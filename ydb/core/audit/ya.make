@@ -18,4 +18,9 @@ END()
 
 RECURSE(
     audit_config
+    heartbeat_actor
+)
+
+RECURSE_FOR_TESTS(
+    ut
 )

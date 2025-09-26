@@ -72,7 +72,7 @@ namespace NKikimr {
 
             void PutToFresh(ui64 lsn, const TLogoBlobID &key) {
                 TRope buffer(Data);
-                Fresh->PutLogoBlobWithData(lsn, TKeyLogoBlob(key), key.PartId(), TIngress(), std::move(buffer));
+                Fresh->PutLogoBlobWithData(lsn, TKeyLogoBlob(key), key.PartId(), TIngress(), std::move(buffer), std::nullopt);
             }
         };
 

@@ -11,9 +11,10 @@ using namespace NSQLv1Generated;
 
 class TSqlQuery: public TSqlTranslation {
 public:
-    TSqlQuery(TContext& ctx, NSQLTranslation::ESqlMode mode, bool topLevel)
+    TSqlQuery(TContext& ctx, NSQLTranslation::ESqlMode mode, bool topLevel, bool allowTopLevelPragmas = false)
         : TSqlTranslation(ctx, mode)
         , TopLevel_(topLevel)
+        , AllowTopLevelPragmas_(allowTopLevelPragmas)
     {
     }
 
@@ -83,6 +84,7 @@ private:
     }
 
     const bool TopLevel_;
+    const bool AllowTopLevelPragmas_;
 };
 
 void EnumeratePragmas(std::function<void(std::string_view)> callback);

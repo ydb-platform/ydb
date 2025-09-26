@@ -6,6 +6,7 @@ UNITTEST_FOR(ydb/core/blobstorage/ut_blobstorage)
 
     SRCS(
         statestorage.cpp
+        statestorage_2_ring_groups.cpp
     )
 
     PEERDIR(

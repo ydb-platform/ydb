@@ -54,13 +54,11 @@ class TestPartitionong(TestBase):
         [
             ("table_Int64", {"Int64": lambda i: i}, {**pk_types, **non_pk_types}, {}),
             ("table_Int32", {"Int32": lambda i: i}, {**pk_types, **non_pk_types}, {}),
-            # ("table_Int16", {"Int16": lambda i: i},
-            # {**pk_types, **non_pk_types}, {}), https://github.com/ydb-platform/ydb/issues/15842
+            ("table_Int16", {"Int16": lambda i: i}, {**pk_types, **non_pk_types}, {}),
             ("table_Int8", {"Int8": lambda i: i}, {**pk_types, **non_pk_types}, {}),
             ("table_Uint64", {"Uint64": lambda i: i}, {**pk_types, **non_pk_types}, {}),
             ("table_Uint32", {"Uint32": lambda i: i}, {**pk_types, **non_pk_types}, {}),
-            # ("table_Uint16", {"Uint16": lambda i: i},
-            # {**pk_types, **non_pk_types}, {}), https://github.com/ydb-platform/ydb/issues/15842
+            ("table_Uint16", {"Uint16": lambda i: i}, {**pk_types, **non_pk_types}, {}),
             ("table_Uint8", {"Uint8": lambda i: i}, {**pk_types, **non_pk_types}, {}),
             ("table_String", {"String": lambda i: f"{i}"}, {**pk_types, **non_pk_types}, {}),
             ("table_Utf8", {"Utf8": lambda i: f"{i}"}, {**pk_types, **non_pk_types}, {}),

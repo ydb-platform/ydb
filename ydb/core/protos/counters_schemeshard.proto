@@ -260,6 +260,16 @@ enum ESimpleCounters {
 
     COUNTER_IN_FLIGHT_OPS_TxIncrementalRestoreFinalize = 203 [(CounterOpts) = {Name: "InFlightOps/IncrementalRestoreFinalize"}];
     COUNTER_IN_FLIGHT_OPS_TxCreateLongIncrementalBackupOp = 204 [(CounterOpts) = {Name: "InFlightOps/CreateLongIncrementalBackupOp"}];
+
+    COUNTER_SECRET_COUNT = 205 [(CounterOpts) = {Name: "SecretCount"}];
+    COUNTER_IN_FLIGHT_OPS_TxCreateSecret = 206 [(CounterOpts) = {Name: "InFlightOps/CreateSecret"}];
+    COUNTER_IN_FLIGHT_OPS_TxAlterSecret = 207 [(CounterOpts) = {Name: "InFlightOps/AlterSecret"}];
+    COUNTER_IN_FLIGHT_OPS_TxDropSecret = 208 [(CounterOpts) = {Name: "InFlightOps/DropSecret"}];
+
+    COUNTER_STREAMING_QUERY_COUNT = 209                [(CounterOpts) = {Name: "StreamingQueryCount"}];
+    COUNTER_IN_FLIGHT_OPS_TxCreateStreamingQuery = 210 [(CounterOpts) = {Name: "InFlightOps/CreateStreamingQuery"}];
+    COUNTER_IN_FLIGHT_OPS_TxDropStreamingQuery = 211   [(CounterOpts) = {Name: "InFlightOps/DropStreamingQuery"}];
+    COUNTER_IN_FLIGHT_OPS_TxAlterStreamingQuery = 212  [(CounterOpts) = {Name: "InFlightOps/AlterStreamingQuery"}];
 }
 
 enum ECumulativeCounters {
@@ -422,6 +432,14 @@ enum ECumulativeCounters {
 
     COUNTER_FINISHED_OPS_TxIncrementalRestoreFinalize = 125 [(CounterOpts) = {Name: "FinishedOps/IncrementalRestoreFinalize"}];
     COUNTER_FINISHED_OPS_TxCreateLongIncrementalBackupOp = 126 [(CounterOpts) = {Name: "FinishedOps/CreateLongIncrementalBackupOp"}];
+
+    COUNTER_FINISHED_OPS_TxCreateSecret = 127 [(CounterOpts) = {Name: "FinishedOps/CreateSecret"}];
+    COUNTER_FINISHED_OPS_TxAlterSecret = 128 [(CounterOpts) = {Name: "FinishedOps/AlterSecret"}];
+    COUNTER_FINISHED_OPS_TxDropSecret = 129 [(CounterOpts) = {Name: "FinishedOps/DropSecret"}];
+
+    COUNTER_FINISHED_OPS_TxCreateStreamingQuery = 130 [(CounterOpts) = {Name: "FinishedOps/CreateStreamingQuery"}];
+    COUNTER_FINISHED_OPS_TxDropStreamingQuery = 131   [(CounterOpts) = {Name: "FinishedOps/DropStreamingQuery"}];
+    COUNTER_FINISHED_OPS_TxAlterStreamingQuery = 132  [(CounterOpts) = {Name: "FinishedOps/AlterStreamingQuery"}];
 }
 
 enum EPercentileCounters {
@@ -673,4 +691,8 @@ enum ETxTypes {
     TXTYPE_LIST_INCREMENTAL_BACKUP = 104 [(TxTypeOpts) = {Name: "TxListIncrementalBackup"}];
     TXTYPE_FORGET_INCREMENTAL_BACKUP = 105 [(TxTypeOpts) = {Name: "TxForgetIncrementalBackup"}];
     TXTYPE_PROGRESS_INCREMENTAL_BACKUP = 106 [(TxTypeOpts) = {Name: "TxProgressIncrementalBackup"}];
+
+    TXTYPE_GET_BACKUP_COLLECTION_RESTORE = 107 [(TxTypeOpts) = {Name: "TxGetBackupCollectionRestore"}];
+    TXTYPE_LIST_BACKUP_COLLECTION_RESTORE = 108 [(TxTypeOpts) = {Name: "TxListBackupCollectionRestore"}];
+    TXTYPE_FORGET_BACKUP_COLLECTION_RESTORE = 109 [(TxTypeOpts) = {Name: "TxForgetBackupCollectionRestore"}];
 }

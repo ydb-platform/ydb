@@ -104,7 +104,7 @@ public:
             auto& parseRecordSettings = Settings_.ParseRecordSettings;
 
             auto tableDataServiceWriter = MakeIntrusive<TFmrTableDataServiceWriter>(output.TableId, output.PartId, TableDataService_, output.SerializedColumnGroups, Settings_.FmrWriterSettings);
-            auto threadPool = CreateThreadPool(parseRecordSettings.MergeNumThreads);
+            auto threadPool = CreateThreadPool(parseRecordSettings.MergeNumThreads, parseRecordSettings.MaxQueueSize, TThreadPool::TParams().SetBlocking(true).SetCatching(true));
             TMaybe<TMutex> mutex = TMutex();
             for (const auto& inputTableRef : taskTableInputRef.Inputs) {
                 threadPool->SafeAddFunc([&, tableDataServiceWriter] {

@@ -44,6 +44,7 @@
 /ydb/services/datastreams @ydb-platform/Topics
 /ydb/services/deprecated/persqueue_v0 @ydb-platform/Topics
 /ydb/services/persqueue_v1 @ydb-platform/Topics
+/ydb/core/transfer @ydb-platform/Topics
 
 /ydb/core/change_exchange @ydb-platform/core
 /ydb/core/cms @ydb-platform/core

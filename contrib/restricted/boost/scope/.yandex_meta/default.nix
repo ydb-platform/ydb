@@ -1,13 +1,13 @@
 self: super: with self; {
   boost_scope = stdenv.mkDerivation rec {
     pname = "boost_scope";
-    version = "1.88.0";
+    version = "1.89.0";
 
     src = fetchFromGitHub {
       owner = "boostorg";
       repo = "scope";
       rev = "boost-${version}";
-      hash = "sha256-vxVFs8V0EfNkif+mcr3mrOQFNqoDuR3bpzmpzS5mOcU=";
+      hash = "sha256-5j6Y+7v2scCRXuqWg7bC9unPFEGwQ/F9Dre2y/uNAus=";
     };
   };
 }

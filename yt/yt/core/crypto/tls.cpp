@@ -184,7 +184,7 @@ struct TSslContextImpl
         return SSL_get_SSL_CTX(ssl) == ActiveContext_.get();
     }
 
-    DEFINE_BYVAL_RW_BOOLEAN_PROPERTY(InsecureSkipVerify, DefaultInsecureSkipVerify);
+    DEFINE_BYVAL_RW_BOOLEAN_PROPERTY(InsecureSkipVerify, false);
 
 private:
     YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, Lock_);

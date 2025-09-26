@@ -257,7 +257,7 @@
 #define EVENT__HAVE_STRING_H 1
 
 /* Define to 1 if you have the `strlcpy' function. */
-/* #undef EVENT__HAVE_STRLCPY */
+#define EVENT__HAVE_STRLCPY 1
 
 /* Define to 1 if you have the `strsep' function. */
 #define EVENT__HAVE_STRSEP 1

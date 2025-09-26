@@ -1,0 +1,1 @@
+select false and (not WithSideEffects(x)) from (select Ensure(false, false) as x)

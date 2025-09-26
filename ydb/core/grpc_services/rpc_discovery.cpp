@@ -45,7 +45,8 @@ public:
     void Bootstrap() {
         // request endpoints
         Discoverer = Register(CreateDiscoverer(&MakeEndpointsBoardPath,
-            Request->GetProtoRequest()->database(), SelfId(), CacheId));
+            Request->GetProtoRequest()->database(), Request->GetEndpointId().empty() && Request->GetProtoRequest()->Getservice().empty(),
+            SelfId(), CacheId));
 
         // request self node info
         Send(GetNameserviceActorId(), new TEvInterconnect::TEvGetNode(SelfId().NodeId()));
@@ -71,7 +72,6 @@ public:
     }
 
     void Handle(TEvDiscovery::TEvDiscoveryData::TPtr &ev) {
-        Y_ABORT_UNLESS(ev->Get()->CachedMessageData);
         Discoverer = {};
 
         LookupResponse.Reset(ev->Release().Release());
@@ -126,8 +126,7 @@ public:
         if (!NameserviceResponse || !LookupResponse)
             return;
 
-        Y_ABORT_UNLESS(LookupResponse->CachedMessageData && !LookupResponse->CachedMessageData->InfoEntries.empty() &&
-            LookupResponse->CachedMessageData->Status == TEvStateStorage::TEvBoardInfo::EStatus::Ok);
+        Y_ABORT_UNLESS(LookupResponse->Status == TEvStateStorage::TEvBoardInfo::EStatus::Ok);
 
         const TSet<TString> services(
             Request->GetProtoRequest()->Getservice().begin(), Request->GetProtoRequest()->Getservice().end());
@@ -136,14 +135,15 @@ public:
 
         TString endpointId = Request->GetEndpointId();
 
-        if (endpointId.empty() && services.empty() && !LookupResponse->CachedMessageData->CachedMessage.empty() &&
-                !LookupResponse->CachedMessageData->CachedMessageSsl.empty()) {
-            cachedMessage = LookupResponse->CachedMessageData->CachedMessage;
-            cachedMessageSsl = LookupResponse->CachedMessageData->CachedMessageSsl;
+        if (!LookupResponse->CachedMessage.empty() && !LookupResponse->CachedMessageSsl.empty()) {
+            cachedMessage = LookupResponse->CachedMessage;
+            cachedMessageSsl = LookupResponse->CachedMessageSsl;
         } else {
-            auto cachedMessageData = NDiscovery::CreateCachedMessage(
-                {}, std::move(LookupResponse->CachedMessageData->InfoEntries),
-                std::move(services), std::move(endpointId), NameserviceResponse, LookupResponse->CachedMessageData->BridgeInfo);
+            NDiscovery::TCachedMessageData cachedMessageData(
+                LookupResponse->InfoEntries,
+                NameserviceResponse, LookupResponse->BridgeInfo,
+                endpointId, services);
+
             cachedMessage = std::move(cachedMessageData.CachedMessage);
             cachedMessageSsl = std::move(cachedMessageData.CachedMessageSsl);
         }

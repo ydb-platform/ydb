@@ -173,7 +173,8 @@ class BaseTestSet:
                 "enable_tiering_in_column_shard": True,
             },
             column_shard_config={
-                "generate_internal_path_id": True
+                "generate_internal_path_id": True,
+                "bulk_upsert_require_all_columns": False,
             },
             query_service_config=dict(
                 available_external_data_sources=["ObjectStorage"]

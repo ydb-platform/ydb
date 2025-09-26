@@ -9,6 +9,10 @@ ELSE()
     SIZE(MEDIUM)
 ENDIF()
 
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(ram:32 cpu:4)
+ENDIF()
+
 SRCS(
     flat_cxx_database_ut.cpp
     ut_db_iface.cpp
@@ -55,6 +59,7 @@ SRCS(
     ut_slice_loader.cpp
     ut_vacuum.cpp
     ut_versions.cpp
+    ut_backup.cpp
 )
 
 RESOURCE(

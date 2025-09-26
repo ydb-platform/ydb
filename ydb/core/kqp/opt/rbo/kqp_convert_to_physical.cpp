@@ -34,26 +34,42 @@ namespace {
                 if (auto idx = strippedName.find_last_of('.'); idx != TString::npos) {
                     strippedName =  strippedName.substr(idx+1);
                 }
+                // clang-format off
                 memberName = Build<TCoAtom>(ctx, input->Pos()).Value(strippedName).Done();
+                // clang-format on
             }
+            // clang-format off
             return Build<TCoMember>(ctx, input->Pos())
                 .Struct(arg)
                 .Name(memberName)
-                .Done().Ptr();
+            .Done().Ptr();
+            // clang-format on
         }
         else if (input->IsCallable()){
             TVector<TExprNode::TPtr> newChildren;
             for (auto c : input->Children()) {
                 newChildren.push_back(ReplaceArg(c, arg, ctx, removeAliases));
             }
-            return ctx.Builder(input->Pos()).Callable(input->Content()).Add(std::move(newChildren)).Seal().Build();
+            // clang-format off
+            return ctx.Builder(input->Pos())
+                .Callable(input->Content())
+                    .Add(std::move(newChildren))
+                    .Seal()
+                .Build();
+            // clang-format on
         }
         else if(input->IsList()){
             TVector<TExprNode::TPtr> newChildren;
             for (auto c : input->Children()) {
                 newChildren.push_back(ReplaceArg(c, arg, ctx, removeAliases));
             }
-            return ctx.Builder(input->Pos()).List().Add(std::move(newChildren)).Seal().Build();
+            // clang-format off
+            return ctx.Builder(input->Pos())
+                .List()
+                    .Add(std::move(newChildren))
+                    .Seal()
+                .Build();
+            // clang-format on
         }
         else {
             return input;
@@ -63,21 +79,27 @@ namespace {
     [[maybe_unused]]
     TExprNode::TPtr ExtractMembers(TExprNode::TPtr input, TExprContext& ctx, TVector<TInfoUnit> members) {
         TVector<TExprBase> items;
-        auto arg = Build<TCoArgument>(ctx, input->Pos()).Name("arg").Done().Ptr();
+        // clang-format off
+        auto arg = Build<TCoArgument>(ctx, input->Pos())
+            .Name("arg")
+        .Done().Ptr();
+        // clang-format on
 
         for (auto iu : members) {
             auto name = iu.GetFullName();
+            // clang-format off
             auto tuple = Build<TCoNameValueTuple>(ctx, input->Pos())
                 .Name().Build(name)
                 .Value<TCoMember>()
                     .Struct(arg)
                     .Name().Build(name)
                 .Build()
-                .Done();
-        
+            .Done();
+            // clang-format on
             items.push_back(tuple);
         }
 
+        // clang-format off
         return Build<TCoFlatMap>(ctx, input->Pos())
             .Input(input)
             .Lambda<TCoLambda>()
@@ -88,7 +110,8 @@ namespace {
                     .Build()
                 .Build()
             .Build()
-            .Done().Ptr();
+        .Done().Ptr();
+        // clang-format on
     }
 
     [[maybe_unused]]
@@ -122,11 +145,13 @@ namespace {
                 argTypes.push_back(input->GetTypeAnn());
             }
 
+            // clang-format off
             // Build a temporary KqpProgram to run peephole on
             auto program = Build<TKqpProgram>(ctx, stageLambda->Pos())
                 .Lambda(stageLambda)
                 .ArgsType(ExpandType(stageLambda->Pos(), *ctx.MakeType<TTupleExprType>(argTypes), ctx))
-                .Done();
+            .Done();
+            // clang-format on
 
             auto programPtr = program.Ptr();
             
@@ -149,27 +174,32 @@ namespace {
 
             TVector<TExprNode::TPtr> keys;
             for (auto iu : join.GetLeftInput()->GetOutputIUs()) {
-                keys.push_back(
-                    Build<TCoNameValueTuple>(ctx, pos)
+                // clang-format off
+                auto keyPtr = Build<TCoNameValueTuple>(ctx, pos)
+                    .Name().Build(iu.GetFullName())
+                    .Value<TCoMember>()
+                        .Struct(leftArg)
                         .Name().Build(iu.GetFullName())
-                        .Value<TCoMember>()
-                            .Struct(leftArg)
-                            .Name().Build(iu.GetFullName())
-                            .Build()
-                        .Done().Ptr());
+                    .Build()
+                .Done().Ptr();
+                // clang-forat on
+                keys.push_back(keyPtr);
             }
 
             for (auto iu : join.GetRightInput()->GetOutputIUs()) {
-                keys.push_back(
-                    Build<TCoNameValueTuple>(ctx, pos)
+                // clang-format off
+                auto keyPtr = Build<TCoNameValueTuple>(ctx, pos)
+                    .Name().Build(iu.GetFullName())
+                    .Value<TCoMember>()
+                    .Struct(rightArg)
                         .Name().Build(iu.GetFullName())
-                        .Value<TCoMember>()
-                            .Struct(rightArg)
-                            .Name().Build(iu.GetFullName())
-                            .Build()
-                        .Done().Ptr());
+                    .Build()
+                .Done().Ptr();
+                // clang-format on
+                keys.push_back(keyPtr);
             }
 
+            // clang-format off
             // we have to `Condense` right input as single-element stream of lists (single list of all elements from the right),
             // because stream supports single iteration only
             auto itemArg = Build<TCoArgument>(ctx, pos).Name("item").Done();
@@ -194,11 +224,11 @@ namespace {
                     .Body<TCoAppend>()
                         .List("state")
                         .Item("item")
-                        .Build()
                     .Build()
-                .Done();
+                .Build()
+            .Done();
 
-            auto flatMap =  Build<TCoFlatMap>(ctx, pos)
+            auto flatMap = Build<TCoFlatMap>(ctx, pos)
                 .Input(rightAsStreamOfLists)
                 .Lambda()
                     .Args({"rightAsList"})
@@ -213,22 +243,24 @@ namespace {
                                     .Args({rightArg})
                                     .Body<TCoAsStruct>()
                                         .Add(keys)
-                                        .Build()
                                     .Build()
                                 .Build()
                             .Build()
                         .Build()
                     .Build()
-                .Done().Ptr();
+                .Build()
+            .Done().Ptr();
 
             return Build<TCoFromFlow>(ctx, pos)
                 .Input(flatMap)
-                .Done().Ptr();
+            .Done().Ptr();
+            // clang-format on
         }
 
         TExprNode::TPtr ExpandJoinInput(TExprNode::TPtr input, TVector<TInfoUnit> ius, TExprContext&  ctx) {
+            // clang-format off
             return ctx.Builder(input->Pos())
-            .Callable("ExpandMap")
+                .Callable("ExpandMap")
                 .Add(0, input)
                 .Lambda(1)
                     .Param("item")
@@ -245,11 +277,13 @@ namespace {
                     })
                 .Seal()
             .Seal().Build();
+            // clang-format on
         }
 
         TExprNode::TPtr CollapseJoinOutput(TExprNode::TPtr graceJoin, TVector<TInfoUnit> ius, TExprContext&  ctx) {
-        return ctx.Builder(graceJoin->Pos())
-            .Callable("NarrowMap")
+            // clang-format off
+            return ctx.Builder(graceJoin->Pos())
+                .Callable("NarrowMap")
                 .Add(0, graceJoin)
                     .Lambda(1)
                     .Params("output", ius.size())
@@ -269,6 +303,7 @@ namespace {
                 .Seal()
             .Seal()
             .Build();
+            // clang-format on
         }
 
         TExprNode::TPtr BuildGraceJoinCore(TOpJoin & join, TExprNode::TPtr leftInput, TExprNode::TPtr rightInput, TExprContext&  ctx, TPositionHandle pos) {
@@ -307,35 +342,55 @@ namespace {
 
             // Convert to wide flow
 
+            // clang-format off
             leftInput = Build<TCoToFlow>(ctx, pos)
-                        .Input(leftInput)
-                        .Done().Ptr();
+                .Input(leftInput)
+            .Done().Ptr();
+            // clang-forat on
 
             leftInput = ExpandJoinInput(leftInput, join.GetLeftInput()->GetOutputIUs(), ctx);
 
+            // clang-format off
             rightInput = Build<TCoToFlow>(ctx, pos)
-                        .Input(rightInput)
-                        .Done().Ptr();
+                .Input(rightInput)
+            .Done().Ptr();
+            // clang-format on
 
             rightInput = ExpandJoinInput(rightInput, join.GetRightInput()->GetOutputIUs(), ctx);
 
+            // clang-format off
             auto graceJoin = Build<TCoGraceJoinCore>(ctx, pos)
                 .LeftInput(leftInput)
                 .RightInput(rightInput)
-                .JoinKind<TCoAtom>().Value(GetValidJoinKind(join.JoinKind)).Build()
-                .LeftKeysColumns<TCoAtomList>().Add(leftColumnIdxs).Build()
-                .RightKeysColumns<TCoAtomList>().Add(rightColumnIdxs).Build()
-                .LeftRenames().Add(leftRenames).Build()
-                .RightRenames().Add(rightRenames).Build()
-                .LeftKeysColumnNames<TCoAtomList>().Add(leftKeyColumnNames).Build()
-                .RightKeysColumnNames<TCoAtomList>().Add(rightKeyColumnNames).Build()
+                .JoinKind<TCoAtom>()
+                    .Value(GetValidJoinKind(join.JoinKind))
+                .Build()
+                .LeftKeysColumns<TCoAtomList>()
+                    .Add(leftColumnIdxs)
+                .Build()
+                .RightKeysColumns<TCoAtomList>()
+                    .Add(rightColumnIdxs)
+                .Build()
+                .LeftRenames()
+                    .Add(leftRenames)
+                .Build()
+                .RightRenames()
+                    .Add(rightRenames)
+                .Build()
+                .LeftKeysColumnNames<TCoAtomList>()
+                    .Add(leftKeyColumnNames)
+                .Build()
+                .RightKeysColumnNames<TCoAtomList>()
+                    .Add(rightKeyColumnNames)
+                .Build()
                 .Flags().Build()
-                .Done().Ptr();
+            .Done().Ptr();
 
             // Convert back to narrow stream
             return Build<TCoFromFlow>(ctx, pos)
                 .Input(CollapseJoinOutput(graceJoin, join.GetOutputIUs(), ctx))
-                .Done().Ptr();
+            .Done().Ptr();
+            // clang-format on
         }
 
         [[maybe_unused]]
@@ -348,27 +403,39 @@ namespace {
                 TString leftFullName = "_alias_" + p.first.Alias + "." + p.first.ColumnName;
                 TString rightFullName = "_alias_" + p.second.Alias + "." + p.second.ColumnName;
 
+                // clang-format off
                 joinKeys.push_back(Build<TDqJoinKeyTuple>(ctx, pos)
                     .LeftLabel().Value("_alias_" + p.first.Alias).Build()
                     .LeftColumn().Value(p.first.ColumnName).Build()
                     .RightLabel().Value("_alias_" + p.second.Alias).Build()
                     .RightColumn().Value(p.second.ColumnName).Build()
-                    .Done());
+                .Done());
 
                 leftKeyColumnNames.push_back(Build<TCoAtom>(ctx, pos).Value(leftFullName).Done());
                 rightKeyColumnNames.push_back(Build<TCoAtom>(ctx, pos).Value(rightFullName).Done());
+                // clang-format on
             }
 
+            // clang-format off
             return Build<TDqPhyGraceJoin>(ctx, pos)
                 .LeftInput(leftInput)
                 .LeftLabel<TCoVoid>().Build()
                 .RightInput(rightInput)
                 .RightLabel<TCoVoid>().Build()
-                .JoinType<TCoAtom>().Value("Inner").Build()
-                .JoinKeys<TDqJoinKeyTupleList>().Add(joinKeys).Build()
-                .LeftJoinKeyNames<TCoAtomList>().Add(leftKeyColumnNames).Build()
-                .RightJoinKeyNames<TCoAtomList>().Add(rightKeyColumnNames).Build()
-                .Done().Ptr();
+                .JoinType<TCoAtom>()
+                    .Value("Inner")
+                .Build()
+                .JoinKeys<TDqJoinKeyTupleList>()
+                    .Add(joinKeys)
+                .Build()
+                .LeftJoinKeyNames<TCoAtomList>()
+                    .Add(leftKeyColumnNames)
+                .Build()
+                .RightJoinKeyNames<TCoAtomList>()
+                    .Add(rightKeyColumnNames)
+                .Build()
+            .Done().Ptr();
+            // clang-format on
         }
 
 
@@ -409,11 +476,13 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot & root,  TExprContext& ctx, TTypeAnnot
             TVector<TExprBase> listElements;
             listElements.push_back(Build<TCoAsStruct>(ctx, root.Node->Pos()).Done());
 
+            // clang-format off
             currentStageBody = Build<TCoIterator>(ctx, root.Node->Pos())
                 .List<TCoAsList>()
                     .Add(listElements)
                 .Build()
-                .Done().Ptr();
+            .Done().Ptr();
+            // clang-format on
             stages[opStageId] = currentStageBody;
             YQL_CLOG(TRACE, CoreDq) << "Converted Empty Source " << opStageId;
         }
@@ -422,8 +491,8 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot & root,  TExprContext& ctx, TTypeAnnot
             auto read = TKqpOpRead(op->Node);
             auto opSource = CastOperator<TOpRead>(op);
 
-        
             auto source = ctx.NewCallable(root.Node->Pos(), "DataSource", {ctx.NewAtom(root.Node->Pos(), "KqpReadRangesSource")});
+            // clang-format off
             currentStageBody = Build<TDqSource>(ctx, root.Node->Pos())
                 .DataSource(source)
                 .Settings<TKqpReadRangesSourceSettings>()
@@ -433,7 +502,8 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot & root,  TExprContext& ctx, TTypeAnnot
                     .RangesExpr<TCoVoid>().Build()
                     .ExplainPrompt<TCoNameValueTupleList>().Build()
                 .Build()
-                .Done().Ptr();
+            .Done().Ptr();
+            // clang-format on
 
             stages[opStageId] = currentStageBody;
             YQL_CLOG(TRACE, CoreDq) << "Converted Read " << opStageId;
@@ -455,20 +525,21 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot & root,  TExprContext& ctx, TTypeAnnot
             newFilterBody = ctx.Builder(root.Node->Pos()).Callable("FromPg").Add(0, newFilterBody).Seal().Build();
 
             TVector<TExprBase> items;
-
             for (auto iu : op->GetOutputIUs()) {
                 auto memberName = iu.GetFullName();
+                // clang-format off
                 auto tuple = Build<TCoNameValueTuple>(ctx, root.Node->Pos())
                     .Name().Build(memberName)
                     .Value<TCoMember>()
                         .Struct(map_arg)
                         .Name().Build(memberName)
                     .Build()
-                    .Done();
-                
+                .Done();
+                // clang-format on
                 items.push_back(tuple);
             }
-            
+
+            // clang-format off
             currentStageBody = Build<TCoMap>(ctx, root.Node->Pos())
                 .Input<TCoFilter>()
                     .Input(TExprBase(currentStageBody))
@@ -489,6 +560,7 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot & root,  TExprContext& ctx, TTypeAnnot
                     .Build()
                 .Build()
             .Done().Ptr();
+            // clang-format off
 
             stages[opStageId] = currentStageBody;
             YQL_CLOG(TRACE, CoreDq) << "Converted Filter " << opStageId;
@@ -507,15 +579,18 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot & root,  TExprContext& ctx, TTypeAnnot
             auto arg = Build<TCoArgument>(ctx, root.Node->Pos()).Name("arg").Done().Ptr();
 
             for (auto mapElement : map.MapElements()) {
+                // clang-format off
                 auto tuple = Build<TCoNameValueTuple>(ctx, root.Node->Pos())
                     .Name().Build(mapElement.Variable())
                     .Value(mapElement.Lambda().Body())
-                    .Done();
+                .Done();
+                // clang-format on
                 
                 tuple = TCoNameValueTuple(ReplaceArg(tuple.Ptr(), arg, ctx));
                 items.push_back(tuple);
             }
 
+            // clang-format off
             currentStageBody = Build<TCoMap>(ctx, root.Node->Pos())
                 .Input(TExprBase(currentStageBody))
                 .Lambda<TCoLambda>()
@@ -524,7 +599,8 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot & root,  TExprContext& ctx, TTypeAnnot
                         .Add(items)
                     .Build()
                 .Build()
-                .Done().Ptr();
+            .Done().Ptr();
+            // clang-fort on
 
             stages[opStageId] = currentStageBody;
             YQL_CLOG(TRACE, CoreDq) << "Converted Map " << opStageId;
@@ -536,10 +612,12 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot & root,  TExprContext& ctx, TTypeAnnot
                 currentStageBody = stageInput;
             }
 
+            // clang-format off
             currentStageBody = Build<TCoTake>(ctx, root.Node->Pos())
                 .Input(TExprBase(currentStageBody))
                 .Count(TKqpOpLimit(op->Node).Count())
-                .Done().Ptr();
+            .Done().Ptr();
+            // clang-format on
 
             stages[opStageId] = currentStageBody;
             YQL_CLOG(TRACE, CoreDq) << "Converted Limit " << opStageId; 
@@ -600,6 +678,7 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot & root,  TExprContext& ctx, TTypeAnnot
             stage = stages.at(id);
         }
         else {
+            // clang-format off
             stage = Build<TDqPhyStage>(ctx, root.Node->Pos())
                 .Inputs()
                     .Add(inputs)
@@ -609,8 +688,8 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot & root,  TExprContext& ctx, TTypeAnnot
                     .Body(stages.at(id))
                     .Build()
                 .Settings().Build()
-                .Done()
-                .Ptr();
+            .Done().Ptr();
+            // clang-format on
 
             txStages.push_back(stage);
             YQL_CLOG(TRACE, CoreDq) << "Added stage " << stage->UniqueId();
@@ -625,6 +704,7 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot & root,  TExprContext& ctx, TTypeAnnot
 
     auto lastStage = finalizedStages.at(lastStageIdx);
 
+    // clang-format off
     // wrap in DqResult
     auto dqResult = Build<TDqCnResult>(ctx, root.Node->Pos())
         .Output()
@@ -632,15 +712,15 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot & root,  TExprContext& ctx, TTypeAnnot
             .Index().Build("0")
         .Build()
         .ColumnHints().Build()
-        .Done()
-        .Ptr();
+    .Done().Ptr();
+    // clang-format on
 
     TVector<TExprNode::TPtr> txSettings;
+    // clang-format off
     txSettings.push_back(Build<TCoNameValueTuple>(ctx, root.Node->Pos())
                             .Name().Build("type")
                             .Value<TCoAtom>().Build("compute")
-                            .Done()
-                            .Ptr());
+                        .Done().Ptr());
     // Build PhysicalTx
     auto physTx = Build<TKqpPhysicalTx>(ctx, root.Node->Pos())
         .Stages()
@@ -653,18 +733,16 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot & root,  TExprContext& ctx, TTypeAnnot
         .Settings()
             .Add(txSettings)
         .Build()
-        .Done()
-        .Ptr();
+    .Done().Ptr();
 
     TVector<TExprNode::TPtr> querySettings;
     querySettings.push_back(Build<TCoNameValueTuple>(ctx, root.Node->Pos())
-                            .Name().Build("type")
-                            .Value<TCoAtom>().Build("data_query")
-                            .Done()
-                            .Ptr());
+                                .Name().Build("type")
+                                .Value<TCoAtom>().Build("data_query")
+                            .Done().Ptr());
+    // clang-format off
 
     // Build result type
-    
     typeAnnTransformer->Rewind();
     IGraphTransformer::TStatus status(IGraphTransformer::TStatus::Ok);
     do {
@@ -678,11 +756,12 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot & root,  TExprContext& ctx, TTypeAnnot
 
     YQL_CLOG(TRACE, CoreDq) << "Inferred final type: " << *dqResult->GetTypeAnn();
 
+    // clang-format off
     auto binding = Build<TKqpTxResultBinding>(ctx, root.Node->Pos())
         .Type(ExpandType(root.Node->Pos(), *dqResult->GetTypeAnn(), ctx))
         .TxIndex().Build("0")
         .ResultIndex().Build("0")
-        .Done();
+    .Done();
 
     // Build Physical query
     auto physQuery = Build<TKqpPhysicalQuery>(ctx, root.Node->Pos())
@@ -695,8 +774,8 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot & root,  TExprContext& ctx, TTypeAnnot
         .Settings()
             .Add(querySettings)
         .Build()
-        .Done()
-        .Ptr();
+    .Done().Ptr();
+    // clang-format on
 
         /*
     typeAnnTransformer->Rewind();

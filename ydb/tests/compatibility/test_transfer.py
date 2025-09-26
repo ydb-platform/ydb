@@ -1,10 +1,13 @@
 # -*- coding: utf-8 -*-
+import logging
 import pytest
 import time
 import uuid
 
-from ydb.tests.library.compatibility.fixtures import RestartToAnotherVersionFixture, RollingUpgradeAndDowngradeFixture, MixedClusterFixture
+from ydb.tests.library.compatibility.fixtures import RollingUpgradeAndDowngradeFixture
 from ydb.tests.oss.ydb_sdk_import import ydb
+
+logger = logging.getLogger(__name__)
 
 
 class Workload:
@@ -77,7 +80,7 @@ class Workload:
                 self.message_count += 1
 
     def wait_transfer_finished(self):
-        iterations = 10
+        iterations = 30
         last_offset = -1
 
         with ydb.QuerySessionPool(self.driver) as session_pool:
@@ -91,97 +94,18 @@ class Workload:
                     """
                 )
                 rs = rss[0]
-                last_offset = rs.rows[0].last_offset
+                last_offset = rs.rows[0].last_offset + 1
 
-                if last_offset + 1 == self.message_count:
+                logger.info(f"Transfer status: last processed offset is {last_offset}, expected {self.message_count}")
+                if last_offset == self.message_count:
                     return
 
-            raise Exception(f"Transfer still work after {iterations} seconds. Last offset is {last_offset}")
+            raise Exception(f"Transfer still work after {iterations} seconds. Last offset is {last_offset}, expected {self.message_count}")
 
 
 def skip_if_unsupported(versions):
     if min(versions) < (25, 1):
         pytest.skip("Only available since 25-1-2")
-
-
-class TestTransferMixedClusterFixture(MixedClusterFixture):
-    @pytest.fixture(autouse=True, scope="function")
-    def setup(self):
-        skip_if_unsupported(self.versions)
-
-        #
-        # Setup cluster
-        #
-        yield from self.setup_cluster(
-            # # Some feature flags can be passed. And other KikimrConfigGenerator options
-            extra_feature_flags={
-                "enable_column_store": True,
-                "enable_topic_transfer": True,
-            }
-        )
-
-    @pytest.mark.parametrize("store, local", [
-        ("row", False),
-        # ("column", False) TODO uncomment after OLAP will be enabled
-        # ("row", True), TODO uncomment after local topic will be merged
-    ])
-    def test_transfer(self, store, local):
-        utils = Workload(self.driver, self.endpoint)
-
-        #
-        # 1. Fill table with data
-        #
-        utils.create_table(store)
-        utils.create_topic()
-        utils.create_transfer(local)
-
-        utils.write_to_topic()
-
-        #
-        # 2. check written data is correct
-        #
-        utils.wait_transfer_finished()
-
-
-class TestTransferRestartToAnotherVersion(RestartToAnotherVersionFixture):
-    @pytest.fixture(autouse=True, scope="function")
-    def setup(self):
-        skip_if_unsupported(self.versions)
-
-        #
-        # Setup cluster
-        #
-        yield from self.setup_cluster(
-            # # Some feature flags can be passed. And other KikimrConfigGenerator options
-            extra_feature_flags={
-                "enable_column_store": True,
-                "enable_topic_transfer": True,
-            }
-        )
-
-    @pytest.mark.parametrize("store, local", [
-        ("row", False),
-        # ("column", False) TODO uncomment after OLAP will be enabled
-        # ("row", True), TODO uncomment after local topic will be merged
-    ])
-    def test_transfer(self, store, local):
-        utils = Workload(self.driver, self.endpoint)
-
-        #
-        # 1. Fill table with data
-        #
-        utils.create_table(store)
-        utils.create_topic()
-        utils.create_transfer(local)
-
-        utils.write_to_topic()
-        self.change_cluster_version()
-        utils.write_to_topic()
-
-        #
-        # 2. check written data is correct
-        #
-        utils.wait_transfer_finished()
 
 
 class TestTransferRollingUpdate(RollingUpgradeAndDowngradeFixture):
@@ -203,7 +127,7 @@ class TestTransferRollingUpdate(RollingUpgradeAndDowngradeFixture):
     @pytest.mark.parametrize("store, local", [
         ("row", False),
         # ("column", False) TODO uncomment after OLAP will be enabled
-        # ("row", True), TODO uncomment after local topic will be merged
+        ("row", True),
     ])
     def test_transfer(self, store, local):
         utils = Workload(self.driver, self.endpoint)

@@ -5,9 +5,12 @@ import time
 import random
 from enum import Enum
 import pytest
+import statistics
+from textwrap import dedent
 
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
+# from ydb.tests.library.harness.util import LogLevels
 from ydb.tests.olap.common.ydb_client import YdbClient
 
 logger = logging.getLogger(__name__)
@@ -25,18 +28,48 @@ class Timer:
     def __init__(self, label: str):
         self.label = label
         self._t0 = None
-        self._dt = None
+        self._dts = []
+        self._to_ms = 1000
 
     def __enter__(self):
         self._t0 = time.perf_counter()
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        self._dt = time.perf_counter() - self._t0
-        print(f"{self.label}: {self._dt*1000:.1f} ms", flush=True)
+        if len(self._dts) == 0:
+            self.one_more()
+        self._dts.sort()
 
-    def get_time_ms(self):
-        return self._dt * 1000
+    def one_more(self):
+        new_t0 = time.perf_counter()
+        dt = new_t0 - self._t0
+        self._dts.append(dt)
+        self._t0 = new_t0
+
+    def report(self):
+        if len(self._dts) == 1:
+            return f"{self.label}: {self._dts[0] * self._to_ms:.1f} ms"
+
+        return dedent(
+            f"""
+        {self.label}:
+            "runs": {len(self._dts)}
+            "avg_ms": {self._get_mean():.1f}
+            "min_ms": {self._get_d(0):.1f}
+            "median_ms": {self._get_d(len(self._dts) // 2):.1f}
+            "max_ms": {self._get_d(-1):.1f}
+            "stdev_ms": {self._get_stdev():.1f}
+        """
+        ).strip()
+
+    def _get_d(self, idx):
+        return self._dts[idx] * self._to_ms
+
+    def _get_mean(self):
+        return statistics.mean(self._dts) * self._to_ms
+
+    def _get_stdev(self):
+        return statistics.stdev(self._dts) * self._to_ms
 
 
 class TestCSManyUpdates(object):
@@ -62,7 +95,12 @@ class TestCSManyUpdates(object):
                 "compaction_enabled": False,
                 "deduplication_enabled": True,
                 "reader_class_name": "SIMPLE",
-            }
+            },
+            # Uncomment this to see more logs
+            # additional_log_configs={
+            #     "TX_COLUMNSHARD_TX": LogLevels.TRACE,
+            #     "TX_COLUMNSHARD": LogLevels.TRACE,
+            # },
         )
         cls.cluster = KiKiMR(config)
         cls.cluster.start()
@@ -75,14 +113,15 @@ class TestCSManyUpdates(object):
         cls.test_dir = f"{cls.ydb_client.database}/{cls.test_name}"
 
     def _check_rows_num(self, table_path, expected_rows_num):
-        count = self.ydb_client.query(f"SELECT COUNT(*) as cnt FROM `{table_path}`;")[
-            0
-        ].rows[0]["cnt"]
+        result_sets = self.ydb_client.query(
+            f"SELECT COUNT(*) as cnt FROM `{table_path}`;"
+        )
+        assert len(result_sets) == 1
+        count = result_sets[0].rows[0]["cnt"]
         assert count == expected_rows_num
 
-    def _do_update(self, table_path, pks, mods):
+    def _do_update(self, table_path, pks, mods, timer):
         """Apply modifications using individual UPDATE statements."""
-        updates_num = 0
         for pk in pks:
             for value in mods[pk]:
                 update_query = f"""
@@ -91,12 +130,17 @@ class TestCSManyUpdates(object):
                 WHERE id = {pk};
                 """
                 self.ydb_client.query(update_query)
-                updates_num += 1
-        return updates_num
+                timer.one_more()
 
-    def _do_upsert(self, table_path, pks, mods):
+    def _delete_all(self, table_path, timer):
+        """Delete all rows using DELETE statement."""
+        update_query = f"""
+        DELETE FROM `{table_path}`
+        """
+        self.ydb_client.query(update_query)
+
+    def _do_upsert(self, table_path, pks, mods, timer):
         """Apply modifications using individual UPSERT statements."""
-        updates_num = 0
         for pk in pks:
             for value in mods[pk]:
                 upsert_query = f"""
@@ -104,12 +148,10 @@ class TestCSManyUpdates(object):
                 VALUES ({pk}, {value});
                 """
                 self.ydb_client.query(upsert_query)
-                updates_num += 1
-        return updates_num
+                timer.one_more()
 
-    def _do_bulk_upsert(self, table_path, pks, mods):
+    def _do_bulk_upsert(self, table_path, pks, mods, timer):
         """Apply modifications using batch UPSERT statements."""
-        updates_num = 0
         mods_num = len(mods[0])
         for mod_idx in range(mods_num):
             # Collect all updates for this round
@@ -125,16 +167,19 @@ class TestCSManyUpdates(object):
             VALUES {values_clause};
             """
             self.ydb_client.query(batch_upsert_query)
-            updates_num += 1
-        return updates_num
+            timer.one_more()
 
     def _test_many_updates_impl(self, rows_num, operation_sequence):
         """Test a sequence of different modification operations on the same table."""
         table_path = f"{self.test_dir}/test_many_modifications_sequence"
 
-        with Timer("drop table"):
+        timer = Timer("drop table")
+        with timer:
             self.ydb_client.query(f"DROP TABLE IF EXISTS `{table_path}`")
-        with Timer("create table"):
+        print(timer.report())
+
+        timer = Timer("create table")
+        with timer:
             self.ydb_client.query(
                 f"""
                 CREATE TABLE `{table_path}` (
@@ -147,6 +192,7 @@ class TestCSManyUpdates(object):
                 )
                 """
             )
+        print(timer.report())
 
         # Generate a list of primary keys
         pks = list(range(rows_num))
@@ -155,15 +201,20 @@ class TestCSManyUpdates(object):
         inits = [random.randint(0, 1000000) for _ in range(rows_num)]
 
         # Insert the initial rows
-        with Timer("initial inserts"):
+        timer = Timer("initial inserts")
+        with timer:
             for pk in pks:
                 initial_value = inits[pk]
                 self.ydb_client.query(
                     f"INSERT INTO `{table_path}` (id, value) VALUES ({pk}, {initial_value});"
                 )
+                timer.one_more()
+        print(timer.report())
 
-        with Timer("select count(*) after initial inserts"):
+        timer = Timer("select count(*) after initial inserts")
+        with timer:
             self._check_rows_num(table_path, rows_num)
+        print(timer.report())
 
         # Keep track of expected final values
         expected_values = inits[:]
@@ -186,67 +237,87 @@ class TestCSManyUpdates(object):
                 expected_values[pk] = mods[pk][-1]
 
             # Execute the operation
-            operation_timer = Timer(f"{operation_name}s (step {total_operations + 1})")
-            with operation_timer:
+            timer = Timer(f"{operation_name}s (step {total_operations})")
+            with timer:
                 if mod_type == ModType.UPDATE:
-                    updates_num = self._do_update(table_path, pks, mods)
+                    self._do_update(table_path, pks, mods, timer)
                 elif mod_type == ModType.UPSERT:
-                    updates_num = self._do_upsert(table_path, pks, mods)
+                    self._do_upsert(table_path, pks, mods, timer)
                 elif mod_type == ModType.BULK_UPSERT:
-                    updates_num = self._do_bulk_upsert(table_path, pks, mods)
+                    self._do_bulk_upsert(table_path, pks, mods, timer)
                 else:
                     raise ValueError(f"Unsupported modification type: {mod_type}")
 
-            print(
-                f"{operation_name}s num: {updates_num}, avg_time: {operation_timer.get_time_ms() / updates_num:.2f} ms"
-            )
+            print(timer.report())
             total_operations += 1
 
         # Verify the final state
-        with Timer("select count(*) after all modifications"):
+        timer = Timer("select count(*) after all modifications")
+        with timer:
             self._check_rows_num(table_path, rows_num)
+        print(timer.report())
 
         expected_data = {pk: expected_values[pk] for pk in pks}
 
-        with Timer("select all"):
+        timer = Timer("select all")
+        with timer:
             result_sets = self.ydb_client.query(
                 f"SELECT id, value FROM `{table_path}`;"
             )
+        print(timer.report())
 
         rows = [row for result_set in result_sets for row in result_set.rows]
         assert len(rows) == rows_num
         actual_data = {row["id"]: row["value"] for row in rows}
         assert actual_data == expected_data
 
+        timer = Timer("delete from table")
+        with timer:
+            self._delete_all(table_path, timer)
+        print(timer.report())
+
+        timer = Timer("select all after delete")
+        with timer:
+            result_sets = self.ydb_client.query(
+                f"SELECT id, value FROM `{table_path}`;"
+            )
+        print(timer.report())
+
+        rows = [row for result_set in result_sets for row in result_set.rows]
+        assert not rows
+
     @pytest.mark.parametrize(
         "rows_num,operation_sequence",
         [
+            # On practice, 10 rows * 100 updates runs for 100 seconds approximately.
+            # So, there is no point in setting larger numbers here.
+            # BULK_UPSERT updates all the rows at once, so a bit different math for it. 10 * 500 works good enough.
             # Single operations
-            (10, [{"mod_type": ModType.UPDATE, "mods_num": 2}]),
+            (10, [{"mod_type": ModType.UPDATE, "mods_num": 100}]),
             (10, [{"mod_type": ModType.UPSERT, "mods_num": 100}]),
-            (30, [{"mod_type": ModType.BULK_UPSERT, "mods_num": 500}]),
+            (10, [{"mod_type": ModType.BULK_UPSERT, "mods_num": 500}]),
             # Sequential combinations
             (
                 15,
                 [
-                    {"mod_type": ModType.UPDATE, "mods_num": 3},
-                    {"mod_type": ModType.BULK_UPSERT, "mods_num": 10},
+                    {"mod_type": ModType.UPDATE, "mods_num": 10},
+                    {"mod_type": ModType.BULK_UPSERT, "mods_num": 100},
                 ],
             ),
             (
                 20,
                 [
-                    {"mod_type": ModType.UPDATE, "mods_num": 3},
-                    {"mod_type": ModType.UPSERT, "mods_num": 7},
-                    {"mod_type": ModType.BULK_UPSERT, "mods_num": 15},
+                    {"mod_type": ModType.UPDATE, "mods_num": 10},
+                    {"mod_type": ModType.UPSERT, "mods_num": 10},
+                    {"mod_type": ModType.BULK_UPSERT, "mods_num": 100},
                 ],
             ),
             (
                 10,
                 [
-                    {"mod_type": ModType.BULK_UPSERT, "mods_num": 5},
-                    {"mod_type": ModType.UPDATE, "mods_num": 2},
-                    {"mod_type": ModType.UPSERT, "mods_num": 8},
+                    {"mod_type": ModType.BULK_UPSERT, "mods_num": 100},
+                    {"mod_type": ModType.UPDATE, "mods_num": 20},
+                    {"mod_type": ModType.UPSERT, "mods_num": 20},
                 ],
             ),
         ],
@@ -267,16 +338,12 @@ class TestCSManyUpdates(object):
 
     def test_many_updates_random_sequence(self):
         """Test random sequence of different datebase modification operations."""
-        # every update takes about 3 seconds, delete this flag when updates become fast enough
-        update_are_too_slow = True
         rows_num = 10
         op_count = 10
         operation_sequence = []
         for _ in range(op_count):
             op_type = random.choice(list(ModType))
-            max_mods_num = 50
-            if op_type == ModType.UPDATE and update_are_too_slow:
-                max_mods_num = 2
+            max_mods_num = 20
             op_num = random.randint(1, max_mods_num)
             operation_sequence.append({"mod_type": op_type, "mods_num": op_num})
 

@@ -153,8 +153,9 @@ cdef class SSLChannelCredentials(ChannelCredentials):
     else:
       c_pem_root_certificates = self._pem_root_certificates
     if self._private_key is None and self._certificate_chain is None:
-      return grpc_ssl_credentials_create(
-          c_pem_root_certificates, NULL, NULL, NULL)
+      with nogil:
+        return grpc_ssl_credentials_create(
+            c_pem_root_certificates, NULL, NULL, NULL)
     else:
       if self._private_key:
         c_pem_key_certificate_pair.private_key = self._private_key
@@ -164,8 +165,9 @@ cdef class SSLChannelCredentials(ChannelCredentials):
         c_pem_key_certificate_pair.certificate_chain = self._certificate_chain
       else:
         c_pem_key_certificate_pair.certificate_chain = NULL
-      return grpc_ssl_credentials_create(
-          c_pem_root_certificates, &c_pem_key_certificate_pair, NULL, NULL)
+      with nogil:
+        return grpc_ssl_credentials_create(
+            c_pem_root_certificates, &c_pem_key_certificate_pair, NULL, NULL)
 
 
 cdef class CompositeChannelCredentials(ChannelCredentials):
@@ -314,7 +316,7 @@ def server_credentials_ssl_dynamic_cert_config(initial_cert_config,
   return credentials
 
 cdef grpc_ssl_certificate_config_reload_status _server_cert_config_fetcher_wrapper(
-        void* user_data, grpc_ssl_server_certificate_config **config) with gil:
+        void* user_data, grpc_ssl_server_certificate_config **config) noexcept with gil:
   # This is a credentials.ServerCertificateConfig
   cdef ServerCertificateConfig cert_config = None
   if not user_data:
@@ -435,8 +437,9 @@ cdef class ComputeEngineChannelCredentials(ChannelCredentials):
       raise ValueError("Call credentials may not be NULL.")
 
   cdef grpc_channel_credentials *c(self) except *:
-    self._c_creds = grpc_google_default_credentials_create(self._call_creds)
-    return self._c_creds
+    with nogil:
+      self._c_creds = grpc_google_default_credentials_create(self._call_creds)
+      return self._c_creds
 
 
 def channel_credentials_compute_engine(call_creds):

@@ -12,26 +12,20 @@ namespace NMonitoring::NAudit {
 
 struct TUrlPattern {
     TString Path;
-    TString ParamName;
-    TString ParamValue;
+    bool Recursive = false;
 };
 
 class TUrlMatcher {
 public:
-    void AddPattern(const TUrlPattern& rule);
-    bool Match(const TString& url, const TCgiParameters& params) const;
-    bool Match(const TString& url, const TString& params = {}) const;
+    void AddPattern(const TUrlPattern& pattern);
+    bool MatchPath(const TStringBuf path) const;
+    bool Match(const TStringBuf url) const;
 
 private:
-    struct TParamCondition {
-        TString Name;
-        TString ExpectedValue;
-    };
-
     struct TNode {
         THashMap<TString, TNode> Children;
-        bool MatchWithoutParams = false;
-        TVector<TParamCondition> MatchedParams;
+        bool PatternEnd = false;
+        bool Recursive = false;
     };
 
     TNode Root;

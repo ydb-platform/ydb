@@ -199,7 +199,7 @@ public:
             }
 
             if (numColumns != sourceColumns->List.size()) {
-                ctx.Error(Pos_) << "SELECT have " << numColumns << " columns, " << OperationHumanName_ << " expects: " << ColumnsHint_.size();
+                ctx.Error(Pos_) << "SELECT have " << numColumns << " columns, " << OperationHumanName_ << " expects: " << sourceColumns->List.size();
                 return false;
             }
 
@@ -220,7 +220,11 @@ public:
                 }
             }
             if (mismatchFound) {
-                ctx.Warning(Pos_, TIssuesIds::YQL_SOURCE_SELECT_COLUMN_MISMATCH) << str.Str();
+                if (!ctx.Warning(Pos_, TIssuesIds::YQL_SOURCE_SELECT_COLUMN_MISMATCH, [&](auto& out) {
+                    out << str.Str();
+                })) {
+                    return false;
+                }
             }
         }
         return true;

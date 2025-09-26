@@ -436,147 +436,137 @@ def delete_keys_recursively(data, keys_to_delete):
             delete_keys_recursively(item, keys_to_delete)
 
 
-def normalize_result_pdisks(result):
-    result = replace_values_by_key(result, ['AvailableSize',
-                                            'TotalSize',
-                                            'LogUsedSize',
-                                            'LogTotalSize',
-                                            'SystemSize',
-                                            'SlotSize',
-                                            'EnforcedDynamicSlotSize',
-                                            ])
-    result = replace_values_by_key_and_value(result, ['Status'], ['ACTIVE', 'INACTIVE'])
-    return result
-
-
-def normalize_result_vdisks(result):
-    return replace_values_by_key(result, ['AvailableSize',
-                                          'IncarnationGuid',
-                                          'InstanceGuid',
-                                          'WriteThroughput',
-                                          'ReadThroughput',
-                                          ])
-
-
-def normalize_result_groups(result):
-    return replace_values_by_key(result, ['Available',
-                                          'Limit',
-                                          ])
-
-
-def normalize_result_nodes(result):
-    result = replace_types_by_key(result, ['ClockSkewUs',
-                                           'ClockSkewMinUs',
-                                           'ClockSkewMaxUs',
-                                           'NetworkUtilization',
-                                           'NetworkUtilizationMin',
-                                           'NetworkUtilizationMax',
-                                           'NetworkWriteThroughput',
-                                           'PingTimeUs',
-                                           'PingTimeMinUs',
-                                           'PingTimeMaxUs',
-                                           'ReverseClockSkewUs',
-                                           'ReversePingTimeUs',
-                                           'Utilization',
-                                           'BytesWritten',
-                                           'ReceiveThroughput',
-                                           'SendThroughput',
-                                           'UptimeSeconds',
-                                           'Usage',
-                                           'TotalSessions',
-                                           ])
-    return replace_values_by_key(result, ['CpuUsage',
-                                          'DiskSpaceUsage',
-                                          'Address',
-                                          'Port',
-                                          'port',
-                                          'host',
-                                          'Host',
-                                          'PeerName',
-                                          'LoadAverage',
-                                          'MemoryStats',
-                                          'MemoryTotal',
-                                          'MemoryLimit',
-                                          'NumberOfCpus',
-                                          'CoresUsed',
-                                          'CoresTotal',
-                                          'RealNumberOfCpus',
-                                          'CreateTime',
-                                          'MaxDiskUsage',
-                                          'Roles',
-                                          'ConnectTime',
-                                          'Connections',
-                                          'ResolveHost',
-                                          ])
-
-
-def normalize_result_info(result):
-    return replace_values_by_key(result, ['ChangeTime',
-                                          'StartTime',
-                                          'ResponseTime',
-                                          'ResponseDuration',
-                                          'ProcessDuration',
-                                          ])
-
-
-def normalize_result_schema(result):
-    return replace_values_by_key(result, ['CreateStep',
-                                          'ACL',
-                                          'EffectiveACL',
-                                          'CreateTxId',
-                                          'PathId',
-                                          'PublicKeys',
-                                          'OriginalUserToken',
-                                          ])
-
-
-def normalize_result_cluster(result):
-    return replace_values_by_key(result, ['MapVersions',
-                                          'Versions',
-                                          'DataCenters',
-                                          'Metrics',
-                                          'StorageTotal',
-                                          'StorageUsed',
-                                          'ROT',
-                                          ])
-
-
-def normalize_result_healthcheck(result):
-    result = replace_values_by_key_and_value(result, ['self_check_result'], ['GOOD', 'DEGRADED', 'MAINTENANCE_REQUIRED', 'EMERGENCY'])
-    delete_keys_recursively(result, ['issue_log'])
-    return result
-
-
-def normalize_result_replication(result):
-    result = replace_values_by_key(result, ['connection_string',
-                                            'endpoint',
-                                            'plan_step',
-                                            'tx_id'])
-    delete_keys_recursively(result, ['issue_log'])
-    return result
-
-
 def normalize_result(result):
-    delete_keys_recursively(result, ['Version',
+    delete_keys_recursively(result, {'Version',
                                      'MemoryUsed',
                                      'WriteThroughput',
                                      'ReadThroughput',
                                      'Read',
                                      'Write',
                                      'size_bytes',
-                                     ])
-    result = wipe_values_by_key(result, ['LatencyGetFast',
+                                     })
+    result = wipe_values_by_key(result, {'LatencyGetFast',
                                          'LatencyPutTabletLog',
                                          'LatencyPutUserData'
-                                         ])
-    result = normalize_result_nodes(result)
-    result = normalize_result_info(result)
-    result = normalize_result_schema(result)
-    result = normalize_result_groups(result)
-    result = normalize_result_pdisks(result)
-    result = normalize_result_vdisks(result)
-    result = normalize_result_cluster(result)
-    result = normalize_result_replication(result)
+                                         })
+
+    replace_with_types = set()
+    replace_with_values = set()
+
+    # nodes
+    replace_with_types.update({'ClockSkewUs',
+                               'ClockSkewMinUs',
+                               'ClockSkewMaxUs',
+                               'NetworkUtilization',
+                               'NetworkUtilizationMin',
+                               'NetworkUtilizationMax',
+                               'NetworkWriteThroughput',
+                               'PingTimeUs',
+                               'PingTimeMinUs',
+                               'PingTimeMaxUs',
+                               'ReverseClockSkewUs',
+                               'ReversePingTimeUs',
+                               'Utilization',
+                               'BytesWritten',
+                               'ReceiveThroughput',
+                               'SendThroughput',
+                               'UptimeSeconds',
+                               'Usage',
+                               'TotalSessions',
+                               })
+
+    replace_with_values.update({'CpuUsage',
+                                'DiskSpaceUsage',
+                                'Address',
+                                'Port',
+                                'port',
+                                'host',
+                                'Host',
+                                'PeerName',
+                                'LoadAverage',
+                                'MemoryStats',
+                                'MemoryTotal',
+                                'MemoryLimit',
+                                'NumberOfCpus',
+                                'CoresUsed',
+                                'CoresTotal',
+                                'RealNumberOfCpus',
+                                'CreateTime',
+                                'MaxDiskUsage',
+                                'Roles',
+                                'ConnectTime',
+                                'Connections',
+                                'ResolveHost',
+                                })
+
+    # info
+    replace_with_values.update({'ChangeTime',
+                                'StartTime',
+                                'ResponseTime',
+                                'ResponseDuration',
+                                'ProcessDuration',
+                                })
+
+    # schema
+    replace_with_values.update({'CreateStep',
+                                'ACL',
+                                'EffectiveACL',
+                                'CreateTxId',
+                                'PathId',
+                                'PublicKeys',
+                                'OriginalUserToken',
+                                })
+
+    # groups
+    replace_with_values.update({'Available',
+                                'Limit',
+                                })
+
+    # pdisks
+    replace_with_values.update({'TotalSize',
+                                'LogUsedSize',
+                                'LogTotalSize',
+                                'SystemSize',
+                                'SlotSize',
+                                'SlotCount',
+                                'EnforcedDynamicSlotSize',
+                                })
+
+    result = replace_values_by_key_and_value(result, {'Status'}, {'ACTIVE', 'INACTIVE'})
+
+    # vdisks
+    replace_with_values.update({'AvailableSize',
+                                'AllocatedSize',
+                                'IncarnationGuid',
+                                'InstanceGuid',
+                                'WriteThroughput',
+                                'ReadThroughput',
+                                })
+
+    # cluster
+    replace_with_values.update({'MapVersions',
+                                'Versions',
+                                'DataCenters',
+                                'Metrics',
+                                'StorageTotal',
+                                'StorageUsed',
+                                'ROT',
+                                })
+
+    # replication
+    replace_with_values.update({'connection_string',
+                                'endpoint',
+                                'plan_step',
+                                'tx_id'})
+
+    result = replace_types_by_key(result, replace_with_types)
+    result = replace_values_by_key(result, replace_with_values)
+    return result
+
+
+def normalize_result_healthcheck(result):
+    result = replace_values_by_key_and_value(result, ['self_check_result'], ['GOOD', 'DEGRADED', 'MAINTENANCE_REQUIRED', 'EMERGENCY'])
+    delete_keys_recursively(result, ['issue_log'])
     return result
 
 
@@ -623,7 +613,7 @@ def test_viewer_storage_nodes_all():
 
 
 def test_storage_groups():
-    return normalize_result(get_viewer("/storage/groups", {
+    return normalize_result(get_viewer("/viewer/groups", {
         'fields_required': 'all'
     }))
 
@@ -844,7 +834,6 @@ def test_operations_list_page_bad():
 
 
 def test_scheme_directory():
-
     result = {}
     result["1-get"] = get_viewer_normalized("/scheme/directory", {
         'database': dedicated_db,
@@ -989,24 +978,118 @@ def test_topic_data():
     return result
 
 
-def test_transfer_describe():
+def test_topic_data_cdc():
+    call_viewer("/viewer/query", {
+        'database': dedicated_db,
+        'query': 'create table table_test_topic_data_cdc(id int64, name text, primary key(id))',
+        'schema': 'multi'
+    })
+
+    alter_response = call_viewer("/viewer/query", {
+        'database': dedicated_db,
+        'query': "alter table table_test_topic_data_cdc add changefeed updates_feed WITH (FORMAT = 'JSON', MODE = 'UPDATES', INITIAL_SCAN = TRUE)"
+    })
+
+    insert_response = call_viewer("/viewer/query", {
+        'database': dedicated_db,
+        'query': 'insert into table_test_topic_data_cdc(id, name) values(11, "elleven")',
+        'schema': 'multi'
+    })
+
+    update_response = call_viewer("/viewer/query", {
+        'database': dedicated_db,
+        'query': "update table_test_topic_data_cdc set name = 'ONE' where id = 1",
+        'schema': 'multi'
+    })
+
+    topic_path = '{}/table_test_topic_data_cdc/updates_feed'.format(dedicated_db)
+    data_response = call_viewer("/viewer/topic_data", {
+        'database': dedicated_db,
+        'path': topic_path,
+        'partition': '0',
+        'offset': '0',
+        'limit': '3'
+    })
+
+    data_response = replace_values_by_key(
+        data_response, ['CreateTimestamp', 'WriteTimestamp', 'ProducerId', ]
+    )
+    data_response = replace_types_by_key(data_response, ['TimestampDiff'])
+
+    final_result = {"alter" : alter_response, "insert" : insert_response, "update" : update_response, "data" : data_response}
+    logging.info("Results: {}".format(final_result))
+    return final_result
+
+
+def test_async_replication_describe():
     grpc_port = cluster.nodes[1].grpc_port
     endpoint = "grpc://localhost:{}/?database={}".format(grpc_port, dedicated_db)
 
-    call_viewer("/viewer/query", {
+    create_result = get_viewer_normalized("/viewer/query", {
         'database': dedicated_db,
         'query': 'CREATE ASYNC REPLICATION `TestAsyncReplication` FOR `TableNotExists` AS `TargetAsyncReplicationTable` WITH (CONNECTION_STRING = "{}")'.format(endpoint),
         'schema': 'multi'
     })
 
-    result = get_viewer_normalized("/viewer/describe_replication", {
+    for i in range(60):
+        describe_result = get_viewer_normalized("/viewer/describe_replication", {
+            'database': dedicated_db,
+            'path': '{}/TestAsyncReplication'.format(dedicated_db),
+            'include_stats': 'true',
+            'enums': 'true'
+        })
+
+        if "error" in describe_result:
+            break
+
+        time.sleep(1)
+
+    return {
+        'create_result': create_result,
+        'describe_result': describe_result
+    }
+
+
+def test_transfer_describe():
+    topic_result = get_viewer_normalized("/viewer/query", {
         'database': dedicated_db,
-        'path': '{}/TestAsyncReplication'.format(dedicated_db),
-        'include_stats': 'true',
-        'enums': 'true'
+        'query': 'CREATE TOPIC TestTransferSourceTopic (CONSUMER OurConsumer)',
+        'schema': 'multi'
     })
 
-    return result
+    table_result = get_viewer_normalized("/viewer/query", {
+        'database': dedicated_db,
+        'query': 'CREATE TABLE TestTransferDestinationTable (id Uint64 NOT NULL, message String, PRIMARY KEY (id) )',
+        'schema': 'multi'
+    })
+
+    transfer_result = get_viewer_normalized("/viewer/query", {
+        'database': dedicated_db,
+        'query': '''CREATE TRANSFER `TestTransfer` FROM `TestTransferSourceTopic` TO `TestTransferDestinationTable`
+            USING ($x) -> { return [<| id: $x._offset, message: $x._data |>]; }
+            WITH (CONSUMER='OurConsumer')''',
+        'schema': 'multi'
+    })
+
+    for i in range(60):
+        describe_result = get_viewer_normalized("/viewer/describe_transfer", {
+            'database': dedicated_db,
+            'path': '{}/TestTransfer'.format(dedicated_db),
+            'include_stats': 'true',
+            'enums': 'true'
+        })
+
+        if "running" in describe_result:
+            break
+
+        time.sleep(1)
+
+    return {
+        'topic_result': topic_result,
+        'table_result': table_result,
+        'transfer_result': transfer_result,
+        'describe_result': describe_result
+    }
 
 
 def normalize_result_query_long(result):
@@ -1205,6 +1288,103 @@ def test_viewer_query_long_multipart():
     return result
 
 
+def normalize_result_event_stream(result):
+    result = replace_values_by_key(result, ['query_id',
+                                            'node_id',
+                                            'session_id',
+                                            ])
+    return result
+
+
+def test_viewer_query_event_stream():
+    """Execute a query requesting an event-stream (text/event-stream) response and parse it.
+
+    The server should return SSE formatted data:
+        event: <name> (optional, default 'message')\n
+        data: <payload line 1>\n
+        data: <payload line 2> (optional, concatenated with newline)\n
+        \n (blank line terminates one event)
+
+    We collect events, try to decode JSON payloads, and normalize dynamic fields.
+    """
+    body = {
+        'database': dedicated_db,
+        'query': 'SELECT * FROM table1;',
+        'action': 'execute-query',
+        'schema': 'multipart',
+    }
+    response = call_viewer_api_post("/viewer/query", body, headers={
+        'Content-Type': 'application/json',
+        'Accept': 'text/event-stream',
+    })
+    result = {
+        'status_code': response.status_code,
+        'content_type': response.headers.get('Content-Type')
+    }
+
+    # If not OK just return text for canonization
+    if response.status_code != 200:
+        result['text'] = response.text
+        return result
+
+    raw_text = response.text
+
+    def parse_event_stream(text):
+        events = []
+        current_event = {}
+        data_lines = []
+
+        def flush_event():
+            if not data_lines and 'event' not in current_event and 'id' not in current_event:
+                return
+            data_str = '\n'.join(data_lines)
+            data_value = data_str
+            # Try JSON parse
+            try:
+                parsed = json.loads(data_str)
+                if isinstance(parsed, dict):
+                    parsed = normalize_result_query_long(parsed)
+                data_value = parsed
+            except Exception:
+                pass
+            evt = {
+                'event': current_event.get('event', 'message'),
+                'data': normalize_result_event_stream(data_value)
+            }
+            if 'id' in current_event:
+                evt['id'] = current_event['id']
+            if 'retry' in current_event:
+                evt['retry'] = current_event['retry']
+            events.append(evt)
+
+        for line in text.splitlines():
+            if line == '':  # end of event
+                flush_event()
+                current_event = {}
+                data_lines = []
+                continue
+            if line.startswith(':'):
+                # comment line, ignore
+                continue
+            if line.startswith('event:'):
+                current_event['event'] = line[6:].strip()
+            elif line.startswith('data:'):
+                data_lines.append(line[5:].lstrip())
+            elif line.startswith('id:'):
+                current_event['id'] = line[3:].strip()
+            elif line.startswith('retry:'):
+                current_event['retry'] = line[6:].strip()
+            else:
+                # treat as continuation of data
+                data_lines.append(line)
+        # Flush last event if file didn't end with blank line
+        flush_event()
+        return events
+
+    result['events'] = parse_event_stream(raw_text)
+    return result
+
+
 def test_security():
     result = {}
     result['database_nodes_root'] = get_viewer_normalized("/viewer/nodes", params={
@@ -1249,6 +1429,35 @@ def test_security():
     })
     result['cluster_nodes_database'] = get_viewer_normalized("/viewer/nodes", params={
         'fields_required': 'NodeId',
+    }, headers={
+        'Cookie': 'ydb_session_id=' + database_session_id,
+    })
+
+    result['storage_nodes_root'] = get_viewer_normalized("/viewer/nodes", params={
+        'fields_required': 'NodeId',
+        'database': dedicated_db,
+        'type': 'storage',
+    }, headers={
+        'Cookie': 'ydb_session_id=' + root_session_id,
+    })
+    result['storage_nodes_monitoring'] = get_viewer_normalized("/viewer/nodes", params={
+        'fields_required': 'NodeId',
+        'database': dedicated_db,
+        'type': 'storage',
+    }, headers={
+        'Cookie': 'ydb_session_id=' + monitoring_session_id,
+    })
+    result['storage_nodes_viewer'] = get_viewer_normalized("/viewer/nodes", params={
+        'fields_required': 'NodeId',
+        'database': dedicated_db,
+        'type': 'storage',
+    }, headers={
+        'Cookie': 'ydb_session_id=' + viewer_session_id,
+    })
+    result['storage_nodes_database'] = get_viewer_normalized("/viewer/nodes", params={
+        'fields_required': 'NodeId',
+        'database': dedicated_db,
+        'type': 'storage',
     }, headers={
         'Cookie': 'ydb_session_id=' + database_session_id,
     })

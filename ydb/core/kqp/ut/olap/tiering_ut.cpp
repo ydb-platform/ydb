@@ -83,7 +83,7 @@ public:
     }
 
     void WriteSampleData() {
-        for (ui64 i = 0; i < 100; ++i) {
+        for (ui64 i = 0; i < 400; ++i) {
             WriteTestData(TestHelper->GetKikimr(), TablePath, 0, 3600000000 + i * 10000, 1000);
             WriteTestData(TestHelper->GetKikimr(), TablePath, 0, 3600000000 + i * 10000, 1000);
         }
@@ -173,21 +173,38 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         auto& olapHelper = tieringHelper.GetOlapHelper();
         auto& testHelper = tieringHelper.GetTestHelper();
         tieringHelper.SetTablePath("/Root/olapTable");
-
+        tieringHelper.GetTestHelper().GetKikimr().GetTestServer().GetRuntime()->GetAppData().ColumnShardConfig.SetBulkUpsertRequireAllColumns(false);
         olapHelper.CreateTestOlapStandaloneTable();
         testHelper.CreateTier(DEFAULT_TIER_NAME);
         testHelper.SetTiering("/Root/olapTable", DEFAULT_TIER_PATH, DEFAULT_COLUMN_NAME);
+
         {
             const TString query = R"(ALTER TABLE `/Root/olapTable` ADD COLUMN f Int32)";
             auto result = testHelper.GetSession().ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToOneLineString());
         }
-        testHelper.RebootTablets("/Root/olapTable");
 
-        tieringHelper.WriteSampleData();
+        for (ui64 i = 0; i < 100; ++i) {
+            WriteTestData(testHelper.GetKikimr(), "/Root/olapTable", 0, 3600000000 + i * 10000, 1000);
+            WriteTestData(testHelper.GetKikimr(), "/Root/olapTable", 0, 3600000000 + i * 10000, 1000);
+        }
+
+        testHelper.RebootTablets("/Root/olapTable");
         csController->WaitCompactions(TDuration::Seconds(5));
         csController->WaitActualization(TDuration::Seconds(5));
-        tieringHelper.CheckAllDataInTier(DEFAULT_TIER_PATH);
+
+        NYdb::NTable::TTableClient tableClient = testHelper.GetKikimr().GetTableClient();
+        auto selectQuery = TStringBuilder();
+        selectQuery << R"(
+            SELECT
+                TierName, SUM(ColumnRawBytes) AS RawBytes, SUM(Rows) AS Rows
+            FROM `/Root/olapTable/.sys/primary_index_portion_stats`
+            WHERE Activity == 1
+            GROUP BY TierName)";
+
+        auto rows = ExecuteScanQuery(tableClient, selectQuery);
+        UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[0].at("TierName")), DEFAULT_TIER_PATH);
     }
 
     Y_UNIT_TEST(EvictionWithStrippedEdsPath) {

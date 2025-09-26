@@ -514,4 +514,4 @@ TEST(TValidateLogicalTypeTest, TestTaggedType)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NTableChunkFormat
+} // namespace NYT::NTableClient

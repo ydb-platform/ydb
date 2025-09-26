@@ -2,7 +2,7 @@
 
 С помощью команды `admin cluster config replace` вы можете загрузить [конфигурацию](../../../../../devops/configuration-management/configuration-v2/index.md) на кластер {{ ydb-short-name }}.
 
-{% include [danger-warning](../_includes/danger-warning.md) %}
+{% include [danger-warning](../../_includes/danger-warning.md) %}
 
 В зависимости от используемой кластером [версии конфигурации](../../../../../devops/configuration-management/compare-configs.md), команда заменяет:
 

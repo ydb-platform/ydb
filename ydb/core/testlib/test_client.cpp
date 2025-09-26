@@ -1,5 +1,6 @@
 #include "test_client.h"
 
+#include <ydb/core/kqp/federated_query/kqp_federated_query_actors.h>
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/appdata.h>
@@ -60,6 +61,7 @@
 #include <ydb/core/client/server/msgbus_server.h>
 #include <ydb/core/security/ticket_parser.h>
 #include <ydb/core/security/ldap_auth_provider/ldap_auth_provider.h>
+#include <ydb/core/security/token_manager/token_manager.h>
 #include <ydb/core/security/ticket_parser_settings.h>
 #include <ydb/core/base/user_registry.h>
 #include <ydb/core/health_check/health_check.h>
@@ -115,8 +117,6 @@
 #include <ydb/core/statistics/service/service.h>
 #include <ydb/core/keyvalue/keyvalue.h>
 #include <ydb/core/persqueue/pq.h>
-#include <ydb/core/persqueue/cluster_tracker.h>
-#include <ydb/core/persqueue/dread_cache_service/caching_service.h>
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
 #include <ydb/core/fq/libs/init/init.h>
 #include <ydb/core/fq/libs/mock/yql_mock.h>
@@ -145,6 +145,9 @@
 #include <util/system/sanitizers.h>
 #include <util/system/valgrind.h>
 #include <util/system/env.h>
+
+#include <ydb/core/fq/libs/checkpoint_storage/storage_service.h>
+#include <ydb/library/yql/dq/actors/compute/dq_checkpoints.h>
 
 namespace NKikimr {
 
@@ -561,6 +564,7 @@ namespace Tests {
             if (appData.BridgeConfig.PilesSize() > 0) {
                 appData.BridgeModeEnabled = true;
             }
+            appData.StatisticsConfig.MergeFrom(Settings->AppConfig->GetStatisticsConfig());
 
             appData.DynamicNameserviceConfig = new TDynamicNameserviceConfig;
             auto dnConfig = appData.DynamicNameserviceConfig;
@@ -702,7 +706,7 @@ namespace Tests {
         // Setup discovery for typically used services on the node
         {
             TIntrusivePtr<NGRpcService::TGrpcEndpointDescription> desc = new NGRpcService::TGrpcEndpointDescription();
-            desc->Address = options.Host;
+            desc->Address = Settings->GrpcHost ? Settings->GrpcHost : options.Host;
             desc->Port = options.Port;
             desc->Ssl = !options.SslData.Empty();
 
@@ -1136,7 +1140,7 @@ namespace Tests {
                 TMailboxType::Revolving, appData.SystemPoolId));
         localConfig.TabletClassInfo[TTabletTypes::StatisticsAggregator] =
             TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(
-                &NStat::CreateStatisticsAggregatorForTests, TMailboxType::Revolving, appData.UserPoolId,
+                &NStat::CreateStatisticsAggregator, TMailboxType::Revolving, appData.UserPoolId,
                 TMailboxType::Revolving, appData.SystemPoolId));
     }
 
@@ -1243,6 +1247,13 @@ namespace Tests {
 
         Runtime->SetTxAllocatorTabletIds({ChangeStateStorage(TxAllocator, Settings->Domain)});
         {
+            if (Settings->AuthConfig.GetTokenManager().GetEnable()) {
+                TActorId fakeHttProxy = Runtime->AllocateEdgeActor(nodeIdx);
+                IActor* tokenManager = Settings->CreateTokenManager({.Config = Settings->AuthConfig.GetTokenManager(), .HttpProxyId = fakeHttProxy});
+                TActorId tokenManagerId = Runtime->Register(tokenManager, nodeIdx, userPoolId);
+                Runtime->RegisterService(MakeTokenManagerID(), tokenManagerId, nodeIdx);
+            }
+
             if (Settings->AuthConfig.HasLdapAuthentication()) {
                 IActor* ldapAuthProvider = NKikimr::CreateLdapAuthProvider(Settings->AuthConfig.GetLdapAuthentication());
                 TActorId ldapAuthProviderId = Runtime->Register(ldapAuthProvider, nodeIdx, userPoolId);
@@ -1273,6 +1284,11 @@ namespace Tests {
             Runtime->RegisterService(MakeDatabaseMetadataCacheId(Runtime->GetNodeId(nodeIdx)), metadataCacheId, nodeIdx);
         }
         {
+            IActor* describeSchemaSecretsService = NKqp::CreateDescribeSchemaSecretsService();
+            TActorId describeSchemaSecretsServiceId = Runtime->Register(describeSchemaSecretsService, nodeIdx, userPoolId);
+            Runtime->RegisterService(NKqp::MakeKqpDescribeSchemaSecretServiceId(Runtime->GetNodeId(nodeIdx)), describeSchemaSecretsServiceId, nodeIdx);
+        }
+        {
             auto kqpProxySharedResources = std::make_shared<NKqp::TKqpProxySharedResources>();
 
             IActor* kqpRmService = NKqp::CreateKqpResourceManagerActor(
@@ -1287,7 +1303,7 @@ namespace Tests {
             }
 
             NKikimr::NKqp::IKqpFederatedQuerySetupFactory::TPtr federatedQuerySetupFactory = Settings->FederatedQuerySetupFactory;
-            if (Settings->InitializeFederatedQuerySetupFactory) {
+            if (Settings->InitializeFederatedQuerySetupFactory && GetRuntime()->GetAppData(nodeIdx).FeatureFlags.GetEnableScriptExecutionOperations()) {
                 const auto& queryServiceConfig = Settings->AppConfig->GetQueryServiceConfig();
 
                 NYql::NConnector::IClient::TPtr connectorClient;
@@ -1321,7 +1337,11 @@ namespace Tests {
                         );
                     }
                 }
-                auto driver = std::make_shared<NYdb::TDriver>(NYdb::TDriverConfig());
+
+                auto actorSystemPtr = std::make_shared<NKikimr::TDeferredActorLogBackend::TAtomicActorSystemPtr>(nullptr);
+                actorSystemPtr->store(Runtime->GetActorSystem(nodeIdx));
+                auto driver = std::make_shared<NYdb::TDriver>(NYdb::TDriverConfig()
+                    .SetLog(std::make_unique<NKikimr::TDeferredActorLogBackend>(actorSystemPtr, NKikimrServices::EServiceKikimr::YDB_SDK)));
 
                 federatedQuerySetupFactory = std::make_shared<NKikimr::NKqp::TKqpFederatedQuerySetupFactoryMock>(
                     NKqp::MakeHttpGateway(queryServiceConfig.GetHttpGateway(), Runtime->GetAppData(nodeIdx).Counters),
@@ -1339,8 +1359,15 @@ namespace Tests {
                     Settings->DqTaskTransformFactory,
                     NYql::TPqGatewayConfig{},
                     Settings->PqGateway ? Settings->PqGateway : NKqp::MakePqGateway(driver, NYql::TPqGatewayConfig{}),
-                    std::make_shared<NKikimr::TDeferredActorLogBackend::TAtomicActorSystemPtr>(nullptr),
+                    actorSystemPtr,
                     driver);
+            }
+
+            const auto& allExternalSourcesTypes = NYql::GetAllExternalDataSourceTypes();
+            for (const auto& source : Settings->AppConfig->GetQueryServiceConfig().GetAvailableExternalDataSources()) {
+                if (!allExternalSourcesTypes.contains(source)) {
+                    ythrow yexception() << "wrong AvailableExternalDataSources \"" << source << "\"";
+                }
             }
 
             IActor* kqpProxyService = NKqp::CreateKqpProxyService(Settings->AppConfig->GetLogConfig(),
@@ -1770,6 +1797,10 @@ namespace Tests {
 
         if (YqSharedResources) {
             YqSharedResources->Stop();
+        }
+
+        if (Settings->FederatedQuerySetupFactory) {
+            Settings->FederatedQuerySetupFactory->Cleanup();
         }
 
         if (Runtime) {

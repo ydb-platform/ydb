@@ -3,6 +3,7 @@
 #include <ydb/public/api/protos/persqueue_error_codes_v1.pb.h>
 
 #include <ydb/library/aclib/aclib.h>
+#include <ydb/library/cloud_permissions/cloud_permissions.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/ticket_parser.h>
@@ -74,19 +75,11 @@ void FillIssue(Ydb::Issue::IssueMessage* issue, const Ydb::PersQueue::ErrorCode:
 
 
 static inline TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry>  GetTicketParserEntries(const TString& dbId, const TString& folderId) {
-    TVector<TString> permissions = {
-        "ydb.databases.list",
-        "ydb.databases.create",
-        "ydb.databases.connect",
-        "ydb.tables.select",
-        "ydb.schemas.getMetadata",
-        "ydb.streams.write"
-    };
     TVector<std::pair<TString, TString>> attributes;
     if (!dbId.empty()) attributes.push_back({"database_id", dbId});
     if (!folderId.empty()) attributes.push_back({"folder_id", folderId});
     if (!attributes.empty()) {
-        return {{permissions, attributes}};
+        return {{NCloudPermissions::TCloudPermissions<NCloudPermissions::EType::DEFAULT>::Get(), attributes}};
     }
     return {};
 }

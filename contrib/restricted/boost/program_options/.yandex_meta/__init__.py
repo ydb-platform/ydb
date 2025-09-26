@@ -14,7 +14,7 @@ def post_install(self):
 boost_program_options = NixSourceProject(
     nixattr="boost_program_options",
     arcdir=boost.make_arcdir("program_options"),
-    owners=["g:cpp-contrib", "g:taxi-common"],
+    owners=["g:cpp-contrib"],
     copy_sources=[
         "include/boost/",
         "src/",

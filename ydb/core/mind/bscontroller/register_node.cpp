@@ -293,7 +293,7 @@ public:
             }
         }
 
-        Self->ApplySyncerState(nodeId, record.GetSyncerState(), groupIDsToRead);
+        Self->ApplySyncerState(nodeId, record.GetSyncerState(), groupIDsToRead, /*comprehensive=*/ true);
         Self->SerializeSyncers(nodeId, &Response->Record, groupIDsToRead);
 
         Self->ReadGroups(groupIDsToRead, false, Response.get(), nodeId);
@@ -489,6 +489,9 @@ void TBlobStorageController::ReadPDisk(const TPDiskId& pdiskId, const TPDiskInfo
         }
         if (pdisk.InferPDiskSlotCountFromUnitSize) {
             pDisk->SetInferPDiskSlotCountFromUnitSize(pdisk.InferPDiskSlotCountFromUnitSize);
+        }
+        if (pdisk.InferPDiskSlotCountMax) {
+            pDisk->SetInferPDiskSlotCountMax(pdisk.InferPDiskSlotCountMax);
         }
     }
     pDisk->SetExpectedSerial(pdisk.ExpectedSerial);

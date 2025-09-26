@@ -32,6 +32,13 @@ TTopicMessage::TTopicMessage(const TDataEvent::TCompressedMessage& msg)
 {
 }
 
+TTopicMessage::TTopicMessage(TDataEvent::TMessageInformation&& msg, TString&& data)
+    : TDataEvent::TMessageInformation(std::move(msg))
+    , Codec(ECodec::RAW)
+    , Data(std::move(data))
+{
+}
+
 TTopicMessage::TTopicMessage(ui64 offset, const TString& data)
     : TDataEvent::TMessageInformation(offset, "", 0, TInstant::Zero(), TInstant::Zero(), nullptr, nullptr, 0, "")
     , Codec(ECodec::RAW)

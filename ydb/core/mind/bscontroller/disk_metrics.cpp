@@ -33,20 +33,19 @@ public:
                 value.ClearVDiskId();
                 db.Table<Schema::VDiskMetrics>().Key(key).Update<Schema::VDiskMetrics::Metrics>(value);
                 Self->SysViewChangedVSlots.insert(vslotId);
-                Self->SysViewChangedGroups.insert(v->GroupId);
+                Self->SysViewChangedGroups.insert(v->GroupId); // TODO(alexvru): really necessary?
             }
         }
 
         for (auto& [vslotId, v] : Self->StaticVSlots) {
             if (std::exchange(v.MetricsDirty, false)) {
-                Self->SysViewChangedVSlots.insert(vslotId);
                 auto vdiskId = v.VDiskId;
                 auto groupId = vdiskId.GroupID.GetRawId();
                 auto&& key = std::tie(groupId, vdiskId.GroupGeneration, vdiskId.FailRealm, vdiskId.FailDomain, vdiskId.VDisk);
                 auto value = v.VDiskMetrics;
                 value->ClearVDiskId();
                 db.Table<Schema::VDiskMetrics>().Key(key).Update<Schema::VDiskMetrics::Metrics>(*value);
-                Self->SysViewChangedGroups.insert(vdiskId.GroupID);
+                Self->SysViewChangedVSlots.insert(vslotId);
             }
         }
         return true;
@@ -64,6 +63,7 @@ void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerUpdateDiskStatu
 
     const TInstant now = TActivationContext::Now();
     auto& record = ev->Get()->Record;
+    THashSet<TGroupId> groupsToCheck;
 
     STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXUDM01, "Updating disk status", (Record, record));
 
@@ -75,6 +75,7 @@ void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerUpdateDiskStatu
             i64 allocatedSizeIncrement;
             if (slot->UpdateVDiskMetrics(m, &allocatedSizeIncrement) && slot->Group) {
                 dirtyGroups.insert(slot->Group);
+                groupsToCheck.insert(slot->Group->ID);
             }
             if (allocatedSizeIncrement && !slot->IsBeingDeleted()) {
                 const TGroupInfo *group = FindGroup(slot->GroupId);
@@ -96,14 +97,14 @@ void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerUpdateDiskStatu
     }
 
     // apply PDisk metrics update
-    TSet<TList<TSelectGroupsQueueItem>::iterator, TPDiskToQueueComp> queues;
     for (const auto& m : record.GetPDisksMetrics()) {
         const TPDiskId pdiskId(ev->Sender.NodeId(), m.GetPDiskId());
         if (auto *pdisk = FindPDisk(pdiskId)) {
             if (pdisk->UpdatePDiskMetrics(m, now)) {
-                const auto first = std::make_pair(pdiskId, TList<TSelectGroupsQueueItem>::iterator());
-                for (auto it = PDiskToQueue.lower_bound(first); it != PDiskToQueue.end() && it->first == pdiskId; ++it) {
-                    queues.insert(it->second);
+                for (auto& [id, slot] : pdisk->VSlotsOnPDisk) {
+                    if (slot->Group) {
+                        groupsToCheck.insert(slot->Group->ID);
+                    }
                 }
             }
             pdisk->UpdateOperational(true);
@@ -114,9 +115,8 @@ void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerUpdateDiskStatu
             STLOG(PRI_NOTICE, BS_CONTROLLER, BSCTXUDM03, "PDisk not found", (PDiskId, pdiskId));
         }
     }
-    for (const TList<TSelectGroupsQueueItem>::iterator it : queues) {
-        ProcessSelectGroupsQueueItem(it);
-    }
+
+    UpdateWaitingGroups(groupsToCheck);
 
     // process VDisk status
     ProcessVDiskStatus(record.GetVDiskStatus());

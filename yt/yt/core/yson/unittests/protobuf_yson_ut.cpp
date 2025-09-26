@@ -46,7 +46,7 @@ using TError = NYT::NProto::TError;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT
+} // namespace NYT::NYson::NProto
 
 namespace NYT::NYson {
 namespace {
@@ -2080,6 +2080,36 @@ TEST(TProtobufToYsonTest, ReservedFields)
     TEST_EPILOGUE(TMessageWithReservedFields)
 }
 
+TEST(TProtobufToYsonTest, MessageWithUsedUnknownFieldNumber)
+{
+    TEST_PROLOGUE()
+    codedStream.WriteTag(WireFormatLite::MakeTag(3005, WireFormatLite::WIRETYPE_VARINT));
+    codedStream.WriteVarint64(1);
+    TEST_EPILOGUE(TMessageWithUsedUnknownFieldNumber)
+
+    auto writtenNode = ConvertToNode(TYsonString(yson));
+    auto expectedNode = BuildYsonNodeFluently()
+        .BeginMap()
+            .Item("field").Value(1)
+        .EndMap();
+    EXPECT_TRUE(AreNodesEqual(writtenNode, expectedNode));
+}
+
+TEST(TProtobufToYsonTest, MessageWith3005FieldAndUnknownFieldNumberOverride)
+{
+    TEST_PROLOGUE()
+    codedStream.WriteTag(WireFormatLite::MakeTag(3005, WireFormatLite::WIRETYPE_VARINT));
+    codedStream.WriteVarint64(1);
+    TEST_EPILOGUE(TMessageWith3005FieldAndUnknownFieldNumberOverride)
+
+    auto writtenNode = ConvertToNode(TYsonString(yson));
+    auto expectedNode = BuildYsonNodeFluently()
+        .BeginMap()
+            .Item("field").Value(1)
+        .EndMap();
+    EXPECT_TRUE(AreNodesEqual(writtenNode, expectedNode));
+}
+
 #undef TEST_PROLOGUE
 #undef TEST_EPILOGUE
 #undef TEST_EPILOGUE_WITH_OPTIONS
@@ -2826,12 +2856,11 @@ TEST(TYsonToProtobufTest, ForceSnakeCaseNames)
     newConfig->ForceSnakeCaseNames = true;
     SetProtobufInteropConfig(newConfig);
 
-    auto ysonNode = BuildYsonNodeFluently()
+    auto ysonString = BuildYsonStringFluently()
         .BeginMap()
             .Item("some_field").Value(1)
             .Item("another_field123").Value(2)
         .EndMap();
-    auto ysonString = ConvertToYsonString(ysonNode);
 
     NProto::TOtherExternalProtobuf message;
     message.ParseFromStringOrThrow(NYson::YsonStringToProto(
@@ -2854,6 +2883,47 @@ TEST(TYsonToProtobufTest, ForceSnakeCaseNames)
             << "Expected: " << ysonString.AsStringBuf() << "\n\n"
             << "Actual: " << newYsonString << "\n\n";
     }
+}
+
+TEST(TYsonToProtobufTest, MessageWithUsedUnknownFieldNumber)
+{
+    auto ysonString = BuildYsonStringFluently()
+        .BeginMap()
+            .Item("field").Value(1)
+            .Item("field2").Value(1)
+        .EndMap();
+
+    EXPECT_THROW(
+        YsonStringToProto(
+            ysonString,
+            NYson::ReflectProtobufMessageType<NProto::TMessageWithUsedUnknownFieldNumber>(),
+            EUnknownYsonFieldsMode::Keep),
+        TErrorException);
+
+    auto protoString = YsonStringToProto(
+        ysonString,
+        NYson::ReflectProtobufMessageType<NProto::TMessageWithUsedUnknownFieldNumber>(),
+        EUnknownYsonFieldsMode::Skip);
+    NProto::TMessageWithUsedUnknownFieldNumber proto;
+    proto.ParseFromStringOrThrow(protoString);
+    EXPECT_EQ(proto.field(), 1);
+}
+
+TEST(TYsonToProtobufTest, MessageWithUnknownFieldNumberOverride)
+{
+    auto protoString = YsonStringToProto(BuildYsonStringFluently()
+        .BeginMap()
+            .Item("unknown_field").Value(2)
+        .EndMap(),
+        ReflectProtobufMessageType<NProto::TMessageWith3005FieldAndUnknownFieldNumberOverride>(),
+        EUnknownYsonFieldsMode::Keep);
+
+    NProto::TMessageWith3005FieldAndUnknownFieldNumberOverride proto;
+    proto.ParseFromStringOrThrow(protoString);
+
+    const auto& unknownFieldsSet = proto.GetReflection()->GetUnknownFields(proto);
+    EXPECT_EQ(unknownFieldsSet.field_count(), 1);
+    EXPECT_EQ(unknownFieldsSet.field(0).number(), 3006);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

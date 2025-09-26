@@ -408,7 +408,7 @@ void S::RegisterMetadata(auto&& registrar)
 
 PHOENIX_DEFINE_TYPE(S);
 
-} // namespace NVersions
+} // namespace NInVersions
 
 TEST(TPhoenixTest, InVersion1)
 {
@@ -636,6 +636,83 @@ TEST(TPhoenixTest, CompatFieldSerializer)
     auto s = Deserialize<S>(buffer);
     EXPECT_EQ(s.A, 123);
     EXPECT_EQ(s.B, 0);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+namespace NSchemaEvolution {
+
+struct S
+{
+    int A;
+    int C;
+
+    bool operator==(const S&) const = default;
+
+    PHOENIX_DECLARE_TYPE(S, 0x4910d939);
+};
+
+enum EVersion
+{
+    Initial = 1,
+    RemoveB = 2,
+    AddC = 3,
+};
+
+void S::RegisterMetadata(auto&& registrar)
+{
+    PHOENIX_REGISTER_FIELD(1, A);
+
+    registrar.template VirtualField<2>("B", [] (TThis* /*this_*/, auto& context) {
+        Load<int>(context);
+    })
+        .BeforeVersion(RemoveB)();
+
+    PHOENIX_REGISTER_FIELD(3, C,
+        .SinceVersion(AddC)
+        .WhenMissing([] (TThis* this_, auto& /*context*/) {
+            this_->C = 777;
+        }));
+}
+
+PHOENIX_DEFINE_TYPE(S);
+
+} // NSchemaEvolution
+
+TEST(TPhoenixTest, AddFieldAfterDeletedField)
+{
+    using namespace NSchemaEvolution;
+    auto buffer = MakeBuffer([] (auto& context) {
+        Save<int>(context, 123);
+    });
+
+    auto removeBSchema = ConvertTo<TUniverseSchemaPtr>(TYsonString(TString(R"""(
+        {
+            types = [
+                {
+                    name = S;
+                    tag = 1225840953u;
+                    fields = [
+                        {
+                            name = a;
+                            tag = 1u;
+                        };
+                        {
+                            name = b;
+                            tag = 2u;
+                        };
+                    ]
+                }
+            ];
+        }
+    )""")));
+
+    TLoadSessionGuard guard(removeBSchema);
+    EXPECT_TRUE(NDetail::UniverseLoadState->Schedule);
+
+    auto s = Deserialize<S>(buffer, RemoveB);
+    EXPECT_EQ(s.A, 123);
+    EXPECT_EQ(s.C, 777);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

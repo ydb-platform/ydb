@@ -4,8 +4,8 @@
 #include "helpers.h"
 #include "read_init_auth_actor.h"
 
+#include <ydb/core/persqueue/public/constants.h>
 #include <ydb/library/persqueue/topic_parser/counters.h>
-#include <ydb/core/persqueue/user_info.h>
 
 #include <library/cpp/protobuf/util/repeated_field_utils.h>
 #include <library/cpp/random_provider/random_provider.h>
@@ -705,7 +705,9 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvCommitDone::
         << ", from# " << msg->StartCookie
         << ", to# " << msg->LastCookie
         << ", offset# " << partition.Offset);
-    WriteToStreamOrDie(ctx, std::move(result));
+    if (!WriteToStreamOrDie(ctx, std::move(result))) {
+        return;
+    }
 
     NotifyChildren(partition, ctx);
 }
@@ -1113,8 +1115,8 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvAuthResultOk
 
         if (IsQuotaRequired()) {
             Y_ABORT_UNLESS(MaybeRequestQuota(1, EWakeupTag::RlInit, ctx));
-        } else {
-            InitSession(ctx);
+        } else  if (!InitSession(ctx)) {
+            return;
         }
     } else {
         for (const auto& [name, t] : ev->Get()->TopicAndTablets) {
@@ -1138,17 +1140,17 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvAuthResultOk
 }
 
 template <bool UseMigrationProtocol>
-void TReadSessionActor<UseMigrationProtocol>::InitSession(const TActorContext& ctx) {
+bool TReadSessionActor<UseMigrationProtocol>::InitSession(const TActorContext& ctx) {
     TServerMessage result;
     result.set_status(Ydb::StatusIds::SUCCESS);
 
     result.mutable_init_response()->set_session_id(Session);
     if (!WriteToStreamOrDie(ctx, std::move(result))) {
-        return;
+        return false;
     }
 
     if (!ReadFromStreamOrDie(ctx)) {
-        return;
+        return false;
     }
 
     for (auto& [_, holder] : Topics) {
@@ -1168,10 +1170,13 @@ void TReadSessionActor<UseMigrationProtocol>::InitSession(const TActorContext& c
     for (const auto& [topicName, topic] : Topics) {
         if (ReadWithoutConsumer) {
             if (topic->Groups.size() == 0) {
-                return CloseSession(PersQueue::ErrorCode::BAD_REQUEST, "explicitly specify the partitions when reading without a consumer", ctx);
+                CloseSession(PersQueue::ErrorCode::BAD_REQUEST, "explicitly specify the partitions when reading without a consumer", ctx);
+                return false;
             }
             for (auto group : topic->Groups) {
-                SendLockPartitionToSelf(group-1, topicName, topic, ctx);
+                if (!SendLockPartitionToSelf(group-1, topicName, topic, ctx)) {
+                    return false;
+                }
             }
         } else {
             RegisterSession(topic->FullConverter->GetInternalName(), topic->PipeClient, topic->Groups, ctx);
@@ -1181,13 +1186,16 @@ void TReadSessionActor<UseMigrationProtocol>::InitSession(const TActorContext& c
     }
 
     ctx.Schedule(TDuration::Seconds(AppData(ctx)->PQConfig.GetACLRetryTimeoutSec()), new TEvents::TEvWakeup(EWakeupTag::RecheckAcl));
+
+    return true;
 }
 
 template <bool UseMigrationProtocol>
-void TReadSessionActor<UseMigrationProtocol>::SendLockPartitionToSelf(ui32 partitionId, TString topicName, const TTopicHolder::TPtr& topic, const TActorContext& ctx) {
+bool TReadSessionActor<UseMigrationProtocol>::SendLockPartitionToSelf(ui32 partitionId, TString topicName, const TTopicHolder::TPtr& topic, const TActorContext& ctx) {
     auto partitionIt = topic->Partitions.find(partitionId);
     if (partitionIt == topic->Partitions.end()) {
-        return CloseSession(PersQueue::ErrorCode::BAD_REQUEST, TStringBuilder() << "no partition " << partitionId << " in topic " << topicName, ctx);
+        CloseSession(PersQueue::ErrorCode::BAD_REQUEST, TStringBuilder() << "no partition " << partitionId << " in topic " << topicName, ctx);
+        return false;
     }
     THolder<TEvPersQueue::TEvLockPartition> res{new TEvPersQueue::TEvLockPartition};
     res->Record.SetSession(Session);
@@ -1199,6 +1207,8 @@ void TReadSessionActor<UseMigrationProtocol>::SendLockPartitionToSelf(ui32 parti
     res->Record.SetClientId(ClientId);
     res->Record.SetTabletId(partitionIt->second.TabletId);
     ctx.Send(ctx.SelfID, res.Release());
+
+    return true;
 }
 
 template <bool UseMigrationProtocol>
@@ -1417,6 +1427,7 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvPartitionSta
             result.mutable_partition_session_status_response()->mutable_partition_offsets()->set_end(ev->Get()->EndOffset);
             *result.mutable_partition_session_status_response()->mutable_write_time_high_watermark() =
                 ::google::protobuf::util::TimeUtil::MillisecondsToTimestamp(ev->Get()->WriteTimestampEstimateMs);
+            result.mutable_partition_session_status_response()->set_read_offset(ev->Get()->ReadOffset);
         }
     }
 
@@ -1799,7 +1810,9 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(NGRpcService::TGRpcRequestP
             TServerMessage result;
             result.set_status(Ydb::StatusIds::SUCCESS);
             result.mutable_update_token_response();
-            WriteToStreamOrDie(ctx, std::move(result));
+            if (!WriteToStreamOrDie(ctx, std::move(result))) {
+                return;
+            }
         }
     } else {
         if (ev->Get()->Retryable) {
@@ -2339,7 +2352,7 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvents::TEvWakeup::TPtr& e
 
     switch (tag) {
         case EWakeupTag::RlInit:
-            return InitSession(ctx);
+            return (void)InitSession(ctx);
 
         case EWakeupTag::RecheckAcl:
             return RecheckACL(ctx);

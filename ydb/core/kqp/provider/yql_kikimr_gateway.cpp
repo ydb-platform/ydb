@@ -76,6 +76,16 @@ void TReplicationSettings::TStaticCredentials::Serialize(NKikimrReplication::TSt
     }
 }
 
+void TReplicationSettings::TIamCredentials::Serialize(NKikimrReplication::TIamCredentials& proto) const {
+    InitialToken.Serialize(*proto.MutableInitialToken());
+    if (ServiceAccountId) {
+        proto.SetServiceAccountId(ServiceAccountId);
+    }
+    if (ResourceId) {
+        proto.SetResourceId(ResourceId);
+    }
+}
+
 void TReplicationSettings::TGlobalConsistency::Serialize(NKikimrReplication::TConsistencySettings_TGlobalConsistency& proto) const {
     if (CommitInterval) {
         proto.SetCommitIntervalMilliSeconds(CommitInterval.MilliSeconds());
@@ -166,7 +176,7 @@ bool TTableSettings::IsSet() const {
     return CompactionPolicy || PartitionBy || AutoPartitioningBySize || UniformPartitions || PartitionAtKeys
         || PartitionSizeMb || AutoPartitioningByLoad || MinPartitions || MaxPartitions || KeyBloomFilter
         || ReadReplicasSettings || TtlSettings || DataSourcePath || Location || ExternalSourceParameters
-        || StoreExternalBlobs;
+        || StoreExternalBlobs || ExternalDataChannelsCount;
 }
 
 EYqlIssueCode YqlStatusFromYdbStatus(ui32 ydbStatus) {

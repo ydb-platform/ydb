@@ -33,6 +33,8 @@ def add_options(p):
     common.add_group_ids_option(g)
     p.add_argument('--max-donors-per-pdisk', type=int, default=0, help='Limit number of donors per pdisk')
     p.add_argument('--allow-same-node', action='store_true', help='Allow to relocate vdisks from one group to the same node')
+    p.add_argument('--prefer-less-occupied-rack', action='store_true', help='Take into account racks\' free slots picking pdisk from rack with more free slots first')
+    p.add_argument('--with-attention-to-replication', action='store_true', help='Take into account replicating vdisks picking node and pdisk with less amount of them')
     p.add_argument('--waiting-time', type=int, default=Constants.WAITING_TIME, help='Time to wait when there are no vdisks to reassign')
     p.add_argument('--time-between-reassignings', type=int, default=Constants.TIME_BERWEEN_REASSIGNINGS, help='Time to wait between reassignings')
     common.add_basic_format_options(p)
@@ -240,6 +242,8 @@ class BalancingStrategy(IBalancingStrategy):
         cmd.FailRealmIdx = vslot.FailRealmIdx
         cmd.FailDomainIdx = vslot.FailDomainIdx
         cmd.VDiskIdx = vslot.VDiskIdx
+        cmd.PreferLessOccupiedRack = self.args.prefer_less_occupied_rack
+        cmd.WithAttentionToReplication = self.args.with_attention_to_replication
 
     def reassign_vslot(self, vslot, try_blocking):
         pdisk_id = common.get_pdisk_id(vslot.VSlotId)
@@ -448,6 +452,8 @@ class GroupVSlotsBalancingStrategy(BalancingStrategy):
         cmd.FailRealmIdx = vslot.FailRealmIdx
         cmd.FailDomainIdx = vslot.FailDomainIdx
         cmd.VDiskIdx = 0
+        cmd.PreferLessOccupiedRack = self.args.prefer_less_occupied_rack
+        cmd.WithAttentionToReplication = self.args.with_attention_to_replication
         target = cmd.TargetPDiskId
         target.NodeId = target_pdisk_id[0]
         target.PDiskId = target_pdisk_id[1]

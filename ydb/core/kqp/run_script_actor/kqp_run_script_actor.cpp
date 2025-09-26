@@ -135,11 +135,12 @@ public:
         , ProgressStatsPeriod(settings.ProgressStatsPeriod)
         , QueryServiceConfig(std::move(queryServiceConfig))
         , SaveQueryPhysicalGraph(settings.SaveQueryPhysicalGraph)
+        , DisableDefaultTimeout(settings.DisableDefaultTimeout)
         , PhysicalGraph(std::move(settings.PhysicalGraph))
         , Counters(settings.Counters)
     {}
 
-    static constexpr char ActorName[] = "KQP_RUN_SCRIPT_ACTOR";
+    [[maybe_unused]] static constexpr char ActorName[] = "KQP_RUN_SCRIPT_ACTOR";
 
     void Bootstrap() {
         const auto& traceId = Request.GetTraceId();
@@ -175,6 +176,7 @@ private:
         hFunc(TEvScriptLeaseUpdateResponse, Handle);
         hFunc(TEvSaveScriptResultMetaFinished, Handle);
         hFunc(TEvSaveScriptResultFinished, Handle);
+        hFunc(TEvSaveScriptProgressResponse, Handle);
         hFunc(TEvCheckAliveRequest, Handle);
     )
 
@@ -248,6 +250,7 @@ private:
         ev->Record = Request;
         ev->Record.MutableRequest()->SetSessionId(SessionId);
         ev->SetSaveQueryPhysicalGraph(SaveQueryPhysicalGraph);
+        ev->SetDisableDefaultTimeout(DisableDefaultTimeout);
         ev->SetUserRequestContext(UserRequestContext);
         if (PhysicalGraph) {
             ev->SetQueryPhysicalGraph(std::move(*PhysicalGraph));
@@ -255,6 +258,7 @@ private:
         if (ev->Record.GetRequest().GetCollectStats() >= Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL) {
             ev->SetProgressStatsPeriod(ProgressStatsPeriod ? ProgressStatsPeriod : TDuration::MilliSeconds(QueryServiceConfig.GetProgressStatsPeriodMs()));
         }
+        ev->SetGeneration(LeaseGeneration);
 
         NActors::ActorIdToProto(SelfId(), ev->Record.MutableRequestActorId());
 
@@ -265,8 +269,12 @@ private:
         }
     }
 
-    void UpdateScriptProgress(const TString& plan) {
-        const auto& updaterId = Register(CreateScriptProgressActor(ExecutionId, Database, plan, LeaseGeneration));
+    void UpdateScriptProgress(const TString& plan, std::optional<TString> ast = std::nullopt) {
+        if (AstSaved) {
+            ast = std::nullopt;
+        }
+
+        const auto& updaterId = Register(CreateScriptProgressActor(ExecutionId, Database, plan, LeaseGeneration, ast, QueryServiceConfig));
         LOG_T("Start TScriptProgressActor " << updaterId);
     }
 
@@ -346,9 +354,9 @@ private:
             );
             Send(MakeKqpFinalizeScriptServiceId(SelfId().NodeId()), scriptFinalizeRequest.release());
             return;
-        } else {
-            LOG_N("Script final status is already saved, WaitFinalizationRequest: " << WaitFinalizationRequest);
         }
+
+        LOG_N("Script final status is already saved, WaitFinalizationRequest: " << WaitFinalizationRequest);
 
         if (!WaitFinalizationRequest && RunState != ERunState::Cancelled && RunState != ERunState::Finished) {
             RunState = ERunState::Finished;
@@ -571,7 +579,8 @@ private:
 
     void Handle(TEvKqpExecuter::TEvExecuterProgress::TPtr& ev) {
         LOG_T("Got script progress from " << ev->Sender);
-        UpdateScriptProgress(ev->Get()->Record.GetQueryPlan());
+        const auto& record = ev->Get()->Record;
+        UpdateScriptProgress(record.GetQueryPlan(), record.GetQueryAst());
     }
 
     void Handle(TEvSaveScriptExternalEffectRequest::TPtr& ev) {
@@ -817,6 +826,14 @@ private:
         CheckInflight();
     }
 
+    void Handle(TEvSaveScriptProgressResponse::TPtr& ev) {
+        LOG_T("Script progress updated " << ev->Sender << ", Status: " << ev->Get()->Status << ", Issues: " << ev->Get()->Issues.ToOneLineString());
+
+        if (ev->Get()->AstSaved) {
+            AstSaved = true;
+        }
+    }
+
     static Ydb::Query::ExecStatus GetExecStatusFromStatusCode(Ydb::StatusIds::StatusCode status) {
         if (status == Ydb::StatusIds::SUCCESS) {
             return Ydb::Query::EXEC_STATUS_COMPLETED;
@@ -911,6 +928,7 @@ private:
     const TDuration ProgressStatsPeriod;
     const NKikimrConfig::TQueryServiceConfig QueryServiceConfig;
     const bool SaveQueryPhysicalGraph = false;
+    const bool DisableDefaultTimeout = false;
     std::optional<NKikimrKqp::TQueryPhysicalGraph> PhysicalGraph;
     std::optional<TActorId> PhysicalGraphSender;
     TIntrusivePtr<TKqpCounters> Counters;
@@ -927,6 +945,7 @@ private:
     // Result info
     NYql::TIssues Issues;
     Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
+    bool AstSaved = false;
 
     // Result data
     std::vector<TResultSetInfo> ResultSetInfos;

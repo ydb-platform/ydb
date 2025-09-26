@@ -419,7 +419,7 @@ private:
     TVector<TDataProviderInfo> DataProviders_;
     TYqlOperationOptions OperationOptions_;
     TCredentials::TPtr Credentials_;
-    const IUrlListerManagerPtr UrlListerManager_;
+    IUrlListerManagerPtr UrlListerManager_;
     IUdfResolver::TPtr UdfResolver_;
     const TUdfIndex::TPtr UdfIndex_;
     const TUdfIndexPackageSet::TPtr UdfIndexPackageSet_;
@@ -472,6 +472,6 @@ private:
     TMaybe<TIssue> ParametersIssue_;
 };
 
-void UpdateSqlFlagsFromQContext(const TQContext& qContext, THashSet<TString>& flags);
+void UpdateSqlFlagsFromQContext(const TQContext& qContext, THashSet<TString>& flags, TMaybe<TString> gatewaysPatch = {});
 
 } // namspace NYql

@@ -97,6 +97,7 @@ TQueryInfoList TVectorWorkloadGenerator::Select() {
 
     // Create the query info with a callback that captures the target index
     TQueryInfo queryInfo(query, std::move(params));
+    queryInfo.UseStaleRO = Params.StaleRO;
 
     return TQueryInfoList(1, queryInfo);
 }

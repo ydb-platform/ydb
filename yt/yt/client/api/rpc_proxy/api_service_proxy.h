@@ -211,9 +211,11 @@ public:
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, ListQueries);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, AlterQuery);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, GetQueryTrackerInfo);
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, GetDeclaredParametersInfo);
 
     // Distributed table client
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, StartDistributedWriteSession);
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, PingDistributedWriteSession);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, FinishDistributedWriteSession);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, WriteTableFragment,
         .SetStreamingEnabled(true));

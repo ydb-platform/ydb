@@ -390,7 +390,7 @@ namespace NKqp {
         case NScheme::NTypeIds::JsonDocument:
             return arrow::field(name, arrow::binary(), nullable);
         case NScheme::NTypeIds::Decimal:
-            return arrow::field(name, arrow::decimal(typeInfo.GetDecimalType().GetPrecision(), typeInfo.GetDecimalType().GetScale()), nullable);
+            return arrow::field(name, std::make_shared<arrow::FixedSizeBinaryType>(NScheme::FSB_SIZE), nullable);
         case NScheme::NTypeIds::Pg:
             switch (NPg::PgTypeIdFromTypeDesc(typeInfo.GetPgTypeDesc())) {
                 case INT2OID:

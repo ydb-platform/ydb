@@ -43,7 +43,7 @@ namespace NTabletFlatExecutor {
         {
             auto *partStore = CheckedCast<const NTable::TPartStore*>(part);
 
-            const TSharedData* page = Lookup(ref, partStore->Locate(lob, ref));
+            const TSharedData* page = TryGetPage(ref, partStore->Locate(lob, ref));
 
             if (!page && ReadMissingReferences) {
                 MissingReferencesSize_ += Max<ui64>(1, part->GetPageSize(lob, ref));
@@ -56,7 +56,7 @@ namespace NTabletFlatExecutor {
         {
             auto *partStore = CheckedCast<const NTable::TPartStore*>(part);
 
-            return Lookup(pageId, partStore->PageCollections.at(groupId.Index).Get());
+            return TryGetPage(pageId, partStore->PageCollections.at(groupId.Index).Get());
         }
 
         void EnableReadMissingReferences() {
@@ -82,7 +82,7 @@ namespace NTabletFlatExecutor {
             }
         }
 
-        const TSharedData* Lookup(TPageId pageId, TPageCollection *pageCollection)
+        const TSharedData* TryGetPage(TPageId pageId, TPageCollection *pageCollection)
         {
             auto& pinnedCollection = Seat.Pinned[pageCollection->Id];
             auto* pinnedPage = pinnedCollection.FindPtr(pageId);
@@ -98,6 +98,7 @@ namespace NTabletFlatExecutor {
                 return nullptr;
             }
 
+            sharedBody.IncrementFrequency();
             auto emplaced = pinnedCollection.emplace(pageId, TPrivatePageCache::TPinnedPage(std::move(sharedBody)));
             Y_ENSURE(emplaced.second);
             auto& pinnedBody = emplaced.first->second.PinnedBody;
@@ -119,19 +120,6 @@ namespace NTabletFlatExecutor {
                 result.emplace(pageCollectionId, std::move(pages));
             }
             ToLoad.clear();
-            return result;
-        }
-        
-        auto ObtainSharedCacheTouches() {
-            THashMap<TLogoBlobID, THashSet<TPageId>> result;
-            for (const auto& [pageCollectionId, pages] : Seat.Pinned) {
-                if (Cache.FindPageCollection(pageCollectionId)) {
-                    auto& touches = result[pageCollectionId];
-                    for (const auto& [pageId, pinnedPageRef] : pages) {
-                        touches.insert(pageId);
-                    }
-                }
-            }
             return result;
         }
 

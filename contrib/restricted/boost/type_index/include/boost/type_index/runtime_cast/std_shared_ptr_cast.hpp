@@ -13,14 +13,23 @@
 /// \brief Contains the overload of boost::typeindex::runtime_pointer_cast for
 /// std::shared_ptr types.
 
+#include <boost/type_index/detail/config.hpp>
+
+#if !defined(BOOST_USE_MODULES) || defined(BOOST_TYPE_INDEX_INTERFACE_UNIT)
+
 #include <boost/type_index/runtime_cast/detail/runtime_cast_impl.hpp>
+
+#if !defined(BOOST_TYPE_INDEX_INTERFACE_UNIT)
 #include <memory>
+#endif
 
 #ifdef BOOST_HAS_PRAGMA_ONCE
 # pragma once
 #endif
 
 namespace boost { namespace typeindex {
+
+BOOST_TYPE_INDEX_BEGIN_MODULE_EXPORT
 
 /// \brief Creates a new instance of std::shared_ptr whose stored pointer is obtained from u's
 /// stored pointer using a runtime_cast.
@@ -40,6 +49,10 @@ std::shared_ptr<T> runtime_pointer_cast(std::shared_ptr<U> const& u) {
     return std::shared_ptr<T>();
 }
 
+BOOST_TYPE_INDEX_END_MODULE_EXPORT
+
 }} // namespace boost::typeindex
+
+#endif  // #if !defined(BOOST_USE_MODULES) || defined(BOOST_TYPE_INDEX_INTERFACE_UNIT)
 
 #endif // BOOST_TYPE_INDEX_RUNTIME_CAST_STD_SHARED_PTR_CAST_HPP

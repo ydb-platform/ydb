@@ -67,6 +67,7 @@ def _rpc_error_handler(
     rpc_state,
     rpc_error: typing.Union[grpc.RpcError, grpc.aio.AioRpcError, grpc.Call, grpc.aio.Call],
     on_disconnected: typing.Callable[[], None] = None,
+    use_unavailable: bool = False,
 ):
     """
     RPC call error handler, that translates gRPC error into YDB issue
@@ -74,7 +75,7 @@ def _rpc_error_handler(
     :param rpc_error: an underlying rpc error to handle
     :param on_disconnected: a handler to call on disconnected connection
     """
-    logger.info("%s: received error, %s", rpc_state, rpc_error)
+    logger.debug("%s: received error, %s", rpc_state, rpc_error)
     if isinstance(rpc_error, (grpc.RpcError, grpc.aio.AioRpcError, grpc.Call, grpc.aio.Call)):
         if rpc_error.code() == grpc.StatusCode.UNAUTHENTICATED:
             return issues.Unauthenticated(rpc_error.details())
@@ -82,12 +83,26 @@ def _rpc_error_handler(
             return issues.DeadlineExceed("Deadline exceeded on request")
         elif rpc_error.code() == grpc.StatusCode.UNIMPLEMENTED:
             return issues.Unimplemented("Method or feature is not implemented on server!")
+        elif rpc_error.code() == grpc.StatusCode.CANCELLED:
+            return issues.Cancelled(rpc_error.details())
+        elif use_unavailable and rpc_error.code() == grpc.StatusCode.UNAVAILABLE:
+            return issues.Unavailable(rpc_error.details())
 
     logger.debug("%s: unhandled rpc error, disconnecting channel", rpc_state)
     if on_disconnected is not None:
         on_disconnected()
 
     return issues.ConnectionLost("Rpc error, reason %s" % str(rpc_error))
+
+
+def _is_disconnect_needed(error):
+    return isinstance(
+        error,
+        (
+            issues.ConnectionLost,
+            issues.Unavailable,
+        ),
+    )
 
 
 def _on_response_callback(rpc_state, call_state_unref, wrap_result=None, on_disconnected=None, wrap_args=()):
@@ -325,6 +340,33 @@ class EndpointKey(object):
         self.node_id = node_id
 
 
+class _SafeSyncIterator:
+    def __init__(self, resp, rpc_state, on_disconnected_callback):
+        self.resp = resp
+        self.it = resp.__iter__()
+        self.rpc_state = rpc_state
+        self.on_disconnected_callback = on_disconnected_callback
+
+    def cancel(self):
+        self.resp.cancel()
+        return self
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        try:
+            return self.it.__next__()
+        except grpc.RpcError as rpc_error:
+            ydb_error = _rpc_error_handler(self.rpc_state, rpc_error, use_unavailable=True)
+            if _is_disconnect_needed(ydb_error):
+                self.on_disconnected_callback()
+            raise ydb_error
+
+    def __getattr__(self, item):
+        return getattr(self.resp, item)
+
+
 class Connection(object):
     __slots__ = (
         "endpoint",
@@ -466,6 +508,11 @@ class Connection(object):
                 compression=getattr(settings, "compression", None),
             )
             _log_response(rpc_state, response)
+
+            if hasattr(response, "__iter__"):
+                # NOTE(vgvoleg): for stream results we should also be able to handle disconnects
+                response = _SafeSyncIterator(response, rpc_state, on_disconnected)
+
             return response if wrap_result is None else wrap_result(rpc_state, response, *wrap_args)
         except grpc.RpcError as rpc_error:
             raise _rpc_error_handler(rpc_state, rpc_error, on_disconnected)
@@ -499,7 +546,7 @@ class Connection(object):
         Closes the underlying gRPC channel
         :return: None
         """
-        logger.info("Closing channel for endpoint %s", self.endpoint)
+        logger.debug("Closing channel for endpoint %s", self.endpoint)
         with self.lock:
             self.closing = True
 

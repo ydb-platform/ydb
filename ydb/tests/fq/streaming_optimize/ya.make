@@ -6,6 +6,7 @@ FORK_SUBTESTS()
 SPLIT_FACTOR(4)
 
 TEST_SRCS(
+    test_sql_negative.py
     test_sql_streaming.py
 )
 

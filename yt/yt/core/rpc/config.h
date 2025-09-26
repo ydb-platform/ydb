@@ -142,6 +142,18 @@ DEFINE_REFCOUNTED_TYPE(TServiceConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TMethodTestingConfig
+    : public NYTree::TYsonStructLite
+{
+    std::optional<TDuration> RandomDelay;
+
+    REGISTER_YSON_STRUCT_LITE(TMethodTestingConfig);
+
+    static void Register(TRegistrar registrar);
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 struct TMethodConfig
     : public NYTree::TYsonStruct
 {
@@ -158,6 +170,8 @@ struct TMethodConfig
     NConcurrency::TThroughputThrottlerConfigPtr LoggingSuppressionFailedRequestThrottler;
     std::optional<ERequestTracingMode> TracingMode;
     std::optional<bool> Pooled;
+
+    TMethodTestingConfig Testing;
 
     REGISTER_YSON_STRUCT(TMethodConfig);
 

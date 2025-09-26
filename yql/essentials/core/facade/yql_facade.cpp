@@ -33,6 +33,7 @@
 #include <yql/essentials/providers/common/arrow_resolve/yql_simple_arrow_resolver.h>
 #include <yql/essentials/providers/common/config/yql_setting.h>
 #include <yql/essentials/core/qplayer/udf_resolver/yql_qplayer_udf_resolver.h>
+#include <yql/essentials/core/qplayer/url_lister/qplayer_url_lister_manager.h>
 
 #include <library/cpp/yson/node/node_io.h>
 #include <library/cpp/deprecated/split/split_iterator.h>
@@ -138,6 +139,13 @@ std::function<TString(const TString&, const TString&)> BuildCompositeTokenResolv
 
         return {};
     };
+}
+
+void AddSqlFlagsFromPatch(THashSet<TString>& flags, const TString& gatewaysPatch) {
+    TGatewaysConfig config;
+    YQL_ENSURE(NProtoBuf::TextFormat::ParseFromString(gatewaysPatch, &config));
+    auto patchFlags = ExtractSqlFlags(config);
+    flags.insert(patchFlags.begin(), patchFlags.end());
 }
 
 } // namspace
@@ -418,6 +426,9 @@ TProgram::TProgram(
     UserDataStorage_->SetUrlPreprocessor(urlPreprocessing);
 
     if (QContext_) {
+        if (UrlListerManager_) {
+            UrlListerManager_ = NCommon::WrapUrlListerManagerWithQContext(UrlListerManager_, qContext);
+        }
         UdfResolver_ = NCommon::WrapUdfResolverWithQContext(UdfResolver_, QContext_);
         if (QContext_.CanRead()) {
             auto item = QContext_.GetReader()->Get({FacadeComponent, GatewaysLabel}).GetValueSync();
@@ -716,7 +727,7 @@ THashSet<TString> ExtractSqlFlags(const NYT::TNode& dataNode) {
 
 } // namespace
 
-void UpdateSqlFlagsFromQContext(const TQContext& qContext, THashSet<TString>& flags) {
+void UpdateSqlFlagsFromQContext(const TQContext& qContext, THashSet<TString>& flags, TMaybe<TString> gatewaysPatch) {
     if (qContext.CanRead()) {
         auto loaded = qContext.GetReader()->Get({FacadeComponent, TranslationLabel}).GetValueSync();
         if (!loaded) {
@@ -725,6 +736,10 @@ void UpdateSqlFlagsFromQContext(const TQContext& qContext, THashSet<TString>& fl
 
         auto dataNode = NYT::NodeFromYsonString(loaded->Value);
         flags = ExtractSqlFlags(dataNode);
+
+        if (gatewaysPatch) {
+            AddSqlFlagsFromPatch(flags, *gatewaysPatch);
+        }
     }
 }
 
@@ -765,6 +780,10 @@ void TProgram::HandleTranslationSettings(NSQLTranslation::TTranslationSettings& 
         }
 
         loadedSettings.Flags = ExtractSqlFlags(dataNode);
+        if (GatewaysForMerge_) {
+            AddSqlFlagsFromPatch(loadedSettings.Flags, *GatewaysForMerge_);
+        }
+
         loadedSettings.V0Behavior = (NSQLTranslation::EV0Behavior)dataNode["V0Behavior"].AsUint64();
         loadedSettings.V0WarnAsError = NSQLTranslation::ISqlFeaturePolicy::Make(dataNode["V0WarnAsError"].AsBool());
         loadedSettings.DqDefaultAuto = NSQLTranslation::ISqlFeaturePolicy::Make(dataNode["DqDefaultAuto"].AsBool());
@@ -1684,6 +1703,10 @@ TMaybe<TString> TProgram::GetDiagnostics() {
     }
 
     if (!Transformer_) {
+        return Nothing();
+    }
+
+    if (VolatileResults_) {
         return Nothing();
     }
 

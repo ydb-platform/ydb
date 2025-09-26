@@ -5,6 +5,7 @@
 #include "rpc_export_base.h"
 #include "rpc_import_base.h"
 #include "rpc_operation_request_base.h"
+#include "rpc_restore_base.h"
 
 #include <ydb/core/grpc_services/base/base.h>
 #include <google/protobuf/text_format.h>
@@ -37,8 +38,11 @@ using namespace Ydb;
 using TEvGetOperationRequest = TGrpcRequestOperationCall<Ydb::Operations::GetOperationRequest,
     Ydb::Operations::GetOperationResponse>;
 
-class TGetOperationRPC : public TRpcOperationRequestActor<TGetOperationRPC, TEvGetOperationRequest, true>,
-                         public TExportConv {
+class TGetOperationRPC
+    : public TRpcOperationRequestActor<TGetOperationRPC, TEvGetOperationRequest, true>
+    , public TExportConv
+    , public TBackupCollectionRestoreConv
+{
 
     TStringBuf GetLogPrefix() const override {
         switch (OperationId_.GetKind()) {
@@ -52,6 +56,8 @@ class TGetOperationRPC : public TRpcOperationRequestActor<TGetOperationRPC, TEvG
             return "[GetScriptExecution]";
         case TOperationId::INCREMENTAL_BACKUP:
             return "[GetIncrementalBackup]";
+        case TOperationId::RESTORE:
+            return "[GetBackupCollectionRestore]";
         default:
             return "[Untagged]";
         }
@@ -67,6 +73,8 @@ class TGetOperationRPC : public TRpcOperationRequestActor<TGetOperationRPC, TEvG
             return new NSchemeShard::TEvIndexBuilder::TEvGetRequest(GetDatabaseName(), RawOperationId_);
         case TOperationId::INCREMENTAL_BACKUP:
             return new NSchemeShard::TEvBackup::TEvGetIncrementalBackupRequest(GetDatabaseName(), RawOperationId_);
+        case TOperationId::RESTORE:
+            return new NSchemeShard::TEvBackup::TEvGetBackupCollectionRestoreRequest(GetDatabaseName(), RawOperationId_);
         default:
             Y_ABORT("unreachable");
         }
@@ -98,6 +106,7 @@ public:
             case TOperationId::IMPORT:
             case TOperationId::BUILD_INDEX:
             case TOperationId::INCREMENTAL_BACKUP:
+            case TOperationId::RESTORE:
                 if (!TryGetId(OperationId_, RawOperationId_)) {
                     return ReplyWithStatus(StatusIds::BAD_REQUEST);
                 }
@@ -127,6 +136,7 @@ public:
             HFunc(NSchemeShard::TEvIndexBuilder::TEvGetResponse, Handle);
             HFunc(NKqp::TEvGetScriptExecutionOperationResponse, Handle);
             HFunc(NSchemeShard::TEvBackup::TEvGetIncrementalBackupResponse, Handle);
+            HFunc(NSchemeShard::TEvBackup::TEvGetBackupCollectionRestoreResponse, Handle);
 
         default:
             return StateBase(ev);
@@ -275,6 +285,17 @@ private:
 
         TEvGetOperationRequest::TResponse resp;
         *resp.mutable_operation() = TIncrementalBackupConv::ToOperation(record.GetIncrementalBackup());
+        Reply(resp, ctx);
+    }
+
+    void Handle(NSchemeShard::TEvBackup::TEvGetBackupCollectionRestoreResponse::TPtr& ev, const TActorContext& ctx) {
+        const auto& record = ev->Get()->Record;
+
+        LOG_D("Handle TEvBackup::TEvGetBackupCollectionRestoreResponse"
+            << ": record# " << record.ShortDebugString());
+
+        TEvGetOperationRequest::TResponse resp;
+        *resp.mutable_operation() = TBackupCollectionRestoreConv::ToOperation(record.GetBackupCollectionRestore());
         Reply(resp, ctx);
     }
 

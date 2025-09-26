@@ -56,16 +56,16 @@ static void PrimitiveValueToYson(EPrimitiveType type, TValueParser& parser, NYso
             writer.OnInt64Scalar(parser.GetInterval());
             break;
         case EPrimitiveType::Date32:
-            writer.OnInt64Scalar(parser.GetDate32());
+            writer.OnInt64Scalar(parser.GetDate32().time_since_epoch().count());
             break;
         case EPrimitiveType::Datetime64:
-            writer.OnInt64Scalar(parser.GetDatetime64());
+            writer.OnInt64Scalar(parser.GetDatetime64().time_since_epoch().count());
             break;
         case EPrimitiveType::Timestamp64:
-            writer.OnInt64Scalar(parser.GetTimestamp64());
+            writer.OnInt64Scalar(parser.GetTimestamp64().time_since_epoch().count());
             break;
         case EPrimitiveType::Interval64:
-            writer.OnInt64Scalar(parser.GetInterval64());
+            writer.OnInt64Scalar(parser.GetInterval64().count());
             break;
         case EPrimitiveType::TzDate:
             writer.OnStringScalar(parser.GetTzDate());

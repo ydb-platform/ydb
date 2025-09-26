@@ -341,6 +341,7 @@ enum class TRateLimiterMode : ui8 {
     Ru = 2,
     RuOnProgress = 3,
     RuManual = 4,
+    RuTopic = 5,
 };
 
 #define RLSWITCH(mode) \
@@ -454,6 +455,8 @@ public:
     }
     virtual void SetAuditLogHook(TAuditLogHook&& hook) = 0;
     virtual void SetDiskQuotaExceeded(bool disk) = 0;
+
+    virtual TString GetRpcMethodName() const = 0;
 };
 
 // Request context
@@ -477,6 +480,8 @@ public:
 
     virtual void Reply(NProtoBuf::Message* resp, ui32 status = 0) = 0;
 
+    virtual TString GetRpcMethodName() const = 0;
+
 protected:
     virtual void FinishRequest() = 0;
 };
@@ -489,6 +494,10 @@ public:
     // Legacy, do not use for modern code
     virtual void SendResult(const google::protobuf::Message& result, Ydb::StatusIds::StatusCode status,
         const google::protobuf::RepeatedPtrField<TYdbIssueMessageType>& message) = 0;
+};
+
+// A marker class to distinguish requests that are sent inside the system (not initialized by the user)
+class IInternalRequestCtx {
 };
 
 class IRequestNoOpCtx : public IRequestCtx {
@@ -701,6 +710,10 @@ public:
 
     void SetAuditLogHook(TAuditLogHook&&) override {
         Y_ABORT("unimplemented for TRefreshTokenImpl");
+    }
+
+    TString GetRpcMethodName() const override {
+        return {};
     }
 
     // IRequestCtxBase
@@ -1016,6 +1029,10 @@ public:
         return Ctx_->WriteAndFinish(std::move(message), options, grpcStatus);
     }
 
+    TString GetRpcMethodName() const override {
+        return Ctx_->GetRpcMethodName();
+    }
+
 private:
     TIntrusivePtr<IStreamCtx> Ctx_;
     TIntrusiveConstPtr<NACLib::TUserToken> InternalToken_;
@@ -1155,6 +1172,10 @@ public:
 
     const TMaybe<TString> GetDatabaseName() const override {
         return ExtractDatabaseName(Ctx_->GetPeerMetaValues(NYdb::YDB_DATABASE_HEADER));
+    }
+
+    TString GetRpcMethodName() const override {
+        return Ctx_->GetRpcMethodName();
     }
 
     void UpdateAuthState(NYdbGrpc::TAuthState::EAuthState state) override {
@@ -1676,27 +1697,31 @@ private:
 
 class TEvRequestAuthAndCheckResult : public TEventLocal<TEvRequestAuthAndCheckResult, TRpcServices::EvRequestAuthAndCheckResult> {
 public:
-    TEvRequestAuthAndCheckResult(Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues)
+    TEvRequestAuthAndCheckResult(Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues, const TAuditLogParts& auditLogParts)
         : Status(status)
         , Issues(issues)
+        , AuditLogParts(auditLogParts)
     {}
 
-    TEvRequestAuthAndCheckResult(Ydb::StatusIds::StatusCode status, const NYql::TIssue& issue)
+    TEvRequestAuthAndCheckResult(Ydb::StatusIds::StatusCode status, const NYql::TIssue& issue, const TAuditLogParts& auditLogParts)
         : Status(status)
+        , AuditLogParts(auditLogParts)
     {
         Issues.AddIssue(issue);
     }
 
-    TEvRequestAuthAndCheckResult(Ydb::StatusIds::StatusCode status, const TString& error)
+    TEvRequestAuthAndCheckResult(Ydb::StatusIds::StatusCode status, const TString& error, const TAuditLogParts& auditLogParts)
         : Status(status)
+        , AuditLogParts(auditLogParts)
     {
         Issues.AddIssue(error);
     }
 
-    TEvRequestAuthAndCheckResult(const TString& database, const TMaybe<TString>& ydbToken, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken)
+    TEvRequestAuthAndCheckResult(const TString& database, const TMaybe<TString>& ydbToken, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, const TAuditLogParts& auditLogParts)
         : Database(database)
         , YdbToken(ydbToken)
         , UserToken(userToken)
+        , AuditLogParts(auditLogParts)
     {}
 
     Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::SUCCESS;
@@ -1704,17 +1729,20 @@ public:
     TString Database;
     TMaybe<TString> YdbToken;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
+    TAuditLogParts AuditLogParts;
 };
 
 class TEvRequestAuthAndCheck
     : public IRequestProxyCtx
     , public TEventLocal<TEvRequestAuthAndCheck, TRpcServices::EvRequestAuthAndCheck> {
 public:
-    TEvRequestAuthAndCheck(const TString& database, const TMaybe<TString>& ydbToken, NActors::TActorId sender)
+    TEvRequestAuthAndCheck(const TString& database, const TMaybe<TString>& ydbToken, NActors::TActorId sender, TAuditMode auditMode, TString peerName = {})
         : Database(database)
         , YdbToken(ydbToken)
         , Sender(sender)
         , AuthState(true)
+        , AuditMode(auditMode)
+        , PeerName(std::move(peerName))
     {}
 
     // IRequestProxyCtx
@@ -1748,14 +1776,16 @@ public:
                 new TEvRequestAuthAndCheckResult(
                     Database,
                     YdbToken,
-                    UserToken
+                    UserToken,
+                    GetAuditLogParts()
                 )
             );
         } else {
             ctx.Send(Sender,
                 new TEvRequestAuthAndCheckResult(
                     status,
-                    IssueManager.GetIssues()
+                    IssueManager.GetIssues(),
+                    GetAuditLogParts()
                 )
             );
         }
@@ -1866,7 +1896,7 @@ public:
     }
 
     TString GetPeerName() const override {
-        return {};
+        return PeerName;
     }
 
     const TString& GetRequestName() const override {
@@ -1891,6 +1921,14 @@ public:
         return {};
     }
 
+    TAuditMode GetAuditMode() const override {
+        return AuditMode;
+    }
+
+    TString GetRpcMethodName() const override {
+        return {};
+    }
+
     TString Database;
     TMaybe<TString> YdbToken;
     NActors::TActorId Sender;
@@ -1902,6 +1940,8 @@ public:
     NYql::TIssueManager IssueManager;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     TInstant deadline = TInstant::Now() + TDuration::Seconds(10);
+    TAuditMode AuditMode;
+    TString PeerName;
 
     inline static const TString EmptySerializedTokenMessage;
 };

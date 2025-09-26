@@ -1348,4 +1348,4 @@ TEST(TYsonPullParserCursorTest, MapFragment)
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace
-} // namespace NYT::NYTree
+} // namespace NYT::NYson

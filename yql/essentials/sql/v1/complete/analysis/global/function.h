@@ -11,4 +11,6 @@ namespace NSQLComplete {
 
     TMaybe<TFunctionContext> EnclosingFunction(TParsedInput input, const TNamedNodes& nodes);
 
+    TMaybe<TFunctionContext> GetFunction(SQLv1::Table_refContext* ctx, const TNamedNodes& nodes);
+
 } // namespace NSQLComplete

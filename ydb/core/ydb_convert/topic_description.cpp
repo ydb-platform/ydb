@@ -3,7 +3,7 @@
 
 #include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/base/feature_flags.h>
-#include <ydb/core/persqueue/utils.h>
+#include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/protos/feature_flags.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>

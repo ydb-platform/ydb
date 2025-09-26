@@ -142,17 +142,24 @@ public:
         auto it = ExecuterToPartition.find(ev->Sender);
         if (it != ExecuterToPartition.end()) {
             PE_LOG_D("Got TEvKqp::EvAbortExecution from ActorId = " << ev->Sender
-            << " , status: " << NYql::NDqProto::StatusIds_StatusCode_Name(msg.GetStatusCode())
-            << ", message: " << issues.ToOneLineString() << ", abort child executers");
-
-            ReturnIssues.AddIssues(issues);
-            ReturnIssues.AddIssue(NYql::TIssue(TStringBuilder()
-                << "while preparing/executing by KqpPartitionedExecuterActor"));
+                << ", status: " << NYql::NDqProto::StatusIds_StatusCode_Name(msg.GetStatusCode())
+                << ", message: " << issues.ToOneLineString() << ", abort child executers");
 
             auto [_, partInfo] = *it;
             AbortBuffer(partInfo->ExecuterId);
             ForgetExecuterAndBuffer(partInfo);
             ForgetPartition(partInfo);
+        } else {
+            PE_LOG_D("Got TEvKqp::TEvAbortExecution from unknown actor with Id = " << ev->Sender
+                << ", status: " << NYql::NDqProto::StatusIds_StatusCode_Name(msg.GetStatusCode())
+                << ", message: " << issues.ToOneLineString() << ", ignore");
+        }
+
+        if (ReturnStatus == Ydb::StatusIds::SUCCESS) {
+            ReturnStatus = Ydb::StatusIds::ABORTED;
+            ReturnIssues.AddIssues(issues);
+            ReturnIssues.AddIssue(NYql::TIssue(TStringBuilder()
+                << "aborting by KqpPartitionedExecuterActor"));
         }
 
         Abort();
@@ -365,7 +372,7 @@ private:
                         if (!settings.GetIsIndexImplTable()) {
                             return settings;
                         }
-                    } 
+                    }
                 }
             }
         }
@@ -487,16 +494,22 @@ private:
 
         auto* bufferActor = CreateKqpBufferWriterActor(std::move(settings));
         auto bufferActorId = RegisterWithSameMailbox(bufferActor);
- 
-        TPartitionPruner::TConfig prunerConfig{
-            .BatchOperationRange=NBatchOperations::MakePartitionRange(partInfo->BeginRange, partInfo->EndRange, KeyIds.size())
+
+        TPartitionPrunerConfig prunerConfig{
+            .BatchOperationRange = NBatchOperations::MakePartitionRange(partInfo->BeginRange, partInfo->EndRange, KeyIds.size())
         };
+
+        std::optional<TLlvmSettings> llvmSettings;
+        if (TableServiceConfig.GetEnableKqpScanQueryUseLlvm()) {
+            llvmSettings = PreparedQuery->GetLlvmSettings();
+        }
 
         auto batchSettings = NBatchOperations::TSettings(partInfo->LimitSize, Settings.MinBatchSize);
         const auto executerConfig = TExecuterConfig(MutableExecuterConfig, TableServiceConfig);
-        auto executerActor = CreateKqpExecuter(std::move(newRequest), Database, UserToken, TResultSetFormatSettings{}, RequestCounters,
-            executerConfig, AsyncIoFactory, PreparedQuery, SelfId(), UserRequestContext, StatementResultIndex,
-            FederatedQuerySetup, GUCSettings, prunerConfig, ShardIdToTableInfo, txManager, bufferActorId, std::move(batchSettings));
+        auto executerActor = CreateKqpExecuter(std::move(newRequest), Database, UserToken, NFormats::TFormatsSettings{}, RequestCounters,
+            executerConfig, AsyncIoFactory, SelfId(), UserRequestContext, StatementResultIndex,
+            FederatedQuerySetup, GUCSettings, prunerConfig, ShardIdToTableInfo, txManager, bufferActorId, std::move(batchSettings),
+            llvmSettings, {}, 0);
         auto exId = RegisterWithSameMailbox(executerActor);
 
         partInfo->ExecuterId = exId;
@@ -551,6 +564,15 @@ private:
     void OnSuccessResponse(TBatchPartitionInfo::TPtr& partInfo, TEvKqpExecuter::TEvTxResponse* ev) {
         TSerializedCellVec minKey = GetMinCellVecKey(std::move(ev->BatchOperationMaxKeys), std::move(ev->BatchOperationKeyIds));
         if (minKey) {
+            if (!IsKeyInPartition(minKey.GetCells(), partInfo)) {
+                ReturnStatus = Ydb::StatusIds::PRECONDITION_FAILED;
+                ReturnIssues.AddIssue(NYql::TIssue(TStringBuilder()
+                    << "The next key from KqpReadActor does not belong to the partition with PartitionIndex = "
+                    << partInfo->PartitionIndex));
+                ForgetPartition(partInfo);
+                return Abort();
+            }
+
             partInfo->BeginRange = TKeyDesc::TPartitionRangeInfo(minKey, /* IsInclusive */ false, /* IsPoint */ false);
             return RetryPartExecution(partInfo);
         }
@@ -570,6 +592,15 @@ private:
             Send(SessionActorId, ResponseEv.release());
             PassAway();
         }
+    }
+
+    bool IsKeyInPartition(const TConstArrayRef<TCell>& key, const TBatchPartitionInfo::TPtr& partInfo) {
+        bool isGEThanBegin = !partInfo->BeginRange || CompareBorders<true, true>(key,
+            partInfo->BeginRange->EndKeyPrefix.GetCells(), true, true, KeyColumnTypes) >= 0;
+        bool isLEThanEnd = !partInfo->EndRange || CompareBorders<true, true>(key,
+            partInfo->EndRange->EndKeyPrefix.GetCells(), true, true, KeyColumnTypes) <= 0;
+
+        return isGEThanBegin && isLEThanEnd;
     }
 
     void RetryPartExecution(const TBatchPartitionInfo::TPtr& partInfo) {

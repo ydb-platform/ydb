@@ -16,17 +16,21 @@ namespace NKikimr::NBridge {
         TIntrusivePtr<TBlobStorageGroupInfo> Info;
         const TGroupId SourceGroupId;
         const TGroupId TargetGroupId;
+        std::shared_ptr<TSyncerDataStats> SyncerDataStats;
         ui32 SourceGroupGeneration;
         ui32 TargetGroupGeneration;
         TString LogId;
         NKikimrBridge::TGroupState::EStage Stage;
         bool Finished = false;
-        ui32 BarriersStage = 0;
+        ui32 Step = 0;
+        std::deque<TLogoBlobID> RestoreQueue;
 
     public:
-        TSyncerActor(TIntrusivePtr<TBlobStorageGroupInfo> info, TGroupId sourceGroupId, TGroupId targetGroupId);
+        TSyncerActor(TIntrusivePtr<TBlobStorageGroupInfo> info, TGroupId sourceGroupId, TGroupId targetGroupId,
+            std::shared_ptr<TSyncerDataStats> syncerDataStats);
 
         void Bootstrap();
+        void BeginNextStep();
         void PassAway() override;
 
         void Terminate(std::optional<TString> errorReason);
@@ -65,6 +69,13 @@ namespace NKikimr::NBridge {
         void Handle(TEvBlobStorage::TEvPutResult::TPtr ev);
         void Handle(TEvBlobStorage::TEvGetResult::TPtr ev);
         TQueryPayload OnQueryFinished(ui64 cookie, bool success);
+
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // Blob restoration
+
+        static constexpr ui32 MaxDataPerIndexQuery = 10_MB;
+
+        void ProcessRestoreQueue();
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Per-group assimilation status

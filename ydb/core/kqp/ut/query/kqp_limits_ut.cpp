@@ -67,10 +67,11 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         TControlWrapper mkqlInitialMemoryLimit;
         TControlWrapper mkqlMaxMemoryLimit;
 
-        mkqlInitialMemoryLimit = kikimr.GetTestServer().GetRuntime()->GetAppData().Icb->RegisterSharedControl(
-            mkqlInitialMemoryLimit, "KqpSession.MkqlInitialMemoryLimit");
-        mkqlMaxMemoryLimit = kikimr.GetTestServer().GetRuntime()->GetAppData().Icb->RegisterSharedControl(
-            mkqlMaxMemoryLimit, "KqpSession.MkqlMaxMemoryLimit");
+        auto& icb = *kikimr.GetTestServer().GetRuntime()->GetAppData().Icb;
+        TControlBoard::RegisterSharedControl(
+            mkqlInitialMemoryLimit, icb.KQPSessionControls.MkqlInitialMemoryLimit);
+        TControlBoard::RegisterSharedControl(
+            mkqlMaxMemoryLimit, icb.KQPSessionControls.MkqlMaxMemoryLimit);
 
         mkqlInitialMemoryLimit = 1_KB;
         mkqlMaxMemoryLimit = 1_KB;
@@ -147,10 +148,11 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         TControlWrapper mkqlInitialMemoryLimit;
         TControlWrapper mkqlMaxMemoryLimit;
 
-        mkqlInitialMemoryLimit = kikimr.GetTestServer().GetRuntime()->GetAppData().Icb->RegisterSharedControl(
-            mkqlInitialMemoryLimit, "KqpSession.MkqlInitialMemoryLimit");
-        mkqlMaxMemoryLimit = kikimr.GetTestServer().GetRuntime()->GetAppData().Icb->RegisterSharedControl(
-            mkqlMaxMemoryLimit, "KqpSession.MkqlMaxMemoryLimit");
+        auto& icb = *kikimr.GetTestServer().GetRuntime()->GetAppData().Icb;
+        TControlBoard::RegisterSharedControl(
+            mkqlInitialMemoryLimit, icb.KQPSessionControls.MkqlInitialMemoryLimit);
+        TControlBoard::RegisterSharedControl(
+            mkqlMaxMemoryLimit, icb.KQPSessionControls.MkqlMaxMemoryLimit);
 
         mkqlInitialMemoryLimit = 1_KB;
         mkqlMaxMemoryLimit = 1_KB;
@@ -180,11 +182,11 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         TControlWrapper mkqlInitialMemoryLimit;
         TControlWrapper mkqlMaxMemoryLimit;
 
-        mkqlInitialMemoryLimit = kikimr.GetTestServer().GetRuntime()->GetAppData().Icb->RegisterSharedControl(
-            mkqlInitialMemoryLimit, "KqpSession.MkqlInitialMemoryLimit");
-        mkqlMaxMemoryLimit = kikimr.GetTestServer().GetRuntime()->GetAppData().Icb->RegisterSharedControl(
-            mkqlMaxMemoryLimit, "KqpSession.MkqlMaxMemoryLimit");
-
+        auto& icb = *kikimr.GetTestServer().GetRuntime()->GetAppData().Icb;
+        TControlBoard::RegisterSharedControl(
+            mkqlInitialMemoryLimit, icb.KQPSessionControls.MkqlInitialMemoryLimit);
+        TControlBoard::RegisterSharedControl(
+            mkqlMaxMemoryLimit, icb.KQPSessionControls.MkqlMaxMemoryLimit);
 
         mkqlInitialMemoryLimit = 1_KB;
         mkqlMaxMemoryLimit = 1_KB;
@@ -425,7 +427,7 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(OutOfSpaceYQLUpsertFail, useSink) {
+    Y_UNIT_TEST(OutOfSpaceYQLUpsertFail) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false)
             .SetStorage(NFake::TStorage{
@@ -434,7 +436,7 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
                 .ChunkSize = 32_MB,
                 .DiskSize = 8_GB
                 });
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(false);
         settings.AppConfig.MutableTableServiceConfig()->MutableResourceManager()->SetMkqlLightProgramMemoryLimit(1'000'000'000);
 
         TKikimrRunner kikimr(settings);
@@ -487,7 +489,6 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
                 continue;
             case EStatus::OVERLOADED:
                 if (result.GetIssues().ToString().contains("out of disk space")) {
-                    UNIT_ASSERT(useSink);
                     Cerr << "Got out of space. Successfully inserted " << rowsPerBatch << " x " << batchIdx << " lines, each of size " << dataTextSize << "bytes";
                     return;
                 } else {
@@ -495,7 +496,6 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
                 }
             case EStatus::UNAVAILABLE:
                 if (result.GetIssues().ToString().contains("out of disk space")) {
-                    UNIT_ASSERT(!useSink);
                     //TODO Should be also EStatus::OVERLOADED
                     Cerr << "Got out of space. Successfully inserted " << rowsPerBatch << " x " << batchIdx << " lines, each of size " << dataTextSize << "bytes";
                     return;

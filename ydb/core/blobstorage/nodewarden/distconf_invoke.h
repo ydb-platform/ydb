@@ -23,6 +23,9 @@ namespace NKikimr::NStorage {
 
         std::shared_ptr<TLifetimeToken> RequestHandlerToken = std::make_shared<TLifetimeToken>();
 
+        bool InvokedWithoutScepter = false;
+        bool EnablingDistconf = false;
+
     public: // Error handling
         struct TExError : yexception {
             bool IsCritical = false; // the one what would case Y_ABORT if in debug mode
@@ -108,7 +111,7 @@ namespace NKikimr::NStorage {
         void SelfHealNodesStateUpdate(const TQuery::TSelfHealNodesStateUpdate& cmd);
         void GetStateStorageConfig(const TQuery::TGetStateStorageConfig& cmd);
 
-        void GetCurrentStateStorageConfig(NKikimrBlobStorage::TStateStorageConfig* currentConfig);
+        void GetCurrentStateStorageConfig(NKikimrBlobStorage::TStateStorageConfig* currentConfig, bool getNodesState);
         bool GetRecommendedStateStorageConfig(NKikimrBlobStorage::TStateStorageConfig* currentConfig, bool pileupReplicas);
         void AdjustRingGroupActorIdOffsetInRecommendedStateStorageConfig(NKikimrBlobStorage::TStateStorageConfig* currentConfig);
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -151,6 +154,7 @@ namespace NKikimr::NStorage {
         void SwitchBridgeClusterState(const TQuery::TSwitchBridgeClusterState& cmd);
 
         void NotifyBridgeSyncFinished(const TQuery::TNotifyBridgeSyncFinished& cmd);
+        void NotifyBridgeSuspended(const TQuery::TNotifyBridgeSuspended& cmd);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Configuration proposition
@@ -158,7 +162,7 @@ namespace NKikimr::NStorage {
         void AdvanceGeneration();
         void StartProposition(NKikimrBlobStorage::TStorageConfig *config, bool acceptLocalQuorum = false,
             bool requireScepter = true, bool mindPrev = true,
-            const NKikimrBlobStorage::TStorageConfig *propositionBase = nullptr);
+            const NKikimrBlobStorage::TStorageConfig *propositionBase = nullptr, bool fromBootstrap = false);
         void Handle(TEvPrivate::TEvConfigProposed::TPtr ev);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////

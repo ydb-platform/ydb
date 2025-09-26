@@ -7,6 +7,26 @@
 
 #include <iterator>
 
+namespace {
+
+bool IsServiceAuthenticated(const THashSet<TString>& allowedServiceAuthTokens, grpc::ServerContext* ctx) {
+    if (allowedServiceAuthTokens.empty()) {
+        return true;
+    }
+    const auto& meta = ctx->client_metadata();
+    const auto authorizationHeaderRange = meta.equal_range("authorization");
+    bool isServiceAuthenticated = false;
+    for (auto it = authorizationHeaderRange.first; it != authorizationHeaderRange.second; ++it) {
+        if (allowedServiceAuthTokens.contains(TString(it->second.cbegin(), it->second.cend()))) {
+            isServiceAuthenticated = true;
+            break;
+        }
+    }
+    return isServiceAuthenticated;
+}
+
+} // namespace
+
 class TAccessServiceMock : public yandex::cloud::priv::servicecontrol::v1::AccessService::Service {
 public:
     template <class TResonseProto>
@@ -89,6 +109,8 @@ public:
             const yandex::cloud::priv::servicecontrol::v1::AuthenticateRequest* request,
             yandex::cloud::priv::servicecontrol::v1::AuthenticateResponse* response) override {
 
+        // Do not use authentication for "Authenticate" handler
+
         ++AuthenticateCount;
         if (request->has_signature()) {
             if (ShouldGenerateRetryableError) {
@@ -147,6 +169,9 @@ public:
             grpc::ServerContext*,
             const yandex::cloud::priv::servicecontrol::v1::AuthorizeRequest* request,
             yandex::cloud::priv::servicecontrol::v1::AuthorizeResponse* response) override {
+
+        // Do not use authentication for "Authorize" handler
+
         ++AuthorizeCount;
         if (request->has_signature()) {
             if (ShouldGenerateRetryableError) {
@@ -195,6 +220,7 @@ public:
     bool ShouldGenerateOneRetryableError = false;
     bool isUserAuthenticated = true;
 
+    THashSet<TString> AllowedServiceAuthTokens;
     THashSet<TString> UnavailableUserPermissions;
     THashSet<TString> AllowedResourceIds;
     THashSet<TString> AllowedUserPermissions = {
@@ -205,10 +231,15 @@ public:
     THashMap<TString, TString> AllowedServicePermissions = {{"service1-something.write", "root1/folder1"}};
 
 public:
-    ::grpc::Status BulkAuthorize(::grpc::ServerContext*,
+    ::grpc::Status BulkAuthorize(::grpc::ServerContext* context,
                                  const ::yandex::cloud::priv::accessservice::v2::BulkAuthorizeRequest* request,
                                  ::yandex::cloud::priv::accessservice::v2::BulkAuthorizeResponse* response) {
+        if (!IsServiceAuthenticated(AllowedServiceAuthTokens, context)) {
+            return grpc::Status(grpc::StatusCode::UNAUTHENTICATED, "Unauthenticated service");
+        }
+
         ++AuthorizeCount;
+
         if (request->has_signature()) {
             if (ShouldGenerateRetryableError) {
                 return grpc::Status(grpc::StatusCode::UNAVAILABLE, "Service Unavailable");
@@ -222,8 +253,8 @@ public:
         } else {
             if (!isUserAuthenticated) {
                 auto error = response->mutable_unauthenticated_error();
-                error->set_message("Access Denied");
-                return grpc::Status(grpc::StatusCode::UNAUTHENTICATED, "Access Denied");
+                error->set_message("User is unauthenticated");
+                return grpc::Status(grpc::StatusCode::OK, "OK");
             }
             TString token = request->has_iam_token() ? request->iam_token() : request->api_key();
             if (request->has_actions()) {

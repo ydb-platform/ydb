@@ -20,7 +20,6 @@
 #include <library/cpp/logger/log.h>
 
 #include <util/string/cast.h>
-#include <util/system/info.h>
 
 #include <atomic>
 #include <stop_token>
@@ -35,7 +34,7 @@ namespace {
 
 //-----------------------------------------------------------------------------
 
-constexpr auto GracefulShutdownTimeout = std::chrono::seconds(10);
+constexpr auto GracefulShutdownTimeout = std::chrono::seconds(20);
 constexpr auto MinWarmupPerTerminalMs = std::chrono::milliseconds(1);
 
 constexpr auto MaxPerTerminalTransactionsInflight = 1;
@@ -130,12 +129,7 @@ TPCCRunner::TPCCRunner(const NConsoleClient::TClientCommand::TConfig& connection
     ConnectionConfig.IsNetworkIntensive = true;
     ConnectionConfig.UsePerChannelTcpConnection = true;
 
-    const size_t cpuCount = NSystemInfo::CachedNumberOfCpus();
-    if (cpuCount == 0) {
-        // dump sanity check
-        std::cerr << "No CPUs" << std::endl;
-        std::exit(1);
-    }
+    const size_t cpuCount = NumberOfMyCpus();
 
     if (Config.WarehouseCount == 0) {
         std::cerr << "Specified zero warehouses" << std::endl;
@@ -146,25 +140,80 @@ TPCCRunner::TPCCRunner(const NConsoleClient::TClientCommand::TConfig& connection
 
     const size_t terminalsCount = Config.WarehouseCount * TERMINALS_PER_WAREHOUSE;
 
+    // Currently, terminal threads busy wait (for extra efficiency).
+    // That is why we want to avoid thread oversubscription.
+    //
+    // However, note, that we have a very efficient implementation,
+    // and don't need many threads to execute terminals.
+
+    // we don't want to share CPU with SDK threads
+    const size_t networkThreadCount = ConnectionConfig.GetNetworkThreadNum();
+    const size_t maxTerminalThreadCountAvailable = cpuCount > networkThreadCount ? cpuCount - networkThreadCount : 1;
+
+    // even with high number of terminals, this value is usually low
+    const size_t recommendedThreadCount =
+        (Config.WarehouseCount + WAREHOUSES_PER_CPU_CORE - 1) / WAREHOUSES_PER_CPU_CORE;
+
     size_t threadCount = 0;
     if (Config.ThreadCount == 0) {
-        // here we calculate max possible efficient thread number
-        const size_t networkThreadCount = ConnectionConfig.GetNetworkThreadNum();
-        const size_t maxTerminalThreadCount = cpuCount > networkThreadCount ? cpuCount - networkThreadCount : 1;
-        threadCount = std::min(maxTerminalThreadCount, terminalsCount);
-
-        // usually this allows to lower number of threads
-        const size_t recommendedThreadCount =
-            (Config.WarehouseCount + WAREHOUSES_PER_CPU_CORE - 1) / WAREHOUSES_PER_CPU_CORE;
+        threadCount = std::min(maxTerminalThreadCountAvailable, terminalsCount);
         threadCount = std::min(threadCount, recommendedThreadCount);
+
+        // in TUI even number of threads looks cute: increase number of threads
+        // if we have enough CPU cores
+        if (threadCount % 2 != 0 && threadCount < maxTerminalThreadCountAvailable) {
+            ++threadCount;
+        }
     } else {
+        // user provided value: don't give us a chance to break things:
+        // with too many threads, we get poor result
         threadCount = Config.ThreadCount;
+        if (threadCount > maxTerminalThreadCountAvailable) {
+            LOG_I("User provided thread count " << threadCount << " is above max available thread count "
+                << maxTerminalThreadCountAvailable << " (cpu count " << cpuCount << ", network threads "
+                << networkThreadCount << "). Recommended thread count for " << Config.WarehouseCount
+                << " warehouses is " << recommendedThreadCount
+                << ". Setting thread count to " << maxTerminalThreadCountAvailable);
+            threadCount = maxTerminalThreadCountAvailable;
+        }
+    }
+
+    if (threadCount < recommendedThreadCount) {
+        LOG_W("Thread count " << threadCount << " is lower than recommended " << recommendedThreadCount
+            << ". It might affect benchmark results");
     }
 
     // The number of terminals might be hundreds of thousands.
     // For now, we don't have more than 32 network threads (check TClientCommand::TConfig::GetNetworkThreadNum()),
     // so that maxTerminalThreads will be around more or less around 100.
     const size_t driverCount = Config.DriverCount == 0 ? threadCount : Config.DriverCount;
+    Drivers.reserve(driverCount);
+    for (size_t i = 0; i < driverCount; ++i) {
+        Drivers.emplace_back(NConsoleClient::TYdbCommand::CreateDriver(ConnectionConfig));
+    }
+
+    if (Config.MaxInflight == 0) {
+        int32_t computeCores = 0;
+        std::string reason;
+        try {
+            computeCores = NumberOfComputeCpus(Drivers[0]);
+        } catch (const std::exception& ex) {
+            reason = ex.what();
+        }
+
+        if (computeCores == 0) {
+            std::cerr << "Failed to autodetect max number of sessions";
+            if (!reason.empty()) {
+                std::cerr << ": " << reason;
+            }
+
+            std::cerr << ". Please specify '-m' manually." << std::endl;
+            std::exit(1);
+        }
+
+        Config.MaxInflight = std::min(terminalsCount, computeCores * SESSIONS_PER_COMPUTE_CORE);
+        LOG_I("Set max sessions to " << Config.MaxInflight << ", feel free to manually adjust if needed");
+    }
 
     const size_t maxSessionsPerClient = (Config.MaxInflight + driverCount - 1) / driverCount;
     NQuery::TSessionPoolSettings sessionPoolSettings;
@@ -174,12 +223,10 @@ TPCCRunner::TPCCRunner(const NConsoleClient::TClientCommand::TConfig& connection
     NQuery::TClientSettings clientSettings;
     clientSettings.SessionPoolSettings(sessionPoolSettings);
 
-    Drivers.reserve(driverCount);
     std::vector<std::shared_ptr<NQuery::TQueryClient>> clients;
     clients.reserve(driverCount);
     for (size_t i = 0; i < driverCount; ++i) {
-        auto& driver = Drivers.emplace_back(NConsoleClient::TYdbCommand::CreateDriver(ConnectionConfig));
-        clients.emplace_back(std::make_shared<NQuery::TQueryClient>(driver, clientSettings));
+        clients.emplace_back(std::make_shared<NQuery::TQueryClient>(Drivers[i], clientSettings));
     }
 
     PerThreadTerminalStats.reserve(threadCount);

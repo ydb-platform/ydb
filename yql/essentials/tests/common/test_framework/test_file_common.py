@@ -55,7 +55,7 @@ def check_provider(provider, config):
         pytest.skip('%s provider is not supported here' % provider)
 
 
-def get_sql_query(provider, suite, case, config, data_path=None, template={'.sql', '.yql'}):
+def get_sql_query(provider, suite, case, config, data_path=None, template=['.sql', '.yql']):
     pragmas = get_pragmas(config)
 
     if get_param('TARGET_PLATFORM'):
@@ -90,7 +90,7 @@ def run_file_no_cache(provider, suite, case, cfg, config, yql_http_file_server,
                       run_sql=True, cfg_postprocess=None, langver=None, attr_postprocess=None):
     check_provider(provider, config)
 
-    sql_query = get_sql_query(provider, suite, case, config, data_path, template={'.sql', '.yql'} if run_sql else '.yqls')
+    sql_query = get_sql_query(provider, suite, case, config, data_path, template=['.sql', '.yql'] if run_sql else '.yqls')
     sql_query = replace_vars(sql_query, "yqlrun_var")
 
     xfail = is_xfail(config)

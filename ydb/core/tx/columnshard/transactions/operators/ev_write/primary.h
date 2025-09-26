@@ -86,7 +86,7 @@ private:
             auto op = Self->GetProgressTxController().GetTxOperatorVerifiedAs<TEvWriteCommitPrimaryTransactionOperator>(TxId, true);
             if (!op) {
                 AFL_WARN(NKikimrServices::TX_COLUMNSHARD_TX)("event", "repeated shard broken_flag info")("shard_id", TabletId)("reason", "absent operation");
-            } else if (!op->WaitShardsBrokenFlags.erase(TabletId)) {
+            } else if (!op->WaitShardsBrokenFlags.contains(TabletId)) {
                 AFL_WARN(NKikimrServices::TX_COLUMNSHARD_TX)("event", "repeated shard broken_flag info")("shard_id", TabletId);
             } else {
                 op->TxBroken = op->TxBroken.value_or(false) || BrokenFlag;
@@ -99,7 +99,7 @@ private:
             auto op = Self->GetProgressTxController().GetTxOperatorVerifiedAs<TEvWriteCommitPrimaryTransactionOperator>(TxId, true);
             if (!op) {
                 AFL_WARN(NKikimrServices::TX_COLUMNSHARD_TX)("event", "repeated shard broken_flag info")("shard_id", TabletId)("reason", "absent operator");
-            } else if (!SendAckFlag) {
+            } else if (!SendAckFlag || !op->WaitShardsBrokenFlags.erase(TabletId)) {
                 AFL_WARN(NKikimrServices::TX_COLUMNSHARD_TX)("event", "repeated shard broken_flag info")("shard_id", TabletId);
             } else {
                 AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_TX)("event", "remove_tablet_id")("wait", JoinSeq(",", op->WaitShardsBrokenFlags))(
@@ -150,7 +150,7 @@ private:
 
     public:
         TTxWriteReceivedResultAck(TColumnShard& owner, const ui64 txId, const ui64 tabletId)
-            : TBase(&owner)
+            : TBase(&owner, "write_received_result_ack")
             , TxId(txId)
             , TabletId(tabletId) {
         }
@@ -245,7 +245,7 @@ private:
 
     public:
         TTxStartPreparation(TColumnShard* owner, const ui64 txId)
-            : TBase(owner)
+            : TBase(owner, "start_preparation")
             , TxId(txId) {
         }
     };

@@ -422,10 +422,11 @@ TExprBase TKqpMatchReadResult::BuildProcessNodes(TExprBase input, TExprContext& 
             .Done();
     }
 
+
     if (FlatMap) {
         expr = Build<TCoFlatMap>(ctx, FlatMap.Cast().Pos())
             .Input(expr)
-            .Lambda(FlatMap.Cast().Lambda())
+            .Lambda(ctx.DeepCopyLambda(FlatMap.Cast().Lambda().Ref()))
             .Done();
     }
 

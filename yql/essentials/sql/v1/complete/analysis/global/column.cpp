@@ -2,7 +2,10 @@
 
 #include "base_visitor.h"
 #include "evaluate.h"
+#include "function.h"
 #include "narrowing_visitor.h"
+
+#include <yql/essentials/sql/v1/complete/core/name.h>
 
 #include <util/generic/hash_set.h>
 #include <util/generic/scope.h>
@@ -45,30 +48,15 @@ namespace NSQLComplete {
             std::any visitTable_ref(SQLv1::Table_refContext* ctx) override {
                 if (TMaybe<TString> path; (path = GetObjectId(ctx->table_key())) ||
                                           (path = GetObjectId(ctx->bind_parameter()))) {
-                    TString cluster = GetObjectId(ctx->cluster_expr()).GetOrElse("");
-                    return TColumnContext{
-                        .Tables = {
-                            TTableId{std::move(cluster), std::move(*path)},
-                        },
-                    };
+                    return VisitTableRefPath(ctx, std::move(*path));
                 }
 
-                if (TMaybe<TString> named = NSQLComplete::GetName(ctx->bind_parameter())) {
-                    const TNamedNode* node = Nodes_->FindPtr(*named);
-                    if (!node || !std::holds_alternative<SQLv1::Subselect_stmtContext*>(*node)) {
-                        return {};
-                    }
+                if (TMaybe<TFunctionContext> function = GetFunction(ctx, *Nodes_)) {
+                    return VisitTableRefFunction(std::move(*function));
+                }
 
-                    if (Resolving_.contains(*named)) {
-                        return {};
-                    }
-
-                    Resolving_.emplace(*named);
-                    Y_DEFER {
-                        Resolving_.erase(*named);
-                    };
-
-                    return visit(std::get<SQLv1::Subselect_stmtContext*>(*node));
+                if (auto* bind_parameter = ctx->bind_parameter()) {
+                    return visit(bind_parameter);
                 }
 
                 return {};
@@ -102,7 +90,7 @@ namespace NSQLComplete {
                         alias = Nothing();
                     }
 
-                    auto aliased = source.ExtractAliased(alias);
+                    TColumnContext aliased = source.ExtractAliased(alias);
                     imported = std::move(imported) | std::move(aliased);
                 }
 
@@ -162,7 +150,79 @@ namespace NSQLComplete {
                 };
             }
 
+            std::any visitBind_parameter(SQLv1::Bind_parameterContext* ctx) override {
+                TMaybe<TString> name = NSQLComplete::GetName(ctx);
+                if (!name) {
+                    return {};
+                }
+
+                const TNamedNode* node = Nodes_->FindPtr(*name);
+                if (!node) {
+                    return {};
+                }
+
+                if (Resolving_.contains(*name)) {
+                    return {};
+                }
+
+                Resolving_.emplace(*name);
+                Y_DEFER {
+                    Resolving_.erase(*name);
+                };
+
+                auto* rule = std::visit([](auto&& arg) -> antlr4::ParserRuleContext* {
+                    using T = std::decay_t<decltype(arg)>;
+
+                    constexpr bool isRule = std::is_pointer_v<T> ||
+                                            std::is_base_of_v<
+                                                antlr4::ParserRuleContext*,
+                                                std::remove_pointer_t<T>>;
+
+                    if constexpr (isRule) {
+                        return arg;
+                    }
+
+                    return nullptr;
+                }, *node);
+
+                if (!rule) {
+                    return {};
+                }
+
+                return visit(rule);
+            }
+
         private:
+            std::any VisitTableRefPath(SQLv1::Table_refContext* ctx, TString path) {
+                TString cluster = GetObjectId(ctx->cluster_expr()).GetOrElse("");
+                return TColumnContext{
+                    .Tables = {
+                        TTableId{std::move(cluster), std::move(path)},
+                    },
+                };
+            }
+
+            std::any VisitTableRefFunction(TFunctionContext function) {
+                TString cluster = function.Cluster.GetOrElse({}).Name;
+
+                TString path;
+                function.Name = NormalizeName(function.Name);
+                if (function.Name == "concat" && function.Arg0) {
+                    path = std::move(*function.Arg0);
+                } else if (function.Name == "range" && function.Arg0 && function.Arg1) {
+                    path = std::move(*function.Arg0);
+                    path.append('/').append(*function.Arg1);
+                } else {
+                    return {};
+                }
+
+                return TColumnContext{
+                    .Tables = {
+                        TTableId{std::move(cluster), std::move(path)},
+                    },
+                };
+            }
+
             TMaybe<TString> GetAlias(SQLv1::Named_single_sourceContext* ctx) const {
                 TMaybe<TString> alias = GetColumnId(ctx->an_id());
                 alias = alias.Defined() ? alias : GetColumnId(ctx->an_id_as_compat());
@@ -251,20 +311,25 @@ namespace NSQLComplete {
             }
 
             std::any visitSelect_core(SQLv1::Select_coreContext* ctx) override {
-                antlr4::ParserRuleContext* source = nullptr;
-                if (IsEnclosingStrict(ctx->expr(0)) ||
-                    IsEnclosingStrict(ctx->group_by_clause()) ||
-                    IsEnclosingStrict(ctx->expr(1)) ||
-                    IsEnclosingStrict(ctx->window_clause()) ||
+                if (IsEnclosingStrict(ctx->window_clause()) ||
                     IsEnclosingStrict(ctx->ext_order_by_clause())) {
-                    source = ctx;
-                } else {
-                    source = ctx->join_source(0);
-                    source = source == nullptr ? ctx->join_source(1) : source;
+                    return TInferenceVisitor(Nodes_).visit(ctx);
                 }
 
-                if (source == nullptr) {
+                auto* source = ctx->join_source(0);
+                source = source == nullptr ? ctx->join_source(1) : source;
+
+                if (!source) {
                     return {};
+                }
+
+                auto sources = source->flatten_source();
+                auto** flatten = FindIfPtr(sources, [&](auto* ctx) {
+                    return IsEnclosingStrict(ctx);
+                });
+
+                if (flatten) {
+                    return visitChildren(*flatten);
                 }
 
                 return TInferenceVisitor(Nodes_).visit(source);

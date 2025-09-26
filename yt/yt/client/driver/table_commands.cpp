@@ -87,16 +87,24 @@ void TReadTableCommand::Register(TRegistrar registrar)
             return command->Options.OmitInaccessibleColumns;
         })
         .Default(false);
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "omit_inaccessible_rows",
+        [] (TThis* command) -> auto& {
+            return command->Options.OmitInaccessibleRows;
+        })
+        .Default(false);
 }
 
 void TReadTableCommand::DoExecute(ICommandContextPtr context)
 {
     YT_LOG_DEBUG("Executing \"read_table\" command (Path: %v, Unordered: %v, StartRowIndexOnly: %v, "
-        "OmitInaccessibleColumns: %v)",
+        "OmitInaccessibleColumns: %v, OmitInaccessibleRows: %v)",
         Path,
         Unordered,
         StartRowIndexOnly,
-        Options.OmitInaccessibleColumns);
+        Options.OmitInaccessibleColumns,
+        Options.OmitInaccessibleRows);
     Options.Ping = true;
     Options.EnableTableIndex = ControlAttributes->EnableTableIndex;
     Options.EnableRowIndex = ControlAttributes->EnableRowIndex;
@@ -508,8 +516,6 @@ void TPartitionTablesCommand::Register(TRegistrar registrar)
         .Default(true);
     registrar.Parameter("enable_cookies", &TThis::EnableCookies)
         .Default(false);
-    registrar.Parameter("use_new_slicing_implementation_in_ordered_pool", &TThis::UseNewSlicingImplementationInOrderedPool)
-        .Default(true);
     registrar.Parameter("use_new_slicing_implementation_in_unordered_pool", &TThis::UseNewSlicingImplementationInUnorderedPool)
         .Default(true);
 }
@@ -526,7 +532,6 @@ void TPartitionTablesCommand::DoExecute(ICommandContextPtr context)
     Options.EnableKeyGuarantee = EnableKeyGuarantee;
     Options.AdjustDataWeightPerPartition = AdjustDataWeightPerPartition;
     Options.EnableCookies = EnableCookies;
-    Options.UseNewSlicingImplementationInOrderedPool = UseNewSlicingImplementationInOrderedPool;
     Options.UseNewSlicingImplementationInUnorderedPool = UseNewSlicingImplementationInUnorderedPool;
 
     auto partitions = WaitFor(context->GetClient()->PartitionTables(Paths, Options))
@@ -952,7 +957,7 @@ void TSelectRowsCommand::Register(TRegistrar registrar)
         })
         .Optional(/*init*/ false);
 
-    registrar.ParameterWithUniversalAccessor<EStatisticsAggregation>(
+    registrar.ParameterWithUniversalAccessor<std::optional<EStatisticsAggregation>>(
         "statistics_aggregation",
         [] (TThis* command) -> auto& {
             return command->Options.StatisticsAggregation;
@@ -1192,6 +1197,13 @@ void TLookupRowsCommand::Register(TRegistrar registrar)
         "versioned_read_options",
         [] (TThis* command) -> auto& {
             return command->Options.VersionedReadOptions;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<std::string>>(
+        "execution_pool",
+        [] (TThis* command) -> auto& {
+            return command->Options.ExecutionPool;
         })
         .Optional(/*init*/ false);
 }

@@ -8,6 +8,7 @@
 #include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
 #include <ydb/core/statistics/events.h>
 #include <ydb/core/statistics/service/service.h>
+#include <ydb/core/sys_view/common/resolver.h>
 
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
@@ -657,13 +658,12 @@ void TKqpTableMetadataLoader::OnLoadedTableMetadata(TTableMetadataResult& loadTa
 }
 
 NThreading::TFuture<NYql::IKikimrGateway::TTableMetadataResult> TKqpTableMetadataLoader::LoadSysViewRewrittenMetadata(
-    const TString& cluster, const TString& table, const NSysView::ISystemViewResolver::TSystemViewPath& sysViewPath)
+    const TString& cluster, const TString& table, const TString& sysViewName)
 {
     TNavigate::TEntry entry;
 
-    const auto& rewrittenSysViewTypes = SystemViewRewrittenResolver->GetSystemViewsTypes(NSysView::ISystemViewResolver::ESource::Domain);
-    const auto sysViewType = rewrittenSysViewTypes.at(sysViewPath.ViewName);
-    auto schema = SystemViewRewrittenResolver->GetSystemViewSchema(sysViewType);
+    const auto sysViewType = NSysView::GetSystemViewRewrittenResolver().GetSystemViewType(sysViewName);
+    auto schema = NSysView::GetSystemViewRewrittenResolver().GetSystemViewSchema(*sysViewType);
 
     entry.Kind = TNavigate::KindSysView;
     entry.Columns = std::move(schema->Columns);
@@ -677,7 +677,7 @@ NThreading::TFuture<NYql::IKikimrGateway::TTableMetadataResult> TKqpTableMetadat
 
     auto sysViewInfo = MakeIntrusive<TNavigate::TSysViewInfo>();
     sysViewInfo->Kind = TNavigate::KindSysView;
-    sysViewInfo->Description.SetType(sysViewType);
+    sysViewInfo->Description.SetType(*sysViewType);
 
     entry.SysViewInfo = sysViewInfo;
 
@@ -696,8 +696,8 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
         NThreading::TFuture<TTableMetadataResult> tableMetaFuture;
 
         NSysView::ISystemViewResolver::TSystemViewPath sysViewPath;
-        if (settings.SysViewRewritten_ && SystemViewRewrittenResolver->IsSystemViewPath(SplitPath(table), sysViewPath)) {
-            tableMetaFuture = LoadSysViewRewrittenMetadata(cluster, table, sysViewPath);
+        if (settings.SysViewRewritten_ && NSysView::GetSystemViewRewrittenResolver().IsSystemViewPath(SplitPath(table), sysViewPath)) {
+            tableMetaFuture = LoadSysViewRewrittenMetadata(cluster, table, sysViewPath.ViewName);
         } else {
             tableMetaFuture = LoadTableMetadataCache(cluster, table, settings, database, userToken);
         }
@@ -985,7 +985,7 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                                 return;
                             }
 
-                            auto loadDynamicMetadata = [promise, externalDataSourceMetadata, settings, table, database, externalPath] () mutable {
+                            auto loadDynamicMetadata = [promise, settings, table, database, externalPath] (const TTableMetadataResult& externalDataSourceMetadata) mutable {
                                 NExternalSource::IExternalSource::TPtr externalSource;
                                 if (settings.ExternalSourceFactory) {
                                     try {
@@ -1042,15 +1042,18 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                                     useTls,
                                     structuredTokenJson,
                                     path)
-                                    .Subscribe([externalDataSourceMetadata, f = loadDynamicMetadata] (const NThreading::TFuture<TGetSchemeEntryResult>& result) mutable {
-                                        TGetSchemeEntryResult type = result.GetValue();
-                                        if (type == NYdb::NScheme::ESchemeEntryType::Topic) {
-                                            externalDataSourceMetadata.Metadata->ExternalSource.Type = ToString(NKikimr::NExternalSource::YdbTopicsType);
+                                    .Subscribe([externalDataSourceMetadata, f = loadDynamicMetadata, promise] (const NThreading::TFuture<TGetSchemeEntryResult>& result) mutable {
+                                        TGetSchemeEntryResult value = result.GetValue();
+                                        if (value.Issues) {
+                                            externalDataSourceMetadata.AddIssues(value.Issues);
                                         }
-                                        f();
+                                        if (value.EntryType == NYdb::NScheme::ESchemeEntryType::Topic) {
+                                            externalDataSourceMetadata.Metadata->ExternalSource.Type = ToString(NYql::EDatabaseType::YdbTopics);
+                                        }
+                                        f(externalDataSourceMetadata);
                                     });
                             } else {
-                                loadDynamicMetadata();
+                                loadDynamicMetadata(externalDataSourceMetadata);
                             }
                         });
                         break;

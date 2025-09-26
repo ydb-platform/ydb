@@ -2,4 +2,6 @@
 
 SUBSCRIBER(g:contrib g:cpp-contrib)
 
+VERSION(5.3.0)
+
 DLL_FOR(contrib/libs/jemalloc jemalloc)

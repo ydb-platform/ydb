@@ -420,7 +420,18 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::UnessentialFilter(TExpr
             const auto pruneKeys = ytMap.Mapper().Body().Maybe<TCoPruneKeysBase>();
 
             if (pruneKeys) {
-                if (pruneKeys.Cast().Input().Ptr() == ytMapInput) {
+                bool skipPruneKeys = true;
+                if (pruneKeys.Cast().Input().Ptr() != ytMapInput) {
+                    skipPruneKeys = false;
+                } else if (auto maybePruneAdjacentKeys = pruneKeys.Cast().Maybe<TCoPruneAdjacentKeys>(); maybePruneAdjacentKeys) {
+                    auto pruneAdjacentKeys = maybePruneAdjacentKeys.Cast();
+                    // We cannot remove added unique\distinct constraints added for pruneAdjacentKeys, so we cannot remove pruneAdjacentKeys
+                    if (pruneAdjacentKeys.Input().Ptr()->GetConstraintSet() != pruneAdjacentKeys.Ptr()->GetConstraintSet()) {
+                        skipPruneKeys = false;
+                    }
+                }
+
+                if (skipPruneKeys) {
                     auto identityLambda = MakeIdentityLambda(node.Pos(), ctx);
                     return Build<TYtMap>(ctx, node.Pos())
                         .InitFrom(ytMap)

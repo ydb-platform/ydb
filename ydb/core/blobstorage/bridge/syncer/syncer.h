@@ -6,6 +6,16 @@
 
 namespace NKikimr::NBridge {
 
-    IActor *CreateSyncerActor(TIntrusivePtr<TBlobStorageGroupInfo> info, TGroupId sourceGroupId, TGroupId targetGroupId);
+    struct TSyncerDataStats {
+        std::atomic_uint64_t BytesTotal = 0;
+        std::atomic_uint64_t BytesDone = 0;
+        std::atomic_uint64_t BytesError = 0;
+        std::atomic_uint64_t BlobsTotal = 0;
+        std::atomic_uint64_t BlobsDone = 0;
+        std::atomic_uint64_t BlobsError = 0;
+    };
+
+    IActor *CreateSyncerActor(TIntrusivePtr<TBlobStorageGroupInfo> info, TGroupId sourceGroupId, TGroupId targetGroupId,
+        std::shared_ptr<TSyncerDataStats> syncerDataStats);
 
 } // NKikimr::NBridge

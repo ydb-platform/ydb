@@ -2,6 +2,8 @@
 
 #include "probes.h"
 
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/counters.h>
 #include <ydb/core/metering/metering.h>
 #include <ydb/core/util/token_bucket.h>
 #include <ydb/core/metering/time_grid.h>
@@ -217,6 +219,10 @@ private:
 
     // Monitoring
     TRateAccountingCounters Counters;
+    ::NMonitoring::TDynamicCounterPtr PublicCounters;
+    ::NMonitoring::TDynamicCounters::TCounterPtr Limit;
+    ::NMonitoring::TDynamicCounters::TCounterPtr Consumed;
+
 public:
     explicit TAccountingActor(const IBillSink::TPtr& billSink, const NKikimrKesus::TStreamingQuoterResource& props, const TString& quoterPath)
         : TActor(&TThis::StateWork)
@@ -271,6 +277,32 @@ private:
         Provisioned.Configure(accCfg.GetProvisioned(), QuoterPath, props.GetResourcePath(), "provisioned", BillSink);
         OnDemand.Configure(accCfg.GetOnDemand(), QuoterPath, props.GetResourcePath(), "ondemand", BillSink);
         Overshoot.Configure(accCfg.GetOvershoot(), QuoterPath, props.GetResourcePath(), "overshoot", BillSink);
+
+        if (const auto& cfg = accCfg.GetOnDemand(); cfg.GetEnabled() && cfg.GetCloudId() && cfg.GetFolderId() && cfg.GetResourceId()) {
+            TString category = "Generic";
+            for (const auto& [label, value] : cfg.GetLabels()) {
+                if (to_lower(label) == "category") {
+                    category = value;
+                    break;
+                }
+            }
+
+            PublicCounters = GetServiceCounters(AppData()->Counters, "ydb_serverless", false)
+                ->GetSubgroup("host", "")
+                ->GetSubgroup("cloud_id", cfg.GetCloudId())
+                ->GetSubgroup("folder_id", cfg.GetFolderId())
+                ->GetSubgroup("database_id", cfg.GetResourceId())
+                ->GetSubgroup("category", category);
+            Limit = PublicCounters->GetExpiringNamedCounter("name", "resources.request_units.limit", false);
+            Consumed = PublicCounters->GetExpiringNamedCounter("name", "resources.request_units.consumed", true);
+
+            *Limit = resCfg.GetMaxUnitsPerSecond();
+        } else {
+            Limit.Reset();
+            Consumed.Reset();
+            PublicCounters.Reset();
+        }
+
         LWPROBE(ResourceAccountConfigure,
             QuoterPath,
             ResourcePath,
@@ -316,6 +348,10 @@ private:
         Provisioned.Add(provisioned, t, ctx);
         OnDemand.Add(onDemand, t, ctx);
         Overshoot.Add(overshoot, t, ctx);
+
+        if (Consumed) {
+            *Consumed += consumed;
+        }
     }
 };
 

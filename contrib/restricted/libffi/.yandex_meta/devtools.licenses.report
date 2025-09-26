@@ -135,8 +135,8 @@ BELONGS ya.make
     Files with this license:
         src/dlmalloc.c [3:4]
 
-SKIP     GPL-3.0-or-later     87fc8712bb68fe0e4f0e8067a1ff14e7
-BELONGS ya.make
+KEEP     GPL-3.0-or-later     87fc8712bb68fe0e4f0e8067a1ff14e7
+BELONGS testsuite/libffi.bhaible/test-callback/ya.make
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: GPL-3.0-or-later
@@ -145,9 +145,12 @@ BELONGS ya.make
         Links           : http://www.gnu.org/licenses/gpl-3.0-standalone.html, https://spdx.org/licenses/GPL-3.0-or-later
     Files with this license:
         testsuite/libffi.bhaible/test-callback.c [5:16]
+    Belongs difference:
+        + testsuite/libffi.bhaible/test-callback/ya.make
+        - ya.make
 
-SKIP     GPL-3.0-or-later     89b4246da7378f845d8524dbdd0ee755
-BELONGS ya.make
+KEEP     GPL-3.0-or-later     89b4246da7378f845d8524dbdd0ee755
+BELONGS testsuite/libffi.bhaible/test-call/ya.make testsuite/libffi.bhaible/test-callback/ya.make
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: GPL-3.0-or-later
@@ -156,6 +159,9 @@ BELONGS ya.make
         Links           : http://www.gnu.org/licenses/gpl-3.0-standalone.html, https://spdx.org/licenses/GPL-3.0-or-later
     Files with this license:
         testsuite/libffi.bhaible/testcases.c [5:16]
+    Belongs difference:
+        + testsuite/libffi.bhaible/test-call/ya.make testsuite/libffi.bhaible/test-callback/ya.make
+        - ya.make
 
 KEEP     MIT                  8a7348686d1975121ceb5328e9f86d92
 BELONGS ya.make
@@ -177,7 +183,7 @@ BELONGS ya.make
         configs/x86_64-apple-macosx/include/ffitarget.h [8:26]
         configs/x86_64-microsoft-windows/include/ffitarget.h [8:26]
         configs/x86_64-pc-linux-android21/include/ffitarget.h [8:26]
-        configs/x86_64-pc-linux-gnu/include/ffitarget.h [8:26]
+        configs/x86_64-unknown-linux-gnu/include/ffitarget.h [8:26]
         src/arm/ffi.c [10:28]
         src/arm/ffitarget.h [8:26]
         src/arm/sysv.S [7:25]
@@ -225,13 +231,13 @@ BELONGS ya.make
         configs/x86_64-apple-macosx/include/ffi.h [6:24]
         configs/x86_64-microsoft-windows/include/ffi.h [6:24]
         configs/x86_64-pc-linux-android21/include/ffi.h [6:24]
-        configs/x86_64-pc-linux-gnu/include/ffi.h [6:24]
+        configs/x86_64-unknown-linux-gnu/include/ffi.h [6:24]
         include/ffi_cfi.h [6:24]
         include/ffi_common.h [9:27]
         include/tramp.h [6:24]
 
-SKIP     GPL-3.0-or-later     c258ea87f6ea5cea93bf902d058a6a6a
-BELONGS ya.make
+KEEP     GPL-3.0-or-later     c258ea87f6ea5cea93bf902d058a6a6a
+BELONGS testsuite/libffi.bhaible/test-call/ya.make
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: GPL-3.0-or-later
@@ -240,6 +246,9 @@ BELONGS ya.make
         Links           : http://www.gnu.org/licenses/gpl-3.0-standalone.html, https://spdx.org/licenses/GPL-3.0-or-later
     Files with this license:
         testsuite/libffi.bhaible/test-call.c [5:16]
+    Belongs difference:
+        + testsuite/libffi.bhaible/test-call/ya.make
+        - ya.make
 
 KEEP     MIT                  f3282ec937cc52c3e9dfb631266166d0
 BELONGS ya.make

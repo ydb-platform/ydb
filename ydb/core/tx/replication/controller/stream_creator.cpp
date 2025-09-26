@@ -18,6 +18,8 @@
 namespace NKikimr::NReplication::NController {
 
 class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
+    static constexpr TDuration RetryDelay = TDuration::Seconds(10);
+
     static NYdb::NTable::TChangefeedDescription MakeChangefeed(
             const TString& name,
             const TDuration& retentionPeriod,
@@ -88,7 +90,7 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
         if (!result.IsSuccess()) {
             if (IsRetryableError(result)) {
                 LOG_D("Retry CreateStream");
-                return Schedule(TDuration::Seconds(10), new TEvents::TEvWakeup);
+                return Schedule(RetryDelay, new TEvents::TEvWakeup);
             }
 
             LOG_E("Error"
@@ -144,7 +146,7 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
         if (!result.IsSuccess()) {
             if (IsRetryableError(result)) {
                 LOG_D("Retry CreateConsumer");
-                return Schedule(TDuration::Seconds(10), new TEvents::TEvWakeup);
+                return Schedule(RetryDelay, new TEvents::TEvWakeup);
             }
 
             LOG_E("Error"
@@ -156,6 +158,49 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
         }
 
         Reply(std::move(result));
+    }
+
+    void CheckConsumerExists() {
+        const auto streamPath = BuildStreamPath();
+        Send(YdbProxy, new TEvYdbProxy::TEvDescribeTopicRequest(streamPath, {}));
+        Become(&TThis::StateCheckConsumerExists);
+    }
+
+    STATEFN(StateCheckConsumerExists) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvYdbProxy::TEvDescribeTopicResponse, Handle);
+            sFunc(TEvents::TEvWakeup, CheckConsumerExists);
+        default:
+            return StateBase(ev);
+        }
+    }
+
+    void Handle(TEvYdbProxy::TEvDescribeTopicResponse::TPtr& ev) {
+        LOG_T("Handle " << ev->Get()->ToString());
+
+        const auto& result = ev->Get()->Result;
+        if (!result.IsSuccess()) {
+            if (IsRetryableError(result)) {
+                LOG_W("Error of resolving topic '" << BuildStreamPath() << "': " << ev->Get()->ToString() << ". Retry.");
+                return Schedule(RetryDelay, new TEvents::TEvWakeup);
+            }
+
+            LOG_E("Error of resolving topic '" << BuildStreamPath() << "': " << ev->Get()->ToString() << ". Stop.");
+            NYdb::NIssue::TIssues issues = result.GetIssues();
+            return Reply(NYdb::TStatus(result.GetStatus(), std::move(issues)));
+        }
+
+        bool exists = AnyOf(result.GetTopicDescription().GetConsumers(), [&](const auto& consumer) {
+            return consumer.GetConsumerName() == SrcConsumerName;
+        });
+
+        if (exists) {
+            Reply(NYdb::TStatus(NYdb::EStatus::SUCCESS, NYdb::NIssue::TIssues()));
+        } else {
+            NYdb::NIssue::TIssues issues;
+            issues.AddIssue(TStringBuilder() << "consumer '" << SrcConsumerName << "' does not exist");
+            Reply(NYdb::TStatus(NYdb::EStatus::SCHEME_ERROR, std::move(issues)));
+        }
     }
 
     void Reply(NYdb::TStatus&& status) {
@@ -178,7 +223,8 @@ public:
             const TString& consumerName,
             const TDuration& retentionPeriod,
             const std::optional<TDuration>& resolvedTimestamps,
-            bool supportsTopicAutopartitioning)
+            bool supportsTopicAutopartitioning,
+            bool needCreate)
         : Parent(parent)
         , YdbProxy(proxy)
         , ReplicationId(rid)
@@ -191,12 +237,17 @@ public:
             {"id", ToString(rid)},
             {"supports_topic_autopartitioning", supportsTopicAutopartitioning},
         }))
+        , NeedCreate(needCreate)
         , LogPrefix("StreamCreator", ReplicationId, TargetId)
     {
     }
 
     void Bootstrap() {
-        RequestPermission();
+        if (NeedCreate) {
+            RequestPermission();
+        } else {
+            CheckConsumerExists();
+        }
     }
 
     STATEFN(StateBase) {
@@ -214,6 +265,7 @@ private:
     const TString SrcPath;
     const TString SrcConsumerName;
     const NYdb::NTable::TChangefeedDescription Changefeed;
+    const bool NeedCreate;
     const TActorLogPrefix LogPrefix;
 
 }; // TStreamCreator
@@ -226,22 +278,24 @@ IActor* CreateStreamCreator(TReplication* replication, ui64 targetId, const TAct
     const auto resolvedTimestamps = config.HasGlobal()
         ? std::make_optional(TDuration::MilliSeconds(config.GetGlobal().GetCommitIntervalMilliSeconds()))
         : std::nullopt;
+    const bool needCreate = !replication->GetConfig().HasTransferSpecific() ||
+        !replication->GetConfig().GetTransferSpecific().GetTarget().HasConsumerName();
 
     return CreateStreamCreator(ctx.SelfID, replication->GetYdbProxy(),
         replication->GetId(), target->GetId(),
         target->GetConfig(), target->GetStreamName(), target->GetStreamConsumerName(),
         TDuration::Seconds(AppData()->ReplicationConfig.GetRetentionPeriodSeconds()), resolvedTimestamps,
-        AppData()->FeatureFlags.GetEnableTopicAutopartitioningForReplication());
+        AppData()->FeatureFlags.GetEnableTopicAutopartitioningForReplication(), needCreate);
 }
 
 IActor* CreateStreamCreator(const TActorId& parent, const TActorId& proxy, ui64 rid, ui64 tid,
         const TReplication::ITarget::IConfig::TPtr& config,
         const TString& streamName, const TString& consumerName, const TDuration& retentionPeriod,
         const std::optional<TDuration>& resolvedTimestamps,
-        bool supportsTopicAutopartitioning)
+        bool supportsTopicAutopartitioning, bool needCreate)
 {
     return new TStreamCreator(parent, proxy, rid, tid, config,
-        streamName, consumerName, retentionPeriod, resolvedTimestamps, supportsTopicAutopartitioning);
+        streamName, consumerName, retentionPeriod, resolvedTimestamps, supportsTopicAutopartitioning, needCreate);
 }
 
 }

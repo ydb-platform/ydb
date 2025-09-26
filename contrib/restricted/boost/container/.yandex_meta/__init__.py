@@ -15,7 +15,7 @@ def post_install(self):
 boost_container = NixSourceProject(
     nixattr="boost_container",
     arcdir=boost.make_arcdir("container"),
-    owners=["g:cpp-contrib", "g:taxi-common"],
+    owners=["g:cpp-contrib"],
     copy_sources=[
         "include/boost/",
         "src/",

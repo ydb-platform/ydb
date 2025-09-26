@@ -51,7 +51,7 @@ def post_install(self):
 
 
 llvm_openmp = CMakeNinjaNixProject(
-    owners=["g:cpp-contrib", "g:cpp-committee"],
+    owners=["g:cpp-contrib"],
     arcdir="contrib/libs/cxxsupp/openmp",
     nixattr="llvmPackages_20.openmp",
     install_subdir="runtime/src",
@@ -76,6 +76,7 @@ llvm_openmp = CMakeNinjaNixProject(
         "libperfstat.h",
         "llvm/Support/TimeProfiler.h",
         "ompd-specific.h",
+        "OS.h",
         "procfs.h",
     ],
     platform_dispatchers=["kmp_config.h"],

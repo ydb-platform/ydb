@@ -5,6 +5,8 @@
 
 #include <library/cpp/yt/misc/enum.h>
 
+#include <library/cpp/yt/yson_string/public.h>
+
 #include <library/cpp/yson/node/node.h>
 
 #include <util/generic/maybe.h>
@@ -15,6 +17,20 @@
 #include <util/datetime/base.h>
 
 namespace NYT {
+
+////////////////////////////////////////////////////////////////////////////////
+
+namespace NYson {
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct IYsonConsumer;
+
+enum class EYsonFormat : int;
+
+////////////////////////////////////////////////////////////////////////////////
+
+} // namespace NYson
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -254,7 +270,7 @@ struct TConfig
     bool RedirectStdoutToStderr = false;
 
     /// Append job and operation IDs as shell command options.
-    bool AppendDebugOptions = true;
+    bool EnableDebugCommandLineArguments = false;
 
     static bool GetBool(const char* var, bool defaultValue = false);
     static int GetInt(const char* var, int defaultValue);
@@ -282,6 +298,18 @@ struct TConfig
 
     static TConfigPtr Get();
 };
+
+////////////////////////////////////////////////////////////////////////////////
+
+void Serialize(const TConfig& config, NYson::IYsonConsumer* consumer);
+
+void Deserialize(TConfig& config, const TNode& node);
+
+////////////////////////////////////////////////////////////////////////////////
+
+TString ConfigToYsonString(const TConfig& config, NYson::EYsonFormat format = NYson::EYsonFormat::Pretty);
+
+TConfig ConfigFromYsonString(TString serializedConfig);
 
 ////////////////////////////////////////////////////////////////////////////////
 

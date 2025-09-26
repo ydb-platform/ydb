@@ -1,10 +1,14 @@
+from pathlib import Path
+
 import pytest
 
 from build.plugins.lib.nots.typescript import TsConfig, TsValidationError
 
 
-def test_ts_config_validate_valid():
-    cfg = TsConfig(path="/tsconfig.json")
+def test_ts_config_validate_valid(monkeypatch):
+    monkeypatch.setattr(Path, "exists", lambda _: True)
+
+    cfg = TsConfig(path="/target/tsconfig.json", source_dir="/target")
     cfg.data = {
         "compilerOptions": {
             "rootDir": "./src",
@@ -70,7 +74,7 @@ def test_ts_config_declaration_without_dir():
 
 
 def test_ts_config_declaration_with_outdir():
-    cfg = TsConfig(path="/tsconfig.json")
+    cfg = TsConfig(path="/target/tsconfig.json", source_dir="/target")
     cfg.data = {
         "compilerOptions": {"rootDir": "./src", "outDir": "some/dir", "declaration": True},
     }
@@ -124,7 +128,7 @@ def test_ts_config_validate_invalid_local_outdir():
 
 
 def test_ts_config_validate_invalid_subdirs():
-    cfg = TsConfig(path="/foo/tsconfig.json")
+    cfg = TsConfig(path="/foo/tsconfig.json", source_dir="/foo")
     cfg.data = {
         "compilerOptions": {
             "rootDir": "/bar/src",
@@ -154,6 +158,113 @@ def test_ts_config_compiler_options():
     assert cfg.compiler_option("rootDir") == "src"
 
 
+class TestTsConfigGetConfigDir:
+    def test_simple(self):
+        # arrange
+        cfg = TsConfig(path="/target/config/tsconfig.json", source_dir="/target")
+
+        # act
+        result = cfg.get_config_dir()
+
+        # assert
+        assert result == Path("/target/config")
+
+
+class TestTsConfigGetModuleDir:
+    def test_with_moddir(self):
+        # arrange
+        cfg = TsConfig(path="/target/config/tsconfig.json", source_dir="/target")
+
+        # act
+        result = cfg.get_module_dir()
+
+        # assert
+        assert result == Path("/target")
+
+    def test_without_moddir(self, monkeypatch):
+        # arrange
+        monkeypatch.setattr(Path, "exists", lambda _: True)
+        cfg = TsConfig(path="/target/config/tsconfig.json")
+
+        # act
+        result = cfg.get_module_dir()
+
+        # assert
+        assert result == Path("/target")
+
+
+class TestTsConfigGetOutputDir:
+    def test_simple(self):
+        # arrange
+        cfg = TsConfig(path="/target/tsconfig.json", source_dir="/target")
+        cfg.data = {
+            "compilerOptions": {"rootDir": "./src", "outDir": "./build"},
+        }
+
+        # act
+        result = cfg.get_out_dirs()
+
+        # assert
+        assert result == {"build"}
+
+    def test_with_declaration_dir(self):
+        # arrange
+        cfg = TsConfig(path="/target/tsconfig.json", source_dir="/target")
+        cfg.data = {
+            "compilerOptions": {"rootDir": "./src", "outDir": "./build", "declarationDir": "./types"},
+        }
+
+        # act
+        result = cfg.get_out_dirs()
+
+        # assert
+        assert result == {"build", "types"}
+
+    def test_from_dir(self):
+        # arrange
+        cfg = TsConfig(path="/target/configs/tsconfig.json", source_dir="/target")
+        cfg.data = {
+            "compilerOptions": {"rootDir": "../src", "outDir": "../build"},
+        }
+
+        # act
+        result = cfg.get_out_dirs()
+
+        # assert
+        assert result == {"build"}
+
+
+class TestTsConfigRelPath:
+    def test_simple(self):
+        # arrange
+        cfg = TsConfig(path="/target/tsconfig.json", source_dir="/target")
+
+        # act
+        result = cfg.rel_to_module_path("./src")
+
+        # assert
+        assert result == Path("src")
+
+    def test_from_dir(self):
+        # arrange
+        cfg = TsConfig(path="/target/configs/tsconfig.json", source_dir="/target")
+
+        # act
+        result = cfg.rel_to_module_path("../src")
+
+        # assert
+        assert str(result) == "src"
+
+    def test_raise_exception(self, monkeypatch):
+        # arrange
+        cfg = TsConfig(path="/target/tsconfig.json")
+        monkeypatch.setattr(cfg, 'get_module_dir', lambda: None)
+
+        # act+assert
+        with pytest.raises(Exception, match="Can't find the module directory"):
+            cfg.rel_to_module_path("./src")
+
+
 class TestTsConfigMerge:
     def test_merge_paths(self):
         # arrange
@@ -171,6 +282,24 @@ class TestTsConfigMerge:
         # assert
         assert cfg_main.data == {
             "compilerOptions": {"paths": {"path1": ["src/path1"], "path2": ["src/path2"]}},
+        }
+
+    def test_fix_path_aliases(self):
+        # arrange
+        cfg_main = TsConfig(path="/foo/tsconfig.json")
+
+        cfg_common = TsConfig(path="/foo/configs/tsconfig.common.json")
+        cfg_common.data = {
+            "compilerOptions": {"paths": {"path1": ["../src/path1"], "path2": ["../src/path2"]}},
+        }
+
+        # act
+        cfg_main.merge("config", cfg_common)
+
+        # assert
+        assert cfg_main.data['compilerOptions']['paths']['path1'] == ["./src/path1"]
+        assert cfg_main.data == {
+            "compilerOptions": {"paths": {"path1": ["./src/path1"], "path2": ["./src/path2"]}},
         }
 
     def test_create_compiler_options(self):
@@ -238,13 +367,13 @@ class TestTsConfigMerge:
 
 
 class TestTsConfigExtends:
-    def create_empty_ts_config(self, path):
-        cfg = TsConfig(path=path)
+    def create_empty_ts_config(self, path, source_dir: str = None):
+        cfg = TsConfig(path=path, source_dir=source_dir)
         cfg.data = {}
         return cfg
 
-    def create_ts_config_with_data_once(self, path):
-        cfg = TsConfig(path=path)
+    def create_ts_config_with_data_once(self, path, source_dir: str = None):
+        cfg = TsConfig(path=path, source_dir=source_dir)
 
         if path == "/foo/base-tsconfig.json":
             cfg.data = {"extends": "./extends/recursive/tsconfig.json"}

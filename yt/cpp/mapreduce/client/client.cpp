@@ -875,13 +875,15 @@ THolder<TClientWriter> TClientBase::CreateClientWriter(
     const TRichYPath& path,
     const TTableReaderOptions& options,
     const ISkiffRowSkipperPtr& skipper,
-    const NSkiff::TSkiffSchemaPtr& schema)
+    const NSkiff::TSkiffSchemaPtr& requestedSchema,
+    const NSkiff::TSkiffSchemaPtr& parserSchema)
 {
     auto skiffOptions = TCreateSkiffSchemaOptions().HasRangeIndex(true);
-    auto resultSchema = NYT::NDetail::CreateSkiffSchema(TVector{schema}, skiffOptions);
+    auto resultRequestedSchema = NYT::NDetail::CreateSkiffSchema(TVector{requestedSchema}, skiffOptions);
+    auto resultParserSchema = NYT::NDetail::CreateSkiffSchema(TVector{parserSchema}, skiffOptions);
     return new TSkiffRowTableReader(
-        CreateClientReader(path, NYT::NDetail::CreateSkiffFormat(resultSchema), options),
-        resultSchema,
+        CreateClientReader(path, NYT::NDetail::CreateSkiffFormat(resultRequestedSchema), options),
+        resultParserSchema,
         {skipper},
         std::move(skiffOptions));
 }
@@ -914,13 +916,16 @@ THolder<TClientWriter> TClientBase::CreateClientWriter(
     const TString& cookie,
     const TTablePartitionReaderOptions& options,
     const ISkiffRowSkipperPtr& skipper,
-    const NSkiff::TSkiffSchemaPtr& schema)
+    const NSkiff::TSkiffSchemaPtr& requestedSchema,
+    const NSkiff::TSkiffSchemaPtr& parserSchema)
 {
     auto skiffOptions = TCreateSkiffSchemaOptions().HasRangeIndex(true);
-    auto resultSchema = NYT::NDetail::CreateSkiffSchema(TVector{schema}, skiffOptions);
+    auto resultRequestedSchema = NYT::NDetail::CreateSkiffSchema(TVector{requestedSchema}, skiffOptions);
+    auto resultParserSchema = NYT::NDetail::CreateSkiffSchema(TVector{parserSchema}, skiffOptions);
+
     return new TSkiffRowTableReader(
-        CreateRawTablePartitionReader(cookie, NYT::NDetail::CreateSkiffFormat(resultSchema), options),
-        resultSchema,
+        CreateRawTablePartitionReader(cookie, NYT::NDetail::CreateSkiffFormat(resultRequestedSchema), options),
+        resultParserSchema,
         {skipper},
         std::move(skiffOptions));
 }

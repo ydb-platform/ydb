@@ -102,16 +102,18 @@
                                                                                 "Node Type": "Aggregate-Filter-TableRangeScan",
                                                                                 "Operators": [
                                                                                     {
+                                                                                        "Aggregation": "{SUM(1)}",
+                                                                                        "GroupBy": "[item.EventDate,item.URLHash]",
                                                                                         "Inputs": [
                                                                                             {
                                                                                                 "InternalOperatorId": 1
                                                                                             }
                                                                                         ],
                                                                                         "Name": "Aggregate",
-                                                                                        "Phase": "Intermediate",
-                                                                                        "Pushdown": "True"
+                                                                                        "Phase": "Intermediate"
                                                                                     },
                                                                                     {
+                                                                                        "Blocks": "True",
                                                                                         "Inputs": [
                                                                                             {
                                                                                                 "InternalOperatorId": 2
@@ -329,28 +331,6 @@
                                                                                                     }
                                                                                                 },
                                                                                                 {
-                                                                                                    "GroupBy": {
-                                                                                                        "Aggregates": [
-                                                                                                            {
-                                                                                                                "Column": {
-                                                                                                                    "Id": 117
-                                                                                                                },
-                                                                                                                "Function": {
-                                                                                                                    "Id": 2
-                                                                                                                }
-                                                                                                            }
-                                                                                                        ],
-                                                                                                        "KeyColumns": [
-                                                                                                            {
-                                                                                                                "Id": 6
-                                                                                                            },
-                                                                                                            {
-                                                                                                                "Id": 104
-                                                                                                            }
-                                                                                                        ]
-                                                                                                    }
-                                                                                                },
-                                                                                                {
                                                                                                     "Projection": {
                                                                                                         "Columns": [
                                                                                                             {
@@ -358,9 +338,6 @@
                                                                                                             },
                                                                                                             {
                                                                                                                 "Id": 104
-                                                                                                            },
-                                                                                                            {
-                                                                                                                "Id": 117
                                                                                                             }
                                                                                                         ]
                                                                                                     }

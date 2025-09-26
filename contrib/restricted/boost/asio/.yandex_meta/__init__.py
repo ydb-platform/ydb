@@ -14,7 +14,7 @@ def post_install(self):
 boost_asio = NixSourceProject(
     nixattr="boost_asio",
     arcdir=boost.make_arcdir("asio"),
-    owners=["g:cpp-contrib", "g:taxi-common"],
+    owners=["g:cpp-contrib"],
     copy_sources=[
         "include/boost/",
     ],

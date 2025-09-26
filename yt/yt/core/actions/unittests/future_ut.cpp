@@ -38,8 +38,6 @@ TEST_F(TFutureTest, NoncopyableGet)
 {
     auto f = MakeFuture<std::unique_ptr<int>>(std::make_unique<int>(1));
     EXPECT_TRUE(f.IsSet());
-    EXPECT_TRUE(f.Get().IsOK());
-    EXPECT_EQ(1, *f.Get().Value());
     auto result =  f.GetUnique();
     EXPECT_TRUE(result.IsOK());
     EXPECT_EQ(1, *result.Value());

@@ -17,7 +17,7 @@ def post_install(self):
 
 
 sqlite3 = GNUMakeNixProject(
-    owners=["g:cpp-contrib", "g:maps-mrc"],
+    owners=["g:cpp-contrib"],
     arcdir="contrib/libs/sqlite3",
     nixattr="sqlite",
     makeflags=["libsqlite3.la"],

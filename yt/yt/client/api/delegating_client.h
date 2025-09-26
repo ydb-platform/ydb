@@ -782,7 +782,7 @@ public:
         const TListUserTokensOptions& options),
         (user, passwordSha256, options))
 
-    DELEGATE_METHOD(TFuture<TGetCurrentUserResultPtr>, GetCurrentUser, (
+    DELEGATE_METHOD(TFuture<TGetCurrentUserResult>, GetCurrentUser, (
         const TGetCurrentUserOptions& options),
         (options))
 
@@ -826,6 +826,10 @@ public:
 
     DELEGATE_METHOD(TFuture<TGetQueryTrackerInfoResult>, GetQueryTrackerInfo, (
         const TGetQueryTrackerInfoOptions& options),
+        (options))
+
+    DELEGATE_METHOD(TFuture<TGetDeclaredParametersInfoResult>, GetDeclaredParametersInfo, (
+        const TGetDeclaredParametersInfoOptions& options),
         (options))
 
     // Bundle Controller
@@ -901,6 +905,11 @@ public:
         const NYPath::TRichYPath& path,
         const TDistributedWriteSessionStartOptions& options),
         (path, options))
+
+    DELEGATE_METHOD(TFuture<void>, PingDistributedWriteSession, (
+        TSignedDistributedWriteSessionPtr session,
+        const TDistributedWriteSessionPingOptions& options),
+        (session, options))
 
     DELEGATE_METHOD(TFuture<void>, FinishDistributedWriteSession, (
         const TDistributedWriteSessionWithResults& sessionWithResults,

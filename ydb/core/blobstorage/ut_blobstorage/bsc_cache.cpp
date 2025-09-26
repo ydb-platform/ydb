@@ -51,6 +51,7 @@ struct TTestCtx : public TTestCtxBase {
     void StartNode() {
         Env->StartNode(NodeWithProxy);
         AllocateEdgeActorOnNodeWOConfig();
+        Env->Sim(TDuration::Seconds(1));
     }
 
     void RestartNode() {

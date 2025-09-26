@@ -11,11 +11,10 @@ from decimal import Decimal
 class TestCompatibility(RestartToAnotherVersionFixture):
     @pytest.fixture(autouse=True, scope="function")
     def setup(self):
-        output_path = yatest.common.test_output_path()
-        self.output_f = open(os.path.join(output_path, "out.log"), "w")
         yield from self.setup_cluster(
             extra_feature_flags={
                 # "enable_table_datetime64": True # uncomment for 64 datetime in tpc-h/tpc-ds
+                "enable_parameterized_decimal": True,
                 },
             column_shard_config={
                 'disabled_on_scheme_shard': False,
@@ -171,9 +170,9 @@ class TestCompatibility(RestartToAnotherVersionFixture):
             "clean"
         ]
 
-        yatest.common.execute(init_command, wait=True, stdout=self.output_f)
-        yatest.common.execute(import_command, wait=True, stdout=self.output_f)
-        yatest.common.execute(run_command, wait=True, stdout=self.output_f)
+        yatest.common.execute(init_command, wait=True)
+        yatest.common.execute(import_command, wait=True)
+        yatest.common.execute(run_command, wait=True)
         self.change_cluster_version()
-        yatest.common.execute(run_command, wait=True, stdout=self.output_f)
-        yatest.common.execute(clean_command, wait=True, stdout=self.output_f)
+        yatest.common.execute(run_command, wait=True)
+        yatest.common.execute(clean_command, wait=True)

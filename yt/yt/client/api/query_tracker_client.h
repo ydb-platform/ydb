@@ -107,6 +107,9 @@ struct TListQueriesOptions
     ui64 Limit = 100;
 
     NYTree::TAttributeFilter Attributes;
+
+    bool SearchByTokenPrefix = false;
+    bool UseFullTextSearch = true;
 };
 
 struct TQuery
@@ -176,7 +179,22 @@ struct TGetQueryTrackerInfoResult
     NYson::TYsonString SupportedFeatures;
     std::vector<std::string> AccessControlObjects;
     std::vector<std::string> Clusters;
-    NYson::TYsonString EnginesInfo;
+    std::optional<NYson::TYsonString> EnginesInfo;
+    std::optional<int> ExpectedTablesVersion;
+};
+
+struct TGetDeclaredParametersInfoOptions
+    : public TTimeoutOptions
+    , public TQueryTrackerOptions
+{
+    std::string Query;
+    NYson::TYsonString Settings;
+    NQueryTrackerClient::EQueryEngine Engine;
+};
+
+struct TGetDeclaredParametersInfoResult
+{
+    NYson::TYsonString Parameters;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -215,6 +233,8 @@ struct IQueryTrackerClient
         const TAlterQueryOptions& options = {}) = 0;
 
     virtual TFuture<TGetQueryTrackerInfoResult> GetQueryTrackerInfo(const TGetQueryTrackerInfoOptions& options = {}) = 0;
+
+    virtual TFuture<TGetDeclaredParametersInfoResult> GetDeclaredParametersInfo(const TGetDeclaredParametersInfoOptions& options = {}) = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

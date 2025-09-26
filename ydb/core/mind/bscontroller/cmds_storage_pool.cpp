@@ -209,7 +209,7 @@ namespace NKikimr::NBsController {
         // iterate through subset and add only requested entities
         const auto &storagePools = StoragePools.Get();
         for (auto it = storagePools.lower_bound(since); it != storagePools.end() && it->first <= till; ++it) {
-            if ((!storagePoolIds || storagePoolIds.count(it->first)) && (!nameSet || nameSet.count(it->second.Name))) {
+            if ((!storagePoolIds || storagePoolIds.contains(it->first)) && (!nameSet || nameSet.contains(it->second.Name))) {
                 Serialize(status.AddStoragePool(), it->first, it->second);
             }
         }
@@ -259,7 +259,7 @@ namespace NKikimr::NBsController {
 
         // second, scan all groups and check those who are not in SPs
         Groups.ForEach([&](TGroupId groupId, const TGroupInfo& groupInfo) {
-            if (storagePoolGroups.count(groupId)) {
+            if (storagePoolGroups.contains(groupId)) {
                 return;
             }
 
@@ -387,6 +387,14 @@ namespace NKikimr::NBsController {
 
         if (cmd.GetOnlyToLessOccupiedPDisk()) {
             Fit.OnlyToLessOccupiedPDisk = true;
+        }
+
+        if (cmd.GetPreferLessOccupiedRack()) {
+            Fit.PreferLessOccupiedRack = true;
+        }
+
+        if (cmd.GetWithAttentionToReplication()) {
+            Fit.WithAttentionToReplication = true;
         }
 
         Fit.PoolsAndGroups.emplace(group->StoragePoolId, group->ID);
@@ -575,7 +583,7 @@ namespace NKikimr::NBsController {
 
         Groups.ForEach([&](TGroupId groupId, const TGroupInfo& groupInfo) {
             if (!virtualGroupsOnly || groupFilter.contains(groupId)) {
-               Serialize(pb->AddGroup(), groupInfo, finder);
+               Serialize(pb->AddGroup(), groupInfo, finder, BridgeInfo.get());
             }
         });
 
@@ -601,6 +609,7 @@ namespace NKikimr::NBsController {
                 x->SetExpectedSlotCount(pdisk.ExpectedSlotCount);
                 x->SetDecommitStatus(NKikimrBlobStorage::EDecommitStatus::DECOMMIT_NONE);
                 x->SetInferPDiskSlotCountFromUnitSize(pdisk.InferPDiskSlotCountFromUnitSize);
+                x->SetInferPDiskSlotCountMax(pdisk.InferPDiskSlotCountMax);
                 if (pdisk.PDiskMetrics) {
                     x->MutablePDiskMetrics()->CopyFrom(*pdisk.PDiskMetrics);
                     x->MutablePDiskMetrics()->ClearPDiskId();
@@ -641,7 +650,7 @@ namespace NKikimr::NBsController {
                         const TVSlotId vslotId(nodeId, pdiskId, vdiskSlotId);
                         vslotId.Serialize(x->AddVSlotId());
                     }
-                    const auto& status = group.GetStatus(finder);
+                    const auto& status = group.GetStatus(finder, BridgeInfo.get());
                     x->SetOperatingStatus(status.OperatingStatus);
                     x->SetExpectedStatus(status.ExpectedStatus);
                 }

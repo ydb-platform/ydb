@@ -962,6 +962,8 @@ bool TBlobStorageController::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr e
         } else if (page == "InternalTables") {
             const TString table = cgi.Has("table") ? cgi.Get("table") : "pdisks";
             RenderInternalTables(str, table);
+        } else if (page == "Bridge") {
+            RenderBridge(str);
         } else if (page == "VirtualGroups") {
             RenderVirtualGroups(str);
         } else if (page == "StopGivingGroups") {
@@ -1016,6 +1018,7 @@ void TBlobStorageController::RenderMonPage(IOutputStream& out) {
     out << "<a href='app?TabletID=" << TabletID() << "&page=HealthEvents'>Health events</a><br>";
     out << "<a href='app?TabletID=" << TabletID() << "&page=Scrub'>Scrub state</a><br>";
     out << "<a href='app?TabletID=" << TabletID() << "&page=Shred'>Shred state</a><br>";
+    out << "<a href='app?TabletID=" << TabletID() << "&page=Bridge'>Bridge state</a><br>";
     out << "<a href='app?TabletID=" << TabletID() << "&page=VirtualGroups'>Virtual groups</a><br>";
     out << "<a href='app?TabletID=" << TabletID() << "&page=InternalTables'>Internal tables</a><br>";
 
@@ -1133,6 +1136,8 @@ void TBlobStorageController::RenderInternalTables(IOutputStream& out, const TStr
                         TABLEH() { out << "Total Size"; }
                         TABLEH() { out << "Status"; }
                         TABLEH() { out << "State"; }
+                        TABLEH() { out << "Decommit status"; }
+                        TABLEH() { out << "Maintenance status"; }
                         TABLEH() { out << "ExpectedSerial"; }
                         TABLEH() { out << "LastSeenSerial"; }
                         TABLEH() { out << "LastSeenPath"; }
@@ -1156,6 +1161,8 @@ void TBlobStorageController::RenderInternalTables(IOutputStream& out, const TStr
                                     out << NKikimrBlobStorage::TPDiskState::E_Name(m.GetState());
                                 }
                             }
+                            TABLED() { out << NKikimrBlobStorage::EDecommitStatus_Name(pdisk->DecommitStatus); }
+                            TABLED() { out << NKikimrBlobStorage::TMaintenanceStatus::E_Name(pdisk->MaintenanceStatus); }
                             TABLED() { out << pdisk->ExpectedSerial.Quote(); }
                             TABLED() {
                                 TString color = pdisk->ExpectedSerial == pdisk->LastSeenSerial ? "green" : "red";
@@ -1490,7 +1497,7 @@ void TBlobStorageController::RenderGroupRow(IOutputStream& out, const TGroupInfo
             TABLED() { out << (group.SeenOperational ? "YES" : ""); }
             TABLED() { out << (group.IsLayoutCorrect(finder) ? "" : "NO"); }
 
-            const auto& status = group.GetStatus(finder);
+            const auto& status = group.GetStatus(finder, BridgeInfo.get());
             TABLED() { out << NKikimrBlobStorage::TGroupStatus::E_Name(status.OperatingStatus); }
             TABLED() { out << NKikimrBlobStorage::TGroupStatus::E_Name(status.ExpectedStatus); }
             TABLED() {

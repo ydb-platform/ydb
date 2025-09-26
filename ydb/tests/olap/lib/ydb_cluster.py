@@ -136,7 +136,7 @@ class YdbCluster:
         return []
 
     @classmethod
-    def get_metrics(cls, metrics: dict[str, dict[str, str]], db_only: bool = False, role: Optional[YdbCluster.Node.Role] = None) -> dict[str, dict[str, float]]:
+    def get_metrics(cls, metrics: dict[str, dict[str, str]], db_only: bool = False, role: Optional[YdbCluster.Node.Role] = None, counters: str = 'tablets') -> dict[str, dict[str, float]]:
         def sensor_has_labels(sensor, labels: dict[str, str]) -> bool:
             for k, v in labels.items():
                 if sensor.get('labels', {}).get(k, '') != v:
@@ -145,7 +145,11 @@ class YdbCluster:
         nodes = cls.get_cluster_nodes(db_only=db_only, role=role)
         result = {}
         for node in nodes:
-            response = requests.get(f'http://{node.host}:{node.mon_port}/counters/counters=tablets/json')
+            url = f'http://{node.host}:{node.mon_port}/counters/'
+            if counters:
+                url += f'counters={counters}/'
+            url += 'json'
+            response = requests.get(url)
             response.raise_for_status()
             sensor_values = {}
             for name, labels in metrics.items():

@@ -29,8 +29,10 @@ RECURSE(
     serializable
     serverless
     sqs
+    statistics
     suite_tests
     tpc
+    tpcc
     tenants
     ttl
     wardens

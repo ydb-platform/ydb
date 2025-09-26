@@ -9,7 +9,7 @@ def post_install(self):
 boost_tuple = NixSourceProject(
     nixattr="boost_tuple",
     arcdir=boost.make_arcdir("tuple"),
-    owners=["g:cpp-contrib", "g:taxi-common"],
+    owners=["g:cpp-contrib"],
     copy_sources=[
         "include/boost/",
     ],

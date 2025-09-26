@@ -134,4 +134,4 @@ TEST(TFutureInteropTest, ToArcadiaFutureVoid2)
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace
-} // namespace NYT:::NConcurrency
+} // namespace NYT::NConcurrency

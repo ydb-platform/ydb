@@ -139,7 +139,7 @@ private:
                 if (PayloadType->GetMemberType(0)->IsOptional()) {
                     valueItems[0] = valueItems[0].MakeOptional();
                 }
-            } else if (val == 999) { // simulate error
+            } else if (val == 9999) { // simulate error
                 SendError();
                 return;
             }

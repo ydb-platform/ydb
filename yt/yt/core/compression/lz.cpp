@@ -53,7 +53,7 @@ static constexpr size_t MaxLzBlockSize = 1_GB;
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace
-} // namespace NYT::NCompression
+} // namespace NYT::NCompression::NDetail
 
 Y_DECLARE_PODTYPE(NYT::NCompression::NDetail::THeader);
 Y_DECLARE_PODTYPE(NYT::NCompression::NDetail::TBlockHeader);

@@ -57,21 +57,22 @@ namespace NSQLComplete {
             }
 
             std::any visitImport_stmt(SQLv1::Import_stmtContext* ctx) override {
-                VisitNullable(ctx->named_bind_parameter_list());
+                VisitNullableCollecting(ctx->named_bind_parameter_list());
                 return {};
             }
 
             std::any visitDefine_action_or_subquery_stmt(
                 SQLv1::Define_action_or_subquery_stmtContext* ctx) override {
-                VisitNullable(ctx->bind_parameter());
+                VisitNullableCollecting(ctx->bind_parameter());
                 if (IsEnclosing(ctx)) {
+                    VisitNullableCollecting(ctx->action_or_subquery_args());
                     return visitChildren(ctx);
                 }
                 return {};
             }
 
             std::any visitNamed_nodes_stmt(SQLv1::Named_nodes_stmtContext* ctx) override {
-                VisitNullable(ctx->bind_parameter_list());
+                VisitNullableCollecting(ctx->bind_parameter_list());
                 if (IsEnclosing(ctx)) {
                     visitChildren(ctx);
                 }
@@ -108,7 +109,7 @@ namespace NSQLComplete {
             }
 
             std::any visitFor_stmt(SQLv1::For_stmtContext* ctx) override {
-                VisitNullable(ctx->bind_parameter());
+                VisitNullableCollecting(ctx->bind_parameter());
                 if (IsEnclosing(ctx)) {
                     return visitChildren(ctx);
                 }
@@ -116,7 +117,7 @@ namespace NSQLComplete {
             }
 
             std::any visitLambda(SQLv1::LambdaContext* ctx) override {
-                VisitNullable(ctx->smart_parenthesis());
+                VisitNullableCollecting(ctx->smart_parenthesis());
                 if (IsEnclosing(ctx)) {
                     return visitChildren(ctx);
                 }
@@ -125,12 +126,12 @@ namespace NSQLComplete {
 
             std::any visitNamed_bind_parameter(
                 SQLv1::Named_bind_parameterContext* ctx) override {
-                VisitNullable(ctx->bind_parameter(0));
+                VisitNullableCollecting(ctx->bind_parameter(0));
                 return {};
             }
 
             std::any visitBind_parameter(SQLv1::Bind_parameterContext* ctx) override {
-                if (IsEnclosing(ctx)) {
+                if (IsEnclosing(ctx) || !IsCollecting_) {
                     return {};
                 }
 
@@ -144,15 +145,20 @@ namespace NSQLComplete {
             }
 
         private:
-            void VisitNullable(antlr4::tree::ParseTree* tree) {
+            void VisitNullableCollecting(antlr4::tree::ParseTree* tree) {
                 if (tree == nullptr) {
                     return;
                 }
+
+                const bool old = IsCollecting_;
+                IsCollecting_ = true;
                 visit(tree);
+                IsCollecting_ = old;
             }
 
             TNamedNodes* Names_;
             const TEnvironment* Env_;
+            bool IsCollecting_ = false;
         };
 
     } // namespace

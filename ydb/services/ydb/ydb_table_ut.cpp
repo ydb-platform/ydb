@@ -3019,7 +3019,7 @@ R"___(<main>: Error: Transaction not found: , code: 2015
     }
 
     Y_UNIT_TEST(CopyTables) {
-        TKikimrWithGrpcAndRootSchemaNoSystemViews server;
+        TKikimrWithGrpcAndRootSchema server;
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_NOTICE);
 
         auto connection = NYdb::TDriver(
@@ -3039,85 +3039,85 @@ R"___(<main>: Error: Transaction not found: , code: 2015
                 .AddNullableColumn("Value", EPrimitiveType::Utf8);
             tableBuilder.SetPrimaryKeyColumn("Key");
 
-            auto result = session.CreateTable("/Root/Table-1", tableBuilder.Build()).ExtractValueSync();
+            auto result = session.CreateTable("/Root/Dir/Table-1", tableBuilder.Build()).ExtractValueSync();
             UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
         }
 
         {
-            auto result = session.CopyTables({{"/Root/Table-1", "/Root/Table-2"}}).ExtractValueSync();
-            UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-        }
-
-        {
-            auto result = session.CopyTables(
-                                     { {"/Root/Table-1", "/Root/Table-3"}
-                                     , {"/Root/Table-2", "/Root/Table-4"}}
-                                     ).ExtractValueSync();
+            auto result = session.CopyTables({{"/Root/Dir/Table-1", "/Root/Dir/Table-2"}}).ExtractValueSync();
             UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
         }
 
         {
             auto result = session.CopyTables(
-                                     { {"/Root/Table-1", "/Root/Table-5"}
-                                     , {"/Root/Table-2", "/Root/Table-6"}
-                                     , {"/Root/Table-3", "/Root/Table-7"}
-                                     , {"/Root/Table-4", "/Root/Table-8"}}
-                                     ).ExtractValueSync();
+                                    { {"/Root/Dir/Table-1", "/Root/Dir/Table-3"}
+                                    , {"/Root/Dir/Table-2", "/Root/Dir/Table-4"}}
+                                    ).ExtractValueSync();
             UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
         }
 
         {
             auto result = session.CopyTables(
-                                     { }).ExtractValueSync();
+                                    { {"/Root/Dir/Table-1", "/Root/Dir/Table-5"}
+                                    , {"/Root/Dir/Table-2", "/Root/Dir/Table-6"}
+                                    , {"/Root/Dir/Table-3", "/Root/Dir/Table-7"}
+                                    , {"/Root/Dir/Table-4", "/Root/Dir/Table-8"}}
+                                    ).ExtractValueSync();
+            UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+
+        {
+            auto result = session.CopyTables(
+                                    { }).ExtractValueSync();
             UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetStatus());
         }
 
         {
             auto result = session.CopyTables(
-                                     { {"/Root/Table-1", "/Root/Table-1"}
-                                     , {"/Root/Table-2", "/Root/Table-9"}}
-                                     ).ExtractValueSync();
+                                    { {"/Root/Dir/Table-1", "/Root/Dir/Table-1"}
+                                    , {"/Root/Dir/Table-2", "/Root/Dir/Table-9"}}
+                                    ).ExtractValueSync();
             UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetStatus());
         }
 
         {
             auto result = session.CopyTables(
-                                     { {"/Root/Table-1", "/Root/dir_no_exist/Table-1"}
-                                     , {"/Root/Table-2", "/Root/Table-9"}}
-                                     ).ExtractValueSync();
+                                    { {"/Root/Dir/Table-1", "/Root/dir_no_exist/Table-1"}
+                                    , {"/Root/Dir/Table-2", "/Root/Dir/Table-9"}}
+                                    ).ExtractValueSync();
             UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetStatus());
         }
 
         {
             auto result = session.CopyTables(
-                                     { {"/Root/Table-1", "/Root/Table-2"}
-                                     , {"/Root/Table-2", "/Root/Table-9"}}
-                                     ).ExtractValueSync();
+                                    { {"/Root/Dir/Table-1", "/Root/Dir/Table-2"}
+                                    , {"/Root/Dir/Table-2", "/Root/Dir/Table-9"}}
+                                    ).ExtractValueSync();
             UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetStatus());
         }
 
         {
             auto result = session.CopyTables(
-                                     { {"/Root/Table-1", "/Root/Table-9"}
-                                     , {"/Root/Table-1", "/Root/Table-10"}}
-                                     ).ExtractValueSync();
+                                    { {"/Root/Dir/Table-1", "/Root/Dir/Table-9"}
+                                    , {"/Root/Dir/Table-1", "/Root/Dir/Table-10"}}
+                                    ).ExtractValueSync();
             UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetStatus());
         }
 
         {
             auto result = session.CopyTables(
-                                     { {"/Root/Table-1", "/Root/Table-3"}
-                                     , {"/Root/Table-2", "/Root/Table-4"}}
-                                     ).ExtractValueSync();
+                                    { {"/Root/Dir/Table-1", "/Root/Dir/Table-3"}
+                                    , {"/Root/Dir/Table-2", "/Root/Dir/Table-4"}}
+                                    ).ExtractValueSync();
             UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetStatus()); // do not fail on exist
         }
@@ -3130,63 +3130,60 @@ R"___(<main>: Error: Transaction not found: , code: 2015
             tableBuilder.SetPrimaryKeyColumn("Key");
             tableBuilder.AddSecondaryIndex("user-index", "Value");
 
-            auto result = session.CreateTable("/Root/Indexed-Table-1", tableBuilder.Build()).ExtractValueSync();
+            auto result = session.CreateTable("/Root/Dir/Indexed-Table-1", tableBuilder.Build()).ExtractValueSync();
             UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
         }
 
         {
             auto result = session.CopyTables(
-                                     {NYdb::NTable::TCopyItem("/Root/Indexed-Table-1", "/Root/Indexed-Table-2")})
-                              .ExtractValueSync();
+                                    {{"/Root/Dir/Indexed-Table-1", "/Root/Dir/Indexed-Table-2"}}
+                                    ).ExtractValueSync();
             UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
         }
 
         {
             auto result = session.CopyTables(
-                                     {NYdb::NTable::TCopyItem("/Root/Indexed-Table-1", "/Root/Omited-Indexes-Table-3").SetOmitIndexes()})
-                              .ExtractValueSync();
+                                    {NYdb::NTable::TCopyItem("/Root/Dir/Indexed-Table-1", "/Root/Dir/Omited-Indexes-Table-3").SetOmitIndexes()}
+                                    ).ExtractValueSync();
             UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
         }
 
         {
             auto result = session.CopyTables(
-                                     {NYdb::NTable::TCopyItem("/Root/Indexed-Table-1", "/Root/Omited-Indexes-Table-4").SetOmitIndexes(),
-                                      NYdb::NTable::TCopyItem("/Root/Indexed-Table-2", "/Root/Omited-Indexes-Table-5").SetOmitIndexes(),
-                                      NYdb::NTable::TCopyItem("/Root/Omited-Indexes-Table-3", "/Root/Omited-Indexes-Table-6").SetOmitIndexes()
-                                      })
-                              .ExtractValueSync();
+                                    { NYdb::NTable::TCopyItem("/Root/Dir/Indexed-Table-1", "/Root/Dir/Omited-Indexes-Table-4").SetOmitIndexes()
+                                    , NYdb::NTable::TCopyItem("/Root/Dir/Indexed-Table-2", "/Root/Dir/Omited-Indexes-Table-5").SetOmitIndexes()
+                                    , NYdb::NTable::TCopyItem("/Root/Dir/Omited-Indexes-Table-3", "/Root/Dir/Omited-Indexes-Table-6").SetOmitIndexes()}
+                                    ).ExtractValueSync();
             UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
         }
 
         {
             auto result = session.CopyTables(
-                                     {NYdb::NTable::TCopyItem("/Root/Indexed-Table-1", "/Root/Indexed-Table-7"),
-                                      NYdb::NTable::TCopyItem("/Root/Indexed-Table-2", "/Root/Omited-Indexes-Table-8").SetOmitIndexes()
-                                     })
-                              .ExtractValueSync();
+                                    { NYdb::NTable::TCopyItem("/Root/Dir/Indexed-Table-1", "/Root/Dir/Indexed-Table-7")
+                                    , NYdb::NTable::TCopyItem("/Root/Dir/Indexed-Table-2", "/Root/Dir/Omited-Indexes-Table-8").SetOmitIndexes()}
+                                    ).ExtractValueSync();
             UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
         }
 
-
         {
-            auto asyncDescDir = NYdb::NScheme::TSchemeClient(connection).ListDirectory("/Root");
+            auto asyncDescDir = NYdb::NScheme::TSchemeClient(connection).ListDirectory("/Root/Dir");
             asyncDescDir.Wait();
             const auto& val = asyncDescDir.GetValue();
             auto entry = val.GetEntry();
-            UNIT_ASSERT_EQUAL(entry.Name, "Root");
+            UNIT_ASSERT_EQUAL(entry.Name, "Dir");
             UNIT_ASSERT_EQUAL(entry.Type, NYdb::NScheme::ESchemeEntryType::Directory);
 
             auto children = val.GetChildren();
-            UNIT_ASSERT_EQUAL(children.size(), 16);
+            UNIT_ASSERT_VALUES_EQUAL(children.size(), 16);
             for (const auto& child: children) {
                 UNIT_ASSERT_EQUAL(child.Type, NYdb::NScheme::ESchemeEntryType::Table);
 
-                auto result = session.DropTable(TStringBuilder() << "Root" << "/" <<  child.Name).ExtractValueSync();
+                auto result = session.DropTable(TStringBuilder() << "Root/Dir" << "/" <<  child.Name).ExtractValueSync();
                 UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
                 UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
             }
@@ -3194,7 +3191,7 @@ R"___(<main>: Error: Transaction not found: , code: 2015
     }
 
     Y_UNIT_TEST(RenameTables) {
-        TKikimrWithGrpcAndRootSchemaNoSystemViews server;
+        TKikimrWithGrpcAndRootSchema server;
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_NOTICE);
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::GRPC_SERVER, NActors::NLog::PRI_DEBUG);
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::TX_PROXY, NActors::NLog::PRI_DEBUG);
@@ -3216,79 +3213,79 @@ R"___(<main>: Error: Transaction not found: , code: 2015
                 .AddNullableColumn("Value", EPrimitiveType::Utf8);
             tableBuilder.SetPrimaryKeyColumn("Key");
 
-            auto result = session.CreateTable("/Root/Table-1", tableBuilder.Build()).ExtractValueSync();
+            auto result = session.CreateTable("/Root/Dir/Table-1", tableBuilder.Build()).ExtractValueSync();
             UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
         }
 
         {
-            auto result = session.RenameTables({{"/Root/Table-1", "/Root/Table-2"}}).ExtractValueSync();
+            auto result = session.RenameTables({{"/Root/Dir/Table-1", "/Root/Dir/Table-2"}}).ExtractValueSync();
             UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
         }
 
         {
-            auto result = session.CopyTables({{"/Root/Table-2", "/Root/Table-1"}}).ExtractValueSync();
+            auto result = session.CopyTables({{"/Root/Dir/Table-2", "/Root/Dir/Table-1"}}).ExtractValueSync();
             UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
         }
 
         {
             auto result = session.RenameTables(
-                                     { {"/Root/Table-1", "/Root/Table-2"} }
-                                     ).ExtractValueSync();
+                                    {{"/Root/Dir/Table-1", "/Root/Dir/Table-2"}}
+                                    ).ExtractValueSync();
             UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetStatus());
         }
 
         {
             auto result = session.RenameTables(
-                                     { {"/Root/Table-1", "/Root/Table-3"}
-                                     , {"/Root/Table-2", "/Root/Table-4"}}
-                                     ).ExtractValueSync();
+                                    { {"/Root/Dir/Table-1", "/Root/Dir/Table-3"}
+                                    , {"/Root/Dir/Table-2", "/Root/Dir/Table-4"}}
+                                    ).ExtractValueSync();
             UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
         }
 
         {
             auto result = session.RenameTables(
-                                     { }).ExtractValueSync();
+                                    { }).ExtractValueSync();
             UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetStatus());
         }
 
         {
             auto result = session.RenameTables(
-                                     { {"/Root/Table-1", "/Root/Table-1"}
-                                     , {"/Root/Table-2", "/Root/Table-9"}}
-                                     ).ExtractValueSync();
+                                    { {"/Root/Dir/Table-1", "/Root/Dir/Table-1"}
+                                    , {"/Root/Dir/Table-2", "/Root/Dir/Table-9"}}
+                                    ).ExtractValueSync();
             UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetStatus());
         }
 
         {
             auto result = session.RenameTables(
-                                     { {"/Root/Table-1", "/Root/dir_no_exist/Table-1"}
-                                     , {"/Root/Table-2", "/Root/Table-9"}}
-                                     ).ExtractValueSync();
+                                    { {"/Root/Dir/Table-1", "/Root/dir_no_exist/Table-1"}
+                                    , {"/Root/Dir/Table-2", "/Root/Dir/Table-9"}}
+                                    ).ExtractValueSync();
             UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetStatus());
         }
 
         {
             auto result = session.RenameTables(
-                                     { {"/Root/Table-1", "/Root/Table-2"}
-                                     , {"/Root/Table-2", "/Root/Table-9"}}
-                                     ).ExtractValueSync();
+                                    { {"/Root/Dir/Table-1", "/Root/Dir/Table-2"}
+                                    , {"/Root/Dir/Table-2", "/Root/Dir/Table-9"}}
+                                    ).ExtractValueSync();
             UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetStatus());
         }
 
         {
             auto result = session.RenameTables(
-                                     { {"/Root/Table-1", "/Root/Table-9"}
-                                     , {"/Root/Table-1", "/Root/Table-10"}}
-                                     ).ExtractValueSync();
+                                    { {"/Root/Dir/Table-1", "/Root/Dir/Table-9"}
+                                    , {"/Root/Dir/Table-1", "/Root/Dir/Table-10"}}
+                                    ).ExtractValueSync();
             UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetStatus());
         }
@@ -3296,62 +3293,62 @@ R"___(<main>: Error: Transaction not found: , code: 2015
 
         {
             auto result = session.RenameTables(
-                                     { {"/Root/Table-1", "/Root/Table-3"}
-                                     , {"/Root/Table-2", "/Root/Table-4"}}
-                                     ).ExtractValueSync();
+                                    { {"/Root/Dir/Table-1", "/Root/Dir/Table-3"}
+                                    , {"/Root/Dir/Table-2", "/Root/Dir/Table-4"}}
+                                    ).ExtractValueSync();
             UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetStatus()); // do not fail on exist
         }
 
         {
             auto result = session.CopyTables(
-                                     { {"/Root/Table-3", "/Root/Table-1"}
-                                     , {"/Root/Table-4", "/Root/Table-2"}}
-                                     ).ExtractValueSync();
+                                    { {"/Root/Dir/Table-3", "/Root/Dir/Table-1"}
+                                    , {"/Root/Dir/Table-4", "/Root/Dir/Table-2"}}
+                                    ).ExtractValueSync();
             UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
         }
 
         {
             auto result = session.RenameTables(
-                                     { {"/Root/Table-1", "/Root/Table-3"}
-                                     , {"/Root/Table-2", "/Root/Table-4"}}
-                                     ).ExtractValueSync();
+                                    { {"/Root/Dir/Table-1", "/Root/Dir/Table-3"}
+                                    , {"/Root/Dir/Table-2", "/Root/Dir/Table-4"}}
+                                    ).ExtractValueSync();
             UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetStatus()); // do not fail on exist
         }
 
         {
             auto result = session.RenameTables(
-                                     {NYdb::NTable::TRenameItem("/Root/Table-4", "/Root/Table-1").SetReplaceDestination()})
-                              .ExtractValueSync();
+                                    {NYdb::NTable::TRenameItem("/Root/Dir/Table-4", "/Root/Dir/Table-1").SetReplaceDestination()}
+                                    ).ExtractValueSync();
             UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
         }
 
         {
             auto result = session.RenameTables(
-                                     {NYdb::NTable::TRenameItem("/Root/Table-2", "/Root/Table-1").SetReplaceDestination(),
-                                     {"/Root/Table-3", "/Root/Table-2"}})
-                              .ExtractValueSync();
+                                    { NYdb::NTable::TRenameItem("/Root/Dir/Table-2", "/Root/Dir/Table-1").SetReplaceDestination()
+                                    , {"/Root/Dir/Table-3", "/Root/Dir/Table-2"}}
+                                    ).ExtractValueSync();
             UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
         }
 
         {
-            auto asyncDescDir = NYdb::NScheme::TSchemeClient(connection).ListDirectory("/Root");
+            auto asyncDescDir = NYdb::NScheme::TSchemeClient(connection).ListDirectory("/Root/Dir");
             asyncDescDir.Wait();
             const auto& val = asyncDescDir.GetValue();
             auto entry = val.GetEntry();
-            UNIT_ASSERT_EQUAL(entry.Name, "Root");
+            UNIT_ASSERT_EQUAL(entry.Name, "Dir");
             UNIT_ASSERT_EQUAL(entry.Type, NYdb::NScheme::ESchemeEntryType::Directory);
 
             auto children = val.GetChildren();
-            UNIT_ASSERT_EQUAL_C(children.size(), 2, children.size());
+            UNIT_ASSERT_VALUES_EQUAL(children.size(), 2);
             for (const auto& child: children) {
                 UNIT_ASSERT_EQUAL(child.Type, NYdb::NScheme::ESchemeEntryType::Table);
 
-                auto result = session.DropTable(TStringBuilder() << "Root" << "/" <<  child.Name).ExtractValueSync();
+                auto result = session.DropTable(TStringBuilder() << "Root/Dir" << "/" <<  child.Name).ExtractValueSync();
                 UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
                 UNIT_ASSERT_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetStatus());
             }
@@ -3465,6 +3462,7 @@ R"___(<main>: Error: Transaction not found: , code: 2015
     Y_UNIT_TEST(SimpleColumnFamilies) {
         TKikimrWithGrpcAndRootSchema server;
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_NOTICE);
+        server.Server_->GetRuntime()->GetAppData().FeatureFlags.SetEnableTableCacheModes(true);
         InitSubDomain(server);
 
         auto connection = NYdb::TDriver(
@@ -3633,6 +3631,7 @@ R"___(<main>: Error: Transaction not found: , code: 2015
                 .AlterColumnFamily("Value", "alt")
                 .BeginAddColumnFamily("alt")
                     .SetCompression(EColumnFamilyCompression::None)
+                    .SetCacheMode(EColumnFamilyCacheMode::Regular)
                 .EndAddColumnFamily();
 
             auto result = session.AlterTable("/Root/ydb_ut_tenant/Table-4", alterSettings).ExtractValueSync();
@@ -3657,12 +3656,14 @@ R"___(<main>: Error: Transaction not found: , code: 2015
             UNIT_ASSERT_VALUES_EQUAL(families[0].GetName(), "default");
             UNIT_ASSERT_VALUES_EQUAL(families[1].GetName(), "alt");
             UNIT_ASSERT_VALUES_EQUAL(families[1].GetCompression().value(), EColumnFamilyCompression::None);
+            UNIT_ASSERT_VALUES_EQUAL(families[1].GetCacheMode().value(), EColumnFamilyCacheMode::Regular);
         }
 
         {
             auto alterSettings = TAlterTableSettings()
                 .BeginAlterColumnFamily("alt")
                     .SetCompression(EColumnFamilyCompression::LZ4)
+                    .SetCacheMode(EColumnFamilyCacheMode::InMemory)
                 .EndAlterColumnFamily();
 
             auto result = session.AlterTable("/Root/ydb_ut_tenant/Table-4", alterSettings).ExtractValueSync();
@@ -3687,6 +3688,7 @@ R"___(<main>: Error: Transaction not found: , code: 2015
             UNIT_ASSERT_VALUES_EQUAL(families[0].GetName(), "default");
             UNIT_ASSERT_VALUES_EQUAL(families[1].GetName(), "alt");
             UNIT_ASSERT_VALUES_EQUAL(families[1].GetCompression().value(), EColumnFamilyCompression::LZ4);
+            UNIT_ASSERT_VALUES_EQUAL(families[1].GetCacheMode().value(), EColumnFamilyCacheMode::InMemory);
         }
 
         for (int tableIdx = 1; tableIdx <= 4; ++tableIdx) {
@@ -3763,6 +3765,7 @@ R"___(<main>: Error: Transaction not found: , code: 2015
     Y_UNIT_TEST(ColumnFamiliesDescriptionWithStorageAndIndex) {
         TKikimrWithGrpcAndRootSchema server;
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_NOTICE);
+        server.Server_->GetRuntime()->GetAppData().FeatureFlags.SetEnableTableCacheModes(true);
         InitSubDomain(server);
 
         auto connection = NYdb::TDriver(
@@ -3783,6 +3786,7 @@ R"___(<main>: Error: Transaction not found: , code: 2015
                 .BeginColumnFamily("alt")
                     .SetData("hdd")
                     .SetCompression(EColumnFamilyCompression::LZ4)
+                    .SetCacheMode(EColumnFamilyCacheMode::InMemory)
                 .EndColumnFamily();
             tableBuilder.SetPrimaryKeyColumn("Key");
             tableBuilder.AddSecondaryIndex("MyIndex", "Value");
@@ -3813,6 +3817,7 @@ R"___(<main>: Error: Transaction not found: , code: 2015
             UNIT_ASSERT_VALUES_EQUAL(families[1].GetName(), "alt");
             UNIT_ASSERT_VALUES_EQUAL(families[1].GetData(), "hdd");
             UNIT_ASSERT_VALUES_EQUAL(families[1].GetCompression().value(), EColumnFamilyCompression::LZ4);
+            UNIT_ASSERT_VALUES_EQUAL(families[1].GetCacheMode().value(), EColumnFamilyCacheMode::InMemory);
         }
     }
 
@@ -3820,6 +3825,7 @@ R"___(<main>: Error: Transaction not found: , code: 2015
         TKikimrWithGrpcAndRootSchema server;
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_NOTICE);
         server.Server_->GetRuntime()->GetAppData().FeatureFlags.SetEnablePublicApiExternalBlobs(true);
+        server.Server_->GetRuntime()->GetAppData().FeatureFlags.SetEnableTableCacheModes(true);
         InitSubDomain(server, EDefaultTableProfile::Disabled);
 
         auto connection = NYdb::TDriver(
@@ -3842,6 +3848,7 @@ R"___(<main>: Error: Transaction not found: , code: 2015
                     .SetTabletCommitLog1("ssd")
                     .SetExternal("hdd")
                     .SetStoreExternalBlobs(true)
+                    .SetExternalDataChannelsCount(7U)
                 .EndStorageSettings()
                 .BeginColumnFamily("default")
                     .SetData("ssd")
@@ -3849,6 +3856,7 @@ R"___(<main>: Error: Transaction not found: , code: 2015
                 .BeginColumnFamily("alt")
                     .SetData("hdd")
                     .SetCompression(EColumnFamilyCompression::LZ4)
+                    .SetCacheMode(EColumnFamilyCacheMode::InMemory)
                 .EndColumnFamily();
             tableBuilder.SetPrimaryKeyColumn("Key");
 
@@ -3875,6 +3883,7 @@ R"___(<main>: Error: Transaction not found: , code: 2015
             const auto& settings = res.GetTableDescription().GetStorageSettings();
             UNIT_ASSERT_VALUES_EQUAL(settings.GetExternal(), "hdd");
             UNIT_ASSERT_VALUES_EQUAL(settings.GetStoreExternalBlobs().value(), true);
+            UNIT_ASSERT_VALUES_EQUAL(settings.GetExternalDataChannelsCount().value(), 7U);
             const auto& families = res.GetTableDescription().GetColumnFamilies();
             UNIT_ASSERT_EQUAL(families.size(), 2);
             UNIT_ASSERT_VALUES_EQUAL(families[0].GetName(), "default");
@@ -3882,6 +3891,7 @@ R"___(<main>: Error: Transaction not found: , code: 2015
             UNIT_ASSERT_VALUES_EQUAL(families[1].GetName(), "alt");
             UNIT_ASSERT_VALUES_EQUAL(families[1].GetData(), "hdd");
             UNIT_ASSERT_VALUES_EQUAL(families[1].GetCompression().value(), EColumnFamilyCompression::LZ4);
+            UNIT_ASSERT_VALUES_EQUAL(families[1].GetCacheMode().value(), EColumnFamilyCacheMode::InMemory);
         }
     }
 

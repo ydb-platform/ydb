@@ -16,7 +16,7 @@ __contributors__ = [
     "Lai Han",
 ]
 __license__ = "MIT"
-__version__ = "0.22.0"
+__version__ = "0.30.2"
 
 import base64
 import calendar
@@ -47,9 +47,7 @@ import zlib
 try:
     import socks
 except ImportError:
-    # TODO: remove this fallback and copypasted socksipy module upon py2/3 merge,
-    # idea is to have soft-dependency on any compatible module called socks
-    from . import socks
+    socks = None
 from . import auth
 from .error import *
 from .iri2uri import iri2uri
@@ -955,6 +953,10 @@ def proxy_info_from_url(url, method="http", noproxy=None):
     url = urllib.parse.urlparse(url)
 
     proxy_type = 3  # socks.PROXY_TYPE_HTTP
+    if url.scheme == "socks4":
+        proxy_type = 1  # socks.PROXY_TYPE_SOCKS4
+    elif url.scheme == "socks5" or url.scheme == "socks":
+        proxy_type = 2  # socks.PROXY_TYPE_SOCKS5
     pi = ProxyInfo(
         proxy_type=proxy_type,
         proxy_host=url.hostname,

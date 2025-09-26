@@ -30,23 +30,19 @@ public:
 
     virtual bool IsSystemViewPath(const TVector<TString>& path, TSystemViewPath& sysViewPath) const = 0;
 
-    virtual TMaybe<TSchema> GetSystemViewSchema(const TStringBuf viewName, ESource sourceObjectType) const = 0;
-
     virtual TMaybe<TSchema> GetSystemViewSchema(NKikimrSysView::ESysViewType viewType) const = 0;
 
-    virtual bool IsSystemView(const TStringBuf viewName) const = 0;
+    virtual TMaybe<NKikimrSysView::ESysViewType> GetSystemViewType(const TStringBuf viewName, TMaybe<ESource> sourceObjectType = Nothing()) const = 0;
 
-    virtual TVector<TString> GetSystemViewNames(ESource target) const = 0;
-
-    virtual const THashMap<TString, NKikimrSysView::ESysViewType>& GetSystemViewsTypes(ESource target) const = 0;
+    virtual const THashMap<TStringBuf, NKikimrSysView::ESysViewType>& GetSystemViewsTypes(ESource source = ESource::Domain) const = 0;
 };
 
 bool MaybeSystemViewPath(const TVector<TString>& path);
 bool MaybeSystemViewFolderPath(const TVector<TString>& path);
 
-THolder<ISystemViewResolver> CreateSystemViewResolver();
+const ISystemViewResolver& GetSystemViewResolver();
 
-THolder<ISystemViewResolver> CreateSystemViewRewrittenResolver();
+const ISystemViewResolver& GetSystemViewRewrittenResolver();
 
 } // NSysView
 } // NKikimr

@@ -232,6 +232,7 @@ namespace NKikimr::NDataShard {
             std::optional<ui64> changeGroup,
             bool commitOrdered,
             bool isArbiter,
+            bool disableExpectations,
             TTransactionContext& txc);
 
         bool AttachVolatileTxCallback(

@@ -109,6 +109,28 @@ private:
     bool Exhausted_ = false;
 };
 
+class TTSimpleNestedStreamImpl: public NYql::NPureCalc::IStream<NPureCalcProto::TSimpleNested*> {
+public:
+    TTSimpleNestedStreamImpl()
+    {
+        Message_.SetX(100);
+        *Message_.MutableY() = GetCanonicalMessage();
+    }
+
+    NPureCalcProto::TSimpleNested* Fetch() override {
+        if (Exhausted_) {
+            return nullptr;
+        } else {
+            Exhausted_ = true;
+            return &Message_;
+        }
+    }
+
+private:
+    NPureCalcProto::TSimpleNested Message_;
+    bool Exhausted_ = false;
+};
+
 class TAllTypesConsumerImpl: public NYql::NPureCalc::IConsumer<NPureCalcProto::TAllTypes*> {
 private:
     int I_ = 0;
@@ -991,6 +1013,61 @@ Y_UNIT_TEST_SUITE(TestProtoIO) {
             input->OnFinish();
 
             UNIT_ASSERT_VALUES_EQUAL(expected, actual);
+        }
+    }
+
+    Y_UNIT_TEST(TestNestedFieldRenames) {
+        using namespace NYql::NPureCalc;
+
+        auto factory = MakeProgramFactory();
+
+        TString query = "SELECT InputAlias AS OutputAlias, X FROM Input";
+
+        auto inputProtoOptions = TProtoSchemaOptions();
+        inputProtoOptions.SetFieldRenames({{"Y", "InputAlias"}, {"FInt64", "NestedField"}});
+        inputProtoOptions.SetEnableRecursiveRenaming(true);
+
+        auto inputSpec = TProtobufInputSpec<NPureCalcProto::TSimpleNested>(
+            Nothing(), std::move(inputProtoOptions)
+        );
+
+        auto outputProtoOptions = TProtoSchemaOptions();
+        outputProtoOptions.SetEnableRecursiveRenaming(true);
+
+        outputProtoOptions.SetFieldRenames({{"Y", "OutputAlias"}, {"FInt64", "NestedField"}});
+        auto outputSpecWithNestedRename = TProtobufOutputSpec<NPureCalcProto::TSimpleNested>(
+            outputProtoOptions
+        );
+
+        outputProtoOptions.SetFieldRenames({{"Y", "OutputAlias"}});
+        auto outputSpecWithoutNestedRename = TProtobufOutputSpec<NPureCalcProto::TSimpleNested>(
+            std::move(outputProtoOptions)
+        );
+
+        {
+            auto program = factory->MakePullStreamProgram(
+                inputSpec, outputSpecWithNestedRename, query, ETranslationMode::SQL
+            );
+
+            auto input = MakeHolder<TTSimpleNestedStreamImpl>();
+            auto output = program->Apply(std::move(input));
+
+            TVector<int> expected = {3};
+            TVector<int> actual;
+
+            while (auto* x = output->Fetch()) {
+                actual.push_back(x->GetY().GetFInt64());
+            }
+
+            UNIT_ASSERT_VALUES_EQUAL(expected, actual);
+        }
+
+        {
+            UNIT_ASSERT_EXCEPTION_CONTAINS([&](){
+                factory->MakePullStreamProgram(
+                    inputSpec, outputSpecWithoutNestedRename, query, ETranslationMode::SQL
+                );
+            }(), TCompileError, "Failed to optimize");
         }
     }
 }

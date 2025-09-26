@@ -228,7 +228,7 @@ class WorkloadVectorIndex(WorkloadBase):
         similarity_data = ["cosine", "inner_product"]
         vector_type_data = ["float", "int8", "uint8"]
         levels_data = [1, 3]
-        clusters_data = [1, 17]
+        clusters_data = [2, 17]
         vector_dimension_data = [5]
         self._create_table(table_path)
 

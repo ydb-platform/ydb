@@ -1,5 +1,6 @@
 #include "schemeshard_path_describer.h"
 
+#include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/public/api/protos/annotations/sensitive.pb.h>
 
 #include <ydb/core/base/appdata.h>
@@ -216,8 +217,10 @@ TPathElement::EPathSubType TPathDescriber::CalcPathSubType(const TPath& path) {
                 return TPathElement::EPathSubType::EPathSubTypeSyncIndexImplTable;
             case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
                 return TPathElement::EPathSubType::EPathSubTypeVectorKmeansTreeIndexImplTable;
+            case NKikimrSchemeOp::EIndexTypeGlobalFulltext:
+                return TPathElement::EPathSubType::EPathSubTypeFulltextIndexImplTable; 
             default:
-                Y_DEBUG_ABORT("%s", (TStringBuilder() << "unexpected indexInfo->Type# " << indexInfo->Type).data());
+                Y_DEBUG_ABORT_S(NTableIndex::InvalidIndexType(indexInfo->Type));
                 return TPathElement::EPathSubType::EPathSubTypeEmpty;
         }
     } else if (parentPath.IsCdcStream()) {
@@ -1089,7 +1092,7 @@ void TPathDescriber::DescribeView(const TActorContext&, TPathId pathId, TPathEle
 
 void TPathDescriber::DescribeResourcePool(TPathId pathId, TPathElement::TPtr pathEl) {
     auto it = Self->ResourcePools.FindPtr(pathId);
-    Y_ABORT_UNLESS(it, "ResourcePools is not found");
+    Y_ABORT_UNLESS(it, "ResourcePool is not found");
     TResourcePoolInfo::TPtr resourcePoolInfo = *it;
 
     auto entry = Result->Record.MutablePathDescription()->MutableResourcePoolDescription();
@@ -1123,6 +1126,29 @@ void TPathDescriber::DescribeSysView(const TActorContext&, TPathId pathId, TPath
     entry->SetName(pathEl->Name);
     entry->SetType(sysViewInfo->Type);
     sourceObjectPath.GetPathIdForDomain().ToProto(entry->MutableSourceObject());
+}
+
+void TPathDescriber::DescribeSecret(const TActorContext&, TPathId pathId, TPathElement::TPtr pathEl) {
+    auto it = Self->Secrets.FindPtr(pathId);
+    Y_ABORT_UNLESS(it, "Secret is not found");
+    TSecretInfo::TPtr secretInfo = *it;
+
+    auto entry = Result->Record.MutablePathDescription()->MutableSecretDescription();
+    entry->SetName(pathEl->Name);
+    if (Params.GetOptions().GetReturnSecretValue()) {
+        entry->SetValue(secretInfo->Description.GetValue());
+    }
+    entry->SetVersion(secretInfo->Description.GetVersion());
+}
+
+void TPathDescriber::DescribeStreamingQuery(TPathId pathId, TPathElement::TPtr pathEl) {
+    const auto it = Self->StreamingQueries.FindPtr(pathId);
+    Y_ABORT_UNLESS(it, "StreamingQuery is not found");
+    const auto streamingQueryInfo = *it;
+
+    auto& entry = *Result->Record.MutablePathDescription()->MutableStreamingQueryDescription();
+    entry.SetName(pathEl->Name);
+    *entry.MutableProperties() = streamingQueryInfo->Properties;
 }
 
 static bool ConsiderAsDropped(const TPath& path) {
@@ -1289,6 +1315,12 @@ THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> TPathDescriber::Describe
         case NKikimrSchemeOp::EPathTypeSysView:
             DescribeSysView(ctx, base->PathId, base);
             break;
+        case NKikimrSchemeOp::EPathTypeSecret:
+            DescribeSecret(ctx, base->PathId, base);
+            break;
+        case NKikimrSchemeOp::EPathTypeStreamingQuery:
+            DescribeStreamingQuery(base->PathId, base);
+            break;
         case NKikimrSchemeOp::EPathTypeInvalid:
             Y_UNREACHABLE();
         }
@@ -1442,14 +1474,23 @@ void TSchemeShard::DescribeTableIndex(const TPathId& pathId, const TString& name
     }
     entry.SetDataSize(dataSize);
 
-    if (indexInfo->Type == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree) {
-        if (const auto* vectorIndexKmeansTreeDescription = std::get_if<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(&indexInfo->SpecializedIndexDescription)) {
-           *entry.MutableVectorIndexKmeansTreeDescription() = *vectorIndexKmeansTreeDescription;
-        } else {
-            Y_FAIL_S("SpecializedIndexDescription should be set");
-        }
+    switch (indexInfo->Type) {
+        case NKikimrSchemeOp::EIndexTypeGlobal:
+        case NKikimrSchemeOp::EIndexTypeGlobalAsync:
+        case NKikimrSchemeOp::EIndexTypeGlobalUnique:
+            // no specialized index description
+            Y_ASSERT(std::holds_alternative<std::monostate>(indexInfo->SpecializedIndexDescription));
+            break;
+        case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
+            *entry.MutableVectorIndexKmeansTreeDescription() = std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(indexInfo->SpecializedIndexDescription);
+            break;
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltext:
+            *entry.MutableFulltextIndexDescription() = std::get<NKikimrSchemeOp::TFulltextIndexDescription>(indexInfo->SpecializedIndexDescription);
+            break;
+        default:
+            Y_DEBUG_ABORT_S(NTableIndex::InvalidIndexType(indexInfo->Type));
+            break;
     }
-
 }
 
 void TSchemeShard::DescribeCdcStream(const TPathId& pathId, const TString& name,

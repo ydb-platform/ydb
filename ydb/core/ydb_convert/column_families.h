@@ -133,6 +133,10 @@ namespace NKikimr {
                 }
             }
 
+            if (settings.has_external_data_channels_count()) {
+                MutableDefaultFamily()->MutableStorageConfig()->SetExternalChannelsCount(settings.external_data_channels_count());
+            }
+
             return true;
         }
 
@@ -202,6 +206,34 @@ namespace NKikimr {
                     return false;
             }
 
+            switch (familySettings.cache_mode()) {
+                case Ydb::Table::ColumnFamily::CACHE_MODE_UNSPECIFIED:
+                    break;
+                case Ydb::Table::ColumnFamily::CACHE_MODE_REGULAR:
+                    if (!AppData()->FeatureFlags.GetEnableTableCacheModes()) {
+                        *code = Ydb::StatusIds::BAD_REQUEST;
+                        *error = "Setting cache_mode is not allowed";
+                        return false;
+                    }
+                    family->SetColumnCacheMode(NKikimrSchemeOp::ColumnCacheModeRegular);
+                    break;
+                case Ydb::Table::ColumnFamily::CACHE_MODE_IN_MEMORY:
+                    if (!AppData()->FeatureFlags.GetEnableTableCacheModes()) {
+                        *code = Ydb::StatusIds::BAD_REQUEST;
+                        *error = "Setting cache_mode is not allowed";
+                        return false;
+                    }
+                    family->SetColumnCacheMode(NKikimrSchemeOp::ColumnCacheModeTryKeepInMemory);
+                    break;
+                default:
+                    *code = Ydb::StatusIds::BAD_REQUEST;
+                    *error = TStringBuilder()
+                        << "Unsupported cache mode value "
+                        << (ui32)familySettings.cache_mode()
+                        << " in column family '" << familySettings.name() << "'";
+                    return false;
+            }
+
             return true;
         }
 
@@ -214,14 +246,6 @@ namespace NKikimr {
                 return true;
             }
 
-            const auto* defaultFamily = FindDefaultFamily();
-            if (!defaultFamily) {
-                *code = Ydb::StatusIds::BAD_REQUEST;
-                *error = TStringBuilder()
-                    << "Missing 'default' column family in the table definition";
-                return false;
-            }
-
             for (size_t index = 0; index < PartitionConfig->ColumnFamiliesSize(); ++index) {
                 auto columnFamily = PartitionConfig->GetColumnFamilies(index);
                 if (columnFamily.HasColumnCodecLevel()) {
@@ -229,16 +253,6 @@ namespace NKikimr {
                     *error = "Field `COMPRESSION_LEVEL` is not supported for OLTP tables";
                     return false;
                 }
-            }
-
-            if (!defaultFamily->HasStorageConfig() ||
-                !defaultFamily->GetStorageConfig().HasSysLog() ||
-                !defaultFamily->GetStorageConfig().HasLog())
-            {
-                *code = Ydb::StatusIds::BAD_REQUEST;
-                *error = TStringBuilder()
-                    << "Column families cannot be used without tablet_commit_log0 and tablet_commit_log1 media defined";
-                return false;
             }
 
             return true;

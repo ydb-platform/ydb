@@ -37,13 +37,6 @@ TTopicRef::TTopicRef(const TString& refName, const TDeferredAtom& cluster, TNode
 {
 }
 
-TColumnConstraints::TColumnConstraints(TNodePtr defaultExpr, bool nullable)
-    : DefaultExpr(defaultExpr)
-    , Nullable(nullable)
-{
-}
-
-
 TColumnSchema::TColumnSchema(TPosition pos, const TString& name, const TNodePtr& type, bool nullable,
         TVector<TIdentifier> families, bool serial, TNodePtr defaultExpr, ETypeOfChange typeOfChange)
     : Pos(pos)
@@ -1014,7 +1007,7 @@ bool TCallNodeDepArgs::DoInit(TContext& ctx, ISource* src) {
     return true;
 }
 
-TCallDirectRow::TPtr TCallDirectRow::DoClone() const {
+INode::TPtr TCallDirectRow::DoClone() const {
     return new TCallDirectRow(Pos_, OpName_, CloneContainer(Args_));
 }
 
@@ -1038,7 +1031,13 @@ bool TCallDirectRow::DoInit(TContext& ctx, ISource* src) {
     if (!TCallNode::DoInit(ctx, src)) {
         return false;
     }
-    Nodes_.push_back(Y("DependsOn", "row"));
+
+    if (ctx.DirectRowDependsOn.GetOrElse(true)) {
+        Nodes_.push_back(Y("DependsOn", "row"));
+    } else {
+        Nodes_.push_back(AstNode("row"));
+    }
+
     return true;
 }
 
@@ -1204,11 +1203,17 @@ bool TWinRank::DoInit(TContext& ctx, ISource* src) {
     const auto& orderSpec = winSpecPtr->OrderBy;
     if (orderSpec.empty()) {
         if (Args_.empty()) {
-            ctx.Warning(GetPos(), TIssuesIds::YQL_RANK_WITHOUT_ORDER_BY) <<
-                OpName_ << "() is used with unordered window - all rows will be considered equal to each other";
+            if (!ctx.Warning(GetPos(), TIssuesIds::YQL_RANK_WITHOUT_ORDER_BY, [&](auto& out) {
+                out << OpName_ << "() is used with unordered window - all rows will be considered equal to each other";
+            })) {
+                return false;
+            }
         } else {
-            ctx.Warning(GetPos(), TIssuesIds::YQL_RANK_WITHOUT_ORDER_BY) <<
-                OpName_ << "(<expression>) is used with unordered window - the result is likely to be undefined";
+            if (!ctx.Warning(GetPos(), TIssuesIds::YQL_RANK_WITHOUT_ORDER_BY, [&](auto& out) {
+                out << OpName_ << "(<expression>) is used with unordered window - the result is likely to be undefined";
+            })) {
+                return false;
+            }
         }
     }
 
@@ -1873,8 +1878,11 @@ StringContentInternal(TContext& ctx, TPosition pos, const TString& input, EStrin
             result.Type = NKikimr::NUdf::EDataSlot::Utf8;
         } else {
             if (ctx.Scoped->WarnUntypedStringLiterals) {
-                ctx.Warning(pos, TIssuesIds::YQL_UNTYPED_STRING_LITERALS)
-                << "Please add suffix u for Utf8 strings or s for arbitrary binary strings";
+                if (!ctx.Warning(pos, TIssuesIds::YQL_UNTYPED_STRING_LITERALS, [](auto& out) {
+                    out << "Please add suffix u for Utf8 strings or s for arbitrary binary strings";
+                })) {
+                    return {};
+                }
             }
 
             if (ctx.Scoped->UnicodeLiterals) {
@@ -2687,7 +2695,7 @@ TNodePtr BuildAccess(TPosition pos, const TVector<INode::TIdPart>& ids, bool isL
     return new TAccessNode(pos, ids, isLookup);
 }
 
-void WarnIfAliasFromSelectIsUsedInGroupBy(TContext& ctx, const TVector<TNodePtr>& selectTerms, const TVector<TNodePtr>& groupByTerms,
+bool WarnIfAliasFromSelectIsUsedInGroupBy(TContext& ctx, const TVector<TNodePtr>& selectTerms, const TVector<TNodePtr>& groupByTerms,
                                           const TVector<TNodePtr>& groupByExprTerms)
 {
     THashMap<TString, TNodePtr> termsByLabel;
@@ -2718,9 +2726,10 @@ void WarnIfAliasFromSelectIsUsedInGroupBy(TContext& ctx, const TVector<TNodePtr>
     }
 
     if (termsByLabel.empty()) {
-        return;
+        return true;
     }
 
+    bool isError = false;
     bool found = false;
     auto visitor = [&](const INode& current) {
         if (found) {
@@ -2736,10 +2745,17 @@ void WarnIfAliasFromSelectIsUsedInGroupBy(TContext& ctx, const TVector<TNodePtr>
             auto it = termsByLabel.find(*columnName);
             if (it != termsByLabel.end()) {
                 found = true;
-                ctx.Warning(current.GetPos(), TIssuesIds::YQL_PROJECTION_ALIAS_IS_REFERENCED_IN_GROUP_BY)
-                    << "GROUP BY will aggregate by column `" << *columnName << "` instead of aggregating by SELECT expression with same alias";
-                ctx.Warning(it->second->GetPos(), TIssuesIds::YQL_PROJECTION_ALIAS_IS_REFERENCED_IN_GROUP_BY)
-                    << "You should probably use alias in GROUP BY instead of using it here. Please consult documentation for more details";
+
+                ctx.Warning(current.GetPos(), TIssuesIds::YQL_PROJECTION_ALIAS_IS_REFERENCED_IN_GROUP_BY, [&](auto& out) {
+                    out << "GROUP BY will aggregate by column `" << *columnName
+                        << "` instead of aggregating by SELECT expression with same alias";
+                });
+
+                isError = isError || !ctx.Warning(it->second->GetPos(), TIssuesIds::YQL_PROJECTION_ALIAS_IS_REFERENCED_IN_GROUP_BY, [](auto& out) {
+                    out << "You should probably use alias in GROUP BY instead of using it here. "
+                        << "Please consult documentation for more details";
+                });
+
                 return false;
             }
         }
@@ -2769,10 +2785,14 @@ void WarnIfAliasFromSelectIsUsedInGroupBy(TContext& ctx, const TVector<TNodePtr>
 
     for (auto& groupByTerm : originalGroupBy) {
         groupByTerm->VisitTree(visitor);
+        if (isError) {
+            return false;
+        }
         if (found) {
-            return;
+            return true;
         }
     }
+    return true;
 }
 
 bool ValidateAllNodesForAggregation(TContext& ctx, const TVector<TNodePtr>& nodes) {
@@ -3201,9 +3221,13 @@ TNodePtr BuildBinaryOp(TContext& ctx, TPosition pos, const TString& opName, TNod
         const bool oneArgNull  = a->IsNull() || b->IsNull();
 
         if (bothArgNull || (oneArgNull && opName != "Or" && opName != "And")) {
-            ctx.Warning(pos, TIssuesIds::YQL_OPERATION_WILL_RETURN_NULL) << "Binary operation "
-            << opName.substr(0, opName.size() - 7 * opName.EndsWith("MayWarn"))
-            << " will return NULL here";
+            if (!ctx.Warning(pos, TIssuesIds::YQL_OPERATION_WILL_RETURN_NULL, [&](auto& out) {
+                out << "Binary operation "
+                    << opName.substr(0, opName.size() - 7 * opName.EndsWith("MayWarn"))
+                    << " will return NULL here";
+            })) {
+                return nullptr;
+            }
         }
     }
 
@@ -3581,19 +3605,18 @@ TNodePtr BuildNamedExpr(TNodePtr parent) {
     return new TNamedExprNode(parent);
 }
 
-bool TVectorIndexSettings::Validate(TContext& ctx) const {
-    if (!Distance && !Similarity) {
-        ctx.Error() << "either distance or similarity should be set";
+bool TSecretParameters::ValidateParameters(TContext& ctx, const TPosition stmBeginPos, const TSecretParameters::TOperationMode mode) {
+    if (!Value) {
+        ctx.Error(stmBeginPos) << "parameter VALUE must be set";
         return false;
     }
-    if (!VectorType) {
-        ctx.Error() << "vector_type should be set";
-        return false;
+    if (mode == TOperationMode::Alter) {
+        if (InheritPermissions) {
+            ctx.Error(stmBeginPos) << "parameter INHERIT_PERMISSIONS is not supported for alter operation";
+            return false;
+        }
     }
-    if (!VectorDimension) {
-        ctx.Error() << "vector_dimension should be set";
-        return false;
-    }
+
     return true;
 }
 

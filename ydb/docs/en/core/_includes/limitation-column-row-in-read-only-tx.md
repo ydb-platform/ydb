@@ -1,0 +1,3 @@
+Currently, mixing [column-oriented tables](../concepts/glossary.md#column-oriented-table) and [row-oriented tables](../concepts/glossary.md#row-oriented-table) in a single transaction is supported only if the transaction performs read operations; no writes are allowed. Support for read-write transactions involving both table types is under development.
+
+If a write transaction includes both types of tables, it fails with the following error: `Write transactions that use both row-oriented and column-oriented tables are disabled at current time`.

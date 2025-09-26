@@ -1,8 +1,8 @@
 # CREATE TOPIC
 
-The `CREATE TOPIC` call creates a [topic](concepts/topic).
+The `CREATE TOPIC` call creates a [topic](../../../concepts/datamodel/topic.md).
 
-When creating a topic, you can add topic [consumers](concepts/topic#consumer) to it and topic settings.
+When creating a topic, you can add topic [consumers](../../../concepts/datamodel/topic.md#consumer) to it and topic settings.
 
 ```yql
 CREATE TOPIC topic_path (
@@ -16,7 +16,11 @@ CREATE TOPIC topic_path (
 All the parameters except the topic name are optional. By default, a topic is created without consumers. All
 the omitted settings are also set by default (both for the topic and its consumers).
 
-{% include [object naming rules](../../../concepts/datamodel/_includes/object-naming-rules.md#object-naming-rules) %}
+{% note info %}
+
+When choosing a name for the topic, please consider the common [schema objects naming rules](../../../concepts/datamodel/cluster-namespace.md#object-naming-rules)
+
+{% endnote %}
 
 ## Examples
 

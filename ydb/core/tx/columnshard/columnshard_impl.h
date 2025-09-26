@@ -24,7 +24,6 @@
 #include "normalizer/abstract/abstract.h"
 #include "operations/events.h"
 #include "operations/manager.h"
-#include "overload/overload_subscribers.h"
 #include "resource_subscriber/counters.h"
 #include "resource_subscriber/task.h"
 #include "subscriber/abstract/manager/manager.h"
@@ -38,6 +37,8 @@
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/tx/columnshard/column_fetching/manager.h>
+#include <ydb/core/tx/columnshard/overload_manager/overload_manager_service.h>
+#include <ydb/core/tx/columnshard/overload_manager/overload_manager_events.h>
 #include <ydb/core/tx/data_events/events.h>
 #include <ydb/core/tx/locks/locks.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
@@ -148,9 +149,9 @@ struct TSettings {
     }
 
     void RegisterControls(TControlBoard& icb) {
-        icb.RegisterSharedControl(BlobWriteGrouppingEnabled, "ColumnShardControls.BlobWriteGrouppingEnabled");
-        icb.RegisterSharedControl(CacheDataAfterIndexing, "ColumnShardControls.CacheDataAfterIndexing");
-        icb.RegisterSharedControl(CacheDataAfterCompaction, "ColumnShardControls.CacheDataAfterCompaction");
+        TControlBoard::RegisterSharedControl(BlobWriteGrouppingEnabled, icb.ColumnShardControls.BlobWriteGrouppingEnabled);
+        TControlBoard::RegisterSharedControl(CacheDataAfterIndexing, icb.ColumnShardControls.CacheDataAfterIndexing);
+        TControlBoard::RegisterSharedControl(CacheDataAfterCompaction, icb.ColumnShardControls.CacheDataAfterCompaction);
     }
 };
 
@@ -251,7 +252,7 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     void Handle(TEvTxProcessing::TEvReadSetAck::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvColumnShard::TEvProposeTransaction::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvColumnShard::TEvCheckPlannedTransaction::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvColumnShard::TEvCancelTransactionProposal::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvCancelTransactionProposal::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvColumnShard::TEvNotifyTxCompletion::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTxProcessing::TEvPlanStep::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvKqpScan::TPtr& ev, const TActorContext& ctx);
@@ -320,8 +321,6 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
 
     void Die(const TActorContext& ctx) override;
 
-    void OnYellowChannelsChanged() override;
-
     void CleanupActors(const TActorContext& ctx);
     void BecomeBroken(const TActorContext& ctx);
     void TrySwitchToWork(const TActorContext& ctx);
@@ -382,11 +381,9 @@ public:
 private:
     void OverloadWriteFail(const EOverloadStatus overloadReason, const NEvWrite::TWriteMeta& writeMeta, const ui64 writeSize, const ui64 cookie,
         std::unique_ptr<NActors::IEventBase>&& event, const TActorContext& ctx);
+    EOverloadStatus ResourcesStatusToOverloadStatus(const NOverload::EResourcesStatus status) const;
     EOverloadStatus CheckOverloadedImmediate(const TInternalPathId tableId) const;
     EOverloadStatus CheckOverloadedWait(const TInternalPathId tableId) const;
-    void UpdateOverloadsStatus();
-    ui64 GetShardWritesInFlyLimit() const;
-    ui64 GetShardWritesSizeInFlyLimit() const;
 
 protected:
     STFUNC(StateInit) {
@@ -420,7 +417,7 @@ protected:
             HFunc(TEvTabletPipe::TEvServerDisconnected, Handle);
             HFunc(TEvColumnShard::TEvProposeTransaction, Handle);
             HFunc(TEvColumnShard::TEvCheckPlannedTransaction, Handle);
-            HFunc(TEvColumnShard::TEvCancelTransactionProposal, Handle);
+            HFunc(TEvDataShard::TEvCancelTransactionProposal, Handle);
             HFunc(TEvColumnShard::TEvNotifyTxCompletion, Handle);
             HFunc(TEvDataShard::TEvKqpScan, Handle);
             HFunc(TEvColumnShard::TEvInternalScan, Handle);
@@ -542,7 +539,7 @@ private:
     NDataShard::TSysLocks SysLocks;
     TSpaceWatcher* SpaceWatcher;
     TActorId SpaceWatcherId;
-    NOverload::TOverloadSubscribers OverloadSubscribers;
+    THashMap<TActorId, TActorId> PipeServersInterconnectSessions;
 
     void TryRegisterMediatorTimeCast();
     void UnregisterMediatorTimeCast();

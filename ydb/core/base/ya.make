@@ -28,6 +28,8 @@ SRCS(
     feature_flags.h
     feature_flags_service.cpp
     feature_flags_service.h
+    fulltext.cpp
+    fulltext.h
     group_stat.cpp
     group_stat.h
     hive.h
@@ -42,6 +44,7 @@ SRCS(
     logoblob.h
     memory_controller_iface.h
     nameservice.h
+    nodestate.h
     path.cpp
     pool_stats_collector.cpp
     pool_stats_collector.h
@@ -103,6 +106,7 @@ PEERDIR(
     ydb/core/audit/audit_config
     ydb/core/base/generated
     ydb/core/base/services
+    ydb/core/control/lib
     ydb/core/debug
     ydb/core/erasure
     ydb/core/graph/api

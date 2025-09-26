@@ -46,26 +46,11 @@ BELONGS ya.make
     Files with this license:
         include/boost/container_hash/detail/hash_integral.hpp [1:3]
 
-KEEP     COPYRIGHT_SERVICE_LABEL 0cf50a14f48d5f6b52260bcafcb4688e
-BELONGS ya.make
-    License text:
-        // Copyright 2005-2014 Daniel James.
-        // Copyright 2021, 2022 Peter Dimov.
-        // Distributed under the Boost Software License, Version 1.0.
-        // https://www.boost.org/LICENSE_1_0.txt
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        include/boost/container_hash/hash.hpp [1:4]
-        include/boost/container_hash/hash_fwd.hpp [1:4]
-
 KEEP     COPYRIGHT_SERVICE_LABEL 28754ad9c0aa02276f0e2f7033f5dfc4
 BELONGS ya.make
     License text:
         // Copyright 2005-2014 Daniel James.
-        // Copyright 2021, 2022 Peter Dimov.
+        // Copyright 2021, 2022, 2025 Peter Dimov.
         // Distributed under the Boost Software License, Version 1.0.
         // https://www.boost.org/LICENSE_1_0.txt
     Scancode info:
@@ -107,6 +92,34 @@ BELONGS ya.make
         include/boost/functional/hash/hash.hpp [2:4]
         include/boost/functional/hash/hash_fwd.hpp [2:4]
         include/boost/functional/hash_fwd.hpp [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 436a7b8d4f16f2e476488fc26cd739c3
+BELONGS ya.make
+    License text:
+        // Copyright 2005-2014 Daniel James.
+        // Copyright 2021, 2022, 2025 Peter Dimov.
+        // Distributed under the Boost Software License, Version 1.0.
+        // https://www.boost.org/LICENSE_1_0.txt
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/container_hash/hash.hpp [1:4]
+        include/boost/container_hash/hash_fwd.hpp [1:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7eeac0d4fa6400e19f2cd41fef4ee203
+BELONGS ya.make
+    License text:
+        // Copyright 2025 Joaquin M Lopez Munoz.
+        // Distributed under the Boost Software License, Version 1.0.
+        // https://www.boost.org/LICENSE_1_0.txt
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/container_hash/hash_is_avalanching.hpp [1:3]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 8e00e7d6fce9c86304b3ed14045f8800
 BELONGS ya.make

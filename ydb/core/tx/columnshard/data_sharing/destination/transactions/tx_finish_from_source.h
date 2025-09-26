@@ -16,7 +16,7 @@ protected:
     virtual void DoComplete(const TActorContext& ctx) override;
 public:
     TTxFinishFromSource(NColumnShard::TColumnShard* self, const TTabletId sourceTabletId, const std::shared_ptr<TDestinationSession>& session)
-        : TBase(self)
+        : TBase(self, "finish_from_source")
         , Session(session)
         , SourceTabletId(sourceTabletId)
     {

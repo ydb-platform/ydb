@@ -12,8 +12,16 @@ message TReplicationDefaults {
         optional uint32 InflightDropStreamLimit = 2 [default = 1];
     }
 
+    message TIamServiceControl {
+        optional string Endpoint = 1;
+        optional string ServiceId = 2;
+        optional string MicroserviceId = 3;
+        optional string ResourceType = 4;
+    }
+
     optional int32 RetentionPeriodSeconds = 1 [default = 86400]; // 1d
     optional TSchemeOperationLimits SchemeOperationLimits = 2;
+    optional TIamServiceControl IamServiceControl = 3;
 }
 
 message TStaticCredentials {
@@ -27,6 +35,12 @@ message TOAuthToken {
     optional string TokenSecretName = 2;
 }
 
+message TIamCredentials {
+    optional string ServiceAccountId = 1;
+    optional TOAuthToken InitialToken = 2; // Initial token used to check rights & to resolve ResourceId
+    optional string ResourceId = 3; // In terms of IAM Service Control, actually CloudId
+}
+
 message TConnectionParams {
     optional string Endpoint = 1;
     optional string Database = 2;
@@ -36,6 +50,7 @@ message TConnectionParams {
     oneof Credentials {
         TStaticCredentials StaticCredentials = 3;
         TOAuthToken OAuthToken = 4;
+        TIamCredentials IamCredentials = 7;
     }
 }
 

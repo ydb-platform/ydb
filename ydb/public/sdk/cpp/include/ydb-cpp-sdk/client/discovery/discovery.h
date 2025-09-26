@@ -66,15 +66,7 @@ struct TEndpointInfo {
 };
 
 struct TPileState {
-    enum EState {
-        UNSPECIFIED = 0 /* "unspecified" */,
-        PRIMARY = 1 /* "primary" */,
-        PROMOTE = 2 /* "promote" */,
-        SYNCHRONIZED = 3 /* "synchronized" */,
-        NOT_SYNCHRONIZED = 4 /* "not_synchronized" */,
-        SUSPENDED = 5 /* "suspended" */,
-        DISCONNECTED = 6 /* "disconnected" */
-    };
+    using EState = NYdb::EPileState;
 
     EState State;
     std::string PileName;

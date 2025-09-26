@@ -1,0 +1,1 @@
+{"error": true, "stderr": "Terminating due to uncaught exception REDACTED    what() -> \"ydb/library/yaml_config/deprecated/yaml_config_parser.cpp:524: Condition violated: `json.Has(\"domains_config\")'\"\n of type TWithBackTrace<yexception>\n"}

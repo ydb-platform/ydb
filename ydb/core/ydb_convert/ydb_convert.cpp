@@ -1397,16 +1397,16 @@ void ProtoValueFromCell(NYdb::TValueBuilder& vb, const NScheme::TTypeInfo& typeI
         vb.Interval(cell.AsValue<i64>());
         break;
     case EPrimitiveType::Date32:
-        vb.Date32(cell.AsValue<i32>());
+        vb.Date32(std::chrono::sys_time<TWideDays>(TWideDays(cell.AsValue<i32>())));
         break;
     case EPrimitiveType::Datetime64:
-        vb.Datetime64(cell.AsValue<i64>());
+        vb.Datetime64(std::chrono::sys_time<TWideSeconds>(TWideSeconds(cell.AsValue<i64>())));
         break;
     case EPrimitiveType::Timestamp64:
-        vb.Timestamp64(cell.AsValue<i64>());
+        vb.Timestamp64(std::chrono::sys_time<TWideMicroseconds>(TWideMicroseconds(cell.AsValue<i64>())));
         break;
     case EPrimitiveType::Interval64:
-        vb.Interval64(cell.AsValue<i64>());
+        vb.Interval64(TWideMicroseconds(cell.AsValue<i64>()));
         break;
     case EPrimitiveType::TzDate:
         vb.TzDate(getString());

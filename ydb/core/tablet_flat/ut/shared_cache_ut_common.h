@@ -2,7 +2,6 @@
 
 #include <shared_cache_s3fifo.h>
 #include <shared_page.h>
-#include <ydb/core/util/cache_cache_iface.h>
 
 namespace NKikimr::NSharedCache::NTest {
 
@@ -14,10 +13,26 @@ namespace NKikimr::NSharedCache::NTest {
             : Id(id), Size(size)
         {}
         
+        ui32 GetFrequency() const noexcept {
+            return Frequency.load(std::memory_order_relaxed);
+        }
+
+        void IncrementFrequency() noexcept {
+            ui32 value = Frequency.load(std::memory_order_relaxed);
+            if (value < 3) { // S3FIFO frequency is capped to 3
+                Frequency.compare_exchange_weak(value, value + 1,
+                    std::memory_order_acq_rel, std::memory_order_relaxed);
+            }
+        }
+    
+        void SetFrequency(ui32 frequency) noexcept {
+            Frequency.store(frequency, std::memory_order_release);
+        }
+
         ECacheMode CacheMode : 2 = ECacheMode::Regular;
 
-        ES3FIFOPageLocation S3FIFOLocation : 4 = ES3FIFOPageLocation::None;
-        ui32 S3FIFOFrequency : 4 = 0;
+        ES3FIFOPageLocation Location : 4 = ES3FIFOPageLocation::None;
+        std::atomic<ui32> Frequency;
     };
 
     struct TPageTraits {
@@ -50,20 +65,19 @@ namespace NKikimr::NSharedCache::NTest {
         }
 
         static ES3FIFOPageLocation GetLocation(const TPage* page) {
-            return page->S3FIFOLocation;
+            return page->Location;
         }
 
         static void SetLocation(TPage* page, ES3FIFOPageLocation location) {
-            page->S3FIFOLocation = location;
+            page->Location = location;
         }
 
         static ui32 GetFrequency(const TPage* page) {
-            return page->S3FIFOFrequency;
+            return page->GetFrequency();
         }
-
+    
         static void SetFrequency(TPage* page, ui32 frequency) {
-            Y_ENSURE(frequency < (1 << 4));
-            page->S3FIFOFrequency = frequency;
+            page->SetFrequency(frequency);
         }
 
         static ui32 GetTier(TPage* page) {

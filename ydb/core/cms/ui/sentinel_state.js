@@ -91,24 +91,26 @@ class CmsSentinelState {
         }
     }
 
-    renderPVEntry(entry, newData) {
-        var table = entry.table;
-        var headers = entry.header;
-        var data = entry.data;
+    renderPVEntry(tableEntry, newData, prefix = '') {
+        var table = tableEntry.table;
+        var headers = tableEntry.header;
+        var data = tableEntry.data;
         for (var entry in newData) {
-            if (!data.hasOwnProperty(entry)) {
-                var row = this.addPVEntry(table, headers[0], entry, newData[entry]);
-                data[entry] = {
+            if (typeof newData[entry]  === 'object' && newData[entry] !== null) {
+                this.renderPVEntry(tableEntry, newData[entry], prefix + entry + ".");
+            } else if (!data.hasOwnProperty(prefix + entry)) {
+                var row = this.addPVEntry(table, headers[0], prefix + entry, newData[entry]);
+                data[prefix + entry] = {
                     row: row,
                     data: newData[entry],
                 };
             } else {
                 this.updatePVEntry(
                     table,
-                    data[entry].row,
+                    data[prefix + entry].row,
                     newData[entry],
-                    data[entry].data);
-                data[entry].data = newData[entry];
+                    data[prefix + entry].data);
+                data[prefix + entry].data = newData[entry];
             }
         }
     }

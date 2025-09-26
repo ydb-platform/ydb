@@ -13,9 +13,16 @@ using TStats = TCache::TStats;
 Y_UNIT_TEST_SUITE(TieredCache) {
 
     TVector<ui32> Touch(auto& cache, NTest::TPage& page) {
-        auto evicted = cache.Touch(&page);
+        if (TPageTraits::GetLocation(&page) != ES3FIFOPageLocation::None) {
+            page.IncrementFrequency();
+            return {};
+        }
+
+        auto evicted = cache.Insert(&page);
         TVector<ui32> result;
         for (auto& p : evicted) {
+            UNIT_ASSERT_VALUES_EQUAL(p.Location, ES3FIFOPageLocation::None);
+            UNIT_ASSERT_VALUES_EQUAL(p.Frequency.load(), 0);
             result.push_back(p.Id);
         }
         return result;
@@ -24,8 +31,10 @@ Y_UNIT_TEST_SUITE(TieredCache) {
     TVector<ui32> EvictNext(auto& cache) {
         auto evicted = cache.EvictNext();
         TVector<ui32> result;
-        for (auto& p : evicted) {
-            result.push_back(p.Id);
+        if (evicted) {
+            UNIT_ASSERT_VALUES_EQUAL(evicted->Location, ES3FIFOPageLocation::None);
+            UNIT_ASSERT_VALUES_EQUAL(evicted->Frequency.load(), 0);
+            result.push_back(evicted->Id);
         }
         return result;
     }

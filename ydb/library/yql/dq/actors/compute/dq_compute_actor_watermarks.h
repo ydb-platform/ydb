@@ -13,8 +13,9 @@ public:
 
     void RegisterAsyncInput(ui64 inputId);
     void RegisterInputChannel(ui64 inputId);
-    void RegisterOutputChannel(ui64 outputId);
-    bool HasOutputChannels() const;
+
+    void UnregisterAsyncInput(ui64 inputId);
+    void UnregisterInputChannel(ui64 inputId);
 
     // Will return true, if local watermark inside this async input was moved forward.
     // CA should pause this async input and wait for coresponding watermarks in all other sources/inputs.
@@ -24,18 +25,21 @@ public:
     // CA should pause this input channel and wait for coresponding watermarks in all other sources/inputs.
     bool NotifyInChannelWatermarkReceived(ui64 inputId, TInstant watermark);
 
-    // Will return true, if watermark was sent to all registered outputs.
-    // CA should resume inputs and sources in this case
-    bool NotifyOutputChannelWatermarkSent(ui64 outputId, TInstant watermark);
+    // Will return true, if pending watermark completed.
+    bool NotifyWatermarkWasSent(TInstant watermark);
 
     bool HasPendingWatermark() const;
     TMaybe<TInstant> GetPendingWatermark() const;
     void PopPendingWatermark();
 
+    // Should be only called only when HasPendingWatermark() is true
+    TDuration GetWatermarkDiscrepancy() const;
+
     void SetLogPrefix(const TString& logPrefix);
 
 private:
     void RecalcPendingWatermark();
+    bool UpdateAndRecalcPendingWatermark(TMaybe<TInstant>& storedWatermark, TInstant watermark);
     bool MaybePopPendingWatermark();
 
 private:
@@ -43,10 +47,10 @@ private:
 
     std::unordered_map<ui64, TMaybe<TInstant>> AsyncInputsWatermarks;
     std::unordered_map<ui64, TMaybe<TInstant>> InputChannelsWatermarks;
-    std::unordered_map<ui64, TMaybe<TInstant>> OutputChannelsWatermarks;
 
     TMaybe<TInstant> PendingWatermark;
     TMaybe<TInstant> LastWatermark;
+    TMaybe<TInstant> MaxWatermark;
 };
 
 } // namespace NYql::NDq

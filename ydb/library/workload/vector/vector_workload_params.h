@@ -26,7 +26,7 @@ public:
     TString TableName;
     TString QueryTableName;
     TString IndexName;
-    std::string KeyColumn;
+    std::vector<std::string> KeyColumns;
     std::string EmbeddingColumn;
     std::string QueryTableKeyColumn;
     std::optional<std::string> PrefixColumn;
@@ -45,6 +45,7 @@ public:
     ui64 TableRowCount = 0;
     bool Recall = false;
     bool NonIndexedSearch = false;
+    bool StaleRO = false;
     bool KeyIsInt = false;
 };
 

@@ -232,6 +232,7 @@ void ToProto(
     YT_OPTIONAL_TO_PROTO(proto, subject_name, result.SubjectName);
 
     ToProto(proto->mutable_missing_subjects(), result.MissingSubjects);
+    ToProto(proto->mutable_pending_removal_subjects(), result.PendingRemovalSubjects);
 }
 
 void FromProto(
@@ -244,6 +245,7 @@ void FromProto(
     result->SubjectName = YT_OPTIONAL_FROM_PROTO(proto, subject_name);
 
     FromProto(&result->MissingSubjects, proto.missing_subjects());
+    FromProto(&result->PendingRemovalSubjects, proto.pending_removal_subjects());
 }
 
 void ToProto(
@@ -698,6 +700,9 @@ void FromProto(
 
     FromProto(&statistics->InnerStatistics, protoStatistics.inner_statistics());
 }
+
+#undef DESERIALIZE_I64_AND_MAYBE_FALLBACK
+#undef DESERIALIZE_DURATION_AND_MAYBE_FALLBACK
 
 void ToProto(NProto::TOperation* protoOperation, const NApi::TOperation& operation)
 {
@@ -1396,6 +1401,9 @@ void ToProto(
     if (query.OtherAttributes) {
         ToProto(protoQuery->mutable_other_attributes(), *query.OtherAttributes);
     }
+    if (query.Secrets) {
+        protoQuery->set_secrets(ToProto(*query.Secrets));
+    }
 }
 
 void FromProto(
@@ -1434,6 +1442,11 @@ void FromProto(
         query->OtherAttributes = NYTree::FromProto(protoQuery.other_attributes());
     } else if (query->OtherAttributes) {
         query->OtherAttributes->Clear();
+    }
+    if (protoQuery.has_secrets()) {
+        query->Secrets = TYsonString(protoQuery.secrets());
+    } else if (query->Secrets) {
+        query->Secrets = TYsonString{};
     }
 }
 
@@ -1951,9 +1964,28 @@ void ParseRequest(
 ////////////////////////////////////////////////////////////////////////////////
 
 void FillRequest(
+    TReqPingDistributedWriteSession* req,
+    const TSignedDistributedWriteSessionPtr session,
+    const TDistributedWriteSessionPingOptions& /*options*/)
+{
+    req->set_signed_session(ToProto(ConvertToYsonString(session)));
+}
+
+void ParseRequest(
+    TSignedDistributedWriteSessionPtr* mutableSession,
+    TDistributedWriteSessionPingOptions* mutableOptions,
+    const TReqPingDistributedWriteSession& req)
+{
+    Y_UNUSED(mutableOptions);
+    *mutableSession = ConvertTo<TSignedDistributedWriteSessionPtr>(TYsonString(req.signed_session()));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void FillRequest(
     TReqFinishDistributedWriteSession* req,
     const TDistributedWriteSessionWithResults& sessionWithResults,
-    const TDistributedWriteSessionFinishOptions& options)
+    const TDistributedWriteSessionFinishOptions& /*options*/)
 {
     YT_VERIFY(sessionWithResults.Session);
 
@@ -1962,12 +1994,14 @@ void FillRequest(
         YT_VERIFY(writeResult);
         req->add_signed_write_results(ConvertToYsonString(writeResult).ToString());
     }
-    req->set_max_children_per_attach_request(options.MaxChildrenPerAttachRequest);
+    // TODO(achains): Remove after updated server binaries
+    // Setting default value for MaxChildrenPerAttachRequest from TDistributedWriteDynamicConfig
+    req->set_max_children_per_attach_request(10'000);
 }
 
 void ParseRequest(
     TDistributedWriteSessionWithResults* mutableSessionWithResults,
-    TDistributedWriteSessionFinishOptions* mutableOptions,
+    TDistributedWriteSessionFinishOptions* /*mutableOptions*/,
     const TReqFinishDistributedWriteSession& req)
 {
     mutableSessionWithResults->Results.reserve(req.signed_write_results().size());
@@ -1976,8 +2010,6 @@ void ParseRequest(
     }
 
     mutableSessionWithResults->Session = ConvertTo<TSignedDistributedWriteSessionPtr>(TYsonString(req.signed_session()));
-
-    mutableOptions->MaxChildrenPerAttachRequest = req.max_children_per_attach_request();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -2013,6 +2045,21 @@ void ParseRequest(
 
 ////////////////////////////////////////////////////////////////////////////////
 
+bool IsChaosRetriableError(const TError& error)
+{
+    return static_cast<bool>(error.FindMatching([] (const TError& error) {
+        auto code = error.GetCode();
+        return
+            code == NTransactionClient::EErrorCode::ChaosCoordinatorsAreNotAvailable ||
+            code == NTabletClient::EErrorCode::SyncReplicaNotInSync ||
+            code == NTableClient::EErrorCode::UnableToSynchronizeReplicationCard ||
+            code == NTabletClient::EErrorCode::TabletReplicationEraMismatch ||
+            code == NChaosClient::EErrorCode::ShortcutNotFound ||
+            code == NChaosClient::EErrorCode::ShortcutHasDifferentEra ||
+            code == NChaosClient::EErrorCode::ShortcutRevoked;
+    }));
+}
+
 bool IsDynamicTableRetriableError(const TError& error)
 {
     return
@@ -2023,8 +2070,7 @@ bool IsDynamicTableRetriableError(const TError& error)
         error.FindMatching(NTabletClient::EErrorCode::NoInSyncReplicas) ||
         error.FindMatching(NTabletClient::EErrorCode::TabletNotMounted) ||
         error.FindMatching(NTabletClient::EErrorCode::NoSuchTablet) ||
-        error.FindMatching(NTabletClient::EErrorCode::TabletReplicationEraMismatch) ||
-        error.FindMatching(NTableClient::EErrorCode::UnableToSynchronizeReplicationCard);
+        IsChaosRetriableError(error);
 }
 
 bool IsRetriableError(const TError& error, bool retryProxyBanned)

@@ -2,12 +2,12 @@
 #include <ydb/core/kafka_proxy/kafka_events.h>
 #include <ydb/core/base/ticket_parser.h>
 #include "ydb/core/kafka_proxy/kafka_metrics.h"
-#include <ydb/core/persqueue/fetch_request_actor.h>
+#include <ydb/core/persqueue/public/fetcher/fetch_request_actor.h>
 #include <ydb/core/persqueue/events/internal.h>
-#include <ydb/core/persqueue/user_info.h>
-#include <ydb/core/persqueue/write_meta.h>
+#include <ydb/core/persqueue/public/write_meta/write_meta.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/public/api/grpc/ydb_auth_v1.grpc.pb.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/codecs.h>
 
 #include "actors.h"
 #include "kafka_fetch_actor.h"
@@ -53,7 +53,10 @@ void TKafkaFetchActor::PrepareFetchRequestData(const size_t topicIndex, TVector<
     topicKafkaResponse.Partitions.resize(topicKafkaRequest.Partitions.size());
     for (size_t partIndex = 0; partIndex < topicKafkaRequest.Partitions.size(); partIndex++) {
         auto& partKafkaRequest = topicKafkaRequest.Partitions[partIndex];
-        KAFKA_LOG_D(TStringBuilder() << "Fetch actor: New request. Topic: " << topicKafkaRequest.Topic.value() << " Partition: " << partKafkaRequest.Partition << " FetchOffset: " << partKafkaRequest.FetchOffset << " PartitionMaxBytes: " << partKafkaRequest.PartitionMaxBytes);
+        KAFKA_LOG_D(TStringBuilder() << "Fetch actor: New request. Topic: " << topicKafkaRequest.Topic.value()
+            << " Partition: " << partKafkaRequest.Partition
+            << " FetchOffset: " << partKafkaRequest.FetchOffset
+            << " PartitionMaxBytes: " << partKafkaRequest.PartitionMaxBytes);
         auto& partPQRequest = partPQRequests[partIndex];
         partPQRequest.Topic = NormalizePath(Context->DatabasePath, topicKafkaRequest.Topic.value()); // FIXME(savnik): handle empty topic
         partPQRequest.Partition = partKafkaRequest.Partition;
@@ -166,6 +169,31 @@ void TKafkaFetchActor::FillRecordsBatch(const NKikimrClient::TPersQueueFetchResp
                 record.Headers.push_back(header);
             }
         }
+
+        TKafkaHeader header;
+        header.CodecKeyStr = "__codec";
+        header.Key = header.CodecKeyStr;
+
+        NYdb::NTopic::ECodec codec = static_cast<NYdb::NTopic::ECodec>(record.DataChunk.GetCodec() + 1);
+        switch (codec) {
+            case NYdb::NTopic::ECodec::RAW:
+                header.CodecValueStr = "RAW";
+                break;
+            case NYdb::NTopic::ECodec::GZIP:
+                header.CodecValueStr = "GZIP";
+                break;
+            case NYdb::NTopic::ECodec::LZOP:
+                header.CodecValueStr = "LZOP";
+                break;
+            case NYdb::NTopic::ECodec::ZSTD:
+                header.CodecValueStr = "ZSTD";
+                break;
+            default:
+                header.CodecValueStr = std::to_string(static_cast<uint32_t>(codec));
+        }
+
+        header.Value = header.CodecValueStr;
+        record.Headers.push_back(header);
 
         record.Value = record.DataChunk.GetData();
         record.OffsetDelta = lastOffset - baseOffset;

@@ -141,7 +141,6 @@ def post_install(self):
             "-DPy_BUILD_CORE",
             "-DPy_BUILD_CORE_BUILTIN",
             "-DUSE_ZLIB_CRC32",
-            '-DABIFLAGS=""',
             '-DPREFIX="/var/empty"',
             '-DEXEC_PREFIX="/var/empty"',
             f'-DVERSION="{self.version[:4]}"',

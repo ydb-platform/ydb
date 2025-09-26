@@ -36,16 +36,14 @@ message EndpointInfo {
     // not this specific node hostname.
     string ssl_target_name_override = 10;
 
-    // EXPERIMENTAL
     // Optional name of the bridge pile this endpoint belongs to.
-    optional string bridge_pile_name = 11;
+    string bridge_pile_name = 11;
 }
 
 message ListEndpointsResult {
     repeated EndpointInfo endpoints = 1;
     string self_location = 2;
 
-    // EXPERIMENTAL
     // List of bridge pile states.
     // This field is empty if cluster is not in bridge mode.
     repeated Ydb.Bridge.PileState pile_states = 3;

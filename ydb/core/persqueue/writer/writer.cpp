@@ -12,7 +12,7 @@
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/persqueue/events/global.h>
-#include <ydb/core/persqueue/pq_rl_helpers.h>
+#include <ydb/core/persqueue/public/pq_rl_helpers.h>
 #include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/public/lib/base/msgbus_status.h>
 
@@ -81,7 +81,7 @@ TString TEvPartitionWriter::TEvWriteAccepted::ToString() const {
 }
 
 TString TEvPartitionWriter::TEvWriteResponse::DumpError() const {
-    Y_ABORT_UNLESS(!IsSuccess());
+    Y_ENSURE(!IsSuccess());
 
     return TStringBuilder() << "Error {"
         << " SessionId: " << SessionId
@@ -338,6 +338,7 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, private TR
 
         if (HasSupportivePartitionId()) {
             operations->SetSupportivePartition(SupportivePartitionId);
+            operations->SetTabletId(TabletId);
         }
 
         return ev;
@@ -415,8 +416,8 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, private TR
     }
 
     void SavePartitionIdToKqpTxn(const TActorContext& ctx) {
-        Y_ABORT_UNLESS(HasWriteId());
-        Y_ABORT_UNLESS(HasSupportivePartitionId());
+        Y_ENSURE(HasWriteId());
+        Y_ENSURE(HasSupportivePartitionId());
 
         DEBUG("Start of a request to KQP to save PartitionId. " <<
               "SessionId: " << Opts.SessionId <<

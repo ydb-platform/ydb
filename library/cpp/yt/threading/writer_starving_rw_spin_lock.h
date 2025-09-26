@@ -32,6 +32,8 @@ class TWriterStarvingRWSpinLock
     : public TSpinLockBase
 {
 public:
+    static constexpr bool Traced = true;
+
     using TSpinLockBase::TSpinLockBase;
 
     //! Acquires the reader lock.
@@ -102,8 +104,6 @@ private:
     void AcquireReaderSlow() noexcept;
     void AcquireWriterSlow() noexcept;
 };
-
-REGISTER_TRACKED_SPIN_LOCK_CLASS(TWriterStarvingRWSpinLock)
 
 ////////////////////////////////////////////////////////////////////////////////
 

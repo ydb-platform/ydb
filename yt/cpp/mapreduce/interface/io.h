@@ -519,7 +519,8 @@ private:
         const TRichYPath& path,
         const TTableReaderOptions& options,
         const ISkiffRowSkipperPtr& skipper,
-        const NSkiff::TSkiffSchemaPtr& schema) = 0;
+        const NSkiff::TSkiffSchemaPtr& requestedSchema,
+        const NSkiff::TSkiffSchemaPtr& parserSchema) = 0;
 
     virtual ::TIntrusivePtr<INodeReaderImpl> CreateNodeTablePartitionReader(
         const TString& cookie, const TTablePartitionReaderOptions& options) = 0;
@@ -533,7 +534,8 @@ private:
         const TString& cookie,
         const TTablePartitionReaderOptions& options,
         const ISkiffRowSkipperPtr& skipper,
-        const NSkiff::TSkiffSchemaPtr& schema) = 0;
+        const NSkiff::TSkiffSchemaPtr& requestedSchema,
+        const NSkiff::TSkiffSchemaPtr& parserSchema) = 0;
 
     virtual ::TIntrusivePtr<INodeWriterImpl> CreateNodeWriter(
         const TRichYPath& path, const TTableWriterOptions& options) = 0;

@@ -3,6 +3,7 @@
 
 #include "defs.h"
 #include "channel_profiles.h"
+#include "config_metrics.h"
 #include "domain.h"
 #include "feature_flags.h"
 #include "nameservice.h"
@@ -77,6 +78,9 @@ struct TAppData::TImpl {
     NKikimrConfig::TWorkloadManagerConfig WorkloadManagerConfig;
     NKikimrConfig::TQueryServiceConfig QueryServiceConfig;
     NKikimrConfig::TBridgeConfig BridgeConfig;
+    NKikimrConfig::TStatisticsConfig StatisticsConfig;
+    TMetricsConfig MetricsConfig;
+    NKikimrConfig::TSystemTabletBackupConfig SystemTabletBackupConfig;
 };
 
 TAppData::TAppData(
@@ -103,7 +107,8 @@ TAppData::TAppData(
     , CompilerSchemeCacheTables(Max<ui64>() / 4)
     , Mon(nullptr)
     , Icb(new TControlBoard())
-    , InFlightLimiterRegistry(new NGRpcService::TInFlightLimiterRegistry(Icb))
+    , Dcb(new TDynamicControlBoard())
+    , InFlightLimiterRegistry(new NGRpcService::TInFlightLimiterRegistry())
     , SharedCachePages(new NSharedCache::TSharedCachePages())
     , StreamingConfig(Impl->StreamingConfig)
     , PQConfig(Impl->PQConfig)
@@ -139,6 +144,9 @@ TAppData::TAppData(
     , WorkloadManagerConfig(Impl->WorkloadManagerConfig)
     , QueryServiceConfig(Impl->QueryServiceConfig)
     , BridgeConfig(Impl->BridgeConfig)
+    , StatisticsConfig(Impl->StatisticsConfig)
+    , MetricsConfig(Impl->MetricsConfig)
+    , SystemTabletBackupConfig(Impl->SystemTabletBackupConfig)
     , KikimrShouldContinue(kikimrShouldContinue)
     , TracingConfigurator(MakeIntrusive<NJaegerTracing::TSamplingThrottlingConfigurator>(TimeProvider, RandomProvider))
 {}

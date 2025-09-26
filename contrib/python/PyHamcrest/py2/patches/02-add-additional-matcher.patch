@@ -28,7 +28,7 @@ revision: 2945097
          try:
 -            function()
 +            self.actual_return_value = function()
-         except Exception:
+         except BaseException:
              self.actual = sys.exc_info()[1]
  
              if isinstance(self.actual, self.expected):
@@ -68,7 +68,7 @@ revision: 2945097
 +                description.append_text("\nAdditional exception matcher: ")
 +                self.matcher.describe_mismatch(self.actual, description)
          else:
-             description.append_text('%s was raised instead' % type(self.actual))
+             description.append_text('%r of type %s was raised instead' % (self.actual, type(self.actual)))
  
  
 -def raises(exception, pattern=None):

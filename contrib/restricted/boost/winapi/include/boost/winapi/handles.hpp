@@ -16,7 +16,7 @@
 #pragma once
 #endif
 
-#if !defined( BOOST_USE_WINDOWS_H )
+#if !defined(BOOST_USE_WINDOWS_H)
 extern "C" {
 BOOST_WINAPI_IMPORT_EXCEPT_WM boost::winapi::BOOL_ BOOST_WINAPI_WINAPI_CC
 CloseHandle(boost::winapi::HANDLE_ handle);
@@ -30,13 +30,18 @@ DuplicateHandle(
     boost::winapi::DWORD_ dwDesiredAccess,
     boost::winapi::BOOL_ bInheritHandle,
     boost::winapi::DWORD_ dwOptions);
+} // extern "C"
+#endif
 
-#if BOOST_USE_WINAPI_VERSION >= BOOST_WINAPI_VERSION_WIN10 && (BOOST_WINAPI_PARTITION_APP || BOOST_WINAPI_PARTITION_SYSTEM)
+#if (!defined(BOOST_USE_WINDOWS_H) || (defined(BOOST_WINAPI_IS_MINGW_W64) && (__MINGW64_VERSION_MAJOR >= 6) && (__MINGW64_VERSION_MAJOR < 9))) && \
+    (BOOST_USE_WINAPI_VERSION >= BOOST_WINAPI_VERSION_WIN10 && (BOOST_WINAPI_PARTITION_APP || BOOST_WINAPI_PARTITION_SYSTEM))
+extern "C" {
+// Older MinGW-w64 do not have this declaration. It is present when __MINGW64_VERSION_MAJOR is 9 or greater, which is the case
+// in 8.0.1 (specifically, not earlier or later 8.x) and 9.0.0 and onwards. Library exports seem to be present since 6.0.0.
 BOOST_WINAPI_IMPORT boost::winapi::BOOL_ BOOST_WINAPI_WINAPI_CC
 CompareObjectHandles(
     boost::winapi::HANDLE_ hFirstObjectHandle,
     boost::winapi::HANDLE_ hSecondObjectHandle);
-#endif
 } // extern "C"
 #endif
 
@@ -46,12 +51,13 @@ namespace winapi {
 using ::CloseHandle;
 using ::DuplicateHandle;
 
-#if BOOST_USE_WINAPI_VERSION >= BOOST_WINAPI_VERSION_WIN10 && (BOOST_WINAPI_PARTITION_APP || BOOST_WINAPI_PARTITION_SYSTEM)
+#if (!defined(BOOST_WINAPI_IS_MINGW_W64) || (__MINGW64_VERSION_MAJOR >= 6)) && \
+    (BOOST_USE_WINAPI_VERSION >= BOOST_WINAPI_VERSION_WIN10 && (BOOST_WINAPI_PARTITION_APP || BOOST_WINAPI_PARTITION_SYSTEM))
 using ::CompareObjectHandles;
 #endif
 
 // Note: MSVC-14.1 does not interpret INVALID_HANDLE_VALUE_ initializer as a constant expression
-#if defined( BOOST_USE_WINDOWS_H )
+#if defined(BOOST_USE_WINDOWS_H)
 BOOST_CONSTEXPR_OR_CONST DWORD_ DUPLICATE_CLOSE_SOURCE_ = DUPLICATE_CLOSE_SOURCE;
 BOOST_CONSTEXPR_OR_CONST DWORD_ DUPLICATE_SAME_ACCESS_ = DUPLICATE_SAME_ACCESS;
 const HANDLE_ INVALID_HANDLE_VALUE_ = INVALID_HANDLE_VALUE;

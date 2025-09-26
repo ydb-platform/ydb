@@ -353,8 +353,9 @@ public:
         Scheme.ExpectClientCert(GetClientCert());
     }
 
-    void ExpectUserAndPassword(const TString& user, const TString& password, const TString& token) {
+    void ExpectUserAndPassword(const TString& user, const TString& password) {
         Auth.ExpectUserAndPassword(user, password);
+        const TString token = password + "-token";
         Auth.SetToken(token);
         Scheme.ExpectToken(token);
     }
@@ -666,40 +667,43 @@ Y_UNIT_TEST_SUITE(ParseOptionsTest) {
     }
 
     Y_UNIT_TEST_F(StaticCredentials, TCliTestFixture) {
-        TString passwordFile = EnvFile("test-password  \n", "password");
-        TString otherPasswordFile = EnvFile("pwd", "pwd");
+        TString profilePasswordFile = EnvFile("password-from-file-in-profile  \n", "password");
+        TString explicitPasswordFile = EnvFile("password-from-file-explicit  \n", "password2");
 
-        ExpectUserAndPassword("test-user", "test-password", "123");
+        // user and password-file from explicit options
+        ExpectUserAndPassword("user-from-explicit-option", "password-from-file-explicit");
         RunCli({
             "-v",
             "-e", GetEndpoint(),
             "-d", GetDatabase(),
-            "--user", "test-user",
-            "--password-file", passwordFile,
+            "--user", "user-from-explicit-option",
+            "--password-file", explicitPasswordFile,
             "scheme", "ls",
         });
 
-        ExpectUserAndPassword("test-user", "", "no-pwd-token");
+        // user from explicit option, no password
+        ExpectUserAndPassword("user-from-explicit-option", "");
         RunCli({
             "-v",
             "-e", GetEndpoint(),
             "-d", GetDatabase(),
-            "--user", "test-user",
+            "--user", "user-from-explicit-option",
             "--no-password",
             "scheme", "ls",
         },
         {
-            {"YDB_PASSWORD", "pwd"},
+            {"YDB_PASSWORD", "env-password"},
         });
 
+        // --no-password and --password-file are not allowed together
         ExpectFail();
         RunCli({
             "-v",
             "-e", GetEndpoint(),
             "-d", GetDatabase(),
-            "--user", "test-user",
+            "--user", "user-from-explicit-option",
             "--no-password",
-            "--password-file", passwordFile,
+            "--password-file", explicitPasswordFile,
             "scheme", "ls",
         });
 
@@ -711,23 +715,23 @@ Y_UNIT_TEST_SUITE(ParseOptionsTest) {
                 authentication:
                     method: static-credentials
                     data:
-                        user: user-test
-                        password: password-test
+                        user: user-from-active-profile
+                        password: password-from-active-profile
             test_profile:
                 endpoint: {endpoint}
                 database: {database}
                 authentication:
                     method: static-credentials
                     data:
-                        user: user_1
-                        password: password_1
+                        user: user-from-explicit-profile
+                        password: password-from-explicit-profile
             test_profile_with_password_file:
                 endpoint: {endpoint}
                 database: {database}
                 authentication:
                     method: static-credentials
                     data:
-                        user: user_2
+                        user: user-from-explicit-profile
                         password-file: {password_file}
             test_profile_with_both_passwords:
                 endpoint: {endpoint}
@@ -745,23 +749,26 @@ Y_UNIT_TEST_SUITE(ParseOptionsTest) {
                     method: static-credentials
                     data:
                         user: user_no_password
+                        password: ""
         active_profile: active_test_profile
         )yaml",
         "endpoint"_a = GetEndpoint(),
         "database"_a = GetDatabase(),
-        "password_file"_a = passwordFile
+        "password_file"_a = profilePasswordFile
         );
-        ExpectFail();
+
+        // user from active profile, password from explicit password file
+        ExpectUserAndPassword("user-from-active-profile", "password-from-file-explicit");
         RunCli({
             "-v",
-            "--password-file", otherPasswordFile,
+            "--password-file", explicitPasswordFile,
             "scheme", "ls",
         },
         {},
         profile);
 
-        // active profile
-        ExpectUserAndPassword("user-test", "password-test", "token-test");
+        // user and password from active profile
+        ExpectUserAndPassword("user-from-active-profile", "password-from-active-profile");
         RunCli({
             "-v",
             "scheme", "ls",
@@ -769,31 +776,32 @@ Y_UNIT_TEST_SUITE(ParseOptionsTest) {
         {},
         profile);
 
-        // there is active profile, but we read from env
-        ExpectFail();
+        // user from active profile, password from env
+        ExpectUserAndPassword("user-from-active-profile", "password-from-env");
         RunCli({
             "-v",
             "scheme", "ls",
         },
         {
-            {"YDB_PASSWORD", "pwd"},
+            {"YDB_PASSWORD", "password-from-env"},
         },
         profile);
 
-        ExpectUserAndPassword("env-user", "env-password", "env-token");
+        // user and password from env
+        ExpectUserAndPassword("user-from-env", "password-from-env");
         RunCli({
             "-v",
             "scheme", "ls",
         },
         {
-            {"YDB_USER", "env-user"},
-            {"YDB_PASSWORD", "env-password"},
+            {"YDB_USER", "user-from-env"},
+            {"YDB_PASSWORD", "password-from-env"},
             {"YDB_OAUTH2_KEY_FILE", "not used"},
         },
         profile);
 
         // explicit profile
-        ExpectUserAndPassword("user_1", "password_1", "token_1");
+        ExpectUserAndPassword("user-from-explicit-profile", "password-from-explicit-profile");
         RunCli({
             "-v",
             "-p", "test_profile",
@@ -811,7 +819,7 @@ Y_UNIT_TEST_SUITE(ParseOptionsTest) {
         {},
         profile);
 
-        ExpectUserAndPassword("user_no_password", "", "no-password-token");
+        ExpectUserAndPassword("user_no_password", "");
         RunCli({
             "-v",
             "-p", "test_profile_without_password",
@@ -822,14 +830,138 @@ Y_UNIT_TEST_SUITE(ParseOptionsTest) {
         profile);
 
         // explicit profile with password file
-        ExpectUserAndPassword("user_2", "test-password", "token_2");
+        ExpectUserAndPassword("user-from-explicit-profile", "password-from-file-in-profile");
         RunCli({
             "-v",
             "-p", "test_profile_with_password_file",
             "scheme", "ls",
         },
         {
-            {"YDB_PASSWORD", "pwd"},
+            {"YDB_PASSWORD", "password-from-env"},
+        },
+        profile);
+
+        // --user option + password from environment
+        ExpectUserAndPassword("user-from-explicit-option", "password-from-env");
+        RunCli({
+            "-v",
+            "-e", GetEndpoint(),
+            "-d", GetDatabase(),
+            "--user", "user-from-explicit-option",
+            "scheme", "ls",
+        },
+        {
+            {"YDB_PASSWORD", "password-from-env"},
+        },
+        profile);
+
+        // --user option + password from active profile
+        ExpectUserAndPassword("user-from-explicit-option", "password-from-active-profile");
+        RunCli({
+            "-v",
+            "--user", "user-from-explicit-option",
+            "scheme", "ls",
+        },
+        {},
+        profile);
+
+        // user from environment + --password-file option
+        ExpectUserAndPassword("user-from-env", "password-from-file-explicit");
+        RunCli({
+            "-v",
+            "-e", GetEndpoint(),
+            "-d", GetDatabase(),
+            "--password-file", explicitPasswordFile,
+            "scheme", "ls",
+        },
+        {
+            {"YDB_USER", "user-from-env"},
+        },
+        profile);
+
+        // user from environment + password from active profile
+        ExpectUserAndPassword("user-from-env", "password-from-active-profile");
+        RunCli({
+            "-v",
+            "scheme", "ls",
+        },
+        {
+            {"YDB_USER", "user-from-env"},
+        },
+        profile);
+
+        // user + empty password from explicit profile (password from environment is overridden)
+        ExpectUserAndPassword("user_no_password", "");
+        RunCli({
+            "-v",
+            "-p", "test_profile_without_password",
+            "--no-password",
+            "scheme", "ls",
+        },
+        {
+            {"YDB_PASSWORD", "password-from-env"},
+        },
+        profile);
+
+        // user from explicit profile + --password-file option
+        ExpectUserAndPassword("user-from-explicit-profile", "password-from-file-explicit");
+        RunCli({
+            "-v",
+            "-p", "test_profile",
+            "--password-file", explicitPasswordFile,
+            "scheme", "ls",
+        },
+        {},
+        profile);
+
+        // --user option + password from explicit profile (user and password from active profile are overridden)
+        ExpectUserAndPassword("user-from-explicit-option", "password-from-explicit-profile");
+        RunCli({
+            "-v",
+            "-p", "test_profile",
+            "--user", "user-from-explicit-option",
+            "scheme", "ls",
+        },
+        {},
+        profile);
+
+        // --user option + --no-password (override env and active profile password)
+        ExpectUserAndPassword("user-from-explicit-option", "");
+        RunCli({
+            "-v",
+            "--user", "user-from-explicit-option",
+            "--no-password",
+            "scheme", "ls",
+        },
+        {
+            {"YDB_PASSWORD", "password-from-env"},
+        },
+        profile);
+
+        // user from environment + --no-password (override env andactive profile password)
+        ExpectUserAndPassword("user-from-env", "");
+        RunCli({
+            "-v",
+            "--no-password",
+            "scheme", "ls",
+        },
+        {
+            {"YDB_USER", "user-from-env"},
+            {"YDB_PASSWORD", "password-from-env"},
+        },
+        profile);
+
+        // Test precedence with all sources present - explicit options should take precedence over everything
+        ExpectUserAndPassword("user-from-explicit-option", "password-from-file-explicit");
+        RunCli({
+            "-v",
+            "--user", "user-from-explicit-option",
+            "--password-file", explicitPasswordFile,
+            "scheme", "ls",
+        },
+        {
+            {"YDB_USER", "user-from-env"},
+            {"YDB_PASSWORD", "password-from-env"},
         },
         profile);
     }
@@ -889,7 +1021,7 @@ Y_UNIT_TEST_SUITE(ParseOptionsTest) {
         },
         profile);
 
-        ExpectUserAndPassword("user", "", "some-token");
+        ExpectUserAndPassword("user", "");
         RunCli({
             "-v",
             "-e", GetEndpoint(),

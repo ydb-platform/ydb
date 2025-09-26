@@ -53,7 +53,7 @@ struct TShardState: public TCommonRetriesState {
     TShardState(const ui64 tabletId);
 
     TString ToString(TConstArrayRef<NScheme::TTypeInfo> keyTypes) const;
-    const TSmallVec<TSerializedTableRange> GetScanRanges(TConstArrayRef<NScheme::TTypeInfo> keyTypes) const;
+    const TSmallVec<TSerializedTableRange> GetScanRanges(TConstArrayRef<NScheme::TTypeInfo> keyTypes, bool allRanges = false) const;
     TString GetAddress() const;
 };
 }

@@ -1656,7 +1656,13 @@ void TPDisk::ProcessReadLogResult(const NPDisk::TEvReadLogResult &evReadLogResul
                 params.CommonLogSize = LogChunks.size();
                 params.MaxCommonLogChunks = Cfg->MaxCommonLogChunks;
                 params.SpaceColorBorder = Cfg->SpaceColorBorder;
-                params.ChunkBaseLimit = Cfg->ChunkBaseLimit;
+                ui64 chunkBaseLimitIcb = ChunkBaseLimitPerMille;
+                if (chunkBaseLimitIcb) {
+                    params.ChunkBaseLimit = std::clamp(chunkBaseLimitIcb,
+                            static_cast<ui64>(13), static_cast<ui64>(130));
+                } else {
+                    params.ChunkBaseLimit = Cfg->ChunkBaseLimit;
+                }
                 for (ui32 ownerId = OwnerBeginUser; ownerId < OwnerEndUser; ++ownerId) {
                     if (OwnerData[ownerId].VDiskId != TVDiskID::InvalidId) {
                         params.OwnersInfo[ownerId] = {

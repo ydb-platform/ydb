@@ -27,6 +27,13 @@ bool ShouldThrow(EUnrecognizedStrategy strategy)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+TYsonStructMeta::TYsonStructMeta(const NYT::TSourceLocation& sourceLocation, const std::function<IMapNodePtr()>& defaultStructNodeGetter)
+    : SourceLocation_(sourceLocation)
+    , StructType_(nullptr)
+    , MetaUnrecognizedStrategy_()
+    , DefaultStructNodeGetter_(defaultStructNodeGetter)
+{ }
+
 void TYsonStructMeta::SetDefaultsOfInitializedStruct(TYsonStructBase* target, bool dontSetLiteMembers) const
 {
     if (auto* bitmap = target->GetSetFieldsBitmap()) {
@@ -316,6 +323,7 @@ IMapNodePtr TYsonStructMeta::GetRecursiveUnrecognized(const TYsonStructBase* tar
 
 void TYsonStructMeta::RegisterParameter(std::string key, IYsonStructParameterPtr parameter)
 {
+    InitialOrderParameters_.emplace_back(key, parameter);
     YT_VERIFY(Parameters_.template emplace(std::move(key), std::move(parameter)).second);
 }
 
@@ -334,22 +342,26 @@ void TYsonStructMeta::SetUnrecognizedStrategy(EUnrecognizedStrategy strategy)
     MetaUnrecognizedStrategy_ = strategy;
 }
 
-void TYsonStructMeta::WriteSchema(const TYsonStructBase* target, NYson::IYsonConsumer* consumer) const
+void TYsonStructMeta::WriteSchema(const TYsonStructBase* target, NYson::IYsonConsumer* consumer, const TYsonStructWriteSchemaOptions& options) const
 {
     BuildYsonFluently(consumer)
         .BeginMap()
             .Item("type_name").Value("struct")
-            .Item("members").DoListFor(Parameters_, [&] (auto fluent, const auto& pair) {
-                fluent.Item()
-                    .BeginMap()
-                        .Item("name").Value(pair.first)
-                        .Item("type").Do([&] (auto fluent) {
-                            pair.second->WriteSchema(target, fluent.GetConsumer());
-                        })
-                        .DoIf(pair.second->IsRequired(), [] (auto fluent) {
-                            fluent.Item("required").Value(true);
-                        })
-                    .EndMap();
+            .DoIf(options.AddCppTypeNames, [&] (auto fluent) {
+                YT_VERIFY(StructType_);
+                fluent.Item("cpp_type_name").Value(TypeName(*StructType_));
+            })
+            .DoIf(options.AddSourceLocation && SourceLocation_.IsValid(), [&] (auto fluent) {
+                fluent.Item("source_location_file_name").Value(SourceLocation_.GetFileName());
+                fluent.Item("source_location_line").Value(i64{SourceLocation_.GetLine()});
+            })
+            .Item("members").DoListFor(InitialOrderParameters_, [&] (auto fluent, const auto& pair) {
+                auto defaultValueGetter = [&] {
+                    return DefaultStructNodeGetter_()->FindChild(pair.first);
+                };
+                fluent.Item().Do([&] (auto fluent) {
+                    pair.second->WriteMemberSchema(target, fluent.GetConsumer(), defaultValueGetter, options);
+                });
             })
         .EndMap();
 }

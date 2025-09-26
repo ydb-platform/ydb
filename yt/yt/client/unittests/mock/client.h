@@ -545,7 +545,7 @@ public:
         const TPutFileToCacheOptions& options),
         (override));
 
-    MOCK_METHOD(TFuture<TGetCurrentUserResultPtr>, GetCurrentUser, (
+    MOCK_METHOD(TFuture<TGetCurrentUserResult>, GetCurrentUser, (
         const TGetCurrentUserOptions& options),
         (override));
 
@@ -813,6 +813,10 @@ public:
         const TGetQueryTrackerInfoOptions& options),
         (override));
 
+    MOCK_METHOD(TFuture<TGetDeclaredParametersInfoResult>, GetDeclaredParametersInfo, (
+        const TGetDeclaredParametersInfoOptions& options),
+        (override));
+
     MOCK_METHOD(TFuture<NBundleControllerClient::TBundleConfigDescriptorPtr>, GetBundleConfig, (
         const std::string& bundleName,
         const NBundleControllerClient::TGetBundleConfigOptions& options), (override));
@@ -880,6 +884,11 @@ public:
     MOCK_METHOD(TFuture<TDistributedWriteSessionWithCookies>, StartDistributedWriteSession, (
         const NYPath::TRichYPath& path,
         const TDistributedWriteSessionStartOptions& options),
+        (override));
+
+    MOCK_METHOD(TFuture<void>, PingDistributedWriteSession, (
+        TSignedDistributedWriteSessionPtr session,
+        const TDistributedWriteSessionPingOptions& options),
         (override));
 
     MOCK_METHOD(TFuture<void>, FinishDistributedWriteSession, (

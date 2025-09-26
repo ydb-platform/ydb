@@ -10,6 +10,11 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+template<>
+void Out<Ydb::Backup::RestoreProgress::Progress>(IOutputStream& out, TTypeTraits<Ydb::Backup::RestoreProgress::Progress>::TFuncParam value) {
+    out << Ydb::Backup::RestoreProgress_Progress_Name(value);
+}
+
 using namespace NKikimr;
 using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;
@@ -129,7 +134,7 @@ struct TLongOpTestSetup {
                       Name: ")" << tableName << R"("
                       Columns { Name: "key"   Type: "Uint64" }
                       Columns { Name: "value" Type: "Utf8" }
-                      Columns { Name: "__ydb_incrBackupImpl_deleted" Type: "Bool" }
+                      Columns { Name: "__ydb_incrBackupImpl_changeMetadata" Type: "String" }
                       KeyColumnNames: ["key"]
                 )";
                 
@@ -206,21 +211,17 @@ struct TLongOpTestSetup {
         }
     }
     
-    // Helper method to clear captured events between tests
     void ClearCapturedEvents() {
         CapturedBackupCollectionPathIds.clear();
         ExpectedBackupCollectionPathIds.clear();
         OperationInProgress = false;
     }
     
-    // Helper method to check if events were captured for the expected operation
     bool HasCapturedEventsForOperation() const {
         if (CapturedBackupCollectionPathIds.empty()) {
             return false;
         }
         
-        // For now, just verify we captured any events during the operation window
-        // More specific validation can be added in individual tests
         return !CapturedBackupCollectionPathIds.empty();
     }
 };
@@ -270,18 +271,12 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
             NLs::IsBackupCollection,
         });
 
-        // Execute restore operation
         setup.ExecuteRestore("TestCollection");
-
-        // The operation should complete successfully
-        // We can't easily test the internal ESchemeOpCreateLongIncrementalRestoreOp dispatch
-        // without deeper integration, but we can verify the overall restore works
     }
 
     Y_UNIT_TEST(CreateLongIncrementalRestoreOpNonExistentCollection) {
         TLongOpTestSetup setup;
 
-        // Try to restore from non-existent backup collection
         setup.ExecuteRestore("NonExistentCollection", {NKikimrScheme::StatusPathDoesNotExist});
     }
 
@@ -374,10 +369,6 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
     Y_UNIT_TEST(CreateLongIncrementalRestoreOpInternalTransaction) {
         TLongOpTestSetup setup;
 
-        // This test verifies that the internal ESchemeOpCreateLongIncrementalRestoreOp
-        // transaction can be created and processed without errors
-
-        // Create backup collection
         setup.CreateBackupCollection("InternalTestCollection", {"/MyRoot/InternalTestTable"});
 
         // Create backup structure with incremental backups to trigger long restore
@@ -475,7 +466,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
                   Name: "DatabaseTestTable"
                   Columns { Name: "key"   Type: "Uint32" }
                   Columns { Name: "value" Type: "Utf8" }
-                  Columns { Name: "__ydb_incrBackupImpl_deleted" Type: "Bool" }
+                  Columns { Name: "__ydb_incrBackupImpl_changeMetadata" Type: "String" }
                   KeyColumnNames: ["key"]
             )");
             env.TestWaitNotification(runtime, txId);
@@ -886,43 +877,70 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
     }
 
 
+    // Helper function to wait for incremental restore to make progress (not necessarily complete)
+    void WaitForIncrementalRestoreProgress(TTestBasicRuntime& runtime, ui64 restoreId, ui32 timeoutSeconds = 30) {
+        TInstant deadline = TInstant::Now() + TDuration::Seconds(timeoutSeconds);
+        TTabletId schemeShardTabletId = TTabletId(TTestTxConfig::SchemeShard);
+        
+        while (TInstant::Now() < deadline) {
+            // Check if incremental restore has made actual progress
+            NKikimrMiniKQL::TResult result;
+            TString err;
+            NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, schemeShardTabletId.GetValue(), Sprintf(R"(
+                (
+                    (let key '('('OperationId (Uint64 '%lu))))
+                    (let select '('OperationId 'CurrentIncrementalIdx 'CompletedOperations))
+                    (let state (SelectRow 'IncrementalRestoreState key select))
+                    (let ret (AsList (SetResult 'State state)))
+                    (return ret)
+                )
+            )", restoreId), result, err);
+            
+            if (status == NKikimrProto::EReplyStatus::OK) {
+                auto value = NClient::TValue::Create(result);
+                auto stateResult = value["State"];
+                
+                if (stateResult.HaveValue() && !stateResult.IsNull()) {
+                    auto currentIncrementalIdx = stateResult["CurrentIncrementalIdx"];
+                    auto completedOperations = stateResult["CompletedOperations"];
+                    
+                    // Check if progress has been made
+                    bool progressMade = false;
+                    
+                    if (currentIncrementalIdx.HaveValue() && !currentIncrementalIdx.IsNull()) {
+                        ui32 idx = (ui32)currentIncrementalIdx;
+                        if (idx > 0) {
+                            progressMade = true;
+                        }
+                    }
+                    
+                    if (!progressMade && completedOperations.HaveValue() && !completedOperations.IsNull()) {
+                        TString completedOpsStr = (TString)completedOperations;
+                        if (!completedOpsStr.empty() && completedOpsStr != "[]") {
+                            progressMade = true;
+                        }
+                    }
+                    
+                    if (progressMade) {
+                        Cerr << "Incremental restore progress detected for operation " << restoreId << Endl;
+                        return; // Progress has been made
+                    }
+                }
+            }
+            
+            runtime.SimulateSleep(TDuration::MilliSeconds(100));
+        }
+        
+        // If we reach here, timeout occurred
+        UNIT_ASSERT_C(false, "Timeout waiting for incremental restore progress");
+    }
+
     // Helper function to wait for incremental restore completion
     void WaitForIncrementalRestoreCompletion(TTestBasicRuntime& runtime, const TString& collectionName, const TVector<TString>& tableNames, ui32 timeoutSeconds = 30) {
         Y_UNUSED(collectionName); // Collection name parameter kept for future use
         TInstant deadline = TInstant::Now() + TDuration::Seconds(timeoutSeconds);
         
         while (TInstant::Now() < deadline) {
-            // Check if operations are cleaned up from database
-            TTabletId schemeShardTabletId = TTabletId(TTestTxConfig::SchemeShard);
-            
-            NKikimrMiniKQL::TResult result;
-            TString err;
-            NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, schemeShardTabletId.GetValue(), R"(
-                (
-                    (let range '('('Id (Null) (Void))))
-                    (let select '('Id 'Operation))
-                    (let operations (SelectRange 'IncrementalRestoreOperations range select '()))
-                    (let ret (AsList (SetResult 'Operations operations)))
-                    (return ret)
-                )
-            )", result, err);
-            
-            if (status != NKikimrProto::EReplyStatus::OK) {
-                runtime.SimulateSleep(TDuration::MilliSeconds(100));
-                continue;
-            }
-            
-            auto value = NClient::TValue::Create(result);
-            auto operationsResultSet = value["Operations"];
-            ui32 operationsCount = 0;
-            if (operationsResultSet.HaveValue()) {
-                auto operationsList = operationsResultSet["List"];
-                if (operationsList.HaveValue()) {
-                    operationsCount = operationsList.Size();
-                }
-            }
-            
-            // Check if all target tables are in normalized state
             bool allTablesNormalized = true;
             for (const auto& tableName : tableNames) {
                 TString targetPath = TStringBuilder() << "/MyRoot/" << tableName;
@@ -935,8 +953,9 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
                 }
             }
             
-            // Operations should be cleaned up AND all tables should be normalized
-            if (operationsCount == 0 && allTablesNormalized) {
+            // Only wait for all tables to be normalized
+            // Database operations cleanup now happens during FORGET, not finalization
+            if (allTablesNormalized) {
                 return; // Finalization completed
             }
             
@@ -964,6 +983,25 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
         )", result, err);
         
         UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::EReplyStatus::OK, err);
+    }
+
+    // Helper function to verify complete cleanup after FORGET operation
+    void VerifyDatabaseCleanupAfterForget(TTestBasicRuntime& runtime) {
+        TTabletId schemeShardTabletId = TTabletId(TTestTxConfig::SchemeShard);
+        
+        NKikimrMiniKQL::TResult result;
+        TString err;
+        NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, schemeShardTabletId.GetValue(), R"(
+            (
+                (let range '('('Id (Null) (Void))))
+                (let select '('Id 'Operation))
+                (let operations (SelectRange 'IncrementalRestoreOperations range select '()))
+                (let ret (AsList (SetResult 'Operations operations)))
+                (return ret)
+            )
+        )", result, err);
+        
+        UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::EReplyStatus::OK, err);
         
         auto value = NClient::TValue::Create(result);
         auto operationsResultSet = value["Operations"];
@@ -976,7 +1014,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
             }
             
             UNIT_ASSERT_VALUES_EQUAL_C(operationsCount, 0, 
-                TStringBuilder() << "IncrementalRestoreOperations table should be empty after finalization, but found " 
+                TStringBuilder() << "IncrementalRestoreOperations table should be empty after FORGET, but found " 
                                << operationsCount << " operations");
         }
     }
@@ -1032,7 +1070,8 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
 
     // Helper function to verify operation completion
     void VerifyIncrementalRestoreOperationCompleted(TTestBasicRuntime& runtime, ui64 operationId) {
-        // Check that the operation is no longer in progress
+        // With new completion tracking, operations remain in database until FORGET
+        // This function verifies the operation exists and is in the correct completed state
         TTabletId schemeShardTabletId = TTabletId(TTestTxConfig::SchemeShard);
         
         NKikimrMiniKQL::TResult result;
@@ -1052,9 +1091,34 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
         auto value = NClient::TValue::Create(result);
         auto operationResult = value["Operation"];
         
-        // Operation should not exist after completion and finalization
-        UNIT_ASSERT_C(!operationResult.HaveValue() || operationResult.IsNull(),
-            TStringBuilder() << "Operation " << operationId << " should be cleaned up after completion");
+        // With new completion tracking, operations remain in database until FORGET is called
+        // So we expect the operation to be present (but internally marked as completed)
+        UNIT_ASSERT_C(operationResult.HaveValue() && !operationResult.IsNull(), 
+            "Operation " << operationId << " should remain in database until FORGET is called");
+        
+        // Verify the operation has the expected fields
+        auto idField = operationResult["Id"];
+        UNIT_ASSERT_C(idField.HaveValue() && !idField.IsNull(), 
+            "Operation " << operationId << " should have a valid Id field");
+        
+        ui64 foundId = (ui64)idField;
+        UNIT_ASSERT_VALUES_EQUAL_C(foundId, operationId, 
+            "Operation Id should match expected value");
+        
+        // Also verify the operation can be found via list API (tests in-memory state consistency)
+        auto listResp = TestListBackupCollectionRestores(runtime, "/MyRoot");
+        bool foundInList = false;
+        for (const auto& entry : listResp.GetEntries()) {
+            if (entry.GetId() == operationId) {
+                foundInList = true;
+                // Verify the operation shows as completed
+                UNIT_ASSERT_VALUES_EQUAL_C(entry.GetProgress(), Ydb::Backup::RestoreProgress::PROGRESS_DONE,
+                    "Operation " << operationId << " should be marked as PROGRESS_DONE in list API");
+                break;
+            }
+        }
+        
+        UNIT_ASSERT_C(foundInList, "Operation " << operationId << " should be visible in list API until FORGET is called");
     }
 
     Y_UNIT_TEST(LongIncrementalRestoreOpCleanupAfterSuccess) {
@@ -1238,5 +1302,390 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
         
         VerifyPathStatesNormalized(setup.Runtime, "ConcurrentCollection1", {"ConcurrentTable1"});
         VerifyPathStatesNormalized(setup.Runtime, "ConcurrentCollection2", {"ConcurrentTable2"});
+    }
+
+    Y_UNIT_TEST(BackupCollectionRestoreOpApiGetListForget) {
+        TLongOpTestSetup setup;
+        auto& runtime = setup.Runtime;
+        auto& env = setup.Env;
+        auto& txId = setup.TxId;
+
+        setup.CreateCompleteBackupScenario("ApiCollection", {"ApiTable"}, 2);
+
+        // Start async restore to allow checking mid-progress
+        setup.ExecuteAsyncRestore("ApiCollection");
+        ui64 startTxId = txId;
+        TestModificationResult(runtime, startTxId, NKikimrScheme::StatusAccepted);
+        env.TestWaitNotification(runtime, startTxId);
+
+        // List should show exactly one entry for this DB
+        auto listResp = TestListBackupCollectionRestores(runtime, "/MyRoot");
+        const auto& entries = listResp.GetEntries();
+        UNIT_ASSERT_C(entries.size() >= 1, "Expected at least one incremental restore entry");
+
+        // Find our collection entry by name match in metadata if available, otherwise use the last
+        ui64 restoreId = entries.rbegin()->GetId();
+
+        // Get should return SUCCESS
+        auto getResp = TestGetBackupCollectionRestore(runtime, restoreId, "/MyRoot");
+        UNIT_ASSERT_VALUES_EQUAL(getResp.GetBackupCollectionRestore().GetId(), restoreId);
+
+        // Forget during progress should fail
+        auto forgetRespPre = TestForgetBackupCollectionRestore(runtime, ++txId, "/MyRoot", restoreId, Ydb::StatusIds::PRECONDITION_FAILED);
+        Y_UNUSED(forgetRespPre);
+
+        // Wait until operation completes (tables created)
+        env.TestWaitNotification(runtime, startTxId);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/ApiTable"), {NLs::PathExist});
+
+        // Add a short delay to allow incremental processing to start
+        // Since the restore operation may complete very quickly, we need to give it time
+        runtime.SimulateSleep(TDuration::MilliSeconds(500));
+
+        // Get after completion should report DONE progress
+        auto getAfter = TestGetBackupCollectionRestore(runtime, restoreId, "/MyRoot");
+        UNIT_ASSERT_VALUES_EQUAL(getAfter.GetBackupCollectionRestore().GetId(), restoreId);
+        UNIT_ASSERT_VALUES_EQUAL(getAfter.GetBackupCollectionRestore().GetProgress(), Ydb::Backup::RestoreProgress::PROGRESS_DONE);
+
+        // Now Forget should succeed and subsequent Get should be NOT_FOUND
+        auto forgetResp = TestForgetBackupCollectionRestore(runtime, ++txId, "/MyRoot", restoreId, Ydb::StatusIds::SUCCESS);
+        Y_UNUSED(forgetResp);
+        (void)TestGetBackupCollectionRestore(runtime, restoreId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
+    }
+
+    Y_UNIT_TEST(IncrementalRestorePersistenceRowsLifecycle) {
+        TLongOpTestSetup setup;
+        auto& runtime = setup.Runtime;
+        auto& env = setup.Env;
+        auto& txId = setup.TxId;
+
+        setup.CreateCompleteBackupScenario("PersistCollection", {"PersistTable"}, 2);
+
+        // Start async restore
+        setup.ExecuteAsyncRestore("PersistCollection");
+        ui64 startTxId = txId;
+        TestModificationResult(runtime, startTxId, NKikimrScheme::StatusAccepted);
+        env.TestWaitNotification(runtime, startTxId);
+
+        // Obtain restoreId from list
+        auto listResp = TestListBackupCollectionRestores(runtime, "/MyRoot");
+        UNIT_ASSERT_GE(listResp.GetEntries().size(), 1);
+        ui64 restoreId = listResp.GetEntries().rbegin()->GetId();
+
+        // Verify IncrementalRestoreState table has at least one row
+        TTabletId schemeShardTabletId = TTabletId(TTestTxConfig::SchemeShard);
+        {
+            NKikimrMiniKQL::TResult result;
+            TString err;
+            auto status = LocalMiniKQL(runtime, schemeShardTabletId.GetValue(), R"(
+                (
+                    (let range '('('OperationId (Null) (Void))))
+                    (let select '('OperationId 'State 'CurrentIncrementalIdx))
+                    (let rows (SelectRange 'IncrementalRestoreState range select '()))
+                    (let ret (AsList (SetResult 'Rows rows)))
+                    (return ret)
+                )
+            )", result, err);
+            UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::EReplyStatus::OK, err);
+            auto value = NClient::TValue::Create(result);
+            auto rows = value["Rows"]["List"];
+            UNIT_ASSERT_C(rows.HaveValue(), "Expected rows in IncrementalRestoreState during progress");
+        }
+
+        // Wait completion
+        env.TestWaitNotification(runtime, startTxId);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/PersistTable"), {NLs::PathExist});
+
+        // Add a delay to allow incremental processing to complete
+        runtime.SimulateSleep(TDuration::MilliSeconds(500));
+
+        // Verify the restore is actually done before trying to forget
+        auto getAfter = TestGetBackupCollectionRestore(runtime, restoreId, "/MyRoot");
+        UNIT_ASSERT_VALUES_EQUAL(getAfter.GetBackupCollectionRestore().GetId(), restoreId);
+        UNIT_ASSERT_VALUES_EQUAL(getAfter.GetBackupCollectionRestore().GetProgress(), Ydb::Backup::RestoreProgress::PROGRESS_DONE);
+
+        // Forget and ensure tables are cleaned
+        TestForgetBackupCollectionRestore(runtime, ++txId, "/MyRoot", restoreId, Ydb::StatusIds::SUCCESS);
+
+        // Now IncrementalRestoreState should be empty (or at least no row for this op)
+        {
+            NKikimrMiniKQL::TResult result;
+            TString err;
+            auto status = LocalMiniKQL(runtime, schemeShardTabletId.GetValue(), R"(
+                (
+                    (let range '('('OperationId (Null) (Void))))
+                    (let select '('OperationId))
+                    (let rows (SelectRange 'IncrementalRestoreState range select '()))
+                    (let ret (AsList (SetResult 'Rows rows)))
+                    (return ret)
+                )
+            )", result, err);
+            UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::EReplyStatus::OK, err);
+            auto value = NClient::TValue::Create(result);
+            auto rows = value["Rows"]["List"];
+            // It is acceptable that table exists for other ops, but our id should not be present
+            bool found = false;
+            if (rows.HaveValue()) {
+                for (ui32 i = 0; i < rows.Size(); ++i) {
+                    if ((ui64)rows[i]["Tuple"][0] == restoreId) {
+                        found = true; break;
+                    }
+                }
+            }
+            UNIT_ASSERT_C(!found, "Restore state row should be deleted after forget");
+        }
+    }
+
+    Y_UNIT_TEST(BackupCollectionRestoreOpApiMultipleOperationsListing) {
+        TLongOpTestSetup setup;
+        auto& runtime = setup.Runtime;
+        auto& env = setup.Env;
+        auto& txId = setup.TxId;
+
+        // Helper function to verify database is completely clean
+        auto VerifyDatabaseCompletelyClean = [&]() {
+            TTabletId schemeShardTabletId = TTabletId(TTestTxConfig::SchemeShard);
+            
+            // Check IncrementalRestoreOperations table
+            NKikimrMiniKQL::TResult result;
+            TString err;
+            auto status = LocalMiniKQL(runtime, schemeShardTabletId.GetValue(), R"(
+                (
+                    (let range '('('Id (Null) (Void))))
+                    (let select '('Id 'Operation))
+                    (let operations (SelectRange 'IncrementalRestoreOperations range select '()))
+                    (let ret (AsList (SetResult 'Operations operations)))
+                    (return ret)
+                )
+            )", result, err);
+            UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::EReplyStatus::OK, err);
+            
+            auto value = NClient::TValue::Create(result);
+            auto operationsResultSet = value["Operations"];
+            ui32 operationsCount = 0;
+            if (operationsResultSet.HaveValue()) {
+                auto operationsList = operationsResultSet["List"];
+                if (operationsList.HaveValue()) {
+                    operationsCount = operationsList.Size();
+                }
+            }
+            
+            // Check IncrementalRestoreState table  
+            status = LocalMiniKQL(runtime, schemeShardTabletId.GetValue(), R"(
+                (
+                    (let range '('('OperationId (Null) (Void))))
+                    (let select '('OperationId))
+                    (let states (SelectRange 'IncrementalRestoreState range select '()))
+                    (let ret (AsList (SetResult 'States states)))
+                    (return ret)
+                )
+            )", result, err);
+            UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::EReplyStatus::OK, err);
+            
+            auto stateValue = NClient::TValue::Create(result);
+            auto statesResultSet = stateValue["States"];
+            ui32 statesCount = 0;
+            if (statesResultSet.HaveValue()) {
+                auto statesList = statesResultSet["List"];
+                if (statesList.HaveValue()) {
+                    statesCount = statesList.Size();
+                }
+            }
+            
+            UNIT_ASSERT_VALUES_EQUAL_C(operationsCount, 0, 
+                TStringBuilder() << "IncrementalRestoreOperations should be empty, found: " << operationsCount);
+            UNIT_ASSERT_VALUES_EQUAL_C(statesCount, 0,
+                TStringBuilder() << "IncrementalRestoreState should be empty, found: " << statesCount);
+            
+            // Verify list API returns empty
+            auto listResp = TestListBackupCollectionRestores(runtime, "/MyRoot");
+            UNIT_ASSERT_VALUES_EQUAL_C(listResp.GetEntries().size(), 0,
+                TStringBuilder() << "List API should return empty, found: " << listResp.GetEntries().size());
+        };
+
+        // Helper function to cleanup tables for next restore cycle
+        auto CleanupTables = [&](const TVector<TString>& tableNames) {
+            for (const auto& tableName : tableNames) {
+                TString targetPath = TStringBuilder() << "/MyRoot/" << tableName;
+                auto desc = DescribePath(runtime, targetPath);
+                if (desc.GetStatus() != NKikimrScheme::StatusPathDoesNotExist) {
+                    TestDropTable(runtime, ++txId, "/MyRoot", tableName);
+                    env.TestWaitNotification(runtime, txId);
+                }
+            }
+        };
+
+        Cerr << "=== PHASE 1: Initial Multiple Operations Test ===" << Endl;
+
+        // Create multiple backup scenarios
+        setup.CreateCompleteBackupScenario("ListCollection1", {"ListTable1"}, 2);
+        setup.CreateCompleteBackupScenario("ListCollection2", {"ListTable2"}, 3);
+        setup.CreateCompleteBackupScenario("ListCollection3", {"ListTable3"}, 1);
+
+        // Start multiple async restores
+        setup.ExecuteAsyncRestore("ListCollection1");
+        ui64 restore1TxId = txId;
+        TestModificationResult(runtime, restore1TxId, NKikimrScheme::StatusAccepted);
+
+        setup.ExecuteAsyncRestore("ListCollection2");
+        ui64 restore2TxId = txId;
+        TestModificationResult(runtime, restore2TxId, NKikimrScheme::StatusAccepted);
+
+        setup.ExecuteAsyncRestore("ListCollection3");
+        ui64 restore3TxId = txId;
+        TestModificationResult(runtime, restore3TxId, NKikimrScheme::StatusAccepted);
+
+        // Wait for all operations to be initialized
+        env.TestWaitNotification(runtime, restore1TxId);
+        env.TestWaitNotification(runtime, restore2TxId);
+        env.TestWaitNotification(runtime, restore3TxId);
+
+        // List should show all three operations
+        auto listResp = TestListBackupCollectionRestores(runtime, "/MyRoot");
+        const auto& entries = listResp.GetEntries();
+        UNIT_ASSERT_C(entries.size() >= 3, 
+            TStringBuilder() << "Expected at least 3 incremental restore entries, got: " << entries.size());
+
+        // Collect restore IDs and verify they're all unique
+        THashSet<ui64> cycle1RestoreIds;
+        for (const auto& entry : entries) {
+            cycle1RestoreIds.insert(entry.GetId());
+        }
+        UNIT_ASSERT_C(cycle1RestoreIds.size() >= 3, 
+            TStringBuilder() << "Expected at least 3 unique restore operations, got: " << cycle1RestoreIds.size());
+
+        // Wait for all operations to complete
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/ListTable1"), {NLs::PathExist});
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/ListTable2"), {NLs::PathExist});
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/ListTable3"), {NLs::PathExist});
+
+        // Add delay to allow incremental processing to complete
+        runtime.SimulateSleep(TDuration::MilliSeconds(1000));
+
+        // Verify all operations show as DONE
+        auto listAfterCompletion = TestListBackupCollectionRestores(runtime, "/MyRoot");
+        ui32 doneCount = 0;
+        TVector<ui64> cycle1CompletedIds;
+        for (const auto& entry : listAfterCompletion.GetEntries()) {
+            if (cycle1RestoreIds.contains(entry.GetId()) && entry.GetProgress() == Ydb::Backup::RestoreProgress::PROGRESS_DONE) {
+                doneCount++;
+                cycle1CompletedIds.push_back(entry.GetId());
+            }
+        }
+        UNIT_ASSERT_C(doneCount >= 3, TStringBuilder() << "Expected at least 3 DONE operations, got: " << doneCount);
+
+        Cerr << "=== PHASE 2: Test Failed Restore (should not break system) ===" << Endl;
+
+        // Create a backup collection that will cause restore to fail
+        setup.CreateBackupCollection("FailCollection", {"/MyRoot/FailTable"});
+        setup.CreateFullBackup("FailCollection", {"FailTable"});
+        // Create malformed incremental backup directory (no table backup inside)
+        setup.CreateCustomBackupDirectories("FailCollection", {"backup_002_incremental"});
+
+        // Try to restore the broken collection - should fail gracefully
+        ui64 failedRestoreTxId = 0;
+        try {
+            setup.ExecuteAsyncRestore("FailCollection");
+            failedRestoreTxId = txId;
+            TestModificationResult(runtime, failedRestoreTxId, NKikimrScheme::StatusAccepted);
+            env.TestWaitNotification(runtime, failedRestoreTxId);
+            runtime.SimulateSleep(TDuration::MilliSeconds(2000)); // Wait for failure
+        } catch (...) {
+            // Expected to fail
+        }
+
+        // Verify system is still functional after failure - list should still work
+        auto listAfterFailure = TestListBackupCollectionRestores(runtime, "/MyRoot");
+        UNIT_ASSERT_C(listAfterFailure.GetEntries().size() >= 3,
+            "List API should still work after failed restore");
+
+        // Verify successful operations are still accessible after failure
+        for (ui64 id : cycle1CompletedIds) {
+            auto getResp = TestGetBackupCollectionRestore(runtime, id, "/MyRoot");
+            UNIT_ASSERT_VALUES_EQUAL(getResp.GetBackupCollectionRestore().GetId(), id);
+        }
+
+        Cerr << "=== PHASE 3: Second Restore Cycle (after cleanup) ===" << Endl;
+
+        // Cleanup tables to enable second restore cycle
+        CleanupTables({"ListTable1", "ListTable2", "ListTable3"});
+
+        // Second restore cycle with same collections
+        setup.ExecuteAsyncRestore("ListCollection1");
+        ui64 restore1Cycle2TxId = txId;
+        TestModificationResult(runtime, restore1Cycle2TxId, NKikimrScheme::StatusAccepted);
+
+        setup.ExecuteAsyncRestore("ListCollection2");
+        ui64 restore2Cycle2TxId = txId;
+        TestModificationResult(runtime, restore2Cycle2TxId, NKikimrScheme::StatusAccepted);
+
+        env.TestWaitNotification(runtime, restore1Cycle2TxId);
+        env.TestWaitNotification(runtime, restore2Cycle2TxId);
+
+        // Verify we now have operations from both cycles visible
+        auto listCycle2 = TestListBackupCollectionRestores(runtime, "/MyRoot");
+        UNIT_ASSERT_C(listCycle2.GetEntries().size() >= 5, // 3 from cycle1 + 2 from cycle2
+            TStringBuilder() << "Should have operations from both cycles, got: " << listCycle2.GetEntries().size());
+
+        // Collect cycle2 IDs
+        THashSet<ui64> cycle2RestoreIds;
+        for (const auto& entry : listCycle2.GetEntries()) {
+            if (!cycle1RestoreIds.contains(entry.GetId())) {
+                cycle2RestoreIds.insert(entry.GetId());
+            }
+        }
+        UNIT_ASSERT_C(cycle2RestoreIds.size() >= 2,
+            TStringBuilder() << "Should have at least 2 new operations from cycle 2, got: " << cycle2RestoreIds.size());
+
+        // Wait for cycle2 completion
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/ListTable1"), {NLs::PathExist});
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/ListTable2"), {NLs::PathExist});
+        runtime.SimulateSleep(TDuration::MilliSeconds(1000));
+
+        Cerr << "=== PHASE 4: Selective FORGET Testing ===" << Endl;
+
+        // Forget some operations from cycle1, keep others
+        ui64 toForgetCycle1 = cycle1CompletedIds[0];
+        auto forgetResp = TestForgetBackupCollectionRestore(runtime, ++txId, "/MyRoot", toForgetCycle1, Ydb::StatusIds::SUCCESS);
+        Y_UNUSED(forgetResp);
+
+        // Verify selective forget worked
+        auto listAfterSelectiveForget = TestListBackupCollectionRestores(runtime, "/MyRoot");
+        bool foundForgotten = false;
+        ui32 remainingCycle1 = 0;
+        ui32 remainingCycle2 = 0;
+
+        for (const auto& entry : listAfterSelectiveForget.GetEntries()) {
+            if (entry.GetId() == toForgetCycle1) {
+                foundForgotten = true;
+            }
+            if (cycle1RestoreIds.contains(entry.GetId()) && entry.GetId() != toForgetCycle1) {
+                remainingCycle1++;
+            }
+            if (cycle2RestoreIds.contains(entry.GetId())) {
+                remainingCycle2++;
+            }
+        }
+
+        UNIT_ASSERT_C(!foundForgotten, "Forgotten operation should not be in list");
+        UNIT_ASSERT_C(remainingCycle1 >= 2, "Should have remaining cycle1 operations");
+        UNIT_ASSERT_C(remainingCycle2 >= 2, "Should have remaining cycle2 operations");
+
+        Cerr << "=== PHASE 5: Complete Cleanup Verification ===" << Endl;
+
+        // Forget ALL remaining operations
+        TVector<ui64> allRemainingIds;
+        auto listBeforeCleanup = TestListBackupCollectionRestores(runtime, "/MyRoot");
+        for (const auto& entry : listBeforeCleanup.GetEntries()) {
+            allRemainingIds.push_back(entry.GetId());
+        }
+
+        Cerr << "Forgetting " << allRemainingIds.size() << " remaining operations..." << Endl;
+        for (ui64 id : allRemainingIds) {
+            auto forgetResp = TestForgetBackupCollectionRestore(runtime, ++txId, "/MyRoot", id, Ydb::StatusIds::SUCCESS);
+            Y_UNUSED(forgetResp);
+        }
+
+        VerifyDatabaseCompletelyClean();
     }
 }

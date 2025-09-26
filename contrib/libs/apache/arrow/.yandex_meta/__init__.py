@@ -196,7 +196,7 @@ def post_install(self):
 
 
 apache_arrow = CMakeNinjaNixProject(
-    owners=["primorial", "g:cpp-contrib"],
+    owners=["g:cpp-contrib"],
     arcdir="contrib/libs/apache/arrow",
     nixattr="arrow-cpp",
     ignore_commands=["cmake"],

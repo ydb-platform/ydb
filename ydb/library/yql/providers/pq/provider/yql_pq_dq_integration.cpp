@@ -302,6 +302,9 @@ public:
                     taskSensorLabel->SetLabel(label);
                     taskSensorLabel->SetValue(value);
                 }
+                for (auto nodeId : State_->NodeIds) {
+                    srcDesc.AddNodeIds(nodeId);
+                }
 
                 NYql::NConnector::NApi::TExpression watermarkExprProto;
                 auto serializedWatermarkExpr = topicSource.Watermark().Ref().Content();

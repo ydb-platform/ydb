@@ -15,16 +15,19 @@ namespace {
         const TTypeAnnotationNode* OutputStruct_;
         bool AcceptsBlocks_;
         EProcessorMode ProcessorMode_;
+        const TTypeAnnotationContext& TypeCtx_;
 
     public:
         explicit TOutputAligner(
             const TTypeAnnotationNode* outputStruct,
             bool acceptsBlocks,
-            EProcessorMode processorMode
+            EProcessorMode processorMode,
+            const TTypeAnnotationContext& typeCtx
         )
             : OutputStruct_(outputStruct)
             , AcceptsBlocks_(acceptsBlocks)
             , ProcessorMode_(processorMode)
+            , TypeCtx_(typeCtx)
         {
         }
 
@@ -50,7 +53,7 @@ namespace {
                 }
             }
 
-            if (!ValidateOutputType(actualItemType, expectedItemType, ctx)) {
+            if (!ValidateOutputType(actualItemType, expectedItemType, ctx, TypeCtx_)) {
                 return TStatus::Error;
             }
 
@@ -58,7 +61,7 @@ namespace {
                 return TStatus::Ok;
             }
 
-            auto status = TryConvertTo(output, *actualType, *expectedType, ctx);
+            auto status = TryConvertTo(output, *actualType, *expectedType, ctx, TypeCtx_);
 
             if (status.Level == IGraphTransformer::TStatus::Repeat) {
                 status = IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, true);
@@ -116,7 +119,8 @@ namespace {
 TAutoPtr<IGraphTransformer> NYql::NPureCalc::MakeOutputAligner(
     const TTypeAnnotationNode* outputStruct,
     bool acceptsBlocks,
-    EProcessorMode processorMode
+    EProcessorMode processorMode,
+    const TTypeAnnotationContext& typeCtx
 ) {
-    return new TOutputAligner(outputStruct, acceptsBlocks, processorMode);
+    return new TOutputAligner(outputStruct, acceptsBlocks, processorMode, typeCtx);
 }

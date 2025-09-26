@@ -606,6 +606,28 @@ namespace {
                         return nullptr;
 
                     return Expr.MakeType<TScalarExprType>(r);
+                } else if (content == TStringBuf("Linear")) {
+                    if (node.GetChildrenCount() != 2) {
+                        AddError(node, "Bad linear type annotation");
+                        return nullptr;
+                    }
+
+                    auto r = CompileTypeAnnotationNode(*node.GetChild(1));
+                    if (!r)
+                        return nullptr;
+
+                    return Expr.MakeType<TLinearExprType>(r);
+                } else if (content == TStringBuf("DynamicLinear")) {
+                    if (node.GetChildrenCount() != 2) {
+                        AddError(node, "Bad dynamic linear type annotation");
+                        return nullptr;
+                    }
+
+                    auto r = CompileTypeAnnotationNode(*node.GetChild(1));
+                    if (!r)
+                        return nullptr;
+
+                    return Expr.MakeType<TDynamicLinearExprType>(r);
                 } else {
                     AddError(node, TStringBuilder() << "Unknown type annotation");
                     return nullptr;
@@ -866,6 +888,22 @@ namespace {
         {
             auto type = annotation.Cast<TScalarExprType>();
             auto self = TAstNode::NewLiteralAtom(TPosition(), TStringBuf("Scalar"), pool);
+            auto itemType = ConvertTypeAnnotationToAst(*type->GetItemType(), pool, refAtoms);
+            return TAstNode::NewList(TPosition(), pool, self, itemType);
+        }
+
+        case ETypeAnnotationKind::Linear:
+        {
+            auto type = annotation.Cast<TLinearExprType>();
+            auto self = TAstNode::NewLiteralAtom(TPosition(), TStringBuf("Linear"), pool);
+            auto itemType = ConvertTypeAnnotationToAst(*type->GetItemType(), pool, refAtoms);
+            return TAstNode::NewList(TPosition(), pool, self, itemType);
+        }
+
+        case ETypeAnnotationKind::DynamicLinear:
+        {
+            auto type = annotation.Cast<TDynamicLinearExprType>();
+            auto self = TAstNode::NewLiteralAtom(TPosition(), TStringBuf("DynamicLinear"), pool);
             auto itemType = ConvertTypeAnnotationToAst(*type->GetItemType(), pool, refAtoms);
             return TAstNode::NewList(TPosition(), pool, self, itemType);
         }
@@ -2300,22 +2338,6 @@ const TTypeAnnotationNode* CompileTypeAnnotation(const TAstNode& node, TExprCont
     return compileCtx.CompileTypeAnnotationNode(node);
 }
 
-template<class Set>
-bool IsDependedImpl(const TExprNode& node, const Set& dependences, TNodeSet& visited) {
-    if (!visited.emplace(&node).second)
-        return false;
-
-    if (dependences.cend() != dependences.find(&node))
-        return true;
-
-    for (const auto& child : node.Children()) {
-        if (IsDependedImpl(*child, dependences, visited))
-            return true;
-    }
-
-    return false;
-}
-
 namespace {
 
 enum EChangeState : ui8 {
@@ -2651,11 +2673,6 @@ TExprNode::TListType TExprContext::ReplaceNodes(TExprNode::TListType&& starts, c
 template TExprNode::TListType TExprContext::ReplaceNodes<true>(TExprNode::TListType&& starts, const TNodeOnNodeOwnedMap& replaces);
 template TExprNode::TListType TExprContext::ReplaceNodes<false>(TExprNode::TListType&& starts, const TNodeOnNodeOwnedMap& replaces);
 
-bool IsDepended(const TExprNode& node, const TNodeSet& dependences) {
-    TNodeSet visited;
-    return !dependences.empty() && IsDependedImpl(node, dependences, visited);
-}
-
 void CheckArguments(const TExprNode& root) {
     try {
         TNodeMap<TNodeSetPtr> unresolvedArgsMap;
@@ -2838,6 +2855,31 @@ TExprNode::TPtr TExprContext::DeepCopyLambda(const TExprNode& node, TExprNode::T
     return NewLambda(node.Pos(), NewArguments(prevArgs.Pos(), std::move(newArgNodes)), std::move(newBody));
 }
 
+TExprNode::TPtr TExprContext::CopyLambdaWithTypes(const TExprNode& node) {
+    YQL_ENSURE(node.IsLambda());
+
+    const auto& args = node.Head();
+    auto argsChildren = args.ChildrenList();
+
+    TNodeOnNodeOwnedMap replaces;
+    replaces.reserve(args.ChildrenSize());
+
+    for (size_t i = 0U; i < args.ChildrenSize(); ++i) {
+        const auto arg = args.Child(i);
+        auto newArg = ShallowCopy(*arg);
+        newArg->SetTypeAnn(arg->GetTypeAnn());
+        YQL_ENSURE(replaces.emplace(arg, newArg).second);
+        argsChildren[i] = std::move(newArg);
+    }
+
+    auto newArgs = NewArguments(args.Pos(), std::move(argsChildren));
+    newArgs->SetTypeAnn(MakeType<TUnitExprType>());
+    auto lambda = NewLambda(node.Pos(), std::move(newArgs), ReplaceNodes<true>(GetLambdaBody(node), replaces));
+    lambda->SetTypeAnn(node.GetTypeAnn());
+    lambda->Head().ForEachChild(std::bind(&TExprNode::SetDependencyScope, std::placeholders::_1, lambda.Get(), lambda.Get()));
+    return lambda;
+}
+
 TExprNode::TPtr TExprContext::FuseLambdas(const TExprNode& outer, const TExprNode& inner) {
     YQL_ENSURE(outer.IsLambda() && inner.IsLambda());
     const auto& outerArgs = outer.Head();
@@ -2866,7 +2908,7 @@ TExprNode::TPtr TExprContext::FuseLambdas(const TExprNode& outer, const TExprNod
         });
         newBody = ReplaceNodes(std::move(outerBody), outerReplaces);
     } else if (1U == outerArgs.ChildrenSize()) {
-        newBody.reserve(newBody.size() * body.size());
+        newBody.reserve(outerBody.size() * body.size());
         for (auto item : body) {
             for (auto root : outerBody) {
                 newBody.emplace_back(ReplaceNode(TExprNode::TPtr(root), outerArgs.Head(), TExprNode::TPtr(item)));
@@ -3631,6 +3673,24 @@ const TScalarExprType* TMakeTypeImpl<TScalarExprType>::Make(TExprContext& ctx, c
     return AddType<TScalarExprType>(ctx, hash, itemType);
 }
 
+const TLinearExprType* TMakeTypeImpl<TLinearExprType>::Make(TExprContext& ctx, const TTypeAnnotationNode* itemType) {
+    const auto hash = TLinearExprType::MakeHash(itemType);
+    TLinearExprType sample(hash, itemType);
+    if (const auto found = FindType(sample, ctx))
+        return found;
+
+    return AddType<TLinearExprType>(ctx, hash, itemType);
+}
+
+const TDynamicLinearExprType* TMakeTypeImpl<TDynamicLinearExprType>::Make(TExprContext& ctx, const TTypeAnnotationNode* itemType) {
+    const auto hash = TDynamicLinearExprType::MakeHash(itemType);
+    TDynamicLinearExprType sample(hash, itemType);
+    if (const auto found = FindType(sample, ctx))
+        return found;
+
+    return AddType<TDynamicLinearExprType>(ctx, hash, itemType);
+}
+
 bool CompareExprTrees(const TExprNode*& one, const TExprNode*& two) {
     TArgumentsMap map;
     ui32 level = 0;
@@ -3910,6 +3970,14 @@ void TDefaultTypeAnnotationVisitor::Visit(const TBlockExprType& type) {
 }
 
 void TDefaultTypeAnnotationVisitor::Visit(const TScalarExprType& type) {
+    type.GetItemType()->Accept(*this);
+}
+
+void TDefaultTypeAnnotationVisitor::Visit(const TLinearExprType& type) {
+    type.GetItemType()->Accept(*this);
+}
+
+void TDefaultTypeAnnotationVisitor::Visit(const TDynamicLinearExprType& type) {
     type.GetItemType()->Accept(*this);
 }
 

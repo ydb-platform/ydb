@@ -846,6 +846,8 @@ Arguments:
 
 To check the conditions based on the final calculation result, it's convenient to combine Ensure with [DISCARD SELECT](../syntax/discard.md).
 
+Ensure is not guaranteed to evaluate, if the program's result does not depend on its return value. In particular, you should not use singular types as the first argument to Ensure such as `Null`,`Void`,`EmptyList`,`EmptyDict` or empty `Struct`/`Tuple`.
+
 #### Examples
 
 ```yql
@@ -870,6 +872,45 @@ SELECT EnsureConvertibleTo(
     Double?,
     "expected value to be numeric"
 ) AS value FROM my_table;
+```
+
+## WithSideEffects, WithSideEffectsMode {#side_effects}
+
+#### Signature
+
+```yql
+WithSideEffects(T)->T
+WithSideEffectsMode(T, mode:string)->T
+```
+
+The functions are available since version [2025.04](../changelog/2025.04.md).
+The `WithSideEffects` or `WithSideEffectsMode` function returns its first argument. The function is a requirement for the optimizer and marks the inner expression (usually a UDF call) as containing side effects.
+
+A side effect is:
+* An effect of one function call on another other than through passing data in arguments – for example, through some global state;
+* Observable behavior outside YQL during query execution – for example, reading/writing data in external systems.
+
+A side effect is not:
+* UDF counters and logs exposed by the ABI. In other words, optimizations are allowed that will change the values ​​of these counters or log entries at the expense of a different number of UDF calls;
+* Query execution error.
+
+The optimizer should not remove the evaluation of such an expression, and generally should not change the number of its evaluations, if it depends, for example, on each row of a table.
+
+Possible values ​​of mode:
+
+* `General` - all kinds of side effects are allowed, common subexpression removal is not possible;
+* `SemilatticeRT` - only idempotent and commutative side effects are allowed, and the expression result can be evaluated once and reused, which allows common subexpression removal;
+* `None` - no side effects are allowed outside the expression.
+
+The `WithSideEffects` function is a shorthand for calling the `WithSideEffectsMode` function with mode equal to `General`.
+
+A typical example of a `General` side effect is to perform an `UPDATE` to another system, and return the number of records changed as the expression result.
+A typical example of a `SemilatticeRT` side effect is to perform an `UPSERT` to a table with no non-key columns (which is an idempotent and commutative action), and return the number of records sent as the expression result.
+
+#### Example
+
+```yql
+SELECT WithSideEffects(MyModule::Func(...)) FROM table
 ```
 
 ## EvaluateExpr, EvaluateAtom {#evaluate_expr_atom}

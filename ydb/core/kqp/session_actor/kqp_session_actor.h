@@ -53,10 +53,11 @@ struct TKqpWorkerSettings {
         , MkqlMaxMemoryLimit(1073741824, 1, Max<i64>())
         , DbCounters(dbCounters)
     {
-        AppData()->Icb->RegisterSharedControl(
-            MkqlInitialMemoryLimit, "KqpSession.MkqlInitialMemoryLimit");
-        AppData()->Icb->RegisterSharedControl(
-            MkqlMaxMemoryLimit, "KqpSession.MkqlMaxMemoryLimit");
+        auto& icb = *AppData()->Icb;
+        TControlBoard::RegisterSharedControl(
+            MkqlInitialMemoryLimit, icb.KQPSessionControls.MkqlInitialMemoryLimit);
+        TControlBoard::RegisterSharedControl(
+            MkqlMaxMemoryLimit, icb.KQPSessionControls.MkqlMaxMemoryLimit);
     }
 };
 

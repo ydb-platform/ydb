@@ -177,29 +177,16 @@ namespace {
         TVector<TFieldMapping> NestedFields;
     };
 
-    /**
-     * Fills a tree of field mappings from the given yql struct type to protobuf message.
-     *
-     * @param fromType source yql type.
-     * @param toType target protobuf message type.
-     * @param mappings destination vector will be filled with field descriptors. Order of descriptors will match
-     *                the order of field names.
-     */
-    void FillFieldMappings(
+    void FillFieldMappingsImpl(
         const TStructType* fromType,
         const Descriptor& toType,
         TVector<TFieldMapping>& mappings,
         const TMaybe<TString>& timestampColumn,
         bool listIsOptional,
-        const THashMap<TString, TString>& fieldRenames
+        bool enableRecursiveRenaming,
+        const THashMap<TString, TString>& inverseFieldRenames
     ) {
-        THashMap<TString, TString> inverseFieldRenames;
-
-        for (const auto& [source, target]: fieldRenames) {
-            auto [iterator, emplaced] = inverseFieldRenames.emplace(target, source);
-            Y_ENSURE(emplaced, "Duplicate rename field found: " << source << " -> " << target);
-        }
-
+        static const THashMap<TString, TString> emptyInverseFieldRenames;
         mappings.resize(fromType->GetMembersCount());
         for (ui32 i = 0; i < fromType->GetMembersCount(); ++i) {
             TString fieldName(fromType->GetMemberName(i));
@@ -232,11 +219,43 @@ namespace {
                        fieldType->GetKind() == NKikimr::NMiniKQL::TType::EKind::Data,
                        "unsupported field kind [" << fieldType->GetKindAsStr() << "], field [" << fieldName << "]");
             if (fieldType->GetKind() ==  NKikimr::NMiniKQL::TType::EKind::Struct) {
-                FillFieldMappings(static_cast<const NKikimr::NMiniKQL::TStructType*>(fieldType),
-                                  *mappings[i].Field->message_type(),
-                                  mappings[i].NestedFields, Nothing(), listIsOptional, {});
+                FillFieldMappingsImpl(
+                    static_cast<const NKikimr::NMiniKQL::TStructType*>(fieldType),
+                    *mappings[i].Field->message_type(),
+                    mappings[i].NestedFields,
+                    Nothing(),
+                    listIsOptional,
+                    enableRecursiveRenaming,
+                    enableRecursiveRenaming ? inverseFieldRenames : emptyInverseFieldRenames
+                );
             }
         }
+    }
+
+    /**
+     * Fills a tree of field mappings from the given yql struct type to protobuf message.
+     *
+     * @param fromType source yql type.
+     * @param toType target protobuf message type.
+     * @param mappings destination vector will be filled with field descriptors. Order of descriptors will match
+     *                the order of field names.
+     */
+    void FillFieldMappings(
+        const TStructType* fromType,
+        const Descriptor& toType,
+        TVector<TFieldMapping>& mappings,
+        const TMaybe<TString>& timestampColumn,
+        bool listIsOptional,
+        bool enableRecursiveRenaming,
+        const THashMap<TString, TString>& fieldRenames
+    ) {
+        THashMap<TString, TString> inverseFieldRenames;
+        for (const auto& [source, target]: fieldRenames) {
+            auto [iterator, emplaced] = inverseFieldRenames.emplace(target, source);
+            Y_ENSURE(emplaced, "Duplicate rename field found: " << source << " -> " << target);
+        }
+
+        FillFieldMappingsImpl(fromType, toType, mappings, timestampColumn, listIsOptional, enableRecursiveRenaming, inverseFieldRenames);
     }
 
     /**
@@ -624,6 +643,7 @@ namespace {
                 Worker_->GetInputType(), inputSpec.GetDescriptor(),
                 Mappings_, TimestampColumn_,
                 inputSpec.GetSchemaOptions().ListIsOptional,
+                inputSpec.GetSchemaOptions().EnableRecursiveRenaming,
                 inputSpec.GetSchemaOptions().FieldRenames
             );
         }
@@ -673,6 +693,7 @@ namespace {
                 OutputColumns_,
                 Nothing(),
                 outputSpec.GetSchemaOptions().ListIsOptional,
+                outputSpec.GetSchemaOptions().EnableRecursiveRenaming,
                 outputSpec.GetSchemaOptions().FieldRenames
             );
 
@@ -734,6 +755,7 @@ namespace {
                     OutputColumns_.back(),
                     Nothing(),
                     outputSpec.GetSchemaOptions().ListIsOptional,
+                    false,
                     {}
                 );
 

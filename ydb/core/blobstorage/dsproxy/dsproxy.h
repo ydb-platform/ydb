@@ -32,14 +32,13 @@ constexpr ui32 TypicalDisksInSubring = 8;
 
 constexpr ui32 MaxBatchedPutSize = 64 * 1024 - 512 - 5; // (MinHugeBlobInBytes - 1 - TDiskBlob::HugeBlobOverhead) for ssd and nvme
 
-const TDuration ProxyConfigurationTimeout = TDuration::Seconds(20);
-const ui32 ProxyRetryConfigurationInitialTimeout = 200;
-const ui32 ProxyRetryConfigurationMaxTimeout = 5000;
+const TDuration ProxyConfigurationTimeout = TDuration::Seconds(10);
 const ui64 UnconfiguredBufferSizeLimit = 32 << 20;
 
-const TDuration ProxyEstablishSessionsTimeout = TDuration::Seconds(100);
+const TDuration ProxyEstablishSessionsTimeout = TDuration::Seconds(5);
 
-const ui64 DsPutWakeupMs = 60000;
+const TDuration DsMinimumDelayBetweenPutWakeups = TDuration::Seconds(1);
+const TDuration DsMaximumPutTimeout = TDuration::Seconds(60);
 
 const ui64 BufferSizeThreshold = 1 << 20;
 
@@ -196,6 +195,7 @@ public:
         TMaybe<TGroupStat::EKind> LatencyQueueKind = {};
 
         std::optional<ui32> ForceGroupGeneration; // work only with this specific group generation and nothing else
+        bool DoSendDeathNote = true; // unschedules DSProxy timeout on termination, be careful with disabling
     };
 
     struct TTypeSpecificParameters {
@@ -223,6 +223,7 @@ public:
         , RacingDomains(&Info->GetTopology())
         , ExecutionRelay(std::move(params.Common.ExecutionRelay))
         , ForceGroupGeneration(params.Common.ForceGroupGeneration)
+        , DoSendDeathNote(params.Common.DoSendDeathNote)
     {
         if (ParentSpan) {
             const NWilson::TTraceId& parentTraceId = ParentSpan.GetTraceId();
@@ -328,6 +329,7 @@ private:
     bool FirstResponse = true;
     std::optional<ui32> ForceGroupGeneration;
     ui32 RacingGeneration = 0;
+    bool DoSendDeathNote;
 };
 
 void Encrypt(char *destination, const char *source, size_t shift, size_t sizeBytes, const TLogoBlobID &id,

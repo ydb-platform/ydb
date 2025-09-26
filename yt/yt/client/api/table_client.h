@@ -33,10 +33,12 @@ struct TTableReaderOptions
 {
     bool Unordered = false;
     bool OmitInaccessibleColumns = false;
+    bool OmitInaccessibleRows = false;
     bool EnableTableIndex = false;
     bool EnableRowIndex = false;
     bool EnableRangeIndex = false;
     bool EnableTabletIndex = false;
+    bool EnableAnyUnpacking = true;
     NTableClient::TTableReaderConfigPtr Config;
 };
 
@@ -320,9 +322,6 @@ struct TPartitionTablesOptions
 
     //! Whether to return cookies that can be fed to CreateTablePartitionReader.
     bool EnableCookies = false;
-
-    //! COMPAT(apollo1321): remove in 25.2 release.
-    bool UseNewSlicingImplementationInOrderedPool = true;
 
     //! COMPAT(apollo1321): remove in 25.2 release.
     bool UseNewSlicingImplementationInUnorderedPool = true;

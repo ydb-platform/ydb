@@ -62,6 +62,21 @@ void TStartDistributedWriteSessionCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void TPingDistributedWriteSessionCommand::Register(TRegistrar registrar)
+{
+    registrar.Parameter("session", &TThis::Session);
+}
+
+// -> Nothing
+void TPingDistributedWriteSessionCommand::DoExecute(ICommandContextPtr context)
+{
+    auto session = ConvertTo<TSignedDistributedWriteSessionPtr>(Session);
+    WaitFor(context->GetClient()->PingDistributedWriteSession(session, Options))
+        .ThrowOnError();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 void TFinishDistributedWriteSessionCommand::Register(TRegistrar registrar)
 {
     registrar.Parameter("session", &TThis::Session);

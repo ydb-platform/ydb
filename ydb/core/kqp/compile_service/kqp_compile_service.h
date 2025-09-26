@@ -19,6 +19,46 @@ enum class ECompileActorAction {
     SPLIT,
 };
 
+class TKqpQueryCacheSnapshot {
+public:
+    struct TEntry {
+        TKqpCompileResult::TConstPtr CompileResult;
+        TInstant LastTouched;
+    };
+
+    struct TUidComparator {
+        bool operator()(const TEntry& a, const TEntry& b) const {
+            return a.CompileResult->Uid < b.CompileResult->Uid;
+        }
+    };
+
+    struct TUidLowerBoundComparator {
+        bool operator()(const TEntry& entry, const TString& uid) const {
+            return entry.CompileResult->Uid < uid;
+        }
+    };
+
+    struct TUidUpperBoundComparator {
+        bool operator()(const TString& uid, const TEntry& entry) const {
+            return uid < entry.CompileResult->Uid;
+        }
+    };
+
+public:
+    TKqpQueryCacheSnapshot() = default;
+    void Clear();
+    void Insert(const TString& uid, const TKqpCompileResult::TConstPtr& compileResult, TInstant now);
+    void Erase(const TString& uid);
+    void Replace(const TString& uid, const TKqpCompileResult::TConstPtr& newResult);
+    void Touch(const TString& uid, TInstant now);
+    TVector<TEntry> GetSnapshot() const;
+    size_t Size() const noexcept { return Entries_.size(); }
+    bool Contains(const TString& uid) const { return Index_.contains(uid); }
+private:
+    TVector<TEntry> Entries_;
+    THashMap<TString, ui32> Index_;
+};
+
 // Cache is shared between query sessions, compile service and kqp proxy.
 // Currently we don't use RW lock, because of cache promotions during lookup:
 // in benchmark both versions (RW spinlock and adaptive W spinlock) show same
@@ -79,7 +119,7 @@ public:
         return ByteSize;
     }
 
-    THashSet<TKqpCompileResult::TConstPtr> GetSnapshot() const;
+    TVector<TKqpQueryCacheSnapshot::TEntry> GetSnapshot() const;
     size_t EraseExpiredQueries();
 
     void Clear();
@@ -135,7 +175,7 @@ private:
     ui64 ByteSize = 0;
     TDuration Ttl;
 
-    THashSet<TKqpCompileResult::TConstPtr> Snapshot;
+    TKqpQueryCacheSnapshot Snapshot;
     TAdaptiveLock Lock;
 };
 

@@ -309,6 +309,8 @@ public:
     bool HasCounter() {
         return std::get<NMetrics::EResource::Counter>(GetResourceCurrentValues()) > 0;
     }
+
+    void NotifyOnRestart(const TString& status, TSideEffects& sideEffects);
 };
 
 

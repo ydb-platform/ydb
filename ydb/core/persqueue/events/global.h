@@ -226,6 +226,7 @@ namespace TEvPersQueue {
     };
 
     struct TEvProposeTransaction : public TEventPreSerializedPB<TEvProposeTransaction, NKikimrPQ::TEvProposeTransaction, EvProposeTransaction> {
+        NWilson::TSpan ExecuteSpan;
     };
 
     struct TEvProposeTransactionBuilder: public TEvProposeTransaction {
@@ -247,6 +248,7 @@ namespace TEvPersQueue {
     };
 
     using TEvProposeTransactionAttach = TEvDataShard::TEvProposeTransactionAttach;
+    using TEvProposeTransactionAttachResult = TEvDataShard::TEvProposeTransactionAttachResult;
 
     struct TEvReadingPartitionFinishedRequest : public TEventPB<TEvReadingPartitionFinishedRequest, NKikimrPQ::TEvReadingPartitionFinishedRequest, EvReadingPartitionFinished> {
         TEvReadingPartitionFinishedRequest() = default;

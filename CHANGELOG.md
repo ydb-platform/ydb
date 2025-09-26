@@ -2,6 +2,8 @@
 
 ### Functionality
 
+* Added support for creating unique indexes on existing tables. This feature is enabled by setting the `enable_add_unique_index` feature flag in the cluster configuration. ([Vasily Gerasimov](https://github.com/UgnineSirdis))
+* Added support for encrypted exports to S3, allowing secure storage of exported data. This feature is enabled by setting the `enable_encrypted_export` feature flag in the cluster configuration. ([Vasily Gerasimov](https://github.com/UgnineSirdis))
 * 15186:Increased [the query text limit size](../dev/system-views#query-metrics) in system views from 4 KB to 10 KB. [#15186](https://github.com/ydb-platform/ydb/pull/15186) ([spuchin](https://github.com/spuchin))
 * 15693:Added a health check configuration that administrators can customize: the number of node restarts, tablets, the time difference between database dynodes,
 and timeout (by default, the maximum response time from healthcheck). Documentation is under construction. [#15693](https://github.com/ydb-platform/ydb/pull/15693) ([Andrei Rykov](https://github.com/StekPerepolnen))
@@ -172,4 +174,3 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 22620:![profdata](https://github.com/user-attachments/assets/81a7f464-2890-4c8f-81f4-01cebe274b49) [#22620](https://github.com/ydb-platform/ydb/pull/22620) ([Oleg Doronin](https://github.com/dorooleg))
 * 22473:The compute scheduler tries to utilize all pools fair-share by resuming throttled tasks [#22473](https://github.com/ydb-platform/ydb/pull/22473) ([Ivan](https://github.com/abyss7))
 * 22311:Invoke TRope::Compact in OnVGetResult only when occupied memory exceeds threshold [#22311](https://github.com/ydb-platform/ydb/pull/22311) ([Anton Myagkov](https://github.com/antonmyagkov))
-

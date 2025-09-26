@@ -9,7 +9,7 @@ def post_install(self):
 boost_endian = NixSourceProject(
     nixattr="boost_endian",
     arcdir=boost.make_arcdir("endian"),
-    owners=["g:cpp-contrib", "g:taxi-common"],
+    owners=["g:cpp-contrib"],
     copy_sources=[
         "include/boost/",
     ],

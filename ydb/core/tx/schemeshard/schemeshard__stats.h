@@ -1,6 +1,8 @@
 #pragma once
 
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
+#include <ydb/core/protos/counters_schemeshard.pb.h>
+
 
 namespace NKikimr {
 namespace NSchemeShard {

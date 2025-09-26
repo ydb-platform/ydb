@@ -1,5 +1,5 @@
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
-
+ROOT=$(ya dump root)
 fmt () {
         file=${1}
         echo $file
@@ -11,8 +11,8 @@ fmt-all () {
         for FILE in $(git diff --cached --name-only);
         do
                 if [[ "$FILE" == *.cpp || "$FILE" == *.h ]]; then
-                        fmt $HOME/ydbwork/ydb/$FILE
-                        git add $HOME/ydbwork/ydb/$FILE
+                        fmt $ROOT/$FILE
+                        git add $ROOT/$FILE
                         echo "Processing text file: $FILE"
                 fi
         done

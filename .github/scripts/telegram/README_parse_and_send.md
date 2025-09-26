@@ -111,6 +111,7 @@ python .github/scripts/telegram/parse_and_send_team_issues.py \
 ### Periodic Trend Updates Mode
 - ✅ Weekly and monthly trend reports
 - ✅ Automatic team discovery from YDB data
+- ✅ Team blacklist support (exclude specific teams from periodic updates)
 - ✅ Fallback to default channel for teams without specific configuration
 - ✅ Trend charts with 30-day history
 - ✅ Period-over-period change calculations
@@ -191,6 +192,22 @@ The `--team-channels` parameter expects a JSON configuration:
 - `YDB_ENDPOINT` - YDB database endpoint
 - `YDB_DATABASE` - YDB database path
 - `YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS` - Path to YDB credentials file
+
+## Team Blacklist
+
+The script supports a blacklist for periodic updates (weekly/monthly). Teams in the blacklist will be skipped during periodic trend updates but will still receive immediate mute-change notifications.
+
+To add teams to the blacklist, edit the `PERIOD_UPDATE_BLACKLIST` constant in the script:
+
+```python
+# Teams blacklisted from weekly/monthly updates
+PERIOD_UPDATE_BLACKLIST = {
+    'storage',  # Example: storage team
+    'team-name'  # Add more teams as needed
+}
+```
+
+**Note:** The blacklist only affects periodic updates (`--period-update` mode), not immediate mute-change notifications (`--on-mute-change-update` mode).
 
 ## Dependencies
 

@@ -6,6 +6,7 @@
 #include <ydb/core/protos/msgbus_pq.pb.h>
 #include <ydb/core/protos/msgbus.pb.h>
 
+#include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/client/server/msgbus_server_pq_metacache.h>
 #include <ydb/core/grpc_services/service_scheme.h>
@@ -23,9 +24,9 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/public/lib/base/msgbus_status.h>
 
-#define LOG_E(stream) LOG_ERROR_S(ctx, NKikimrServices::PQ_FETCH_REQUEST, stream)
-#define LOG_I(stream) LOG_INFO_S(ctx, NKikimrServices::PQ_FETCH_REQUEST, stream)
-#define LOG_D(stream) LOG_DEBUG_S(ctx, NKikimrServices::PQ_FETCH_REQUEST, stream)
+#define LOG_E(stream) LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::PQ_FETCH_REQUEST, stream)
+#define LOG_I(stream) LOG_INFO_S(*NActors::TlsActivationContext, NKikimrServices::PQ_FETCH_REQUEST, stream)
+#define LOG_D(stream) LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PQ_FETCH_REQUEST, stream)
 
 namespace NKikimr::NPQ {
 
@@ -34,7 +35,8 @@ using namespace NSchemeCache;
 
 
 namespace {
-    static constexpr TDuration DefaultTimeout = TDuration::MilliSeconds(30000);
+    static constexpr TDuration MaxTimeout = TDuration::MilliSeconds(30000);
+    static constexpr ui64 TimeoutWakeupTag = 1000;
 }
 
 struct TTabletInfo { // ToDo !! remove
@@ -67,20 +69,6 @@ using namespace NActors;
 
 class TPQFetchRequestActor : public TActorBootstrapped<TPQFetchRequestActor>
                            , private TRlHelpers {
-
-struct TEvPrivate {
-    enum EEv {
-        EvTimeout = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
-        EvEnd
-    };
-
-    static_assert(EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE)");
-
-    struct TEvTimeout : NActors::TEventLocal<TEvTimeout, EvTimeout> {
-    };
-
-};
-
 private:
     TFetchRequestSettings Settings;
 
@@ -110,6 +98,8 @@ private:
     ui64 PendingQuotaAmount;
     bool AnyCdcTopicInRequest = false;
 
+    TActorId LongTimer;
+
     std::unordered_map<TString, TString> PrivateTopicPathToCdcPath;
     std::unordered_map<TString, TString> CdcPathToPrivateTopicPath;
 
@@ -131,7 +121,7 @@ public:
         , PartTabletsRequested(0)
         , RequesterId(requesterId)
     {
-        ui64 deadline = TAppData::TimeProvider->Now().MilliSeconds() + Min<ui32>(Settings.MaxWaitTimeMs, 30000);
+        ui64 deadline = TAppData::TimeProvider->Now().MilliSeconds() + Min<ui64>(Settings.MaxWaitTimeMs, MaxTimeout.MilliSeconds());
         FetchRequestBytesLeft = Settings.TotalMaxBytes;
         for (const auto& p : Settings.Partitions) {
             if (p.Topic.empty()) {
@@ -156,6 +146,10 @@ public:
     }
 
     void Handle(TEvents::TEvWakeup::TPtr& ev, const TActorContext& ctx) {
+        if (ev->Get()->Tag == TimeoutWakeupTag) {
+            HandleTimeout(ctx);
+            return;
+        }
         const auto tag = static_cast<EWakeupTag>(ev->Get()->Tag);
         OnWakeup(tag);
         switch (tag) {
@@ -181,11 +175,13 @@ public:
         if (Response) {
             return SendReplyAndDie(std::move(Response), ctx);
         }
-        LOG_D("scheduling HasDataInfoResponse in " << Settings.MaxWaitTimeMs);
-        ctx.Schedule(TDuration::MilliSeconds(Min<ui32>(Settings.MaxWaitTimeMs, 30000)), new TEvPersQueue::TEvHasDataInfoResponse);
+
+        // We add 6 second because message from partition can be in flight and
+        // wakeup period in the partition is 5 seconds. timeout must be more
+        LongTimer = CreateLongTimer(Min<TDuration>(MaxTimeout, TDuration::MilliSeconds(Settings.MaxWaitTimeMs)) + TDuration::Seconds(6),
+            new IEventHandle(ctx.SelfID, ctx.SelfID, new TEvents::TEvWakeup(TimeoutWakeupTag)));
 
         SendSchemeCacheRequest(ctx);
-        Schedule(DefaultTimeout, new TEvPrivate::TEvTimeout());
         Become(&TPQFetchRequestActor::StateFunc);
     }
 
@@ -428,9 +424,9 @@ public:
             } else {
                 const auto& tabletInfo = TabletInfo[tabletId];
                 auto& fetchInfo = it->second.FetchInfo[part];
-                LOG_D("sending HasDataInfoResponse " << fetchInfo->Record.DebugString());
+                LOG_D("Sending TEvPersQueue::TEvHasDataInfo " << fetchInfo->Record.DebugString());
 
-                NTabletPipe::SendData(ctx, tabletInfo.PipeClient, it->second.FetchInfo[part].Release());
+                NTabletPipe::SendData(ctx, tabletInfo.PipeClient, fetchInfo.Release());
                 ++PartTabletsRequested;
             }
         }
@@ -481,12 +477,16 @@ public:
 
     void HandleTimeout(const TActorContext& ctx) {
         TString reason = "Timeout while waiting for response, may be just slow, Marker# PQ11";
-        return SendReplyAndDie(CreateErrorReply(Ydb::StatusIds::GENERIC_ERROR, reason), ctx);
+        LOG_D(reason);
+        return SendReplyAndDie(CreateErrorReply(Ydb::StatusIds::TIMEOUT, reason), ctx);
     }
 
     void Die(const TActorContext& ctx) override {
         for (auto& actor: PQClient) {
             NTabletPipe::CloseClient(ctx, actor);
+        }
+        if (LongTimer) {
+            Send(LongTimer, new TEvents::TEvPoison());
         }
         TRlHelpers::PassAway(SelfId());
         TActorBootstrapped<TPQFetchRequestActor>::Die(ctx);
@@ -669,7 +669,6 @@ public:
             HFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleSchemeCacheResponse);
             HFunc(NKikimr::NReplication::TEvYdbProxy::TEvAlterTopicResponse, Handle);
             HFunc(TEvPersQueue::TEvHasDataInfoResponse, Handle);
-            CFunc(TEvPrivate::EvTimeout, HandleTimeout);
             CFunc(NActors::TEvents::TSystem::PoisonPill, Die);
     )
 };

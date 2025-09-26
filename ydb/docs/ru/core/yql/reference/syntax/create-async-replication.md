@@ -23,19 +23,7 @@ WITH (option = value [, ...])
 * `CA_CERT` — [корневой сертификат для TLS](../../../concepts/connect.md#tls-cert). Необязательный параметр. Может быть указан, если база-источник поддерживает режим обмена данными с шифрованием (`CONNECTION_STRING` начинается с `grpcs://`).
 * Настройки для аутентификации в базе-источнике одним из способов (обязательно):
 
-  * С помощью [токена](../../../recipes/ydb-sdk/auth-access-token.md):
-
-    * `TOKEN_SECRET_NAME` — имя [секрета](../../../concepts/datamodel/secrets.md), содержащего токен.
-
-  * С помощью [логина и пароля](../../../recipes/ydb-sdk/auth-static.md):
-
-    * `USER` — имя пользователя.
-    * `PASSWORD_SECRET_NAME` — имя [секрета](../../../concepts/datamodel/secrets.md), содержащего пароль.
-
-  * С помощью [делегированного сервисного аккаунта](https://yandex.cloud/ru/docs/iam/concepts/service-control):
-
-    * `SERVICE_ACCOUNT_ID` — идентификатор сервисного аккаунта.
-    * `INITIAL_TOKEN_SECRET_NAME` — имя [секрета](../../../concepts/datamodel/secrets.md), содержащего токен от сервисного аккаунта. Используется для первоначальной инициализации.
+  {% include [x](_includes/async_replication_authentification.md) %}
 
 * `CONSISTENCY_LEVEL` — [уровень согласованности реплицируемых данных](../../../concepts/async-replication.md#consistency-levels):
   * `ROW` — [согласованность данных уровня строки](../../../concepts/async-replication.md#consistency-level-row). Режим по умолчанию.

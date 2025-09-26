@@ -32,6 +32,9 @@ def send_telegram_message(bot_token, chat_id, message_or_file, parse_mode="Markd
     Returns:
         bool: True if successful, False otherwise
     """
+    print(f"🔍 send_telegram_message called with photo_path: {photo_path}")
+    print(f"🔍 message_or_file length: {len(message_or_file) if message_or_file else 'None'}")
+    print(f"🔍 chat_id: {chat_id}, message_thread_id: {message_thread_id}")
     # Check if message_or_file is a file path
     # If the string is too long, it's definitely not a file path
     if len(message_or_file) > 255:
@@ -144,13 +147,14 @@ def _send_single_message(bot_token, chat_id, message, parse_mode, message_thread
                     return False
                 
             result = response.json()
+            print(f"🔍 Full Telegram API Response: {result}")
+            
             if result.get('ok'):
                 thread_info = f" (thread {message_thread_id})" if message_thread_id is not None else ""
                 print(f"✅ Message sent successfully to chat {chat_id}{thread_info}")
                 return True
             else:
                 print(f"❌ Telegram API Error: {result.get('description', 'Unknown error')}")
-                print(f"❌ Full response: {result}")
                 if attempt < max_retries:
                     print(f"⏳ Waiting {retry_delay} seconds before retry...")
                     continue
@@ -233,13 +237,14 @@ def _send_photo(bot_token, chat_id, photo_path, caption, parse_mode, message_thr
                         return False
                     
                 result = response.json()
+                print(f"🔍 Full Telegram API Response: {result}")
+                
                 if result.get('ok'):
                     thread_info = f" (thread {message_thread_id})" if message_thread_id is not None else ""
                     print(f"✅ Photo sent successfully to chat {chat_id}{thread_info}")
                     return True
                 else:
                     print(f"❌ Telegram API Error: {result.get('description', 'Unknown error')}")
-                    print(f"❌ Full response: {result}")
                     if attempt < max_retries:
                         print(f"⏳ Waiting {retry_delay} seconds before retry...")
                         continue

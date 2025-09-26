@@ -334,13 +334,23 @@ def create_trend_plot(team_name, trend_data):
         print(f"📈 Created trend plot for {team_name}: {tmp_path}")
         print(f"📁 File size: {os.path.getsize(tmp_path)} bytes")
         
+        # Also save to debug directory
+        debug_dir = "/Users/kirrysin/Documents/temp"
+        os.makedirs(debug_dir, exist_ok=True)
+        debug_path = os.path.join(debug_dir, f"trend_{team_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png")
+        
+        # Copy to debug directory
+        import shutil
+        shutil.copy2(tmp_path, debug_path)
+        print(f"🔍 Debug plot saved to: {debug_path}")
+        
         # Read and encode as base64
         with open(tmp_path, 'rb') as f:
             image_data = f.read()
         
         print(f"📊 Base64 data length: {len(base64.b64encode(image_data).decode('utf-8'))} characters")
         
-        # Clean up
+        # Clean up temporary file (but keep debug file)
         os.unlink(tmp_path)
         plt.close()
         
@@ -614,6 +624,8 @@ def send_team_messages(teams, bot_token, delay=2, max_retries=5, retry_delay=10,
             
             # Get trend plot if requested
             plot_data = None
+            print(f"🔍 Plot settings: include_plots={include_plots}, ydb_config={ydb_config is not None}, MATPLOTLIB_AVAILABLE={MATPLOTLIB_AVAILABLE}")
+            
             if include_plots and ydb_config and MATPLOTLIB_AVAILABLE:
                 print(f"📊 Getting trend data for team: {team_name}")
                 trend_data = get_monthly_trend_data(
@@ -627,7 +639,7 @@ def send_team_messages(teams, bot_token, delay=2, max_retries=5, retry_delay=10,
                     print(f"📊 Trend data for {team_name}: {len(trend_data)} days")
                     plot_data = create_trend_plot(team_name, trend_data)
                     if plot_data:
-                        print(f"📈 Created trend plot for team: {team_name}")
+                        print(f"📈 Created trend plot for team: {team_name} (data length: {len(plot_data)})")
                     else:
                         print(f"⚠️ Could not create trend plot for team: {team_name}")
                 else:
@@ -636,6 +648,8 @@ def send_team_messages(teams, bot_token, delay=2, max_retries=5, retry_delay=10,
                 print(f"⚠️ Matplotlib not available, skipping plot for team: {team_name}")
             elif include_plots and not ydb_config:
                 print(f"⚠️ YDB config not available, skipping plot for team: {team_name}")
+            else:
+                print(f"ℹ️ Plots disabled for team: {team_name}")
             
             # Send message with or without plot
             if plot_data:
@@ -647,8 +661,21 @@ def send_team_messages(teams, bot_token, delay=2, max_retries=5, retry_delay=10,
                 print(f"📁 Saved plot to temporary file: {tmp_path}")
                 print(f"📁 File size: {os.path.getsize(tmp_path)} bytes")
                 
+                # Also save to debug directory for final file
+                debug_dir = "/Users/kirrysin/Documents/temp"
+                os.makedirs(debug_dir, exist_ok=True)
+                final_debug_path = os.path.join(debug_dir, f"final_{team_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png")
+                import shutil
+                shutil.copy2(tmp_path, final_debug_path)
+                print(f"🔍 Final debug plot saved to: {final_debug_path}")
+                
                 try:
-                    if send_telegram_message(bot_token, team_chat_id, message, "Markdown", team_thread_id, True, max_retries, retry_delay, tmp_path):
+                    print(f"📤 Sending message with plot for team: {team_name}")
+                    print(f"📤 Chat ID: {team_chat_id}, Thread ID: {team_thread_id}")
+                    print(f"📤 Photo path: {tmp_path}")
+                    print(f"📤 Message length: {len(message)} characters")
+                    
+                    if send_telegram_message(bot_token, team_chat_id, message, "Markdown", team_thread_id, True, max_retries, retry_delay, photo_path=tmp_path):
                         sent_count += 1
                         print(f"✅ Message with plot sent for team: {team_name}")
                     else:
@@ -660,6 +687,10 @@ def send_team_messages(teams, bot_token, delay=2, max_retries=5, retry_delay=10,
                         print(f"🗑️ Cleaned up temporary file: {tmp_path}")
             else:
                 # Send regular message
+                print(f"📤 Sending regular message for team: {team_name}")
+                print(f"📤 Chat ID: {team_chat_id}, Thread ID: {team_thread_id}")
+                print(f"📤 Message length: {len(message)} characters")
+                
                 if send_telegram_message(bot_token, team_chat_id, message, "Markdown", team_thread_id, True, max_retries, retry_delay):
                     sent_count += 1
                     print(f"✅ Message sent for team: {team_name}")

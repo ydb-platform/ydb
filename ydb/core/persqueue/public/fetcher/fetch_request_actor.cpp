@@ -33,14 +33,10 @@ namespace {
     static constexpr ui64 TimeoutWakeupTag = 1000;
 }
 
-struct TTabletInfo { // ToDo !! remove
-    ui32 NodeId = 0;
+struct TTabletInfo {
     TString Topic;
     TActorId PipeClient;
     bool BrokenPipe = false;
-    bool IsBalancer = false;
-    TVector<NKikimrPQ::TOffsetsResponse::TPartResult> OffsetResponses;
-    TVector<NKikimrPQ::TStatusResponse::TPartResult> StatusResponses;
 };
 
 struct TTopicInfo {

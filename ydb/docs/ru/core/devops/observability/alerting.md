@@ -18,16 +18,17 @@ Prometheus Alerting Rules — это набор правил, написанны
 **Описание:** Правило отслеживает общее состояние здоровья {{ ydb-short-name }} кластера. Срабатывает, когда статус здоровья отличается от `GOOD`, что может указывать на проблемы с доступностью или производительностью базы данных.
 **Что делать:** Это общий алерт системы самодиагностики, в сообщении будет указана причина, по которой сработал алерт.
 **Пример сработавшего алерта:**
-```
-description:	Health check failed for YDB.
-		- Status: RED
-		- Message: VDisk is not available
-		- Type: VDISK
-		- Database: /Root
-		- Domain: Root
-		- Instance: myt0-7514.search.yandex.net
-		This issue has been active for more than 1 minute.
-summary:	YDB Health Issue in /Root (Status: RED)
+
+```text
+description: Health check failed for YDB.
+  - Status: RED
+  - Message: VDisk is not available
+  - Type: VDISK
+  - Database: /Root
+  - Domain: Root
+  - Instance: myt0-7514.search.yandex.net
+  This issue has been active for more than 1 minute.
+summary: YDB Health Issue in /Root (Status: RED)
 ```
 
 ```yaml

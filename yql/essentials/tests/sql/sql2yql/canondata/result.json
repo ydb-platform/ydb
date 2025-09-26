@@ -3261,6 +3261,13 @@
             "uri": "https://{canondata_backend}/1937150/ec0019724df75083b0e89cab22f57e10ef36744e/resource.tar.gz#test_sql2yql.test_expr-int_literals_negative_typed_/sql.yql"
         }
     ],
+    "test_sql2yql.test[expr-invalid_unpickle_fail]": [
+        {
+            "checksum": "94ba064e4a883d561c5240c8c4a07b0e",
+            "size": 1086,
+            "uri": "https://{canondata_backend}/1942173/caf56179578808380b1ed28f5cb82e4673ba4319/resource.tar.gz#test_sql2yql.test_expr-invalid_unpickle_fail_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[expr-is_null]": [
         {
             "checksum": "c1b5a9c484e32e61d9ec2af131d651d4",
@@ -10916,6 +10923,11 @@
     "test_sql_format.test[expr-int_literals_negative_typed]": [
         {
             "uri": "file://test_sql_format.test_expr-int_literals_negative_typed_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[expr-invalid_unpickle_fail]": [
+        {
+            "uri": "file://test_sql_format.test_expr-invalid_unpickle_fail_/formatted.sql"
         }
     ],
     "test_sql_format.test[expr-is_null]": [

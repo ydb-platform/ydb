@@ -146,6 +146,33 @@ void TOperationsManager::AbortTransactionOnComplete(TColumnShard& owner, const u
     OnTransactionFinishOnComplete(aborted, *lock, txId);
 }
 
+void TOperationsManager::AbortLockOnExecute(TColumnShard& owner, const ui64 lockId, NTabletFlatExecutor::TTransactionContext& txc) {
+    auto* lock = GetLockOptional(lockId);
+    if (!lock) {
+        return;
+    }
+
+    for (auto&& opPtr : lock->GetWriteOperations()) {
+        opPtr->AbortOnExecute(owner, txc);
+        RemoveOperationOnExecute(opPtr, txc);
+    }
+}
+
+void TOperationsManager::AbortLockOnComplete(TColumnShard& owner, const ui64 lockId) {
+    auto* lock = GetLockOptional(lockId);
+    if (!lock) {
+        return;
+    }
+
+    for (auto&& opPtr : lock->GetWriteOperations()) {
+        opPtr->AbortOnComplete(owner);
+        RemoveOperationOnComplete(opPtr);
+    }
+
+    lock->RemoveInteractions(InteractionsContext);
+    LockFeatures.erase(lockId);
+}
+
 void TOperationsManager::OnTransactionFinishOnExecute(
     const TVector<TWriteOperation::TPtr>& operations, const TLockFeatures& lock, const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc) {
     for (auto&& op : operations) {

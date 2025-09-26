@@ -23,6 +23,8 @@ private:
     const ui64 Generation;
     std::atomic<bool> Broken = false;
     std::atomic<bool> Writes = false;
+    std::atomic<bool> Deleted = false;
+    std::atomic<bool> Aborted = false;
     friend class TLockFeatures;
 
 public:
@@ -48,6 +50,14 @@ public:
 
     ui64 GetInternalGenerationCounter() const {
         return IsBroken() ? TSysTables::TLocksTable::TLock::ESetErrors::ErrorBroken : 0;
+    }
+
+    bool isDeleted() const {
+        return Deleted;
+    }
+
+    bool isAborted() const {
+        return Aborted;
     }
 };
 
@@ -78,7 +88,6 @@ public:
         return SharingInfo->GetInternalGenerationCounter();
     }
 
-
     void AddWriteOperation(const TWriteOperation::TPtr op) {
         WriteOperations.push_back(op);
         SharingInfo->Writes = true;
@@ -94,6 +103,22 @@ public:
 
     bool IsBroken() const {
         return SharingInfo->IsBroken();
+    }
+
+    void SetDeleted() {
+        SharingInfo->Deleted = true;
+    }
+
+    bool IsDeleted() const {
+        return SharingInfo->isDeleted();
+    }
+
+    void SetAborted() {
+        SharingInfo->Aborted = true;
+    }
+
+    bool IsAborted() const {
+        return SharingInfo->isAborted();
     }
 
     bool IsCommitted(const ui64 lockId) const {
@@ -203,6 +228,8 @@ public:
     void LinkTransactionOnComplete(const ui64 lockId, const ui64 txId);
     void AbortTransactionOnExecute(TColumnShard& owner, const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc);
     void AbortTransactionOnComplete(TColumnShard& owner, const ui64 txId);
+    void AbortLockOnExecute(TColumnShard& owner, const ui64 lockId, NTabletFlatExecutor::TTransactionContext& txc);
+    void AbortLockOnComplete(TColumnShard& owner, const ui64 lockId);
 
     std::optional<ui64> GetLockForTx(const ui64 txId) const;
     std::optional<ui64> GetLockForTxOptional(const ui64 txId) const {

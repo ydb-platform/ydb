@@ -55,6 +55,7 @@ python .github/scripts/telegram/parse_and_send_team_issues.py \
 - `--ydb-credentials` - Path to YDB service account credentials JSON file (or use YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS env var)
 - `--no-stats` - Skip fetching muted tests statistics from YDB
 - `--include-plots` - Include trend plots in messages (requires matplotlib)
+- `--debug-plots-dir` - Directory to save debug plot files (enables debug mode)
 
 ## Features
 
@@ -142,4 +143,12 @@ python .github/scripts/telegram/parse_and_send_team_issues.py \
   --bot-token "YOUR_BOT_TOKEN" \
   --include-plots \
   --use-yesterday
+
+# Send messages with debug plots saved to custom directory
+python .github/scripts/telegram/parse_and_send_team_issues.py \
+  --file "formatted_results.txt" \
+  --team-channels '{"teams": {"team-name": {"responsible": ["@user1"], "channel": "channel-name"}}, "channels": {"channel-name": "123456789/1"}}' \
+  --bot-token "YOUR_BOT_TOKEN" \
+  --include-plots \
+  --debug-plots-dir "/path/to/debug/plots"
 ```

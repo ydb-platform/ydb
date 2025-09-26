@@ -122,6 +122,108 @@ def _execute_ydb_query(database_endpoint, database_path, query, description):
         return None
 
 
+def get_all_team_data(database_endpoint=None, database_path=None, credentials_path=None, use_yesterday=False):
+    """
+    Get all team data (stats + trends) from YDB in one optimized query.
+    
+    Args:
+        database_endpoint (str): YDB database endpoint
+        database_path (str): YDB database path
+        credentials_path (str): Path to service account credentials JSON file
+        use_yesterday (bool): If True, use yesterday's data for development convenience
+        
+    Returns:
+        dict: Dictionary with team names as keys and their data, or None if error
+    """
+    # Set up connection
+    endpoint, path = _setup_ydb_connection(database_endpoint, database_path, credentials_path)
+    if not endpoint or not path:
+        return None
+    
+    # Calculate target date
+    if use_yesterday:
+        target_date = datetime.now() - timedelta(days=1)
+    else:
+        target_date = datetime.now()
+    
+    yesterday_date = target_date - timedelta(days=1)
+    start_date = target_date - timedelta(days=30)
+    
+    # Single optimized query for all data
+    all_data_query = f"""
+    SELECT 
+        owner,
+        date_window,
+        COUNT(*) as daily_count,
+        SUM(CASE WHEN mute_state_change_date = Date('{target_date.strftime('%Y-%m-%d')}') THEN 1 ELSE 0 END) as today_count
+    FROM `test_results/analytics/test_muted_monitor_mart`
+    WHERE date_window >= Date('{start_date.strftime('%Y-%m-%d')}')
+    AND date_window <= Date('{target_date.strftime('%Y-%m-%d')}')
+    AND is_muted = 1
+    AND branch = 'main'
+    AND build_type = 'relwithdebinfo'
+    GROUP BY owner, date_window
+    ORDER BY owner, date_window
+    """
+    
+    # Execute query
+    results = _execute_ydb_query(endpoint, path, all_data_query, f"Getting all team data from {start_date.strftime('%Y-%m-%d')} to {target_date.strftime('%Y-%m-%d')}")
+    if results is None:
+        return None
+    
+    # Process results
+    team_data = {}
+    base_date = datetime(1970, 1, 1)
+    
+    for row in results:
+        owner = row.owner
+        if not owner:
+            continue
+            
+        # Handle both "TEAM:@ydb-platform/teamname" and "Unknown" formats
+        if owner.startswith('TEAM:@ydb-platform/'):
+            team_name = owner.split('/')[-1]
+        elif owner == 'Unknown':
+            team_name = 'Unknown'
+        else:
+            # Skip other formats
+            continue
+        
+        if team_name not in team_data:
+            team_data[team_name] = {
+                'stats': {'total': 0, 'today': 0, 'minus_today': 0},
+                'trend': {}
+            }
+        
+        # Convert days since epoch to date
+        date_obj = base_date + timedelta(days=row.date_window)
+        date_str = date_obj.strftime('%Y-%m-%d')
+        
+        # Add to trend data
+        team_data[team_name]['trend'][date_str] = row.daily_count
+        
+        # Update stats for target date
+        if date_str == target_date.strftime('%Y-%m-%d'):
+            team_data[team_name]['stats']['total'] = row.daily_count
+            team_data[team_name]['stats']['today'] = row.today_count
+    
+    # Calculate "minus today" for each team
+    for team_name, data in team_data.items():
+        trend = data['trend']
+        yesterday_str = yesterday_date.strftime('%Y-%m-%d')
+        
+        if yesterday_str in trend:
+            yesterday_total = trend[yesterday_str]
+            today_total = data['stats']['total']
+            today_new = data['stats']['today']
+            
+            # minus_today = yesterday_total - (today_total - today_new)
+            data['stats']['minus_today'] = max(0, yesterday_total - (today_total - today_new))
+    
+    print(f"📊 Processed data for {len(team_data)} teams")
+    return team_data
+
+
 def get_muted_tests_stats(database_endpoint=None, database_path=None, credentials_path=None, use_yesterday=False):
     """
     Get statistics about muted tests from YDB by team.
@@ -135,81 +237,16 @@ def get_muted_tests_stats(database_endpoint=None, database_path=None, credential
     Returns:
         dict: Dictionary with team names as keys and {'total': count, 'today': count} as values, or None if error
     """
-    # Set up connection
-    endpoint, path = _setup_ydb_connection(database_endpoint, database_path, credentials_path)
-    if not endpoint or not path:
+    
+    # Use the optimized function to get all data
+    all_data = get_all_team_data(database_endpoint, database_path, credentials_path, use_yesterday)
+    if all_data is None:
         return None
     
-    # Calculate target date
-    if use_yesterday:
-        target_date = datetime.now() - timedelta(days=1)
-    else:
-        target_date = datetime.now()
-    
-    # Query for team statistics
-    stats_query = f"""
-    SELECT
-        owner,
-        COUNT(*) as total_count,
-        SUM(CASE WHEN mute_state_change_date = Date('{target_date.strftime('%Y-%m-%d')}') THEN 1 ELSE 0 END) as today_count
-    FROM `test_results/analytics/test_muted_monitor_mart`
-    WHERE date_window = Date('{target_date.strftime('%Y-%m-%d')}')
-    AND is_muted = 1
-    AND branch = 'main'
-    AND build_type = 'relwithdebinfo'
-    GROUP BY owner
-    """
-    
-    # Query for yesterday's count (for calculating "minus today")
-    yesterday_date = target_date - timedelta(days=1)
-    yesterday_query = f"""
-    SELECT
-        owner,
-        COUNT(*) as yesterday_count
-    FROM `test_results/analytics/test_muted_monitor_mart`
-    WHERE date_window = Date('{yesterday_date.strftime('%Y-%m-%d')}')
-    AND is_muted = 1
-    AND branch = 'main'
-    AND build_type = 'relwithdebinfo'
-    GROUP BY owner
-    """
-    
-    # Execute both queries
-    results = _execute_ydb_query(endpoint, path, stats_query, f"Getting muted tests statistics for {target_date.strftime('%Y-%m-%d')}")
-    if results is None:
-        return None
-    
-    yesterday_results = _execute_ydb_query(endpoint, path, yesterday_query, f"Getting yesterday's muted tests count for {yesterday_date.strftime('%Y-%m-%d')}")
-    if yesterday_results is None:
-        print("⚠️ Could not get yesterday's data, skipping 'minus today' calculation")
-        yesterday_results = []
-    
-    # Process today's results
+    # Extract just the stats part
     team_stats = {}
-    for row in results:
-        owner = row.owner
-        if owner and owner.startswith('TEAM:@ydb-platform/'):
-            team_name = owner.split('/')[-1]
-            team_stats[team_name] = {
-                'total': row.total_count,
-                'today': row.today_count,
-                'minus_today': 0  # Will be calculated below
-            }
-    
-    # Process yesterday's results and calculate "minus today"
-    yesterday_counts = {}
-    for row in yesterday_results:
-        owner = row.owner
-        if owner and owner.startswith('TEAM:@ydb-platform/'):
-            team_name = owner.split('/')[-1]
-            yesterday_counts[team_name] = row.yesterday_count
-    
-    # Calculate "minus today" for each team
-    for team_name, stats in team_stats.items():
-        yesterday_count = yesterday_counts.get(team_name, 0)
-        # minus_today = yesterday_count - (today_total - today_newly_muted)
-        # This gives us how many were unmuted today
-        stats['minus_today'] = max(0, yesterday_count - (stats['total'] - stats['today']))
+    for team_name, data in all_data.items():
+        team_stats[team_name] = data['stats']
     
     print(f"📊 Found statistics for {len(team_stats)} teams")
     return team_stats
@@ -229,59 +266,29 @@ def get_monthly_trend_data(database_endpoint=None, database_path=None, credentia
     Returns:
         dict: Dictionary with dates as keys and counts as values, or None if error
     """
-    # Set up connection
-    endpoint, path = _setup_ydb_connection(database_endpoint, database_path, credentials_path)
-    if not endpoint or not path:
+    # Use the optimized function to get all data
+    all_data = get_all_team_data(database_endpoint, database_path, credentials_path, use_yesterday)
+    if all_data is None:
         return None
     
-    # Calculate date range (last 30 days)
-    if use_yesterday:
-        end_date = datetime.now() - timedelta(days=1)
+    # Extract trend data for the specific team
+    if team_name in all_data:
+        trend_data = all_data[team_name]['trend']
+        print(f"📊 Found trend data for {len(trend_data)} days for team '{team_name}'")
+        return trend_data
     else:
-        end_date = datetime.now()
-    start_date = end_date - timedelta(days=30)
-    
-    # Query for monthly trend data
-    trend_query = f"""
-    SELECT 
-        date_window,
-        COUNT(*) as daily_count
-    FROM `test_results/analytics/test_muted_monitor_mart`
-    WHERE date_window >= Date('{start_date.strftime('%Y-%m-%d')}')
-    AND date_window <= Date('{end_date.strftime('%Y-%m-%d')}')
-    AND is_muted = 1
-    AND branch = 'main'
-    AND build_type = 'relwithdebinfo'
-    AND owner = 'TEAM:@ydb-platform/{team_name}'
-    GROUP BY date_window
-    ORDER BY date_window
-    """
-    
-    # Execute query
-    results = _execute_ydb_query(endpoint, path, trend_query, f"Getting monthly trend data for team '{team_name}' from {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}")
-    if results is None:
+        print(f"⚠️ No data found for team '{team_name}'")
         return None
-    
-    # Process results
-    trend_data = {}
-    base_date = datetime(1970, 1, 1)
-    for row in results:
-        # Convert days since epoch to date
-        date_obj = base_date + timedelta(days=row.date_window)
-        date_str = date_obj.strftime('%Y-%m-%d')
-        trend_data[date_str] = row.daily_count
-    
-    print(f"📊 Found trend data for {len(trend_data)} days")
-    return trend_data
 
 
-def create_trend_plot(team_name, trend_data):
+def create_trend_plot(team_name, trend_data, debug_dir=None):
     """
     Create a trend plot for muted tests.
     
     Args:
         team_name (str): Team name
         trend_data (dict): Dictionary with dates as keys and counts as values
+        debug_dir (str): Directory to save debug plot files (if None, debug mode is disabled)
         
     Returns:
         str: Base64 encoded image data, or None if error
@@ -334,15 +341,15 @@ def create_trend_plot(team_name, trend_data):
         print(f"📈 Created trend plot for {team_name}: {tmp_path}")
         print(f"📁 File size: {os.path.getsize(tmp_path)} bytes")
         
-        # Also save to debug directory
-        debug_dir = "/Users/kirrysin/Documents/temp"
-        os.makedirs(debug_dir, exist_ok=True)
-        debug_path = os.path.join(debug_dir, f"trend_{team_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png")
-        
-        # Copy to debug directory
-        import shutil
-        shutil.copy2(tmp_path, debug_path)
-        print(f"🔍 Debug plot saved to: {debug_path}")
+        # Save to debug directory if requested
+        if debug_dir:
+            os.makedirs(debug_dir, exist_ok=True)
+            debug_path = os.path.join(debug_dir, f"trend_{team_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png")
+            
+            # Copy to debug directory
+            import shutil
+            shutil.copy2(tmp_path, debug_path)
+            print(f"🔍 Debug plot saved to: {debug_path}")
         
         # Read and encode as base64
         with open(tmp_path, 'rb') as f:
@@ -570,7 +577,7 @@ def get_team_config(team_name, team_channels):
         return None, None, None
 
 
-def send_team_messages(teams, bot_token, delay=2, max_retries=5, retry_delay=10, team_channels=None, dry_run=False, muted_stats=None, include_plots=False, ydb_config=None):
+def send_team_messages(teams, bot_token, delay=2, max_retries=5, retry_delay=10, team_channels=None, dry_run=False, muted_stats=None, include_plots=False, ydb_config=None, debug_plots_dir=None, all_team_data=None):
     """
     Send separate messages for each team.
     
@@ -585,6 +592,8 @@ def send_team_messages(teams, bot_token, delay=2, max_retries=5, retry_delay=10,
         muted_stats (dict): Dictionary with team names as keys and {'total': count, 'today': count} as values
         include_plots (bool): If True, include trend plots in messages
         ydb_config (dict): YDB configuration for trend data
+        debug_plots_dir (str): Directory to save debug plot files (if None, debug mode is disabled)
+        all_team_data (dict): Pre-fetched team data to avoid repeated queries
     """
     
     total_teams = len(teams)
@@ -626,18 +635,25 @@ def send_team_messages(teams, bot_token, delay=2, max_retries=5, retry_delay=10,
             plot_data = None
             print(f"🔍 Plot settings: include_plots={include_plots}, ydb_config={ydb_config is not None}, MATPLOTLIB_AVAILABLE={MATPLOTLIB_AVAILABLE}")
             
-            if include_plots and ydb_config and MATPLOTLIB_AVAILABLE:
-                print(f"📊 Getting trend data for team: {team_name}")
-                trend_data = get_monthly_trend_data(
-                    database_endpoint=ydb_config.get('endpoint'),
-                    database_path=ydb_config.get('path'),
-                    credentials_path=ydb_config.get('credentials'),
-                    team_name=team_name,
-                    use_yesterday=ydb_config.get('use_yesterday', False)
-                )
+            if include_plots and MATPLOTLIB_AVAILABLE:
+                # Use pre-fetched data if available, otherwise fetch on demand
+                if all_team_data and team_name in all_team_data:
+                    trend_data = all_team_data[team_name]['trend']
+                    print(f"📊 Using cached trend data for {team_name}: {len(trend_data)} days")
+                elif ydb_config:
+                    print(f"📊 Getting trend data for team: {team_name}")
+                    trend_data = get_monthly_trend_data(
+                        database_endpoint=ydb_config.get('endpoint'),
+                        database_path=ydb_config.get('path'),
+                        credentials_path=ydb_config.get('credentials'),
+                        team_name=team_name,
+                        use_yesterday=ydb_config.get('use_yesterday', False)
+                    )
+                else:
+                    trend_data = None
+                
                 if trend_data:
-                    print(f"📊 Trend data for {team_name}: {len(trend_data)} days")
-                    plot_data = create_trend_plot(team_name, trend_data)
+                    plot_data = create_trend_plot(team_name, trend_data, debug_plots_dir)
                     if plot_data:
                         print(f"📈 Created trend plot for team: {team_name} (data length: {len(plot_data)})")
                     else:
@@ -661,13 +677,13 @@ def send_team_messages(teams, bot_token, delay=2, max_retries=5, retry_delay=10,
                 print(f"📁 Saved plot to temporary file: {tmp_path}")
                 print(f"📁 File size: {os.path.getsize(tmp_path)} bytes")
                 
-                # Also save to debug directory for final file
-                debug_dir = "/Users/kirrysin/Documents/temp"
-                os.makedirs(debug_dir, exist_ok=True)
-                final_debug_path = os.path.join(debug_dir, f"final_{team_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png")
-                import shutil
-                shutil.copy2(tmp_path, final_debug_path)
-                print(f"🔍 Final debug plot saved to: {final_debug_path}")
+                # Also save to debug directory for final file if requested
+                if debug_plots_dir:
+                    os.makedirs(debug_plots_dir, exist_ok=True)
+                    final_debug_path = os.path.join(debug_plots_dir, f"final_{team_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png")
+                    import shutil
+                    shutil.copy2(tmp_path, final_debug_path)
+                    print(f"🔍 Final debug plot saved to: {final_debug_path}")
                 
                 try:
                     print(f"📤 Sending message with plot for team: {team_name}")
@@ -832,6 +848,7 @@ def main():
     parser.add_argument('--no-stats', action='store_true', help='Skip fetching muted tests statistics from YDB')
     parser.add_argument('--use-yesterday', action='store_true', help='Use yesterday\'s data for development convenience')
     parser.add_argument('--include-plots', action='store_true', help='Include trend plots in messages (requires matplotlib)')
+    parser.add_argument('--debug-plots-dir', help='Directory to save debug plot files (enables debug mode)')
     
     args = parser.parse_args()
     
@@ -941,8 +958,10 @@ def main():
         
         print(f"  - {team_name}: {len(issues)} issues{responsible_info}{channel_info}")
     
-    # Prepare YDB config for plots if needed
+    # Prepare YDB config and get all team data if needed
     ydb_config = None
+    all_team_data = None
+    
     if args.include_plots and not args.no_stats:
         ydb_config = {
             'endpoint': args.ydb_endpoint,
@@ -950,9 +969,23 @@ def main():
             'credentials': args.ydb_credentials,
             'use_yesterday': args.use_yesterday
         }
+        
+        # Get all team data in one optimized query
+        print("📊 Fetching all team data in one optimized query...")
+        all_team_data = get_all_team_data(
+            database_endpoint=args.ydb_endpoint,
+            database_path=args.ydb_database,
+            credentials_path=args.ydb_credentials,
+            use_yesterday=args.use_yesterday
+        )
+        
+        if all_team_data:
+            print(f"✅ Successfully fetched data for {len(all_team_data)} teams")
+        else:
+            print("⚠️ Could not fetch team data, will use individual queries if needed")
     
     # Send messages (or show in dry run)
-    send_team_messages(teams, bot_token, args.delay, args.max_retries, args.retry_delay, team_channels, args.dry_run, muted_stats, args.include_plots, ydb_config)
+    send_team_messages(teams, bot_token, args.delay, args.max_retries, args.retry_delay, team_channels, args.dry_run, muted_stats, args.include_plots, ydb_config, args.debug_plots_dir, all_team_data)
 
 
 if __name__ == "__main__":

@@ -269,16 +269,6 @@ class TSecureTestServer : public TTestServer<TKikimrWithGrpcAndRootSchemaSecure,
     using TTestServer::TTestServer;
 };
 
-ui64 GetPQTabletId(TInsecureTestServer& setup, const TString& topicPath) {
-    TClient client(*(setup.KikimrServer->ServerSettings));
-    auto pathDescr = client.Describe(setup.KikimrServer->GetRuntime(), topicPath).GetPathDescription().GetPersQueueGroup();
-    auto tabletId = pathDescr.GetPartitions()[0].GetTabletId();
-    Cerr << ">>>>> PQTabletID=" << tabletId << Endl << Flush;
-    UNIT_ASSERT(tabletId);
-    return tabletId;
-}
-
-
 TString GetMessageMetaKey(const NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage& msg, const TString& key) {
     if (msg.GetMessageMeta()) {
         for (auto& [k, v] : msg.GetMessageMeta()->Fields) {
@@ -1371,12 +1361,6 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         TKafkaTestClient client(testServer.Port);
 
         client.AuthenticateToKafka();
-
-        // {
-        //     std::vector<TString> topics = { topicName };
-        //     auto msg = client.JoinGroup(topics, group, protocolName, 10000);
-        //     UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
-        // }
 
         {
             // Check FETCH
@@ -2537,8 +2521,6 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
     }
 
     Y_UNIT_TEST(TopicsCompactionSwitchOnAndOff) {
-        return; // TODO komels
-
         TInsecureTestServer testServer(TTestServerSettings{.KafkaApiMode = "2", .EnableQuoting = false});
         TKafkaTestClient client(testServer.Port);
         TString topic = "topic-comp-test";

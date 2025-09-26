@@ -20,7 +20,6 @@ template <> class hash<NKikimr::NMiniKQL::TTuple> {
 
 template <> class equal_to<NKikimr::NMiniKQL::TTuple> {
   public:
-    // hash(TKey)
     bool operator()(NKikimr::NMiniKQL::TTuple lhs, NKikimr::NMiniKQL::TTuple rhs) {
         return Equal(lhs, rhs);
     }
@@ -46,6 +45,7 @@ class TDumbJoinTable {
     }
 
     void Build() {
+        Y_ABORT_UNLESS(BuiltTable.empty(), "JoinTable is built already");
         for (int index = 0; index < std::ssize(Tuples); index += TupleSize) {
             TTuple thisTuple = &Tuples[index];
             auto [it, ok] = BuiltTable.emplace(thisTuple, std::vector{thisTuple});
@@ -55,7 +55,7 @@ class TDumbJoinTable {
         }
     }
 
-    void Lookup(TTuple key, std::function<void(const TTuple&)> produce) const {
+    void Lookup(TTuple key, std::function<void(TTuple)> produce) const {
         Y_ABORT_IF(BuiltTable.empty(), "call Build first");
         auto it = BuiltTable.find(key);
         if (it != BuiltTable.end()) {

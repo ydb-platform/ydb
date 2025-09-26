@@ -3,33 +3,18 @@
 ## {{ ydb-short-name }} Prometheus Alerting Rules
 
 Prometheus Alerting Rules — это набор правил, написанных в формате YAML, которые определяют условия для генерации оповещений (алертов). Эти правила основаны на языке запросов PromQL (Prometheus Query Language) и позволяют автоматически выявлять проблемы на основе собранных метрик. Например, вы можете настроить правило, которое сработает, если CPU нагрузка превысит 90% или если диск заполнен более чем на 80%.
-
-    - **Где они хранятся?** Правила обычно определяются в отдельных файлах (например, rules.yml) и загружаются в конфигурацию Prometheus.
-    - **Как они оцениваются?** Prometheus сервер периодически (по умолчанию каждые 1-2 минуты) вычисляет выражения в правилах. Если условие истинно в течение заданного времени (параметр for), генерируется алерт.
-    - **Состояния алерта:**
-        **Pending** (ожидание): Условие истинно, но ещё не прошло время for.
-        **Firing** (активный): Условие истинно и прошло время for.
-        **Resolved** (решён): Условие больше не истинно.
-
+- **Где они хранятся?** Правила обычно определяются в отдельных файлах (например, rules.yml) и загружаются в конфигурацию Prometheus.
+- **Как они оцениваются?** Prometheus сервер периодически (по умолчанию каждые 1-2 минуты) вычисляет выражения в правилах. Если условие истинно в течение заданного времени (параметр for), генерируется алерт.
+- **Состояния алерта:**
+    **Pending** (ожидание): Условие истинно, но ещё не прошло время for.
+    **Firing** (активный): Условие истинно и прошло время for.
+    **Resolved** (решён): Условие больше не истинно.
 Более подробно об особенности системы и стуктуре правил смотрите в [официальной документации](https://prometheus.io/docs/prometheus/latest/configuration/alerting_rules/).
 
 ### 1. {{ ydb-short-name }} Health Check
 
 **Описание:** Правило отслеживает общее состояние здоровья {{ ydb-short-name }} кластера. Срабатывает, когда статус здоровья отличается от `GOOD`, что может указывать на проблемы с доступностью или производительностью базы данных.
 **Что делать:** Это общий алерт системы самодиагностики, в сообщении будет указана причина, по которой сработал алерт.
-**Пример сработавшего алерта:**
-
-```text
-description: Health check failed for YDB.
-  - Status: RED
-  - Message: VDisk is not available
-  - Type: VDISK
-  - Database: /Root
-  - Domain: Root
-  - Instance: myt0-7514.search.yandex.net
-  This issue has been active for more than 1 minute.
-summary: YDB Health Issue in /Root (Status: RED)
-```
 
 ```yaml
 - alert: YDBHealthCheck
@@ -52,6 +37,20 @@ summary: YDB Health Issue in /Root (Status: RED)
       - Domain: {{ $labels.DOMAIN }}
       - Instance: {{ $labels.instance }}
       This issue has been active for more than 1 minute.
+```
+
+**Пример сработавшего алерта:**
+
+```text
+description: Health check failed for YDB.
+  - Status: RED
+  - Message: VDisk is not available
+  - Type: VDISK
+  - Database: /Root
+  - Domain: Root
+  - Instance: myt0-7514.search.yandex.net
+  This issue has been active for more than 1 minute.
+summary: YDB Health Issue in /Root (Status: RED)
 ```
 
 ### 2. {{ ydb-short-name }} ExecPool High Utilization

@@ -31,24 +31,13 @@ def send_telegram_message(bot_token, chat_id, message_or_file, parse_mode="Markd
     Returns:
         bool: True if successful, False otherwise
     """
-    # Check if message_or_file is a file path
-    # If the string is too long, it's definitely not a file path
-    if len(message_or_file) > 255:
-        # It's definitely a text message, not a file path
+    # Try to open as file first, if it fails, treat as message
+    try:
+        with open(message_or_file, 'r', encoding='utf-8') as f:
+            content = f.read()
+    except (OSError, IOError, ValueError, UnicodeDecodeError):
+        # It's a text message, not a file (or file can't be read as text)
         content = message_or_file
-    else:
-        file_path = Path(message_or_file)
-        if file_path.exists() and file_path.is_file():
-            # It's a file, read its content
-            try:
-                with open(file_path, 'r', encoding='utf-8') as f:
-                    content = f.read()
-            except Exception as e:
-                print(f"❌ Error reading file {file_path}: {e}")
-                return False
-        else:
-            # It's a text message
-            content = message_or_file
     
     if not content.strip():
         print(f"⚠️ Content is empty")

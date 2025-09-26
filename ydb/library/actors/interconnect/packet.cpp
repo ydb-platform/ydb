@@ -16,6 +16,7 @@ ui32 TEventHolder::Fill(IEventHandle& ev) {
     ForwardRecipient = ev.GetForwardOnNondeliveryRecipient();
     EventActuallySerialized = 0;
     Descr.Checksum = 0;
+    ZcTransferId = 0;
 
     if (ev.HasBuffer()) {
         Buffer = ev.ReleaseChainBuffer();

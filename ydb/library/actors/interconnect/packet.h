@@ -99,6 +99,7 @@ struct TEventHolder : TNonCopyable {
     ui32 EventActuallySerialized;
     mutable NLWTrace::TOrbit Orbit;
     NWilson::TSpan Span;
+    ui32 ZcTransferId; //id of zero copy transfer. In case of RDMA it is a place where some internal handle can be stored to identify events
 
     ui32 Fill(IEventHandle& ev);
 
@@ -195,10 +196,10 @@ struct TTcpPacketOutTask : TNonCopyable {
 
     // Append reference to some data (acquired previously or external pointer).
     template<bool External>
-    void Append(const void *buffer, size_t len) {
+    void Append(const void *buffer, size_t len, ui32* const zcHandle) {
         Y_DEBUG_ABORT_UNLESS(len <= (External ? GetExternalFreeAmount() : GetInternalFreeAmount()));
         (External ? ExternalSize : InternalSize) += len;
-        (External ? XdcStream : OutgoingStream).Append({static_cast<const char*>(buffer), len});
+        (External ? XdcStream : OutgoingStream).Append({static_cast<const char*>(buffer), len}, zcHandle);
         ProcessChecksum<External>(buffer, len);
     }
 

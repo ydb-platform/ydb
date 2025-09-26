@@ -668,12 +668,12 @@ NYql::NNodes::TExprBase KqpBuildStreamLookupTableStages(NYql::NNodes::TExprBase 
 }
 
 NYql::NNodes::TExprBase KqpBuildStreamIdxLookupJoinStagesKeepSorted(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx,
-    TTypeAnnotationContext& typeCtx, bool ruleEnabled) 
+    TTypeAnnotationContext& typeCtx, bool ruleEnabled)
 {
     if (!ruleEnabled) {
         return node;
     }
-    
+
     if (!node.Maybe<TKqlIndexLookupJoin>()) {
         return node;
     }
@@ -711,9 +711,9 @@ NYql::NNodes::TExprBase KqpBuildStreamIdxLookupJoinStagesKeepSorted(NYql::NNodes
     TExprNodeList args;
     args.push_back(arg.Ptr());
 
-    auto rightStruct = tupleType.Arg(1).Cast<TCoStructType>();
+    auto leftStruct = tupleType.Arg(0).Cast<TCoStructType>();
 
-    for (auto structContent : rightStruct ) {
+    for (auto structContent : leftStruct) {
         auto attrName = structContent.Ptr()->Child(0);
         auto field = Build<TCoNameValueTuple>(ctx, node.Pos())
                 .Name(attrName)
@@ -859,10 +859,10 @@ NYql::NNodes::TExprBase KqpBuildStreamIdxLookupJoinStagesKeepSortedFSM(
     TExprNodeList args;
     args.push_back(arg.Ptr());
 
-    auto rightStruct = tupleType.Arg(1).Cast<TCoStructType>();
+    auto leftStruct = tupleType.Arg(0).Cast<TCoStructType>();
 
     THashSet<TString> passthroughColumns;
-    for (const auto& structContent : rightStruct ) {
+    for (const auto& structContent : leftStruct) {
         auto attrName = structContent.Ptr()->Child(0);
         passthroughColumns.insert(TString(attrName->Content()));
         auto field = Build<TCoNameValueTuple>(ctx, node.Pos())

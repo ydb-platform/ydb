@@ -3881,28 +3881,29 @@ bool EnsureDataOrOptionalOfData(TPositionHandle position, const TTypeAnnotationN
     return true;
 }
 
-IGraphTransformer::TStatus ConvertToLinearType(TExprNode::TPtr& node, TExprContext& ctx) {
-    if (HasError(node->GetTypeAnn(), ctx)) {
+IGraphTransformer::TStatus ConvertToLinearType(const TExprNode& node, TExprContext& ctx, const TLinearExprType*& retType) {
+    if (HasError(node.GetTypeAnn(), ctx)) {
         return IGraphTransformer::TStatus::Error;
     }
 
-    if (!node->GetTypeAnn()) {
-        ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() <<
+    if (!node.GetTypeAnn()) {
+        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() <<
             "Expected (dynamic) linear type, but got lambda"));
         return IGraphTransformer::TStatus::Error;
     }
 
-    if (node->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Linear) {
+    if (node.GetTypeAnn()->GetKind() == ETypeAnnotationKind::Linear) {
+        retType = node.GetTypeAnn()->Cast<TLinearExprType>();
         return IGraphTransformer::TStatus::Ok;
     }
 
-    if (node->GetTypeAnn()->GetKind() == ETypeAnnotationKind::DynamicLinear) {
-        node = ctx.NewCallable(node->Pos(), "FromDynamicLinear", { node });
-        return IGraphTransformer::TStatus::Repeat;
+    if (node.GetTypeAnn()->GetKind() == ETypeAnnotationKind::DynamicLinear) {
+        retType = ctx.MakeType<TLinearExprType>(node.GetTypeAnn()->Cast<TDynamicLinearExprType>()->GetItemType());
+        return IGraphTransformer::TStatus::Ok;
     }
 
-    ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() <<
-        "Expected (dynamic) linear type, but got: " << *node->GetTypeAnn()));
+    ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() <<
+        "Expected (dynamic) linear type, but got: " << *node.GetTypeAnn()));
     return IGraphTransformer::TStatus::Error;
 }
 
@@ -6566,6 +6567,18 @@ const TTypeAnnotationNode* UnpackOptionalBlockItemType(const TTypeAnnotationNode
     } else {
         return ctx.MakeType<TBlockExprType>(underlyingType);
     }
+}
+
+const TTypeAnnotationNode* GetLinearItemType(const TTypeAnnotationNode& type, bool& isDynamic) {
+    YQL_ENSURE(type.IsLinearOrDynamicLinear());
+    const auto kind = type.GetKind();
+    if (kind == ETypeAnnotationKind::Linear) {
+        isDynamic = false;
+        return type.Cast<TLinearExprType>()->GetItemType();
+    }
+
+    isDynamic = true;
+    return type.Cast<TDynamicLinearExprType>()->GetItemType();
 }
 
 const TTypeAnnotationNode* AggApplySerializedStateType(const TExprNode::TPtr& input, TExprContext& ctx) {

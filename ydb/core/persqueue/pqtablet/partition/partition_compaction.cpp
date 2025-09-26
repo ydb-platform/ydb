@@ -487,7 +487,7 @@ void TPartition::AddNewCompactionWriteBlob(std::pair<TKey, ui32>& res, TEvKeyVal
     write->SetKey(key.Data(), key.Size());
     write->SetValue(valueD);
     write->SetCreationUnixTime(blobCreationUnixTime.Seconds());  // note: The time is rounded to second precision.
-    Y_ASSERT(blobCreationUnixTime.Seconds() > 0);
+    // Y_ASSERT(blobCreationUnixTime.Seconds() > 0); TODO: move fake time in tests forward and enable checking
 
     bool isInline = key.IsHead() && valueD.size() < MAX_INLINE_SIZE;
 

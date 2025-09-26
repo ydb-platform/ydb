@@ -7,9 +7,9 @@ namespace NKikimr::NMiniKQL::NJoinTable {
 using TTuple = NYql::NUdf::TUnboxedValue*;
 
 class TStdJoinTable {
-public:
+  public:
     TStdJoinTable(int tupleSize, NKikimr::NMiniKQL::TWideUnboxedEqual eq, NKikimr::NMiniKQL::TWideUnboxedHasher hash)
-        : TupleSize(tupleSize), BuiltTable(1, hash,eq)
+        : TupleSize(tupleSize), BuiltTable(1, hash, eq)
     {}
 
     void Add(std::span<NYql::NUdf::TUnboxedValue> tuple) {
@@ -42,7 +42,9 @@ public:
   private:
     const int TupleSize;
     std::vector<NYql::NUdf::TUnboxedValue> Tuples;
-    std::unordered_map<TTuple, std::vector<TTuple>, NKikimr::NMiniKQL::TWideUnboxedHasher, NKikimr::NMiniKQL::TWideUnboxedEqual> BuiltTable;
+    std::unordered_map<TTuple, std::vector<TTuple>, NKikimr::NMiniKQL::TWideUnboxedHasher,
+                       NKikimr::NMiniKQL::TWideUnboxedEqual>
+        BuiltTable;
 };
 
-} // namespace NKikimr::NMiniKQL
+} // namespace NKikimr::NMiniKQL::NJoinTable

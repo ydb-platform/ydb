@@ -21,6 +21,10 @@ NYT::TNode CreateTypeNode(NYT::TNode&& typeNode) {
     return CreateNamedNode("DataType", std::move(typeNode));
 }
 
+NYT::TNode CreateOptionalTypeNode(NYT::TNode&& typeNode) {
+    return CreateNamedNode("OptionalType", std::move(typeNode));
+}
+
 NYT::TNode CreateStructTypeNode(NYT::TNode&& membersNode) {
     return CreateNamedNode("StructType", std::move(membersNode));
 }
@@ -70,7 +74,7 @@ NYT::TNode MakeWatermarkOutputSchema() {
     return CreateStructTypeNode(
         NYT::TNode::CreateList()
             .Add(CreateFieldNode(OFFSET_FIELD_NAME, CreateTypeNode("Uint64")))
-            .Add(CreateFieldNode(WATERMARK_FIELD_NAME, CreateTypeNode("Timestamp")))
+            .Add(CreateFieldNode(WATERMARK_FIELD_NAME, CreateOptionalTypeNode(CreateTypeNode("Timestamp"))))
     );
 }
 
@@ -457,21 +461,10 @@ private:
 
     TStringBuilder sb;
     sb << R"(PRAGMA config.flags("LLVM", ")" << (settings.EnabledLLVM ? "ON" : "OFF") << R"(");)" << '\n';
-    sb << "$input ="
-        << " SELECT "
-            << OFFSET_FIELD_NAME << ", "
-            << watermarkExpr << " AS " << WATERMARK_FIELD_NAME
-        << " FROM Input;\n";
-    sb << "$output ="
-        << " SELECT "
-            << OFFSET_FIELD_NAME << ", "
-            << WATERMARK_FIELD_NAME
-        << " FROM $input"
-        << " WHERE " << WATERMARK_FIELD_NAME << " IS NOT NULL;\n";
     sb << "SELECT "
         << OFFSET_FIELD_NAME << ", "
-        << "Unwrap(" << WATERMARK_FIELD_NAME << ") AS " << WATERMARK_FIELD_NAME
-    << " FROM $output;\n";
+        << watermarkExpr << " AS " << WATERMARK_FIELD_NAME
+    << " FROM Input;\n";
 
     TString result = sb;
     LOG_ROW_DISPATCHER_DEBUG("Generated sql:\n" << result);

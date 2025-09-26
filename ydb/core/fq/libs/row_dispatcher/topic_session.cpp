@@ -716,7 +716,7 @@ void TTopicSession::SendData(TClientsInfo& info) {
 
         ui64 batchSize = 0;
         while (!buffer.empty()) {
-            auto [serializedData, offsets, watermarksUs] = std::move(buffer.front());
+            auto [serializedData, offsets, watermark] = std::move(buffer.front());
             Y_ENSURE(!offsets.empty(), "Expected non empty message batch");
             buffer.pop();
 
@@ -725,7 +725,9 @@ void TTopicSession::SendData(TClientsInfo& info) {
             NFq::NRowDispatcherProto::TEvMessage message;
             message.SetPayloadId(event->AddPayload(std::move(serializedData)));
             message.MutableOffsets()->Assign(offsets.begin(), offsets.end());
-            message.MutableWatermarksUs()->Assign(watermarksUs.begin(), watermarksUs.end());
+            if (watermark) {
+                message.AddWatermarksUs(watermark->MicroSeconds());
+            }
             event->Record.AddMessages()->CopyFrom(std::move(message));
             event->Record.SetNextMessageOffset(*offsets.rbegin() + 1);
 

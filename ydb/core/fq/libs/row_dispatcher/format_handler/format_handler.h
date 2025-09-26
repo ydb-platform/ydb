@@ -35,7 +35,7 @@ public:
 struct TDataBatch {
     TRope SerializedData;
     TSet<ui64> Offsets;
-    TVector<ui64> WatermarksUs;
+    TMaybe<TInstant> Watermark;
 };
 
 class ITopicFormatHandler : public TNonCopyable {

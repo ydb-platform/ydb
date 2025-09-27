@@ -83,10 +83,10 @@ NThreading::TFuture<std::vector<TFederatedTopicClient::TClusterInfo>> TFederated
             });
 }
 
-auto TFederatedTopicClient::TImpl::GetSubsessionHandlersExecutor() -> NTopic::IExecutor::TPtr {
+auto TFederatedTopicClient::TImpl::GetSubsessionHandlersExecutor() -> IExecutor::TPtr {
     with_lock (Lock) {
         if (!SubsessionHandlersExecutor) {
-            SubsessionHandlersExecutor = NTopic::CreateThreadPoolExecutor(1);
+            SubsessionHandlersExecutor = CreateThreadPoolExecutor(1);
         }
         return SubsessionHandlersExecutor;
     }

@@ -801,7 +801,7 @@ IExecutor::TPtr TDirectReadSessionImplTestSetup::GetDefaultExecutor() {
     if (!DefaultExecutor) {
         ThreadPool = std::make_shared<TThreadPool>();
         ThreadPool->Start(1);
-        DefaultExecutor = CreateThreadPoolExecutorAdapter(ThreadPool);
+        DefaultExecutor = CreateExternalThreadPoolExecutorAdapter(ThreadPool);
     }
     return DefaultExecutor;
 }

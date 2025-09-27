@@ -10,11 +10,11 @@
 #include <ydb/public/sdk/cpp/src/client/impl/internal/common/client_pid.h>
 #include <ydb/public/sdk/cpp/src/client/impl/internal/db_driver_state/state.h>
 #include <ydb/public/sdk/cpp/src/client/impl/internal/rpc_request_settings/settings.h>
-#include <ydb/public/sdk/cpp/src/client/impl/internal/thread_pool/pool.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/resources/ydb_resources.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/extension_common/extension.h>
 
 #include <ydb/public/sdk/cpp/src/library/issue/yql_issue_message.h>
+
 
 namespace NYdb::inline Dev {
 
@@ -750,8 +750,8 @@ private:
     std::mutex ExtensionsLock_;
     ::NMonitoring::TMetricRegistry* MetricRegistryPtr_ = nullptr;
 
-    const size_t ClientThreadsNum_;
-    std::unique_ptr<IThreadPool> ResponseQueue_;
+    const std::size_t ClientThreadsNum_;
+    std::shared_ptr<IExecutor> ResponseQueue_;
 
     const std::string DefaultDiscoveryEndpoint_;
     const TSslCredentials SslCredentials_;
@@ -759,16 +759,16 @@ private:
     std::shared_ptr<ICredentialsProviderFactory> DefaultCredentialsProviderFactory_;
     TDbDriverStateTracker StateTracker_;
     const EDiscoveryMode DefaultDiscoveryMode_;
-    const i64 MaxQueuedRequests_;
-    const i64 MaxQueuedResponses_;
+    const std::int64_t MaxQueuedRequests_;
+    const std::int64_t MaxQueuedResponses_;
     const bool DrainOnDtors_;
     const TBalancingPolicy::TImpl BalancingSettings_;
     const TDuration GRpcKeepAliveTimeout_;
     const bool GRpcKeepAlivePermitWithoutCalls_;
-    const ui64 MemoryQuota_;
-    const ui64 MaxInboundMessageSize_;
-    const ui64 MaxOutboundMessageSize_;
-    const ui64 MaxMessageSize_;
+    const std::uint64_t MemoryQuota_;
+    const std::uint64_t MaxInboundMessageSize_;
+    const std::uint64_t MaxOutboundMessageSize_;
+    const std::uint64_t MaxMessageSize_;
 
     std::atomic_int64_t QueuedRequests_;
     const NYdbGrpc::TTcpKeepAliveSettings TcpKeepAliveSettings_;
@@ -784,7 +784,7 @@ private:
 
     IDiscoveryMutatorApi::TMutatorCb DiscoveryMutatorCb;
 
-    const size_t NetworkThreadsNum_;
+    const std::size_t NetworkThreadsNum_;
     bool UsePerChannelTcpConnection_;
     // Must be the last member (first called destructor)
     NYdbGrpc::TGRpcClientLow GRpcClientLow_;

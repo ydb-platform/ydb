@@ -21,6 +21,11 @@ void TManagedExecutor::Post(TFunction &&f)
     ++Planned;
 }
 
+void TManagedExecutor::Stop()
+{
+    Executor->Stop();
+}
+
 void TManagedExecutor::DoStart()
 {
     Executor->Start();
@@ -90,14 +95,14 @@ void TManagedExecutor::RunAllTasks()
     }
 }
 
-TIntrusivePtr<TManagedExecutor> CreateThreadPoolManagedExecutor(size_t threads)
+std::shared_ptr<TManagedExecutor> CreateThreadPoolManagedExecutor(size_t threads)
 {
-    return MakeIntrusive<TManagedExecutor>(NYdb::NTopic::CreateThreadPoolExecutor(threads));
+    return std::make_shared<TManagedExecutor>(NYdb::CreateThreadPoolExecutor(threads));
 }
 
-TIntrusivePtr<TManagedExecutor> CreateSyncManagedExecutor()
+std::shared_ptr<TManagedExecutor> CreateSyncManagedExecutor()
 {
-    return MakeIntrusive<TManagedExecutor>(NYdb::NTopic::CreateSyncExecutor());
+    return std::make_shared<TManagedExecutor>(NYdb::NTopic::CreateSyncExecutor());
 }
 
 }

@@ -394,7 +394,7 @@ struct TFederatedReadSessionSettings: public NTopic::TReadSessionSettings {
         //! Executor for handlers.
         //! If not set, default single threaded executor will be used.
         //! Shared between subsessions
-        FLUENT_SETTING(NTopic::IExecutor::TPtr, HandlersExecutor);
+        FLUENT_SETTING(IExecutor::TPtr, HandlersExecutor);
     };
 
     //! Federated event handlers.
@@ -492,10 +492,10 @@ struct TFederatedTopicClientSettings : public TCommonClientSettingsBase<TFederat
     using TSelf = TFederatedTopicClientSettings;
 
     //! Default executor for compression tasks.
-    FLUENT_SETTING_DEFAULT(NTopic::IExecutor::TPtr, DefaultCompressionExecutor, NTopic::CreateThreadPoolExecutor(2));
+    FLUENT_SETTING_DEFAULT(IExecutor::TPtr, DefaultCompressionExecutor, CreateThreadPoolExecutor(2));
 
     //! Default executor for callbacks.
-    FLUENT_SETTING_DEFAULT(NTopic::IExecutor::TPtr, DefaultHandlersExecutor, NTopic::CreateThreadPoolExecutor(1));
+    FLUENT_SETTING_DEFAULT(IExecutor::TPtr, DefaultHandlersExecutor, CreateThreadPoolExecutor(1));
 
     //! Connection timeoout for federation discovery.
     FLUENT_SETTING_DEFAULT(TDuration, ConnectionTimeout, TDuration::Seconds(30));

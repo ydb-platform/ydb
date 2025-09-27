@@ -8,7 +8,7 @@ extern const std::string TestRSAPublicKeyContent;
 
 struct TJwtCheck {
     using TSelf = TJwtCheck;
-#ifdef YDB_SDK_USE_NEW_JWT
+#ifdef YDB_SDK_OSS
     using TDecodedJwt = jwt::decoded_jwt<jwt::traits::kazuho_picojson>;
 #else
     using TDecodedJwt = jwt::decoded_jwt;
@@ -29,7 +29,7 @@ struct TJwtCheck {
             UNIT_ASSERT_VALUES_EQUAL(decoded.get_algorithm(), Alg.name());
             const std::string data = decoded.get_header_base64() + "." + decoded.get_payload_base64();
 		    const std::string signature = decoded.get_signature();
-#ifdef YDB_SDK_USE_NEW_JWT
+#ifdef YDB_SDK_OSS
             std::error_code ec;
             Alg.verify(data, signature, ec);
             if (ec) {

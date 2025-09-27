@@ -2785,7 +2785,7 @@ std::exception_ptr TDataDecompressionInfo<UseMigrationProtocol>::GetDecompressio
 
 template <bool UseMigrationProtocol>
 i64 TDataDecompressionInfo<UseMigrationProtocol>::StartDecompressionTasks(
-    const typename IAExecutor<UseMigrationProtocol>::TPtr& executor, i64 availableMemory,
+    const typename IExecutor::TPtr& executor, i64 availableMemory,
     TDeferredActions<UseMigrationProtocol>& deferred)
 {
     auto session = CbContext->LockShared();
@@ -3172,7 +3172,7 @@ void TDeferredActions<UseMigrationProtocol>::DeferReadFromProcessor(const typena
 }
 
 template<bool UseMigrationProtocol>
-void TDeferredActions<UseMigrationProtocol>::DeferStartExecutorTask(const typename IAExecutor<UseMigrationProtocol>::TPtr& executor, typename IAExecutor<UseMigrationProtocol>::TFunction&& task) {
+void TDeferredActions<UseMigrationProtocol>::DeferStartExecutorTask(const typename IExecutor::TPtr& executor, typename IExecutor::TFunction&& task) {
     ExecutorsTasks.emplace_back(executor, std::move(task));
 }
 

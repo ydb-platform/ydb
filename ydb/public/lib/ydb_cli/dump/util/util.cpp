@@ -62,6 +62,18 @@ TStatus DescribeReplication(NReplication::TReplicationClient& client, const TStr
     return status;
 }
 
+TStatus DescribeTransfer(NReplication::TReplicationClient& client, const TString& path, TMaybe<NReplication::TTransferDescription>& out) {
+    out.Clear();
+
+    auto status = NConsoleClient::RetryFunction([&]() {
+        return client.DescribeTransfer(path).ExtractValueSync();
+    });
+    if (status.IsSuccess()) {
+        out = status.GetTransferDescription();
+    }
+    return status;
+}
+
 namespace {
 
     bool RemoveCreateViewPattern(std::string& input) {

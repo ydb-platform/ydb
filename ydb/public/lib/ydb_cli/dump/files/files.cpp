@@ -22,6 +22,7 @@ enum EFilesType {
     CREATE_EXTERNAL_DATA_SOURCE,
     CREATE_EXTERNAL_TABLE,
     SYSTEM_VIEW,
+    CREATE_TRANSFER,
 };
 
 static constexpr TFileInfo FILES_INFO[] = {
@@ -44,6 +45,7 @@ static constexpr TFileInfo FILES_INFO[] = {
     {"create_external_data_source.sql", "external data source"},
     {"create_external_table.sql", "external table"},
     {"system_view.pb", "system view"},
+    {"create_transfer.sql", "transfer"},
 };
 
 const TFileInfo& TableScheme() {
@@ -120,6 +122,10 @@ const TFileInfo& CreateExternalTable() {
 
 const TFileInfo& SystemView() {
     return FILES_INFO[SYSTEM_VIEW];
+}
+
+const TFileInfo& CreateTransfer() {
+    return FILES_INFO[CREATE_TRANSFER];
 }
 
 } // NYdb::NDump::NFiles

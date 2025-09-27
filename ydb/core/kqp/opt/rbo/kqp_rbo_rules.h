@@ -6,9 +6,21 @@
 namespace NKikimr {
 namespace NKqp {
 
-class TExtractJoinExpressionsRule : public TSimplifiedRule {
+class TExtractJoinExpressionsRule : public IRule {
     public:
-    TExtractJoinExpressionsRule() : TSimplifiedRule("Extract join expressions") {}
+    TExtractJoinExpressionsRule() : IRule("Extract join expressions") {}
+
+    virtual bool TestAndApply(std::shared_ptr<IOperator>& input, 
+        TExprContext& ctx,
+        const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, 
+        TTypeAnnotationContext& typeCtx, 
+        const TKikimrConfiguration::TPtr& config,
+        TPlanProps& props) override;
+};
+
+class TPushMapRule : public TSimplifiedRule {
+    public:
+    TPushMapRule() : TSimplifiedRule("Push map operator") {}
 
     virtual std::shared_ptr<IOperator> SimpleTestAndApply(const std::shared_ptr<IOperator>& input, 
         TExprContext& ctx,

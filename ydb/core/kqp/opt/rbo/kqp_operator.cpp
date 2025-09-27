@@ -239,7 +239,7 @@ namespace NKikimr
             for (auto k : Keys)
             {
                 TString columnName;
-                if (FromSourceStage)
+                if (FromSourceStage || k.Alias == "")
                 {
                     columnName = k.ColumnName;
                 }
@@ -315,11 +315,20 @@ namespace NKikimr
             auto alias = opSource.Alias().StringValue();
             for (auto c : opSource.Columns())
             {
-                OutputIUs.push_back(TInfoUnit(alias, c.StringValue()));
                 Columns.push_back(c.StringValue());
             }
 
             Alias = alias;
+        }
+
+        TVector<TInfoUnit> TOpRead::GetOutputIUs() {
+            TVector<TInfoUnit> res;
+
+            for (auto c : Columns)
+            {
+                res.push_back(TInfoUnit(Alias, c));
+            }
+            return res;
         }
 
         TString TOpRead::ToString() {
@@ -328,13 +337,20 @@ namespace NKikimr
 
         TOpMap::TOpMap(std::shared_ptr<IOperator> input, TVector<std::pair<TInfoUnit, std::variant<TInfoUnit, TExprNode::TPtr>>> mapElements, bool project) :
             IUnaryOperator(EOperator::Map, input), MapElements(mapElements), Project(project) {
+        }
+
+        TVector<TInfoUnit> TOpMap::GetOutputIUs() {
+            TVector<TInfoUnit> res;
             if (!Project) {
-                OutputIUs.insert(OutputIUs.begin(), GetInput()->GetOutputIUs().begin(), GetInput()->GetOutputIUs().end());
+                res = GetInput()->GetOutputIUs();
             }
             for (auto & [k, v] : MapElements) {
-                OutputIUs.push_back(k);
+                res.push_back(k);
             }
+
+            return res;
         }
+
 
         bool TOpMap::HasRenames() const {
             for (auto & [iu, body] : MapElements) {
@@ -396,10 +412,15 @@ namespace NKikimr
 
         TOpProject::TOpProject(std::shared_ptr<IOperator> input, TVector<TInfoUnit> projectList) : IUnaryOperator(EOperator::Project, input),
             ProjectList(projectList)
-        {
+        {}
+
+        TVector<TInfoUnit> TOpProject::GetOutputIUs() {
+            TVector<TInfoUnit> res;
+
             for (auto p : ProjectList ) {
-                OutputIUs.push_back(p);
+                res.push_back(p);
             }
+            return res;
         }
 
         void TOpProject::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> & renameMap, TExprContext & ctx) {
@@ -423,7 +444,10 @@ namespace NKikimr
 
         TOpFilter::TOpFilter(std::shared_ptr<IOperator> input, TExprNode::TPtr filterLambda) : IUnaryOperator(EOperator::Filter, input),
             FilterLambda(filterLambda) {
-            OutputIUs = GetInput()->GetOutputIUs();
+        }
+
+        TVector<TInfoUnit> TOpFilter::GetOutputIUs() {
+            return GetInput()->GetOutputIUs();
         }
 
         void TOpFilter::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> & renameMap, TExprContext & ctx) {
@@ -447,7 +471,6 @@ namespace NKikimr
             if (lambdaBody->IsCallable("ToPg"))
             {
                 lambdaBody = lambdaBody->ChildPtr(0);
-                res.ToPg = true;
             }
 
             if (lambdaBody->IsCallable("And"))
@@ -455,10 +478,12 @@ namespace NKikimr
                 for (auto conj : lambdaBody->Children())
                 {
                     auto conjObj = conj;
+                    bool fromPg = false;
 
                     if (conj->IsCallable("FromPg"))
                     {
                         conjObj = conj->ChildPtr(0);
+                        fromPg = true;
                     }
 
                     if (conjObj->IsCallable("PgResolvedOp") && conjObj->Child(0)->Content() == "=")
@@ -470,7 +495,7 @@ namespace NKikimr
                         {
                             TVector<TInfoUnit> conjIUs;
                             GetAllMembers(conj, conjIUs);
-                            res.Filters.push_back(TFilterInfo(conj, conjIUs));
+                            res.Filters.push_back(TFilterInfo(conj, conjIUs, fromPg ));
                         }
                         else
                         {
@@ -485,7 +510,7 @@ namespace NKikimr
                     {
                         TVector<TInfoUnit> conjIUs;
                         GetAllMembers(conj, conjIUs);
-                        res.Filters.push_back(TFilterInfo(conj, conjIUs));
+                        res.Filters.push_back(TFilterInfo(conj, conjIUs, fromPg ));
                     }
                 }
             }
@@ -507,12 +532,14 @@ namespace NKikimr
             IBinaryOperator(EOperator::Join, leftInput, rightInput),
             JoinKind(joinKind),
             JoinKeys(joinKeys) {
+        }
 
-            auto leftInputIUs = GetLeftInput()->GetOutputIUs();
+        TVector<TInfoUnit> TOpJoin::GetOutputIUs() {
+            auto res = GetLeftInput()->GetOutputIUs();
             auto rightInputIUs = GetRightInput()->GetOutputIUs();
 
-            OutputIUs.insert(OutputIUs.end(), leftInputIUs.begin(), leftInputIUs.end());
-            OutputIUs.insert(OutputIUs.end(), rightInputIUs.begin(), rightInputIUs.end());
+            res.insert(res.end(), rightInputIUs.begin(), rightInputIUs.end());
+            return res;
         }
 
         void TOpJoin::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> & renameMap, TExprContext & ctx) {
@@ -534,7 +561,10 @@ namespace NKikimr
 
         TOpLimit::TOpLimit(std::shared_ptr<IOperator> input, TExprNode::TPtr limitCond) : IUnaryOperator(EOperator::Limit, input),
             LimitCond(limitCond) {
-            OutputIUs = GetInput()->GetOutputIUs();
+        }
+
+        TVector<TInfoUnit> TOpLimit::GetOutputIUs() {
+            return GetInput()->GetOutputIUs();
         }
 
         void TOpLimit::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> & renameMap, TExprContext & ctx) {
@@ -546,7 +576,10 @@ namespace NKikimr
         }
 
         TOpRoot::TOpRoot(std::shared_ptr<IOperator> input) : IUnaryOperator(EOperator::Root, input) {
-            OutputIUs = GetInput()->GetOutputIUs();            
+        }
+
+        TVector<TInfoUnit> TOpRoot::GetOutputIUs() {
+            return GetInput()->GetOutputIUs();
         }
 
         void ComputeParentsRec(std::shared_ptr<IOperator> op, std::shared_ptr<IOperator> parent) {

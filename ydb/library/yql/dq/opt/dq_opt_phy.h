@@ -14,6 +14,11 @@ namespace NYql {
 
 namespace NYql::NDq {
 
+struct TAggregationResultStageOptions {
+    bool IsEnabled{true};
+    bool IsKqpPipeline{false};
+};
+
 NNodes::TMaybeNode<NNodes::TDqStage> DqPushLambdaToStage(const NNodes::TDqStage &stage,
     const NNodes::TCoAtom& outputIndex, const NNodes::TCoLambda& lambda,
     const TVector<NNodes::TDqConnection>& lambdaInputs, TExprContext& ctx, IOptimizationContext& optCtx);
@@ -100,7 +105,7 @@ NNodes::TExprBase DqBuildFinalizeByKeyStage(NNodes::TExprBase node, TExprContext
     const TParentsMap& parentsMap, bool allowStageMultiUsage = true);
 
 NNodes::TExprBase DqBuildAggregationResultStage(NNodes::TExprBase node, TExprContext& ctx,
-    IOptimizationContext& optCtx);
+    IOptimizationContext& optCtx, const TAggregationResultStageOptions &options);
 
 NNodes::TExprBase DqBuildTopStageRemoveSort(NNodes::TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
     TTypeAnnotationContext& typeCtx, const TParentsMap& parentsMap, bool allowStageMultiUsage = true);

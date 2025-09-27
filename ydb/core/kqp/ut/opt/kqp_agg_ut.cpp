@@ -1,4 +1,5 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
 namespace NKikimr::NKqp {
 
@@ -334,6 +335,79 @@ Y_UNIT_TEST_SUITE(KqpAgg) {
             UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), results[i]);
         }
     }
+
+    Y_UNIT_TEST(ScalarAggregationResult) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        auto tableClient = kikimr.GetTableClient();
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+
+        auto queryClient = kikimr.GetQueryClient();
+        auto result = queryClient.GetSession().GetValueSync();
+        NStatusHelpers::ThrowOnError(result);
+        auto session2 = result.GetSession();
+
+        auto res = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/t1` (
+                a Int64	NOT NULL,
+                b Int32,
+                primary key(a)
+            )
+            PARTITION BY HASH(a)
+            WITH (STORE = COLUMN);
+        )").GetValueSync();
+        UNIT_ASSERT(res.IsSuccess());
+
+        auto insertRes = session2.ExecuteQuery(R"(
+            INSERT INTO `/Root/t1` (a, b) VALUES (1, 1);
+            INSERT INTO `/Root/t1` (a, b) VALUES (2, 1);
+            INSERT INTO `/Root/t1` (a, b) VALUES (3, 1);
+        )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT(insertRes.IsSuccess());
+
+        // Same as current representation of rollup.
+        std::vector<TString> queries = {
+            R"(
+                select sum(b) as sumB from `/Root/t1`
+                union all
+                select sum(b) as sumB from `/Root/t1` group by a
+                order by sumB;
+            )",
+        };
+
+        std::vector<TString> results = {
+            R"([[[1]];[[1]];[[1]];[[3]]])"
+        };
+
+        for (ui32 i = 0; i < queries.size(); ++i) {
+            const auto query = queries[i];
+            auto result =
+                session2
+                    .ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain))
+                    .ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            const auto &ast = *result.GetStats()->GetAst();
+            ui32 physicalTxCount = 0;
+            ui32 startPosition = 0;
+            while (true) {
+                auto currentPosition = ast.find("KqpPhysicalTx", startPosition);
+                if (currentPosition == std::string::npos) {
+                    break;
+                }
+                startPosition = currentPosition + 1;
+                ++physicalTxCount;
+            }
+            UNIT_ASSERT_VALUES_EQUAL(physicalTxCount, 1U);
+
+            result = session2.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+            TString output = FormatResultSetYson(result.GetResultSet(0));
+            UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), results[i]);
+        }
+    }
+
 }
 
 } // namespace NKikimr::NKqp

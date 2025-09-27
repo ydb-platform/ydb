@@ -426,4 +426,6 @@ message TTableServiceConfig {
     optional bool EnablePointPredicateSortAutoSelectIndex = 101 [ default = true ];
 
     optional bool EnableDataShardCreateTableAs = 102 [default = true];
+
+    optional bool EnableBuildAggregationResultStages = 103 [default = true];
 };

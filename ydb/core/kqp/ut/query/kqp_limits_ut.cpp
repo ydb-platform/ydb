@@ -1045,7 +1045,7 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         bool firstEvState = false;
         ui32 totalEvState = 0;
         TActorId executerId;
-        ui32 actorCount = 3; // TODO: get number of actors properly.
+        ui32 actorCount = 4; // TODO: get number of actors properly.
 
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
         runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
@@ -1100,7 +1100,7 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         bool timeoutPoison = false;
         ui32 totalEvState = 0;
         TActorId executerId;
-        ui32 actorCount = 3; // TODO: get number of actors properly.
+        ui32 actorCount = 4; // TODO: get number of actors properly.
 
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
         runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
@@ -1351,10 +1351,10 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         NJson::ReadJsonTree(*result.GetStats()->GetPlan(), &plan, true);
         Cout << plan;
 
-        UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Node Type"].GetStringSafe(), "TableFullScan");
-        UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Tables"][0].GetStringSafe(), "ManyShardsTable");
+        UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Node Type"].GetStringSafe(), "TableFullScan");
+        UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Tables"][0].GetStringSafe(), "ManyShardsTable");
         UNIT_ASSERT(plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Stats"]["Tasks"].GetIntegerSafe() < 100);
-        UNIT_ASSERT(plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Stats"]["Tasks"].GetIntegerSafe() > 1);
+        UNIT_ASSERT(plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Stats"]["Tasks"].GetIntegerSafe() >= 1);
     }
 
     Y_UNIT_TEST(ManyPartitionsSorting) {

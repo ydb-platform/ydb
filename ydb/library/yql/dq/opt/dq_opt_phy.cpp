@@ -1549,7 +1549,13 @@ TExprBase DqBuildFinalizeByKeyStage(TExprBase node, TExprContext& ctx,
 //       hard to work with. We should consider making it more explicit, something like ProcessScalar on the
 //       top level of expression graph.
 
-TExprBase DqBuildAggregationResultStage(TExprBase node, TExprContext& ctx, IOptimizationContext&) {
+TExprBase DqBuildAggregationResultStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TAggregationResultStageOptions &options) {
+    Y_UNUSED(optCtx);
+
+    if (!options.IsEnabled) {
+        return node;
+    }
+
     if (!node.Maybe<TCoAsList>()) {
         return node;
     }
@@ -1597,7 +1603,7 @@ TExprBase DqBuildAggregationResultStage(TExprBase node, TExprContext& ctx, IOpti
                 return false;
             }
 
-            if (expr.Maybe<TDqPhyPrecompute>().IsValid()) {
+            if (!options.IsKqpPipeline && expr.Maybe<TDqPhyPrecompute>().IsValid()) {
                 auto precompute = expr.Cast<TDqPhyPrecompute>();
                 auto maybeConnection = precompute.Connection().Maybe<TDqCnValue>();
 

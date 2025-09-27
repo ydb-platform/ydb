@@ -10,107 +10,54 @@
                 "PlanNodeType": "Query",
                 "Plans": [
                     {
-                        "Node Type": "ResultSet_1",
-                        "PlanNodeId": 9,
+                        "Node Type": "ResultSet",
+                        "PlanNodeId": 8,
                         "PlanNodeType": "ResultSet",
                         "Plans": [
                             {
-                                "CTE Name": "precompute_0_0",
-                                "Node Type": "ConstantExpr",
-                                "Operators": [
-                                    {
-                                        "Inputs": [],
-                                        "Iterator": "precompute_0_0",
-                                        "Name": "Iterator"
-                                    }
-                                ],
-                                "PlanNodeId": 8
-                            }
-                        ]
-                    },
-                    {
-                        "Node Type": "Precompute_0",
-                        "Parent Relationship": "InitPlan",
-                        "PlanNodeId": 6,
-                        "PlanNodeType": "Materialize",
-                        "Plans": [
-                            {
-                                "Node Type": "Aggregate-Limit-Aggregate",
+                                "Node Type": "Aggregate",
                                 "Operators": [
                                     {
                                         "Inputs": [
                                             {
-                                                "InternalOperatorId": 1
-                                            }
-                                        ],
-                                        "Name": "Aggregate",
-                                        "Phase": "Final"
-                                    },
-                                    {
-                                        "Inputs": [
-                                            {
-                                                "InternalOperatorId": 2
-                                            }
-                                        ],
-                                        "Limit": "1",
-                                        "Name": "Limit"
-                                    },
-                                    {
-                                        "Inputs": [
-                                            {
-                                                "ExternalPlanNodeId": 4
+                                                "ExternalPlanNodeId": 6
                                             }
                                         ],
                                         "Name": "Aggregate",
                                         "Phase": "Final"
                                     }
                                 ],
-                                "PlanNodeId": 5,
+                                "PlanNodeId": 7,
                                 "Plans": [
                                     {
                                         "Node Type": "UnionAll",
-                                        "PlanNodeId": 4,
+                                        "PlanNodeId": 6,
                                         "PlanNodeType": "Connection",
                                         "Plans": [
                                             {
-                                                "Node Type": "Aggregate-Aggregate",
+                                                "Node Type": "Aggregate",
                                                 "Operators": [
                                                     {
                                                         "Inputs": [
                                                             {
-                                                                "InternalOperatorId": 1
-                                                            }
-                                                        ],
-                                                        "Name": "Aggregate",
-                                                        "Phase": "Intermediate"
-                                                    },
-                                                    {
-                                                        "Inputs": [
-                                                            {
-                                                                "ExternalPlanNodeId": 2
+                                                                "ExternalPlanNodeId": 4
                                                             }
                                                         ],
                                                         "Name": "Aggregate",
                                                         "Phase": "Final"
                                                     }
                                                 ],
-                                                "PlanNodeId": 3,
+                                                "PlanNodeId": 5,
                                                 "Plans": [
                                                     {
-                                                        "HashFunc": "HashV2",
-                                                        "KeyColumns": [
-                                                            "UserID"
-                                                        ],
-                                                        "Node Type": "HashShuffle",
-                                                        "PlanNodeId": 2,
+                                                        "Node Type": "UnionAll",
+                                                        "PlanNodeId": 4,
                                                         "PlanNodeType": "Connection",
                                                         "Plans": [
                                                             {
-                                                                "Node Type": "Aggregate-TableFullScan",
+                                                                "Node Type": "Aggregate-Aggregate",
                                                                 "Operators": [
                                                                     {
-                                                                        "Aggregation": "state",
-                                                                        "GroupBy": "item.UserID",
                                                                         "Inputs": [
                                                                             {
                                                                                 "InternalOperatorId": 1
@@ -120,36 +67,75 @@
                                                                         "Phase": "Intermediate"
                                                                     },
                                                                     {
-                                                                        "Inputs": [],
-                                                                        "Name": "TableFullScan",
-                                                                        "Path": "/local/clickbench/plans/column/hits",
-                                                                        "ReadColumns": [
-                                                                            "CounterID (-\u221e, +\u221e)",
-                                                                            "EventDate (-\u221e, +\u221e)",
-                                                                            "UserID (-\u221e, +\u221e)",
-                                                                            "EventTime (-\u221e, +\u221e)",
-                                                                            "WatchID (-\u221e, +\u221e)"
+                                                                        "Inputs": [
+                                                                            {
+                                                                                "ExternalPlanNodeId": 2
+                                                                            }
                                                                         ],
-                                                                        "Scan": "Parallel",
-                                                                        "SsaProgram": {
-                                                                            "Command": [
-                                                                                {
-                                                                                    "Projection": {
-                                                                                        "Columns": [
-                                                                                            {
-                                                                                                "Id": 10
-                                                                                            }
-                                                                                        ]
-                                                                                    }
-                                                                                }
-                                                                            ]
-                                                                        },
-                                                                        "Table": "clickbench/plans/column/hits"
+                                                                        "Name": "Aggregate",
+                                                                        "Phase": "Final"
                                                                     }
                                                                 ],
-                                                                "PlanNodeId": 1,
-                                                                "Tables": [
-                                                                    "clickbench/plans/column/hits"
+                                                                "PlanNodeId": 3,
+                                                                "Plans": [
+                                                                    {
+                                                                        "HashFunc": "HashV2",
+                                                                        "KeyColumns": [
+                                                                            "UserID"
+                                                                        ],
+                                                                        "Node Type": "HashShuffle",
+                                                                        "PlanNodeId": 2,
+                                                                        "PlanNodeType": "Connection",
+                                                                        "Plans": [
+                                                                            {
+                                                                                "Node Type": "Aggregate-TableFullScan",
+                                                                                "Operators": [
+                                                                                    {
+                                                                                        "Aggregation": "state",
+                                                                                        "GroupBy": "item.UserID",
+                                                                                        "Inputs": [
+                                                                                            {
+                                                                                                "InternalOperatorId": 1
+                                                                                            }
+                                                                                        ],
+                                                                                        "Name": "Aggregate",
+                                                                                        "Phase": "Intermediate"
+                                                                                    },
+                                                                                    {
+                                                                                        "Inputs": [],
+                                                                                        "Name": "TableFullScan",
+                                                                                        "Path": "/local/clickbench/plans/column/hits",
+                                                                                        "ReadColumns": [
+                                                                                            "CounterID (-\u221e, +\u221e)",
+                                                                                            "EventDate (-\u221e, +\u221e)",
+                                                                                            "UserID (-\u221e, +\u221e)",
+                                                                                            "EventTime (-\u221e, +\u221e)",
+                                                                                            "WatchID (-\u221e, +\u221e)"
+                                                                                        ],
+                                                                                        "Scan": "Parallel",
+                                                                                        "SsaProgram": {
+                                                                                            "Command": [
+                                                                                                {
+                                                                                                    "Projection": {
+                                                                                                        "Columns": [
+                                                                                                            {
+                                                                                                                "Id": 10
+                                                                                                            }
+                                                                                                        ]
+                                                                                                    }
+                                                                                                }
+                                                                                            ]
+                                                                                        },
+                                                                                        "Table": "clickbench/plans/column/hits"
+                                                                                    }
+                                                                                ],
+                                                                                "PlanNodeId": 1,
+                                                                                "Tables": [
+                                                                                    "clickbench/plans/column/hits"
+                                                                                ]
+                                                                            }
+                                                                        ]
+                                                                    }
                                                                 ]
                                                             }
                                                         ]
@@ -160,8 +146,7 @@
                                     }
                                 ]
                             }
-                        ],
-                        "Subplan Name": "CTE precompute_0_0"
+                        ]
                     }
                 ],
                 "Stats": {

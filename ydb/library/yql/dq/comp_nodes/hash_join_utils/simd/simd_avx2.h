@@ -111,7 +111,7 @@ struct TSimd8 {
     }
 
     static Y_FORCE_INLINE TSimd8<T> LoadStream(const T values[32]) {
-        return _mm256_stream_load_si256(reinterpret_cast<__m256i *>(values));
+        return _mm256_stream_load_si256(reinterpret_cast<const __m256i *>(values));
     }
 
     Y_FORCE_INLINE void Store(T dst[32]) const {
@@ -283,6 +283,43 @@ struct TSimd8 {
             return Shuffle(TSimd8<T>(A0, A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14, A15,
                                      A16, A17, A18, A19, A20, A21, A22, A23, A24, A25, A26, A27, A28, A29, A30, A31));
         }
+    }
+
+    static Y_FORCE_INLINE TSimd8<T> UnpackLaneLo8(const TSimd8<T>& lhs, const TSimd8<T>& rhs) {
+        return _mm256_unpacklo_epi8(lhs.Value, rhs.Value);
+    }
+
+    static Y_FORCE_INLINE TSimd8<T> UnpackLaneHi8(const TSimd8<T>& lhs, const TSimd8<T>& rhs) {
+        return _mm256_unpackhi_epi8(lhs.Value, rhs.Value);
+    }
+
+    static Y_FORCE_INLINE TSimd8<T> UnpackLaneLo16(const TSimd8<T>& lhs, const TSimd8<T>& rhs) {
+        return _mm256_unpacklo_epi16(lhs.Value, rhs.Value);
+    }
+
+    static Y_FORCE_INLINE TSimd8<T> UnpackLaneHi16(const TSimd8<T>& lhs, const TSimd8<T>& rhs) {
+        return _mm256_unpackhi_epi16(lhs.Value, rhs.Value);
+    }
+
+    static Y_FORCE_INLINE TSimd8<T> UnpackLaneLo32(const TSimd8<T>& lhs, const TSimd8<T>& rhs) {
+        return _mm256_unpacklo_epi32(lhs.Value, rhs.Value);
+    }
+
+    static Y_FORCE_INLINE TSimd8<T> UnpackLaneHi32(const TSimd8<T>& lhs, const TSimd8<T>& rhs) {
+        return _mm256_unpackhi_epi32(lhs.Value, rhs.Value);
+    }
+
+    static Y_FORCE_INLINE TSimd8<T> UnpackLaneLo64(const TSimd8<T>& lhs, const TSimd8<T>& rhs) {
+        return _mm256_unpacklo_epi64(lhs.Value, rhs.Value);
+    }
+
+    static Y_FORCE_INLINE TSimd8<T> UnpackLaneHi64(const TSimd8<T>& lhs, const TSimd8<T>& rhs) {
+        return _mm256_unpackhi_epi64(lhs.Value, rhs.Value);
+    }
+
+    template <int N>
+    static Y_FORCE_INLINE TSimd8<T> PermuteLanes(const TSimd8<T>& lhs, const TSimd8<T>& rhs) {
+        return _mm256_permute2x128_si256(lhs.Value, rhs.Value, N);
     }
 
     static Y_FORCE_INLINE TSimd8<T> Repeat16(

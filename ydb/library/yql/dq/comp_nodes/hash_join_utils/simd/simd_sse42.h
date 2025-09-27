@@ -107,8 +107,8 @@ struct TSimd8 {
         return _mm_load_si128(reinterpret_cast<const __m128i *>(values));
     }
 
-    static Y_FORCE_INLINE TSimd8<T> LoadStream(T dst[16]) {
-        return _mm_stream_load_si128(reinterpret_cast<__m128i *>(dst));
+    static Y_FORCE_INLINE TSimd8<T> LoadStream(const T values[16]) {
+        return _mm_stream_load_si128(reinterpret_cast<const __m128i *>(values));
     }
 
     Y_FORCE_INLINE void Store(T dst[16]) const {
@@ -198,6 +198,38 @@ struct TSimd8 {
     template<int N>
     Y_FORCE_INLINE TSimd8<T> Rotate() const {
         return Rotate128<N>();
+    }
+
+    static Y_FORCE_INLINE TSimd8<T> UnpackLaneLo8(const TSimd8<T>& lhs, const TSimd8<T>& rhs) {
+        return _mm_unpacklo_epi8(lhs.Value, rhs.Value);
+    }
+
+    static Y_FORCE_INLINE TSimd8<T> UnpackLaneHi8(const TSimd8<T>& lhs, const TSimd8<T>& rhs) {
+        return _mm_unpackhi_epi8(lhs.Value, rhs.Value);
+    }
+
+    static Y_FORCE_INLINE TSimd8<T> UnpackLaneLo16(const TSimd8<T>& lhs, const TSimd8<T>& rhs) {
+        return _mm_unpacklo_epi16(lhs.Value, rhs.Value);
+    }
+
+    static Y_FORCE_INLINE TSimd8<T> UnpackLaneHi16(const TSimd8<T>& lhs, const TSimd8<T>& rhs) {
+        return _mm_unpackhi_epi16(lhs.Value, rhs.Value);
+    }
+
+    static Y_FORCE_INLINE TSimd8<T> UnpackLaneLo32(const TSimd8<T>& lhs, const TSimd8<T>& rhs) {
+        return _mm_unpacklo_epi32(lhs.Value, rhs.Value);
+    }
+
+    static Y_FORCE_INLINE TSimd8<T> UnpackLaneHi32(const TSimd8<T>& lhs, const TSimd8<T>& rhs) {
+        return _mm_unpackhi_epi32(lhs.Value, rhs.Value);
+    }
+
+    static Y_FORCE_INLINE TSimd8<T> UnpackLaneLo64(const TSimd8<T>& lhs, const TSimd8<T>& rhs) {
+        return _mm_unpacklo_epi64(lhs.Value, rhs.Value);
+    }
+
+    static Y_FORCE_INLINE TSimd8<T> UnpackLaneHi64(const TSimd8<T>& lhs, const TSimd8<T>& rhs) {
+        return _mm_unpackhi_epi64(lhs.Value, rhs.Value);
     }
 
     static Y_FORCE_INLINE TSimd8<T> Repeat16(

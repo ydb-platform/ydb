@@ -81,7 +81,6 @@ private:
 
     TActorId LongTimer;
 
-    std::unordered_map<TString, TString> PrivateTopicPathToCdcPath;
     std::unordered_map<TString, TString> CdcPathToPrivateTopicPath;
 
     enum class EPartitionStatus {
@@ -172,8 +171,6 @@ public:
             return SendReplyAndDie(std::move(Response), ctx);
         }
 
-        // We add 6 second because message from partition can be in flight and
-        // wakeup period in the partition is 5 seconds. timeout must be more
         LongTimer = CreateLongTimer(Min<TDuration>(MaxTimeout, TDuration::MilliSeconds(Settings.MaxWaitTimeMs)),
             new IEventHandle(ctx.SelfID, ctx.SelfID, new TEvents::TEvWakeup(TimeoutWakeupTag)));
 
@@ -188,13 +185,13 @@ public:
         schemeCacheRequest->DatabaseName = Settings.Database;
 
         THashSet<TString> topicsRequested;
-        if (PrivateTopicPathToCdcPath.empty()) {
+        if (CdcPathToPrivateTopicPath.empty()) {
             for (const auto& part : Settings.Partitions) {
                 topicsRequested.insert(part.Topic);
             }
         } else {
-            for (const auto& [key, _] : PrivateTopicPathToCdcPath) {
-                topicsRequested.insert(key);
+            for (const auto& [_, topicPath] : CdcPathToPrivateTopicPath) {
+                topicsRequested.insert(topicPath);
             }
         }
 
@@ -243,7 +240,6 @@ public:
                 anyCdcTopicInRequest = true;
                 AFL_ENSURE(entry.ListNodeEntry->Children.size() == 1);
                 auto privateTopicPath = CanonizePath(JoinPath(ChildPath(NKikimr::SplitPath(path), entry.ListNodeEntry->Children.at(0).Name)));
-                PrivateTopicPathToCdcPath[privateTopicPath] = path;
                 CdcPathToPrivateTopicPath[path] = privateTopicPath;
                 TopicInfo[privateTopicPath] = std::move(TopicInfo[path]);
                 TopicInfo.erase(path);
@@ -374,19 +370,11 @@ public:
         PartitionStatus[partitionIndex] = EPartitionStatus::DataReceived;
 
         const auto& req = Settings.Partitions[partitionIndex];
-        const auto& topic = req.Topic;
-        const auto& partitionId = req.Partition;
 
-        auto res = Response->Response.AddPartResult();
-        auto privateTopicToCdcIt = PrivateTopicPathToCdcPath.find(topic);
-        if (privateTopicToCdcIt == PrivateTopicPathToCdcPath.end()) {
-            res->SetTopic(topic);
-        } else {
-            res->SetTopic(PrivateTopicPathToCdcPath[topic]);
-        }
-
-        res->SetPartition(partitionId);
-        auto read = res->MutableReadResult();
+        auto* res = Response->Response.AddPartResult();
+        res->SetTopic(req.Topic);
+        res->SetPartition(req.Partition);
+        auto* read = res->MutableReadResult();
         read->SetErrorCode(errorCode);
 
         ++FetchRequestReadsDone;
@@ -443,14 +431,6 @@ public:
         }
         TRlHelpers::PassAway(SelfId());
         TActorBootstrapped<TPQFetchRequestActor>::Die(ctx);
-    }
-
-    TAutoPtr<TEvPersQueue::TEvResponse> FormEmptyCurrentRead(ui64 cookie) {
-        TAutoPtr<TEvPersQueue::TEvResponse> req(new TEvPersQueue::TEvResponse);
-        auto read = req->Record.MutablePartitionResponse()->MutableCmdReadResult();
-        req->Record.MutablePartitionResponse()->SetCookie(cookie);
-        read->SetErrorCode(NPersQueue::NErrorCode::READ_NOT_DONE);
-        return req.Release();
     }
 
     std::optional<size_t> NextPartition() {
@@ -524,6 +504,7 @@ public:
                 continue;
             }
 
+
             FetchRequestCurrentReadTablet = tabletId;
             PartitionStatus[*partitionIndex] = EPartitionStatus::DataRequested;
 
@@ -531,6 +512,8 @@ public:
             auto request = CreateReadRequest(topic, req);
             LOG_D("Sending request: " << request->Record.ShortDebugString());
             NTabletPipe::SendData(ctx, tabletInfo.PipeClient, request.release());
+
+            break;
         }
     }
 
@@ -583,13 +566,7 @@ public:
         const auto& partitionId = req.Partition;
 
         auto res = Response->Response.AddPartResult();
-        auto privateTopicToCdcIt = PrivateTopicPathToCdcPath.find(topic);
-        if (privateTopicToCdcIt == PrivateTopicPathToCdcPath.end()) {
-            res->SetTopic(topic);
-        } else {
-            res->SetTopic(PrivateTopicPathToCdcPath[topic]);
-        }
-
+        res->SetTopic(topic);
         res->SetPartition(partitionId);
         auto read = res->MutableReadResult();
         if (record.HasPartitionResponse() && record.GetPartitionResponse().HasCmdReadResult())

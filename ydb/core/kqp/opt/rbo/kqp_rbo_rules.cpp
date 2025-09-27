@@ -1,5 +1,6 @@
 #include "kqp_rbo_rules.h"
 #include <ydb/core/kqp/common/kqp_yql.h>
+#include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/utils/log/log.h>
 #include <typeinfo>
 
@@ -52,12 +53,40 @@ TExprNode::TPtr ReplaceArg(TExprNode::TPtr input, TExprNode::TPtr arg, TExprCont
     }
 }
 
+TExprNode::TPtr FindMemberArg(TExprNode::TPtr input) {
+    if (input->IsCallable("Member")) {
+        auto member = TCoMember(input);
+        return member.Struct().Ptr();
+    }
+    else if (input->IsCallable()){
+        for (auto c : input->Children()) {
+            if (auto arg = FindMemberArg(c))
+                return arg;
+        }
+    }
+    else if(input->IsList()){
+        for (auto c : input->Children()) {
+            if (auto arg = FindMemberArg(c)) {
+                return arg;
+            }
+        }
+    }
+    return TExprNode::TPtr();
+}
+
 TExprNode::TPtr BuildFilterLambdaFromConjuncts(TPositionHandle pos, TVector<TFilterInfo> conjuncts, TExprContext& ctx) {
     auto arg = Build<TCoArgument>(ctx, pos).Name("lambda_arg").Done();
     TExprNode::TPtr lambda;
 
     if (conjuncts.size()==1) {
-        auto body = TExprBase(ReplaceArg(conjuncts[0].FilterBody, arg.Ptr(), ctx));
+        auto filterInfo = conjuncts[0];
+        auto body = ReplaceArg(filterInfo.FilterBody, arg.Ptr(), ctx);
+        if (!filterInfo.FromPg) {
+            body = ctx.Builder(body->Pos())
+                .Callable("FromPg")
+                .Add(0, body)
+                .Seal().Build();
+        }
 
         // clang-format off
         return Build<TCoLambda>(ctx, pos)
@@ -70,7 +99,14 @@ TExprNode::TPtr BuildFilterLambdaFromConjuncts(TPositionHandle pos, TVector<TFil
         TVector<TExprNode::TPtr> newConjuncts;
 
         for (auto c : conjuncts ) {
-            newConjuncts.push_back( ReplaceArg(c.FilterBody, arg.Ptr(), ctx));
+            auto body = ReplaceArg(c.FilterBody, arg.Ptr(), ctx);
+            if (!c.FromPg) {
+                body = ctx.Builder(body->Pos())
+                    .Callable("FromPg")
+                    .Add(0, body)
+                    .Seal().Build();
+            }
+            newConjuncts.push_back( ReplaceArg(body, arg.Ptr(), ctx));
         }
 
         // clang-format off
@@ -111,7 +147,136 @@ bool IsNullRejectingPredicate(const TFilterInfo& filter, TExprContext& ctx) {
 namespace NKikimr {
 namespace NKqp {
 
-std::shared_ptr<IOperator> TExtractJoinExpressionsRule::SimpleTestAndApply(const std::shared_ptr<IOperator> & input, TExprContext& ctx, 
+// Currently we only extract simple expressions where there is only one variable on either side
+
+bool TExtractJoinExpressionsRule::TestAndApply(std::shared_ptr<IOperator> & input, TExprContext& ctx, 
+    const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, 
+    TTypeAnnotationContext& typeCtx, 
+    const TKikimrConfiguration::TPtr& config,
+    TPlanProps& props) {
+
+    Y_UNUSED(kqpCtx);
+    Y_UNUSED(config);
+
+    if (input->Kind != EOperator::Filter) {
+        return false;
+    }
+
+    auto filter = CastOperator<TOpFilter>(input);
+    auto conjInfo = filter->GetConjunctInfo();
+
+    TVector<std::pair<int, TExprNode::TPtr>> matchedConjuncts;
+
+    YQL_CLOG(TRACE, CoreDq) << "Testing expr extraction";
+
+    for (size_t idx = 0; idx < conjInfo.Filters.size(); idx++) {
+        auto f = conjInfo.Filters[idx];
+        YQL_CLOG(TRACE, CoreDq) << "IUs in filter " << f.FilterIUs.size();
+
+        if (f.FilterIUs.size() == 2) {
+            auto predicate = f.FilterBody;
+
+            if (predicate->IsCallable("FromPg")) {
+                predicate = predicate->Child(0);
+            }
+
+            if (predicate->IsCallable("PgResolvedOp") && predicate->Child(0)->Content() == "=") {
+                auto leftSide = predicate->Child(2);
+                auto rightSide = predicate->Child(3);
+
+                if (leftSide->IsCallable("Member") && rightSide->IsCallable("Member")) {
+                    continue;
+                }
+
+                TVector<TInfoUnit> leftIUs;
+                TVector<TInfoUnit> rightIUs;
+                GetAllMembers(leftSide, leftIUs);
+                GetAllMembers(rightSide, rightIUs);
+
+                if (leftIUs.size()==1 && rightIUs.size()==1) {
+                    matchedConjuncts.push_back(std::make_pair(idx, f.FilterBody));
+                }
+            }
+        }
+    }
+
+    if (matchedConjuncts.size()) {
+        TVector<std::pair<TInfoUnit, std::variant<TInfoUnit,TExprNode::TPtr>>> mapElements;
+        TNodeOnNodeOwnedMap replaceMap;
+
+
+        for (auto [idx, conj] : matchedConjuncts) {
+            if (conj->IsCallable("FromPg")) {
+                conj = conj->Child(0);
+            }
+
+            auto leftSide = conj->Child(2);
+            auto rightSide = conj->Child(3);
+
+            auto memberArg = FindMemberArg(leftSide);
+
+            if (!leftSide->IsCallable("Member")) {
+                TString newName = "_rbo_arg_" + std::to_string(props.InternalVarIdx++);
+                auto lambda_arg = Build<TCoArgument>(ctx, leftSide->Pos()).Name("arg").Done().Ptr();
+
+                // clang-format off
+                auto mapLambda = Build<TCoLambda>(ctx, leftSide->Pos())
+                    .Args({lambda_arg})
+                    .Body(ReplaceArg(leftSide, lambda_arg, ctx))
+                    .Done().Ptr();
+                // clang-format on
+
+                mapElements.push_back(std::make_pair(TInfoUnit(newName), mapLambda));
+
+                // clang-format off
+                auto newLeftSide = Build<TCoMember>(ctx, leftSide->Pos())
+                    .Struct(memberArg)
+                    .Name().Value(newName).Build()
+                    .Done().Ptr();
+                // clang-format on
+
+                replaceMap[leftSide] = newLeftSide;
+            }
+
+            if (!rightSide->IsCallable("Member")) {
+                TString newName = "_rbo_arg_" + std::to_string(props.InternalVarIdx++);
+                auto lambda_arg = Build<TCoArgument>(ctx, rightSide->Pos()).Name("arg").Done().Ptr();
+
+                // clang-format off
+                auto mapLambda = Build<TCoLambda>(ctx, rightSide->Pos())
+                    .Args({lambda_arg})
+                    .Body(ReplaceArg(rightSide, lambda_arg, ctx))
+                    .Done().Ptr();
+                // clang-format on
+
+                mapElements.push_back(std::make_pair(TInfoUnit(newName), mapLambda));
+
+                // clang-format off
+                auto newRightSide = Build<TCoMember>(ctx, leftSide->Pos())
+                    .Struct(memberArg)
+                    .Name().Value(newName).Build()
+                    .Done().Ptr();
+                // clang-format on
+
+                replaceMap[rightSide] = newRightSide;
+            }
+        }
+
+        TOptimizeExprSettings settings(&typeCtx);
+        TExprNode::TPtr newFilterLambda;
+        RemapExpr(filter->FilterLambda, newFilterLambda, replaceMap, ctx, settings);
+        filter->FilterLambda = newFilterLambda;
+
+        auto newMap = std::make_shared<TOpMap>(filter->GetInput(), mapElements, false);
+        filter->Children[0] = newMap;
+        return true;
+    }
+
+    return false;
+}
+
+// Currently we push map operator 
+std::shared_ptr<IOperator> TPushMapRule::SimpleTestAndApply(const std::shared_ptr<IOperator> & input, TExprContext& ctx, 
     const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, 
     TTypeAnnotationContext& typeCtx, 
     const TKikimrConfiguration::TPtr& config,
@@ -123,38 +288,80 @@ std::shared_ptr<IOperator> TExtractJoinExpressionsRule::SimpleTestAndApply(const
     Y_UNUSED(config);
     Y_UNUSED(props);
 
-    if (input->Kind != EOperator::Filter) {
+    if (input->Kind != EOperator::Map) {
         return input;
     }
 
-    auto filter = CastOperator<TOpFilter>(input);
-    auto conjInfo = filter->GetConjunctInfo();
+    auto map = CastOperator<TOpMap>(input);
+    if (map->Project) {
+        return input;
+    }
 
-    TExprNode::TPtr matchedConjunct;
-
-    size_t idx = 0;
-    for ( ; idx < conjInfo.Filters.size(); idx++) {
-        auto f = conjInfo.Filters[idx];
-
-        if (f.FilterIUs.size() == 2) {
-            auto predicate = f.FilterBody;
-            if (predicate->IsCallable("PgResolvedOp") && predicate->Child(0)->Content() == "=") {
-                auto leftSide = predicate->Child(2);
-                auto rightSide = predicate->Child(3);
-                TVector<TInfoUnit> leftIUs;
-                TVector<TInfoUnit> rightIUs;
-                GetAllMembers(leftSide, leftIUs);
-                GetAllMembers(rightSide, rightIUs);
-
-                if (leftIUs.size()==1 && rightIUs.size()==1) {
-                    matchedConjunct = predicate;
-                    break;
-                }
-            }
+    // Don't handle renames at this point, just expressions that acutally compute something
+    for (auto & [var, body] : map->MapElements ) {
+        if (!std::holds_alternative<TExprNode::TPtr>(body)) {
+            return input;
         }
     }
 
-    return input;
+    if (map->GetInput()->Kind != EOperator::Join)
+    {
+        return input;
+    }
+
+    auto join = CastOperator<TOpJoin>(map->GetInput());
+
+    // Make sure the join and its inputs are single consumer
+    if (!join->IsSingleConsumer() || !join->GetLeftInput()->IsSingleConsumer() || !join->GetRightInput()->IsSingleConsumer()) {
+        return input;
+    }
+
+    TVector<std::pair<TInfoUnit, std::variant<TInfoUnit,TExprNode::TPtr>>> leftMapElements;
+    TVector<std::pair<TInfoUnit, std::variant<TInfoUnit,TExprNode::TPtr>>> rightMapElements;
+    TVector<std::pair<TInfoUnit, std::variant<TInfoUnit,TExprNode::TPtr>>> topMapElements;
+
+    TVector<int> removeElements;
+
+    for (size_t i=0; i < map->MapElements.size(); i++ ) {
+        auto mapElement = map->MapElements[i];
+
+        TVector<TInfoUnit> mapElIUs;
+        GetAllMembers(std::get<TExprNode::TPtr>(mapElement.second), mapElIUs);
+
+        if (!IUSetDiff(mapElIUs, join->GetLeftInput()->GetOutputIUs()).size()) {
+            leftMapElements.push_back(mapElement);
+        }
+        else if (!IUSetDiff(mapElIUs, join->GetRightInput()->GetOutputIUs()).size()) {
+            rightMapElements.push_back(mapElement);
+        }
+        else {
+            topMapElements.push_back(mapElement);
+        }
+    }    
+
+    if (!leftMapElements.size() && !rightMapElements.size()) {
+        return input;
+    }
+
+    std::shared_ptr<IOperator> output;
+    if (!topMapElements.size()) {
+        output = join;
+    }
+    else {
+        output = std::make_shared<TOpMap>(join, topMapElements, false);
+    }
+
+    if (leftMapElements.size()) {
+        auto leftInput = join->GetLeftInput();
+        join->Children[0] = std::make_shared<TOpMap>(leftInput, leftMapElements, false);
+    }
+
+    if (rightMapElements.size()) {
+        auto rightInput = join->GetRightInput();
+        join->Children[1] = std::make_shared<TOpMap>(rightInput, rightMapElements, false);
+    }
+
+    return output;
 }
 
 std::shared_ptr<IOperator> TPushFilterRule::SimpleTestAndApply(const std::shared_ptr<IOperator> & input, TExprContext& ctx, 
@@ -657,7 +864,7 @@ void TRenameStage::RunStage(TRuleBasedOptimizer* optimizer, TOpRoot & root, TExp
 
 }
 
-TRuleBasedStage RuleStage1 = TRuleBasedStage({std::make_shared<TPushFilterRule>()}, true);
+TRuleBasedStage RuleStage1 = TRuleBasedStage({std::make_shared<TExtractJoinExpressionsRule>(), std::make_shared<TPushMapRule>(), std::make_shared<TPushFilterRule>()}, true);
 TRuleBasedStage RuleStage2 = TRuleBasedStage({std::make_shared<TAssignStagesRule>()}, false);
 
 }

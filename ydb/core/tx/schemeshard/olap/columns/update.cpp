@@ -405,6 +405,7 @@ void TOlapColumnAdd::ParseFromLocalDB(const NKikimrSchemeOp::TOlapColumnDescript
                 errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder() << "Duplicate key column '" << pkKey << "'");
                 return false;
             }
+            PrimaryKeyColumnNames.emplace_back(pkKey);
         }
 
         TSet<TString> columnNames;

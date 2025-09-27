@@ -102,6 +102,10 @@ private:
     bool AskSent = false;
 };
 
+IActor* CreateDescribeSecretsActor(const TString& ownerUserId, const std::vector<TString>& secretIds, NThreading::TPromise<TEvDescribeSecretsResponse::TDescription> promise) {
+    return new TDescribeSecretsActor(ownerUserId, secretIds, promise);
+}
+
 }  // anonymous namespace
 
 void TDescribeSchemaSecretsService::HandleIncomingRequest(TEvResolveSecret::TPtr& ev) {
@@ -322,15 +326,10 @@ NThreading::TFuture<TEvDescribeSecretsResponse::TDescription> DescribeSecret(
     return promise.GetFuture();
 }
 
-IActor* CreateDescribeSecretsActor(const TString& ownerUserId, const std::vector<TString>& secretIds, NThreading::TPromise<TEvDescribeSecretsResponse::TDescription> promise) {
-    return new TDescribeSecretsActor(ownerUserId, secretIds, promise);
-}
-
 void RegisterDescribeSecretsActor(const NActors::TActorId& replyActorId, const TString& ownerUserId, const std::vector<TString>& secretIds, NActors::TActorSystem* actorSystem) {
-    auto promise = NThreading::NewPromise<TEvDescribeSecretsResponse::TDescription>();
-    actorSystem->Register(CreateDescribeSecretsActor(ownerUserId, secretIds, promise));
-
-    promise.GetFuture().Subscribe([actorSystem, replyActorId](const NThreading::TFuture<TEvDescribeSecretsResponse::TDescription>& result){
+    TVector<TString> secretNames{secretIds.begin(), secretIds.end()};
+    auto future = DescribeSecret(secretNames, ownerUserId.empty() ? nullptr : new NACLib::TUserToken(ownerUserId, {}), actorSystem);
+    future.Subscribe([actorSystem, replyActorId](const NThreading::TFuture<TEvDescribeSecretsResponse::TDescription>& result){
         actorSystem->Send(replyActorId, new TEvDescribeSecretsResponse(result.GetValue()));
     });
 }

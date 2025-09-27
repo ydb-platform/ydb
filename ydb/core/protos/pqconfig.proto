@@ -743,10 +743,14 @@ message TClientInfo {
 message TAggregatedCounters {
     repeated uint64 Values = 1;
     repeated TConsumerAggregatedCounters ConsumerAggregatedCounters = 2;
+    optional TCompactionCounters CompactionCounters = 3;
 
     message TConsumerAggregatedCounters {
         optional string Consumer = 1;
         repeated uint64 Values = 2;
+    }
+    message TCompactionCounters {
+        repeated uint64 Values = 1;
     }
 }
 

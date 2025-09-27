@@ -497,6 +497,7 @@ private:
     ui64 GetReadOffset(ui64 offset, TMaybe<TInstant> readTimestamp) const;
 
     TConsumerSnapshot CreateSnapshot(TUserInfo& userInfo) const;
+    bool IsKeyCompactionEnabled() const;
     void CreateCompacter();
     void SendCompacterWriteRequest(THolder<TEvKeyValue::TEvRequest>&& request);
 
@@ -916,6 +917,7 @@ private:
 
     TTabletCountersBase TabletCounters;
     THolder<TPartitionLabeledCounters> PartitionCountersLabeled;
+    THolder<TPartitionCompactionCounters> PartitionCompactionCounters;
 
     // Per partition counters
     NMonitoring::TDynamicCounters::TCounterPtr WriteTimeLagMsByLastWritePerPartition;
@@ -1002,6 +1004,9 @@ private:
     TMultiCounter CompactionUnprocessedCount;
     TMultiCounter CompactionUnprocessedBytes;
     TMultiCounter CompactionTimeLag;
+
+    // NKikimr::NPQ::TMultiCounter KeyCompactionReadCyclesTotal;
+    // NKikimr::NPQ::TMultiCounter KeyCompactionWriteCyclesTotal;
 
     // Writing blob with topic quota variables
     ui64 TopicQuotaRequestCookie = 0;

@@ -777,7 +777,7 @@
             "database":"/Root",
             "database_id":"database4",
             "folder_id":"folder4",
-            "name":"topic.compaction.unprocessed_count_max",
+            "name":"topic.partition.blobs.uncompacted_count_max",
             "topic":"test-counters-stream"
         },
         "value":0
@@ -790,7 +790,7 @@
             "database":"/Root",
             "database_id":"database4",
             "folder_id":"folder4",
-            "name":"topic.compaction.unprocessed_bytes_max",
+            "name":"topic.partition.blobs.uncompacted_bytes_max",
             "topic":"test-counters-stream"
         },
         "value":0
@@ -803,7 +803,7 @@
             "database":"/Root",
             "database_id":"database4",
             "folder_id":"folder4",
-            "name":"topic.compaction.lag_milliseconds_max",
+            "name":"topic.partition.blobs.compaction_lag_milliseconds_max",
             "topic":"test-counters-stream"
         },
         "value":0

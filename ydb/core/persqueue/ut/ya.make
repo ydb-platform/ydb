@@ -52,6 +52,7 @@ RESOURCE(
     ydb/core/persqueue/ut/resources/counters_datastreams.html counters_datastreams.html
     ydb/core/persqueue/ut/resources/counters_pqproxy_firstclass.html counters_pqproxy_firstclass.html
     ydb/core/persqueue/ut/resources/counters_topics.html counters_topics.html
+    ydb/core/persqueue/ut/resources/counters_topics_extended.html counters_topics_extended.html
 
     ydb/core/persqueue/ut/resources/partition_counters/federation/after_write.html federation_after_write.html
     ydb/core/persqueue/ut/resources/partition_counters/federation/after_read.html federation_after_read.html

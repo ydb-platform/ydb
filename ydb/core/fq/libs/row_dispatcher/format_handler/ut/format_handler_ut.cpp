@@ -154,7 +154,8 @@ public:
         CompileService = Runtime.Register(CreatePurecalcCompileServiceMock(CompileNotifier));
 
         CreateFormatHandler({
-            .JsonParserConfig = {},
+            .FunctionRegistry = FunctionRegistry,
+            .JsonParserConfig = {.FunctionRegistry = FunctionRegistry},
             .FiltersConfig = {.CompileServiceId = CompileService},
         });
     }
@@ -384,7 +385,7 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
 
     Y_UNIT_TEST_F(ManyRawClients, TFormatHandlerFixture) {
         CreateFormatHandler(
-            {.JsonParserConfig = {}, .FiltersConfig = {.CompileServiceId = CompileService}},
+            {.FunctionRegistry = FunctionRegistry, .JsonParserConfig = {.FunctionRegistry = FunctionRegistry}, .FiltersConfig = {.CompileServiceId = CompileService}},
             {.ParsingFormat = "raw"}
         );
 
@@ -569,7 +570,7 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
         };
         CheckSuccess(MakeClient(
             {{"ts", "[DataType; String]"}},
-            R"(Unwrap(CAST(`ts` AS Timestamp?) - Interval("PT5S")))",
+            R"(CAST(`ts` AS Timestamp?) - Interval("PT5S"))",
             "",
             BatchCheck(messages),
             ExpectedFilteredRows(messages)
@@ -598,7 +599,7 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
         };
         CheckSuccess(MakeClient(
             {{"ts", "[DataType; String]"}},
-            R"(Unwrap(CAST(`ts` AS Timestamp?) - Interval("PT5S")))",
+            R"(CAST(`ts` AS Timestamp?) - Interval("PT5S"))",
             "",
             BatchCheck(messages),
             ExpectedFilteredRows(messages)
@@ -648,7 +649,7 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
         };
         CheckSuccess(MakeClient(
             {{"ts", "[DataType; String]"}, {"pass", "[DataType; Uint64]"}},
-            R"(Unwrap(CAST(`ts` AS Timestamp?) - Interval("PT5S")))",
+            R"(CAST(`ts` AS Timestamp?) - Interval("PT5S"))",
             "WHERE pass > 0",
             BatchCheck(messages),
             ExpectedFilteredRows(messages)
@@ -675,7 +676,7 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
         };
         CheckSuccess(MakeClient(
             {{"ts", "[DataType; String]"}, {"pass", "[DataType; Uint64]"}},
-            R"(Unwrap(CAST(`ts` AS Timestamp?) - Interval("PT5S")))",
+            R"(CAST(`ts` AS Timestamp?) - Interval("PT5S"))",
             "WHERE pass > 0",
             BatchCheck(messages),
             ExpectedFilteredRows(messages)
@@ -723,7 +724,7 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
         };
         CheckSuccess(MakeClient(
             {{"ts", "[DataType; String]"}},
-            R"(Unwrap(CAST(`ts` AS Timestamp?) - Interval("PT5S")))",
+            R"(CAST(`ts` AS Timestamp?) - Interval("PT5S"))",
             "WHERE FALSE",
             BatchCheck(messages),
             ExpectedFilteredRows(messages)
@@ -748,7 +749,7 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
         };
         CheckSuccess(MakeClient(
             {{"ts", "[DataType; String]"}},
-            R"(Unwrap(CAST(`ts` AS Timestamp?) - Interval("PT5S")))",
+            R"(CAST(`ts` AS Timestamp?) - Interval("PT5S"))",
             "WHERE FALSE",
             BatchCheck(messages),
             ExpectedFilteredRows(messages)

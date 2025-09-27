@@ -24,6 +24,7 @@ std::unique_ptr<NActors::IActor> NewRowDispatcherService(
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     const TYqSharedResources::TPtr& yqSharedResources,
     NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
+    const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
     const TString& tenant,
     const ::NMonitoring::TDynamicCounterPtr& counters,
     const NYql::IPqGateway::TPtr& pqGateway,

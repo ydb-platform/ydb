@@ -20,7 +20,6 @@ PEERDIR(
 
     yql/essentials/minikql
     yql/essentials/minikql/dom
-    yql/essentials/minikql/invoke_builtins
     yql/essentials/providers/common/schema
 )
 

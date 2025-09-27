@@ -226,7 +226,7 @@ public:
             if (!watermark->GetTypeAnn()) {
                 return TStatus::Repeat;
             }
-            if (!EnsureSpecificDataType(*watermark, EDataSlot::Timestamp, ctx, false)) {
+            if (!EnsureSpecificDataType(*watermark, EDataSlot::Timestamp, ctx, true)) {
                 return TStatus::Error;
             }
 

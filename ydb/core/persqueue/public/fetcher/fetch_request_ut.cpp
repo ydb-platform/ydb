@@ -114,28 +114,35 @@ Y_UNIT_TEST_SUITE(TFetchRequestTests) {
 
         ui32 totalPartitions = 5;
         setup->CreateTopic("topic1", "dc1", totalPartitions);
-        NACLib::TDiffACL acl;
-        acl.AddAccess(NACLib::EAccessType::Allow, NACLib::SelectRow, "user1@staff");
-        setup->GetServer().AnnoyingClient->ModifyACL("/Root/PQ", "rt3.dc1--topic1", acl.SerializeAsString());
 
         auto edgeId = runtime.AllocateEdgeActor();
         TPartitionFetchRequest p1{"Root/PQ/rt3.dc1--topic1", 1, 1, 10000};
-        auto goodToken = MakeIntrusiveConst<NACLib::TUserToken>("user1@staff", TVector<TString>{});
-        auto badToken = MakeIntrusiveConst<NACLib::TUserToken>("bad-user@staff", TVector<TString>{});
-        TFetchRequestSettings settings{{}, {p1}, 10000, 10000, {}, goodToken};
-        auto fetchId = runtime.Register(CreatePQFetchRequestActor(settings, MakeSchemeCacheID(), edgeId));
-        runtime.EnableScheduleForActor(fetchId);
-        
-        auto ev = runtime.GrabEdgeEvent<TEvPQ::TEvFetchResponse>();
-        UNIT_ASSERT_C(ev->Status == Ydb::StatusIds::SUCCESS, ev->Message);
-        settings.User = badToken;
 
-        fetchId = runtime.Register(CreatePQFetchRequestActor(settings, MakeSchemeCacheID(), edgeId));
-        runtime.EnableScheduleForActor(fetchId);
-        
-        ev = runtime.GrabEdgeEvent<TEvPQ::TEvFetchResponse>();
-        UNIT_ASSERT_C(ev->Status == Ydb::StatusIds::UNAUTHORIZED, ev->Message);
+        {
+            NACLib::TDiffACL acl;
+            acl.AddAccess(NACLib::EAccessType::Allow, NACLib::SelectRow, "user1@staff");
+            setup->GetServer().AnnoyingClient->ModifyACL("/Root/PQ", "rt3.dc1--topic1", acl.SerializeAsString());
 
+            auto goodToken = MakeIntrusiveConst<NACLib::TUserToken>("user1@staff", TVector<TString>{});
+            TFetchRequestSettings settings{{}, {p1}, 10000, 10000, {}, goodToken};
+
+            auto fetchId = runtime.Register(CreatePQFetchRequestActor(settings, MakeSchemeCacheID(), edgeId));
+            runtime.EnableScheduleForActor(fetchId);
+
+            auto ev = runtime.GrabEdgeEvent<TEvPQ::TEvFetchResponse>();
+            UNIT_ASSERT_C(ev->Status == Ydb::StatusIds::SUCCESS, ev->Message);
+        }
+        
+        {
+            auto badToken = MakeIntrusiveConst<NACLib::TUserToken>("bad-user@staff", TVector<TString>{});
+            TFetchRequestSettings settings{{}, {p1}, 10000, 10000, {}, badToken};
+
+            auto fetchId = runtime.Register(CreatePQFetchRequestActor(settings, MakeSchemeCacheID(), edgeId));
+            runtime.EnableScheduleForActor(fetchId);
+            
+            auto ev = runtime.GrabEdgeEvent<TEvPQ::TEvFetchResponse>();
+            UNIT_ASSERT_C(ev->Status == Ydb::StatusIds::UNAUTHORIZED, ev->Message);
+        }
     }
 };
 

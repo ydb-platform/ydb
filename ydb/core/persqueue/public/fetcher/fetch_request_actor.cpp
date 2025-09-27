@@ -17,10 +17,11 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/public/lib/base/msgbus_status.h>
 
-#define LOG_E(stream) LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::PQ_FETCH_REQUEST, stream)
-#define LOG_W(stream) LOG_WARN_S(*NActors::TlsActivationContext, NKikimrServices::PQ_FETCH_REQUEST, stream)
-#define LOG_I(stream) LOG_INFO_S(*NActors::TlsActivationContext, NKikimrServices::PQ_FETCH_REQUEST, stream)
-#define LOG_D(stream) LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PQ_FETCH_REQUEST, stream)
+#define LOG_PREFIX "[" << NActors::TlsActivationContext->AsActorContext().SelfID << "] "
+#define LOG_E(stream) LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::PQ_FETCH_REQUEST, LOG_PREFIX << stream)
+#define LOG_W(stream) LOG_WARN_S(*NActors::TlsActivationContext, NKikimrServices::PQ_FETCH_REQUEST, LOG_PREFIX << stream)
+#define LOG_I(stream) LOG_INFO_S(*NActors::TlsActivationContext, NKikimrServices::PQ_FETCH_REQUEST, LOG_PREFIX << stream)
+#define LOG_D(stream) LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PQ_FETCH_REQUEST, LOG_PREFIX << stream)
 
 namespace NKikimr::NPQ {
 
@@ -363,9 +364,7 @@ public:
     }
 
     void AddResult(size_t partitionIndex, NPersQueue::NErrorCode::EErrorCode errorCode) {
-        if (!Response) {
-            Response = MakeHolder<TEvPQ::TEvFetchResponse>();
-        }
+        EnsureResponse();
 
         PartitionStatus[partitionIndex] = EPartitionStatus::DataReceived;
 
@@ -554,9 +553,7 @@ public:
             FetchRequestBytesLeft = 0;
         }
         FetchRequestCurrentReadTablet = 0;
-        if (!Response) {
-            Response = MakeHolder<TEvPQ::TEvFetchResponse>();
-        }
+        EnsureResponse();
 
         PartitionStatus[CurrentCookie] = EPartitionStatus::DataReceived;
 
@@ -579,7 +576,7 @@ public:
         ++FetchRequestReadsDone;
 
         auto it = TopicInfo.find(CanonizePath(topic));
-        AFL_ENSURE(it != TopicInfo.end());
+        AFL_ENSURE(it != TopicInfo.end())("topic", topic);
 
         SetMeteringMode(it->second.PQInfo->Description.GetPQTabletConfig().GetMeteringMode());
 
@@ -637,10 +634,14 @@ public:
         return response;
     }
 
-    void CreateOkResponse() {
+    void EnsureResponse() {
         if (!Response) {
             Response = MakeHolder<TEvPQ::TEvFetchResponse>();
         }
+    }
+
+    void CreateOkResponse() {
+        EnsureResponse();
         Response->Status = Ydb::StatusIds::SUCCESS;
     }
 

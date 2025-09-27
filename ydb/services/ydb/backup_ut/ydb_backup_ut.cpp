@@ -119,6 +119,21 @@ struct TTenantsTestSettings : TKikimrTestSettings {
     static constexpr bool PrecreatePools = false;
 };
 
+struct TTransferTestConfig {
+    TString TablePath = "/Root/test_table";
+    TString TopicPath = "/Root/test_topic";
+    TString TransferPath = "/Root/test_transfer";
+    bool UseSecret = true;
+    bool UseUserLogin = false;
+    ui64 BatchSizeBytes = 1024;
+    TDuration FlushInterval = TDuration::Seconds(55);
+    bool Replace = false;
+    bool ComplexLambda = false;
+    bool UseConnectionString = true;
+    bool LambdaInsideUsing = false;
+    ui32 BackupRestoreAtteemptsCount = 1;
+};
+
 }
 
 namespace {
@@ -1314,17 +1329,17 @@ void TestReplicationSettingsArePreserved(
     checkDescription();
 }
 
-TString NormalizeString(const TString& sourceString) {
-    TString normalizedString;
-    normalizedString.reserve(sourceString.size());
+TString CanonizeString(const TString& sourceString) {
+    TString canonizedString;
+    canonizedString.reserve(sourceString.size());
     
     for (size_t i = 0; i < sourceString.size(); ++i) {
         if (const char c = sourceString[i]; !IsSpace(c)) {
-            normalizedString += ToUpper(c);
+            canonizedString += ToUpper(c);
         }
     }
     
-    return normalizedString;
+    return canonizedString;
 }
 
 void WaitTransferInit(TReplicationClient& client, const TString& path) {
@@ -1345,7 +1360,7 @@ const TString GetTransformationLambdaCreateQuery(TReplicationClient& client, con
     auto result = client.DescribeTransfer(path).ExtractValueSync();
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
     const auto& desc = result.GetTransferDescription();
-    return TString(desc.GetTransformationLambda().c_str());
+    return desc.GetTransformationLambda().c_str();
 }
 
 void TestTransferSettingsArePreserved(
@@ -1354,27 +1369,21 @@ void TestTransferSettingsArePreserved(
     TReplicationClient& client,
     TBackupFunction&& backup,
     TRestoreFunction&& restore,
-    const bool useSecret = true,
-    const bool useUserLogin = false,
-    const NDump::TRestoreSettings& restorationSettings = {},
-    const TString& table = "/Root/test_table",
-    const TString& topic = "/Root/test_topic",
-    const TString& transfer = "/Root/test_transfer",
-    const ui64 batchSizeBytes = 1024,
-    const TDuration flushInterval = TDuration::Seconds(55),
-    const bool complexLambda = false
+    TFsPath pathToBackup,
+    const TTransferTestConfig& config = {}
 ) {
-    UNIT_ASSERT_C(!(useSecret && useUserLogin), "useSecret and useUserLogin options are mutually exclusive");
+    UNIT_ASSERT_C(!(config.UseSecret && config.UseUserLogin), "useSecret and useUserLogin options are mutually exclusive");
+    UNIT_ASSERT_C(config.BackupRestoreAtteemptsCount < 10, "backup-restore attempts number must be less than 10");
 
-    if (useSecret || useUserLogin) {
+    if (config.UseSecret || config.UseUserLogin) {
         ExecuteQuery(session, "CREATE OBJECT `transfer_secret_name` (TYPE SECRET) WITH (value = 'root@builtin');", true);
     }
 
-    if (useUserLogin) {
+    if (config.UseUserLogin) {
         ExecuteQuery(session, "CREATE USER `transferuser` PASSWORD 'root@builtin';", true);
     }
     
-    const TString& lambdaBodyQuery = !complexLambda ?
+    const TString& lambdaBodyQuery = !config.ComplexLambda ?
             "$test_lambda = ($msg) -> { return [<| k:CAST($msg._offset AS Uint32), v: CAST($msg._data AS Utf8) |>]; };" :
             R"(
                 $f = ($data) -> {
@@ -1387,70 +1396,83 @@ void TestTransferSettingsArePreserved(
             )";
 
     ExecuteQuery(session,
-        Sprintf("CREATE TABLE `%s` (k Uint32, v Utf8, PRIMARY KEY (k));", table.c_str())
+        Sprintf("CREATE TABLE `%s` (k Uint32, v Utf8, PRIMARY KEY (k));", config.TablePath.c_str())
         , true);
-    ExecuteQuery(session, Sprintf("CREATE TOPIC `%s`;", topic.c_str()), true);
+    ExecuteQuery(session, Sprintf("CREATE TOPIC `%s`;", config.TopicPath.c_str()), true);
     ExecuteQuery(session, Sprintf(R"(
                 %s
-                
-                CREATE TRANSFER `%s` FROM `%s` TO `%s` USING $test_lambda
+                CREATE TRANSFER `%s` FROM `%s` TO `%s` USING %s
                 WITH (
-                    CONNECTION_STRING = 'grpc://%s/?database=/Root',
+                    %s
                     BATCH_SIZE_BYTES = %lu,
                     FLUSH_INTERVAL = Interval('PT%luS')
                     %s
                 );
             )",
             lambdaBodyQuery.c_str(),
-            transfer.c_str(), topic.c_str(), table.c_str(),
-            endpoint.c_str(),
-            batchSizeBytes,
-            flushInterval.Seconds(),
-            (useSecret ? ", TOKEN_SECRET_NAME = 'transfer_secret_name'" :
-            (useUserLogin ? ", USER = 'transferuser', PASSWORD_SECRET_NAME = 'transfer_secret_name'" : ""))
+            config.TransferPath.c_str(), config.TopicPath.c_str(), config.TablePath.c_str(),
+            (config.LambdaInsideUsing ? "($msg) -> { return $test_lambda($msg); }" : "$test_lambda"),
+            (config.UseConnectionString ? Sprintf("CONNECTION_STRING = 'grpc://%s/?database=/Root',", endpoint.c_str()).c_str() : ""),
+            config.BatchSizeBytes,
+            config.FlushInterval.Seconds(),
+            (config.UseSecret ? ", TOKEN_SECRET_NAME = 'transfer_secret_name'" :
+            (config.UseUserLogin ? ", USER = 'transferuser', PASSWORD_SECRET_NAME = 'transfer_secret_name'" : ""))
         ), true
     );
 
-    WaitTransferInit(client, transfer.c_str());
-    const TString& originalLambdaNormalized = NormalizeString(GetTransformationLambdaCreateQuery(client, transfer.c_str()));
+    WaitTransferInit(client, config.TransferPath.c_str());
+    const TString& originalLambdaCanonized = CanonizeString(GetTransformationLambdaCreateQuery(client, config.TransferPath.c_str()));
 
     auto checkDescription = [&]() {
-        auto result = client.DescribeTransfer(transfer.c_str()).ExtractValueSync();
+        auto result = client.DescribeTransfer(config.TransferPath.c_str()).ExtractValueSync();
         const auto& desc = result.GetTransferDescription();
         const auto& params = desc.GetConnectionParams();
-        UNIT_ASSERT_VALUES_EQUAL(params.GetDiscoveryEndpoint(), endpoint);
         UNIT_ASSERT_VALUES_EQUAL(params.GetDatabase(), "/Root");
-        if (useSecret) {
+        UNIT_ASSERT_VALUES_EQUAL(params.GetDiscoveryEndpoint(), endpoint);
+        if (config.UseSecret) {
             UNIT_ASSERT_VALUES_EQUAL(params.GetOAuthCredentials().TokenSecretName, "transfer_secret_name");
         }
-        if (useUserLogin) {
+        if (config.UseUserLogin) {
             UNIT_ASSERT_VALUES_EQUAL(params.GetStaticCredentials().User, "transferuser");
             UNIT_ASSERT_VALUES_EQUAL(params.GetStaticCredentials().PasswordSecretName, "transfer_secret_name");
         }
 
-        UNIT_ASSERT_VALUES_EQUAL(desc.GetSrcPath(), topic.c_str());
-        UNIT_ASSERT_VALUES_EQUAL(desc.GetDstPath(), table.c_str());
-        UNIT_ASSERT_VALUES_EQUAL(desc.GetBatchingSettings().SizeBytes, batchSizeBytes);
-        UNIT_ASSERT_VALUES_EQUAL(desc.GetBatchingSettings().FlushInterval, flushInterval);
+        UNIT_ASSERT_VALUES_EQUAL(desc.GetSrcPath(), config.TopicPath.c_str());
+        UNIT_ASSERT_VALUES_EQUAL(desc.GetDstPath(), config.TablePath.c_str());
+        UNIT_ASSERT_VALUES_EQUAL(desc.GetBatchingSettings().SizeBytes, config.BatchSizeBytes);
+        UNIT_ASSERT_VALUES_EQUAL(desc.GetBatchingSettings().FlushInterval, config.FlushInterval);
 
-        UNIT_ASSERT_VALUES_EQUAL(NormalizeString(desc.GetTransformationLambda().c_str()), originalLambdaNormalized.c_str());
+        UNIT_ASSERT_VALUES_EQUAL(CanonizeString(desc.GetTransformationLambda().c_str()), originalLambdaCanonized.c_str());
+    };
+
+    auto cleanBackupFolder = [&pathToBackup] {
+        TVector<TFsPath> children;
+        pathToBackup.List(children);
+        for (auto& i : children) {
+            i.ForceDelete();
+        }
     };
     
     checkDescription();
 
-    backup();
+    size_t attempt = 0;
+    do {
+        backup();
 
-    if (!restorationSettings.Replace_) {
-        ExecuteQuery(session, Sprintf("DROP TRANSFER `%s`;", transfer.c_str()), true);
-        // we MUST drop topic, because consumer will be dropped during droping transfer
-        // to do: create transfer's option to enable dropping transfer witout dropping consumer
-        ExecuteQuery(session, Sprintf("DROP TOPIC `%s`;", topic.c_str()), true);
-    }
+        if (!config.Replace) {
+            ExecuteQuery(session, Sprintf("DROP TRANSFER `%s`;", config.TransferPath.c_str()), true);
+            // we MUST drop topic, because consumer will be dropped during droping transfer
+            // to do: create transfer's option to enable dropping transfer witout dropping consumer
+            ExecuteQuery(session, Sprintf("DROP TOPIC `%s`;", config.TopicPath.c_str()), true);
+        }
 
-    restore();
+        restore();
 
-    WaitTransferInit(client, transfer.c_str());
-    checkDescription();
+        WaitTransferInit(client, config.TransferPath.c_str());
+        checkDescription();
+
+        cleanBackupFolder();
+    } while (++attempt < config.BackupRestoreAtteemptsCount);
 }
 
 Ydb::Table::DescribeExternalDataSourceResult DescribeExternalDataSource(TSession& session, const TString& path) {
@@ -2311,25 +2333,15 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         );
     }
 
-    void TestTransferBackupRestore(
-        const TString& tablePath = "/Root/test_table",
-        const TString& topicPath = "/Root/test_topic",
-        const TString& transferPath = "/Root/test_transfer",
-		const bool useSecret = true,
-        const bool useUserLogin = false,
-        const ui64 batchSizeBytes = 1024,
-        const TDuration flushInterval = TDuration::Seconds(55),
-        const bool replace = false,
-		const bool complexLambda = false
-    ) {
-        UNIT_ASSERT_C(!(useSecret && useUserLogin), "useSecret and useUserLogin options are mutually exclusive");
+    void TestTransferBackupRestore(const TTransferTestConfig& config = {}) {
+        UNIT_ASSERT_C(!(config.UseSecret && config.UseUserLogin), "useSecret and useUserLogin options are mutually exclusive");
 
         TKikimrWithGrpcAndRootSchema server;
         server.GetRuntime()->GetAppData().FeatureFlags.SetEnableTopicTransfer(true);
         
         const auto endpoint = Sprintf("localhost:%u", server.GetPort());
         auto driverConfig = TDriverConfig().SetEndpoint(endpoint);
-        if (useSecret || useUserLogin) {
+        if (config.UseSecret || config.UseUserLogin) {
             driverConfig.SetAuthToken("root@builtin");
         }
         
@@ -2339,7 +2351,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         auto session = queryClient.GetSession().ExtractValueSync().GetSession();
         TReplicationClient replicationClient(driver);
 
-        if (useSecret || useUserLogin) {
+        if (config.UseSecret || config.UseUserLogin) {
             TPermissions permissionsToken("root@builtin", {"ydb.generic.full"});
             TPermissions permissionsUser("transferuser", {"ydb.generic.full"});
             const auto result = schemeClient.ModifyPermissions("/Root",
@@ -2352,14 +2364,13 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
 
         TTempDir tempDir;
         const auto& pathToBackup = tempDir.Path();
-        const auto restorationSettings = NDump::TRestoreSettings().Replace(replace);
+        const auto restorationSettings = NDump::TRestoreSettings().Replace(config.Replace);
         
         TestTransferSettingsArePreserved(
             endpoint, session, replicationClient,
             CreateBackupLambda(driver, pathToBackup),
             CreateRestoreLambda(driver, pathToBackup, "/Root", restorationSettings),
-            useSecret, useUserLogin, restorationSettings,
-            tablePath, topicPath, transferPath, batchSizeBytes, flushInterval, complexLambda
+            pathToBackup, config
         );
     }
 
@@ -2676,7 +2687,8 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
 
         cleanup();
         TestTransferSettingsArePreserved(endpoint, querySession, transferClient,
-            CreateBackupLambda(driver, pathToBackup), CreateRestoreLambda(driver, pathToBackup, "/Root", restorationSettings), true, false, restorationSettings
+            CreateBackupLambda(driver, pathToBackup), CreateRestoreLambda(driver, pathToBackup, "/Root", restorationSettings), pathToBackup,
+            TTransferTestConfig { .Replace = restorationSettings.Replace_ }
         );
 
         cleanup();
@@ -2777,7 +2789,8 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
                 
         cleanup();
         TestTransferSettingsArePreserved(endpoint, querySession, transferClient,
-            CreateBackupLambda(driver, pathToBackup), CreateRestoreLambda(driver, pathToBackup, "/Root", restorationSettings), true, false
+            CreateBackupLambda(driver, pathToBackup), CreateRestoreLambda(driver, pathToBackup, "/Root", restorationSettings), pathToBackup,
+            TTransferTestConfig { .Replace = restorationSettings.Replace_ }
         );
 
         cleanup();
@@ -2834,94 +2847,106 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
     }
     
     Y_UNIT_TEST(BackupRestoreTransfer_UseSecret) {
-        TestTransferBackupRestore(
-            "/Root/test_table",
-            "/Root/test_topic",
-            "/Root/test_transfer",
-            true, false
-        );
+        TestTransferBackupRestore(TTransferTestConfig {
+            .UseSecret = true,
+            .UseUserLogin = false,
+            .BackupRestoreAtteemptsCount = 3,
+        });
     }
 
     Y_UNIT_TEST(BackupRestoreTransfer_UseUserPassword) {
-        TestTransferBackupRestore(
-            "/Root/test_table",
-            "/Root/test_topic",
-            "/Root/test_transfer",
-            false, true
-        );
+        TestTransferBackupRestore(TTransferTestConfig {
+            .UseSecret = false,
+            .UseUserLogin = true,
+            .BackupRestoreAtteemptsCount = 3,
+        });
     }
 
     Y_UNIT_TEST(BackupRestoreTransfer_NoSecretNoUserPassword) {
-        TestTransferBackupRestore(
-            "/Root/test_table",
-            "/Root/test_topic",
-            "/Root/test_transfer",
-            false, false
-        );
+        TestTransferBackupRestore(TTransferTestConfig {
+            .UseSecret = false,
+            .UseUserLogin = false,
+            .BackupRestoreAtteemptsCount = 3,
+        });
+    }
+
+    Y_UNIT_TEST(BackupRestoreTransfer_NoConnectionString) {
+        TestTransferBackupRestore(TTransferTestConfig {
+            .UseConnectionString = false,
+            .BackupRestoreAtteemptsCount = 3,
+        });
     }
 
     Y_UNIT_TEST(BackupRestoreTransfer_Replace) {
-        TestTransferBackupRestore(
-            "/Root/test_table",
-            "/Root/test_topic",
-            "/Root/test_transfer",
-            true, false,
-            1024,
-            TDuration::Seconds(1),
-            true
-        );
+        TestTransferBackupRestore(TTransferTestConfig {
+            .FlushInterval = TDuration::Seconds(1),
+            .Replace = true,
+            .BackupRestoreAtteemptsCount = 3,
+        });
     }
 
     Y_UNIT_TEST(BackupRestoreTransfer_ComplexLambdaDropRestore) {
-        TestTransferBackupRestore(
-            "/Root/test_table",
-            "/Root/test_topic",
-            "/Root/test_transfer",
-            true, false,
-            1024,
-            TDuration::Seconds(86399),
-            false,
-            true
-        );
+        TestTransferBackupRestore(TTransferTestConfig {
+            .BatchSizeBytes = 100,
+            .FlushInterval = TDuration::Seconds(86399),
+            .Replace = false,
+            .ComplexLambda = true,
+            .BackupRestoreAtteemptsCount = 3,
+        });
     }
 
     Y_UNIT_TEST(BackupRestoreTransfer_ComplexLambdaReplace) {
-        TestTransferBackupRestore(
-            "/Root/test_table",
-            "/Root/test_topic",
-            "/Root/test_transfer",
-            true, false,
-            1024,
-            TDuration::Seconds(5),
-            true,
-            true
-        );
+        TestTransferBackupRestore(TTransferTestConfig {
+            .BatchSizeBytes = 10241024,
+            .FlushInterval = TDuration::Seconds(5),
+            .Replace = true,
+            .ComplexLambda = true,
+            .BackupRestoreAtteemptsCount = 3,
+        });
+    }
+
+    Y_UNIT_TEST(BackupRestoreTransfer_ComplexLambdaInsideUsingDropRestore) {
+        TestTransferBackupRestore(TTransferTestConfig {
+            .BatchSizeBytes = 100,
+            .FlushInterval = TDuration::Seconds(86399),
+            .Replace = false,
+            .ComplexLambda = true,
+            .LambdaInsideUsing = true,
+            .BackupRestoreAtteemptsCount = 3,
+        });
+    }
+
+    Y_UNIT_TEST(BackupRestoreTransfer_ComplexLambdaInsideUsingReplace) {
+        TestTransferBackupRestore(TTransferTestConfig {
+            .BatchSizeBytes = 10241024,
+            .FlushInterval = TDuration::Seconds(5),
+            .Replace = true,
+            .ComplexLambda = true,
+            .LambdaInsideUsing = true,
+            .BackupRestoreAtteemptsCount = 3,
+        });
     }
 
     Y_UNIT_TEST(BackupRestoreTransfer_SubFoldersReplace) {
-        TestTransferBackupRestore(
-            "/Root/table_folder/test_table",
-            "/Root/topic_folder/test_topic",
-            "/Root/test_transfer",
-            true, false,
-            1024,
-            TDuration::Seconds(5),
-            true,
-            true
-        );
+        TestTransferBackupRestore(TTransferTestConfig {
+            .TablePath = "/Root/table_folder/test_table",
+            .TopicPath = "/Root/topic_folder/test_topic",
+            .FlushInterval = TDuration::Seconds(86399),
+            .Replace =  true,
+            .ComplexLambda = true,
+            .BackupRestoreAtteemptsCount = 5,
+        });
     }
 
     Y_UNIT_TEST(BackupRestoreTransfer_SubFoldersDropRestore) {
-        TestTransferBackupRestore(
-            "/Root/table_folder/test_table",
-            "/Root/topic_folder/test_topic",
-            "/Root/test_transfer",
-            true, false,
-            1024,
-            TDuration::Seconds(5),
-            false,
-            true
-        );
+        TestTransferBackupRestore(TTransferTestConfig {
+            .TablePath = "/Root/table_folder/test_table",
+            .TopicPath = "/Root/topic_folder/test_topic",
+            .FlushInterval = TDuration::Seconds(5),
+            .Replace =  false,
+            .ComplexLambda = true,
+            .BackupRestoreAtteemptsCount = 5,
+        });
     }
 
     Y_UNIT_TEST(ReplicasAreNotBackedUp) {

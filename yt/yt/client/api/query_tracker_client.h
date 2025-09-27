@@ -131,6 +131,7 @@ struct TQuery
     NYson::TYsonString Annotations;
     NYTree::IAttributeDictionaryPtr OtherAttributes;
     std::optional<NYson::TYsonString> Secrets;
+    std::optional<bool> IsIndexed;
 };
 
 void Serialize(const TQuery& query, NYson::IYsonConsumer* consumer);

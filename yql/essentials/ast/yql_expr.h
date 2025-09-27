@@ -308,6 +308,18 @@ public:
         return GetKind() == ETypeAnnotationKind::Scalar;
     }
 
+    bool IsLinearOrDynamicLinear() const {
+        return IsLinear() || IsDynamicLinear();
+    }
+
+    bool IsLinear() const {
+        return GetKind() == ETypeAnnotationKind::Linear;
+    }
+
+    bool IsDynamicLinear() const {
+        return GetKind() == ETypeAnnotationKind::DynamicLinear;
+    }
+
     bool HasFixedSizeRepr() const {
         return (GetFlags() & (TypeHasDynamicSize | TypeNonPersistable | TypeNonComputable)) == 0;
     }

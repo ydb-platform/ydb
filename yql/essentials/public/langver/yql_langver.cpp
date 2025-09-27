@@ -69,6 +69,16 @@ bool FormatLangVersion(TLangVersion ver, TLangVersionBuffer& buffer, TStringBuf&
     return true;
 }
 
+TMaybe<TString> FormatLangVersion(TLangVersion ver) {
+    TLangVersionBuffer buffer;
+    TStringBuf result;
+    if (!FormatLangVersion(ver, buffer, result)) {
+        return Nothing();
+    }
+
+    return TString(result);
+}
+
 TLangVersion GetMaxReleasedLangVersion() {
     return MaxReleasedLangVersion;
 }

@@ -288,7 +288,7 @@ TAutoPtr<TLogElement> TYqlLog::CreateLogElement(
         EComponent component, ELevel level,
         TStringBuf file, int line) const
 {
-    if (const bool writeMsg = AtomicCas(&WriteTruncMsg_, 0, 1)) {
+    if (/* const bool writeMsg = */ AtomicCas(&WriteTruncMsg_, 0, 1)) {
         TLogElement fatal(this, ELevelHelpers::ToLogPriority(ELevel::FATAL));
         Contextify(fatal, EComponent::Default, ELevel::FATAL, __FILE__, __LINE__);
         fatal << "Log is truncated by limit";

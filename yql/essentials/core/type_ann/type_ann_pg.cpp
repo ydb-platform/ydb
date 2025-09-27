@@ -3821,7 +3821,7 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                                 }
                                 for (const auto& item : column->Tail().GetTypeAnn()->Cast<TStructExprType>()->GetItems()) {
                                     auto name = TString(item->GetName());
-                                    if (auto it = withRemovedAlias.FindPtr(name)) {
+                                    if (/* auto it = */ withRemovedAlias.FindPtr(name)) {
                                         name = withRemovedAlias[name];
                                     }
                                     auto rightName = localOrder.Find(name);

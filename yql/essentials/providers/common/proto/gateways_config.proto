@@ -234,6 +234,7 @@ message TClickHouseClusterConfig {
     optional bool NativeSecure = 12 [default = false];
     optional string Id = 13;
     repeated string GroupAllowed = 14;
+    optional bool ForceUseBalancer = 15 [default = false];
 }
 
 message TClickHouseGatewayConfig {

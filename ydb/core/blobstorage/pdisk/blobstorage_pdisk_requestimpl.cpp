@@ -112,6 +112,11 @@ TChunkWritePiece::~TChunkWritePiece() {
 }
 
 void TChunkWritePiece::Process(void*) {
+    //do not override PDiskThread counter if no extra threads are created
+    if (PDisk->Cfg->EncryptionThreadsCount > 1) {
+        auto cpuCounter = PDisk->Mon.PDiskGroup->GetCounter(TThread::CurrentThreadName() + "CPU", true);
+        *cpuCounter = ThreadCPUTime();
+    }
     this->ChunkWriteResult = MakeHolder<TChunkWriteResult>(PDisk->ChunkWritePiece(this));
     PDisk->PushChunkWrite(this);
 }

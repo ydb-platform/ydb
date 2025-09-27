@@ -109,7 +109,11 @@ TPDisk::TPDisk(std::shared_ptr<TPDiskCtx> pCtx, const TIntrusivePtr<TPDiskConfig
     JointLogReads.reserve(16 << 10);
     JointChunkForgets.reserve(16 << 10);
 
-    ChunkEncoder = CreateThreadPool(cfg->EncryptionThreadsCount);
+    ChunkEncoder = CreateThreadPool(
+        cfg->EncryptionThreadsCount,
+        0/*QueueSizeLimit*/,
+        TThreadPoolParams().SetThreadNamePrefix("PdEncrypt")
+    );
 
     DebugInfoGenerator = [id = cfg->PDiskId, type = PDiskCategory]() {
         return TStringBuilder() << "PDisk DebugInfo# { Id# " << id << " Type# " << type.TypeStrLong() << " }";
@@ -3845,6 +3849,10 @@ void TPDisk::EnqueueAll() {
     LWTRACK(PDiskEnqueueAllDetails, UpdateCycleOrbit, PCtx->PDiskId, initialQueueSize, processedReqs, pushedToSchedulerReqs, spentTimeMs);
 }
 
+// namespace {
+//     int64_t cycles = 0, sleeps = 0;
+// }
+
 void TPDisk::GetJobsFromForsetti() {
     // Prepare
     UpdateMinLogCostNs();
@@ -3974,7 +3982,7 @@ void TPDisk::Update() {
     }
 
     // Processing
-    bool isNonLogWorkloadPresent = !ChunkEncoder->Size() || !JointChunkWrites.IsEmpty() || !FastOperationsQueue.empty() ||
+    bool isNonLogWorkloadPresent = !JointChunkWrites.IsEmpty() || !FastOperationsQueue.empty() ||
             !JointChunkReads.empty() || !JointLogReads.empty() || !JointChunkTrims.empty() || !JointChunkForgets.empty();
     bool isLogWorkloadPresent = !JointLogWrites.empty();
     bool isNothingToDo = true;
@@ -4082,13 +4090,17 @@ void TPDisk::Update() {
     }
 
     // Wait for something to do
+    // cycles++;
+    // Cerr << "PDisk stats:\n" << isNothingToDo << ' ' << InputQueue.GetWaitingSize() << ' ' << ForsetiScheduler.IsEmpty() << Endl;
     if (isNothingToDo && InputQueue.GetWaitingSize() == 0 && ForsetiScheduler.IsEmpty()) {
         // use deadline to be able to wakeup in situation of pdisk destruction
+        // sleeps++;
         InputQueue.ProducedWait(TDuration::MilliSeconds(10));
     }
+    // Cerr << "cycles, sleeps " << cycles << " " << sleeps << Endl;
 
     auto entireUpdateMs = Mon.UpdateDurationTracker.UpdateEnded();
-    LWTRACK(PDiskUpdateEnded, UpdateCycleOrbit, PCtx->PDiskId, entireUpdateMs );
+    LWTRACK(PDiskUpdateEnded, UpdateCycleOrbit, PCtx->PDiskId, entireUpdateMs);
     UpdateCycleOrbit.Reset();
     *Mon.PDiskThreadCPU = ThreadCPUTime();
 }

@@ -637,6 +637,9 @@ namespace NKikimr::NYaml {
                     if (drive.HasExpectedSlotCount()) {
                         drive.MutablePDiskConfig()->SetExpectedSlotCount(drive.GetExpectedSlotCount());
                     }
+                    if (drive.HasEncryptionThreadsCount()) {
+                        drive.MutablePDiskConfig()->SetEncryptionThreadsCount(drive.GetEncryptionThreadsCount());
+                    }
                     if (drive.HasSlotSizeInUnits()) {
                         drive.MutablePDiskConfig()->SetSlotSizeInUnits(drive.GetSlotSizeInUnits());
                     }

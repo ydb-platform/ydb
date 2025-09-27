@@ -42,6 +42,10 @@ PERIOD_UPDATE_BLACKLIST = {
     'storage'  # Add team names that should not receive periodic updates
 }
 
+# URL constants (only for duplicated URLs)
+GITHUB_ORG_TEAMS_URL = "https://github.com/orgs/ydb-platform/teams"
+DATALENS_DASHBOARD_URL = "https://datalens.yandex/4un3zdm0zcnyr?owner_team={team_name}"
+
 
 def _setup_ydb_connection(database_endpoint=None, database_path=None, credentials_path=None):
     """
@@ -129,6 +133,9 @@ def _execute_ydb_query(database_endpoint, database_path, query, description):
         
     except Exception as e:
         print(f"❌ Error executing YDB query: {e}")
+        print(f"❌ Error type: {type(e).__name__}")
+        import traceback
+        print(f"❌ Traceback: {traceback.format_exc()}")
         return None
 
 
@@ -146,9 +153,17 @@ def get_all_team_data(database_endpoint=None, database_path=None, credentials_pa
         dict: Dictionary with team names as keys and their data, or None if error
     """
     # Set up connection
+    print(f"🔍 Setting up YDB connection:")
+    print(f"   database_endpoint: {database_endpoint}")
+    print(f"   database_path: {database_path}")
+    print(f"   credentials_path: {credentials_path}")
+    
     endpoint, path = _setup_ydb_connection(database_endpoint, database_path, credentials_path)
     if not endpoint or not path:
+        print("❌ Failed to set up YDB connection")
         return None
+    
+    print(f"✅ YDB connection configured: {endpoint} / {path}")
     
     # Calculate target date
     if use_yesterday:
@@ -158,6 +173,13 @@ def get_all_team_data(database_endpoint=None, database_path=None, credentials_pa
     
     yesterday_date = target_date - timedelta(days=1)
     start_date = target_date - timedelta(days=30)
+    
+    print(f"🔍 Date calculation:")
+    print(f"   Current datetime.now(): {datetime.now()}")
+    print(f"   use_yesterday: {use_yesterday}")
+    print(f"   target_date: {target_date}")
+    print(f"   start_date: {start_date}")
+    print(f"   yesterday_date: {yesterday_date}")
     
     # Single optimized query for all data
     all_data_query = f"""
@@ -177,6 +199,12 @@ def get_all_team_data(database_endpoint=None, database_path=None, credentials_pa
     """
     
     # Execute query
+    print(f"🔍 Query details:")
+    print(f"   Start date: {start_date.strftime('%Y-%m-%d')}")
+    print(f"   Target date: {target_date.strftime('%Y-%m-%d')}")
+    print(f"   Endpoint: {endpoint}")
+    print(f"   Path: {path}")
+    
     results = _execute_ydb_query(endpoint, path, all_data_query, f"Getting all team data from {start_date.strftime('%Y-%m-%d')} to {target_date.strftime('%Y-%m-%d')}")
     if results is None:
         return None
@@ -217,10 +245,16 @@ def get_all_team_data(database_endpoint=None, database_path=None, credentials_pa
             team_data[team_name]['stats']['total'] = row.daily_count
             team_data[team_name]['stats']['today'] = row.today_count
     
-    # Calculate "minus today" for each team
+    # Calculate "minus today" for each team and fix total if needed
     for team_name, data in team_data.items():
         trend = data['trend']
         yesterday_str = yesterday_date.strftime('%Y-%m-%d')
+        
+        # If total is 0 but we have trend data, use the latest available value
+        if data['stats']['total'] == 0 and trend:
+            latest_date = max(trend.keys())
+            data['stats']['total'] = trend[latest_date]
+            print(f"🔍 Fixed total for team {team_name}: using {latest_date} value {trend[latest_date]}")
         
         if yesterday_str in trend:
             yesterday_total = trend[yesterday_str]
@@ -487,7 +521,7 @@ def escape_markdown(text):
     
     # Escape special characters for MarkdownV2 (single backslash)
     # Characters that need escaping: _ * [ ] ( ) ~ ` > # + - = | { } . !
-    special_chars = ['_', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!']
+    special_chars = ['_', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!', '(', ')']
     
     for char in special_chars:
         text = text.replace(char, f'\\{char}')
@@ -536,7 +570,7 @@ def format_team_message(team_name, issues, team_responsible=None, muted_stats=No
     # Start with title and team tag (replace - with _ in tag)
     team_tag = team_name.replace('-', '')
     # Create team URL and escape it
-    team_url = f"https://github.com/orgs/ydb-platform/teams/{team_name}"
+    team_url = f"{GITHUB_ORG_TEAMS_URL}/{team_name}"
     message = f"🔇 *{current_date} new muted tests in `main` for [{team_name}]({team_url})* #{team_tag}\n\n"
     
     for issue in issues:
@@ -561,7 +595,7 @@ def format_team_message(team_name, issues, team_responsible=None, muted_stats=No
         minus_today = team_stats.get('minus_today', 0)
         
         # Create dashboard URL for the team
-        dashboard_url = f"https://datalens.yandex/4un3zdm0zcnyr?owner_team={team_name}"
+        dashboard_url = DATALENS_DASHBOARD_URL.format(team_name=team_name)
         
         # Format statistics with color coding and emojis
         if show_diff:
@@ -1008,17 +1042,19 @@ def send_period_updates(period, bot_token, team_channels, ydb_config, delay=2, m
         # Create trend message
         period_title = "Weekly Muted Tests Report" if period == "week" else "Monthly Muted Tests Report"
         team_tag = team_name.replace('-', '')
-        message = f"📈 *{period_title}* for team [{team_name}](https://github.com/orgs/ydb-platform/teams/{team_name}) #{team_tag}\n\n"
+        team_url = f"{GITHUB_ORG_TEAMS_URL}/{team_name}"
+        message = f"📈 *{period_title}* for team [{team_name}]({team_url}) #{team_tag}\n\n"
         
         # Add trend statistics if available
         if team_name in all_team_data:
             team_stats = all_team_data[team_name]['stats']
             trend_data = all_team_data[team_name]['trend']
             total = team_stats['total']
-            dashboard_url = f"https://datalens.yandex/4un3zdm0zcnyr?owner_team={team_name}"
+            dashboard_url = DATALENS_DASHBOARD_URL.format(team_name=team_name)
             
             # Calculate period change
             period_days = 7 if period == "week" else 30
+            # Use the same date logic as in get_all_team_data
             current_date = datetime.now() - timedelta(days=1) if ydb_config.get('use_yesterday', False) else datetime.now()
             previous_date = current_date - timedelta(days=period_days)
             
@@ -1027,17 +1063,55 @@ def send_period_updates(period, bot_token, team_channels, ydb_config, delay=2, m
             
             current_count = trend_data.get(current_date_str, 0)
             previous_count = trend_data.get(previous_date_str, 0)
-            change = current_count - previous_count
+            
+            # Check if we have data for both dates to calculate meaningful change
+            has_current_data = current_date_str in trend_data
+            has_previous_data = previous_date_str in trend_data
+            
+            # Debug information
+            print(f"🔍 Debug for team {team_name}:")
+            print(f"   Current date: {current_date_str}, count: {current_count}, has_data: {has_current_data}")
+            print(f"   Previous date: {previous_date_str}, count: {previous_count}, has_data: {has_previous_data}")
+            print(f"   Available dates in trend_data: {sorted(trend_data.keys())[-5:]}")  # Last 5 dates
             
             message += f"📊 *[Total muted tests: {total}]({dashboard_url})*\n\n"
             
-            # Add change information
-            if change > 0:
-                message += f"🔴 +{change} muted tests in last {period_days} days\n\n"
-            elif change < 0:
-                message += f"🟢 {change} muted tests in last {period_days} days\n\n"
+            # Add change information only if we have data for both dates
+            if has_current_data and has_previous_data:
+                change = current_count - previous_count
+                print(f"   Change: {change} (current - previous)")
+                if change > 0:
+                    message += f"🔴 +{change} muted tests in last {period_days} days\n\n"
+                elif change < 0:
+                    message += f"🟢 {change} muted tests in last {period_days} days\n\n"
+                else:
+                    message += f"⚪ No change in last {period_days} days\n\n"
             else:
-                message += f"⚪ No change in last {period_days} days\n\n"
+                print(f"   Cannot calculate change: missing data for current={has_current_data}, previous={has_previous_data}")
+                
+                # Try to find the earliest available data for comparison
+                if trend_data and has_current_data:
+                    available_dates = sorted(trend_data.keys())
+                    if len(available_dates) > 1:
+                        earliest_date = available_dates[0]
+                        earliest_count = trend_data[earliest_date]
+                        days_span = (datetime.strptime(current_date_str, '%Y-%m-%d') - datetime.strptime(earliest_date, '%Y-%m-%d')).days
+                        change = current_count - earliest_count
+                        print(f"   Using earliest available data: {earliest_date} ({earliest_count}) vs {current_date_str} ({current_count}) = {change} over {days_span} days")
+                        
+                        if change > 0:
+                            message += f"🔴 +{change} muted tests since {earliest_date} ({days_span} days ago)\n\n"
+                        elif change < 0:
+                            message += f"🟢 {change} muted tests since {earliest_date} ({days_span} days ago)\n\n"
+                        else:
+                            message += f"⚪ No change since {earliest_date} ({days_span} days ago)\n\n"
+                    else:
+                        message += f"ℹ️ No historical data available for comparison\n\n"
+                else:
+                    if not has_previous_data:
+                        message += f"ℹ️ No data available for comparison ({period_days} days ago)\n\n"
+                    else:
+                        message += f"ℹ️ Insufficient data for trend analysis\n\n"
         
         # Add responsible users if available
         if team_responsible and team_name in team_responsible:

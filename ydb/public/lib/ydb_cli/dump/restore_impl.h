@@ -257,7 +257,7 @@ private:
     NRateLimiter::TRateLimiterClient RateLimiterClient;
     NQuery::TQueryClient QueryClient;
     NCms::TCmsClient CmsClient;
-    NReplication::TReplicationClient ReplicationClient;    
+    NReplication::TReplicationClient ReplicationClient;
     std::shared_ptr<TLog> Log;
     // Used to creating child drivers with different database settings.
     TDriverConfig DriverConfig;

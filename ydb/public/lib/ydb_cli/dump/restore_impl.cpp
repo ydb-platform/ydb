@@ -492,7 +492,7 @@ TRestoreClient::TRestoreClient(const TDriver& driver, const std::shared_ptr<TLog
     , RateLimiterClient(driver)
     , QueryClient(driver)
     , CmsClient(driver)
-    , ReplicationClient(driver)    
+    , ReplicationClient(driver)
     , Log(log)
     , DriverConfig(driver.GetConfig())
 {

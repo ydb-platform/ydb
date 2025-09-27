@@ -823,23 +823,28 @@ namespace {
 
 TString ExtractTransformationLambdaName(const TString& lambdaCreateQuery) {
     const TString lambdaNameStartPattern  = "$__ydb_transfer_lambda = ";
-    const TString lambdaNameEndPattern  = ";";
+    const TString lambdaNameEndPattern = ";";
     
-    size_t start_pos = lambdaCreateQuery.find(lambdaNameStartPattern);
-    if (start_pos == TString::npos) {
+    size_t startPos = lambdaCreateQuery.find(lambdaNameStartPattern);
+    if (startPos == TString::npos) {
         LOG_E("Unexpected transfer lambda name: '$__ydb_transfer_lambda' was not found");
         return "";
     }
 
-    start_pos += lambdaNameStartPattern.length();
+    startPos += lambdaNameStartPattern.length();
 
-    size_t end_pos = lambdaCreateQuery.find(lambdaNameEndPattern, start_pos);
-    if (end_pos == TString::npos) {
+    size_t endPos = lambdaCreateQuery.rfind(lambdaNameEndPattern);
+    if (endPos == TString::npos) {
         LOG_E("Unexpected transfer lambda name: end semicolon was not found");
         return "";
     }
+
+    if (startPos >= endPos) {
+        LOG_E("Unexpected transfer lambda name");
+        return "";
+    }
     
-    return lambdaCreateQuery.substr(start_pos, end_pos - start_pos);
+    return lambdaCreateQuery.substr(startPos, endPos - startPos);
 }
 
 void CleanQuery(TString& query, const TString& patternToRemove) {    

@@ -1155,6 +1155,8 @@ private:
                              const bool needToCompactHead,
                              TProcessParametersBase& parameters,
                              TEvKeyValue::TEvRequest* compactionRequest);
+
+    bool WasTheLastBlobBig = true;
 };
 
 inline ui64 TPartition::GetStartOffset() const {

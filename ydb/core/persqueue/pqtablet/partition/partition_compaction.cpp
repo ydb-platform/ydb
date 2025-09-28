@@ -409,15 +409,14 @@ void TPartition::BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& 
         auto& [k, pos] = KeysForCompaction[i];
         bool needToCompactHead = (parameters.CurOffset < k.Key.GetOffset());
 
-        LOG_D("Need to compact head " << needToCompactHead);
-
         if (pos == Max<size_t>()) {
             // большой блоб надо переименовать
             LOG_D("Rename key " << k.Key.ToString());
 
-            if (!wasTheLastBlobBig) {
+            if (!WasTheLastBlobBig) {
                 needToCompactHead = true;
             }
+            LOG_D("Need to compact head " << needToCompactHead);
 
             parameters.CurOffset = k.Key.GetOffset();
 
@@ -433,19 +432,20 @@ void TPartition::BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& 
 
             parameters.HeadCleared = true;
 
-            wasTheLastBlobBig = true;
+            WasTheLastBlobBig = true;
         } else {
             // маленький блоб надо дописать
             LOG_D("Append blob for key " << k.Key.ToString());
+            LOG_D("Need to compact head " << needToCompactHead);
 
             const TRequestedBlob& requestedBlob = blobs[pos];
-            if (!CompactRequestedBlob(requestedBlob, parameters, needToCompactHead, compactionRequest.Get(), blobCreationUnixTime, wasTheLastBlobBig)) {
+            if (!CompactRequestedBlob(requestedBlob, parameters, needToCompactHead, compactionRequest.Get(), blobCreationUnixTime, WasTheLastBlobBig)) {
                 LOG_D("Can't append blob for key " << k.Key.ToString());
                 Y_FAIL("Something went wrong");
                 return;
             }
 
-            wasTheLastBlobBig = false;
+            WasTheLastBlobBig = false;
         }
     }
 

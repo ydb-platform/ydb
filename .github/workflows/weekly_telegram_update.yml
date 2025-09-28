@@ -23,7 +23,7 @@ env:
   GH_TOKEN: ${{ secrets.YDBOT_TOKEN }}
 
 jobs:
-  mite-trend-report:
+  mute-trend-report:
     name: Send trend updates to Telegram
     runs-on: [ self-hosted, auto-provisioned, build-preset-analytic-node]
     

@@ -1115,7 +1115,7 @@ def send_period_updates(period, bot_token, team_channels, ydb_config, delay=2, m
             if isinstance(responsible, list):
                 responsible_str = " ".join(f"@{r}" if not r.startswith('@') else r for r in responsible)
             else:
-                responsible_str = f"@{responsible.replace('_', '\\_')}" if not responsible.startswith('@') else responsible.replace('_', '\\_')
+                responsible_str = f"@{responsible}" if not responsible.startswith('@') else responsible
             message += f"fyi: {responsible_str}\n\n"
         
         # Message will be automatically escaped by send_telegram_message for MarkdownV2

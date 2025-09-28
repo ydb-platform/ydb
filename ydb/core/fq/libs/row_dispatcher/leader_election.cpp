@@ -95,7 +95,7 @@ class TLeaderElection: public TActorBootstrapped<TLeaderElection>, public TActor
         Started
     };
     NFq::NConfig::TRowDispatcherCoordinatorConfig Config;
-    const NKikimr::TYdbCredentialsProviderFactory& CredentialsProviderFactory;
+    NKikimr::TYdbCredentialsProviderFactory CredentialsProviderFactory;
     std::unique_ptr<NYdb::TDriver> Driver;
     TYdbConnectionPtr YdbConnection;
     TString TablePathPrefix;

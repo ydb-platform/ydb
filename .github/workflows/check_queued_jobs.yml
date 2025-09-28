@@ -29,4 +29,6 @@ jobs:
       env:
         TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_YDBOT_TOKEN }}
       run: |
-        python .github/scripts/telegram/check_queued_jobs.py --chat-id 3017506311 --send-when-all-good
+        python .github/scripts/telegram/check_queued_jobs.py \
+          --chat-id 3017506311 \
+          --send-when-all-good

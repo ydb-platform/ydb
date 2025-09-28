@@ -52,6 +52,7 @@ void GetAllMembers(TExprNode::TPtr node, TVector<TInfoUnit>& IUs);
 struct TFilterInfo {
     TExprNode::TPtr FilterBody;
     TVector<TInfoUnit> FilterIUs;
+    bool FromPg = false;
 };
 
 struct TJoinConditionInfo {
@@ -61,7 +62,6 @@ struct TJoinConditionInfo {
 };
 
 struct TConjunctInfo {
-    bool ToPg = false;
     TVector<TFilterInfo> Filters;
     TVector<TJoinConditionInfo> JoinConditions;
 };
@@ -158,6 +158,7 @@ struct TStageGraph {
 
 struct TPlanProps {
     TStageGraph StageGraph;
+    int InternalVarIdx=1;
 };
 
 class IOperator {
@@ -174,9 +175,9 @@ class IOperator {
         return Children;
     }
 
-    virtual TVector<TInfoUnit> GetOutputIUs() {
-        return OutputIUs;
-    }
+    bool HasChildren() const { return Children.size() != 0; }
+
+    virtual TVector<TInfoUnit> GetOutputIUs() = 0;
 
     virtual void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> & renameMap, TExprContext & ctx);
 
@@ -189,7 +190,6 @@ class IOperator {
     TPhysicalOpProps Props;
     TVector<std::shared_ptr<IOperator>> Children;
     TVector<std::weak_ptr<IOperator>> Parents;
-    TVector<TInfoUnit> OutputIUs;
 };
 
 template <class K>
@@ -231,6 +231,7 @@ class IBinaryOperator : public IOperator {
 class TOpEmptySource : public IOperator {
     public:
     TOpEmptySource() : IOperator(EOperator::EmptySource, {}) {}
+    virtual TVector<TInfoUnit> GetOutputIUs() override { return {}; }
     virtual TString ToString() override { return "EmptySource"; }
 
 };
@@ -238,6 +239,7 @@ class TOpEmptySource : public IOperator {
 class TOpRead : public IOperator {
     public:
     TOpRead(TExprNode::TPtr node);
+    virtual TVector<TInfoUnit> GetOutputIUs() override;
     virtual TString ToString() override;
 
     TString Alias;
@@ -247,6 +249,7 @@ class TOpRead : public IOperator {
 class TOpMap : public IUnaryOperator {
     public:
     TOpMap(std::shared_ptr<IOperator> input, TVector<std::pair<TInfoUnit, std::variant<TInfoUnit, TExprNode::TPtr>>> mapElements, bool project);
+    virtual TVector<TInfoUnit> GetOutputIUs() override;
     bool HasRenames() const;
     bool HasLambdas() const;
     TVector<std::pair<TInfoUnit, TInfoUnit>> GetRenames() const;
@@ -262,6 +265,7 @@ class TOpMap : public IUnaryOperator {
 class TOpProject : public IUnaryOperator {
     public:
     TOpProject(std::shared_ptr<IOperator> input, TVector<TInfoUnit> projectList );
+    virtual TVector<TInfoUnit> GetOutputIUs() override;    
 
     void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> & renameMap, TExprContext & ctx) override;
     virtual TString ToString() override;
@@ -272,6 +276,7 @@ class TOpProject : public IUnaryOperator {
 class TOpFilter : public IUnaryOperator {
     public:
     TOpFilter(std::shared_ptr<IOperator> input, TExprNode::TPtr filterLambda);
+    virtual TVector<TInfoUnit> GetOutputIUs() override;
     virtual TString ToString() override;
 
     TVector<TInfoUnit> GetFilterIUs() const;
@@ -284,6 +289,7 @@ class TOpFilter : public IUnaryOperator {
 class TOpJoin : public IBinaryOperator {
     public:
     TOpJoin(std::shared_ptr<IOperator> leftArg, std::shared_ptr<IOperator> rightArg, TString joinKind, TVector<std::pair<TInfoUnit, TInfoUnit>> joinKeys);
+    virtual TVector<TInfoUnit> GetOutputIUs() override;
     void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> & renameMap, TExprContext & ctx) override;
     virtual TString ToString() override;
 
@@ -294,6 +300,7 @@ class TOpJoin : public IBinaryOperator {
 class TOpLimit : public IUnaryOperator {
     public:
     TOpLimit(std::shared_ptr<IOperator> input, TExprNode::TPtr limitCond);
+    virtual TVector<TInfoUnit> GetOutputIUs() override;
     void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> & renameMap, TExprContext & ctx) override;
     virtual TString ToString() override;
 
@@ -303,6 +310,7 @@ class TOpLimit : public IUnaryOperator {
 class TOpRoot : public IUnaryOperator {
     public:
     TOpRoot(std::shared_ptr<IOperator> input);
+    virtual TVector<TInfoUnit> GetOutputIUs() override;
     virtual TString ToString() override;
     void ComputeParents();
 

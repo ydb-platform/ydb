@@ -1157,6 +1157,8 @@ private:
                              TEvKeyValue::TEvRequest* compactionRequest);
 
     bool WasTheLastBlobBig = true;
+
+    void DumpKeysForBlobsCompaction() const;
 };
 
 inline ui64 TPartition::GetStartOffset() const {

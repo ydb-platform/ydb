@@ -24,9 +24,7 @@ bool TPartition::ExecRequestForCompaction(TWriteMsg& p, TProcessParametersBase& 
 
     bool needCompactHead = poffset > curOffset;
     if (needCompactHead) { //got gap
-        // проверка не нужна. мы можем начать с блоба в середины сообщения
-        //AFL_ENSURE(p.Msg.PartNo == 0)
-        //    ("p.Msg.PartNo", p.Msg.PartNo);
+        // не нужно проверять p.Msg.PartNo. мы можем начать с блоба в середине сообщения
         curOffset = poffset;
     }
 
@@ -153,6 +151,16 @@ ui64 TPartition::GetCompactedBlobSizeLowerBound() const
     return Config.GetPartitionConfig().GetLowWatermark();
 }
 
+void TPartition::DumpKeysForBlobsCompaction() const
+{
+    LOG_D("==== keys for blobs compaction ====");
+    for (size_t i = 0; i < BlobEncoder.DataKeysBody.size(); ++i) {
+        const auto& k = BlobEncoder.DataKeysBody[i];
+        LOG_D(((k.Size >= GetCompactedBlobSizeLowerBound()) ? 'R' : '*') << " " << k.Key.ToString() << " " << k.Size);
+    }
+    LOG_D("===================================");
+}
+
 void TPartition::TryRunCompaction()
 {
     if (CompactionInProgress) {
@@ -165,12 +173,7 @@ void TPartition::TryRunCompaction()
         return;
     }
 
-    LOG_D("==== keys for blobs compaction ====");
-    for (size_t i = 0; i < BlobEncoder.DataKeysBody.size(); ++i) {
-        const auto& k = BlobEncoder.DataKeysBody[i];
-        LOG_D(((k.Size >= GetCompactedBlobSizeLowerBound()) ? 'R' : '*') << " " << k.Key.ToString() << " " << k.Size);
-    }
-    LOG_D("===================================");
+    //DumpKeysForBlobsCompaction();
 
     const ui64 blobsKeyCountLimit = GetBodyKeysCountLimit();
     const ui64 compactedBlobSizeLowerBound = GetCompactedBlobSizeLowerBound();
@@ -220,7 +223,7 @@ void TPartition::Handle(TEvPQ::TEvRunCompaction::TPtr& ev)
 {
     const ui64 blobsCount = ev->Get()->BlobsCount;
 
-    LOG_D("begin compaction for " << blobsCount << " blobs");
+    LOG_D("Begin compaction for " << blobsCount << " blobs");
 
     TVector<TRequestedBlob> blobs;
     TBlobKeyTokens tokens;

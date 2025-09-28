@@ -13,3 +13,9 @@
   * YQ-4447 disabled thread pool in s3 by default (https://github.com/ydb-platform/ydb/pull/22160)
   * YQ-4454 fixed clickhouse udf includes (https://github.com/ydb-platform/ydb/pull/21698)
 * 22678:Fixed [false-positive unresponsive tablet issues](https://github.com/ydb-platform/ydb/issues/22390) in healthcheck during restarts. [#22678](https://github.com/ydb-platform/ydb/pull/22678) ([vporyadke](https://github.com/vporyadke))
+* 25621:Fixes https://github.com/ydb-platform/ydb/issues/25586
+
+Removes misleading comments in code [#25621](https://github.com/ydb-platform/ydb/pull/25621) ([Sergey Belyakov](https://github.com/serbel324))
+* 25145:fix crash after follower alter https://github.com/ydb-platform/ydb/issues/20866 https://github.com/ydb-platform/ydb/issues/20868 [#25145](https://github.com/ydb-platform/ydb/pull/25145) ([vporyadke](https://github.com/vporyadke))
+* 25112:fix a bug where tablet deletion might get stuck https://github.com/ydb-platform/ydb/issues/23858 [#25112](https://github.com/ydb-platform/ydb/pull/25112) ([vporyadke](https://github.com/vporyadke))
+

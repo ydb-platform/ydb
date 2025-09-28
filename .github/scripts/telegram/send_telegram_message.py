@@ -9,7 +9,107 @@ import sys
 import argparse
 import requests
 import time
+import re
 from pathlib import Path
+
+
+def escape_markdown(text):
+    """
+    Escape special MarkdownV2 characters for Telegram, but preserve bold formatting and link structure.
+    
+    Args:
+        text (str): Text to escape
+        
+    Returns:
+        str: Escaped text
+    """
+    print(f"Input text: \n{text}")
+    # For MarkdownV2, we need to escape these characters: _ * [ ] ( ) ~ ` > # + - = | { } . !
+    # But we want to preserve * for bold formatting, [ ] ( ) for links, and content inside backticks
+    
+    # First, protect inline code by temporarily replacing them
+    code_pattern = r'`([^`]+)`'
+    code_blocks = []
+    
+    def replace_code(match):
+        code_blocks.append(match.group(1))
+        return f"CODEPLACEHOLDER{len(code_blocks)-1}N"
+    
+    # Replace all inline code with placeholders
+    text = re.sub(code_pattern, replace_code, text)
+    
+    # Then protect links by temporarily replacing them
+    link_pattern = r'\[([^\]]+)\]\(([^)]+)\)'
+    links = []
+    
+    def replace_link(match):
+        links.append((match.group(1), match.group(2)))
+        return f"LINKPLACEHOLDER{len(links)-1}N"
+    
+    # Replace all links with placeholders
+    text = re.sub(link_pattern, replace_link, text)
+    
+    # Also protect standalone URLs (http/https) by temporarily replacing them
+    url_pattern = r'https?://[^\s\)]+'
+    urls = []
+    
+    def replace_url(match):
+        urls.append(match.group(0))
+        return f"URLPLACEHOLDER{len(urls)-1}N"
+    
+    # Replace all standalone URLs with placeholders
+    text = re.sub(url_pattern, replace_url, text)
+    print(f"Text after URL replacement: \n{text}")
+    
+    # Protect user mentions (@username) by temporarily replacing them BEFORE escaping
+    mention_pattern = r'@[a-zA-Z0-9_]+'
+    
+    # First, find all mentions
+    mentions = re.findall(mention_pattern, text)
+    print(f"Found mentions: {mentions}")
+    
+    # Sort mentions by length in descending order to avoid partial matches
+    mentions.sort(key=len, reverse=True)
+    print(f"Sorted mentions (longest first): {mentions}")
+    
+    # Now replace mentions in order from longest to shortest
+    for i, mention in enumerate(mentions):
+        print(f"Replacing mention: {mention}")
+       # text = text.replace(mention, f"MENTIONPLACEHOLDER{i}N")
+    
+    print(f"Text after mention replacement: \n{text}")
+    
+    # Escape special characters for MarkdownV2 (single backslash)
+    # Characters that need escaping: _ * [ ] ( ) ~ ` > # + - = | { } . !
+    special_chars = ['_', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!', '(', ')']
+    
+    for char in special_chars:
+        text = text.replace(char, f'\\{char}')
+    
+    # Restore user mentions FIRST (content should NOT be escaped)
+    for i, mention in enumerate(mentions):
+        print(f"Restoring mention: {mention}")
+        text = text.replace(f"MENTIONPLACEHOLDER{i}N", mention)
+    
+    # Restore standalone URLs (they should NOT be escaped)
+    for i, url in enumerate(urls):
+        text = text.replace(f"URLPLACEHOLDER{i}N", url)
+    
+    # Restore links, escaping special characters in link text but NOT in URLs
+    for i, (link_text, link_url) in enumerate(links):
+        # Escape special characters in link text only
+        escaped_text = link_text
+        for char in special_chars:
+            escaped_text = escaped_text.replace(char, f'\\{char}')
+        
+        # URLs should NOT be escaped (Telegram handles them correctly)
+        text = text.replace(f"LINKPLACEHOLDER{i}N", f"[{escaped_text}]({link_url})")
+    
+    # Restore inline code (content should NOT be escaped)
+    for i, code_content in enumerate(code_blocks):
+        text = text.replace(f"CODEPLACEHOLDER{i}N", f"`{code_content}`")
+    print(f"Restored text: {text}")
+    return text
 
 
 def _read_content(message_or_file):
@@ -166,6 +266,10 @@ def send_telegram_message(bot_token, chat_id, message_or_file, parse_mode="Markd
     content = _read_content(message_or_file)
     if content is None:
         return False
+    
+    # Escape content for MarkdownV2 if needed
+    if parse_mode == "MarkdownV2":
+        content = escape_markdown(content)
     
     # If photo is provided, send photo with chunked caption
     if photo_path:

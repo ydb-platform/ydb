@@ -66,20 +66,20 @@ TConclusionStatus TOneCompactionCommand::DoExecute(TKikimrRunner& /*kikimr*/) {
     auto controller = NYDBTest::TControllers::GetControllerAs<NYDBTest::NColumnShard::TController>();
     AFL_VERIFY(controller);
     AFL_VERIFY(!controller->IsBackgroundEnable(NKikimr::NYDBTest::ICSController::EBackground::Compaction));
-    const i64 compactions = controller->GetCompactionFinishedCounter().Val();
+    const i64 compactionsFinished = controller->GetCompactionFinishedCounter().Val();
+    const i64 compactionsStarted = controller->GetCompactionStartedCounter().Val();
     controller->EnableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
-    const TInstant start = TInstant::Now();
-    while (TInstant::Now() - start < TDuration::Seconds(10)) {
-        if (compactions < controller->GetCompactionFinishedCounter().Val()) {
-            Cerr << "COMPACTION_HAPPENED: " << compactions << " -> " << controller->GetCompactionFinishedCounter().Val() << Endl;
-            break;
-        }
+    const bool started = controller->WaitCompactions(TDuration::Seconds(30));
 
-        Cerr << "WAIT_COMPACTION: " << controller->GetCompactionFinishedCounter().Val() << Endl;
+    const TInstant deadline = TInstant::Now() + TDuration::Seconds(30);
+    while (controller->GetCompactionFinishedCounter().Val() == compactionsFinished && TInstant::Now() < deadline) {
+        Cerr << "WAIT_COMPACTION_FINISH: " << controller->GetCompactionFinishedCounter().Val() << Endl;
         Sleep(TDuration::MilliSeconds(300));
     }
 
-    AFL_VERIFY(compactions < controller->GetCompactionFinishedCounter().Val());
+    AFL_VERIFY(started);
+    AFL_VERIFY(compactionsStarted < controller->GetCompactionStartedCounter().Val());
+    AFL_VERIFY(compactionsFinished < controller->GetCompactionFinishedCounter().Val());
 
     controller->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
     return TConclusionStatus::Success();

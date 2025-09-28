@@ -23,7 +23,6 @@ def escape_markdown(text):
     Returns:
         str: Escaped text
     """
-    print(f"Input text: \n{text}")
     # For MarkdownV2, we need to escape these characters: _ * [ ] ( ) ~ ` > # + - = | { } . !
     # But we want to preserve * for bold formatting, [ ] ( ) for links, and content inside backticks
     
@@ -59,25 +58,6 @@ def escape_markdown(text):
     
     # Replace all standalone URLs with placeholders
     text = re.sub(url_pattern, replace_url, text)
-    print(f"Text after URL replacement: \n{text}")
-    
-    # Protect user mentions (@username) by temporarily replacing them BEFORE escaping
-    mention_pattern = r'@[a-zA-Z0-9_]+'
-    
-    # First, find all mentions
-    mentions = re.findall(mention_pattern, text)
-    print(f"Found mentions: {mentions}")
-    
-    # Sort mentions by length in descending order to avoid partial matches
-    mentions.sort(key=len, reverse=True)
-    print(f"Sorted mentions (longest first): {mentions}")
-    
-    # Now replace mentions in order from longest to shortest
-    for i, mention in enumerate(mentions):
-        print(f"Replacing mention: {mention}")
-       # text = text.replace(mention, f"MENTIONPLACEHOLDER{i}N")
-    
-    print(f"Text after mention replacement: \n{text}")
     
     # Escape special characters for MarkdownV2 (single backslash)
     # Characters that need escaping: _ * [ ] ( ) ~ ` > # + - = | { } . !
@@ -85,11 +65,6 @@ def escape_markdown(text):
     
     for char in special_chars:
         text = text.replace(char, f'\\{char}')
-    
-    # Restore user mentions FIRST (content should NOT be escaped)
-    for i, mention in enumerate(mentions):
-        print(f"Restoring mention: {mention}")
-        text = text.replace(f"MENTIONPLACEHOLDER{i}N", mention)
     
     # Restore standalone URLs (they should NOT be escaped)
     for i, url in enumerate(urls):
@@ -108,7 +83,6 @@ def escape_markdown(text):
     # Restore inline code (content should NOT be escaped)
     for i, code_content in enumerate(code_blocks):
         text = text.replace(f"CODEPLACEHOLDER{i}N", f"`{code_content}`")
-    print(f"Restored text: {text}")
     return text
 
 

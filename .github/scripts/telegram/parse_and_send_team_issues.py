@@ -194,6 +194,8 @@ def get_all_team_data(database_endpoint=None, database_path=None, credentials_pa
     AND is_muted = 1
     AND branch = 'main'
     AND build_type = 'relwithdebinfo'
+    AND is_test_chunk = 0
+    AND resolution != 'Skipped'
     GROUP BY owner, date_window
     ORDER BY owner, date_window
     """

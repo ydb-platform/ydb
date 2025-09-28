@@ -31,7 +31,6 @@ Y_UNIT_TEST(TestWriteVeryBigMessage) {
         TFinalizer finalizer(tc);
         tc.Prepare(dispatchName, setup, activeZone);
         tc.Runtime->SetScheduledLimit(200);
-        tc.Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsSize(1);
         activeZone = false;
 
         PQTabletPrepare({}, {}, tc); //always delete

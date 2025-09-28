@@ -16,6 +16,7 @@ message TIndexPortionMeta {
         bool IsEvicted = 4;
     }
     optional string TierName = 5;
+    optional bool TieredIndexes = 19;
     optional bytes PrimaryKeyBorders = 6; // arrow::RecordBatch with first and last ReplaceKey rows
     optional TSnapshot RecordSnapshotMin = 7;
     optional TSnapshot RecordSnapshotMax = 8;

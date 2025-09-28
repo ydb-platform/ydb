@@ -191,11 +191,15 @@ public:
     ui32 GetCompactionLevel() const {
         return GetMeta().GetCompactionLevel();
     }
+    
+    bool GetTieredIndexes() const {
+        return GetMeta().GetTieredIndexes();
+    }
 
     bool NeedShardingFilter(const TGranuleShardingInfo& shardingInfo) const;
 
     virtual NSplitter::TEntityGroups GetEntityGroupsByStorageId(
-        const TString& specialTier, const IStoragesManager& storages, const TIndexInfo& indexInfo) const = 0;
+        const TString& specialTier, const bool tieredIndexes, const IStoragesManager& storages, const TIndexInfo& indexInfo) const = 0;
     virtual const TString& GetColumnStorageId(const ui32 columnId, const TIndexInfo& indexInfo) const = 0;
     virtual const TString& GetEntityStorageId(const ui32 columnId, const TIndexInfo& indexInfo) const = 0;
     virtual const TString& GetIndexStorageId(const ui32 indexId, const TIndexInfo& indexInfo) const = 0;

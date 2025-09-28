@@ -38,8 +38,8 @@ std::unique_ptr<TPortionInfoConstructor> TCompactedPortionInfo::BuildConstructor
 }
 
 NSplitter::TEntityGroups TCompactedPortionInfo::GetEntityGroupsByStorageId(
-    const TString& specialTier, const IStoragesManager& storages, const TIndexInfo& indexInfo) const {
-    return indexInfo.GetEntityGroupsByStorageId(specialTier, storages);
+    const TString& specialTier, const bool tieredIndexes, const IStoragesManager& storages, const TIndexInfo& indexInfo) const {
+    return indexInfo.GetEntityGroupsByStorageId(specialTier, tieredIndexes, storages);
 }
 
 const TString& TCompactedPortionInfo::GetColumnStorageId(const ui32 columnId, const TIndexInfo& indexInfo) const {
@@ -47,11 +47,11 @@ const TString& TCompactedPortionInfo::GetColumnStorageId(const ui32 columnId, co
 }
 
 const TString& TCompactedPortionInfo::GetEntityStorageId(const ui32 columnId, const TIndexInfo& indexInfo) const {
-    return indexInfo.GetEntityStorageId(columnId, GetMeta().GetTierName());
+    return indexInfo.GetEntityStorageId(columnId, GetMeta().GetTierName(), GetMeta().GetTieredIndexes());
 }
 
 const TString& TCompactedPortionInfo::GetIndexStorageId(const ui32 indexId, const TIndexInfo& indexInfo) const {
-    return indexInfo.GetIndexStorageId(indexId);
+    return indexInfo.GetIndexStorageId(indexId, GetMeta().GetTierName(), GetMeta().GetTieredIndexes());
 }
 
 }   // namespace NKikimr::NOlap

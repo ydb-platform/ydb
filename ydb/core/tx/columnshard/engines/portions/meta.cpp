@@ -15,6 +15,7 @@ NKikimrTxColumnShard::TIndexPortionMeta TPortionMeta::SerializeToProto(const std
     FullValidation();
     NKikimrTxColumnShard::TIndexPortionMeta portionMeta;
     portionMeta.SetTierName(TierName);
+    portionMeta.SetTieredIndexes(TieredIndexes);
     portionMeta.SetCompactionLevel(CompactionLevel);
     portionMeta.SetDeletionsCount(DeletionsCount);
     portionMeta.SetRecordsCount(RecordsCount);
@@ -71,6 +72,14 @@ TString TPortionMeta::DebugString() const {
 std::optional<TString> TPortionMeta::GetTierNameOptional() const {
     if (TierName && TierName != NBlobOperations::TGlobal::DefaultStorageId) {
         return TierName;
+    } else {
+        return std::nullopt;
+    }
+}
+
+std::optional<bool> TPortionMeta::GetTieredIndexesOptional() const {
+    if (TierName && TierName != NBlobOperations::TGlobal::DefaultStorageId) {
+        return TieredIndexes;
     } else {
         return std::nullopt;
     }

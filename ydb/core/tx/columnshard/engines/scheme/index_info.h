@@ -150,7 +150,10 @@ private:
     std::shared_ptr<TColumnFeatures> BuildDefaultColumnFeatures(
         const NTable::TColumn& column, const std::shared_ptr<IStoragesManager>& operators) const;
 
-    const TString& GetIndexStorageId(const ui32 indexId) const {
+    const TString& GetIndexStorageId(const ui32 indexId, const TString& specialTier, bool tieredIndexes) const {
+        if (tieredIndexes && specialTier && specialTier != IStoragesManager::DefaultStorageId) {
+            return specialTier;
+        }
         auto it = Indexes.find(indexId);
         AFL_VERIFY(it != Indexes.end());
         return it->second->GetStorageId();
@@ -173,15 +176,18 @@ private:
     }
 
 public:
-    const TString& GetEntityStorageId(const ui32 entityId, const TString& specialTier) const {
+    const TString& GetEntityStorageId(const ui32 entityId, const TString& specialTier, bool tieredIndexes) const {
         auto it = Indexes.find(entityId);
         if (it != Indexes.end()) {
+            if (tieredIndexes && specialTier && specialTier != IStoragesManager::DefaultStorageId) {
+                return specialTier;
+            }
             return it->second->GetStorageId();
         }
         return GetColumnStorageId(entityId, specialTier);
     }
 
-    NSplitter::TEntityGroups GetEntityGroupsByStorageId(const TString& specialTier, const IStoragesManager& storages) const;
+    NSplitter::TEntityGroups GetEntityGroupsByStorageId(const TString& specialTier, const bool tieredIndexes, const IStoragesManager& storages) const;
     std::optional<ui32> GetPKColumnIndexByIndexVerified(const ui32 columnIndex) const {
         AFL_VERIFY(columnIndex < ColumnFeatures.size());
         return ColumnFeatures[columnIndex]->GetPKColumnIndex();

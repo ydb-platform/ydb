@@ -14,6 +14,7 @@ class TPortionMetaConstructor {
 private:
     std::optional<NArrow::TFirstLastSpecialKeys> FirstAndLastPK;
     std::optional<TString> TierName;
+    std::optional<bool> TieredIndexes;
     std::optional<TSnapshot> RecordSnapshotMin;
     std::optional<TSnapshot> RecordSnapshotMax;
     std::optional<ui64> CompactionLevel;

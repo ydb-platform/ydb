@@ -190,7 +190,6 @@ Y_UNIT_TEST(MediumMsgCompactificationWithRebootsTest) {
 }
 
 Y_UNIT_TEST(LargeMsgCompactificationWithRebootsTest) {
-    return; // ToDo: enable after fixing LOGBROKER-9700
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() { return tc.InitialEventsFilter.Prepare(); }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
         TFinalizer finalizer(tc);

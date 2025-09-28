@@ -2224,6 +2224,7 @@ class WorkloadTestBase(LoadSuiteBase):
 
             # Собираем информацию об ошибках нод
             node_errors = []
+            verify_errors = {}
 
             # Проверяем состояние нод и собираем ошибки
             try:
@@ -2232,6 +2233,7 @@ class WorkloadTestBase(LoadSuiteBase):
                 diagnostics_start_time = getattr(
                     result, "workload_start_time", result.start_time
                 )
+                verify_errors = self.check_node_verifies_with_timing(diagnostics_start_time, end_time)
                 node_errors = self.check_nodes_diagnostics_with_timing(
                     result, diagnostics_start_time, end_time
                 )
@@ -2241,7 +2243,7 @@ class WorkloadTestBase(LoadSuiteBase):
                 # Добавляем ошибку в результат
                 result.add_warning(f"Error getting nodes state: {e}")
                 node_errors = []  # Устанавливаем пустой список если диагностика не удалась
-
+            
             # Вычисляем время выполнения
             end_time = time_module.time()
             start_time = result.start_time if result.start_time else end_time - 1
@@ -2294,6 +2296,7 @@ class WorkloadTestBase(LoadSuiteBase):
                 end_time=end_time,
                 addition_table_strings=additional_table_strings,
                 node_errors=node_errors,
+                verify_errors=verify_errors,
                 workload_result=result,
                 workload_params=workload_params,
                 use_node_subcols=use_node_subcols,
@@ -2346,7 +2349,7 @@ class WorkloadTestBase(LoadSuiteBase):
             # 3. Формирование summary/статистики (with_errors/with_warnings автоматически добавляются в ydb_cli.py)
 
             # 4. Формирование allure-отчёта
-            self._create_allure_report(result, workload_name, workload_params, node_errors, use_node_subcols)
+            self._create_allure_report(result, workload_name, workload_params, node_errors, use_node_subcols, verify_errors)
 
             # Сохраняем node_errors для использования после выгрузки
             result._node_errors = node_errors

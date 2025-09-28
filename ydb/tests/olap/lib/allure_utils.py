@@ -1,4 +1,5 @@
 from __future__ import annotations
+from collections import defaultdict
 import allure
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from ydb.tests.olap.lib.results_processor import ResultsProcessor
@@ -15,7 +16,7 @@ class NodeErrors:
     def __init__(self, node: YdbCluster.Node, message: str):
         self.node = node
         self.core_hashes: list[tuple[str, str]] = []    # id, aggregated hash
-        self.verifies: str = None
+        self.verifies: int = 0
         self.sanitizer_errors: str = None
         self.was_oom: bool = False
         self.message: str = message
@@ -52,28 +53,51 @@ def _set_coredumps(test_info: dict[str, str], start_time: float, end_time: float
     test_info['coredumps'] = f"<a target='_blank' href='https://coredumps.yandex-team.ru/v3/cores?{params}'>link</a>"
 
 
-def _set_node_errors(test_info: dict[str, str], node_errors: list[NodeErrors]) -> None:
+def _set_node_errors(node_errors: list[NodeErrors]) -> str:
     if len(node_errors) == 0:
-        return
-    html = '<ul>'
+        return ''
+    html = '<h3>Node Errors</h3>'
+    html += '<table border="1" cellpadding="2px"><tr><th>Node</th><th>Problems</th><th>Core dumps</th></tr>'
+    host_errors = defaultdict(lambda: defaultdict(lambda: ''))
+    host_cores = defaultdict(lambda: '')
+
+    reported_sanitizer = set()
+
     for node in node_errors:
-        html += f'<li>{node.node.slot}'
-        if node.message:
-            html += f'<p>Node {node.message}</p>'
+        problems = ''
         if node.was_oom:
-            html += '<p>Node was killed by OOM</p>'
+            host_errors[node.node.host]['oom'] = 'OOM'
         if node.verifies:
-            html += '<p>Node had VERIFY failures</p>'
-            allure.attach(node.verifies, f'Node {node.node.slot} VERIFY report', attachment_type=allure.attachment_type.TEXT)
-        if node.sanitizer_errors:
-            html += '<p>Node had sanitizer issues</p>'
-            allure.attach(node.sanitizer_errors, f'Node {node.node.slot} sanitizer report', attachment_type=allure.attachment_type.TEXT)
+            host_errors[node.node.host]['verify'] = f'VERIFY fails: {node.verifies}'
+        if node.sanitizer_errors and node.node.host not in reported_sanitizer:
+            host_errors[node.node.host]['sanitizer'] = 'SANitizer issues'
+            reported_sanitizer.add(node.node.host)
+            allure.attach(node.sanitizer_errors, f'Node {node.node.host} sanitizer report', attachment_type=allure.attachment_type.TEXT)
         for core_id, core_hash in node.core_hashes:
             color = hex(0xFF0000 + hash(str(core_hash)) % 0xFFFF).split('x')[-1]
-            html += f'<p>There was coredump <a target="_blank" href="https://coredumps.yandex-team.ru/core_trace?core_id={core_id}" style="background-color: #{color}">{core_hash}</a></p>'
-        html += '</li>'
-    html += '</ul>'
-    test_info['<span style="background-color: #FF8888">node errors</span>'] = html
+            host_cores[node.node.host] += f'Coredump at {node.node.slot} <a target="_blank" href="https://coredumps.yandex-team.ru/core_trace?core_id={core_id}" style="background-color: #{color}">{core_hash}</a></br>'
+    for host, problems in host_errors.items():
+        html += f'<tr>'
+        html += f'<td>{host}</td>'
+        html += f'<td>{'<br/>'.join(problems.values())}</td>'
+        html += f'<td>{host_cores[host]}</td>'
+        html += '</tr>'
+    html += '</table>'
+    return html
+
+
+def _produce_verify_report(verify_errors) -> str:
+    if not verify_errors or len(verify_errors) == 0:
+        return ''
+    html = '<h4>Verifies Errors (clickable)</h4>'
+
+    for verify, verify_info in verify_errors.items():
+        html += f'<details style="margin-bottom: 15px"><summary>• {verify}</summary>'
+        html += f'<table border="1" cellpadding="2px"><tr><th>Node</th><th>VERIFY failed times</th></tr>'
+        for host, triggered_times in verify_info['hosts_count'].items():
+            html += f'<tr bgcolor="{'#90EE90' if triggered_times == 0 else '#FA8072'}"><td>{host}</td><td>{triggered_times}</td></tr>'
+        html += f'</table><br/><code>{''.join(verify_info['full_trace']).replace('\n', '<br/>')}</code></details>'
+    return html
 
 
 def _set_results_plot(test_info: dict[str, str], suite: str, test: str, refference_set: str) -> None:
@@ -758,6 +782,7 @@ def allure_test_description(
     attachments: tuple[str, str, allure.attachment_type] = None,
     refference_set: str = '',
     node_errors: list[NodeErrors] = None,
+    verify_errors=None,
     workload_result=None,
     workload_params: dict = None,
     use_node_subcols: bool = False,
@@ -784,7 +809,6 @@ def allure_test_description(
 
     _set_monitoring(test_info, start_time, end_time)
     _set_coredumps(test_info, start_time, end_time)
-    _set_node_errors(test_info, node_errors)
     _set_results_plot(test_info, suite, test, refference_set)
     _set_logs_command(test_info, start_time, end_time)
 
@@ -808,6 +832,9 @@ def allure_test_description(
         {table_strings}
         </tbody></table>
     '''
+    
+    html += _set_node_errors(node_errors)
+    html += _produce_verify_report(verify_errors)
 
     html += '\n'.join([f'<div>\n{b}\n</div>\n\n' for b in addition_blocks])
 

@@ -1,7 +1,9 @@
 from __future__ import annotations
+from collections import Counter, defaultdict
 import allure
 import json
 import logging
+import re as regex
 import os
 import pytest
 import yatest
@@ -274,26 +276,69 @@ class LoadSuiteBase:
         return host_logs
 
     @classmethod
-    def __get_verify_fails(cls, hosts: set[str], start_time: float, end_time: float) -> dict[str, str]:
+    def __get_verify_fails(cls, hosts: set[str], start_time: float, end_time: float):
         tz = timezone('Europe/Moscow')
         start = datetime.fromtimestamp(start_time, tz).isoformat()
         end = datetime.fromtimestamp(end_time + 10, tz).isoformat()
 
-        verify_regex_params = r'(VERIFY failed.*\n)([^0-9]*.*\n){0,2}(\d+\..*\n)+'
+        verify_regex_params = r'(VERIFY failed \(.+\): .*\n(\s+.*\n\s+.*\n)(\d+\..*\n)*)'
+        verify_regex = regex.compile(verify_regex_params)
 
         core_processes = {
-            h: cls.execute_ssh(h, fr"ulimit -n 100500;unified_agent select -S '{start}' -U '{end}' -s kikimr-start | grep -Pzo -i '{verify_regex_params}'")
+            h: cls.execute_ssh(h, fr"ulimit -n 100500;unified_agent select -S '{start}' -U '{end}' -s kikimr-start | grep -Pzo -i '{verify_regex_params}' | head -n 50000")
             for h in hosts
         }
 
-        host_logs = {}
+        host_matches = defaultdict(lambda: [])
         for h, exec in core_processes.items():
             exec.wait(check_exit_code=False)
             if exec.returncode != 0:
                 logging.error(f'Error while process VERIFY fails on host {h}: {exec.stderr}')
             else:
-                host_logs[h] = exec.stdout
-        return host_logs
+                verifies_stdout = exec.stdout
+                matches = verify_regex.findall(verifies_stdout)
+                for m in matches:
+                    host_matches[h].append((m[0], m[1]))
+        verifies_info = defaultdict(lambda: {
+            'full_trace': None,
+            'hosts_count': defaultdict(0)
+        })
+        for host, verify_match in host_matches.items():
+            verifies_patterns = list(map(lambda m: m[1], verify_match))
+            unique_verify_patterns = set(verifies_patterns)
+            counters = Counter(verifies_patterns)
+            for pattern in unique_verify_patterns:
+                if pattern in verifies_info:
+                    verifies_info[pattern]['hosts_count'][host] = counters[pattern]
+                else:
+                    verifies_info[pattern] = {
+                        'full_trace': next(m for m in verify_match if m[1] == pattern),
+                        'hosts_count': {host: counters[pattern]}
+                    }
+        return verifies_info
+
+    @classmethod
+    def __count_verify_fails(cls, hosts: set[str], start_time: float, end_time: float) -> dict[str, str]:
+        tz = timezone('Europe/Moscow')
+        start = datetime.fromtimestamp(start_time, tz).isoformat()
+        end = datetime.fromtimestamp(end_time + 10, tz).isoformat()
+
+        verify_regex_params = r'VERIFY failed'
+
+        core_processes = {
+            h: cls.execute_ssh(h, fr"ulimit -n 100500;unified_agent select -S '{start}' -U '{end}' -s kikimr-start | grep -ic '{verify_regex_params}'")
+            for h in hosts
+        }
+
+        total_host_verify_fails = dict()
+        for h, exec in core_processes.items():
+            exec.wait(check_exit_code=False)
+            if exec.returncode != 0:
+                logging.error(f'Error while process VERIFY fails on host {h}: {exec.stderr}')
+            else:
+                total_host_verify_fails[h] = int(exec.stdout)
+
+        return total_host_verify_fails
 
     @classmethod
     def __get_hosts_with_omms(cls, hosts: set[str], start_time: float, end_time: float) -> set[str]:
@@ -577,6 +622,13 @@ class LoadSuiteBase:
         return cls.check_nodes_diagnostics_with_timing(result, result.start_time, end_time)
 
     @classmethod
+    def check_node_verifies_with_timing(cls, start_time: float, end_time: float):
+        if cls.__nodes_state is None:
+            return []
+        all_hosts = {node.host for node in cls.__nodes_state.values()}
+        return cls.__get_verify_fails(all_hosts, start_time, end_time)
+
+    @classmethod
     def check_nodes_diagnostics_with_timing(cls, result: YdbCliHelper.WorkloadRunResult, start_time: float, end_time: float) -> list[NodeErrors]:
         """
         Собирает диагностическую информацию о нодах с кастомным временным интервалом.
@@ -597,7 +649,7 @@ class LoadSuiteBase:
         core_hashes = cls.__get_core_hashes_by_pod(all_hosts, start_time, end_time)
         ooms = cls.__get_hosts_with_omms(all_hosts, start_time, end_time)
         sanitizer_messages = cls.__get_sanitizer_events(all_hosts, start_time, end_time)
-        verifies = cls.__get_verify_fails(all_hosts, start_time, end_time)
+        hosts_with_verifies = cls.__count_verify_fails(all_hosts, start_time, end_time)
 
         # Создаем NodeErrors для каждой ноды с диагностической информацией
         node_errors = []
@@ -606,12 +658,12 @@ class LoadSuiteBase:
             has_cores = bool(core_hashes.get(node.slot, []))
             has_oom = node.host in ooms
 
-            if has_cores or has_oom or node.host in verifies or node.host in sanitizer_messages:
+            if has_cores or has_oom or node.host in hosts_with_verifies or node.host in sanitizer_messages:
                 node_error = NodeErrors(node, 'diagnostic info collected')
                 node_error.core_hashes = core_hashes.get(node.slot, [])
                 node_error.was_oom = has_oom
-                if node.host in verifies:
-                    node_error.verifies = verifies[node.host]
+                if node.host in hosts_with_verifies:
+                    node_error.verifies = hosts_with_verifies[node.host]
                 if node.host in sanitizer_messages:
                     node_error.sanitizer_errors = sanitizer_messages[node.host]
                 node_errors.append(node_error)
@@ -662,7 +714,7 @@ class LoadSuiteBase:
             node_errors = []
         return node_errors
 
-    def _create_allure_report(self, result, workload_name, workload_params, node_errors, use_node_subcols):
+    def _create_allure_report(self, result, workload_name, workload_params, node_errors, use_node_subcols, verify_errors):
         """Формирует allure-отчёт по результатам workload"""
         end_time = time()
         start_time = result.start_time if result.start_time else end_time - 1
@@ -690,9 +742,10 @@ class LoadSuiteBase:
             end_time=end_time,
             addition_table_strings=additional_table_strings,
             node_errors=node_errors,
+            verify_errors=verify_errors,
             workload_result=result,
             workload_params=workload_params,
-            use_node_subcols=use_node_subcols
+            use_node_subcols=use_node_subcols,
         )
 
     def _handle_final_status(self, result, workload_name, node_errors):

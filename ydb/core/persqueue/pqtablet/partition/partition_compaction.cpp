@@ -337,15 +337,17 @@ void TPartition::RenameCompactedBlob(TDataKey& k,
 {
     const auto& ctx = ActorContext();
 
-    CompactionBlobEncoder.NewPartitionedBlob(Partition,
-                                             CompactionBlobEncoder.NewHead.Offset,
-                                             "",                      // SourceId
-                                             0,                       // SeqNo
-                                             0,                       // TotalParts
-                                             0,                       // TotalSize
-                                             parameters.HeadCleared,  // headCleared
-                                             needToCompactHead,       // needCompactHead
-                                             MaxBlobSize);
+    if (!CompactionBlobEncoder.PartitionedBlob.IsInited()) {
+        CompactionBlobEncoder.NewPartitionedBlob(Partition,
+                                                 CompactionBlobEncoder.NewHead.Offset,
+                                                 "",                      // SourceId
+                                                 0,                       // SeqNo
+                                                 0,                       // TotalParts
+                                                 0,                       // TotalSize
+                                                 parameters.HeadCleared,  // headCleared
+                                                 needToCompactHead,       // needCompactHead
+                                                 MaxBlobSize);
+    }
     auto write = CompactionBlobEncoder.PartitionedBlob.Add(k.Key, size, false);
     if (write && !write->Value.empty()) {
         // надо записать содержимое головы перед первым большим блобом
@@ -363,8 +365,9 @@ void TPartition::RenameCompactedBlob(TDataKey& k,
                           ctx);
     }
 
-    parameters.CurOffset += k.Key.GetCount();
     k.BlobKeyToken->NeedDelete = false;
+
+    parameters.CurOffset += k.Key.GetCount();
 }
 
 void TPartition::BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& blobs)
@@ -404,18 +407,19 @@ void TPartition::BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& 
 
     for (size_t i = 0; i < KeysForCompaction.size(); ++i) {
         auto& [k, pos] = KeysForCompaction[i];
-        bool needToCompactHead = ((i ? CompactionBlobEncoder.NewHead : CompactionBlobEncoder.Head).PackedSize != 0);
+        bool needToCompactHead = (parameters.CurOffset < k.Key.GetOffset());
+
         LOG_D("Need to compact head " << needToCompactHead);
 
         if (pos == Max<size_t>()) {
             // большой блоб надо переименовать
             LOG_D("Rename key " << k.Key.ToString());
 
-            CompactionBlobEncoder.NewHead.Clear();
-            CompactionBlobEncoder.NewHead.Offset = k.Key.GetOffset();
-            CompactionBlobEncoder.NewHead.PartNo = k.Key.GetPartNo();
+            if (!wasTheLastBlobBig) {
+                needToCompactHead = true;
+            }
 
-            parameters.CurOffset = CompactionBlobEncoder.NewHead.Offset;
+            parameters.CurOffset = k.Key.GetOffset();
 
             RenameCompactedBlob(k, k.Size,
                                 needToCompactHead,
@@ -423,8 +427,11 @@ void TPartition::BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& 
                                 compactionRequest.Get());
 
             CompactionBlobEncoder.ClearPartitionedBlob(Partition, MaxBlobSize);
+
             CompactionBlobEncoder.NewHead.Clear();
             CompactionBlobEncoder.NewHead.Offset = parameters.CurOffset;
+
+            parameters.HeadCleared = true;
 
             wasTheLastBlobBig = true;
         } else {

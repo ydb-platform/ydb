@@ -808,9 +808,6 @@ Y_UNIT_TEST(TestMessageNo) {
 
 
 Y_UNIT_TEST(TestPartitionedBlobFails) {
-    // TODO(abcdef): temporarily deleted
-    //return;
-
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
@@ -1001,9 +998,6 @@ Y_UNIT_TEST(TestAlreadyWritten) {
 
 
 Y_UNIT_TEST(TestAlreadyWrittenWithoutDeduplication) {
-    // TODO(abcdef): temporarily deleted
-    //return;
-
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
@@ -1088,9 +1082,6 @@ Y_UNIT_TEST(TestWritePQCompact) {
 
 
 Y_UNIT_TEST(TestWritePQBigMessage) {
-    // TODO(abcdef): temporarily deleted
-    //return;
-
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
@@ -1535,9 +1526,6 @@ Y_UNIT_TEST(TestPQPartialRead) {
 
 
 Y_UNIT_TEST(TestPQRead) {
-    // TODO(abcdef): temporarily deleted
-    //return;
-
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
@@ -1633,9 +1621,6 @@ Y_UNIT_TEST(TestPQSmallRead) {
 }
 
 Y_UNIT_TEST(TestPQReadAhead) {
-    // TODO(abcdef): temporarily deleted
-    //return;
-
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
@@ -1972,9 +1957,6 @@ Y_UNIT_TEST(TestReadSubscription) {
 
 
 Y_UNIT_TEST(TestPQCacheSizeManagement) {
-    // TODO(abcdef): temporarily deleted
-    //return;
-
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();

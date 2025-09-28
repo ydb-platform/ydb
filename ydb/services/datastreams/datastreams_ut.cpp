@@ -2391,9 +2391,6 @@ Y_UNIT_TEST_SUITE(DataStreams) {
     }
 
     Y_UNIT_TEST(TestGetRecordsWithCount) {
-        // TODO(abcdef): temporarily deleted
-        //return;
-
         TInsecureDatastreamsTestServer testServer;
         const TString streamName = TStringBuilder() << "stream_" << Y_UNIT_TEST_NAME;
         {

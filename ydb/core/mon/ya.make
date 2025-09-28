@@ -1,6 +1,12 @@
+RECURSE_FOR_TESTS(
+    ut
+)
+
 LIBRARY()
 
 SRCS(
+    auth.cpp
+    auth.h
     events_internal.h
     mon.cpp
     mon.h

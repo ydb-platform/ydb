@@ -359,12 +359,14 @@ def get_interval_dates(trend_data, period):
     
     # Find the closest available date to interval start
     interval_start_count = None
+    actual_interval_start_str = None
     for date_str in available_dates:
         if date_str >= interval_start_str:
             interval_start_count = trend_data[date_str]
+            actual_interval_start_str = date_str
             break
     
-    return interval_start_str, interval_end_date, interval_start_count, interval_end_count
+    return actual_interval_start_str, interval_end_date, interval_start_count, interval_end_count
 
 
 def create_trend_plot(team_name, trend_data, debug_dir=None, period=None):
@@ -1061,7 +1063,7 @@ def send_period_updates(period, bot_token, team_channels, ydb_config, delay=2, m
             
             # Check if we have data for both dates to calculate meaningful change
             has_current_data = current_date_str in trend_data
-            has_previous_data = previous_date_str in trend_data and previous_count > 0
+            has_previous_data = previous_date_str in trend_data
             
             # Debug information
             print(f"🔍 Debug for team {team_name}:")

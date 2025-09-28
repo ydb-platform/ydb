@@ -327,7 +327,47 @@ def get_monthly_trend_data(database_endpoint=None, database_path=None, credentia
         return None
 
 
-def create_trend_plot(team_name, trend_data, debug_dir=None):
+def get_interval_dates(trend_data, period):
+    """
+    Get interval start and end dates for period visualization.
+    
+    Args:
+        trend_data (dict): Dictionary with dates as keys and counts as values
+        period (str): Period type ('week' or 'month')
+        
+    Returns:
+        tuple: (interval_start_date, interval_end_date, interval_start_count, interval_end_count)
+    """
+    if not trend_data:
+        return None, None, None, None
+    
+    available_dates = sorted(trend_data.keys())
+    if not available_dates:
+        return None, None, None, None
+    
+    # Calculate interval days
+    interval_days = 7 if period == 'week' else 30
+    
+    # Use the last available date as end
+    interval_end_date = available_dates[-1]
+    interval_end_count = trend_data[interval_end_date]
+    
+    # Calculate interval start (period_days-1 days before end)
+    end_date_obj = datetime.strptime(interval_end_date, '%Y-%m-%d')
+    interval_start = end_date_obj - timedelta(days=interval_days-1)
+    interval_start_str = interval_start.strftime('%Y-%m-%d')
+    
+    # Find the closest available date to interval start
+    interval_start_count = None
+    for date_str in available_dates:
+        if date_str >= interval_start_str:
+            interval_start_count = trend_data[date_str]
+            break
+    
+    return interval_start_str, interval_end_date, interval_start_count, interval_end_count
+
+
+def create_trend_plot(team_name, trend_data, debug_dir=None, period=None):
     """
     Create a trend plot for muted tests.
     
@@ -335,6 +375,7 @@ def create_trend_plot(team_name, trend_data, debug_dir=None):
         team_name (str): Team name
         trend_data (dict): Dictionary with dates as keys and counts as values
         debug_dir (str): Directory to save debug plot files (if None, debug mode is disabled)
+        period (str): Period type ('week' or 'month') for interval visualization
         
     Returns:
         str: Base64 encoded image data, or None if error
@@ -376,6 +417,30 @@ def create_trend_plot(team_name, trend_data, debug_dir=None):
             p = np.poly1d(z)
             plt.plot(dates, p(x_numeric), "r--", alpha=0.8, linewidth=2, label='Trend')
             plt.legend()
+        
+        # Add interval visualization for period reports
+        if period and dates and counts:
+            # Get interval dates using the shared function
+            interval_start_str, interval_end_str, interval_start_count, interval_end_count = get_interval_dates(trend_data, period)
+            
+            if interval_start_str and interval_end_str:
+                # Convert strings to datetime objects for plotting
+                interval_start_date = datetime.strptime(interval_start_str, '%Y-%m-%d')
+                interval_end_date = datetime.strptime(interval_end_str, '%Y-%m-%d')
+                
+                # Add vertical dotted lines for interval boundaries
+                plt.axvline(x=interval_start_date, color='gray', linestyle='--', alpha=0.7, linewidth=1)
+                plt.axvline(x=interval_end_date, color='gray', linestyle='--', alpha=0.7, linewidth=1)
+                
+                # Add annotation for the interval start point
+                if interval_start_count is not None:
+                    plt.annotate(f'{interval_start_count}', 
+                                xy=(interval_start_date, interval_start_count), 
+                                xytext=(10, 10), 
+                                textcoords='offset points',
+                                bbox=dict(boxstyle='round,pad=0.3', facecolor='lightblue', alpha=0.7),
+                                arrowprops=dict(arrowstyle='->', connectionstyle='arc3,rad=0'),
+                                fontsize=10, fontweight='bold')
         
         # Add annotation for the last point
         if dates and counts:
@@ -723,7 +788,7 @@ def send_team_messages(teams, bot_token, delay=2, max_retries=5, retry_delay=10,
                     trend_data = None
                 
                 if trend_data:
-                    plot_data = create_trend_plot(team_name, trend_data, debug_plots_dir)
+                    plot_data = create_trend_plot(team_name, trend_data, debug_plots_dir, period=None)
                     if plot_data:
                         print(f"📈 Created trend plot for team: {team_name} (data length: {len(plot_data)})")
                     else:
@@ -981,21 +1046,22 @@ def send_period_updates(period, bot_token, team_channels, ydb_config, delay=2, m
             total = team_stats['total']
             dashboard_url = DATALENS_DASHBOARD_URL.format(team_name=team_name)
             
-            # Calculate period change
+            # Calculate period change using the same logic as the plot
+            interval_start_str, current_date_str, previous_count, current_count = get_interval_dates(trend_data, period)
             period_days = 7 if period == "week" else 30
-            # Use the same date logic as in get_all_team_data
-            current_date = datetime.now() - timedelta(days=1) if ydb_config.get('use_yesterday', False) else datetime.now()
-            previous_date = current_date - timedelta(days=period_days)
             
-            current_date_str = current_date.strftime('%Y-%m-%d')
-            previous_date_str = previous_date.strftime('%Y-%m-%d')
-            
-            current_count = trend_data.get(current_date_str, 0)
-            previous_count = trend_data.get(previous_date_str, 0)
+            if current_date_str:
+                previous_date_str = interval_start_str
+            else:
+                # No data available, skip change calculation
+                current_date_str = None
+                previous_date_str = None
+                current_count = 0
+                previous_count = 0
             
             # Check if we have data for both dates to calculate meaningful change
             has_current_data = current_date_str in trend_data
-            has_previous_data = previous_date_str in trend_data
+            has_previous_data = previous_date_str in trend_data and previous_count > 0
             
             # Debug information
             print(f"🔍 Debug for team {team_name}:")
@@ -1078,7 +1144,7 @@ def send_period_updates(period, bot_token, team_channels, ydb_config, delay=2, m
             
             if trend_data and MATPLOTLIB_AVAILABLE:
                 # Create trend plot
-                plot_data = create_trend_plot(team_name, trend_data, debug_plots_dir)
+                plot_data = create_trend_plot(team_name, trend_data, debug_plots_dir, period=period)
                 
                 if plot_data:
                     # Send message with plot

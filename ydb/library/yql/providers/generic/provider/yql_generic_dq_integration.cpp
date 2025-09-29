@@ -374,17 +374,26 @@ namespace NYql {
                 source.set_table(tableName);
                 *source.mutable_data_source_instance() = tableMeta->DataSourceInstance;
 
+                // TODO: remove this block as soon as first part YQ-4730 is deployed
+                //
                 // Managed YDB supports access via IAM token.
                 // If exist, copy service account creds to obtain tokens during request execution phase.
                 // If exists, copy previously created token.
                 if (clusterConfig.kind() == NYql::EGenericDataSourceKind::YDB) {
-                    source.SetServiceAccountId(clusterConfig.GetServiceAccountId());
-                    source.SetServiceAccountIdSignature(clusterConfig.GetServiceAccountIdSignature());
-                    source.SetToken(State_->Types->Credentials->FindCredentialContent(
-                        "default_" + clusterConfig.name(),
-                        "default_generic",
-                        clusterConfig.GetToken()));
+                    // source.SetServiceAccountId(clusterConfig.GetServiceAccountId());
+                    // source.SetServiceAccountIdSignature(clusterConfig.GetServiceAccountIdSignature());
+                    // source.SetToken(State_->Types->Credentials->FindCredentialContent(
+                    //     "default_" + clusterConfig.name(),
+                    //     "default_generic",
+                    //     clusterConfig.GetToken()));
+
                 }
+
+                // We set token name to the protobuf message that will be received
+                // by the lookup actor during the execution phase.
+                // It will use token name to extract credentials from the from secureParams.
+                const auto tokenName = TString("cluster:default_") += clusterConfig.name();
+                source.SetTokenName(tokenName);
 
                 // preserve source description for read actor
                 protoSettings.PackFrom(source);

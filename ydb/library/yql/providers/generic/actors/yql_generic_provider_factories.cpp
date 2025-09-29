@@ -40,7 +40,9 @@ namespace NYql::NDq {
                 args.PayloadType,
                 args.TypeEnv,
                 args.HolderFactory,
-                args.MaxKeysInRequest);
+                args.MaxKeysInRequest,
+                args.SecureParams
+            );
         };
 
         for (auto& name : {

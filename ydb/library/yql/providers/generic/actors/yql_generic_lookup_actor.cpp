@@ -81,9 +81,11 @@ namespace NYql::NDq {
             const NKikimr::NMiniKQL::TStructType* payloadType,
             const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
             const NKikimr::NMiniKQL::THolderFactory& holderFactory,
-            const size_t maxKeysInRequest)
+            const size_t maxKeysInRequest,
+            const THashMap<TString, TString>& secureParams)
             : Connector(connectorClient)
             , TokenProvider(std::move(tokenProvider))
+            , SecureParams(secureParams)
             , ParentId(std::move(parentId))
             , Alloc(alloc)
             , KeyTypeHelper(keyTypeHelper)
@@ -511,6 +513,7 @@ namespace NYql::NDq {
     private:
         NConnector::IClient::TPtr Connector;
         TGenericTokenProvider::TPtr TokenProvider;
+        const THashMap<TString, TString> SecureParams;
         const NActors::TActorId ParentId;
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
         std::shared_ptr<TKeyTypeHelper> KeyTypeHelper;
@@ -549,13 +552,15 @@ namespace NYql::NDq {
         const NKikimr::NMiniKQL::TStructType* payloadType,
         const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
         const NKikimr::NMiniKQL::THolderFactory& holderFactory,
-        const size_t maxKeysInRequest)
+        const size_t maxKeysInRequest,
+        const THashMap<TString, TString>& secureParams
+    )
     {
         auto tokenProvider = NYql::NDq::CreateGenericTokenProvider(
-            "",
-            lookupSource.GetToken(), 
-            lookupSource.GetServiceAccountId(), 
-            lookupSource.GetServiceAccountIdSignature(), 
+            secureParams.Value(lookupSource.tokenname(), TString()),
+            lookupSource.token(),
+            lookupSource.serviceaccountid(),
+            lookupSource.serviceaccountidsignature(),
             credentialsFactory);
         auto guard = Guard(*alloc);
         const auto actor = new TGenericLookupActor(
@@ -570,7 +575,8 @@ namespace NYql::NDq {
             payloadType,
             typeEnv,
             holderFactory,
-            maxKeysInRequest);
+            maxKeysInRequest,
+            secureParams);
         return {actor, actor};
     }
 

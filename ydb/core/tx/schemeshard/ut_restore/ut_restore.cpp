@@ -5241,11 +5241,11 @@ Y_UNIT_TEST_SUITE(TImportTests) {
     using SchemeFunction = std::function<std::function<void(TTestBasicRuntime&)>(THashMap<TString, TTestDataWithScheme>&, const TString&, const TString&)>;
 
     struct TTableWithChangefeeds {
-        TString TableName;
-        TString PkType;
-        ui64 ChangefeedCount;
-        SchemeFunction AddedScheme;
-        int MaxPartitions;
+        TString TableName = "Table";
+        TString PkType = "UTF8";
+        ui64 ChangefeedCount = 1;
+        SchemeFunction AddedScheme = AddedScheme;
+        int MaxPartitions = 3;
     };
 
     TGeneratedChangefeed GenChangefeed(ui64 num = 1, bool isPartitioningAvailable = true, const TString& tableName = "Table", int maxPartitions = 3) {
@@ -5328,15 +5328,13 @@ Y_UNIT_TEST_SUITE(TImportTests) {
 
     TVector<std::function<void(TTestBasicRuntime&)>> GenChangefeeds(
         THashMap<TString, TTestDataWithScheme>& bucketContent, 
-        ui64 count = 1, 
-        bool isPartitioningAvailable = true,
-        const TString& tableName = "Table",
-        int maxPartitions = 3) 
+        const TTableWithChangefeeds& table) 
     {
         TVector<std::function<void(TTestBasicRuntime&)>> checkers;
-        checkers.reserve(count);
-        for (ui64 i = 1; i <= count; ++i) {
-            const auto genChangefeed = GenChangefeed(i, isPartitioningAvailable, tableName, maxPartitions);
+        checkers.reserve(table.ChangefeedCount);
+        bool isPartitioningAvailable = table.PkType == "UINT32" || table.PkType == "UINT64";
+        for (ui64 i = 1; i <= table.ChangefeedCount; ++i) {
+            const auto genChangefeed = GenChangefeed(i, isPartitioningAvailable, table.TableName, table.MaxPartitions);
             bucketContent.emplace(genChangefeed.Changefeed);
             checkers.push_back(genChangefeed.Checker);
         }
@@ -5423,8 +5421,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             allCheckers.push_back(checkerTable);
 
             if (table.ChangefeedCount > 0) {
-                auto checkersChangefeeds = GenChangefeeds(bucketContent, table.ChangefeedCount, 
-                    table.PkType == "UINT32" || table.PkType == "UINT64", table.TableName, table.MaxPartitions);
+                auto checkersChangefeeds = GenChangefeeds(bucketContent, table);
                 allCheckers.insert(allCheckers.end(), checkersChangefeeds.begin(), checkersChangefeeds.end());
             }
         }
@@ -5454,7 +5451,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         }
     }
 
-    void TestImportChangefeeds(ui64 countChangefeed, SchemeFunction addedScheme, const TString& pkType = "UTF8", int maxPartitions = 3) {
+    void TestImportChangefeeds(ui64 countChangefeed = 1, SchemeFunction addedScheme = AddedScheme, const TString& pkType = "UTF8", int maxPartitions = 3) {
         TestImportChangefeeds({{"Table", pkType, countChangefeed, addedScheme, maxPartitions}});
     }
 
@@ -5487,27 +5484,24 @@ Y_UNIT_TEST_SUITE(TImportTests) {
 
     // Test for tables with similar prefixes
     Y_UNIT_TEST(ChangefeedTablePrefixConflict) {
-        TVector<TTableWithChangefeeds> tables = {
-            {"table", "UTF8", 0, AddedScheme, 3},         // table without changefeed
-            {"table_prefix", "UTF8", 1, AddedScheme, 3}   // table_prefix with changefeed
-        };
-        TestImportChangefeeds(tables);
+        TestImportChangefeeds({
+            {"table", "UTF8", 0},         // table without changefeed
+            {"table_prefix", "UTF8", 1}   // table_prefix with changefeed
+        });
     }
 
-    Y_UNIT_TEST(ChangefeedTablePrefixConflictDiffTableDesc) {
-        TVector<TTableWithChangefeeds> tables = {
-            {"table", "UINT32", 1, AddedScheme, 3},       // partitioning available (table property)
-            {"table_prefix", "UTF8", 1, AddedScheme, 3}   // partitioning unavailable (table property)
-        };        
-        TestImportChangefeeds(tables);
+    Y_UNIT_TEST(ChangefeedTablePrefixConflictDiffTableDesc) {      
+        TestImportChangefeeds({
+            {"table", "UINT32", 1},       // partitioning available (table property)
+            {"table_prefix", "UTF8", 1}   // partitioning unavailable (table property)
+        });
     }
 
-    Y_UNIT_TEST(ChangefeedTablePrefixConflictDiffChangefeedDesc) {
-        TVector<TTableWithChangefeeds> tables = {
+    Y_UNIT_TEST(ChangefeedTablePrefixConflictDiffChangefeedDesc) {     
+        TestImportChangefeeds({
             {"table", "UINT32", 1, AddedScheme, 3},       // max partitions 3 (changefeed property)
             {"table_prefix", "UTF8", 1, AddedScheme, 4}   // max partitions 4 (changefeed property)
-        };        
-        TestImportChangefeeds(tables);
+        });
     }
 
     void TestCreateCdcStreams(TTestEnv& env, TTestActorRuntime& runtime, ui64& txId, const TString& dbName, ui64 count, bool isShouldSuccess) {

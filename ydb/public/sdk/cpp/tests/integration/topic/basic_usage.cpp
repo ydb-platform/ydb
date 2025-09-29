@@ -179,7 +179,7 @@ TEST_F(BasicUsage, TEST_NAME(MaxByteSizeEqualZero)) {
 TEST_F(BasicUsage, TEST_NAME(WriteAndReadSomeMessagesWithSyncCompression)) {
     auto driver = MakeDriver();
 
-    IExecutor::TPtr executor = new TSyncExecutor();
+    IExecutor::TPtr executor = std::make_shared<TSyncExecutor>();
     auto writeSettings = NPersQueue::TWriteSessionSettings()
         .Path(GetTopicPath())
         .MessageGroupId(TEST_MESSAGE_GROUP_ID)
@@ -507,7 +507,7 @@ TEST_F(BasicUsage, TEST_NAME(SessionNotDestroyedWhileUserEventHandlingInFlight))
     RunTasks(stepByStepExecutor, {1});
     futureRead.GetValueSync();
     ASSERT_TRUE(futureRead.HasValue());
-    std::cerr << ">>>TEST: future read has value " << std::endl;
+    std::cerr << ">>> TEST: future read has value " << std::endl;
 
     f.get();
 
@@ -520,7 +520,7 @@ TEST_F(BasicUsage, TEST_NAME(ReadSessionCorrectClose)) {
     NPersQueue::TWriteSessionSettings writeSettings;
     writeSettings.Path(GetTopicPath()).MessageGroupId(TEST_MESSAGE_GROUP_ID);
     writeSettings.Codec(NPersQueue::ECodec::RAW);
-    IExecutor::TPtr executor = new TSyncExecutor();
+    IExecutor::TPtr executor = std::make_shared<TSyncExecutor>();
     writeSettings.CompressionExecutor(executor);
 
     NPersQueue::TPersQueueClient client(driver);

@@ -308,6 +308,18 @@ public:
         return GetKind() == ETypeAnnotationKind::Scalar;
     }
 
+    bool IsLinearOrDynamicLinear() const {
+        return IsLinear() || IsDynamicLinear();
+    }
+
+    bool IsLinear() const {
+        return GetKind() == ETypeAnnotationKind::Linear;
+    }
+
+    bool IsDynamicLinear() const {
+        return GetKind() == ETypeAnnotationKind::DynamicLinear;
+    }
+
     bool HasFixedSizeRepr() const {
         return (GetFlags() & (TypeHasDynamicSize | TypeNonPersistable | TypeNonComputable)) == 0;
     }
@@ -2747,6 +2759,7 @@ struct TExprContext : private TNonCopyable {
     std::unordered_set<const TConstraintNode*, TConstraintNode::THash, TConstraintNode::TEqual> ConstraintSet;
     std::unordered_map<const TTypeAnnotationNode*, TExprNode::TPtr> TypeAsNodeCache;
     std::unordered_set<TStringBuf, THash<TStringBuf>> DisabledConstraints;
+    std::unordered_map<TString, const TTypeAnnotationNode*> ParseTypeCache;
 
     ui64 NextUniqueId = 0;
     ui64 NodeAllocationCounter = 0;

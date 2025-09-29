@@ -9,10 +9,6 @@
 
 #include <library/cpp/yson/writer.h>
 
-#include <util/datetime/base.h>
-
-#include <library/cpp/yt/misc/cast.h>
-
 #include <library/cpp/type_info/fwd.h>
 
 namespace NYT::NYson {
@@ -84,48 +80,12 @@ void Deserialize(TTableColumnarStatistics& statistics, const TNode& node);
 void Deserialize(TMultiTablePartition& partition, const TNode& node);
 void Deserialize(TMultiTablePartitions& partitions, const TNode& node);
 void Deserialize(TTabletInfo& tabletInfos, const TNode& node);
-void Deserialize(TDuration& duration, const TNode& node);
 
 void Serialize(const TGUID& path, NYT::NYson::IYsonConsumer* consumer);
 void Deserialize(TGUID& value, const TNode& node);
 
 void Serialize(const NTi::TTypePtr& type, NYT::NYson::IYsonConsumer* consumer);
 void Deserialize(NTi::TTypePtr& type, const TNode& node);
-
-template <std::integral T>
-void Deserialize(T& value, const TNode& node)
-{
-    if (node.GetType() == TNode::EType::Int64) {
-        value = CheckedIntegralCast<T>(node.AsInt64());
-    } else if (node.GetType() == TNode::EType::Uint64) {
-        value = CheckedIntegralCast<T>(node.AsUint64());
-    } else {
-        throw yexception() << "Cannot parse integral value from node of type " << node.GetType();
-    }
-}
-
-template <typename T>
-void Deserialize(THashSet<T>& hs, const TNode& node)
-{
-    if (node.GetType() != TNode::EType::List) {
-        throw yexception() << "Cannot parse hashset from node of type " << node.GetType();
-    }
-    for (const auto& value : node.AsList()) {
-        T deserialized;
-        Deserialize(deserialized, value);
-        hs.insert(deserialized);
-    }
-}
-
-template <typename T>
-requires std::is_enum_v<T>
-void Deserialize(T& value, const TNode& node)
-{
-    if (auto nodeType = node.GetType(); nodeType != TNode::EType::String) {
-        throw yexception() << "Enum deserialization expects EType::String, got " << node.GetType();
-    }
-    value = ::FromString<T>(node.AsString());
-}
 
 template <typename T>
 TString ToYsonText(const T& value)

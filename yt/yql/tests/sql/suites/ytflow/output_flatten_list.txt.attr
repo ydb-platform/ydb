@@ -1,0 +1,61 @@
+{
+    "_yql_row_spec" = {
+        "Type" = [
+            "StructType";
+            [
+                [
+                    "$timestamp";
+                    [
+                        "OptionalType";
+                        [
+                            "DataType";
+                            "Uint64"
+                        ]
+                    ];
+                ];
+                [
+                    "$cumulative_data_weight";
+                    [
+                        "OptionalType";
+                        [
+                            "DataType";
+                            "Int64"
+                        ]
+                    ];
+                ];
+                [
+                    "label";
+                    [
+                        "OptionalType";
+                        [
+                            "DataType";
+                            "String"
+                        ]
+                    ];
+                ];
+                [
+                    "value";
+                    [
+                        "OptionalType";
+                        [
+                            "DataType";
+                            "Int64"
+                        ]
+                    ];
+                ];
+                [
+                    "condition";
+                    [
+                        "OptionalType";
+                        [
+                            "DataType";
+                            "Bool"
+                        ]
+                    ];
+                ];
+            ]
+        ]
+    };
+    "_yql_dynamic" = %true;
+    "_yql_dynamic_native_read" = %true;
+}

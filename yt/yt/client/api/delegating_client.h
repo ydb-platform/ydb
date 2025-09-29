@@ -828,6 +828,10 @@ public:
         const TGetQueryTrackerInfoOptions& options),
         (options))
 
+    DELEGATE_METHOD(TFuture<TGetDeclaredParametersInfoResult>, GetDeclaredParametersInfo, (
+        const TGetDeclaredParametersInfoOptions& options),
+        (options))
+
     // Bundle Controller
     DELEGATE_METHOD(TFuture<NBundleControllerClient::TBundleConfigDescriptorPtr>, GetBundleConfig, (
         const std::string& bundleName,

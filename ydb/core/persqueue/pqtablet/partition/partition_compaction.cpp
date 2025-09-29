@@ -5,7 +5,7 @@
 
 namespace NKikimr::NPQ {
 
-bool TPartition::ExecRequestForCompaction(TWriteMsg& p, TProcessParametersBase& parameters, TEvKeyValue::TEvRequest* request, ui64 blobCreationUnixTime)
+bool TPartition::ExecRequestForCompaction(TWriteMsg& p, TProcessParametersBase& parameters, TEvKeyValue::TEvRequest* request, const TInstant blobCreationUnixTime)
 {
     const auto& ctx = ActorContext();
 
@@ -202,13 +202,16 @@ void TPartition::Handle(TEvPQ::TEvRunCompaction::TPtr& ev)
             break;
         }
 
-        blobs.emplace_back(k.Key.GetOffset(),
-                           k.Key.GetPartNo(),
-                           k.Key.GetCount(),
-                           k.Key.GetInternalPartsCount(),
-                           k.Size,
-                           TString(),
-                           k.Key);
+        blobs.push_back(TRequestedBlob(
+            k.Key.GetOffset(),
+            k.Key.GetPartNo(),
+            k.Key.GetCount(),
+            k.Key.GetInternalPartsCount(),
+            k.Size,
+            TString(),
+            k.Key,
+            k.Timestamp.Seconds()
+        ));
         tokens.Append(k.BlobKeyToken);
     }
 #else
@@ -263,12 +266,10 @@ void TPartition::BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& 
 
     AFL_ENSURE(CompactionBlobEncoder.NewHead.GetBatches().empty());
 
-    ui64 blobCreationUnixTime = 0;
+    TInstant blobCreationUnixTime = TInstant::Zero();
 
     for (const auto& requestedBlob : blobs) {
         TMaybe<ui64> firstBlobOffset = requestedBlob.Offset;
-
-        blobCreationUnixTime = requestedBlob.CreationUnixTime;
 
         for (TBlobIterator it(requestedBlob.Key, requestedBlob.Value); it.IsValid(); it.Next()) {
             TBatch batch = it.GetBatch();
@@ -302,7 +303,8 @@ void TPartition::BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& 
                 }, std::nullopt};
                 msg.Internal = true;
 
-                ExecRequestForCompaction(msg, parameters, compactionRequest.Get(), blobCreationUnixTime);
+                blobCreationUnixTime = std::max(blobCreationUnixTime, blob.WriteTimestamp);
+                ExecRequestForCompaction(msg, parameters, compactionRequest.Get(), blob.WriteTimestamp);
 
                 firstBlobOffset = Nothing();
             }
@@ -374,7 +376,7 @@ void TPartition::BlobsForCompactionWereWrite()
     TryRunCompaction();
 }
 
-void TPartition::EndProcessWritesForCompaction(TEvKeyValue::TEvRequest* request, ui64 blobCreationUnixTime, const TActorContext& ctx)
+void TPartition::EndProcessWritesForCompaction(TEvKeyValue::TEvRequest* request, const TInstant blobCreationUnixTime, const TActorContext& ctx)
 {
     if (CompactionBlobEncoder.HeadCleared) {
         AFL_ENSURE(!CompactionBlobEncoder.CompactedKeys.empty() || CompactionBlobEncoder.Head.PackedSize == 0)
@@ -474,16 +476,17 @@ std::pair<TKey, ui32> TPartition::GetNewCompactionWriteKey(const bool headCleare
     return GetNewCompactionWriteKeyImpl(headCleared, needCompaction, headSize);
 }
 
-void TPartition::AddNewCompactionWriteBlob(std::pair<TKey, ui32>& res, TEvKeyValue::TEvRequest* request, ui64 blobCreationUnixTime, const TActorContext& ctx)
+void TPartition::AddNewCompactionWriteBlob(std::pair<TKey, ui32>& res, TEvKeyValue::TEvRequest* request, const TInstant blobCreationUnixTime, const TActorContext& ctx)
 {
     const auto& key = res.first;
 
-    TString valueD = CompactionBlobEncoder.SerializeForKey(key, res.second, CompactionBlobEncoder.EndOffset, PendingWriteTimestamp);
-
+    TInstant compactionWriteTimestamp;
+    TString valueD = CompactionBlobEncoder.SerializeForKey(key, res.second, CompactionBlobEncoder.EndOffset, compactionWriteTimestamp);
     auto write = request->Record.AddCmdWrite();
     write->SetKey(key.Data(), key.Size());
     write->SetValue(valueD);
-    write->SetCreationUnixTime(blobCreationUnixTime);
+    write->SetCreationUnixTime(blobCreationUnixTime.Seconds());  // note: The time is rounded to second precision.
+    // Y_ASSERT(blobCreationUnixTime.Seconds() > 0); TODO: move fake time in tests forward and enable checking
 
     bool isInline = key.IsHead() && valueD.size() < MAX_INLINE_SIZE;
 
@@ -511,7 +514,7 @@ void TPartition::AddNewCompactionWriteBlob(std::pair<TKey, ui32>& res, TEvKeyVal
         CompactionBlobEncoder.NewHead.PartNo = 0;
     } else {
         AFL_ENSURE(CompactionBlobEncoder.NewHeadKey.Size == 0);
-        CompactionBlobEncoder.NewHeadKey = {key, res.second, CurrentTimestamp, 0, MakeBlobKeyToken(key.ToString())};
+        CompactionBlobEncoder.NewHeadKey = {key, res.second, compactionWriteTimestamp, 0, MakeBlobKeyToken(key.ToString())};
     }
 }
 
@@ -560,6 +563,34 @@ TInstant TPartition::GetFirstUncompactedBlobTimestamp() const
     }
 
     return BlobEncoder.DataKeysBody[GetBodyKeysCountLimit()].Timestamp;
+}
+
+
+void TPartition::CheckTimestampsOrderInZones(TStringBuf validateReason) const {
+    TInstant prev = TInstant::Zero();
+    size_t pos = 0;
+    auto check = [&](const auto& seq, TStringBuf zoneName) {
+        size_t in_zone_pos = 0;
+        for (const TDataKey& k : seq) {
+            const auto curr = k.Timestamp;
+            const bool disorder = (curr < prev);
+            PQ_ENSURE(!disorder)
+                ("prev_tmestamp", prev.MicroSeconds())
+                ("curr_timestamp", curr.MicroSeconds())
+                ("zone", zoneName)
+                ("offset", k.Key.GetOffset())
+                ("part_no", k.Key.GetPartNo())
+                ("pos", pos)
+                ("in_zone_pos", in_zone_pos)
+                ("validate_reason", validateReason);
+           prev = curr;
+            ++pos;
+            ++in_zone_pos;
+        }
+    };
+    check(CompactionBlobEncoder.DataKeysBody, "compacted_body");
+    check(CompactionBlobEncoder.HeadKeys, "compacted_head");
+    check(BlobEncoder.DataKeysBody, "fastwrite_body");
 }
 
 }

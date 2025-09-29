@@ -189,6 +189,10 @@ message TVectorIndexKmeansTreeDescription {
     optional Ydb.Table.KMeansTreeSettings Settings = 1;
 }
 
+message TFulltextIndexDescription {
+    optional Ydb.Table.FulltextIndexSettings Settings = 1;
+}
+
 message TIndexDescriptionProto {
     optional string Name = 1;
     optional uint32 Type = 2;
@@ -200,6 +204,7 @@ message TIndexDescriptionProto {
     repeated string DataColumns = 8;
     oneof SpecializedIndexDescription {
         TVectorIndexKmeansTreeDescription VectorIndexKmeansTreeDescription = 9;
+        TFulltextIndexDescription FulltextIndexDescription = 10;
     }
 };
 
@@ -366,6 +371,10 @@ message TCompileCacheQueryInfo {
     optional uint64 AccessCount = 4;
     optional int64 CompiledQueryAt = 5;
     optional string UserSID = 6;
+    optional int64 LastAccessedAt = 7;
+    optional string Warnings = 8;
+    optional google.protobuf.Duration CompilationDuration = 9;
+    optional string MetaInfo = 10;
 }
 
 message TSessionInfo {

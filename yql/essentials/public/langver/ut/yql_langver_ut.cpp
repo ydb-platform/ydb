@@ -34,6 +34,13 @@ Y_UNIT_TEST_SUITE(TLangVerTests) {
         UNIT_ASSERT_VALUES_EQUAL(b[s.Size()], 0);
     }
 
+    Y_UNIT_TEST(FormatString) {
+        UNIT_ASSERT(!FormatLangVersion(MakeLangVersion(99999, 1)));
+        UNIT_ASSERT(!FormatLangVersion(MakeLangVersion(999, 1)));
+        UNIT_ASSERT_VALUES_EQUAL(FormatLangVersion(MakeLangVersion(2025, 1)), "2025.01");
+        UNIT_ASSERT_VALUES_EQUAL(FormatLangVersion(MakeLangVersion(2025, 12)), "2025.12");
+    }
+
     Y_UNIT_TEST(Deprecated) {
         UNIT_ASSERT(IsDeprecatedLangVersion(MakeLangVersion(2025,2),MakeLangVersion(2027,1)));
         UNIT_ASSERT(!IsDeprecatedLangVersion(MakeLangVersion(2025,3),MakeLangVersion(2025,1)));

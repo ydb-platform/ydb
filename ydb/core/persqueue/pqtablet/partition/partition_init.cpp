@@ -1,3 +1,4 @@
+#include "autopartitioning_manager.h"
 #include "offload_actor.h"
 #include "partition.h"
 #include "partition_compactification.h"
@@ -34,6 +35,7 @@ TInitializer::TInitializer(TPartition* partition)
     Steps.push_back(MakeHolder<TInitDataRangeStep>(this));
     Steps.push_back(MakeHolder<TInitDataStep>(this));
     Steps.push_back(MakeHolder<TInitEndWriteTimestampStep>(this));
+    Steps.push_back(MakeHolder<TInitFieldsStep>(this));
 
     CurrentStep = Steps.begin();
 }
@@ -602,6 +604,26 @@ THashSet<TString> FilterBlobsMetaData(const NKikimrClient::TKeyValueResponse::TR
     return {filtered.begin(), filtered.end()};
 }
 
+static void CheckKeysTimestampOrder(const std::deque<TDataKey>& keys) {
+    if (keys.size() < 2) {
+        return;
+    }
+    auto prev = keys.begin();
+    auto curr = std::next(prev);
+    while (curr != keys.end()) {
+        if (curr->Timestamp < prev->Timestamp) {
+            PQ_LOG_ERROR("Data keys have misarranged timestamps:"
+                    << " prev_timestamp=" << prev->Timestamp
+                    << " curr_timestamp=" << curr->Timestamp
+                    << " prev_key=" << prev->Key.ToString()
+                    << " curr_key=" << curr->Key.ToString()
+                    << " index=" << std::distance(keys.begin(), curr)
+            );
+        }
+        prev = curr++;
+    }
+}
+
 void TInitDataRangeStep::FillBlobsMetaData(const NKikimrClient::TKeyValueResponse::TReadRangeResult& range, const TActorContext&) {
     auto& endOffset = Partition()->BlobEncoder.EndOffset;
     auto& startOffset = Partition()->BlobEncoder.StartOffset;
@@ -657,6 +679,7 @@ void TInitDataRangeStep::FillBlobsMetaData(const NKikimrClient::TKeyValueRespons
                                   dataKeysBody.empty() ? 0 : dataKeysBody.back().CumulativeSize + dataKeysBody.back().Size,
                                   Partition()->MakeBlobKeyToken(k.ToString()));
     }
+    CheckKeysTimestampOrder(dataKeysBody);
 
     PQ_INIT_ENSURE(endOffset >= startOffset);
 }
@@ -942,6 +965,22 @@ void TInitEndWriteTimestampStep::Execute(const TActorContext &ctx) {
 }
 
 //
+// TInitFieldsStep
+//
+
+TInitFieldsStep::TInitFieldsStep(TInitializer* initializer)
+    : TInitializerStep(initializer, "TInitFieldsStep", false) {
+}
+
+void TInitFieldsStep::Execute(const TActorContext &ctx) {
+    auto& config = Partition()->Config;
+
+    Partition()->AutopartitioningManager.reset(CreateAutopartitioningManager(config, Partition()->Partition));
+
+    return Done(ctx);
+}
+
+//
 // TPartition
 //
 
@@ -960,7 +999,7 @@ void TPartition::Initialize(const TActorContext& ctx) {
     CreationTime = ctx.Now();
     WriteCycleStartTime = ctx.Now();
 
-    ReadQuotaTrackerActor = Register(new TReadQuoter(
+    ReadQuotaTrackerActor = RegisterWithSameMailbox(new TReadQuoter(
         AppData(ctx)->PQConfig,
         TopicConverter,
         Config,
@@ -975,8 +1014,6 @@ void TPartition::Initialize(const TActorContext& ctx) {
     WriteTimestamp = ctx.Now();
     LastUsedStorageMeterTimestamp = ctx.Now();
     WriteTimestampEstimate = ManageWriteTimestampEstimate ? ctx.Now() : TInstant::Zero();
-
-    InitSplitMergeSlidingWindow();
 
     CloudId = Config.GetYcCloudId();
     DbId = Config.GetYdbDatabaseId();
@@ -1281,11 +1318,6 @@ void TPartition::SetupStreamCounters(const TActorContext& ctx) {
                             {1000, "1000"}, {2500, "2500"}, {5000, "5000"},
                             {10'000, "10000"}, {9'999'999, "999999"}}, true)
     );
-}
-
-void TPartition::InitSplitMergeSlidingWindow() {
-    using Tui64SumSlidingWindow = NSlidingWindow::TSlidingWindow<NSlidingWindow::TSumOperation<ui64>>;
-    SplitMergeAvgWriteBytes = std::make_unique<Tui64SumSlidingWindow>(TDuration::Seconds(Config.GetPartitionStrategy().GetScaleThresholdSeconds()), 1000);
 }
 
 void TPartition::CreateCompacter() {

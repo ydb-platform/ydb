@@ -122,11 +122,16 @@ namespace NKikimr {
                 , SlotSize(slotSize)
             {}
 
+            TChain(TString vdiskLogPrefix, const NKikimrVDiskData::THugeKeeperHeap::TChain& chain);
+
             TChain(TChain&&) = default;
             TChain(const TChain&) = delete;
 
             TChain& operator=(TChain&&) = default;
             TChain& operator=(const TChain&) = delete;
+
+            void SaveToProto(NKikimrVDiskData::THugeKeeperHeap::TChain& chain) const;
+            void LoadFromProto(const NKikimrVDiskData::THugeKeeperHeap::TChain& chain);
 
             THugeSlot Convert(const NPrivate::TChunkSlot& id) const;
             NPrivate::TChunkSlot Convert(const TDiskPart& addr) const;
@@ -179,19 +184,27 @@ namespace NKikimr {
         ////////////////////////////////////////////////////////////////////////////
         class TAllChains {
         public:
-            TAllChains(const TString &vdiskLogPrefix,
+            TAllChains(const TString& vdiskLogPrefix,
                 ui32 chunkSize,
                 ui32 appendBlockSize,
                 ui32 minHugeBlobInBytes,
                 ui32 milestoneBlobInBytes,
-                ui32 maxBlobInBytes,
+                ui32 maxHugeBlobInBytes,
                 ui32 overhead);
+
+            TAllChains(const TString& vdiskLogPrefix, const NKikimrVDiskData::THugeKeeperHeap& heap);
+
             // return a pointer to corresponding chain delegator by object byte size
             TChain *GetChain(ui32 size);
             const TChain *GetChain(ui32 size) const;
             THeapStat GetStat() const;
+
             void Save(IOutputStream *s) const;
             void Load(IInputStream *s);
+
+            void SaveToProto(NKikimrVDiskData::THugeKeeperHeap& heap) const;
+            void LoadFromProto(const NKikimrVDiskData::THugeKeeperHeap& heap);
+
             void GetOwnedChunks(TSet<TChunkIdx>& chunks) const;
             TString ToString() const;
             void RenderHtml(IOutputStream &str) const;
@@ -206,18 +219,18 @@ namespace NKikimr {
             void ListChunks(const THashSet<TChunkIdx>& chunksOfInterest, THashSet<TChunkIdx>& chunks);
 
         private:
-            void BuildChains();
+            void BuildChains(ui32 milestoneBlobInBytes, ui32 overhead);
             void BuildSearchTable();
             inline ui32 SizeToBlocks(ui32 size) const;
 
             const TString VDiskLogPrefix;
-            const ui32 ChunkSize;
-            const ui32 AppendBlockSize;
-            const ui32 MinHugeBlobInBytes;
-            const ui32 MilestoneBlobInBytes;
-            const ui32 Overhead;
-            const ui32 MinHugeBlobInBlocks;
-            const ui32 MaxHugeBlobInBlocks;
+            ui32 ChunkSize = 0;
+            ui32 AppendBlockSize = 0;
+            ui32 MinHugeBlobInBytes = 0;
+            ui32 MaxHugeBlobInBytes = 0;
+            ui32 MinHugeBlobInBlocks = 0;
+            ui32 MaxHugeBlobInBlocks = 0;
+
             TDynBitMap DeserializedChains; // a bit mask of chains that were deserialized from the origin stream
             std::vector<TChain> Chains;
             std::vector<ui16> SearchTable; // (NumFullBlocks - 1) -> Chain index
@@ -233,8 +246,10 @@ namespace NKikimr {
             using TFreeChunks = TSet<TChunkID>;
 
             static const ui32 Signature;
+            static const ui32 SignatureV2;
+
             const TString VDiskLogPrefix;
-            const ui32 FreeChunksReservation;
+            ui32 FreeChunksReservation = 0;
             TFreeChunks FreeChunks;
             TAllChains Chains;
             THashSet<TChunkID> ForbiddenChunks; // chunks that are being shredded right now
@@ -249,11 +264,12 @@ namespace NKikimr {
                 // fixed point to calculate layout (for backward compatibility)
                 ui32 mileStoneBlobInBytes,
                 // max size of the blob
-                ui32 maxBlobInBytes,
+                ui32 maxHugeBlobInBytes,
                 // difference between buckets is 1/overhead
                 ui32 overhead,
                 ui32 freeChunksReservation);
 
+            THeap(const TString& vdiskLogPrefix, const NKikimrVDiskData::THugeKeeperHeap& heap);
 
             ui32 SlotNumberOfThisSize(ui32 size) const {
                 const TChain *chain = Chains.GetChain(size);
@@ -301,6 +317,10 @@ namespace NKikimr {
             //////////////////////////////////////////////////////////////////////////////////////////
             TString Serialize();
             void ParseFromString(const TString &serialized);
+
+            void SaveToProto(NKikimrVDiskData::THugeKeeperHeap& heap) const;
+            void LoadFromProto(const NKikimrVDiskData::THugeKeeperHeap& heap);
+
             static bool CheckEntryPoint(const TString &serialized);
             void GetOwnedChunks(TSet<TChunkIdx>& chunks) const;
 

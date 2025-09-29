@@ -78,6 +78,7 @@ message TEvNodeConfigPush {
     repeated TBoundNode BoundNodes = 2; // a list of bound node updates (including itself)
     repeated TNodeIdentifier DeletedBoundNodeIds = 3; // a list of detached nodes
     TCacheUpdate CacheUpdate = 4;
+    TStorageConfig StorageConfig = 5;
 }
 
 // Used to reverse-propagate configuration and to confirm/reject initial TEvNodePushBinding query.
@@ -87,6 +88,7 @@ message TEvNodeConfigReversePush {
     TStorageConfig CommittedStorageConfig = 3; // last known committed storage configuration
     bool RecurseConfigUpdate = 4;
     TCacheUpdate CacheUpdate = 5;
+    optional uint64 RequestStorageConfigGeneration = 6;
 }
 
 // Remove node from bound list.

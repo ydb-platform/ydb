@@ -205,14 +205,25 @@ THolder<IComputationGraph> BuildGraph(TKqpSetup<LLVM>& setup, THolder<NUdf::TBox
 
     TRuntimeNode pgmReturn;
 
+    constexpr const bool useFlow = true; // TODO: configurable
     if (useDqImpl) {
-        pgmReturn = pb.DqHashCombine(
-            TRuntimeNode(streamCallable, false),
-            memLimit,
-            lambdaKey,
-            lambdaInit,
-            lambdaUpdate,
-            lambdaFinalize);
+        if (useFlow) {
+            pgmReturn = pb.FromFlow(pb.DqHashCombine(
+                pb.ToFlow(TRuntimeNode(streamCallable, false)),
+                memLimit,
+                lambdaKey,
+                lambdaInit,
+                lambdaUpdate,
+                lambdaFinalize));
+        } else {
+            pgmReturn = pb.DqHashCombine(
+                TRuntimeNode(streamCallable, false),
+                memLimit,
+                lambdaKey,
+                lambdaInit,
+                lambdaUpdate,
+                lambdaFinalize);
+        }
     } else {
         pgmReturn = pb.FromFlow(pb.WideCombiner(
             pb.ToFlow(TRuntimeNode(streamCallable, false)),
@@ -247,7 +258,6 @@ std::vector<TType*> FieldDescrToTypes(const std::vector<TFieldDescr>& fds, TProg
 template<bool LLVM>
 TRunResult RunTestOverGraph(
     const TRunParams& params,
-    const TStreamValues& inputData,
     const std::vector<TFieldDescr>& keyFields,
     const std::vector<TFieldDescr>& valueFields,
     [[maybe_unused]] const bool needsVerification,
@@ -256,6 +266,8 @@ TRunResult RunTestOverGraph(
     TKqpSetup<LLVM> setup(GetPerfTestFactory());
 
     NYql::NLog::InitLogger("cerr", false);
+
+    TStreamValues inputData = GenerateSample(params.NumKeys, params.RowsPerRun, keyFields, valueFields);
 
     auto makeStream = [&]() -> THolder<NUdf::TBoxedValue> {
         return MakeHolder<TPrebuiltStream>(inputData, keyFields.size() + valueFields.size(), params.NumRuns);
@@ -324,11 +336,11 @@ void PrepareColumnDescriptions(const TRunParams& params, std::vector<TFieldDescr
         switch (params.SamplerType) {
         case ESamplerType::StringKeysUI64Values:
             descr.IsString = true;
-            descr.IsEmbedded = true;
+            descr.IsEmbedded = !params.LongStringKeys;
             break;
         case ESamplerType::UI64KeysUI64Values:
             descr.IsString = false;
-            descr.IsEmbedded = true;
+            descr.IsEmbedded = !params.LongStringKeys;
             break;
         default:
             ythrow yexception() << "Unsupported sampler type for dq-hash-combine test";
@@ -354,12 +366,10 @@ void RunTestDqHashCombineVsWideCombine(const TRunParams& params, TTestResultColl
 
     std::optional<TRunResult> finalResult;
 
-    const TStreamValues inputData = GenerateSample(params.NumKeys, params.RowsPerRun, keyFields, valueFields);
-
     Cerr << "======== " << __func__ << ", keys: " << params.NumKeys << ", llvm: " << LLVM << ", mem limit: " << params.WideCombinerMemLimit << Endl;
 
     if (params.NumAttempts <= 1 && !params.MeasureReferenceMemory && !params.AlwaysSubprocess) {
-        finalResult = RunTestOverGraph<LLVM>(params, inputData, keyFields, valueFields, true, false);
+        finalResult = RunTestOverGraph<LLVM>(params, keyFields, valueFields, true, false);
     }
     else {
         for (int i = 1; i <= params.NumAttempts; ++i) {
@@ -368,11 +378,11 @@ void RunTestDqHashCombineVsWideCombine(const TRunParams& params, TTestResultColl
             const bool needsVerification = (i == 1);
 
             TRunResult runResultDq = RunForked([&]() {
-                return RunTestOverGraph<LLVM>(params, inputData, keyFields, valueFields, needsVerification, false);
+                return RunTestOverGraph<LLVM>(params, keyFields, valueFields, needsVerification, false);
             });
 
             TRunResult runResultWide = RunForked([&]() {
-                return RunTestOverGraph<LLVM>(params, inputData, keyFields, valueFields, needsVerification, true);
+                return RunTestOverGraph<LLVM>(params, keyFields, valueFields, needsVerification, true);
             });
 
             if (finalResult.has_value()) {

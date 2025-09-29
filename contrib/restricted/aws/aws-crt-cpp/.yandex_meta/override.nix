@@ -7,4 +7,6 @@ pkgs: attrs: with pkgs; with attrs; rec {
     rev = "v${version}";
     hash = "sha256-z/9ifBv4KbH5RiR1t1Dz8cCWZlHrMSyB8/w4pdTscw0=";
   };
+
+  patches = [];
 }

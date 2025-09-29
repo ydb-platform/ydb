@@ -1,0 +1,948 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     Apache-2.0 WITH LLVM-exception 3cd6ea1904395f4162edc527b90cadab
+BELONGS ya.make
+    License text:
+           SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        flang-rt/README.md [5:5]
+    Scancode info:
+        Original SPDX id: LLVM-exception
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://llvm.org/foundation/relicensing/LICENSE.txt, https://spdx.org/licenses/LLVM-exception
+    Files with this license:
+        flang-rt/README.md [5:5]
+
+KEEP     Apache-2.0 WITH LLVM-exception 46de3ad957a7feef77f4d3a511e79b6a
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 99.69
+        Match type      : TEXT
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        flang-rt/LICENSE.TXT [2:205]
+        flang/LICENSE.TXT [2:205]
+
+KEEP     Apache-2.0 WITH LLVM-exception 705a75a25bce12b12334e8fc577d8a46
+BELONGS ya.make
+    License text:
+         * Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+         * See https://llvm.org/LICENSE.txt for license information.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        flang-rt/config-linux.h [3:4]
+        flang-rt/lib/runtime/complex-reduction.c [3:4]
+        flang-rt/lib/runtime/complex-reduction.h [3:4]
+        flang-rt/lib/runtime/environment-default-list.h [3:4]
+        flang/include/flang/Common/ISO_Fortran_binding_wrapper.h [3:4]
+        flang/include/flang/Common/api-attrs.h [3:4]
+        flang/include/flang/Common/float128.h [3:4]
+        flang/include/flang/Common/float80.h [3:4]
+        flang/include/flang/Decimal/decimal.h [3:4]
+        flang/include/flang/ISO_Fortran_binding.h [3:4]
+        flang/include/flang/Runtime/entry-names.h [3:4]
+        flang/include/flang/Runtime/magic-numbers.h [3:4]
+    Scancode info:
+        Original SPDX id: LLVM-exception
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://llvm.org/foundation/relicensing/LICENSE.txt, https://spdx.org/licenses/LLVM-exception
+    Files with this license:
+        flang-rt/config-linux.h [3:4]
+        flang-rt/lib/runtime/complex-reduction.c [3:4]
+        flang-rt/lib/runtime/complex-reduction.h [3:4]
+        flang-rt/lib/runtime/environment-default-list.h [3:4]
+        flang/include/flang/Common/ISO_Fortran_binding_wrapper.h [3:4]
+        flang/include/flang/Common/api-attrs.h [3:4]
+        flang/include/flang/Common/float128.h [3:4]
+        flang/include/flang/Common/float80.h [3:4]
+        flang/include/flang/Decimal/decimal.h [3:4]
+        flang/include/flang/ISO_Fortran_binding.h [3:4]
+        flang/include/flang/Runtime/entry-names.h [3:4]
+        flang/include/flang/Runtime/magic-numbers.h [3:4]
+
+KEEP     Apache-2.0 WITH LLVM-exception 755ab7da3ff8c5d6ae90bdbebd177e49
+BELONGS ya.make
+    License text:
+        // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+        // See https://llvm.org/LICENSE.txt for license information.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        flang-rt/include/flang-rt/runtime/allocator-registry.h [3:4]
+        flang-rt/include/flang-rt/runtime/array-constructor.h [3:4]
+        flang-rt/include/flang-rt/runtime/assign-impl.h [3:4]
+        flang-rt/include/flang-rt/runtime/buffer.h [3:4]
+        flang-rt/include/flang-rt/runtime/connection.h [3:4]
+        flang-rt/include/flang-rt/runtime/derived.h [3:4]
+        flang-rt/include/flang-rt/runtime/descriptor.h [3:4]
+        flang-rt/include/flang-rt/runtime/emit-encoded.h [3:4]
+        flang-rt/include/flang-rt/runtime/environment.h [3:4]
+        flang-rt/include/flang-rt/runtime/file.h [3:4]
+        flang-rt/include/flang-rt/runtime/format-implementation.h [3:4]
+        flang-rt/include/flang-rt/runtime/format.h [3:4]
+        flang-rt/include/flang-rt/runtime/internal-unit.h [3:4]
+        flang-rt/include/flang-rt/runtime/io-error.h [3:4]
+        flang-rt/include/flang-rt/runtime/io-stmt.h [3:4]
+        flang-rt/include/flang-rt/runtime/lock.h [3:4]
+        flang-rt/include/flang-rt/runtime/memory.h [3:4]
+        flang-rt/include/flang-rt/runtime/namelist.h [3:4]
+        flang-rt/include/flang-rt/runtime/non-tbp-dio.h [3:4]
+        flang-rt/include/flang-rt/runtime/numeric-templates.h [3:4]
+        flang-rt/include/flang-rt/runtime/random-templates.h [3:4]
+        flang-rt/include/flang-rt/runtime/reduction-templates.h [3:4]
+        flang-rt/include/flang-rt/runtime/stat.h [3:4]
+        flang-rt/include/flang-rt/runtime/terminator.h [3:4]
+        flang-rt/include/flang-rt/runtime/tools.h [3:4]
+        flang-rt/include/flang-rt/runtime/type-code.h [3:4]
+        flang-rt/include/flang-rt/runtime/type-info.h [3:4]
+        flang-rt/include/flang-rt/runtime/utf.h [3:4]
+        flang-rt/include/flang-rt/runtime/work-queue.h [3:4]
+        flang-rt/lib/runtime/ISO_Fortran_binding.cpp [3:4]
+        flang-rt/lib/runtime/ISO_Fortran_util.h [3:4]
+        flang-rt/lib/runtime/allocatable.cpp [3:4]
+        flang-rt/lib/runtime/allocator-registry.cpp [3:4]
+        flang-rt/lib/runtime/array-constructor.cpp [3:4]
+        flang-rt/lib/runtime/assign.cpp [3:4]
+        flang-rt/lib/runtime/buffer.cpp [3:4]
+        flang-rt/lib/runtime/character.cpp [3:4]
+        flang-rt/lib/runtime/command.cpp [3:4]
+        flang-rt/lib/runtime/complex-powi.cpp [3:4]
+        flang-rt/lib/runtime/connection.cpp [3:4]
+        flang-rt/lib/runtime/copy.cpp [3:4]
+        flang-rt/lib/runtime/copy.h [3:4]
+        flang-rt/lib/runtime/derived-api.cpp [3:4]
+        flang-rt/lib/runtime/derived.cpp [3:4]
+        flang-rt/lib/runtime/descriptor-io.cpp [3:4]
+        flang-rt/lib/runtime/descriptor-io.h [3:4]
+        flang-rt/lib/runtime/descriptor.cpp [3:4]
+        flang-rt/lib/runtime/dot-product.cpp [3:4]
+        flang-rt/lib/runtime/edit-input.cpp [3:4]
+        flang-rt/lib/runtime/edit-input.h [3:4]
+        flang-rt/lib/runtime/edit-output.cpp [3:4]
+        flang-rt/lib/runtime/edit-output.h [3:4]
+        flang-rt/lib/runtime/environment.cpp [3:4]
+        flang-rt/lib/runtime/exceptions.cpp [3:4]
+        flang-rt/lib/runtime/execute.cpp [3:4]
+        flang-rt/lib/runtime/extensions.cpp [3:4]
+        flang-rt/lib/runtime/external-unit.cpp [3:4]
+        flang-rt/lib/runtime/extrema.cpp [3:4]
+        flang-rt/lib/runtime/file.cpp [3:4]
+        flang-rt/lib/runtime/findloc.cpp [3:4]
+        flang-rt/lib/runtime/format.cpp [3:4]
+        flang-rt/lib/runtime/inquiry.cpp [3:4]
+        flang-rt/lib/runtime/internal-unit.cpp [3:4]
+        flang-rt/lib/runtime/io-api-common.h [3:4]
+        flang-rt/lib/runtime/io-api-minimal.cpp [3:4]
+        flang-rt/lib/runtime/io-api.cpp [3:4]
+        flang-rt/lib/runtime/io-error.cpp [3:4]
+        flang-rt/lib/runtime/io-stmt.cpp [3:4]
+        flang-rt/lib/runtime/iostat.cpp [3:4]
+        flang-rt/lib/runtime/main.cpp [3:4]
+        flang-rt/lib/runtime/matmul-transpose.cpp [3:4]
+        flang-rt/lib/runtime/matmul.cpp [3:4]
+        flang-rt/lib/runtime/memory.cpp [3:4]
+        flang-rt/lib/runtime/misc-intrinsic.cpp [3:4]
+        flang-rt/lib/runtime/namelist.cpp [3:4]
+        flang-rt/lib/runtime/non-tbp-dio.cpp [3:4]
+        flang-rt/lib/runtime/numeric.cpp [3:4]
+        flang-rt/lib/runtime/pointer.cpp [3:4]
+        flang-rt/lib/runtime/product.cpp [3:4]
+        flang-rt/lib/runtime/pseudo-unit.cpp [3:4]
+        flang-rt/lib/runtime/ragged.cpp [3:4]
+        flang-rt/lib/runtime/random.cpp [3:4]
+        flang-rt/lib/runtime/reduce.cpp [3:4]
+        flang-rt/lib/runtime/reduction.cpp [3:4]
+        flang-rt/lib/runtime/stack.h [3:4]
+        flang-rt/lib/runtime/stat.cpp [3:4]
+        flang-rt/lib/runtime/stop.cpp [3:4]
+        flang-rt/lib/runtime/sum.cpp [3:4]
+        flang-rt/lib/runtime/support.cpp [3:4]
+        flang-rt/lib/runtime/temporary-stack.cpp [3:4]
+        flang-rt/lib/runtime/terminator.cpp [3:4]
+        flang-rt/lib/runtime/time-intrinsic.cpp [3:4]
+        flang-rt/lib/runtime/tools.cpp [3:4]
+        flang-rt/lib/runtime/transformational.cpp [3:4]
+        flang-rt/lib/runtime/type-code.cpp [3:4]
+        flang-rt/lib/runtime/type-info.cpp [3:4]
+        flang-rt/lib/runtime/unit-map.cpp [3:4]
+        flang-rt/lib/runtime/unit-map.h [3:4]
+        flang-rt/lib/runtime/unit.cpp [3:4]
+        flang-rt/lib/runtime/unit.h [3:4]
+        flang-rt/lib/runtime/utf.cpp [3:4]
+        flang-rt/lib/runtime/work-queue.cpp [3:4]
+        flang/include/flang/Common/Fortran-consts.h [3:4]
+        flang/include/flang/Common/bit-population-count.h [3:4]
+        flang/include/flang/Common/constexpr-bitset.h [3:4]
+        flang/include/flang/Common/enum-class.h [3:4]
+        flang/include/flang/Common/enum-set.h [3:4]
+        flang/include/flang/Common/erfc-scaled.h [3:4]
+        flang/include/flang/Common/fast-int-set.h [3:4]
+        flang/include/flang/Common/format.h [3:4]
+        flang/include/flang/Common/idioms.h [3:4]
+        flang/include/flang/Common/leading-zero-bit-count.h [3:4]
+        flang/include/flang/Common/optional.h [3:4]
+        flang/include/flang/Common/real.h [3:4]
+        flang/include/flang/Common/reference-wrapper.h [3:4]
+        flang/include/flang/Common/restorer.h [3:4]
+        flang/include/flang/Common/type-kinds.h [3:4]
+        flang/include/flang/Common/uint128.h [3:4]
+        flang/include/flang/Common/variant.h [3:4]
+        flang/include/flang/Common/visit.h [3:4]
+        flang/include/flang/Common/windows-include.h [3:4]
+        flang/include/flang/Decimal/binary-floating-point.h [3:4]
+        flang/include/flang/Runtime/allocatable.h [3:4]
+        flang/include/flang/Runtime/allocator-registry-consts.h [3:4]
+        flang/include/flang/Runtime/array-constructor-consts.h [3:4]
+        flang/include/flang/Runtime/assign.h [3:4]
+        flang/include/flang/Runtime/c-or-cpp.h [3:4]
+        flang/include/flang/Runtime/character.h [3:4]
+        flang/include/flang/Runtime/command.h [3:4]
+        flang/include/flang/Runtime/complex.h [3:4]
+        flang/include/flang/Runtime/cpp-type.h [3:4]
+        flang/include/flang/Runtime/derived-api.h [3:4]
+        flang/include/flang/Runtime/descriptor-consts.h [3:4]
+        flang/include/flang/Runtime/exceptions.h [3:4]
+        flang/include/flang/Runtime/execute.h [3:4]
+        flang/include/flang/Runtime/extensions.h [3:4]
+        flang/include/flang/Runtime/freestanding-tools.h [3:4]
+        flang/include/flang/Runtime/inquiry.h [3:4]
+        flang/include/flang/Runtime/io-api.h [3:4]
+        flang/include/flang/Runtime/iostat-consts.h [3:4]
+        flang/include/flang/Runtime/iostat.h [3:4]
+        flang/include/flang/Runtime/main.h [3:4]
+        flang/include/flang/Runtime/matmul-instances.inc [3:4]
+        flang/include/flang/Runtime/matmul-transpose.h [3:4]
+        flang/include/flang/Runtime/matmul.h [3:4]
+        flang/include/flang/Runtime/misc-intrinsic.h [3:4]
+        flang/include/flang/Runtime/numeric.h [3:4]
+        flang/include/flang/Runtime/pointer.h [3:4]
+        flang/include/flang/Runtime/ragged.h [3:4]
+        flang/include/flang/Runtime/random.h [3:4]
+        flang/include/flang/Runtime/reduce.h [3:4]
+        flang/include/flang/Runtime/reduction.h [3:4]
+        flang/include/flang/Runtime/stop.h [3:4]
+        flang/include/flang/Runtime/support.h [3:4]
+        flang/include/flang/Runtime/temporary-stack.h [3:4]
+        flang/include/flang/Runtime/time-intrinsic.h [3:4]
+        flang/include/flang/Runtime/transformational.h [3:4]
+        flang/lib/Decimal/big-radix-floating-point.h [3:4]
+        flang/lib/Decimal/binary-to-decimal.cpp [3:4]
+        flang/lib/Decimal/decimal-to-binary.cpp [3:4]
+    Scancode info:
+        Original SPDX id: LLVM-exception
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://llvm.org/foundation/relicensing/LICENSE.txt, https://spdx.org/licenses/LLVM-exception
+    Files with this license:
+        flang-rt/include/flang-rt/runtime/allocator-registry.h [3:4]
+        flang-rt/include/flang-rt/runtime/array-constructor.h [3:4]
+        flang-rt/include/flang-rt/runtime/assign-impl.h [3:4]
+        flang-rt/include/flang-rt/runtime/buffer.h [3:4]
+        flang-rt/include/flang-rt/runtime/connection.h [3:4]
+        flang-rt/include/flang-rt/runtime/derived.h [3:4]
+        flang-rt/include/flang-rt/runtime/descriptor.h [3:4]
+        flang-rt/include/flang-rt/runtime/emit-encoded.h [3:4]
+        flang-rt/include/flang-rt/runtime/environment.h [3:4]
+        flang-rt/include/flang-rt/runtime/file.h [3:4]
+        flang-rt/include/flang-rt/runtime/format-implementation.h [3:4]
+        flang-rt/include/flang-rt/runtime/format.h [3:4]
+        flang-rt/include/flang-rt/runtime/internal-unit.h [3:4]
+        flang-rt/include/flang-rt/runtime/io-error.h [3:4]
+        flang-rt/include/flang-rt/runtime/io-stmt.h [3:4]
+        flang-rt/include/flang-rt/runtime/lock.h [3:4]
+        flang-rt/include/flang-rt/runtime/memory.h [3:4]
+        flang-rt/include/flang-rt/runtime/namelist.h [3:4]
+        flang-rt/include/flang-rt/runtime/non-tbp-dio.h [3:4]
+        flang-rt/include/flang-rt/runtime/numeric-templates.h [3:4]
+        flang-rt/include/flang-rt/runtime/random-templates.h [3:4]
+        flang-rt/include/flang-rt/runtime/reduction-templates.h [3:4]
+        flang-rt/include/flang-rt/runtime/stat.h [3:4]
+        flang-rt/include/flang-rt/runtime/terminator.h [3:4]
+        flang-rt/include/flang-rt/runtime/tools.h [3:4]
+        flang-rt/include/flang-rt/runtime/type-code.h [3:4]
+        flang-rt/include/flang-rt/runtime/type-info.h [3:4]
+        flang-rt/include/flang-rt/runtime/utf.h [3:4]
+        flang-rt/include/flang-rt/runtime/work-queue.h [3:4]
+        flang-rt/lib/runtime/ISO_Fortran_binding.cpp [3:4]
+        flang-rt/lib/runtime/ISO_Fortran_util.h [3:4]
+        flang-rt/lib/runtime/allocatable.cpp [3:4]
+        flang-rt/lib/runtime/allocator-registry.cpp [3:4]
+        flang-rt/lib/runtime/array-constructor.cpp [3:4]
+        flang-rt/lib/runtime/assign.cpp [3:4]
+        flang-rt/lib/runtime/buffer.cpp [3:4]
+        flang-rt/lib/runtime/character.cpp [3:4]
+        flang-rt/lib/runtime/command.cpp [3:4]
+        flang-rt/lib/runtime/complex-powi.cpp [3:4]
+        flang-rt/lib/runtime/connection.cpp [3:4]
+        flang-rt/lib/runtime/copy.cpp [3:4]
+        flang-rt/lib/runtime/copy.h [3:4]
+        flang-rt/lib/runtime/derived-api.cpp [3:4]
+        flang-rt/lib/runtime/derived.cpp [3:4]
+        flang-rt/lib/runtime/descriptor-io.cpp [3:4]
+        flang-rt/lib/runtime/descriptor-io.h [3:4]
+        flang-rt/lib/runtime/descriptor.cpp [3:4]
+        flang-rt/lib/runtime/dot-product.cpp [3:4]
+        flang-rt/lib/runtime/edit-input.cpp [3:4]
+        flang-rt/lib/runtime/edit-input.h [3:4]
+        flang-rt/lib/runtime/edit-output.cpp [3:4]
+        flang-rt/lib/runtime/edit-output.h [3:4]
+        flang-rt/lib/runtime/environment.cpp [3:4]
+        flang-rt/lib/runtime/exceptions.cpp [3:4]
+        flang-rt/lib/runtime/execute.cpp [3:4]
+        flang-rt/lib/runtime/extensions.cpp [3:4]
+        flang-rt/lib/runtime/external-unit.cpp [3:4]
+        flang-rt/lib/runtime/extrema.cpp [3:4]
+        flang-rt/lib/runtime/file.cpp [3:4]
+        flang-rt/lib/runtime/findloc.cpp [3:4]
+        flang-rt/lib/runtime/format.cpp [3:4]
+        flang-rt/lib/runtime/inquiry.cpp [3:4]
+        flang-rt/lib/runtime/internal-unit.cpp [3:4]
+        flang-rt/lib/runtime/io-api-common.h [3:4]
+        flang-rt/lib/runtime/io-api-minimal.cpp [3:4]
+        flang-rt/lib/runtime/io-api.cpp [3:4]
+        flang-rt/lib/runtime/io-error.cpp [3:4]
+        flang-rt/lib/runtime/io-stmt.cpp [3:4]
+        flang-rt/lib/runtime/iostat.cpp [3:4]
+        flang-rt/lib/runtime/main.cpp [3:4]
+        flang-rt/lib/runtime/matmul-transpose.cpp [3:4]
+        flang-rt/lib/runtime/matmul.cpp [3:4]
+        flang-rt/lib/runtime/memory.cpp [3:4]
+        flang-rt/lib/runtime/misc-intrinsic.cpp [3:4]
+        flang-rt/lib/runtime/namelist.cpp [3:4]
+        flang-rt/lib/runtime/non-tbp-dio.cpp [3:4]
+        flang-rt/lib/runtime/numeric.cpp [3:4]
+        flang-rt/lib/runtime/pointer.cpp [3:4]
+        flang-rt/lib/runtime/product.cpp [3:4]
+        flang-rt/lib/runtime/pseudo-unit.cpp [3:4]
+        flang-rt/lib/runtime/ragged.cpp [3:4]
+        flang-rt/lib/runtime/random.cpp [3:4]
+        flang-rt/lib/runtime/reduce.cpp [3:4]
+        flang-rt/lib/runtime/reduction.cpp [3:4]
+        flang-rt/lib/runtime/stack.h [3:4]
+        flang-rt/lib/runtime/stat.cpp [3:4]
+        flang-rt/lib/runtime/stop.cpp [3:4]
+        flang-rt/lib/runtime/sum.cpp [3:4]
+        flang-rt/lib/runtime/support.cpp [3:4]
+        flang-rt/lib/runtime/temporary-stack.cpp [3:4]
+        flang-rt/lib/runtime/terminator.cpp [3:4]
+        flang-rt/lib/runtime/time-intrinsic.cpp [3:4]
+        flang-rt/lib/runtime/tools.cpp [3:4]
+        flang-rt/lib/runtime/transformational.cpp [3:4]
+        flang-rt/lib/runtime/type-code.cpp [3:4]
+        flang-rt/lib/runtime/type-info.cpp [3:4]
+        flang-rt/lib/runtime/unit-map.cpp [3:4]
+        flang-rt/lib/runtime/unit-map.h [3:4]
+        flang-rt/lib/runtime/unit.cpp [3:4]
+        flang-rt/lib/runtime/unit.h [3:4]
+        flang-rt/lib/runtime/utf.cpp [3:4]
+        flang-rt/lib/runtime/work-queue.cpp [3:4]
+        flang/include/flang/Common/Fortran-consts.h [3:4]
+        flang/include/flang/Common/bit-population-count.h [3:4]
+        flang/include/flang/Common/constexpr-bitset.h [3:4]
+        flang/include/flang/Common/enum-class.h [3:4]
+        flang/include/flang/Common/enum-set.h [3:4]
+        flang/include/flang/Common/erfc-scaled.h [3:4]
+        flang/include/flang/Common/fast-int-set.h [3:4]
+        flang/include/flang/Common/format.h [3:4]
+        flang/include/flang/Common/idioms.h [3:4]
+        flang/include/flang/Common/leading-zero-bit-count.h [3:4]
+        flang/include/flang/Common/optional.h [3:4]
+        flang/include/flang/Common/real.h [3:4]
+        flang/include/flang/Common/reference-wrapper.h [3:4]
+        flang/include/flang/Common/restorer.h [3:4]
+        flang/include/flang/Common/type-kinds.h [3:4]
+        flang/include/flang/Common/uint128.h [3:4]
+        flang/include/flang/Common/variant.h [3:4]
+        flang/include/flang/Common/visit.h [3:4]
+        flang/include/flang/Common/windows-include.h [3:4]
+        flang/include/flang/Decimal/binary-floating-point.h [3:4]
+        flang/include/flang/Runtime/allocatable.h [3:4]
+        flang/include/flang/Runtime/allocator-registry-consts.h [3:4]
+        flang/include/flang/Runtime/array-constructor-consts.h [3:4]
+        flang/include/flang/Runtime/assign.h [3:4]
+        flang/include/flang/Runtime/c-or-cpp.h [3:4]
+        flang/include/flang/Runtime/character.h [3:4]
+        flang/include/flang/Runtime/command.h [3:4]
+        flang/include/flang/Runtime/complex.h [3:4]
+        flang/include/flang/Runtime/cpp-type.h [3:4]
+        flang/include/flang/Runtime/derived-api.h [3:4]
+        flang/include/flang/Runtime/descriptor-consts.h [3:4]
+        flang/include/flang/Runtime/exceptions.h [3:4]
+        flang/include/flang/Runtime/execute.h [3:4]
+        flang/include/flang/Runtime/extensions.h [3:4]
+        flang/include/flang/Runtime/freestanding-tools.h [3:4]
+        flang/include/flang/Runtime/inquiry.h [3:4]
+        flang/include/flang/Runtime/io-api.h [3:4]
+        flang/include/flang/Runtime/iostat-consts.h [3:4]
+        flang/include/flang/Runtime/iostat.h [3:4]
+        flang/include/flang/Runtime/main.h [3:4]
+        flang/include/flang/Runtime/matmul-instances.inc [3:4]
+        flang/include/flang/Runtime/matmul-transpose.h [3:4]
+        flang/include/flang/Runtime/matmul.h [3:4]
+        flang/include/flang/Runtime/misc-intrinsic.h [3:4]
+        flang/include/flang/Runtime/numeric.h [3:4]
+        flang/include/flang/Runtime/pointer.h [3:4]
+        flang/include/flang/Runtime/ragged.h [3:4]
+        flang/include/flang/Runtime/random.h [3:4]
+        flang/include/flang/Runtime/reduce.h [3:4]
+        flang/include/flang/Runtime/reduction.h [3:4]
+        flang/include/flang/Runtime/stop.h [3:4]
+        flang/include/flang/Runtime/support.h [3:4]
+        flang/include/flang/Runtime/temporary-stack.h [3:4]
+        flang/include/flang/Runtime/time-intrinsic.h [3:4]
+        flang/include/flang/Runtime/transformational.h [3:4]
+        flang/lib/Decimal/big-radix-floating-point.h [3:4]
+        flang/lib/Decimal/binary-to-decimal.cpp [3:4]
+        flang/lib/Decimal/decimal-to-binary.cpp [3:4]
+
+KEEP     NCSA                 7e1c6e0177b0a462d79445a1e2d85892
+BELONGS ya.make
+    License text:
+        Legacy LLVM License (https://llvm.org/docs/DeveloperPolicy.html#legacy):
+        ==============================================================================
+        University of Illinois/NCSA
+        Open Source License
+    Scancode info:
+        Original SPDX id: NCSA
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.otm.illinois.edu/faculty/forms/opensource.asp, https://spdx.org/licenses/NCSA
+    Files with this license:
+        LICENSE.TXT [237:240]
+
+KEEP     Apache-2.0 WITH LLVM-exception 8494a9caed330d9a4f40e19cce7dc770
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LLVM-exception
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://llvm.org/foundation/relicensing/LICENSE.txt, https://spdx.org/licenses/LLVM-exception
+    Files with this license:
+        LICENSE.TXT [208:222]
+        flang-rt/LICENSE.TXT [208:222]
+        flang/LICENSE.TXT [208:222]
+
+KEEP     Apache-2.0 WITH LLVM-exception 920007a31ffdd1aecc6f9a8b12515826
+BELONGS ya.make
+    License text:
+        // The original source code is distributed under the Apache License v2.0
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 11.00
+        Match type      : INTRO
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        flang/include/flang/Common/reference-wrapper.h [14:14]
+
+KEEP     Apache-2.0 WITH LLVM-exception 9ac77f65a898755c7eed97099caded94
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        LICENSE.TXT [5:205]
+
+KEEP     NCSA                 b160d8bd561da097b0edd40b062e1c84
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: NCSA
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.otm.illinois.edu/faculty/forms/opensource.asp, https://spdx.org/licenses/NCSA
+    Files with this license:
+        LICENSE.TXT [253:278]
+
+KEEP     Apache-2.0 WITH LLVM-exception b7566a1930e050e1090162bf1d543650
+BELONGS ya.make
+    License text:
+        // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        flang-rt/include/flang-rt/runtime/allocator-registry.h [5:5]
+        flang-rt/include/flang-rt/runtime/array-constructor.h [5:5]
+        flang-rt/include/flang-rt/runtime/assign-impl.h [5:5]
+        flang-rt/include/flang-rt/runtime/buffer.h [5:5]
+        flang-rt/include/flang-rt/runtime/connection.h [5:5]
+        flang-rt/include/flang-rt/runtime/derived.h [5:5]
+        flang-rt/include/flang-rt/runtime/descriptor.h [5:5]
+        flang-rt/include/flang-rt/runtime/emit-encoded.h [5:5]
+        flang-rt/include/flang-rt/runtime/environment.h [5:5]
+        flang-rt/include/flang-rt/runtime/file.h [5:5]
+        flang-rt/include/flang-rt/runtime/format-implementation.h [5:5]
+        flang-rt/include/flang-rt/runtime/format.h [5:5]
+        flang-rt/include/flang-rt/runtime/internal-unit.h [5:5]
+        flang-rt/include/flang-rt/runtime/io-error.h [5:5]
+        flang-rt/include/flang-rt/runtime/io-stmt.h [5:5]
+        flang-rt/include/flang-rt/runtime/lock.h [5:5]
+        flang-rt/include/flang-rt/runtime/memory.h [5:5]
+        flang-rt/include/flang-rt/runtime/namelist.h [5:5]
+        flang-rt/include/flang-rt/runtime/non-tbp-dio.h [5:5]
+        flang-rt/include/flang-rt/runtime/numeric-templates.h [5:5]
+        flang-rt/include/flang-rt/runtime/random-templates.h [5:5]
+        flang-rt/include/flang-rt/runtime/reduction-templates.h [5:5]
+        flang-rt/include/flang-rt/runtime/stat.h [5:5]
+        flang-rt/include/flang-rt/runtime/terminator.h [5:5]
+        flang-rt/include/flang-rt/runtime/tools.h [5:5]
+        flang-rt/include/flang-rt/runtime/type-code.h [5:5]
+        flang-rt/include/flang-rt/runtime/type-info.h [5:5]
+        flang-rt/include/flang-rt/runtime/utf.h [5:5]
+        flang-rt/include/flang-rt/runtime/work-queue.h [5:5]
+        flang-rt/lib/runtime/ISO_Fortran_binding.cpp [5:5]
+        flang-rt/lib/runtime/ISO_Fortran_util.h [5:5]
+        flang-rt/lib/runtime/allocatable.cpp [5:5]
+        flang-rt/lib/runtime/allocator-registry.cpp [5:5]
+        flang-rt/lib/runtime/array-constructor.cpp [5:5]
+        flang-rt/lib/runtime/assign.cpp [5:5]
+        flang-rt/lib/runtime/buffer.cpp [5:5]
+        flang-rt/lib/runtime/character.cpp [5:5]
+        flang-rt/lib/runtime/command.cpp [5:5]
+        flang-rt/lib/runtime/complex-powi.cpp [5:5]
+        flang-rt/lib/runtime/connection.cpp [5:5]
+        flang-rt/lib/runtime/copy.cpp [5:5]
+        flang-rt/lib/runtime/copy.h [5:5]
+        flang-rt/lib/runtime/derived-api.cpp [5:5]
+        flang-rt/lib/runtime/derived.cpp [5:5]
+        flang-rt/lib/runtime/descriptor-io.cpp [5:5]
+        flang-rt/lib/runtime/descriptor-io.h [5:5]
+        flang-rt/lib/runtime/descriptor.cpp [5:5]
+        flang-rt/lib/runtime/dot-product.cpp [5:5]
+        flang-rt/lib/runtime/edit-input.cpp [5:5]
+        flang-rt/lib/runtime/edit-input.h [5:5]
+        flang-rt/lib/runtime/edit-output.cpp [5:5]
+        flang-rt/lib/runtime/edit-output.h [5:5]
+        flang-rt/lib/runtime/environment.cpp [5:5]
+        flang-rt/lib/runtime/exceptions.cpp [5:5]
+        flang-rt/lib/runtime/execute.cpp [5:5]
+        flang-rt/lib/runtime/extensions.cpp [5:5]
+        flang-rt/lib/runtime/external-unit.cpp [5:5]
+        flang-rt/lib/runtime/extrema.cpp [5:5]
+        flang-rt/lib/runtime/file.cpp [5:5]
+        flang-rt/lib/runtime/findloc.cpp [5:5]
+        flang-rt/lib/runtime/format.cpp [5:5]
+        flang-rt/lib/runtime/inquiry.cpp [5:5]
+        flang-rt/lib/runtime/internal-unit.cpp [5:5]
+        flang-rt/lib/runtime/io-api-common.h [5:5]
+        flang-rt/lib/runtime/io-api-minimal.cpp [5:5]
+        flang-rt/lib/runtime/io-api.cpp [5:5]
+        flang-rt/lib/runtime/io-error.cpp [5:5]
+        flang-rt/lib/runtime/io-stmt.cpp [5:5]
+        flang-rt/lib/runtime/iostat.cpp [5:5]
+        flang-rt/lib/runtime/main.cpp [5:5]
+        flang-rt/lib/runtime/matmul-transpose.cpp [5:5]
+        flang-rt/lib/runtime/matmul.cpp [5:5]
+        flang-rt/lib/runtime/memory.cpp [5:5]
+        flang-rt/lib/runtime/misc-intrinsic.cpp [5:5]
+        flang-rt/lib/runtime/namelist.cpp [5:5]
+        flang-rt/lib/runtime/non-tbp-dio.cpp [5:5]
+        flang-rt/lib/runtime/numeric.cpp [5:5]
+        flang-rt/lib/runtime/pointer.cpp [5:5]
+        flang-rt/lib/runtime/product.cpp [5:5]
+        flang-rt/lib/runtime/pseudo-unit.cpp [5:5]
+        flang-rt/lib/runtime/ragged.cpp [5:5]
+        flang-rt/lib/runtime/random.cpp [5:5]
+        flang-rt/lib/runtime/reduce.cpp [5:5]
+        flang-rt/lib/runtime/reduction.cpp [5:5]
+        flang-rt/lib/runtime/stack.h [5:5]
+        flang-rt/lib/runtime/stat.cpp [5:5]
+        flang-rt/lib/runtime/stop.cpp [5:5]
+        flang-rt/lib/runtime/sum.cpp [5:5]
+        flang-rt/lib/runtime/support.cpp [5:5]
+        flang-rt/lib/runtime/temporary-stack.cpp [5:5]
+        flang-rt/lib/runtime/terminator.cpp [5:5]
+        flang-rt/lib/runtime/time-intrinsic.cpp [5:5]
+        flang-rt/lib/runtime/tools.cpp [5:5]
+        flang-rt/lib/runtime/transformational.cpp [5:5]
+        flang-rt/lib/runtime/type-code.cpp [5:5]
+        flang-rt/lib/runtime/type-info.cpp [5:5]
+        flang-rt/lib/runtime/unit-map.cpp [5:5]
+        flang-rt/lib/runtime/unit-map.h [5:5]
+        flang-rt/lib/runtime/unit.cpp [5:5]
+        flang-rt/lib/runtime/unit.h [5:5]
+        flang-rt/lib/runtime/utf.cpp [5:5]
+        flang-rt/lib/runtime/work-queue.cpp [5:5]
+        flang/include/flang/Common/Fortran-consts.h [5:5]
+        flang/include/flang/Common/bit-population-count.h [5:5]
+        flang/include/flang/Common/constexpr-bitset.h [5:5]
+        flang/include/flang/Common/enum-class.h [5:5]
+        flang/include/flang/Common/enum-set.h [5:5]
+        flang/include/flang/Common/erfc-scaled.h [5:5]
+        flang/include/flang/Common/fast-int-set.h [5:5]
+        flang/include/flang/Common/format.h [5:5]
+        flang/include/flang/Common/idioms.h [5:5]
+        flang/include/flang/Common/leading-zero-bit-count.h [5:5]
+        flang/include/flang/Common/optional.h [5:5]
+        flang/include/flang/Common/real.h [5:5]
+        flang/include/flang/Common/reference-wrapper.h [5:5]
+        flang/include/flang/Common/restorer.h [5:5]
+        flang/include/flang/Common/type-kinds.h [5:5]
+        flang/include/flang/Common/uint128.h [5:5]
+        flang/include/flang/Common/variant.h [5:5]
+        flang/include/flang/Common/visit.h [5:5]
+        flang/include/flang/Common/windows-include.h [5:5]
+        flang/include/flang/Decimal/binary-floating-point.h [5:5]
+        flang/include/flang/Runtime/allocatable.h [5:5]
+        flang/include/flang/Runtime/allocator-registry-consts.h [5:5]
+        flang/include/flang/Runtime/array-constructor-consts.h [5:5]
+        flang/include/flang/Runtime/assign.h [5:5]
+        flang/include/flang/Runtime/c-or-cpp.h [5:5]
+        flang/include/flang/Runtime/character.h [5:5]
+        flang/include/flang/Runtime/command.h [5:5]
+        flang/include/flang/Runtime/complex.h [5:5]
+        flang/include/flang/Runtime/cpp-type.h [5:5]
+        flang/include/flang/Runtime/derived-api.h [5:5]
+        flang/include/flang/Runtime/descriptor-consts.h [5:5]
+        flang/include/flang/Runtime/exceptions.h [5:5]
+        flang/include/flang/Runtime/execute.h [5:5]
+        flang/include/flang/Runtime/extensions.h [5:5]
+        flang/include/flang/Runtime/freestanding-tools.h [5:5]
+        flang/include/flang/Runtime/inquiry.h [5:5]
+        flang/include/flang/Runtime/io-api.h [5:5]
+        flang/include/flang/Runtime/iostat-consts.h [5:5]
+        flang/include/flang/Runtime/iostat.h [5:5]
+        flang/include/flang/Runtime/main.h [5:5]
+        flang/include/flang/Runtime/matmul-instances.inc [5:5]
+        flang/include/flang/Runtime/matmul-transpose.h [5:5]
+        flang/include/flang/Runtime/matmul.h [5:5]
+        flang/include/flang/Runtime/misc-intrinsic.h [5:5]
+        flang/include/flang/Runtime/numeric.h [5:5]
+        flang/include/flang/Runtime/pointer.h [5:5]
+        flang/include/flang/Runtime/ragged.h [5:5]
+        flang/include/flang/Runtime/random.h [5:5]
+        flang/include/flang/Runtime/reduce.h [5:5]
+        flang/include/flang/Runtime/reduction.h [5:5]
+        flang/include/flang/Runtime/stop.h [5:5]
+        flang/include/flang/Runtime/support.h [5:5]
+        flang/include/flang/Runtime/temporary-stack.h [5:5]
+        flang/include/flang/Runtime/time-intrinsic.h [5:5]
+        flang/include/flang/Runtime/transformational.h [5:5]
+        flang/lib/Decimal/big-radix-floating-point.h [5:5]
+        flang/lib/Decimal/binary-to-decimal.cpp [5:5]
+        flang/lib/Decimal/decimal-to-binary.cpp [5:5]
+    Scancode info:
+        Original SPDX id: LLVM-exception
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://llvm.org/foundation/relicensing/LICENSE.txt, https://spdx.org/licenses/LLVM-exception
+    Files with this license:
+        flang-rt/include/flang-rt/runtime/allocator-registry.h [5:5]
+        flang-rt/include/flang-rt/runtime/array-constructor.h [5:5]
+        flang-rt/include/flang-rt/runtime/assign-impl.h [5:5]
+        flang-rt/include/flang-rt/runtime/buffer.h [5:5]
+        flang-rt/include/flang-rt/runtime/connection.h [5:5]
+        flang-rt/include/flang-rt/runtime/derived.h [5:5]
+        flang-rt/include/flang-rt/runtime/descriptor.h [5:5]
+        flang-rt/include/flang-rt/runtime/emit-encoded.h [5:5]
+        flang-rt/include/flang-rt/runtime/environment.h [5:5]
+        flang-rt/include/flang-rt/runtime/file.h [5:5]
+        flang-rt/include/flang-rt/runtime/format-implementation.h [5:5]
+        flang-rt/include/flang-rt/runtime/format.h [5:5]
+        flang-rt/include/flang-rt/runtime/internal-unit.h [5:5]
+        flang-rt/include/flang-rt/runtime/io-error.h [5:5]
+        flang-rt/include/flang-rt/runtime/io-stmt.h [5:5]
+        flang-rt/include/flang-rt/runtime/lock.h [5:5]
+        flang-rt/include/flang-rt/runtime/memory.h [5:5]
+        flang-rt/include/flang-rt/runtime/namelist.h [5:5]
+        flang-rt/include/flang-rt/runtime/non-tbp-dio.h [5:5]
+        flang-rt/include/flang-rt/runtime/numeric-templates.h [5:5]
+        flang-rt/include/flang-rt/runtime/random-templates.h [5:5]
+        flang-rt/include/flang-rt/runtime/reduction-templates.h [5:5]
+        flang-rt/include/flang-rt/runtime/stat.h [5:5]
+        flang-rt/include/flang-rt/runtime/terminator.h [5:5]
+        flang-rt/include/flang-rt/runtime/tools.h [5:5]
+        flang-rt/include/flang-rt/runtime/type-code.h [5:5]
+        flang-rt/include/flang-rt/runtime/type-info.h [5:5]
+        flang-rt/include/flang-rt/runtime/utf.h [5:5]
+        flang-rt/include/flang-rt/runtime/work-queue.h [5:5]
+        flang-rt/lib/runtime/ISO_Fortran_binding.cpp [5:5]
+        flang-rt/lib/runtime/ISO_Fortran_util.h [5:5]
+        flang-rt/lib/runtime/allocatable.cpp [5:5]
+        flang-rt/lib/runtime/allocator-registry.cpp [5:5]
+        flang-rt/lib/runtime/array-constructor.cpp [5:5]
+        flang-rt/lib/runtime/assign.cpp [5:5]
+        flang-rt/lib/runtime/buffer.cpp [5:5]
+        flang-rt/lib/runtime/character.cpp [5:5]
+        flang-rt/lib/runtime/command.cpp [5:5]
+        flang-rt/lib/runtime/complex-powi.cpp [5:5]
+        flang-rt/lib/runtime/connection.cpp [5:5]
+        flang-rt/lib/runtime/copy.cpp [5:5]
+        flang-rt/lib/runtime/copy.h [5:5]
+        flang-rt/lib/runtime/derived-api.cpp [5:5]
+        flang-rt/lib/runtime/derived.cpp [5:5]
+        flang-rt/lib/runtime/descriptor-io.cpp [5:5]
+        flang-rt/lib/runtime/descriptor-io.h [5:5]
+        flang-rt/lib/runtime/descriptor.cpp [5:5]
+        flang-rt/lib/runtime/dot-product.cpp [5:5]
+        flang-rt/lib/runtime/edit-input.cpp [5:5]
+        flang-rt/lib/runtime/edit-input.h [5:5]
+        flang-rt/lib/runtime/edit-output.cpp [5:5]
+        flang-rt/lib/runtime/edit-output.h [5:5]
+        flang-rt/lib/runtime/environment.cpp [5:5]
+        flang-rt/lib/runtime/exceptions.cpp [5:5]
+        flang-rt/lib/runtime/execute.cpp [5:5]
+        flang-rt/lib/runtime/extensions.cpp [5:5]
+        flang-rt/lib/runtime/external-unit.cpp [5:5]
+        flang-rt/lib/runtime/extrema.cpp [5:5]
+        flang-rt/lib/runtime/file.cpp [5:5]
+        flang-rt/lib/runtime/findloc.cpp [5:5]
+        flang-rt/lib/runtime/format.cpp [5:5]
+        flang-rt/lib/runtime/inquiry.cpp [5:5]
+        flang-rt/lib/runtime/internal-unit.cpp [5:5]
+        flang-rt/lib/runtime/io-api-common.h [5:5]
+        flang-rt/lib/runtime/io-api-minimal.cpp [5:5]
+        flang-rt/lib/runtime/io-api.cpp [5:5]
+        flang-rt/lib/runtime/io-error.cpp [5:5]
+        flang-rt/lib/runtime/io-stmt.cpp [5:5]
+        flang-rt/lib/runtime/iostat.cpp [5:5]
+        flang-rt/lib/runtime/main.cpp [5:5]
+        flang-rt/lib/runtime/matmul-transpose.cpp [5:5]
+        flang-rt/lib/runtime/matmul.cpp [5:5]
+        flang-rt/lib/runtime/memory.cpp [5:5]
+        flang-rt/lib/runtime/misc-intrinsic.cpp [5:5]
+        flang-rt/lib/runtime/namelist.cpp [5:5]
+        flang-rt/lib/runtime/non-tbp-dio.cpp [5:5]
+        flang-rt/lib/runtime/numeric.cpp [5:5]
+        flang-rt/lib/runtime/pointer.cpp [5:5]
+        flang-rt/lib/runtime/product.cpp [5:5]
+        flang-rt/lib/runtime/pseudo-unit.cpp [5:5]
+        flang-rt/lib/runtime/ragged.cpp [5:5]
+        flang-rt/lib/runtime/random.cpp [5:5]
+        flang-rt/lib/runtime/reduce.cpp [5:5]
+        flang-rt/lib/runtime/reduction.cpp [5:5]
+        flang-rt/lib/runtime/stack.h [5:5]
+        flang-rt/lib/runtime/stat.cpp [5:5]
+        flang-rt/lib/runtime/stop.cpp [5:5]
+        flang-rt/lib/runtime/sum.cpp [5:5]
+        flang-rt/lib/runtime/support.cpp [5:5]
+        flang-rt/lib/runtime/temporary-stack.cpp [5:5]
+        flang-rt/lib/runtime/terminator.cpp [5:5]
+        flang-rt/lib/runtime/time-intrinsic.cpp [5:5]
+        flang-rt/lib/runtime/tools.cpp [5:5]
+        flang-rt/lib/runtime/transformational.cpp [5:5]
+        flang-rt/lib/runtime/type-code.cpp [5:5]
+        flang-rt/lib/runtime/type-info.cpp [5:5]
+        flang-rt/lib/runtime/unit-map.cpp [5:5]
+        flang-rt/lib/runtime/unit-map.h [5:5]
+        flang-rt/lib/runtime/unit.cpp [5:5]
+        flang-rt/lib/runtime/unit.h [5:5]
+        flang-rt/lib/runtime/utf.cpp [5:5]
+        flang-rt/lib/runtime/work-queue.cpp [5:5]
+        flang/include/flang/Common/Fortran-consts.h [5:5]
+        flang/include/flang/Common/bit-population-count.h [5:5]
+        flang/include/flang/Common/constexpr-bitset.h [5:5]
+        flang/include/flang/Common/enum-class.h [5:5]
+        flang/include/flang/Common/enum-set.h [5:5]
+        flang/include/flang/Common/erfc-scaled.h [5:5]
+        flang/include/flang/Common/fast-int-set.h [5:5]
+        flang/include/flang/Common/format.h [5:5]
+        flang/include/flang/Common/idioms.h [5:5]
+        flang/include/flang/Common/leading-zero-bit-count.h [5:5]
+        flang/include/flang/Common/optional.h [5:5]
+        flang/include/flang/Common/real.h [5:5]
+        flang/include/flang/Common/reference-wrapper.h [5:5]
+        flang/include/flang/Common/restorer.h [5:5]
+        flang/include/flang/Common/type-kinds.h [5:5]
+        flang/include/flang/Common/uint128.h [5:5]
+        flang/include/flang/Common/variant.h [5:5]
+        flang/include/flang/Common/visit.h [5:5]
+        flang/include/flang/Common/windows-include.h [5:5]
+        flang/include/flang/Decimal/binary-floating-point.h [5:5]
+        flang/include/flang/Runtime/allocatable.h [5:5]
+        flang/include/flang/Runtime/allocator-registry-consts.h [5:5]
+        flang/include/flang/Runtime/array-constructor-consts.h [5:5]
+        flang/include/flang/Runtime/assign.h [5:5]
+        flang/include/flang/Runtime/c-or-cpp.h [5:5]
+        flang/include/flang/Runtime/character.h [5:5]
+        flang/include/flang/Runtime/command.h [5:5]
+        flang/include/flang/Runtime/complex.h [5:5]
+        flang/include/flang/Runtime/cpp-type.h [5:5]
+        flang/include/flang/Runtime/derived-api.h [5:5]
+        flang/include/flang/Runtime/descriptor-consts.h [5:5]
+        flang/include/flang/Runtime/exceptions.h [5:5]
+        flang/include/flang/Runtime/execute.h [5:5]
+        flang/include/flang/Runtime/extensions.h [5:5]
+        flang/include/flang/Runtime/freestanding-tools.h [5:5]
+        flang/include/flang/Runtime/inquiry.h [5:5]
+        flang/include/flang/Runtime/io-api.h [5:5]
+        flang/include/flang/Runtime/iostat-consts.h [5:5]
+        flang/include/flang/Runtime/iostat.h [5:5]
+        flang/include/flang/Runtime/main.h [5:5]
+        flang/include/flang/Runtime/matmul-instances.inc [5:5]
+        flang/include/flang/Runtime/matmul-transpose.h [5:5]
+        flang/include/flang/Runtime/matmul.h [5:5]
+        flang/include/flang/Runtime/misc-intrinsic.h [5:5]
+        flang/include/flang/Runtime/numeric.h [5:5]
+        flang/include/flang/Runtime/pointer.h [5:5]
+        flang/include/flang/Runtime/ragged.h [5:5]
+        flang/include/flang/Runtime/random.h [5:5]
+        flang/include/flang/Runtime/reduce.h [5:5]
+        flang/include/flang/Runtime/reduction.h [5:5]
+        flang/include/flang/Runtime/stop.h [5:5]
+        flang/include/flang/Runtime/support.h [5:5]
+        flang/include/flang/Runtime/temporary-stack.h [5:5]
+        flang/include/flang/Runtime/time-intrinsic.h [5:5]
+        flang/include/flang/Runtime/transformational.h [5:5]
+        flang/lib/Decimal/big-radix-floating-point.h [5:5]
+        flang/lib/Decimal/binary-to-decimal.cpp [5:5]
+        flang/lib/Decimal/decimal-to-binary.cpp [5:5]
+
+KEEP     Apache-2.0 WITH LLVM-exception c1e6c6536fcc444f916047679115c618
+BELONGS ya.make
+    License text:
+         * SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        flang-rt/config-linux.h [5:5]
+        flang-rt/lib/runtime/complex-reduction.c [5:5]
+        flang-rt/lib/runtime/complex-reduction.h [5:5]
+        flang-rt/lib/runtime/environment-default-list.h [5:5]
+        flang/include/flang/Common/ISO_Fortran_binding_wrapper.h [5:5]
+        flang/include/flang/Common/api-attrs.h [5:5]
+        flang/include/flang/Common/float128.h [5:5]
+        flang/include/flang/Common/float80.h [5:5]
+        flang/include/flang/Decimal/decimal.h [5:5]
+        flang/include/flang/ISO_Fortran_binding.h [5:5]
+        flang/include/flang/Runtime/entry-names.h [5:5]
+        flang/include/flang/Runtime/magic-numbers.h [5:5]
+    Scancode info:
+        Original SPDX id: LLVM-exception
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://llvm.org/foundation/relicensing/LICENSE.txt, https://spdx.org/licenses/LLVM-exception
+    Files with this license:
+        flang-rt/config-linux.h [5:5]
+        flang-rt/lib/runtime/complex-reduction.c [5:5]
+        flang-rt/lib/runtime/complex-reduction.h [5:5]
+        flang-rt/lib/runtime/environment-default-list.h [5:5]
+        flang/include/flang/Common/ISO_Fortran_binding_wrapper.h [5:5]
+        flang/include/flang/Common/api-attrs.h [5:5]
+        flang/include/flang/Common/float128.h [5:5]
+        flang/include/flang/Common/float80.h [5:5]
+        flang/include/flang/Decimal/decimal.h [5:5]
+        flang/include/flang/ISO_Fortran_binding.h [5:5]
+        flang/include/flang/Runtime/entry-names.h [5:5]
+        flang/include/flang/Runtime/magic-numbers.h [5:5]
+
+KEEP     Apache-2.0 WITH LLVM-exception df18889e552d44a4679aff552267f802
+BELONGS ya.make
+    License text:
+        The LLVM Project is under the Apache License v2.0 with LLVM Exceptions:
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        LICENSE.TXT [2:2]
+        flang-rt/LICENSE.TXT [2:2]
+        flang/LICENSE.TXT [2:2]
+    Scancode info:
+        Original SPDX id: LLVM-exception
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://llvm.org/foundation/relicensing/LICENSE.txt, https://spdx.org/licenses/LLVM-exception
+    Files with this license:
+        LICENSE.TXT [2:2]
+        flang-rt/LICENSE.TXT [2:2]
+        flang/LICENSE.TXT [2:2]
+
+KEEP     Apache-2.0 WITH LLVM-exception ed67892e7cae8c050a15bc8c61ac8aa2
+BELONGS ya.make
+    License text:
+        // The original source code is distributed under the Apache License v2.0
+        // with LLVM Exceptions.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 81.82
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        flang/include/flang/Common/reference-wrapper.h [14:15]
+    Scancode info:
+        Original SPDX id: LLVM-exception
+        Score           : 81.82
+        Match type      : NOTICE
+        Links           : http://llvm.org/foundation/relicensing/LICENSE.txt, https://spdx.org/licenses/LLVM-exception
+    Files with this license:
+        flang/include/flang/Common/reference-wrapper.h [14:15]
+
+KEEP     Apache-2.0 WITH LLVM-exception ffcb177513ee7cc880ebfe3c64e5187e
+BELONGS ya.make
+    License text:
+           Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+           See https://llvm.org/LICENSE.txt for license information.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        flang-rt/README.md [3:4]
+    Scancode info:
+        Original SPDX id: LLVM-exception
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://llvm.org/foundation/relicensing/LICENSE.txt, https://spdx.org/licenses/LLVM-exception
+    Files with this license:
+        flang-rt/README.md [3:4]

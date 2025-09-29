@@ -86,6 +86,7 @@ THashMap<TStringBuf, TPragmaMaybeField> CTX_PRAGMA_MAYBE_FIELDS = {
     {"AnsiInForEmptyOrNullableItemsCollections", &TContext::AnsiInForEmptyOrNullableItemsCollections},
     {"EmitAggApply", &TContext::EmitAggApply},
     {"CompactGroupBy", &TContext::CompactGroupBy},
+    {"DirectRowDependsOn", &TContext::DirectRowDependsOn},
 };
 
 } // namespace

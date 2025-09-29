@@ -14,7 +14,9 @@ namespace NYT {
 
 namespace NDetail {
 
-Y_NO_INLINE TBacktrace GetBacktrace(TBacktraceBuffer* buffer)
+using TBacktraceBuffer = std::array<const void*, 99>; // 99 is to keep formatting :)
+
+Y_NO_INLINE NBacktrace::TBacktrace GetBacktrace(TBacktraceBuffer* buffer)
 {
 #ifdef _unix_
     NBacktrace::TLibunwindCursor cursor;
@@ -29,13 +31,25 @@ Y_NO_INLINE TBacktrace GetBacktrace(TBacktraceBuffer* buffer)
 
 } // namespace NDetail
 
-std::string DumpBacktrace(void* startPC)
+TCapturedBacktrace CaptureBacktrace()
 {
-    std::string result;
-    DumpBacktrace(
-        [&] (TStringBuf str) { result += str; },
-        startPC);
-    return result;
+    NDetail::TBacktraceBuffer buffer;
+    auto backtraceRange = NDetail::GetBacktrace(&buffer);
+    return TCapturedBacktrace(backtraceRange.begin(), backtraceRange.end());
+}
+
+Y_NO_INLINE void DumpBacktrace(const std::function<void(TStringBuf)>& writeCallback, void* startPC)
+{
+    NDetail::TBacktraceBuffer buffer;
+    auto backtrace = NDetail::GetBacktrace(&buffer);
+    NBacktrace::SymbolizeBacktrace(backtrace, writeCallback, startPC);
+}
+
+std::string DumpBacktrace()
+{
+    NDetail::TBacktraceBuffer buffer;
+    auto backtrace = NDetail::GetBacktrace(&buffer);
+    return NBacktrace::SymbolizeBacktrace(backtrace);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

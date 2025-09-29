@@ -6,6 +6,8 @@
 #include <yt/yt/core/ypath/token.h>
 #include <yt/yt/core/ypath/tokenizer.h>
 
+#include <yt/yt/core/ytree/helpers.h>
+
 #include <yt/yt/core/yson/tokenizer.h>
 #include <yt/yt/core/yson/async_writer.h>
 #include <yt/yt/core/yson/protobuf_helpers.h>
@@ -397,12 +399,8 @@ std::pair<TString, INodePtr> TMapNodeMixin::PrepareSetChildOrChildValue(
             tokenizer.Advance();
             tokenizer.Expect(NYPath::ETokenType::Literal);
             auto key = tokenizer.GetLiteralValue();
-
             int maxKeyLength = GetMaxKeyLength();
-            if (std::ssize(key) > maxKeyLength) {
-                ThrowMaxKeyLengthViolated();
-            }
-
+            NYTree::ValidateYTreeKey(key, maxKeyLength);
             tokenizer.Advance();
 
             bool lastStep = (tokenizer.GetType() == NYPath::ETokenType::EndOfStream);
@@ -477,15 +475,6 @@ void TMapNodeMixin::SetChildValue(
 int TMapNodeMixin::GetMaxKeyLength() const
 {
     return std::numeric_limits<int>::max();
-}
-
-void TMapNodeMixin::ThrowMaxKeyLengthViolated() const
-{
-    THROW_ERROR_EXCEPTION(
-        NYTree::EErrorCode::MaxKeyLengthViolation,
-        "Map node %v is not allowed to contain items with keys longer than %v symbols",
-        GetPath(),
-        GetMaxKeyLength());
 }
 
 ////////////////////////////////////////////////////////////////////////////////

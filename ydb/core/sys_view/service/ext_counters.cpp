@@ -33,7 +33,7 @@ class TExtCountersUpdaterActor
     TCounterPtr CGroupMemLimit;
     TCounterPtr MemoryHardLimit;
     TVector<TCounterPtr> PoolElapsedMicrosec;
-    TVector<TCounterPtr> PoolCurrentThreadCount;
+    TVector<TCounterPtr> PoolPotentialMaxThreadPercent;
     TVector<ui64> PoolElapsedMicrosecPrevValue;
     TVector<ui64> ExecuteLatencyMsValues;
     TVector<ui64> ExecuteLatencyMsPrevValues;
@@ -89,13 +89,13 @@ private:
             CGroupMemLimit = utilsGroup->FindCounter("Process/CGroupMemLimit");
 
             PoolElapsedMicrosec.resize(Config.Pools.size());
-            PoolCurrentThreadCount.resize(Config.Pools.size());
+            PoolPotentialMaxThreadPercent.resize(Config.Pools.size());
             PoolElapsedMicrosecPrevValue.resize(Config.Pools.size());
             for (size_t i = 0; i < Config.Pools.size(); ++i) {
                 auto poolGroup = utilsGroup->FindSubgroup("execpool", Config.Pools[i].Name);
                 if (poolGroup) {
                     PoolElapsedMicrosec[i] = poolGroup->FindCounter("ElapsedMicrosec");
-                    PoolCurrentThreadCount[i] = poolGroup->FindCounter("CurrentThreadCount");
+                    PoolPotentialMaxThreadPercent[i] = poolGroup->FindCounter("PotentialMaxThreadCountPercent");
                     if (PoolElapsedMicrosec[i]) {
                         PoolElapsedMicrosecPrevValue[i] = PoolElapsedMicrosec[i]->Val();
                     }
@@ -146,11 +146,11 @@ private:
                     }
                     PoolElapsedMicrosecPrevValue[i] = elapsedMs;
                 }
-                if (PoolCurrentThreadCount[i] && PoolCurrentThreadCount[i]->Val()) {
-                    limitCore = PoolCurrentThreadCount[i]->Val();
-                    CpuLimitCorePercents[i]->Set(limitCore * 100);
+                if (PoolPotentialMaxThreadPercent[i] && PoolPotentialMaxThreadPercent[i]->Val()) {
+                    limitCore = PoolPotentialMaxThreadPercent[i]->Val();
+                    CpuLimitCorePercents[i]->Set(limitCore);
                 } else {
-                    limitCore = Config.Pools[i].ThreadCount * 100;
+                    limitCore = Config.Pools[i].ThreadCount;
                     CpuLimitCorePercents[i]->Set(limitCore * 100);
                 }
                 if (limitCore > 0) {

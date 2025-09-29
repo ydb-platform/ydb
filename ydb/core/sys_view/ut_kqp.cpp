@@ -299,11 +299,6 @@ public:
     void CheckShowCreateTable(const std::string& query, const std::string& tableName, TString formatQuery = "", bool temporary = false, bool initialScan = false) {
         auto session = QueryClient.GetSession().GetValueSync().GetSession();
 
-        std::optional<TString> sessionId = std::nullopt;
-        if (temporary) {
-            sessionId = session.GetId();
-        }
-
         ExecuteQuery(session, query);
         auto showCreateTableQuery = ShowCreateTable(session, tableName);
 
@@ -315,12 +310,21 @@ public:
             return;
         }
 
-        auto describeResultOrig = DescribeTable(tableName, sessionId);
+        std::optional<TString> tempDir = std::nullopt;
+        if (temporary) {
+            auto res = Env.GetClient().Ls("/Root/.tmp/sessions");
+            UNIT_ASSERT(res);
+            UNIT_ASSERT(res->Record.HasPathDescription());
+            UNIT_ASSERT(res->Record.GetPathDescription().ChildrenSize() == 1);
+            tempDir = res->Record.GetPathDescription().GetChildren(0).GetName();
+        }
+
+        auto describeResultOrig = DescribeTable(tableName, tempDir);
 
         DropTable(session, tableName);
 
         ExecuteQuery(session, showCreateTableQuery);
-        auto describeResultNew = DescribeTable(tableName, sessionId);
+        auto describeResultNew = DescribeTable(tableName, tempDir);
 
         DropTable(session, tableName);
 
@@ -388,8 +392,7 @@ private:
             tablePath = CanonizePath(JoinPath({"/Root", tablePath}));
         }
         if (sessionId.has_value()) {
-            auto pos = sessionId.value().find("&id=");
-            tablePath = NKqp::GetTempTablePath("Root", sessionId.value().substr(pos + 4), tablePath);
+            tablePath = NKqp::GetTempTablePath("Root", sessionId.value(), tablePath);
         }
         auto tableDesc = describeTable(std::move(tablePath));
 

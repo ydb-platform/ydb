@@ -688,7 +688,7 @@ void TCreateTopicSettings::SerializeTo(Ydb::Topic::CreateTopicRequest& request) 
     *request.mutable_consumers() = SerializeConsumers(Consumers_);
     *request.mutable_attributes() = SerializeAttributes(Attributes_);
     if (MetricsLevel_) {
-        request.set_metrics_level(static_cast<Ydb::MetricsLevel>(*MetricsLevel_));
+        request.set_metrics_level(*MetricsLevel_);
     }
 }
 

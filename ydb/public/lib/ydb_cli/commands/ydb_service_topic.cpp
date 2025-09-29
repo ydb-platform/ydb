@@ -35,16 +35,13 @@ namespace NYdb::NConsoleClient {
             std::pair<TString, NYdb::NTopic::ECodec>("zstd", NYdb::NTopic::ECodec::ZSTD),
         };
 
-        THashMap<TString, NTopic::EMetricsLevel> ExistingMetricsLevels = {
-            std::pair<TString, NTopic::EMetricsLevel>("database", NTopic::EMetricsLevel::Database),
-            std::pair<TString, NTopic::EMetricsLevel>("object", NTopic::EMetricsLevel::Object),
-            std::pair<TString, NTopic::EMetricsLevel>("detailed", NTopic::EMetricsLevel::Detailed),
-        };
+        TVector<i32> ExistingMetricsLevels = {1, 2, 3, 4};
 
-        THashMap<NTopic::EMetricsLevel, TString> MetricsLevelsDescriptions = {
-            std::pair<NTopic::EMetricsLevel, TString>(NTopic::EMetricsLevel::Database, "Database level metrics."),
-            std::pair<NTopic::EMetricsLevel, TString>(NTopic::EMetricsLevel::Object, "Database and object level metrics."),
-            std::pair<NTopic::EMetricsLevel, TString>(NTopic::EMetricsLevel::Detailed, "Database, object, and detailed level metrics."),
+        THashMap<i32, TString> MetricsLevelsDescriptions = {
+            {1, "No metrics."},
+            {2, "Database level metrics."},
+            {3, "Database and object level metrics."},
+            {4, "Database, object, and detailed level metrics."},
         };
 
         THashMap<TString, NTopic::EMeteringMode> ExistingMeteringModes = {
@@ -176,32 +173,18 @@ namespace NYdb::NConsoleClient {
         description << "Available metrics levels: ";
         NColorizer::TColors colors = NColorizer::AutoColors(Cout);
         for (const auto& level: ExistingMetricsLevels) {
-            auto findResult = MetricsLevelsDescriptions.find(level.second);
+            auto findResult = MetricsLevelsDescriptions.find(level);
             Y_ABORT_UNLESS(findResult != MetricsLevelsDescriptions.end(),
-                     "Couldn't find description for %s metrics level", (TStringBuilder() << level.second).c_str());
-            description << "\n  " << colors.BoldColor() << level.first << colors.OldColor()
+                     "Couldn't find description for %s metrics level", (TStringBuilder() << level).c_str());
+            description << "\n  " << colors.BoldColor() << level << colors.OldColor()
                         << "\n    " << findResult->second;
-            if (level.second == NTopic::EMetricsLevel::Database) {
+            if (level == 2 /* database-level metrics */) {
                 description << colors.CyanColor() << " (default)" << colors.OldColor();
             }
         }
         config.Opts->AddLongOption("metrics-level", description.Str())
             .Optional()
-            .StoreResult(&MetricsLevelStr_);
-    }
-
-    void TCommandWithMetricsLevel::ParseMetricsLevel() {
-        if (MetricsLevelStr_.empty()) {
-            return;
-        }
-
-        TString toLowerMetricsLevel = to_lower(MetricsLevelStr_);
-        if (auto it = ExistingMetricsLevels.find(toLowerMetricsLevel); it != ExistingMetricsLevels.end()) {
-            MetricsLevel_ = it->second;
-            return;
-        }
-
-        throw TMisuseException() << "Metering mode " << MetricsLevelStr_ << " is not available for this command";
+            .StoreResult(&MetricsLevel_);
     }
 
     TMaybe<NTopic::EMetricsLevel> TCommandWithMetricsLevel::GetMetricsLevel() const {
@@ -390,7 +373,6 @@ namespace NYdb::NConsoleClient {
         ParseTopicName(config, 0);
         ParseCodecs();
         ParseMeteringMode();
-        ParseMetricsLevel();
         ParseAutoPartitioningStrategy();
     }
 
@@ -474,7 +456,6 @@ namespace NYdb::NConsoleClient {
         ParseTopicName(config, 0);
         ParseCodecs();
         ParseMeteringMode();
-        ParseMetricsLevel();
         ParseAutoPartitioningStrategy();
     }
 

@@ -1,5 +1,4 @@
 syntax = "proto3";
-import "ydb/public/api/protos/ydb_common.proto";
 import "ydb/public/api/protos/ydb_operation.proto";
 import "ydb/public/api/protos/ydb_scheme.proto";
 import "ydb/public/api/protos/ydb_status_codes.proto";
@@ -1190,7 +1189,7 @@ message TopicSettings {
     RemoteMirrorRule remote_mirror_rule = 11;
 
     // Metrics level.
-    optional MetricsLevel metrics_level = 16;
+    optional int32 metrics_level = 16;
 }
 
 message AutoPartitioningSettings {

@@ -2811,8 +2811,8 @@ static bool StoreTopicSettingsEntry(
         if (reset) {
             settings.MetricsLevel.Reset();
         } else {
-            if (!valueExprNode->IsLiteral() || valueExprNode->GetLiteralType() != "String") {
-                ctx.Error() << to_upper(id.Name) << " value should be string";
+            if (!valueExprNode->IsIntegerLiteral()) {
+                ctx.Error() << to_upper(id.Name) << " value should be an integer";
                 return false;
             }
             settings.MetricsLevel.Set(valueExprNode);

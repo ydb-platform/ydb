@@ -105,6 +105,7 @@ struct TListQueriesOptions
     std::optional<NQueryTrackerClient::EQueryEngine> EngineFilter;
     std::optional<TString> SubstrFilter;
     ui64 Limit = 100;
+    bool TutorialFilter = false;
 
     NYTree::TAttributeFilter Attributes;
 

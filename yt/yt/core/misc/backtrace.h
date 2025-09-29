@@ -8,18 +8,17 @@ namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-using TBacktraceView = TRange<const void*>;
-using TBacktrace = std::vector<const void*>;
+using TCapturedBacktrace = std::vector<const void*>;
 
-//! Gets the current backtrace.
-TBacktrace GetBacktrace();
+//! Captures the current backtrace.
+TCapturedBacktrace CaptureBacktrace();
 
-//! Gets backtrace and symbolizes it passing result into #callback.
+//! Captures the current backtrace and symbolizes it passing result into #writeCallback.
 void DumpBacktrace(
     const std::function<void(TStringBuf)>& writeCallback,
     void* startPC = nullptr);
 
-//! Gets backtrace and symbolizes it into a string.
+//! Captures the current backtrace and symbolizes it into a string.
 std::string DumpBacktrace();
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -434,7 +434,7 @@ class WriterAsyncIOReconnector:
             raise self._stop_reason.exception()
 
     async def _connection_loop(self):
-        retry_settings = RetrySettings()  # todo
+        retry_settings = RetrySettings(retry_cancelled=True)  # todo
 
         while True:
             attempt = 0  # todo calc and reset
@@ -485,15 +485,16 @@ class WriterAsyncIOReconnector:
             except issues.Error as err:
                 err_info = check_retriable_error(err, retry_settings, attempt)
                 if not err_info.is_retriable or self._tx is not None:  # no retries in tx writer
+                    logger.debug("writer reconnector %s stop connection loop due to %s", self._id, err)
                     self._stop(err)
                     return
 
-                await asyncio.sleep(err_info.sleep_timeout_seconds)
                 logger.debug(
                     "writer reconnector %s retry in %s seconds",
                     self._id,
                     err_info.sleep_timeout_seconds,
                 )
+                await asyncio.sleep(err_info.sleep_timeout_seconds)
 
             except (asyncio.CancelledError, Exception) as err:
                 self._stop(err)

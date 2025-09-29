@@ -1,9 +1,5 @@
 LIBRARY()
 
-CFLAGS(
-    -DYDB_SDK_USE_DRAFT_API
-)
-
 SRCS(
     operation.cpp
 )

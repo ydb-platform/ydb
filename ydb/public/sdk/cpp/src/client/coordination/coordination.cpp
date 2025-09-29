@@ -1341,7 +1341,7 @@ private:
                 return;
             }
 
-            if (auto* op = FindSentRequest<TPingOp>(SessionSelfPingReqId)) {
+            if (FindSentRequest<TPingOp>(SessionSelfPingReqId)) {
                 // We have an active request which has not been answered yet
                 // Cancel everything, it's a timeout :(
                 SessionSelfPingContext.reset();

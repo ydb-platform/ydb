@@ -496,6 +496,8 @@ struct TEvBlobStorage {
         EvGetBlock,
         EvCheckIntegrity,
 
+        EvExplicitMultiPut, // for debugging purposes
+
         //
         EvPutResult = EvPut + 512,                              /// 268 632 576
         EvGetResult,
@@ -764,6 +766,7 @@ struct TEvBlobStorage {
         EvReleaseSyncToken,
         EvBSQueueResetConnection, // for test purposes
         EvYardResize,                                           // 268 636 340
+        EvChangeExpectedSlotCount,
 
         EvYardInitResult = EvPut + 9 * 512,                     /// 268 636 672
         EvLogResult,
@@ -820,6 +823,7 @@ struct TEvBlobStorage {
         EvYardResizeResult,
         EvCommitVDiskMetadata,
         EvCommitVDiskMetadataDone,
+        EvChangeExpectedSlotCountResult,
 
         // internal proxy interface
         EvUnusedLocal1 = EvPut + 10 * 512, // Not used.    /// 268 637 184

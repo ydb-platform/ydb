@@ -98,7 +98,7 @@ ERetryErrorClass SyncRetryPolicyClass(const std::exception* ex, bool retryAllErr
             return ERetryErrorClass::ShortRetry;
         }
     }
-    if (const TSystemError* err = dynamic_cast<const TSystemError*>(ex)) {
+    if (dynamic_cast<const TSystemError*>(ex)) {
         return ERetryErrorClass::ShortRetry;
     }
 

@@ -370,7 +370,7 @@ namespace NActors {
             for (IEventHandle* ev = head; ev; ev = GetNextPtr(ev)) {
                 if (IActor* actor = FindActor(ev->GetRecipientRewrite().LocalId())) {
                     actor->OnEnqueueEvent(ev->SendTime);
-                } else if (IActor* alias = FindAlias(ev->GetRecipientRewrite().LocalId())) {
+                } else if (/*IActor* alias = */FindAlias(ev->GetRecipientRewrite().LocalId())) {
                     actor->OnEnqueueEvent(ev->SendTime);
                 }
             }

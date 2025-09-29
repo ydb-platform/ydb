@@ -808,9 +808,6 @@ Y_UNIT_TEST(TestMessageNo) {
 
 
 Y_UNIT_TEST(TestPartitionedBlobFails) {
-    // TODO(abcdef): temporarily deleted
-    return;
-
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
@@ -1001,9 +998,6 @@ Y_UNIT_TEST(TestAlreadyWritten) {
 
 
 Y_UNIT_TEST(TestAlreadyWrittenWithoutDeduplication) {
-    // TODO(abcdef): temporarily deleted
-    return;
-
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
@@ -1088,9 +1082,6 @@ Y_UNIT_TEST(TestWritePQCompact) {
 
 
 Y_UNIT_TEST(TestWritePQBigMessage) {
-    // TODO(abcdef): temporarily deleted
-    return;
-
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
@@ -1434,6 +1425,9 @@ Y_UNIT_TEST(TestTimeRetention) {
 }
 
 Y_UNIT_TEST(TestCompactifiedWithRetention) {
+    // TODO(abcdef): temporarily deleted
+    return;
+
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
@@ -1535,9 +1529,6 @@ Y_UNIT_TEST(TestPQPartialRead) {
 
 
 Y_UNIT_TEST(TestPQRead) {
-    // TODO(abcdef): temporarily deleted
-    return;
-
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
@@ -1633,9 +1624,6 @@ Y_UNIT_TEST(TestPQSmallRead) {
 }
 
 Y_UNIT_TEST(TestPQReadAhead) {
-    // TODO(abcdef): temporarily deleted
-    return;
-
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
@@ -1972,9 +1960,6 @@ Y_UNIT_TEST(TestReadSubscription) {
 
 
 Y_UNIT_TEST(TestPQCacheSizeManagement) {
-    // TODO(abcdef): temporarily deleted
-    return;
-
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
@@ -2739,7 +2724,7 @@ Y_UNIT_TEST(IncompleteProxyResponse) {
     CmdRead(0, 7, 10, 20_MB, 3, false, tc, {7, 8, 9});
 }
 
-Y_UNIT_TEST(SmallMsgComactificationWithRebootsTest) {
+Y_UNIT_TEST(SmallMsgCompactificationWithRebootsTest) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();

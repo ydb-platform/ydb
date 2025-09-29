@@ -145,9 +145,6 @@ const TElementType& GetProtobufElementOrThrow(const TProtobufElement& element);
 
 ////////////////////////////////////////////////////////////////////////////////
 
-constexpr int UnknownYsonFieldNumber = 3005;
-
-
 //! Creates a YSON consumer that converts IYsonConsumer calls into
 //! a byte sequence in protobuf wire format.
 /*!

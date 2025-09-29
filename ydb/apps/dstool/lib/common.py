@@ -1201,7 +1201,7 @@ def get_vslots_by_vdisk_ids(base_config, vdisk_ids):
     return res
 
 
-def filter_healthy_groups(groups, node_mon_map, base_config, vslot_map):
+def filter_healthy_groups(groups, base_config, vslot_map):
     res = {
         group.GroupId: len(group.VSlotId)
         for group in base_config.Group

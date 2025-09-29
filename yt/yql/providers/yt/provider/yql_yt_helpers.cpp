@@ -627,8 +627,11 @@ TExprNode::TPtr YtCleanupWorld(const TExprNode::TPtr& input, TExprContext& ctx, 
     return output;
 }
 
-TYtOutputOpBase GetOutputOp(TYtOutput output) {
+TYtOutputOpBase GetOutputOp(TYtOutput output, bool takeFirstInHybrid) {
     if (const auto tr = output.Operation().Maybe<TYtTryFirst>()) {
+        if (takeFirstInHybrid) {
+            return tr.Cast().First();
+        }
         return tr.Cast().Second();
     }
     return output.Operation().Cast<TYtOutputOpBase>();
@@ -1361,9 +1364,9 @@ TExprNode::TPtr ResetTablesMeta(const TExprNode::TPtr& input, TExprContext& ctx,
     return input;
 }
 
-std::pair<TExprBase, TString> GetOutTableWithCluster(TExprBase ytOutput) {
+std::pair<TExprBase, TString> GetOutTableWithCluster(TExprBase ytOutput, bool takeFirstInHybrid) {
     const auto output = ytOutput.Cast<TYtOutput>();
-    const auto op = GetOutputOp(output);
+    const auto op = GetOutputOp(output, takeFirstInHybrid);
     const auto cluster = TString{ op.DataSink().Cluster().Value() };
     size_t ndx = 0;
     YQL_ENSURE(TryFromString<size_t>(output.OutIndex().Value(), ndx), "Bad " << TYtOutput::CallableName() << " output index value");

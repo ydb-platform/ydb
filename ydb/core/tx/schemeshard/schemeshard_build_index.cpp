@@ -1,6 +1,7 @@
 #include "schemeshard_build_index.h"
 
 #include "schemeshard_impl.h"
+#include <ydb/core/protos/flat_scheme_op.pb.h>
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -57,6 +58,10 @@ void TSchemeShard::Handle(TEvDataShard::TEvValidateUniqueIndexResponse::TPtr& ev
     Execute(CreateTxReply(ev), ctx);
 }
 
+void TSchemeShard::Handle(TEvDataShard::TEvBuildFulltextIndexResponse::TPtr& ev, const TActorContext& ctx) {
+    Execute(CreateTxReply(ev), ctx);
+}
+
 void TSchemeShard::Handle(TEvPrivate::TEvIndexBuildingMakeABill::TPtr& ev, const TActorContext& ctx) {
     Execute(CreateTxBilling(ev), ctx);
 }
@@ -95,11 +100,25 @@ void TSchemeShard::PersistCreateBuildIndex(NIceDb::TNiceDb& db, const TIndexBuil
             *serializableRepresentation.AddIndexImplTableDescriptions() = description;
         }
 
-        std::visit([&]<typename T>(const T& specializedDescription) {
-            if constexpr (std::is_same_v<T, NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>) {
-                *serializableRepresentation.MutableVectorIndexKmeansTreeDescription() = specializedDescription;
-            }
-        }, info.SpecializedIndexDescription);
+        switch (info.IndexType) {
+            case NKikimrSchemeOp::EIndexTypeGlobal:
+            case NKikimrSchemeOp::EIndexTypeGlobalAsync:
+            case NKikimrSchemeOp::EIndexTypeGlobalUnique:
+                // no specialized index description
+                Y_ASSERT(std::holds_alternative<std::monostate>(info.SpecializedIndexDescription));
+                break;
+            case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
+                *serializableRepresentation.MutableVectorIndexKmeansTreeDescription() =
+                    std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(info.SpecializedIndexDescription);
+                break;
+            case NKikimrSchemeOp::EIndexTypeGlobalFulltext:
+                *serializableRepresentation.MutableFulltextIndexDescription() =
+                    std::get<NKikimrSchemeOp::TFulltextIndexDescription>(info.SpecializedIndexDescription);
+                break;
+            default:
+                Y_DEBUG_ABORT_S(NTableIndex::InvalidIndexType(info.IndexType));
+                break;
+        }
 
         persistedBuildIndex.Update(
             NIceDb::TUpdate<Schema::IndexBuild::CreationConfig>(serializableRepresentation.SerializeAsString())

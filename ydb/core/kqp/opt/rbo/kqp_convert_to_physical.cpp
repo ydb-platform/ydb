@@ -573,16 +573,52 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot & root,  TExprContext& ctx, TTypeAnnot
                 currentStageBody = stageInput;
             }
 
-            auto map = TKqpOpMap(op->Node);
+            auto map = CastOperator<TOpMap>(op);
 
             TVector<TExprBase> items;
             auto arg = Build<TCoArgument>(ctx, root.Node->Pos()).Name("arg").Done().Ptr();
 
-            for (auto mapElement : map.MapElements()) {
+            if (!map->Project) {
+                for (auto iu : map->GetInput()->GetOutputIUs()) {
+                    // clang-format off
+                    auto tuple = Build<TCoNameValueTuple>(ctx, root.Node->Pos())
+                        .Name().Value(iu.GetFullName()).Build()
+                        .Value<TCoMember>()
+                            .Struct(arg)
+                            .Name().Value(iu.GetFullName()).Build()
+                        .Build()
+                    .Done();
+                    // clang-format on
+
+                    tuple = TCoNameValueTuple(ReplaceArg(tuple.Ptr(), arg, ctx));
+                    items.push_back(tuple);
+                }
+            }
+
+            for (auto mapElement : map->MapElements) {
+                TMaybeNode<TCoLambda> mapLambda;
+
+                if (std::holds_alternative<TExprNode::TPtr>(mapElement.second)) {
+                    mapLambda = TCoLambda(std::get<TExprNode::TPtr>(mapElement.second));
+                }
+                else {
+                    auto var = std::get<TInfoUnit>(mapElement.second);
+
+                    // clang-format off
+                    mapLambda = Build<TCoLambda>(ctx, root.Node->Pos())
+                        .Args({arg})
+                        .Body<TCoMember>()
+                            .Struct(arg)
+                            .Name().Value(var.GetFullName()).Build()
+                        .Build()
+                    .Done();
+                    // clang-format on
+                }
+
                 // clang-format off
                 auto tuple = Build<TCoNameValueTuple>(ctx, root.Node->Pos())
-                    .Name().Build(mapElement.Variable())
-                    .Value(mapElement.Lambda().Body())
+                    .Name().Value(mapElement.first.GetFullName()).Build()
+                    .Value(mapLambda.Body())
                 .Done();
                 // clang-format on
                 

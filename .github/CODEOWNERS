@@ -37,6 +37,7 @@
 /ydb/library/yql/tools/solomon_emulator @ydb-platform/fq
 /ydb/library/yql/tools/solomon_emulator_grpc @ydb-platform/fq
 /ydb/library/yql/udfs/common/clickhouse/client @ydb-platform/fq
+/ydb/library/yql/udfs/common/knn @ydb-platform/datashard
 /ydb/services/fq/ @ydb-platform/fq
 
 /ydb/core/kafka_proxy @ydb-platform/Topics

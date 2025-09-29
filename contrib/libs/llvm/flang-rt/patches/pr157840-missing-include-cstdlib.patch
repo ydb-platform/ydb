@@ -1,0 +1,22 @@
+From e34e6364ce0816b29a52b27873bd0153109e4cc2 Mon Sep 17 00:00:00 2001
+From: Yuriy Chernyshov <thegeorg@yandex-team.com>
+Date: Wed, 10 Sep 2025 14:04:59 +0200
+Subject: [PATCH] Add missing #include <cstdlib>
+
+std::realloc is declared there
+---
+ flang/include/flang/Runtime/freestanding-tools.h | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/flang/include/flang/Runtime/freestanding-tools.h b/flang/include/flang/Runtime/freestanding-tools.h
+index 6753b7a24ebe1..7ef7cc74f213b 100644
+--- a/flang/include/flang/Runtime/freestanding-tools.h
++++ b/flang/include/flang/Runtime/freestanding-tools.h
+@@ -13,6 +13,7 @@
+ #include "flang/Runtime/c-or-cpp.h"
+ #include <algorithm>
+ #include <cctype>
++#include <cstdlib>
+ #include <cstring>
+ 
+ // The file defines a set of utilities/classes that might be

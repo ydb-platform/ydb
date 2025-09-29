@@ -18,7 +18,6 @@
 #include "flat_boot_oven.h"
 #include "flat_executor_tx_env.h"
 #include "flat_executor_counters.h"
-#include "flat_executor_backup.h"
 #include "logic_snap_main.h"
 #include "logic_alter_main.h"
 #include "flat_abi_evol.h"
@@ -26,6 +25,7 @@
 #include "shared_sausagecache.h"
 #include "util_fmt_abort.h"
 #include "util_fmt_desc.h"
+#include "util_string.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/hive.h>
@@ -177,9 +177,11 @@ void TExecutor::Registered(TActorSystem *sys, const TActorId&)
     Scans = new TScans(Logger.Get(), this, Emitter, Owner, OwnerActorId);
     Memory = new TMemory(Logger.Get(), this, Emitter, Sprintf(" at tablet %" PRIu64, Owner->TabletID()));
     MemTableMemoryConsumersCollection = new TMemTableMemoryConsumersCollection(NActors::TActivationContext::ActorSystem(), SelfId());
-    TString myTabletType = TTabletTypes::TypeToStr(Owner->TabletType());
-    AppData()->Icb->RegisterSharedControl(LogFlushDelayOverrideUsec, myTabletType + "_LogFlushDelayOverrideUsec");
-    AppData()->Icb->RegisterSharedControl(MaxCommitRedoMB, "TabletControls.MaxCommitRedoMB");
+    auto& icb = *AppData()->Icb;
+    if (static_cast<size_t>(Owner->TabletType()) < icb.LogFlushDelayOverrideUsec.size()) {
+        TControlBoard::RegisterSharedControl(LogFlushDelayOverrideUsec, icb.LogFlushDelayOverrideUsec[static_cast<size_t>(Owner->TabletType())]);
+    }
+    TControlBoard::RegisterSharedControl(MaxCommitRedoMB, icb.TabletControls.MaxCommitRedoMB);
 
     // instantiate alert counters so even never reported alerts are created
     GetServiceCounters(AppData()->Counters, "tablets")->GetCounter("alerts_pending_nodata", true);
@@ -210,8 +212,6 @@ void TExecutor::PassAway() {
     Owner = nullptr;
 
     Send(MakeSharedPageCacheId(), new NSharedCache::TEvUnregister());
-
-    Send(BackupWriter, new TEvents::TEvPoisonPill());
 
     return TActor::PassAway();
 }
@@ -3758,7 +3758,7 @@ void TExecutor::Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled) 
         UtilizeSubset(*ops->Subset, *ops->Trace, std::move(reusedBundles), commit.Get());
 
         for (auto &gone: ops->Subset->Flatten) {
-            if (auto *found = updatedSlices.FindPtr(gone->Label)) {
+            if (updatedSlices.FindPtr(gone->Label)) {
                 auto *deltaProto = proto.AddBundleDeltas();
                 LogoBlobIDFromLogoBlobID(gone->Label, deltaProto->MutableLabel());
                 deltaProto->SetDelta(NTable::TOverlay::EncodeRemoveSlices(gone.Slices));
@@ -4350,6 +4350,7 @@ STFUNC(TExecutor::StateWork) {
         hFunc(NMemory::TEvMemTableRegistered, Handle);
         hFunc(NMemory::TEvMemTableCompact, Handle);
         hFunc(TEvTablet::TEvGcForStepAckResponse, Handle);
+        hFunc(NBackup::TEvSnapshotCompleted, Handle);
     default:
         break;
     }
@@ -5122,9 +5123,22 @@ void TExecutor::StartBackup() {
     const auto& backupConfig = AppData()->SystemTabletBackupConfig;
     TTabletTypes::EType tabletType = Owner->TabletType();
     ui64 tabletId = Owner->TabletID();
-    if (auto* writer = CreateBackupWriter(backupConfig, tabletType, tabletId, Generation0); writer != nullptr) {
-        BackupWriter = Register(writer, TMailboxType::HTSwap, AppData()->IOPoolId);
+    const auto& scheme = Database->GetScheme();
+    const auto& tables = scheme.Tables;
+
+    if (auto* writer = NBackup::CreateSnapshotWriter(SelfId(), backupConfig, tables, tabletType, tabletId, Generation0, scheme.GetSnapshot())) {
+        auto writerActor = Register(writer, TMailboxType::HTSwap, AppData()->IOPoolId);
+
+        for (const auto& [tableId, table] : tables) {
+           auto opts = TScanOptions().SetResourceBroker("system_tablet_backup", 10);
+           QueueScan(tableId, NBackup::CreateSnapshotScan(writerActor, tableId, table.Columns), 0, opts);
+        }
     }
+}
+
+void TExecutor::Handle(NBackup::TEvSnapshotCompleted::TPtr& ev) {
+    Y_ENSURE(ev->Get()->Success, ev->Get()->Error);
+    Owner->BackupSnapshotComplete(OwnerCtx());
 }
 
 }

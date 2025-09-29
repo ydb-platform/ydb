@@ -456,6 +456,12 @@ Y_UNIT_TEST(TestSingularNullType) {
 // Test for PgInt type
 Y_UNIT_TEST(TestPgIntType) {
     // Test with mixed null/non-null left operands
+
+    TestCoalesceKernel(
+        std::vector<TPgInt>{TPgInt(), TPgInt{1}, TPgInt{3}},
+        std::vector<TPgInt>{TPgInt{10}, TPgInt{20}, TPgInt{30}},
+        std::vector<TPgInt>{TPgInt{10}, TPgInt{1}, TPgInt{3}});
+
     TestCoalesceKernel(
         std::vector<TMaybe<TPgInt>>{Nothing(), TPgInt{1}, TPgInt{3}},
         std::vector<TPgInt>{TPgInt{10}, TPgInt{20}, TPgInt{30}},

@@ -324,9 +324,6 @@ struct TPartitionTablesOptions
     bool EnableCookies = false;
 
     //! COMPAT(apollo1321): remove in 25.2 release.
-    bool UseNewSlicingImplementationInOrderedPool = true;
-
-    //! COMPAT(apollo1321): remove in 25.2 release.
     bool UseNewSlicingImplementationInUnorderedPool = true;
 };
 

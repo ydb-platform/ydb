@@ -1029,6 +1029,48 @@
             "uri": "https://{canondata_backend}/1871102/cf0bf303bf8ddaa5f80dc41d0b1079fd931793f8/resource.tar.gz#test.test_like-ilike-Ansi-Results_/results.txt"
         }
     ],
+    "test.test[linear-dict_update-default.txt-Debug]": [
+        {
+            "checksum": "d4bf7b5307cbf2ec9b0943e230c0fe9a",
+            "size": 561,
+            "uri": "https://{canondata_backend}/1942415/df3e80ac994c18318b1f7c88f726afeb48326be8/resource.tar.gz#test.test_linear-dict_update-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[linear-dict_update-default.txt-Results]": [
+        {
+            "checksum": "489dc346769a9ecaf47aa338990093b6",
+            "size": 2412,
+            "uri": "https://{canondata_backend}/1942415/df3e80ac994c18318b1f7c88f726afeb48326be8/resource.tar.gz#test.test_linear-dict_update-default.txt-Results_/results.txt"
+        }
+    ],
+    "test.test[linear-mutdict_contains-default.txt-Debug]": [
+        {
+            "checksum": "46e4961f3a6861e7cf1dc80e89733cdb",
+            "size": 502,
+            "uri": "https://{canondata_backend}/1936842/3408b583683ceec1bc0db56850313771a1e2cdad/resource.tar.gz#test.test_linear-mutdict_contains-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[linear-mutdict_contains-default.txt-Results]": [
+        {
+            "checksum": "aed9665bb4d4b4a8ceaea2981b63c7b7",
+            "size": 2214,
+            "uri": "https://{canondata_backend}/1936842/3408b583683ceec1bc0db56850313771a1e2cdad/resource.tar.gz#test.test_linear-mutdict_contains-default.txt-Results_/results.txt"
+        }
+    ],
+    "test.test[linear-mutdict_payloads-default.txt-Debug]": [
+        {
+            "checksum": "9d4fe2ac3003c0a995a4cad4fbd5b2f3",
+            "size": 543,
+            "uri": "https://{canondata_backend}/1936842/3408b583683ceec1bc0db56850313771a1e2cdad/resource.tar.gz#test.test_linear-mutdict_payloads-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[linear-mutdict_payloads-default.txt-Results]": [
+        {
+            "checksum": "686a87466b136f3571ce4f8eee7b7ea3",
+            "size": 2469,
+            "uri": "https://{canondata_backend}/1936842/3408b583683ceec1bc0db56850313771a1e2cdad/resource.tar.gz#test.test_linear-mutdict_payloads-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[linear-types-default.txt-Debug]": [
         {
             "checksum": "013b2c346f23df65f2e461b9a9cff6f9",

@@ -59,7 +59,7 @@ def _workaround_for_old_pycparser(csource):
     # for "char***(*const)".  This means we can't tell the difference
     # afterwards.  But "char(*const(***))" gives us the right syntax
     # tree.  The issue only occurs if there are several stars in
-    # sequence with no parenthesis inbetween, just possibly qualifiers.
+    # sequence with no parenthesis in between, just possibly qualifiers.
     # Attempt to fix it by adding some parentheses in the source: each
     # time we see "* const" or "* const *", we add an opening
     # parenthesis before each star---the hard part is figuring out where

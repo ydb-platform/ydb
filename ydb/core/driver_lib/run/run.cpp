@@ -347,12 +347,7 @@ public:
             TVector<TString> defaultUserSIDs(securityConfig.GetDefaultUserSIDs().begin(), securityConfig.GetDefaultUserSIDs().end());
             appData->DefaultUserSIDs = std::move(defaultUserSIDs);
         }
-        if (securityConfig.HasAllAuthenticatedUsers()) {
-            const TString& allUsersGroup = Strip(securityConfig.GetAllAuthenticatedUsers());
-            if (allUsersGroup) {
-                appData->AllAuthenticatedUsers = allUsersGroup;
-            }
-        }
+        appData->AllAuthenticatedUsers = Strip(securityConfig.GetAllAuthenticatedUsers());
         if (securityConfig.RegisterDynamicNodeAllowedSIDsSize() > 0) {
             const auto& allowedSids = securityConfig.GetRegisterDynamicNodeAllowedSIDs();
             TVector<TString> registerDynamicNodeAllowedSIDs(allowedSids.cbegin(), allowedSids.cend());

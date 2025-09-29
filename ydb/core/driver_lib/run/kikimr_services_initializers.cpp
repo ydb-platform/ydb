@@ -956,7 +956,7 @@ void TImmediateControlBoardInitializer::InitializeServices(NActors::TActorSystem
         const NKikimr::TAppData* appData) {
     setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(
         MakeIcbId(NodeId),
-        TActorSetupCmd(CreateImmediateControlActor(appData->Icb, appData->Counters), TMailboxType::ReadAsFilled, appData->UserPoolId)
+        TActorSetupCmd(CreateImmediateControlActor(appData->Icb, appData->Dcb, appData->Counters), TMailboxType::ReadAsFilled, appData->UserPoolId)
     ));
     setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(
         TActorId(),
@@ -2519,6 +2519,15 @@ void TCompositeConveyorInitializer::InitializeServices(NActors::TActorSystemSetu
             protoLink.SetWeight(1);
             protoWorkersPool.SetDefaultFractionOfThreadsCount(0.4);
         }
+        
+        NKikimrConfig::TCompositeConveyorConfig::TCategory& protoCategory = *result.AddCategories();
+        protoCategory.SetName(::ToString(NConveyorComposite::ESpecialTaskCategory::Deduplication));
+        NKikimrConfig::TCompositeConveyorConfig::TWorkersPool& protoWorkersPool = *result.AddWorkerPools();
+        NKikimrConfig::TCompositeConveyorConfig::TWorkerPoolCategoryLink& protoLink = *protoWorkersPool.AddLinks();
+        protoLink.SetCategory(::ToString(NConveyorComposite::ESpecialTaskCategory::Deduplication));
+        protoLink.SetWeight(1);
+        protoWorkersPool.SetDefaultFractionOfThreadsCount(0.3);
+
         return result;
     }();
 

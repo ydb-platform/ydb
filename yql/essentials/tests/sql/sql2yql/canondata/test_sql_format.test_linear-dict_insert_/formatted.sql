@@ -1,0 +1,5 @@
+SELECT
+    DictInsert(NULL, 'foo', 1),
+    DictInsert(Just({'bar': 2}), 'foo', 1),
+    DictInsert({'bar': 2}, 'foo', 1)
+;

@@ -242,6 +242,42 @@ message TScrubEntrypoint {
     optional TScrubState ScrubState = 2;
 }
 
+message THullHugeRecoveryLogPos {
+    optional uint64 ChunkAllocationLsn = 1;
+    optional uint64 ChunkFreeingLsn = 2;
+    optional uint64 HugeBlobLoggedLsn = 3;
+    optional uint64 LogoBlobsDbSlotDelLsn = 4;
+    optional uint64 EntryPointLsn = 5;
+}
+
+message THugeKeeperHeap {
+    optional uint32 ChunkSize = 1;
+    optional uint32 AppendBlockSize = 2;
+    optional uint32 MinHugeBlobInBytes = 3;
+    optional uint32 MaxHugeBlobInBytes = 4;
+
+    message TChain {
+        optional uint32 SlotsInChunk = 1;
+        optional uint32 SlotSize = 2;
+        optional uint32 AllocatedSlots = 3;
+
+        message TFreeSpaceItem {
+            optional uint32 ChunkId = 1;
+            optional bytes Mask = 2;
+        }
+        repeated TFreeSpaceItem FreeSpaceItems = 4;
+    }
+    repeated TChain Chains = 5;
+
+    repeated uint32 FreeChunks = 6;
+    optional uint32 FreeChunksReservation = 7;
+}
+
+message THugeKeeperEntryPoint {
+    optional THullHugeRecoveryLogPos LogPos = 1;
+    optional THugeKeeperHeap Heap = 2;
+}
+
 message TMetadataEntryPoint {
     optional bool IsTinyDisk = 1;
     optional uint32 HullCompLevel0MaxSstsAtOnce = 2;

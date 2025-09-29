@@ -3857,7 +3857,7 @@ ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_OPTIONS,
             UNIT_ASSERT_VALUES_EQUAL(entry.Type, ESchemeEntryType::Directory);
 
             auto children = result.GetChildren();
-            UNIT_ASSERT_VALUES_EQUAL(children.size(), 33);
+            UNIT_ASSERT_VALUES_EQUAL(children.size(), 34);
 
             THashSet<TString> names;
             for (const auto& child : children) {
@@ -3880,7 +3880,7 @@ ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_OPTIONS,
 
             auto children = result.GetChildren();
 
-            UNIT_ASSERT_VALUES_EQUAL(children.size(), 27);
+            UNIT_ASSERT_VALUES_EQUAL(children.size(), 28);
 
             THashSet<TString> names;
             for (const auto& child : children) {
@@ -4218,32 +4218,29 @@ ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_OPTIONS,
         }, "script");
     }
 
-    // TODO: make a test when tenant support is provided
-    void QueryMetricsSimple() {
-        TTestEnv env(1, 2);
+    Y_UNIT_TEST(QueryMetricsSimple) {
+        TTestEnv env(1, 2, {.EnableSVP = true});
         CreateTenant(env, "Tenant1", true);
-        {
-            TTableClient client(env.GetDriver());
-            auto session = client.CreateSession().GetValueSync().GetSession();
-
-            NKqp::AssertSuccessResult(session.ExecuteSchemeQuery(R"(
-                CREATE TABLE `Root/Tenant1/Table1` (
-                    Key Uint64,
-                    Value String,
-                    PRIMARY KEY (Key)
-                );
-            )").GetValueSync());
-        }
 
         auto driverConfig = TDriverConfig()
             .SetEndpoint(env.GetEndpoint())
+            .SetDiscoveryMode(EDiscoveryMode::Off)
             .SetDatabase("/Root/Tenant1");
         auto driver = TDriver(driverConfig);
 
         TTableClient client(driver);
         auto session = client.CreateSession().GetValueSync().GetSession();
+
+        NKqp::AssertSuccessResult(session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/Tenant1/Table1` (
+                Key Uint64,
+                Value String,
+                PRIMARY KEY (Key)
+            );
+        )").GetValueSync());
+
         NKqp::AssertSuccessResult(session.ExecuteDataQuery(
-            "SELECT * FROM `Root/Tenant1/Table1`", TTxControl::BeginTx().CommitTx()
+            "SELECT * FROM `/Root/Tenant1/Table1`", TTxControl::BeginTx().CommitTx()
         ).GetValueSync());
 
         size_t rowCount = 0;
@@ -4251,7 +4248,9 @@ ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_OPTIONS,
 
         for (size_t iter = 0; iter < 30 && !rowCount; ++iter) {
             auto it = client.StreamExecuteScanQuery(R"(
-                SELECT SumReadBytes FROM `Root/Tenant1/.sys/query_metrics`;
+                SELECT SumReadBytes
+                FROM `/Root/Tenant1/.sys/query_metrics_one_minute`
+                WHERE QueryText = 'SELECT * FROM `/Root/Tenant1/Table1`';
             )").GetValueSync();
 
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
@@ -4262,10 +4261,11 @@ ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_OPTIONS,
             rowCount = node.AsList().size();
 
             if (!rowCount) {
-                Sleep(TDuration::Seconds(1));
+                Sleep(TDuration::Seconds(5));
             }
         }
 
+        UNIT_ASSERT_GE(rowCount, 0);
         NKqp::CompareYson(R"([
             [[0u]];
         ])", ysonString);
@@ -5625,6 +5625,7 @@ ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_OPTIONS,
                     [["/Root/.sys/auth_owners"];["metadata@system"]];
                     [["/Root/.sys/auth_permissions"];["metadata@system"]];
                     [["/Root/.sys/auth_users"];["metadata@system"]];
+                    [["/Root/.sys/compile_cache_queries"];["metadata@system"]];
                     [["/Root/.sys/ds_groups"];["metadata@system"]];
                     [["/Root/.sys/ds_pdisks"];["metadata@system"]];
                     [["/Root/.sys/ds_storage_pools"];["metadata@system"]];
@@ -5688,6 +5689,7 @@ ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_OPTIONS,
                     [["/Root/Tenant1/.sys/auth_owners"];["metadata@system"]];
                     [["/Root/Tenant1/.sys/auth_permissions"];["metadata@system"]];
                     [["/Root/Tenant1/.sys/auth_users"];["metadata@system"]];
+                    [["/Root/Tenant1/.sys/compile_cache_queries"];["metadata@system"]];
                     [["/Root/Tenant1/.sys/nodes"];["metadata@system"]];
                     [["/Root/Tenant1/.sys/partition_stats"];["metadata@system"]];
                     [["/Root/Tenant1/.sys/pg_class"];["metadata@system"]];
@@ -5741,6 +5743,7 @@ ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_OPTIONS,
                     [["/Root/Tenant2/.sys/auth_owners"];["metadata@system"]];
                     [["/Root/Tenant2/.sys/auth_permissions"];["metadata@system"]];
                     [["/Root/Tenant2/.sys/auth_users"];["metadata@system"]];
+                    [["/Root/Tenant2/.sys/compile_cache_queries"];["metadata@system"]];
                     [["/Root/Tenant2/.sys/nodes"];["metadata@system"]];
                     [["/Root/Tenant2/.sys/partition_stats"];["metadata@system"]];
                     [["/Root/Tenant2/.sys/pg_class"];["metadata@system"]];
@@ -5989,6 +5992,7 @@ ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_OPTIONS,
                     [["/Root/.sys/auth_owners"];["metadata@system"]];
                     [["/Root/.sys/auth_permissions"];["metadata@system"]];
                     [["/Root/.sys/auth_users"];["metadata@system"]];
+                    [["/Root/.sys/compile_cache_queries"];["metadata@system"]];
                     [["/Root/.sys/ds_groups"];["metadata@system"]];
                     [["/Root/.sys/ds_pdisks"];["metadata@system"]];
                     [["/Root/.sys/ds_storage_pools"];["metadata@system"]];
@@ -6660,6 +6664,7 @@ ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_OPTIONS,
                     [["/Root/.sys/auth_owners"];["ydb.generic.use"];["user1"]];
                     [["/Root/.sys/auth_permissions"];["ydb.generic.use"];["user1"]];
                     [["/Root/.sys/auth_users"];["ydb.generic.use"];["user1"]];
+                    [["/Root/.sys/compile_cache_queries"];["ydb.generic.use"];["user1"]];
                     [["/Root/.sys/ds_groups"];["ydb.generic.use"];["user1"]];
                     [["/Root/.sys/ds_pdisks"];["ydb.generic.use"];["user1"]];
                     [["/Root/.sys/ds_storage_pools"];["ydb.generic.use"];["user1"]];
@@ -6726,6 +6731,7 @@ ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_OPTIONS,
                     [["/Root/Tenant1/.sys/auth_owners"];["ydb.generic.use"];["user1"]];
                     [["/Root/Tenant1/.sys/auth_permissions"];["ydb.generic.use"];["user1"]];
                     [["/Root/Tenant1/.sys/auth_users"];["ydb.generic.use"];["user1"]];
+                    [["/Root/Tenant1/.sys/compile_cache_queries"];["ydb.generic.use"];["user1"]];
                     [["/Root/Tenant1/.sys/nodes"];["ydb.generic.use"];["user1"]];
                     [["/Root/Tenant1/.sys/partition_stats"];["ydb.generic.use"];["user1"]];
                     [["/Root/Tenant1/.sys/pg_class"];["ydb.generic.use"];["user1"]];

@@ -22,9 +22,6 @@ TEST_F(Describe, TEST_NAME(Basic)) {
 }
 
 TEST_F(Describe, TEST_NAME(Statistics)) {
-    // TODO(abcdef): temporarily deleted
-    GTEST_SKIP() << "temporarily deleted";
-
     TTopicClient client(MakeDriver());
 
     // Get empty description

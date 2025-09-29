@@ -426,7 +426,7 @@ namespace NYql::NDq {
                            Generic::TSource&& source,
                            ui64 inputIndex,
                            TCollectStatsLevel statsLevel,
-                           const THashMap<TString, TString>& /*secureParams*/,
+                           const THashMap<TString, TString>& secureParams,
                            ui64 taskId,
                            const THashMap<TString, TString>& taskParams,
                            const TVector<TString>& readRanges,
@@ -446,6 +446,10 @@ namespace NYql::NDq {
                                         << ", protocol=" << NYql::EGenericProtocol_Name(dsi.protocol())
                                         << ", task_id=" << taskId
                                         << ", partitions_count=" << partitions.size();
+
+        for (const auto& [k, v] : secureParams) {
+            Cout << "secureParams: " << k << "=" << v << Endl;
+        }
 
         // FIXME: strange piece of logic - authToken is created but not used:
         // https://a.yandex-team.ru/arcadia/ydb/library/yql/providers/clickhouse/actors/yql_ch_read_actor.cpp?rev=r11550199#L140

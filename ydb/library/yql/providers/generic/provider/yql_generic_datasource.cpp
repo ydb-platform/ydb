@@ -8,9 +8,10 @@
 #include <yql/essentials/providers/common/provider/yql_data_provider_impl.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
+#include <yql/essentials/utils/log/log.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/client.h>
 #include <ydb/library/yql/providers/generic/expr_nodes/yql_generic_expr_nodes.h>
-#include <yql/essentials/utils/log/log.h>
 
 namespace NYql {
 
@@ -140,6 +141,13 @@ namespace NYql {
             }
 
             void AddCluster(const TString& clusterName, const THashMap<TString, TString>& properties) override {
+                State_->Configuration->Tokens[clusterName] =
+                    TStructuredTokenBuilder()
+                        .SetBasicAuth(
+                            clusterConfig.GetCredentials().basic().username(),
+                            clusterConfig.GetCredentials().basic().password())
+                        .ToJson();
+
                 State_->Configuration->AddCluster(
                     GenericClusterConfigFromProperties(clusterName, properties),
                     State_->DatabaseResolver,

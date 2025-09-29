@@ -98,67 +98,30 @@ namespace NActors {
         rope = newRope;
     }
 
-    static TReceiveContext::TPerChannelContext::ScheduleRdmaReadRequestsResult SendRdmaReadRequest(
-        NInterconnect::NRdma::ICq::TPtr cq, const NActorsInterconnect::TRdmaCred& cred,
-        const NInterconnect::NRdma::TMemRegionSlice& memReg, ui32 offset,
-        TRdmaReadContext::TPtr readCtx , TActorId notify, ui16 channel) {
-        using namespace NInterconnect::NRdma;
-
-        Y_DEBUG_ABORT_UNLESS(memReg.GetSize() >= offset + cred.GetSize(),
-            "memReg sz: %d, offset: %d, cred sz: %d", memReg.GetSize(), offset, cred.GetSize());
-
-        TMonotonic cur = TMonotonic::Now();
-        auto reply = [notify, channel, cur](NActors::TActorSystem* as, TEvRdmaIoDone* ioDone) {
-            TEvRdmaReadDone* rdmaReadDone = new TEvRdmaReadDone(std::unique_ptr<TEvRdmaIoDone>(ioDone), cur, channel);
-                as->Send(new IEventHandle(notify, TActorId(), rdmaReadDone));
-        };
-
-        // We need to capture qp to guarantee it will be alive until we have rdma reads inflight
-        // QP is part of TRdmaReadContext which is captured here
-        auto cb = [readCtx, size=cred.GetSize(), reply, memReg](NActors::TActorSystem* as, TEvRdmaIoDone* ioDone) {
-            if (!ioDone->IsSuccess()) {
-                reply(as, ioDone);
-                return;
-            }
-
-            size_t before = readCtx->SizeLeft.fetch_sub(size, std::memory_order_relaxed);
-            Y_ABORT_UNLESS(before >= size);
-            if (before == size) {
-                reply(as, ioDone);
-            } else {
-                delete ioDone; // Clean up the event
-            }
-            Y_UNUSED(memReg);
-        };
-
-        auto wrTask = [memReg, readCtx, offset, cred, reply](NActors::TActorSystem* as, ICq::IWr* wr) {
-            void* addr = static_cast<char*>(memReg.GetAddr()) + offset;
-            int err = readCtx->Qp->SendRdmaReadWr(wr->GetId(),
-                addr, memReg.GetLKey(readCtx->Qp->GetCtx()->GetDeviceIndex()),
-                reinterpret_cast<void*>(cred.GetAddress()), cred.GetRkey(), cred.GetSize()
-            );
-            if (err) {
-                wr->Release();
-                reply(as,  NInterconnect::NRdma::TEvRdmaIoDone::WrError(err));
-            }
-            return err;
-        };
-
-        auto allocResult = cq->AllocWrAsync(wrTask, cb);
-        if (allocResult) {
-            return *allocResult;
-        } else {
-            return TReceiveContext::TPerChannelContext::TRdmaReadReqOk{};
-        }
-    }
-
     TReceiveContext::TPerChannelContext::ScheduleRdmaReadRequestsResult TReceiveContext::TPerChannelContext::ScheduleRdmaReadRequests(
-        const NActorsInterconnect::TRdmaCreds& creds, NInterconnect::NRdma::ICq::TPtr cq, TActorId notify, ui16 channel) {
+        const NActorsInterconnect::TRdmaCreds& creds, NInterconnect::NRdma::ICq::TPtr cq, TActorId notify, ui16 channel)
+    {
+        using namespace NInterconnect::NRdma;
         auto& pendingEvent = PendingEvents.back();
+
+        // In most cases we will have one wr per cred
+        std::unique_ptr<IIbVerbsBuilder> verbsBuilder = CreateIbVerbsBuilder(creds.CredsSize());
 
         ui32 mrOffset = 0;
 
         auto curMemReg = pendingEvent.RdmaBuffers.front();
+
+        TMonotonic curTime = TMonotonic::Now();
+        auto reply = [notify, channel, curTime](NActors::TActorSystem* as, TEvRdmaIoDone* ioDone) {
+            TEvRdmaReadDone* rdmaReadDone = new TEvRdmaReadDone(std::unique_ptr<TEvRdmaIoDone>(ioDone), curTime, channel);
+                as->Send(new IEventHandle(notify, TActorId(), rdmaReadDone));
+        };
+
+        if (!creds.CredsSize()) {
+            // Nothing to read.
+            return TRdmaReadReqOk{};
+        }
+
         for (const auto& cred : creds.GetCreds()) {
 
             ui32 credOffset = 0;
@@ -168,10 +131,33 @@ namespace NActors {
 
                 credCopy.SetAddress(cred.GetAddress() + credOffset);
                 credCopy.SetSize(std::min(cred.GetSize() - credOffset, (ui64)curMemReg.GetSize() - mrOffset));
-                auto err = SendRdmaReadRequest(cq, credCopy, curMemReg, mrOffset, pendingEvent.RdmaReadContext, notify, channel);
-                if (!std::holds_alternative<TRdmaReadReqOk>(err)) {
-                    return err;
-                }
+
+                // We need to capture qp to guarantee it will be alive until we have rdma reads inflight
+                // QP is part of TRdmaReadContext which is captured here
+                auto cb = [readCtx = pendingEvent.RdmaReadContext, size=credCopy.GetSize(), reply, curMemReg](NActors::TActorSystem* as, TEvRdmaIoDone* ioDone) {
+                    if (!ioDone->IsSuccess()) {
+                        reply(as, ioDone);
+                        return;
+                    }
+
+                    size_t before = readCtx->SizeLeft.fetch_sub(size, std::memory_order_relaxed);
+                    Y_ABORT_UNLESS(before >= size);
+                    if (before == size) {
+                        reply(as, ioDone);
+                    } else {
+                        delete ioDone; // Clean up the event
+                    }
+                    Y_UNUSED(curMemReg);
+                };
+
+                verbsBuilder->AddReadVerb(
+                    reinterpret_cast<char*>(curMemReg.GetAddr()) + mrOffset,
+                    curMemReg.GetLKey(pendingEvent.RdmaReadContext->Qp->GetCtx()->GetDeviceIndex()),
+                    reinterpret_cast<void*>(credCopy.GetAddress()),
+                    credCopy.GetRkey(),
+                    credCopy.GetSize(),
+                    std::move(cb)
+                );
 
                 mrOffset += credCopy.GetSize();
                 credOffset += credCopy.GetSize(); 
@@ -186,6 +172,11 @@ namespace NActors {
                     }
                 }
             } while (credOffset < cred.GetSize());
+        }
+
+        auto err = cq->DoWrBatchAsync(pendingEvent.RdmaReadContext->Qp, std::move(verbsBuilder));
+        if (err) {
+            return *err;
         }
         return TRdmaReadReqOk{};
     }

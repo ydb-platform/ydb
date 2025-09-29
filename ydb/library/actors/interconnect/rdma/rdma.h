@@ -9,6 +9,7 @@ struct ibv_qp;
 struct ibv_cq; 
 struct ibv_wc;
 union ibv_gid; 
+struct ibv_send_wr;
 }
 
 namespace NActors {
@@ -27,6 +28,9 @@ class TRdmaCtx;
 class TCqCommon;
 class TCqActor;
 struct TEvRdmaIoDone;
+
+class TQueuePair;
+class IIbVerbsBuilder;
 
 class ICq {
     ICq() {};
@@ -57,7 +61,7 @@ public:
     // returns TBusy in case of no prepare requests
     // returns TErr in case of fatal CQ error. NOTE!!! The callback might be called in this case with TCqErr 
     virtual TAllocResult AllocWr(std::function<void(NActors::TActorSystem* as, TEvRdmaIoDone*)> cb) noexcept = 0;
-    virtual std::optional<TErr> AllocWrAsync(std::function<int(NActors::TActorSystem*, ICq::IWr*)> wrCb, std::function<void(NActors::TActorSystem* as, TEvRdmaIoDone*)> ioCb) noexcept  = 0;
+    virtual std::optional<TErr> DoWrBatchAsync(std::shared_ptr<TQueuePair> qp, std::unique_ptr<IIbVerbsBuilder> builder) noexcept = 0;
     virtual TWrStats GetWrStats() const noexcept = 0;
 
     static bool IsWrSuccess(const TAllocResult& ar) {
@@ -101,6 +105,7 @@ public:
     int ToResetState() noexcept;
     int ToRtsState(TRdmaCtx* ctx, ui32 qpNum, const ibv_gid& gid, int mtuIndex) noexcept;
     int SendRdmaReadWr(ui64 wrId, void* mrAddr, ui32 mrlKey, void* dstAddr, ui32 dstRkey, ui32 dstSize) noexcept;
+    int PostSend(struct ::ibv_send_wr *wr, struct ::ibv_send_wr **bad_wr) noexcept;
     ui32 GetQpNum() const noexcept;
     void Output(IOutputStream&) const noexcept;
     TQpState GetState(bool forseUpdate) const noexcept;
@@ -112,5 +117,20 @@ private:
     TRdmaCtx* Ctx = nullptr;
     mutable int LastState = UnknownQpState;
 };
+
+class TIbVerbsBuilderImpl;
+
+class IIbVerbsBuilder : public NNonCopyable::TNonCopyable {
+    // Do not allow other implementations
+    friend class TIbVerbsBuilderImpl;
+public:
+    virtual ~IIbVerbsBuilder() = default;
+    virtual void AddReadVerb(void* mrAddr, ui32 mrlKey, void* dstAddr, ui32 dstRkey, ui32 dstSize,
+        std::function<void(NActors::TActorSystem* as, TEvRdmaIoDone*)> ioCb) noexcept = 0;
+private:
+    IIbVerbsBuilder() noexcept = default;
+};
+
+std::unique_ptr<IIbVerbsBuilder> CreateIbVerbsBuilder(size_t hint) noexcept;
 
 }

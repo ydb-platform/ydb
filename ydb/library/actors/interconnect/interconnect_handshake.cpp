@@ -753,23 +753,21 @@ namespace NActors {
 
             auto qp = RdmaQp;
 
-            auto wrTask = [qp, mr, cred, cb] (NActors::TActorSystem* as, ICq::IWr* wr) {
-                Y_ABORT_UNLESS(wr); //AllocWrAsync newer pass nullptr here
-                const auto lkey = mr->GetLKey(qp->GetCtx()->GetDeviceIndex());
-                int err = qp->SendRdmaReadWr(wr->GetId(),
-                    mr->GetAddr(), lkey,
-                    reinterpret_cast<void*>(cred.GetAddress()), cred.GetRkey(), cred.GetSize());
-                if (err) {
-                    wr->Release();
-                    cb(as,  TEvRdmaIoDone::WrError(err));
-                }
-                return err;
-            };
+            std::unique_ptr<IIbVerbsBuilder> verbsBuilder = CreateIbVerbsBuilder(1);
 
-            auto err = RdmaCq->AllocWrAsync(wrTask, cb);
+            verbsBuilder->AddReadVerb(
+                reinterpret_cast<char*>(mr->GetAddr()),
+                mr->GetLKey(qp->GetCtx()->GetDeviceIndex()),
+                reinterpret_cast<void*>(cred.GetAddress()),
+                cred.GetRkey(),
+                cred.GetSize(),
+                std::move(cb)
+            );
+
+            auto err = RdmaCq->DoWrBatchAsync(qp, std::move(verbsBuilder));
             if (err) {
                 TStringBuilder sb;
-                sb << "Unable to allocate work reqeust";
+                sb << "Unable to launch work reqeust";
                 LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICRDMA", NLog::PRI_ERROR,
                     sb.c_str());
                     rdmaReadAck.SetErr(sb);
@@ -787,7 +785,7 @@ namespace NActors {
                         "Unable to complete rdma READ work request due to wc error, code: %d", ev->Get()->GetErrCode());
                     } else if (ev->Get()->IsWrError()) {
                         LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICRDMA", NLog::PRI_ERROR,
-                        "Unable to complete rdma READ work request due to wr error, code: %d", ev->Get()->GetErrCode());
+                        "Unable to complete rdma READ work request due to post wr error, code: %d", ev->Get()->GetErrCode());
                     } else {
                         LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICRDMA", NLog::PRI_ERROR,
                             "Unable to complete rdma READ work request due to cq runtime error");

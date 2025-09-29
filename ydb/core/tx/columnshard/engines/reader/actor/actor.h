@@ -152,6 +152,7 @@ private:
     bool Finished = false;
     ui32 BuildResultCounter = 0;
     std::optional<TMonotonic> LastResultInstant;
+    std::optional<NKikimr::NColumnShard::TCounterGuard> ResultsForReplyBuildGuard;
 
     class TBlobStats {
     private:

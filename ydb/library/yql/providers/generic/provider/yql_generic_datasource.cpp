@@ -141,12 +141,39 @@ namespace NYql {
             }
 
             void AddCluster(const TString& clusterName, const THashMap<TString, TString>& properties) override {
-                State_->Configuration->Tokens[clusterName] =
-                    TStructuredTokenBuilder()
-                        .SetBasicAuth(
-                            clusterConfig.GetCredentials().basic().username(),
-                            clusterConfig.GetCredentials().basic().password())
-                        .ToJson();
+                for (const auto& [k, v] : properties) {
+                    Cout << "properties: " << k << "=" << v << Endl;
+                }
+
+                auto authMethod = properties.Value("authMethod", "");
+
+                TString structuredToken = "";
+                if (authMethod == "BASIC") {
+                    const TString& login = properties.Value("login", "");
+                    const TString& passwordReference = properties.Value("passwordReference", "");
+                    const TString& password = properties.Value("password", "");
+                    structuredToken = ComposeStructuredTokenJsonForBasicAuthWithSecret(login, passwordReference, password);
+                } else if (authMethod == "SERVICE_ACCOUNT") {
+                    const TString& serviceAccountId = properties.Value("serviceAccountId", "");
+                    const TString& serviceAccountIdSignature = properties.Value("serviceAccountIdSignature", "");
+                    const TString& serviceAccountIdSignatureReference = properties.Value("serviceAccountIdSignatureReference", "");
+                    structuredToken = ComposeStructuredTokenJsonForServiceAccountWithSecret(serviceAccountId, serviceAccountIdSignatureReference, serviceAccountIdSignature);
+                } else if (authMethod == "TOKEN") {
+                    const TString& token = properties.Value("token", "");
+                    const TString& tokenReference = properties.Value("tokenReference", "");
+                    structuredToken = ComposeStructuredTokenJsonForTokenAuthWithSecret(tokenReference, token);
+                } else {
+                    ythrow yexception() << "Unknown auth method: " << authMethod;
+                }
+
+                Cout << "structured token: " << structuredToken << Endl;
+
+                State_->Configuration->Tokens[clusterName] = structuredToken;
+                    // TStructuredTokenBuilder()
+                    //     .SetBasicAuth(
+                    //         clusterConfig.GetCredentials().basic().username(),
+                    //         clusterConfig.GetCredentials().basic().password())
+                    //     .ToJson();
 
                 State_->Configuration->AddCluster(
                     GenericClusterConfigFromProperties(clusterName, properties),

@@ -317,10 +317,6 @@ namespace NYql {
     }
 
     TGenericClusterConfig GenericClusterConfigFromProperties(const TString& clusterName, const THashMap<TString, TString>& properties) {
-        for (const auto& [k, v] : properties) {
-            Cout << "properties: " << k << "=" << v << Endl;
-        }
-
         NYql::TGenericClusterConfig clusterConfig;
         clusterConfig.set_name(clusterName);
         ParseLogin(properties, clusterConfig);

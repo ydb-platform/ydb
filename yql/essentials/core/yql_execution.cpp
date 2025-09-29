@@ -1,6 +1,7 @@
 #include "yql_execution.h"
 #include "yql_expr_optimize.h"
 #include "yql_opt_proposed_by_data.h"
+#include "yql_linear_checker.h"
 
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/utils/log/log.h>
@@ -988,6 +989,10 @@ TAutoPtr<IGraphTransformer> CreateCheckExecutionTransformer(const TTypeAnnotatio
                 bool collectCalcOverWindow = false;
                 return funcCheckExecution(noExecutionListForCalcOverWindow, collectCalcOverWindow, node);
             });
+        }
+
+        if (types.LangVer >= MakeLangVersion(2024, 4)) {
+            hasErrors = !ValidateLinearTypes(*input, ctx);
         }
 
         return hasErrors ? IGraphTransformer::TStatus::Error : IGraphTransformer::TStatus::Ok;

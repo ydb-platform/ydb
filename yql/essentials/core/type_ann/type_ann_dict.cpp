@@ -114,10 +114,8 @@ IGraphTransformer::TStatus FromMutDictWrapper(const TExprNode::TPtr& input, TExp
         return IGraphTransformer::TStatus::Error;
     }
 
-    const TLinearExprType* linType;
-    auto status = ConvertToLinearType(*input->Child(0), ctx.Expr, linType);
-    if (status != IGraphTransformer::TStatus::Ok) {
-        return status;
+    if (!EnsureLinearType(*input->Child(0), ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
     }
 
     const TDictExprType* dictType;
@@ -140,10 +138,8 @@ IGraphTransformer::TStatus MutDictBlindOpWrapper(const TExprNode::TPtr& input, T
         return IGraphTransformer::TStatus::Error;
     }
 
-    const TLinearExprType* linType;
-    auto status = ConvertToLinearType(*input->Child(0), ctx.Expr, linType);
-    if (status != IGraphTransformer::TStatus::Ok) {
-        return status;
+    if (!EnsureLinearType(*input->Child(0), ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
     }
 
     const TDictExprType* dictType;
@@ -151,7 +147,7 @@ IGraphTransformer::TStatus MutDictBlindOpWrapper(const TExprNode::TPtr& input, T
         return IGraphTransformer::TStatus::Error;
     }
 
-    status = TryConvertTo(input->ChildRef(1), *dictType->GetKeyType(), ctx.Expr, ctx.Types);
+    auto status = TryConvertTo(input->ChildRef(1), *dictType->GetKeyType(), ctx.Expr, ctx.Types);
     if (status != IGraphTransformer::TStatus::Ok) {
         return status;
     }
@@ -163,7 +159,7 @@ IGraphTransformer::TStatus MutDictBlindOpWrapper(const TExprNode::TPtr& input, T
         }
     }
 
-    input->SetTypeAnn(linType);
+    input->SetTypeAnn(input->Child(0)->GetTypeAnn());
     return IGraphTransformer::TStatus::Ok;
 }
 
@@ -177,10 +173,8 @@ IGraphTransformer::TStatus MutDictPopWrapper(const TExprNode::TPtr& input, TExpr
         return IGraphTransformer::TStatus::Error;
     }
 
-    const TLinearExprType* linType;
-    auto status = ConvertToLinearType(*input->Child(0), ctx.Expr, linType);
-    if (status != IGraphTransformer::TStatus::Ok) {
-        return status;
+    if (!EnsureLinearType(*input->Child(0), ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
     }
 
     const TDictExprType* dictType;
@@ -188,13 +182,13 @@ IGraphTransformer::TStatus MutDictPopWrapper(const TExprNode::TPtr& input, TExpr
         return IGraphTransformer::TStatus::Error;
     }
 
-    status = TryConvertTo(input->ChildRef(1), *dictType->GetKeyType(), ctx.Expr, ctx.Types);
+    auto status = TryConvertTo(input->ChildRef(1), *dictType->GetKeyType(), ctx.Expr, ctx.Types);
     if (status != IGraphTransformer::TStatus::Ok) {
         return status;
     }
 
     auto pair = ctx.Expr.MakeType<TTupleExprType>(TTypeAnnotationNode::TListType{
-        linType,
+        input->Child(0)->GetTypeAnn(),
         ctx.Expr.MakeType<TOptionalExprType>(dictType->GetPayloadType())});
 
     input->SetTypeAnn(pair);
@@ -211,10 +205,8 @@ IGraphTransformer::TStatus MutDictContainsWrapper(const TExprNode::TPtr& input, 
         return IGraphTransformer::TStatus::Error;
     }
 
-    const TLinearExprType* linType;
-    auto status = ConvertToLinearType(*input->Child(0), ctx.Expr, linType);
-    if (status != IGraphTransformer::TStatus::Ok) {
-        return status;
+    if (!EnsureLinearType(*input->Child(0), ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
     }
 
     const TDictExprType* dictType;
@@ -222,13 +214,13 @@ IGraphTransformer::TStatus MutDictContainsWrapper(const TExprNode::TPtr& input, 
         return IGraphTransformer::TStatus::Error;
     }
 
-    status = TryConvertTo(input->ChildRef(1), *dictType->GetKeyType(), ctx.Expr, ctx.Types);
+    auto status = TryConvertTo(input->ChildRef(1), *dictType->GetKeyType(), ctx.Expr, ctx.Types);
     if (status != IGraphTransformer::TStatus::Ok) {
         return status;
     }
 
     auto pair = ctx.Expr.MakeType<TTupleExprType>(TTypeAnnotationNode::TListType{
-        linType,
+        input->Child(0)->GetTypeAnn(),
         ctx.Expr.MakeType<TDataExprType>(NUdf::EDataSlot::Bool)});
 
     input->SetTypeAnn(pair);
@@ -245,10 +237,8 @@ IGraphTransformer::TStatus MutDictHasItemsWrapper(const TExprNode::TPtr& input, 
         return IGraphTransformer::TStatus::Error;
     }
 
-    const TLinearExprType* linType;
-    auto status = ConvertToLinearType(*input->Child(0), ctx.Expr, linType);
-    if (status != IGraphTransformer::TStatus::Ok) {
-        return status;
+    if (!EnsureLinearType(*input->Child(0), ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
     }
 
     const TDictExprType* dictType;
@@ -257,7 +247,7 @@ IGraphTransformer::TStatus MutDictHasItemsWrapper(const TExprNode::TPtr& input, 
     }
 
     auto pair = ctx.Expr.MakeType<TTupleExprType>(TTypeAnnotationNode::TListType{
-        linType,
+        input->Child(0)->GetTypeAnn(),
         ctx.Expr.MakeType<TDataExprType>(NUdf::EDataSlot::Bool)});
 
     input->SetTypeAnn(pair);
@@ -274,10 +264,8 @@ IGraphTransformer::TStatus MutDictLengthWrapper(const TExprNode::TPtr& input, TE
         return IGraphTransformer::TStatus::Error;
     }
 
-    const TLinearExprType* linType;
-    auto status = ConvertToLinearType(*input->Child(0), ctx.Expr, linType);
-    if (status != IGraphTransformer::TStatus::Ok) {
-        return status;
+    if (!EnsureLinearType(*input->Child(0), ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
     }
 
     const TDictExprType* dictType;
@@ -286,7 +274,7 @@ IGraphTransformer::TStatus MutDictLengthWrapper(const TExprNode::TPtr& input, TE
     }
 
     auto pair = ctx.Expr.MakeType<TTupleExprType>(TTypeAnnotationNode::TListType{
-        linType,
+        input->Child(0)->GetTypeAnn(),
         ctx.Expr.MakeType<TDataExprType>(NUdf::EDataSlot::Uint64)});
 
     input->SetTypeAnn(pair);
@@ -303,10 +291,8 @@ IGraphTransformer::TStatus MutDictItemsWrapper(const TExprNode::TPtr& input, TEx
         return IGraphTransformer::TStatus::Error;
     }
 
-    const TLinearExprType* linType;
-    auto status = ConvertToLinearType(*input->Child(0), ctx.Expr, linType);
-    if (status != IGraphTransformer::TStatus::Ok) {
-        return status;
+    if (!EnsureLinearType(*input->Child(0), ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
     }
 
     const TDictExprType* dictType;
@@ -321,7 +307,7 @@ IGraphTransformer::TStatus MutDictItemsWrapper(const TExprNode::TPtr& input, TEx
     );
 
     auto pair = ctx.Expr.MakeType<TTupleExprType>(TTypeAnnotationNode::TListType{
-        linType,
+        input->Child(0)->GetTypeAnn(),
         list});
 
     input->SetTypeAnn(pair);
@@ -338,10 +324,8 @@ IGraphTransformer::TStatus MutDictKeysWrapper(const TExprNode::TPtr& input, TExp
         return IGraphTransformer::TStatus::Error;
     }
 
-    const TLinearExprType* linType;
-    auto status = ConvertToLinearType(*input->Child(0), ctx.Expr, linType);
-    if (status != IGraphTransformer::TStatus::Ok) {
-        return status;
+    if (!EnsureLinearType(*input->Child(0), ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
     }
 
     const TDictExprType* dictType;
@@ -354,7 +338,7 @@ IGraphTransformer::TStatus MutDictKeysWrapper(const TExprNode::TPtr& input, TExp
     );
 
     auto pair = ctx.Expr.MakeType<TTupleExprType>(TTypeAnnotationNode::TListType{
-        linType,
+        input->Child(0)->GetTypeAnn(),
         list});
 
     input->SetTypeAnn(pair);
@@ -371,10 +355,8 @@ IGraphTransformer::TStatus MutDictPayloadsWrapper(const TExprNode::TPtr& input, 
         return IGraphTransformer::TStatus::Error;
     }
 
-    const TLinearExprType* linType;
-    auto status = ConvertToLinearType(*input->Child(0), ctx.Expr, linType);
-    if (status != IGraphTransformer::TStatus::Ok) {
-        return status;
+    if (!EnsureLinearType(*input->Child(0), ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
     }
 
     const TDictExprType* dictType;
@@ -387,7 +369,7 @@ IGraphTransformer::TStatus MutDictPayloadsWrapper(const TExprNode::TPtr& input, 
     );
 
     auto pair = ctx.Expr.MakeType<TTupleExprType>(TTypeAnnotationNode::TListType{
-        linType,
+        input->Child(0)->GetTypeAnn(),
         list});
 
     input->SetTypeAnn(pair);

@@ -3881,32 +3881,6 @@ bool EnsureDataOrOptionalOfData(TPositionHandle position, const TTypeAnnotationN
     return true;
 }
 
-IGraphTransformer::TStatus ConvertToLinearType(const TExprNode& node, TExprContext& ctx, const TLinearExprType*& retType) {
-    if (HasError(node.GetTypeAnn(), ctx)) {
-        return IGraphTransformer::TStatus::Error;
-    }
-
-    if (!node.GetTypeAnn()) {
-        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() <<
-            "Expected (dynamic) linear type, but got lambda"));
-        return IGraphTransformer::TStatus::Error;
-    }
-
-    if (node.GetTypeAnn()->GetKind() == ETypeAnnotationKind::Linear) {
-        retType = node.GetTypeAnn()->Cast<TLinearExprType>();
-        return IGraphTransformer::TStatus::Ok;
-    }
-
-    if (node.GetTypeAnn()->GetKind() == ETypeAnnotationKind::DynamicLinear) {
-        retType = ctx.MakeType<TLinearExprType>(node.GetTypeAnn()->Cast<TDynamicLinearExprType>()->GetItemType());
-        return IGraphTransformer::TStatus::Ok;
-    }
-
-    ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() <<
-        "Expected (dynamic) linear type, but got: " << *node.GetTypeAnn()));
-    return IGraphTransformer::TStatus::Error;
-}
-
 bool EnsureLinearType(const TExprNode& node, TExprContext& ctx) {
     if (HasError(node.GetTypeAnn(), ctx)) {
         return false;

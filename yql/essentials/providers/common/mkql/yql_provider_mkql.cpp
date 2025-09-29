@@ -31,20 +31,8 @@ namespace NYql {
 namespace NCommon {
 
 TType* ExtractDictTypeFromMutDic(const TExprNode& node, TMkqlBuildContext& ctx) {
-    bool isDynamic;
-    auto innerType = GetLinearItemType(*node.GetTypeAnn(), isDynamic);
-    auto tag = innerType->Cast<TResourceExprType>()->GetTag();
+    auto tag = node.GetTypeAnn()->Cast<TLinearExprType>()->GetItemType()->Cast<TResourceExprType>()->GetTag();
     return ctx.BuildType(node, *NTypeAnnImpl::GetCachedMutDictType(tag, ctx.ExprCtx));
-}
-
-TRuntimeNode EnsureLinear(TRuntimeNode value, const TPositionHandle posHandle, TMkqlBuildContext& ctx) {
-    auto linType = AS_TYPE(TLinearType, value);
-    if (!linType->IsDynamic()) {
-        return value;
-    }
-
-    auto pos = ctx.ExprCtx.GetPosition(posHandle);
-    return ctx.ProgramBuilder.FromDynamicLinear(value, pos.File, pos.Row, pos.Column);
 }
 
 TRuntimeNode WideTopImpl(const TExprNode& node, TMkqlBuildContext& ctx,
@@ -2479,7 +2467,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
             innerType->Cast<TResourceExprType>()->GetTag(), ctx.ExprCtx);
         return ctx.ProgramBuilder.FromMutDict(
             ctx.BuildType(node, *dictType),
-            EnsureLinear(MkqlBuildExpr(node.Head(), ctx), node.Pos(), ctx));
+            MkqlBuildExpr(node.Head(), ctx));
     });
 
     AddCallable("MutDictCreate", [](const TExprNode& node, TMkqlBuildContext& ctx) {
@@ -2509,7 +2497,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         auto key = MkqlBuildExpr(*node.Child(1), ctx);
         auto payload = MkqlBuildExpr(*node.Child(2), ctx);
         auto dictType = ExtractDictTypeFromMutDic(node.Head(), ctx);
-        return ctx.ProgramBuilder.MutDictInsert(dictType, EnsureLinear(dict, node.Pos(), ctx), key, payload);
+        return ctx.ProgramBuilder.MutDictInsert(dictType, dict, key, payload);
     });
 
     AddCallable("MutDictUpsert", [](const TExprNode& node, TMkqlBuildContext& ctx) {
@@ -2517,7 +2505,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         auto key = MkqlBuildExpr(*node.Child(1), ctx);
         auto payload = MkqlBuildExpr(*node.Child(2), ctx);
         auto dictType = ExtractDictTypeFromMutDic(node.Head(), ctx);
-        return ctx.ProgramBuilder.MutDictUpsert(dictType, EnsureLinear(dict, node.Pos(), ctx), key, payload);
+        return ctx.ProgramBuilder.MutDictUpsert(dictType, dict, key, payload);
     });
 
     AddCallable("MutDictUpdate", [](const TExprNode& node, TMkqlBuildContext& ctx) {
@@ -2525,65 +2513,65 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         auto key = MkqlBuildExpr(*node.Child(1), ctx);
         auto payload = MkqlBuildExpr(*node.Child(2), ctx);
         auto dictType = ExtractDictTypeFromMutDic(node.Head(), ctx);
-        return ctx.ProgramBuilder.MutDictUpdate(dictType, EnsureLinear(dict, node.Pos(), ctx), key, payload);
+        return ctx.ProgramBuilder.MutDictUpdate(dictType, dict, key, payload);
     });
 
     AddCallable("MutDictRemove", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         auto dict = MkqlBuildExpr(*node.Child(0), ctx);
         auto key = MkqlBuildExpr(*node.Child(1), ctx);
         auto dictType = ExtractDictTypeFromMutDic(node.Head(), ctx);
-        return ctx.ProgramBuilder.MutDictRemove(dictType, EnsureLinear(dict, node.Pos(), ctx), key);
+        return ctx.ProgramBuilder.MutDictRemove(dictType, dict, key);
     });
 
     AddCallable("MutDictPop", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         auto dict = MkqlBuildExpr(*node.Child(0), ctx);
         auto key = MkqlBuildExpr(*node.Child(1), ctx);
         auto dictType = ExtractDictTypeFromMutDic(node.Head(), ctx);
-        return ctx.ProgramBuilder.MutDictPop(dictType, EnsureLinear(dict, node.Pos(), ctx), key);
+        return ctx.ProgramBuilder.MutDictPop(dictType, dict, key);
     });
 
     AddCallable("MutDictContains", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         auto dict = MkqlBuildExpr(*node.Child(0), ctx);
         auto key = MkqlBuildExpr(*node.Child(1), ctx);
         auto dictType = ExtractDictTypeFromMutDic(node.Head(), ctx);
-        return ctx.ProgramBuilder.MutDictContains(dictType, EnsureLinear(dict, node.Pos(), ctx), key);
+        return ctx.ProgramBuilder.MutDictContains(dictType, dict, key);
     });
 
     AddCallable("MutDictLookup", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         auto dict = MkqlBuildExpr(*node.Child(0), ctx);
         auto key = MkqlBuildExpr(*node.Child(1), ctx);
         auto dictType = ExtractDictTypeFromMutDic(node.Head(), ctx);
-        return ctx.ProgramBuilder.MutDictLookup(dictType, EnsureLinear(dict, node.Pos(), ctx), key);
+        return ctx.ProgramBuilder.MutDictLookup(dictType, dict, key);
     });
 
     AddCallable("MutDictHasItems", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         auto dict = MkqlBuildExpr(*node.Child(0), ctx);
         auto dictType = ExtractDictTypeFromMutDic(node.Head(), ctx);
-        return ctx.ProgramBuilder.MutDictHasItems(dictType, EnsureLinear(dict, node.Pos(), ctx));
+        return ctx.ProgramBuilder.MutDictHasItems(dictType, dict);
     });
 
     AddCallable("MutDictLength", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         auto dict = MkqlBuildExpr(*node.Child(0), ctx);
         auto dictType = ExtractDictTypeFromMutDic(node.Head(), ctx);
-        return ctx.ProgramBuilder.MutDictLength(dictType, EnsureLinear(dict, node.Pos(), ctx));
+        return ctx.ProgramBuilder.MutDictLength(dictType, dict);
     });
 
     AddCallable("MutDictItems", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         auto dict = MkqlBuildExpr(*node.Child(0), ctx);
         auto dictType = ExtractDictTypeFromMutDic(node.Head(), ctx);
-        return ctx.ProgramBuilder.MutDictItems(dictType, EnsureLinear(dict, node.Pos(), ctx));
+        return ctx.ProgramBuilder.MutDictItems(dictType, dict);
     });
 
     AddCallable("MutDictKeys", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         auto dict = MkqlBuildExpr(*node.Child(0), ctx);
         auto dictType = ExtractDictTypeFromMutDic(node.Head(), ctx);
-        return ctx.ProgramBuilder.MutDictKeys(dictType, EnsureLinear(dict, node.Pos(), ctx));
+        return ctx.ProgramBuilder.MutDictKeys(dictType, dict);
     });
 
     AddCallable("MutDictPayloads", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         auto dict = MkqlBuildExpr(*node.Child(0), ctx);
         auto dictType = ExtractDictTypeFromMutDic(node.Head(), ctx);
-        return ctx.ProgramBuilder.MutDictPayloads(dictType, EnsureLinear(dict, node.Pos(), ctx));
+        return ctx.ProgramBuilder.MutDictPayloads(dictType, dict);
     });
 
     AddCallable("Error", [](const TExprNode& node, TMkqlBuildContext& ctx)->NKikimr::NMiniKQL::TRuntimeNode {

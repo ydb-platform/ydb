@@ -340,6 +340,10 @@ public:
         return (GetFlags() & TypeHasError) != 0;
     }
 
+    bool HasStaticLinear() const {
+        return (GetFlags() & TypeHasStaticLinear) != 0;
+    }
+
     ui32 GetFlags() const {
         return Flags_;
     }

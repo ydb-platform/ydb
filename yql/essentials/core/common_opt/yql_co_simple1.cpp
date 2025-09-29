@@ -4937,7 +4937,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
     };
 
     map["Member"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
-        if (node->Head().IsCallable("AsStruct")) {
+        if (node->Head().IsCallable("AsStruct") && !(node->Head().HasSideEffects() && node->GetTypeAnn()->HasStaticLinear())) {
             YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();
             auto res = ExtractMember(*node);
             res = KeepWorld(res, *node, ctx, *optCtx.Types);
@@ -4988,7 +4988,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
     map["AsStruct"] = std::bind(&OptimizeAsStruct, _1, _2);
 
     map["Nth"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
-        if (node->Head().Type() == TExprNode::List) {
+        if (node->Head().Type() == TExprNode::List && !(node->Head().HasSideEffects() && node->GetTypeAnn()->HasStaticLinear())) {
             YQL_CLOG(DEBUG, Core) << node->Content() << " over tuple literal";
             const auto index = FromString<ui32>(node->Tail().Content());
             auto res = node->Head().ChildPtr(index);

@@ -29,6 +29,15 @@ namespace NKikimr {
 using TGRpcServers = TVector<std::pair<TString, TAutoPtr<NYdbGrpc::TGRpcServer>>>;
 using TGRpcServersFactory = std::function<TGRpcServers()>;
 
+struct TGRpcServersWrapper {
+    TGRpcServers Servers;
+    TMutex Mutex;
+
+    TGuard<TMutex> Guard() {
+        return TGuard<TMutex>(Mutex);
+    }
+};
+
 class TKikimrRunner : public virtual TThrRefBase, private IGlobalObjectStorage {
 protected:
     static TProgramShouldContinue KikimrShouldContinue;
@@ -69,6 +78,7 @@ protected:
 
     TKikimrRunner(std::shared_ptr<TModuleFactories> factories = {});
 
+    std::shared_ptr<TGRpcServersWrapper> GRpcServersWrapper;
     TGRpcServersFactory GRpcServersFactory;
     TActorId GRpcServersManager;
 

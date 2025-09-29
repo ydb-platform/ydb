@@ -174,8 +174,7 @@
 namespace NKikimr {
 
 class TGRpcServersManager : public TActorBootstrapped<TGRpcServersManager> {
-    TGRpcServersFactory GRpcServersFactory;
-    TGRpcServers GRpcServers;
+    std::weak_ptr<TGRpcServersWrapper> GRpcServersWrapper;
     TIntrusivePtr<NMemory::IProcessMemoryInfoProvider> ProcessMemoryInfoProvider;
 
 public:
@@ -192,9 +191,9 @@ public:
     };
 
 public:
-    TGRpcServersManager(TGRpcServersFactory grpcServersFactory,
+    TGRpcServersManager(std::weak_ptr<TGRpcServersWrapper> grpcServersWrapper,
             TIntrusivePtr<NMemory::IProcessMemoryInfoProvider> processMemoryInfoProvider)
-        : GRpcServersFactory(std::move(grpcServersFactory))
+        : GRpcServersWrapper(std::move(grpcServersWrapper))
         , ProcessMemoryInfoProvider(std::move(processMemoryInfoProvider))
     {}
 
@@ -215,11 +214,12 @@ public:
     }
 
     void Start() {
-        if (GRpcServers) {
+        auto wrapper = GRpcServersWrapper.lock();
+        if (!wrapper) {
             return;
         }
-        GRpcServers = GRpcServersFactory();
-        for (auto& [name, server] : GRpcServers) {
+        TGuard<TMutex> guard = wrapper->Guard();
+        for (auto& [name, server] : wrapper->Servers) {
             if (!server) {
                 continue;
             }
@@ -251,12 +251,17 @@ public:
     }
 
     void Stop() {
-        for (auto& [name, server] : GRpcServers) {
+        auto wrapper = GRpcServersWrapper.lock();
+        if (!wrapper) {
+            return;
+        }
+        TGuard<TMutex> guard = wrapper->Guard();
+        for (auto& [name, server] : wrapper->Servers) {
             if (server) {
                 server->Stop();
             }
         }
-        GRpcServers.clear();
+        wrapper->Servers.clear();
     }
 
     void HandleStop(TEvStop::TPtr ev) {
@@ -1990,7 +1995,11 @@ void TKikimrRunner::KikimrStart() {
         Monitoring->Start(ActorSystem.Get());
     }
 
-    GRpcServersManager = ActorSystem->Register(new TGRpcServersManager(std::move(GRpcServersFactory), ProcessMemoryInfoProvider));
+    if (GRpcServersFactory) {
+        GRpcServersWrapper = std::make_shared<TGRpcServersWrapper>();
+        GRpcServersWrapper->Servers = GRpcServersFactory();
+        GRpcServersManager = ActorSystem->Register(new TGRpcServersManager(GRpcServersWrapper, ProcessMemoryInfoProvider));
+    }
 
     if (SqsHttp) {
         SqsHttp->Start();
@@ -2094,21 +2103,23 @@ void TKikimrRunner::KikimrStop(bool graceful) {
         SqsHttp.Destroy();
     }
 
-    // stop processing grpc requests/response - we must stop feeding ActorSystem
-    TManualEvent event;
-    ActorSystem->Send(new IEventHandle(GRpcServersManager, {}, new TGRpcServersManager::TEvStop(&event)));
-    event.WaitI();
-
     if (ActorSystem) {
         ActorSystem->Stop();
     }
 
-    if (YqSharedResources) {
-        YqSharedResources->Stop();
+    // stop processing grpc requests/response - we must stop feeding ActorSystem
+    if (GRpcServersManager) {
+        TGuard<TMutex> guard = GRpcServersWrapper->Guard();
+        for (auto& [name, server] : GRpcServersWrapper->Servers) {
+            if (server) {
+                server->Stop();
+            }
+        }
+        GRpcServersWrapper->Servers.clear();
     }
 
-    if (ActorSystem) {
-        ActorSystem->Cleanup();
+    if (YqSharedResources) {
+        YqSharedResources->Stop();
     }
 
     if (ModuleFactories) {
@@ -2117,11 +2128,16 @@ void TKikimrRunner::KikimrStop(bool graceful) {
         }
     }
 
-    if (YdbDriver) {
-        YdbDriver->Stop(true);
-    }
     for (auto plugin: Plugins) {
         plugin->Stop();
+    }
+
+    if (ActorSystem) {
+        ActorSystem->Cleanup();
+    }
+
+    if (YdbDriver) {
+        YdbDriver->Stop(true);
     }
 }
 

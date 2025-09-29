@@ -372,7 +372,6 @@ private:
     std::shared_ptr<TAtomicCounter> TotalExecutionDurationUs = std::make_shared<TAtomicCounter>();
     std::shared_ptr<TAtomicCounter> TotalRawBytes = std::make_shared<TAtomicCounter>();
     std::shared_ptr<TAtomicCounter> AccessorsForConstructionGuard = std::make_shared<TAtomicCounter>();
-    std::shared_ptr<TAtomicCounter> AckWaitingCounter = std::make_shared<TAtomicCounter>();
     THashMap<ui32, std::shared_ptr<TAtomicCounter>> SkipNodesCount;
     THashMap<ui32, std::shared_ptr<TAtomicCounter>> ExecuteNodesCount;
 
@@ -421,7 +420,6 @@ public:
                                 << "ResultsForSourceCount:" << ResultsForSourceCount->Val() << ";"
                                 << "ResultsForReplyGuard:" << ResultsForReplyGuard->Val() << ";"
                                 << "FilterFetchingGuard:" << FilterFetchingGuard->Val() << ";"
-                                << "AckWaiting:" << AckWaitingCounter->Val() << ";"
                                 << "AccessorsGuard:" << AccessorsForConstructionGuard->Val() << ";"
                                 << "AbortsGuard:" << AbortsGuard->Val() << ";";
     }
@@ -433,10 +431,6 @@ public:
 
     TCounterGuard GetResultsForReplyGuard() const {
         return TCounterGuard(ResultsForReplyGuard);
-    }
-
-    TCounterGuard GetAckWaitingGuard() const {
-        return TCounterGuard(AckWaitingCounter);
     }
 
     TCounterGuard GetFetcherAcessorsGuard() const {
@@ -478,7 +472,7 @@ public:
     bool InWaiting() const {
         return MergeTasksCount->Val() || AssembleTasksCount->Val() || ReadTasksCount->Val() || ResourcesAllocationTasksCount->Val() ||
                FetchAccessorsCount->Val() || ResultsForSourceCount->Val() || FetchBlobsCount->Val() || ResultsForReplyGuard->Val() ||
-               FilterFetchingGuard->Val() || AbortsGuard->Val() || AccessorsForConstructionGuard->Val() || AckWaitingCounter->Val();
+               FilterFetchingGuard->Val() || AbortsGuard->Val() || AccessorsForConstructionGuard->Val();
     }
 
     const THashMap<ui32, std::shared_ptr<TAtomicCounter>>& GetSkipStats() const {

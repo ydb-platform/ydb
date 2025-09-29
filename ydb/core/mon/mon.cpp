@@ -1380,6 +1380,10 @@ TMon::TMon(TConfig config)
 {
 }
 
+TMon::~TMon() {
+    IndexMonPage->ClearPages(); // it's required to avoid loop-reference
+}
+
 std::future<void> TMon::Start(TActorSystem* actorSystem) {
     Y_ABORT_UNLESS(actorSystem);
     TGuard<TMutex> g(Mutex);
@@ -1456,9 +1460,8 @@ std::future<void> TMon::Start(TActorSystem* actorSystem) {
 }
 
 void TMon::Stop() {
-    IndexMonPage->ClearPages(); // it's required to avoid loop-reference
+    TGuard<TMutex> g(Mutex);
     if (ActorSystem) {
-        TGuard<TMutex> g(Mutex);
         for (const auto& [path, actorId] : ActorServices) {
             ActorSystem->Send(actorId, new TEvents::TEvPoisonPill);
         }

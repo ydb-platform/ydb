@@ -1186,12 +1186,6 @@ TRestoreResult TRestoreClient::Restore(NScheme::ESchemeEntryType type, const TFs
             return RestoreTable(fsPath, dbPath, settings);
         case ESchemeEntryType::Topic:
             return RestoreTopic(fsPath, dbPath, settings);
-        case ESchemeEntryType::View:
-            if (delay) {
-                DelayedRestoreManager.Add(ESchemeEntryType::View, fsPath, dbRestoreRoot, dbPathRelativeToRestoreRoot, settings);
-                return Result<TRestoreResult>();
-            }
-            return RestoreView(fsPath, dbRestoreRoot, dbPathRelativeToRestoreRoot, settings);
         case ESchemeEntryType::CoordinationNode:
             return RestoreCoordinationNode(fsPath, dbPath, settings);
         case ESchemeEntryType::ExternalTable:
@@ -1202,24 +1196,28 @@ TRestoreResult TRestoreClient::Restore(NScheme::ESchemeEntryType type, const TFs
             return RestoreExternalTable(fsPath, dbPath, settings);
         case ESchemeEntryType::ExternalDataSource:
             return RestoreExternalDataSource(fsPath, dbPath, settings);
-        case ESchemeEntryType::Replication:
-            if (delay) {
-                DelayedRestoreManager.Add(ESchemeEntryType::Replication, fsPath, dbRestoreRoot, dbPathRelativeToRestoreRoot, settings);
-                return Result<TRestoreResult>();
-            }
-            return RestoreReplication(fsPath, dbRestoreRoot, dbPathRelativeToRestoreRoot, settings);
-        case ESchemeEntryType::Transfer:
-            if (delay) {
-                DelayedRestoreManager.Add(ESchemeEntryType::Transfer, fsPath, dbRestoreRoot, dbPathRelativeToRestoreRoot, settings);
-                return Result<TRestoreResult>();
-            }
-            return RestoreTransfer(fsPath, dbRestoreRoot, dbPathRelativeToRestoreRoot, settings);
         case ESchemeEntryType::SysView:
             return RestoreSysView(fsPath, dbPath, settings);
+
+        case ESchemeEntryType::View:
+            if (!delay) {
+                return RestoreView(fsPath, dbRestoreRoot, dbPathRelativeToRestoreRoot, settings);
+            }
+        case ESchemeEntryType::Replication:
+            if (!delay) {
+                return RestoreReplication(fsPath, dbRestoreRoot, dbPathRelativeToRestoreRoot, settings);
+            }
+        case ESchemeEntryType::Transfer:
+            if (!delay) {
+                return RestoreTransfer(fsPath, dbRestoreRoot, dbPathRelativeToRestoreRoot, settings);
+            }
+
+            DelayedRestoreManager.Add(type, fsPath, dbRestoreRoot, dbPathRelativeToRestoreRoot, settings);
+            return Result<TRestoreResult>();
+
         default:
             ythrow TBadArgumentException() << "Attempting to restore an unexpected object from: " << fsPath << ", type: " << type;
     }
-
 }
 
 TRestoreResult TRestoreClient::DropAndRestoreExternals(const TVector<TFsBackupEntry>& backupEntries, const TVector<size_t>& externalDataSources, const THashMap<TString, size_t>& externalTables, const TRestoreSettings& settings) {

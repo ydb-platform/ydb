@@ -23,6 +23,7 @@ public:
     const NActors::TActorId ComputeActorId;
     ui64 TaskId;
     TMaybe<TDqSourceWatermarkTracker<TPartitionKey>> WatermarkTracker;
+    // << Initialized when watermark tracking is enabled
     TMaybe<TInstant> NextIdlenessCheckAt;
 
     TDqPqReadActorBase(

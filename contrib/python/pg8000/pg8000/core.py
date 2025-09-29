@@ -147,7 +147,7 @@ def _flush(sock):
 
 
 def _read(sock, size):
-    buff = bytearray()
+    buff = bytearray(sock.read(size))
     try:
         while len(buff) < size:
             block = sock.read(size - len(buff))

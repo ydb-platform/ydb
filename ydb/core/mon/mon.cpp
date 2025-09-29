@@ -1459,7 +1459,6 @@ std::future<void> TMon::Start(TActorSystem* actorSystem) {
 void TMon::Stop() {
     TGuard<TMutex> g(Mutex);
     if (ActorSystem) {
-        TGuard<TMutex> g(Mutex);
         for (const auto& [path, actorId] : ActorServices) {
             ActorSystem->Send(actorId, new TEvents::TEvPoisonPill);
         }

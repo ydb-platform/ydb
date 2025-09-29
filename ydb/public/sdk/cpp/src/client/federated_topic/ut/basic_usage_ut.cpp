@@ -6,7 +6,6 @@
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/persqueue.h>
 
 #include <ydb/public/sdk/cpp/src/client/topic/impl/common.h>
-#include <ydb/public/sdk/cpp/src/client/topic/common/executor_impl.h>
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/include/write_session.h>
 
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/ut_utils.h>
@@ -275,7 +274,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         NPersQueue::TWriteSessionSettings writeSettings;
         writeSettings.Path(setup->GetTestTopic()).MessageGroupId("src_id");
         writeSettings.Codec(NPersQueue::ECodec::RAW);
-        NPersQueue::IExecutor::TPtr executor = new NTopic::TSyncExecutor();
+        IExecutor::TPtr executor = NPersQueue::CreateSyncExecutor();
         writeSettings.CompressionExecutor(executor);
 
         auto& client = setup->GetPersQueueClient();
@@ -534,7 +533,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         NPersQueue::TWriteSessionSettings writeSettings;
         writeSettings.Path(setup->GetTestTopic()).MessageGroupId("src_id");
         writeSettings.Codec(NPersQueue::ECodec::RAW);
-        NPersQueue::IExecutor::TPtr executor = new NTopic::TSyncExecutor();
+        IExecutor::TPtr executor = NPersQueue::CreateSyncExecutor();
         writeSettings.CompressionExecutor(executor);
 
         auto& client = setup->GetPersQueueClient();
@@ -640,7 +639,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             NPersQueue::TWriteSessionSettings writeSettings;
             writeSettings.Path(setup->GetTestTopic()).MessageGroupId("src_id");
             writeSettings.Codec(NPersQueue::ECodec::RAW);
-            NPersQueue::IExecutor::TPtr executor = new NTopic::TSyncExecutor();
+            IExecutor::TPtr executor = NPersQueue::CreateSyncExecutor();
             writeSettings.CompressionExecutor(executor);
 
             auto& client = setup->GetPersQueueClient();
@@ -660,7 +659,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             NPersQueue::TWriteSessionSettings writeSettings;
             writeSettings.Path(setup->GetTestTopic() + "-mirrored-from-dc2").MessageGroupId("src_id");
             writeSettings.Codec(NPersQueue::ECodec::RAW);
-            NPersQueue::IExecutor::TPtr executor = new NTopic::TSyncExecutor();
+            IExecutor::TPtr executor = NPersQueue::CreateSyncExecutor();
             writeSettings.CompressionExecutor(executor);
 
             auto& client = setup->GetPersQueueClient();
@@ -680,7 +679,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             NPersQueue::TWriteSessionSettings writeSettings;
             writeSettings.Path(setup->GetTestTopic() + "-mirrored-from-dc3").MessageGroupId("src_id");
             writeSettings.Codec(NPersQueue::ECodec::RAW);
-            NPersQueue::IExecutor::TPtr executor = new NTopic::TSyncExecutor();
+            IExecutor::TPtr executor = NPersQueue::CreateSyncExecutor();
             writeSettings.CompressionExecutor(executor);
 
             auto& client = setup->GetPersQueueClient();

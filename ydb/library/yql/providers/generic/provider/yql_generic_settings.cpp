@@ -62,19 +62,6 @@ namespace NYql {
             YQL_CLOG(DEBUG, ProviderGeneric) << "database id '" << databaseId << "' added to mapping";
         }
 
-        Cout << "OLOLO 1: " << clusterConfig.credentials().DebugString() << Endl;
-
-        // NOTE: Tokens map is filled just because it's required by DQ/KQP.
-        // The only reason for provider to store these tokens is
-        // to keep compatibility with these engines.
-        // Real credentials are stored in TGenericClusterConfig.
-        Tokens[clusterConfig.GetName()] =
-            TStructuredTokenBuilder()
-                .SetBasicAuth(
-                    clusterConfig.GetCredentials().basic().username(),
-                    clusterConfig.GetCredentials().basic().password())
-                .ToJson();
-
         // preserve cluster config entirely for the further use
         ClusterNamesToClusterConfigs[clusterName] = clusterConfig;
 

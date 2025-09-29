@@ -167,6 +167,9 @@ class KikimrConfigGenerator(object):
             pg_compatible_expirement=False,
             generic_connector_config=None,  # typing.Optional[TGenericConnectorConfig]
             pgwire_port=None,
+            default_clusteradmin=None,
+            monitoring_allowed_sids=[],
+            viewer_allowed_sids=[],
     ):
         if extra_feature_flags is None:
             extra_feature_flags = []
@@ -430,6 +433,22 @@ class KikimrConfigGenerator(object):
 
             self.yaml_config["feature_flags"]["enable_external_data_sources"] = True
             self.yaml_config["feature_flags"]["enable_script_execution_operations"] = True
+
+        self.__default_clusteradmin = default_clusteradmin
+        if self.__default_clusteradmin is not None:
+            security_config = self.yaml_config["domains_config"]["security_config"]
+            security_config.setdefault("administration_allowed_sids", []).append(self.__default_clusteradmin)
+            security_config.setdefault("default_access", []).append('+F:{}'.format(self.__default_clusteradmin))
+
+        for sid in monitoring_allowed_sids:
+            security_config.setdefault("monitoring_allowed_sids", []).append(sid)
+
+        for sid in viewer_allowed_sids:
+            security_config.setdefault("viewer_allowed_sids", []).append(sid)
+
+    @property
+    def default_clusteradmin(self):
+        return self.__default_clusteradmin
 
     @property
     def pdisks_info(self):

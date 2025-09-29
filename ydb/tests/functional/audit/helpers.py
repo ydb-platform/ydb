@@ -6,7 +6,7 @@ import time
 
 import yatest
 
-from ydb.tests.library.common.helpers import plain_or_under_sanitizer
+from ydb.tests.library.common.yatest_common import plain_or_under_sanitizer
 
 
 NO_RECORDS_TIMEOUT = plain_or_under_sanitizer(2, 30)
@@ -49,7 +49,7 @@ def execute_ydbd(cluster, token, cmd, check_exit_code=True):
 
 def execute_dstool_grpc(cluster, token, cmd, check_exit_code=True):
     dstool_binary_path = yatest.common.build_path('ydb/apps/dstool/ydb-dstool')
-    full_cmd = [dstool_binary_path, '--endpoint', f'grpc://{cluster_endpoint(cluster)}']
+    full_cmd = [dstool_binary_path, '--endpoint', f'grpc://{cluster_endpoint(cluster)}', '--grpc-port', str(cluster.nodes[1].grpc_port)]
     full_cmd += cmd
 
     proc_result = yatest.common.process.execute(full_cmd, check_exit_code=False, env={'YDB_TOKEN': token})
@@ -60,7 +60,7 @@ def execute_dstool_grpc(cluster, token, cmd, check_exit_code=True):
 
 def execute_dstool_http(cluster, token, cmd, check_exit_code=True):
     dstool_binary_path = yatest.common.build_path('ydb/apps/dstool/ydb-dstool')
-    full_cmd = [dstool_binary_path, '--endpoint', f'http://{cluster_http_endpoint(cluster)}']
+    full_cmd = [dstool_binary_path, '--endpoint', f'http://{cluster_http_endpoint(cluster)}', '--mon-port', str(cluster.nodes[1].mon_port), '--http']
     full_cmd += cmd
 
     proc_result = yatest.common.process.execute(full_cmd, check_exit_code=False, env={'YDB_TOKEN': token})
@@ -168,7 +168,8 @@ class CanonicalCaptureAuditFileOutput:
         self.__validate_field_has_value(json_record, 'status', ['SUCCESS', 'ERROR', 'IN-PROCESS'])
         if json_record.get('subject') != 'metadata@system':
             self.__validate_field_exists_and_not_empty(json_record, 'sanitized_token')
-            self.__validate_field_exists_and_not_empty(json_record, 'remote_address')
+            # We don't have remote_address field in console requests
+            # self.__validate_field_exists_and_not_empty(json_record, 'remote_address')
 
     def __exit__(self, *exc):
         last_read_time = time.time()

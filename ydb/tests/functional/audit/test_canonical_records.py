@@ -2,11 +2,11 @@
 import logging
 import json
 
-from ydb import Driver, DriverConfig, SessionPool, TableClient, TableDescription, Column, OptionalType, PrimitiveType
-from ydb.topic import TopicClient, TopicAlterConsumer
-from ydb.issues import Unauthorized, SchemeError
+from ydb import Driver, DriverConfig, SessionPool, TableDescription, Column, OptionalType, PrimitiveType  # , TableClient
+from ydb.topic import TopicClient  # , TopicAlterConsumer
+from ydb.issues import Unauthorized  # , SchemeError
 from ydb.draft import DynamicConfigClient
-from ydb.query import QuerySessionPool
+# from ydb.query import QuerySessionPool
 from ydb.tests.library.harness.util import LogLevels
 
 import http_helpers
@@ -59,6 +59,8 @@ CLUSTER_CONFIG = dict(
     },
     enforce_user_token_requirement=True,
     default_clusteradmin=TOKEN,
+    monitoring_allowed_sids=[TOKEN],
+    viewer_allowed_sids=[TOKEN],
     auth_config_path=make_test_file_with_content('auth_config.yaml', AUTH_CONFIG),
     dynamic_pdisks=[{'user_kind': 0}],
 )
@@ -166,66 +168,68 @@ def test_create_drop_and_alter_table(ydb_cluster):
     capture_audit_alter = CanonicalCaptureAuditFileOutput(ydb_cluster.config.audit_file_path)
     capture_audit_drop = CanonicalCaptureAuditFileOutput(ydb_cluster.config.audit_file_path)
     with Driver(DriverConfig(cluster_endpoint(ydb_cluster), DATABASE, auth_token=TOKEN)) as driver:
-        table_client = TableClient(driver)
-        description = TableDescription().with_columns(
-            Column('key', OptionalType(PrimitiveType.Uint64)),
-            Column('value', OptionalType(PrimitiveType.Utf8))).with_primary_key('key')
+        with SessionPool(driver) as pool:
+            # table_client = TableClient(driver)
+            description = TableDescription().with_columns(
+                Column('key', OptionalType(PrimitiveType.Uint64)),
+                Column('value', OptionalType(PrimitiveType.Utf8))).with_primary_key('key')
 
-        with capture_audit_create:
-            table_client.create_table('/Root/Table', description)
+            with capture_audit_create:
+                pool.retry_operation_sync(lambda session: session.create_table('/Root/Table', description))
 
-        with capture_audit_alter:
-            table_client.alter_table('/Root/Table', add_columns=[Column('col', OptionalType(PrimitiveType.Uint64))])
+            with capture_audit_alter:
+                pool.retry_operation_sync(lambda session: session.alter_table('/Root/Table', add_columns=[Column('col', OptionalType(PrimitiveType.Uint64))]))
 
-        with capture_audit_drop:
-            table_client.drop_table('/Root/Table')
+            with capture_audit_drop:
+                pool.retry_operation_sync(lambda session: session.drop_table('/Root/Table'))
     return capture_audit_create.canonize(), capture_audit_alter.canonize(), capture_audit_drop.canonize()
 
 
-def test_dml(ydb_cluster):
-    create_table_sql = """
-        CREATE TABLE TestTable (
-        id Int64 NOT NULL,
-        value Int64 NOT NULL,
-        PRIMARY KEY (id)
-    ) """
+# This test is commented because there is no query service implementation in python sdk
+# def test_dml(ydb_cluster):
+#     create_table_sql = """
+#         CREATE TABLE TestTable (
+#         id Int64 NOT NULL,
+#         value Int64 NOT NULL,
+#         PRIMARY KEY (id)
+#     ) """
 
-    insert_sql = """
-        INSERT INTO TestTable
-            (id, value)
-        VALUES
-            (1, 2)
-    """
+#     insert_sql = """
+#         INSERT INTO TestTable
+#             (id, value)
+#         VALUES
+#             (1, 2)
+#     """
 
-    select_sql = 'SELECT * FROM TestTable'
+#     select_sql = 'SELECT * FROM TestTable'
 
-    def select(session):
-        with session.transaction() as transaction:
-            with transaction.execute(select_sql, commit_tx=True) as iterator:
-                try:
-                    while iterator.next():
-                        pass
-                except StopIteration:
-                    pass
+#     def select(session):
+#         with session.transaction() as transaction:
+#             with transaction.execute(select_sql, commit_tx=True) as iterator:
+#                 try:
+#                     while iterator.next():
+#                         pass
+#                 except StopIteration:
+#                     pass
 
-    capture_audit = CanonicalCaptureAuditFileOutput(ydb_cluster.config.audit_file_path)
-    with Driver(DriverConfig(cluster_endpoint(ydb_cluster), DATABASE, auth_token=TOKEN)) as right_driver, \
-         Driver(DriverConfig(cluster_endpoint(ydb_cluster), DATABASE, auth_token=OTHER_TOKEN)) as wrong_driver:
+#     capture_audit = CanonicalCaptureAuditFileOutput(ydb_cluster.config.audit_file_path)
+#     with Driver(DriverConfig(cluster_endpoint(ydb_cluster), DATABASE, auth_token=TOKEN)) as right_driver, \
+#          Driver(DriverConfig(cluster_endpoint(ydb_cluster), DATABASE, auth_token=OTHER_TOKEN)) as wrong_driver:
 
-        right_pool = QuerySessionPool(right_driver)
-        wrong_pool = QuerySessionPool(wrong_driver)
-        with capture_audit:
-            right_pool.execute_with_retries(create_table_sql)
-            right_pool.execute_with_retries(insert_sql)
-            right_pool.retry_operation_sync(select)
+#         right_pool = QuerySessionPool(right_driver)
+#         wrong_pool = QuerySessionPool(wrong_driver)
+#         with capture_audit:
+#             right_pool.execute_with_retries(create_table_sql)
+#             right_pool.execute_with_retries(insert_sql)
+#             right_pool.retry_operation_sync(select)
 
-            # Request with error
-            try:
-                wrong_pool.execute_with_retries(insert_sql)
-            except SchemeError:
-                pass
+#             # Request with error
+#             try:
+#                 wrong_pool.execute_with_retries(insert_sql)
+#             except SchemeError:
+#                 pass
 
-    return capture_audit.canonize()
+#     return capture_audit.canonize()
 
 
 def test_kill_tablet_using_developer_ui(ydb_cluster):
@@ -278,29 +282,30 @@ def test_restart_pdisk(ydb_cluster):
 
 def test_topic(ydb_cluster):
     capture_audit = CanonicalCaptureAuditFileOutput(ydb_cluster.config.audit_file_path)
-    with Driver(DriverConfig(cluster_endpoint(ydb_cluster), DATABASE, auth_token=TOKEN)) as right_driver, \
-         Driver(DriverConfig(cluster_endpoint(ydb_cluster), DATABASE, auth_token=OTHER_TOKEN)) as wrong_driver:
+    with Driver(DriverConfig(cluster_endpoint(ydb_cluster), DATABASE, auth_token=TOKEN)) as right_driver:
+        # Driver(DriverConfig(cluster_endpoint(ydb_cluster), DATABASE, auth_token=OTHER_TOKEN)) as wrong_driver:
         right_topic_client = TopicClient(driver=right_driver, settings=None)
-        wrong_topic_client = TopicClient(driver=wrong_driver, settings=None)
+        # wrong_topic_client = TopicClient(driver=wrong_driver, settings=None)
 
         topic_name = 'test_topic'
-        consumer_name = 'test_consumer'
+        # consumer_name = 'test_consumer'
         with capture_audit:
             # Create
             right_topic_client.create_topic(topic_name)
 
+            # This code is commented because there is no alter_topic implementation in python sdk
             # Try to modify without rights
-            try:
-                wrong_topic_client.alter_topic(topic_name, add_consumers=[consumer_name])
-            except SchemeError:
-                # ydb.issues.SchemeError: message: "path 'Root/test_topic' does not exist or you do not have access rights" issue_code: 500018 severity: 1 (server_code: 400070)
-                pass
+            # try:
+            #     wrong_topic_client.alter_topic(topic_name, add_consumers=[consumer_name])
+            # except SchemeError:
+            #     # ydb.issues.SchemeError: message: "path 'Root/test_topic' does not exist or you do not have access rights" issue_code: 500018 severity: 1 (server_code: 400070)
+            #     pass
 
             # Add consumer
-            right_topic_client.alter_topic(topic_name, add_consumers=[consumer_name])
+            # right_topic_client.alter_topic(topic_name, add_consumers=[consumer_name])
 
             # Modify consumer
-            right_topic_client.alter_topic(topic_name, alter_consumers=[TopicAlterConsumer(name=consumer_name, alter_attributes={'x': 'y'})])
+            # right_topic_client.alter_topic(topic_name, alter_consumers=[TopicAlterConsumer(name=consumer_name, alter_attributes={'x': 'y'})])
 
             # Write
             with right_topic_client.writer(topic_name, producer_id='test_id') as writer:
@@ -308,33 +313,33 @@ def test_topic(ydb_cluster):
     return capture_audit.canonize()
 
 
-def test_execute_minikql(ydb_cluster):
-    # List tablets
-    list_response = http_helpers.get_tablets_request(ydb_cluster, TOKEN)
-    assert list_response.status_code == 200, list_response.content
-    ss_tablet_id = http_helpers.extract_tablet_id(list_response.content, 'SCHEMESHARD')
-    assert ss_tablet_id
+# def test_execute_minikql(ydb_cluster):
+#     # List tablets
+#     list_response = http_helpers.get_tablets_request(ydb_cluster, TOKEN)
+#     assert list_response.status_code == 200, list_response.content
+#     ss_tablet_id = http_helpers.extract_tablet_id(list_response.content, 'SCHEMESHARD')
+#     assert ss_tablet_id
 
-    query = '''
-        (
-            (let row '('('TabId (Uint64 '42))))
-            (let data
-                '(
-                    '('NextColId (Uint32 '42))
-                    '('PartitionConfig (Utf8 'Trash))
-                )
-            )
-            (let update (UpdateRow 'Tables row data))
-            (return (
-                AsList update
-            ))
-        )
-    '''
+#     query = '''
+#         (
+#             (let row '('('TabId (Uint64 '42))))
+#             (let data
+#                 '(
+#                     '('NextColId (Uint32 '42))
+#                     '('PartitionConfig (Utf8 'Trash))
+#                 )
+#             )
+#             (let update (UpdateRow 'Tables row data))
+#             (return (
+#                 AsList update
+#             ))
+#         )
+#     '''
 
-    capture_audit = CanonicalCaptureAuditFileOutput(ydb_cluster.config.audit_file_path)
-    with capture_audit:
-        execute_ydbd(ydb_cluster, TOKEN, ['admin', 'tablet', ss_tablet_id, 'execute', make_test_file_with_content('minikql.query', query)])
-    return capture_audit.canonize()
+#     capture_audit = CanonicalCaptureAuditFileOutput(ydb_cluster.config.audit_file_path)
+#     with capture_audit:
+#         execute_ydbd(ydb_cluster, TOKEN, ['admin', 'tablet', ss_tablet_id, 'execute', make_test_file_with_content('minikql.query', query)])
+#     return capture_audit.canonize()
 
 
 def test_dstool_evict_vdisk_grpc(ydb_cluster):

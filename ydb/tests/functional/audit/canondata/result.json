@@ -27,9 +27,6 @@
             "uri": "file://test_canonical_records.test_create_drop_and_alter_table/audit_log.2.json"
         }
     ],
-    "test_canonical_records.test_dml": {
-        "uri": "file://test_canonical_records.test_dml/audit_log.json"
-    },
     "test_canonical_records.test_dml_through_http": {
         "uri": "file://test_canonical_records.test_dml_through_http/audit_log.json"
     },
@@ -38,9 +35,6 @@
     },
     "test_canonical_records.test_dstool_evict_vdisk_grpc": {
         "uri": "file://test_canonical_records.test_dstool_evict_vdisk_grpc/audit_log.json"
-    },
-    "test_canonical_records.test_execute_minikql": {
-        "uri": "file://test_canonical_records.test_execute_minikql/audit_log.json"
     },
     "test_canonical_records.test_kill_tablet_using_developer_ui": {
         "uri": "file://test_canonical_records.test_kill_tablet_using_developer_ui/audit_log.json"

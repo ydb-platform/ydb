@@ -699,7 +699,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
 
     void ListChangefeeds() {
         CreateClient();
-        ListObjects(ImportInfo->GetItemSrcPrefix(ItemIdx) + "/");;
+        ListObjects(ImportInfo->GetItemSrcPrefix(ItemIdx) + "/");
     }
 
     void DownloadMetadata() {

@@ -35,17 +35,13 @@ private:
 
 void TColumnShard::MaybeCleanupLock(const ui64 lockId) {
     auto lock = OperationsManager->GetLockOptional(lockId);
-    if (!lock || !lock->IsDeleted() || lock->IsAborted() || lock->HasTxId()) {
+    if (!lock || !lock->IsDeleted() || lock->IsAborted() || lock->IsTxIdAssigned() || lock->GetOperationsInProgress()) {
         return;
     }
 
-    for (auto&& op : lock->GetWriteOperations()) {
-        if (!op->GetIsFinished()) {
-            return;
-        }
+    if (!lock->SetAborted()) {
+        return;
     }
-
-    lock->SetAborted();
 
     Execute(new TAbortWriteLockTransaction(this, lockId));
 }

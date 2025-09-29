@@ -143,7 +143,7 @@ void TTxBlobsWritingFinished::DoComplete(const TActorContext& ctx) {
             Self->OperationsManager->CommitTransactionOnComplete(*Self, op->GetLockId(), *CommitSnapshot);
             Self->Counters.GetTabletCounters()->IncCounter(COUNTER_IMMEDIATE_TX_COMPLETED);
         } else {
-            op->SetIsFinished(true);
+            Self->GetOperationsManager().SetOperationFinished(op->GetWriteId());
             Self->MaybeCleanupLock(op->GetLockId());
         }
         Self->Counters.GetCSCounters().OnWriteTxComplete(now - writeMeta.GetWriteStartInstant());

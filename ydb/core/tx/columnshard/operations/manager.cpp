@@ -222,7 +222,7 @@ std::optional<ui64> TOperationsManager::GetLockForTx(const ui64 txId) const {
 
 void TOperationsManager::LinkTransactionOnExecute(const ui64 lockId, const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc) {
     auto& lock = GetLockVerified(lockId);
-    lock.SetTxId(txId);
+    lock.SetTxIdAssigned();
 
     NIceDb::TNiceDb db(txc.DB);
     db.Table<Schema::OperationTxIds>().Key(txId, lockId).Update();
@@ -332,6 +332,12 @@ void TOperationsManager::AddEventForLock(
         container.AddToInteraction(InteractionsContext);
         txLock.AddTxEvent(std::move(container));
     }
+}
+
+void TOperationsManager::SetOperationFinished(const TOperationWriteId writeId) {
+    auto operation = GetOperationVerified(writeId);
+    auto& lock = GetLockVerified(operation->GetLockId());
+    lock.OnWriteOperationFinished();
 }
 
 }   // namespace NKikimr::NColumnShard

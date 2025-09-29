@@ -62,7 +62,6 @@ private:
     YDB_READONLY(NEvWrite::EModificationType, ModificationType, NEvWrite::EModificationType::Upsert);
     YDB_READONLY_FLAG(Bulk, false);
     const std::shared_ptr<TAtomicCounter> Activity = std::make_shared<TAtomicCounter>(1);
-    YDB_ACCESSOR(bool, IsFinished, false);
 
 public:
     using TPtr = std::shared_ptr<TWriteOperation>;

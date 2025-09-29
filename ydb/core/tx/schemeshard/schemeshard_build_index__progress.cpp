@@ -610,6 +610,20 @@ private:
             : request.GetTabletId());
     }
 
+    void FillBuildInfoColumns(TIndexBuildInfo& buildInfo, TTableColumns&& columns) {
+        buildInfo.FillIndexColumns.clear();
+        buildInfo.FillIndexColumns.reserve(columns.Keys.size());
+        for (const auto& x: columns.Keys) {
+            buildInfo.FillIndexColumns.emplace_back(x);
+            columns.Columns.erase(x);
+        }
+        buildInfo.FillDataColumns.clear();
+        buildInfo.FillDataColumns.reserve(columns.Columns.size());
+        for (const auto& x: columns.Columns) {
+            buildInfo.FillDataColumns.emplace_back(x);
+        }
+    }
+
     void SendSampleKRequest(TShardIdx shardIdx, TIndexBuildInfo& buildInfo) {
         Y_ENSURE(buildInfo.IsBuildVectorIndex());
         auto ev = MakeHolder<TEvDataShard::TEvSampleKRequest>();
@@ -821,19 +835,7 @@ private:
                 buildInfo.TargetName = implTable.PathString();
 
                 const auto& implTableInfo = Self->Tables.at(implTable.Base()->PathId);
-                auto implTableColumns = NTableIndex::ExtractInfo(implTableInfo);
-                buildInfo.FillIndexColumns.clear();
-                buildInfo.FillIndexColumns.reserve(implTableColumns.Keys.size());
-                for (const auto& x: implTableColumns.Keys) {
-                    buildInfo.FillIndexColumns.emplace_back(x);
-                    implTableColumns.Columns.erase(x);
-                }
-                // TODO(mbkkt) why order doesn't matter?
-                buildInfo.FillDataColumns.clear();
-                buildInfo.FillDataColumns.reserve(implTableColumns.Columns.size());
-                for (const auto& x: implTableColumns.Columns) {
-                    buildInfo.FillDataColumns.emplace_back(x);
-                }
+                FillBuildInfoColumns(buildInfo, NTableIndex::ExtractInfo(implTableInfo));
             }
             *ev->Record.MutableIndexColumns() = {
                 buildInfo.FillIndexColumns.begin(),
@@ -910,18 +912,7 @@ private:
             buildInfo.TargetName = implTable.PathString();
 
             const auto& implTableInfo = Self->Tables.at(implTable.Base()->PathId);
-            auto implTableColumns = NTableIndex::ExtractInfo(implTableInfo);
-            buildInfo.FillIndexColumns.clear();
-            buildInfo.FillIndexColumns.reserve(implTableColumns.Keys.size());
-            for (const auto& x: implTableColumns.Keys) {
-                buildInfo.FillIndexColumns.emplace_back(x);
-                implTableColumns.Columns.erase(x);
-            }
-            buildInfo.FillDataColumns.clear();
-            buildInfo.FillDataColumns.reserve(implTableColumns.Columns.size());
-            for (const auto& x: implTableColumns.Columns) {
-                buildInfo.FillDataColumns.emplace_back(x);
-            }
+            FillBuildInfoColumns(buildInfo, NTableIndex::ExtractInfo(implTableInfo));
         }
         ev->Record.SetIndexName(buildInfo.TargetName);
         *ev->Record.MutableSettings() = std::get<NKikimrSchemeOp::TFulltextIndexDescription>(

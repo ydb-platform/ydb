@@ -79,7 +79,7 @@ NYT::TNode MakeWatermarkOutputSchema() {
 }
 
 struct TInputType {
-    const TVector<const TVector<NYql::NUdf::TUnboxedValue>*>& Values;
+    const TVector<std::span<NYql::NUdf::TUnboxedValue>>& Values;
     ui64 NumberRows;
 };
 
@@ -156,8 +156,9 @@ public:
 
                 items[OffsetPosition] = NYql::NUdf::TUnboxedValuePod(rowId);
 
-                for (ui64 fieldId = 0; const auto column : input.Values) {
-                    items[FieldsPositions[fieldId++]] = column->at(rowId);
+                for (ui64 fieldId = 0; const auto& column : input.Values) {
+                    Y_DEBUG_ABORT_UNLESS(column.size() > rowId);
+                    items[FieldsPositions[fieldId++]] = column[rowId];
                 }
 
                 Worker->Push(std::move(result));
@@ -419,7 +420,7 @@ public:
         ActiveFilters_->Dec();
     }
 
-    void ProcessData(const TVector<const TVector<NYql::NUdf::TUnboxedValue>*>& values, ui64 numberRows) const override {
+    void ProcessData(const TVector<std::span<NYql::NUdf::TUnboxedValue>>& values, ui64 numberRows) const override {
         LOG_ROW_DISPATCHER_TRACE("ProcessData for " << numberRows << " rows");
 
         if (!ProgramHolder_) {

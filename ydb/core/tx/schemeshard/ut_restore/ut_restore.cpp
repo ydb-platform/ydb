@@ -5360,7 +5360,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         )", pkType.c_str()), {{pkType == "UTF8" ? "a" : "", 1}}, permissions);
 
         bucketContent.emplace("/" + tableName, data);
-        return [tableName = TString(tableName)](TTestBasicRuntime& runtime) {
+        return [&tableName](TTestBasicRuntime& runtime) {
             TestDescribeResult(DescribePath(runtime, "/MyRoot/" + tableName), {
                 NLs::PathExist
             });

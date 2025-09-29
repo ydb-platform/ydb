@@ -162,8 +162,8 @@ private:
                     PoolElapsedMicrosecPrevValue[i] = elapsedMs;
                 }
                 if (PoolPotentialMaxThreadPercent[i] && PoolPotentialMaxThreadPercent[i]->Val()) {
-                    limitCore = PoolPotentialMaxThreadPercent[i]->Val() / 100.;
-                    CpuLimitCorePercents[i]->Set(limitCore * 100);
+                    limitCore = PoolPotentialMaxThreadPercent[i]->Val();
+                    CpuLimitCorePercents[i]->Set(limitCore);
                 } else {
                     limitCore = Config.Pools[i].ThreadCount;
                     CpuLimitCorePercents[i]->Set(limitCore * 100);

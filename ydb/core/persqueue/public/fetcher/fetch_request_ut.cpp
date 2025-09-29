@@ -110,6 +110,7 @@ Y_UNIT_TEST_SUITE(TFetchRequestTests) {
     Y_UNIT_TEST(CheckAccess) {
         auto setup = std::make_shared<TPersQueueYdbSdkTestSetup>(TEST_CASE_NAME);
         auto& runtime = setup->GetRuntime();
+        runtime.SetLogPriority(NKikimrServices::PQ_FETCH_REQUEST, NActors::NLog::EPriority::PRI_DEBUG);
         StartSchemeCache(runtime);
 
         ui32 totalPartitions = 5;

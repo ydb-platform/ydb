@@ -5241,11 +5241,11 @@ Y_UNIT_TEST_SUITE(TImportTests) {
     using SchemeFunction = std::function<std::function<void(TTestBasicRuntime&)>(THashMap<TString, TTestDataWithScheme>&, const TString&, const TString&)>;
 
     struct TTableWithChangefeeds {
-        TString TableName = "Table";
-        TString PkType = "UTF8";
-        ui64 ChangefeedCount = 1;
-        SchemeFunction AddedScheme = AddedScheme;
-        int MaxPartitions = 3;
+        TString TableName;
+        TString PkType;
+        ui64 ChangefeedCount;
+        SchemeFunction AddedScheme;
+        int MaxPartitions;
     };
 
     TGeneratedChangefeed GenChangefeed(ui64 num = 1, bool isPartitioningAvailable = true, const TString& tableName = "Table", int maxPartitions = 3) {
@@ -5485,16 +5485,16 @@ Y_UNIT_TEST_SUITE(TImportTests) {
     // Test for tables with similar prefixes
     Y_UNIT_TEST(ChangefeedTablePrefixConflict) {
         TestImportChangefeeds({
-            {"table", "UTF8", 0},         // table without changefeed
-            {"table_prefix", "UTF8", 1}   // table_prefix with changefeed
+            {"table", "UTF8", 0, AddedScheme, 3},         // table without changefeed
+            {"table_prefix", "UTF8", 1, AddedScheme, 3}   // table_prefix with changefeed
         });
     }
 
     // Test that identical changefeeds are correctly applied to their respective tables with common prefix
     Y_UNIT_TEST(ChangefeedTablePrefixConflictDiffTableDesc) {      
         TestImportChangefeeds({
-            {"table", "UINT32", 1},       // partitioning available (table property)
-            {"table_prefix", "UTF8", 1}   // partitioning unavailable (table property)
+            {"table", "UINT32", 1, AddedScheme, 3},       // partitioning available (table property)
+            {"table_prefix", "UTF8", 1, AddedScheme, 3}   // partitioning unavailable (table property)
         });
     }
 

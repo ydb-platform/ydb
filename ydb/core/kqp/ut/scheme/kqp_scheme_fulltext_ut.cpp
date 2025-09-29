@@ -66,8 +66,7 @@ Y_UNIT_TEST_SUITE(KqpSchemeFulltext) {
                     WITH (layout=flat, tokenizer=whitespace, use_filter_lowercase=true)
             )";
             auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
-            // TODO: implement build index
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
     }
 

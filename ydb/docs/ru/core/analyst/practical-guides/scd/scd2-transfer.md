@@ -1,38 +1,38 @@
 # Реализация SCD2 (append-only) с использованием трансфера и операций слияния
 
-В этой статье описывается реализация паттерна Slowly Changing Dimensions Type 2 (SCD2) в YDB.
+В этой статье описывается реализация паттерна Slowly Changing Dimensions Type 2 (SCD2) в {{ ydb-short-name }}.
 
 ## Используемые инструменты
 
-Для поставки данных в SCD2 таблицу в данной статье будет использоваться следующая комбинация из доступной в {{ ydb-short-name }} функциональности:
+Для поставки данных в SCD2-таблицу в данной статье будет использоваться следующая комбинация доступных возможностей {{ ydb-short-name }}:
 
 1. Таблица-источник будет [строковой](../../../concepts/datamodel/table.md#row-oriented-table) для оперативных транзакционных изменений;
 2. Таблица-приёмник будет [колоночной](../../../concepts/datamodel/table.md#column-oriented-table) для эффективного выполнения аналитических запросов;
-3. Подписка на изменения в таблице-источники будет осуществляться через механизм [Change Data Capture (CDC)](../../../concepts/cdc.md);
-4. За буферизацию изменений будет отвечать неявно создаваемый под CDC [топик](../../../concepts/datamodel/topic.md);
+3. Подписка на изменения в таблице-источнике будет осуществляться через механизм [Change Data Capture (CDC)](../../../concepts/cdc.md);
+4. За буферизацию изменений будет отвечать неявно создаваемый для CDC [топик](../../../concepts/datamodel/topic.md);
 5. За автоматическое перекладывание данных из CDC-топика в таблицу-приёмник будет отвечать [трансфер](../../../concepts/transfer.md).
 
 ## Создайте таблицу-источник данных, которая будет генерировать CDC-события
 
-  ```sql
-  CREATE TABLE source_customers (
-      id Utf8 NOT NULL,
-      attribute1 Utf8,
-      attribute2 Utf8,
-      PRIMARY KEY (id)
-  );
+```sql
+CREATE TABLE source_customers (
+    id Utf8 NOT NULL,
+    attribute1 Utf8,
+    attribute2 Utf8,
+    PRIMARY KEY (id)
+);
 
-  ALTER TABLE `source_customers` ADD CHANGEFEED `updates` WITH (
-    FORMAT = 'DEBEZIUM_JSON',
-    MODE = 'NEW_AND_OLD_IMAGES'
-  );
-  ```
+ALTER TABLE `source_customers` ADD CHANGEFEED `updates` WITH (
+  FORMAT = 'DEBEZIUM_JSON',
+  MODE = 'NEW_AND_OLD_IMAGES'
+);
+```
 
-## Создайте таблицу для приема изменений
+## Создайте таблицу для приёма изменений
 
-  ```sql
-    CREATE TABLE dimension_scd_changes (
-        id Utf8 NOT NULL,
+```sql
+CREATE TABLE dimension_scd_changes (
+    id Utf8 NOT NULL,
         attribute1 Utf8,
         attribute2 Utf8,
         change_time Timestamp NOT NULL,

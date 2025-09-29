@@ -13,6 +13,7 @@ Notes
     ||
 || `Bool` |
 Boolean value |
+Not available for column-oriented tables
     ||
 || `Int8` |
 Signed integer
@@ -62,7 +63,7 @@ Real number with fixed precision, 16 bytes in size. Precision is the maximum tot
 || `DyNumber` |
 Binary representation of a real number with precision up to 38 digits.
 | Acceptable values: positive from 1×10<sup>-130</sup> to 1×10<sup>126</sup>–1, negative from -1×10<sup>126</sup>–1 to -1×10<sup>-130</sup> and 0.
-Compatible with the `Number` type in AWS DynamoDB. Not recommended for use in {{ backend_name_lower }}-native applications. |
+Compatible with the `Number` type in AWS DynamoDB. Not recommended for use in {{ backend_name_lower }}-native applications. Not available for column-oriented tables. |
     ||
 {% endif %}
 |#
@@ -92,6 +93,7 @@ Doesn't support matching{% if feature_map_tables %}, can't be used in the primar
     ||
 || `Uuid` |
 Universal identifier [UUID](https://tools.ietf.org/html/rfc4122) |
+Not available for column-oriented tables
     ||
 |#
 
@@ -201,7 +203,7 @@ from -136 years to +136 years
 |
 8
 |
-{% if feature_map_tables %}Can't be used in the primary key or in columns that form the key of a secondary index.{% else %}—{% endif %}
+{% if feature_map_tables %}Can't be used in the primary key or in columns that form the key of a secondary index.{% else %}—{% endif %} Not available for column-oriented tables
 ||
 
 ||

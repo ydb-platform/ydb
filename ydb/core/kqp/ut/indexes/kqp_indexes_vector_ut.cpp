@@ -100,7 +100,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         std::string_view right,
         bool covered = false
     ) {
-        constexpr std::string_view target = "$target = \"\x67\x71\x03\";";
+        constexpr std::string_view target = "$target = \"\x67\x71\x02\";";
         std::string metric = std::format("Knn::{}({}, {})", function, left, right);
         // no metric in result
         {
@@ -214,16 +214,16 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         {
             const TString query1 = TStringBuilder()
                 << "UPSERT INTO `/Root/TestTable` (pk, emb, " << dataCol << ") VALUES "
-                << "(0, \"\x03\x30\x03\", \"0\"),"
-                    "(1, \"\x13\x31\x03\", \"1\"),"
-                    "(2, \"\x23\x32\x03\", \"2\"),"
-                    "(3, \"\x53\x33\x03\", \"3\"),"
-                    "(4, \"\x43\x34\x03\", \"4\"),"
-                    "(5, \"\x50\x60\x03\", \"5\"),"
-                    "(6, \"\x61\x11\x03\", \"6\"),"
-                    "(7, \"\x12\x62\x03\", \"7\"),"
-                    "(8, \"\x75\x76\x03\", \"8\"),"
-                    "(9, \"\x76\x76\x03\", \"9\");";
+                << "(0, \"\x03\x30\x02\", \"0\"),"
+                    "(1, \"\x13\x31\x02\", \"1\"),"
+                    "(2, \"\x23\x32\x02\", \"2\"),"
+                    "(3, \"\x53\x33\x02\", \"3\"),"
+                    "(4, \"\x43\x34\x02\", \"4\"),"
+                    "(5, \"\x50\x60\x02\", \"5\"),"
+                    "(6, \"\x61\x11\x02\", \"6\"),"
+                    "(7, \"\x12\x62\x02\", \"7\"),"
+                    "(8, \"\x75\x76\x02\", \"8\"),"
+                    "(9, \"\x76\x76\x02\", \"9\");";
 
             auto result = session.ExecuteDataQuery(Q_(query1), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
                 .ExtractValueSync();
@@ -505,7 +505,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
             rows.AddListItem()
                 .BeginStruct()
                 .AddMember("pk").Int64(11)
-                .AddMember("emb").String("\x77\x77\x03")
+                .AddMember("emb").String("\x77\x77\x02")
                 .AddMember("data").String("43")
                 .EndStruct();
             rows.EndList();
@@ -538,7 +538,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
                 .ExtractValueSync();
             UNIT_ASSERT(result.IsSuccess());
             if (returning) {
-                UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[[\"9\"];[\"vv\\3\"];[9]]]");
+                UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[[\"9\"];[\"vv\\2\"];[9]]]");
             }
         }
 
@@ -605,8 +605,8 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         {
             TString query1(Q_(R"(
                 INSERT INTO `/Root/TestTable` (pk, emb, data) VALUES
-                (10, "\x11\x62\x03", "10"),
-                (11, "\x77\x75\x03", "11")
+                (10, "\x11\x62\x02", "10"),
+                (11, "\x77\x75\x02", "11")
             )"));
             query1 += (returning ? " RETURNING data, emb, pk;" : ";");
 
@@ -614,7 +614,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
                 .ExtractValueSync();
             UNIT_ASSERT(result.IsSuccess());
             if (returning) {
-                UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[[\"10\"];[\"\\021b\\3\"];[10]];[[\"11\"];[\"wu\\3\"];[11]]]");
+                UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[[\"10\"];[\"\\021b\\2\"];[10]];[[\"11\"];[\"wu\\2\"];[11]]]");
             }
         }
 
@@ -711,7 +711,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         // Update to the table with index should succeed (embedding changes, but the cluster does not)
         {
             const TString query1(Q_(R"(
-                UPDATE `/Root/TestTable` SET `emb`="\x76\x75\x03" WHERE `pk`=9;
+                UPDATE `/Root/TestTable` SET `emb`="\x76\x75\x02" WHERE `pk`=9;
             )"));
 
             auto result = session.ExecuteDataQuery(query1, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
@@ -721,7 +721,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
 
         const TString updated = ReadTablePartToYson(session, "/Root/TestTable/index1/indexImplPostingTable");
         if (Covered) {
-            SubstGlobal(orig, "\"\x76\x76\\3\"", "\"\x76\x75\\3\"");
+            SubstGlobal(orig, "\"\x76\x76\\2\"", "\"\x76\x75\\2\"");
         }
         UNIT_ASSERT_STRINGS_EQUAL(orig, updated);
     }
@@ -748,7 +748,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
                 .ExtractValueSync();
             UNIT_ASSERT(result.IsSuccess());
             if (returning) {
-                UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[[\"9\"];[\"\\0031\\3\"];[9]]]");
+                UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[[\"9\"];[\"\\0031\\2\"];[9]]]");
             }
         }
 
@@ -769,27 +769,27 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
     }
 
     Y_UNIT_TEST_TWIN(VectorIndexUpdatePkClusterChange, Covered) {
-        DoTestVectorIndexUpdateClusterChange(Q_(R"(UPDATE `/Root/TestTable` SET `emb`="\x03\x31\x03" WHERE `pk`=9;)"), false, Covered);
+        DoTestVectorIndexUpdateClusterChange(Q_(R"(UPDATE `/Root/TestTable` SET `emb`="\x03\x31\x02" WHERE `pk`=9;)"), false, Covered);
     }
 
     Y_UNIT_TEST_TWIN(VectorIndexUpdateFilterClusterChange, Covered) {
-        DoTestVectorIndexUpdateClusterChange(Q_(R"(UPDATE `/Root/TestTable` SET `emb`="\x03\x31\x03" WHERE `data`="9";)"), false, Covered);
+        DoTestVectorIndexUpdateClusterChange(Q_(R"(UPDATE `/Root/TestTable` SET `emb`="\x03\x31\x02" WHERE `data`="9";)"), false, Covered);
     }
 
     Y_UNIT_TEST_TWIN(VectorIndexUpsertClusterChange, Covered) {
-        DoTestVectorIndexUpdateClusterChange(Q_(R"(UPSERT INTO `/Root/TestTable` (`pk`, `emb`, `data`) VALUES (9, "\x03\x31\x03", "9");)"), false, Covered);
+        DoTestVectorIndexUpdateClusterChange(Q_(R"(UPSERT INTO `/Root/TestTable` (`pk`, `emb`, `data`) VALUES (9, "\x03\x31\x02", "9");)"), false, Covered);
     }
 
     Y_UNIT_TEST_TWIN(VectorIndexUpdatePkClusterChangeReturning, Covered) {
-        DoTestVectorIndexUpdateClusterChange(Q_(R"(UPDATE `/Root/TestTable` SET `emb`="\x03\x31\x03" WHERE `pk`=9 RETURNING `data`, `emb`, `pk`;)"), true, Covered);
+        DoTestVectorIndexUpdateClusterChange(Q_(R"(UPDATE `/Root/TestTable` SET `emb`="\x03\x31\x02" WHERE `pk`=9 RETURNING `data`, `emb`, `pk`;)"), true, Covered);
     }
 
     Y_UNIT_TEST_TWIN(VectorIndexUpdateFilterClusterChangeReturning, Covered) {
-        DoTestVectorIndexUpdateClusterChange(Q_(R"(UPDATE `/Root/TestTable` SET `emb`="\x03\x31\x03" WHERE `data`="9" RETURNING `data`, `emb`, `pk`;)"), true, Covered);
+        DoTestVectorIndexUpdateClusterChange(Q_(R"(UPDATE `/Root/TestTable` SET `emb`="\x03\x31\x02" WHERE `data`="9" RETURNING `data`, `emb`, `pk`;)"), true, Covered);
     }
 
     Y_UNIT_TEST_TWIN(VectorIndexUpsertClusterChangeReturning, Covered) {
-        DoTestVectorIndexUpdateClusterChange(Q_(R"(UPSERT INTO `/Root/TestTable` (`pk`, `emb`, `data`) VALUES (9, "\x03\x31\x03", "9") RETURNING `data`, `emb`, `pk`;)"), true, Covered);
+        DoTestVectorIndexUpdateClusterChange(Q_(R"(UPSERT INTO `/Root/TestTable` (`pk`, `emb`, `data`) VALUES (9, "\x03\x31\x02", "9") RETURNING `data`, `emb`, `pk`;)"), true, Covered);
     }
 
     // First index level build is processed differently when table has 1 and >1 partitions so we check both cases
@@ -819,7 +819,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         {
             TString query1(Q_(R"(
                 INSERT INTO `/Root/TestTable` (pk, emb, data) VALUES
-                (10, "\x11\x62\x03", "10");
+                (10, "\x11\x62\x02", "10");
             )"));
 
             auto result = session.ExecuteDataQuery(query1, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
@@ -843,7 +843,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
             const TString query1(Q_(R"(
                 SELECT pk FROM `/Root/TestTable`
                 VIEW index1
-                ORDER BY Knn::CosineDistance(emb, "AA\x03")
+                ORDER BY Knn::CosineDistance(emb, "AA\x02")
             )"));
             auto result = session.ExecuteDataQuery(query1, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
                 .ExtractValueSync();

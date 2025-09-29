@@ -8,7 +8,7 @@ The terms "simple", "primitive", and "elementary" data types are used synonymous
 
 | Type | Description | Notes |
 | ----- | ----- | ----- |
-| `Bool` | Boolean value. | |
+| `Bool` | Boolean value. | Not available for column-oriented tables |
 | `Int8` | A signed integer.<br/>Acceptable values: from -2<sup>7</sup> to 2<sup>7</sup>–1. | |
 | `Int16` | A signed integer.<br/>Acceptable values: from –2<sup>15</sup> to 2<sup>15</sup>–1. | |
 | `Int32` | A signed integer.<br/>Acceptable values: from –2<sup>31</sup> to 2<sup>31</sup>–1. | |
@@ -63,7 +63,7 @@ To store numbers (JSON Number) in `JsonDocument`, as well as for arithmetic oper
 | `Date` | Date, precision to the day | Range of values for all time types except `Interval`: From 00:00 01.01.1970 to 00:00 01.01.2106. Internal `Date` representation: Unsigned 16-bit integer |
 | `Datetime` | Date/time, precision to the second | Internal representation: Unsigned 32-bit integer |
 | `Timestamp` | Date/time, precision to the microsecond | Internal representation: Unsigned 64-bit integer |
-| `Interval` | Time interval (signed), precision to microseconds | Value range: From -136 years to +136 years. Internal representation: Signed 64-bit integer. {% if feature_map_tables %}Can't be used in the primary key{% endif %} Not available for column-oriented tables |
+| `Interval` | Time interval (signed), precision to microseconds | Value range: From -136 years to +136 years. Internal representation: Signed 64-bit integer. {% if feature_map_tables %}Can't be used in the primary key{% endif %}. Not available for column-oriented tables |
 | `TzDate` | Date with time zone label, precision to the day | Not supported in table columns |
 | `TzDateTime` | Date/time with time zone label, precision to the second | Not supported in table columns |
 | `TzTimestamp` | Date/time with time zone label, precision to the microsecond | Not supported in table columns |

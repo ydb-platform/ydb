@@ -306,10 +306,6 @@ void TColumnShardScan::ContinueProcessing() {
     while (ScanIterator && ProduceResults()) {
     }
     if (!!AckReceivedInstant) {
-        if (!ResultsForReplyBuildGuard) {
-            ResultsForReplyBuildGuard.emplace(ScanCountersPool.GetResultsForReplyGuard());
-        }
-
         LastResultInstant = TMonotonic::Now();
     }
 
@@ -411,7 +407,6 @@ bool TColumnShardScan::SendResult(bool pageFault, bool lastBatch) {
     }
     ReadMetadataRange->OnReplyConstruction(TabletId, *Result);
     AckReceivedInstant.reset();
-    ResultsForReplyBuildGuard.reset();
     LastResultInstant = TMonotonic::Now();
 
     Result->CpuTime = ScanCountersPool.GetExecutionDuration();

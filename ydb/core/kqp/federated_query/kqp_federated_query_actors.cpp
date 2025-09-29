@@ -288,9 +288,14 @@ void TDescribeSchemaSecretsService::HandleNotifyUpdate(TSchemeBoardEvents::TEvNo
 
 void TDescribeSchemaSecretsService::HandleNotifyDelete(TSchemeBoardEvents::TEvNotifyDelete::TPtr& ev) {
     const TString& secretName = CanonizePath(ev->Get()->Path);
+
+    if (SecretUpdateListener) {
+        SecretUpdateListener->HandleNotifyDelete(secretName);
+    }
+
     VersionedSecrets.erase(secretName);
 
-    auto subscriberIt = SchemeBoardSubscribers.find(secretName);
+    const auto subscriberIt = SchemeBoardSubscribers.find(secretName);
     Y_ENSURE(subscriberIt != SchemeBoardSubscribers.end());
     Send(subscriberIt->second, new TEvents::TEvPoisonPill());
     SchemeBoardSubscribers.erase(subscriberIt);
@@ -368,7 +373,7 @@ NThreading::TFuture<TEvDescribeSecretsResponse::TDescription> DescribeExternalDa
     }
 }
 
-IActor* CreateDescribeSchemaSecretsService() {
+IActor* TDescribeSchemaSecretsServiceFactory::CreateService() {
     return new TDescribeSchemaSecretsService();
 }
 

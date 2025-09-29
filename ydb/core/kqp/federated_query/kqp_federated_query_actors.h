@@ -85,11 +85,23 @@ public:
 
     void Bootstrap();
 
+public:
+    // For tests only
+    class ISecretUpdateListener : public TThrRefBase {
+    public:
+        virtual void HandleNotifyDelete(const TString& secretName) = 0;
+        virtual ~ISecretUpdateListener() = default;
+    };
+    void SetSecretUpdateListener(ISecretUpdateListener* secretUpdateListener) {
+        SecretUpdateListener = secretUpdateListener;
+    }
+
 private:
     ui64 LastCookie = 0;
     THashMap<ui64, TResponseContext> ResolveInFlight;
     THashMap<TString, TVersionedSecret> VersionedSecrets;
     THashMap<TString, TActorId> SchemeBoardSubscribers;
+    ISecretUpdateListener* SecretUpdateListener;
 };
 
 IActor* CreateDescribeSecretsActor(const TString& ownerUserId, const std::vector<TString>& secretIds, NThreading::TPromise<TEvDescribeSecretsResponse::TDescription> promise);
@@ -99,5 +111,18 @@ void RegisterDescribeSecretsActor(const TActorId& replyActorId, const TString& o
 NThreading::TFuture<TEvDescribeSecretsResponse::TDescription> DescribeExternalDataSourceSecrets(const NKikimrSchemeOp::TAuth& authDescription, const TString& ownerUserId, TActorSystem* actorSystem);
 
 IActor* CreateDescribeSchemaSecretsService();
+
+class IDescribeSchemaSecretsServiceFactory {
+public:
+    using TPtr = std::shared_ptr<IDescribeSchemaSecretsServiceFactory>;
+
+    virtual IActor* CreateService() = 0;
+    virtual ~IDescribeSchemaSecretsServiceFactory() = default;
+};
+
+class TDescribeSchemaSecretsServiceFactory : public IDescribeSchemaSecretsServiceFactory {
+public:
+    IActor* CreateService() override;
+};
 
 }  // namespace NKikimr::NKqp

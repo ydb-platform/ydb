@@ -2,7 +2,7 @@ name: Regression-run_Large
 
 on:
   schedule:
-    - cron: "30 23 * * *"  # At 23:30 every day
+    - cron: "30 23 * * FRI"  # At 23:30 every friday
   workflow_dispatch:
     inputs:
       use_default_branches:

@@ -298,13 +298,12 @@ public:
             return OnTopicAltered(ctx);
         }
 
-        TString groupId = Settings.Partitions[0].ClientId; // TODO why always partitions[0]?
-        if (groupId == NKikimr::NPQ::CLIENTID_WITHOUT_CONSUMER) {
+        if (Settings.Consumer == NKikimr::NPQ::CLIENTID_WITHOUT_CONSUMER) {
             return OnTopicAltered(ctx);
         }
 
         for (auto& [topicPath, info]: TopicInfo) {
-            if (HasConsumer(info.PQInfo->Description.GetPQTabletConfig(), groupId)) {
+            if (HasConsumer(info.PQInfo->Description.GetPQTabletConfig(), Settings.Consumer)) {
                 continue;
             }
 
@@ -312,7 +311,7 @@ public:
 
             const auto settings = NYdb::NTopic::TAlterTopicSettings()
                 .BeginAddConsumer()
-                    .ConsumerName(groupId)
+                    .ConsumerName(Settings.Consumer)
                 .EndAddConsumer();
 
             Send(YdbProxy, new NReplication::TEvYdbProxy::TEvAlterTopicRequest(topicPath, settings));
@@ -347,18 +346,28 @@ public:
 
     void Handle(TEvPersQueue::TEvHasDataInfoResponse::TPtr& ev, const TActorContext& ctx) {
         auto& record = ev->Get()->Record;
+        auto partitionIndex = record.GetCookie();
         LOG_D("Handle TEvPersQueue::TEvHasDataInfoResponse " << record.ShortDebugString());
-        if (record.GetCookie() >= PartitionStatus.size()) {
-            Y_VERIFY_DEBUG(record.GetCookie() < PartitionStatus.size());
+        if (partitionIndex >= PartitionStatus.size()) {
+            Y_VERIFY_DEBUG(partitionIndex < PartitionStatus.size());
             return;
         }
-        auto& status = PartitionStatus[record.GetCookie()];
+        auto& status = PartitionStatus[partitionIndex];
         if (status != EPartitionStatus::HasDataRequested) {
-            Y_VERIFY_DEBUG(status == EPartitionStatus::HasDataRequested);
+            // On timeout we resend send HasData
             return;
         }
-        PartitionsWithData.push_back(record.GetCookie());
+
         status = EPartitionStatus::HasDataReceived;
+
+        auto& partition = Settings.Partitions[partitionIndex];
+        if (record.GetEndOffset() < partition.Offset) {
+            AddResult(partitionIndex, NPersQueue::NErrorCode::EErrorCode::READ_ERROR_TOO_BIG_OFFSET);
+        } else if (record.GetEndOffset() == partition.Offset) {
+            AddResult(partitionIndex, NPersQueue::NErrorCode::EErrorCode::READ_NOT_DONE);
+        } else {
+            PartitionsWithData.push_back(partitionIndex);
+        }
 
         ProceedFetchRequest(ctx);
     }
@@ -456,8 +465,20 @@ public:
     }
 
     void HandleTimeout(const TActorContext& ctx) {
-        EnsureResponse();
-        SendReplyOnDoneAndDie(ctx);
+        for (size_t i = 0; i < PartitionStatus.size(); ++i) {
+            if (PartitionStatus[i] == EPartitionStatus::HasDataRequested) { // rerequest HasData without timeout
+                auto& p = Settings.Partitions[i];
+                auto [topic, topicInfo] = GetTopicInfo(p.Topic);
+
+                auto fetchInfo = std::make_unique<TEvPersQueue::TEvHasDataInfo>();
+                fetchInfo->Record.SetPartition(p.Partition);
+                fetchInfo->Record.SetOffset(p.Offset);
+                fetchInfo->Record.SetCookie(i);
+
+                auto tabletId = topicInfo.PartitionToTablet[p.Partition];
+                NTabletPipe::SendData(ctx, TabletInfo[tabletId].PipeClient, fetchInfo.release());
+            }
+        }
     }
 
     void Die(const TActorContext& ctx) override {
@@ -494,6 +515,19 @@ public:
         return result;
     }
 
+    std::pair<const TString&, TTopicInfo&> GetTopicInfo(const TString& topicPath) {
+        auto* topic = &topicPath;
+        auto cdcTopicNameIt = CdcPathToPrivateTopicPath.find(*topic);
+        if (cdcTopicNameIt != CdcPathToPrivateTopicPath.end()) {
+            topic = &cdcTopicNameIt->second;
+        }
+
+        auto it = TopicInfo.find(CanonizePath(*topic));
+        AFL_ENSURE(it != TopicInfo.end())("topic", *topic);
+
+        return {*topic, it->second};
+    }
+
     void ProceedFetchRequest(const TActorContext& ctx) {
         if (FetchRequestCurrentReadTablet) { //already got active read request
             return;
@@ -516,17 +550,7 @@ public:
             CurrentCookie = *partitionIndex;
 
             auto& req = Settings.Partitions[*partitionIndex];
-
-            auto topic = req.Topic;
-            auto cdcTopicNameIt = CdcPathToPrivateTopicPath.find(req.Topic);
-            if (cdcTopicNameIt != CdcPathToPrivateTopicPath.end()) {
-                topic = cdcTopicNameIt->second;
-            }
-
-            auto it = TopicInfo.find(CanonizePath(topic));
-            AFL_ENSURE(it != TopicInfo.end())("topic", topic);
-
-            auto& topicInfo = it->second;
+            auto [topic, topicInfo] = GetTopicInfo(req.Topic);
 
             auto partitionId = req.Partition;
 
@@ -569,7 +593,7 @@ public:
         partitionRequest->SetPartition(fetchRequest.Partition);
 
         auto read = partitionRequest->MutableCmdRead();
-        read->SetClientId(fetchRequest.ClientId);
+        read->SetClientId(Settings.Consumer);
         read->SetOffset(fetchRequest.Offset);
         read->SetCount(1000000);
         read->SetTimeoutMs(0);
@@ -602,11 +626,10 @@ public:
 
         AFL_ENSURE(FetchRequestReadsDone < Settings.Partitions.size());
         const auto& req = Settings.Partitions[CurrentCookie];
-        const auto& topic = req.Topic;
         const auto& partitionId = req.Partition;
 
         auto res = Response->Response.AddPartResult();
-        res->SetTopic(topic);
+        res->SetTopic(req.Topic);
         res->SetPartition(partitionId);
         auto read = res->MutableReadResult();
         if (record.HasPartitionResponse() && record.GetPartitionResponse().HasCmdReadResult())
@@ -618,10 +641,9 @@ public:
 
         ++FetchRequestReadsDone;
 
-        auto it = TopicInfo.find(CanonizePath(topic));
-        AFL_ENSURE(it != TopicInfo.end())("topic", topic);
+        auto [_, topicInfo] = GetTopicInfo(req.Topic);
 
-        SetMeteringMode(it->second.PQInfo->Description.GetPQTabletConfig().GetMeteringMode());
+        SetMeteringMode(topicInfo.PQInfo->Description.GetPQTabletConfig().GetMeteringMode());
 
         if (FetchRequestBytesLeft == 0) {
             SendReplyOnDoneAndDie(ctx);
@@ -648,9 +670,10 @@ public:
     }
 
     bool CheckAccess(const TSecurityObject& access) {
-        if (Settings.User == nullptr)
+        if (Settings.UserToken == nullptr) {
             return true;
-        return access.CheckAccess(NACLib::EAccessRights::SelectRow, *Settings.User);
+        }
+        return access.CheckAccess(NACLib::EAccessRights::SelectRow, *Settings.UserToken);
     }
 
     void SendReplyOnDoneAndDie(const TActorContext& ctx) {

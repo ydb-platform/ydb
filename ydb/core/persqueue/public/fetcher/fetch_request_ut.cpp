@@ -59,7 +59,7 @@ Y_UNIT_TEST_SUITE(TFetchRequestTests) {
         TPartitionFetchRequest p2{"Root/PQ/rt3.dc1--topic2", 3, 0, 10000};
         TPartitionFetchRequest pbad{"Root/PQ/rt3.dc1--topic2", 2, 1, 10000};
 
-        TFetchRequestSettings settings{{}, {p1, p2, pbad}, 10000, 10000, {}};
+        TFetchRequestSettings settings{{}, NKikimr::NPQ::CLIENTID_WITHOUT_CONSUMER, {p1, p2, pbad}, 1000, 1000};
         auto fetchId = runtime.Register(CreatePQFetchRequestActor(settings, MakeSchemeCacheID(), edgeId));
         runtime.EnableScheduleForActor(fetchId);
         runtime.DispatchEvents();
@@ -99,7 +99,7 @@ Y_UNIT_TEST_SUITE(TFetchRequestTests) {
         TPartitionFetchRequest p1{"Root/PQ/rt3.dc1--topic1", 1, 1, 10000};
         TPartitionFetchRequest p2{"Root/PQ/rt3.dc1--topic2", 3, 0, 10000};
 
-        TFetchRequestSettings settings{{}, {p1, p2}, 10000, 10000, {}};
+        TFetchRequestSettings settings{{}, NKikimr::NPQ::CLIENTID_WITHOUT_CONSUMER, {p1, p2}, 1000, 1000};
         auto fetchId = runtime.Register(CreatePQFetchRequestActor(settings, MakeSchemeCacheID(), edgeId));
         runtime.EnableScheduleForActor(fetchId);
         
@@ -125,7 +125,15 @@ Y_UNIT_TEST_SUITE(TFetchRequestTests) {
             setup->GetServer().AnnoyingClient->ModifyACL("/Root/PQ", "rt3.dc1--topic1", acl.SerializeAsString());
 
             auto goodToken = MakeIntrusiveConst<NACLib::TUserToken>("user1@staff", TVector<TString>{});
-            TFetchRequestSettings settings{{}, {p1}, 100, 10000, {}, goodToken};
+            TFetchRequestSettings settings{
+                .Database = {},
+                .Consumer = NKikimr::NPQ::CLIENTID_WITHOUT_CONSUMER,
+                .Partitions = {p1},
+                .MaxWaitTimeMs = 100,
+                .TotalMaxBytes = 10000,
+                .RuPerRequest = false,
+                .UserToken = goodToken
+            };
 
             auto fetchId = runtime.Register(CreatePQFetchRequestActor(settings, MakeSchemeCacheID(), edgeId));
             runtime.EnableScheduleForActor(fetchId);
@@ -136,7 +144,15 @@ Y_UNIT_TEST_SUITE(TFetchRequestTests) {
         
         {
             auto badToken = MakeIntrusiveConst<NACLib::TUserToken>("bad-user@staff", TVector<TString>{});
-            TFetchRequestSettings settings{{}, {p1}, 100, 10000, {}, badToken};
+            TFetchRequestSettings settings{
+                .Database = {},
+                .Consumer = NKikimr::NPQ::CLIENTID_WITHOUT_CONSUMER,
+                .Partitions = {p1},
+                .MaxWaitTimeMs = 100,
+                .TotalMaxBytes = 10000,
+                .RuPerRequest = false,
+                .UserToken = badToken
+            };
 
             auto fetchId = runtime.Register(CreatePQFetchRequestActor(settings, MakeSchemeCacheID(), edgeId));
             runtime.EnableScheduleForActor(fetchId);

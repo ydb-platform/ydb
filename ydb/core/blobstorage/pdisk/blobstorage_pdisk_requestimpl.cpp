@@ -113,7 +113,7 @@ TChunkWritePiece::~TChunkWritePiece() {
 
 void TChunkWritePiece::Process(void*) {
     //do not override PDiskThread counter if no extra threads are created
-    if (PDisk->Cfg->EncryptionThreadsCount > 1) {
+    if (PDisk->HasEncryptionThreads()) {
         auto cpuCounter = PDisk->Mon.PDiskGroup->GetCounter(TThread::CurrentThreadName() + "CPU", true);
         *cpuCounter = ThreadCPUTime();
     }
@@ -122,6 +122,7 @@ void TChunkWritePiece::Process(void*) {
 }
 
 void TChunkWritePiece::MarkReady(const TString& logPrefix) {
+    Processed = true;
     auto evChunkWrite = ChunkWrite.Get();
     ui8 old = evChunkWrite->ReadyForBlockDevice.fetch_add(1, std::memory_order_seq_cst);
     if (old + 1 == evChunkWrite->Pieces) {

@@ -5,8 +5,8 @@
 namespace NKikimr {
 namespace NPDisk {
 
-TChunkWritePieceQueue::TChunkWritePieceQueue(int threadsCount) : SingleThread(threadsCount == 1) {
-    Y_VERIFY_S(0 < threadsCount && threadsCount < 256, "invalid EncrypthionThreadsCount");
+TChunkWritePieceQueue::TChunkWritePieceQueue(int threadsCount) : SingleThread(threadsCount == 0) {
+    Y_VERIFY_S(0 <= threadsCount && threadsCount < 16, "invalid EncrypthionThreadsCount");
     if (SingleThread) {
         QueueImpl = std::queue<TChunkWritePiece*>();
     } else {

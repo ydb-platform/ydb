@@ -21,12 +21,13 @@ TCompletionChunkWritePiece::TCompletionChunkWritePiece(TChunkWritePiece* piece, 
     , Piece(piece)
     , CumulativeCompletion(cumulativeCompletion)
     , Span(piece->Span.CreateChild(TWilson::PDiskDetailed, "PDisk.ChunkWritePiece.CompletionPart"))
+    , ActorSystem(Piece->PDisk->PCtx->ActorSystem)
 {
 }
 
 TCompletionChunkWritePiece::~TCompletionChunkWritePiece() {
     if (CumulativeCompletion) {
-        CumulativeCompletion->RemovePart(Piece->PDisk->PCtx->ActorSystem);
+        CumulativeCompletion->RemovePart(ActorSystem);
     }
 }
 

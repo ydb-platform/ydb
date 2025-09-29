@@ -1,0 +1,1793 @@
+diff --git a/ydb/apps/version/version_definition.cpp b/ydb/apps/version/version_definition.cpp
+index 4cfb93b74f7..e5bc9b0701b 100644
+--- a/ydb/apps/version/version_definition.cpp
++++ b/ydb/apps/version/version_definition.cpp
+@@ -2,10 +2,37 @@
+
+ NKikimrConfig::TCurrentCompatibilityInfo NKikimr::TCompatibilityInfo::MakeCurrent() {
+     using TCurrentConstructor = NKikimr::TCompatibilityInfo::TProtoConstructor::TCurrentCompatibilityInfo;
+-    // using TVersionConstructor = NKikimr::TCompatibilityInfo::TProtoConstructor::TVersion;
+-    // using TCompatibilityRuleConstructor = NKikimr::TCompatibilityInfo::TProtoConstructor::TCompatibilityRule;
++    using TVersionConstructor = NKikimr::TCompatibilityInfo::TProtoConstructor::TVersion;
++    using TCompatibilityRuleConstructor = NKikimr::TCompatibilityInfo::TProtoConstructor::TCompatibilityRule;
+
+     return TCurrentConstructor{
+         .Application = "ydb",
++        .Version = TVersionConstructor{
++            .Year = 25,
++            .Major = 1,
++        },
++        .CanLoadFrom = {
++            TCompatibilityRuleConstructor{
++                .LowerLimit = TVersionConstructor{ .Year = 24, .Major = 4 },
++                .UpperLimit = TVersionConstructor{ .Year = 25, .Major = 1 },
++            },
++        },
++        .StoresReadableBy = {
++            TCompatibilityRuleConstructor{
++                .LowerLimit = TVersionConstructor{ .Year = 24, .Major = 4 },
++                .UpperLimit = TVersionConstructor{ .Year = 25, .Major = 1 },
++            },
++        },
++        .CanConnectTo = {
++            TCompatibilityRuleConstructor{
++                .LowerLimit = TVersionConstructor{ .Year = 24, .Major = 4 },
++                .UpperLimit = TVersionConstructor{ .Year = 25, .Major = 1 },
++            },
++            TCompatibilityRuleConstructor{
++                .Application = "nbs",
++                .LowerLimit = TVersionConstructor{ .Year = 24, .Major = 3 },
++                .UpperLimit = TVersionConstructor{ .Year = 25, .Major = 1 },
++            },
++        }
+     }.ToPB();
+ }
+diff --git a/ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h b/ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h
+index 17626ab65ae..0e0f5f086cd 100644
+--- a/ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h
++++ b/ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h
+@@ -217,10 +217,16 @@ struct TEventTypeField {
+     PROBE(PDiskChunkReadPieceComplete, GROUPS("PDisk", "PDiskRequest"), \
+       TYPES(TPDiskIdField, ui64, ui64, double), \
+       NAMES("pdisk", "size", "relativeOffset", "deviceTimeMs")) \
++    PROBE(PDiskChunkWritePieceComplete, GROUPS("PDisk", "PDiskRequest"), \
++      TYPES(TPDiskIdField, ui64, ui64, double), \
++      NAMES("pdisk", "size", "relativeOffset", "deviceTimeMs")) \
+     PROBE(PDiskChunkWriteAddToScheduler, GROUPS("PDisk", "PDiskRequest"), \
+       TYPES(TPDiskIdField, ui64, double, ui64, bool, ui64, ui64), \
+       NAMES("pdisk", "reqId", "creationTimeSec", "owner", "isFast", "priorityClass", "size")) \
+-    PROBE(PDiskChunkWriteLastPieceSendToDevice, GROUPS("PDisk", "PDiskRequest"), \
++    PROBE(PDiskChunkWritePieceAddToScheduler, GROUPS("PDisk", "PDiskRequest"), \
++      TYPES(TPDiskIdField, ui32, ui64, ui64), \
++      NAMES("pdisk", "pieceIdx", "offset", "size")) \
++    PROBE(PDiskChunkWritePieceSendToDevice, GROUPS("PDisk", "PDiskRequest"), \
+       TYPES(TPDiskIdField, ui64, ui64, ui64, ui64), \
+       NAMES("pdisk", "owner", "chunkIdx", "pieceOffset", "pieceSize")) \
+     PROBE(PDiskLogWriteComplete, GROUPS("PDisk", "PDiskRequest"), \
+diff --git a/ydb/core/blobstorage/pdisk/blobstorage_pdisk_blockdevice_async.cpp b/ydb/core/blobstorage/pdisk/blobstorage_pdisk_blockdevice_async.cpp
+index d41fa4501d7..4f07bab368f 100644
+--- a/ydb/core/blobstorage/pdisk/blobstorage_pdisk_blockdevice_async.cpp
++++ b/ydb/core/blobstorage/pdisk/blobstorage_pdisk_blockdevice_async.cpp
+@@ -34,7 +34,6 @@ namespace NKikimr {
+ namespace NPDisk {
+
+ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
+-
+ constexpr ui64 MaxWaitingNoops = 256;
+
+ ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+diff --git a/ydb/core/blobstorage/pdisk/blobstorage_pdisk_chunk_write_queue.cpp b/ydb/core/blobstorage/pdisk/blobstorage_pdisk_chunk_write_queue.cpp
+new file mode 100644
+index 00000000000..71db9d7a627
+--- /dev/null
++++ b/ydb/core/blobstorage/pdisk/blobstorage_pdisk_chunk_write_queue.cpp
+@@ -0,0 +1,65 @@
++#include "blobstorage_pdisk_chunk_write_queue.h"
++
++#include <ydb/library/yverify_stream/yverify_stream.h>
++
++namespace NKikimr {
++namespace NPDisk {
++
++TChunkWritePieceQueue::TChunkWritePieceQueue(int threadsCount) : SingleThread(threadsCount == 0) {
++    Y_VERIFY_S(0 <= threadsCount && threadsCount < 16, "invalid EncrypthionThreadsCount");
++    if (SingleThread) {
++        QueueImpl = std::queue<TChunkWritePiece*>();
++    } else {
++        Y_VERIFY(false);
++        QueueImpl = MakeHolder<TLockFreeQueue<TChunkWritePiece*>>();
++    }
++}
++
++std::queue<TChunkWritePiece*>* TChunkWritePieceQueue::GetQueue() {
++    return &std::get<0>(QueueImpl);
++}
++
++TLockFreeQueue<TChunkWritePiece*>* TChunkWritePieceQueue::GetLfQueue() {
++    auto& ptr = std::get<1>(QueueImpl);
++    return ptr.Get();
++}
++
++bool TChunkWritePieceQueue::IsEmpty() {
++    if (Y_LIKELY(SingleThread)) {
++        return GetQueue()->empty();
++    } else {
++        return SizeCounter.load(std::memory_order_relaxed) == 0;
++    }
++}
++
++size_t TChunkWritePieceQueue::Size() {
++    if (Y_LIKELY(SingleThread)) {
++        return GetQueue()->size();
++    } else {
++        return SizeCounter.load(std::memory_order_relaxed);
++    }
++}
++
++TChunkWritePiece* TChunkWritePieceQueue::Dequeue() {
++    TChunkWritePiece* item;
++    if (Y_LIKELY(SingleThread)) {
++        item = GetQueue()->front();
++        GetQueue()->pop();
++    } else {
++        GetLfQueue()->Dequeue(&item);
++        SizeCounter.fetch_sub(1, std::memory_order_release);
++    }
++    return item;
++}
++
++void TChunkWritePieceQueue::Enqueue(TChunkWritePiece* item) {
++    if (Y_LIKELY(SingleThread)) {
++        GetQueue()->push(item);
++    } else {
++        GetLfQueue()->Enqueue(item);
++        SizeCounter.fetch_add(1, std::memory_order_release);
++    }
++}
++
++} // NPDisk
++} // NKikimr
+diff --git a/ydb/core/blobstorage/pdisk/blobstorage_pdisk_chunk_write_queue.h b/ydb/core/blobstorage/pdisk/blobstorage_pdisk_chunk_write_queue.h
+new file mode 100644
+index 00000000000..1dc81340d66
+--- /dev/null
++++ b/ydb/core/blobstorage/pdisk/blobstorage_pdisk_chunk_write_queue.h
+@@ -0,0 +1,29 @@
++#include <util/thread/lfqueue.h>
++
++#include <queue>
++#include <variant>
++
++namespace NKikimr {
++namespace NPDisk {
++
++class TChunkWritePiece;
++
++class TChunkWritePieceQueue {
++public:
++    TChunkWritePieceQueue() = delete;
++    TChunkWritePieceQueue(int threadsCount);
++
++    bool IsEmpty();
++    size_t Size();
++    TChunkWritePiece* Dequeue();
++    void Enqueue(TChunkWritePiece* item);
++private:
++    bool SingleThread;
++    std::queue<TChunkWritePiece*>* GetQueue();
++    TLockFreeQueue<TChunkWritePiece*>* GetLfQueue();
++    std::variant<std::queue<TChunkWritePiece*>, THolder<TLockFreeQueue<TChunkWritePiece*>>> QueueImpl;
++    std::atomic<size_t> SizeCounter = 0;
++};
++
++} // NPDisk
++} // NKikimr
+diff --git a/ydb/core/blobstorage/pdisk/blobstorage_pdisk_chunk_write_result.h b/ydb/core/blobstorage/pdisk/blobstorage_pdisk_chunk_write_result.h
+new file mode 100644
+index 00000000000..fe5f2595a32
+--- /dev/null
++++ b/ydb/core/blobstorage/pdisk/blobstorage_pdisk_chunk_write_result.h
+@@ -0,0 +1,15 @@
++#pragma once
++#include "blobstorage_pdisk_writer.h"
++
++namespace NKikimr {
++namespace NPDisk {
++
++class TChunkWriteResult {
++public:
++    THolder<TChunkWriter> ChunkWriter;
++    bool LastPart;
++    TChunkWriteResult(THolder<TChunkWriter>&& chunkWriter, bool lastPart) : ChunkWriter(std::move(chunkWriter)), LastPart(lastPart) {}
++};
++
++} // NPDisk
++} // NKikimr
+diff --git a/ydb/core/blobstorage/pdisk/blobstorage_pdisk_completion_impl.cpp b/ydb/core/blobstorage/pdisk/blobstorage_pdisk_completion_impl.cpp
+index 3a25a7be113..187161978a6 100644
+--- a/ydb/core/blobstorage/pdisk/blobstorage_pdisk_completion_impl.cpp
++++ b/ydb/core/blobstorage/pdisk/blobstorage_pdisk_completion_impl.cpp
+@@ -11,6 +11,52 @@ namespace NPDisk {
+ // Completion actions
+ ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
++////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
++// Chunk write completion actions
++////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
++
++
++TCompletionChunkWritePiece::TCompletionChunkWritePiece(TChunkWritePiece* piece, TCompletionChunkWrite* cumulativeCompletion)
++    : TCompletionAction()
++    , Piece(piece)
++    , CumulativeCompletion(cumulativeCompletion)
++    , Span(piece->Span.CreateChild(TWilson::PDiskDetailed, "PDisk.ChunkWritePiece.CompletionPart"))
++    , ActorSystem(Piece->PDisk->PCtx->ActorSystem)
++{
++}
++
++TCompletionChunkWritePiece::~TCompletionChunkWritePiece() {
++    if (CumulativeCompletion) {
++        // CumulativeCompletion->RemovePart(ActorSystem);
++    }
++}
++
++void TCompletionChunkWritePiece::Exec(TActorSystem *actorSystem) {
++    Span.Event("PDisk.CompletionChunkWritePart.Exec");
++    Y_VERIFY(actorSystem);
++    Y_VERIFY(CumulativeCompletion);
++    if (TCompletionAction::Result != EIoResult::Ok) {
++        Release(actorSystem);
++        return;
++    }
++
++    double deviceTimeMs = HPMilliSecondsFloat(GetTime - SubmitTime);
++    //TODO: Fork and join this orbit from ChunkWrite orbit.
++    LWTRACK(PDiskChunkWritePieceComplete, Orbit, Piece->PDisk->PCtx->PDiskId, Piece->PieceSize, Piece->PieceShift, deviceTimeMs);
++
++    CumulativeCompletion->CompletePart(actorSystem);
++    CumulativeCompletion = nullptr;
++
++    Span.Event("PDisk.CompletionChunkWritePart.ExecStop");
++    delete this;
++}
++
++void TCompletionChunkWritePiece::Release(TActorSystem *actorSystem) {
++    Y_UNUSED(actorSystem);
++    Span.EndError("PDisk.CompletionChunkWritePart.Release");
++    delete this;
++}
++
+ ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+ // Log write completion action
+ ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+diff --git a/ydb/core/blobstorage/pdisk/blobstorage_pdisk_completion_impl.h b/ydb/core/blobstorage/pdisk/blobstorage_pdisk_completion_impl.h
+index b8ece04d09f..0f6e2752cc1 100644
+--- a/ydb/core/blobstorage/pdisk/blobstorage_pdisk_completion_impl.h
++++ b/ydb/core/blobstorage/pdisk/blobstorage_pdisk_completion_impl.h
+@@ -76,11 +76,14 @@ class TCompletionChunkWrite : public TCompletionAction {
+     std::function<void()> OnDestroy;
+     TReqId ReqId;
+     NWilson::TSpan Span;
+-
++    std::atomic<ui32> PartsStarted;
++    std::atomic<ui32> PartsRemoved;
++    std::atomic<ui32> PartsWritten;
+ public:
++    bool IsReplied = false;
++    ui32 Pieces;
+     TEvChunkWrite::TPartsPtr Parts;
+     std::optional<TAlignedData> Buffer;
+-
+     TCompletionChunkWrite(const TActorId &recipient, TEvChunkWriteResult *event,
+             TPDiskMon *mon, ui32 pdiskId, NHPTimer::STime startTime, size_t sizeBytes,
+             ui8 priorityClass, std::function<void()> onDestroy, TReqId reqId, NWilson::TSpan&& span)
+@@ -164,16 +167,57 @@ public:
+         if (Mon) {
+             Mon->GetWriteCounter(PriorityClass)->CountResponse();
+         }
++
+         delete this;
+     }
+
+     void Release(TActorSystem *actorSystem) override {
+-        Event->Status = NKikimrProto::CORRUPTED;
+-        Event->ErrorReason = ErrorReason;
+-        actorSystem->Send(Recipient, Event.Release());
+-        Span.EndError(ErrorReason);
++        if (!IsReplied) {
++            Event->Status = NKikimrProto::CORRUPTED;
++            Event->ErrorReason = ErrorReason;
++            actorSystem->Send(Recipient, Event.Release());
++            Span.EndError(ErrorReason);
++        }
+         delete this;
+     }
++
++    void AddPart() {
++        PartsStarted++;
++    }
++
++    bool AllPartsStarted() {
++        return PartsStarted == Pieces;
++    }
++
++    void RemovePart(TActorSystem *actorSystem) {
++        ui32 old = PartsRemoved.fetch_add(1, std::memory_order_seq_cst);
++        if (old + 1 == Pieces) {
++            if (PartsWritten.load(std::memory_order_seq_cst) == Pieces) {
++                Exec(actorSystem);
++            } else {
++                Release(actorSystem);
++            }
++        }
++    }
++
++    void CompletePart(TActorSystem *actorSystem) {
++        PartsWritten++;
++        RemovePart(actorSystem);
++    }
++};
++
++class TChunkWritePiece;
++
++class TCompletionChunkWritePiece : public TCompletionAction {
++    TChunkWritePiece* Piece;
++    TCompletionChunkWrite* CumulativeCompletion;
++    NWilson::TSpan Span;
++    TActorSystem* ActorSystem;
++public:
++    TCompletionChunkWritePiece(NKikimr::NPDisk::TChunkWritePiece* piece, TCompletionChunkWrite* cumulativeCompletion);
++    void Exec(TActorSystem *actorSystem) override;
++    void Release(TActorSystem *actorSystem) override;
++    virtual ~TCompletionChunkWritePiece();
+ };
+
+ class TCompletionLogWrite : public TCompletionAction {
+diff --git a/ydb/core/blobstorage/pdisk/blobstorage_pdisk_config.h b/ydb/core/blobstorage/pdisk/blobstorage_pdisk_config.h
+index b76644f397a..6f6be613d01 100644
+--- a/ydb/core/blobstorage/pdisk/blobstorage_pdisk_config.h
++++ b/ydb/core/blobstorage/pdisk/blobstorage_pdisk_config.h
+@@ -167,6 +167,7 @@ struct TPDiskConfig : public TThrRefBase {
+     NKikimrBlobStorage::TPDiskSpaceColor::E SpaceColorBorder = NKikimrBlobStorage::TPDiskSpaceColor::GREEN;
+
+     ui32 CompletionThreadsCount = 1;
++    ui32 EncryptionThreadsCount = 0;
+     bool UseNoopScheduler = false;
+
+     bool PlainDataChunks = false;
+@@ -422,6 +423,9 @@ struct TPDiskConfig : public TThrRefBase {
+         if (cfg->HasCompletionThreadsCount()) {
+             CompletionThreadsCount = cfg->GetCompletionThreadsCount();
+         }
++        if (cfg->HasEncryptionThreadsCount()) {
++            EncryptionThreadsCount = cfg->GetEncryptionThreadsCount();
++        }
+
+         if (cfg->HasUseNoopScheduler()) {
+             UseNoopScheduler = cfg->GetUseNoopScheduler();
+diff --git a/ydb/core/blobstorage/pdisk/blobstorage_pdisk_data.h b/ydb/core/blobstorage/pdisk/blobstorage_pdisk_data.h
+index eed7fa687ba..306ad1cbcb3 100644
+--- a/ydb/core/blobstorage/pdisk/blobstorage_pdisk_data.h
++++ b/ydb/core/blobstorage/pdisk/blobstorage_pdisk_data.h
+@@ -656,6 +656,7 @@ struct TDiskFormat {
+         str << " MagicFormatChunk: " << MagicFormatChunk << x;
+         str << " ChunkSize: " << ChunkSize << " bytes (" << (ChunkSize / 1000000ull) << " MB)" << x;
+         str << " SectorSize: " << SectorSize << x;
++        str << " SectorPayloadSize: " << SectorPayloadSize() << x;
+         str << " SysLogSectorCount: " << SysLogSectorCount << x;
+         str << " SystemChunkCount: " << SystemChunkCount << x;
+         str << " FormatText: \"" << FormatText << "\"" << x;
+diff --git a/ydb/core/blobstorage/pdisk/blobstorage_pdisk_impl.cpp b/ydb/core/blobstorage/pdisk/blobstorage_pdisk_impl.cpp
+index 7ba03b05ed6..96295c0e13c 100644
+--- a/ydb/core/blobstorage/pdisk/blobstorage_pdisk_impl.cpp
++++ b/ydb/core/blobstorage/pdisk/blobstorage_pdisk_impl.cpp
+@@ -4,6 +4,7 @@
+ #include "blobstorage_pdisk_completion_impl.h"
+ #include "blobstorage_pdisk_mon.h"
+ #include "blobstorage_pdisk_request_id.h"
++#include "blobstorage_pdisk_chunk_write_result.h"
+
+ #include <ydb/core/blobstorage/base/blobstorage_events.h>
+ #include <ydb/core/control/lib/immediate_control_board_impl.h>
+@@ -36,6 +37,7 @@ TPDisk::TPDisk(std::shared_ptr<TPDiskCtx> pCtx, const TIntrusivePtr<TPDiskConfig
+             cfg->DeviceInFlight)
+     , ReqCreator(PCtx, &Mon, &DriveModel, &EstimatedLogChunkIdx, cfg->SeparateHugePriorities)
+     , ReorderingMs(cfg->ReorderingMs)
++    , JointChunkWrites(cfg->EncryptionThreadsCount)
+     , LogSeekCostLoop(2)
+     , ExpectedDiskGuid(cfg->PDiskGuid)
+     , PDiskCategory(cfg->PDiskCategory)
+@@ -98,6 +100,15 @@ TPDisk::TPDisk(std::shared_ptr<TPDiskCtx> pCtx, const TIntrusivePtr<TPDiskConfig
+     JointLogReads.reserve(16 << 10);
+     JointChunkForgets.reserve(16 << 10);
+
++    THolder<IThreadPool> queue;
++    if (HasEncryptionThreads()) {
++        queue.Reset(new TThreadPool(TThreadPoolParams().SetThreadNamePrefix("PdEncrypt_")));
++    } else {
++        queue.Reset(new TFakeThreadPool());
++    }
++    queue->Start(cfg->EncryptionThreadsCount, 0);
++    ChunkEncoder = std::move(queue);
++
+     DebugInfoGenerator = [id = cfg->PDiskId, type = PDiskCategory]() {
+         return TStringBuilder() << "PDisk DebugInfo# { Id# " << id << " Type# " << type.TypeStrLong() << " }";
+     };
+@@ -299,6 +310,7 @@ void TPDisk::Stop() {
+
+     P_LOG(PRI_NOTICE, BPD01, "Shutdown", (OwnerInfo, StartupOwnerInfo()));
+
++    // BlockDevice->Stop() frees all completion events that are released and sent to device
+     BlockDevice->Stop();
+
+     // BlockDevice is stopped, the data will NOT hit the disk.
+@@ -329,11 +341,19 @@ void TPDisk::Stop() {
+         TRequestBase::AbortDelete(req.Get(), PCtx->ActorSystem);
+     }
+
+-    for (; JointChunkWrites.size(); JointChunkWrites.pop()) {
+-        auto* req = JointChunkWrites.front();
+-        Y_VERIFY_DEBUG_S(req->GetType() == ERequestType::RequestChunkWritePiece,
+-                PCtx->PDiskLogPrefix << "Unexpected request type# " << TypeName(req));
+-        TRequestBase::AbortDelete(req, PCtx->ActorSystem);
++    {
++        /* Waits all thread pool tasks to be completed.
++        * Do we need to look for an implementation that drops all requests
++        * For Stop() to be faster?
++        */
++        ChunkEncoder->Stop();
++
++        while (!JointChunkWrites.IsEmpty()) {
++            auto piece = JointChunkWrites.Dequeue();
++            //When control reaches this function, req->Completion is already freed by
++            //TCompletionChunkWritePiece::Release() calls
++            TRequestBase::AbortDelete(piece, PCtx->ActorSystem);
++        }
+     }
+
+     for (; JointLogWrites.size(); JointLogWrites.pop()) {
+@@ -787,11 +807,17 @@ ui32 TPDisk::AskVDisksToCutLogs(TOwner ownerFilter, bool doForce) {
+ ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+ // Chunk writing
+ ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+-void TPDisk::ChunkWritePiecePlain(TChunkWrite *evChunkWrite) {
++
++bool TPDisk::HasEncryptionThreads() const {
++    return Cfg->EncryptionThreadsCount > 0;
++}
++
++void TPDisk::ChunkWritePiecePlain(TChunkWritePiece *piece) {
++    auto& evChunkWrite = piece->ChunkWrite;
+     ui32 chunkIdx = evChunkWrite->ChunkIdx;
+     Y_VERIFY_S(chunkIdx != 0, PCtx->PDiskLogPrefix);
+
+-    auto& comp = evChunkWrite->Completion;
++    auto& headComp = evChunkWrite->Completion;
+     const ui32 count = evChunkWrite->PartsPtr->Size();
+     const void* buff = nullptr;
+     ui32 chunkOffset = evChunkWrite->Offset;
+@@ -812,7 +838,7 @@ void TPDisk::ChunkWritePiecePlain(TChunkWrite *evChunkWrite) {
+             && size % Format.SectorSize == 0) {
+         newSize = size;
+     } else {
+-        newSize = comp->CompactBuffer(chunkOffset % Format.SectorSize, Format.SectorSize);
++        newSize = headComp->CompactBuffer(chunkOffset % Format.SectorSize, Format.SectorSize);
+
+         auto log = [&] () {
+             TStringStream str;
+@@ -830,29 +856,43 @@ void TPDisk::ChunkWritePiecePlain(TChunkWrite *evChunkWrite) {
+             (size, size), (newSize, newSize), (Sizes, log()));
+         *Mon.WriteBufferCompactedBytes += size;
+     }
+-    buff = comp->GetBuffer();
++    buff = headComp->GetBuffer();
+     P_LOG(PRI_DEBUG, BPD01, "Chunk write", (ChunkIdx, chunkIdx), (Encrypted, false), (format_ChunkSize, Format.ChunkSize),
+         (aligndown, AlignDown<ui32>(chunkOffset, Format.SectorSize)),
+         (chunkOffset, chunkOffset), (Size, size), (NewSize, newSize),
+         (diskOffset, diskOffset), (count, count));
+
+     auto traceId = evChunkWrite->Span.GetTraceId();
+-    evChunkWrite->Completion->Orbit = std::move(evChunkWrite->Orbit);
+-    BlockDevice->PwriteAsync(buff, newSize, diskOffset, comp.Release(), evChunkWrite->ReqId, &traceId);
++    BlockDevice->PwriteAsync(buff, newSize, diskOffset, piece->Completion.Release(), evChunkWrite->ReqId, &traceId);
+     evChunkWrite->IsReplied = true;
+ }
+
+-bool TPDisk::ChunkWritePieceEncrypted(TChunkWrite *evChunkWrite, TChunkWriter& writer, ui32 bytesAvailable) {
++bool TPDisk::ChunkWritePieceEncrypted(TChunkWritePiece *piece, TChunkWriter& writer, ui32 bytesAvailable) {
++    auto evChunkWrite = piece->ChunkWrite.Get();
+     const ui32 count = evChunkWrite->PartsPtr->Size();
+-    for (ui32 partIdx = evChunkWrite->CurrentPart; partIdx < count; ++partIdx) {
+-        ui32 remainingPartSize = (*evChunkWrite->PartsPtr)[partIdx].second - evChunkWrite->CurrentPartOffset;
++
++    //find part that corresponds to a target pieceshift;
++    //TODO: remember it once for all pieces when they are created
++    ui32 partIdx = 0;
++    ui32 partsSize = 0;
++    for (; partIdx < count; ++partIdx) {
++        auto partSize = (*evChunkWrite->PartsPtr)[partIdx].second;
++        if (piece->PieceShift < partsSize + partSize) {
++            piece->PartOffset = piece->PieceShift - partsSize;
++            break;
++        }
++        partsSize += partSize;
++    }
++
++    for (; partIdx < count; ++partIdx) {
++        ui32 remainingPartSize = (*evChunkWrite->PartsPtr)[partIdx].second - piece->PartOffset;
+         auto traceId = evChunkWrite->Span.GetTraceId();
+         if (bytesAvailable < remainingPartSize) {
+             ui32 sizeToWrite = bytesAvailable;
+             if (sizeToWrite > 0) {
+                 ui8 *data = (ui8*)(*evChunkWrite->PartsPtr)[partIdx].first;
+                 if (data) {
+-                    ui8 *source = data + evChunkWrite->CurrentPartOffset;
++                    ui8 *source = data + piece->PartOffset;
+                     NSan::CheckMemIsInitialized(source, sizeToWrite);
+                     writer.WriteData(source, sizeToWrite, evChunkWrite->ReqId, &traceId);
+                     *Mon.BandwidthPChunkPayload += sizeToWrite;
+@@ -862,9 +902,16 @@ bool TPDisk::ChunkWritePieceEncrypted(TChunkWrite *evChunkWrite, TChunkWriter& w
+                 }
+                 evChunkWrite->RemainingSize -= sizeToWrite;
+                 evChunkWrite->BytesWritten += sizeToWrite;
++                piece->PartOffset = 0;
+             }
+-            evChunkWrite->CurrentPartOffset += sizeToWrite;
+-            evChunkWrite->CurrentPart = partIdx;
++            if (HasEncryptionThreads()) {
++                writer.Flush(evChunkWrite->ReqId, &traceId, piece->Completion.Release());
++            } else {
++                // auto raw = piece->Completion.Release();
++                // //deletes raw
++                // raw->Exec(PCtx->ActorSystem);
++            }
++            piece->MarkReady(PCtx->PDiskLogPrefix);
+             return false;
+         } else {
+             Y_VERIFY_S(remainingPartSize, PCtx->PDiskLogPrefix);
+@@ -872,19 +919,18 @@ bool TPDisk::ChunkWritePieceEncrypted(TChunkWrite *evChunkWrite, TChunkWriter& w
+             bytesAvailable -= remainingPartSize;
+             ui8 *data = (ui8*)(*evChunkWrite->PartsPtr)[partIdx].first;
+             if (data) {
+-                ui8 *source = data + evChunkWrite->CurrentPartOffset;
++                ui8 *source = data + piece->PartOffset;
+                 writer.WriteData(source, sizeToWrite, evChunkWrite->ReqId, &traceId);
+                 *Mon.BandwidthPChunkPayload += sizeToWrite;
+             } else {
+                 writer.WritePadding(sizeToWrite, evChunkWrite->ReqId, &traceId);
+                 *Mon.BandwidthPChunkPadding += sizeToWrite;
+             }
+-            evChunkWrite->CurrentPartOffset = 0;
+             evChunkWrite->RemainingSize -= sizeToWrite;
+             evChunkWrite->BytesWritten += sizeToWrite;
++            piece->PartOffset = 0;
+         }
+     }
+-    Y_VERIFY_S(evChunkWrite->RemainingSize == 0, PCtx->PDiskLogPrefix);
+
+     ui32 chunkIdx = evChunkWrite->ChunkIdx;
+     P_LOG(PRI_DEBUG, BPD79, "ChunkWrite",
+@@ -900,32 +946,59 @@ bool TPDisk::ChunkWritePieceEncrypted(TChunkWrite *evChunkWrite, TChunkWriter& w
+     }
+
+     auto traceId = evChunkWrite->Span.GetTraceId();
+-    evChunkWrite->Completion->Orbit = std::move(evChunkWrite->Orbit);
+-    writer.Flush(evChunkWrite->ReqId, &traceId, evChunkWrite->Completion.Release());
+
+-    evChunkWrite->IsReplied = true;
++    writer.Flush(evChunkWrite->ReqId, &traceId, piece->ChunkWrite->Completion);
++
++    if (!HasEncryptionThreads()) {
++        P_LOG(PRI_DEBUG, BPD11, "Performing TChunkWritePiece write to block device",
++                (ReqId, piece->ChunkWrite->ReqId),
++                (chunkIdx, piece->ChunkWrite->ChunkIdx),
++                (PieceShift, piece->PieceShift),
++                (PieceSize, piece->PieceSize),
++        );
++        LWTRACK(PDiskChunkWritePieceSendToDevice,
++            piece->Orbit, PCtx->PDiskId, piece->ChunkWrite->Owner, piece->ChunkWrite->ChunkIdx,
++            piece->PieceShift, piece->PieceSize
++        );
++    }
++    piece->MarkReady(PCtx->PDiskLogPrefix);
++
+     return true;
+ }
+
+-bool TPDisk::ChunkWritePiece(TChunkWrite *evChunkWrite, ui32 pieceShift, ui32 pieceSize) {
++void TPDisk::PushChunkWrite(TChunkWritePiece *piece) {
++    JointChunkWrites.Enqueue(piece);
++}
++
++TChunkWriteResult TPDisk::ChunkWritePiece(TChunkWritePiece *piece) {
++    P_LOG(PRI_DEBUG, BPD01, "TPDisk::ChunkWritePiece",
++        (ChunkIdx, piece->ChunkWrite->ChunkIdx),
++        (Offset, piece->PieceShift),
++        (Size, piece->PieceSize)
++    );
++    auto evChunkWrite = piece->ChunkWrite.Get();
+     if (evChunkWrite->IsReplied) {
+-        return true;
++        return {nullptr, true};
+     }
+-    Y_VERIFY_S(evChunkWrite->BytesWritten == pieceShift, PCtx->PDiskLogPrefix);
+
+-    TGuard<TMutex> guard(StateMutex);
+-    Y_VERIFY_S(pieceShift % Format.SectorPayloadSize() == 0, PCtx->PDiskLogPrefix);
+-    Y_VERIFY_S(pieceSize % Format.SectorPayloadSize() == 0 || pieceShift + pieceSize == evChunkWrite->TotalSize,
+-        PCtx->PDiskLogPrefix << "pieceShift# " << pieceShift << " pieceSize# " << pieceSize
++    Y_ENSURE(piece->ChunkWrite->Completion, "Existing ChunkWritePiece should have a parent TCompletionChunkWrite");
++
++    piece->ChunkWrite->Completion->AddPart();
++    if (piece->ChunkWrite->Completion->AllPartsStarted()) {
++        Mon.IncrementQueueTime(piece->ChunkWrite->PriorityClass, piece->ChunkWrite->LifeDurationMs(HPNow()));
++    }
++
++    Y_VERIFY_S(piece->PieceShift % Format.SectorPayloadSize() == 0, PCtx->PDiskLogPrefix);
++    Y_VERIFY_S(piece->PieceSize % Format.SectorPayloadSize() == 0 || piece->PieceShift + piece->PieceSize == evChunkWrite->TotalSize,
++        PCtx->PDiskLogPrefix << "pieceShift# " << piece->PieceShift << " pieceSize# " << piece->PieceSize
+         << " evChunkWrite->TotalSize# " << evChunkWrite->TotalSize);
+
+     ui64 desiredSectorIdx = 0;
+     ui64 sectorOffset = 0;
+     ui64 lastSectorIdx;
+-    if (!ParseSectorOffset(Format, PCtx->ActorSystem, PCtx->PDiskId, evChunkWrite->Offset + evChunkWrite->BytesWritten,
+-            evChunkWrite->TotalSize - evChunkWrite->BytesWritten, desiredSectorIdx, lastSectorIdx, sectorOffset,
++    if (!ParseSectorOffset(Format, PCtx->ActorSystem, PCtx->PDiskId, evChunkWrite->Offset + piece->PieceShift,
++            evChunkWrite->TotalSize - piece->PieceShift, desiredSectorIdx, lastSectorIdx, sectorOffset,
+             PCtx->PDiskLogPrefix)) {
+-        guard.Release();
+         ui32 chunkIdx = evChunkWrite->ChunkIdx;
+         Y_VERIFY_S(chunkIdx != 0, PCtx->PDiskLogPrefix);
+
+@@ -934,29 +1007,27 @@ bool TPDisk::ChunkWritePiece(TChunkWrite *evChunkWrite, ui32 pieceShift, ui32 pi
+                 (ui32)evChunkWrite->TotalSize, (ui32)chunkIdx, (ui32)evChunkWrite->Owner);
+         P_LOG(PRI_ERROR, BPD01, err);
+         SendChunkWriteError(*evChunkWrite, err, NKikimrProto::ERROR);
+-        return true;
++        return {nullptr, true};
+     }
+
+     if (evChunkWrite->ChunkEncrypted) {
+         ui32 chunkIdx = evChunkWrite->ChunkIdx;
+         Y_VERIFY_S(chunkIdx != 0, PCtx->PDiskLogPrefix);
+
+-        TChunkState &state = ChunkState[chunkIdx];
+-        state.CurrentNonce = state.Nonce + (ui64)desiredSectorIdx;
++        const TChunkState &state = ChunkState[chunkIdx];
++        auto currentNonce = state.Nonce + (ui64)desiredSectorIdx;
+
+         ui32 dataChunkSizeSectors = Format.ChunkSize / Format.SectorSize;
+-        TChunkWriter writer(Mon, *BlockDevice.Get(), Format, state.CurrentNonce, Format.ChunkKey, BufferPool.Get(),
++        auto writer = MakeHolder<TChunkWriter>(Mon, *BlockDevice.Get(), Format, currentNonce, Format.ChunkKey, BufferPool.Get(),
+                 desiredSectorIdx, dataChunkSizeSectors, Format.MagicDataChunk, chunkIdx, nullptr, desiredSectorIdx,
+-                nullptr, PCtx, &DriveModel, Cfg->EnableSectorEncryption);
++                nullptr, PCtx, &DriveModel, Cfg->EnableSectorEncryption, HasEncryptionThreads());
+
+-        guard.Release();
+-        bool end = ChunkWritePieceEncrypted(evChunkWrite, writer, pieceSize);
+-        LWTRACK(PDiskChunkWriteLastPieceSendToDevice, evChunkWrite->Orbit, PCtx->PDiskId, evChunkWrite->Owner, chunkIdx, pieceShift, pieceSize);
+-        return end;
++        piece->Span.Event("PDisk.ChunkWritePiece.EncryptionStart");
++        bool end = ChunkWritePieceEncrypted(piece, writer.GetRef(), piece->PieceSize);
++        return {HasEncryptionThreads() ? std::move(writer) : nullptr, end};
+     } else {
+-        guard.Release();
+-        ChunkWritePiecePlain(evChunkWrite);
+-        return true;
++        ChunkWritePiecePlain(piece);
++        return {nullptr, true};
+     }
+ }
+
+@@ -974,6 +1045,9 @@ void TPDisk::SendChunkWriteError(TChunkWrite &chunkWrite, const TString &errorRe
+     PCtx->ActorSystem->Send(chunkWrite.Sender, ev.release());
+     Mon.GetWriteCounter(chunkWrite.PriorityClass)->CountResponse();
+     chunkWrite.IsReplied = true;
++    if (chunkWrite.Completion) {
++        chunkWrite.Completion->IsReplied = true;
++    }
+ }
+
+ ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+@@ -1396,7 +1470,6 @@ TVector<TChunkIdx> TPDisk::AllocateChunkForOwner(const TRequestBase *req, const
+             PCtx->PDiskLogPrefix << "chunkIdx# " << chunkIdx << " desired ownerId# " << req->Owner
+             << " state# " << state.ToString());
+         state.Nonce = chunkNonce;
+-        state.CurrentNonce = chunkNonce;
+         P_LOG(PRI_INFO, BPD01, "chunk is allocated",
+                 (ChunkIdx, chunkIdx),
+                 (OldOwnerId, state.OwnerId),
+@@ -2178,7 +2251,6 @@ void TPDisk::ForceDeleteChunk(TChunkIdx chunkIdx) {
+         state.OwnerId = OwnerUnallocated;
+         state.CommitState = TChunkState::FREE;
+         state.Nonce = 0;
+-        state.CurrentNonce = 0;
+         Keeper.PushFreeOwnerChunk(owner, chunkIdx);
+         break;
+     case TChunkState::DATA_COMMITTED_DELETE_IN_PROGRESS:
+@@ -2409,34 +2481,45 @@ void TPDisk::Slay(TSlay &evSlay) {
+ void TPDisk::ProcessChunkWriteQueue() {
+     auto start = HPNow();
+
+-    size_t initialSize = JointChunkWrites.size();
++    size_t initialSize = JointChunkWrites.Size();
+     size_t processed = 0;
+     size_t processedBytes = 0;
+     double processedCostMs = 0;
+-    while (JointChunkWrites.size()) {
+-        TRequestBase *req = JointChunkWrites.front();
+-        JointChunkWrites.pop();
+
+-        req->Span.Event("PDisk.BeforeBlockDevice");
++    while (!JointChunkWrites.IsEmpty()) {
++        auto piece = JointChunkWrites.Dequeue();
++        if (!piece->Processed) {
++            if (HasEncryptionThreads()) {
++                auto res = ChunkEncoder->Add(piece);
++                Y_VERIFY(res, "failed to schedule TChunkWritePiece");
++                continue; //not counts as processed; it is only scheduled
++            }
++            piece->ChunkWriteResult = MakeHolder<TChunkWriteResult>(ChunkWritePiece(piece));
++        }
+
+-        Y_VERIFY_S(req->GetType() == ERequestType::RequestChunkWritePiece, PCtx->PDiskLogPrefix
+-            << "Unexpected request type# " << ui64(req->GetType())
+-            << " TypeName# " << TypeName(*req) << " in JointChunkWrites");
+-        TChunkWritePiece *piece = static_cast<TChunkWritePiece*>(req);
+         processed++;
+         processedBytes += piece->PieceSize;
+         processedCostMs += piece->GetCostMs();
+
+-        P_LOG(PRI_DEBUG, BPD01, "ChunkWritePiece",
+-            (ChunkIdx, piece->ChunkWrite->ChunkIdx),
+-            (Offset, piece->PieceShift),
+-            (Size, piece->PieceSize)
+-        );
+-        bool lastPart = ChunkWritePiece(piece->ChunkWrite.Get(), piece->PieceShift, piece->PieceSize);
+-        if (lastPart) {
+-            Mon.IncrementQueueTime(piece->ChunkWrite->PriorityClass, piece->ChunkWrite->LifeDurationMs(HPNow()));
++        // For plain chunks, nothing happens here, and ChunkWriter is nullptr
++        if (piece->ChunkWriteResult->ChunkWriter) {
++            P_LOG(PRI_DEBUG, BPD11, "Performing TChunkWritePiece write to block device",
++                (ReqId, piece->ChunkWrite->ReqId),
++                (chunkIdx, piece->ChunkWrite->ChunkIdx),
++                (PieceShift, piece->PieceShift),
++                (PieceSize, piece->PieceSize),
++            );
++            LWTRACK(PDiskChunkWritePieceSendToDevice,
++                piece->Orbit, PCtx->PDiskId, piece->ChunkWrite->Owner, piece->ChunkWrite->ChunkIdx,
++                piece->PieceShift, piece->PieceSize
++            );
++            piece->ChunkWriteResult->ChunkWriter->WriteToBlockDevice();
+         }
++
++        // One more flush is sent to BlockDevice from TSectorWriter destructor.
++        // Y_VERIFY(piece->Completion == nullptr, "Completion should be released from TChunkWritePiece and freed in completion thread");
+         delete piece;
++
+         // prevent the thread from being stuck for long
+         if (UseNoopSchedulerCached && processed >= Cfg->SchedulerCfg.MaxChunkWritesPerCycle
+             && HPMilliSecondsFloat(HPNow() - start) > Cfg->SchedulerCfg.MaxChunkWritesDurationPerCycleMs) {
+@@ -3236,7 +3319,7 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
+                 --state.OperationsInProgress;
+                 --inFlight->ChunkWrites;
+             };
+-            ev.Completion = MakeHolder<TCompletionChunkWrite>(ev.Sender, result.release(), &Mon, PCtx->PDiskId,
++            ev.Completion = new TCompletionChunkWrite(ev.Sender, result.release(), &Mon, PCtx->PDiskId,
+                     ev.CreationTime, ev.TotalSize, ev.PriorityClass, std::move(onDestroy), ev.ReqId,
+                     ev.Span.CreateChild(TWilson::PDiskBasic, "PDisk.CompletionChunkWrite"));
+             ev.Completion->Parts = ev.PartsPtr;
+@@ -3416,19 +3499,33 @@ void TPDisk::PushRequestToScheduler(TRequestBase *request) {
+             ? ui64(ForsetiOpPieceSizeCached) * Format.SectorPayloadSize() / Format.SectorSize
+             : whole->TotalSize;
+         const ui32 jobCount = (whole->TotalSize + jobSizeLimit - 1) / jobSizeLimit;
+-
++        whole->Completion->Pieces = jobCount;
+         ui32 remainingSize = whole->TotalSize;
++
++        TVector<TChunkWritePiece*> chunkWritePieces(jobCount);
+         for (ui32 idx = 0; idx < jobCount; ++idx) {
+             auto span = request->Span.CreateChild(TWilson::PDiskDetailed, "PDisk.ChunkWritePiece", NWilson::EFlags::AUTO_END);
+             span.Attribute("small_job_idx", idx)
+                 .Attribute("is_last_piece", idx == jobCount - 1);
+             ui32 jobSize = Min(remainingSize, jobSizeLimit);
+-            TChunkWritePiece *piece = new TChunkWritePiece(whole, idx * jobSizeLimit, jobSize, std::move(span));
+-            piece->GateId = whole->GateId;
++            auto piece = new TChunkWritePiece(this, whole, idx * jobSizeLimit, jobSize, std::move(span));
+             piece->EstimateCost(DriveModel);
+-            AddJobToScheduler(piece, request->JobKind);
+             remainingSize -= jobSize;
++            chunkWritePieces[idx] = std::move(piece);
+         }
++
++        //to register all pieces first, then schedule
++        for (size_t idx = 0; idx < chunkWritePieces.size(); idx++) {
++            auto& piece = chunkWritePieces[idx];
++            P_LOG(PRI_INFO, BPD01, "PDiskChunkWritePieceAddToScheduler", (idx, idx), (jobSizeLimit, jobSizeLimit),
++                (pieceShift, piece->PieceShift), (pieceSize, piece->PieceSize));
++            LWTRACK(PDiskChunkWritePieceAddToScheduler, whole->Orbit, PCtx->PDiskId, idx, piece->PieceShift,
++                    piece->PieceSize);
++
++            AddJobToScheduler(piece, request->JobKind);
++        }
++        chunkWritePieces.clear();
++
+         Y_VERIFY_S(remainingSize == 0, PCtx->PDiskLogPrefix << "remainingSize# " << remainingSize);
+     } else if (request->GetType() == ERequestType::RequestChunkRead) {
+         TIntrusivePtr<TChunkRead> read = std::move(static_cast<TChunkRead*>(request)->SelfPointer);
+@@ -3563,7 +3660,19 @@ void TPDisk::RouteRequest(TRequestBase *request) {
+             break;
+         }
+         case ERequestType::RequestChunkWritePiece:
+-            JointChunkWrites.push(request);
++            {
++
++                request->Span.Event("PDisk.BeforeBlockDevice");
++
++                Y_VERIFY_S(request->GetType() == ERequestType::RequestChunkWritePiece, PCtx->PDiskLogPrefix
++                    << "Unexpected request type# " << ui64(request->GetType())
++                    << " TypeName# " << TypeName(*request) << " in ChunkEncoder");
++
++                TChunkWritePiece *piece = static_cast<TChunkWritePiece*>(request);
++
++                JointChunkWrites.Enqueue(piece);
++            }
++
+             break;
+         case ERequestType::RequestChunkTrim:
+         {
+@@ -3736,6 +3845,10 @@ void TPDisk::EnqueueAll() {
+     LWTRACK(PDiskEnqueueAllDetails, UpdateCycleOrbit, PCtx->PDiskId, initialQueueSize, processedReqs, pushedToSchedulerReqs, spentTimeMs);
+ }
+
++// namespace {
++//     int64_t cycles = 0, sleeps = 0;
++// }
++
+ void TPDisk::GetJobsFromForsetti() {
+     // Prepare
+     UpdateMinLogCostNs();
+@@ -3858,7 +3971,7 @@ void TPDisk::Update() {
+     }
+
+     // Processing
+-    bool isNonLogWorkloadPresent = !JointChunkWrites.empty() || !FastOperationsQueue.empty() ||
++    bool isNonLogWorkloadPresent = !JointChunkWrites.IsEmpty() || !FastOperationsQueue.empty() ||
+             !JointChunkReads.empty() || !JointLogReads.empty() || !JointChunkTrims.empty() || !JointChunkForgets.empty();
+     bool isLogWorkloadPresent = !JointLogWrites.empty();
+     bool isNothingToDo = true;
+@@ -3966,13 +4079,17 @@ void TPDisk::Update() {
+     }
+
+     // Wait for something to do
++    // cycles++;
++    // Cerr << "PDisk stats:\n" << isNothingToDo << ' ' << InputQueue.GetWaitingSize() << ' ' << ForsetiScheduler.IsEmpty() << Endl;
+     if (isNothingToDo && InputQueue.GetWaitingSize() == 0 && ForsetiScheduler.IsEmpty()) {
+         // use deadline to be able to wakeup in situation of pdisk destruction
++        // sleeps++;
+         InputQueue.ProducedWait(TDuration::MilliSeconds(10));
+     }
++    // Cerr << "cycles, sleeps " << cycles << " " << sleeps << Endl;
+
+     auto entireUpdateMs = Mon.UpdateDurationTracker.UpdateEnded();
+-    LWTRACK(PDiskUpdateEnded, UpdateCycleOrbit, PCtx->PDiskId, entireUpdateMs );
++    LWTRACK(PDiskUpdateEnded, UpdateCycleOrbit, PCtx->PDiskId, entireUpdateMs);
+     UpdateCycleOrbit.Reset();
+     *Mon.PDiskThreadCPU = ThreadCPUTime();
+ }
+diff --git a/ydb/core/blobstorage/pdisk/blobstorage_pdisk_impl.h b/ydb/core/blobstorage/pdisk/blobstorage_pdisk_impl.h
+index 99378365622..10b721cd6c3 100644
+--- a/ydb/core/blobstorage/pdisk/blobstorage_pdisk_impl.h
++++ b/ydb/core/blobstorage/pdisk/blobstorage_pdisk_impl.h
+@@ -4,6 +4,7 @@
+ #include "blobstorage_pdisk_blockdevice.h"
+ #include <ydb/library/pdisk_io/buffers.h>
+ #include "blobstorage_pdisk_chunk_tracker.h"
++#include "blobstorage_pdisk_chunk_write_queue.h"
+ #include "blobstorage_pdisk_crypto.h"
+ #include "blobstorage_pdisk_data.h"
+ #include "blobstorage_pdisk_delayed_cost_loop.h"
+@@ -32,6 +33,7 @@
+ #include <util/generic/queue.h>
+ #include <util/system/condvar.h>
+ #include <util/system/mutex.h>
++#include <util/thread/lfqueue.h>
+
+ #include <queue>
+
+@@ -82,7 +84,9 @@ public:
+
+     TVector<TRequestBase*> JointLogReads;
+     std::queue<TIntrusivePtr<TRequestBase>> JointChunkReads;
+-    std::queue<TRequestBase*> JointChunkWrites;
++    THolder<IThreadPool> ChunkEncoder;
++    std::queue<TChunkWritePiece*> JointChunkWriteRequests;
++    TChunkWritePieceQueue JointChunkWrites;
+     std::queue<TLogWrite*> JointLogWrites;
+     TVector<TChunkTrim*> JointChunkTrims;
+     TVector<std::unique_ptr<TChunkForget>> JointChunkForgets;
+@@ -314,10 +318,12 @@ public:
+         bool parseCommitMessage);
+     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+     // Chunk writing
+-    bool ChunkWritePiece(TChunkWrite *evChunkWrite, ui32 pieceShift, ui32 pieceSize);
+-    void ChunkWritePiecePlain(TChunkWrite *evChunkWrite);
+-    bool ChunkWritePieceEncrypted(TChunkWrite *evChunkWrite, TChunkWriter &writer, ui32 bytesAvailable);
++    void PushChunkWrite(TChunkWritePiece *piece);
++    TChunkWriteResult ChunkWritePiece(TChunkWritePiece *piece);
++    void ChunkWritePiecePlain(TChunkWritePiece *piece);
++    bool ChunkWritePieceEncrypted(TChunkWritePiece *piece, TChunkWriter &writer, ui32 bytesAvailable);
+     void SendChunkWriteError(TChunkWrite &evChunkWrite, const TString &errorReason, NKikimrProto::EReplyStatus status);
++    bool HasEncryptionThreads() const;
+     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+     // Chunk reading
+     enum EChunkReadPieceResult {
+diff --git a/ydb/core/blobstorage/pdisk/blobstorage_pdisk_mon.cpp b/ydb/core/blobstorage/pdisk/blobstorage_pdisk_mon.cpp
+index f43370711fd..6471df35d8e 100644
+--- a/ydb/core/blobstorage/pdisk/blobstorage_pdisk_mon.cpp
++++ b/ydb/core/blobstorage/pdisk/blobstorage_pdisk_mon.cpp
+@@ -264,6 +264,7 @@ TPDiskMon::TPDiskMon(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& count
+     COUNTER_INIT(PDiskGroup, TrimThreadCPU, true);
+     COUNTER_INIT(PDiskGroup, CompletionThreadCPU, true);
+
++
+     COUNTER_INIT(CounterGroup, PDiskCount, false);
+ }
+
+diff --git a/ydb/core/blobstorage/pdisk/blobstorage_pdisk_requestimpl.cpp b/ydb/core/blobstorage/pdisk/blobstorage_pdisk_requestimpl.cpp
+index caaa5568c76..793dd193353 100644
+--- a/ydb/core/blobstorage/pdisk/blobstorage_pdisk_requestimpl.cpp
++++ b/ydb/core/blobstorage/pdisk/blobstorage_pdisk_requestimpl.cpp
+@@ -1,5 +1,6 @@
+ #include "blobstorage_pdisk_requestimpl.h"
+ #include "blobstorage_pdisk_completion_impl.h"
++#include "blobstorage_pdisk_impl.h"
+
+ namespace NKikimr {
+ namespace NPDisk {
+@@ -64,6 +65,11 @@ TChunkWrite::TChunkWrite(const NPDisk::TEvChunkWrite &ev, const TActorId &sender
+     SlackSize = Max<ui32>();
+ }
+
++void TChunkWrite::Abort(TActorSystem* actorSystem) {
++    if (!AtomicSwap(&Aborted, true)) {
++        actorSystem->Send(Sender, new NPDisk::TEvChunkWriteResult(NKikimrProto::CORRUPTED, ChunkIdx, Cookie, 0, "TChunkWrite is being aborted"));
++    }
++}
+
+ ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+ // TChunkRead
+@@ -87,6 +93,44 @@ void TChunkRead::Abort(TActorSystem* actorSystem) {
+ }
+
+
++////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
++// TChunkWritePiece
++////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
++TChunkWritePiece::TChunkWritePiece(TPDisk *pdisk, TIntrusivePtr<TChunkWrite> &write, ui32 pieceShift, ui32 pieceSize, NWilson::TSpan span)
++    : TRequestBase(write->Sender, write->ReqId, write->Owner, write->OwnerRound, write->PriorityClass, std::move(span))
++    , PDisk(pdisk)
++    , ChunkWrite(write)
++    , PieceShift(pieceShift)
++    , PieceSize(pieceSize)
++    // , Completion(MakeHolder<TCompletionChunkWritePiece>(this, ChunkWrite->Completion))
++{
++    ChunkWrite->RegisterPiece();
++    GateId = ChunkWrite->GateId;
++}
++
++TChunkWritePiece::~TChunkWritePiece() {
++}
++
++void TChunkWritePiece::Process(void*) {
++    //do not override PDiskThread counter if no extra threads are created
++    if (PDisk->HasEncryptionThreads()) {
++        auto cpuCounter = PDisk->Mon.PDiskGroup->GetCounter(TThread::CurrentThreadName() + "CPU", true);
++        *cpuCounter = ThreadCPUTime();
++    }
++    this->ChunkWriteResult = MakeHolder<TChunkWriteResult>(PDisk->ChunkWritePiece(this));
++    PDisk->PushChunkWrite(this);
++}
++
++void TChunkWritePiece::MarkReady(const TString& logPrefix) {
++    Processed = true;
++    Y_UNUSED(logPrefix);
++    // auto evChunkWrite = ChunkWrite.Get();
++    // ui8 old = evChunkWrite->ReadyForBlockDevice.fetch_add(1, std::memory_order_seq_cst);
++    // if (old + 1 == evChunkWrite->Pieces) {
++    //     Y_VERIFY_S(evChunkWrite->RemainingSize == 0, logPrefix);
++    //     evChunkWrite->Completion->Orbit = std::move(evChunkWrite->Orbit);
++    // }
++}
+ ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+ // TChunkReadPiece
+ ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+diff --git a/ydb/core/blobstorage/pdisk/blobstorage_pdisk_requestimpl.h b/ydb/core/blobstorage/pdisk/blobstorage_pdisk_requestimpl.h
+index 520b31efd38..b9ebbbf9afb 100644
+--- a/ydb/core/blobstorage/pdisk/blobstorage_pdisk_requestimpl.h
++++ b/ydb/core/blobstorage/pdisk/blobstorage_pdisk_requestimpl.h
+@@ -2,6 +2,7 @@
+ #include "defs.h"
+ #include "blobstorage_pdisk.h"
+ #include <ydb/library/pdisk_io/buffers.h>
++#include "blobstorage_pdisk_chunk_write_result.h"
+ #include "blobstorage_pdisk_data.h"
+ #include "blobstorage_pdisk_drivemodel.h"
+ #include "blobstorage_pdisk_internal_interface.h"
+@@ -498,11 +499,12 @@ public:
+     }
+ };
+
+-
+-class TCompletionChunkWrite;
+ //
+ // TChunkWrite
+ //
++class TCompletionChunkWrite;
++class TCompletionChunkWritePiece;
++
+ class TChunkWrite : public TRequestBase {
+ public:
+     ui32 ChunkIdx;
+@@ -515,17 +517,16 @@ public:
+     bool ChunkEncrypted = true;
+
+     ui32 TotalSize;
+-    ui32 CurrentPart = 0;
+-    ui32 CurrentPartOffset = 0;
+-    ui32 RemainingSize = 0;
++    std::atomic<ui32> RemainingSize = 0;
+
+     ui32 SlackSize;
+-    ui32 BytesWritten = 0;
++    std::atomic<ui32> BytesWritten = 0;
+
+     TAtomic Pieces = 0;
+     TAtomic Aborted = 0;
++    std::atomic<ui32> ReadyForBlockDevice = 0;
+
+-    THolder<TCompletionChunkWrite> Completion;
++    TCompletionChunkWrite* Completion = nullptr;
+
+     TChunkWrite(const NPDisk::TEvChunkWrite &ev, const TActorId &sender, TReqId reqId, NWilson::TSpan span);
+
+@@ -565,30 +566,27 @@ public:
+         }
+     }
+
+-    void Abort(TActorSystem* actorSystem) override {
+-        if (!AtomicSwap(&Aborted, true)) {
+-            actorSystem->Send(Sender, new NPDisk::TEvChunkWriteResult(NKikimrProto::CORRUPTED, ChunkIdx, Cookie, 0, "TChunkWrite is being aborted"));
+-        }
+-    }
++    void Abort(TActorSystem* actorSystem) override;
+ };
+
+ //
+ // TChunkWritePiece
+ //
+-class TChunkWritePiece : public TRequestBase {
++
++class TChunkWritePiece : public TRequestBase, public IObjectInQueue {
+ public:
++    TPDisk *PDisk;
++
+     TIntrusivePtr<TChunkWrite> ChunkWrite;
+     ui32 PieceShift;
+     ui32 PieceSize;
++    ui32 PartOffset = 0;
++    THolder<TChunkWriteResult> ChunkWriteResult;
++    THolder<TCompletionChunkWritePiece> Completion;
++    bool Processed = false;
+
+-    TChunkWritePiece(TIntrusivePtr<TChunkWrite> &write, ui32 pieceShift, ui32 pieceSize, NWilson::TSpan span)
+-        : TRequestBase(write->Sender, write->ReqId, write->Owner, write->OwnerRound, write->PriorityClass, std::move(span))
+-        , ChunkWrite(write)
+-        , PieceShift(pieceShift)
+-        , PieceSize(pieceSize)
+-    {
+-        ChunkWrite->RegisterPiece();
+-    }
++    TChunkWritePiece(TPDisk *pdisk, TIntrusivePtr<TChunkWrite> &write, ui32 pieceShift, ui32 pieceSize, NWilson::TSpan span);
++    ~TChunkWritePiece();
+
+     ERequestType GetType() const override {
+         return ERequestType::RequestChunkWritePiece;
+@@ -604,6 +602,9 @@ public:
+             ChunkWrite->AbortPiece(actorSystem);
+         }
+     }
++
++    void Process(void*) override;
++    void MarkReady(const TString& logPrefix);
+ };
+
+ //
+diff --git a/ydb/core/blobstorage/pdisk/blobstorage_pdisk_state.h b/ydb/core/blobstorage/pdisk/blobstorage_pdisk_state.h
+index f2bc0d4d436..61a90d4aaa7 100644
+--- a/ydb/core/blobstorage/pdisk/blobstorage_pdisk_state.h
++++ b/ydb/core/blobstorage/pdisk/blobstorage_pdisk_state.h
+@@ -277,7 +277,6 @@ struct TChunkState {
+     };
+
+     ui64 Nonce;
+-    ui64 CurrentNonce;
+     ui64 PreviousNonce;
+     std::atomic<i64> OperationsInProgress;
+     TOwner OwnerId;
+@@ -287,7 +286,6 @@ struct TChunkState {
+     ui64 ShredGeneration;
+     TChunkState()
+         : Nonce(0)
+-        , CurrentNonce(0)
+         , PreviousNonce(0)
+         , OperationsInProgress(0)
+         , OwnerId(OwnerUnallocated)
+@@ -309,7 +307,6 @@ struct TChunkState {
+         TStringStream str;
+         str << "{ ";
+         OUT_VAR(Nonce);
+-        OUT_VAR(CurrentNonce);
+         OUT_VAR(PreviousNonce);
+         OUT_VAR(OperationsInProgress.load());
+         OUT_VAR(OwnerId);
+diff --git a/ydb/core/blobstorage/pdisk/blobstorage_pdisk_thread.h b/ydb/core/blobstorage/pdisk/blobstorage_pdisk_thread.h
+index 54387e93146..eac00f30bb7 100644
+--- a/ydb/core/blobstorage/pdisk/blobstorage_pdisk_thread.h
++++ b/ydb/core/blobstorage/pdisk/blobstorage_pdisk_thread.h
+@@ -55,4 +55,3 @@ private:
+
+ } // NPDisk
+ } // NKikimr
+-
+diff --git a/ydb/core/blobstorage/pdisk/blobstorage_pdisk_ut.cpp b/ydb/core/blobstorage/pdisk/blobstorage_pdisk_ut.cpp
+index 3038493915c..ea29033f4f5 100644
+--- a/ydb/core/blobstorage/pdisk/blobstorage_pdisk_ut.cpp
++++ b/ydb/core/blobstorage/pdisk/blobstorage_pdisk_ut.cpp
+@@ -1,5 +1,6 @@
+ #include "blobstorage_pdisk_ut.h"
+
++#include "blobstorage_pdisk.h"
+ #include "blobstorage_pdisk_abstract.h"
+ #include "blobstorage_pdisk_impl.h"
+ #include "blobstorage_pdisk_ut_env.h"
+@@ -9,6 +10,7 @@
+ #include <ydb/core/testlib/actors/test_runtime.h>
+
+ #include <util/system/hp_timer.h>
++#include <sanitizer/lsan_interface.h>
+
+ namespace NKikimr {
+
+@@ -549,39 +551,48 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
+     }
+
+     Y_UNIT_TEST(TestFakeErrorPDiskManyChunkWrite) {
+-        TActorTestContext testCtx{{}};
+-        testCtx.TestCtx.SectorMap->IoErrorEveryNthRequests = 1000;
+-
+-        const TVDiskID vDiskID(0, 1, 0, 0, 0);
+-        const auto evInitRes = testCtx.TestResponse<NPDisk::TEvYardInitResult>(
+-                new NPDisk::TEvYardInit(2, vDiskID, testCtx.TestCtx.PDiskGuid),
+-                NKikimrProto::OK);
+-
+-        const auto evReserveRes = testCtx.TestResponse<NPDisk::TEvChunkReserveResult>(
+-                new NPDisk::TEvChunkReserve(evInitRes->PDiskParams->Owner, evInitRes->PDiskParams->OwnerRound, 1),
+-                NKikimrProto::OK);
+-        UNIT_ASSERT(evReserveRes->ChunkIds.size() == 1);
+-        const ui32 reservedChunk = evReserveRes->ChunkIds.front();
++        for (int encryptionThreadsCount : {0, 1, 3}) {
++            TActorTestContext testCtx{{}};
++            testCtx.TestCtx.SectorMap->IoErrorEveryNthRequests = 1000;
++
++            if (encryptionThreadsCount) {
++                auto pdiskConfig = testCtx.GetPDiskConfig();
++                pdiskConfig->EncryptionThreadsCount = encryptionThreadsCount;
++                Cerr << "encryptionThreadsCount# " << pdiskConfig->EncryptionThreadsCount << Endl;
++                testCtx.UpdateConfigRecreatePDisk(pdiskConfig);
++            }
+
+-        ui32 errors = 0;
+-        bool printed = false;
+-        for (ui32 i = 0; i < 10'000; ++i) {
+-            testCtx.Send(new NPDisk::TEvChunkWrite(evInitRes->PDiskParams->Owner, evInitRes->PDiskParams->OwnerRound,
+-                    reservedChunk, 0, new NPDisk::TEvChunkWrite::TAlignedParts(PrepareData(1024)), nullptr, false, 0));
++            const TVDiskID vDiskID(0, 1, 0, 0, 0);
++            const auto evInitRes = testCtx.TestResponse<NPDisk::TEvYardInitResult>(
++                    new NPDisk::TEvYardInit(2, vDiskID, testCtx.TestCtx.PDiskGuid),
++                    NKikimrProto::OK);
+
+-            const auto res = testCtx.Recv<NPDisk::TEvChunkWriteResult>();
+-            //Ctest << res->ToString() << Endl;
+-            if (res->Status != NKikimrProto::OK) {
+-                ++errors;
+-                if (!printed) {
+-                    printed = true;
+-                    Ctest << res->ToString() << Endl;
++            const auto evReserveRes = testCtx.TestResponse<NPDisk::TEvChunkReserveResult>(
++                    new NPDisk::TEvChunkReserve(evInitRes->PDiskParams->Owner, evInitRes->PDiskParams->OwnerRound, 1),
++                    NKikimrProto::OK);
++            UNIT_ASSERT(evReserveRes->ChunkIds.size() == 1);
++            const ui32 reservedChunk = evReserveRes->ChunkIds.front();
++
++            ui32 errors = 0;
++            bool printed = false;
++            for (ui32 i = 0; i < 10'000; ++i) {
++                testCtx.Send(new NPDisk::TEvChunkWrite(evInitRes->PDiskParams->Owner, evInitRes->PDiskParams->OwnerRound,
++                        reservedChunk, 0, new NPDisk::TEvChunkWrite::TAlignedParts(PrepareData(1024)), nullptr, false, 0));
++
++                const auto res = testCtx.Recv<NPDisk::TEvChunkWriteResult>();
++                //Ctest << res->ToString() << Endl;
++                if (res->Status != NKikimrProto::OK) {
++                    ++errors;
++                    if (!printed) {
++                        printed = true;
++                        Ctest << res->ToString() << Endl;
++                    }
++                } else {
++                    UNIT_ASSERT(errors == 0);
+                 }
+-            } else {
+-                UNIT_ASSERT(errors == 0);
+             }
++            UNIT_ASSERT(errors > 0);
+         }
+-        UNIT_ASSERT(errors > 0);
+     }
+
+     Y_UNIT_TEST(TestSIGSEGVInTUndelivered) {
+@@ -1054,7 +1065,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
+             void Bootstrap() {
+                 Become(&TThis::StateDefault);
+             }
+-
++
+             STATEFN(StateDefault) {
+                 switch (ev->GetTypeRewrite()) {
+                     case TEvBlobStorage::TEvControllerUpdateDiskStatus::EventType: {
+@@ -1285,13 +1296,19 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
+         ui32 logBuffSize = 250;
+         ui32 chunkBuffSize = 128_KB;
+
+-        for (ui32 testCase = 0; testCase < 8; testCase++) {
++        for (ui32 testCase = 0; testCase < 16; testCase++) {
+             Cerr << "restart# " << bool(testCase & 4) << " start with noop scheduler# " << bool(testCase & 1)
+-                << " end with noop scheduler# " << bool(testCase & 2) << Endl;
++                << " end with noop scheduler# " << bool(testCase & 2) << " multiple encryption threads# "
++                << bool(testCase & 8)<< Endl;
+             testCtx.SafeRunOnPDisk([=] (NPDisk::TPDisk* pdisk) {
+                 pdisk->UseNoopSchedulerHDD = testCase & 1;
+                 pdisk->UseNoopSchedulerSSD = testCase & 1;
+             });
++            if (testCase & 8) {
++                auto pdiskConfig = testCtx.GetPDiskConfig();
++                pdiskConfig->EncryptionThreadsCount = 3;
++                testCtx.UpdateConfigRecreatePDisk(pdiskConfig);
++            }
+
+             vdisk.InitFull();
+             for (ui32 i = 0; i < 100; ++i) {
+@@ -1403,12 +1420,74 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
+             UNIT_ASSERT(ConvertIPartsToString(parts.Get()) == res->Data.ToString().Slice());
+         }
+     }
++
+     Y_UNIT_TEST(ChunkWriteDifferentOffsetAndSize) {
+         for (int i = 0; i <= 1; ++i) {
+             ChunkWriteDifferentOffsetAndSizeImpl(i);
+         }
+     }
+
++    Y_UNIT_TEST(TestUnalignedChunkWriteParts) {
++        size_t offset = 17954752;
++        size_t size = 772160;
++        size_t partsCount = 4;
++        TVector<size_t> partSize = {764032, 16, 676, 7436};
++        TReallyFastRng32 rng(12345);
++
++        auto counter = MakeIntrusive<::NMonitoring::TCounterForPtr>();
++        TMemoryConsumer consumer(counter);
++        TRope rope;
++        size_t createdBytes = 0;
++        if (size >= partsCount) {
++            for (size_t i = 0; i < partsCount; ++i) {
++                TRope x(PrepareData(partSize[i]));
++                createdBytes += x.size();
++                rope.Insert(rope.End(), std::move(x));
++            }
++        }
++        UNIT_ASSERT(createdBytes == size);
++        auto parts = MakeIntrusive<NPDisk::TEvChunkWrite::TRopeAlignedParts>(std::move(rope), size);
++
++        TActorTestContext testCtx({ false });
++        TVDiskMock vdisk(&testCtx);
++
++        auto pdiskConfig = testCtx.GetPDiskConfig();
++        pdiskConfig->EncryptionThreadsCount = 3;
++        testCtx.UpdateConfigRecreatePDisk(pdiskConfig);
++
++        vdisk.InitFull();
++        vdisk.ReserveChunk();
++        auto chunk = *vdisk.Chunks[EChunkState::RESERVED].begin();
++        vdisk.CommitReservedChunks();
++
++        testCtx.TestResponse<NPDisk::TEvChunkWriteResult>(
++            new NPDisk::TEvChunkWrite(vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound,
++                chunk, offset, parts, nullptr, false, 0),
++            NKikimrProto::OK);
++        auto read = testCtx.TestResponse<NPDisk::TEvChunkReadResult>(
++                new NPDisk::TEvChunkRead(vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound,
++                    chunk, offset, size, 0, 0),
++                NKikimrProto::OK);
++
++        UNIT_ASSERT(read->Data.IsReadable());
++        UNIT_ASSERT_EQUAL(ConvertIPartsToString(parts.Get()), read->Data.ToString());
++        size_t partialOffset = 18718784;
++        size_t partialSize = 8128;
++        auto partialRead = testCtx.TestResponse<NPDisk::TEvChunkReadResult>(
++            new NPDisk::TEvChunkRead(vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound,
++                chunk, partialOffset, partialSize, 0, 0),
++            NKikimrProto::OK);
++        UNIT_ASSERT(partialRead->Data.IsReadable());
++        UNIT_ASSERT_VALUES_EQUAL(partialRead->Data.ToString().size(), 8128);
++        offset = 0;
++        for (size_t i = 1; i < partsCount; i++) {
++            auto expected = (*parts.Get())[i];
++            int diff = memcmp(expected.first, const_cast<TBufferWithGaps*>(&partialRead->Data)->RawDataPtr(offset, expected.second), expected.second);
++            UNIT_ASSERT(!diff);
++            offset += expected.second;
++        }
++    }
++
+     Y_UNIT_TEST(PlainChunksWriteReadALot) {
+         TActorTestContext testCtx{{
+             .PlainDataChunks = true,
+@@ -1461,6 +1540,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
+         Cerr << " total_speed# " << 2 * written / duration.SecondsFloat() / 1e9 << " GB/s" << Endl;
+     }
+
++
+     Y_UNIT_TEST(ChunkWriteBadOffset) {
+         TActorTestContext testCtx{{}};
+
+@@ -1502,11 +1582,13 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
+             ui32 logBuffSize = 250;
+             ui32 chunkBuffSize = 128_KB;
+
+-            for (ui32 testCase = 0; testCase < 4; testCase++) {
++            for (ui32 testCase = 0; testCase < 8; testCase++) {
+                 Cerr << "testCase# " << testCase << Endl;
+                 auto cfg = testCtx.GetPDiskConfig();
+                 cfg->PlainDataChunks = testCase & 1;
++                cfg->EncryptionThreadsCount = 1 + 2 * (testCase & 2);
+                 Cerr << "plainDataChunk# " << cfg->PlainDataChunks  << Endl;
++                Cerr << "encryptionThreadsCount# " << cfg->EncryptionThreadsCount << Endl;
+                 testCtx.UpdateConfigRecreatePDisk(cfg);
+
+                 vdisk.InitFull();
+@@ -1644,7 +1726,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
+         using namespace NPriRead;
+         std::vector<ui8> PriRead = {SyncLog, HullComp, HullOnlineRt, HullOnlineOther, HullLoad, HullLow};
+         auto shares = GetChunkOperationPriorities(true, PriRead);
+-
++
+         // compare with 10% tolerance
+         UNIT_ASSERT(shares[SyncLog] * 0.90 > shares[HullLoad]);
+         UNIT_ASSERT(shares[HullLoad] * 0.90 > shares[HullOnlineRt]);
+@@ -1659,7 +1741,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
+         using namespace NPriWrite;
+         std::vector<ui8> PriWrite = {SyncLog, HullFresh, HullHugeAsyncBlob, HullHugeUserData, HullComp};
+         auto shares = GetChunkOperationPriorities(false, PriWrite);
+-
++
+         // compare with 10% tolerance
+         UNIT_ASSERT(shares[SyncLog] * 0.90 > shares[HullHugeUserData]);
+         UNIT_ASSERT(shares[HullHugeUserData] * 0.90 > shares[HullComp]);
+diff --git a/ydb/core/blobstorage/pdisk/blobstorage_pdisk_writer.cpp b/ydb/core/blobstorage/pdisk/blobstorage_pdisk_writer.cpp
+index 41cbd2ce350..6e6fee6cc2e 100644
+--- a/ydb/core/blobstorage/pdisk/blobstorage_pdisk_writer.cpp
++++ b/ydb/core/blobstorage/pdisk/blobstorage_pdisk_writer.cpp
+@@ -6,11 +6,61 @@
+ namespace NKikimr {
+ namespace NPDisk {
+
++
+ ////////////////////////////////////////////////////////////////////////////
+-// BufferedWriter
++// TBlockDeviceWrite
+ ////////////////////////////////////////////////////////////////////////////
+
+-void TBufferedWriter::WriteBufferWithFlush(TReqId reqId, NWilson::TTraceId *traceId,
++TBufferedWriter::TBlockDeviceWrite::TBlockDeviceWrite(const TReqId& ReqId, TBuffer::TPtr &&buffer, ui64 StartOffset, ui64 DirtyFrom, ui64 DirtyTo, NWilson::TTraceId *TraceId, TActorSystem* ActorSystem)
++    : TBlockDeviceAction(ReqId), Deleter(ActorSystem), Buffer(std::unique_ptr<TBuffer, TReleaseWriteAction>(buffer.Release(), Deleter)), StartOffset(StartOffset), DirtyFrom(DirtyFrom), DirtyTo(DirtyTo), TraceId(*TraceId)
++{
++}
++
++void TBufferedWriter::TBlockDeviceWrite::DoCall(IBlockDevice &BlockDevice) {
++    // TODO: do not mock writes one-by-one, do a huge PwriteAsync
++    ui8 *source = Buffer->Data() + DirtyFrom - StartOffset;
++    ui32 sizeToWrite = (ui32)(DirtyTo - DirtyFrom);
++    BlockDevice.PwriteAsync(source, sizeToWrite, DirtyFrom, Buffer.release(), ReqId, &TraceId);
++}
++
++TBufferedWriter::TBlockDeviceWrite::TReleaseWriteAction::TReleaseWriteAction(TActorSystem *ActorSystem) : ActorSystem(ActorSystem) {}
++
++void TBufferedWriter::TBlockDeviceWrite::TReleaseWriteAction::operator()(TBuffer *buffer) const {
++        if (buffer->FlushAction) {
++            //frees buffer->FlushAction
++            buffer->FlushAction->Release(ActorSystem);
++        }
++
++        buffer->ReturnToPool();
++}
++
++
++////////////////////////////////////////////////////////////////////////////
++// TBlockDeviceFlush
++////////////////////////////////////////////////////////////////////////////
++TBufferedWriter::TBlockDeviceFlush::TBlockDeviceFlush(const TReqId& ReqId, TCompletionAction* Completion1, TActorSystem* actorSystem)
++    : TBlockDeviceAction(ReqId), Deleter(actorSystem), Completion(std::unique_ptr<TCompletionAction, TReleaseFlushAction>(Completion1, Deleter))
++{
++}
++
++void TBufferedWriter::TBlockDeviceFlush::DoCall(IBlockDevice &BlockDevice) {
++    BlockDevice.FlushAsync(Completion.release(), ReqId);
++}
++
++TBufferedWriter::TBlockDeviceFlush::TReleaseFlushAction::TReleaseFlushAction(TActorSystem *ActorSystem) : ActorSystem(ActorSystem) {}
++
++void TBufferedWriter::TBlockDeviceFlush::TReleaseFlushAction::operator()(TCompletionAction *action) const {
++        if (action->FlushAction) {
++            action->FlushAction->Release(ActorSystem);
++        }
++        //frees action->FlushAction
++        action->Release(ActorSystem);
++}
++
++////////////////////////////////////////////////////////////////////////////
++// BufferedWriter
++////////////////////////////////////////////////////////////////////////////
++void TBufferedWriter::WriteToBuffer(TReqId reqId, NWilson::TTraceId *traceId,
+         TCompletionAction *flushAction, ui32 chunkIdx) {
+     static NWilson::TTraceId noTrace;
+     if (DirtyFrom != DirtyTo) {
+@@ -20,19 +70,28 @@ void TBufferedWriter::WriteBufferWithFlush(TReqId reqId, NWilson::TTraceId *trac
+         CurrentBuffer->FlushAction = flushAction;
+         CurrentBuffer->CostNs = DriveModel->TimeForSizeNs(sizeToWrite, chunkIdx, TDriveModel::OP_TYPE_WRITE);
+         Y_VERIFY_DEBUG_S(sizeToWrite <= CurrentBuffer->Size(), PCtx->PDiskLogPrefix);
+-        BlockDevice.PwriteAsync(source, sizeToWrite, DirtyFrom, CurrentBuffer.Release(), reqId, traceId);
++        if (WithDelayedFlush) {
++            BlockDeviceActions.push(MakeHolder<TBlockDeviceWrite>(reqId, std::move(CurrentBuffer), StartOffset, DirtyFrom, DirtyTo, traceId, PCtx->ActorSystem));
++        } else {
++            BlockDevice.PwriteAsync(source, sizeToWrite, DirtyFrom, CurrentBuffer.Release(), reqId, traceId);
++        }
+         CurrentBuffer = TBuffer::TPtr(Pool->Pop());
+         CurrentSector = CurrentBuffer->Data();
++
+         StartOffset = DirtyTo;
+         DirtyFrom = DirtyTo;
+     } else if (flushAction) {
+         flushAction->CostNs = 1;
+-        BlockDevice.FlushAsync(flushAction, reqId);
++        if (WithDelayedFlush) {
++            BlockDeviceActions.push(MakeHolder<TBlockDeviceFlush>(reqId, flushAction, PCtx->ActorSystem));
++        } else {
++            BlockDevice.FlushAsync(flushAction, reqId);
++        }
+     }
+ }
+
+ TBufferedWriter::TBufferedWriter(ui64 sectorSize, IBlockDevice &blockDevice, TDiskFormat &format, TBufferPool *pool,
+-        TActorSystem *actorSystem, TDriveModel *driveModel, std::shared_ptr<TPDiskCtx> pCtx)
++        TActorSystem *actorSystem, TDriveModel *driveModel, std::shared_ptr<TPDiskCtx> pCtx, bool withDelayedFlush)
+     : SectorSize(sectorSize)
+     , BlockDevice(blockDevice)
+     , Format(format)
+@@ -47,10 +106,13 @@ TBufferedWriter::TBufferedWriter(ui64 sectorSize, IBlockDevice &blockDevice, TDi
+     , LastReqId(TReqId::InitialTSectorWriterReqId, 0)
+     , DriveModel(driveModel)
+     , PCtx(std::move(pCtx))
++    , WithDelayedFlush(withDelayedFlush)
+ {
+ }
+
+ void TBufferedWriter::SetupWithBuffer(ui64 startOffset, ui64 currentOffset, TBuffer *buffer, ui32 count, TReqId reqId) {
++    //TODO: replace with Y_VERIFY?
++    Y_ENSURE(!WithDelayedFlush);
+     CurrentBuffer.Reset(buffer);
+     CurrentSector = CurrentBuffer->Data() + (currentOffset - startOffset);
+
+@@ -68,7 +130,7 @@ ui8* TBufferedWriter::Seek(ui64 offset, ui32 count, ui32 reserve, TReqId reqId,
+     Y_VERIFY_S(count > 0, PCtx->PDiskLogPrefix);
+     Y_VERIFY_S(count <= 16, PCtx->PDiskLogPrefix);
+     if (NextOffset != offset || NextOffset + SectorSize * reserve - StartOffset > CurrentBuffer->Size()) {
+-        WriteBufferWithFlush(LastReqId, traceId, nullptr, chunkIdx);
++        WriteToBuffer(LastReqId, traceId, nullptr, chunkIdx);
+         StartOffset = offset;
+         DirtyFrom = offset;
+         DirtyTo = offset;
+@@ -90,7 +152,7 @@ ui8* TBufferedWriter::RawData() const {
+
+ void TBufferedWriter::Flush(TReqId reqId, NWilson::TTraceId *traceId,
+         TCompletionAction *flushAction, ui32 chunkIdx) {
+-    WriteBufferWithFlush(reqId, traceId, flushAction, chunkIdx);
++    WriteToBuffer(reqId, traceId, flushAction, chunkIdx);
+ }
+
+ void TBufferedWriter::MarkDirty() {
+@@ -101,7 +163,17 @@ void TBufferedWriter::Obliterate() {
+     DirtyTo = DirtyFrom;
+ }
+
++void TBufferedWriter::WriteToBlockDevice() {
++    Y_ENSURE(WithDelayedFlush);
++    while (!BlockDeviceActions.empty()) {
++        const auto& action = BlockDeviceActions.front();
++        action->DoCall(BlockDevice);
++        BlockDeviceActions.pop();
++    }
++}
++
+ TBufferedWriter::~TBufferedWriter() {
++    BlockDeviceActions = {};
+     Flush(LastReqId, nullptr, nullptr, 0);
+ }
+
+diff --git a/ydb/core/blobstorage/pdisk/blobstorage_pdisk_writer.h b/ydb/core/blobstorage/pdisk/blobstorage_pdisk_writer.h
+index a635914f584..5222bc95c6b 100644
+--- a/ydb/core/blobstorage/pdisk/blobstorage_pdisk_writer.h
++++ b/ydb/core/blobstorage/pdisk/blobstorage_pdisk_writer.h
+@@ -10,9 +10,12 @@
+ #include "blobstorage_pdisk_request_id.h"
+
+ #include <ydb/core/blobstorage/crypto/crypto.h>
++#include <ydb/library/pdisk_io/buffers.h>
+
+ #include <util/generic/deque.h>
+
++#include <queue>
++
+ namespace NKikimr {
+ namespace NPDisk {
+
+@@ -24,6 +27,48 @@ struct TBuffer;
+ // BufferedWriter
+ ////////////////////////////////////////////////////////////////////////////
+ class TBufferedWriter {
++private:
++    class TBlockDeviceAction {
++    protected:
++        TReqId ReqId;
++    public:
++        TBlockDeviceAction(const TReqId& ReqId) : ReqId(ReqId) {}
++        virtual void DoCall(IBlockDevice &BlockDevice) = 0;
++        virtual ~TBlockDeviceAction() = default;
++    };
++
++    class TBlockDeviceWrite : public TBlockDeviceAction {
++    public:
++        class TReleaseWriteAction {
++        public:
++            TActorSystem* ActorSystem;
++            TReleaseWriteAction() = delete;
++            TReleaseWriteAction(TActorSystem* actorSystem);
++            void operator()(TBuffer *buffer) const;
++        };
++        TReleaseWriteAction Deleter;
++        std::unique_ptr<TBuffer, TReleaseWriteAction> Buffer;
++        ui64 StartOffset;
++        ui64 DirtyFrom;
++        ui64 DirtyTo;
++        NWilson::TTraceId TraceId;
++        TBlockDeviceWrite(const TReqId& ReqId, TBuffer::TPtr&& buffer, ui64 StartOffset, ui64 DirtyFrom, ui64 DirtyTo, NWilson::TTraceId *TraceId, TActorSystem* actorSystem);
++        virtual void DoCall(IBlockDevice &BlockDevice) override;
++    };
++    class TBlockDeviceFlush : public TBlockDeviceAction {
++    public:
++        class TReleaseFlushAction {
++        public:
++            TActorSystem* ActorSystem;
++            TReleaseFlushAction() = delete;
++            TReleaseFlushAction(TActorSystem* actorSystem);
++            void operator()(TCompletionAction *action) const;
++        };
++        TReleaseFlushAction Deleter;
++        std::unique_ptr<TCompletionAction, TReleaseFlushAction> Completion;
++        TBlockDeviceFlush(const TReqId& ReqId, TCompletionAction* Completion, TActorSystem* actorSystem);
++        virtual void DoCall(IBlockDevice &BlockDevice) override;
++    };
+ protected:
+     ui64 SectorSize;
+     IBlockDevice &BlockDevice;
+@@ -45,11 +90,14 @@ protected:
+
+     std::shared_ptr<TPDiskCtx> PCtx;
+
+-    void WriteBufferWithFlush(TReqId reqId, NWilson::TTraceId *traceId,
++    bool WithDelayedFlush;
++    std::queue<THolder<TBlockDeviceAction>> BlockDeviceActions;
++
++    void WriteToBuffer(TReqId reqId, NWilson::TTraceId *traceId,
+             TCompletionAction *flushAction, ui32 chunkIdx);
+ public:
+     TBufferedWriter(ui64 sectorSize, IBlockDevice &blockDevice, TDiskFormat &format, TBufferPool *pool,
+-        TActorSystem *actorSystem, TDriveModel *driveModel, std::shared_ptr<TPDiskCtx> pCtx);
++        TActorSystem *actorSystem, TDriveModel *driveModel, std::shared_ptr<TPDiskCtx> pCtx, bool withDelayedFlush);
+     void SetupWithBuffer(ui64 startOffset, ui64 currentOffset, TBuffer *buffer, ui32 count, TReqId reqId);
+     ui8* Seek(ui64 offset, ui32 count, ui32 reserve, TReqId reqId, NWilson::TTraceId *traceId, ui32 chunkIdx);
+     ui8* Get() const;
+@@ -58,6 +106,7 @@ public:
+             ui32 chunkIdx);
+     void MarkDirty();
+     void Obliterate();
++    void WriteToBlockDevice();
+     ~TBufferedWriter();
+ };
+
+@@ -112,7 +161,7 @@ public:
+     TSectorWriter(TPDiskMon &mon, IBlockDevice &blockDevice, TDiskFormat &format, ui64 &nonce,
+             const TKey &key, TBufferPool *pool, ui64 firstSectorIdx, ui64 endSectorIdx, ui64 dataMagic, ui32 chunkIdx,
+             TLogChunkInfo *logChunkInfo, ui64 sectorIdx, TBuffer *buffer, std::shared_ptr<TPDiskCtx> pCtx,
+-            TDriveModel *driveModel, bool enableEncrytion)
++            TDriveModel *driveModel, bool enableEncrytion, bool withDelayedFlush = false)
+         : Mon(mon)
+         , BlockDevice(blockDevice)
+         , Format(format)
+@@ -134,7 +183,7 @@ public:
+     {
+         Y_VERIFY_S(!LogChunkInfo || LogChunkInfo->ChunkIdx == ChunkIdx, PCtx->PDiskLogPrefix);
+         BufferedWriter.Reset(new TBufferedWriter(Format.SectorSize, BlockDevice, Format, pool,
+-                PCtx->ActorSystem, DriveModel, PCtx));
++                PCtx->ActorSystem, DriveModel, PCtx, withDelayedFlush));
+
+         Cypher.SetKey(key);
+         Cypher.StartMessage(Nonce);
+@@ -428,7 +477,7 @@ public:
+             } else {
+                 *Mon.BandwidthPLogRecordHeader += sizeof(TLogPageHeader);
+             }
+-            P_LOG(PRI_DEBUG, BPD61, SelfInfo() << " LogPageHeader",
++            P_LOG(PRI_DEBUG, BPD61, SelfInfo() << " LogPageHeader",
+                     (ChunkIdx, ChunkIdx), (SectorIdx, SectorIdx), (Nonce, Nonce));
+             Write(&header, sizeof(TLogPageHeader), reqId, traceId);
+         }
+@@ -466,6 +515,10 @@ public:
+         }
+     }
+
++    void WriteToBlockDevice() {
++        BufferedWriter->WriteToBlockDevice();
++    }
++
+ protected:
+     void FinalizeWrite(ui64 size, TReqId reqId, NWilson::TTraceId *traceId) {
+         CurrentPosition += size;
+diff --git a/ydb/core/blobstorage/pdisk/ya.make b/ydb/core/blobstorage/pdisk/ya.make
+index 437e48374c6..b6d81e51150 100644
+--- a/ydb/core/blobstorage/pdisk/ya.make
++++ b/ydb/core/blobstorage/pdisk/ya.make
+@@ -1,11 +1,11 @@
+ LIBRARY()
+
+-IF (YDB_ENABLE_PDISK_SHRED)
++IF (YDB_ENABLE_PDISK_SHRED)
+     CFLAGS(
+         -DENABLE_PDISK_SHRED
+     )
+ ENDIF()
+-IF (YDB_DISABLE_PDISK_ENCRYPTION)
++IF (YDB_DISABLE_PDISK_ENCRYPTION)
+     CFLAGS(
+         -DDISABLE_PDISK_ENCRYPTION
+     )
+@@ -47,6 +47,7 @@ SRCS(
+     blobstorage_pdisk.cpp
+     blobstorage_pdisk_actor.cpp
+     blobstorage_pdisk_blockdevice_async.cpp
++    blobstorage_pdisk_chunk_write_queue.cpp
+     blobstorage_pdisk_completion_impl.cpp
+     blobstorage_pdisk_delayed_cost_loop.cpp
+     blobstorage_pdisk_driveestimator.cpp
+diff --git a/ydb/core/protos/blobstorage_pdisk_config.proto b/ydb/core/protos/blobstorage_pdisk_config.proto
+index 86c7275507e..1da4f96e6ef 100644
+--- a/ydb/core/protos/blobstorage_pdisk_config.proto
++++ b/ydb/core/protos/blobstorage_pdisk_config.proto
+@@ -97,4 +97,5 @@ message TPDiskConfig {
+     optional bool PlainDataChunks = 2005;
+     optional uint32 SlotSizeInUnits = 2006;
+     optional bool SeparateHugePriorities = 2007;
++    optional uint32 EncryptionThreadsCount = 2008;
+ };
+diff --git a/ydb/library/yaml_config/protos/config.proto b/ydb/library/yaml_config/protos/config.proto
+index cf84e2f0657..85792a84208 100644
+--- a/ydb/library/yaml_config/protos/config.proto
++++ b/ydb/library/yaml_config/protos/config.proto
+@@ -77,6 +77,7 @@ message TExtendedHostConfigDrive {
+     optional uint32 SlotSizeInUnits = 8;
+     optional uint64 InferPDiskSlotCountFromUnitSize = 9 [(NMarkers.CopyTo) = "THostConfigDrive"];
+     optional uint32 InferPDiskSlotCountMax = 10 [(NMarkers.CopyTo) = "THostConfigDrive"];
++    optional uint32 EncryptionThreadsCount = 11;
+ }
+
+ message TInferPDiskSlotCountFromUnitSize {
+diff --git a/ydb/library/yaml_config/yaml_config_parser.cpp b/ydb/library/yaml_config/yaml_config_parser.cpp
+index 9919c4c94ab..cfb20341edf 100644
+--- a/ydb/library/yaml_config/yaml_config_parser.cpp
++++ b/ydb/library/yaml_config/yaml_config_parser.cpp
+@@ -637,6 +637,9 @@ namespace NKikimr::NYaml {
+                     if (drive.HasExpectedSlotCount()) {
+                         drive.MutablePDiskConfig()->SetExpectedSlotCount(drive.GetExpectedSlotCount());
+                     }
++                    if (drive.HasEncryptionThreadsCount()) {
++                        drive.MutablePDiskConfig()->SetEncryptionThreadsCount(drive.GetEncryptionThreadsCount());
++                    }
+                     if (drive.HasSlotSizeInUnits()) {
+                         drive.MutablePDiskConfig()->SetSlotSizeInUnits(drive.GetSlotSizeInUnits());
+                     }
+diff --git a/ydb/tools/cfg/base.py b/ydb/tools/cfg/base.py
+index fa85bbd9189..324e17a55c4 100644
+--- a/ydb/tools/cfg/base.py
++++ b/ydb/tools/cfg/base.py
+@@ -63,12 +63,13 @@ def merge_with_default(dft, override):
+
+
+ class KiKiMRDrive(object):
+-    def __init__(self, type, path, shared_with_os=False, expected_slot_count=None, kind=None, pdisk_config=None):
++    def __init__(self, type, path, shared_with_os=False, expected_slot_count=None, kind=None, pdisk_config=None, encryption_threads_count=None):
+         self.type = type
+         self.path = path
+         self.shared_with_os = shared_with_os
+         self.pdisk_config = pdisk_config
+         self.expected_slot_count = expected_slot_count
++        self.encryption_threads_count = encryption_threads_count
+         self.kind = kind
+
+     def __eq__(self, other):
+@@ -78,11 +79,12 @@ class KiKiMRDrive(object):
+             and self.shared_with_os == other.shared_with_os
+             and self.expected_slot_count == other.expected_slot_count
+             and self.kind == other.kind
++            and self.encryption_threads_count == other.encryption_threads_count
+             and self.pdisk_config == other.pdisk_config
+         )
+
+     def __hash__(self):
+-        return hash("\0".join(map(str, (self.type, self.path, self.shared_with_os, self.expected_slot_count, self.kind, self.pdisk_config))))
++        return hash("\0".join(map(str, (self.type, self.path, self.shared_with_os, self.expected_slot_count, self.encryption_threads_count, self.kind, self.pdisk_config))))
+
+
+ Domain = collections.namedtuple(
+diff --git a/ydb/tools/cfg/dynamic.py b/ydb/tools/cfg/dynamic.py
+index 460959c6a34..c066019859b 100644
+--- a/ydb/tools/cfg/dynamic.py
++++ b/ydb/tools/cfg/dynamic.py
+@@ -187,9 +187,16 @@ class DynamicConfigGenerator(object):
+                 Type=drive.type,
+                 Kind=drive.kind,
+             )
++            pc = None
+             if drive.expected_slot_count is not None:
+                 pc = pdisk_config.TPDiskConfig(ExpectedSlotCount=drive.expected_slot_count)
+                 kwargs.update(PDiskConfig=pc)
++            if drive.encryption_threads_count is not None:
++                if pc is None:
++                    pc = pdisk_config.TPDiskConfig(EncryptionThreadsCount=drive.encryption_threads_count)
++                else:
++                    pc.EncryptionThreadsCount = drive.encryption_threads_count
++                kwargs.update(PDiskConfig=pc)
+             array.add(**kwargs)
+
+         for host_config in self._cluster_details.host_configs:
+diff --git a/ydb/tools/cfg/validation.py b/ydb/tools/cfg/validation.py
+index b4d3b564b99..b6a42d538f8 100644
+--- a/ydb/tools/cfg/validation.py
++++ b/ydb/tools/cfg/validation.py
+@@ -155,6 +155,7 @@ DRIVE_SCHEMA = {
+         "path": dict(type="string", minLength=1),
+         "shared_with_os": dict(type="boolean"),
+         "expected_slot_count": dict(type="integer"),
++        "encryption_threads_count": dict(type="integer"),
+         "pdisk_config": {
+             "type": "object",
+             "additionalProperties": True,

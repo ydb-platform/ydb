@@ -551,11 +551,11 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
     }
 
     Y_UNIT_TEST(TestFakeErrorPDiskManyChunkWrite) {
-        for (int encryptionThreadsCount : {1, 3}) {
+        for (int encryptionThreadsCount : {0, 1, 3}) {
             TActorTestContext testCtx{{}};
             testCtx.TestCtx.SectorMap->IoErrorEveryNthRequests = 1000;
 
-            if (encryptionThreadsCount > 1) {
+            if (encryptionThreadsCount) {
                 auto pdiskConfig = testCtx.GetPDiskConfig();
                 pdiskConfig->EncryptionThreadsCount = encryptionThreadsCount;
                 Cerr << "encryptionThreadsCount# " << pdiskConfig->EncryptionThreadsCount << Endl;
@@ -1726,7 +1726,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         using namespace NPriRead;
         std::vector<ui8> PriRead = {SyncLog, HullComp, HullOnlineRt, HullOnlineOther, HullLoad, HullLow};
         auto shares = GetChunkOperationPriorities(true, PriRead);
-        
+
         // compare with 10% tolerance
         UNIT_ASSERT(shares[SyncLog] * 0.90 > shares[HullLoad]);
         UNIT_ASSERT(shares[HullLoad] * 0.90 > shares[HullOnlineRt]);
@@ -1741,7 +1741,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         using namespace NPriWrite;
         std::vector<ui8> PriWrite = {SyncLog, HullFresh, HullHugeAsyncBlob, HullHugeUserData, HullComp};
         auto shares = GetChunkOperationPriorities(false, PriWrite);
-        
+
         // compare with 10% tolerance
         UNIT_ASSERT(shares[SyncLog] * 0.90 > shares[HullHugeUserData]);
         UNIT_ASSERT(shares[HullHugeUserData] * 0.90 > shares[HullComp]);

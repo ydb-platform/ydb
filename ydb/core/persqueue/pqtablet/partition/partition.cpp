@@ -419,41 +419,31 @@ ui64 TPartition::GetUsedStorage(const TInstant& now) {
     return size * duration.MilliSeconds() / 1000 / 1_MB; // mb*seconds
 }
 
-static TDuration GetAvailabilityPeriod(const NKikimrPQ::TPQTabletConfig_TConsumer& consumer)  {
-    if (consumer.GetImportant()) {
+static TDuration GetAvailabilityPeriod(const TUserInfo& consumer)  {
+    if (!ImporantOrExtendedAvailabilityPeriod(consumer)) {
+        return TDuration::Zero();
+    }
+    if (consumer.Important) {
         return TDuration::Max();
     }
-    if (consumer.GetAvailabilityPeriodMs() > 0) {
-        return consumer.GetAvailabilityPeriodMs() <= TDuration::Max().MilliSeconds()
-            ? TDuration::MilliSeconds(consumer.GetAvailabilityPeriodMs())
-            : TDuration::Max();
-    }
-    return TDuration::Zero();
+    return consumer.AvailabilityPeriod;
 }
 
-TImportantConsumerOffsetTracker TPartition::ImportantClientsMinOffset() const {
-    std::vector<TImportantConsumerOffsetTracker::TConsumerOffset> consumersToCheck;
-    for (size_t consumerIdx = 0; consumerIdx < Config.ConsumersSize(); ++consumerIdx) {
-        const auto& consumer = Config.GetConsumers(consumerIdx);
-        const TDuration availabilityPeriod = GetAvailabilityPeriod(consumer);
+bool TPartition::ImportantConsumersNeedToKeepCurrentKey(const TDataKey& currentKey, const TDataKey& nextKey, const TInstant now) const {
+    for (const auto& [name, userInfo] : UsersInfoStorage->ViewImportant()) {
+        const TDuration availabilityPeriod = GetAvailabilityPeriod(userInfo);
         if (availabilityPeriod == TDuration::Zero()) {
             continue;
         }
-
-        const TUserInfo* userInfo = UsersInfoStorage->GetIfExists(consumer.GetName());
         ui64 curOffset = GetStartOffset();
-        if (userInfo && userInfo->Offset >= 0) //-1 means no offset
-            curOffset = userInfo->Offset;
+        if (userInfo.Offset >= 0) // -1 means no offset
+            curOffset = userInfo.Offset;
 
-        if (consumersToCheck.empty()) {
-            consumersToCheck.reserve(Config.ConsumersSize() - consumerIdx);
+        if (ImportantConsumerNeedToKeepCurrentKey(availabilityPeriod, curOffset, currentKey, nextKey, now)) {
+            return true;
         }
-        consumersToCheck.push_back(TImportantConsumerOffsetTracker::TConsumerOffset{
-            .AvailabilityPeriod = availabilityPeriod,
-            .Offset = curOffset,
-        });
     }
-    return TImportantConsumerOffsetTracker(std::move(consumersToCheck));
+    return false;
 }
 
 
@@ -571,13 +561,12 @@ bool TPartition::CleanUpBlobs(TEvKeyValue::TEvRequest *request, const TActorCont
 
     const bool hasStorageLimit = partConfig.HasStorageLimitBytes();
     const auto now = ctx.Now();
-    const auto importantConsumerOffsetTracker = ImportantClientsMinOffset();
 
     bool hasDrop = false;
     while (CompactionBlobEncoder.DataKeysBody.size() > 1) {
         const auto& nextKey = CompactionBlobEncoder.DataKeysBody[1];
         const auto& firstKey = CompactionBlobEncoder.DataKeysBody.front();
-        if (importantConsumerOffsetTracker.ShouldKeepCurrentKey(firstKey, nextKey, now)) {
+        if (ImportantConsumersNeedToKeepCurrentKey(firstKey, nextKey, now)) {
             break;
         }
 

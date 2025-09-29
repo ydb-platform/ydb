@@ -315,6 +315,8 @@ private:
     // Removes blobs that are no longer required. Blobs are no longer required if the storage time of all messages
     // stored in this blob has expired and they have been read by all important consumers.
     bool CleanUpBlobs(TEvKeyValue::TEvRequest *request, const TActorContext& ctx);
+    // Checks if any consumer has uncommited messages in their availability window
+    bool ImportantConsumersNeedToKeepCurrentKey(const TDataKey& currentKey, const TDataKey& nextKey, const TInstant now) const;
     bool IsQuotingEnabled() const;
     bool WaitingForPreviousBlobQuota() const;
     bool WaitingForSubDomainQuota(const ui64 withSize = 0) const;
@@ -533,8 +535,6 @@ public:
     // The size of the storage that usud by the partition. That included combination of the reserver and realy persisted data.
     ui64 StorageSize(const TActorContext& ctx) const;
     ui64 UsedReserveSize(const TActorContext& ctx) const;
-    // Minimal offsets, the data from which cannot be deleted, because it is required by an important consumers
-    TImportantConsumerOffsetTracker ImportantClientsMinOffset() const;
 
     TInstant GetEndWriteTimestamp() const; // For tests only
 

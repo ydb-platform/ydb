@@ -18,10 +18,9 @@ namespace NKikimr::NPQ {
         bool ShouldKeepCurrentKey(const TDataKey& currentKey, const TDataKey& nextKey, const TInstant now) const;
 
     private:
-        static bool ShouldKeep(const TDataKey& currentKey, const TDataKey& nextKey, const TInstant now, const TConsumerOffset& consumer);
-
-    private:
         std::vector<TConsumerOffset> Consumers_;
     };
+
+    bool ImportantConsumerNeedToKeepCurrentKey(const TDuration availabilityPeriod, ui64 offset, const TDataKey& currentKey, const TDataKey& nextKey, const TInstant now);
 
 } // namespace NKikimr::NPQ

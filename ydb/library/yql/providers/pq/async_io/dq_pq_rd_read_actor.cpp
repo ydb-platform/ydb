@@ -586,7 +586,7 @@ void TDqPqRdReadActor::InitChild() {
     StartingMessageTimestamp = Parent->StartingMessageTimestamp;
     SRC_LOG_I("Send TEvCoordinatorChangesSubscribe to local RD (" << LocalRowDispatcherActorId << ")");
     Send(LocalRowDispatcherActorId, new NFq::TEvRowDispatcher::TEvCoordinatorChangesSubscribe());
-    Schedule(TDuration::Seconds(PrintStatePeriodSec), new TEvPrivate::TEvPrintState());
+    // Schedule(TDuration::Seconds(PrintStatePeriodSec), new TEvPrivate::TEvPrintState());   // Logs (InternalState) is too big
 }
 
 void TDqPqRdReadActor::ProcessGlobalState() {

@@ -30,6 +30,7 @@ public:
                 for (auto jt = range.first; range.second != jt;) {
                     if (jt->second == dead) {
                         YQL_ENSURE(jt->second->UseCount()==0);
+                        YQL_ENSURE(jt->second->Dead());
                         jt = ctx.UniqueNodes.erase(jt);
                     } else {
                         ++jt;

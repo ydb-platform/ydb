@@ -330,6 +330,7 @@ public:
     using TPtr = TIntrusivePtr<TJsonParser>;
 
     static constexpr ui64 NUMBER_ROWS_LIMIT = 1000;
+    static_assert(NUMBER_ROWS_LIMIT <= Max<uint16_t>());
 
 public:
     TJsonParser(IParsedDataConsumer::TPtr consumer, const TJsonParserConfig& config, const TCountersDesc& counters)

@@ -267,8 +267,11 @@ private:
             };
 
             for (size_t i = 0; const ui64 columnId : ColumnsIds) {
+                auto& parsedData = Self.ParsedData[Self.ParserSchemaIndex[columnId]];
+                Y_DEBUG_ABORT_UNLESS(parsedData.size() > rowId);
+
                 // All data was locked in parser, so copy is safe
-                FilteredRow[i++] = Self.ParsedData[Self.ParserSchemaIndex[columnId]][rowId];
+                FilteredRow[i++] = parsedData[rowId];
             }
             DataPacker->AddWideItem(FilteredRow.data(), FilteredRow.size());
 

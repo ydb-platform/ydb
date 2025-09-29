@@ -157,6 +157,7 @@ public:
                 items[OffsetPosition] = NYql::NUdf::TUnboxedValuePod(rowId);
 
                 for (ui64 fieldId = 0; const auto& column : input.Values) {
+                    Y_DEBUG_ABORT_UNLESS(column.size() > rowId);
                     items[FieldsPositions[fieldId++]] = column[rowId];
                 }
 

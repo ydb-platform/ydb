@@ -249,13 +249,16 @@ bool TPartition::CanEnqueue() const {
 }
 
 ui64 GetOffsetEstimate(const std::deque<TDataKey>& container, TInstant timestamp, ui64 offset) {
+    return GetOffsetEstimate(container, timestamp).GetOrElse(offset);
+}
+
+TMaybe<ui64> GetOffsetEstimate(const std::deque<TDataKey>& container, TInstant timestamp) {
     if (container.empty()) {
-        return offset;
+        return Nothing();
     }
-    auto it = std::lower_bound(container.begin(), container.end(), timestamp,
-                    [](const TDataKey& p, const TInstant timestamp) { return timestamp > p.Timestamp; });
+    auto it = std::ranges::lower_bound(container, timestamp, {}, &TDataKey::Timestamp);
     if (it == container.end()) {
-        return offset;
+        return Nothing();
     } else {
         return it->Key.GetOffset();
     }
@@ -2877,9 +2880,9 @@ void TPartition::CommitWriteOperations(TTransaction& t)
 
         for (auto& k : t.WriteInfo->BodyKeys) {
             LOG_D("add key " << k.Key.ToString());
-            auto write = BlobEncoder.PartitionedBlob.Add(k.Key, k.Size);
+            auto write = BlobEncoder.PartitionedBlob.Add(k.Key, k.Size, k.Timestamp);
             if (write && !write->Value.empty()) {
-                AddCmdWrite(write, PersistRequest.Get(), ctx);
+                AddCmdWriteWithDeferredTimestamp(write, PersistRequest.Get(), ctx);
                 BlobEncoder.CompactedKeys.emplace_back(write->Key, write->Value.size());
             }
             Parameters->CurOffset += k.Key.GetCount();

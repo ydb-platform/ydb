@@ -327,9 +327,7 @@ NThreading::TFuture<TEvDescribeSecretsResponse::TDescription> DescribeSecret(
 }
 
 void RegisterDescribeSecretsActor(const NActors::TActorId& replyActorId, const TString& ownerUserId, const std::vector<TString>& secretIds, NActors::TActorSystem* actorSystem) {
-    //TVector<TString> secretNames{secretIds.begin(), secretIds.end()};
-    Y_UNUSED(secretIds);
-    TVector<TString> secretNames{"will-break-some-tests"};
+    TVector<TString> secretNames{secretIds.begin(), secretIds.end()};
     auto future = DescribeSecret(secretNames, ownerUserId.empty() ? nullptr : new NACLib::TUserToken(ownerUserId, {}), actorSystem);
     future.Subscribe([actorSystem, replyActorId](const NThreading::TFuture<TEvDescribeSecretsResponse::TDescription>& result){
         actorSystem->Send(replyActorId, new TEvDescribeSecretsResponse(result.GetValue()));

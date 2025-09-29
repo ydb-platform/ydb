@@ -1,6 +1,7 @@
 #include "snapshot.h"
 
 #include "dynamic.h"
+#include "../kqp_compute_scheduler_service.h"
 
 namespace NKikimr::NKqp::NScheduler::NHdrf::NSnapshot {
 
@@ -81,19 +82,20 @@ void TTreeElement::UpdateTopDown() {
         // Give at least 1 fair-share for each demanding child
         ForEachChild<TTreeElement>([&](TTreeElement* child, size_t) -> bool {
             // We want to allow FairShare to be over Limit.
-            // If you need to change this behaviour uncomment if-statement below
-            // if (leftFairShare == 0) {
-            //     return true;
-            // }
+            // If you need to change this behaviour change variable's default value
+            if (!TComputeScheduler::ALLOW_FAIRSHARE_OVERLIMIT && leftFairShare == 0) {
+                return true;
+            }
 
             if (child->Demand > 0) {
                 child->FairShare = 1;
-                --leftFairShare;
+                if (!TComputeScheduler::ALLOW_FAIRSHARE_OVERLIMIT || leftFairShare > 0) {
+                    --leftFairShare;
+                }
             }
 
             return false;
         });
-        leftFairShare = Max(leftFairShare, 0ul);
         ForEachChild<TQuery>([&](TQuery* query, size_t) {
             auto demand = query->Demand > 0 ? query->Demand - 1 : 0;
             query->FairShare += Min(leftFairShare, demand);

@@ -79,7 +79,7 @@ private:
         void OnParsedData(ui64 numberRows) override {
             LOG_ROW_DISPATCHER_TRACE("Got parsed data, number rows: " << numberRows);
 
-            Self.ParsedData.assign(ParerSchema.size(), nullptr);
+            Self.ParsedData.assign(ParerSchema.size(), std::span<NYql::NUdf::TUnboxedValue>());
             for (size_t i = 0; i < ParerSchema.size(); ++i) {
                 auto columnStatus = Self.Parser->GetParsedColumn(i);
                 if (Y_LIKELY(columnStatus.IsSuccess())) {
@@ -267,8 +267,11 @@ private:
             };
 
             for (size_t i = 0; const ui64 columnId : ColumnsIds) {
+                auto& parsedData = Self.ParsedData[Self.ParserSchemaIndex[columnId]];
+                Y_DEBUG_ABORT_UNLESS(parsedData.size() > rowId);
+
                 // All data was locked in parser, so copy is safe
-                FilteredRow[i++] = Self.ParsedData[Self.ParserSchemaIndex[columnId]]->at(rowId);
+                FilteredRow[i++] = parsedData[rowId];
             }
             DataPacker->AddWideItem(FilteredRow.data(), FilteredRow.size());
 
@@ -661,7 +664,7 @@ private:
 
     // Parsed data
     const TVector<ui64>* Offsets;
-    TVector<const TVector<NYql::NUdf::TUnboxedValue>*> ParsedData;
+    TVector<std::span<NYql::NUdf::TUnboxedValue>> ParsedData;
     bool RefreshScheduled = false;
 
     // Metrics

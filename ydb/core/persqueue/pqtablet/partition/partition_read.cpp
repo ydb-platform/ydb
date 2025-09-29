@@ -75,7 +75,7 @@ void TPartition::FillReadFromTimestamps(const TActorContext& ctx) {
 
     TSet<TString> hasReadRule;
 
-    for (auto& [consumer, userInfo] : UsersInfoStorage->GetAll()) {
+    for (auto&& [consumer, userInfo] : UsersInfoStorage->GetAll()) {
         userInfo.ReadFromTimestamp = TInstant::Zero();
         userInfo.HasReadRule = false;
         hasReadRule.insert(consumer);
@@ -251,7 +251,7 @@ void TPartition::InitUserInfoForImportantClients(const TActorContext& ctx) {
         TUserInfo* userInfo = UsersInfoStorage->GetIfExists(consumer.GetName());
         if (userInfo && !ImporantOrExtendedAvailabilityPeriod(*userInfo) && userInfo->LabeledCounters) {
             ctx.Send(TabletActorId, new TEvPQ::TEvPartitionLabeledCountersDrop(Partition, userInfo->LabeledCounters->GetGroup()));
-            userInfo->SetImportant(consumer.GetImportant(), TDuration::MilliSeconds(consumer.GetAvailabilityPeriodMs()));
+            UsersInfoStorage->SetImportant(*userInfo, consumer.GetImportant(), TDuration::MilliSeconds(consumer.GetAvailabilityPeriodMs()));
             continue;
         }
         if (!userInfo) {
@@ -263,13 +263,13 @@ void TPartition::InitUserInfoForImportantClients(const TActorContext& ctx) {
             userInfo->Offset = GetStartOffset();
         ReadTimestampForOffset(consumer.GetName(), *userInfo, ctx);
     }
-    for (auto& [consumer, userInfo] : UsersInfoStorage->GetAll()) {
+    for (auto&& [consumer, userInfo] : UsersInfoStorage->GetAll()) {
         if (!important.contains(consumer) && ImporantOrExtendedAvailabilityPeriod(userInfo) && userInfo.LabeledCounters) {
             ctx.Send(
                 TabletActorId,
                 new TEvPQ::TEvPartitionLabeledCountersDrop(Partition, userInfo.LabeledCounters->GetGroup())
             );
-            userInfo.SetImportant(false, TDuration::Zero());
+            UsersInfoStorage->SetImportant(userInfo, false, TDuration::Zero());
         }
     }
 }
@@ -948,7 +948,7 @@ void TPartition::ReadTimestampForOffset(const TString& user, TUserInfo& userInfo
 }
 
 void TPartition::ProcessTimestampsForNewData(const ui64 prevEndOffset, const TActorContext& ctx) {
-    for (auto& [consumer, userInfo] : UsersInfoStorage->GetAll()) {
+    for (auto&& [consumer, userInfo] : UsersInfoStorage->GetAll()) {
         if (userInfo.Offset >= (i64)prevEndOffset && userInfo.Offset < (i64)GetEndOffset()) {
             ReadTimestampForOffset(consumer, userInfo, ctx);
         }

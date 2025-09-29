@@ -369,6 +369,11 @@ void TUsersInfoStorage::Parse(const TString& key, const TString& data, const TAc
 void TUsersInfoStorage::Remove(const TString& user, const TActorContext&) {
     auto it = UsersInfo.find(user);
     AFL_ENSURE(it != UsersInfo.end());
+    if (ImporantOrExtendedAvailabilityPeriod(*it->second)) {
+        UpdateImportantExtSlice(it->second.Get(), EImportantSliceAction::Remove);
+    } else {
+        AFL_ENSURE(!ImportantExtUsersInfoSlice.contains(user))("user", user);
+    }
     UsersInfo.erase(it);
 }
 
@@ -381,7 +386,7 @@ TUserInfo& TUsersInfoStorage::GetOrCreate(const TString& user, const TActorConte
                 0, 0, 0, 0, TInstant::Zero(), {}, false
         );
     }
-    return it->second;
+    return *it->second;
 }
 
 ::NMonitoring::TDynamicCounterPtr TUsersInfoStorage::GetPartitionCounterSubgroup(const TActorContext& ctx) const {
@@ -427,13 +432,13 @@ void TUsersInfoStorage::SetupDetailedMetrics(const TActorContext& ctx) {
     if (!subgroup) {
         return;  // TODO(qyryq) Y_ABORT_UNLESS?
     }
-    for (auto& userInfo : GetAll()) {
+    for (auto&& userInfo : GetAll()) {
         userInfo.second.SetupDetailedMetrics(ctx, subgroup);
     }
 }
 
 void TUsersInfoStorage::ResetDetailedMetrics() {
-    for (auto& userInfo : GetAll()) {
+    for (auto&& userInfo : GetAll()) {
         userInfo.second.ResetDetailedMetrics();
     }
 }
@@ -444,19 +449,15 @@ bool TUsersInfoStorage::DetailedMetricsAreEnabled() const {
 
 const TUserInfo* TUsersInfoStorage::GetIfExists(const TString& user) const {
     auto it = UsersInfo.find(user);
-    return it != UsersInfo.end() ? &it->second : nullptr;
+    return it != UsersInfo.end() ? &*it->second : nullptr;
 }
 
 TUserInfo* TUsersInfoStorage::GetIfExists(const TString& user) {
     auto it = UsersInfo.find(user);
-    return it != UsersInfo.end() ? &it->second : nullptr;
+    return it != UsersInfo.end() ? &*it->second : nullptr;
 }
 
-THashMap<TString, TUserInfo>& TUsersInfoStorage::GetAll() {
-    return UsersInfo;
-}
-
-TUserInfo TUsersInfoStorage::CreateUserInfo(const TActorContext& ctx,
+TIntrusivePtr<TUserInfo> TUsersInfoStorage::CreateUserInfo(const TActorContext& ctx,
                                             const TString& user,
                                             const ui64 readRuleGeneration,
                                             bool important,
@@ -478,12 +479,12 @@ TUserInfo TUsersInfoStorage::CreateUserInfo(const TActorContext& ctx,
 
     bool meterRead = userServiceType.empty() || userServiceType == defaultServiceType;
 
-    return {
+    return MakeIntrusive<TUserInfo>(
         ctx, StreamCountersSubgroup, GetPartitionCounterSubgroup(ctx),
         user, readRuleGeneration, important, availabilityPeriod, TopicConverter, Partition,
         session, partitionSessionId, gen, step, offset, readOffsetRewindSum, DCId, readFromTimestamp, DbPath,
         meterRead, pipeClient, anyCommits, committedMetadata
-    };
+    );
 }
 
 TUserInfoBase TUsersInfoStorage::CreateUserInfo(const TString& user,
@@ -500,16 +501,46 @@ TUserInfo& TUsersInfoStorage::Create(
         TInstant readFromTimestamp, const TActorId& pipeClient, bool anyCommits,
         const std::optional<TString>& committedMetadata
 ) {
-    auto userInfo = CreateUserInfo(ctx, user, readRuleGeneration, important, availabilityPeriod, session, partitionSessionId,
+    TIntrusivePtr<TUserInfo> userInfo = CreateUserInfo(ctx, user, readRuleGeneration, important, availabilityPeriod, session, partitionSessionId,
                                               gen, step, offset, readOffsetRewindSum, readFromTimestamp, pipeClient,
                                               anyCommits, committedMetadata);
-    auto result = UsersInfo.emplace(user, std::move(userInfo));
+    auto result = UsersInfo.emplace(user, userInfo);
     AFL_ENSURE(result.second);
-    return result.first->second;
+    if (ImporantOrExtendedAvailabilityPeriod(*userInfo)) {
+        UpdateImportantExtSlice(userInfo.Get(), EImportantSliceAction::Insert);
+    }
+    return *userInfo;
+}
+
+void TUsersInfoStorage::UpdateImportantExtSlice(TUserInfo* userInfo, EImportantSliceAction action) {
+    Y_ASSERT(userInfo != nullptr);
+    switch (action) {
+        using enum EImportantSliceAction;
+        case Insert: {
+            AFL_ENSURE(ImportantExtUsersInfoSlice.emplace(userInfo->User, userInfo).second)("user", userInfo->User);
+            break;
+        }
+        case Remove: {
+            AFL_ENSURE(ImportantExtUsersInfoSlice.erase(userInfo->User) > 0)("user", userInfo->User);
+            break;
+        }
+    }
 }
 
 void TUsersInfoStorage::Clear(const TActorContext&) {
+    ImportantExtUsersInfoSlice.clear();
     UsersInfo.clear();
+}
+
+void TUsersInfoStorage::SetImportant(TUserInfo& userInfo, bool important, TDuration availabilityPeriod) {
+    bool prev = ImporantOrExtendedAvailabilityPeriod(userInfo);
+    userInfo.SetImportant(important, availabilityPeriod);
+    bool curr = ImporantOrExtendedAvailabilityPeriod(userInfo);
+    if (prev && !curr) {
+        UpdateImportantExtSlice(&userInfo, EImportantSliceAction::Remove);
+    } else if (!prev && curr) {
+        UpdateImportantExtSlice(&userInfo, EImportantSliceAction::Insert);
+    }
 }
 
 } //NPQ

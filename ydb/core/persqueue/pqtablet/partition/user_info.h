@@ -76,7 +76,7 @@ struct TUserInfoBase {
     std::optional<TString> CommittedMetadata = std::nullopt;
 };
 
-struct TUserInfo: public TUserInfoBase {
+struct TUserInfo: public TUserInfoBase, public TAtomicRefCount<TUserInfo> {
     TUserInfo(
         const TActorContext& ctx,
         NMonitoring::TDynamicCounterPtr streamCountersSubgroup,
@@ -147,7 +147,6 @@ struct TUserInfo: public TUserInfoBase {
     void UpdateReadOffset(const i64 offset, TInstant writeTimestamp, TInstant createTimestamp, TInstant now, bool force = false);
     void AddTimestampToCache(const ui64 offset, TInstant writeTimestamp, TInstant createTimestamp, bool isUserRead, TInstant now);
     bool UpdateTimestampFromCache();
-    void SetImportant(bool important, TDuration availabilityPeriod);
 
     i64 GetReadOffset() const {
         return ReadOffset == -1 ? Offset : (ReadOffset + 1); //+1 because we want to track first not readed offset
@@ -158,6 +157,12 @@ struct TUserInfo: public TUserInfoBase {
     ui64 GetWriteLagMs() const {
         return WriteLagMs.GetValue();
     }
+
+private:
+    friend class TUsersInfoStorage;
+    void SetImportant(bool important, TDuration availabilityPeriod);
+
+public:
 
     bool ActualTimestamps = false;
     // WriteTimestamp of the last committed message
@@ -246,7 +251,20 @@ public:
     const TUserInfo* GetIfExists(const TString& user) const;
     TUserInfo* GetIfExists(const TString& user);
 
-    THashMap<TString, TUserInfo>& GetAll();
+    auto GetAll() {
+        auto proj = [](auto& ni) -> std::pair<const TString&, TUserInfo&> { return {ni.first, *ni.second}; };
+        return std::views::transform(UsersInfo, proj);
+    }
+
+    auto ViewAll() const {
+        auto proj = [](auto& ni) -> std::pair<const TString&, const TUserInfo&> { return {ni.first, *ni.second}; };
+        return std::views::transform(UsersInfo, proj);
+    }
+
+    auto ViewImportant() const {
+        auto proj = [](auto& ni) -> std::pair<const TString&, const TUserInfo&> { return {ni.first, *ni.second}; };
+        return std::views::transform(ImportantExtUsersInfoSlice, proj);
+    }
 
     TUserInfoBase CreateUserInfo(const TString& user,
                              TMaybe<ui64> readRuleGeneration = {}) const;
@@ -267,9 +285,11 @@ public:
     void ResetDetailedMetrics();
     bool DetailedMetricsAreEnabled() const;
 
+    void SetImportant(TUserInfo& userInfo, bool important, TDuration availabilityPeriod);
+
 private:
 
-    TUserInfo CreateUserInfo(const TActorContext& ctx,
+    TIntrusivePtr<TUserInfo> CreateUserInfo(const TActorContext& ctx,
                              const TString& user,
                              const ui64 readRuleGeneration,
                              bool important,
@@ -282,8 +302,14 @@ private:
                              bool anyCommits,
                              const std::optional<TString>& committedMetadata = std::nullopt) const;
 
+    enum class EImportantSliceAction {
+        Insert,
+        Remove,
+    };
+    void UpdateImportantExtSlice(TUserInfo* userInfo, EImportantSliceAction action);
 private:
-    THashMap<TString, TUserInfo> UsersInfo;
+    THashMap<TString, TIntrusivePtr<TUserInfo>> UsersInfo;
+    THashMap<TString, TIntrusivePtr<TUserInfo>> ImportantExtUsersInfoSlice;
 
     const TString DCId;
     NPersQueue::TTopicConverterPtr TopicConverter;

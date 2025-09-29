@@ -482,7 +482,7 @@ void TPartition::HandleWakeup(const TActorContext& ctx) {
 
     ProcessHasDataRequests(ctx);
 
-    for (auto& userInfo : UsersInfoStorage->GetAll()) {
+    for (auto&& userInfo : UsersInfoStorage->GetAll()) {
         userInfo.second.UpdateReadingTimeAndState(GetEndOffset(), now);
         for (auto& avg : userInfo.second.AvgReadBytes) {
             avg.Update(now);
@@ -702,7 +702,7 @@ bool CheckDiskStatus(const TStorageStatusFlags status) {
 
 void TPartition::InitComplete(const TActorContext& ctx) {
     if (BlobEncoder.StartOffset == BlobEncoder.EndOffset && BlobEncoder.EndOffset == 0) {
-        for (auto& [user, info] : UsersInfoStorage->GetAll()) {
+        for (auto&& [user, info] : UsersInfoStorage->ViewAll()) {
             if (info.Offset > 0 && BlobEncoder.StartOffset < (ui64)info.Offset) {
                  BlobEncoder.Head.Offset = BlobEncoder.EndOffset = BlobEncoder.StartOffset = info.Offset;
             }
@@ -751,7 +751,7 @@ void TPartition::InitComplete(const TActorContext& ctx) {
 
     InitUserInfoForImportantClients(ctx);
 
-    for (auto& userInfoPair : UsersInfoStorage->GetAll()) {
+    for (auto&& userInfoPair : UsersInfoStorage->GetAll()) {
         PQ_ENSURE(userInfoPair.second.Offset >= 0);
         ReadTimestampForOffset(userInfoPair.first, userInfoPair.second, ctx);
     }
@@ -775,7 +775,7 @@ void TPartition::InitComplete(const TActorContext& ctx) {
 
 
 void TPartition::UpdateUserInfoEndOffset(const TInstant& now) {
-    for (auto& userInfo : UsersInfoStorage->GetAll()) {
+    for (auto&& userInfo : UsersInfoStorage->GetAll()) {
         userInfo.second.UpdateReadingTimeAndState(GetEndOffset(), now);
     }
 }
@@ -898,7 +898,7 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
     ui64 maxQuota = 0;
     bool filterConsumers = !ev->Get()->Consumers.empty();
     TSet<TString> requiredConsumers(ev->Get()->Consumers.begin(), ev->Get()->Consumers.end());
-    for (auto& userInfoPair : UsersInfoStorage->GetAll()) {
+    for (auto&& userInfoPair : UsersInfoStorage->GetAll()) {
         auto& userInfo = userInfoPair.second;
         auto& clientId = ev->Get()->ClientId;
         bool consumerShouldBeProcessed = filterConsumers
@@ -1021,7 +1021,7 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
         for (ui32 i = 0; i < PartitionCountersLabeled->GetCounters().Size(); ++i) {
             ac->AddValues(PartitionCountersLabeled->GetCounters()[i].Get());
         }
-        for (auto& userInfoPair : UsersInfoStorage->GetAll()) {
+        for (auto&& userInfoPair : UsersInfoStorage->ViewAll()) {
             auto& userInfo = userInfoPair.second;
             if (!userInfo.LabeledCounters)
                 continue;
@@ -1086,10 +1086,10 @@ void TPartition::Handle(TEvPQ::TEvGetPartitionClientInfo::TPtr& ev, const TActor
     result.SetStartOffset(GetStartOffset());
     result.SetEndOffset(GetEndOffset());
     result.SetResponseTimestamp(ctx.Now().MilliSeconds());
-    for (auto& pr : UsersInfoStorage->GetAll()) {
+    for (auto&& pr : UsersInfoStorage->GetAll()) {
         auto snapshot = CreateSnapshot(pr.second);
 
-        TUserInfo& userInfo(pr.second);
+        const TUserInfo& userInfo(pr.second);
         NKikimrPQ::TClientInfo& clientInfo = *result.AddClientInfo();
         clientInfo.SetClientId(pr.first);
 
@@ -1808,7 +1808,7 @@ bool TPartition::UpdateCounters(const TActorContext& ctx, bool force) {
     LastCountersUpdate = now;
 
     // per client counters
-    for (auto& userInfoPair : UsersInfoStorage->GetAll()) {
+    for (auto&& userInfoPair : UsersInfoStorage->GetAll()) {
         auto& userInfo = userInfoPair.second;
         if (!userInfo.LabeledCounters)
             continue;
@@ -3064,7 +3064,7 @@ void TPartition::BeginChangePartitionConfig(const NKikimrPQ::TPQTabletConfig& co
                                             const TActorContext& ctx)
 {
     TSet<TString> hasReadRule;
-    for (auto& [consumer, info] : UsersInfoStorage->GetAll()) {
+    for (auto&& [consumer, info] : UsersInfoStorage->ViewAll()) {
         hasReadRule.insert(consumer);
     }
 
@@ -3149,7 +3149,7 @@ void TPartition::OnProcessTxsAndUserActsWriteComplete(const TActorContext& ctx) 
                 if (userInfo.LabeledCounters) {
                     ScheduleDropPartitionLabeledCounters(userInfo.LabeledCounters->GetGroup());
                 }
-                userInfo.SetImportant(actual->Important, actual->AvailabilityPeriod);
+                UsersInfoStorage->SetImportant(userInfo, actual->Important, actual->AvailabilityPeriod);
             }
             if (ImporantOrExtendedAvailabilityPeriod(userInfo) && userInfo.Offset < (i64)GetStartOffset()) {
                 userInfo.Offset = GetStartOffset();

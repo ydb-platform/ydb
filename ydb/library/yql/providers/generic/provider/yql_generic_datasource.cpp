@@ -141,10 +141,6 @@ namespace NYql {
             }
 
             void AddCluster(const TString& clusterName, const THashMap<TString, TString>& properties) override {
-                for (const auto& [k, v] : properties) {
-                    Cout << "properties: " << k << "=" << v << Endl;
-                }
-
                 auto authMethod = properties.Value("authMethod", "");
 
                 TString structuredToken = "";
@@ -166,15 +162,7 @@ namespace NYql {
                     ythrow yexception() << "Unknown auth method: " << authMethod;
                 }
 
-                Cout << "structured token: " << structuredToken << Endl;
-
                 State_->Configuration->Tokens[clusterName] = structuredToken;
-                    // TStructuredTokenBuilder()
-                    //     .SetBasicAuth(
-                    //         clusterConfig.GetCredentials().basic().username(),
-                    //         clusterConfig.GetCredentials().basic().password())
-                    //     .ToJson();
-
                 State_->Configuration->AddCluster(
                     GenericClusterConfigFromProperties(clusterName, properties),
                     State_->DatabaseResolver,

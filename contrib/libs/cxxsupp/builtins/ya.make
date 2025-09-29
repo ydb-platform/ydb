@@ -60,6 +60,14 @@ IF (GCC OR CLANG)
     NO_LTO()
 ENDIF()
 
+IF (OS_ANDROID AND ARCH_ARM7)
+    # For some reason, some intrinsincs fail to compile under Thumb mode restrictions
+    # Disable it, since it's not used in upstream NDK anyway
+    CFLAGS(
+        -mno-thumb
+    )
+ENDIF()
+
 IF (OS_DARWIN OR OS_IOS)
     SRCS(
         atomic_flag_clear.c

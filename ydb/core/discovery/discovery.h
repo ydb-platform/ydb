@@ -57,8 +57,6 @@ public:
     TBridgeInfo::TPtr BridgeInfo;
     TEvStateStorage::TEvBoardInfo::EStatus Status;
 
-    bool IsDirty = false;
-
 public:
     TCachedMessageData(const TString& cachedMessage, const TString& cachedMessageSsl,
                         const TMap<TActorId, TEvStateStorage::TBoardInfoEntry>& infoEntries,

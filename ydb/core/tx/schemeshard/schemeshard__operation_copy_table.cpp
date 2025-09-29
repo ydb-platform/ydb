@@ -777,24 +777,7 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
         }
     }
 
-    THashSet<TString> sequences;
-    for (auto& child: srcPath.Base()->GetChildren()) {
-        auto name = child.first;
-        auto pathId = child.second;
-
-        TPath childPath = srcPath.Child(name);
-        if (!childPath.IsSequence() || childPath.IsDeleted()) {
-            continue;
-        }
-
-        Y_ABORT_UNLESS(childPath.Base()->PathId == pathId);
-
-        TSequenceInfo::TPtr sequenceInfo = context.SS->Sequences.at(pathId);
-        const auto& sequenceDesc = sequenceInfo->Description;
-        const auto& sequenceName = sequenceDesc.GetName();
-
-        sequences.emplace(sequenceName);
-    }
+    THashSet<TString> sequences = GetLocalSequences(context, srcPath);
 
     TPath workDir = TPath::Resolve(tx.GetWorkingDir(), context.SS);
     TPath dstPath = workDir.Child(copying.GetName());
@@ -817,7 +800,6 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
         result.push_back(CreateCopyTable(NextPartId(nextId, result), schema, sequences));
     }
 
-    TVector<NKikimrSchemeOp::TSequenceDescription> sequenceDescriptions;
     for (auto& child: srcPath.Base()->GetChildren()) {
         auto name = child.first;
         auto pathId = child.second;
@@ -828,9 +810,6 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
         }
 
         if (childPath.IsSequence()) {
-            TSequenceInfo::TPtr sequenceInfo = context.SS->Sequences.at(pathId);
-            const auto& sequenceDesc = sequenceInfo->Description;
-            sequenceDescriptions.push_back(sequenceDesc);
             continue;
         }
 
@@ -884,18 +863,7 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
         }
     }
 
-    for (auto&& sequenceDescription : sequenceDescriptions) {
-        auto scheme = TransactionTemplate(
-            tx.GetWorkingDir() + "/" + copying.GetName(),
-            NKikimrSchemeOp::EOperationType::ESchemeOpCreateSequence);
-        scheme.SetFailOnExist(tx.GetFailOnExist());
-
-        auto* copySequence = scheme.MutableCopySequence();
-        copySequence->SetCopyFrom(copying.GetCopyFromTable() + "/" + sequenceDescription.GetName());
-        *scheme.MutableSequence() = std::move(sequenceDescription);
-
-        result.push_back(CreateCopySequence(NextPartId(nextId, result), scheme));
-    }
+    AddCopySequences(nextId, tx, context, result, srcPath, dstPath.PathString());
     return result;
 }
 

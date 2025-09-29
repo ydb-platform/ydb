@@ -5238,6 +5238,13 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         std::function<void(TTestBasicRuntime&)> Checker;
     };
 
+    struct TTableWithChangefeeds {
+        TString tableName;
+        TString pkType;
+        ui64 changefeedCount;
+        std::function<std::function<void(TTestBasicRuntime&)>(THashMap<TString, TTestDataWithScheme>&, const TString&, const TString&)> addedScheme;
+    };
+
     TGeneratedChangefeed GenChangefeed(ui64 num = 1, bool isPartitioningAvailable = true, const TString& tableName = "Table") {
         const TString changefeedName = TStringBuilder() << "updates_feed" << num;
         const TString changefeedPath = TStringBuilder() << "/" << tableName << "/" << changefeedName;
@@ -5399,17 +5406,27 @@ Y_UNIT_TEST_SUITE(TImportTests) {
 
     using SchemeFunction = std::function<std::function<void(TTestBasicRuntime&)>(THashMap<TString, TTestDataWithScheme>&, const TString&, const TString&)>;
 
-    void TestImportChangefeeds(ui64 countChangefeed, SchemeFunction addedScheme, const TString& pkType = "UTF8") {
+    void TestImportChangefeeds(const TVector<TTableWithChangefeeds>& tables) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
         runtime.GetAppData().FeatureFlags.SetEnableChangefeedsImport(true);
         runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
 
-        THashMap<TString, TTestDataWithScheme> bucketContent(countChangefeed + 1);
+        THashMap<TString, TTestDataWithScheme> bucketContent;
+        TVector<std::function<void(TTestBasicRuntime&)>> allCheckers;
 
-        auto checkerTable = addedScheme(bucketContent, pkType, "Table");
-        auto checkersChangefeeds = GenChangefeeds(bucketContent, countChangefeed, pkType == "UINT32" || pkType == "UINT64");
+        // Create tables and changefeeds
+        for (const auto& table : tables) {
+            auto checkerTable = table.addedScheme(bucketContent, table.pkType, table.tableName);
+            allCheckers.push_back(checkerTable);
+
+            if (table.changefeedCount > 0) {
+                auto checkersChangefeeds = GenChangefeeds(bucketContent, table.changefeedCount, 
+                    table.pkType == "UINT32" || table.pkType == "UINT64", table.tableName);
+                allCheckers.insert(allCheckers.end(), checkersChangefeeds.begin(), checkersChangefeeds.end());
+            }
+        }
 
         TPortManager portManager;
         const ui16 port = portManager.GetPort();
@@ -5417,22 +5434,33 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         TS3Mock s3Mock(ConvertTestData(bucketContent), TS3Mock::TSettings(port));
         UNIT_ASSERT(s3Mock.Start());
 
-        TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
-            ImportFromS3Settings {
-              endpoint: "localhost:%d"
-              scheme: HTTP
-              items {
-                source_prefix: "/Table"
-                destination_path: "/MyRoot/Table"
-              }
-            }
-        )", port));
-        env.TestWaitNotification(runtime, txId);
+        // Import each table
+        for (const auto& table : tables) {
+            TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+                ImportFromS3Settings {
+                  endpoint: "localhost:%d"
+                  scheme: HTTP
+                  items {
+                    source_prefix: "/%s"
+                    destination_path: "/MyRoot/%s"
+                  }
+                }
+            )", port, table.tableName.c_str(), table.tableName.c_str()));
+            env.TestWaitNotification(runtime, txId);
+        }
 
-        checkerTable(runtime);
-        for (const auto& checker : checkersChangefeeds) {
+        // Run all checkers
+        for (const auto& checker : allCheckers) {
             checker(runtime);
         }
+    }
+
+    // Backward compatibility overload
+    void TestImportChangefeeds(ui64 countChangefeed, SchemeFunction addedScheme, const TString& pkType = "UTF8") {
+        TVector<TTableWithChangefeeds> tables = {
+            {"Table", pkType, countChangefeed, addedScheme}
+        };
+        TestImportChangefeeds(tables);
     }
 
     Y_UNIT_TEST(Changefeed) {
@@ -5542,343 +5570,19 @@ Y_UNIT_TEST_SUITE(TImportTests) {
 
     // Test for tables with similar prefixes and changefeeds
     Y_UNIT_TEST(ChangefeedTablePrefixConflict) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
-        ui64 txId = 100;
-        runtime.GetAppData().FeatureFlags.SetEnableChangefeedsImport(true);
-        runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
-
-        THashMap<TString, TTestDataWithScheme> bucketContent;
-
-        // Create both tables using the reusable AddedScheme function
-        auto checkerTable = AddedScheme(bucketContent, "UTF8", "table");
-        auto checkerTablePrefix = AddedScheme(bucketContent, "UTF8", "table_prefix");
-
-        // Add changefeed only for table_prefix
-        auto checkersChangefeeds = GenChangefeeds(bucketContent, 1, false, "table_prefix");
-
-        TPortManager portManager;
-        const ui16 port = portManager.GetPort();
-
-        TS3Mock s3Mock(ConvertTestData(bucketContent), TS3Mock::TSettings(port));
-        UNIT_ASSERT(s3Mock.Start());
-
-        // Import table "table" (without changefeed)
-        TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
-            ImportFromS3Settings {
-              endpoint: "localhost:%d"
-              scheme: HTTP
-              items {
-                source_prefix: "/table"
-                destination_path: "/MyRoot/table"
-              }
-            }
-        )", port));
-        env.TestWaitNotification(runtime, txId);
-
-        // Import table "table_prefix" (with changefeed)
-        TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
-            ImportFromS3Settings {
-              endpoint: "localhost:%d"
-              scheme: HTTP
-              items {
-                source_prefix: "/table_prefix"
-                destination_path: "/MyRoot/table_prefix"
-              }
-            }
-        )", port));
-        env.TestWaitNotification(runtime, txId);
-
-        // Verify both tables were created successfully
-        checkerTable(runtime);
-        checkerTablePrefix(runtime);
-
-        // Verify changefeed was created for table_prefix using the generated checker
-        for (const auto& checker : checkersChangefeeds) {
-            checker(runtime);
-        }
-    }
-
-    // Test for tables with similar prefixes where both have changefeeds with different names
-    Y_UNIT_TEST(ChangefeedTablePrefixConflictDifferentNames) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
-        ui64 txId = 100;
-        runtime.GetAppData().FeatureFlags.SetEnableChangefeedsImport(true);
-        runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
-
-        TPortManager portManager;
-        const ui16 port = portManager.GetPort();
-
-        THashMap<TString, TTestDataWithScheme> bucketContent;
-
-        // Helper lambda to create changefeed data
-        auto addChangefeedToTable = [&bucketContent](const TString& tablePath, const TString& changefeedName, const TString& consumerName) {
-            const auto changefeedPath = TStringBuilder() << "/" << changefeedName;
-            const auto changefeedDesc = Sprintf(R"(
-                name: "%s"
-                mode: MODE_UPDATES
-                format: FORMAT_JSON
-                state: STATE_ENABLED
-            )", changefeedName.c_str());
-
-            const auto topicDesc = Sprintf(R"(
-                partitioning_settings {
-                    min_active_partitions: 1
-                    max_active_partitions: 2
-                }
-                partitions {
-                    active: true
-                }
-                retention_period {
-                    seconds: 86400
-                }
-                partition_write_speed_bytes_per_second: 1048576
-                partition_write_burst_bytes: 1048576
-                consumers {
-                    name: "%s"
-                    read_from {
-                    }
-                    attributes {
-                        key: "_service_type"
-                        value: "data-streams"
-                    }
-                }
-            )", consumerName.c_str());
-
-            NAttr::TAttributes attr;
-            attr.emplace(NAttr::EKeys::TOPIC_DESCRIPTION, topicDesc);
-            bucketContent.emplace(tablePath + changefeedPath, GenerateTestData({EPathTypeCdcStream, changefeedDesc, std::move(attr)}));
+        TVector<TTableWithChangefeeds> tables = {
+            {"table", "UTF8", 0, AddedScheme},         // table without changefeed
+            {"table_prefix", "UTF8", 1, AddedScheme}   // table_prefix with changefeed
         };
-
-        // Table "table_prefix" with changefeed "updates_feed"
-        {
-            const auto tablePrefixData = GenerateTestData(R"(
-                columns {
-                  name: "key"
-                  type { optional_type { item { type_id: UTF8 } } }
-                }
-                columns {
-                  name: "value"
-                  type { optional_type { item { type_id: UTF8 } } }
-                }
-                primary_key: ["key"]
-            )");
-            bucketContent.emplace("/table_prefix", tablePrefixData);
-            addChangefeedToTable("/table_prefix", "updates_feed", "consumer1");
-        }
-
-        // Table "table" with changefeed "different_feed"
-        {
-            const auto tableData = GenerateTestData(R"(
-                columns {
-                  name: "key"
-                  type { optional_type { item { type_id: UTF8 } } }
-                }
-                columns {
-                  name: "value"
-                  type { optional_type { item { type_id: UTF8 } } }
-                }
-                primary_key: ["key"]
-            )");
-            bucketContent.emplace("/table", tableData);
-            addChangefeedToTable("/table", "different_feed", "consumer2");
-        }
-
-        TS3Mock s3Mock(ConvertTestData(bucketContent), TS3Mock::TSettings(port));
-        UNIT_ASSERT(s3Mock.Start());
-
-        // Import both tables
-        TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
-            ImportFromS3Settings {
-              endpoint: "localhost:%d"
-              scheme: HTTP
-              items {
-                source_prefix: ""
-                destination_path: "/MyRoot/table"
-              }
-            }
-        )", port));
-        env.TestWaitNotification(runtime, txId);
-
-        TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
-            ImportFromS3Settings {
-              endpoint: "localhost:%d"
-              scheme: HTTP
-              items {
-                source_prefix: ""
-                destination_path: "/MyRoot/table_prefix"
-              }
-            }
-        )", port));
-        env.TestWaitNotification(runtime, txId);
-
-        // Verify both tables exist
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/table"), {
-            NLs::PathExist,
-        });
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/table_prefix"), {
-            NLs::PathExist,
-        });
-
-        // Verify each table has its own changefeed with correct name
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/table/different_feed", false, false, true), {
-            NLs::PathExist,
-        });
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/table_prefix/updates_feed", false, false, true), {
-            NLs::PathExist,
-        });
-
-        // Verify cross-contamination doesn't occur
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/table/updates_feed", false, false, true), {
-            NLs::PathNotExist,
-        });
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/table_prefix/different_feed", false, false, true), {
-            NLs::PathNotExist,
-        });
+        TestImportChangefeeds(tables);
     }
 
     // Test for tables with similar prefixes where both have changefeeds with same name but different descriptions
     Y_UNIT_TEST(ChangefeedTablePrefixConflictSameNameDifferentDesc) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
-        ui64 txId = 100;
-        runtime.GetAppData().FeatureFlags.SetEnableChangefeedsImport(true);
-        runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
-
-        TPortManager portManager;
-        const ui16 port = portManager.GetPort();
-
-        THashMap<TString, TTestDataWithScheme> bucketContent;
-
-        // Helper lambda to create changefeed data with different configurations
-        auto addChangefeedToTable = [&bucketContent](const TString& tablePath, const TString& changefeedName, 
-                                                     const TString& consumerName, ui32 minPartitions, ui32 maxPartitions) {
-            const auto changefeedPath = TStringBuilder() << "/" << changefeedName;
-            const auto changefeedDesc = Sprintf(R"(
-                name: "%s"
-                mode: MODE_UPDATES
-                format: FORMAT_JSON
-                state: STATE_ENABLED
-            )", changefeedName.c_str());
-
-            const auto topicDesc = Sprintf(R"(
-                partitioning_settings {
-                    min_active_partitions: %d
-                    max_active_partitions: %d
-                }
-                partitions {
-                    active: true
-                }
-                retention_period {
-                    seconds: 86400
-                }
-                partition_write_speed_bytes_per_second: 1048576
-                partition_write_burst_bytes: 1048576
-                consumers {
-                    name: "%s"
-                    read_from {
-                    }
-                    attributes {
-                        key: "_service_type"
-                        value: "data-streams"
-                    }
-                }
-            )", minPartitions, maxPartitions, consumerName.c_str());
-
-            NAttr::TAttributes attr;
-            attr.emplace(NAttr::EKeys::TOPIC_DESCRIPTION, topicDesc);
-            bucketContent.emplace(tablePath + changefeedPath, GenerateTestData({EPathTypeCdcStream, changefeedDesc, std::move(attr)}));
-        };
-
-        // Table "table_prefix" with changefeed "updates_feed" (1-2 partitions, consumer1)
-        {
-            const auto tablePrefixData = GenerateTestData(R"(
-                columns {
-                  name: "key"
-                  type { optional_type { item { type_id: UTF8 } } }
-                }
-                columns {
-                  name: "value"
-                  type { optional_type { item { type_id: UTF8 } } }
-                }
-                primary_key: ["key"]
-            )");
-            bucketContent.emplace("/table_prefix", tablePrefixData);
-            addChangefeedToTable("/table_prefix", "updates_feed", "consumer1", 1, 2);
-        }
-
-        // Table "table" with changefeed "updates_feed" (2-4 partitions, consumer2)
-        {
-            const auto tableData = GenerateTestData(R"(
-                columns {
-                  name: "key"
-                  type { optional_type { item { type_id: UTF8 } } }
-                }
-                columns {
-                  name: "value"
-                  type { optional_type { item { type_id: UTF8 } } }
-                }
-                primary_key: ["key"]
-            )");
-            bucketContent.emplace("/table", tableData);
-            addChangefeedToTable("/table", "updates_feed", "consumer2", 2, 4);
-        }
-
-        TS3Mock s3Mock(ConvertTestData(bucketContent), TS3Mock::TSettings(port));
-        UNIT_ASSERT(s3Mock.Start());
-
-        // Import both tables
-        TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
-            ImportFromS3Settings {
-              endpoint: "localhost:%d"
-              scheme: HTTP
-              items {
-                source_prefix: ""
-                destination_path: "/MyRoot/table"
-              }
-            }
-        )", port));
-        env.TestWaitNotification(runtime, txId);
-
-        TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
-            ImportFromS3Settings {
-              endpoint: "localhost:%d"
-              scheme: HTTP
-              items {
-                source_prefix: ""
-                destination_path: "/MyRoot/table_prefix"
-              }
-            }
-        )", port));
-        env.TestWaitNotification(runtime, txId);
-
-        // Verify both tables exist
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/table"), {
-            NLs::PathExist,
-        });
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/table_prefix"), {
-            NLs::PathExist,
-        });
-
-        // Verify each table has its own changefeed with same name but different configurations
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/table/updates_feed", false, false, true), {
-            NLs::PathExist,
-        });
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/table/updates_feed/streamImpl", false, false, true), {
-            NLs::ConsumerExist("consumer2"),
-            NLs::MinTopicPartitionsCountEqual(2),
-            NLs::MaxTopicPartitionsCountEqual(4),
-        });
-
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/table_prefix/updates_feed", false, false, true), {
-            NLs::PathExist,
-        });
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/table_prefix/updates_feed/streamImpl", false, false, true), {
-            NLs::ConsumerExist("consumer1"),
-            NLs::MinTopicPartitionsCountEqual(1),
-            NLs::MaxTopicPartitionsCountEqual(2),
-        });
+        TVector<TTableWithChangefeeds> tables = {
+            {"table", "UINT32", 1, AddedScheme},       // partitioning available
+            {"table_prefix", "UTF8", 1, AddedScheme}   // partitioning unavailable
+        };        
     }
 
     Y_UNIT_TEST(ShouldSucceedImportTableWithUniqueIndex) {

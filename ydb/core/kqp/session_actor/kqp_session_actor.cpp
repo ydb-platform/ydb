@@ -792,83 +792,85 @@ public:
         {
             // TODO: properly initialize transaction(s)
             TVector<IKqpGateway::TPhysicalTxData> txs;
-            txs.emplace_back(QueryState->PreparedQuery->GetPhyTxOrEmpty(QueryState->CurrentTx), QueryState->QueryData);
+            txs.emplace_back(QueryState->PreparedQuery->GetTransactions().back(), QueryState->QueryData);
 
-            auto txAlloc = std::make_shared<TTxAllocatorState>(AppData()->FunctionRegistry, AppData()->TimeProvider, AppData()->RandomProvider);
-            auto tasksGraph = TKqpTasksGraph(Settings.Database, txs, txAlloc, {}, Settings.TableService.GetAggregationConfig(), RequestCounters, {});
-            tasksGraph.GetMeta().AllowOlapDataQuery = Settings.TableService.GetAllowOlapDataQuery();
+            if (txs.front().Body->GetType() != NKqpProto::TKqpPhyTx::TYPE_SCHEME) {
+                auto txAlloc = std::make_shared<TTxAllocatorState>(AppData()->FunctionRegistry, AppData()->TimeProvider, AppData()->RandomProvider);
+                auto tasksGraph = TKqpTasksGraph(Settings.Database, txs, txAlloc, {}, Settings.TableService.GetAggregationConfig(), RequestCounters, {});
+                tasksGraph.GetMeta().AllowOlapDataQuery = Settings.TableService.GetAllowOlapDataQuery();
 
-            // Resolve tables
-            {
-                auto kqpTableResolver = CreateKqpTableResolver(SelfId(), 0, QueryState->UserToken, tasksGraph);
-                RegisterWithSameMailbox(kqpTableResolver);
-                auto resolveEv = co_await ActorWaitForEvent<TEvKqpExecuter::TEvTableResolveStatus>(0);
-                if (resolveEv->Get()->Status != Ydb::StatusIds::SUCCESS) {
-                    ReplyResolveError(*resolveEv->Get());
-                    co_return;
+                // Resolve tables
+                {
+                    auto kqpTableResolver = CreateKqpTableResolver(SelfId(), 0, QueryState->UserToken, tasksGraph);
+                    RegisterWithSameMailbox(kqpTableResolver);
+                    auto resolveEv = co_await ActorWaitForEvent<TEvKqpExecuter::TEvTableResolveStatus>(0);
+                    if (resolveEv->Get()->Status != Ydb::StatusIds::SUCCESS) {
+                        ReplyResolveError(*resolveEv->Get());
+                        co_return;
+                    }
                 }
-            }
 
-            // Resolve shards
-            {
-                TSet<ui64> shardIds;
-                for (const auto& [stageId, stageInfo] : tasksGraph.GetStagesInfo()) {
-                    if (stageInfo.Meta.ShardKey) {
-                        for (const auto& partition : stageInfo.Meta.ShardKey->GetPartitions()) {
-                            shardIds.insert(partition.ShardId);
+                // Resolve shards
+                {
+                    TSet<ui64> shardIds;
+                    for (const auto& [stageId, stageInfo] : tasksGraph.GetStagesInfo()) {
+                        if (stageInfo.Meta.ShardKey) {
+                            for (const auto& partition : stageInfo.Meta.ShardKey->GetPartitions()) {
+                                shardIds.insert(partition.ShardId);
+                            }
                         }
                     }
+                    // TODO: initialize tasksGraph.GetMeta().UseFollowers ?
+                    auto kqpShardsResolver = CreateKqpShardsResolver(SelfId(), 0, false, std::move(shardIds));
+                    RegisterWithSameMailbox(kqpShardsResolver);
+                    auto resolveEv = co_await ActorWaitForEvent<NShardResolver::TEvShardsResolveStatus>(0);
+                    if (resolveEv->Get()->Status != Ydb::StatusIds::SUCCESS) {
+                        ReplyResolveError(*resolveEv->Get());
+                        co_return;
+                    }
+                    tasksGraph.GetMeta().ShardIdToNodeId = std::move(resolveEv->Get()->ShardNodes);
+                    for (const auto& [shardId, nodeId] : tasksGraph.GetMeta().ShardIdToNodeId) {
+                        tasksGraph.GetMeta().ShardsOnNode[nodeId].push_back(shardId);
+                    }
                 }
-                // TODO: initialize tasksGraph.GetMeta().UseFollowers ?
-                auto kqpShardsResolver = CreateKqpShardsResolver(SelfId(), 0, false, std::move(shardIds));
-                RegisterWithSameMailbox(kqpShardsResolver);
-                auto resolveEv = co_await ActorWaitForEvent<NShardResolver::TEvShardsResolveStatus>(0);
-                if (resolveEv->Get()->Status != Ydb::StatusIds::SUCCESS) {
-                    ReplyResolveError(*resolveEv->Get());
-                    co_return;
-                }
-                tasksGraph.GetMeta().ShardIdToNodeId = std::move(resolveEv->Get()->ShardNodes);
-                for (const auto& [shardId, nodeId] : tasksGraph.GetMeta().ShardIdToNodeId) {
-                    tasksGraph.GetMeta().ShardsOnNode[nodeId].push_back(shardId);
-                }
-            }
 
-            bool needResourcesSnapshot = tasksGraph.GetMeta().IsScan;
-            if (!tasksGraph.GetMeta().IsScan) {
-                for (const auto& transaction : txs) {
-                    for (const auto& stage : transaction.Body->GetStages()) {
-                        if (stage.SourcesSize() > 0 && stage.GetSources(0).GetTypeCase() == NKqpProto::TKqpSource::kExternalSource) {
-                            needResourcesSnapshot = true;
+                bool needResourcesSnapshot = tasksGraph.GetMeta().IsScan;
+                if (!tasksGraph.GetMeta().IsScan) {
+                    for (const auto& transaction : txs) {
+                        for (const auto& stage : transaction.Body->GetStages()) {
+                            if (stage.SourcesSize() > 0 && stage.GetSources(0).GetTypeCase() == NKqpProto::TKqpSource::kExternalSource) {
+                                needResourcesSnapshot = true;
+                            }
                         }
                     }
+                    // TODO: better set `needResourcesSnapshot`
                 }
-                // TODO: better set `needResourcesSnapshot`
+
+                // Get resources snapshot
+                TVector<NKikimrKqp::TKqpNodeResources> resourcesSnapshot;
+                if (needResourcesSnapshot) {
+                    struct TEvResourcesSnapshot : public TEventLocal<TEvResourcesSnapshot, EventSpaceBegin(TEvents::ES_PRIVATE)> {
+                        TVector<NKikimrKqp::TKqpNodeResources> Snapshot;
+
+                        TEvResourcesSnapshot(TVector<NKikimrKqp::TKqpNodeResources>&& snapshot)
+                            : Snapshot(std::move(snapshot)) {}
+                    };
+
+                    GetKqpResourceManager()->RequestClusterResourcesInfo(
+                        [as = TlsActivationContext->ActorSystem(), self = SelfId()](TVector<NKikimrKqp::TKqpNodeResources>&& resources) {
+                            TAutoPtr<IEventHandle> eh = new IEventHandle(self, self, new TEvResourcesSnapshot(std::move(resources)));
+                            as->Send(eh);
+                        }
+                    );
+
+                    resourcesSnapshot = std::move((co_await ActorWaitForEvent<TEvResourcesSnapshot>(0))->Get()->Snapshot);
+                }
+
+                tasksGraph.BuildAllTasks({}, resourcesSnapshot, nullptr, nullptr);
+
+                // TODO: fill tasks count into result
+                // Cerr << tasksGraph.DumpToString();
             }
-
-            // Get resources snapshot
-            TVector<NKikimrKqp::TKqpNodeResources> resourcesSnapshot;
-            if (needResourcesSnapshot) {
-                struct TEvResourcesSnapshot : public TEventLocal<TEvResourcesSnapshot, EventSpaceBegin(TEvents::ES_PRIVATE)> {
-                    TVector<NKikimrKqp::TKqpNodeResources> Snapshot;
-
-                    TEvResourcesSnapshot(TVector<NKikimrKqp::TKqpNodeResources>&& snapshot)
-                        : Snapshot(std::move(snapshot)) {}
-                };
-
-                GetKqpResourceManager()->RequestClusterResourcesInfo(
-                    [as = TlsActivationContext->ActorSystem(), self = SelfId()](TVector<NKikimrKqp::TKqpNodeResources>&& resources) {
-                        TAutoPtr<IEventHandle> eh = new IEventHandle(self, self, new TEvResourcesSnapshot(std::move(resources)));
-                        as->Send(eh);
-                    }
-                );
-
-                resourcesSnapshot = std::move((co_await ActorWaitForEvent<TEvResourcesSnapshot>(0))->Get()->Snapshot);
-            }
-
-            tasksGraph.BuildAllTasks({}, resourcesSnapshot, nullptr, nullptr);
-
-            // TODO: fill tasks count into result
-            // Cerr << tasksGraph.DumpToString();
 
             co_return ReplyPrepareResult();
         }
@@ -1569,7 +1571,6 @@ public:
                             "Data operations cannot be executed outside of transaction");
                         return true;
                     }
-
                     break;
 
                 default:

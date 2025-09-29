@@ -29,6 +29,7 @@
 #define LOG_W(stream) LOG_WARN_S(*NActors::TlsActivationContext, NKikimrServices::PQ_FETCH_REQUEST, LOG_PREFIX << stream)
 #define LOG_I(stream) LOG_INFO_S(*NActors::TlsActivationContext, NKikimrServices::PQ_FETCH_REQUEST, LOG_PREFIX << stream)
 #define LOG_D(stream) LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PQ_FETCH_REQUEST, LOG_PREFIX << stream)
+#define LOG(level, stream) LOG_LOG_S(*NActors::TlsActivationContext, level, NKikimrServices::PQ_FETCH_REQUEST, LOG_PREFIX << stream)
 
 namespace NKikimr::NPQ {
 
@@ -37,7 +38,7 @@ using namespace NSchemeCache;
 
 
 namespace {
-    static constexpr TDuration MaxTimeout = TDuration::MilliSeconds(30000);
+    static constexpr TDuration MaxTimeout = TDuration::Seconds(30);
     static constexpr ui64 TimeoutWakeupTag = 1000;
 }
 
@@ -325,12 +326,10 @@ public:
 
     void Handle(NKikimr::NReplication::TEvYdbProxy::TEvAlterTopicResponse::TPtr& ev, const TActorContext& ctx) {
         NYdb::TStatus& result = ev->Get()->Result;
-        if (result.GetStatus() == NYdb::EStatus::SUCCESS) {
-            LOG_D("Handling TEvAlterTopicResponse. Status: " << result.GetStatus() << "\n");
-        } else {
-            LOG_I("Handling TEvAlterTopicResponse. Status: " << result.GetStatus() << "\n");
-        }
-        PendingAlterTopicResponses--;
+        auto logLevel = result.GetStatus() == NYdb::EStatus::SUCCESS ? NActors::NLog::PRI_DEBUG :NActors::NLog::PRI_INFO;
+        LOG(logLevel, "Handling TEvAlterTopicResponse. Status: " << result.GetStatus());
+
+        --PendingAlterTopicResponses;
         if (PendingAlterTopicResponses == 0) {
             OnTopicAltered(ctx);
         }
@@ -457,12 +456,8 @@ public:
     }
 
     void HandleTimeout(const TActorContext& ctx) {
-        if (Response) {
-            return SendReplyOnDoneAndDie(ctx);
-        }
-        TString reason = "Timeout while waiting for response, may be just slow, Marker# PQ11";
-        LOG_D(reason);
-        return SendReplyAndDie(CreateErrorReply(Ydb::StatusIds::TIMEOUT, reason), ctx);
+        EnsureResponse();
+        SendReplyOnDoneAndDie(ctx);
     }
 
     void Die(const TActorContext& ctx) override {

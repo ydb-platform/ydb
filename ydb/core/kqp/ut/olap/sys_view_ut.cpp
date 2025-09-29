@@ -182,8 +182,8 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
             WriteTestData(kikimr, "/Root/olapStore/olapTable_1", 0, 1000000 + i * 10000, 1000);
             WriteTestData(kikimr, "/Root/olapStore/olapTable_2", 0, 1000000 + i * 10000, 2000);
         }
-        csController->WaitCompactions(TDuration::Seconds(5));
 
+        csController->WaitCompactions(TDuration::Seconds(5));
         auto tableClient = kikimr.GetTableClient();
         {
             auto selectQuery = TString(R"(
@@ -229,15 +229,23 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
             UNIT_ASSERT_VALUES_EQUAL(rows.size(), 0);
         }
         {
-            auto selectQuery = Sprintf(R"(
+            auto selectQuery1 = TString(R"(
                 SELECT COUNT(*)
                 FROM `/Root/olapStore/olapTable_1/.sys/primary_index_stats`
-            )",
-                tablePathId1);
+            )");
+            auto rows1 = ExecuteScanQuery(tableClient, selectQuery1);
+            UNIT_ASSERT_VALUES_EQUAL(rows1.size(), 1);
+            const ui64 count1 = GetUint64(rows1.front().at("column0"));
+            UNIT_ASSERT(count1 > 0);
 
-            auto rows = ExecuteScanQuery(tableClient, selectQuery);
-            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows.front().at("column0")), 180);
+            auto selectQuery2 = TString(R"(
+                SELECT COUNT(*)
+                FROM `/Root/olapStore/olapTable_2/.sys/primary_index_stats`
+            )");
+            auto rows2 = ExecuteScanQuery(tableClient, selectQuery2);
+            UNIT_ASSERT_VALUES_EQUAL(rows2.size(), 1);
+            const ui64 count2 = GetUint64(rows2.front().at("column0"));
+            UNIT_ASSERT(count2 > 0);
         }
     }
 

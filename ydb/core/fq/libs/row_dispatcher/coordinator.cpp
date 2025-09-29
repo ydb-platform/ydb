@@ -515,7 +515,7 @@ void TActorCoordinator::Handle(TEvPrivate::TEvPrintState::TPtr&) {
 }
 
 void TActorCoordinator::Handle(NKikimr::TEvTenantNodeEnumerator::TEvLookupResult::TPtr& ev) {
-     if (!ev->Get()->Success) {
+    if (!ev->Get()->Success) {
         LOG_ROW_DISPATCHER_ERROR("Failed to get TEvLookupResult, try later...");
         ScheduleNodeInfoRequest();
         return;

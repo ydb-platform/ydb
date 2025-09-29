@@ -22,14 +22,14 @@
 Пример конфига (доступны все типы внешних источников):
 
 ```yaml
-feature_flags: !inherit
+feature_flags:
     enable_external_data_sources: true
 ```
 
 Пример конфига (доступны только выбранные типы):
 
 ```yaml
-feature_flags: !inherit
+feature_flags:
     enable_external_data_sources: true
 ...
 query_service_config:

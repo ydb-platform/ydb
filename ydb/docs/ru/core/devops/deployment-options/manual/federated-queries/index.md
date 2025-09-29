@@ -53,12 +53,5 @@
                   value: "true"
     ```
 
-4. В конфигурационном файле {{ ydb-short-name }} добавьте секцию `feature_flags` следующего содержания:
-
-    ```yaml
-    feature_flags:
-        enable_external_data_sources: true
-        enable_script_execution_operations: true
-    ```
-
+4. В конфигурационном файле {{ ydb-short-name }} добавьте настройки согласно [конфигурации](../../../../concepts/federated_query/config.md).
 5. Продолжайте развёртывание динамического узла {{ ydb-short-name }} по [инструкции](../initial-deployment.md).

@@ -127,22 +127,22 @@ private:
 
 }}
 
-#define STFUNC_TABLET_INIT(NAME, HANDLERS)                                                           \
+#define STFUNC_TABLET_INIT(NAME, HANDLERS)                                                          \
     void NAME(STFUNC_SIG) {                                                                         \
-        switch (const ui32 etype = ev->GetTypeRewrite()) {                                          \
+        switch ([[maybe_unused]] const ui32 etype = ev->GetTypeRewrite()) {                         \
             HANDLERS                                                                                \
             default:                                                                                \
-                TTabletExecutedFlat::StateInitImpl(ev, SelfId());                                             \
+                TTabletExecutedFlat::StateInitImpl(ev, SelfId());                                   \
         }                                                                                           \
     }
 
-#define STFUNC_TABLET_DEF(NAME, HANDLERS)                                                            \
+#define STFUNC_TABLET_DEF(NAME, HANDLERS)                                                           \
     void NAME(STFUNC_SIG) {                                                                         \
-        switch (const ui32 etype = ev->GetTypeRewrite()) {                                          \
+        switch ([[maybe_unused]] const ui32 etype = ev->GetTypeRewrite()) {                         \
             HANDLERS                                                                                \
             default:                                                                                \
-                if (!TTabletExecutedFlat::HandleDefaultEvents(ev, SelfId()))                             \
-                    Y_DEBUG_ABORT("%s: unexpected event type: %" PRIx32 " event: %s",       \
+                if (!TTabletExecutedFlat::HandleDefaultEvents(ev, SelfId()))                        \
+                    Y_DEBUG_ABORT("%s: unexpected event type: %" PRIx32 " event: %s",               \
                                    __func__, ev->GetTypeRewrite(),                                  \
                                    ev->ToString().data());                                          \
         }                                                                                           \
@@ -150,9 +150,9 @@ private:
 
 #define STFUNC_TABLET_IGN(NAME, HANDLERS)                                                           \
     void NAME(STFUNC_SIG) {                                                                         \
-        switch (const ui32 etype = ev->GetTypeRewrite()) {                                          \
+        switch ([[maybe_unused]] const ui32 etype = ev->GetTypeRewrite()) {                         \
             HANDLERS                                                                                \
             default:                                                                                \
-                TTabletExecutedFlat::HandleDefaultEvents(ev, SelfId());                                  \
+                TTabletExecutedFlat::HandleDefaultEvents(ev, SelfId());                             \
         }                                                                                           \
     }

@@ -919,7 +919,7 @@ void TDataShard::PersistChangeRecord(NIceDb::TNiceDb& db, const TChangeRecord& r
 
                     if (cIt->second.SchemaSnapshotAcquired) {
                         const auto snapshotKey = TSchemaSnapshotKey(cIt->second.TableId, cIt->second.SchemaVersion);
-                        if (const auto last = SchemaSnapshotManager.ReleaseReference(snapshotKey)) {
+                        if (SchemaSnapshotManager.ReleaseReference(snapshotKey)) {
                             ScheduleRemoveSchemaSnapshot(snapshotKey);
                         }
                     }
@@ -1056,7 +1056,7 @@ void TDataShard::CommitLockChangeRecords(NIceDb::TNiceDb& db, ui64 lockId, ui64 
 
             if (cIt->second.SchemaSnapshotAcquired) {
                 const auto snapshotKey = TSchemaSnapshotKey(cIt->second.TableId, cIt->second.SchemaVersion);
-                if (const auto last = SchemaSnapshotManager.ReleaseReference(snapshotKey)) {
+                if (SchemaSnapshotManager.ReleaseReference(snapshotKey)) {
                     ScheduleRemoveSchemaSnapshot(snapshotKey);
                 }
             }
@@ -1126,7 +1126,7 @@ void TDataShard::RemoveChangeRecord(NIceDb::TNiceDb& db, ui64 order) {
 
     if (record.SchemaSnapshotAcquired) {
         const auto snapshotKey = TSchemaSnapshotKey(record.TableId, record.SchemaVersion);
-        if (const bool last = SchemaSnapshotManager.ReleaseReference(snapshotKey)) {
+        if (SchemaSnapshotManager.ReleaseReference(snapshotKey)) {
             ScheduleRemoveSchemaSnapshot(snapshotKey);
         }
     }
@@ -1517,7 +1517,7 @@ void TDataShard::ScheduleRemoveAbandonedLockChanges() {
             continue;
         }
 
-        if (auto* info = VolatileTxManager.FindByCommitTxId(lockId)) {
+        if (VolatileTxManager.FindByCommitTxId(lockId)) {
             // Skip lock changes attached to volatile transactions
             continue;
         }

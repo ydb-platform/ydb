@@ -38,7 +38,7 @@ class TBlobStorageGroupGetBlockRequest : public TBlobStorageGroupRequestActor {
         }
         ++Responses;
 
-        switch (const NKikimrProto::EReplyStatus overallStatus = QuorumTracker.ProcessReply(vdisk, status)) {
+        switch (QuorumTracker.ProcessReply(vdisk, status)) {
             case NKikimrProto::OK:
                 if (Responses == Requests) {
                     ReplyAndDie(NKikimrProto::OK);

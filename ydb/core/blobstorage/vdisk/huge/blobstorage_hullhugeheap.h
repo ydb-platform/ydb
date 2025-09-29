@@ -54,6 +54,17 @@ namespace NKikimr {
                 }
             };
 
+            // represents one segment in form of (Left, Right]
+            struct TLayoutSegment {
+                ui32 Left; // not included
+                ui32 Right; // included
+
+                bool operator ==(const TLayoutSegment &s) const {
+                    return Left == s.Left && Right == s.Right;
+                }
+            };
+
+            using TLayout = TVector<TLayoutSegment>;
 
             ////////////////////////////////////////////////////////////////////////
             // TChainLayoutBuilder
@@ -61,16 +72,12 @@ namespace NKikimr {
             ////////////////////////////////////////////////////////////////////////
             class TChainLayoutBuilder {
             public:
-                // represents one segment in form of (Left, Right]
-                struct TSeg {
-                    ui32 Left; // not included
-                    ui32 Right; // included
-                    bool operator ==(const TSeg &s) const { return Left == s.Left && Right == s.Right; }
-                };
+                TChainLayoutBuilder(const TString& prefix,
+                    ui32 left, ui32 milestone, ui32 right, ui32 overhead);
 
-                TChainLayoutBuilder(const TString& prefix, ui32 left, ui32 milestone, ui32 right, ui32 overhead);
-                const TVector<TSeg> &GetLayout() const { return Layout; }
-                const TSeg &GetMilestoneSegment() const { return Layout.at(MilestoneId); }
+                TLayout GetLayout() const { return std::move(Layout); }
+                const TLayoutSegment &GetMilestoneSegment() const { return Layout.at(MilestoneId); }
+
                 TString ToString(ui32 appendBlockSize = 0) const;
                 void Output(IOutputStream &str, ui32 appendBlockSize = 0) const;
 
@@ -79,9 +86,38 @@ namespace NKikimr {
                 void BuildDownward(ui32 left, ui32 right, ui32 overhead);
                 void BuildUpward(ui32 left, ui32 right, ui32 overhead);
 
-                TVector<TSeg> Layout;
+                TLayout Layout;
                 // An index in Layout vector, where milestone segment starts
                 size_t MilestoneId = Max<size_t>();
+            };
+
+            ////////////////////////////////////////////////////////////////////////
+            // TChainLayoutBuilderV2
+            // Next version of layout builder
+            ////////////////////////////////////////////////////////////////////////
+
+            class TChainLayoutBuilderV2 {
+            public:
+                TChainLayoutBuilderV2(const TString& prefix, ui32 blockSize,
+                    ui32 blocksInChunk, ui32 left, ui32 right, ui32 stepsBetweenPowersOf2);
+
+                TLayout GetLayout() const { return std::move(Layout); }
+
+                TString ToString() const;
+                void Output(IOutputStream &str) const;
+
+            private:
+                void Build();
+                void Check();
+
+                const TString VDiskLogPrefix;
+                const ui32 BlockSize = 0;
+                const ui32 BlocksInChunk = 0;
+                const ui32 Left = 0;
+                const ui32 Right = 0;
+                const ui32 StepsBetweenPowersOf2 = 0;
+
+                TLayout Layout;
             };
 
         } // NPrivate
@@ -210,7 +246,7 @@ namespace NKikimr {
             void RenderHtml(IOutputStream &str) const;
             void RenderHtmlForUsage(IOutputStream &str) const;
             // for testing purposes
-            TVector<NPrivate::TChainLayoutBuilder::TSeg> GetLayout() const;
+            NPrivate::TLayout GetLayout() const;
             // Builds a map of BlobSize -> THugeSlotsMap::TSlotInfo for THugeBlobCtx
             std::shared_ptr<THugeSlotsMap> BuildHugeSlotsMap() const;
 

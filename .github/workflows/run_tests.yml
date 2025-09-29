@@ -148,11 +148,6 @@ jobs:
         with:
           ref: ${{ matrix.branch }}
 
-      - name: Setup ssh key for slice 
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: ${{ secrets.SLICE_QA_SSH_PRIVATE_KEY }}
-
       - name: Setup ydb access
         uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
         with:

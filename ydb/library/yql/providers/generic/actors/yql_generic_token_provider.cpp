@@ -33,8 +33,30 @@ namespace NYql::NDq {
         Y_ENSURE(!structuredTokenJSON.empty(), "empty structured token");
         Y_ENSURE(credentialsFactory, "CredentialsFactory is not initialized");
 
-        auto credentialsProviderFactory =
-            CreateCredentialsProviderFactoryForStructuredToken(credentialsFactory, structuredTokenJSON, false);
+        std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory = nullptr;
+
+        NYql::TStructuredTokenParser parser = NYql::CreateStructuredTokenParser(structuredTokenJSON);
+
+        Cout << "structured token JSON: " << structuredTokenJSON << Endl;
+
+        if (parser.HasBasicAuth()) {
+            Cout << "HasBasicAuth" << Endl;
+            TString login;
+            TString password;
+            parser.GetBasicAuth(login, password);
+            credentialsProviderFactory = NYdb::CreateLoginCredentialsProviderFactory({
+                .User = login,
+                .Password = password
+            });
+        } else {
+            Cout << "Else" << Endl;
+            credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(
+                    credentialsFactory, 
+                    structuredTokenJSON, 
+                    false
+            );
+        }
+
         CredentialsProvider_ = credentialsProviderFactory->CreateProvider();
     }
 

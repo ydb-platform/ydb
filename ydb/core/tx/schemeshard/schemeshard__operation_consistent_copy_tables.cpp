@@ -138,24 +138,7 @@ bool CreateConsistentCopyTables(
         TPath dstPath = TPath::Resolve(dstStr, context.SS);
         TPath dstParentPath = dstPath.Parent();
 
-        THashSet<TString> sequences;
-        for (const auto& child: srcPath.Base()->GetChildren()) {
-            auto name = child.first;
-            auto pathId = child.second;
-
-            TPath childPath = srcPath.Child(name);
-            if (!childPath.IsSequence() || childPath.IsDeleted()) {
-                continue;
-            }
-
-            Y_ABORT_UNLESS(childPath.Base()->PathId == pathId);
-
-            TSequenceInfo::TPtr sequenceInfo = context.SS->Sequences.at(pathId);
-            const auto& sequenceDesc = sequenceInfo->Description;
-            const auto& sequenceName = sequenceDesc.GetName();
-
-            sequences.emplace(sequenceName);
-        }
+        THashSet<TString> sequences = GetLocalSequences(context, srcPath);
 
         if (descr.HasTargetPathTargetState()) {
             result.push_back(CreateCopyTable(
@@ -170,7 +153,6 @@ bool CreateConsistentCopyTables(
                                 sequences));
         }
 
-        TVector<NKikimrSchemeOp::TSequenceDescription> sequenceDescriptions;
         for (const auto& child: srcPath.Base()->GetChildren()) {
             const auto& name = child.first;
             const auto& pathId = child.second;
@@ -183,9 +165,6 @@ bool CreateConsistentCopyTables(
             }
 
             if (srcIndexPath.IsSequence()) {
-                TSequenceInfo::TPtr sequenceInfo = context.SS->Sequences.at(pathId);
-                const auto& sequenceDesc = sequenceInfo->Description;
-                sequenceDescriptions.push_back(sequenceDesc);
                 continue;
             }
 
@@ -218,21 +197,50 @@ bool CreateConsistentCopyTables(
             }
         }
 
-        for (auto&& sequenceDescription : sequenceDescriptions) {
-            auto scheme = TransactionTemplate(
-                dstPath.PathString(),
-                NKikimrSchemeOp::EOperationType::ESchemeOpCreateSequence);
-            scheme.SetFailOnExist(true);
+        AddCopySequences(nextId, tx, context, result, srcPath, dstPath.PathString());
+    }
+
+    return true;
+}
+
+THashSet<TString> GetLocalSequences(TOperationContext& context, const TPath& srcPath) {
+    THashSet<TString> sequences;
+    for (const auto& [name, pathId] : srcPath.Base()->GetChildren()) {
+        TPath childPath = srcPath.Child(name);
+        if (!childPath.IsSequence() || childPath.IsDeleted()) {
+            continue;
+        }
+
+        Y_ABORT_UNLESS(childPath.Base()->PathId == pathId);
+
+        TSequenceInfo::TPtr sequenceInfo = context.SS->Sequences.at(pathId);
+        const auto& sequenceDesc = sequenceInfo->Description;
+        const auto& sequenceName = sequenceDesc.GetName();
+
+        sequences.emplace(sequenceName);
+    }
+    return sequences;
+}
+
+void AddCopySequences(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context,
+    TVector<ISubOperation::TPtr>& result, const TPath& srcTable, const TString& dstPath)
+{
+    for (const auto& [subName, subPathId] : srcTable.Base()->GetChildren()) {
+        TPath subPath = srcTable.Child(subName);
+        if (subPath.IsSequence() && !subPath.IsDeleted()) {
+            TSequenceInfo::TPtr sequenceInfo = context.SS->Sequences.at(subPathId);
+            const auto& sequenceDesc = sequenceInfo->Description;
+
+            auto scheme = TransactionTemplate(dstPath, NKikimrSchemeOp::EOperationType::ESchemeOpCreateSequence);
+            scheme.SetFailOnExist(tx.GetFailOnExist());
 
             auto* copySequence = scheme.MutableCopySequence();
-            copySequence->SetCopyFrom(srcPath.PathString() + "/" + sequenceDescription.GetName());
-            *scheme.MutableSequence() = std::move(sequenceDescription);
+            copySequence->SetCopyFrom(subPath.PathString());
+            *scheme.MutableSequence() = sequenceDesc;
 
             result.push_back(CreateCopySequence(NextPartId(nextId, result), scheme));
         }
     }
-
-    return true;
 }
 
 TVector<ISubOperation::TPtr> CreateConsistentCopyTables(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context) {

@@ -147,7 +147,7 @@ Y_UNIT_TEST(TestOnDiskStoredSourceIds) {
     });
 }
 
-Y_UNIT_TEST(MediumMsgComactificationWithRebootsTest) {
+Y_UNIT_TEST(MediumMsgCompactificationWithRebootsTest) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() { return tc.InitialEventsFilter.Prepare(); }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
         TFinalizer finalizer(tc);
@@ -189,8 +189,7 @@ Y_UNIT_TEST(MediumMsgComactificationWithRebootsTest) {
         PQGetPartInfo([](ui64 offset) { return offset >= 1; }, currentOffset, tc); });
 }
 
-Y_UNIT_TEST(LargeMsgComactificationWithRebootsTest) {
-    return; // ToDo: enable after fixing LOGBROKER-9700
+Y_UNIT_TEST(LargeMsgCompactificationWithRebootsTest) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() { return tc.InitialEventsFilter.Prepare(); }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
         TFinalizer finalizer(tc);

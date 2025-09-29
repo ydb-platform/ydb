@@ -1092,7 +1092,7 @@ void TPartition::Initialize(const TActorContext& ctx) {
 }
 
 bool TPartition::DetailedMetricsAreEnabled() const {
-    return AppData()->FeatureFlags.GetEnableMetricsLevel() && (Config.HasMetricsLevel() && Config.GetMetricsLevel() == Ydb::MetricsLevel::Detailed);
+    return AppData()->FeatureFlags.GetEnableMetricsLevel() && (Config.HasMetricsLevel() && Config.GetMetricsLevel() == 4);
 }
 
 void TPartition::SetupTopicCounters(const TActorContext& ctx) {

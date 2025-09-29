@@ -500,7 +500,7 @@ void TUsersInfoStorage::ResetDetailedMetrics() {
 }
 
 bool TUsersInfoStorage::DetailedMetricsAreEnabled() const {
-    return AppData()->FeatureFlags.GetEnableMetricsLevel() && (Config.HasMetricsLevel() && Config.GetMetricsLevel() == Ydb::MetricsLevel::Detailed);
+    return AppData()->FeatureFlags.GetEnableMetricsLevel() && (Config.HasMetricsLevel() && Config.GetMetricsLevel() == 4);
 }
 
 const TUserInfo* TUsersInfoStorage::GetIfExists(const TString& user) const {

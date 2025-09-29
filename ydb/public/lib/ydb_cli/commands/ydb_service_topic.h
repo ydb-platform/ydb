@@ -41,11 +41,9 @@ namespace NYdb::NConsoleClient {
     class TCommandWithMetricsLevel {
     protected:
         void AddMetricsLevels(TClientCommand::TConfig& config);
-        void ParseMetricsLevel();
         TMaybe<NTopic::EMetricsLevel> GetMetricsLevel() const;
 
     private:
-        TString MetricsLevelStr_;
         NTopic::EMetricsLevel MetricsLevel_;
     };
 

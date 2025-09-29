@@ -36,11 +36,12 @@ enum class EAutoPartitioningStrategy: uint32_t {
     Paused = 4,
 };
 
-enum class EMetricsLevel : uint32_t {
-    Database = 0,
-    Object = 1,
-    Detailed = 2,
-};
+// 0 - unspecified
+// 1 - disabeld
+// 2 - database level metrics
+// 3 - object level metrics
+// 4 - detailed metrics
+using EMetricsLevel = uint32_t;
 
 class TConsumer {
 public:

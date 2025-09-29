@@ -351,10 +351,10 @@ void TPartition::RenameCompactedBlob(TDataKey& k,
                                                  needToCompactHead,       // needCompactHead
                                                  MaxBlobSize);
     }
-    auto write = CompactionBlobEncoder.PartitionedBlob.Add(k.Key, size, false);
+    auto write = CompactionBlobEncoder.PartitionedBlob.Add(k.Key, size, k.Timestamp, false);
     if (write && !write->Value.empty()) {
         // надо записать содержимое головы перед первым большим блобом
-        AddCmdWrite(write, compactionRequest, k.Timestamp.Seconds(), ctx);
+        AddCmdWrite(write, compactionRequest, k.Timestamp, ctx);
         CompactionBlobEncoder.CompactedKeys.emplace_back(write->Key, write->Value.size());
     }
 
@@ -405,8 +405,6 @@ void TPartition::BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& 
     AFL_ENSURE(CompactionBlobEncoder.NewHead.GetBatches().empty());
 
     TInstant blobCreationUnixTime = TInstant::Zero();
-    const auto* headForCompaction = &CompactionBlobEncoder.Head;
-    bool wasTheLastBlobBig = true;
 
     for (size_t i = 0; i < KeysForCompaction.size(); ++i) {
         auto& [k, pos] = KeysForCompaction[i];

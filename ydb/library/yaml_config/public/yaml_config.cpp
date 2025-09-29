@@ -434,9 +434,18 @@ TResolvedConfig ResolveAll(NFyaml::TDocument& doc)
     TVector<std::pair<TString, TSet<TLabel>>> labels;
 
     auto config = ParseConfig(doc);
+    THashSet<TString> usedNames;
+    usedNames.reserve(config.Selectors.size() * 2);
+    for (const auto& selectorModel : config.Selectors) {
+        for (const auto& [label, _] : selectorModel.Selector.In) usedNames.insert(label);
+        for (const auto& [label, _] : selectorModel.Selector.NotIn) usedNames.insert(label);
+    }
     auto namedLabels = CollectLabels(doc);
 
     for (auto& [name, values]: namedLabels) {
+        if (!usedNames.contains(name)) {
+            continue;
+        }
         TSet<TLabel> set;
         if (values.Class == EYamlConfigLabelTypeClass::Open) {
             set.insert(TLabel{TLabel::EType::Negative, {}});

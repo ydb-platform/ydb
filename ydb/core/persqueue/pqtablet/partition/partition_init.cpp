@@ -1340,8 +1340,8 @@ void TPartition::CreateCompacter() {
         return;
     }
 
-    TUserInfoMutableRef userInfo = UsersInfoStorage->GetOrCreate(CLIENTID_COMPACTION_CONSUMER, ActorContext()); //ToDo: Fix!
-    ui64 compStartOffset = userInfo->Offset;
+    auto& userInfo = UsersInfoStorage->GetOrCreate(CLIENTID_COMPACTION_CONSUMER, ActorContext()); //ToDo: Fix!
+    ui64 compStartOffset = userInfo.Offset;
     Compacter = MakeHolder<TPartitionCompaction>(compStartOffset, ++CompacterCookie, this);
     Compacter->TryCompactionIfPossible();
 }

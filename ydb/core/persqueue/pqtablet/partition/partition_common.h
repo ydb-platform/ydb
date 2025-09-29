@@ -24,8 +24,8 @@ std::function<void(bool, T& r)> TPartition::GetResultPostProcessor(const TString
 
             if constexpr (std::is_same<T, NKikimrClient::TCmdReadResult>::value) {
                 if (consumer) {
-                    TUserInfoMutableRef userInfo = UsersInfoStorage->GetOrCreate(consumer, ActorContext());
-                    r.SetCommittedToEnd(LastOffsetHasBeenCommited(*userInfo));
+                    auto& userInfo = UsersInfoStorage->GetOrCreate(consumer, ActorContext());
+                    r.SetCommittedToEnd(LastOffsetHasBeenCommited(userInfo));
                 }
             }
         }

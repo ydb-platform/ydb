@@ -440,7 +440,7 @@ TImportantConsumerOffsetTracker TPartition::ImportantClientsMinOffset() const {
             continue;
         }
 
-        TUserInfoViewPtr userInfo = UsersInfoStorage->GetIfExists(consumer.GetName());
+        const TUserInfo* userInfo = UsersInfoStorage->GetIfExists(consumer.GetName());
         ui64 curOffset = GetStartOffset();
         if (userInfo && userInfo->Offset >= 0) //-1 means no offset
             curOffset = userInfo->Offset;
@@ -1751,13 +1751,13 @@ void TPartition::Handle(TEvPQ::TEvBlobResponse::TPtr& ev, const TActorContext& c
     TReadInfo info = std::move(it->second);
     ReadInfo.erase(it);
 
-    TUserInfoMutableViewPtr userInfo = UsersInfoStorage->GetIfExists(info.User);
+    auto* userInfo = UsersInfoStorage->GetIfExists(info.User);
     if (!userInfo) {
         ReplyError(ctx, info.Destination,  NPersQueue::NErrorCode::BAD_REQUEST, GetConsumerDeletedMessage(info.User));
         OnReadRequestFinished(info.Destination, 0, info.User, ctx);
     }
 
-    OnReadComplete(info, userInfo.Get(), ev->Get(), ctx);
+    OnReadComplete(info, userInfo, ev->Get(), ctx);
 }
 
 void TPartition::Handle(TEvPQ::TEvError::TPtr& ev, const TActorContext& ctx) {
@@ -2096,7 +2096,7 @@ void TPartition::ReportCounters(const TActorContext& ctx, bool force) {
 
 void TPartition::Handle(NReadQuoterEvents::TEvQuotaUpdated::TPtr& ev, const TActorContext&) {
     for (auto& [consumerStr, quota] : ev->Get()->UpdatedConsumerQuotas) {
-        TUserInfoViewPtr userInfo = UsersInfoStorage->GetIfExists(consumerStr);
+        const TUserInfo* userInfo = UsersInfoStorage->GetIfExists(consumerStr);
         if (userInfo) {
             userInfo->LabeledCounters->GetCounters()[METRIC_READ_QUOTA_PER_CONSUMER_BYTES].Set(quota);
         }
@@ -3130,39 +3130,39 @@ void TPartition::OnProcessTxsAndUserActsWriteComplete(const TActorContext& ctx) 
 
     for (auto& user : AffectedUsers) {
         if (auto* actual = GetPendingUserIfExists(user)) {
-            TUserInfoMutableRef userInfo = UsersInfoStorage->GetOrCreate(user, ctx);
-            bool offsetHasChanged = (userInfo->Offset != actual->Offset);
+            TUserInfo& userInfo = UsersInfoStorage->GetOrCreate(user, ctx);
+            bool offsetHasChanged = (userInfo.Offset != actual->Offset);
 
-            userInfo->Session = actual->Session;
-            userInfo->Generation = actual->Generation;
-            userInfo->Step = actual->Step;
-            userInfo->Offset = actual->Offset;
-            userInfo->CommittedMetadata = actual->CommittedMetadata;
-            if (userInfo->Offset <= (i64)GetStartOffset()) {
-                userInfo->AnyCommits = false;
+            userInfo.Session = actual->Session;
+            userInfo.Generation = actual->Generation;
+            userInfo.Step = actual->Step;
+            userInfo.Offset = actual->Offset;
+            userInfo.CommittedMetadata = actual->CommittedMetadata;
+            if (userInfo.Offset <= (i64)GetStartOffset()) {
+                userInfo.AnyCommits = false;
             }
-            userInfo->ReadRuleGeneration = actual->ReadRuleGeneration;
-            userInfo->ReadFromTimestamp = actual->ReadFromTimestamp;
-            userInfo->HasReadRule = true;
+            userInfo.ReadRuleGeneration = actual->ReadRuleGeneration;
+            userInfo.ReadFromTimestamp = actual->ReadFromTimestamp;
+            userInfo.HasReadRule = true;
 
-            if (userInfo->Important != actual->Important || userInfo->AvailabilityPeriod != actual->AvailabilityPeriod) {
-                if (userInfo->LabeledCounters) {
-                    ScheduleDropPartitionLabeledCounters(userInfo->LabeledCounters->GetGroup());
+            if (userInfo.Important != actual->Important || userInfo.AvailabilityPeriod != actual->AvailabilityPeriod) {
+                if (userInfo.LabeledCounters) {
+                    ScheduleDropPartitionLabeledCounters(userInfo.LabeledCounters->GetGroup());
                 }
-                userInfo->SetImportant(actual->Important, actual->AvailabilityPeriod);
+                userInfo.SetImportant(actual->Important, actual->AvailabilityPeriod);
             }
-            if (ImporantOrExtendedAvailabilityPeriod(*userInfo) && userInfo->Offset < (i64)GetStartOffset()) {
-                userInfo->Offset = GetStartOffset();
+            if (ImporantOrExtendedAvailabilityPeriod(userInfo) && userInfo.Offset < (i64)GetStartOffset()) {
+                userInfo.Offset = GetStartOffset();
             }
 
-            if (offsetHasChanged && !userInfo->UpdateTimestampFromCache()) {
-                userInfo->ActualTimestamps = false;
-                ReadTimestampForOffset(user, *userInfo, ctx);
+            if (offsetHasChanged && !userInfo.UpdateTimestampFromCache()) {
+                userInfo.ActualTimestamps = false;
+                ReadTimestampForOffset(user, userInfo, ctx);
             } else {
                 TabletCounters.Cumulative()[COUNTER_PQ_WRITE_TIMESTAMP_CACHE_HIT].Increment(1);
             }
 
-            if (LastOffsetHasBeenCommited(*userInfo)) {
+            if (LastOffsetHasBeenCommited(userInfo)) {
                 SendReadingFinished(user);
             }
         } else if (user != CLIENTID_WITHOUT_CONSUMER) {
@@ -3537,7 +3537,7 @@ void TPartition::CommitUserAct(TEvPQ::TEvSetClientInfo& act) {
             && act.Generation == userInfo.Generation
             && act.Step == userInfo.Step
     ) {
-        TUserInfoViewPtr ui = UsersInfoStorage->GetIfExists(userInfo.User);
+        auto* ui = UsersInfoStorage->GetIfExists(userInfo.User);
         auto ts = ui ? GetTime(*ui, userInfo.Offset) : std::make_pair<TInstant, TInstant>(TInstant::Zero(), TInstant::Zero());
 
         userInfo.PipeClient = act.PipeClient;
@@ -3673,7 +3673,7 @@ void TPartition::EmulatePostProcessUserAct(const TEvPQ::TEvSetClientInfo& act,
         if (createSession || dropSession) {
             offset = userInfo.Offset;
 
-            TUserInfoViewPtr ui = UsersInfoStorage->GetIfExists(userInfo.User);
+            auto *ui = UsersInfoStorage->GetIfExists(userInfo.User);
             auto ts = ui ? GetTime(*ui, userInfo.Offset) : std::make_pair<TInstant, TInstant>(TInstant::Zero(), TInstant::Zero());
 
             ScheduleReplyGetClientOffsetOk(act.Cookie,
@@ -3885,7 +3885,7 @@ void TPartition::AddCmdWriteUserInfos(NKikimrClient::TKeyValueRequest& request)
         ikeyDeprecated.Append(user.c_str(), user.size());
 
         if (TUserInfoBase* userInfo = GetPendingUserIfExists(user)) {
-            TUserInfoViewPtr ui = UsersInfoStorage->GetIfExists(user);
+            auto *ui = UsersInfoStorage->GetIfExists(user);
 
             AddCmdWrite(request,
                         ikey, ikeyDeprecated,
@@ -4428,7 +4428,7 @@ void TPartition::SetupDetailedMetrics() {
     SourceIdCountPerPartition = getCounter("topic.partition.producers_count", "SourceIdCount", false);
     TimeSinceLastWriteMsPerPartition = getCounter("topic.partition.write.idle_milliseconds", "TimeSinceLastWriteMs", false);
 
-    BytesWrittenPerPartition = getCounter("topic.partitzion.write.bytes", "BytesWrittenPerPartition", true);
+    BytesWrittenPerPartition = getCounter("topic.partition.write.bytes", "BytesWrittenPerPartition", true);
     MessagesWrittenPerPartition = getCounter("topic.partition.write.messages", "MessagesWrittenPerPartition", true);
 }
 

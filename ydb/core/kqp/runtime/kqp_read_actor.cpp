@@ -611,7 +611,8 @@ public:
         const auto& tr = *AppData()->TypeRegistry;
 
         TVector<THolder<TShardState>> newShards;
-        newShards.reserve(keyDesc->GetPartitions().size()); 
+        newShards.reserve(keyDesc->GetPartitions().size());
+
         auto bounds = state->GetBounds(Settings->GetReverse());
         size_t pointIndex = 0;
         size_t rangeIndex = 0;

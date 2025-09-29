@@ -698,7 +698,7 @@ void TPartition::InitComplete(const TActorContext& ctx) {
 
     TStringBuilder ss;
     ss << "SYNC INIT topic " << TopicName() << " partitition " << Partition
-       << " so " << BlobEncoder.StartOffset << " endOffset " << GetEndOffset() << " Head " << BlobEncoder.Head << "\n";
+       << " so " << GetStartOffset() << " endOffset " << GetEndOffset() << " Head " << BlobEncoder.Head << "\n";
     for (const auto& s : SourceIdStorage.GetInMemorySourceIds()) {
         ss << "SYNC INIT sourceId " << s.first << " seqNo " << s.second.SeqNo << " offset " << s.second.Offset << "\n";
     }

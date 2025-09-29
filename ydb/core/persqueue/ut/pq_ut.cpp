@@ -1425,7 +1425,7 @@ Y_UNIT_TEST(TestTimeRetention) {
 }
 
 Y_UNIT_TEST(TestCompactifiedWithRetention) {
-    // TODO(abcdef): temporarily disabled
+    // TODO(abcdef): temporarily deleted
     return;
 
     TTestContext tc;

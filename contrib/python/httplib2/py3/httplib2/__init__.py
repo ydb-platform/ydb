@@ -16,7 +16,7 @@ __contributors__ = [
     "Lai Han",
 ]
 __license__ = "MIT"
-__version__ = "0.30.2"
+__version__ = "0.31.0"
 
 import base64
 import calendar
@@ -178,7 +178,8 @@ def _build_ssl_context(
     if hasattr(context, "check_hostname"):
         context.check_hostname = not disable_ssl_certificate_validation
 
-    context.load_verify_locations(ca_certs)
+    if not disable_ssl_certificate_validation:
+        context.load_verify_locations(ca_certs)
 
     if cert_file:
         context.load_cert_chain(cert_file, key_file, key_password)

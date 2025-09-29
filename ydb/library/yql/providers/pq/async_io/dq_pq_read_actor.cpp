@@ -1,46 +1,43 @@
 #include "dq_pq_read_actor.h"
+#include "dq_pq_meta_extractor.h"
+#include "dq_pq_rd_read_actor.h"
+#include "dq_pq_read_actor_base.h"
 #include "probes.h"
 
-#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io_factory.h>
-#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
-#include <ydb/library/yql/dq/actors/compute/dq_source_watermark_tracker.h>
-#include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
-#include <ydb/library/yql/dq/common/dq_common.h>
-#include <ydb/library/yql/dq/actors/compute/dq_checkpoints_states.h>
-
-#include <yql/essentials/minikql/comp_nodes/mkql_saveload.h>
-#include <yql/essentials/minikql/mkql_alloc.h>
-#include <yql/essentials/minikql/mkql_string_util.h>
-#include <ydb/library/yql/providers/pq/async_io/dq_pq_meta_extractor.h>
-#include <ydb/library/yql/providers/pq/async_io/dq_pq_rd_read_actor.h>
-#include <ydb/library/yql/providers/pq/async_io/dq_pq_read_actor_base.h>
-#include <ydb/library/yql/providers/pq/common/pq_meta_fields.h>
-#include <ydb/library/yql/providers/pq/common/pq_partition_key.h>
-#include <ydb/library/yql/providers/pq/proto/dq_io_state.pb.h>
-#include <yql/essentials/utils/log/log.h>
-#include <yql/essentials/utils/yql_panic.h>
-
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/federated_topic/federated_topic.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
-
+#include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/log_backend/actor_log_backend.h>
-#include <library/cpp/lwtrace/mon/mon_lwtrace.h>
-
-#include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
-
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io_factory.h>
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
+#include <ydb/library/yql/dq/actors/compute/dq_source_watermark_tracker.h>
+#include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
+#include <ydb/library/yql/dq/common/dq_common.h>
+#include <ydb/library/yql/dq/actors/compute/dq_checkpoints_states.h>
+#include <ydb/library/yql/providers/pq/common/pq_events_processor.h>
+#include <ydb/library/yql/providers/pq/common/pq_meta_fields.h>
+#include <ydb/library/yql/providers/pq/common/pq_partition_key.h>
+#include <ydb/library/yql/providers/pq/proto/dq_io_state.pb.h>
 #include <ydb/public/sdk/cpp/adapters/issue/issue.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/federated_topic/federated_topic.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
+
+#include <yql/essentials/minikql/comp_nodes/mkql_saveload.h>
+#include <yql/essentials/minikql/mkql_alloc.h>
+#include <yql/essentials/minikql/mkql_string_util.h>
+#include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/utils/yql_panic.h>
+
+#include <library/cpp/lwtrace/mon/mon_lwtrace.h>
 
 #include <util/generic/algorithm.h>
 #include <util/generic/hash.h>
 #include <util/generic/utility.h>
 #include <util/string/join.h>
-
 
 #include <queue>
 #include <variant>
@@ -81,6 +78,7 @@ struct TEvPrivate {
         EvReconnectSession,
         EvReceivedClusters,
         EvDescribeTopicResult,
+        EvExecuteTopicEvent,
 
         EvEnd
     };
@@ -116,10 +114,14 @@ struct TEvPrivate {
         ui32 PartitionsCount;
         TMaybe<NYdb::TStatus> Status;
     };
+    struct TEvExecuteTopicEvent : public TTopicEventBase<TEvExecuteTopicEvent, EvExecuteTopicEvent> {
+        using TTopicEventBase::TTopicEventBase;
+    };
 };
 
-} // namespace
-class TDqPqReadActor : public NActors::TActor<TDqPqReadActor>, public NYql::NDq::NInternal::TDqPqReadActorBase  {
+} // anonymous namespace
+
+class TDqPqReadActor : public NActors::TActor<TDqPqReadActor>, public NYql::NDq::NInternal::TDqPqReadActorBase, TTopicEventProcessor<TEvPrivate::TEvExecuteTopicEvent> {
     static constexpr bool StaticDiscovery = true;
     struct TMetrics {
         TMetrics(
@@ -232,8 +234,10 @@ public:
         return opts;
     }
 
-    NYdb::NTopic::TTopicClientSettings GetTopicClientSettings(TClusterState& state) const {
+    NYdb::NTopic::TTopicClientSettings GetTopicClientSettings(TClusterState& state) {
         NYdb::NTopic::TTopicClientSettings opts = PqGateway->GetTopicClientSettings();
+        SetupTopicClientSettings(ActorContext().ActorSystem(), SelfId(), opts);
+
         opts.Database(SourceParams.GetDatabase())
             .DiscoveryEndpoint(SourceParams.GetEndpoint())
             .SslCredentials(NYdb::TSslCredentials(SourceParams.GetUseSsl()))
@@ -330,6 +334,7 @@ private:
         hFunc(TEvPrivate::TEvReconnectSession, Handle);
         hFunc(TEvPrivate::TEvReceivedClusters, Handle);
         hFunc(TEvPrivate::TEvDescribeTopicResult, Handle);
+        hFunc(TEvPrivate::TEvExecuteTopicEvent, HandleTopicEvent);
     )
 
     void Handle(TEvPrivate::TEvSourceDataReady::TPtr& ev) {

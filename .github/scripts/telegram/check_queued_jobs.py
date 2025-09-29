@@ -428,7 +428,7 @@ def test_telegram_connection(bot_token: str, chat_id: str, thread_id: int = None
         print(f"❌ Ошибка соединения с Telegram: {e}")
         return False
 
-def send_telegram_message(bot_token: str, chat_id: str, message: str, thread_id: int = None) -> bool:
+def send_telegram_message(bot_token: str, chat_id: str, message: str, thread_id: int = None, parse_mode: str = "MarkdownV2") -> bool:
     """
     Отправляет сообщение в Telegram используя внешний скрипт.
     
@@ -452,7 +452,8 @@ def send_telegram_message(bot_token: str, chat_id: str, message: str, thread_id:
             'python3', send_script,
             '--bot-token', bot_token,
             '--chat-id', chat_id,
-            '--message', message
+            '--message', message,
+            '--parse-mode', parse_mode
         ]
         
         # Добавляем thread_id если указан
@@ -562,7 +563,7 @@ def main():
             print("-" * 50)
         elif send_when_all_good:
             print(f"📤 Отправляем сообщение о пустой очереди в Telegram")
-            if send_telegram_message(bot_token, chat_id, message, thread_id):
+            if send_telegram_message(bot_token, chat_id, message, thread_id, "MarkdownV2"):
                 print("✅ Сообщение о пустой очереди отправлено успешно")
             else:
                 print("❌ Ошибка отправки сообщения о пустой очереди")
@@ -606,7 +607,7 @@ def main():
     
     print(f"🚨 Найдено {len(stuck_jobs)} застрявших jobs по нашим критериям")
     
-    # Отправляем в Telegram или показываем в dry-run режиме
+        # Отправляем в Telegram или показываем в dry-run режиме
     if dry_run:
         print(f"\n📤 DRY-RUN: {len(telegram_messages)} сообщение(й) для Telegram:")
         for i, message in enumerate(telegram_messages, 1):
@@ -622,7 +623,7 @@ def main():
         success_count = 0
         for i, message in enumerate(telegram_messages, 1):
             print(f"📨 Отправляем сообщение {i}/{len(telegram_messages)}...")
-            if send_telegram_message(bot_token, chat_id, message, thread_id):
+            if send_telegram_message(bot_token, chat_id, message, thread_id, "MarkdownV2"):
                 success_count += 1
             else:
                 print(f"❌ Ошибка отправки сообщения {i}")

@@ -105,6 +105,7 @@ struct TListQueriesOptions
     std::optional<NQueryTrackerClient::EQueryEngine> EngineFilter;
     std::optional<TString> SubstrFilter;
     ui64 Limit = 100;
+    bool TutorialFilter = false;
 
     NYTree::TAttributeFilter Attributes;
 
@@ -131,6 +132,7 @@ struct TQuery
     NYson::TYsonString Annotations;
     NYTree::IAttributeDictionaryPtr OtherAttributes;
     std::optional<NYson::TYsonString> Secrets;
+    std::optional<bool> IsIndexed;
 };
 
 void Serialize(const TQuery& query, NYson::IYsonConsumer* consumer);

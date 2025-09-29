@@ -489,7 +489,7 @@ int Main(int argc, const char *argv[])
             factory, {outputGenSchema}, testSql, isPgTest, repeats,
             [&](const auto& program) {
                 auto handle = program->Apply(StreamFromVector(outputGenStream));
-                while (arrow::compute::ExecBatch* batch = handle->Fetch()) {}
+                while (/* arrow::compute::ExecBatch* batch = */ handle->Fetch()) {}
             });
     }
 

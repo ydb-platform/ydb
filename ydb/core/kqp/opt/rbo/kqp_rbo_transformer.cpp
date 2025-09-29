@@ -1,5 +1,7 @@
 #include "kqp_rbo_transformer.h"
 #include "kqp_operator.h"
+#include "kqp_plan_conversion_utils.h"
+
 #include <yql/essentials/utils/log/log.h>
 
 using namespace NYql;
@@ -164,6 +166,10 @@ TExprNode::TPtr RewritePgSelect(const TExprNode::TPtr& node, TExprContext& ctx, 
     
     TVector<TExprNode::TPtr> resultElements;
 
+    // In pg syntax duplicate attributes are allowed in the results, but we need to rename them
+    // We use the counters for this purpose
+    THashMap<TString, int> resultElementCounters;
+
     TExprNode::TPtr joinExpr;
     TExprNode::TPtr filterExpr;
     TExprNode::TPtr lastAlias;
@@ -176,18 +182,58 @@ TExprNode::TPtr RewritePgSelect(const TExprNode::TPtr& node, TExprContext& ctx, 
 
     if (from) {
         for (auto fromItem : from->Child(1)->Children()) {
-            auto readExpr = TKqlReadTableRanges(fromItem->Child(0));
-            auto alias = fromItem->Child(1);
+            // From item can be a table read with an alias or a subquery with an alias
+            // In case of a subquery, we have already translated PgSelect of the nested subquery
+            // so we just need to remove TKqpOpRoot and plug in the translated subquery
 
-            // clang-format off
-            auto opRead = Build<TKqpOpRead>(ctx, node->Pos())
-                .Table(readExpr.Table())
-                .Alias(alias)
-                .Columns(readExpr.Columns())
-            .Done().Ptr();
-            // clang-format on
-            aliasToInputMap.insert({TString(alias->Content()), opRead});
-            inputsInOrder.push_back(opRead);
+            auto childExpr = fromItem->ChildPtr(0);
+            auto alias = fromItem->Child(1);
+            TExprNode::TPtr fromExpr;
+
+            if (TKqpOpRoot::Match(childExpr.Get())) {
+                auto opRoot = TKqpOpRoot(childExpr);
+
+                TVector<TExprNode::TPtr> subqueryElements;
+
+                // We need to rename all the IUs in the subquery to reflect the new alias
+                auto subqueryType = childExpr->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+                for (auto item : subqueryType->GetItems()) {
+                    auto orig = TString(item->GetName());
+                    auto unit = TInfoUnit(orig);
+                    auto renamedUnit = TInfoUnit(TString(alias->Content()), unit.ColumnName);
+
+                    // clang-format off
+                    subqueryElements.push_back(Build<TKqpOpMapElementRename>(ctx, node->Pos())
+                        .Input(opRoot.Input())
+                        .Variable().Value(renamedUnit.GetFullName()).Build()
+                        .From().Value(unit.GetFullName()).Build()
+                    .Done().Ptr());
+                    // clang-format on
+                }
+
+                // clang-format off
+                fromExpr = Build<TKqpOpMap>(ctx, node->Pos())
+                    .Input(opRoot.Input())
+                    .MapElements().Add(subqueryElements).Build()
+                    .Project().Value("true").Build()
+                .Done().Ptr();
+                // clang-format on
+            }
+
+            else {
+                auto readExpr = TKqlReadTableRanges(childExpr);
+
+                // clang-format off
+                fromExpr = Build<TKqpOpRead>(ctx, node->Pos())
+                    .Table(readExpr.Table())
+                    .Alias(alias)
+                    .Columns(readExpr.Columns())
+                .Done().Ptr();
+                // clang-format on
+            }
+
+            aliasToInputMap.insert({TString(alias->Content()), fromExpr});
+            inputsInOrder.push_back(fromExpr);
             lastAlias = alias;
         }
     }
@@ -311,8 +357,7 @@ TExprNode::TPtr RewritePgSelect(const TExprNode::TPtr& node, TExprContext& ctx, 
 
     for (auto resultItem : result->Child(1)->Children()) {
         auto column = resultItem->Child(0);
-        auto columnName = column->Content();
-        auto variable = Build<TCoAtom>(ctx, node->Pos()).Value(columnName).Done();
+        TString columnName = TString(column->Content());
 
         const auto expectedTypeNode = finalType->FindItemType(columnName);
         Y_ENSURE(expectedTypeNode);
@@ -358,8 +403,18 @@ TExprNode::TPtr RewritePgSelect(const TExprNode::TPtr& node, TExprContext& ctx, 
             // clang-format on
         }
 
+        if (resultElementCounters.contains(columnName)) {
+            resultElementCounters[columnName] += 1;
+            columnName = columnName + "_generated_" + std::to_string(resultElementCounters.at(columnName));
+        }
+        else {
+            resultElementCounters[columnName] = 1;
+        }
+
+        auto variable = Build<TCoAtom>(ctx, node->Pos()).Value(columnName).Done();
+
         // clang-format off
-        resultElements.push_back(Build<TKqpOpMapElement>(ctx, node->Pos())
+        resultElements.push_back(Build<TKqpOpMapElementLambda>(ctx, node->Pos())
             .Input(resultExpr)
             .Variable(variable)
             .Lambda(lambda)
@@ -372,8 +427,9 @@ TExprNode::TPtr RewritePgSelect(const TExprNode::TPtr& node, TExprContext& ctx, 
         .Input<TKqpOpMap>()
             .Input(resultExpr)
                 .MapElements()
-                .Add(resultElements)
-            .Build()
+                    .Add(resultElements)
+                .Build()
+                .Project().Value("true").Build()
         .Build()
     .Done().Ptr();
     // clang-format on
@@ -428,7 +484,8 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::DoTransform(TExprNode::TPtr in
 
     auto status = OptimizeExpr(output, output, [this] (const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
         if (TKqpOpRoot::Match(node.Get())) {
-            auto root = TOpRoot(node);
+            auto root = PlanConverter().ConvertRoot(node);
+            root.ComputeParents();
             return RBO.Optimize(root, ctx);
         } else {
             return node;
@@ -449,35 +506,6 @@ IGraphTransformer::TStatus TKqpRBOCleanupTransformer::DoTransform(TExprNode::TPt
     TOptimizeExprSettings settings(&TypeCtx);
 
     Y_UNUSED(ctx);
-
-    /*
-    auto status = OptimizeExpr(output, output, [] (const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
-        Y_UNUSED(ctx);
-        YQL_CLOG(TRACE, CoreDq) << "Checking if node " << node->UniqueId() << " is list: " << node->IsList();
-
-        if (node.Get()->IsList() && node.Get()->ChildrenSize()>=1) {
-            auto child_level_1 = node.Get()->Child(0);
-            YQL_CLOG(TRACE, CoreDq) << "Matched level 0";
-
-            if (child_level_1->IsList() && child_level_1->ChildrenSize()>=1) {
-                auto child_level_2 = child_level_1->Child(0);
-                YQL_CLOG(TRACE, CoreDq) << "Matched level 1";
-
-                if (child_level_2->IsList() && child_level_2->ChildrenSize()>=1) {
-                    auto maybeQuery = child_level_2->Child(0);
-                    YQL_CLOG(TRACE, CoreDq) << "Matched level 2";
-
-                    if (TKqpPhysicalQuery::Match(maybeQuery)) {
-                        YQL_CLOG(TRACE, CoreDq) << "Found query node";
-                        return maybeQuery;
-                    }
-                }
-            }
-        }
-        return node;
-    }, ctx, settings);
-
-    */
 
     YQL_CLOG(TRACE, CoreDq) << "Cleanup input plan: " << output->Dump();
 

@@ -9,11 +9,18 @@
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/client/server/msgbus_server_pq_metacache.h>
+#include <ydb/core/grpc_services/service_scheme.h>
+#include <ydb/core/grpc_services/service_topic.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/persqueue/public/constants.h>
 #include <ydb/core/persqueue/public/pq_rl_helpers.h>
 #include <ydb/core/persqueue/public/write_meta/write_meta.h>
+#include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
+#include <ydb/core/tx/replication/ydb_proxy/local_proxy/local_proxy.h>
+#include <ydb/core/tx/replication/ydb_proxy/local_proxy/local_proxy_request.h>
+#include <ydb/core/kafka_proxy/actors/actors.h>
+#include <ydb/core/kafka_proxy/actors/kafka_topic_group_path_struct.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/public/lib/base/msgbus_status.h>
 
@@ -61,6 +68,7 @@ private:
     ui32 FetchRequestReadsDone;
     ui64 FetchRequestCurrentReadTablet;
     ui64 CurrentCookie;
+    ui32 PendingAlterTopicResponses = 0;
     ui32 FetchRequestBytesLeft;
     THolder<TEvPQ::TEvFetchResponse> Response;
     const TActorId SchemeCache;
@@ -72,14 +80,12 @@ private:
     // PartitionIndex
     std::deque<ui64> PartitionsWithData;
 
-    ui32 TopicsAnswered;
-    THashSet<ui64> TabletsDiscovered;
-    THashSet<ui64> TabletsAnswered;
-    ui32 PartTabletsRequested;
     TString ErrorReason;
     TActorId RequesterId;
     ui64 PendingQuotaAmount;
+    bool AnyCdcTopicInRequest = false;
 
+    TActorId YdbProxy;
     TActorId LongTimer;
 
     std::unordered_map<TString, TString> CdcPathToPrivateTopicPath;
@@ -106,8 +112,6 @@ public:
         , CurrentCookie(1)
         , FetchRequestBytesLeft(0)
         , SchemeCache(schemeCacheId)
-        , TopicsAnswered(0)
-        , PartTabletsRequested(0)
         , RequesterId(requesterId)
     {
         ui64 deadline = TAppData::TimeProvider->Now().MilliSeconds() + Min<ui64>(Settings.MaxWaitTimeMs, MaxTimeout.MilliSeconds());
@@ -214,7 +218,7 @@ public:
     void HandleSchemeCacheResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) {
         LOG_D("Handle SchemeCache response");
         auto& result = ev->Get()->Request;
-        bool anyCdcTopicInRequest = false;
+        AnyCdcTopicInRequest = false;
         for (const auto& entry : result->ResultSet) {
             auto path = CanonizePath(NKikimr::JoinPath(entry.Path));
             switch (entry.Status) {
@@ -238,7 +242,7 @@ public:
                     );
             }
             if (entry.Kind == NSchemeCache::TSchemeCacheNavigate::KindCdcStream) {
-                anyCdcTopicInRequest = true;
+                AnyCdcTopicInRequest = true;
                 AFL_ENSURE(entry.ListNodeEntry->Children.size() == 1);
                 auto privateTopicPath = CanonizePath(JoinPath(ChildPath(NKikimr::SplitPath(path), entry.ListNodeEntry->Children.at(0).Name)));
                 CdcPathToPrivateTopicPath[path] = privateTopicPath;
@@ -282,11 +286,58 @@ public:
             topicInfo.PQInfo = entry.PQGroupInfo;
         }
 
-        if (anyCdcTopicInRequest) {
-            SendSchemeCacheRequest(ctx);
-            return;
+        if (AnyCdcTopicInRequest) {
+            return SendSchemeCacheRequest(ctx);
         }
 
+        OnMetadataReceived(ctx);
+    }
+
+    void OnMetadataReceived(const TActorContext& ctx) {
+        if (!AppData(ctx)->KafkaProxyConfig.GetAutoCreateConsumersEnable()) {
+            return OnTopicAltered(ctx);
+        }
+
+        TString groupId = Settings.Partitions[0].ClientId; // TODO why always partitions[0]?
+        if (groupId == NKikimr::NPQ::CLIENTID_WITHOUT_CONSUMER) {
+            return OnTopicAltered(ctx);
+        }
+
+        for (auto& [topicPath, info]: TopicInfo) {
+            if (HasConsumer(info.PQInfo->Description.GetPQTabletConfig(), groupId)) {
+                continue;
+            }
+
+            EnsureYdbProxy();
+
+            const auto settings = NYdb::NTopic::TAlterTopicSettings()
+                .BeginAddConsumer()
+                    .ConsumerName(groupId)
+                .EndAddConsumer();
+
+            Send(YdbProxy, new NReplication::TEvYdbProxy::TEvAlterTopicRequest(topicPath, settings));
+            ++PendingAlterTopicResponses;
+        }
+
+        if (PendingAlterTopicResponses == 0) {
+            return OnTopicAltered(ctx);
+        }
+    }
+
+    void Handle(NKikimr::NReplication::TEvYdbProxy::TEvAlterTopicResponse::TPtr& ev, const TActorContext& ctx) {
+        NYdb::TStatus& result = ev->Get()->Result;
+        if (result.GetStatus() == NYdb::EStatus::SUCCESS) {
+            LOG_D("Handling TEvAlterTopicResponse. Status: " << result.GetStatus() << "\n");
+        } else {
+            LOG_I("Handling TEvAlterTopicResponse. Status: " << result.GetStatus() << "\n");
+        }
+        PendingAlterTopicResponses--;
+        if (PendingAlterTopicResponses == 0) {
+            OnTopicAltered(ctx);
+        }
+    }
+
+    void OnTopicAltered(const TActorContext& ctx) {
         for (auto& [name, info]: TopicInfo) {
             ProcessTopicMetadata(name, info, ctx);
         }
@@ -325,8 +376,6 @@ public:
     void ProcessTopicMetadata(const TString& name, TTopicInfo& topicInfo, const TActorContext& ctx) {
         const auto& pqDescr = topicInfo.PQInfo->Description;
 
-        ++TopicsAnswered;
-
         for (const auto& partition : pqDescr.GetPartitions()) {
             ui32 partitionId = partition.GetPartitionId();
             ui64 tabletId = partition.GetTabletId();
@@ -351,8 +400,6 @@ public:
             LOG_D("Sending TEvPersQueue::TEvHasDataInfo " << fetchInfo->Record.ShortDebugString());
             NTabletPipe::SendData(ctx, tabletInfo.PipeClient, fetchInfo.Release());
             PartitionStatus[partitionIndex] = EPartitionStatus::HasDataRequested;
-
-            ++PartTabletsRequested;
         }
 
         if (!topicInfo.PartitionsToRequest.empty() && topicInfo.PartitionsToRequest.size() != topicInfo.PartitionToTablet.size()) {
@@ -424,6 +471,9 @@ public:
             if (!tabletInfo.BrokenPipe) {
                 NTabletPipe::CloseClient(ctx, tabletInfo.PipeClient);
             }
+        }
+        if (YdbProxy) {
+            Send(YdbProxy, new TEvents::TEvPoison());
         }
         if (LongTimer) {
             Send(LongTimer, new TEvents::TEvPoison());
@@ -502,7 +552,6 @@ public:
             if (tabletInfo.BrokenPipe) {
                 continue;
             }
-
 
             FetchRequestCurrentReadTablet = tabletId;
             PartitionStatus[*partitionIndex] = EPartitionStatus::DataRequested;
@@ -645,8 +694,15 @@ public:
         Response->Status = Ydb::StatusIds::SUCCESS;
     }
 
+    void EnsureYdbProxy() {
+        if (!YdbProxy) {
+            YdbProxy = RegisterWithSameMailbox(NReplication::CreateLocalYdbProxy(Settings.Database));
+        }
+    }
+
     STRICT_STFUNC(StateFunc,
             HFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleSchemeCacheResponse);
+            HFunc(NKikimr::NReplication::TEvYdbProxy::TEvAlterTopicResponse, Handle);
 
             HFunc(TEvPersQueue::TEvHasDataInfoResponse, Handle);
             HFunc(TEvPersQueue::TEvResponse, Handle);
@@ -655,6 +711,7 @@ public:
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
 
             HFunc(TEvents::TEvWakeup, Handle);
+
             CFunc(NActors::TEvents::TSystem::PoisonPill, Die);
     )
 };

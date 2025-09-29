@@ -2946,7 +2946,7 @@ namespace NTypeAnnImpl {
         const auto dataSlot = dataType->GetSlot();
         if (IsDataTypeDecimal(dataSlot)) {
             const auto params = static_cast<const TDataExprParamsType*>(dataType);
-            if (const auto scale = FromString<ui8>(params->GetParamTwo())) {
+            if (/* const auto scale = */ FromString<ui8>(params->GetParamTwo())) {
                     output = ctx.Expr.Builder(input->Pos())
                         .Callable(IncOrDec ? "Add" : "Sub")
                             .Add(0, input->Child(0))
@@ -5391,7 +5391,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         }
 
         TVector<TString> supportedSystems = { "yt", "kikimr", "rtmr" };
-        if (auto p = FindPtr(supportedSystems, input->Tail().Content())) {
+        if (/* auto p = */ FindPtr(supportedSystems, input->Tail().Content())) {
         } else {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Tail().Pos()), TStringBuilder() << "Unknown system: "
                 << input->Tail().Content() << ", supported: " << JoinSeq(",", supportedSystems)));

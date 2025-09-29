@@ -324,6 +324,12 @@ void TListQueriesCommand::Register(TRegistrar registrar)
             return command->Options.UseFullTextSearch;
         })
         .Optional(/*init*/ false);
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "tutorial_filter",
+        [] (TThis* command) -> auto& {
+            return command->Options.TutorialFilter;
+        })
+        .Optional(/*init*/ false);
 }
 
 void TListQueriesCommand::DoExecute(ICommandContextPtr context)

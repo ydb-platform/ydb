@@ -31,7 +31,7 @@ public:
                 fields[i] = &Items[i]->RefValue(ctx);
         }
 
-        switch (const auto result = Flow->FetchValues(ctx, fields)) {
+        switch (/* const auto result = */ Flow->FetchValues(ctx, fields)) {
             case EFetchResult::Finish:
                 return NUdf::TUnboxedValuePod::MakeFinish();
             case EFetchResult::Yield:

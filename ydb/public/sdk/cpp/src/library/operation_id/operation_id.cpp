@@ -153,7 +153,7 @@ public:
                 auto data = Proto.add_data();
                 data->set_key(it.first);
                 data->set_value(it.second);
-#ifdef YDB_SDK_USE_STD_STRING
+#ifdef YDB_SDK_OSS
                 Index[it.first].push_back(&data->value());
 #else
                 Index[it.first].push_back(&data->value().ConstRef());
@@ -206,7 +206,7 @@ public:
 private:
     void BuildIndex() {
         for (const auto& data : Proto.data()) {
-#ifdef YDB_SDK_USE_STD_STRING
+#ifdef YDB_SDK_OSS
             Index[data.key()].push_back(&data.value());
 #else
             Index[data.key()].push_back(&data.value().ConstRef());

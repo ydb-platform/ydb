@@ -80,7 +80,6 @@ private:
     // PartitionIndex
     std::deque<ui64> PartitionsWithData;
 
-    TString ErrorReason;
     TActorId RequesterId;
     ui64 PendingQuotaAmount;
     bool AnyCdcTopicInRequest = false;

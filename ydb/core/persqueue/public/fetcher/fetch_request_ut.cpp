@@ -125,7 +125,7 @@ Y_UNIT_TEST_SUITE(TFetchRequestTests) {
             setup->GetServer().AnnoyingClient->ModifyACL("/Root/PQ", "rt3.dc1--topic1", acl.SerializeAsString());
 
             auto goodToken = MakeIntrusiveConst<NACLib::TUserToken>("user1@staff", TVector<TString>{});
-            TFetchRequestSettings settings{{}, {p1}, 10000, 10000, {}, goodToken};
+            TFetchRequestSettings settings{{}, {p1}, 100, 10000, {}, goodToken};
 
             auto fetchId = runtime.Register(CreatePQFetchRequestActor(settings, MakeSchemeCacheID(), edgeId));
             runtime.EnableScheduleForActor(fetchId);
@@ -136,7 +136,7 @@ Y_UNIT_TEST_SUITE(TFetchRequestTests) {
         
         {
             auto badToken = MakeIntrusiveConst<NACLib::TUserToken>("bad-user@staff", TVector<TString>{});
-            TFetchRequestSettings settings{{}, {p1}, 10000, 10000, {}, badToken};
+            TFetchRequestSettings settings{{}, {p1}, 100, 10000, {}, badToken};
 
             auto fetchId = runtime.Register(CreatePQFetchRequestActor(settings, MakeSchemeCacheID(), edgeId));
             runtime.EnableScheduleForActor(fetchId);

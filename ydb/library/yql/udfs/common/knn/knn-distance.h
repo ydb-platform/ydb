@@ -75,11 +75,8 @@ private:
         ui64 mask = 0;
         // big    endian: 0 1 2 3 4 5 6 7 | 0 1 2 3 | 0 1 | 0 | 0 => needs to zero high bits
         // little endian: 7 6 5 4 3 2 1 0 | 3 2 1 0 | 1 0 | 0 | 0 => needs to zero low  bits
-        if constexpr (std::endian::native == std::endian::big) {
-            mask = (ui64{1} << (byteLen * 8)) - 1;
-        } else {
-            mask = ~((ui64{1} << (unneededBytes * 8)) - 1);
-        }
+        static_assert(std::endian::native == std::endian::little, "BitVectors only support little endian");
+        mask = ~((ui64{1} << (unneededBytes * 8)) - 1);
         op(d1 & mask, d2 & mask);
     }
 

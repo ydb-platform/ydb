@@ -5,8 +5,7 @@
 #include <string>
 #include <grpcpp/grpcpp.h>
 
-// Общий макрос для настройки методов gRPC
-#define SETUP_METHOD(methodName, method, rlMode, requestType, serviceType, counterName, auditMode)    \
+#define SETUP_METHOD_WITH_TYPE(methodName, method, rlMode, requestType, serviceType, counterName, auditMode, runtimeEventType)    \
     MakeIntrusive<NGRpcService::TGRpcRequest<                                                         \
         Ydb::serviceType::Y_CAT(methodName, Request),                                                 \
         Ydb::serviceType::Y_CAT(methodName, Response),                                                \
@@ -17,9 +16,12 @@
         CQ,                                                                                           \
         [this](NYdbGrpc::IRequestContextBase* reqCtx) {                                               \
             NGRpcService::ReportGrpcReqToMon(*ActorSystem, reqCtx->GetPeer());                        \
+            Cout << "+++++Type: " << static_cast<ui32>(NRuntimeEvents::EType::runtimeEventType) << Endl;                                                                 \
             ActorSystem->Send(GRpcRequestProxyId, new TGrpcRequestOperationCall<                      \
                 Ydb::serviceType::Y_CAT(methodName, Request),                                         \
-                Ydb::serviceType::Y_CAT(methodName, Response)>(reqCtx, &method,                       \
+                Ydb::serviceType::Y_CAT(methodName, Response),                                        \
+                TYdbGrpcMethodAccessorTraits<Ydb::serviceType::Y_CAT(methodName, Request), Ydb::serviceType::Y_CAT(methodName, Response), true>,\
+                NRuntimeEvents::EType::runtimeEventType>(reqCtx, &method,                             \
                     TRequestAuxSettings {                                                             \
                         .RlMode = TRateLimiterMode::rlMode,                                           \
                         .AuditMode = auditMode,                                                       \
@@ -31,5 +33,9 @@
         logger,                                                                                       \
         getCounterBlock(Y_STRINGIZE(counterName), Y_STRINGIZE(methodName))                            \
     )->Run()
+
+// Общий макрос для настройки методов gRPC
+#define SETUP_METHOD(methodName, method, rlMode, requestType, serviceType, counterName, auditMode)    \
+    SETUP_METHOD_WITH_TYPE(methodName, method, rlMode, requestType, serviceType, counterName, auditMode, UNKNOWN)
 
 #endif // GRPC_METHOD_SETUP_H

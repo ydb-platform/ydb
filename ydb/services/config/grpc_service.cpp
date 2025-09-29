@@ -30,9 +30,16 @@ void TConfigGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
 
     SETUP_BS_METHOD(ReplaceConfig, DoReplaceConfig, Rps, CONFIG_REPLACECONFIG, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
     SETUP_BS_METHOD(FetchConfig, DoFetchConfig, Rps, CONFIG_FETCHCONFIG, TAuditMode::NonModifying());
-    SETUP_BS_METHOD(BootstrapCluster, DoBootstrapCluster, Rps, CONFIG_BOOTSTRAP, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
 
     #undef SETUP_BS_METHOD
+
+
+    #define SETUP_BS_WITH_TYPE_METHOD(methodName, method, rlMode, requestType, auditModeFlags, runtimeEventType) \
+        SETUP_METHOD_WITH_TYPE(methodName, method, rlMode, requestType, Config, config, auditModeFlags, runtimeEventType)
+
+    SETUP_BS_WITH_TYPE_METHOD(BootstrapCluster, DoBootstrapCluster, Rps, CONFIG_BOOTSTRAP, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin), BOOTSTRAP_CLUSTER);
+
+    #undef SETUP_BS_WITH_TYPE_METHOD
 }
 
 } // namespace NKikimr::NGRpcService

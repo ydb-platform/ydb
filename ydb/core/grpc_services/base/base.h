@@ -1120,6 +1120,10 @@ class TEvProxyRuntimeEvent
     , public TEventLocal<TEvProxyRuntimeEvent, TRpcServices::EvGrpcRuntimeRequest>
 {
 public:
+    TEvProxyRuntimeEvent() {
+        Cout << "+++ TEvProxyRuntimeEvent()" << Endl;
+    }
+
     const TMaybe<TString> GetSdkBuildInfo() const {
         return GetPeerMetaValues(NYdb::YDB_SDK_BUILD_INFO_HEADER);
     }
@@ -1129,14 +1133,22 @@ public:
     }
 
     virtual NRuntimeEvents::EType GetRuntimeEventType() {
+        Cout << "+++ TEvProxyRuntimeEvent: UNKNOWN" << Endl;
         return NRuntimeEvents::EType::UNKNOWN;
     }
 };
 
 template <typename NRuntimeEvents::EType RuntimeEventType = NRuntimeEvents::EType::UNKNOWN>
 class TEvProxyRuntimeEventWithType : public TEvProxyRuntimeEvent {
+    NRuntimeEvents::EType Type;
+
 public:
+    TEvProxyRuntimeEventWithType() : TEvProxyRuntimeEvent(), Type(RuntimeEventType) {
+        Cout << "+++ TEvProxyRuntimeEventWithType(): " << static_cast<ui32>(Type) << Endl;
+    }
+
     NRuntimeEvents::EType GetRuntimeEventType() override {
+        Cout << "+++ TEvProxyRuntimeEventWithType: " << static_cast<ui32>(RuntimeEventType) << Endl;
         return RuntimeEventType;
     }
 };
@@ -1187,6 +1199,7 @@ public:
         if (!TraceId) {
             TraceId = UlidGen.Next().ToString();
         }
+        Cout << "+++ TGRpcRequestWrapperImpl: " << static_cast<ui32>(RuntimeEventType) << Endl;
     }
 
     const TMaybe<TString> GetYdbToken() const override {
@@ -1537,8 +1550,10 @@ class TGRpcRequestValidationWrapperImpl : public TGRpcRequestWrapperImpl<TRpcId,
 public:
 
     TGRpcRequestValidationWrapperImpl(NYdbGrpc::IRequestContextBase* ctx)
-        : TGRpcRequestWrapperImpl<TRpcId, TReq, TResp, IsOperation, TDerived, TMethodAccessorTraits>(ctx)
-    { }
+        : TGRpcRequestWrapperImpl<TRpcId, TReq, TResp, IsOperation, TDerived, TMethodAccessorTraits, RuntimeEventType>(ctx)
+    {
+        Cout << "+++ TGRpcRequestValidationWrapperImpl: " << static_cast<ui32>(RuntimeEventType) << Endl;
+    }
 
     bool Validate(TString& error) override {
         return this->GetProtoRequest()->validate(error);
@@ -1570,9 +1585,21 @@ template <typename TReq,
 class TGrpcRequestCall
     : public std::conditional_t<TProtoHasValidate<TReq>::Value,
         TGRpcRequestValidationWrapperImpl<
-            TRpcServices::EvGrpcRuntimeRequest, TReq, TResp, IsOperation, TGrpcRequestCall<TReq, TResp, IsOperation, TMethodAccessorTraits>, TMethodAccessorTraits>,
+            TRpcServices::EvGrpcRuntimeRequest,
+            TReq,
+            TResp,
+            IsOperation,
+            TGrpcRequestCall<TReq, TResp, IsOperation, TMethodAccessorTraits, RuntimeEventType>,
+            TMethodAccessorTraits,
+            RuntimeEventType>,
         TGRpcRequestWrapperImpl<
-            TRpcServices::EvGrpcRuntimeRequest, TReq, TResp, IsOperation, TGrpcRequestCall<TReq, TResp, IsOperation, TMethodAccessorTraits, RuntimeEventType>, TMethodAccessorTraits>>
+            TRpcServices::EvGrpcRuntimeRequest,
+            TReq,
+            TResp,
+            IsOperation,
+            TGrpcRequestCall<TReq, TResp, IsOperation, TMethodAccessorTraits, RuntimeEventType>,
+            TMethodAccessorTraits,
+            RuntimeEventType>>
 {
     using TRequestIface = typename std::conditional<IsOperation, IRequestOpCtx, IRequestNoOpCtx>::type;
 
@@ -1586,16 +1613,30 @@ public:
 
     using TBase = std::conditional_t<TProtoHasValidate<TReq>::Value,
         TGRpcRequestValidationWrapperImpl<
-            TRpcServices::EvGrpcRuntimeRequest, TReq, TResp, IsOperation, TGrpcRequestCall<TReq, TResp, IsOperation, TMethodAccessorTraits>, TMethodAccessorTraits>,
+            TRpcServices::EvGrpcRuntimeRequest,
+            TReq,
+            TResp,
+            IsOperation,
+            TGrpcRequestCall<TReq, TResp, IsOperation, TMethodAccessorTraits, RuntimeEventType>,
+            TMethodAccessorTraits,
+            RuntimeEventType>,
         TGRpcRequestWrapperImpl<
-            TRpcServices::EvGrpcRuntimeRequest, TReq, TResp, IsOperation, TGrpcRequestCall<TReq, TResp, IsOperation, TMethodAccessorTraits>, TMethodAccessorTraits>>;
+            TRpcServices::EvGrpcRuntimeRequest,
+            TReq,
+            TResp,
+            IsOperation,
+            TGrpcRequestCall<TReq, TResp, IsOperation, TMethodAccessorTraits, RuntimeEventType>,
+            TMethodAccessorTraits,
+            RuntimeEventType>>;
 
     template <typename TCallback>
     TGrpcRequestCall(NYdbGrpc::IRequestContextBase* ctx, TCallback&& cb, TRequestAuxSettings auxSettings = {})
         : TBase(ctx)
         , PassMethod(std::forward<TCallback>(cb))
         , AuxSettings(std::move(auxSettings))
-    { }
+    {
+        Cout << "+++ TGrpcRequestCall: " << static_cast<ui32>(RuntimeEventType) << Endl;
+    }
 
     void Pass(const IFacilityProvider& facility) override {
         try {

@@ -227,21 +227,25 @@ namespace NYql {
                         }
                     }
 
+                    // TODO: remove this block as soon as first part YQ-4730 is deployed
+                    //
                     // Iceberg/Managed YDB (including YDB underlying Logging) supports access via IAM token.
                     // If exist, copy service account creds to obtain tokens during request execution phase.
                     // If exists, copy previously created token.
                     if (IsIn({NYql::EGenericDataSourceKind::YDB, NYql::EGenericDataSourceKind::LOGGING, NYql::EGenericDataSourceKind::ICEBERG}, clusterConfig.kind())) {
-                        // TODO: remove this block as soon as first part YQ-4730 is deployed
                         source.SetServiceAccountId(clusterConfig.GetServiceAccountId());
                         source.SetServiceAccountIdSignature(clusterConfig.GetServiceAccountIdSignature());
                         source.SetToken(State_->Types->Credentials->FindCredentialContent(
                             "default_" + clusterConfig.name(),
                             "default_generic",
                             clusterConfig.GetToken()));
-
-                        const auto tokenName = TString("cluster:default_") += clusterConfig.name();
-                        source.SetTokenName(tokenName);
                     }
+
+                    // We set token name to the protobuf message that will be received
+                    // by the read actor during the execution phase.
+                    // It will use token name to extract credentials from the from secureParams.
+                    const auto tokenName = TString("cluster:default_") += clusterConfig.name();
+                    source.SetTokenName(tokenName);
 
                     // preserve source description for read actor
                     protoSettings.PackFrom(source);

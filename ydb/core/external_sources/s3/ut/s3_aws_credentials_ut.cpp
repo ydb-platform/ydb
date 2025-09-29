@@ -68,29 +68,51 @@ void WaitBucket(std::shared_ptr<TKikimrRunner> kikimr, const TString& externalDa
     UNIT_FAIL("Bucket isn't ready");
 }
 
+void CreateSecret(TString& secretName, const TString& secretValue, const bool useSchemaSecrets, NYdb::NTable::TSession& session) {
+    if (useSchemaSecrets) {
+        secretName = "/Root/" + secretName;
+    }
+
+    TString createSecretQuery;
+    if (useSchemaSecrets) {
+        createSecretQuery = "CREATE SECRET `" + secretName + "` WITH (value = \"" + secretValue + "\");";
+    } else {
+        createSecretQuery = TStringBuilder() << "CREATE OBJECT " << secretName << " (TYPE SECRET) WITH value = `" << secretValue << "`;";
+    }
+    auto createSecretQueryResult = session.ExecuteSchemeQuery(createSecretQuery).GetValueSync();
+    UNIT_ASSERT_C(createSecretQueryResult.GetStatus() == NYdb::EStatus::SUCCESS, createSecretQueryResult.GetIssues().ToString());
+}
+
 Y_UNIT_TEST_SUITE(S3AwsCredentials) {
-    Y_UNIT_TEST(ExecuteScriptWithEqSymbol) {
+    Y_UNIT_TEST_TWIN(ExecuteScriptWithEqSymbol, UseSchemaSecrets) {
         const TString externalDataSourceName = "/Root/external_data_source";
         auto s3ActorsFactory = NYql::NDq::CreateS3ActorsFactory();
         auto kikimr = MakeKikimrRunner(true, nullptr, nullptr, std::nullopt, s3ActorsFactory);
+        if (UseSchemaSecrets) {
+            kikimr->GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableSchemaSecrets(true);
+        }
         kikimr->GetTestClient().GrantConnect("root1@builtin");
         auto tc = kikimr->GetTableClient();
         auto session = tc.CreateSession().GetValueSync().GetSession();
+        TString id = "id";
+        TString key = "key";
+        CreateSecret(id, "minio", UseSchemaSecrets, session);
+        CreateSecret(key, "minio123", UseSchemaSecrets, session);
         const TString query = fmt::format(R"(
-            CREATE OBJECT id (TYPE SECRET) WITH (value=`minio`);
-            CREATE OBJECT key (TYPE SECRET) WITH (value=`minio123`);
             CREATE EXTERNAL DATA SOURCE `{external_source}` WITH (
                 SOURCE_TYPE="ObjectStorage",
                 LOCATION="{location}",
                 AUTH_METHOD="AWS",
-                AWS_ACCESS_KEY_ID_SECRET_NAME="id",
-                AWS_SECRET_ACCESS_KEY_SECRET_NAME="key",
+                AWS_ACCESS_KEY_ID_SECRET_NAME="{id}",
+                AWS_SECRET_ACCESS_KEY_SECRET_NAME="{key}",
                 AWS_REGION="ru-central-1"
             );
             GRANT ALL ON `{external_source}` TO `root1@builtin`;
             )",
             "external_source"_a = externalDataSourceName,
-            "location"_a = "localhost:" + GetExternalPort("minio", "9000") + "/datalake/"
+            "location"_a = "localhost:" + GetExternalPort("minio", "9000") + "/datalake/",
+            "id"_a = id,
+            "key"_a = key
             );
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
@@ -171,6 +193,7 @@ Y_UNIT_TEST_SUITE(S3AwsCredentials) {
 
                 NYdb::NQuery::TScriptExecutionOperation readyOp = WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr->GetDriver());
                 UNIT_ASSERT_EQUAL_C(readyOp.Metadata().ExecStatus, EExecStatus::Failed, readyOp.Status().GetIssues().ToString());
+                const TString errorMessage = UseSchemaSecrets ? Sprintf("secret `%s` not found", id.data()) : Sprintf("secret with name '%s' not found", id.data());
                 UNIT_ASSERT_STRING_CONTAINS_C(readyOp.Status().GetIssues().ToString(), "secret with name 'id' not found", readyOp.Status().GetIssues().ToString());
             }
             {

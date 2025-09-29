@@ -1260,6 +1260,9 @@ class GnuToolchain(Toolchain):
             for root in list(self.tc.isystem):
                 self.c_flags_platform.extend(['-isystem', root])
 
+        if target.is_android:
+            self.c_flags_platform.extend(['-isystem', '{}/sources/cxx-stl/llvm-libc++abi/include'.format(self.tc.name_marker)])
+
         if target.is_cortex_a9:
             self.c_flags_platform.append('-mcpu=cortex-a9')
 

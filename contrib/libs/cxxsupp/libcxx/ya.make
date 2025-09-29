@@ -29,7 +29,7 @@ ADDINCL(
 CXXFLAGS(-D_LIBCPP_BUILDING_LIBRARY)
 
 IF (OS_ANDROID)
-    SET(CXX_RT "libcxxabi")
+    SET(CXX_RT "libcxxabi_dynamic")
 ELSEIF (OS_IOS)
     SET(CXX_RT "libcxxabi_dynamic")
     # Yet take builtins library from Arcadia

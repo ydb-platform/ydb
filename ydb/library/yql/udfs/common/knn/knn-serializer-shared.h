@@ -151,7 +151,7 @@ namespace NKnnVectorSerialization {
     template <typename TTo>
     inline size_t GetBufferSize(const size_t elementCount) {
         if constexpr (std::is_same_v<TTo, bool>) {
-            // We expect byte lenght of the result is (bit-length / 8 + bit-length % 8 != 0) + bits-count (1 byte) + HeaderLen
+            // We expect byte length of the result is (bit-length / 8 + bit-length % 8 != 0) + bits-count (1 byte) + HeaderLen
             // First part can be optimized to (bit-length + 7) / 8
             return (elementCount + 7) / 8 + 1 + HeaderLen;
         } else {

@@ -5490,6 +5490,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         });
     }
 
+    // Test that identical changefeeds are correctly applied to their respective tables with common prefix
     Y_UNIT_TEST(ChangefeedTablePrefixConflictDiffTableDesc) {      
         TestImportChangefeeds({
             {"table", "UINT32", 1},       // partitioning available (table property)
@@ -5497,6 +5498,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         });
     }
 
+    // Test that changefeeds with different properties are created under their respective tables
     Y_UNIT_TEST(ChangefeedTablePrefixConflictDiffChangefeedDesc) {     
         TestImportChangefeeds({
             {"table", "UINT32", 1, AddedScheme, 3},       // max partitions 3 (changefeed property)
@@ -6488,5 +6490,4 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
             }
         }, topic.GetImportRequest());
     }
-
 }

@@ -223,6 +223,95 @@ struct TUserInfo: public TUserInfoBase {
     bool Parsed = false;
 };
 
+class TUsersInfoStorage;
+
+class TUserInfoMutableViewPtr: public TPointerBase<TUserInfoMutableViewPtr, TUserInfo> {
+public:
+    TUserInfoMutableViewPtr(TUserInfo* userInfo, TUsersInfoStorage* usersInfoStorage)
+        : UserInfo_(userInfo)
+        , UsersInfoStorage_(usersInfoStorage)
+    {
+        Y_ASSERT(UsersInfoStorage_);
+    }
+
+    TUserInfo* Get() const noexcept {
+        return UserInfo_;
+    }
+
+    TUsersInfoStorage* UsersInfoStorage() const noexcept {
+        Y_ASSERT(UsersInfoStorage_);
+        return UsersInfoStorage_;
+    }
+
+    explicit operator bool() const noexcept {
+        return UserInfo_ != nullptr;
+    }
+
+
+private:
+    TUserInfo* UserInfo_;
+    TUsersInfoStorage* UsersInfoStorage_;
+};
+
+
+class TUserInfoMutableRef: public TUserInfoMutableViewPtr {
+public:
+    TUserInfoMutableRef(TUserInfo* userInfo, TUsersInfoStorage* usersInfoStorage)
+        : TUserInfoMutableViewPtr(userInfo, usersInfoStorage)
+    {
+        Y_ASSERT(UserInfo_);
+        Y_ASSERT(UsersInfoStorage_);
+    }
+
+    TUserInfo* Get() const noexcept {
+        Y_ASSERT(UserInfo_);
+        return UserInfo_;
+    }
+
+    TUsersInfoStorage* UsersInfoStorage() const noexcept {
+        Y_ASSERT(UsersInfoStorage_);
+        return UsersInfoStorage_;
+    }
+
+private:
+    TUserInfo* UserInfo_;
+    TUsersInfoStorage* UsersInfoStorage_;
+};
+
+class TUserInfoViewPtr: public TPointerBase<TUserInfoMutableViewPtr, TUserInfo> {
+public:
+    TUserInfoViewPtr(const TUserInfo* userInfo, const TUsersInfoStorage* usersInfoStorage)
+        : UserInfo_(userInfo)
+        , UsersInfoStorage_(usersInfoStorage)
+    {
+        Y_ASSERT(UsersInfoStorage_);
+    }
+
+    TUserInfoViewPtr(const TUserInfoMutableViewPtr& userInfo)
+        : UserInfo_(userInfo.Get())
+        , UsersInfoStorage_(userInfo.UsersInfoStorage())
+    {
+        Y_ASSERT(UsersInfoStorage_);
+    }
+
+    const TUserInfo* Get() const noexcept {
+        return UserInfo_;
+    }
+
+    const TUsersInfoStorage* UsersInfoStorage() const noexcept {
+        Y_ASSERT(UsersInfoStorage_);
+        return UsersInfoStorage_;
+    }
+
+    explicit operator bool() const noexcept {
+        return UserInfo_ != nullptr;
+    }
+
+private:
+    const TUserInfo* UserInfo_;
+    const TUsersInfoStorage* UsersInfoStorage_;
+};
+
 class TUsersInfoStorage {
 public:
     TUsersInfoStorage(
@@ -242,15 +331,15 @@ public:
     void ParseDeprecated(const TString& key, const TString& data, const TActorContext& ctx);
     void Parse(const TString& key, const TString& data, const TActorContext& ctx);
 
-    TUserInfo& GetOrCreate(const TString& user, const TActorContext& ctx, TMaybe<ui64> readRuleGeneration = {});
-    const TUserInfo* GetIfExists(const TString& user) const;
-    TUserInfo* GetIfExists(const TString& user);
+    TUserInfoMutableRef GetOrCreate(const TString& user, const TActorContext& ctx, TMaybe<ui64> readRuleGeneration = {});
+    TUserInfoViewPtr GetIfExists(const TString& user) const;
+    TUserInfoMutableViewPtr GetIfExists(const TString& user);
 
     THashMap<TString, TUserInfo>& GetAll();
 
     TUserInfoBase CreateUserInfo(const TString& user,
                              TMaybe<ui64> readRuleGeneration = {}) const;
-    TUserInfo& Create(
+    TUserInfoMutableRef Create(
         const TActorContext& ctx,
         const TString& user, const ui64 readRuleGeneration, bool important, TDuration availabilityPeriod, const TString& session,
         ui64 partitionSessionId, ui32 gen, ui32 step, i64 offset, ui64 readOffsetRewindSum,

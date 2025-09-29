@@ -309,7 +309,7 @@ void TUsersInfoStorage::ParseDeprecated(const TString& key, const TString& data,
     AFL_ENSURE(key[TKeyPrefix::MarkPosition()] == TKeyPrefix::MarkUserDeprecated);
     TString user = key.substr(TKeyPrefix::MarkedSize());
 
-    TUserInfo* userInfo = GetIfExists(user);
+    TUserInfoMutableViewPtr userInfo = GetIfExists(user);
     if (userInfo && userInfo->Parsed) {
         return;
     }
@@ -345,7 +345,7 @@ void TUsersInfoStorage::Parse(const TString& key, const TString& data, const TAc
     AFL_ENSURE(userData.GetOffset() <= (ui64)Max<i64>())("description", "Offset is too big")("offset", userData.GetOffset());
     i64 offset = static_cast<i64>(userData.GetOffset());
 
-    TUserInfo* userInfo = GetIfExists(user);
+    TUserInfoMutableViewPtr userInfo = GetIfExists(user);
     if (!userInfo) {
         Create(
             ctx, user, userData.GetReadRuleGeneration(), false, TDuration::Zero(), userData.GetSession(), userData.GetPartitionSessionId(),
@@ -372,7 +372,7 @@ void TUsersInfoStorage::Remove(const TString& user, const TActorContext&) {
     UsersInfo.erase(it);
 }
 
-TUserInfo& TUsersInfoStorage::GetOrCreate(const TString& user, const TActorContext& ctx, TMaybe<ui64> readRuleGeneration) {
+TUserInfoMutableRef TUsersInfoStorage::GetOrCreate(const TString& user, const TActorContext& ctx, TMaybe<ui64> readRuleGeneration) {
     AFL_ENSURE(!user.empty());
     auto it = UsersInfo.find(user);
     if (it == UsersInfo.end()) {
@@ -381,7 +381,7 @@ TUserInfo& TUsersInfoStorage::GetOrCreate(const TString& user, const TActorConte
                 0, 0, 0, 0, TInstant::Zero(), {}, false
         );
     }
-    return it->second;
+    return TUserInfoMutableRef{&it->second, this};
 }
 
 ::NMonitoring::TDynamicCounterPtr TUsersInfoStorage::GetPartitionCounterSubgroup(const TActorContext& ctx) const {
@@ -442,14 +442,14 @@ bool TUsersInfoStorage::DetailedMetricsAreEnabled() const {
     return AppData()->FeatureFlags.GetEnableMetricsLevel() && (Config.HasMetricsLevel() && Config.GetMetricsLevel() == Ydb::MetricsLevel::Detailed);
 }
 
-const TUserInfo* TUsersInfoStorage::GetIfExists(const TString& user) const {
-    auto it = UsersInfo.find(user);
-    return it != UsersInfo.end() ? &it->second : nullptr;
+TUserInfoViewPtr TUsersInfoStorage::GetIfExists(const TString& user) const {
+    auto p = UsersInfo.FindPtr(user);
+    return TUserInfoViewPtr(p, this);
 }
 
-TUserInfo* TUsersInfoStorage::GetIfExists(const TString& user) {
-    auto it = UsersInfo.find(user);
-    return it != UsersInfo.end() ? &it->second : nullptr;
+TUserInfoMutableViewPtr TUsersInfoStorage::GetIfExists(const TString& user) {
+    auto p = UsersInfo.FindPtr(user);
+    return TUserInfoMutableViewPtr(p, this);
 }
 
 THashMap<TString, TUserInfo>& TUsersInfoStorage::GetAll() {
@@ -493,7 +493,7 @@ TUserInfoBase TUsersInfoStorage::CreateUserInfo(const TString& user,
                           "", 0, 0, 0, false, false, TDuration::Zero(), {}, 0, {}};
 }
 
-TUserInfo& TUsersInfoStorage::Create(
+TUserInfoMutableRef TUsersInfoStorage::Create(
         const TActorContext& ctx, const TString& user, const ui64 readRuleGeneration,
         bool important, const TDuration availabilityPeriod, const TString& session,
         ui64 partitionSessionId, ui32 gen, ui32 step, i64 offset, ui64 readOffsetRewindSum,
@@ -505,7 +505,7 @@ TUserInfo& TUsersInfoStorage::Create(
                                               anyCommits, committedMetadata);
     auto result = UsersInfo.emplace(user, std::move(userInfo));
     AFL_ENSURE(result.second);
-    return result.first->second;
+    return TUserInfoMutableRef{&result.first->second, this};
 }
 
 void TUsersInfoStorage::Clear(const TActorContext&) {

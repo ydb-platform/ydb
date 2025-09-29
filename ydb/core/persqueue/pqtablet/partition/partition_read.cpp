@@ -82,10 +82,10 @@ void TPartition::FillReadFromTimestamps(const TActorContext& ctx) {
     }
 
     for (auto& consumer : Config.GetConsumers()) {
-        auto& userInfo = UsersInfoStorage->GetOrCreate(consumer.GetName(), ctx, 0);
-        userInfo.HasReadRule = true;
+        TUserInfoMutableRef userInfo = UsersInfoStorage->GetOrCreate(consumer.GetName(), ctx, 0);
+        userInfo->HasReadRule = true;
 
-        if (userInfo.ReadRuleGeneration != consumer.GetGeneration()) {
+        if (userInfo->ReadRuleGeneration != consumer.GetGeneration()) {
             THolder<TEvPQ::TEvSetClientInfo> event = MakeHolder<TEvPQ::TEvSetClientInfo>(
                     0, consumer.GetName(), 0, "", 0, 0, 0, TActorId{}, TEvPQ::TEvSetClientInfo::ESCI_INIT_READ_RULE, consumer.GetGeneration()
             );
@@ -93,34 +93,34 @@ void TPartition::FillReadFromTimestamps(const TActorContext& ctx) {
             // TODO(abcdef): заменить на вызов ProcessUserAct
             //
             AddUserAct(event.Release());
-            userInfo.Session = "";
-            userInfo.Offset = 0;
-            if (ImporantOrExtendedAvailabilityPeriod(userInfo)) {
-                userInfo.Offset = GetStartOffset();
+            userInfo->Session = "";
+            userInfo->Offset = 0;
+            if (ImporantOrExtendedAvailabilityPeriod(*userInfo)) {
+                userInfo->Offset = GetStartOffset();
             }
-            userInfo.Step = userInfo.Generation = 0;
+            userInfo->Step = userInfo->Generation = 0;
         }
         hasReadRule.erase(consumer.GetName());
         TInstant ts = TInstant::MilliSeconds(consumer.GetReadFromTimestampsMs());
         if (!ts) ts += TDuration::MilliSeconds(1);
-        if (!userInfo.ReadFromTimestamp || userInfo.ReadFromTimestamp > ts)
-            userInfo.ReadFromTimestamp = ts;
+        if (!userInfo->ReadFromTimestamp || userInfo->ReadFromTimestamp > ts)
+            userInfo->ReadFromTimestamp = ts;
     }
 
     for (auto& consumer : hasReadRule) {
-        auto& userInfo = UsersInfoStorage->GetOrCreate(consumer, ctx);
-        if (userInfo.NoConsumer) {
+        TUserInfoMutableRef userInfo = UsersInfoStorage->GetOrCreate(consumer, ctx);
+        if (userInfo->NoConsumer) {
             continue;
         }
         THolder<TEvPQ::TEvSetClientInfo> event = MakeHolder<TEvPQ::TEvSetClientInfo>(
                 0, consumer, 0, "", 0, 0, 0, TActorId{}, TEvPQ::TEvSetClientInfo::ESCI_DROP_READ_RULE, 0
         );
-        if (!ImporantOrExtendedAvailabilityPeriod(userInfo) && userInfo.LabeledCounters) {
-            ctx.Send(TabletActorId, new TEvPQ::TEvPartitionLabeledCountersDrop(Partition, userInfo.LabeledCounters->GetGroup()));
+        if (!ImporantOrExtendedAvailabilityPeriod(*userInfo) && userInfo->LabeledCounters) {
+            ctx.Send(TabletActorId, new TEvPQ::TEvPartitionLabeledCountersDrop(Partition, userInfo->LabeledCounters->GetGroup()));
         }
-        userInfo.Session = "";
-        userInfo.Offset = 0;
-        userInfo.Step = userInfo.Generation = 0;
+        userInfo->Session = "";
+        userInfo->Offset = 0;
+        userInfo->Step = userInfo->Generation = 0;
         //
         // TODO(abcdef): заменить на вызов ProcessUserAct
         //
@@ -155,8 +155,8 @@ bool TPartition::ProcessHasDataRequest(const THasDataReq& request, const TActorC
             sendResponse(0, true);
 
             auto now = ctx.Now();
-            auto& userInfo = UsersInfoStorage->GetOrCreate(request.ClientId, ctx);
-            userInfo.UpdateReadOffset((i64)GetEndOffset() - 1, now, now, now, true);
+            TUserInfoMutableRef userInfo = UsersInfoStorage->GetOrCreate(request.ClientId, ctx);
+            userInfo->UpdateReadOffset((i64)GetEndOffset() - 1, now, now, now, true);
         }
     } else if (request.Offset < GetEndOffset()) {
         sendResponse(GetSizeLag(request.Offset), false);
@@ -176,8 +176,8 @@ void TPartition::ProcessHasDataRequests(const TActorContext& ctx) {
 
     auto forgetSubscription = [&](const TString clientId) {
         if (!clientId.empty()) {
-            auto& userInfo = UsersInfoStorage->GetOrCreate(clientId, ctx);
-            userInfo.ForgetSubscription(GetEndOffset(), now);
+            TUserInfoMutableRef userInfo = UsersInfoStorage->GetOrCreate(clientId, ctx);
+            userInfo->ForgetSubscription(GetEndOffset(), now);
         }
     };
 
@@ -227,10 +227,10 @@ void TPartition::Handle(TEvPersQueue::TEvHasDataInfo::TPtr& ev, const TActorCont
         PQ_ENSURE(res.second);
 
         if (InitDone && record.HasClientId() && !record.GetClientId().empty()) {
-            auto& userInfo = UsersInfoStorage->GetOrCreate(record.GetClientId(), ctx);
-            ++userInfo.Subscriptions;
-            userInfo.UpdateReadOffset((i64)GetEndOffset() - 1, now, now, now);
-            userInfo.UpdateReadingTimeAndState(GetEndOffset(), now);
+            TUserInfoMutableRef userInfo = UsersInfoStorage->GetOrCreate(record.GetClientId(), ctx);
+            ++userInfo->Subscriptions;
+            userInfo->UpdateReadOffset((i64)GetEndOffset() - 1, now, now, now);
+            userInfo->UpdateReadingTimeAndState(GetEndOffset(), now);
         }
     }
 }
@@ -248,14 +248,14 @@ void TPartition::InitUserInfoForImportantClients(const TActorContext& ctx) {
 
         important.insert(consumer.GetName());
 
-        TUserInfo* userInfo = UsersInfoStorage->GetIfExists(consumer.GetName());
+        TUserInfoMutableViewPtr userInfo = UsersInfoStorage->GetIfExists(consumer.GetName());
         if (userInfo && !ImporantOrExtendedAvailabilityPeriod(*userInfo) && userInfo->LabeledCounters) {
             ctx.Send(TabletActorId, new TEvPQ::TEvPartitionLabeledCountersDrop(Partition, userInfo->LabeledCounters->GetGroup()));
             userInfo->SetImportant(consumer.GetImportant(), TDuration::MilliSeconds(consumer.GetAvailabilityPeriodMs()));
             continue;
         }
         if (!userInfo) {
-            userInfo = &UsersInfoStorage->Create(
+            userInfo = UsersInfoStorage->Create(
                     ctx, consumer.GetName(), 0, consumer.GetImportant(), TDuration::MilliSeconds(consumer.GetAvailabilityPeriodMs()), "", 0, 0, 0, 0, 0, TInstant::Zero(), {}, false
             );
         }
@@ -283,7 +283,7 @@ void TPartition::Handle(TEvPQ::TEvPartitionOffsets::TPtr& ev, const TActorContex
     result.SetWriteTimestampEstimateMS(WriteTimestampEstimate.MilliSeconds());
 
     if (!ev->Get()->ClientId.empty()) {
-        TUserInfo* userInfo = UsersInfoStorage->GetIfExists(ev->Get()->ClientId);
+        TUserInfoViewPtr userInfo = UsersInfoStorage->GetIfExists(ev->Get()->ClientId);
         if (userInfo) {
             auto snapshot = CreateSnapshot(*userInfo);
             result.SetClientOffset(userInfo->Offset);
@@ -311,12 +311,12 @@ std::pair<TInstant, TInstant> TPartition::GetTime(const TUserInfo& userInfo, ui6
 }
 
 void TPartition::Handle(TEvPQ::TEvGetClientOffset::TPtr& ev, const TActorContext& ctx) {
-    auto& userInfo = UsersInfoStorage->GetOrCreate(ev->Get()->ClientId, ctx);
-    PQ_ENSURE(userInfo.Offset >= -1)("Unexpected Offset", userInfo.Offset);
-    ui64 offset = Max<i64>(userInfo.Offset, 0);
-    auto ts = GetTime(userInfo, offset);
+    TUserInfoMutableRef userInfo = UsersInfoStorage->GetOrCreate(ev->Get()->ClientId, ctx);
+    PQ_ENSURE(userInfo->Offset >= -1)("Unexpected Offset", userInfo->Offset);
+    ui64 offset = Max<i64>(userInfo->Offset, 0);
+    auto ts = GetTime(*userInfo, offset);
     TabletCounters.Cumulative()[COUNTER_PQ_GET_CLIENT_OFFSET_OK].Increment(1);
-    ReplyGetClientOffsetOk(ctx, ev->Get()->Cookie, userInfo.Offset, ts.first, ts.second, userInfo.AnyCommits, userInfo.CommittedMetadata);
+    ReplyGetClientOffsetOk(ctx, ev->Get()->Cookie, userInfo->Offset, ts.first, ts.second, userInfo->AnyCommits, userInfo->CommittedMetadata);
 }
 
 void TPartition::Handle(TEvPQ::TEvSetClientInfo::TPtr& ev, const TActorContext& ctx) {
@@ -687,9 +687,9 @@ void TPartition::Handle(TEvPQ::TEvReadTimeout::TPtr& ev, const TActorContext& ct
     ctx.Send(answer.IsInternal ? SelfId() : TabletActorId, answer.Event.Release());
     LOG_D(" waiting read cookie " << ev->Get()->Cookie
         << " partition " << Partition << " read timeout for " << res->User << " offset " << res->Offset);
-    auto& userInfo = UsersInfoStorage->GetOrCreate(res->User, ctx);
+    TUserInfoMutableRef userInfo = UsersInfoStorage->GetOrCreate(res->User, ctx);
 
-    userInfo.ForgetSubscription(GetEndOffset(), ctx.Now());
+    userInfo->ForgetSubscription(GetEndOffset(), ctx.Now());
     OnReadRequestFinished(res->Destination, answer.Size, res->User, ctx);
 }
 
@@ -803,9 +803,9 @@ void TPartition::Handle(TEvPQ::TEvRead::TPtr& ev, const TActorContext& ctx) {
     PQ_ENSURE(read->Offset <= GetEndOffset());
 
     const TString& user = read->ClientId;
-    auto& userInfo = UsersInfoStorage->GetOrCreate(user, ctx);
-    if (!read->SessionId.empty() && !userInfo.NoConsumer) {
-        if (userInfo.Session != read->SessionId) {
+    TUserInfoMutableRef userInfo = UsersInfoStorage->GetOrCreate(user, ctx);
+    if (!read->SessionId.empty() && !userInfo->NoConsumer) {
+        if (userInfo->Session != read->SessionId) {
             TabletCounters.Cumulative()[COUNTER_PQ_READ_ERROR_NO_SESSION].Increment(1);
             TabletCounters.Percentile()[COUNTER_LATENCY_PQ_READ_ERROR].IncrementFor(0);
             ReplyError(ctx, read->Cookie, NPersQueue::NErrorCode::READ_ERROR_NO_SESSION,
@@ -813,7 +813,7 @@ void TPartition::Handle(TEvPQ::TEvRead::TPtr& ev, const TActorContext& ctx) {
             return;
         }
     }
-    userInfo.ReadsInQuotaQueue++;
+    userInfo->ReadsInQuotaQueue++;
     Send(ReadQuotaTrackerActor,
             new TEvPQ::TEvRequestQuota(ev->Get()->Cookie, IEventHandle::Upcast(std::move(ev)))
     );
@@ -1048,10 +1048,10 @@ void TPartition::ProcessRead(const TActorContext& ctx, TReadInfo&& info, const u
     ui32 size = 0;
 
     PQ_ENSURE(!info.User.empty());
-    auto& userInfo = UsersInfoStorage->GetOrCreate(info.User, ctx);
+    TUserInfoMutableRef userInfo = UsersInfoStorage->GetOrCreate(info.User, ctx);
 
     if (subscription) {
-        userInfo.ForgetSubscription(GetEndOffset(), ctx.Now());
+        userInfo->ForgetSubscription(GetEndOffset(), ctx.Now());
     }
 
     TVector<TRequestedBlob> blobs;
@@ -1080,14 +1080,14 @@ void TPartition::ProcessRead(const TActorContext& ctx, TReadInfo&& info, const u
 
     PQ_ENSURE(info.BlobKeyTokens.Size() == info.Blobs.size());
     if (info.Destination != 0) {
-        ++userInfo.ActiveReads;
-        userInfo.UpdateReadingTimeAndState(GetEndOffset(), ctx.Now());
+        ++userInfo->ActiveReads;
+        userInfo->UpdateReadingTimeAndState(GetEndOffset(), ctx.Now());
     }
 
     if (info.Blobs.empty()) { //all from head, answer right now
         LOG_D("Reading cookie " << cookie << ". All data is from uncompacted head.");
 
-        OnReadComplete(info, &UsersInfoStorage->GetOrCreate(info.User, ctx), nullptr, ctx);
+        OnReadComplete(info, UsersInfoStorage->GetOrCreate(info.User, ctx).Get(), nullptr, ctx);
         return;
     }
 

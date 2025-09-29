@@ -1380,11 +1380,9 @@ private:
         // because they're used only by build index
         if (!buildInfo.SnapshotTxId && GetShardsPath(buildInfo)->PathId == buildInfo.TablePathId) {
             Y_ENSURE(Self->TablesWithSnapshots.contains(buildInfo.TablePathId));
-
             Y_ENSURE(Self->TablesWithSnapshots.at(buildInfo.TablePathId) == buildInfo.InitiateTxId);
-            buildInfo.SnapshotTxId = buildInfo.InitiateTxId;
-            Y_ENSURE(buildInfo.SnapshotTxId);
 
+            buildInfo.SnapshotTxId = buildInfo.InitiateTxId;
             Y_ENSURE(buildInfo.SnapshotTxId);
             buildInfo.SnapshotStep = Self->SnapshotsStepIds.at(buildInfo.SnapshotTxId);
             Y_ENSURE(buildInfo.SnapshotStep);

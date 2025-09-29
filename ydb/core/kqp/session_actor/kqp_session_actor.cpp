@@ -820,6 +820,8 @@ public:
                             }
                         }
                     }
+
+                    if (!shardIds.empty()) {
                     // TODO: initialize tasksGraph.GetMeta().UseFollowers ?
                     auto kqpShardsResolver = CreateKqpShardsResolver(SelfId(), 0, false, std::move(shardIds));
                     RegisterWithSameMailbox(kqpShardsResolver);
@@ -831,6 +833,7 @@ public:
                     tasksGraph.GetMeta().ShardIdToNodeId = std::move(resolveEv->Get()->ShardNodes);
                     for (const auto& [shardId, nodeId] : tasksGraph.GetMeta().ShardIdToNodeId) {
                         tasksGraph.GetMeta().ShardsOnNode[nodeId].push_back(shardId);
+                        }
                     }
                 }
 

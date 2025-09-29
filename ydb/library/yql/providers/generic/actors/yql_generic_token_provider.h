@@ -35,8 +35,8 @@ namespace NYql::NDq {
     TGenericTokenProvider::TPtr
     CreateGenericTokenProvider(
         const TString& structuredTokenJSON,
-        const TString& staticIamToken,
-        const TString& serviceAccountId, 
-        const TString& serviceAccountIdSignature,
+        /*[[deprecated]]*/ const TString& staticIamToken,
+        /*[[deprecated]]*/ const TString& serviceAccountId, 
+        /*[[deprecated]]*/ const TString& serviceAccountIdSignature,
         const ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory);
 } // namespace NYql::NDq

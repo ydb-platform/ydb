@@ -56,8 +56,6 @@ public:
     TMap<TActorId, TEvStateStorage::TBoardInfoEntry> InfoEntries; // OwnerId -> Payload
     TEvStateStorage::TEvBoardInfo::EStatus Status;
 
-    bool IsDirty = false;
-
 public:
     TCachedMessageData(const TString& cachedMessage, const TString& cachedMessageSsl,
                         const TMap<TActorId, TEvStateStorage::TBoardInfoEntry>& infoEntries,

@@ -309,6 +309,7 @@ void TColumnShardScan::ContinueProcessing() {
         if (!AckWaitingGuard) {
             AckWaitingGuard.emplace(ScanCountersPool.GetAckWaitingGuard());
         }
+
         LastResultInstant = TMonotonic::Now();
     }
 

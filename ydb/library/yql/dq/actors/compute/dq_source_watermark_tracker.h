@@ -162,7 +162,7 @@ private:
                   (uintptr_t)&*Iterator < (uintptr_t)&*other.Iterator );
             // 1) there are no `operator<` for hashmap iterator (ForwardIterator);
             // 2) comparing pointers belonging to different allocations is UB;
-            // Hence, we node addresses
+            // Hence, we use node addresses
             // (we don't actually care about actual ordering of Iterator's, the only
             // requirement it would be stable, unique and passes strict weak ordering;
             // node addresses comparison qualifies)

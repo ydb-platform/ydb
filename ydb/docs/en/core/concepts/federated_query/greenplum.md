@@ -48,7 +48,11 @@ When working with Greenplum clusters, there are a number of limitations:
 
 1. {% include [!](_includes/supported_requests.md) %}
 1. {% include [!](_includes/datetime_limits.md) %}
-1. {% include [!](_includes/predicate_pushdown.md) %}
+1. {% include [!](_includes/predicate_pushdown_preamble.md) %}
+
+   {% include [!](_includes/predicate_pushdown_examples.md) %}
+
+    Supported data types for filter pushdown:
 
     |{{ ydb-short-name }} Data Type|
     |----|

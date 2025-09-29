@@ -424,7 +424,7 @@ public:
 
         const auto& req = Settings.Partitions[partitionIndex];
 
-        auto* res = Response->Response.AddPartResult();
+        auto* res = Response->Response.MutablePartResult(partitionIndex);
         res->SetTopic(req.Topic);
         res->SetPartition(req.Partition);
         auto* read = res->MutableReadResult();
@@ -628,7 +628,7 @@ public:
         const auto& req = Settings.Partitions[CurrentCookie];
         const auto& partitionId = req.Partition;
 
-        auto res = Response->Response.AddPartResult();
+        auto res = Response->Response.MutablePartResult(CurrentCookie);
         res->SetTopic(req.Topic);
         res->SetPartition(partitionId);
         auto read = res->MutableReadResult();
@@ -703,6 +703,10 @@ public:
     void EnsureResponse() {
         if (!Response) {
             Response = MakeHolder<TEvPQ::TEvFetchResponse>();
+
+            for (size_t i = 0; i < PartitionStatus.size(); ++i) {
+                Response->Response.AddPartResult();
+            }
         }
     }
 

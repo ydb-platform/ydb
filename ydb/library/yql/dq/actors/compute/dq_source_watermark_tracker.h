@@ -3,6 +3,7 @@
 #include <util/datetime/base.h>
 #include <util/generic/maybe.h>
 #include <util/system/types.h>
+#include <util/string/builder.h>
 
 namespace NYql::NDq {
 

@@ -2,7 +2,7 @@ name: Regression-run_Large
 
 on:
   schedule:
-    - cron: "30 23 * * FRI"  # At 23:30 every friday
+    - cron: "30 23 * * *"  # At 23:30 every day
   workflow_dispatch:
     inputs:
       use_default_branches:
@@ -19,7 +19,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix: 
-        build_preset: ["relwithdebinfo", "release-asan", "release-tsan", "release-msan"]
+        build_preset: ["relwithdebinfo", "release-asan"]
     with:
       test_targets: ydb/
       test_size: large

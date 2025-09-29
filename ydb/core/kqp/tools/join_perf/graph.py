@@ -53,16 +53,15 @@ for data_flavour in data_flovours:
         print(graph_name)
         subset = df[(df["input_data_flavour"] == data_flavour) & 
             (df["key_type"] == key_type)]
-        print(subset)
         fig, axes = plt.subplots(nrows=1, ncols=1, figsize=(10, 8), sharex=True)
         
         for name, group in subset.groupby('join_algorithm'):
-            group = group.groupby('left_table_size')['time'].apply(lambda x: geo_mean_70percent_lowest(x)).reset_index(name='unix_bench_time')
+            group = group.groupby('left_table_size')['time'].apply(lambda x: geo_mean_70percent_lowest(x)).sort_values()
             axes.plot(
-                group['left_table_size'], 
-                group['unix_bench_time'], 
-                label=name,
-                marker='o'
+                group.index, 
+                group.values, 
+                label=name, 
+                marker='o' 
             )
         axes.set_ylabel('time')
         axes.set_xlabel('left_rows')

@@ -15,7 +15,7 @@
 
 Для выполнения примеров из этой статьи понадобятся:
 
-* Установленная БД {{ ydb-short-name }} с включённой поддержкой [векторных индексов](../../dev/vector-indexes.md). Об установке простого одноузлового кластера {{ ydb-short-name }} можно прочитать [здесь](../../quickstart.md). Рекомендации по развёртыванию {{ ydb-short-name }} для промышленного использования см. [здесь](../../devops/deployment-options/index.md?version=main).
+* Установленная БД {{ ydb-short-name }} с включённой поддержкой [векторных индексов](../../dev/vector-indexes.md). Об установке простого одноузлового кластера {{ ydb-short-name }} можно прочитать [здесь](../../quickstart.md). Рекомендации по развёртыванию {{ ydb-short-name }} для промышленного использования см. [здесь](../../devops/deployment-options/index.md).
 
 * На рабочей машине:
     * Утилита [{{ ydb-short-name }} CLI](../../reference/ydb-cli/);
@@ -118,10 +118,10 @@ ADD INDEX idx_vector
 GLOBAL USING vector_kmeans_tree
 ON (embedding)
 WITH (
-  distance=cosine, 
-  vector_type="float", 
-  vector_dimension=768, 
-  levels=1, 
+  distance=cosine,
+  vector_type="float",
+  vector_dimension=768,
+  levels=1,
   clusters=200);
 ```
 

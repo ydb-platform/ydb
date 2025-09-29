@@ -16,3 +16,8 @@ select Knn::ToBinaryStringBit($vector_d);
 select Knn::ToBinaryStringBit($vector_f);
 select Knn::ToBinaryStringBit($vector_u8);
 select Knn::ToBinaryStringBit($vector_i8);
+
+$vector_binary_str_bit = Knn::ToBinaryStringBit($vector_f);
+$deserialized_bit_vector = Knn::FloatFromBinaryString($vector_binary_str_bit);
+select $deserialized_bit_vector;
+select $vector_f = $deserialized_bit_vector;

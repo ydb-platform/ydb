@@ -1211,7 +1211,7 @@ public:
 // receives everyhing not related to actor communcation, converts them to request-actors
 class THttpMonIndexService : public TActor<THttpMonIndexService> {
 public:
-    THttpMonIndexService(const TActorId& httpProxyActorId, TIntrusivePtr<NMonitoring::TIndexMonPage> indexMonPage, 
+    THttpMonIndexService(const TActorId& httpProxyActorId, TIntrusivePtr<NMonitoring::TIndexMonPage> indexMonPage,
                          TMon::TRequestAuthorizer authorizer, const TString& redirectRoot = {}, bool needMonLegacyAudit = true)
         : TActor(&THttpMonIndexService::StateWork)
         , HttpProxyActorId(httpProxyActorId)
@@ -1345,6 +1345,10 @@ TMon::TMon(TConfig config)
 {
 }
 
+TMon::~TMon() {
+    IndexMonPage->ClearPages(); // it's required to avoid loop-reference
+}
+
 void TMon::RegisterLwtrace() {
     NLwTraceMonPage::RegisterPages(IndexMonPage.Get());
     NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(ACTORLIB_PROVIDER));
@@ -1453,9 +1457,8 @@ std::future<void> TMon::Start(TActorSystem* actorSystem) {
 }
 
 void TMon::Stop() {
-    IndexMonPage->ClearPages(); // it's required to avoid loop-reference
+    TGuard<TMutex> g(Mutex);
     if (ActorSystem) {
-        TGuard<TMutex> g(Mutex);
         for (const auto& [path, actorId] : ActorServices) {
             ActorSystem->Send(actorId, new TEvents::TEvPoisonPill);
         }

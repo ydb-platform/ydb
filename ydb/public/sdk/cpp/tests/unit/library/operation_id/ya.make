@@ -1,4 +1,4 @@
-UNITTEST()
+GTEST()
 
 FORK_SUBTESTS()
 
@@ -11,7 +11,6 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/testing/unittest
     ydb/public/sdk/cpp/src/library/operation_id
 )
 

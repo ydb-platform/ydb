@@ -4,6 +4,7 @@
 #include <library/cpp/l1_distance/l1_distance.h>
 #include <library/cpp/l2_distance/l2_distance.h>
 #include <ydb/library/yql/udfs/common/knn/knn-defines.h>
+#include <ydb/library/yql/udfs/common/knn/knn-distance.h>
 
 #include <span>
 
@@ -86,31 +87,6 @@ namespace {
     }
 }
 
-template <typename TRes>
-Y_PURE_FUNCTION TTriWayDotProduct<TRes> CosineImpl(const float* lhs, const float* rhs, size_t length)
-{
-    auto r = TriWayDotProduct(lhs, rhs, length);
-    return {static_cast<TRes>(r.LL), static_cast<TRes>(r.LR), static_cast<TRes>(r.RR)};
-}
-
-template <typename TRes>
-Y_PURE_FUNCTION TTriWayDotProduct<TRes> CosineImpl(const i8* lhs, const i8* rhs, size_t length)
-{
-    const auto ll = DotProduct(lhs, lhs, length);
-    const auto lr = DotProduct(lhs, rhs, length);
-    const auto rr = DotProduct(rhs, rhs, length);
-    return {static_cast<TRes>(ll), static_cast<TRes>(lr), static_cast<TRes>(rr)};
-}
-
-template <typename TRes>
-Y_PURE_FUNCTION TTriWayDotProduct<TRes> CosineImpl(const ui8* lhs, const ui8* rhs, size_t length)
-{
-    const auto ll = DotProduct(lhs, lhs, length);
-    const auto lr = DotProduct(lhs, rhs, length);
-    const auto rr = DotProduct(rhs, rhs, length);
-    return {static_cast<TRes>(ll), static_cast<TRes>(lr), static_cast<TRes>(rr)};
-}
-
 // TODO(mbkkt) maybe compute floating sum in double? Needs benchmark
 template <typename TCoord>
 struct TMetric {
@@ -129,13 +105,9 @@ struct TCosineSimilarity : TMetric<TCoord> {
         return std::numeric_limits<TRes>::max();
     }
 
-    static auto Distance(const char* cluster, const char* embedding, ui32 dimensions)
+    static auto Distance(const TStringBuf cluster, const TStringBuf embedding)
     {
-        const auto r = CosineImpl<TRes>(reinterpret_cast<const TCoord*>(cluster),
-                                        reinterpret_cast<const TCoord*>(embedding), dimensions);
-        // sqrt(ll) * sqrt(rr) computed instead of sqrt(ll * rr) to avoid precision issues
-        const auto norm = std::sqrt(r.LL) * std::sqrt(r.RR);
-        const TRes similarity = norm != 0 ? static_cast<TRes>(r.LR) / static_cast<TRes>(norm) : 0;
+        const TRes similarity = KnnDistance<TRes>::CosineSimilarity(cluster, embedding).value();
         return -similarity;
     }
 };
@@ -150,10 +122,9 @@ struct TL1Distance : TMetric<TCoord> {
         return std::numeric_limits<TRes>::max();
     }
 
-    static auto Distance(const char* cluster, const char* embedding, ui32 dimensions)
+    static auto Distance(const TStringBuf cluster, const TStringBuf embedding)
     {
-        const auto distance = L1Distance(reinterpret_cast<const TCoord*>(cluster),
-                                         reinterpret_cast<const TCoord*>(embedding), dimensions);
+        const auto distance = KnnDistance<TRes>::ManhattanDistance(cluster, embedding).value();
         return distance;
     }
 };
@@ -168,10 +139,9 @@ struct TL2Distance : TMetric<TCoord> {
         return std::numeric_limits<TRes>::max();
     }
 
-    static auto Distance(const char* cluster, const char* embedding, ui32 dimensions)
+    static auto Distance(const TStringBuf cluster, const TStringBuf embedding)
     {
-        const auto distance = L2SqrDistance(reinterpret_cast<const TCoord*>(cluster),
-                                            reinterpret_cast<const TCoord*>(embedding), dimensions);
+        const auto distance = KnnDistance<TRes>::EuclideanDistance(cluster, embedding).value();
         return distance;
     }
 };
@@ -186,10 +156,9 @@ struct TMaxInnerProductSimilarity : TMetric<TCoord> {
         return std::numeric_limits<TRes>::max();
     }
 
-    static auto Distance(const char* cluster, const char* embedding, ui32 dimensions)
+    static auto Distance(const TStringBuf cluster, const TStringBuf embedding)
     {
-        const TRes similarity = DotProduct(reinterpret_cast<const TCoord*>(cluster),
-                                           reinterpret_cast<const TCoord*>(embedding), dimensions);
+        const TRes similarity = KnnDistance<TRes>::DotProduct(cluster, embedding).value();
         return -similarity;
     }
 };
@@ -344,14 +313,14 @@ public:
         return false;
     }
 
-    std::optional<ui32> FindCluster(TArrayRef<const char> embedding) override {
+    std::optional<ui32> FindCluster(const TStringBuf embedding) override {
         if (!IsExpectedFormat(embedding)) {
             return {};
         }
         auto min = TMetric::Init();
         std::optional<ui32> closest = {};
         for (size_t i = 0; const auto& cluster : Clusters) {
-            auto distance = TMetric::Distance(cluster.data(), embedding.data(), Dimensions);
+            auto distance = TMetric::Distance(cluster, embedding);
             if (distance < min) {
                 min = distance;
                 closest = i;
@@ -363,7 +332,7 @@ public:
 
     std::optional<ui32> FindCluster(TArrayRef<const TCell> row, ui32 embeddingPos) override {
         Y_ENSURE(embeddingPos < row.size());
-        return FindCluster(row.at(embeddingPos).AsRef());
+        return FindCluster(row.at(embeddingPos).AsBuf());
     }
 
     void AggregateToCluster(ui32 pos, const TArrayRef<const char>& embedding, ui64 weight) override {

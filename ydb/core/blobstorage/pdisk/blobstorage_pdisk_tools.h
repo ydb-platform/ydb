@@ -1,7 +1,6 @@
 #pragma once
 #include "blobstorage_pdisk_defs.h"
 
-#include <ydb/core/protos/blobstorage_distributed_config.pb.h>
 #include <ydb/library/pdisk_io/sector_map.h>
 
 namespace NActors {
@@ -52,9 +51,12 @@ bool ReadPDiskFormatInfo(const TString &path, const NPDisk::TMainKey &mainKey, T
     const bool doLock = false, TIntrusivePtr<NPDisk::TSectorMap> sectorMap = nullptr);
 
 // reads metadata from PDisk (if available)
-NKikimrBlobStorage::TPDiskMetadataRecord ReadPDiskMetadata(const TString& path, const NPDisk::TMainKey& mainKey);
+NPDisk::EPDiskMetadataOutcome ReadPDiskMetadata(const TString& path, const NPDisk::TMainKey& key, TRcBuf& metadata,
+    std::optional<ui64> *pdiskGuid);
 
-// writes metadata record to PDisk (throws on error)
-void WritePDiskMetadata(const TString& path, const NKikimrBlobStorage::TPDiskMetadataRecord& record, const NPDisk::TMainKey& mainKey);
+// updated PDisk metadata (when PDisk is properly formatted and supports metadata vault); size of metadata should not
+// exceed 15 MiB; when function fails (even many times), previusly stored metadata must be kept intact
+NPDisk::EPDiskMetadataOutcome WritePDiskMetadata(const TString& path, const NPDisk::TMainKey& key, TRcBuf&& metadata,
+    std::optional<ui64> *pdiskGuid);
 
 } // NKikimr

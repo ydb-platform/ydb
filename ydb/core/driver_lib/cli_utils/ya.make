@@ -38,6 +38,7 @@ PEERDIR(
     ydb/core/actorlib_impl
     ydb/core/base
     ydb/core/blobstorage/pdisk
+    ydb/core/blobstorage/pdisk/metadata
     ydb/core/client/minikql_compile
     ydb/core/client/scheme_cache_lib
     ydb/core/config/init
@@ -50,7 +51,6 @@ PEERDIR(
     ydb/core/scheme
     ydb/library/aclib
     ydb/library/folder_service/proto
-    ydb/library/keys
     ydb/public/sdk/cpp/src/library/grpc/client
     ydb/library/yaml_config
     ydb/public/api/grpc

@@ -1,4 +1,5 @@
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_tools.h>
+#include <ydb/core/blobstorage/pdisk/metadata/blobstorage_pdisk_metadata.h>
 #include <ydb/core/util/random.h>
 #include "cli.h"
 #include "cli_cmds.h"
@@ -200,7 +201,7 @@ public:
     virtual void Config(TConfig& config) override {
         TClientCommand::Config(config);
         config.SetFreeArgsNum(1);
-        SetFreeArgTitle(0, "<PATH>", "PDisk device path");
+        SetFreeArgTitle(0, "<PATH>", "Disk device path");
     }
 
     virtual void Parse(TConfig& config) override {

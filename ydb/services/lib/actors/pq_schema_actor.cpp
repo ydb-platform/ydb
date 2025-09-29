@@ -67,17 +67,11 @@ namespace NKikimr::NGRpcProxy::V1 {
         return NKikimr::GetDuration(duration);
     }
 
-    static std::expected<TMaybe<TDuration>, TMsgPqCodes> ConvertConsumerAvailabilityPeriod(const google::protobuf::Duration& duration, bool important, std::string_view consumerName) {
+    static std::expected<TMaybe<TDuration>, TMsgPqCodes> ConvertConsumerAvailabilityPeriod(const google::protobuf::Duration& duration, std::string_view consumerName) {
         if (auto val = ConvertPositiveDuration(duration); val.has_value()) {
             if (val.value() == TDuration::Zero()) {
                 return Nothing();
             } else {
-                if (val.value() != TDuration::Max() && important) {
-                    return std::unexpected(TMsgPqCodes(
-                        TStringBuilder() << "Consumer '" << consumerName << "' has important flag and limited availability_period",
-                        Ydb::PersQueue::ErrorCode::INVALID_ARGUMENT
-                    ));
-                }
                 return val.value();
             }
         } else {
@@ -87,7 +81,6 @@ namespace NKikimr::NGRpcProxy::V1 {
             ));
         }
     }
-
 
     TMsgPqCodes AddReadRuleToConfig(
         NKikimrPQ::TPQTabletConfig* config,
@@ -162,7 +155,7 @@ namespace NKikimr::NGRpcProxy::V1 {
         if (rr.important()) {
             consumer->SetImportant(true);
         }
-        if (auto period = ConvertConsumerAvailabilityPeriod(rr.availability_period(), rr.important(), rr.consumer_name()); period.has_value()) {
+        if (auto period = ConvertConsumerAvailabilityPeriod(rr.availability_period(), rr.consumer_name()); period.has_value()) {
             if (period.value().Defined()) {
                 consumer->SetAvailabilityPeriodMs(period.value()->MilliSeconds());
             } else {
@@ -323,7 +316,7 @@ namespace NKikimr::NGRpcProxy::V1 {
             }
             consumer->SetImportant(true);
         }
-        if (auto period = ConvertConsumerAvailabilityPeriod(rr.availability_period(), rr.important(), rr.name()); period.has_value()) {
+        if (auto period = ConvertConsumerAvailabilityPeriod(rr.availability_period(), rr.name()); period.has_value()) {
             if (period.value().Defined()) {
                 consumer->SetAvailabilityPeriodMs(period.value()->MilliSeconds());
             } else {
@@ -381,6 +374,11 @@ namespace NKikimr::NGRpcProxy::V1 {
                 return true;
             }
             readRuleConsumers.insert(consumer.GetName());
+
+            if (consumer.GetImportant() && consumer.HasAvailabilityPeriodMs()) {
+                error = TStringBuilder() << "Consumer '" << consumer.GetName() << "' has both an important flag and a limited availability_period, which are mutually exclusive";
+                return false;
+            }
         }
 
         for (const auto& t : supportedClientServiceTypes) {

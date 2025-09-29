@@ -840,6 +840,37 @@ public:
             result = L(result, Q(settings));
             return result;
         }
+        else if (func == "partitionlist" || func == "partitionliststrict") {
+            auto requiredLangVer = MakeLangVersion(2025, 4);
+            if (!IsBackwardCompatibleFeatureAvailable(ctx.Settings.LangVer, requiredLangVer, ctx.Settings.BackportMode)) {
+                auto str = FormatLangVersion(requiredLangVer);
+                YQL_ENSURE(str);
+                ctx.Error(Pos_) << "PARTITION_LIST table function is not available before language version " << *str;
+                return nullptr;
+            }
+            if (Args_.size() != 1) {
+                ctx.Error(Pos_) << "Single argument required, but got " << Args_.size() << " arguments";
+                return nullptr;
+            }
+            const auto& arg = Args_.front();
+            if (arg.HasAt) {
+                ctx.Error(Pos_) << "Temporary tables are not supported here, expecting expression";
+                return nullptr;
+            }
+            if (!arg.View.empty()) {
+                ctx.Error(Pos_) << "Views are not supported here, expecting expression";
+                return nullptr;
+            }
+            if (!arg.Id.Empty()) {
+                ctx.Error(Pos_) << "Expecting expression as argument, but got identifier";
+                return nullptr;
+            }
+            if (!arg.Expr) {
+                ctx.Error(Pos_) << "Expecting expression as argument";
+                return nullptr;
+            }
+            return Y(func.EndsWith("strict") ? "MrPartitionListStrict" : "MrPartitionList", Y("EvaluateExpr", arg.Expr));
+        }
 
         ctx.Error(Pos_) << "Unknown table name preprocessor: " << Func_;
         return nullptr;

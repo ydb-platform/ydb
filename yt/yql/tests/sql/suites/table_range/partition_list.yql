@@ -1,0 +1,8 @@
+/* postgres can not */
+/* kikimr can not */
+/* dqfile can not - missing langver support */
+/* hybridfile can not - missing langver support */
+
+$tables = ListMap(ListFromRange(1, 4), ($i) -> (AsStruct("Input" || cast($i as String) as TablePath, $i as value, $i + 1 as next_value)));
+
+select * from plato.partition_list($tables);

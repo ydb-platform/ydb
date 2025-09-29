@@ -429,6 +429,18 @@ bool ValidateSettings(const TExprNode& settingsNode, EYtSettingTypes accepted, T
             }
             break;
         }
+        case NYql::EYtSettingType::ExtraColumns: {
+            if (!EnsureTupleSize(*setting, 2, ctx)) {
+                return false;
+            }
+
+            if (!setting->Tail().IsCallable("AsStruct")) {
+                ctx.AddError(TIssue(ctx.GetPosition(setting->Tail().Pos()), TStringBuilder()
+                    << "Expecting AsStruct as extraColumns value"));
+                return false;
+            }
+            break;
+        }
         case EYtSettingType::InferScheme:
         case EYtSettingType::ForceInferScheme:
             if (!EnsureTupleMinSize(*setting, 1, ctx)) {

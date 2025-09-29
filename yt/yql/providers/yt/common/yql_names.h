@@ -53,6 +53,8 @@ const TStringBuf MrFolderName = "MrFolder";
 const TStringBuf MrWalkFoldersName = "MrWalkFolders";
 const TStringBuf MrWalkFoldersImplName = "MrWalkFoldersImpl";
 const TStringBuf MrRangeInputListInternal = "MrRangeInputListInternal";
+const TStringBuf MrPartitionListName = "MrPartitionList";
+const TStringBuf MrPartitionListStrictName = "MrPartitionListStrict";
 
 // YT related names
 const TStringBuf READ_SCHEMA_ATTR_NAME = "_read_schema";
@@ -69,6 +71,9 @@ const TStringBuf YqlIOSpecTables = "tables";
 const TStringBuf YqlIOSpecRegistry = "registry";
 
 const TStringBuf SecurityTagsName = "security_tags";
+
+// Reserved member for table name in MrPartitionList arg
+const TStringBuf MrPartitionListTableMember = "TablePath";
 
 extern const TVector<TStringBuf> YAMR_FIELDS;
 

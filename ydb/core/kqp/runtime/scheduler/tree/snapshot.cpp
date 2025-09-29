@@ -80,9 +80,11 @@ void TTreeElement::UpdateTopDown() {
 
         // Give at least 1 fair-share for each demanding child
         ForEachChild<TTreeElement>([&](TTreeElement* child, size_t) -> bool {
-            if (leftFairShare == 0) {
-                return true;
-            }
+            // We want to allow FairShare to be over Limit.
+            // If you need to change this behaviour uncomment if-statement below
+            // if (leftFairShare == 0) {
+            //     return true;
+            // }
 
             if (child->Demand > 0) {
                 child->FairShare = 1;
@@ -91,6 +93,7 @@ void TTreeElement::UpdateTopDown() {
 
             return false;
         });
+        leftFairShare = Max(leftFairShare, 0ul);
         ForEachChild<TQuery>([&](TQuery* query, size_t) {
             auto demand = query->Demand > 0 ? query->Demand - 1 : 0;
             query->FairShare += Min(leftFairShare, demand);

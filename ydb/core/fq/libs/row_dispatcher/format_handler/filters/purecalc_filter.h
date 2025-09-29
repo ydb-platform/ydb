@@ -73,7 +73,7 @@ public:
         return ProgramHolder_;
     }
 
-    virtual void ProcessData(const TVector<const TVector<NYql::NUdf::TUnboxedValue>*>& values, ui64 numberRows) const = 0;
+    virtual void ProcessData(const TVector<std::span<NYql::NUdf::TUnboxedValue>>& values, ui64 numberRows) const = 0;
 
 protected:
     TString Name_;

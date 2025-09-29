@@ -266,11 +266,15 @@ private:
 
             ++NewNumberRows;
             NewDataPackerSize = DataPacker->PackedSizeEstimate();
-            LOG_ROW_DISPATCHER_TRACE("OnData, row id: " << rowId << ", offset: " << Offset << ", new packer size: " << NewDataPackerSize);
+            LOG_ROW_DISPATCHER_TRACE("OnData, row id: " << rowId << ", offset: " << Offset << ", new number rows: " << NewNumberRows << ", new row size: " << NewDataPackerSize);
         }
 
         void OnBatchFinish() override {
             if (NewNumberRows == NumberRows && NewDataPackerSize == DataPackerSize && WatermarksUs.empty()) {
+                return;
+            }
+            if (const auto nextOffset = Client->GetNextMessageOffset(); nextOffset && Offset < *nextOffset) {
+                LOG_ROW_DISPATCHER_TRACE("OnBatchFinish, skip historical offset: " << Offset << ", next message offset: " << *nextOffset);
                 return;
             }
 
@@ -346,7 +350,7 @@ private:
 public:
     TTopicFormatHandler(const TFormatHandlerConfig& config, const TSettings& settings, const TCountersDesc& counters)
         : TBase(&TTopicFormatHandler::StateFunc)
-        , TTypeParser(__LOCATION__, counters.CopyWithNewMkqlCountersName("row_dispatcher"))
+        , TTypeParser(__LOCATION__, config.FunctionRegistry, counters.CopyWithNewMkqlCountersName("row_dispatcher"))
         , Config(config)
         , Settings(settings)
         , LogPrefix(TStringBuilder() << "TTopicFormatHandler [" << Settings.ParsingFormat << "]: ")
@@ -549,27 +553,35 @@ private:
 
         if (Parser) {
             Parser->Refresh(true);
-            Parser.Reset();
         }
 
         LOG_ROW_DISPATCHER_DEBUG("UpdateParser to new schema with size " << parerSchema.size());
         ParserHandler = MakeIntrusive<TParserHandler>(*this, std::move(parerSchema));
 
         if (const ui64 schemaSize = ParserHandler->GetColumns().size()) {
-            auto newParser = CreateParserForFormat();
-            if (newParser.IsFail()) {
-                return newParser;
+            if (!Parser) {
+                auto newParser = CreateParserForFormat();
+                if (newParser.IsFail()) {
+                    return newParser;
+                }
+
+                Parser = newParser.DetachResult();
+                LOG_ROW_DISPATCHER_DEBUG("Parser was created on schema with " << schemaSize << " columns");
+            } else {
+                if (auto status = Parser->ChangeConsumer(ParserHandler); status.IsFail()) {
+                    return status;
+                }
+
+                LOG_ROW_DISPATCHER_DEBUG("Parser was updated on new schema with " << schemaSize << " columns");
             }
 
-            LOG_ROW_DISPATCHER_DEBUG("Parser was updated on new schema with " << schemaSize << " columns");
-
-            Parser = newParser.DetachResult();
             ParserSchemaIndex.resize(MaxColumnId, std::numeric_limits<ui64>::max());
             for (ui64 i = 0; const auto& [_, columnDesc] : ColumnsDesc) {
                 ParserSchemaIndex[columnDesc.ColumnId] = i++;
             }
         } else {
             LOG_ROW_DISPATCHER_INFO("No columns to parse, reset parser");
+            Parser.Reset();
         }
 
         return TStatus::Success();
@@ -578,7 +590,7 @@ private:
     TValueStatus<ITopicParser::TPtr> CreateParserForFormat() const {
         const auto& counters = Counters.Desc.CopyWithNewMkqlCountersName("row_dispatcher_parser");
         if (Settings.ParsingFormat == "raw") {
-            return CreateRawParser(ParserHandler, counters);
+            return CreateRawParser(ParserHandler, Config.FunctionRegistry, counters);
         }
         if (Settings.ParsingFormat == "json_each_row") {
             return CreateJsonParser(ParserHandler, Config.JsonParserConfig, counters);
@@ -664,9 +676,10 @@ ITopicFormatHandler::TPtr CreateTopicFormatHandler(const NActors::TActorContext&
     return ITopicFormatHandler::TPtr(handler);
 }
 
-TFormatHandlerConfig CreateFormatHandlerConfig(const NConfig::TRowDispatcherConfig& rowDispatcherConfig, NActors::TActorId compileServiceId) {
+TFormatHandlerConfig CreateFormatHandlerConfig(const NConfig::TRowDispatcherConfig& rowDispatcherConfig, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, NActors::TActorId compileServiceId) {
     return {
-        .JsonParserConfig = CreateJsonParserConfig(rowDispatcherConfig.GetJsonParser()),
+        .FunctionRegistry = functionRegistry,
+        .JsonParserConfig = CreateJsonParserConfig(rowDispatcherConfig.GetJsonParser(), functionRegistry),
         .FiltersConfig = {
             .CompileServiceId = compileServiceId
         }

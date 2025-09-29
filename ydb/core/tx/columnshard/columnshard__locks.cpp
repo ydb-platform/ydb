@@ -3,7 +3,7 @@
 namespace NKikimr::NColumnShard {
 
 void TColumnShard::SubscribeLock(const ui64 lockId, const ui32 lockNodeId) {
-    Send(NLongTxService::MakeLongTxServiceID(SelfId().NodeId()), new NLongTxService::TEvLongTxService::TEvSubscribeLock(lockId, lockNodeId));
+    Send(NLongTxService::MakeLongTxServiceID(SelfId().NodeId()), std::make_unique<NLongTxService::TEvLongTxService::TEvSubscribeLock>(lockId, lockNodeId));
 }
 
 class TAbortWriteLockTransaction: public NTabletFlatExecutor::TTransactionBase<TColumnShard> {
@@ -26,7 +26,7 @@ public:
     }
 
     TTxType GetTxType() const override {
-        return TXTYPE_PROPOSE;
+        return TXTYPE_ABORT_LOCK;
     }
 
 private:
@@ -35,7 +35,7 @@ private:
 
 void TColumnShard::MaybeCleanupLock(const ui64 lockId) {
     auto lock = OperationsManager->GetLockOptional(lockId);
-    if (!lock || !lock->IsDeleted() || lock->IsAborted()) {
+    if (!lock || !lock->IsDeleted() || lock->IsAborted() || lock->HasTxId()) {
         return;
     }
 

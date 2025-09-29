@@ -70,6 +70,7 @@ private:
     YDB_READONLY_DEF(THashSet<ui64>, BrokeOnCommit);
     YDB_READONLY_DEF(THashSet<ui64>, NotifyOnCommit);
     YDB_READONLY_DEF(THashSet<ui64>, Committed);
+    YDB_OPT(ui64, TxId);
 
 public:
     ui64 GetLockId() const {
@@ -223,6 +224,8 @@ public:
         TColumnShard& owner, const ui64 txId, const NOlap::TSnapshot& snapshot);
     void AddTemporaryTxLink(const ui64 lockId) {
         AFL_VERIFY(Tx2Lock.emplace(lockId, lockId).second);
+        auto& lock = GetLockVerified(lockId);
+        lock.SetTxId(lockId);
     }
     void LinkTransactionOnExecute(const ui64 lockId, const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc);
     void LinkTransactionOnComplete(const ui64 lockId, const ui64 txId);

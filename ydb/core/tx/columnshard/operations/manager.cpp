@@ -221,6 +221,9 @@ std::optional<ui64> TOperationsManager::GetLockForTx(const ui64 txId) const {
 }
 
 void TOperationsManager::LinkTransactionOnExecute(const ui64 lockId, const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc) {
+    auto& lock = GetLockVerified(lockId);
+    lock.SetTxId(txId);
+
     NIceDb::TNiceDb db(txc.DB);
     db.Table<Schema::OperationTxIds>().Key(txId, lockId).Update();
     Tx2Lock[txId] = lockId;

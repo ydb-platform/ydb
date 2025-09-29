@@ -395,6 +395,10 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
     const auto inFlightLocksRangesBytes = NOlap::TPKRangeFilter::GetFiltersTotalMemorySize();
     const ui64 inFlightLocksRangesBytesLimit = AppDataVerified().ColumnShardConfig.GetInFlightLocksRangesBytesLimit();
     if (behaviour == EOperationBehaviour::WriteWithLock && inFlightLocksRangesBytes > inFlightLocksRangesBytesLimit) {
+        if (auto lock = OperationsManager->GetLockOptional(record.GetLockTxId()); lock) {
+            lock->SetDeleted();
+            MaybeCleanupLock(record.GetLockTxId());
+        }
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "In flight locks ranges bytes limit exceeded")
             ("inFlightLocksRangesBytes", inFlightLocksRangesBytes)
             ("inFlightLocksRangesBytesLimit", inFlightLocksRangesBytesLimit);

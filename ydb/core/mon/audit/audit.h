@@ -22,7 +22,7 @@ enum ERequestStatus {
 
 class TAuditCtx {
 public:
-    void InitAudit(const NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& ev);
+    void InitAudit(const NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& ev, bool needAudit = true);
     void AddAuditLogParts(const TAuditParts& parts); // TODO: pass request context instead of audit log parts
     void LogAudit(ERequestStatus status, const TString& reason, NKikimrConfig::TAuditConfig::TLogClassConfig::ELogPhase logPhase);
     void LogOnReceived();

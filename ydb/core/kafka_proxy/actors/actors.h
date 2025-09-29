@@ -121,7 +121,7 @@ inline EKafkaErrors ConvertErrorCode(NPersQueue::NErrorCode::EErrorCode code) {
         case NPersQueue::NErrorCode::EErrorCode::READ_TIMEOUT:
             return EKafkaErrors::REQUEST_TIMED_OUT;
         case NPersQueue::NErrorCode::EErrorCode::READ_NOT_DONE:
-            //TODO
+            return EKafkaErrors::NONE_ERROR;
         case NPersQueue::NErrorCode::EErrorCode::TABLET_PIPE_DISCONNECTED:
             return EKafkaErrors::NOT_LEADER_OR_FOLLOWER;
         default:

@@ -23,11 +23,11 @@ public:
         AFL_VERIFY(!!Ev);
     }
 
-    virtual bool Execute(TTransactionContext& txc, const TActorContext& /* ctx */) override {
+    virtual bool Execute(TTransactionContext& txc, const TActorContext&) override {
         txc.DB.NoMoreReadsForTx();
         NIceDb::TNiceDb db(txc.DB);
 
-        Self->Counters.GetTabletCounters()->IncCounter(COUNTER_PREPARE_REQUEST);
+        Self->Counters->GetTabletCounters()->IncCounter(COUNTER_PREPARE_REQUEST);
 
         auto& record = Proto(Ev->Get());
         const auto txKind = record.GetTxKind();

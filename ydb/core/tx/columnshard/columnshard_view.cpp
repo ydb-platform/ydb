@@ -163,8 +163,8 @@ TString TTxMonitoring::RenderMainPage() {
     html << "<h3><a href=\"app?Compaction=true&TabletID=" << cgi.Get("TabletID") << "\"> Compaction </a></h3>";
 
     html << "<h3>Tiering Errors</h3>";
-    auto readErrors = Self->Counters.GetEvictionCounters().TieringErrors->GetAllReadErrors();
-    auto writeErrors = Self->Counters.GetEvictionCounters().TieringErrors->GetAllWriteErrors();
+    auto readErrors = Self->Counters->GetEvictionCounters().TieringErrors->GetAllReadErrors();
+    auto writeErrors = Self->Counters->GetEvictionCounters().TieringErrors->GetAllWriteErrors();
 
     TPrintErrorTable(html, readErrors, "read");
     TPrintErrorTable(html, writeErrors, "write");

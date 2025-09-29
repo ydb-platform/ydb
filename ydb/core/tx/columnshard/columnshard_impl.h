@@ -48,6 +48,7 @@
 
 #include <ydb/services/metadata/abstract/common.h>
 #include <ydb/services/metadata/service.h>
+#include <ydb/core/tx/columnshard/statistics/reporter.h>
 
 namespace NKikimr::NOlap {
 class TCleanupPortionsColumnEngineChanges;
@@ -57,6 +58,7 @@ class TChangesWithAppend;
 class TCompactColumnEngineChanges;
 class TInsertColumnEngineChanges;
 class TStoragesManager;
+class TColumnShardStatisticsReporter;
 class TRemovePortionsChange;
 class TMovePortionsChange;
 
@@ -269,6 +271,7 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     void Handle(TEvPrivate::TEvReadFinished::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvPeriodicWakeup::TPtr& ev, const TActorContext& ctx);
     void Handle(NActors::TEvents::TEvWakeup::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvReportStatistics::TPtr&);
     void Handle(TEvPrivate::TEvPingSnapshotsUsage::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvPrivate::TEvWriteIndex::TPtr& ev, const TActorContext& ctx);
@@ -355,15 +358,15 @@ public:
 
     // For syslocks
     void IncCounter(NDataShard::ECumulativeCounters counter, ui64 num = 1) const {
-        Counters.GetTabletCounters()->IncCounter(counter, num);
+        Counters->GetTabletCounters()->IncCounter(counter, num);
     }
 
     void IncCounter(NDataShard::EPercentileCounters counter, ui64 num) const {
-        Counters.GetTabletCounters()->IncCounter(counter, num);
+        Counters->GetTabletCounters()->IncCounter(counter, num);
     }
 
     void IncCounter(NDataShard::EPercentileCounters counter, const TDuration& latency) const {
-        Counters.GetTabletCounters()->IncCounter(counter, latency);
+        Counters->GetTabletCounters()->IncCounter(counter, latency);
     }
 
     inline TRowVersion LastCompleteTxVersion() const {
@@ -434,6 +437,7 @@ protected:
             HFunc(TEvPrivate::TEvReadFinished, Handle);
             HFunc(TEvPrivate::TEvPeriodicWakeup, Handle);
             HFunc(NActors::TEvents::TEvWakeup, Handle);
+            hFunc(TEvPrivate::TEvReportStatistics, Handle);
             HFunc(TEvPrivate::TEvPingSnapshotsUsage, Handle);
 
             HFunc(NEvents::TDataEvents::TEvWrite, Handle);
@@ -475,7 +479,7 @@ protected:
 
 private:
     std::unique_ptr<TTabletCountersBase> TabletCountersHolder;
-    TCountersManager Counters;
+    std::shared_ptr<NKikimr::NColumnShard::TCountersManager> Counters;
     std::unique_ptr<TWriteTasksQueue> WriteTasksQueue;
 
     std::unique_ptr<TTxController> ProgressTxController;
@@ -515,6 +519,7 @@ private:
 
     TActorId ResourceSubscribeActor;
     TActorId BufferizationPortionsWriteActorId;
+    TActorId ColumnShardStatisticsReporter;
     NOlap::NDataAccessorControl::TDataAccessorsManagerContainer DataAccessorsManager;
     NBackgroundTasks::TControlInterfaceContainer<NOlap::NColumnFetching::TColumnDataManager> ColumnDataManager;
 
@@ -592,6 +597,8 @@ private:
     void SendPeriodicStats();
     void FillOlapStats(const TActorContext& ctx, std::unique_ptr<TEvDataShard::TEvPeriodicTableStats>& ev);
     void FillColumnTableStats(const TActorContext& ctx, std::unique_ptr<TEvDataShard::TEvPeriodicTableStats>& ev);
+
+    void FillExecutorStats(const TActorContext& ctx, std::unique_ptr<TEvDataShard::TEvPeriodicTableStats>& ev);
 
 public:
     ui64 TabletTxCounter = 0;

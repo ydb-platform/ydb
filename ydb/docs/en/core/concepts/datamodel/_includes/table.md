@@ -169,12 +169,6 @@ Using a [Bloom filter](https://en.wikipedia.org/wiki/Bloom_filter) lets you more
 
 ## Column-oriented tables {#column-oriented-tables}
 
-{% note warning %}
-
-Column-oriented {{ ydb-short-name }} tables are in the Preview mode.
-
-{% endnote %}
-
 {{ ydb-short-name }}'s column-oriented tables store data of each column separately (independently) from each other. This data storage principle is optimized for handling Online Analytical Processing (OLAP) workloads, as only the columns directly involved in the query are read during its execution. One of the key advantages of this approach is the high data compression ratios since columns often contain repetitive or similar data. A downside, however, is that operations on whole rows become more resource-intensive.
 
 At the moment, the main use case for {{ ydb-short-name }} column-oriented tables is writing data with an increasing primary key (for example, event time), analyzing this data, and deleting outdated data based on TTL. The optimal way to add data to {{ ydb-short-name }} column-oriented tables is [batch upload](../../../dev/batch-upload.md), performed in MB-sized blocks. Data packet insertion is atomic: data will be written either to all partitions or none.
@@ -185,8 +179,8 @@ In most cases, working with {{ ydb-short-name }} column-oriented tables is simil
 * Data is partitioned not by the primary key, but by the hash of the partitioning columns, to evenly distribute the data across the hosts.
 * Column-oriented tables support a limited set of data types:
 
-  + Available in both the primary key and other columns: `Date`, `Datetime`, `Timestamp`, `Int32`, `Int64`, `Uint8`, `Uint16`, `Uint32`, `Uint64`, `Utf8`, `String`;
-  + Available only in columns not included in the primary key: `Bool`, `Decimal`, `Double`, `Float`, `Int8`, `Int16`, `Interval`, `JsonDocument`, `Json`, `Uuid`, `Yson`.
+  + Available in both the primary key and other columns: `Date`, `Datetime`, `Datetime64`, `Timestamp`, `Timestamp64`, `Int32`, `Int64`, `Uint8`, `Uint16`, `Uint32`, `Uint64`, `Utf8`, `String`;
+  + Available only in columns not included in the primary key: `Decimal`, `Double`, `Float`, `Int8`, `Int16`, `JsonDocument`, `Json`, `Yson`.
 
 * Column-oriented tables support column groups, but only for compression settings.
 
@@ -210,11 +204,7 @@ At the moment, not all functionality of column-oriented tables is implemented. T
 * Vector indexes.
 * Bloom filters.
 * Change Data Capture.
-* Table renaming.
 * Custom table attributes.
-* Modifying the list of columns.
-* Adding data to column-oriented tables using the SQL INSERT statement.
-* Deleting data from column-oriented tables using the SQL DELETE statement. In fact, deletion is only possible after the TTL data retention time has expired.
 
 ### Partitioning column-oriented tables {#olap-tables-partitioning}
 

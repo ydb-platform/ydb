@@ -3068,13 +3068,6 @@ void TPartition::BeginChangePartitionConfig(const NKikimrPQ::TPQTabletConfig& co
         hasReadRule.insert(consumer);
     }
 
-    TSet<TString> important;
-    for (const auto& consumer : config.GetConsumers()) {
-        if (consumer.GetImportant()) {
-            important.insert(consumer.GetName());
-        }
-    }
-
     for (auto& consumer : config.GetConsumers()) {
         auto& userInfo = GetOrCreatePendingUser(consumer.GetName(), 0);
 
@@ -3083,7 +3076,7 @@ void TPartition::BeginChangePartitionConfig(const NKikimrPQ::TPQTabletConfig& co
             ts += TDuration::MilliSeconds(1);
         }
         userInfo.ReadFromTimestamp = ts;
-        userInfo.Important = important.contains(consumer.GetName());
+        userInfo.Important = consumer.GetImportant();
         userInfo.AvailabilityPeriod = TDuration::MilliSeconds(consumer.GetAvailabilityPeriodMs());
 
         ui64 rrGen = consumer.GetGeneration();

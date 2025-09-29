@@ -27,6 +27,17 @@ namespace NYql::NDq {
         CredentialsProvider_ = credentialsProviderFactory->CreateProvider();
     }
 
+    TGenericTokenProvider::TGenericTokenProvider(
+        const TString& structuredTokenJSON, 
+        const ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory) {
+        Y_ENSURE(!structuredTokenJSON.empty(), "empty structured token");
+        Y_ENSURE(credentialsFactory, "CredentialsFactory is not initialized");
+
+        auto credentialsProviderFactory =
+            CreateCredentialsProviderFactoryForStructuredToken(credentialsFactory, structuredTokenJSON, false);
+        CredentialsProvider_ = credentialsProviderFactory->CreateProvider();
+    }
+
     TString TGenericTokenProvider::MaybeFillToken(NYql::TGenericDataSourceInstance& dsi) const {
         // 1. Don't need tokens if basic auth is set
         if (dsi.credentials().has_basic()) {
@@ -59,10 +70,14 @@ namespace NYql::NDq {
     }
 
     TGenericTokenProvider::TPtr
-    CreateGenericTokenProvider(const TString& staticIamToken,
-                               const TString& serviceAccountId,
-                               const TString& serviceAccountIdSignature,
+    CreateGenericTokenProvider(const TString& structuredTokenJSON,
+                               /*[[deprecated]]*/ const TString& staticIamToken,
+                               /*[[deprecated]]*/ const TString& serviceAccountId,
+                               /*[[deprecated]]*/ const TString& serviceAccountIdSignature,
                                const ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory) {
+        if (!structuredTokenJSON.empty()) {
+            return std::make_unique<TGenericTokenProvider>(structuredTokenJSON, credentialsFactory);
+        }
         if (!staticIamToken.empty()) {
             return std::make_unique<TGenericTokenProvider>(staticIamToken);
         }

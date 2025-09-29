@@ -551,7 +551,12 @@ namespace NYql::NDq {
         const NKikimr::NMiniKQL::THolderFactory& holderFactory,
         const size_t maxKeysInRequest)
     {
-        auto tokenProvider = NYql::NDq::CreateGenericTokenProvider(lookupSource.GetToken(), lookupSource.GetServiceAccountId(), lookupSource.GetServiceAccountIdSignature(), credentialsFactory);
+        auto tokenProvider = NYql::NDq::CreateGenericTokenProvider(
+            "",
+            lookupSource.GetToken(), 
+            lookupSource.GetServiceAccountId(), 
+            lookupSource.GetServiceAccountIdSignature(), 
+            credentialsFactory);
         auto guard = Guard(*alloc);
         const auto actor = new TGenericLookupActor(
             connectorClient,

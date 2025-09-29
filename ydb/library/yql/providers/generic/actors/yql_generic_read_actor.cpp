@@ -447,22 +447,8 @@ namespace NYql::NDq {
                                         << ", task_id=" << taskId
                                         << ", partitions_count=" << partitions.size();
 
-        for (const auto& [k, v] : secureParams) {
-            Cout << "secureParams: " << k << "=" << v << Endl;
-        }
-
-        // FIXME: strange piece of logic - authToken is created but not used:
-        // https://a.yandex-team.ru/arcadia/ydb/library/yql/providers/clickhouse/actors/yql_ch_read_actor.cpp?rev=r11550199#L140
-        /*
-        const auto token = secureParams.Value(params.token(), TString{});
-        const auto credentialsProviderFactory =
-            CreateCredentialsProviderFactoryForStructuredToken(credentialsFactory, token);
-        const auto authToken = credentialsProviderFactory->CreateProvider()->GetAuthInfo();
-        const auto one = token.find('#'), two = token.rfind('#');
-        YQL_ENSURE(one != TString::npos && two != TString::npos && one < two, "Bad token format:" << token);
-        */
-
         auto tokenProvider = CreateGenericTokenProvider(
+            secureParams.Value(source.GetTokenName(), ""),
             source.GetToken(),
             source.GetServiceAccountId(),
             source.GetServiceAccountIdSignature(),

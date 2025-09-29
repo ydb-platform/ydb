@@ -76,7 +76,7 @@ namespace NYql {
                 if (const auto maybeGenReadTable = TMaybeNode<TGenReadTable>(read)) {
                     const auto genReadTable = maybeGenReadTable.Cast();
                     YQL_ENSURE(genReadTable.Ref().GetTypeAnn(), "No type annotation for node " << genReadTable.Ref().Content());
-                    const auto token = TString("cluster:default_") += genReadTable.DataSource().Cluster().StringValue();
+                    const auto tokenName = TString("cluster:default_") += genReadTable.DataSource().Cluster().StringValue();
                     const auto rowType = genReadTable.Ref()
                                              .GetTypeAnn()
                                              ->Cast<TTupleExprType>()
@@ -102,7 +102,7 @@ namespace NYql {
                             .Cluster(genReadTable.DataSource().Cluster())
                             .Table(genReadTable.Table().Name())
                             .Token<TCoSecureParam>()
-                                .Name().Build(token)
+                                .Name().Build(tokenName)
                                 .Build()
                             .Columns(std::move(columns))
                             .FilterPredicate(genReadTable.FilterPredicate())
@@ -231,12 +231,16 @@ namespace NYql {
                     // If exist, copy service account creds to obtain tokens during request execution phase.
                     // If exists, copy previously created token.
                     if (IsIn({NYql::EGenericDataSourceKind::YDB, NYql::EGenericDataSourceKind::LOGGING, NYql::EGenericDataSourceKind::ICEBERG}, clusterConfig.kind())) {
+                        // TODO: remove this block as soon as first part YQ-4730 is deployed
                         source.SetServiceAccountId(clusterConfig.GetServiceAccountId());
                         source.SetServiceAccountIdSignature(clusterConfig.GetServiceAccountIdSignature());
                         source.SetToken(State_->Types->Credentials->FindCredentialContent(
                             "default_" + clusterConfig.name(),
                             "default_generic",
                             clusterConfig.GetToken()));
+
+                        const auto tokenName = TString("cluster:default_") += clusterConfig.name();
+                        source.SetTokenName(tokenName);
                     }
 
                     // preserve source description for read actor

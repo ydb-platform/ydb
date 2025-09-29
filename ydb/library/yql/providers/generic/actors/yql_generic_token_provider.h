@@ -19,6 +19,9 @@ namespace NYql::NDq {
             const TString& serviceAccountId,
             const TString& ServiceAccountIdSignature,
             const ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory);
+        TGenericTokenProvider(
+            const TString& structuredToken, 
+            const ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory);
 
         // MaybeFillToken sets IAM-token within DataSourceInstance.
         // Returns string containing error, if it happened.
@@ -31,6 +34,7 @@ namespace NYql::NDq {
 
     TGenericTokenProvider::TPtr
     CreateGenericTokenProvider(
+        const TString& structuredTokenJSON,
         const TString& staticIamToken,
         const TString& serviceAccountId, 
         const TString& serviceAccountIdSignature,

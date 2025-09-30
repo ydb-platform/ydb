@@ -297,6 +297,12 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
             UNIT_ASSERT_EQUAL(settings.Clusters, 2);
         }
         DoPositiveQueriesVectorIndexOrderByCosine(session);
+
+        {
+            const TString dropIndex(Q_("ALTER TABLE `/Root/TestTable` DROP INDEX index"));
+            auto result = session.ExecuteSchemeQuery(dropIndex).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
     }
 
     Y_UNIT_TEST_QUAD(OrderByCosineLevel2, Nullable, UseSimilarity) {

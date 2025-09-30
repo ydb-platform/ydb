@@ -1189,7 +1189,7 @@ message TopicSettings {
     RemoteMirrorRule remote_mirror_rule = 11;
 
     // Metrics level.
-    optional int32 metrics_level = 16;
+    optional uint32 metrics_level = 16;
 }
 
 message AutoPartitioningSettings {

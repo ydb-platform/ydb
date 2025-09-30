@@ -447,7 +447,7 @@ message TPQTabletConfig {
 
     optional bool EnableCompactification = 39 [default = false];
 
-    optional int32 MetricsLevel = 40;
+    optional uint32 MetricsLevel = 40;
 
     // The ID of the Monitoring project that will be used as the value of `project` label for detailed metrics level.
     optional string MonitoringProjectId = 41;

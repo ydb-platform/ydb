@@ -1670,7 +1670,8 @@
                             "CreateTable",
                             "CreateQueue",
                             "RemoveSchema",
-                            "AlterSchema"
+                            "AlterSchema",
+                            "WriteUserAttributes"
                         ],
                         "AccessType": "Allow",
                         "InheritanceType": [
@@ -1750,7 +1751,8 @@
                             "CreateTable",
                             "CreateQueue",
                             "RemoveSchema",
-                            "AlterSchema"
+                            "AlterSchema",
+                            "WriteUserAttributes"
                         ],
                         "AccessType": "Allow",
                         "InheritanceType": [
@@ -1836,7 +1838,8 @@
                             "CreateTable",
                             "CreateQueue",
                             "RemoveSchema",
-                            "AlterSchema"
+                            "AlterSchema",
+                            "WriteUserAttributes"
                         ],
                         "AccessType": "Allow",
                         "InheritanceType": [
@@ -1916,7 +1919,8 @@
                             "CreateTable",
                             "CreateQueue",
                             "RemoveSchema",
-                            "AlterSchema"
+                            "AlterSchema",
+                            "WriteUserAttributes"
                         ],
                         "AccessType": "Allow",
                         "InheritanceType": [
@@ -2002,7 +2006,8 @@
                             "CreateTable",
                             "CreateQueue",
                             "RemoveSchema",
-                            "AlterSchema"
+                            "AlterSchema",
+                            "WriteUserAttributes"
                         ],
                         "AccessType": "Allow",
                         "InheritanceType": [
@@ -2082,7 +2087,8 @@
                             "CreateTable",
                             "CreateQueue",
                             "RemoveSchema",
-                            "AlterSchema"
+                            "AlterSchema",
+                            "WriteUserAttributes"
                         ],
                         "AccessType": "Allow",
                         "InheritanceType": [
@@ -2168,7 +2174,8 @@
                             "CreateTable",
                             "CreateQueue",
                             "RemoveSchema",
-                            "AlterSchema"
+                            "AlterSchema",
+                            "WriteUserAttributes"
                         ],
                         "AccessType": "Allow",
                         "InheritanceType": [
@@ -2248,7 +2255,8 @@
                             "CreateTable",
                             "CreateQueue",
                             "RemoveSchema",
-                            "AlterSchema"
+                            "AlterSchema",
+                            "WriteUserAttributes"
                         ],
                         "AccessType": "Allow",
                         "InheritanceType": [
@@ -2334,7 +2342,8 @@
                             "CreateTable",
                             "CreateQueue",
                             "RemoveSchema",
-                            "AlterSchema"
+                            "AlterSchema",
+                            "WriteUserAttributes"
                         ],
                         "AccessType": "Allow",
                         "InheritanceType": [
@@ -2414,7 +2423,8 @@
                             "CreateTable",
                             "CreateQueue",
                             "RemoveSchema",
-                            "AlterSchema"
+                            "AlterSchema",
+                            "WriteUserAttributes"
                         ],
                         "AccessType": "Allow",
                         "InheritanceType": [
@@ -2553,7 +2563,8 @@
                             "CreateTable",
                             "CreateQueue",
                             "RemoveSchema",
-                            "AlterSchema"
+                            "AlterSchema",
+                            "WriteUserAttributes"
                         ],
                         "AccessType": "Allow",
                         "InheritanceType": [
@@ -2726,7 +2737,8 @@
                             "CreateTable",
                             "CreateQueue",
                             "RemoveSchema",
-                            "AlterSchema"
+                            "AlterSchema",
+                            "WriteUserAttributes"
                         ],
                         "AccessType": "Allow",
                         "InheritanceType": [
@@ -2887,7 +2899,8 @@
                             "CreateTable",
                             "CreateQueue",
                             "RemoveSchema",
-                            "AlterSchema"
+                            "AlterSchema",
+                            "WriteUserAttributes"
                         ],
                         "AccessType": "Allow",
                         "InheritanceType": [

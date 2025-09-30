@@ -133,8 +133,6 @@ common:
     to: /devops/configuration-management/configuration-v1/cms.md
   - from: /maintenance/manual/dynamic-config.md
     to: /devops/configuration-management/configuration-v1/dynamic-config.md
-  - from: /maintenance/manual/cluster_expansion.md
-    to: /devops/configuration-management/configuration-v1/cluster_expansion.md
   - from: /maintenance/manual/config-overview.md
     to: /devops/configuration-management/configuration-v1/config-overview.md
   - from: /maintenance/manual/change_actorsystem_configs.md
@@ -170,10 +168,6 @@ common:
     to: /devops/concepts/system-requirements.md
   - from: /cluster/system-requirements.md
     to: /devops/concepts/system-requirements.md
-
-  # Redirects for maintenance folder
-  - from: /maintenance/(.*)$
-    to: /devops/deployment-options/manual/$1
 
   # Dev-related redirects
   - from: /db/index.md
@@ -500,6 +494,8 @@ ru:
     to: /devops/configuration-management/configuration-v1/dynamic-config-selectors.md
   - from: /maintenance/manual/dynamic-config-volatile-config.md
     to: /devops/configuration-management/configuration-v1/dynamic-config-volatile-config.md
+  - from: /maintenance/manual/cluster_expansion.md
+    to: /devops/configuration-management/configuration-v1/cluster-expansion.md
 
 
 en:

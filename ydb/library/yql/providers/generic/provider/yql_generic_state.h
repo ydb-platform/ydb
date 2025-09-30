@@ -28,9 +28,12 @@ namespace NYql {
                 return ClusterName == other.ClusterName && TableName == other.TableName;
             }
 
-            explicit operator size_t() const {
-                return CombineHashes(std::hash<TString>()(ClusterName), std::hash<TString>()(TableName));
-            }
+            explicit operator size_t() const;
+
+            ///
+            /// Make an unique key for a select request on a cluster table
+            ///
+            size_t MakeKeyFor(const NConnector::NApi::TSelect& select) const;
         };
 
         struct TTableMeta {
@@ -45,7 +48,7 @@ namespace NYql {
             // Contains some binary description of table splits (partitions) produced by Connector
             std::vector<NYql::NConnector::NApi::TSplit> Splits;
             // Contains splits for a particular select
-            std::unordered_map<TString, std::vector<NYql::NConnector::NApi::TSplit>> SelectSplits;
+            std::unordered_map<size_t, std::vector<NYql::NConnector::NApi::TSplit>> SelectSplits;
 
             bool HasSplitsForSelect(const NConnector::NApi::TSelect& select) const;
 

@@ -41,7 +41,8 @@ namespace NYql {
                     EFlag::FlatMapOverOptionals | // To pushdown REGEXP over Utf8 column
                     EFlag::ToStringFromStringExpressions | // To pushdown REGEXP over Utf8 column
                     EFlag::DecimalType | EFlag::DecimalCtor |
-                    EFlag::IntervalCtor
+                    EFlag::IntervalCtor |
+                    EFlag::DateCtor
                 );
                 EnableFunction("Re2.Grep");  // For REGEXP pushdown
             }
@@ -214,8 +215,8 @@ namespace NYql {
         class TGenericPhysicalOptProposalWithListTransformer : public TGraphTransformerBase {
         public:
             explicit TGenericPhysicalOptProposalWithListTransformer(TGenericState::TPtr state)
-                : PhysicalOptTransformer_(new TGenericPhysicalOptProposalTransformer(state))
-                , ListTransformer_(new TGenericListSplitTransformer(state))
+                : PhysicalOptTransformer_(std::make_unique<TGenericPhysicalOptProposalTransformer>(state))
+                , ListTransformer_(std::make_unique<TGenericListSplitTransformer>(state))
                 , AllowAsync_(false)
             { }
 
@@ -254,8 +255,8 @@ namespace NYql {
             }
 
         private:
-            const TAutoPtr<TGenericPhysicalOptProposalTransformer> PhysicalOptTransformer_;
-            const TAutoPtr<TGenericListSplitTransformer> ListTransformer_;
+            const std::unique_ptr<TGenericPhysicalOptProposalTransformer> PhysicalOptTransformer_;
+            const std::unique_ptr<TGenericListSplitTransformer> ListTransformer_;
             bool AllowAsync_;
         };
     } // namespace

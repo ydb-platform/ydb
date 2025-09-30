@@ -18,17 +18,15 @@ namespace NYql {
 /// The order of transformations calls:
 ///
 /// 1. TGenericPhysicalOptProposalTransformer::PushFilterToReadTable pushdowns predicate into
-///    a TGenReadTable.
+///    a TGenReadTable node.
 ///
-/// 2. BuildKqlQuery creates TGenSourceSettings.
+/// 2. TKqpConstantFoldingTransformer folds const expression in a pushdown predicate.
 ///
-/// 3. TKqpConstantFoldingTransformer folds const expression in a pushdown predicate.
-///
-/// 4. TGenericListSplitTransformer performs a ListSplit request.
+/// 3. TGenericListSplitTransformer performs a ListSplit request on a TGenSourceSettings node.
 ///
 class TGenericListSplitTransformer : public TGraphTransformerBase {
     struct TListSplitRequestData {
-        TString Key;
+        size_t Key;
         NConnector::NApi::TSelect Select;
         TGenericState::TTableAddress TableAddress;
     };
@@ -41,7 +39,7 @@ class TGenericListSplitTransformer : public TGraphTransformerBase {
     };
 
     using TListResponseMap =
-        std::unordered_map<TString, TListResponse::TPtr>;
+        std::unordered_map<size_t, TListResponse::TPtr>;
 
 public:
     explicit TGenericListSplitTransformer(TGenericState::TPtr state);

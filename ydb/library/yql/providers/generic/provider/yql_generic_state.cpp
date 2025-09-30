@@ -3,6 +3,18 @@
 #include <ydb/library/yql/providers/generic/provider/yql_generic_utils.h>
 
 namespace NYql {
+    TGenericState::TTableAddress::operator size_t() const {
+        auto seed = std::hash<TString>()(ClusterName);
+        HashCombine(seed, std::hash<TString>()(TableName));
+        return seed;
+    }
+
+    size_t TGenericState::TTableAddress::MakeKeyFor(const NConnector::NApi::TSelect& select) const {
+        auto seed = std::hash<TString>()(ClusterName);
+        HashCombine(seed, GetSelectKey(select));
+        return seed;
+    }
+
     bool TGenericState::TTableMeta::HasSplitsForSelect(const NConnector::NApi::TSelect& select) const {
         return SelectSplits.contains(GetSelectKey(select));
     }
@@ -11,16 +23,14 @@ namespace NYql {
         auto k = GetSelectKey(select);
 
         Y_ENSURE(splits.size());
-        Y_ENSURE(!SelectSplits.contains(k));
-
-        SelectSplits.emplace(k, std::move(splits));
+        Y_ENSURE(SelectSplits.emplace(k, std::move(splits)).second);
     }
 
     const std::vector<NYql::NConnector::NApi::TSplit>& TGenericState::TTableMeta::GetSplitsForSelect(
         const NConnector::NApi::TSelect& select) const {
-        auto k = GetSelectKey(select);
+        const auto it = SelectSplits.find(GetSelectKey(select));
 
-        if (!SelectSplits.contains(k)) {
+        if (it == SelectSplits.end()) {
             throw yexception()
                 << "Table metadata does not contains split for select: "
                 << select.what().DebugString()
@@ -28,7 +38,7 @@ namespace NYql {
                 << select.where().DebugString();
         }
 
-        return SelectSplits.at(k);
+        return it->second;
     }
 
     bool TGenericState::HasTable(const TTableAddress& tableAddress) {
@@ -36,7 +46,6 @@ namespace NYql {
     }
 
     void TGenericState::AddTable(const TTableAddress& tableAddress, TTableMeta&& tableMeta) {
-        Y_ENSURE(!Tables_.contains(tableAddress));
         Tables_.emplace(tableAddress, std::move(tableMeta));
     }
 

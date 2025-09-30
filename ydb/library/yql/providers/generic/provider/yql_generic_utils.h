@@ -1,7 +1,5 @@
 #pragma once
 
-#include <yql/essentials/providers/common/proto/gateways_config.pb.h>
-#include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 #include <ydb/library/yql/providers/generic/provider/yql_generic_state.h>
 #include <ydb/library/yql/providers/generic/expr_nodes/yql_generic_expr_nodes.h>
 
@@ -19,6 +17,11 @@ namespace NYql {
     ///
     /// Get an unique key for a select request
     ///
-    TString GetSelectKey(const NConnector::NApi::TSelect& select);
+    size_t GetSelectKey(const NConnector::NApi::TSelect& select);
+
+    ///
+    /// Combine hashes with minimizing collisions
+    ///
+    void HashCombine(size_t& currentSeed, const size_t& hash);
 
 } // namespace NYql

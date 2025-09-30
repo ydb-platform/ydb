@@ -1,4 +1,3 @@
-#include "yql_generic_provider_impl.h"
 #include "yql_generic_list_splits.h"
 
 #include <library/cpp/json/json_reader.h>
@@ -36,13 +35,6 @@ TGenericListSplitTransformer::TGenericListSplitTransformer(TGenericState::TPtr s
     : State_(std::move(state))
 { }
 
-///
-/// Make an unique key for a select request on a particular cluster table
-///
-TString MakeKeyFor(const TGenericState::TTableAddress& table, const NConnector::NApi::TSelect& select) {
-    return TStringBuilder() << table.ClusterName << GetSelectKey(select);
-}
-
 IGraphTransformer::TStatus TGenericListSplitTransformer::DoTransform(TExprNode::TPtr input,
                                                                      TExprNode::TPtr& output,
                                                                      TExprContext& ctx) {
@@ -60,7 +52,7 @@ IGraphTransformer::TStatus TGenericListSplitTransformer::DoTransform(TExprNode::
         return TStatus::Ok;
     }
 
-    std::unordered_map<TString, TListSplitRequestData> pendingRequests;
+    std::unordered_map<size_t, TListSplitRequestData> pendingRequests;
 
     // Iterate over all settings in the input expression, create ListSplit request if needed
     for (const auto& r : readsSettings) {
@@ -81,12 +73,14 @@ IGraphTransformer::TStatus TGenericListSplitTransformer::DoTransform(TExprNode::
         NConnector::NApi::TSelect select;
         FillSelectFromGenSourceSettings(select, settings, ctx, table.first);
 
-        // Splits has been already acquired for such select, skip it
+        // The one sql query could contain multiple selects, e.g.
+        // join, subquery etc. If splits has been already acquired for a
+        // select, skip it
         if (table.first->HasSplitsForSelect(select)) {
             continue;
         }
 
-        auto k = MakeKeyFor(tableAddress, select);
+        auto k = tableAddress.MakeKeyFor(select);
         auto v = TListSplitRequestData{k, std::move(select), tableAddress};
         pendingRequests.emplace(k, v);
     }
@@ -240,7 +234,7 @@ IGraphTransformer::TStatus TGenericListSplitTransformer::DoApplyAsyncChanges(TEx
         }
 
         // Find appropriate response
-        auto iter = ListResponses_.find(MakeKeyFor(tableAddress, select));
+        auto iter = ListResponses_.find(tableAddress.MakeKeyFor(select));
 
         if (iter == ListResponses_.end()) {
             auto msg = TStringBuilder()

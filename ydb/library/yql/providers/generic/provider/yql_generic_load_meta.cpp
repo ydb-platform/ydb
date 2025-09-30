@@ -1,6 +1,5 @@
 // clang-format off
 #include "yql_generic_provider_impl.h"
-#include "yql_generic_list_splits.h"
 #include "yql_generic_describe_table.h"
 
 #include <library/cpp/json/json_reader.h>

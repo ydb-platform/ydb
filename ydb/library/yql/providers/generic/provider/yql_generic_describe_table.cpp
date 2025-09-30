@@ -443,7 +443,7 @@ TIssues ParseTableMeta(
         return issues;
     }
 
-    for (const auto& column: columns) {
+    for (const auto& column : columns) {
         // Make type annotation
         NYdb::TTypeParser parser(column.type());
         auto typeAnnotation = NFq::MakeType(parser, ctx);
@@ -554,9 +554,7 @@ IGraphTransformer::TStatus TGenericDescribeTableTransformer::DoApplyAsyncChanges
         }
 
         // Save table metadata into provider state
-        if (!State_->HasTable(tableAddress)) {
-            State_->AddTable(tableAddress, std::move(tableMeta));
-        }
+        State_->AddTable(tableAddress, std::move(tableMeta));
     }
 
     return RemapExpr(input, output, replaces, ctx, TOptimizeExprSettings(nullptr));

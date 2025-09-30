@@ -196,11 +196,6 @@ namespace NKikimr::NKqp {
         }
 
     public:
-        void SetUp(NUnitTest::TTestContext& context) override {
-            NUnitTest::TBaseFixture::SetUp(context);
-        }
-
-    public:
         const NYql::TGenericDataSourceInstance DataSourceInstance;
         std::shared_ptr<TConnectorClientMock> ClientMock;
 

@@ -5495,8 +5495,6 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         TestImportChangefeeds({
             {"table", "UINT32", 1, AddedScheme, 3},       // partitioning available (table property)
             {"table_prefix", "UTF8", 1, AddedScheme, 3}   // partitioning unavailable (table property)
-            {"table", "UINT32", 1, AddedScheme, 3},       // partitioning available (table property)
-            {"table_prefix", "UTF8", 1, AddedScheme, 3}   // partitioning unavailable (table property)
         });
     }
 

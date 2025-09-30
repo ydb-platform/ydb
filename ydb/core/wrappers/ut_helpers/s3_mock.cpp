@@ -420,7 +420,6 @@ bool TS3Mock::TRequest::DoReply(const TReplyParams& params) {
     case EMethod::Head:
     case EMethod::Get:
         if (queryParams.Has("prefix")) {
-            Cerr << "bucket_name!!!!# " << pathStr << Endl;
             return HttpServeList(params, pathStr == "/" ? "" : pathStr, queryParams.Get("prefix"));
         } else if (Parent->Data.contains(pathStr)) {
             return HttpServeRead(params, method, pathStr);

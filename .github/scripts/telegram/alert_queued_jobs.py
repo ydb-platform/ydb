@@ -33,7 +33,7 @@ WORKFLOW_THRESHOLDS = [
     # ["Nightly", 12, "Nightly-Build"]
 ]
 
-def fetch_workflow_runs(status: str = "queued", per_page: int = 1000, page: int = 1) -> Dict[str, Any]:
+def fetch_workflow_runs(status: str = "queued", per_page: int = 1000, page: int = 1) -> tuple[Dict[str, Any], str]:
     """
     Получает данные о workflow runs из GitHub API.
     
@@ -43,7 +43,7 @@ def fetch_workflow_runs(status: str = "queued", per_page: int = 1000, page: int 
         page: Номер страницы
     
     Returns:
-        Словарь с данными API ответа
+        Кортеж (данные, ошибка). Если успешно - (data, ""), если ошибка - ({}, error_message)
     """
     url = "https://api.github.com/repos/ydb-platform/ydb/actions/runs"
     params = {
@@ -53,12 +53,73 @@ def fetch_workflow_runs(status: str = "queued", per_page: int = 1000, page: int 
     }
     
     try:
-        response = requests.get(url, params=params)
-        response.raise_for_status()
-        return response.json()
+        response = requests.get(url, params=params, timeout=30)
+        
+        if response.status_code == 200:
+            return response.json(), ""
+        else:
+            # Возвращаем ошибку как есть от API
+            try:
+                error_data = response.json()
+                error_message = error_data.get("message", f"HTTP {response.status_code}")
+            except:
+                error_message = f"HTTP {response.status_code}: {response.text}"
+            
+            return {}, error_message
+            
+    except requests.exceptions.Timeout:
+        return {}, "Timeout: Запрос превысил время ожидания (30 сек)"
+    except requests.exceptions.ConnectionError:
+        return {}, "Connection error: Не удалось подключиться к API"
     except requests.exceptions.RequestException as e:
-        print(f"Error when requesting API: {e}")
-        return {}
+        return {}, f"Request error: {e}"
+    except Exception as e:
+        return {}, f"Unexpected error: {e}"
+
+def get_effective_start_time(run: Dict[str, Any]) -> datetime:
+    """
+    Получает эффективное время начала для run (учитывает retry).
+    
+    Args:
+        run: Workflow run объект
+    
+    Returns:
+        datetime: Эффективное время начала
+    """
+    run_attempt = run.get('run_attempt', 1)
+    run_started_at_str = run.get('run_started_at')
+    updated_at_str = run.get('updated_at')
+    created_at_str = run.get('created_at')
+    
+    # Для retry jobs используем updated_at (время последнего изменения статуса)
+    # так как API с status=queued всегда возвращает только queued jobs
+    if run_attempt > 1 and updated_at_str:
+        try:
+            return datetime.fromisoformat(updated_at_str.replace('Z', '+00:00'))
+        except ValueError:
+            pass
+    
+    # Для первой попытки используем created_at
+    if created_at_str:
+        try:
+            return datetime.fromisoformat(created_at_str.replace('Z', '+00:00'))
+        except ValueError:
+            pass
+    
+    # Fallback - текущее время
+    return datetime.now(timezone.utc)
+
+def is_retry_job(run: Dict[str, Any]) -> bool:
+    """
+    Определяет, является ли job retry.
+    
+    Args:
+        run: Workflow run объект
+    
+    Returns:
+        bool: True если это retry job
+    """
+    return run.get('run_attempt', 1) > 1
 
 def analyze_queued_workflows(workflow_runs: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
     """
@@ -81,25 +142,19 @@ def analyze_queued_workflows(workflow_runs: List[Dict[str, Any]]) -> Dict[str, D
     
     for run in workflow_runs:
         workflow_name = run.get('name', 'Unknown')
-        created_at_str = run.get('created_at')
         run_id = run.get('id')
         
         workflow_info[workflow_name]['count'] += 1
         workflow_info[workflow_name]['runs'].append(run)
         
-        if created_at_str:
-            try:
-                # Парсим ISO 8601 формат времени
-                created_at = datetime.fromisoformat(created_at_str.replace('Z', '+00:00'))
-                
-                # Проверяем, является ли этот run самым старым
-                if (workflow_info[workflow_name]['oldest_created_at'] is None or 
-                    created_at < workflow_info[workflow_name]['oldest_created_at']):
-                    workflow_info[workflow_name]['oldest_created_at'] = created_at
-                    workflow_info[workflow_name]['oldest_run_id'] = run_id
-                    
-            except ValueError as e:
-                print(f"Ошибка парсинга времени для run {run_id}: {e}")
+        # Получаем эффективное время начала (учитывает retry)
+        effective_start_time = get_effective_start_time(run)
+        
+        # Проверяем, является ли этот run самым старым
+        if (workflow_info[workflow_name]['oldest_created_at'] is None or 
+            effective_start_time < workflow_info[workflow_name]['oldest_created_at']):
+            workflow_info[workflow_name]['oldest_created_at'] = effective_start_time
+            workflow_info[workflow_name]['oldest_run_id'] = run_id
     
     return dict(workflow_info)
 
@@ -242,21 +297,17 @@ def check_for_stuck_jobs(workflow_runs: List[Dict[str, Any]], threshold_hours: i
     current_time = datetime.now(timezone.utc)
     
     for run in workflow_runs:
-        created_at_str = run.get('created_at')
-        if created_at_str:
-            try:
-                created_at = datetime.fromisoformat(created_at_str.replace('Z', '+00:00'))
-                time_diff = current_time - created_at
-                waiting_hours = time_diff.total_seconds() / 3600
-                
-                # Используем наши критерии для определения застрявших jobs
-                if is_job_stuck_by_criteria(run, waiting_hours):
-                    stuck_jobs.append({
-                        'run': run,
-                        'waiting_hours': waiting_hours
-                    })
-            except ValueError:
-                pass
+        # Получаем эффективное время начала (учитывает retry)
+        effective_start_time = get_effective_start_time(run)
+        time_diff = current_time - effective_start_time
+        waiting_hours = time_diff.total_seconds() / 3600
+        
+        # Используем наши критерии для определения застрявших jobs
+        if is_job_stuck_by_criteria(run, waiting_hours):
+            stuck_jobs.append({
+                'run': run,
+                'waiting_hours': waiting_hours
+            })
     
     return stuck_jobs
 
@@ -360,6 +411,7 @@ def format_telegram_messages(workflow_info: Dict[str, Dict[str, Any]], stuck_job
             waiting_hours = stuck_job['waiting_hours']
             workflow_name = run.get('name', 'Unknown')
             run_id = run.get('id')
+            run_attempt = run.get('run_attempt', 1)
             
             if waiting_hours > 24:
                 waiting_str = f"{waiting_hours/24:.1f} дн"
@@ -368,8 +420,11 @@ def format_telegram_messages(workflow_info: Dict[str, Dict[str, Any]], stuck_job
             else:
                 waiting_str = f"{waiting_hours*60:.0f} мин"
             
+            # Добавляем информацию о retry
+            retry_info = f" (retry #{run_attempt})" if run_attempt > 1 else ""
+            
             github_url = f"https://github.com/ydb-platform/ydb/actions/runs/{run_id}" if run_id else "N/A"
-            message2_parts.append(f"{i}. `{workflow_name}` - {waiting_str}")
+            message2_parts.append(f"{i}. `{workflow_name}`{retry_info} - {waiting_str}")
             if run_id:
                 message2_parts.append(f"   [Run {run_id}]({github_url})")
             message2_parts.append("")
@@ -427,6 +482,22 @@ def test_telegram_connection(bot_token: str, chat_id: str, thread_id: int = None
     except requests.exceptions.RequestException as e:
         print(f"❌ Ошибка соединения с Telegram: {e}")
         return False
+
+def send_api_error_notification(bot_token: str, chat_id: str, error_message: str, thread_id: int = None) -> bool:
+    """
+    Отправляет уведомление об ошибке API в Telegram.
+    
+    Args:
+        bot_token: Токен Telegram бота
+        chat_id: ID чата
+        error_message: Сообщение об ошибке
+        thread_id: ID thread для групповых сообщений
+    
+    Returns:
+        True если успешно, False иначе
+    """
+    message = f"⚠️ *ОШИБКА МОНИТОРИНГА GITHUB ACTIONS*\n\n{error_message}\n\n🕐 *Время:* {datetime.now().strftime('%H:%M:%S UTC')}\n\n{TAIL_MESSAGE}"
+    return send_telegram_message(bot_token, chat_id, message, thread_id, "MarkdownV2")
 
 def send_telegram_message(bot_token: str, chat_id: str, message: str, thread_id: int = None, parse_mode: str = "MarkdownV2") -> bool:
     """
@@ -494,6 +565,8 @@ def main():
                        help='Только тестировать соединение с Telegram')
     parser.add_argument('--send-when-all-good', action='store_true',
                        help='Отправлять сообщение даже когда все jobs работают нормально')
+    parser.add_argument('--notify-on-api-errors', action='store_true',
+                       help='Отправлять уведомления в Telegram при ошибках API')
     
     args = parser.parse_args()
     
@@ -506,6 +579,7 @@ def main():
     thread_id = args.thread_id or os.getenv('TELEGRAM_THREAD_ID')
     dry_run = args.dry_run or os.getenv('DRY_RUN', 'false').lower() == 'true'
     send_when_all_good = args.send_when_all_good or os.getenv('SEND_WHEN_ALL_GOOD', 'false').lower() == 'true'
+    notify_on_api_errors = args.notify_on_api_errors or os.getenv('NOTIFY_ON_API_ERRORS', 'false').lower() == 'true'
     
     # Исправляем формат chat_id для каналов (как в parse_and_send_team_issues.py)
     if chat_id and not chat_id.startswith('-') and len(chat_id) >= 10:
@@ -537,14 +611,50 @@ def main():
     
     # Получаем данные для статуса "queued"
     print("📡 Загружаем данные для статуса: queued")
-    data = fetch_workflow_runs(status="queued")
+    data, error = fetch_workflow_runs(status="queued")
     
-    if 'workflow_runs' not in data:
-        print("❌ Не удалось получить данные из API")
+    if error:
+        print(f"❌ GitHub API error: {error}")
+        
+        # Отправляем уведомление об ошибке API если включено
+        if notify_on_api_errors:
+            if dry_run:
+                print(f"\n📤 DRY-RUN: Уведомление об ошибке API для Telegram {chat_id}:{thread_id}")
+                print("-" * 50)
+                print(f"⚠️ *ОШИБКА МОНИТОРИНГА GITHUB ACTIONS*\n\n{error}\n\n🕐 *Время:* {datetime.now().strftime('%H:%M:%S UTC')}\n\n{TAIL_MESSAGE}")
+                print("-" * 50)
+            else:
+                print("📤 Отправляем уведомление об ошибке API в Telegram...")
+                if send_api_error_notification(bot_token, chat_id, error, thread_id):
+                    print("✅ Уведомление об ошибке отправлено")
+                else:
+                    print("❌ Ошибка отправки уведомления об ошибке")
+        
         sys.exit(1)
     
     queued_runs = data['workflow_runs']
     print(f"📊 Найдено {len(queued_runs)} workflow runs в очереди")
+    
+    # Проверяем, что получили данные
+    if not queued_runs:
+        print("✅ Нет workflow runs в очереди")
+        # Отправляем сообщение о том, что очередь пуста
+        message = "✅ *МОНИТОРИНГ GITHUB ACTIONS*\n\nОчередь пуста - все jobs работают нормально! 🎉"
+        
+        if dry_run:
+            print(f"\n📤 DRY-RUN: Сообщение для Telegram:{chat_id}:{thread_id}")
+            print("-" * 50)
+            print(message)
+            print("-" * 50)
+        elif send_when_all_good:
+            print(f"📤 Отправляем сообщение о пустой очереди в Telegram")
+            if send_telegram_message(bot_token, chat_id, message, thread_id, "MarkdownV2"):
+                print("✅ Сообщение о пустой очереди отправлено успешно")
+            else:
+                print("❌ Ошибка отправки сообщения о пустой очереди")
+        else:
+            print(f"📤 Очередь пуста - ничего не отправляем")
+        return
     
     # Фильтруем старые jobs (старше MAX_AGE_DAYS дней)
     filtered_runs = filter_old_jobs(queued_runs)

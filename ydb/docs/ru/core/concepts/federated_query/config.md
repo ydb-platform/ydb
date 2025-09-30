@@ -1,6 +1,6 @@
 # Конфигурация внешних источников
 
-Внешние источники настраиваиваются в секциях конфига [feature_flags](../../reference/configuration/feature_flags.md), `query_service_config`.
+Параметры работы {{ ydb-short-name }} с внешними источниками данных с помощью функциональности федеративных запросов настраиваиваются в секциях конфига [feature_flags](../../reference/configuration/feature_flags.md), `query_service_config`.
 Если для доступа к нужному вам источнику требуется развернуть коннектор, необходимо также необходимо настроить [коннектор](architecture.md#connectors) по [инструкции](../../devops/deployment-options/manual/federated-queries/connector-deployment.md).
 Имеется возможность разрешить как все типы внешних источников, так и только определенные типы.
 

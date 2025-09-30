@@ -35,9 +35,9 @@ namespace NYdb::NConsoleClient {
             std::pair<TString, NYdb::NTopic::ECodec>("zstd", NYdb::NTopic::ECodec::ZSTD),
         };
 
-        TVector<i32> ExistingMetricsLevels = {1, 2, 3, 4};
+        TVector<ui32> ExistingMetricsLevels = {1, 2, 3, 4};
 
-        THashMap<i32, TString> MetricsLevelsDescriptions = {
+        THashMap<ui32, TString> MetricsLevelsDescriptions = {
             {1, "No metrics."},
             {2, "Database level metrics."},
             {3, "Database and object level metrics."},

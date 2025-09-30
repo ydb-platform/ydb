@@ -13,6 +13,7 @@ CREATE [OR REPLACE] STREAMING QUERY [IF NOT EXISTS] <query name> [WITH (
 BEGIN
     <query statement1>;
 END;
+```
 
 Настройки WITH:
 

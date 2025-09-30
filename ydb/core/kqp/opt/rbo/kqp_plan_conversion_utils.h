@@ -2,6 +2,9 @@
 
 #include "kqp_operator.h"
 
+/**
+ * Convert a plan from ExprNode operators into RBO operators and back
+ */
 namespace NKikimr {
 namespace NKqp {
 

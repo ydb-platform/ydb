@@ -115,6 +115,24 @@ void TimestampToProtoWithSaturation(google::protobuf::Timestamp* proto, TInstant
     );
 }
 
+bool GetUserGroupSids(const std::string& serializedUserGroupSids, TVector<NACLib::TSID>& userGroupSids) {
+    NJson::TJsonValue value;
+    if (!NJson::ReadJsonTree(serializedUserGroupSids, &value) || value.GetType() != NJson::JSON_ARRAY) {
+        return false;
+    }
+
+    const auto sidsSize = value.GetIntegerRobust();
+    userGroupSids.reserve(sidsSize);
+    for (i64 i = 0; i < sidsSize; ++i) {
+        const NJson::TJsonValue* userSid = nullptr;
+        value.GetValuePointer(i, &userSid);
+        Y_ENSURE(userSid);
+
+        userGroupSids.emplace_back(userSid->GetString());
+    }
+    return true;
+}
+
 class TQueryBase : public NKikimr::TQueryBase {
 public:
     struct TSettings {
@@ -974,21 +992,9 @@ public:
 
             TVector<NACLib::TSID> userGroupSids;
             if (const auto serializedUserGroupSids = result.ColumnParser("user_group_sids").GetOptionalJsonDocument()) {
-                NJson::TJsonValue value;
-                if (!NJson::ReadJsonTree(*serializedUserGroupSids, &value) || value.GetType() != NJson::JSON_ARRAY) {
+                if (!GetUserGroupSids(*serializedUserGroupSids, userGroupSids)) {
                     Finish(Ydb::StatusIds::INTERNAL_ERROR, "User group sids are corrupted");
                     return;
-                }
-
-                const auto sidsSize = value.GetIntegerRobust();
-
-                userGroupSids.reserve(sidsSize);
-                for (i64 i = 0; i < sidsSize; ++i) {
-                    const NJson::TJsonValue* userSid = nullptr;
-                    value.GetValuePointer(i, &userSid);
-                    Y_ENSURE(userSid);
-
-                    userGroupSids.emplace_back(userSid->GetString());
                 }
             }
 
@@ -3735,6 +3741,7 @@ public:
                 meta,
                 customer_supplied_id,
                 user_token,
+                user_group_sids,
                 script_sinks,
                 script_secret_names,
                 retry_state,
@@ -3798,7 +3805,14 @@ public:
             }
 
             if (const auto userToken = result.ColumnParser("user_token").GetOptionalUtf8()) {
-                Response->UserToken = *userToken;
+                TVector<NACLib::TSID> userGroupSids;
+                if (const auto serializedUserGroupSids = result.ColumnParser("user_group_sids").GetOptionalJsonDocument()) {
+                    if (!GetUserGroupSids(*serializedUserGroupSids, userGroupSids)) {
+                        Finish(Ydb::StatusIds::INTERNAL_ERROR, "User group sids are corrupted");
+                        return;
+                    }
+                }
+                Response->UserToken = new NACLib::TUserToken(TString(*userToken), userGroupSids);
             }
 
             if (SerializedSinks = result.ColumnParser("script_sinks").GetOptionalJsonDocument()) {

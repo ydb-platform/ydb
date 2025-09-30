@@ -1774,6 +1774,11 @@ message TImmediateControlsConfig {
             MinValue: 0,
             MaxValue: 1,
             DefaultValue: 0 }];
+        optional uint64 SemiStrictSpaceIsolation = 5 [(ControlOptions) = {
+            Description: "If not 0, override PDiskConfig.SpaceColorBorder: 1 - LightYellowMove, 2 - YellowStop",
+            MinValue: 0,
+            MaxValue: 2,
+            DefaultValue: 0 }];
 
     }
 

@@ -124,7 +124,7 @@ public:
         TPartitionPrunerConfig partitionPrunerConfig,
         const TString& database,
         const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
-        TResultSetFormatSettings resultSetFormatSettings,
+        NFormats::TFormatsSettings formatsSettings,
         TKqpRequestCounters::TPtr counters,
         const TExecuterConfig& executerConfig,
         const TIntrusivePtr<TUserRequestContext>& userRequestContext,
@@ -141,7 +141,7 @@ public:
         , TxManager(txManager)
         , Database(database)
         , UserToken(userToken)
-        , ResultSetFormatSettings(std::move(resultSetFormatSettings))
+        , FormatsSettings(std::move(formatsSettings))
         , Counters(counters)
         , ExecuterSpan(spanVerbosity, std::move(Request.TraceId), spanName)
         , Planner(nullptr)
@@ -307,9 +307,9 @@ protected:
         }
 
         bool fillSchema = false;
-        if (ResultSetFormatSettings.IsSchemaInclusionAlways()) {
+        if (FormatsSettings.IsSchemaInclusionAlways()) {
             fillSchema = true;
-        } else if (ResultSetFormatSettings.IsSchemaInclusionFirstOnly()) {
+        } else if (FormatsSettings.IsSchemaInclusionFirstOnly()) {
             fillSchema =
                 (SentResultIndexes.find(resultIndex) == SentResultIndexes.end());
         } else {
@@ -319,7 +319,7 @@ protected:
         TKqpProtoBuilder protoBuilder{*AppData()->FunctionRegistry};
         protoBuilder.BuildYdbResultSet(
             *streamEv->Record.MutableResultSet(), std::move(batches),
-            txResult.MkqlItemType, ResultSetFormatSettings, fillSchema,
+            txResult.MkqlItemType, FormatsSettings, fillSchema,
             txResult.ColumnOrder, txResult.ColumnHints);
 
         // TODO: Calculate rows/bytes count for the arrow format of result set
@@ -1282,7 +1282,7 @@ protected:
     IKqpTransactionManagerPtr TxManager;
     const TString Database;
     const TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
-    TResultSetFormatSettings ResultSetFormatSettings;
+    NFormats::TFormatsSettings FormatsSettings;
     TKqpRequestCounters::TPtr Counters;
     std::unique_ptr<TQueryExecutionStats> Stats;
     TInstant LastProgressStats;
@@ -1362,7 +1362,7 @@ private:
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
-    const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TResultSetFormatSettings resultSetFormatSettings,
+    const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, NFormats::TFormatsSettings formatsSettings,
     TKqpRequestCounters::TPtr counters, bool streamResult, const TExecuterConfig& executerConfig,
     NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, const TActorId& creator,
     const TIntrusivePtr<TUserRequestContext>& userRequestContext, ui32 statementResultIndex,
@@ -1372,7 +1372,7 @@ IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const
     TMaybe<NBatchOperations::TSettings> batchOperationSettings, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, ui64 generation);
 
 IActor* CreateKqpScanExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
-    const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TResultSetFormatSettings resultSetFormatSettings,
+    const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, NFormats::TFormatsSettings formatsSettings,
     TKqpRequestCounters::TPtr counters, const TExecuterConfig& executerConfig,
     NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
     const TIntrusivePtr<TUserRequestContext>& userRequestContext, ui32 statementResultIndex,

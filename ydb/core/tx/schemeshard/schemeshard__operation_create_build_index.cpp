@@ -40,6 +40,30 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
     const auto& op = tx.GetInitiateIndexBuild();
     const auto& indexDesc = op.GetIndex();
 
+    switch (GetIndexType(indexDesc)) {
+        case NKikimrSchemeOp::EIndexTypeGlobal:
+        case NKikimrSchemeOp::EIndexTypeGlobalAsync:
+            // no feature flag, everything is fine
+            break;
+        case NKikimrSchemeOp::EIndexTypeGlobalUnique:
+            if (!context.SS->EnableInitialUniqueIndex) {
+                return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, "Adding a unique index to an existing table is disabled")};
+            }
+            break;
+        case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
+            if (!context.SS->EnableVectorIndex) {
+                return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, "Vector index support is disabled")};
+            }
+            break;
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltext:
+            if (!context.SS->EnableFulltextIndex) {
+                return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, "Fulltext index support is disabled")};
+            }
+            break;
+        default:
+            return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, InvalidIndexType(indexDesc.GetType()))};
+    }
+
     const auto table = TPath::Resolve(op.GetTable(), context.SS);
     const auto index = table.Child(indexDesc.GetName());
     {
@@ -93,15 +117,14 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
     }
 
     TVector<ISubOperation::TPtr> result;
-    const NKikimrSchemeOp::EIndexType indexType = indexDesc.HasType() ? indexDesc.GetType() : NKikimrSchemeOp::EIndexTypeGlobal;
 
     {
         auto outTx = TransactionTemplate(table.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpCreateTableIndex);
         *outTx.MutableLockGuard() = tx.GetLockGuard();
         outTx.MutableCreateTableIndex()->CopyFrom(indexDesc);
+        outTx.MutableCreateTableIndex()->SetType(GetIndexType(indexDesc));
         outTx.MutableCreateTableIndex()->SetState(NKikimrSchemeOp::EIndexStateWriteOnly);
         outTx.SetInternal(tx.GetInternal());
-        outTx.MutableCreateTableIndex()->SetType(indexType);
 
         result.push_back(CreateNewTableIndex(NextPartId(opId, result), outTx));
     }
@@ -118,7 +141,7 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
     }
 
     auto createImplTable = [&](NKikimrSchemeOp::TTableDescription&& implTableDesc) {
-        if (indexType != NKikimrSchemeOp::EIndexTypeGlobalUnique) {
+        if (GetIndexType(indexDesc) != NKikimrSchemeOp::EIndexTypeGlobalUnique) {
             implTableDesc.MutablePartitionConfig()->SetShadowData(true);
         }
 
@@ -129,34 +152,56 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
         return CreateInitializeBuildIndexImplTable(NextPartId(opId, result), outTx);
     };
 
-    if (indexDesc.GetType() == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
-        const bool prefixVectorIndex = indexDesc.GetKeyColumnNames().size() > 1;
-        NKikimrSchemeOp::TTableDescription indexLevelTableDesc, indexPostingTableDesc, indexPrefixTableDesc;
-        // TODO After IndexImplTableDescriptions are persisted, this should be replaced with Y_ABORT_UNLESS
-        if (indexDesc.IndexImplTableDescriptionsSize() == 2 + prefixVectorIndex) {
-            indexLevelTableDesc = indexDesc.GetIndexImplTableDescriptions(0);
-            indexPostingTableDesc = indexDesc.GetIndexImplTableDescriptions(1);
-            if (prefixVectorIndex) {
-                indexPrefixTableDesc = indexDesc.GetIndexImplTableDescriptions(2);
+    switch (GetIndexType(indexDesc)) {
+        case NKikimrSchemeOp::EIndexTypeGlobal:
+        case NKikimrSchemeOp::EIndexTypeGlobalAsync:
+        case NKikimrSchemeOp::EIndexTypeGlobalUnique: {
+            NKikimrSchemeOp::TTableDescription indexTableDesc;
+            // TODO After IndexImplTableDescriptions are persisted, this should be replaced with Y_ABORT_UNLESS
+            if (indexDesc.IndexImplTableDescriptionsSize() == 1) {
+                indexTableDesc = indexDesc.GetIndexImplTableDescriptions(0);
             }
+            auto implTableDesc = CalcImplTableDesc(tableInfo, implTableColumns, indexTableDesc);
+            // TODO if keep erase markers also speedup compaction or something else we can enable it for other impl tables too
+            implTableDesc.MutablePartitionConfig()->MutableCompactionPolicy()->SetKeepEraseMarkers(true);
+            result.push_back(createImplTable(std::move(implTableDesc)));
+            break;
         }
-        const THashSet<TString> indexDataColumns{indexDesc.GetDataColumnNames().begin(), indexDesc.GetDataColumnNames().end()};
-        result.push_back(createImplTable(CalcVectorKmeansTreeLevelImplTableDesc(tableInfo->PartitionConfig(), indexLevelTableDesc)));
-        result.push_back(createImplTable(CalcVectorKmeansTreePostingImplTableDesc(tableInfo, tableInfo->PartitionConfig(), indexDataColumns, indexPostingTableDesc)));
-        if (prefixVectorIndex) {
-            const THashSet<TString> prefixColumns{indexDesc.GetKeyColumnNames().begin(), indexDesc.GetKeyColumnNames().end() - 1};
-            result.push_back(createImplTable(CalcVectorKmeansTreePrefixImplTableDesc(prefixColumns, tableInfo, tableInfo->PartitionConfig(), implTableColumns, indexPrefixTableDesc)));
+        case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree: {
+            const bool prefixVectorIndex = indexDesc.GetKeyColumnNames().size() > 1;
+            NKikimrSchemeOp::TTableDescription indexLevelTableDesc, indexPostingTableDesc, indexPrefixTableDesc;
+            // TODO After IndexImplTableDescriptions are persisted, this should be replaced with Y_ABORT_UNLESS
+            if (indexDesc.IndexImplTableDescriptionsSize() == 2 + prefixVectorIndex) {
+                indexLevelTableDesc = indexDesc.GetIndexImplTableDescriptions(0);
+                indexPostingTableDesc = indexDesc.GetIndexImplTableDescriptions(1);
+                if (prefixVectorIndex) {
+                    indexPrefixTableDesc = indexDesc.GetIndexImplTableDescriptions(2);
+                }
+            }
+            const THashSet<TString> indexDataColumns{indexDesc.GetDataColumnNames().begin(), indexDesc.GetDataColumnNames().end()};
+            result.push_back(createImplTable(CalcVectorKmeansTreeLevelImplTableDesc(tableInfo->PartitionConfig(), indexLevelTableDesc)));
+            result.push_back(createImplTable(CalcVectorKmeansTreePostingImplTableDesc(tableInfo, tableInfo->PartitionConfig(), indexDataColumns, indexPostingTableDesc)));
+            if (prefixVectorIndex) {
+                const THashSet<TString> prefixColumns{indexDesc.GetKeyColumnNames().begin(), indexDesc.GetKeyColumnNames().end() - 1};
+                result.push_back(createImplTable(CalcVectorKmeansTreePrefixImplTableDesc(prefixColumns, tableInfo, tableInfo->PartitionConfig(), implTableColumns, indexPrefixTableDesc)));
+            }
+            break;
         }
-    } else {
-        NKikimrSchemeOp::TTableDescription indexTableDesc;
-        // TODO After IndexImplTableDescriptions are persisted, this should be replaced with Y_ABORT_UNLESS
-        if (indexDesc.IndexImplTableDescriptionsSize() == 1) {
-            indexTableDesc = indexDesc.GetIndexImplTableDescriptions(0);
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltext: {
+            NKikimrSchemeOp::TTableDescription indexTableDesc;
+            // TODO After IndexImplTableDescriptions are persisted, this should be replaced with Y_ABORT_UNLESS
+            if (indexDesc.IndexImplTableDescriptionsSize() == 1) {
+                indexTableDesc = indexDesc.GetIndexImplTableDescriptions(0);
+            }
+            const THashSet<TString> indexDataColumns{indexDesc.GetDataColumnNames().begin(), indexDesc.GetDataColumnNames().end()};
+            auto implTableDesc = CalcFulltextImplTableDesc(tableInfo, tableInfo->PartitionConfig(), indexDataColumns, indexTableDesc);
+            implTableDesc.MutablePartitionConfig()->MutableCompactionPolicy()->SetKeepEraseMarkers(true);
+            result.push_back(createImplTable(std::move(implTableDesc)));
+            break;
         }
-        auto implTableDesc = CalcImplTableDesc(tableInfo, implTableColumns, indexTableDesc);
-        // TODO if keep erase markers also speedup compaction or something else we can enable it for other impl tables too
-        implTableDesc.MutablePartitionConfig()->MutableCompactionPolicy()->SetKeepEraseMarkers(true);
-        result.push_back(createImplTable(std::move(implTableDesc)));
+        default:
+            Y_DEBUG_ABORT_S(NTableIndex::InvalidIndexType(indexDesc.GetType()));
+            break;
     }
 
     return result;

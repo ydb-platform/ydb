@@ -59,10 +59,9 @@ void TPartition::HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorCo
 
                     PROPERTIES("Information") {
                         PROPERTY("Total partition size, bytes", Size());
-                        PROPERTY("Total message count", (BlobEncoder.Head.GetNextOffset() - CompactionBlobEncoder.StartOffset));
-                        PROPERTY("StartOffset", CompactionBlobEncoder.StartOffset);
-                        PROPERTY("EndOffset", BlobEncoder.EndOffset);
-                        PROPERTY("LastOffset", BlobEncoder.Head.GetNextOffset());
+                        PROPERTY("Total message count", (GetEndOffset() - GetStartOffset()));
+                        PROPERTY("StartOffset", GetStartOffset());
+                        PROPERTY("EndOffset", GetEndOffset());
                         PROPERTY("Last message WriteTimestamp", EndWriteTimestamp.ToRfc822String());
                         PROPERTY("HeadOffset", BlobEncoder.Head.Offset << ", count: " << BlobEncoder.Head.GetCount());
                     }
@@ -302,7 +301,7 @@ void TPartition::HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorCo
                                 TABLER() {
                                     TABLED() {out << EncodeHtmlPcdata(user);}
                                     TABLED() {out << userInfo.Offset;}
-                                    TABLED() {out << (BlobEncoder.EndOffset - userInfo.Offset);}
+                                    TABLED() {out << (GetEndOffset() - userInfo.Offset);}
                                     TABLED() {out << ToStringLocalTimeUpToSeconds(userInfo.ReadFromTimestamp);}
                                     TABLED() {out << ToStringLocalTimeUpToSeconds(snapshot.LastCommittedMessage.WriteTimestamp);}
                                     TABLED() {out << ToStringLocalTimeUpToSeconds(snapshot.LastCommittedMessage.WriteTimestamp);}

@@ -1,5 +1,37 @@
 # {{ ydb-short-name }} Server changelog
 
+## Version 25.2 {#25-2}
+
+### Release candidate 25.2.1.10 {#25-2-1-10-rc}
+
+Release date: September 21, 2025.
+
+#### Functionality
+
+* [Analytical capabilities](./concepts/analytics/index.md) are available by default: [column-oriented tables](./concepts/datamodel/table.md?version=v25.2#column-oriented-tables) can be created without special flags, using LZ4 compression and hash partitioning. Supported operations include a wide range of DML operations (UPDATE, DELETE, UPSERT, INSERT INTO ... SELECT) and CREATE TABLE AS SELECT. Integration with dbt, Apache Airflow, Jupyter, Superset, and federated queries to S3 enables building end-to-end analytical pipelines in YDB.  
+* [Cost-Based Optimizer](./concepts/optimizer.md?version=v25.2) is enabled by default for queries involving at least one column-oriented table but can also be enabled manually for other queries. The Cost-Based Optimizer improves query performance by determining the optimal join order and join types based on table statistics; supported [hints](./dev/query-hints.md) allow fine-tuning execution plans for complex analytical queries.
+* Added YDB Transfer – an asynchronous mechanism for transferring data from a topic to a table. You can create a transfer, update or delete it using YQL commands.
+* Added [spilling](./concepts/spilling.md?version=v25.2), a memory management mechanism, that temporarily offloads intermediate data arising from computations and exceeding available node RAM capacity to external storage. Spilling allows executing user queries that require processing large data volumes exceeding available node memory.
+* Increased the [maximum amount of time allowed for a single query to execute](./concepts/limits-ydb?version=v25.2) from 30 minutes to 2 hours.
+* Added support for a user-defined Certificate Authority (CA) and [Yandex Cloud Identity and Access Management (IAM)](https://yandex.cloud/ru/docs/iam) authentication in [asynchronous replication](./yql/reference/syntax/create-async-replication.md?version=v25.2).
+* Enabled by default:
+
+  * [vector index](./dev/vector-indexes.md?version=v25.2) for approximate vector similarity search,
+  * support for [client-side consumer balancing](https://www.confluent.io/blog/cooperative-rebalancing-in-kafka-streams-consumer-ksqldb), [compacted topics](https://docs.confluent.io/kafka/design/log_compaction.html) and [transactions](https://www.confluent.io/blog/transactions-apache-kafka/) in [YDB Topics Kafka API](./reference/kafka-api/index.md?version=v25.2),
+  * support for [auto-partitioning topics](./concepts/cdc.md?version=v25.2#topic-partitions) for row-oriented tables in CDC,
+  * support for auto-partitioning topics in asynchronous replication,
+  * support for [parameterized Decimal type](./yql/reference/types/primitive.md?version=v25.2#numeric),
+  * support for [Datetime64 data type](./yql/reference/types/primitive.md?version=v25.2#datetime),
+  * automatic cleanup of temporary tables and directories during export to S3,
+  * support for [changefeeds](./concepts/cdc.md?version=v25.2) in backup and restore operations,
+  * the ability to [enable followers (read replicas)](./yql/reference/syntax/alter_table/indexes.md?version=v25.2) for covered secondary indexes,
+  * system views with [history of overloaded partitions](./dev/system-views.md?version=v25.2#top-overload-partitions).
+
+#### Bug Fixes
+
+* [Fixed](https://github.com/ydb-platform/ydb/pull/24265) CPU resource limiting for column-oriented tables in Workload Manager. Previously CPU consumption could exceed the configured limits.
+
+
 ## Version 25.1 {#25-1}
 
 ### Version 25.1.4.7 {#25-1-4-7}
@@ -169,7 +201,7 @@ Release date: April 15, 2025
 * Enabled by default:
 
   * support for [views](./concepts/datamodel/view.md)
-  * [auto-partitioning mode](./concepts/topic.md#autopartitioning) for topics
+  * [auto-partitioning mode](./concepts/datamodel/topic.md#autopartitioning) for topics
   * [transactions involving topics and row-oriented tables simultaneously](./concepts/transactions.md#topic-table-transactions)
   * [volatile distributed transactions](./contributor/datashard-distributed-txs.md#volatile-transactions)
 
@@ -424,7 +456,7 @@ Release date: October 12, 2023.
 * Implemented visibility of own changes. With this feature enabled you can read changed values from the current transaction, which has not been committed yet. This functionality also allows multiple modifying operations in one transaction on a table with secondary indexes.
 * Added support for [column tables](concepts/datamodel/table.md#column-tables). It is now possible to create analytical reports based on stored data in YDB with performance comparable to specialized analytical DBMS.
 * Added support for Kafka API for topics. YDB topics can now be accessed via a Kafka-compatible API designed for migrating existing applications. Support for Kafka protocol version 3.4.0 is provided.
-* Added the ability to [write to a topic without deduplication](concepts/topic.md#no-dedup). This is important in cases where message processing order is not critical.
+* Added the ability to [write to a topic without deduplication](concepts/datamodel/topic.md#no-dedup). This is important in cases where message processing order is not critical.
 * YQL has added the capabilities to [create](yql/reference/syntax/create-topic.md), [modify](yql/reference/syntax/alter-topic.md), and [delete](yql/reference/syntax/delete.md) topics.
 * Added support of assigning and revoking access rights using the YQL `GRANT` and `REVOKE` commands.
 * Added support of DML-operations logging in the audit log.
@@ -438,7 +470,7 @@ Release date: October 12, 2023.
 * A new option `PostgreSQL` has been added to the query type selector settings, which is available when the `Enable additional query modes` parameter is enabled. Also, the query history now takes into account the syntax used when executing the query.
 * The YQL query template for creating a table has been updated. Added a description of the available parameters.
 * Now sorting and filtering for Storage and Nodes tables takes place on the server. To use this functionality, you need to enable the parameter `Offload tables filters and sorting to backend` in the experiments section.
-* Buttons for creating, changing and deleting [topics](concepts/topic.md) have been added to the context menu.
+* Buttons for creating, changing and deleting [topics](concepts/datamodel/topic.md) have been added to the context menu.
 * Added sorting by criticality for all issues in the tree in `Healthcheck`.
 
 ### Performance
@@ -615,7 +647,7 @@ Release date: October 12, 2022. To update to version **22.4**, select the [Downl
 
 * {{ ydb-short-name }} Topics and Change Data Capture (CDC):
 
-  * Introduced the new Topic API. {{ ydb-short-name }} [Topic](concepts/topic.md) is an entity for storing unstructured messages and delivering them to various subscribers.
+  * Introduced the new Topic API. {{ ydb-short-name }} [Topic](concepts/datamodel/topic.md) is an entity for storing unstructured messages and delivering them to various subscribers.
   * Added support for the Topic API to the [{{ ydb-short-name }} CLI](reference/ydb-cli/topic-overview.md) and [SDK](reference/ydb-sdk/topic.md). The Topic API provides methods for message streaming writes and reads as well as topic management.
   * Added the ability to [capture table updates](concepts/cdc.md) and send change messages to a topic.
 

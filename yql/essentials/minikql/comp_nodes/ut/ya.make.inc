@@ -33,6 +33,9 @@ SET(ORIG_SOURCES
     mkql_block_map_join_ut_utils.cpp
     mkql_block_map_join_ut.cpp
     mkql_block_test_helper.cpp
+    mkql_block_fuzzer.cpp
+    mkql_block_getelem_ut.cpp
+    mkql_block_just_ut.cpp
     mkql_block_top_sort_ut.cpp
     mkql_blocks_ut.cpp
     mkql_combine_ut.cpp
@@ -90,7 +93,9 @@ PEERDIR(
     yql/essentials/public/udf
     yql/essentials/public/udf/arrow
     yql/essentials/public/udf/service/exception_policy
-    yql/essentials/sql/pg_dummy
+    yql/essentials/parser/pg_wrapper
+    yql/essentials/parser/pg_wrapper/interface
+    yql/essentials/sql/pg
 )
 
 IF (ARCH_X86_64)

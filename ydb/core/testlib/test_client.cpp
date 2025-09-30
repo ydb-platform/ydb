@@ -1,5 +1,6 @@
 #include "test_client.h"
 
+#include <ydb/core/kqp/federated_query/kqp_federated_query_actors.h>
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/appdata.h>
@@ -131,6 +132,7 @@
 #include <ydb/core/tx/priorities/usage/service.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
 #include <ydb/core/tx/columnshard/data_accessor/cache_policy/policy.h>
+#include <ydb/core/tx/columnshard/overload_manager/overload_manager_service.h>
 #include <ydb/core/tx/general_cache/usage/service.h>
 #include <ydb/library/folder_service/mock/mock_folder_service_adapter.h>
 
@@ -1221,6 +1223,11 @@ namespace Tests {
             const auto aid = Runtime->Register(actor, nodeIdx, appData.UserPoolId, TMailboxType::Revolving, 0);
             Runtime->RegisterService(NConveyorComposite::TServiceOperator::MakeServiceId(Runtime->GetNodeId(nodeIdx)), aid, nodeIdx);
         }
+        {
+            auto actor = NColumnShard::NOverload::TOverloadManagerServiceOperator::CreateService(appData.Counters);
+            const auto aid = Runtime->Register(actor.release(), nodeIdx, appData.UserPoolId, TMailboxType::Revolving, 0);
+            Runtime->RegisterService(NColumnShard::NOverload::TOverloadManagerServiceOperator::MakeServiceId(), aid, nodeIdx);
+        }
         Runtime->Register(CreateLabelsMaintainer({}), nodeIdx, appData.SystemPoolId, TMailboxType::Revolving, 0);
 
         auto sysViewService = NSysView::CreateSysViewServiceForTests();
@@ -1281,6 +1288,11 @@ namespace Tests {
             IActor* metadataCache = CreateDatabaseMetadataCache(appData.TenantName, appData.Counters).release();
             TActorId metadataCacheId = Runtime->Register(metadataCache, nodeIdx, userPoolId);
             Runtime->RegisterService(MakeDatabaseMetadataCacheId(Runtime->GetNodeId(nodeIdx)), metadataCacheId, nodeIdx);
+        }
+        {
+            IActor* describeSchemaSecretsService = NKqp::CreateDescribeSchemaSecretsService();
+            TActorId describeSchemaSecretsServiceId = Runtime->Register(describeSchemaSecretsService, nodeIdx, userPoolId);
+            Runtime->RegisterService(NKqp::MakeKqpDescribeSchemaSecretServiceId(Runtime->GetNodeId(nodeIdx)), describeSchemaSecretsServiceId, nodeIdx);
         }
         {
             auto kqpProxySharedResources = std::make_shared<NKqp::TKqpProxySharedResources>();
@@ -1791,6 +1803,10 @@ namespace Tests {
 
         if (YqSharedResources) {
             YqSharedResources->Stop();
+        }
+
+        if (Settings->FederatedQuerySetupFactory) {
+            Settings->FederatedQuerySetupFactory->Cleanup();
         }
 
         if (Runtime) {

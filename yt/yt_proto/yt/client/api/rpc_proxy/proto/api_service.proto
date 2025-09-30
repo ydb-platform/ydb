@@ -524,6 +524,8 @@ message TReqLookupRows
 
     optional NYT.NTableClient.NProto.TVersionedReadOptions versioned_read_options = 12;
 
+    optional string execution_pool = 13;
+
     reserved 5;
     reserved 6;
 }
@@ -566,6 +568,8 @@ message TReqVersionedLookupRows
 
     required TRowsetDescriptor rowset_descriptor = 200;
 
+    optional string execution_pool = 11;
+
     reserved 5;
 }
 
@@ -594,6 +598,8 @@ message TReqMultiLookup
         required int32 attachment_count = 7;
 
         optional NYT.NTableClient.NProto.TVersionedReadOptions versioned_read_options = 8;
+
+        optional string execution_pool = 9;
     }
 
     repeated TSubrequest subrequests = 1;
@@ -2223,13 +2229,9 @@ message TReqPartitionTables
 
     optional bool enable_cookies = 10;
 
-    // COMPAT(apollo1321): Remove in 25.2 release.
-    optional bool use_new_slicing_implementation_in_ordered_pool = 11 [default=true];
-
-    // COMPAT(apollo1321): Remove in 25.2 release.
-    optional bool use_new_slicing_implementation_in_unordered_pool = 12 [default=true];
-
     optional TTransactionalOptions transactional_options = 100;
+
+    reserved 11, 12;
 }
 
 message TMultiTablePartition
@@ -2850,6 +2852,7 @@ message TReqReadTable
 
     optional bool unordered = 2 [default = false];
     optional bool omit_inaccessible_columns = 3 [default = false];
+    optional bool omit_inaccessible_rows = 12 [default = false];
     optional bool enable_table_index = 5 [default = false];
     optional bool enable_row_index = 6 [default = false];
     optional bool enable_range_index = 7 [default = false];
@@ -2857,6 +2860,7 @@ message TReqReadTable
     optional ERowsetFormat desired_rowset_format = 8 [default = RF_YT_WIRE];
     optional ERowsetFormat arrow_fallback_rowset_format = 10 [default = RF_YT_WIRE];
     optional bytes format = 9; // YSON-serialized TFormat
+    optional bool enable_any_unpacking = 11 [default = true];
 
     optional TTransactionalOptions transactional_options = 100;
     optional TSuppressableAccessTrackingOptions suppressable_access_tracking_options = 101;
@@ -3551,6 +3555,7 @@ message TQuery
     optional NYT.NYTree.NProto.TAttributeDictionary other_attributes = 15;
     optional bytes access_control_objects = 16; // YSON
     optional bytes secrets = 17; // YSON
+    optional bool is_indexed = 18;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -3585,6 +3590,7 @@ message TReqListQueries
     optional NYT.NYTree.NProto.TAttributeFilter attributes = 11;
     optional bool search_by_token_prefix = 12 [default = false];
     optional bool use_full_text_search = 13 [default = true];
+    optional bool tutorial_filter = 14 [default = false];
 }
 
 message TRspListQueries
@@ -3632,6 +3638,21 @@ message TRspGetQueryTrackerInfo
     repeated string clusters = 5;
     optional bytes engines_info = 6; // YSON
     optional int32 expected_tables_version = 7;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TReqGetDeclaredParametersInfo
+{
+    required string query_tracker_stage = 1;
+    required string query = 2;
+    required EQueryEngine engine = 3;
+    optional bytes settings = 4; // YSON
+}
+
+message TRspGetDeclaredParametersInfo
+{
+    required bytes declared_parameters_info = 1; // YSON
 }
 
 ////////////////////////////////////////////////////////////////////////////////

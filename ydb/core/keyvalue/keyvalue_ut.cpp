@@ -2872,7 +2872,7 @@ Y_UNIT_TEST(TestReadRequestInFlightLimit)
 
     auto &icb = tc.Runtime->GetAppData().Icb;
     TControlWrapper readRequestInFlightLimit(5, 1, 4096);
-    icb->RegisterSharedControl(readRequestInFlightLimit, "KeyValueVolumeControls.ReadRequestsInFlightLimit");
+    TControlBoard::RegisterSharedControl(readRequestInFlightLimit, icb->KeyValueVolumeControls.ReadRequestsInFlightLimit);
     readRequestInFlightLimit = 5;
 
     ui64 creationUnixTime = (TInstant::Now() - TDuration::Seconds(1000)).Seconds();

@@ -35,10 +35,7 @@ TRuntimeNode BuildSerializeCall(
             }
         );
     } else if (format == "json_list") {
-        ui64 jsonListSizeLimit = 10'000;
-        if (const auto userLimit = config->JsonListSizeLimit.Get()) {
-            jsonListSizeLimit = *userLimit;
-        }
+        const auto jsonListSizeLimit = config->JsonListSizeLimit.GetOrDefault();
         auto groupBySize = ctx.ProgramBuilder.Condense1(input,
                         [&](TRuntimeNode item) { return ctx.ProgramBuilder.AsList(item); },
                         [&](TRuntimeNode, TRuntimeNode state) { return ctx.ProgramBuilder.AggrGreaterOrEqual(ctx.ProgramBuilder.Length(state), ctx.ProgramBuilder.NewDataLiteral<ui64>(jsonListSizeLimit)); },
@@ -95,18 +92,11 @@ TRuntimeNode BuildSerializeCall(
             std::for_each(keys.cbegin(), keys.cend(), [&writer](const std::string_view& key){ writer.Write(key); });
         writer.CloseArray();
 
-        if (const auto keysCount = config->UniqueKeysCountLimit.Get()) {
-            writer.Write("keys_count_limit", ToString(*keysCount));
-        }
+        writer.Write("keys_count_limit", ToString(config->UniqueKeysCountLimit.GetOrDefault()));
     }
 
-    if (const auto totalSize = config->SerializeMemoryLimit.Get()) {
-        writer.Write("total_size_limit", ToString(*totalSize));
-    }
-
-    if (const auto blockSize = config->BlockSizeMemoryLimit.Get()) {
-        writer.Write("block_size_limit", ToString(*blockSize));
-    }
+    writer.Write("total_size_limit", ToString(config->SerializeMemoryLimit.GetOrDefault()));
+    writer.Write("block_size_limit", ToString(config->BlockSizeMemoryLimit.GetOrDefault()));
 
     for (const auto& v : settings) {
         writer.Write(v.first, v.second);

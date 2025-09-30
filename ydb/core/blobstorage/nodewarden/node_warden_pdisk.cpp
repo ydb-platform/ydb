@@ -522,7 +522,35 @@ namespace NKikimr::NStorage {
 
         auto processDisk = [&](const TServiceSetPDisk& pdisk) {
             const TPDiskKey key(pdisk);
-            if (!LocalPDisks.contains(key)) {
+            if (auto it = LocalPDisks.find(key); it != LocalPDisks.end()) {
+                TPDiskRecord& localPDisk = it->second;
+                TIntrusivePtr<TPDiskConfig> newPDiskConfig = CreatePDiskConfig(pdisk);
+                const NKikimrBlobStorage::TPDiskConfig& oldPDiskConfig = localPDisk.Record.GetPDiskConfig();
+                ui64 newExpectedSlotCount = newPDiskConfig->ExpectedSlotCount;
+                ui64 oldExpectedSlotCount = oldPDiskConfig.GetExpectedSlotCount();
+                ui32 newSlotSizeInUnits = newPDiskConfig->SlotSizeInUnits;
+                ui32 oldSlotSizeInUnits = oldPDiskConfig.GetSlotSizeInUnits();
+                STLOG(PRI_DEBUG, BS_NODE, NW110, "ApplyServiceSetPDisks",
+                    (PDiskId, key.PDiskId),
+                    (NewExpectedSlotCount, newExpectedSlotCount),
+                    (OldExpectedSlotCount, oldExpectedSlotCount),
+                    (NewSlotSizeInUnits, newSlotSizeInUnits),
+                    (OldSlotSizeInUnits, oldSlotSizeInUnits));
+                if (newExpectedSlotCount != oldExpectedSlotCount ||
+                        newSlotSizeInUnits != oldSlotSizeInUnits) {
+                    STLOG(PRI_DEBUG, BS_NODE, NW107, "SendChangeExpectedSlotCount",
+                        (PDiskId, key.PDiskId),
+                        (ExpectedSlotCount, newExpectedSlotCount),
+                        (SlotSizeInUnits, newSlotSizeInUnits));
+
+                    const TActorId pdiskActorId = MakeBlobStoragePDiskID(LocalNodeId, key.PDiskId);
+                    Send(pdiskActorId, new NPDisk::TEvChangeExpectedSlotCount(newExpectedSlotCount, newSlotSizeInUnits));
+
+                    NKikimrBlobStorage::TPDiskConfig* pdiskConfig = localPDisk.Record.MutablePDiskConfig();
+                    pdiskConfig->SetExpectedSlotCount(newExpectedSlotCount);
+                    pdiskConfig->SetSlotSizeInUnits(newSlotSizeInUnits);
+                }
+            } else {
                 StartLocalPDisk(pdisk, false);
             }
             pdiskToDelete.erase(key);

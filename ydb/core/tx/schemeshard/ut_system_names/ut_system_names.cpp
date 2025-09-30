@@ -809,6 +809,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSysNames) {
             .EnableSystemNamesProtection(EnableSystemNamesProtection)
             .EnableDatabaseAdmin(EnableDatabaseAdmin)
             .EnableRealSystemViewPaths(false)
+            .RunFakeConfigDispatcher(true)
         ;
         if (op.SetupFlags) {
             op.SetupFlags(opts);

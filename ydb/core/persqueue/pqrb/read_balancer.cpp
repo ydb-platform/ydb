@@ -448,8 +448,7 @@ void TPersQueueReadBalancer::RequestTabletIfNeeded(const ui64 tabletId, const TA
             AggregatedStats.Cookies[tabletId] = cookie;
         }
 
-        PQ_LOG_D(
-            TStringBuilder() << "Send TEvPersQueue::TEvStatus TabletId: " << tabletId << " Cookie: " << cookie);
+        PQ_LOG_D("Send TEvPersQueue::TEvStatus TabletId: " << tabletId << " Cookie: " << cookie);
         NTabletPipe::SendData(ctx, pipeClient, new TEvPersQueue::TEvStatus("", true), cookie);
     }
 }
@@ -477,6 +476,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev, c
                 partitionId,
                 partRes.GetScaleStatus(),
                 partRes.HasScaleParticipatingPartitions() ? MakeMaybe(partRes.GetScaleParticipatingPartitions()) : Nothing(),
+                partRes.HasSplitBoundary() ? MakeMaybe(partRes.GetSplitBoundary()) : Nothing(),
                 ctx
             );
         }
@@ -997,6 +997,7 @@ void TPersQueueReadBalancer::Handle(TEvPQ::TEvPartitionScaleStatusChanged::TPtr&
             record.GetPartitionId(),
             record.GetScaleStatus(),
             record.HasParticipatingPartitions() ? MakeMaybe(record.GetParticipatingPartitions()) : Nothing(),
+            record.HasSplitBoundary() ? MakeMaybe(record.GetSplitBoundary()) : Nothing(),
             ctx
         );
     } else {
@@ -1014,6 +1015,7 @@ void TPersQueueReadBalancer::Handle(TPartitionScaleRequest::TEvPartitionScaleReq
 }
 
 void TPersQueueReadBalancer::Handle(TEvPQ::TEvMirrorTopicDescription::TPtr& ev, const TActorContext& ctx) {
+    PQ_LOG_D("Received TEvMirrorTopicDescription");
     if (!MirroringEnabled(TabletConfig)) {
         return;
     }

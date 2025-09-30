@@ -8,6 +8,7 @@
 #include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
 #include <ydb/core/statistics/events.h>
 #include <ydb/core/statistics/service/service.h>
+#include <ydb/core/sys_view/common/resolver.h>
 
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
@@ -44,7 +45,7 @@ NavigateEntryResult CreateNavigateEntry(const TString& path,
         auto tempTablesInfoIt = tempTablesState->FindInfo(currentPath, false);
         if (tempTablesInfoIt != tempTablesState->TempTables.end()) {
             queryName = currentPath;
-            currentPath = GetTempTablePath(tempTablesState->Database, tempTablesState->SessionId, tempTablesInfoIt->first);
+            currentPath = GetTempTablePath(tempTablesState->Database, tempTablesState->TempDirName, tempTablesInfoIt->first);
         }
     }
     entry.Path = SplitPath(currentPath);
@@ -657,13 +658,12 @@ void TKqpTableMetadataLoader::OnLoadedTableMetadata(TTableMetadataResult& loadTa
 }
 
 NThreading::TFuture<NYql::IKikimrGateway::TTableMetadataResult> TKqpTableMetadataLoader::LoadSysViewRewrittenMetadata(
-    const TString& cluster, const TString& table, const NSysView::ISystemViewResolver::TSystemViewPath& sysViewPath)
+    const TString& cluster, const TString& table, const TString& sysViewName)
 {
     TNavigate::TEntry entry;
 
-    const auto& rewrittenSysViewTypes = SystemViewRewrittenResolver->GetSystemViewsTypes(NSysView::ISystemViewResolver::ESource::Domain);
-    const auto sysViewType = rewrittenSysViewTypes.at(sysViewPath.ViewName);
-    auto schema = SystemViewRewrittenResolver->GetSystemViewSchema(sysViewType);
+    const auto sysViewType = NSysView::GetSystemViewRewrittenResolver().GetSystemViewType(sysViewName);
+    auto schema = NSysView::GetSystemViewRewrittenResolver().GetSystemViewSchema(*sysViewType);
 
     entry.Kind = TNavigate::KindSysView;
     entry.Columns = std::move(schema->Columns);
@@ -677,7 +677,7 @@ NThreading::TFuture<NYql::IKikimrGateway::TTableMetadataResult> TKqpTableMetadat
 
     auto sysViewInfo = MakeIntrusive<TNavigate::TSysViewInfo>();
     sysViewInfo->Kind = TNavigate::KindSysView;
-    sysViewInfo->Description.SetType(sysViewType);
+    sysViewInfo->Description.SetType(*sysViewType);
 
     entry.SysViewInfo = sysViewInfo;
 
@@ -696,8 +696,8 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
         NThreading::TFuture<TTableMetadataResult> tableMetaFuture;
 
         NSysView::ISystemViewResolver::TSystemViewPath sysViewPath;
-        if (settings.SysViewRewritten_ && SystemViewRewrittenResolver->IsSystemViewPath(SplitPath(table), sysViewPath)) {
-            tableMetaFuture = LoadSysViewRewrittenMetadata(cluster, table, sysViewPath);
+        if (settings.SysViewRewritten_ && NSysView::GetSystemViewRewrittenResolver().IsSystemViewPath(SplitPath(table), sysViewPath)) {
+            tableMetaFuture = LoadSysViewRewrittenMetadata(cluster, table, sysViewPath.ViewName);
         } else {
             tableMetaFuture = LoadTableMetadataCache(cluster, table, settings, database, userToken);
         }
@@ -920,11 +920,12 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
 
     const auto schemeCacheId = MakeSchemeCacheID();
 
+    auto ptr = weak_from_base();
     auto future = SendActorRequest<TRequest, TResponse, TResult>(
         ActorSystem,
         schemeCacheId,
         ev.Release(),
-        [userToken, database, cluster, mainCluster = Cluster, table, settings, expectedSchemaVersion, this, queryName, externalPath]
+        [userToken, database, cluster, mainCluster = Cluster, table, settings, expectedSchemaVersion, ptr, queryName, externalPath]
             (TPromise<TResult> promise, TResponse&& response) mutable
         {
             try {
@@ -955,7 +956,12 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                     }
                 }
 
-                const bool resolveEntityInsideDataSource = (cluster != Cluster);
+                auto locked = ptr.lock();
+                if (!locked) {
+                    promise.SetValue(ResultFromError<TResult>(YqlIssue({}, TIssuesIds::KIKIMR_INDEX_METADATA_LOAD_FAILED, "lock failed")));
+                    return;
+                }
+                const bool resolveEntityInsideDataSource = (cluster != locked->Cluster);
                 // resolveEntityInsideDataSource => entry.Kind == EKind::KindExternalDataSource
                 if (resolveEntityInsideDataSource && entry.Kind != EKind::KindExternalDataSource) {
                     const auto message = TStringBuilder()
@@ -976,8 +982,8 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                         if (externalPath) {
                             externalDataSourceMetadata.Metadata->ExternalSource.TableLocation = *externalPath;
                         }
-                        LoadExternalDataSourceSecretValues(entry, userToken, ActorSystem)
-                            .Subscribe([promise, externalDataSourceMetadata, settings, table, database, externalPath, this](const TFuture<TEvDescribeSecretsResponse::TDescription>& result) mutable
+                        LoadExternalDataSourceSecretValues(entry, userToken, locked->ActorSystem)
+                            .Subscribe([promise, externalDataSourceMetadata, settings, table, database, externalPath, locked](const TFuture<TEvDescribeSecretsResponse::TDescription>& result) mutable
                         {
                             UpdateExternalDataSourceSecretsValue(externalDataSourceMetadata, result.GetValue());
                             if (!externalDataSourceMetadata.Success()) {
@@ -1036,7 +1042,7 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                                 auto path = databaseName + "/" + *externalPath;
 
                                 GetSchemeEntryType(
-                                    FederatedQuerySetup,
+                                    locked->FederatedQuerySetup,
                                     source.DataSourceLocation,
                                     databaseName,
                                     useTls,
@@ -1067,7 +1073,7 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                             return;
                         }
                         settings.WithExternalDatasources_ = true;
-                        LoadTableMetadataCache(cluster, dataSourcePath, settings, database, userToken)
+                        locked->LoadTableMetadataCache(cluster, dataSourcePath, settings, database, userToken)
                             .Apply([promise, externalTableMetadata](const TFuture<TTableMetadataResult>& result) mutable
                         {
                             auto externalDataSourceMetadata = result.GetValue();
@@ -1084,7 +1090,7 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                             }
                             TIndexId pathId = TIndexId(child.PathId, child.SchemaVersion);
 
-                            LoadTableMetadataCache(cluster, std::make_pair(pathId, table), settings, database, userToken)
+                            locked->LoadTableMetadataCache(cluster, std::make_pair(pathId, table), settings, database, userToken)
                                 .Apply([promise](const TFuture<TTableMetadataResult>& result) mutable
                             {
                                 promise.SetValue(result.GetValue());

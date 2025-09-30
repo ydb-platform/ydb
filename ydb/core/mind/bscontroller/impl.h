@@ -844,10 +844,10 @@ public:
             }
         }
 
-        void FillInGroupParameters(NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters *params,
+        bool FillInGroupParameters(NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters *params,
             TBlobStorageController *self) const;
-        void FillInResources(NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters::TResources *pb, bool countMaxSlots) const;
-        void FillInVDiskResources(NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters *pb) const;
+        bool FillInResources(NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters::TResources *pb, bool countMaxSlots) const;
+        bool FillInVDiskResources(NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters *pb) const;
 
         void UpdateSeenOperational() {
             TBlobStorageGroupInfo::TGroupFailDomains failed(Topology.get());
@@ -1915,40 +1915,33 @@ private:
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Metric collection
 
-    struct TSelectGroupsQueueItem {
-        TActorId RespondTo;
-        ui64 Cookie;
-        THolder<TEvBlobStorage::TEvControllerSelectGroupsResult> Event;
-        TSet<TPDiskId> BlockedPDisks;
-
-        TSelectGroupsQueueItem(TActorId respondTo, ui64 cookie, THolder<TEvBlobStorage::TEvControllerSelectGroupsResult> event)
-            : RespondTo(respondTo)
-            , Cookie(cookie)
-            , Event(std::move(event))
-        {}
+    struct TWaitingSelectGroupsItem {
+        TEvBlobStorage::TEvControllerSelectGroups::TPtr Request; // original request
+        THashSet<TGroupId> MissingGroups;
     };
 
-    struct TPDiskToQueueComp {
-        using TIterator = TList<TSelectGroupsQueueItem>::iterator;
-        using T = std::pair<TPDiskId, TIterator>;
+    using TWaitingSelectGroupsSetItem = std::tuple<TGroupId, std::list<TWaitingSelectGroupsItem>::iterator>;
 
-        static void *IteratorToPtr(const TIterator& x) {
-            return x == TIterator() ? nullptr : &*x;
-        }
-
-        bool operator ()(const TIterator& x, const TIterator& y) const {
-            return IteratorToPtr(x) < IteratorToPtr(y);
-        }
-
-        bool operator ()(const T& x, const T& y) const {
-            return x.first < y.first || (x.first == y.first && (*this)(x.second, y.second));
+    struct TWaitingSelectGroupsLess {
+        bool operator ()(const TWaitingSelectGroupsSetItem& x, const TWaitingSelectGroupsSetItem& y) const {
+            const auto& [xGroupId, xIter] = x;
+            const auto& [yGroupId, yIter] = y;
+            if (xGroupId < yGroupId) {
+                return true;
+            } else if (yGroupId < xGroupId) {
+                return false;
+            } else {
+                const TWaitingSelectGroupsItem *xPtr = xIter == std::list<TWaitingSelectGroupsItem>::iterator() ? nullptr : &*xIter;
+                const TWaitingSelectGroupsItem *yPtr = yIter == std::list<TWaitingSelectGroupsItem>::iterator() ? nullptr : &*yIter;
+                return xPtr < yPtr;
+            }
         }
     };
 
-    TList<TSelectGroupsQueueItem> SelectGroupsQueue;
-    TSet<std::pair<TPDiskId, TList<TSelectGroupsQueueItem>::iterator>, TPDiskToQueueComp> PDiskToQueue;
+    std::list<TWaitingSelectGroupsItem> WaitingSelectGroups;
+    std::set<TWaitingSelectGroupsSetItem, TWaitingSelectGroupsLess> GroupToWaitingSelectGroupsItem;
 
-    void ProcessSelectGroupsQueueItem(TList<TSelectGroupsQueueItem>::iterator it);
+    void UpdateWaitingGroups(const THashSet<TGroupId>& groupIds);
 
     void NotifyNodesAwaitingKeysForGroups(ui32 groupId);
     ITransaction* CreateTxInitScheme();
@@ -2427,7 +2420,7 @@ public:
         TGroupInfo::TGroupStatus Status;
         bool LayoutCorrect = true;
 
-        TStaticGroupInfo(const NKikimrBlobStorage::TGroupInfo& group, std::map<TGroupId, TStaticGroupInfo>& prev) {
+        TStaticGroupInfo(const NKikimrBlobStorage::TGroupInfo& group, const std::map<TGroupId, TStaticGroupInfo>& prev) {
             TStringStream err;
             Info = TBlobStorageGroupInfo::Parse(group, nullptr, &err);
             Y_VERIFY_DEBUG_S(Info, "failed to parse static group, error# " << err.Str());
@@ -2435,7 +2428,7 @@ public:
                 return;
             }
             if (const auto it = prev.find(Info->GroupID); it != prev.end()) {
-                TStaticGroupInfo& item = it->second;
+                const TStaticGroupInfo& item = it->second;
                 Status = item.Status;
                 LayoutCorrect = item.LayoutCorrect;
             }
@@ -2463,15 +2456,15 @@ public:
         bool MetricsDirty = false;
 
         TStaticVSlotInfo(const NKikimrBlobStorage::TNodeWardenServiceSet::TVDisk& vdisk,
-                std::map<TVSlotId, TStaticVSlotInfo>& prev, TMonotonic mono)
+                const std::map<TVSlotId, TStaticVSlotInfo>& prev, TMonotonic mono)
             : VDiskId(VDiskIDFromVDiskID(vdisk.GetVDiskID()))
             , VDiskKind(vdisk.GetVDiskKind())
         {
             const auto& loc = vdisk.GetVDiskLocation();
             const TVSlotId vslotId(loc.GetNodeID(), loc.GetPDiskID(), loc.GetVDiskSlotID());
             if (const auto it = prev.find(vslotId); it != prev.end()) {
-                TStaticVSlotInfo& item = it->second;
-                VDiskMetrics = std::move(item.VDiskMetrics);
+                const TStaticVSlotInfo& item = it->second;
+                VDiskMetrics = item.VDiskMetrics;
                 VDiskStatus = item.VDiskStatus;
                 VDiskStatusTimestamp = item.VDiskStatusTimestamp;
                 ReadySince = item.ReadySince;
@@ -2500,7 +2493,7 @@ public:
         std::optional<NKikimrBlobStorage::TPDiskMetrics> PDiskMetrics;
 
         TStaticPDiskInfo(const NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk& pdisk,
-                std::map<TPDiskId, TStaticPDiskInfo>& prev)
+                const std::map<TPDiskId, TStaticPDiskInfo>& prev)
             : NodeId(pdisk.GetNodeID())
             , PDiskId(pdisk.GetPDiskID())
             , Path(pdisk.GetPath())
@@ -2518,8 +2511,8 @@ public:
 
             const TPDiskId pdiskId(NodeId, PDiskId);
             if (const auto it = prev.find(pdiskId); it != prev.end()) {
-                TStaticPDiskInfo& item = it->second;
-                PDiskMetrics = std::move(item.PDiskMetrics);
+                const TStaticPDiskInfo& item = it->second;
+                PDiskMetrics = item.PDiskMetrics;
             }
         }
 

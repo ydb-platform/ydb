@@ -289,7 +289,7 @@ protected:
     ITransaction* CreateResumeTabletByTenant(TTabletId tabletId);
     ITransaction* CreateStartTablet(TFullTabletId tabletId, const TActorId& local, ui64 cookie, bool external = false);
     ITransaction* CreateUpdateTabletMetrics(TEvHive::TEvTabletMetrics::TPtr& ev);
-    ITransaction* CreateReassignGroups(TTabletId tabletId, const TActorId& actorToNotify, const std::bitset<MAX_TABLET_CHANNELS>& channelProfileNewGroup);
+    ITransaction* CreateReassignGroups(TTabletId tabletId, const TActorId& actorToNotify, const std::bitset<MAX_TABLET_CHANNELS>& channelProfileNewGroup, bool async);
     ITransaction* CreateReassignGroupsOnDecommit(ui32 groupId, std::unique_ptr<IEventHandle> reply);
     ITransaction* CreateLockTabletExecution(const NKikimrHive::TEvLockTabletExecution& rec, const TActorId& sender, const ui64 cookie);
     ITransaction* CreateUnlockTabletExecution(const NKikimrHive::TEvUnlockTabletExecution& rec, const TActorId& sender, const ui64 cookie);

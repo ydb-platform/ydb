@@ -193,7 +193,7 @@ public:
     }
 
     arrow::Status Start(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& columns);
-    arrow::Status Start(const std::vector<std::pair<TString, NKikimr::NMiniKQL::TType*>> columns);
+    arrow::Status Start(const std::vector<std::pair<TString, NKikimr::NMiniKQL::TType*>>& columns);
     // TODO: deduplicate ydbColumns and schema
     arrow::Status Start(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& ydbColumns, const std::shared_ptr<arrow::Schema>& schema);
 
@@ -208,7 +208,7 @@ protected:
         return YdbSchema;
     }
 
-    const std::vector<std::pair<TString, NKikimr::NMiniKQL::TType*>> GetYqlSchema() const {
+    const std::vector<std::pair<TString, NKikimr::NMiniKQL::TType*>>& GetYqlSchema() const {
         return YqlSchema;
     }
 

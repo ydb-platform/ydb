@@ -58,20 +58,11 @@ namespace NPQ {
         TString Value;
         bool Cached;
         TKey Key;
-        ui64 CreationUnixTime = 0;
+        ui64 CreationUnixTime;
 
         TRequestedBlob() = delete;
 
-        TRequestedBlob(ui64 offset, ui16 partNo, ui32 count, ui16 internalPartsCount, ui32 size, TString value, const TKey& key)
-            : Offset(offset)
-            , PartNo(partNo)
-            , Count(count)
-            , InternalPartsCount(internalPartsCount)
-            , Size(size)
-            , Value(value)
-            , Cached(false)
-            , Key(key)
-        {}
+        TRequestedBlob(ui64 offset, ui16 partNo, ui32 count, ui16 internalPartsCount, ui32 size, TString value, const TKey& key, ui64 creationUnixTime);
     };
 
     struct TDataKey {
@@ -1152,6 +1143,8 @@ struct TEvPQ {
 
         NPQ::TSourceIdMap SrcIdInfo;
         std::deque<NPQ::TDataKey> BodyKeys;
+        // SourceId->WritenBytes
+        std::vector<std::pair<TString, ui64>> WrittenBytes;
 
         ui64 BytesWrittenTotal;
         ui64 BytesWrittenGrpc;
@@ -1278,14 +1271,12 @@ struct TEvPQ {
     };
 
     struct TEvRunCompaction : TEventLocal<TEvRunCompaction, EvRunCompaction> {
-        TEvRunCompaction(ui64 maxBlobSize, ui64 cumulativeSize) :
-            MaxBlobSize(maxBlobSize),
-            CumulativeSize(cumulativeSize)
+        explicit TEvRunCompaction(const ui64 blobsCount) :
+            BlobsCount(blobsCount)
         {
         }
 
-        ui64 MaxBlobSize = 0;
-        ui64 CumulativeSize = 0;
+        ui64 BlobsCount = 0;
     };
 };
 

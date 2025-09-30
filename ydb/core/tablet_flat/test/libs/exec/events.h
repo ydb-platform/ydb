@@ -25,6 +25,7 @@ namespace NFake {
         EvBlobStorageContainsRequest = Base_ + 18,
         EvBlobStorageContainsResponse = Base_ + 19,
         EvBlobStorageDeferGC = Base_ + 20,
+        EvSnapshotBackedUp = Base_ + 21,
     };
 
     struct TEvTerm : public TEventLocal<TEvTerm, EvTerm> { };
@@ -136,6 +137,8 @@ namespace NFake {
 
         const TVector<TBlobInfo> Contains;
     };
+
+    struct TEvSnapshotBackedUp : public TEventLocal<TEvSnapshotBackedUp, EvSnapshotBackedUp> {};
 
 }
 }

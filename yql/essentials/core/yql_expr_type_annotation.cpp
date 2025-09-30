@@ -3753,7 +3753,7 @@ bool IsInstantEqual(const TTypeAnnotationNode& type) {
     case ETypeAnnotationKind::Void: return true;
     case ETypeAnnotationKind::Tuple: {
         const auto tupleType = type.Cast<TTupleExprType>();
-        if (const auto size = tupleType->GetSize()) {
+        if (/* const auto size = */ tupleType->GetSize()) {
             for (const auto& item : tupleType->GetItems()) {
                 if (!IsInstantEqual(*item)) {
                     return false;
@@ -3764,7 +3764,7 @@ bool IsInstantEqual(const TTypeAnnotationNode& type) {
     }
     case ETypeAnnotationKind::Struct: {
         const auto structType = type.Cast<TStructExprType>();
-        if (const auto size = structType->GetSize()) {
+        if (/* const auto size = */ structType->GetSize()) {
             for (const auto& item : structType->GetItems()) {
                 if (!IsInstantEqual(*item)) {
                     return false;
@@ -3878,6 +3878,44 @@ bool EnsureDataOrOptionalOfData(TPositionHandle position, const TTypeAnnotationN
         ctx.AddError(err);
         return false;
     }
+    return true;
+}
+
+bool EnsureLinearType(const TExprNode& node, TExprContext& ctx) {
+    if (HasError(node.GetTypeAnn(), ctx)) {
+        return false;
+    }
+
+    if (!node.GetTypeAnn()) {
+        YQL_ENSURE(node.Type() == TExprNode::Lambda);
+        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Expected linear type, but got lambda"));
+        return false;
+    }
+
+    if (node.GetTypeAnn()->GetKind() != ETypeAnnotationKind::Linear) {
+        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Expected linear type, but got: " << *node.GetTypeAnn()));
+        return false;
+    }
+
+    return true;
+}
+
+bool EnsureDynamicLinearType(const TExprNode& node, TExprContext& ctx) {
+    if (HasError(node.GetTypeAnn(), ctx)) {
+        return false;
+    }
+
+    if (!node.GetTypeAnn()) {
+        YQL_ENSURE(node.Type() == TExprNode::Lambda);
+        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Expected dynamic linear type, but got lambda"));
+        return false;
+    }
+
+    if (node.GetTypeAnn()->GetKind() != ETypeAnnotationKind::DynamicLinear) {
+        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Expected dynamic linear type, but got: " << *node.GetTypeAnn()));
+        return false;
+    }
+
     return true;
 }
 
@@ -6503,6 +6541,18 @@ const TTypeAnnotationNode* UnpackOptionalBlockItemType(const TTypeAnnotationNode
     } else {
         return ctx.MakeType<TBlockExprType>(underlyingType);
     }
+}
+
+const TTypeAnnotationNode* GetLinearItemType(const TTypeAnnotationNode& type, bool& isDynamic) {
+    YQL_ENSURE(type.IsLinearOrDynamicLinear());
+    const auto kind = type.GetKind();
+    if (kind == ETypeAnnotationKind::Linear) {
+        isDynamic = false;
+        return type.Cast<TLinearExprType>()->GetItemType();
+    }
+
+    isDynamic = true;
+    return type.Cast<TDynamicLinearExprType>()->GetItemType();
 }
 
 const TTypeAnnotationNode* AggApplySerializedStateType(const TExprNode::TPtr& input, TExprContext& ctx) {

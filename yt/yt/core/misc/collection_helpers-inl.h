@@ -367,6 +367,12 @@ i64 GetVectorMemoryUsage(const std::vector<T>& vector)
     return vector.capacity() * sizeof(T);
 }
 
+template <class TRange, class T>
+bool Contains(TRange&& range, const T& value)
+{
+    return std::ranges::find(range, value) != std::ranges::end(range);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT

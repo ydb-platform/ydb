@@ -376,7 +376,7 @@ private:
                 bool shouldDequeue = ProcessFDEvents(PollTimeout);
 
                 if (shouldDequeue) {
-                    if (bool noRequestsLeft = !TryProcessRequests(RequestsBatchSize, /*cancelRequests*/ false)) {
+                    if (!TryProcessRequests(RequestsBatchSize, /*cancelRequests*/ false)) {
                         // We make WakeUpHandle triggerable again
                         // and then double check the queue for requests.
                         // This way we ensure that either we observe

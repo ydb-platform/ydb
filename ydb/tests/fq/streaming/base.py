@@ -12,10 +12,8 @@ logger = logging.getLogger(__name__)
 
 class YdbClient:
     def __init__(self, endpoint: str, database: str):
-        self.endpoint = endpoint
-        self.database = database
-
-        self.driver = ydb.Driver(endpoint=endpoint, database=database, oauth=None)
+        driver_config = ydb.DriverConfig(endpoint, database, auth_token='root@builtin')
+        self.driver = ydb.Driver(driver_config)
         self.session_pool = ydb.QuerySessionPool(self.driver)
 
     def stop(self):
@@ -47,14 +45,15 @@ class StreamingImportTestBase(object):
         config = KikimrConfigGenerator(
             extra_feature_flags={
                 "enable_external_data_sources": True,
-                "enable_move_column_table": True
+                "enable_streaming_queries": True
             },
             query_service_config={"available_external_data_sources": ["Ydb"]},
             table_service_config={},
-            nodes=2
+            nodes=2,
+            default_clusteradmin="root@builtin"
         )
         config.yaml_config["query_service_config"] = {}
-        config.yaml_config["query_service_config"]["available_external_data_sources"] = ["ObjectStorage", "Ydb"]
+        config.yaml_config["query_service_config"]["available_external_data_sources"] = ["ObjectStorage", "Ydb", "YdbTopics"]
         config.yaml_config["log_config"]["default_level"] = 8
 
         config.yaml_config["query_service_config"]["shared_reading"] = {}
@@ -78,6 +77,7 @@ class StreamingImportTestBase(object):
         config.yaml_config["query_service_config"]["checkpoints_config"]["checkpoint_garbage_config"] = {}
         config.yaml_config["query_service_config"]["checkpoints_config"]["checkpoint_garbage_config"]["enabled"] = True
         config.yaml_config["query_service_config"]["checkpoints_config"]["max_inflight"] = 1
+        config.yaml_config["query_service_config"]["checkpoints_config"]["checkpointing_period_millis"] = 500
         return config
 
     @classmethod

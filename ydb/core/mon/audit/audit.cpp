@@ -1,5 +1,5 @@
 #include "audit.h"
-#include "auditable_actions.cpp"
+#include "audit_denylist.cpp"
 
 #include <ydb/core/audit/audit_log.h>
 #include <ydb/core/audit/audit_config/audit_config.h>
@@ -50,13 +50,26 @@ namespace {
         return reason;
     }
 
-    inline TUrlMatcher CreateAuditableActionsMatcher() {
+    inline TUrlMatcher CreateDenylistMatcher() {
         TUrlMatcher policy;
-        for (const auto& pattern : AUDITABLE_ACTIONS) {
+        for (const auto& pattern : AUDIT_DENYLIST) {
             policy.AddPattern(pattern);
         }
         return policy;
     }
+}
+
+TString ExtractRemoteAddress(const NHttp::THttpIncomingRequest* request) {
+    if (!request) {
+        return {};
+    }
+    NHttp::THeaders headers(request->Headers);
+
+    TString remoteAddress = ToString(headers.Get(X_FORWARDED_FOR_HEADER).Before(',')); // Get the first address in the list
+    if (remoteAddress.empty()) {
+        remoteAddress = NKikimr::NAddressClassifier::ExtractAddress(request->Address->ToString());
+    }
+    return remoteAddress;
 }
 
 bool TAuditCtx::AuditEnabled(NKikimrConfig::TAuditConfig::TLogClassConfig::ELogPhase logPhase, NACLibProto::ESubjectType subjectType)
@@ -73,8 +86,8 @@ void TAuditCtx::AddAuditLogPart(TStringBuf name, const TString& value) {
     Parts.emplace_back(name, value);
 }
 
-bool TAuditCtx::AuditableRequest(const NHttp::THttpIncomingRequestPtr& request) {
-    // only modifying methods are audited
+bool TAuditCtx::AuditableRequest(const NHttp::THttpIncomingRequestPtr& request) const {
+    // modifying methods are always audited
     const TString method(request->Method);
     static const THashSet<TString> MODIFYING_METHODS = {"POST", "PUT", "DELETE"};
     if (MODIFYING_METHODS.contains(method)) {
@@ -86,34 +99,34 @@ bool TAuditCtx::AuditableRequest(const NHttp::THttpIncomingRequestPtr& request) 
         return false;
     }
 
-    // force audit for specific URLs
-    static auto FORCE_AUDIT_MATCHER = CreateAuditableActionsMatcher();
-    if (FORCE_AUDIT_MATCHER.Match(request->URL)) {
-        return true;
+    // skip audit for URLs from denylist
+    static auto DENYLIST_MATCHER = CreateDenylistMatcher();
+    if (DENYLIST_MATCHER.Match(request->URL)) {
+        return false;
     }
 
-    return false;
+    return true;
 }
 
-void TAuditCtx::InitAudit(const NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& ev) {
+void TAuditCtx::InitAudit(const NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& ev, bool needAudit) {
+    if (!(Auditable = needAudit)) {
+        return;
+    }
+
     const auto& request = ev->Get()->Request;
     const TString method(request->Method);
     const TString url(request->URL.Before('?'));
     const auto params = request->URL.After('?');
     const auto cgiParams = TCgiParameters(params);
-    NHttp::THeaders headers(request->Headers);
 
     if (!(Auditable = AuditableRequest(ev->Get()->Request))) {
         return;
     }
 
-    TString remoteAddress = ToString(headers.Get(X_FORWARDED_FOR_HEADER).Before(',')); // Get the first address in the list
-    if (remoteAddress.empty()) {
-        remoteAddress = NKikimr::NAddressClassifier::ExtractAddress(request->Address->ToString());
-    }
+    TString remoteAddress = ExtractRemoteAddress(request.Get());
 
     AddAuditLogPart("component", MONITORING_COMPONENT_NAME);
-    AddAuditLogPart("remote_address", remoteAddress);
+    AddAuditLogPart("remote_address", remoteAddress ? remoteAddress : EMPTY_VALUE);
     AddAuditLogPart("operation", DEFAULT_OPERATION);
     AddAuditLogPart("method", method);
     AddAuditLogPart("url", url);

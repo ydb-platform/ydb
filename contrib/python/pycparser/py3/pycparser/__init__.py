@@ -8,7 +8,7 @@
 # License: BSD
 #-----------------------------------------------------------------
 __all__ = ['c_lexer', 'c_parser', 'c_ast']
-__version__ = '2.22'
+__version__ = '2.23'
 
 import io
 from subprocess import check_output

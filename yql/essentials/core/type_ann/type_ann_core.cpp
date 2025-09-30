@@ -3,6 +3,7 @@
 #include "type_ann_expr.h"
 #include "type_ann_impl.h"
 #include "type_ann_list.h"
+#include "type_ann_dict.h"
 #include "type_ann_columnorder.h"
 #include "type_ann_wide.h"
 #include "type_ann_types.h"
@@ -51,6 +52,34 @@ namespace NYql {
     }
 
 namespace NTypeAnnImpl {
+    TExprNodeBuilder& AddChildren(TExprNodeBuilder& builder, ui32 index, const TExprNode::TPtr& input) {
+        const auto i = index;
+        return i >= input->ChildrenSize() ? builder : AddChildren(builder.Add(i, input->ChildPtr(i)), ++index, input);
+    }
+
+    const TTypeAnnotationNode* ParseTypeCached(const TString& typeStr, TExprContext& ctx, TTypeAnnotationContext& typeCtx) {
+        if (!ctx.ParseTypeCache.contains(typeStr)) {
+            auto typeNode = ctx.Builder({})
+                .Callable("ParseType")
+                    .Atom(0, typeStr)
+                .Seal()
+                .Build();
+
+            TExtContext extContext(ctx, typeCtx);
+            auto status = ParseTypeWrapper(typeNode, typeNode, extContext);
+            if (status == IGraphTransformer::TStatus::Error) {
+                return nullptr;
+            }
+            if (!EnsureType(*typeNode, ctx)) {
+                return nullptr;
+            }
+
+            ctx.ParseTypeCache[typeStr] = typeNode->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+        }
+
+        return ctx.ParseTypeCache[typeStr];
+    }
+
     enum class EDictItems {
         Both = 0,
         Keys = 1,
@@ -2917,7 +2946,7 @@ namespace NTypeAnnImpl {
         const auto dataSlot = dataType->GetSlot();
         if (IsDataTypeDecimal(dataSlot)) {
             const auto params = static_cast<const TDataExprParamsType*>(dataType);
-            if (const auto scale = FromString<ui8>(params->GetParamTwo())) {
+            if (/* const auto scale = */ FromString<ui8>(params->GetParamTwo())) {
                     output = ctx.Expr.Builder(input->Pos())
                         .Callable(IncOrDec ? "Add" : "Sub")
                             .Add(0, input->Child(0))
@@ -5143,12 +5172,23 @@ namespace NTypeAnnImpl {
             }
         }
         if (input->ChildrenSize() > 0) {
-            auto status = EnsureDependsOnTailAndRewrite(input, output, ctx.Expr, ctx.Types, 0, 1);
-            if (status != IGraphTransformer::TStatus::Ok) {
-                return status;
+            TExprNode::TPtr depOn;
+            if (NNodes::TCoDependsOnBase::Match(&input->Head())) {
+                if (!ctx.Types.DirectRowDependsOn) {
+                    output = ctx.Expr.ChangeChild(*input, 0, input->Head().HeadPtr());
+                    return IGraphTransformer::TStatus::Repeat;
+                }
+
+                auto status = EnsureDependsOnTailAndRewrite(input, output, ctx.Expr, ctx.Types, 0, 1);
+                if (status != IGraphTransformer::TStatus::Ok) {
+                    return status;
+                }
+
+                depOn = input->Head().HeadPtr();
+            } else {
+                depOn = input->HeadPtr();
             }
 
-            auto depOn = input->Head().HeadPtr();
             if (ctx.Types.StrictTableProps && !EnsureStructType(*depOn, ctx.Expr)) {
                 return IGraphTransformer::TStatus::Error;
             }
@@ -5238,12 +5278,23 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             }
         }
         if (input->ChildrenSize() > 0) {
-            auto status = EnsureDependsOnTailAndRewrite(input, output, ctx.Expr, ctx.Types, 0, 1);
-            if (status != IGraphTransformer::TStatus::Ok) {
-                return status;
+            TExprNode::TPtr depOn;
+            if (NNodes::TCoDependsOnBase::Match(&input->Head())) {
+                if (!ctx.Types.DirectRowDependsOn) {
+                    output = ctx.Expr.ChangeChild(*input, 0, input->Head().HeadPtr());
+                    return IGraphTransformer::TStatus::Repeat;
+                }
+
+                auto status = EnsureDependsOnTailAndRewrite(input, output, ctx.Expr, ctx.Types, 0, 1);
+                if (status != IGraphTransformer::TStatus::Ok) {
+                    return status;
+                }
+
+                depOn = input->Head().HeadPtr();
+            } else {
+                depOn = input->HeadPtr();
             }
 
-            auto depOn = input->Head().HeadPtr();
             if (ctx.Types.StrictTableProps && !EnsureStructType(*depOn, ctx.Expr)) {
                 return IGraphTransformer::TStatus::Error;
             }
@@ -5340,7 +5391,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         }
 
         TVector<TString> supportedSystems = { "yt", "kikimr", "rtmr" };
-        if (auto p = FindPtr(supportedSystems, input->Tail().Content())) {
+        if (/* auto p = */ FindPtr(supportedSystems, input->Tail().Content())) {
         } else {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Tail().Pos()), TStringBuilder() << "Unknown system: "
                 << input->Tail().Content() << ", supported: " << JoinSeq(",", supportedSystems)));
@@ -7990,6 +8041,12 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             input->SetPosAware();
         }
 
+        if (cachedType->UseStaticLinear()) {
+            if (!CheckLinearLangver(input->Pos(), ctx.Types.LangVer, ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+        }
+
         return IGraphTransformer::TStatus::Ok;
     }
 
@@ -8149,6 +8206,12 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         input->SetTypeAnn(callableType);
         if (ctx.Types.DebugPositions) {
             input->SetPosAware();
+        }
+
+        if (callableType->UseStaticLinear()) {
+            if (!CheckLinearLangver(input->Pos(), ctx.Types.LangVer, ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
         }
 
         return IGraphTransformer::TStatus::Ok;
@@ -8696,7 +8759,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         return IGraphTransformer::TStatus::Repeat;
     }
 
-    IGraphTransformer::TStatus CallableWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    IGraphTransformer::TStatus CallableWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         Y_UNUSED(output);
         if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
@@ -8742,6 +8805,12 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(lambda->Pos()), TStringBuilder() << "Mismatch of lambda return type: "
                 << *lambda->GetTypeAnn() << " != " << *callableType->GetReturnType()));
             return IGraphTransformer::TStatus::Error;
+        }
+
+        if (callableType->UseStaticLinear()) {
+            if (!CheckLinearLangver(input->Pos(), ctx.Types.LangVer, ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
         }
 
         input->SetTypeAnn(callableType);
@@ -10933,6 +11002,34 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         return IGraphTransformer::TStatus::Ok;
     }
 
+    IGraphTransformer::TStatus BlockWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        Y_UNUSED(output);
+        if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        auto& lambda = input->ChildRef(0);
+        auto status = ConvertToLambda(lambda, ctx.Expr, 1);
+        if (status.Level != IGraphTransformer::TStatus::Ok) {
+            return status;
+        }
+
+        if (!UpdateLambdaAllArgumentsTypes(lambda, { ctx.Expr.MakeType<TDataExprType>(NUdf::EDataSlot::Uint32) }, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!lambda->GetTypeAnn()) {
+            return IGraphTransformer::TStatus::Repeat;
+        }
+
+        if (!EnsureComputable(*lambda->Child(1), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        input->SetTypeAnn(lambda->Child(1)->GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
+    }
+
     TMaybe<EDataSlot> ExtractDataType(const TExprNode& node, TExprContext& ctx) {
         if (node.IsAtom()) {
             auto dataType = node.Content();
@@ -12643,6 +12740,36 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         return IGraphTransformer::TStatus::Ok;
     }
 
+    IGraphTransformer::TStatus ToDynamicLinearWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        Y_UNUSED(output);
+        if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureLinearType(input->Head(), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        auto retType = ctx.Expr.MakeType<TDynamicLinearExprType>(input->Head().GetTypeAnn()->Cast<TLinearExprType>()->GetItemType());
+        input->SetTypeAnn(retType);
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    IGraphTransformer::TStatus FromDynamicLinearWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        Y_UNUSED(output);
+        if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureDynamicLinearType(input->Head(), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        auto retType = ctx.Expr.MakeType<TLinearExprType>(input->Head().GetTypeAnn()->Cast<TDynamicLinearExprType>()->GetItemType());
+        input->SetTypeAnn(retType);
+        return IGraphTransformer::TStatus::Ok;
+    }
+
     IGraphTransformer::TStatus AssumeAllMembersNullableAtOnceWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
         Y_UNUSED(output);
         if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
@@ -12972,6 +13099,27 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         ExtFunctions["ScalarType"] = &TypeWrapper<ETypeAnnotationKind::Scalar>;
         ExtFunctions["LinearType"] = &TypeWrapper<ETypeAnnotationKind::Linear>;
         ExtFunctions["DynamicLinearType"] = &TypeWrapper<ETypeAnnotationKind::DynamicLinear>;
+        ExtFunctions["ToDynamicLinear"] = &ToDynamicLinearWrapper;
+        ExtFunctions["FromDynamicLinear"] = &FromDynamicLinearWrapper;
+        ExtFunctions["MutDictCreate"] = &MutDictCreateWrapper;
+        ExtFunctions["FromMutDict"] = &FromMutDictWrapper;
+        ExtFunctions["ToMutDict"] = &ToMutDictWrapper;
+        ExtFunctions["MutDictInsert"] = &MutDictBlindOpWrapper<true>;
+        ExtFunctions["MutDictUpsert"] = &MutDictBlindOpWrapper<true>;
+        ExtFunctions["MutDictUpdate"] = &MutDictBlindOpWrapper<true>;
+        ExtFunctions["MutDictRemove"] = &MutDictBlindOpWrapper<false>;
+        ExtFunctions["MutDictPop"] = &MutDictPopWrapper;
+        ExtFunctions["MutDictContains"] = &MutDictContainsWrapper;
+        ExtFunctions["MutDictLookup"] = &MutDictPopWrapper;
+        ExtFunctions["MutDictHasItems"] = &MutDictHasItemsWrapper;
+        ExtFunctions["MutDictLength"] = &MutDictLengthWrapper;
+        ExtFunctions["MutDictItems"] = &MutDictItemsWrapper;
+        ExtFunctions["MutDictKeys"] = &MutDictKeysWrapper;
+        ExtFunctions["MutDictPayloads"] = &MutDictPayloadsWrapper;
+        ExtFunctions["DictInsert"] = &DictBlindOpWrapper<true>;
+        ExtFunctions["DictUpsert"] = &DictBlindOpWrapper<true>;
+        ExtFunctions["DictUpdate"] = &DictBlindOpWrapper<true>;
+        ExtFunctions["DictRemove"] = &DictBlindOpWrapper<false>;
         Functions["Nothing"] = &NothingWrapper;
         Functions["AsOptionalType"] = &AsOptionalTypeWrapper;
         Functions["List"] = &ListWrapper;
@@ -13067,7 +13215,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         ExtFunctions["NamedApply"] = &NamedApplyWrapper;
         Functions["PositionalArgs"] = &PositionalArgsWrapper;
         ExtFunctions["SqlCall"] = &SqlCallWrapper;
-        Functions["Callable"] = &CallableWrapper;
+        ExtFunctions["Callable"] = &CallableWrapper;
         ExtFunctions["CallableType"] = &TypeWrapper<ETypeAnnotationKind::Callable>;
         ExtFunctions["CallableResultType"] = &TypeArgWrapper<ETypeArgument::CallableResult>;
         ExtFunctions["CallableArgumentType"] = &TypeArgWrapper<ETypeArgument::CallableArgument>;
@@ -13191,7 +13339,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         ExtFunctions["InnerDependsOn"] = &InnerDependsOnWrapper;
         Functions["Seq"] = &SeqWrapper;
         Functions["Parameter"] = &ParameterWrapper;
-        ExtFunctions["WithSideEffectsMode"] = WithSideEffectsModeWrapper;
+        ExtFunctions["WithSideEffectsMode"] = &WithSideEffectsModeWrapper;
+        ExtFunctions["Block"] = &BlockWrapper;
         ExtFunctions["WeakField"] = &WeakFieldWrapper;
         ExtFunctions["TryWeakMemberFromDict"] = &TryWeakMemberFromDictWrapper;
         Functions["ByteString"] = &ByteStringWrapper;

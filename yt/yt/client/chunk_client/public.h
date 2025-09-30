@@ -158,6 +158,9 @@ class TChunkReplica;
 using TChunkReplicaList = TCompactVector<TChunkReplica, TypicalReplicaCount>;
 using TChunkReplicaSlimList = TCompactVector<TChunkReplica, SlimTypicalReplicaCount>;
 
+/// Empty vector means that no tags are specified. Should be considered as `Maybe<NonEmptyVector<int>>`.
+using TPartitionTags = TCompactVector<int, 1>;
+
 extern const std::string DefaultStoreAccountName;
 extern const std::string DefaultStoreMediumName;
 extern const std::string DefaultCacheMediumName;

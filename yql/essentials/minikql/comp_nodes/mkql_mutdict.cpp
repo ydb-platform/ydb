@@ -51,12 +51,24 @@ using TMutDictMap = std::unordered_map<
     TGenericEquals,
     TMKQLAllocator<std::pair<const NUdf::TUnboxedValue, NUdf::TUnboxedValue>>>;
 
-class TMutDictResource : public TComputationValue<TMutDictResource> {
+using TMutDictSet = std::unordered_set<
+    NUdf::TUnboxedValue,
+    TGenericHash,
+    TGenericEquals,
+    TMKQLAllocator<NUdf::TUnboxedValue>>;
+
+template <bool IsSet>
+using TMutDictStorage = std::conditional_t<IsSet, TMutDictSet, TMutDictMap>;
+
+template <bool IsSet>
+class TMutDictResource : public TComputationValue<TMutDictResource<IsSet>> {
+    using TSelf = TMutDictResource<IsSet>;
+    using TBase = TComputationValue<TSelf>;
 public:
     TMutDictResource(TMemoryUsageInfo* memInfo, const TMutDictSupport& support)
-        : TComputationValue(memInfo)
+        : TBase(memInfo)
         , Tag_(support.Tag)
-        , Map_(0, TGenericHash{support.Hash.Get()}, TGenericEquals{support.Equate.Get()})
+        , Storage_(0, TGenericHash{support.Hash.Get()}, TGenericEquals{support.Equate.Get()})
     {
     }
 
@@ -66,15 +78,16 @@ private:
     }
 
     void* GetResource() override {
-        return &Map_;
+        return &Storage_;
     }
 
     const NUdf::TStringRef Tag_;
-    TMutDictMap Map_;
+    TMutDictStorage<IsSet> Storage_;
 };
 
-class TToMutDictWrapper : public TMutableComputationNode<TToMutDictWrapper> {
-    using TSelf = TToMutDictWrapper;
+template <bool IsSet>
+class TToMutDictWrapper : public TMutableComputationNode<TToMutDictWrapper<IsSet>> {
+    using TSelf = TToMutDictWrapper<IsSet>;
     using TBase = TMutableComputationNode<TSelf>;
     typedef TBase TBaseComputation;
 public:
@@ -88,11 +101,19 @@ public:
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         auto input = Source_->GetValue(ctx);
-        auto res = ctx.HolderFactory.Create<TMutDictResource>(Support_);
-        auto& map = *static_cast<TMutDictMap*>(res.GetResource());
-        NUdf::TUnboxedValue key, value;
-        for (auto it = input.GetDictIterator(); it.NextPair(key, value);) {
-            map.emplace(key, value);
+        auto res = ctx.HolderFactory.Create<TMutDictResource<IsSet>>(Support_);
+        if constexpr (IsSet) {
+            auto& set = *static_cast<TMutDictSet*>(res.GetResource());
+            NUdf::TUnboxedValue key;
+            for (auto it = input.GetKeysIterator(); it.Next(key);) {
+                set.emplace(key);
+            }
+        } else {
+            auto& map = *static_cast<TMutDictMap*>(res.GetResource());
+            NUdf::TUnboxedValue key, value;
+            for (auto it = input.GetDictIterator(); it.NextPair(key, value);) {
+                map.emplace(key, value);
+            }
         }
 
         return res;
@@ -109,8 +130,9 @@ private:
     const TComputationNodePtrVector DependentNodes_;
 };
 
-class TMutDictCreateWrapper : public TMutableComputationNode<TMutDictCreateWrapper> {
-    using TSelf = TMutDictCreateWrapper;
+template <bool IsSet>
+class TMutDictCreateWrapper : public TMutableComputationNode<TMutDictCreateWrapper<IsSet>> {
+    using TSelf = TMutDictCreateWrapper<IsSet>;
     using TBase = TMutableComputationNode<TSelf>;
     typedef TBase TBaseComputation;
 public:
@@ -122,7 +144,7 @@ public:
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        return ctx.HolderFactory.Create<TMutDictResource>(Support_);
+        return ctx.HolderFactory.Create<TMutDictResource<IsSet>>(Support_);
     }
 
 private:
@@ -134,18 +156,23 @@ private:
     const TComputationNodePtrVector DependentNodes_;
 };
 
-class TFromMutDictWrapper : public TMutableComputationNode<TFromMutDictWrapper> {
-    using TSelf = TFromMutDictWrapper;
+template <bool IsSet>
+class TFromMutDictWrapper : public TMutableComputationNode<TFromMutDictWrapper<IsSet>> {
+    using TSelf = TFromMutDictWrapper<IsSet>;
     using TBase = TMutableComputationNode<TSelf>;
     typedef TBase TBaseComputation;
 public:
+    using TStorage = TMutDictStorage<IsSet>;
+
     template <bool NoSwap>
     class TIterator : public TComputationValue<TIterator<NoSwap>> {
+        using TSelf = TIterator<NoSwap>;
+        using TBase = TComputationValue<TSelf>;
     public:
-        TIterator(TMemoryUsageInfo* memInfo, const TMutDictMap& map)
-            : TComputationValue<TIterator<NoSwap>>(memInfo)
-            , Map_(map)
-            , Iterator_(Map_.begin())
+        TIterator(TMemoryUsageInfo* memInfo, const TStorage& storage)
+            : TBase(memInfo)
+            , Storage_(storage)
+            , Iterator_(Storage_.begin())
             , AtStart_(true)
         {
         }
@@ -155,76 +182,90 @@ public:
             if (AtStart_) {
                 AtStart_ = false;
             } else {
-                if (Iterator_ == Map_.end())
+                if (Iterator_ == Storage_.end())
                     return false;
                 ++Iterator_;
             }
 
-            return Iterator_ != Map_.end();
+            return Iterator_ != Storage_.end();
         }
 
         bool Next(NUdf::TUnboxedValue& key) override {
             if (!Skip())
                 return false;
-            key = NoSwap ? Iterator_->first : Iterator_->second;
+            if constexpr (IsSet) {
+                key = NoSwap ? *Iterator_ : NUdf::TUnboxedValue(NUdf::TUnboxedValuePod::Void());
+            } else {
+                key = NoSwap ? Iterator_->first : Iterator_->second;
+            }
             return true;
         }
 
         bool NextPair(NUdf::TUnboxedValue& key, NUdf::TUnboxedValue& payload) override {
             if (!Next(key))
                 return false;
-            payload = NoSwap ? Iterator_->second : Iterator_->first;
+            if constexpr (IsSet) {
+                payload = NoSwap ? NUdf::TUnboxedValue(NUdf::TUnboxedValuePod::Void()) : *Iterator_;
+            } else {
+                payload = NoSwap ? Iterator_->second : Iterator_->first;
+            }
+
             return true;
         }
 
-        const TMutDictMap& Map_;
-        typename TMutDictMap::const_iterator Iterator_;
+        const TStorage& Storage_;
+        typename TStorage::const_iterator Iterator_;
         bool AtStart_;
     };
 
     class TValue : public TComputationValue<TValue> {
+        using TBase = TComputationValue<TValue>;
     public:
-        TValue(TMemoryUsageInfo* memInfo, TMutDictMap&& map)
-            : TComputationValue(memInfo)
-            , Map_(std::move(map))
+        TValue(TMemoryUsageInfo* memInfo, TStorage&& storage)
+            : TBase(memInfo)
+            , Storage_(std::move(storage))
         {
         }
 
         bool Contains(const NUdf::TUnboxedValuePod& key) const override {
-            return Map_.contains(key);
+            return Storage_.contains(key);
         }
 
         NUdf::TUnboxedValue Lookup(const NUdf::TUnboxedValuePod& key) const override {
-            auto it = Map_.find(key);
-            if (it == Map_.end()) {
+            auto it = Storage_.find(key);
+            if (it == Storage_.end()) {
                 return {};
             }
 
-            return it->second.MakeOptional();
+            if constexpr (IsSet) {
+                return NUdf::TUnboxedValuePod::Void();
+            } else {
+                return it->second.MakeOptional();
+            }
         }
 
         NUdf::TUnboxedValue GetKeysIterator() const override {
-            return NUdf::TUnboxedValuePod(new TIterator<true>(GetMemInfo(), Map_));
+            return NUdf::TUnboxedValuePod(new TIterator<true>(this->GetMemInfo(), Storage_));
         }
 
         NUdf::TUnboxedValue GetDictIterator() const override {
-            return NUdf::TUnboxedValuePod(new TIterator<true>(GetMemInfo(), Map_));
+            return NUdf::TUnboxedValuePod(new TIterator<true>(this->GetMemInfo(), Storage_));
         }
 
         NUdf::TUnboxedValue GetPayloadsIterator() const override {
-            return NUdf::TUnboxedValuePod(new TIterator<false>(GetMemInfo(), Map_));
+            return NUdf::TUnboxedValuePod(new TIterator<false>(this->GetMemInfo(), Storage_));
         }
 
         ui64 GetDictLength() const override {
-            return Map_.size();
+            return Storage_.size();
         }
 
         bool HasDictItems() const override {
-            return !Map_.empty();
+            return !Storage_.empty();
         }
 
     private:
-        const TMutDictMap Map_;
+        const TStorage Storage_;
     };
 
     TFromMutDictWrapper(TComputationMutables& mutables, TType* keyType, NUdf::TStringRef tag, IComputationNode* source)
@@ -237,8 +278,8 @@ public:
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         auto input = Source_->GetValue(ctx);
         Y_DEBUG_ABORT_UNLESS(input.GetResourceTag() == Support_.Tag);
-        auto& map = *static_cast<TMutDictMap*>(input.GetResource());
-        return ctx.HolderFactory.Create<TValue>(std::move(map));
+        auto& storage = *static_cast<TMutDictStorage<IsSet>*>(input.GetResource());
+        return ctx.HolderFactory.Create<TValue>(std::move(storage));
     }
 
 private:
@@ -250,8 +291,9 @@ private:
     IComputationNode* const Source_;
 };
 
-class TMutDictInsertWrapper : public TMutableComputationNode<TMutDictInsertWrapper> {
-    using TSelf = TMutDictInsertWrapper;
+template <bool IsSet>
+class TMutDictInsertWrapper : public TMutableComputationNode<TMutDictInsertWrapper<IsSet>> {
+    using TSelf = TMutDictInsertWrapper<IsSet>;
     using TBase = TMutableComputationNode<TSelf>;
     typedef TBase TBaseComputation;
 public:
@@ -268,12 +310,17 @@ public:
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         auto input = Source_->GetValue(ctx);
         Y_DEBUG_ABORT_UNLESS(input.GetResourceTag() == Support_.Tag);
-        auto& map = *static_cast<TMutDictMap*>(input.GetResource());
         auto key = KeySource_->GetValue(ctx);
-        auto [it, inserted] = map.emplace(key, NUdf::TUnboxedValue::Invalid());
-        if (inserted) {
-            auto payload = PayloadSource_->GetValue(ctx);
-            it->second = payload;
+        if constexpr (IsSet) {
+            auto& set = *static_cast<TMutDictSet*>(input.GetResource());
+            set.emplace(key);
+        } else {
+            auto& map = *static_cast<TMutDictMap*>(input.GetResource());
+            auto [it, inserted] = map.emplace(key, NUdf::TUnboxedValue::Invalid());
+            if (inserted) {
+                auto payload = PayloadSource_->GetValue(ctx);
+                it->second = payload;
+            }
         }
 
         return input.Release();
@@ -292,8 +339,9 @@ private:
     IComputationNode* const PayloadSource_;
 };
 
-class TMutDictUpsertWrapper : public TMutableComputationNode<TMutDictUpsertWrapper> {
-    using TSelf = TMutDictUpsertWrapper;
+template <bool IsSet>
+class TMutDictUpsertWrapper : public TMutableComputationNode<TMutDictUpsertWrapper<IsSet>> {
+    using TSelf = TMutDictUpsertWrapper<IsSet>;
     using TBase = TMutableComputationNode<TSelf>;
     typedef TBase TBaseComputation;
 public:
@@ -310,10 +358,15 @@ public:
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         auto input = Source_->GetValue(ctx);
         Y_DEBUG_ABORT_UNLESS(input.GetResourceTag() == Support_.Tag);
-        auto& map = *static_cast<TMutDictMap*>(input.GetResource());
         auto key = KeySource_->GetValue(ctx);
-        auto payload = PayloadSource_->GetValue(ctx);
-        map[key] = payload;
+        if constexpr (IsSet) {
+            auto& set = *static_cast<TMutDictSet*>(input.GetResource());
+            set.emplace(key);
+        } else {
+            auto& map = *static_cast<TMutDictMap*>(input.GetResource());
+            auto payload = PayloadSource_->GetValue(ctx);
+            map[key] = payload;
+        }
         return input.Release();
     }
 
@@ -330,8 +383,9 @@ private:
     IComputationNode* const PayloadSource_;
 };
 
-class TMutDictUpdateWrapper : public TMutableComputationNode<TMutDictUpdateWrapper> {
-    using TSelf = TMutDictUpdateWrapper;
+template <bool IsSet>
+class TMutDictUpdateWrapper : public TMutableComputationNode<TMutDictUpdateWrapper<IsSet>> {
+    using TSelf = TMutDictUpdateWrapper<IsSet>;
     using TBase = TMutableComputationNode<TSelf>;
     typedef TBase TBaseComputation;
 public:
@@ -348,12 +402,14 @@ public:
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         auto input = Source_->GetValue(ctx);
         Y_DEBUG_ABORT_UNLESS(input.GetResourceTag() == Support_.Tag);
-        auto& map = *static_cast<TMutDictMap*>(input.GetResource());
-        auto key = KeySource_->GetValue(ctx);
-        auto it = map.find(key);
-        if (it != map.cend()) {
-            auto payload = PayloadSource_->GetValue(ctx);
-            it->second = payload;
+        if constexpr (!IsSet) {
+            auto& map = *static_cast<TMutDictMap*>(input.GetResource());
+            auto key = KeySource_->GetValue(ctx);
+            auto it = map.find(key);
+            if (it != map.cend()) {
+                auto payload = PayloadSource_->GetValue(ctx);
+                it->second = payload;
+            }
         }
 
         return input.Release();
@@ -372,7 +428,8 @@ private:
     IComputationNode* const PayloadSource_;
 };
 
-class TMutDictRemoveWrapper : public TMutableComputationNode<TMutDictRemoveWrapper> {
+template <bool IsSet>
+class TMutDictRemoveWrapper : public TMutableComputationNode<TMutDictRemoveWrapper<IsSet>> {
     using TSelf = TMutDictRemoveWrapper;
     using TBase = TMutableComputationNode<TSelf>;
     typedef TBase TBaseComputation;
@@ -389,9 +446,9 @@ public:
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         auto input = Source_->GetValue(ctx);
         Y_DEBUG_ABORT_UNLESS(input.GetResourceTag() == Support_.Tag);
-        auto& map = *static_cast<TMutDictMap*>(input.GetResource());
+        auto& storage = *static_cast<TMutDictStorage<IsSet>*>(input.GetResource());
         auto key = KeySource_->GetValue(ctx);
-        map.erase(key);
+        storage.erase(key);
         return input.Release();
     }
 
@@ -406,8 +463,9 @@ private:
     IComputationNode* const KeySource_;
 };
 
-class TMutDictPopWrapper : public TMutableComputationNode<TMutDictPopWrapper> {
-    using TSelf = TMutDictPopWrapper;
+template <bool IsSet>
+class TMutDictPopWrapper : public TMutableComputationNode<TMutDictPopWrapper<IsSet>> {
+    using TSelf = TMutDictPopWrapper<IsSet>;
     using TBase = TMutableComputationNode<TSelf>;
     typedef TBase TBaseComputation;
 public:
@@ -423,15 +481,24 @@ public:
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         auto input = Source_->GetValue(ctx);
         Y_DEBUG_ABORT_UNLESS(input.GetResourceTag() == Support_.Tag);
-        auto& map = *static_cast<TMutDictMap*>(input.GetResource());
         auto key = KeySource_->GetValue(ctx);
         NUdf::TUnboxedValue* items;
         auto res = ctx.HolderFactory.CreateDirectArrayHolder(2, items);
         items[0] = input;
-        auto it = map.find(key);
-        if (it != map.cend()) {
-            items[1] = it->second.MakeOptional();
-            map.erase(it);
+        if constexpr (IsSet) {
+            auto& set = *static_cast<TMutDictSet*>(input.GetResource());
+            auto it = set.find(key);
+            if (it != set.cend()) {
+                items[1] = TUnboxedValuePod::Void();
+                set.erase(it);
+            }
+        } else {
+            auto& map = *static_cast<TMutDictMap*>(input.GetResource());
+            auto it = map.find(key);
+            if (it != map.cend()) {
+                items[1] = it->second.MakeOptional();
+                map.erase(it);
+            }
         }
 
         return res;
@@ -448,8 +515,9 @@ private:
     IComputationNode* const KeySource_;
 };
 
-class TMutDictContainsWrapper : public TMutableComputationNode<TMutDictContainsWrapper> {
-    using TSelf = TMutDictContainsWrapper;
+template <bool IsSet>
+class TMutDictContainsWrapper : public TMutableComputationNode<TMutDictContainsWrapper<IsSet>> {
+    using TSelf = TMutDictContainsWrapper<IsSet>;
     using TBase = TMutableComputationNode<TSelf>;
     typedef TBase TBaseComputation;
 public:
@@ -465,12 +533,12 @@ public:
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         auto input = Source_->GetValue(ctx);
         Y_DEBUG_ABORT_UNLESS(input.GetResourceTag() == Support_.Tag);
-        auto& map = *static_cast<TMutDictMap*>(input.GetResource());
+        auto& storage = *static_cast<TMutDictStorage<IsSet>*>(input.GetResource());
         auto key = KeySource_->GetValue(ctx);
         NUdf::TUnboxedValue* items;
         auto res = ctx.HolderFactory.CreateDirectArrayHolder(2, items);
         items[0] = input;
-        items[1] = NUdf::TUnboxedValuePod(map.contains(key));
+        items[1] = NUdf::TUnboxedValuePod(storage.contains(key));
         return res;
     }
 
@@ -485,8 +553,9 @@ private:
     IComputationNode* const KeySource_;
 };
 
-class TMutDictLookupWrapper : public TMutableComputationNode<TMutDictLookupWrapper> {
-    using TSelf = TMutDictLookupWrapper;
+template <bool IsSet>
+class TMutDictLookupWrapper : public TMutableComputationNode<TMutDictLookupWrapper<IsSet>> {
+    using TSelf = TMutDictLookupWrapper<IsSet>;
     using TBase = TMutableComputationNode<TSelf>;
     typedef TBase TBaseComputation;
 public:
@@ -502,14 +571,22 @@ public:
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         auto input = Source_->GetValue(ctx);
         Y_DEBUG_ABORT_UNLESS(input.GetResourceTag() == Support_.Tag);
-        auto& map = *static_cast<TMutDictMap*>(input.GetResource());
         auto key = KeySource_->GetValue(ctx);
         NUdf::TUnboxedValue* items;
         auto res = ctx.HolderFactory.CreateDirectArrayHolder(2, items);
         items[0] = input;
-        auto it = map.find(key);
-        if (it != map.cend()) {
-            items[1] = it->second.MakeOptional();
+        if constexpr (IsSet) {
+            auto& set = *static_cast<TMutDictSet*>(input.GetResource());
+            auto it = set.find(key);
+            if (it != set.cend()) {
+                items[1] = TUnboxedValuePod::Void();
+            }
+        } else {
+            auto& map = *static_cast<TMutDictMap*>(input.GetResource());
+            auto it = map.find(key);
+            if (it != map.cend()) {
+                items[1] = it->second.MakeOptional();
+            }
         }
 
         return res;
@@ -526,8 +603,9 @@ private:
     IComputationNode* const KeySource_;
 };
 
-class TMutDictHasItemsWrapper : public TMutableComputationNode<TMutDictHasItemsWrapper> {
-    using TSelf = TMutDictHasItemsWrapper;
+template <bool IsSet>
+class TMutDictHasItemsWrapper : public TMutableComputationNode<TMutDictHasItemsWrapper<IsSet>> {
+    using TSelf = TMutDictHasItemsWrapper<IsSet>;
     using TBase = TMutableComputationNode<TSelf>;
     typedef TBase TBaseComputation;
 public:
@@ -542,11 +620,11 @@ public:
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         auto input = Source_->GetValue(ctx);
         Y_DEBUG_ABORT_UNLESS(input.GetResourceTag() == Support_.Tag);
-        auto& map = *static_cast<TMutDictMap*>(input.GetResource());
+        auto& storage = *static_cast<TMutDictStorage<IsSet>*>(input.GetResource());
         NUdf::TUnboxedValue* items;
         auto res = ctx.HolderFactory.CreateDirectArrayHolder(2, items);
         items[0] = input;
-        items[1] = NUdf::TUnboxedValuePod(!map.empty());
+        items[1] = NUdf::TUnboxedValuePod(!storage.empty());
         return res;
     }
 
@@ -559,8 +637,9 @@ private:
     IComputationNode* const Source_;
 };
 
-class TMutDictLengthWrapper : public TMutableComputationNode<TMutDictLengthWrapper> {
-    using TSelf = TMutDictLengthWrapper;
+template <bool IsSet>
+class TMutDictLengthWrapper : public TMutableComputationNode<TMutDictLengthWrapper<IsSet>> {
+    using TSelf = TMutDictLengthWrapper<IsSet>;
     using TBase = TMutableComputationNode<TSelf>;
     typedef TBase TBaseComputation;
 public:
@@ -575,11 +654,11 @@ public:
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         auto input = Source_->GetValue(ctx);
         Y_DEBUG_ABORT_UNLESS(input.GetResourceTag() == Support_.Tag);
-        auto& map = *static_cast<TMutDictMap*>(input.GetResource());
+        auto& storage = *static_cast<TMutDictStorage<IsSet>*>(input.GetResource());
         NUdf::TUnboxedValue* items;
         auto res = ctx.HolderFactory.CreateDirectArrayHolder(2, items);
         items[0] = input;
-        items[1] = NUdf::TUnboxedValuePod(ui64(map.size()));
+        items[1] = NUdf::TUnboxedValuePod(ui64(storage.size()));
         return res;
     }
 
@@ -592,8 +671,9 @@ private:
     IComputationNode* const Source_;
 };
 
-class TMutDictItemsWrapper : public TMutableComputationNode<TMutDictItemsWrapper> {
-    using TSelf = TMutDictItemsWrapper;
+template <bool IsSet>
+class TMutDictItemsWrapper : public TMutableComputationNode<TMutDictItemsWrapper<IsSet>> {
+    using TSelf = TMutDictItemsWrapper<IsSet>;
     using TBase = TMutableComputationNode<TSelf>;
     typedef TBase TBaseComputation;
 public:
@@ -608,17 +688,23 @@ public:
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         auto input = Source_->GetValue(ctx);
         Y_DEBUG_ABORT_UNLESS(input.GetResourceTag() == Support_.Tag);
-        auto& map = *static_cast<TMutDictMap*>(input.GetResource());
+        auto& storage = *static_cast<TMutDictStorage<IsSet>*>(input.GetResource());
         NUdf::TUnboxedValue* items;
         NUdf::TUnboxedValue* listItems;
         auto res = ctx.HolderFactory.CreateDirectArrayHolder(2, items);
-        auto list = ctx.HolderFactory.CreateDirectArrayHolder(map.size(), listItems);
+        auto list = ctx.HolderFactory.CreateDirectArrayHolder(storage.size(), listItems);
         ui64 index = 0;
-        for (auto it = map.cbegin(); it != map.cend(); ++it, ++index) {
+        for (auto it = storage.cbegin(); it != storage.cend(); ++it, ++index) {
             NUdf::TUnboxedValue* pairItems;
             auto pair = ctx.HolderFactory.CreateDirectArrayHolder(2, pairItems);
-            pairItems[0] = it->first;
-            pairItems[1] = it->second;
+            if constexpr (IsSet) {
+                pairItems[0] = *it;
+                pairItems[1] = TUnboxedValuePod::Void();
+            } else {
+                pairItems[0] = it->first;
+                pairItems[1] = it->second;
+            }
+
             listItems[index] = pair;
         }
 
@@ -636,8 +722,9 @@ private:
     IComputationNode* const Source_;
 };
 
-class TMutDictKeysWrapper : public TMutableComputationNode<TMutDictKeysWrapper> {
-    using TSelf = TMutDictKeysWrapper;
+template <bool IsSet>
+class TMutDictKeysWrapper : public TMutableComputationNode<TMutDictKeysWrapper<IsSet>> {
+    using TSelf = TMutDictKeysWrapper<IsSet>;
     using TBase = TMutableComputationNode<TSelf>;
     typedef TBase TBaseComputation;
 public:
@@ -652,14 +739,18 @@ public:
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         auto input = Source_->GetValue(ctx);
         Y_DEBUG_ABORT_UNLESS(input.GetResourceTag() == Support_.Tag);
-        auto& map = *static_cast<TMutDictMap*>(input.GetResource());
+        auto& storage = *static_cast<TMutDictStorage<IsSet>*>(input.GetResource());
         NUdf::TUnboxedValue* items;
         NUdf::TUnboxedValue* listItems;
         auto res = ctx.HolderFactory.CreateDirectArrayHolder(2, items);
-        auto list = ctx.HolderFactory.CreateDirectArrayHolder(map.size(), listItems);
+        auto list = ctx.HolderFactory.CreateDirectArrayHolder(storage.size(), listItems);
         ui64 index = 0;
-        for (auto it = map.cbegin(); it != map.cend(); ++it, ++index) {
-            listItems[index] = it->first;
+        for (auto it = storage.cbegin(); it != storage.cend(); ++it, ++index) {
+            if constexpr (IsSet) {
+                listItems[index] = *it;
+            } else {
+                listItems[index] = it->first;
+            }
         }
 
         items[0] = input;
@@ -676,8 +767,9 @@ private:
     IComputationNode* const Source_;
 };
 
-class TMutDictPayloadsWrapper : public TMutableComputationNode<TMutDictPayloadsWrapper> {
-    using TSelf = TMutDictPayloadsWrapper;
+template <bool IsSet>
+class TMutDictPayloadsWrapper : public TMutableComputationNode<TMutDictPayloadsWrapper<IsSet>> {
+    using TSelf = TMutDictPayloadsWrapper<IsSet>;
     using TBase = TMutableComputationNode<TSelf>;
     typedef TBase TBaseComputation;
 public:
@@ -692,14 +784,18 @@ public:
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         auto input = Source_->GetValue(ctx);
         Y_DEBUG_ABORT_UNLESS(input.GetResourceTag() == Support_.Tag);
-        auto& map = *static_cast<TMutDictMap*>(input.GetResource());
+        auto& storage = *static_cast<TMutDictStorage<IsSet>*>(input.GetResource());
         NUdf::TUnboxedValue* items;
         NUdf::TUnboxedValue* listItems;
         auto res = ctx.HolderFactory.CreateDirectArrayHolder(2, items);
-        auto list = ctx.HolderFactory.CreateDirectArrayHolder(map.size(), listItems);
-        ui64 index = 0;
-        for (auto it = map.cbegin(); it != map.cend(); ++it, ++index) {
-            listItems[index] = it->second;
+        auto list = ctx.HolderFactory.CreateDirectArrayHolder(storage.size(), listItems);
+        if constexpr (IsSet) {
+            std::fill_n(listItems, storage.size(), NUdf::TUnboxedValuePod::Void());
+        } else {
+            ui64 index = 0;
+            for (auto it = storage.cbegin(); it != storage.cend(); ++it, ++index) {
+                listItems[index] = it->second;
+            }
         }
 
         items[0] = input;
@@ -721,6 +817,7 @@ private:
 IComputationNode* WrapToMutDict(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() >= 1U, "Expected at least 1 arg");
     auto keyType = AS_TYPE(TDictType, callable.GetInput(0).GetStaticType())->GetKeyType();
+    auto payloadType = AS_TYPE(TDictType, callable.GetInput(0).GetStaticType())->GetPayloadType();
     TComputationNodePtrVector dependentNodes(callable.GetInputsCount() - 1);
     for (ui32 i = 1; i < callable.GetInputsCount(); ++i) {
         dependentNodes[i - 1] = LocateNode(ctx.NodeLocator, callable, i);
@@ -728,146 +825,220 @@ IComputationNode* WrapToMutDict(TCallable& callable, const TComputationNodeFacto
 
     auto source = LocateNode(ctx.NodeLocator, callable, 0);
     auto tag = GetMutDictTag(callable.GetType()->GetReturnType());
-    return new TToMutDictWrapper(ctx.Mutables, keyType, tag, source, std::move(dependentNodes));
+    if (payloadType->IsVoid()) {
+        return new TToMutDictWrapper<true>(ctx.Mutables, keyType, tag, source, std::move(dependentNodes));
+    } else {
+        return new TToMutDictWrapper<false>(ctx.Mutables, keyType, tag, source, std::move(dependentNodes));
+    }
 }
 
 IComputationNode* WrapMutDictCreate(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() >= 1U, "Expected at least 1 arg");
     MKQL_ENSURE(callable.GetInput(0).GetNode()->GetType()->IsType(), "Expected type");
     auto keyType = AS_TYPE(TDictType, static_cast<TType*>(callable.GetInput(0).GetNode()))->GetKeyType();
+    auto payloadType = AS_TYPE(TDictType, static_cast<TType*>(callable.GetInput(0).GetNode()))->GetPayloadType();
     TComputationNodePtrVector dependentNodes(callable.GetInputsCount() - 1);
     for (ui32 i = 1; i < callable.GetInputsCount(); ++i) {
         dependentNodes[i - 1] = LocateNode(ctx.NodeLocator, callable, i);
     }
 
     auto tag = GetMutDictTag(callable.GetType()->GetReturnType());
-    return new TMutDictCreateWrapper(ctx.Mutables, keyType, tag, std::move(dependentNodes));
+    if (payloadType->IsVoid()) {
+        return new TMutDictCreateWrapper<true>(ctx.Mutables, keyType, tag, std::move(dependentNodes));
+    } else {
+        return new TMutDictCreateWrapper<false>(ctx.Mutables, keyType, tag, std::move(dependentNodes));
+    }
 }
 
 IComputationNode* WrapMutDictInsert(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 4U, "Expected 4 args");
     MKQL_ENSURE(callable.GetInput(0).GetNode()->GetType()->IsType(), "Expected type");
     auto keyType = AS_TYPE(TDictType, static_cast<TType*>(callable.GetInput(0).GetNode()))->GetKeyType();
+    auto payloadType = AS_TYPE(TDictType, static_cast<TType*>(callable.GetInput(0).GetNode()))->GetPayloadType();
     auto source = LocateNode(ctx.NodeLocator, callable, 1);
     auto keySource = LocateNode(ctx.NodeLocator, callable, 2);
     auto payloadSource = LocateNode(ctx.NodeLocator, callable, 3);
     auto tag = GetMutDictTag(callable.GetInput(1).GetStaticType());
-    return new TMutDictInsertWrapper(ctx.Mutables, keyType, tag, source, keySource, payloadSource);
+    if (payloadType->IsVoid()) {
+        return new TMutDictInsertWrapper<true>(ctx.Mutables, keyType, tag, source, keySource, payloadSource);
+    } else {
+        return new TMutDictInsertWrapper<false>(ctx.Mutables, keyType, tag, source, keySource, payloadSource);
+    }
 }
 
 IComputationNode* WrapMutDictUpsert(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 4U, "Expected 4 args");
     MKQL_ENSURE(callable.GetInput(0).GetNode()->GetType()->IsType(), "Expected type");
     auto keyType = AS_TYPE(TDictType, static_cast<TType*>(callable.GetInput(0).GetNode()))->GetKeyType();
+    auto payloadType = AS_TYPE(TDictType, static_cast<TType*>(callable.GetInput(0).GetNode()))->GetPayloadType();
     auto source = LocateNode(ctx.NodeLocator, callable, 1);
     auto keySource = LocateNode(ctx.NodeLocator, callable, 2);
     auto payloadSource = LocateNode(ctx.NodeLocator, callable, 3);
     auto tag = GetMutDictTag(callable.GetInput(1).GetStaticType());
-    return new TMutDictUpsertWrapper(ctx.Mutables, keyType, tag, source, keySource, payloadSource);
+    if (payloadType->IsVoid()) {
+        return new TMutDictUpsertWrapper<true>(ctx.Mutables, keyType, tag, source, keySource, payloadSource);
+    } else {
+        return new TMutDictUpsertWrapper<false>(ctx.Mutables, keyType, tag, source, keySource, payloadSource);
+    }
 }
 
 IComputationNode* WrapMutDictUpdate(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 4U, "Expected 4 args");
     MKQL_ENSURE(callable.GetInput(0).GetNode()->GetType()->IsType(), "Expected type");
     auto keyType = AS_TYPE(TDictType, static_cast<TType*>(callable.GetInput(0).GetNode()))->GetKeyType();
+    auto payloadType = AS_TYPE(TDictType, static_cast<TType*>(callable.GetInput(0).GetNode()))->GetPayloadType();
     auto source = LocateNode(ctx.NodeLocator, callable, 1);
     auto keySource = LocateNode(ctx.NodeLocator, callable, 2);
     auto payloadSource = LocateNode(ctx.NodeLocator, callable, 3);
     auto tag = GetMutDictTag(callable.GetInput(1).GetStaticType());
-    return new TMutDictUpdateWrapper(ctx.Mutables, keyType, tag, source, keySource, payloadSource);
+    if (payloadType->IsVoid()) {
+        return new TMutDictUpdateWrapper<true>(ctx.Mutables, keyType, tag, source, keySource, payloadSource);
+    } else {
+        return new TMutDictUpdateWrapper<false>(ctx.Mutables, keyType, tag, source, keySource, payloadSource);
+    }
 }
 
 IComputationNode* WrapMutDictRemove(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 3U, "Expected 3 args");
     MKQL_ENSURE(callable.GetInput(0).GetNode()->GetType()->IsType(), "Expected type");
     auto keyType = AS_TYPE(TDictType, static_cast<TType*>(callable.GetInput(0).GetNode()))->GetKeyType();
+    auto payloadType = AS_TYPE(TDictType, static_cast<TType*>(callable.GetInput(0).GetNode()))->GetPayloadType();
     auto source = LocateNode(ctx.NodeLocator, callable, 1);
     auto keySource = LocateNode(ctx.NodeLocator, callable, 2);
     auto tag = GetMutDictTag(callable.GetInput(1).GetStaticType());
-    return new TMutDictRemoveWrapper(ctx.Mutables, keyType, tag, source, keySource);
+    if (payloadType->IsVoid()) {
+        return new TMutDictRemoveWrapper<true>(ctx.Mutables, keyType, tag, source, keySource);
+    } else {
+        return new TMutDictRemoveWrapper<false>(ctx.Mutables, keyType, tag, source, keySource);
+    }
 }
 
 IComputationNode* WrapMutDictPop(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 3U, "Expected 3 args");
     MKQL_ENSURE(callable.GetInput(0).GetNode()->GetType()->IsType(), "Expected type");
     auto keyType = AS_TYPE(TDictType, static_cast<TType*>(callable.GetInput(0).GetNode()))->GetKeyType();
+    auto payloadType = AS_TYPE(TDictType, static_cast<TType*>(callable.GetInput(0).GetNode()))->GetPayloadType();
     auto source = LocateNode(ctx.NodeLocator, callable, 1);
     auto keySource = LocateNode(ctx.NodeLocator, callable, 2);
     auto tag = GetMutDictTag(callable.GetInput(1).GetStaticType());
-    return new TMutDictPopWrapper(ctx.Mutables, keyType, tag, source, keySource);
+    if (payloadType->IsVoid()) {
+        return new TMutDictPopWrapper<true>(ctx.Mutables, keyType, tag, source, keySource);
+    } else {
+        return new TMutDictPopWrapper<false>(ctx.Mutables, keyType, tag, source, keySource);
+    }
 }
 
 IComputationNode* WrapMutDictContains(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 3U, "Expected 3 args");
     MKQL_ENSURE(callable.GetInput(0).GetNode()->GetType()->IsType(), "Expected type");
     auto keyType = AS_TYPE(TDictType, static_cast<TType*>(callable.GetInput(0).GetNode()))->GetKeyType();
+    auto payloadType = AS_TYPE(TDictType, static_cast<TType*>(callable.GetInput(0).GetNode()))->GetPayloadType();
     auto source = LocateNode(ctx.NodeLocator, callable, 1);
     auto keySource = LocateNode(ctx.NodeLocator, callable, 2);
     auto tag = GetMutDictTag(callable.GetInput(1).GetStaticType());
-    return new TMutDictContainsWrapper(ctx.Mutables, keyType, tag, source, keySource);
+    if (payloadType->IsVoid()) {
+        return new TMutDictContainsWrapper<true>(ctx.Mutables, keyType, tag, source, keySource);
+    } else {
+        return new TMutDictContainsWrapper<false>(ctx.Mutables, keyType, tag, source, keySource);
+    }
 }
 
 IComputationNode* WrapMutDictLookup(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 3U, "Expected 3 args");
     MKQL_ENSURE(callable.GetInput(0).GetNode()->GetType()->IsType(), "Expected type");
     auto keyType = AS_TYPE(TDictType, static_cast<TType*>(callable.GetInput(0).GetNode()))->GetKeyType();
+    auto payloadType = AS_TYPE(TDictType, static_cast<TType*>(callable.GetInput(0).GetNode()))->GetPayloadType();
     auto source = LocateNode(ctx.NodeLocator, callable, 1);
     auto keySource = LocateNode(ctx.NodeLocator, callable, 2);
     auto tag = GetMutDictTag(callable.GetInput(1).GetStaticType());
-    return new TMutDictLookupWrapper(ctx.Mutables, keyType, tag, source, keySource);
+    if (payloadType->IsVoid()) {
+        return new TMutDictLookupWrapper<true>(ctx.Mutables, keyType, tag, source, keySource);
+    } else {
+        return new TMutDictLookupWrapper<false>(ctx.Mutables, keyType, tag, source, keySource);
+    }
 }
 
 IComputationNode* WrapMutDictLength(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 2U, "Expected 2 args");
     MKQL_ENSURE(callable.GetInput(0).GetNode()->GetType()->IsType(), "Expected type");
     auto keyType = AS_TYPE(TDictType, static_cast<TType*>(callable.GetInput(0).GetNode()))->GetKeyType();
+    auto payloadType = AS_TYPE(TDictType, static_cast<TType*>(callable.GetInput(0).GetNode()))->GetPayloadType();
     auto source = LocateNode(ctx.NodeLocator, callable, 1);
     auto tag = GetMutDictTag(callable.GetInput(1).GetStaticType());
-    return new TMutDictLengthWrapper(ctx.Mutables, keyType, tag, source);
+    if (payloadType->IsVoid()) {
+        return new TMutDictLengthWrapper<true>(ctx.Mutables, keyType, tag, source);
+    } else {
+        return new TMutDictLengthWrapper<false>(ctx.Mutables, keyType, tag, source);
+    }
 }
 
 IComputationNode* WrapMutDictHasItems(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 2U, "Expected 2 args");
     MKQL_ENSURE(callable.GetInput(0).GetNode()->GetType()->IsType(), "Expected type");
     auto keyType = AS_TYPE(TDictType, static_cast<TType*>(callable.GetInput(0).GetNode()))->GetKeyType();
+    auto payloadType = AS_TYPE(TDictType, static_cast<TType*>(callable.GetInput(0).GetNode()))->GetPayloadType();
     auto source = LocateNode(ctx.NodeLocator, callable, 1);
     auto tag = GetMutDictTag(callable.GetInput(1).GetStaticType());
-    return new TMutDictHasItemsWrapper(ctx.Mutables, keyType, tag, source);
+    if (payloadType->IsVoid()) {
+        return new TMutDictHasItemsWrapper<true>(ctx.Mutables, keyType, tag, source);
+    } else {
+        return new TMutDictHasItemsWrapper<false>(ctx.Mutables, keyType, tag, source);
+    }
 }
 
 IComputationNode* WrapMutDictItems(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 2U, "Expected 2 args");
     MKQL_ENSURE(callable.GetInput(0).GetNode()->GetType()->IsType(), "Expected type");
     auto keyType = AS_TYPE(TDictType, static_cast<TType*>(callable.GetInput(0).GetNode()))->GetKeyType();
+    auto payloadType = AS_TYPE(TDictType, static_cast<TType*>(callable.GetInput(0).GetNode()))->GetPayloadType();
     auto source = LocateNode(ctx.NodeLocator, callable, 1);
     auto tag = GetMutDictTag(callable.GetInput(1).GetStaticType());
-    return new TMutDictItemsWrapper(ctx.Mutables, keyType, tag, source);
+    if (payloadType->IsVoid()) {
+        return new TMutDictItemsWrapper<true>(ctx.Mutables, keyType, tag, source);
+    } else {
+        return new TMutDictItemsWrapper<false>(ctx.Mutables, keyType, tag, source);
+    }
 }
 
 IComputationNode* WrapMutDictKeys(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 2U, "Expected 2 args");
     MKQL_ENSURE(callable.GetInput(0).GetNode()->GetType()->IsType(), "Expected type");
     auto keyType = AS_TYPE(TDictType, static_cast<TType*>(callable.GetInput(0).GetNode()))->GetKeyType();
+    auto payloadType = AS_TYPE(TDictType, static_cast<TType*>(callable.GetInput(0).GetNode()))->GetPayloadType();
     auto source = LocateNode(ctx.NodeLocator, callable, 1);
     auto tag = GetMutDictTag(callable.GetInput(1).GetStaticType());
-    return new TMutDictKeysWrapper(ctx.Mutables, keyType, tag, source);
+    if (payloadType->IsVoid()) {
+        return new TMutDictKeysWrapper<true>(ctx.Mutables, keyType, tag, source);
+    } else {
+        return new TMutDictKeysWrapper<false>(ctx.Mutables, keyType, tag, source);
+    }
 }
 
 IComputationNode* WrapMutDictPayloads(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 2U, "Expected 2 args");
     MKQL_ENSURE(callable.GetInput(0).GetNode()->GetType()->IsType(), "Expected type");
     auto keyType = AS_TYPE(TDictType, static_cast<TType*>(callable.GetInput(0).GetNode()))->GetKeyType();
+    auto payloadType = AS_TYPE(TDictType, static_cast<TType*>(callable.GetInput(0).GetNode()))->GetPayloadType();
     auto source = LocateNode(ctx.NodeLocator, callable, 1);
     auto tag = GetMutDictTag(callable.GetInput(1).GetStaticType());
-    return new TMutDictPayloadsWrapper(ctx.Mutables, keyType, tag, source);
+    if (payloadType->IsVoid()) {
+        return new TMutDictPayloadsWrapper<true>(ctx.Mutables, keyType, tag, source);
+    } else {
+        return new TMutDictPayloadsWrapper<false>(ctx.Mutables, keyType, tag, source);
+    }
 }
 
 IComputationNode* WrapFromMutDict(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 1U, "Expected 1 arg");
-    auto keyType = AS_TYPE(TDictType, callable.GetType()->GetReturnType());
+    auto keyType = AS_TYPE(TDictType, callable.GetType()->GetReturnType())->GetKeyType();
+    auto payloadType = AS_TYPE(TDictType, callable.GetType()->GetReturnType())->GetPayloadType();
     auto source = LocateNode(ctx.NodeLocator, callable, 0);
     auto tag = GetMutDictTag(callable.GetInput(0).GetStaticType());
-    return new TFromMutDictWrapper(ctx.Mutables, keyType, tag, source);
+    if (payloadType->IsVoid()) {
+        return new TFromMutDictWrapper<true>(ctx.Mutables, keyType, tag, source);
+    } else {
+        return new TFromMutDictWrapper<false>(ctx.Mutables, keyType, tag, source);
+    }
 }
 
 }

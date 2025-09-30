@@ -33,7 +33,6 @@ namespace {
     };
 
     Ydb::Table::VectorIndexSettings_Metric ParseDistance(const TString& distance_, TString& error) {
-        
         const TString distance = to_lower(distance_);
         if (distance == "cosine")
             return Ydb::Table::VectorIndexSettings::DISTANCE_COSINE;
@@ -493,12 +492,11 @@ bool ValidateSettings(const Ydb::Table::KMeansTreeSettings& settings, TString& e
         return false;
     }
 
+    error = "";
     return true;
 }
 
 bool ValidateSettings(const Ydb::Table::VectorIndexSettings& settings, TString& error) {
-    error = "";
-
     if (!settings.has_metric() || settings.metric() == Ydb::Table::VectorIndexSettings::METRIC_UNSPECIFIED) {
         error = TStringBuilder() << "either distance or similarity should be set";
         return false;
@@ -522,9 +520,11 @@ bool ValidateSettings(const Ydb::Table::VectorIndexSettings& settings, TString& 
         MinVectorDimension, MaxVectorDimension,
         error))
     {
+        Y_ASSERT(error);
         return false;
     }
 
+    error = "";
     return true;
 }
 
@@ -548,7 +548,6 @@ bool FillSetting(Ydb::Table::KMeansTreeSettings& settings, const TString& name, 
         settings.mutable_settings()->set_vector_type(ParseVectorType(value, error));
     } else if (nameLower =="vector_dimension") {
         settings.mutable_settings()->set_vector_dimension(ParseUInt32(name, value, MinVectorDimension, MaxVectorDimension, error));
-
     } else if (nameLower =="clusters") {
         settings.set_clusters(ParseUInt32(name, value, MinClusters, MaxClusters, error));
     } else if (nameLower =="levels") {

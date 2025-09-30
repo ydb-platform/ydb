@@ -88,7 +88,7 @@ SELECT 0.0 / 0.0;
 
 ### Comparison operators {#comparison-operators}
 
-The operators `=`, `==`, `!=`, `<>`, `>`, `<` are defined for:
+The operators `=`, `==`, `!=`, `<>`, `>`, `<`, `>=`, `<=` are defined for:
 
 * Primitive data types except Yson and Json.
 * Tuples and structures with the same set of fields. No order is defined for structures, but you can check for (non-)equality. Tuples are compared element-by-element left to right.

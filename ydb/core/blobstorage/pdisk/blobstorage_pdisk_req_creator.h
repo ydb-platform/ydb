@@ -212,7 +212,7 @@ public:
 
     template<typename TReq, typename... TArgs>
     [[nodiscard]] TReq* CreateFromArgs(TArgs&&... args) {
-        P_LOG(PRI_DEBUG, BPD01, "CreateReaFromArgs",
+        P_LOG(PRI_DEBUG, BPD01, "CreateReqFromArgs",
             (Req, TypeName<TReq>()),
             (ReqId, AtomicGet(LastReqId)));
         auto req = MakeHolder<TReq>(std::forward<TArgs>(args)..., AtomicIncrement(LastReqId));

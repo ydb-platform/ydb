@@ -23,7 +23,7 @@ public:
 
         NUdf::TUnboxedValue next;
         if constexpr (IsStream) {
-            switch (const auto state = stream.Fetch(next)) {
+            switch (/* const auto state = */ stream.Fetch(next)) {
                 case NUdf::EFetchStatus::Ok: return next.Release();
                 case NUdf::EFetchStatus::Finish: return NUdf::TUnboxedValuePod::MakeFinish();
                 case NUdf::EFetchStatus::Yield: return NUdf::TUnboxedValuePod::MakeYield();
@@ -299,7 +299,7 @@ public:
             state = Stream->GetValue(ctx);
         }
 
-        switch (const auto status = state.WideFetch(ctx.MutableValues.get() + TempStateIndex, Width)) {
+        switch (/* const auto status = */ state.WideFetch(ctx.MutableValues.get() + TempStateIndex, Width)) {
         case NUdf::EFetchStatus::Finish:
             return EFetchResult::Finish;
         case NUdf::EFetchStatus::Yield:
@@ -396,7 +396,7 @@ public:
                 ClientBuffer = result;
             }
 
-            switch (const auto status = WideFlow->FetchValues(CompCtx, valuePtrs)) {
+            switch (/* const auto status = */ WideFlow->FetchValues(CompCtx, valuePtrs)) {
             case EFetchResult::Finish:
                 return NUdf::EFetchStatus::Finish;
             case EFetchResult::Yield:

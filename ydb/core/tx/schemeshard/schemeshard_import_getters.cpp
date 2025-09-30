@@ -677,7 +677,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         ChangefeedsPrefixes.reserve(objects.size());
 
         for (const auto& obj : objects) {
-            const TFsPath& path = obj.GetKey();
+            const TFsPath path = obj.GetKey();
             if (path.GetName() == "changefeed_description.pb") {
                 ChangefeedsPrefixes.push_back(path.Parent().GetName());
             }
@@ -699,7 +699,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
 
     void ListChangefeeds() {
         CreateClient();
-        ListObjects(ImportInfo->GetItemSrcPrefix(ItemIdx));
+        ListObjects(ImportInfo->GetItemSrcPrefix(ItemIdx) + "/");;
     }
 
     void DownloadMetadata() {

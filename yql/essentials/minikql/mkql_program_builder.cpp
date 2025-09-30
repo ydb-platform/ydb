@@ -4752,6 +4752,10 @@ TRuntimeNode TProgramBuilder::InverseString(TRuntimeNode data) {
     return Invoke(__func__, NewDataType(NUdf::TDataType<char*>::Id), args);
 }
 
+TRuntimeNode TProgramBuilder::Block(const TUnaryLambda& lambda) {
+    return lambda(NewDataLiteral<ui32>(0));
+}
+
 TRuntimeNode TProgramBuilder::Random(const TArrayRef<const TRuntimeNode>& dependentNodes) {
     TCallableBuilder callableBuilder(Env_, __func__, NewDataType(NUdf::TDataType<double>::Id));
     for (auto& x : dependentNodes) {

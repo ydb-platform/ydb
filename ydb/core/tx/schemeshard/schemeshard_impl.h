@@ -359,6 +359,7 @@ public:
     bool EnableVectorIndex = false;
     bool EnableInitialUniqueIndex = false;
     bool EnableAddUniqueIndex = false;
+    bool EnableFulltextIndex = false;
     bool EnableExternalDataSourcesOnServerless = false;
     bool EnableShred = false;
     bool EnableExternalSourceSchemaInference = false;
@@ -818,6 +819,7 @@ public:
     void PersistRemoveTableIndex(NIceDb::TNiceDb& db, TPathId tableId);
     void PersistRemoveTable(NIceDb::TNiceDb& db, TPathId tableId, const TActorContext& ctx);
     void PersistRevertedMigration(NIceDb::TNiceDb& db, TPathId pathId, TTabletId abandonedSchemeShardId);
+    void UpdateDiskSpaceUsage(NIceDb::TNiceDb& db, TPathId pathId, const TPartitionStats& newPartitionStats, const TPartitionStats& oldPartitionStats, const TActorContext &ctx);
 
     // BlockStore
     void PersistBlockStorePartition(NIceDb::TNiceDb& db, TPathId pathId, ui32 partitionId, TShardIdx shardIdx, ui64 version);
@@ -842,7 +844,7 @@ public:
 
     // ColumnTable
     void PersistColumnTable(NIceDb::TNiceDb& db, TPathId pathId, const TColumnTableInfo& tableInfo, bool isAlter = false);
-    void PersistColumnTableRemove(NIceDb::TNiceDb& db, TPathId pathId);
+    void PersistColumnTableRemove(NIceDb::TNiceDb& db, TPathId pathId, const TActorContext &ctx);
     void PersistColumnTableAlter(NIceDb::TNiceDb& db, TPathId pathId, const TColumnTableInfo& tableInfo);
     void PersistColumnTableAlterRemove(NIceDb::TNiceDb& db, TPathId pathId);
 
@@ -1567,6 +1569,7 @@ public:
         struct TTxReplyPrefixKMeans;
         struct TTxReplyUploadSample;
         struct TTxReplyValidateUniqueIndex;
+        struct TTxReplyFulltextIndex;
 
         struct TTxPipeReset;
         struct TTxBilling;
@@ -1588,7 +1591,8 @@ public:
     NTabletFlatExecutor::ITransaction* CreateTxReply(TEvDataShard::TEvLocalKMeansResponse::TPtr& local);
     NTabletFlatExecutor::ITransaction* CreateTxReply(TEvDataShard::TEvPrefixKMeansResponse::TPtr& prefix);
     NTabletFlatExecutor::ITransaction* CreateTxReply(TEvIndexBuilder::TEvUploadSampleKResponse::TPtr& upload);
-    NTabletFlatExecutor::ITransaction* CreateTxReply(TEvDataShard::TEvValidateUniqueIndexResponse::TPtr& progress);
+    NTabletFlatExecutor::ITransaction* CreateTxReply(TEvDataShard::TEvValidateUniqueIndexResponse::TPtr& response);
+    NTabletFlatExecutor::ITransaction* CreateTxReply(TEvDataShard::TEvBuildFulltextIndexResponse::TPtr& response);
     NTabletFlatExecutor::ITransaction* CreatePipeRetry(TIndexBuildId indexBuildId, TTabletId tabletId);
     NTabletFlatExecutor::ITransaction* CreateTxBilling(TEvPrivate::TEvIndexBuildingMakeABill::TPtr& ev);
 
@@ -1606,6 +1610,7 @@ public:
     void Handle(TEvDataShard::TEvPrefixKMeansResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvIndexBuilder::TEvUploadSampleKResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvValidateUniqueIndexResponse::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvBuildFulltextIndexResponse::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvPrivate::TEvIndexBuildingMakeABill::TPtr& ev, const TActorContext& ctx);
 

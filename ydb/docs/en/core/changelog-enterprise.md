@@ -2,6 +2,18 @@
 
 ## Version 24.4 {#24-4}
 
+### Version 24.4.4.15 {#24-4-4-15}
+
+Release date: September 19, 2025.
+
+#### Performance
+
+* Columns in `ORDER BY` statement are now considered by the optimizer when automatically selecting a secondary index. This optimization is limited to queries that reference only one table and do not include any `JOIN` operations with other tables.
+
+#### Bug Fixes
+
+* When receiving an `OperationAborted` error from S3, the export operation does not terminate with an error, but retries writing to S3.
+
 ### Version 24.4.4.13 {#24-4-4-13}
 
 Release date: July 29, 2025.
@@ -16,7 +28,7 @@ Release date: July 29, 2025.
 * Enabled by default:
 
   * support for [views](./concepts/datamodel/view.md)
-  * [auto-partitioning mode](./concepts/topic.md#autopartitioning) for topics
+  * [auto-partitioning mode](./concepts/datamodel/topic.md#autopartitioning) for topics
   * [transactions involving topics and row-oriented tables simultaneously](./concepts/transactions.md#topic-table-transactions)
   * [volatile distributed transactions](./contributor/datashard-distributed-txs.md#volatile-transactions)
 
@@ -270,7 +282,7 @@ Release date: October 12, 2023.
 * Implemented visibility of own changes. With this feature enabled you can read changed values from the current transaction, which has not been committed yet. This New Features also allows multiple modifying operations in one transaction on a table with secondary indexes.
 * Added support for [column tables](concepts/datamodel/table.md#column-tables). It is now possible to create analytical reports based on stored data in YDB with performance comparable to specialized analytical DBMS.
 * Added support for Kafka API for topics. YDB topics can now be accessed via a Kafka-compatible API designed for migrating existing applications. Support for Kafka protocol version 3.4.0 is provided.
-* Added the ability to [write to a topic without deduplication](concepts/topic.md#no-dedup). This is important in cases where message processing order is not critical.
+* Added the ability to [write to a topic without deduplication](concepts/datamodel/topic.md#no-dedup). This is important in cases where message processing order is not critical.
 * YQL has added the capabilities to [create](yql/reference/syntax/create-topic.md), [modify](yql/reference/syntax/alter-topic.md), and [delete](yql/reference/syntax/delete.md) topics.
 * Added support of assigning and revoking access rights using the YQL `GRANT` and `REVOKE` commands.
 * Added support of DML-operations logging in the audit log.
@@ -284,7 +296,7 @@ Release date: October 12, 2023.
 * A new option `PostgreSQL` has been added to the query type selector settings, which is available when the `Enable additional query modes` parameter is enabled. Also, the query history now takes into account the syntax used when executing the query.
 * The YQL query template for creating a table has been updated. Added a description of the available parameters.
 * Now sorting and filtering for Storage and Nodes tables takes place on the server. To use this New Features, you need to enable the parameter `Offload tables filters and sorting to backend` in the experiments section.
-* Buttons for creating, changing and deleting [topics](concepts/topic.md) have been added to the context menu.
+* Buttons for creating, changing and deleting [topics](concepts/datamodel/topic.md) have been added to the context menu.
 * Added sorting by criticality for all issues in the tree in `Healthcheck`.
 
 ### Performance

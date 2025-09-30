@@ -357,29 +357,29 @@ private:
 class TYdbPqTestExecutor : public IAsyncExecutor {
 public:
     TYdbPqTestExecutor(std::shared_ptr<TLockFreeQueue<ui64>> idsQueue)
-        : Stop()
-        , ExecIdsQueue(idsQueue)
-        , Thread([idsQueue, this]() {
-            while(!Stop) {
+        : Stop_(false)
+        , ExecIdsQueue_(idsQueue)
+        , Thread_([idsQueue, this]() {
+            while(!Stop_) {
                 TFunction f;
-                while (TasksQueue.Dequeue(&f)) {
-                    ++CurrentTaskId;
-                    Cerr << "Enqueue task with id " << CurrentTaskId << Endl;
-                    Tasks[CurrentTaskId] = f;
+                while (TasksQueue_.Dequeue(&f)) {
+                    ++CurrentTaskId_;
+                    Cerr << "Enqueue task with id " << CurrentTaskId_ << Endl;
+                    Tasks_[CurrentTaskId_] = f;
                 }
                 ui64 id = 0;
-                while (ExecIdsQueue->Dequeue(&id)) {
-                    ExecIds.push(id);
+                while (ExecIdsQueue_->Dequeue(&id)) {
+                    ExecIds_.push(id);
                     Cerr << "Got ok to execute task with id " << id << Endl;
 
                 }
-                while (!ExecIds.empty()) {
-                    auto id = ExecIds.front();
-                    auto iter = Tasks.find(id);
-                    if (iter == Tasks.end())
+                while (!ExecIds_.empty()) {
+                    auto id = ExecIds_.front();
+                    auto iter = Tasks_.find(id);
+                    if (iter == Tasks_.end())
                         break;
                     Cerr << "Executing compression of " << id << Endl;
-                    ExecIds.pop();
+                    ExecIds_.pop();
                     try {
                         (iter->second)();
                     } catch (...) {
@@ -387,7 +387,7 @@ public:
                         Y_ABORT();
                     }
                     Cerr << "Compression of " << id << " Done\n";
-                    Tasks.erase(iter);
+                    Tasks_.erase(iter);
                 }
 
             }
@@ -395,31 +395,34 @@ public:
     {
     }
     ~TYdbPqTestExecutor() {
-        Stop = true;
-        Thread.Join();
+        Stop_ = true;
+        Thread_.Join();
     }
     void PostImpl(std::vector<TFunction>&& fs) override {
         for (auto& f : fs) {
-            TasksQueue.Enqueue(std::move(f));
+            TasksQueue_.Enqueue(std::move(f));
         }
     }
 
     void PostImpl(TFunction&& f) override {
-        TasksQueue.Enqueue(std::move(f));
+        TasksQueue_.Enqueue(std::move(f));
     }
 
     void DoStart() override {
-        Thread.Start();
+        Thread_.Start();
+    }
+
+    void Stop() override {
     }
 
 private:
-    std::atomic_bool Stop;
-    TLockFreeQueue<TFunction> TasksQueue;
-    std::shared_ptr<TLockFreeQueue<ui64>> ExecIdsQueue;
-    THashMap<ui64, TFunction> Tasks;
-    TQueue<ui64> ExecIds;
-    ui64 CurrentTaskId = 0;
-    TThread Thread;
+    std::atomic_bool Stop_;
+    TLockFreeQueue<TFunction> TasksQueue_;
+    std::shared_ptr<TLockFreeQueue<ui64>> ExecIdsQueue_;
+    THashMap<ui64, TFunction> Tasks_;
+    TQueue<ui64> ExecIds_;
+    ui64 CurrentTaskId_ = 0;
+    TThread Thread_;
 
 };
 
@@ -428,7 +431,7 @@ struct TYdbPqWriterTestHelper {
     std::shared_ptr<TPersQueueYdbSdkTestSetup> Setup;
     std::shared_ptr<TYdbPqTestRetryPolicy> Policy;
     std::unique_ptr<TYDBClientEventLoop> EventLoop;
-    TIntrusivePtr<TYdbPqTestExecutor> CompressExecutor;
+    std::shared_ptr<TYdbPqTestExecutor> CompressExecutor;
 
     TAutoEvent MessagesWrittenToBuffer;
     ui64 SeqNo = 1;
@@ -445,8 +448,9 @@ public:
         : Setup(setup ? setup : std::make_shared<TPersQueueYdbSdkTestSetup>(name))
         , Policy(std::make_shared<TYdbPqTestRetryPolicy>())
     {
-        if (executorQueue)
-            CompressExecutor = MakeIntrusive<TYdbPqTestExecutor>(executorQueue);
+        if (executorQueue) {
+            CompressExecutor = std::make_shared<TYdbPqTestExecutor>(executorQueue);
+        }
         EventLoop = std::make_unique<TYDBClientEventLoop>(Setup, Policy, CompressExecutor, preferredCluster, sourceId,
                                                           autoSeqNo);
     }

@@ -193,8 +193,8 @@ TExprBase BuildVectorIndexPrefixRows(const TKikimrTableDescription& table, const
     auto postingType = ctx.MakeType<TStructExprType>(postingItems);
 
     TVector<const TTypeAnnotationNode*> joinItemItems;
-    joinItemItems.push_back(ctx.MakeType<TOptionalExprType>(prefixType));
     joinItemItems.push_back(postingType);
+    joinItemItems.push_back(ctx.MakeType<TOptionalExprType>(prefixType));
     auto joinItemType = ctx.MakeType<TTupleExprType>(joinItemItems);
     auto joinInputType = ctx.MakeType<TListExprType>(joinItemType);
 
@@ -223,15 +223,15 @@ TExprBase BuildVectorIndexPrefixRows(const TKikimrTableDescription& table, const
                             .Input(rowsArg)
                             .Lambda()
                                 .Args({rowArg})
-                                // Join StreamLookup takes <key, left row> tuples as input - build them
+                                // Join StreamLookup takes <left row, key> tuples as input - build them
                                 .Body<TExprList>()
+                                    .Add<TCoAsStruct>()
+                                        .Add(MakeColumnGetters(rowArg, postingColumns, pos, ctx))
+                                        .Build()
                                     .Add<TCoJust>()
                                         .Input<TCoAsStruct>()
                                             .Add(MakeColumnGetters(rowArg, prefixColumns, pos, ctx))
                                             .Build()
-                                        .Build()
-                                    .Add<TCoAsStruct>()
-                                        .Add(MakeColumnGetters(rowArg, postingColumns, pos, ctx))
                                         .Build()
                                     .Build()
                                 .Build()

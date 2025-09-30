@@ -82,6 +82,7 @@
 #include <ydb/core/kqp/proxy_service/kqp_proxy_service.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 #include <ydb/core/kqp/finalize_script_service/kqp_finalize_script_service.h>
+#include <ydb/core/kqp/federated_query/kqp_federated_query_actors.h>
 
 #include <ydb/core/load_test/service_actor.h>
 
@@ -955,7 +956,7 @@ void TImmediateControlBoardInitializer::InitializeServices(NActors::TActorSystem
         const NKikimr::TAppData* appData) {
     setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(
         MakeIcbId(NodeId),
-        TActorSetupCmd(CreateImmediateControlActor(appData->Icb, appData->Counters), TMailboxType::ReadAsFilled, appData->UserPoolId)
+        TActorSetupCmd(CreateImmediateControlActor(appData->Icb, appData->Dcb, appData->Counters), TMailboxType::ReadAsFilled, appData->UserPoolId)
     ));
     setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(
         TActorId(),
@@ -2262,6 +2263,13 @@ void TKqpServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setu
         setup->LocalServices.push_back(std::make_pair(
             NKqp::MakeKqpFinalizeScriptServiceId(NodeId),
             TActorSetupCmd(finalize, TMailboxType::HTSwap, appData->UserPoolId)));
+
+        if (appData->FeatureFlags.GetEnableSchemaSecrets()) {
+            auto describeSchemaSecretsService = NKqp::CreateDescribeSchemaSecretsService();
+            setup->LocalServices.push_back(std::make_pair(
+                NKqp::MakeKqpDescribeSchemaSecretServiceId(NodeId),
+                TActorSetupCmd(describeSchemaSecretsService, TMailboxType::HTSwap, appData->UserPoolId)));
+        }
     }
 }
 
@@ -2511,6 +2519,15 @@ void TCompositeConveyorInitializer::InitializeServices(NActors::TActorSystemSetu
             protoLink.SetWeight(1);
             protoWorkersPool.SetDefaultFractionOfThreadsCount(0.4);
         }
+        
+        NKikimrConfig::TCompositeConveyorConfig::TCategory& protoCategory = *result.AddCategories();
+        protoCategory.SetName(::ToString(NConveyorComposite::ESpecialTaskCategory::Deduplication));
+        NKikimrConfig::TCompositeConveyorConfig::TWorkersPool& protoWorkersPool = *result.AddWorkerPools();
+        NKikimrConfig::TCompositeConveyorConfig::TWorkerPoolCategoryLink& protoLink = *protoWorkersPool.AddLinks();
+        protoLink.SetCategory(::ToString(NConveyorComposite::ESpecialTaskCategory::Deduplication));
+        protoLink.SetWeight(1);
+        protoWorkersPool.SetDefaultFractionOfThreadsCount(0.3);
+
         return result;
     }();
 

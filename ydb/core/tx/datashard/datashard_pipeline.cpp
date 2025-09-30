@@ -1184,6 +1184,19 @@ ui64 TPipeline::OutdatedCleanupStep() const
     return LastPlannedTx.Step;
 }
 
+ui64 TPipeline::AllowedDataStep() const
+{
+    ui64 latestStep = 0;
+    if (Self->MediatorTimeCastEntry) {
+        // This could be zero when still initializing
+        latestStep = Self->MediatorTimeCastEntry->GetLatestStep();
+    }
+
+    return Max(
+        LastPlannedTx.Step + 1,
+        latestStep ? latestStep + 1 : TAppData::TimeProvider->Now().MilliSeconds());
+}
+
 ui64 TPipeline::GetTxCompleteLag(EOperationKind kind, ui64 timecastStep) const
 {
     auto &plan = Self->TransQueue.GetPlan(kind);

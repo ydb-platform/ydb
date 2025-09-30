@@ -241,6 +241,7 @@ class TDataShard
     class TTxHandleSafeReshuffleKMeansScan;
     class TTxHandleSafeRecomputeKMeansScan;
     class TTxHandleSafeStatisticsScan;
+    class TTxHandleSafeBuildFulltextIndexScan;
 
     class TTxMediatorStateRestored;
 
@@ -1342,6 +1343,8 @@ class TDataShard
     void HandleSafe(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvPrefixKMeansRequest::TPtr& ev, const TActorContext& ctx);
     void HandleSafe(TEvDataShard::TEvPrefixKMeansRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvBuildFulltextIndexRequest::TPtr& ev, const TActorContext& ctx);
+    void HandleSafe(TEvDataShard::TEvBuildFulltextIndexRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvCdcStreamScanRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvCdcStreamScanRegistered::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvCdcStreamScanProgress::TPtr& ev, const TActorContext& ctx);
@@ -1437,7 +1440,7 @@ class TDataShard
     void OnStopGuardStarting(const TActorContext &ctx);
     void OnStopGuardComplete(const TActorContext &ctx);
     void OnTabletDead(TEvTablet::TEvTabletDead::TPtr &ev, const TActorContext &ctx) override;
-    void IcbRegister();
+    void InitControls();
     bool ReadOnlyLeaseEnabled() override;
     TDuration ReadOnlyLeaseDuration() override;
     void OnActivateExecutor(const TActorContext &ctx) override;
@@ -3225,6 +3228,7 @@ protected:
             HFunc(TEvDataShard::TEvRecomputeKMeansRequest, Handle);
             HFunc(TEvDataShard::TEvLocalKMeansRequest, Handle);
             HFunc(TEvDataShard::TEvPrefixKMeansRequest, Handle);
+            HFunc(TEvDataShard::TEvBuildFulltextIndexRequest, Handle);
             HFunc(TEvDataShard::TEvCdcStreamScanRequest, Handle);
             HFunc(TEvPrivate::TEvCdcStreamScanRegistered, Handle);
             HFunc(TEvPrivate::TEvCdcStreamScanProgress, Handle);

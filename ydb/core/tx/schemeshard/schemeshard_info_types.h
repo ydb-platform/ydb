@@ -8,6 +8,8 @@
 #include "schemeshard_tx_infly.h"
 #include "schemeshard_types.h"
 
+#include <util/generic/yexception.h>
+#include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/public/api/protos/ydb_cms.pb.h>
 #include <ydb/public/api/protos/ydb_coordination.pb.h>
 #include <ydb/public/api/protos/ydb_import.pb.h>
@@ -17,6 +19,7 @@
 #include <ydb/core/backup/common/encryption.h>
 #include <ydb/core/backup/common/metadata.h>
 #include <ydb/core/base/feature_flags.h>
+#include <ydb/core/base/fulltext.h>
 #include <ydb/core/base/kmeans_clusters.h>
 #include <ydb/core/base/storage_pools.h>
 #include <ydb/core/base/table_index.h>
@@ -90,18 +93,18 @@ struct TSplitSettings {
     {}
 
     void Register(TIntrusivePtr<NKikimr::TControlBoard>& icb) {
-        icb->RegisterSharedControl(SplitMergePartCountLimit,        "SchemeShard_SplitMergePartCountLimit");
-        icb->RegisterSharedControl(FastSplitSizeThreshold,          "SchemeShard_FastSplitSizeThreshold");
-        icb->RegisterSharedControl(FastSplitRowCountThreshold,      "SchemeShard_FastSplitRowCountThreshold");
-        icb->RegisterSharedControl(FastSplitCpuPercentageThreshold, "SchemeShard_FastSplitCpuPercentageThreshold");
+        TControlBoard::RegisterSharedControl(SplitMergePartCountLimit,         icb->SchemeShardControls.SplitMergePartCountLimit);
+        TControlBoard::RegisterSharedControl(FastSplitSizeThreshold,           icb->SchemeShardControls.FastSplitSizeThreshold);
+        TControlBoard::RegisterSharedControl(FastSplitRowCountThreshold,       icb->SchemeShardControls.FastSplitRowCountThreshold);
+        TControlBoard::RegisterSharedControl(FastSplitCpuPercentageThreshold,  icb->SchemeShardControls.FastSplitCpuPercentageThreshold);
 
-        icb->RegisterSharedControl(SplitByLoadEnabled,              "SchemeShard_SplitByLoadEnabled");
-        icb->RegisterSharedControl(SplitByLoadMaxShardsDefault,     "SchemeShard_SplitByLoadMaxShardsDefault");
-        icb->RegisterSharedControl(MergeByLoadMinUptimeSec,         "SchemeShard_MergeByLoadMinUptimeSec");
-        icb->RegisterSharedControl(MergeByLoadMinLowLoadDurationSec,"SchemeShard_MergeByLoadMinLowLoadDurationSec");
+        TControlBoard::RegisterSharedControl(SplitByLoadEnabled,               icb->SchemeShardControls.SplitByLoadEnabled);
+        TControlBoard::RegisterSharedControl(SplitByLoadMaxShardsDefault,      icb->SchemeShardControls.SplitByLoadMaxShardsDefault);
+        TControlBoard::RegisterSharedControl(MergeByLoadMinUptimeSec,          icb->SchemeShardControls.MergeByLoadMinUptimeSec);
+        TControlBoard::RegisterSharedControl(MergeByLoadMinLowLoadDurationSec, icb->SchemeShardControls.MergeByLoadMinLowLoadDurationSec);
 
-        icb->RegisterSharedControl(ForceShardSplitDataSize,         "SchemeShardControls.ForceShardSplitDataSize");
-        icb->RegisterSharedControl(DisableForceShardSplit,          "SchemeShardControls.DisableForceShardSplit");
+        TControlBoard::RegisterSharedControl(ForceShardSplitDataSize,          icb->SchemeShardControls.ForceShardSplitDataSize);
+        TControlBoard::RegisterSharedControl(DisableForceShardSplit,           icb->SchemeShardControls.DisableForceShardSplit);
     }
 
     TForceShardSplitSettings GetForceShardSplitSettings() const {
@@ -2443,9 +2446,30 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
         , Type(type)
         , State(state)
     {
-        if (type == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
-            Y_ENSURE(SpecializedIndexDescription.emplace<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>()
-                               .ParseFromString(description));
+        switch (type) {
+            case NKikimrSchemeOp::EIndexTypeGlobal:
+            case NKikimrSchemeOp::EIndexTypeGlobalAsync:
+            case NKikimrSchemeOp::EIndexTypeGlobalUnique:
+                // no specialized index description
+                Y_ASSERT(description.empty());
+                break;
+            case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree: {
+                auto success = SpecializedIndexDescription
+                    .emplace<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>()
+                    .ParseFromString(description);
+                Y_ENSURE(success, description);
+                break;
+            }
+            case NKikimrSchemeOp::EIndexTypeGlobalFulltext: {
+                auto success = SpecializedIndexDescription
+                    .emplace<NKikimrSchemeOp::TFulltextIndexDescription>()
+                    .ParseFromString(description);
+                Y_ENSURE(success, description);
+                break;
+            }
+            default:
+                Y_DEBUG_ABORT_S(NTableIndex::InvalidIndexType(type));
+                break;
         }
     }
 
@@ -2494,8 +2518,21 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
 
         alterData->State = config.HasState() ? config.GetState() : EState::EIndexStateReady;
 
-        if (config.GetType() == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
-            alterData->SpecializedIndexDescription = config.GetVectorIndexKmeansTreeDescription();
+        switch (GetIndexType(config)) {
+            case NKikimrSchemeOp::EIndexTypeGlobal:
+            case NKikimrSchemeOp::EIndexTypeGlobalAsync:
+            case NKikimrSchemeOp::EIndexTypeGlobalUnique:
+                // no specialized index description
+                break;
+            case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
+                alterData->SpecializedIndexDescription = config.GetVectorIndexKmeansTreeDescription();
+                break;
+            case NKikimrSchemeOp::EIndexTypeGlobalFulltext:
+                alterData->SpecializedIndexDescription = config.GetFulltextIndexDescription();
+                break;
+            default:
+                errMsg += InvalidIndexType(config.GetType());
+                return nullptr;
         }
 
         return result;
@@ -2510,7 +2547,9 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
 
     TTableIndexInfo::TPtr AlterData = nullptr;
 
-    std::variant<std::monostate, NKikimrSchemeOp::TVectorIndexKmeansTreeDescription> SpecializedIndexDescription;
+    std::variant<std::monostate,
+        NKikimrSchemeOp::TVectorIndexKmeansTreeDescription,
+        NKikimrSchemeOp::TFulltextIndexDescription> SpecializedIndexDescription;
 };
 
 struct TCdcStreamSettings {
@@ -3127,6 +3166,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         BuildPrefixedVectorIndex = 12,
         BuildSecondaryUniqueIndex = 13,
         BuildColumns = 20,
+        BuildFulltext = 30,
     };
 
     TActorId CreateSender;
@@ -3155,7 +3195,9 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
     TString TargetName;
     TVector<NKikimrSchemeOp::TTableDescription> ImplTableDescriptions;
 
-    std::variant<std::monostate, NKikimrSchemeOp::TVectorIndexKmeansTreeDescription> SpecializedIndexDescription;
+    std::variant<std::monostate,
+        NKikimrSchemeOp::TVectorIndexKmeansTreeDescription,
+        NKikimrSchemeOp::TFulltextIndexDescription> SpecializedIndexDescription;
 
     struct TKMeans {
         // TODO(mbkkt) move to TVectorIndexKmeansTreeDescription
@@ -3391,18 +3433,19 @@ public:
     std::unique_ptr<NKikimr::NKMeans::IClusters> Clusters;
 
     TString DebugString() const {
-        auto result = TStringBuilder() << BuildKind;
+        auto result = TStringBuilder() << BuildKind << " " << State << "/" << SubState << " ";
 
         if (IsBuildVectorIndex()) {
-            result << " "
-                << KMeans.DebugString() << ", "
+            result << KMeans.DebugString() << ", "
                 << "{ Rows = " << Sample.Rows.size()
                 << ", Sample = " << Sample.State
-                << ", Clusters = " << Clusters->GetClusters().size() << " }, "
-                << "{ Done = " << DoneShards.size()
-                << ", ToUpload = " << ToUploadShards.size()
-                << ", InProgress = " << InProgressShards.size() << " }";
+                << ", Clusters = " << Clusters->GetClusters().size() << " }, ";
         }
+
+        result
+            << "{ Done = " << DoneShards.size()
+            << ", ToUpload = " << ToUploadShards.size()
+            << ", InProgress = " << InProgressShards.size() << " }";
 
         return result;
     }
@@ -3571,7 +3614,7 @@ public:
         indexInfo->Billed.SetReadRows(row.template GetValueOrDefault<Schema::IndexBuild::ReadRowsBilled>(0));
         indexInfo->Billed.SetReadBytes(row.template GetValueOrDefault<Schema::IndexBuild::ReadBytesBilled>(0));
         indexInfo->Billed.SetCpuTimeUs(row.template GetValueOrDefault<Schema::IndexBuild::CpuTimeUsBilled>(0));
-        if (indexInfo->IsFillBuildIndex()) {
+        if (indexInfo->IsOldBuildIndex()) {
             TMeteringStatsHelper::TryFixOldFormat(indexInfo->Billed);
         }
 
@@ -3580,7 +3623,7 @@ public:
         indexInfo->Processed.SetReadRows(row.template GetValueOrDefault<Schema::IndexBuild::ReadRowsProcessed>(0));
         indexInfo->Processed.SetReadBytes(row.template GetValueOrDefault<Schema::IndexBuild::ReadBytesProcessed>(0));
         indexInfo->Processed.SetCpuTimeUs(row.template GetValueOrDefault<Schema::IndexBuild::CpuTimeUsProcessed>(0));
-        if (indexInfo->IsFillBuildIndex()) {
+        if (indexInfo->IsOldBuildIndex()) {
             TMeteringStatsHelper::TryFixOldFormat(indexInfo->Processed);
         }
 
@@ -3606,11 +3649,17 @@ public:
                     indexInfo->Clusters = NKikimr::NKMeans::CreateClusters(desc.settings().settings(), indexInfo->KMeans.Rounds, createError);
                     Y_ENSURE(indexInfo->Clusters, createError);
                     indexInfo->SpecializedIndexDescription = std::move(desc);
-                } break;
+                    break;
+                }
+                case NKikimrSchemeOp::TIndexCreationConfig::kFulltextIndexDescription: {
+                    auto& desc = *creationConfig.MutableFulltextIndexDescription();
+                    indexInfo->SpecializedIndexDescription = std::move(desc);
+                    break;
+                }
                 case NKikimrSchemeOp::TIndexCreationConfig::SPECIALIZEDINDEXDESCRIPTION_NOT_SET:
                     /* do nothing */
                     break;
-            }
+                }
         }
 
         LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::BUILD_INDEX,
@@ -3654,7 +3703,7 @@ public:
         shardStatus.Processed.SetReadRows(row.template GetValueOrDefault<Schema::IndexBuildShardStatus::ReadRowsProcessed>(0));
         shardStatus.Processed.SetReadBytes(row.template GetValueOrDefault<Schema::IndexBuildShardStatus::ReadBytesProcessed>(0));
         shardStatus.Processed.SetCpuTimeUs(row.template GetValueOrDefault<Schema::IndexBuildShardStatus::CpuTimeUsProcessed>(0));
-        if (IsFillBuildIndex()) {
+        if (IsOldBuildIndex()) {
             TMeteringStatsHelper::TryFixOldFormat(shardStatus.Processed);
         }
         Processed += shardStatus.Processed;
@@ -3664,8 +3713,13 @@ public:
         return CancelRequested;
     }
 
-    bool IsFillBuildIndex() const {
-        return IsBuildSecondaryIndex() || IsBuildSecondaryUniqueIndex() || IsBuildColumns();
+    bool IsOldBuildIndex() const {
+        return IsBuildSecondaryIndex() || IsBuildColumns();
+    }
+
+    TString InvalidBuildKind() {
+        return TStringBuilder() << "Invalid index build kind " << static_cast<int>(BuildKind)
+            << " for index type " << static_cast<int>(IndexType);
     }
 
     bool IsBuildSecondaryIndex() const {
@@ -3684,8 +3738,12 @@ public:
         return BuildKind == EBuildKind::BuildVectorIndex || IsBuildPrefixedVectorIndex();
     }
 
+    bool IsBuildFulltextIndex() const {
+        return BuildKind == EBuildKind::BuildFulltext;
+    }
+
     bool IsBuildIndex() const {
-        return IsBuildSecondaryIndex() || IsBuildSecondaryUniqueIndex() || IsBuildVectorIndex();
+        return IsBuildSecondaryIndex() || IsBuildSecondaryUniqueIndex() || IsBuildVectorIndex() || IsBuildFulltextIndex();
     }
 
     bool IsBuildColumns() const {

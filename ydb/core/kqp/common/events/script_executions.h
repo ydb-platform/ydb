@@ -428,12 +428,14 @@ struct TEvScriptExecutionsTablesCreationFinished : public TEventLocal<TEvScriptE
 };
 
 struct TEvScriptExecutionRestarted : public TEventLocal<TEvScriptExecutionRestarted, TKqpScriptExecutionEvents::EvScriptExecutionRestarted> {
-    TEvScriptExecutionRestarted(Ydb::StatusIds::StatusCode status, NYql::TIssues issues)
+    TEvScriptExecutionRestarted(Ydb::StatusIds::StatusCode status, bool leaseGenerationChanged, NYql::TIssues issues)
         : Status(status)
+        , LeaseGenerationChanged(leaseGenerationChanged)
         , Issues(std::move(issues))
     {}
 
     const Ydb::StatusIds::StatusCode Status;
+    const bool LeaseGenerationChanged = false;
     const NYql::TIssues Issues;
 };
 

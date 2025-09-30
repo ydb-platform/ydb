@@ -7,6 +7,7 @@ import "ydb/core/protos/blobstorage_disk_color.proto";
 import "ydb/core/protos/blobstorage_pdisk_config.proto";
 import "ydb/core/protos/blob_depot_config.proto";
 import "ydb/library/actors/protos/interconnect.proto";
+import "google/protobuf/any.proto";
 
 package NKikimrBlobStorage;
 
@@ -686,6 +687,9 @@ message TConfigRequest {
 
     // requesting user identifier
     string UserSID = 13;
+
+    // current TStorageConfig against which we are processing this request
+    google.protobuf.Any StorageConfig = 14;
 }
 
 enum ETriStateBool {

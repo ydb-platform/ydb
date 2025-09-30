@@ -881,6 +881,132 @@
             "uri": "https://{canondata_backend}/1942278/bea251ec797c6ae6c79a3fa31fd0d3dbee273fa6/resource.tar.gz#test.test_library-library_yqls--Results_/results.txt"
         }
     ],
+    "test.test[linear-block-default.txt-Debug]": [
+        {
+            "checksum": "bd86346a831ffd0a2dbe71a093117976",
+            "size": 263,
+            "uri": "https://{canondata_backend}/1937001/77bd704576aa33edf60032c4b55577e01f4f1058/resource.tar.gz#test.test_linear-block-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[linear-block-default.txt-Results]": [
+        {
+            "checksum": "adb8bafa3d3ce0fe875519144c7e421a",
+            "size": 714,
+            "uri": "https://{canondata_backend}/1937001/77bd704576aa33edf60032c4b55577e01f4f1058/resource.tar.gz#test.test_linear-block-default.txt-Results_/results.txt"
+        }
+    ],
+    "test.test[linear-dict_insert-default.txt-Debug]": [
+        {
+            "checksum": "4adfc42dddaa0fd891d167626875ff54",
+            "size": 451,
+            "uri": "https://{canondata_backend}/1942278/0e95723ca3d70727d9453dfcda265b8262b4c0ea/resource.tar.gz#test.test_linear-dict_insert-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[linear-dict_insert-default.txt-Results]": [
+        {
+            "checksum": "5f596f017ba6e0df823238c064e9c913",
+            "size": 2700,
+            "uri": "https://{canondata_backend}/1942278/0e95723ca3d70727d9453dfcda265b8262b4c0ea/resource.tar.gz#test.test_linear-dict_insert-default.txt-Results_/results.txt"
+        }
+    ],
+    "test.test[linear-dict_remove-default.txt-Debug]": [
+        {
+            "checksum": "902ce46652ed409171a7067d96fd41e7",
+            "size": 533,
+            "uri": "https://{canondata_backend}/1942278/0e95723ca3d70727d9453dfcda265b8262b4c0ea/resource.tar.gz#test.test_linear-dict_remove-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[linear-dict_remove-default.txt-Results]": [
+        {
+            "checksum": "b8b9c1aba7099bfb0ebd560eedfc8bcf",
+            "size": 2294,
+            "uri": "https://{canondata_backend}/1942278/0e95723ca3d70727d9453dfcda265b8262b4c0ea/resource.tar.gz#test.test_linear-dict_remove-default.txt-Results_/results.txt"
+        }
+    ],
+    "test.test[linear-dict_upsert-default.txt-Debug]": [
+        {
+            "checksum": "642ad038057c1a4929303ff09c85ae5f",
+            "size": 561,
+            "uri": "https://{canondata_backend}/1942278/0e95723ca3d70727d9453dfcda265b8262b4c0ea/resource.tar.gz#test.test_linear-dict_upsert-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[linear-dict_upsert-default.txt-Results]": [
+        {
+            "checksum": "14c87d2a72ab905f156b001e927b2f19",
+            "size": 2548,
+            "uri": "https://{canondata_backend}/1942278/0e95723ca3d70727d9453dfcda265b8262b4c0ea/resource.tar.gz#test.test_linear-dict_upsert-default.txt-Results_/results.txt"
+        }
+    ],
+    "test.test[linear-dyn_linear-default.txt-Debug]": [
+        {
+            "checksum": "dc06e7ab14e2a5cac6af50bd0f59f48f",
+            "size": 443,
+            "uri": "https://{canondata_backend}/1936273/411e7e32d9922c50ca1538af90edabbd87279ce9/resource.tar.gz#test.test_linear-dyn_linear-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[linear-dyn_linear-default.txt-Results]": [
+        {
+            "checksum": "56d2e17bb8e4a449febe10601f3dd3d0",
+            "size": 1573,
+            "uri": "https://{canondata_backend}/1936273/411e7e32d9922c50ca1538af90edabbd87279ce9/resource.tar.gz#test.test_linear-dyn_linear-default.txt-Results_/results.txt"
+        }
+    ],
+    "test.test[linear-mutdict_copy-default.txt-Debug]": [
+        {
+            "checksum": "a6083e95a2a0ef0db3022a6481b79ab2",
+            "size": 374,
+            "uri": "https://{canondata_backend}/1130705/0f717596bbab92f11dfd78d28fde4a2785f033ef/resource.tar.gz#test.test_linear-mutdict_copy-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[linear-mutdict_copy-default.txt-Results]": [
+        {
+            "checksum": "a24053eb2e008ad678213e7637baa7ad",
+            "size": 1296,
+            "uri": "https://{canondata_backend}/1920236/015587ab70db1a7d848c6447a41b55b057ef8a85/resource.tar.gz#test.test_linear-mutdict_copy-default.txt-Results_/results.txt"
+        }
+    ],
+    "test.test[linear-mutdict_hasitems-default.txt-Debug]": [
+        {
+            "checksum": "46e864da32deff7b659b3525318c99cd",
+            "size": 485,
+            "uri": "https://{canondata_backend}/1784826/107313d603008d0fe007496b7d7a3af1cf0331be/resource.tar.gz#test.test_linear-mutdict_hasitems-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[linear-mutdict_hasitems-default.txt-Results]": [
+        {
+            "checksum": "aed9665bb4d4b4a8ceaea2981b63c7b7",
+            "size": 2214,
+            "uri": "https://{canondata_backend}/1784826/107313d603008d0fe007496b7d7a3af1cf0331be/resource.tar.gz#test.test_linear-mutdict_hasitems-default.txt-Results_/results.txt"
+        }
+    ],
+    "test.test[linear-mutdict_keys-default.txt-Debug]": [
+        {
+            "checksum": "4b78458c2630c2d86ac274ab9c68ffe1",
+            "size": 539,
+            "uri": "https://{canondata_backend}/1784826/107313d603008d0fe007496b7d7a3af1cf0331be/resource.tar.gz#test.test_linear-mutdict_keys-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[linear-mutdict_keys-default.txt-Results]": [
+        {
+            "checksum": "29a67360429bb61e6aefaa6154b31856",
+            "size": 2470,
+            "uri": "https://{canondata_backend}/1784826/107313d603008d0fe007496b7d7a3af1cf0331be/resource.tar.gz#test.test_linear-mutdict_keys-default.txt-Results_/results.txt"
+        }
+    ],
+    "test.test[linear-mutdict_lookup-default.txt-Debug]": [
+        {
+            "checksum": "332544c5351a9045ad5e7ed07043055f",
+            "size": 500,
+            "uri": "https://{canondata_backend}/1784826/107313d603008d0fe007496b7d7a3af1cf0331be/resource.tar.gz#test.test_linear-mutdict_lookup-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[linear-mutdict_lookup-default.txt-Results]": [
+        {
+            "checksum": "38042adcb9ff27f62d05bbcce0c04848",
+            "size": 2436,
+            "uri": "https://{canondata_backend}/1784826/107313d603008d0fe007496b7d7a3af1cf0331be/resource.tar.gz#test.test_linear-mutdict_lookup-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[match_recognize-alerts_without_order-streaming-default.txt-Debug]": [
         {
             "checksum": "679b07f8fd3c61f988cfddb5d6b8ffc0",

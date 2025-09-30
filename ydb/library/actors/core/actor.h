@@ -952,7 +952,7 @@ namespace NActors {
 #define STFUNC_STRICT_UNHANDLED_MSG_HANDLER Y_DEBUG_ABORT_UNLESS(false, "%s: unexpected message type %s 0x%08" PRIx32, __func__, ev->GetTypeName().c_str(), etype);
 
 #define STFUNC_BODY(HANDLERS, UNHANDLED_MSG_HANDLER)                    \
-    switch (const ui32 etype = ev->GetTypeRewrite()) {                  \
+    switch ([[maybe_unused]] const ui32 etype = ev->GetTypeRewrite()) { \
         HANDLERS                                                        \
     default:                                                            \
         UNHANDLED_MSG_HANDLER                                           \

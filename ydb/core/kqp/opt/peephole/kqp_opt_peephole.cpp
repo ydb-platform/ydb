@@ -373,15 +373,18 @@ TMaybeNode<TKqpPhysicalTx> PeepholeOptimize(const TKqpPhysicalTx& tx, TExprConte
 
             YQL_ENSURE(stage.Inputs().Size() == stage.Program().Args().Size());
 
-            // TODO(#23895): workaround for https://github.com/ydb-platform/ydb/issues/20440
-            //      do not mix scalar and block HashShuffle connections,
+            // Workaround to mitigate https://github.com/ydb-platform/ydb/issues/20440
+            //      do not mix scalar and block HashShuffle HashV1 connections,
             //      if we find any scalar connection then don't propagate blocks through other connections.
             ui32 scalarHashShuffleCount = 0;
             for (size_t i = 0; i < stage.Inputs().Size(); ++i) {
                 auto connection = stage.Inputs().Item(i).Maybe<TDqCnHashShuffle>();
-                if (connection && connection.Cast().HashFunc().IsValid()) {
-                    auto hashFuncType = FromString<NDq::EHashShuffleFuncType>(connection.Cast().HashFunc().Cast().StringValue());
-                    scalarHashShuffleCount += (hashFuncType == NDq::EHashShuffleFuncType::HashV1) || (hashFuncType == NDq::EHashShuffleFuncType::HashV2);
+                if (connection) {
+                    auto hashFuncType = config->DefaultHashShuffleFuncType;
+                    if (connection.Cast().HashFunc().IsValid()) {
+                        hashFuncType = FromString<NDq::EHashShuffleFuncType>(connection.Cast().HashFunc().Cast().StringValue());
+                    }
+                    scalarHashShuffleCount += (hashFuncType == NDq::EHashShuffleFuncType::HashV1);
                 }
             }
 

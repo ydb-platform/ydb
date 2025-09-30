@@ -2,6 +2,8 @@
 
 #include <ydb/core/persqueue/public/constants.h>
 #include <ydb/core/persqueue/public/pq_rl_helpers.h>
+#include <ydb/core/tx/replication/ydb_proxy/local_proxy/local_proxy.h>
+#include <ydb/core/tx/replication/ydb_proxy/local_proxy/local_proxy_request.h>
 #include <ydb/library/actors/core/actorsystem_fwd.h>
 #include <ydb/library/aclib/aclib.h>
 

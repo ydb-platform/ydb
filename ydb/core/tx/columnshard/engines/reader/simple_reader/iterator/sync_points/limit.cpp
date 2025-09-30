@@ -17,11 +17,8 @@ bool TSyncPointLimitControl::DrainToLimit() {
     if (Collection->GetNextSource()) {
         nextInHeap = TSourceIterator(Collection->GetNextSource());
     }
-    if (Iterators.empty() || (nextInHeap && Iterators.front() < *nextInHeap)) {
-        return false;
-    }
 
-    while (Iterators.size()) {
+    while (Iterators.size() && (!nextInHeap || !(Iterators.front() < *nextInHeap))) {
         if (!Iterators.front().IsFilled()) {
             return false;
         }

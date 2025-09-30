@@ -30,7 +30,7 @@ constexpr ui64 TimeoutBeforeStartSessionSec = 3;
 constexpr ui64 GrabTimeoutSec = 4 * TimeoutBeforeStartSessionSec;
 static_assert(GrabTimeoutSec <= WAIT_TIMEOUT.Seconds());
 
-template<bool MockTopicSession>
+template <bool MockTopicSession>
 class TFixture : public NTests::TBaseFixture {
 public:
     using TBase = NTests::TBaseFixture;
@@ -69,7 +69,7 @@ public:
         CompileNotifier = Runtime.AllocateEdgeActor();
         const auto compileServiceActorId = Runtime.Register(CreatePurecalcCompileServiceMock(CompileNotifier));
 
-        if (MockTopicSession) {
+        if constexpr (MockTopicSession) {
             PqGatewayNotifier = Runtime.AllocateEdgeActor();
             MockPqGateway = CreateMockPqGateway({.Runtime = &Runtime, .Notifier = PqGatewayNotifier});
         }
@@ -115,9 +115,10 @@ public:
             UNIT_ASSERT_C(ping, "Compilation is not performed for predicate: " << predicate);
         }
 
-        if (MockTopicSession) {
+        if constexpr (MockTopicSession) {
             Runtime.GrabEdgeEvent<TEvMockPqEvents::TEvCreateSession>(PqGatewayNotifier, TDuration::Seconds(GrabTimeoutSec));
-            MockPqGateway->AddEvent(TopicPath, NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent(nullptr, 0, 0), 0);
+            MockReadSession = MockPqGateway->ExtractReadSession(TopicPath);
+            MockReadSession->AddStartSessionEvent();
         }
     }
 
@@ -223,40 +224,18 @@ public:
         return TRow().AddUint64(100 * index).AddString(TStringBuilder() << "value" << index);
     }
 
-    using TMessageInformation = NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessageInformation;
-    using TMessage = NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage;
-
-    TMessageInformation MakeNextMessageInformation(size_t offset, size_t uncompressedSize) {
-        auto now = TInstant::Now();
-        TMessageInformation msgInfo(
-            offset,
-            "ProducerId",
-            0,
-            now,
-            now,
-            MakeIntrusive<NYdb::NTopic::TWriteSessionMeta>(),
-            MakeIntrusive<NYdb::NTopic::TMessageMeta>(),
-            uncompressedSize,
-            "messageGroupId"
-        );
-        return msgInfo;
-    }
-
     void PQWrite(
         const std::vector<TString>& sequence,
         ui64 firstMessageOffset = 0) {
-        if (!MockTopicSession) {
+        if constexpr (!MockTopicSession) {
             NYql::NDq::PQWrite(sequence, TopicPath, GetDefaultPqEndpoint());
         } else {
             ui64 offset = firstMessageOffset;
-            TVector<TMessage> msgs;
-            size_t size = 0;
+            TVector<IMockPqReadSession::TMessage> msgs;
             for (const auto& s : sequence) {
-                TMessage msg(s, nullptr, MakeNextMessageInformation(offset++, s.size()), CreatePartitionSession());
-                msgs.emplace_back(msg);
-                size += s.size();
+                msgs.push_back({.Offset = offset++, .Data = s});
             }
-            MockPqGateway->AddEvent(TopicPath, NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent(msgs, {}, CreatePartitionSession()), size);
+            MockReadSession->AddDataReceivedEvent(msgs);
         }
     }
 
@@ -280,6 +259,7 @@ public:
     ui32 PartitionId = 0;
     NKikimrConfig::TSharedReadingConfig Config;
     TIntrusivePtr<IMockPqGateway> MockPqGateway;
+    IMockPqReadSession::TPtr MockReadSession;
 
     const TString Json1 = "{\"dt\":100,\"value\":\"value1\"}";
     const TString Json2 = "{\"dt\":200,\"value\":\"value2\"}";
@@ -628,7 +608,8 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
 
         StopSession(ReadActorId2, source);
         Runtime.GrabEdgeEvent<TEvMockPqEvents::TEvCreateSession>(PqGatewayNotifier, TDuration::Seconds(GrabTimeoutSec));
-        MockPqGateway->AddEvent(TopicPath, NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent(nullptr, 0, 0), 0);
+        MockReadSession = MockPqGateway->ExtractReadSession(TopicPath);
+        MockReadSession->AddStartSessionEvent();
 
         std::vector<TString> data3 = { Json4 };
         PQWrite(data3, 4);

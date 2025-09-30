@@ -929,10 +929,11 @@ namespace NKikimr::NBsController {
             if (actorSystem && actorSystem->AppData<TAppData>() && actorSystem->AppData<TAppData>()->Icb) {
                 const TIntrusivePtr<NKikimr::TControlBoard>& icb = actorSystem->AppData<TAppData>()->Icb;
 
-                icb->RegisterSharedControl(GroupSizeInUnitsLargerThanPDiskPenalty,
-                    "GroupMapperControls.GroupSizeInUnitsLargerThanPDiskPenalty");
-                icb->RegisterSharedControl(GroupSizeInUnitsSmallerThanPDiskPenalty,
-                    "GroupMapperControls.GroupSizeInUnitsSmallerThanPDiskPenalty");
+                TControlBoard::RegisterSharedControl(GroupSizeInUnitsLargerThanPDiskPenalty,
+                    icb->GroupMapperControls.GroupSizeInUnitsLargerThanPDiskPenalty);
+
+                TControlBoard::RegisterSharedControl(GroupSizeInUnitsSmallerThanPDiskPenalty,
+                    icb->GroupMapperControls.GroupSizeInUnitsSmallerThanPDiskPenalty);
                 controlsRegistered = true;
             }
         }

@@ -715,7 +715,7 @@ namespace NKikimr::NStorage {
             const bool needToUpdateConfig = nodeIdsToUpdate.contains(nodeId);
             if (needToUpdateConfig || info.LastReportedRootNodeId != rootNodeId) {
                 SendEvent(nodeId, info, std::make_unique<TEvNodeConfigReversePush>(rootNodeId,
-                    needToUpdateConfig ? StorageConfig.get() : nullptr));
+                    needToUpdateConfig ? StorageConfig.get() : nullptr, std::nullopt));
                 info.LastReportedRootNodeId = GetRootNodeId();
             }
         }

@@ -353,7 +353,7 @@ void TCommandImportFileBase::Config(TConfig& config) {
     TYdbCommand::Config(config);
 
     config.Opts->GetOpts().SetTrailingArgTitle("<input files...>",
-            "One or more file paths to import from");
+            "One or more file paths to import from. If a directory is provided, all files in the directory with supported extension will be imported.");
     config.Opts->AddLongOption("timeout", "Operation timeout. Operation should be executed on server within this timeout. "
             "There could also be a delay up to 200ms to receive timeout error from server")
         .RequiredArgument("VAL").StoreResult(&OperationTimeout).DefaultValue(TDuration::Seconds(5 * 60));
@@ -400,6 +400,40 @@ void TCommandImportFileBase::Parse(TConfig& config) {
             throw TMisuseException() << "File path is not allowed to be empty";
         }
     }
+    TVector<TString> expandedFilePaths;
+    const TString supportedExtension = GetFileExtension();
+
+    for (const auto& filePath : FilePaths) {
+        TFsPath fsPath(filePath);
+        if (fsPath.IsDirectory()) {
+            TVector<TFsPath> dirs;
+            dirs.push_back(fsPath);
+            while (!dirs.empty()) {
+                TFsPath currentDir = dirs.back();
+                dirs.pop_back();
+                TVector<TFsPath> children;
+                currentDir.List(children);
+                for (const TFsPath& child : children) {
+                    const TString name = child.GetName();
+                    if (name.StartsWith('.')) {
+                        continue; // skip hidden files/dirs
+                    }
+                    if (child.IsDirectory()) {
+                        dirs.push_back(child);
+                    } else {
+                        // Include only supported extensions
+                        if (to_lower(child.GetExtension()) == supportedExtension) {
+                            expandedFilePaths.push_back(child.GetPath());
+                        }
+                    }
+                }
+            }
+        } else {
+            // Explicitly provided file paths should be accepted even if extension doesn't match
+            expandedFilePaths.push_back(filePath);
+        }
+    }
+    FilePaths = expandedFilePaths;
     // If no filenames or stdin isn't connected to tty, read from stdin.
     if (FilePaths.empty() || !IsStdinInteractive()) {
         FilePaths.push_back("");
@@ -409,6 +443,21 @@ void TCommandImportFileBase::Parse(TConfig& config) {
 void TCommandImportFileBase::ExtractParams(TConfig& config) {
     TClientCommand::ExtractParams(config);
     AdjustPath(config);
+}
+
+TString TCommandImportFileBase::GetFileExtension() const {
+    switch (InputFormat) {
+        case EDataFormat::Csv:
+            return "csv";
+        case EDataFormat::Tsv:
+            return "tsv";
+        case EDataFormat::JsonUnicode:
+            return "json";
+        case EDataFormat::Parquet:
+            return "parquet";
+        default:
+            throw TMisuseException() << "No known file extension for " << InputFormat << " format";
+    }
 }
 
 /// Import CSV

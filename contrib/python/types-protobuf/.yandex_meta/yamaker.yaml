@@ -1,2 +1,2 @@
-exclude:
-  - '*_pb2.pyi'
+keep:
+  - .arcignore

@@ -590,7 +590,7 @@ struct TStatsAggregator {
 void TraverseOperators(const NJson::TJsonValue& node, TStatsAggregator& aggregator) {
     auto type = node.GetType();
     if (type == NJson::JSON_MAP) {
-        if (auto source = node.GetValueByPath("ExternalDataSource")) {
+        if (node.GetValueByPath("ExternalDataSource")) {
             if (auto sourceType = node.GetValueByPath("SourceType")) {
                 aggregator.Aggregates["Operator." + sourceType->GetStringSafe()]++;
             }

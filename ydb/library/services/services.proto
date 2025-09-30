@@ -439,6 +439,8 @@ enum EServiceKikimr {
     TOKEN_MANAGER = 3600;
 
     LOCAL_DB_BACKUP = 3700;
+
+    SCHEMA_SECRET_CACHE = 3800;
 };
 
 message TActivity {
@@ -1117,5 +1119,6 @@ message TActivity {
         SCHEME_BOARD_RESTORE_ACTOR = 669;
         REPLICATION_CONTROLLER_RESOURCE_ID_RESOLVER = 670;
         BS_VDISK_METADATA_ACTOR = 671;
+        BUILD_FULLTEXT_INDEX = 672;
     };
 };

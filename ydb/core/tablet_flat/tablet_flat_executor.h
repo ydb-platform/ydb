@@ -501,6 +501,7 @@ namespace NFlatExecutorSetup {
         virtual void CompletedLoansChanged(const TActorContext &ctx); // would be no-op in default implementation
         virtual void CompactionComplete(ui32 tableId, const TActorContext &ctx); // would be no-op in default implementation
         virtual void VacuumComplete(ui64 vacuumGeneration, const TActorContext& ctx);
+        virtual void BackupSnapshotComplete(const TActorContext &ctx); // would be no-op in default implementation
 
         virtual void ScanComplete(NTable::EStatus status, TAutoPtr<IDestructable> prod, ui64 cookie, const TActorContext &ctx);
 
@@ -522,7 +523,7 @@ namespace NFlatExecutorSetup {
         virtual void OnFollowerSchemaUpdated();
         virtual void OnFollowerDataUpdated();
 
-        bool NeedBackup() const;
+        virtual bool NeedBackup() const;
 
         // create transaction?
     protected:

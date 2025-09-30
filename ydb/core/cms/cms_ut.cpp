@@ -547,6 +547,10 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         // Manual approval
         auto approveResp = env.CheckApproveRequest("user", rid1, false, TStatus::OK);
         UNIT_ASSERT_VALUES_EQUAL(approveResp.ManuallyApprovedPermissionsSize(), 1);
+
+        // Check that request is now allowed
+        env.CheckRequest("user", rid1, false, TStatus::ALLOW);
+
         TString permissionId = approveResp.GetManuallyApprovedPermissions(0).GetId();
         auto rec2 = env.CheckGetPermission("user", permissionId);
         UNIT_ASSERT_VALUES_EQUAL(rec2.PermissionsSize(), 1);
@@ -636,7 +640,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
 
         auto rid1 = rec1.GetRequestId();
         
-        // // Manual approval
+        // Manual approval
         auto approveResp = env.CheckApproveRequest("user", rid1, false, TStatus::OK);
         UNIT_ASSERT_VALUES_EQUAL(approveResp.ManuallyApprovedPermissionsSize(), 2);
         for (const auto& permission : approveResp.GetManuallyApprovedPermissions()) {
@@ -645,6 +649,9 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
             UNIT_ASSERT_VALUES_EQUAL(rec3.PermissionsSize(), 1);
             UNIT_ASSERT_VALUES_EQUAL(rec3.GetPermissions(0).GetId(), permissionId);
         }
+        
+        // Check that request is now allowed
+        env.CheckRequest("user", rid1, false, TStatus::ALLOW);
     }
 
     Y_UNIT_TEST(ManualRequestApprovalAlreadyLockedNode)

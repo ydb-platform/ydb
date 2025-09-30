@@ -23,7 +23,6 @@ from ...query.session import (
 )
 
 from ..._constants import DEFAULT_INITIAL_RESPONSE_TIMEOUT
-from ..._errors import stream_error_converter
 
 
 class QuerySession(BaseQuerySession):
@@ -164,7 +163,6 @@ class QuerySession(BaseQuerySession):
                 session=self,
                 settings=self._settings,
             ),
-            error_converter=stream_error_converter,
         )
 
     async def explain(

@@ -3466,6 +3466,7 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
     PAIRED_TABLE_ELEM("JsonQueryReturnsJsonDocument", JsonQueryReturnsJsonDocument),
     PAIRED_TABLE_ELEM("EmitAggApply", EmitAggApply),
     PAIRED_TABLE_ELEM("CompactGroupBy", CompactGroupBy),
+    PAIRED_TABLE_ELEM("DirectRowDependsOn", DirectRowDependsOn),
 
     // bool fields.
     TABLE_ELEM("RefSelect", PragmaRefSelect, true),
@@ -4125,8 +4126,8 @@ namespace {
         const TString columnName(Id(columnSchema.GetRule_an_id_schema1(), translation));
         TString columnType;
 
-        const auto constraints = ColumnConstraints(columnSchema, translation);
-        if (!constraints) {
+        const auto options = ColumnOptions(columnSchema, translation);
+        if (!options) {
             return false;
         }
 
@@ -4156,7 +4157,7 @@ namespace {
         result["NAME"] = TDeferredAtom(pos, columnName);
         YQL_ENSURE(columnType, "Unknown column type");
         result["TYPE"] = TDeferredAtom(pos, columnType);
-        if (!constraints->Nullable) {
+        if (!options->Nullable) {
             result["NOT_NULL"] = TDeferredAtom(pos, "true");
         }
         return true;

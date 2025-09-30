@@ -538,7 +538,11 @@ public:
                 }
             }
 
-            Args_.push_back(Y("TablePath", Y("DependsOn", "row")));
+            if (ctx.DirectRowDependsOn.GetOrElse(true)) {
+                Args_.push_back(Y("TablePath", Y("DependsOn", "row")));
+            } else {
+                Args_.push_back(Y("TablePath", "row"));
+            }
         }
 
         if (Args_.size() == 2) {
@@ -1822,7 +1826,7 @@ public:
 
         const auto memberPos = Args_[0]->GetPos();
         TVector<TNodePtr> repackArgs = {BuildAtom(memberPos, "row", NYql::TNodeFlags::Default)};
-        if (auto literal = Args_[1]->GetLiteral("String")) {
+        if (/* auto literal = */ Args_[1]->GetLiteral("String")) {
             TString targetType;
             if (!GetDataTypeStringNode(ctx, *this, 1, &targetType)) {
                 return false;
@@ -3076,6 +3080,30 @@ struct TBuiltinFuncData {
             {"dictlookup", {"DictLookup", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Lookup", 2, 2) }},
             {"dictcontains", {"DictContains", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Contains", 2, 2)}},
 
+            {"todynamiclinear", {"ToDynamicLinear", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ToDynamicLinear", 1, 1) }},
+            {"fromdynamiclinear", {"FromDynamicLinear", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("FromDynamicLinear", 1, 1) }},
+            // MutDict builtins
+            {"mutdictcreate", {"MutDictCreate", "Normal", BuildSimpleBuiltinFactoryCallback<TMutDictCreateBuiltin>()}},
+            {"tomutdict", {"ToMutDict", "Normal", BuildSimpleBuiltinFactoryCallback<TToMutDictBuiltin>()}},
+            {"frommutdict", {"FromMutDict", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("FromMutDict", 1, 1)}},
+            {"mutdictinsert", {"MutDictInsert", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("MutDictInsert", 3, 3)}},
+            {"mutdictupsert", {"MutDictUpsert", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("MutDictUpsert", 3, 3)}},
+            {"mutdictupdate", {"MutDictUpdate", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("MutDictUpdate", 3, 3)}},
+            {"mutdictremove", {"MutDictRemove", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("MutDictRemove", 2, 2)}},
+            {"mutdictpop", {"MutDictPop", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("MutDictPop", 2, 2)}},
+            {"mutdictcontains", {"MutDictContains", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("MutDictContains", 2, 2)}},
+            {"mutdictlookup", {"MutDictLookup", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("MutDictLookup", 2, 2)}},
+            {"mutdicthasitems", {"MutDictHasItems", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("MutDictHasItems", 1, 1)}},
+            {"mutdictlength", {"MutDictLength", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("MutDictLength", 1, 1)}},
+            {"mutdictitems", {"MutDictItems", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("MutDictItems", 1, 1)}},
+            {"mutdictkeys", {"MutDictKeys", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("MutDictKeys", 1, 1)}},
+            {"mutdictpayloads", {"MutDictPayloads", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("MutDictPayloads", 1, 1)}},
+
+            {"dictinsert", {"DictInsert", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("DictInsert", 3, 3)}},
+            {"dictupsert", {"DictUpsert", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("DictUpsert", 3, 3)}},
+            {"dictupdate", {"DictUpdate", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("DictUpdate", 3, 3)}},
+            {"dictremove", {"DictRemove", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("DictRemove", 2, 2)}},
+
             // Atom builtins
             {"asatom", {"AsAtom", "Normal", BuildSimpleBuiltinFactoryCallback<TYqlAsAtom>()}},
             {"secureparam", {"SecureParam", "Normal", BuildNamedBuiltinFactoryCallback<TYqlAtom>("SecureParam")}},
@@ -3101,6 +3129,7 @@ struct TBuiltinFuncData {
             {"evaluateexpr", {"EvaluateExpr", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("EvaluateExpr", 1, 1)}},
             {"evaluateatom", {"EvaluateAtom", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("EvaluateAtom", 1, 1)}},
             {"evaluatetype", {"EvaluateType", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("EvaluateType", 1, 1)}},
+            {"block", {"Block", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Block", 1, 1)}},
             {"unwrap", {"Unwrap", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Unwrap", 1, 2)}},
             {"just", {"Just", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Just", 1, 1)}},
             {"nothing", {"Nothing", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Nothing", 1, 1)}},

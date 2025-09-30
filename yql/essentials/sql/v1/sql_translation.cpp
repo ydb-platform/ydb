@@ -699,13 +699,19 @@ bool TSqlTranslation::CreateTableIndex(const TRule_table_index& node, TVector<TI
 
     if (node.GetRule_table_index_type3().HasBlock2()) {
         const TString subType = to_upper(IdEx(node.GetRule_table_index_type3().GetBlock2().GetRule_index_subtype2().GetRule_an_id1(), *this).Name) ;
-        if (subType == "VECTOR_KMEANS_TREE") {
+        if (subType == "VECTOR_KMEANS_TREE" || subType == "FULLTEXT") {
             if (indexes.back().Type != TIndexDescription::EType::GlobalSync) {
                 Ctx_.Error() << subType << " index can only be GLOBAL [SYNC]";
                 return false;
             }
 
-            indexes.back().Type = TIndexDescription::EType::GlobalVectorKmeansTree;
+            if (subType == "VECTOR_KMEANS_TREE") {
+                indexes.back().Type = TIndexDescription::EType::GlobalVectorKmeansTree;
+            } else if (subType == "FULLTEXT") {
+                indexes.back().Type = TIndexDescription::EType::GlobalFulltext;
+            } else {
+                Y_ABORT("Unreachable");
+            }
         } else {
             Ctx_.Error() << subType << " index subtype is not supported";
             return false;
@@ -716,7 +722,7 @@ bool TSqlTranslation::CreateTableIndex(const TRule_table_index& node, TVector<TI
     if (node.HasBlock10()) {
         //const auto& with = node.GetBlock4();
         auto& index = indexes.back();
-        if (index.Type == TIndexDescription::EType::GlobalVectorKmeansTree) {
+        if (index.Type == TIndexDescription::EType::GlobalVectorKmeansTree || index.Type == TIndexDescription::EType::GlobalFulltext) {
             if (!FillIndexSettings(node.GetBlock10().GetRule_with_index_settings1(), index.IndexSettings)) {
                 return false;
             }
@@ -1453,9 +1459,15 @@ TMaybe<TSourcePtr> TSqlTranslation::AsTableImpl(const TRule_table_ref& node) {
 
     if (block.Alt_case() == TRule_table_ref::TBlock3::kAlt2) {
         auto& alt = block.GetAlt2();
-        TCiString func(Id(alt.GetRule_an_id_expr1(), *this));
 
-        if (func == "as_table") {
+        TString func = Id(alt.GetRule_an_id_expr1(), *this);
+        if (auto issue = NormalizeName(Ctx_.Pos(), func)) {
+            Error() << issue->GetMessage();
+            Ctx_.IncrementMonCounter("sql_errors", "NormalizeTableFunctionError");
+            return nullptr;
+        }
+
+        if (func == "astable") {
             if (node.HasBlock1()) {
                 Ctx_.Error() << "Cluster shouldn't be specified for AS_TABLE source";
                 return TMaybe<TSourcePtr>(nullptr);
@@ -1488,23 +1500,132 @@ TMaybe<TSourcePtr> TSqlTranslation::AsTableImpl(const TRule_table_ref& node) {
     return Nothing();
 }
 
-TMaybe<TColumnConstraints> ColumnConstraints(const TRule_column_schema& node, TTranslation& ctx) {
-    TNodePtr defaultExpr = nullptr;
+TMaybe<TColumnOptions> ColumnOptions(const TRule_column_schema& node, TTranslation& ctx) {
+    TNodePtr defaultExpr;
     bool nullable = true;
+    TVector<TIdentifier> families;
 
-    auto constraintsNode = node.GetRule_opt_column_constraints4();
-    if (constraintsNode.HasBlock1()) {
-        nullable = !constraintsNode.GetBlock1().HasBlock1();
-    }
-    if (constraintsNode.HasBlock2()) {
-        TSqlExpression expr(ctx.Context(), ctx.Context().Settings.Mode);
-        defaultExpr = expr.Build(constraintsNode.GetBlock2().GetRule_expr2());
-        if (!defaultExpr) {
-            return {};
+    const auto& optionsList = node.GetRule_column_option_list3();
+
+    enum class EOption {
+        Family,
+        NotNull,
+        DefaultValue
+    };
+
+    std::vector<TRule_column_option> columnOptions;
+    columnOptions.reserve(static_cast<size_t>(EOption::DefaultValue) + 1);
+
+    {
+        switch (optionsList.Alt_case()) {
+            case TRule_column_option_list::kAltColumnOptionList1: {
+                const auto& block = optionsList.GetAlt_column_option_list1().GetRule_column_option_list_space1().GetBlock1();
+                for (const auto& item : block) {
+                    const auto& rule = item.GetRule_column_option1();
+                    columnOptions.push_back(rule);
+                }
+
+                break;
+            }
+
+            case TRule_column_option_list::kAltColumnOptionList2: {
+                const auto& optionsNode = optionsList.GetAlt_column_option_list2().GetRule_column_option_list_comma1();
+                const auto& firstColumnOption = optionsNode.GetRule_column_option2();
+                columnOptions.push_back(firstColumnOption);
+
+                {
+                    auto block = optionsNode.GetBlock3();
+
+                    for (const auto& item : block) {
+                        const auto& rule = item.GetRule_column_option2();
+                        columnOptions.push_back(rule);
+                    }
+                }
+
+                break;
+            }
+
+            case TRule_column_option_list::ALT_NOT_SET: {
+                Y_ABORT("You should change implementation according to grammar changes");
+            }
         }
+
     }
 
-    return TColumnConstraints(defaultExpr, nullable);
+    {
+        std::vector<EOption> usedOptions;
+        usedOptions.reserve(static_cast<size_t>(EOption::DefaultValue) + 1);
+
+        for (const auto& rule : columnOptions) {
+            switch (rule.Alt_case()) {
+                case TRule_column_option::kAltColumnOption1: {
+                    if (std::find(usedOptions.begin(), usedOptions.end(), EOption::Family) != usedOptions.end()) {
+                        ctx.Context().Error() << "'FAMILY' option can be specified only once";
+                        return {};
+                    }
+
+                    usedOptions.push_back(EOption::Family);
+
+                    const auto& familyRelation = rule.GetAlt_column_option1().GetRule_family_relation1();
+                    families.push_back(IdEx(familyRelation.GetRule_an_id2(), ctx));
+                    break;
+                }
+                case TRule_column_option::kAltColumnOption2: {
+                    if (std::find(usedOptions.begin(), usedOptions.end(), EOption::NotNull) != usedOptions.end()) {
+                        ctx.Context().Error() << "'NOT NULL' option can be specified only once";
+                        return {};
+                    }
+
+                    usedOptions.push_back(EOption::NotNull);
+
+                    nullable = !rule.GetAlt_column_option2().GetRule_nullability1().HasBlock1();
+                    break;
+                }
+                case TRule_column_option::kAltColumnOption3: {
+                    if (std::find(usedOptions.begin(), usedOptions.end(), EOption::DefaultValue) != usedOptions.end()) {
+                        ctx.Context().Error() << "'DEFAULT' option can be specified only once";
+                        return {};
+                    }
+
+                    usedOptions.push_back(EOption::DefaultValue);
+
+                    TSqlExpression expr(ctx.Context(), ctx.Context().Settings.Mode);
+
+                    // TODO: We need to refact it
+                    auto legacyNotNullLastValue = ctx.Context().DisableLegacyNotNull;
+                    Y_DEFER {
+                        ctx.Context().DisableLegacyNotNull = legacyNotNullLastValue;
+                    };
+
+                    ctx.Context().DisableLegacyNotNull = true;
+
+                    defaultExpr = expr.Build(rule.GetAlt_column_option3().GetRule_default_value1().GetRule_expr2());
+
+                    if (AnyOf(ctx.Context().Issues.begin(), ctx.Context().Issues.end(), [](const auto& issue) {
+                        return issue.GetCode() == TIssuesIds::YQL_MISSING_IS_BEFORE_NOT_NULL;
+                    })) {
+                        ctx.Context().Error() << "'DEFAULT' option can not use expr which contains literall 'NOT NULL'."
+                                              << " If you wanted to use two different options 'DEFAULT' and 'NOT NULL',"
+                                              << " it is recommended to use the syntax '(DEFAULT value, NOT NULL, ...)'";
+
+                        return {};
+                    }
+
+                    if (!defaultExpr) {
+                        return {};
+                    }
+
+                    break;
+                }
+                case TRule_column_option::ALT_NOT_SET: {
+                    Y_ABORT("You should change implementation according to grammar changes");
+                }
+            }
+        }
+
+    }
+
+    return TColumnOptions{std::move(defaultExpr), nullable, std::move(families)};
 }
 
 TMaybe<TColumnSchema> TSqlTranslation::ColumnSchemaImpl(const TRule_column_schema& node) {
@@ -1513,10 +1634,12 @@ TMaybe<TColumnSchema> TSqlTranslation::ColumnSchemaImpl(const TRule_column_schem
     TNodePtr type = SerialTypeNode(node.GetRule_type_name_or_bind2());
     const bool serial = (type != nullptr);
 
-    const auto constraints = ColumnConstraints(node, *this);
-    if (!constraints){
+    auto columnOptions = ColumnOptions(node, *this);
+    if (!columnOptions) {
         return {};
     }
+
+    auto [defaultExpr, nullable, families] = columnOptions.GetRef();
 
     if (!type) {
         type = TypeNodeOrBind(node.GetRule_type_name_or_bind2());
@@ -1525,12 +1648,16 @@ TMaybe<TColumnSchema> TSqlTranslation::ColumnSchemaImpl(const TRule_column_schem
     if (!type) {
         return {};
     }
-    TVector<TIdentifier> families;
-    if (node.HasBlock3()) {
-        const auto& familyRelation = node.GetBlock3().GetRule_family_relation1();
-        families.push_back(IdEx(familyRelation.GetRule_an_id2(), *this));
-    }
-    return TColumnSchema(pos, name, type, constraints->Nullable, families, serial, constraints->DefaultExpr);
+
+    return TColumnSchema(
+        std::move(pos),
+        std::move(name),
+        std::move(type),
+        nullable,
+        std::move(families),
+        serial,
+        std::move(defaultExpr)
+    );
 }
 
 TNodePtr TSqlTranslation::SerialTypeNode(const TRule_type_name_or_bind& node) {

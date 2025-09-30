@@ -110,6 +110,7 @@ public:
     TControlWrapper ForsetiOpPieceSizeRot;
     TControlWrapper UseNoopSchedulerSSD;
     TControlWrapper UseNoopSchedulerHDD;
+    TControlWrapper ChunkBaseLimitPerMille;
     bool UseNoopSchedulerCached = false;
 
     // SectorMap Controls
@@ -213,7 +214,7 @@ public:
     ui32 LastInitialChunkIdx;
     ui64 LastInitialSectorIdx;
 
-    ui64 ExpectedSlotCount = 0; // Number of slots to use for space limit calculation.
+    ui32 ExpectedSlotCount = 0; // Number of slots to use for space limit calculation.
 
     TAtomic TotalOwners = 0; // number of registered owners
 
@@ -367,6 +368,7 @@ public:
     void YardInitFinish(TYardInit &evYardInit);
     bool YardInitForKnownVDisk(TYardInit &evYardInit, TOwner owner);
     void YardResize(TYardResize &evYardResize);
+    void ProcessChangeExpectedSlotCount(TChangeExpectedSlotCount& request);
 
     // Scheduler weight configuration
     void ConfigureCbs(ui32 ownerId, EGate gate, ui64 weight);

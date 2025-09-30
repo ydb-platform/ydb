@@ -140,7 +140,7 @@ void TSchemeShard::CollectSysViewUpdates(const TActorContext& ctx) {
     const auto sysViewDirType = IsDomainSchemeShard
         ? NSysView::ISystemViewResolver::ESource::Domain
         : NSysView::ISystemViewResolver::ESource::SubDomain;
-    const auto sysViewsRegistry = NSysView::CreateSystemViewResolver()->GetSystemViewsTypes(sysViewDirType);
+    const auto& sysViewsRegistry = NSysView::GetSystemViewResolver().GetSystemViewsTypes(sysViewDirType);
 
     // create absent system views only if there's no '.sys' entry or '.sys' is a directory
     if (needToMakeSysViewDir || sysViewDirExists) {
@@ -4063,7 +4063,20 @@ void TSchemeShard::PersistColumnTable(NIceDb::TNiceDb& db, TPathId pathId, const
     }
 }
 
-void TSchemeShard::PersistColumnTableRemove(NIceDb::TNiceDb& db, TPathId pathId)
+void TSchemeShard::UpdateDiskSpaceUsage(NIceDb::TNiceDb& db, TPathId pathId, const TPartitionStats& newPartitionStats, const TPartitionStats& oldPartitionStats, const TActorContext &ctx) {
+    auto subDomainId = ResolvePathIdForDomain(pathId);
+    auto subDomainInfo = ResolveDomainInfo(pathId);
+    subDomainInfo->AggrDiskSpaceUsage(this, newPartitionStats, oldPartitionStats);
+    if (subDomainInfo->CheckDiskSpaceQuotas(this)) {
+        PersistSubDomainState(db, subDomainId, *subDomainInfo);
+        // Publish is done in a separate transaction, so we may call this directly
+        TDeque<TPathId> toPublish;
+        toPublish.push_back(subDomainId);
+        PublishToSchemeBoard(TTxId(), std::move(toPublish), ctx);
+    }
+}
+
+void TSchemeShard::PersistColumnTableRemove(NIceDb::TNiceDb& db, TPathId pathId, const TActorContext &ctx)
 {
     Y_ABORT_UNLESS(IsLocalId(pathId));
     auto tablePtr = ColumnTables.at(pathId);
@@ -4083,10 +4096,15 @@ void TSchemeShard::PersistColumnTableRemove(NIceDb::TNiceDb& db, TPathId pathId)
         storeInfo->ColumnTablesUnderOperation.erase(pathId);
         storeInfo->ColumnTables.erase(pathId);
     }
+    
+    UpdateDiskSpaceUsage(db, pathId, TPartitionStats(), tableInfo.GetStats().Aggregated, ctx);
 
     db.Table<Schema::ColumnTables>().Key(pathId.LocalPathId).Delete();
     ColumnTables.Drop(pathId);
     DecrementPathDbRefCount(pathId);
+
+    auto ev = MakeHolder<NSysView::TEvSysView::TEvRemoveTable>(GetDomainKey(pathId), pathId);
+    Send(SysPartitionStatsCollector, ev.Release());
 }
 
 void TSchemeShard::PersistColumnTableAlter(NIceDb::TNiceDb& db, TPathId pathId, const TColumnTableInfo& tableInfo) {
@@ -4426,16 +4444,7 @@ void TSchemeShard::PersistRemoveTable(NIceDb::TNiceDb& db, TPathId pathId, const
     }
 
     if (!tableInfo->IsBackup && !tableInfo->IsShardsStatsDetached()) {
-        auto subDomainId = ResolvePathIdForDomain(pathId);
-        auto subDomainInfo = ResolveDomainInfo(pathId);
-        subDomainInfo->AggrDiskSpaceUsage(this, TPartitionStats(), tableInfo->GetStats().Aggregated);
-        if (subDomainInfo->CheckDiskSpaceQuotas(this)) {
-            PersistSubDomainState(db, subDomainId, *subDomainInfo);
-            // Publish is done in a separate transaction, so we may call this directly
-            TDeque<TPathId> toPublish;
-            toPublish.push_back(subDomainId);
-            PublishToSchemeBoard(TTxId(), std::move(toPublish), ctx);
-        }
+        UpdateDiskSpaceUsage(db, pathId, TPartitionStats(), tableInfo->GetStats().Aggregated, ctx);
     }
 
     // sanity check: by this time compaction queue and metrics must be updated already
@@ -5080,6 +5089,7 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
     EnableVectorIndex = appData->FeatureFlags.GetEnableVectorIndex();
     EnableInitialUniqueIndex = appData->FeatureFlags.GetEnableUniqConstraint();
     EnableAddUniqueIndex = appData->FeatureFlags.GetEnableAddUniqueIndex();
+    EnableFulltextIndex = appData->FeatureFlags.GetEnableFulltextIndex();
     EnableResourcePoolsOnServerless = appData->FeatureFlags.GetEnableResourcePoolsOnServerless();
     EnableExternalDataSourcesOnServerless = appData->FeatureFlags.GetEnableExternalDataSourcesOnServerless();
     EnableShred = appData->FeatureFlags.GetEnableDataErasure();
@@ -5101,22 +5111,23 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
     if (appData->ChannelProfiles) {
         ChannelProfiles = appData->ChannelProfiles;
     }
+    auto& icb = *appData->Icb;
 
-    appData->Icb->RegisterSharedControl(AllowConditionalEraseOperations, "SchemeShard_AllowConditionalEraseOperations");
-    appData->Icb->RegisterSharedControl(DisablePublicationsOfDropping, "SchemeShard_DisablePublicationsOfDropping");
-    appData->Icb->RegisterSharedControl(FillAllocatePQ, "SchemeShard_FillAllocatePQ");
+    TControlBoard::RegisterSharedControl(AllowConditionalEraseOperations, icb.SchemeShardControls.AllowConditionalEraseOperations);
+    TControlBoard::RegisterSharedControl(DisablePublicationsOfDropping, icb.SchemeShardControls.DisablePublicationsOfDropping);
+    TControlBoard::RegisterSharedControl(FillAllocatePQ, icb.SchemeShardControls.FillAllocatePQ);
 
-    appData->Icb->RegisterSharedControl(MaxCommitRedoMB, "TabletControls.MaxCommitRedoMB");
+    TControlBoard::RegisterSharedControl(MaxCommitRedoMB, icb.TabletControls.MaxCommitRedoMB);
 
     AllowDataColumnForIndexTable = appData->FeatureFlags.GetEnableDataColumnForIndexTable();
-    appData->Icb->RegisterSharedControl(AllowDataColumnForIndexTable, "SchemeShard_AllowDataColumnForIndexTable");
+    TControlBoard::RegisterSharedControl(AllowDataColumnForIndexTable, icb.SchemeShardControls.AllowDataColumnForIndexTable);
 
     for (const auto& sid : appData->MeteringConfig.GetSystemBackupSIDs()) {
         SystemBackupSIDs.insert(sid);
     }
 
     AllowServerlessStorageBilling = appData->FeatureFlags.GetAllowServerlessStorageBillingForSchemeShard();
-    appData->Icb->RegisterSharedControl(AllowServerlessStorageBilling, "SchemeShard_AllowServerlessStorageBilling");
+    TControlBoard::RegisterSharedControl(AllowServerlessStorageBilling, icb.SchemeShardControls.AllowServerlessStorageBilling);
 
     TxAllocatorClient = RegisterWithSameMailbox(CreateTxAllocatorClient(appData));
 
@@ -5367,6 +5378,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvDataShard::TEvPrefixKMeansResponse, Handle);
         HFuncTraced(TEvIndexBuilder::TEvUploadSampleKResponse, Handle);
         HFuncTraced(TEvDataShard::TEvValidateUniqueIndexResponse, Handle);
+        HFuncTraced(TEvDataShard::TEvBuildFulltextIndexResponse, Handle);
         // } // NIndexBuilder
 
         //namespace NCdcStreamScan {
@@ -5842,7 +5854,7 @@ void TSchemeShard::DropNode(TPathElement::TPtr node, TStepId step, TTxId txId, N
             PersistOlapStoreRemove(db, node->PathId);
             break;
         case TPathElement::EPathType::EPathTypeColumnTable:
-            PersistColumnTableRemove(db, node->PathId);
+            PersistColumnTableRemove(db, node->PathId, ctx);
             break;
         case TPathElement::EPathType::EPathTypeSubDomain:
         case TPathElement::EPathType::EPathTypeExtSubDomain:
@@ -7797,6 +7809,7 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TFeatureFlags& featu
     EnableVectorIndex = featureFlags.GetEnableVectorIndex();
     EnableInitialUniqueIndex = featureFlags.GetEnableUniqConstraint();
     EnableAddUniqueIndex = featureFlags.GetEnableAddUniqueIndex();
+    EnableFulltextIndex = featureFlags.GetEnableFulltextIndex();
     EnableExternalDataSourcesOnServerless = featureFlags.GetEnableExternalDataSourcesOnServerless();
     EnableShred = featureFlags.GetEnableDataErasure();
     EnableExternalSourceSchemaInference = featureFlags.GetEnableExternalSourceSchemaInference();

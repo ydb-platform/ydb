@@ -257,7 +257,7 @@ void TActorCoordinator::Bootstrap() {
     Become(&TActorCoordinator::StateFunc);
     Send(LocalRowDispatcherId, new NFq::TEvRowDispatcher::TEvCoordinatorChangesSubscribe());
     ScheduleNodeInfoRequest();
-    Schedule(TDuration::Seconds(PrintStatePeriodSec), new TEvPrivate::TEvPrintState());
+    // Schedule(TDuration::Seconds(PrintStatePeriodSec), new TEvPrivate::TEvPrintState());  // Logs (InternalState) is too big
     LOG_ROW_DISPATCHER_DEBUG("Successfully bootstrapped coordinator, id " << SelfId());
     auto nodeGroup = Metrics.Counters->GetSubgroup("node", ToString(SelfId().NodeId()));
     Metrics.IsActive = nodeGroup->GetCounter("IsActive");
@@ -515,7 +515,7 @@ void TActorCoordinator::Handle(TEvPrivate::TEvPrintState::TPtr&) {
 }
 
 void TActorCoordinator::Handle(NKikimr::TEvTenantNodeEnumerator::TEvLookupResult::TPtr& ev) {
-     if (!ev->Get()->Success) {
+    if (!ev->Get()->Success) {
         LOG_ROW_DISPATCHER_ERROR("Failed to get TEvLookupResult, try later...");
         ScheduleNodeInfoRequest();
         return;

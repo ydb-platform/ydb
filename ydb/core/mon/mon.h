@@ -42,13 +42,14 @@ public:
     };
 
     TMon(TConfig config);
-    virtual ~TMon() = default;
+    virtual ~TMon();
 
     std::future<void> Start(TActorSystem* actorSystem); // signals when monitoring is ready
     void Stop();
 
     void Register(NMonitoring::IMonPage* page);
     NMonitoring::TIndexMonPage* RegisterIndexPage(const TString& path, const TString& title);
+    void RegisterLwtrace();
 
     struct TRegisterActorPageFields {
         TString Title;
@@ -95,6 +96,7 @@ protected:
     TActorSystem* ActorSystem = {};
     TActorId HttpProxyActorId;
     TActorId HttpMonServiceActorId;
+    TActorId HttpAuthMonServiceActorId;
     TActorId NodeProxyServiceActorId;
 
     struct TActorMonPageInfo {

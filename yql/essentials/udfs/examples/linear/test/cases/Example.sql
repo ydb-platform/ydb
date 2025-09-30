@@ -1,2 +1,2 @@
 /* syntax version 1 */
-select Linear::UnsafeConsumer(Linear::Producer());
+select Linear::UnsafeConsumer(Linear::Producer(1));

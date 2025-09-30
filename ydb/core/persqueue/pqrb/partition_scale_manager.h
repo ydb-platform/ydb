@@ -10,6 +10,7 @@
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
+#include <ydb/core/util/backoff.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 
 #include <util/system/types.h>
@@ -49,6 +50,7 @@ private:
     struct TPartitionScaleOperationInfo {
         ui32 PartitionId{};
         TMaybe<NKikimrPQ::TPartitionScaleParticipants> PartitionScaleParticipants;
+        TMaybe<TString> SplitBoundary;
     };
 
     struct TBuildSplitScaleRequestResult;
@@ -58,7 +60,10 @@ public:
         const NKikimrPQ::TPQTabletConfig& config, const TPartitionGraph& partitionGraph);
 
 public:
-    void HandleScaleStatusChange(const ui32 partition, NKikimrPQ::EScaleStatus scaleStatus, TMaybe<NKikimrPQ::TPartitionScaleParticipants> participants, const TActorContext& ctx);
+    void HandleScaleStatusChange(const ui32 partition, NKikimrPQ::EScaleStatus scaleStatus,
+        TMaybe<NKikimrPQ::TPartitionScaleParticipants> participants,
+        TMaybe<TString> splitBoundary,
+        const TActorContext& ctx);
     void HandleScaleRequestResult(TPartitionScaleRequest::TEvPartitionScaleRequestDone::TPtr& ev, const TActorContext& ctx);
     std::expected<void, std::string> HandleMirrorTopicDescriptionResult(TEvPQ::TEvMirrorTopicDescription::TPtr& ev, const TActorContext& ctx);
 
@@ -108,14 +113,12 @@ public:
     static const ui64 TRY_SCALE_REQUEST_WAKE_UP_TAG = 10;
 
 private:
-    static const ui32 MIN_SCALE_REQUEST_REPEAT_SECONDS_TIMEOUT = 10;
-    static const ui32 MAX_SCALE_REQUEST_REPEAT_SECONDS_TIMEOUT = 1000;
-
     const TString TopicName;
     const TString TopicPath;
     TString DatabasePath = "";
     TActorId CurrentScaleRequest;
-    TDuration RequestTimeout = TDuration::MilliSeconds(0);
+    TBackoff Backoff = TBackoff(TDuration::Seconds(1), TDuration::Minutes(15));
+    TDuration RequestTimeout;
     TInstant LastResponseTime = TInstant::Zero();
 
     TPartitionsToSplitMap PartitionsToSplit;

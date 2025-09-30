@@ -476,6 +476,7 @@ namespace NKikimr::NStorage {
 
             case EControllerOp::OTHER:
                 record.SetOperation(NKikimrBlobStorage::TEvControllerDistconfRequest::ValidateConfig);
+                record.MutableStorageConfig()->PackFrom(ProposedStorageConfig);
                 break;
 
             case EControllerOp::UNSET:

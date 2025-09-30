@@ -52,7 +52,7 @@ Y_UNIT_TEST_SUITE(KqpRollback) {
 
         // When 0
         auto result = session.ExecuteDataQuery(Q_(R"(
-            UPDATE `/Root/KVR` SET vs = 'whatever' WHERE vn = 2;
+            UPDATE `/Root/KVR` SET vs = 'whatever' WHERE id = 2u;
         )"), TTxControl::BeginTx()).ExtractValueSync();
         UNIT_ASSERT(result.IsSuccess());
         auto tx1 = result.GetTransaction();

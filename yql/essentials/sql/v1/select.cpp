@@ -2430,7 +2430,7 @@ public:
             }
 
             if (ListCall_) {
-                if (auto atom = dynamic_cast<TTableRows*>(term.Get())) {
+                if (/* auto atom = */ dynamic_cast<TTableRows*>(term.Get())) {
                     listPosIndex = termIndex;
                 }
             }

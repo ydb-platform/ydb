@@ -217,9 +217,9 @@ public:
         auto optSessionId = TryDecodeYdbSessionId(SessionId);
         YQL_ENSURE(optSessionId, "Can't decode ydb session Id");
 
-        TempTablesState.SessionId = *optSessionId;
         TempTablesState.Database = Settings.Database;
-        LOG_D("Create session actor with id " << TempTablesState.SessionId);
+        TempTablesState.TempDirName = TAppData::RandomProvider->GenUuid4().AsUuidString();
+        LOG_D("Create session actor with id " <<  *optSessionId << " (tmp dir name: " << TempTablesState.TempDirName << ")");
     }
 
     void Bootstrap() {
@@ -1481,7 +1481,7 @@ public:
             }
         }
 
-        if (QueryState->GetResultSetFormatSettings().IsArrowFormat() && !AppData()->FeatureFlags.GetEnableArrowResultSetFormat()) {
+        if (QueryState->GetFormatsSettings().IsArrowFormat() && !AppData()->FeatureFlags.GetEnableArrowResultSetFormat()) {
             ReplyQueryError(Ydb::StatusIds::BAD_REQUEST, "Arrow result set format is not enabled. Please set EnableArrowResultSetFormat feature flag to true.");
             return true;
         }
@@ -1631,8 +1631,10 @@ public:
         const TString requestType = QueryState->GetRequestType();
         const bool temporary = GetTemporaryTableInfo(tx).has_value();
 
-        auto executerActor = CreateKqpSchemeExecuter(tx, QueryState->GetType(), SelfId(), requestType, Settings.Database, userToken, clientAddress,
-            temporary, QueryState->IsCreateTableAs(), TempTablesState.SessionId, QueryState->UserRequestContext, KqpTempTablesAgentActor);
+        auto executerActor = CreateKqpSchemeExecuter(
+            tx, QueryState->GetType(), SelfId(), requestType, Settings.Database, userToken, clientAddress,
+            temporary, /* createTmpDir */ temporary && !TempTablesState.NeedCleaning,
+            QueryState->IsCreateTableAs(), TempTablesState.TempDirName, QueryState->UserRequestContext, KqpTempTablesAgentActor);
 
         ExecuterId = RegisterWithSameMailbox(executerActor);
 
@@ -1713,7 +1715,7 @@ public:
 
         auto executerActor = CreateKqpExecuter(std::move(request), Settings.Database,
             QueryState ? QueryState->UserToken : TIntrusiveConstPtr<NACLib::TUserToken>(),
-            QueryState ? QueryState->GetResultSetFormatSettings() : TResultSetFormatSettings{},
+            QueryState ? QueryState->GetFormatsSettings() : NFormats::TFormatsSettings{},
             RequestCounters, TExecuterConfig(Settings.MutableExecuterConfig, Settings.TableService),
             AsyncIoFactory, SelfId(),
             QueryState ? QueryState->UserRequestContext : MakeIntrusive<TUserRequestContext>("", Settings.Database, SessionId),
@@ -1908,7 +1910,7 @@ public:
             return;
         }
         if (QueryState->IsCreateTableAs()) {
-            TempTablesState.HasCreateTableAs = true;
+            TempTablesState.NeedCleaning = true;
             QueryState->UpdateTempTablesState(TempTablesState);
             return;
         }
@@ -1917,6 +1919,7 @@ public:
         if (optInfo) {
             auto [isCreate, info] = *optInfo;
             if (isCreate) {
+                TempTablesState.NeedCleaning = true;
                 TempTablesState.TempTables[info.first] = info.second;
             } else {
                 TempTablesState.TempTables.erase(info.first);
@@ -2331,7 +2334,7 @@ public:
                     if (QueryState->QueryData->HasTrailingTxResult(phyQuery.GetResultBindings(i))) {
                         auto ydbResult = QueryState->QueryData->GetYdbTxResult(
                             phyQuery.GetResultBindings(i), response->GetArena(),
-                            QueryState->GetResultSetFormatSettings(), {});
+                            QueryState->GetFormatsSettings(), {});
 
                         YQL_ENSURE(ydbResult);
                         ++trailingResultsCount;
@@ -2349,7 +2352,7 @@ public:
 
                 auto* ydbResult = QueryState->QueryData->GetYdbTxResult(
                     phyQuery.GetResultBindings(i), response->GetArena(),
-                    QueryState->GetResultSetFormatSettings(), effectiveRowsLimit);
+                    QueryState->GetFormatsSettings(), effectiveRowsLimit);
                 response->AddYdbResults()->Swap(ydbResult);
             }
         }

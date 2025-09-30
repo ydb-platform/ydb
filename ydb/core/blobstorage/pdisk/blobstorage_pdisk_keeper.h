@@ -176,6 +176,10 @@ public:
         return ChunkTracker.ColorFlagLimit(owner, color);
     }
 
+    void SetExpectedOwnerCount(size_t newOwnerCount) {
+        ChunkTracker.SetExpectedOwnerCount(newOwnerCount);
+    }
+
     //
     // GUI
     //

@@ -240,7 +240,7 @@
             "Match": {"Type": "CallableBase"},
             "Builder": {"Generate": "None"},
             "Children": [
-                {"Index": 0, "Name": "DependsOn", "Type": "TCoDependsOnBase"}
+                {"Index": 0, "Name": "Row", "Type": "TExprBase"}
             ]
         },
         {

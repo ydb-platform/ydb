@@ -1,5 +1,5 @@
+#include "yql_generic_credentials_provider.h"
 #include "yql_generic_lookup_actor.h"
-#include "yql_generic_token_provider.h"
 #include "yql_generic_base_actor.h"
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -71,7 +71,7 @@ namespace NYql::NDq {
     public:
         TGenericLookupActor(
             NConnector::IClient::TPtr connectorClient,
-            TGenericTokenProvider::TPtr tokenProvider,
+            TGenericCredentialsProvider::TPtr tokenProvider,
             NActors::TActorId&& parentId,
             ::NMonitoring::TDynamicCounterPtr taskCounters,
             std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
@@ -212,7 +212,7 @@ namespace NYql::NDq {
             NConnector::NApi::TReadSplitsRequest readRequest;
 
             *readRequest.mutable_data_source_instance() = LookupSource.data_source_instance();
-            auto error = TokenProvider->MaybeFillToken(*readRequest.mutable_data_source_instance());
+            auto error = TokenProvider->FillCredentials(*readRequest.mutable_data_source_instance());
             if (error) {
                 SendError(TActivationContext::ActorSystem(), SelfId(), std::move(error));
                 return;
@@ -479,7 +479,7 @@ namespace NYql::NDq {
 
         TString FillSelect(NConnector::NApi::TSelect& select) {
             auto dsi = LookupSource.data_source_instance();
-            auto error = TokenProvider->MaybeFillToken(dsi);
+            auto error = TokenProvider->FillCredentials(dsi);
             if (error) {
                 return error;
             }
@@ -510,7 +510,7 @@ namespace NYql::NDq {
 
     private:
         NConnector::IClient::TPtr Connector;
-        TGenericTokenProvider::TPtr TokenProvider;
+        TGenericCredentialsProvider::TPtr TokenProvider;
         const NActors::TActorId ParentId;
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
         std::shared_ptr<TKeyTypeHelper> KeyTypeHelper;
@@ -553,7 +553,7 @@ namespace NYql::NDq {
         const THashMap<TString, TString>& secureParams
     )
     {
-        auto tokenProvider = NYql::NDq::CreateGenericTokenProvider(
+        auto tokenProvider = NYql::NDq::CreateGenericCredentialsProvider(
             secureParams.Value(lookupSource.GetTokenName(), TString()),
             lookupSource.token(),
             lookupSource.serviceaccountid(),

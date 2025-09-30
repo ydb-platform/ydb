@@ -1,6 +1,6 @@
 #include "yql_generic_base_actor.h"
+#include "yql_generic_credentials_provider.h"
 #include "yql_generic_read_actor.h"
-#include "yql_generic_token_provider.h"
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -44,7 +44,7 @@ namespace NYql::NDq {
             ui64 inputIndex,
             TCollectStatsLevel statsLevel,
             NConnector::IClient::TPtr client,
-            TGenericTokenProvider::TPtr tokenProvider,
+            TGenericCredentialsProvider::TPtr tokenProvider,
             Generic::TSource&& source,
             const NActors::TActorId& computeActorId,
             const NKikimr::NMiniKQL::THolderFactory& holderFactory,
@@ -114,7 +114,7 @@ namespace NYql::NDq {
                     dstSplit->set_description(srcSplit.description());
 
                     // Assign actual IAM token to a split
-                    auto error = TokenProvider_->MaybeFillToken(*dstSplit->mutable_select()->mutable_data_source_instance());
+                    auto error = TokenProvider_->FillCredentials(*dstSplit->mutable_select()->mutable_data_source_instance());
                     if (error) {
                         return TIssue(std::move(error));
                     }
@@ -378,7 +378,7 @@ namespace NYql::NDq {
         const NActors::TActorId ComputeActorId_;
 
         NConnector::IClient::TPtr Client_;
-        TGenericTokenProvider::TPtr TokenProvider_;
+        TGenericCredentialsProvider::TPtr TokenProvider_;
 
         TVector<Generic::TPartition> Partitions_;
 
@@ -447,7 +447,7 @@ namespace NYql::NDq {
                                         << ", task_id=" << taskId
                                         << ", partitions_count=" << partitions.size();
 
-        auto tokenProvider = CreateGenericTokenProvider(
+        auto tokenProvider = CreateGenericCredentialsProvider(
             secureParams.Value(source.GetTokenName(), ""),
             source.GetToken(),
             source.GetServiceAccountId(),

@@ -129,7 +129,7 @@ A moment in time corresponding to midnight<sup>1</sup> in UTC, precision to the 
 |
 from 00:00 01.01.1970 to 00:00 01.01.2106
 |
-4
+2
 |
 —
 ||

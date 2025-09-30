@@ -1,6 +1,5 @@
 items:
 - { name: Обзор,                                                  href: index.md }
-- { name: Синтаксис,                                              href: syntax.md }
 - { name: Просмотр запросов,                                      href: view.md }
 - { name: Чекпойнты,                                              href: checkpoints.md }
 - { name: Оптимизация чтения (Shared reading),                    href: shared_reading.md }

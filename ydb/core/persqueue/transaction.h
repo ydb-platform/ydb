@@ -123,6 +123,8 @@ struct TDistributedTransaction {
 
     NWilson::TTraceId GetExecuteSpanTraceId();
 
+    TMaybe<NKikimrPQ::TError> Error;
+
 private:
     NWilson::TSpan CreateSpan(const char* name, ui64 tabletId);
 

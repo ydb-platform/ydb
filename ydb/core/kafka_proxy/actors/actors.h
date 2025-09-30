@@ -1,13 +1,13 @@
 #pragma once
 
 #include <ydb/core/base/path.h>
+#include <ydb/core/kafka_proxy/kafka_messages.h>
 #include <ydb/core/persqueue/public/pq_rl_helpers.h>
 #include <ydb/core/protos/config.pb.h>
+#include <ydb/core/tablet/tablet_pipe_client_cache.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/public/api/protos/persqueue_error_codes_v1.pb.h>
 #include <ydb/public/api/protos/draft/persqueue_error_codes.pb.h> // strange
-
-#include <ydb/core/kafka_proxy/kafka_messages.h>
 
 namespace NKafka {
 
@@ -37,11 +37,19 @@ struct TReadSession {
 struct TContext {
     using TPtr = std::shared_ptr<TContext>;
 
-    TContext(const NKikimrConfig::TKafkaProxyConfig& config)
-        : Config(config) {
+    TContext(const NKikimrConfig::TKafkaProxyConfig& config, NKikimr::NTabletPipe::IClientCache* pipeCache)
+        : Config(config)
+        , PipeCache(pipeCache) {
+    }
+
+    TContext(const TContext& other)
+        : Config(other.Config)
+        , PipeCache(other.PipeCache)
+    {
     }
 
     const NKikimrConfig::TKafkaProxyConfig& Config;
+    const std::shared_ptr<NKikimr::NTabletPipe::IClientCache> PipeCache;
 
     TActorId ConnectionId;
     TString KafkaClient;
@@ -64,10 +72,9 @@ struct TContext {
 
     NKikimr::NPQ::TRlContext RlContext;
 
+
     bool Authenticated() {
-
         return !RequireAuthentication || AuthenticationStep == SUCCESS;
-
     }
 };
 

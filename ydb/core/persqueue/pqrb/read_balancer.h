@@ -104,6 +104,10 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>,
     void Handle(TEvPersQueue::TEvGetReadSessionsInfo::TPtr &ev, const TActorContext& ctx);
     // End balancing
 
+    // Begin kafka integration
+    void Handle(TEvPersQueue::TEvBalancingSubscribe::TPtr &ev, const TActorContext& ctx);
+    // End kafka integration
+
     TStringBuilder LogPrefix() const;
 
     TActorId GetPipeClient(const ui64 tabletId, const TActorContext&);
@@ -322,6 +326,8 @@ public:
             HFunc(TEvPersQueue::TEvReadingPartitionFinishedRequest, Handle);
             HFunc(TEvPQ::TEvWakeupReleasePartition, Handle);
             HFunc(TEvPQ::TEvBalanceConsumer, Handle);
+            // From kafka
+            HFunc(TEvPersQueue::TEvBalancingSubscribe, Handle);
             // from PQ
             HFunc(TEvPQ::TEvPartitionScaleStatusChanged, Handle);
             // from TPartitionScaleRequest

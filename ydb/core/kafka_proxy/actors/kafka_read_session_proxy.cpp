@@ -2,42 +2,13 @@
 #include "kafka_read_session_utils.h"
 #include "kafka_balancer_actor.h"
 
+#include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
 
 namespace NKafka {
 
 using namespace NKikimr::NSchemeCache;
-
-KafkaReadSessionProxyActor::KafkaReadSessionProxyActor(const TContext::TPtr context, ui64 cookie)
-    : Context(context)
-    , Cookie(cookie)
-{
-}
-
-void KafkaReadSessionProxyActor::Bootstrap() {
-    Become(&KafkaReadSessionProxyActor::StateWork);
-}
-
-template<typename TRequest>
-void KafkaReadSessionProxyActor::HandleOnWork(TRequest& ev) {
-    switch (Context->ReadSession.BalancingMode) {
-        case EBalancingMode::Native:
-            Register(new TKafkaBalancerActor(Context, 0, ev->Get()->CorrelationId, ev->Get()->Request));
-            break;
-
-        case EBalancingMode::Server:
-            Forward(ev, ReadSessionActorId);
-            break;
-    }
-}
-
-template<>
-void KafkaReadSessionProxyActor::HandleOnWork<TEvKafka::TEvJoinGroupRequest::TPtr>(TEvKafka::TEvJoinGroupRequest::TPtr& ev) {
-    Context->ReadSession.BalancingMode = Context->ReadSession.PendingBalancingMode.value_or(GetBalancingMode(*ev->Get()->Request));
-    Context->ReadSession.PendingBalancingMode.reset();
-    HandleOnWork(ev);
-}
 
 namespace {
 
@@ -51,25 +22,74 @@ std::vector<TString> GetTopics(const TFetchRequestData& request, const TContext:
 
 }
 
+
+KafkaReadSessionProxyActor::KafkaReadSessionProxyActor(const TContext::TPtr context, ui64 cookie)
+    : Context(context)
+    , Cookie(cookie)
+{
+}
+
+void KafkaReadSessionProxyActor::Bootstrap() {
+    Become(&KafkaReadSessionProxyActor::StateWork);
+    Y_UNUSED(Cookie);
+}
+
+template<typename TRequest>
+void KafkaReadSessionProxyActor::HandleOnWork(TRequest& ev) {
+    KAFKA_LOG_D("HandleOnWork ");
+    switch (Context->ReadSession.BalancingMode) {
+        case EBalancingMode::Native:
+            Register(new TKafkaBalancerActor(Context, 0, ev->Get()->CorrelationId, ev->Get()->Request));
+            break;
+
+        case EBalancingMode::Server:
+            EnsureReadSessionActor();
+            Forward(ev, ReadSessionActorId);
+            break;
+    }
+}
+
+template<>
+void KafkaReadSessionProxyActor::HandleOnWork<TEvKafka::TEvJoinGroupRequest::TPtr>(TEvKafka::TEvJoinGroupRequest::TPtr& ev) {
+    KAFKA_LOG_D("HandleOnWork<TEvKafka::TEvJoinGroupRequest>");
+    Context->ReadSession.BalancingMode = Context->ReadSession.PendingBalancingMode.value_or(GetBalancingMode(*ev->Get()->Request));
+    Context->ReadSession.PendingBalancingMode.reset();
+    KAFKA_LOG_D("Balancing mode: " << Context->ReadSession.BalancingMode);
+
+    switch (Context->ReadSession.BalancingMode) {
+        case EBalancingMode::Native:
+            Register(new TKafkaBalancerActor(Context, 0, ev->Get()->CorrelationId, ev->Get()->Request));
+            break;
+
+        case EBalancingMode::Server:
+            EnsureReadSessionActor();
+            Forward(ev, ReadSessionActorId);
+            break;
+    }
+}
+
 template<>
 void KafkaReadSessionProxyActor::HandleOnWork<TEvKafka::TEvFetchRequest::TPtr>(TEvKafka::TEvFetchRequest::TPtr& ev) {
+    KAFKA_LOG_D("HandleOnWork<TEvKafka::TEvFetchRequest>");
     if (Context->ReadSession.BalancingMode == EBalancingMode::Server) {
         Register(CreateKafkaFetchActor(Context, ev->Get()->CorrelationId, ev->Get()->Request));
         return;
     }
-    std::vector<TString> newTopics;
     for (auto& topic : GetTopics(*ev->Get()->Request, Context)) {
         if (Topics.contains(topic)) {
             continue;
         }
 
-        newTopics.push_back(topic);
+        NewTopics.push_back(topic);
     }
 
-    if (newTopics.empty()) {
+    if (NewTopics.empty()) {
         Register(CreateKafkaFetchActor(Context, ev->Get()->CorrelationId, ev->Get()->Request));
         return;
     }
+
+    Y_VERIFY(!PendingRequest.has_value());
+    PendingRequest = ev;
 
     auto schemeRequest = std::make_unique<TSchemeCacheNavigate>(1);
     schemeRequest->DatabaseName = Context->DatabasePath;
@@ -85,7 +105,7 @@ void KafkaReadSessionProxyActor::HandleOnWork<TEvKafka::TEvFetchRequest::TPtr>(T
         entry.ShowPrivatePath = true;
     };
 
-    for (const auto& topic : newTopics) {
+    for (const auto& topic : NewTopics) {
         addEntry(topic);
         addEntry(TStringBuilder() << topic << "/streamImpl");
     }
@@ -94,6 +114,7 @@ void KafkaReadSessionProxyActor::HandleOnWork<TEvKafka::TEvFetchRequest::TPtr>(T
 }
 
 void KafkaReadSessionProxyActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+    KAFKA_LOG_D("Handle<TEvTxProxySchemeCache::TEvNavigateKeySetResult>");
     auto& result = ev->Get()->Request;
 
     for (size_t i = 0; i < result->ResultSet.size(); ++i) {
@@ -132,12 +153,67 @@ void KafkaReadSessionProxyActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySet
         }
 
         ui64 readBalancerTabletId = entry.PQGroupInfo->Description.GetBalancerTabletID();
+        Context->PipeCache->Prepare(NActors::TlsActivationContext->AsActorContext(), readBalancerTabletId);
         Topics[topic] = {
-            .ReadBalancerTabletId = readBalancerTabletId,
-            .PipeClient = CreatePipe(readBalancerTabletId)
+            .ReadBalancerTabletId = readBalancerTabletId
         };
+
+        Context->PipeCache->Send(NActors::TlsActivationContext->AsActorContext(), readBalancerTabletId,
+            new TEvPersQueue::TEvBalancingSubscribe(SelfId(), topic, Context->GroupId));
     }
+
+    NewTopics.clear();
 }
+
+void KafkaReadSessionProxyActor::Handle(TEvPersQueue::TEvBalancingSubscribeNotify::TPtr& ev) {
+    auto& record = ev->Get()->Record;
+    KAFKA_LOG_D("Handle TEvPersQueue::TEvBalancingSubscribeNotify " << record.ShortDebugString());
+
+    auto it = Topics.find(record.GetTopic());
+    if (it == Topics.end()) {
+        Y_VERIFY_DEBUG(it == Topics.end());
+        return;
+    }
+
+    auto& topicInfo = it->second;
+    if (topicInfo.ReadBalancerGeneration > record.GetGeneration()) {
+        return;
+    }
+    if (topicInfo.ReadBalancerGeneration == record.GetGeneration() && topicInfo.ReadBalancerNotifyCookie >= record.GetCookie()) {
+        return;
+    }
+
+    topicInfo.UsedServerBalancing = record.GetStatus() == NKikimrPQ::TEvBalancingSubscribeNotify::BALANCING;
+    topicInfo.ReadBalancerGeneration = record.GetGeneration();
+    topicInfo.ReadBalancerNotifyCookie = record.GetCookie();
+
+    ProcessPendingRequestIfPossible();
+}
+
+void KafkaReadSessionProxyActor::ProcessPendingRequestIfPossible() {
+    if (!PendingRequest.has_value()) {
+        return;
+    }
+
+    auto fetchEv = PendingRequest.value();
+    for (auto& topic : fetchEv->Get()->Request->Topics) {
+        auto it = Topics.find(*topic.Topic);
+        if (it == Topics.end()) {
+            Y_VERIFY_DEBUG(it == Topics.end());
+            return;
+        }
+
+        auto& topicInfo = it->second;
+        if (!topicInfo.UsedServerBalancing.has_value()) {
+            KAFKA_LOG_D("Topic " << *topic.Topic << " is not initialized");
+            return;
+        }
+    }
+
+    Register(CreateKafkaFetchActor(Context, fetchEv->Get()->CorrelationId, fetchEv->Get()->Request));
+    PendingRequest.reset();
+}
+
 
 STFUNC(KafkaReadSessionProxyActor::StateWork) {
     switch (ev->GetTypeRewrite()) {
@@ -147,6 +223,13 @@ STFUNC(KafkaReadSessionProxyActor::StateWork) {
         hFunc(TEvKafka::TEvLeaveGroupRequest, HandleOnWork);
         hFunc(TEvKafka::TEvFetchRequest, HandleOnWork);
         hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
+        hFunc(TEvPersQueue::TEvBalancingSubscribeNotify, Handle);
+    }
+}
+
+void KafkaReadSessionProxyActor::EnsureReadSessionActor() {
+    if (!ReadSessionActorId) {
+        ReadSessionActorId = Register(CreateKafkaReadSessionActor(Context, Cookie));
     }
 }
 

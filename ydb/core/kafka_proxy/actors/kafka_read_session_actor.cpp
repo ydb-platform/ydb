@@ -101,7 +101,7 @@ void TKafkaReadSessionActor::HandleJoinGroup(TEvKafka::TEvJoinGroupRequest::TPtr
                 << "_" << "kafka";
 
             if (!supportedProtocolFound) {
-                SendJoinGroupResponseFail(ctx, ev->Get()->CorrelationId, INCONSISTENT_GROUP_PROTOCOL, TStringBuilder() << "unsupported assign protocol. Must be " << SUPPORTED_ASSIGN_STRATEGY);
+                SendJoinGroupResponseFail(ctx, ev->Get()->CorrelationId, INCONSISTENT_GROUP_PROTOCOL, TStringBuilder() << "unsupported assign protocol. Must be " << ASSIGN_STRATEGY_ROUNDROBIN);
                 CloseReadSession(ctx);
                 return;
             }
@@ -232,7 +232,7 @@ void TKafkaReadSessionActor::SendJoinGroupResponseOk(const TActorContext&, ui64 
     TJoinGroupResponseData::TPtr response = std::make_shared<TJoinGroupResponseData>();
 
     response->ProtocolType = SUPPORTED_JOIN_GROUP_PROTOCOL;
-    response->ProtocolName = SUPPORTED_ASSIGN_STRATEGY;
+    response->ProtocolName = ASSIGN_STRATEGY_ROUNDROBIN;
     response->ErrorCode = EKafkaErrors::NONE_ERROR;
     response->GenerationId = GenerationId;
     response->MemberId = Session;
@@ -253,7 +253,7 @@ void TKafkaReadSessionActor::SendSyncGroupResponseOk(const TActorContext& ctx, u
     TSyncGroupResponseData::TPtr response = std::make_shared<TSyncGroupResponseData>();
 
     response->ProtocolType = SUPPORTED_JOIN_GROUP_PROTOCOL;
-    response->ProtocolName = SUPPORTED_ASSIGN_STRATEGY;
+    response->ProtocolName = ASSIGN_STRATEGY_ROUNDROBIN;
     response->ErrorCode = EKafkaErrors::NONE_ERROR;
 
     auto assignment = BuildAssignmentAndInformBalancerIfRelease(ctx);

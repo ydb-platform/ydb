@@ -56,6 +56,7 @@ namespace TEvPersQueue {
         EvReadingPartitionStarted,
         EvOffloadStatus,
         EvBalancingSubscribe,
+        EvBalancingSubscribeNotify,
         EvResponse = EvRequest + 256,
         EvInternalEvents = EvResponse + 256,
         EvEnd
@@ -273,6 +274,26 @@ namespace TEvPersQueue {
 
     struct TEvOffloadStatus : TEventPB<TEvOffloadStatus, NKikimrPQ::TEvOffloadStatus, EvOffloadStatus> {};
 
-    struct TEvBalancingSubscribe : TEventPB<TEvBalancingSubscribe, NKikimrPQ::TEvBalancingSubscribe, EvBalancingSubscribe> {};
+    struct TEvBalancingSubscribe : TEventPB<TEvBalancingSubscribe, NKikimrPQ::TEvBalancingSubscribe, EvBalancingSubscribe> {
+        TEvBalancingSubscribe() = default;
+
+        TEvBalancingSubscribe(TActorId client, const TString& topic, const TString& consumer) {
+            ActorIdToProto(client, Record.MutableSourceActor());
+            Record.SetTopic(topic);
+            Record.SetConsumer(consumer);
+        }
+    };
+
+    struct TEvBalancingSubscribeNotify : TEventPB<TEvBalancingSubscribeNotify, NKikimrPQ::TEvBalancingSubscribeNotify, EvBalancingSubscribeNotify> {
+        TEvBalancingSubscribeNotify() = default;
+
+        TEvBalancingSubscribeNotify(ui64 generation, ui64 cookie, const TString& topic, const TString& consumer, const NKikimrPQ::TEvBalancingSubscribeNotify::EStatus status) {
+            Record.SetGeneration(generation);
+            Record.SetCookie(cookie);
+            Record.SetTopic(topic);
+            Record.SetConsumer(consumer);
+            Record.SetStatus(status);
+        }
+    };
 };
 } //NKikimr

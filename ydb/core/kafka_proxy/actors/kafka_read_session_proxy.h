@@ -23,9 +23,12 @@ public:
     void HandleOnWork(TRequest&);
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr&);
+    void Handle(TEvPersQueue::TEvBalancingSubscribeNotify::TPtr&);
 
     STFUNC(StateWork);
 
+    void EnsureReadSessionActor();
+    void ProcessPendingRequestIfPossible();
     void PassAway();
     TActorId CreatePipe(ui64 tabletId);
 
@@ -38,9 +41,15 @@ private:
     struct TTopicInfo {
         ui64 ReadBalancerTabletId;
         TActorId PipeClient;
+
+        ui64 ReadBalancerGeneration = 0;
+        ui64 ReadBalancerNotifyCookie = 0;
+        std::optional<bool> UsedServerBalancing;
     };
     std::unordered_map<TString, TTopicInfo> Topics;
     std::vector<TString> NewTopics;
+
+    std::optional<TEvKafka::TEvFetchRequest::TPtr> PendingRequest;
 
 };
 

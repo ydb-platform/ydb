@@ -75,7 +75,7 @@ TVector<NKikimr::NPQ::TPartitionFetchRequest> TKafkaFetchActor::PrepareFetchRequ
         partPQRequest.MaxBytes = partKafkaRequest.PartitionMaxBytes;
         partPQRequest.ClientId = Context->GroupId.empty() ? NKikimr::NPQ::CLIENTID_WITHOUT_CONSUMER : Context->GroupId;
     }
-    return partPQRequests
+    return partPQRequests;
 }
 
 void TKafkaFetchActor::Handle(NKikimr::TEvPQ::TEvFetchResponse::TPtr& ev, const TActorContext& ctx) {

@@ -29,7 +29,7 @@ Y_UNIT_TEST_SUITE(TMetadataActorTests) {
         auto* runtime = server.CleverServer->GetRuntime();
         auto request = GetMetadataRequest(topics);
 
-        auto context = std::make_shared<TContext>(Config);
+        auto context = std::make_shared<TContext>(Config, nullptr);
         context->ConnectionId = edgeActor;
         context->DatabasePath = "/Root";
         context->ResourceDatabasePath = "/Root";

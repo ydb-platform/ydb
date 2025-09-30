@@ -96,7 +96,7 @@ public:
         , Step(SIZE_READ)
         , Demand(NoDemand)
         , InflightSize(0)
-        , Context(std::make_shared<TContext>(config))
+        , Context(std::make_shared<TContext>(config, CreateBoundedClientCache(MakeIntrusive<NKikimr::NTabletPipe::TBoundedClientCacheConfig>())))
     {
         SetNonBlock();
         IsSslRequired = Socket->IsSslSupported();
@@ -123,8 +123,8 @@ public:
         if (ProduceActorId) {
             Send(ProduceActorId, new TEvents::TEvPoison());
         }
-        if (ReadSessionActorId) {
-            Send(ReadSessionActorId, new TEvents::TEvPoison());
+        if (Context->ReadSession.ProxyActorId) {
+            Send(Context->ReadSession.ProxyActorId, new TEvents::TEvPoison());
         }
         Send(ListenerActorId, new TEvents::TEvUnsubscribe());
         Shutdown();

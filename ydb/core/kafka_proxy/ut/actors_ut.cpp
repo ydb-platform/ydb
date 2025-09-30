@@ -206,7 +206,7 @@ namespace NKafka::NTests {
                 topic.Name = topicPath;
             }
 
-            auto context = std::make_shared<TContext>(kafkaConfig);
+            auto context = std::make_shared<TContext>(kafkaConfig, nullptr);
             context->ConnectionId = edge;
             context->DatabasePath = "/Root";
             context->ResourceDatabasePath = "/Root";

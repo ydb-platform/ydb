@@ -6,7 +6,7 @@ namespace NKafka {
 EBalancingMode GetBalancingMode(const TJoinGroupRequestData& request) {
     if (NKikimr::AppData()->FeatureFlags.GetEnableKafkaNativeBalancing()) {
         return request.ProtocolType == SUPPORTED_JOIN_GROUP_PROTOCOL && AnyOf(request.Protocols, [](const TJoinGroupRequestData::TJoinGroupRequestProtocol& p) {
-            return p.Name == SUPPORTED_ASSIGN_STRATEGY;
+            return p.Name == ASSIGN_STRATEGY_SERVER;
         }) ? EBalancingMode::Server : EBalancingMode::Native;
     } else {
         return EBalancingMode::Server;
@@ -19,7 +19,7 @@ std::optional<TConsumerProtocolSubscription> GetSubscriptions(const TJoinGroupRe
     }
 
     auto* p = FindIf(request.Protocols, [](const TJoinGroupRequestData::TJoinGroupRequestProtocol& p) {
-        return p.Name == SUPPORTED_ASSIGN_STRATEGY;
+        return p.Name == ASSIGN_STRATEGY_ROUNDROBIN;
     });
 
     if (!p) {

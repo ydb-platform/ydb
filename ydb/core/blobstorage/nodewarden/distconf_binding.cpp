@@ -432,20 +432,35 @@ namespace NKikimr::NStorage {
             FanOutReversePush();
         }
 
+        std::unique_ptr<TEvNodeConfigPush> pendingPush;
+        auto getPendingPushRecord = [&] {
+            if (!pendingPush) {
+                pendingPush.reset(new TEvNodeConfigPush);
+            }
+            return &pendingPush->Record;
+        };
+
         // process cache updates, if needed
         if (record.HasCacheUpdate()) {
             auto *cacheUpdate = record.MutableCacheUpdate();
             ApplyCacheUpdates(cacheUpdate, senderNodeId);
 
             if (cacheUpdate->RequestedKeysSize()) {
-                auto ev = std::make_unique<TEvNodeConfigPush>();
                 for (const TString& key : cacheUpdate->GetRequestedKeys()) {
                     if (const auto it = Cache.find(key); it != Cache.end()) {
-                        AddCacheUpdate(ev->Record.MutableCacheUpdate(), it, true);
+                        AddCacheUpdate(getPendingPushRecord()->MutableCacheUpdate(), it, true);
                     }
                 }
-                SendEvent(*Binding, std::move(ev));
             }
+        }
+
+        if (StorageConfig && record.HasRequestStorageConfigGeneration() &&
+                record.GetRequestStorageConfigGeneration() <= StorageConfig->GetGeneration()) {
+            getPendingPushRecord()->MutableStorageConfig()->CopyFrom(*StorageConfig);
+        }
+
+        if (pendingPush) {
+            SendEvent(*Binding, std::move(pendingPush));
         }
 
         // if we have a root node id that is not ours, then we drop all inbound pile connections; also execute any
@@ -537,11 +552,14 @@ namespace NKikimr::NStorage {
 
         // check if we have to send our current config to the peer
         const NKikimrBlobStorage::TStorageConfig *configToPeer = nullptr;
-        if (record.GetInitial()) {
+        std::optional<ui64> requestStorageConfigGeneration;
+        if (StorageConfig) {
             for (const auto& item : record.GetBoundNodes()) {
                 if (item.GetNodeId().GetNodeId() == senderNodeId) {
-                    if (StorageConfig && item.GetMeta().GetGeneration() < StorageConfig->GetGeneration()) {
+                    if (item.GetMeta().GetGeneration() < StorageConfig->GetGeneration()) {
                         configToPeer = StorageConfig.get();
+                    } else if (StorageConfig->GetGeneration() < item.GetMeta().GetGeneration()) {
+                        requestStorageConfigGeneration.emplace(item.GetMeta().GetGeneration());
                     }
                     break;
                 }
@@ -606,7 +624,8 @@ namespace NKikimr::NStorage {
             GetRootNodeId());
         TBoundNode& info = it->second;
         if (inserted) {
-            auto response = std::make_unique<TEvNodeConfigReversePush>(GetRootNodeId(), configToPeer);
+            auto response = std::make_unique<TEvNodeConfigReversePush>(GetRootNodeId(), configToPeer,
+                requestStorageConfigGeneration);
             if (record.GetInitial()) {
                 auto *cache = record.MutableCacheUpdate();
 
@@ -673,6 +692,10 @@ namespace NKikimr::NStorage {
         // process cache items
         if (!record.GetInitial() && record.HasCacheUpdate()) {
             ApplyCacheUpdates(record.MutableCacheUpdate(), senderNodeId);
+        }
+
+        if (record.HasStorageConfig()) {
+            ApplyStorageConfig(record.GetStorageConfig(), /*fromBinding=*/ false);
         }
 
         if (pushEv && pushEv->IsUseful()) {

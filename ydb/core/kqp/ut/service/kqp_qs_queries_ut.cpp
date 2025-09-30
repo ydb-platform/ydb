@@ -3602,10 +3602,6 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetQueryClient();
 
-        if (IsOlap) {
-            return;
-        }
-
         {
             auto result = db.ExecuteQuery(Sprintf(R"(
                 CREATE TABLE Table (

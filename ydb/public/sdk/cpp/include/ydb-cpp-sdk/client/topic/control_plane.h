@@ -757,11 +757,6 @@ struct TAlterTopicSettings : public TOperationRequestSettings<TAlterTopicSetting
         return *this;
     }
 
-    TAlterTopicSettings& DropMetricsLevel() {
-        MetricsLevel_.reset();
-        return *this;
-    }
-
     std::optional<TAlterPartitioningSettings> AlterPartitioningSettings_;
 };
 

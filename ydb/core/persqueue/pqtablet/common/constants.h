@@ -16,10 +16,4 @@ static const ui32 KAFKA_TRANSACTION_DELETE_DELAY_MS = TDuration::Hours(1).MilliS
 
 constexpr char TMP_REQUEST_MARKER[] = "__TMP__REQUEST__MARKER__";
 
-static constexpr ui32 METRICS_LEVEL_UNSPECIFIED = 0;
-static constexpr ui32 METRICS_LEVEL_DISABLED = 1;
-static constexpr ui32 METRICS_LEVEL_DATABASE = 2;
-static constexpr ui32 METRICS_LEVEL_OBJECT = 3;
-static constexpr ui32 METRICS_LEVEL_DETAILED = 4;
-
 }

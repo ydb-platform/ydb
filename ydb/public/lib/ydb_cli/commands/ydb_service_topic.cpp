@@ -35,7 +35,7 @@ namespace NYdb::NConsoleClient {
             std::pair<TString, NYdb::NTopic::ECodec>("zstd", NYdb::NTopic::ECodec::ZSTD),
         };
 
-        TVector<ui32> ExistingMetricsLevels = {1, 2, 3, 4};
+        TVector<ui32> ExistingMetricsLevels = {3, 4};
 
         THashMap<ui32, TString> MetricsLevelsDescriptions = {
             {1, "No metrics."},
@@ -178,7 +178,7 @@ namespace NYdb::NConsoleClient {
                      "Couldn't find description for %s metrics level", (TStringBuilder() << level).c_str());
             description << "\n  " << colors.BoldColor() << level << colors.OldColor()
                         << "\n    " << findResult->second;
-            if (level == 2 /* database-level metrics */) {
+            if (level == 3 /* database and topic level metrics */) {
                 description << colors.CyanColor() << " (default)" << colors.OldColor();
             }
         }

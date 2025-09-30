@@ -1,11 +1,11 @@
 pkgs: attrs: with pkgs; with attrs; rec {
-  version = "1.67.0";
+  version = "1.67.1";
 
   src = fetchFromGitHub {
     owner = "nghttp2";
     repo = "nghttp2";
     rev = "v${version}";
-    hash = "sha256-k3N5l98iuwG+ka1loSRp2p+QJ/4La+VBNiWBMyXBitY=";
+    hash = "sha256-LpuOPC82Rt9EvvLvAYGXRpQYz50Q/Ec3VYTS6/xehAA=";
   };
 
   patches = [];

@@ -24,6 +24,7 @@ public:
 
     void UpdateFairShare();
 
+    static constexpr bool ALLOW_FAIRSHARE_OVERLIMIT = true;
 private:
     TRWMutex Mutex;
     NHdrf::NDynamic::TRootPtr Root;                                // protected by Mutex

@@ -1528,6 +1528,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         ExecQuery(fmt::format(R"(
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
+                PRAGMA ydb.HashJoinMode = "map";
                 $s3_lookup = SELECT * FROM `{s3_source}`.`path/` WITH (
                     FORMAT = "json_each_row",
                     SCHEMA (
@@ -1699,6 +1700,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         ExecQuery(fmt::format(R"(
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
+                PRAGMA ydb.HashJoinMode = "map";
                 $ydb_lookup = SELECT * FROM `{ydb_source}`.`{ydb_table}`;
 
                 $pq_source = SELECT * FROM `{pq_source}`.`{input_topic}` WITH (

@@ -3103,7 +3103,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 2);
 
         {
-            THolder<NMsgBusProxy::TBusPersQueue> request = TRequestDescribePQ().GetRequest({});
+            THolder<NMsgBusProxy::TBusPersQueue> request = TRequestDescribePQ().GetRequest({DEFAULT_TOPIC_NAME});
 
             NKikimrClient::TResponse response;
 
@@ -3410,8 +3410,8 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
                 NKikimrServices::PQ_METACACHE });
         }
 
-        server.AnnoyingClient->DescribeTopic({});
-        server.AnnoyingClient->TestCase({}, 0, 0, true);
+        server.AnnoyingClient->DescribeTopic({DEFAULT_TOPIC_NAME}, true);
+        server.AnnoyingClient->TestCase({{DEFAULT_TOPIC_NAME, {5}}}, 0, 0, false);
 
         server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 10);
         server.AnnoyingClient->AlterTopic(DEFAULT_TOPIC_NAME, 20);
@@ -3431,7 +3431,6 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         server.AnnoyingClient->TestCase({{DEFAULT_TOPIC_NAME, {}}}, 20, 1, true);
         server.AnnoyingClient->TestCase({{DEFAULT_TOPIC_NAME, {5, 5}}}, 0, 0, false);
         server.AnnoyingClient->TestCase({{DEFAULT_TOPIC_NAME, {111}}}, 0, 0, false);
-        server.AnnoyingClient->TestCase({}, 45, 1, true);
         server.AnnoyingClient->TestCase({{thirdTopic, {}}}, 0, 0, false);
         server.AnnoyingClient->TestCase({{DEFAULT_TOPIC_NAME, {}}, {thirdTopic, {}}}, 0, 0, false);
         server.AnnoyingClient->TestCase({{DEFAULT_TOPIC_NAME, {}}, {secondTopic, {}}}, 45, 1, true);
@@ -3440,7 +3439,6 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         server.AnnoyingClient->DescribeTopic({DEFAULT_TOPIC_NAME});
         server.AnnoyingClient->DescribeTopic({secondTopic});
         server.AnnoyingClient->DescribeTopic({secondTopic, DEFAULT_TOPIC_NAME});
-        server.AnnoyingClient->DescribeTopic({});
         server.AnnoyingClient->DescribeTopic({thirdTopic}, true);
     }
 

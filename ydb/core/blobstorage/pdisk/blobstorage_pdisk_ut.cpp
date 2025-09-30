@@ -1275,7 +1275,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         const ui32 firstNodeId = testCtx.GetRuntime()->GetFirstNodeId();
         auto pdiskConfig = testCtx.GetPDiskConfig();
         using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
-        pdiskConfig->SpaceColorBorder = TColor::YELLOW;
+        pdiskConfig->SpaceColorBorder = TColor::ORANGE;
         testCtx.UpdateConfigRecreatePDisk(pdiskConfig);
         // The actual value of SharedQuota.HardLimit internally initialized in TActorTestContext
         // Feel free to update if some day it changes
@@ -1329,7 +1329,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         }
         vdisk0.CommitReservedChunks();
 
-        CheckEvCheckSpace(testCtx, vdisk0, sharedFree, fairQuota, vdisk0Used, 2, 3, TColor::YELLOW);
+        CheckEvCheckSpace(testCtx, vdisk0, sharedFree, fairQuota, vdisk0Used, 2, 3, TColor::ORANGE);
         CheckEvCheckSpace(testCtx, vdisk1, sharedFree, fairQuota*2, 0, 2, 3, TColor::GREEN);
 
         // State 4:
@@ -1363,9 +1363,18 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
 
         fairQuota = sharedQuota / 4;
         UNIT_ASSERT_VALUES_EQUAL(vdisk0Used, fairQuota);
-        CheckEvCheckSpace(testCtx, vdisk0, sharedFree, fairQuota, vdisk0Used, 3, 4, TColor::YELLOW);
+        CheckEvCheckSpace(testCtx, vdisk0, sharedFree, fairQuota, vdisk0Used, 3, 4, TColor::ORANGE);
         CheckEvCheckSpace(testCtx, vdisk1, sharedFree, fairQuota, 0, 3, 4, TColor::GREEN);
         CheckEvCheckSpace(testCtx, vdisk2, sharedFree, fairQuota*2, 0, 3, 4, TColor::GREEN);
+
+        auto &icb = testCtx.GetRuntime()->GetAppData().Icb;
+        TControlWrapper semiStrictSpaceIsolation(0, 0, 2);
+        TControlBoard::RegisterSharedControl(semiStrictSpaceIsolation, icb->PDiskControls.SemiStrictSpaceIsolation);
+        semiStrictSpaceIsolation = 1;
+        CheckEvCheckSpace(testCtx, vdisk0, sharedFree, fairQuota, vdisk0Used, 3, 4, TColor::LIGHT_YELLOW);
+        semiStrictSpaceIsolation = 2;
+        CheckEvCheckSpace(testCtx, vdisk0, sharedFree, fairQuota, vdisk0Used, 3, 4, TColor::YELLOW);
+        semiStrictSpaceIsolation = 0;
 
         // State 6:
         // Owners.GroupSizeInUnits: [0u, 2u, 1u]
@@ -1399,7 +1408,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
 
         fairQuota = sharedQuota / 8;
         UNIT_ASSERT_VALUES_EQUAL(vdisk0Used, fairQuota*2);
-        CheckEvCheckSpace(testCtx, vdisk0, sharedFree, fairQuota, vdisk0Used, 3, 4, TColor::YELLOW);
+        CheckEvCheckSpace(testCtx, vdisk0, sharedFree, fairQuota, vdisk0Used, 3, 4, TColor::ORANGE);
         CheckEvCheckSpace(testCtx, vdisk1, sharedFree, fairQuota*2, 0, 3, 4, TColor::GREEN);
         CheckEvCheckSpace(testCtx, vdisk2, sharedFree, fairQuota, 0, 3, 4, TColor::GREEN);
 

@@ -406,16 +406,7 @@ def format_telegram_messages(workflow_info: Dict[str, Dict[str, Any]], stuck_job
     # Statistics of stuck jobs by types
     stuck_counts = count_stuck_jobs_by_type(stuck_jobs)
     total_stuck = sum(stuck_counts.values())
-    
-    if total_stuck > 0:
-        # Show detailed statistics by types
-        for pattern, threshold_hours, display_name in WORKFLOW_THRESHOLDS:
-            if stuck_counts[display_name] > 0:
-                message1_parts.append(f"• Stuck {display_name} (>{threshold_hours}h): {stuck_counts[display_name]}")
-        if stuck_counts['Other'] > 0:
-            message1_parts.append(f"• Stuck Other: {stuck_counts['Other']}")
-    else:
-        message1_parts.append(f"• Stuck: 0")
+    message1_parts.append(f"• Stuck: {total_stuck} jobs")
     
     if excluded_count > 0:
         message1_parts.append(f"• Excluded (>{MAX_AGE_DAYS}d): {excluded_count} jobs")

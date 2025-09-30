@@ -41,15 +41,11 @@ void ValidateViewQuery(const TString& query, const TString& dbPath, NYql::TIssue
 }
 
 bool RewriteTablePathPrefix(TString& query, TStringBuf backupRoot, TStringBuf restoreRoot,
-    bool restoreRootIsDatabase, TString& effectiveTablePathPrefix, NYql::TIssues& issues
+    bool restoreRootIsDatabase, TString& backupPathPrefix, TString& restorePathPrefix, NYql::TIssues& issues
 ) {
-    effectiveTablePathPrefix = restoreRoot;
-    if (backupRoot == restoreRoot) {
-        return true;
-    }
+    restorePathPrefix = restoreRoot;
 
-    TString pathPrefix;
-    if (!re2::RE2::PartialMatch(query, R"(PRAGMA TablePathPrefix = '(\S+)';)", &pathPrefix)) {
+    if (!re2::RE2::PartialMatch(query, R"(PRAGMA TablePathPrefix = '(\S+)';)", &backupPathPrefix)) {
         if (!restoreRootIsDatabase) {
             // Initially, the view relied on the implicit table path prefix;
             // however, this approach is now incorrect because the requested restore root differs from the database root.
@@ -68,11 +64,15 @@ bool RewriteTablePathPrefix(TString& query, TStringBuf backupRoot, TStringBuf re
         return true;
     }
 
-    pathPrefix = RewriteAbsolutePath(pathPrefix, backupRoot, restoreRoot);
+    if (backupRoot == restoreRoot) {
+        return true;
+    }
+
+    restorePathPrefix = RewriteAbsolutePath(backupPathPrefix, backupRoot, restoreRoot);
 
     constexpr TStringBuf pattern = R"(PRAGMA TablePathPrefix = '\S+';)";
     if (!re2::RE2::Replace(&query, pattern,
-        std::format(R"(PRAGMA TablePathPrefix = '{}';)", pathPrefix.c_str())
+        std::format(R"(PRAGMA TablePathPrefix = '{}';)", restorePathPrefix.c_str())
     )) {
         issues.AddIssue(TStringBuilder() << "query: " << query.Quote()
             << " does not contain the pattern: \"" << pattern << "\""
@@ -80,7 +80,6 @@ bool RewriteTablePathPrefix(TString& query, TStringBuf backupRoot, TStringBuf re
         return false;
     }
 
-    effectiveTablePathPrefix = std::move(pathPrefix);
     return true;
 }
 
@@ -132,12 +131,13 @@ bool RewriteCreateViewQuery(TString& query, const TString& restoreRoot, bool res
 ) {
     const auto backupRoot = GetBackupRoot(query);
 
-    TString effectiveTablePathPrefix;
-    if (!RewriteTablePathPrefix(query, backupRoot, restoreRoot, restoreRootIsDatabase, effectiveTablePathPrefix, issues)) {
+    TString backupPathPrefix;
+    TString restorePathPrefix;
+    if (!RewriteTablePathPrefix(query, backupRoot, restoreRoot, restoreRootIsDatabase, backupPathPrefix, restorePathPrefix, issues)) {
         return false;
     }
 
-    if (!RewriteTableRefs(query, backupRoot, restoreRoot, effectiveTablePathPrefix, issues)) {
+    if (!RewriteTableRefs(query, backupRoot, restoreRoot, backupPathPrefix, restorePathPrefix, issues)) {
         return false;
     }
 

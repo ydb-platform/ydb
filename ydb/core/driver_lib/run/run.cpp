@@ -173,6 +173,25 @@
 
 namespace NKikimr {
 
+namespace {
+
+    void StopGRpcServers(std::weak_ptr<TGRpcServersWrapper> grpcServersWrapper) {
+        auto wrapper = grpcServersWrapper.lock();
+        if (!wrapper) {
+            return;
+        }
+        TGuard<TMutex> guard = wrapper->Guard();
+        for (auto& [name, server] : wrapper->Servers) {
+            if (!server) {
+                continue;
+            }
+            server->Stop();
+        }
+        wrapper->Servers.clear();
+    }
+
+}
+
 class TGRpcServersManager : public TActorBootstrapped<TGRpcServersManager> {
     std::weak_ptr<TGRpcServersWrapper> GRpcServersWrapper;
     TIntrusivePtr<NMemory::IProcessMemoryInfoProvider> ProcessMemoryInfoProvider;
@@ -224,6 +243,7 @@ public:
             return;
         }
         TGuard<TMutex> guard = wrapper->Guard();
+        wrapper->Servers = wrapper->GrpcServersFactory();
         for (auto& [name, server] : wrapper->Servers) {
             if (!server) {
                 continue;
@@ -260,17 +280,7 @@ public:
             return;
         }
         Started = false;
-        auto wrapper = GRpcServersWrapper.lock();
-        if (!wrapper) {
-            return;
-        }
-        TGuard<TMutex> guard = wrapper->Guard();
-        for (auto& [name, server] : wrapper->Servers) {
-            if (server) {
-                server->Stop();
-            }
-        }
-        wrapper->Servers.clear();
+        StopGRpcServers(GRpcServersWrapper);
     }
 
     void HandleStop(TEvStop::TPtr ev) {
@@ -654,7 +664,10 @@ void TKikimrRunner::InitializeKqpController(const TKikimrRunConfig& runConfig) {
 }
 
 void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
-    GRpcServersFactory = [runConfig, this] { return CreateGRpcServers(runConfig); };
+    if (!GRpcServersWrapper) {
+        GRpcServersWrapper = std::make_shared<TGRpcServersWrapper>();
+    }
+    GRpcServersWrapper->GrpcServersFactory = [runConfig, this] { return CreateGRpcServers(runConfig); };
 }
 
 TGRpcServers TKikimrRunner::CreateGRpcServers(const TKikimrRunConfig& runConfig) {
@@ -1999,9 +2012,8 @@ void TKikimrRunner::KikimrStart() {
         Monitoring->Start(ActorSystem.Get());
     }
 
-    if (GRpcServersFactory) {
-        GRpcServersWrapper = std::make_shared<TGRpcServersWrapper>();
-        GRpcServersWrapper->Servers = GRpcServersFactory();
+    if (GRpcServersWrapper) {
+        GRpcServersWrapper->Servers = GRpcServersWrapper->GrpcServersFactory();
         GRpcServersManager = ActorSystem->Register(new TGRpcServersManager(GRpcServersWrapper, ProcessMemoryInfoProvider));
     }
 
@@ -2113,12 +2125,7 @@ void TKikimrRunner::KikimrStop(bool graceful) {
 
     // stop processing grpc requests/response - we must stop feeding ActorSystem
     if (GRpcServersManager) {
-        TGuard<TMutex> guard = GRpcServersWrapper->Guard();
-        for (auto& [name, server] : GRpcServersWrapper->Servers) {
-            if (server) {
-                server->Stop();
-            }
-        }
+        StopGRpcServers(GRpcServersWrapper);
         GRpcServersWrapper->Servers.clear();
     }
 

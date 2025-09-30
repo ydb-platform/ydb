@@ -108,6 +108,21 @@ private:
 };
 #endif
 
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 44)
+class TTypePrinter7 : public TTypePrinter6 {
+public:
+    using TTypePrinter6::TTypePrinter6;
+
+protected:
+    void OnLinear(const TType* itemType, bool isDynamic) final {
+        OnLinearImpl(itemType, isDynamic);
+    }
+
+private:
+    void OnLinearImpl(const TType* itemType, bool isDynamic);
+};
+#endif
+
 TTypePrinter1::TTypePrinter1(const ITypeInfoHelper1& typeHelper, const TType* type, ui16 compatibilityVersion)
     : TStubTypeVisitor(compatibilityVersion)
     , TypeHelper1_(typeHelper), Type_(type), Output_(nullptr)
@@ -293,8 +308,17 @@ void TTypePrinter6::OnBlockImpl(const TType* itemType, bool isScalar) {
     *Output_ << '>';
 }
 
+void TTypePrinter7::OnLinearImpl(const TType* itemType, bool isDynamic) {
+    if (isDynamic) {
+        *Output_ << "Dynamic";
+    }
+    *Output_ << "Linear<";
+    OutImpl(itemType);
+    *Output_ << '>';
+}
+
 void TTypePrinter::Out(IOutputStream &o) const {
-    TTypePrinter6 p(TypeHelper_, Type_, UDF_ABI_COMPATIBILITY_VERSION(2, 26));
+    TTypePrinter7 p(TypeHelper_, Type_, UDF_ABI_COMPATIBILITY_VERSION(2, 44));
     p.Out(o);
 }
 

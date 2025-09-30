@@ -46,10 +46,10 @@ query_service_config:
             use_ssl: false                      # флаг, включающий шифрование соединений
             ssl_ca_crt: "/opt/ydb/certs/ca.crt" # (опционально) путь к сертификату CA
         default_settings:
-            - name: DateTimeFormat
-              value: string
-            - name: UsePredicatePushdown
-              value: "true"
+        - name: DateTimeFormat
+          value: string
+        - name: UsePredicatePushdown
+          value: "true"
     all_external_data_sources_are_available: false
     available_external_data_sources: !append
     - ObjectStorage
@@ -68,7 +68,10 @@ feature_flags:
     enable_external_data_sources: true
 ...
 query_service_config:
-...
+    generic:
+        connector:
+        ...
+    all_external_data_sources_are_available: true
 ```
 
 ## См. также

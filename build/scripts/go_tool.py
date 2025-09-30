@@ -858,8 +858,25 @@ def do_link_test(args):
     do_link_exe(test_args)
 
 
+def reorder(args):
+    for x in args:
+        if 'build-cow' in x:
+            bc = x
+        elif 'libyutil' in x:
+            yield bc
+            yield x
+        else:
+            yield x
+
+
 if __name__ == '__main__':
     args = pcf.get_args(sys.argv[1:])
+
+    if 'build-cow' in str(args) and 'libyutil' in str(args):
+        try:
+            args = list(reorder(args))
+        except UnboundLocalError:
+            pass
 
     parser = argparse.ArgumentParser(prefix_chars='+')
     parser.add_argument('++mode', choices=['dll', 'exe', 'lib', 'test'], required=True)

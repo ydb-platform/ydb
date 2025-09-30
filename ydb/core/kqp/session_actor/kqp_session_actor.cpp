@@ -787,15 +787,26 @@ public:
     }
 
     void OnSuccessCompileRequest() {
-        if (QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_PREPARE ||
-            QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_EXPLAIN)
-        {
+        if (QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_EXPLAIN) {
             // TODO: properly initialize transaction(s)
             TVector<IKqpGateway::TPhysicalTxData> txs;
-            txs.emplace_back(QueryState->PreparedQuery->GetTransactions().back(), QueryState->QueryData);
+            auto tx = QueryState->PreparedQuery->GetTransactions().back();
+            auto txAlloc = std::make_shared<TTxAllocatorState>(AppData()->FunctionRegistry, AppData()->TimeProvider, AppData()->RandomProvider);
+            const auto& parameters = QueryState->GetYdbParameters();
+            QueryState->QueryData = std::make_shared<TQueryData>(txAlloc);
+            QueryState->QueryData->ParseParameters(parameters);
+            txs.emplace_back(tx, QueryState->QueryData);
 
-            if (txs.front().Body->GetType() != NKqpProto::TKqpPhyTx::TYPE_SCHEME) {
-                auto txAlloc = std::make_shared<TTxAllocatorState>(AppData()->FunctionRegistry, AppData()->TimeProvider, AppData()->RandomProvider);
+            bool isValidParams = true;
+            try {
+                QueryState->QueryData->PrepareParameters(tx, QueryState->PreparedQuery, txAlloc->TypeEnv);
+            } catch (const yexception& ex) {
+                // TODO: throw exception instead of silent ignore?
+                // ythrow TRequestFail(Ydb::StatusIds::BAD_REQUEST) << ex.what();
+                isValidParams = false;
+            }
+
+            if (txs.front().Body->GetType() != NKqpProto::TKqpPhyTx::TYPE_SCHEME && isValidParams) {
                 auto tasksGraph = TKqpTasksGraph(Settings.Database, txs, txAlloc, {}, Settings.TableService.GetAggregationConfig(), RequestCounters, {});
                 tasksGraph.GetMeta().AllowOlapDataQuery = Settings.TableService.GetAllowOlapDataQuery();
 
@@ -822,17 +833,17 @@ public:
                     }
 
                     if (!shardIds.empty()) {
-                    // TODO: initialize tasksGraph.GetMeta().UseFollowers ?
-                    auto kqpShardsResolver = CreateKqpShardsResolver(SelfId(), 0, false, std::move(shardIds));
-                    RegisterWithSameMailbox(kqpShardsResolver);
-                    auto resolveEv = co_await ActorWaitForEvent<NShardResolver::TEvShardsResolveStatus>(0);
-                    if (resolveEv->Get()->Status != Ydb::StatusIds::SUCCESS) {
-                        ReplyResolveError(*resolveEv->Get());
-                        co_return;
-                    }
-                    tasksGraph.GetMeta().ShardIdToNodeId = std::move(resolveEv->Get()->ShardNodes);
-                    for (const auto& [shardId, nodeId] : tasksGraph.GetMeta().ShardIdToNodeId) {
-                        tasksGraph.GetMeta().ShardsOnNode[nodeId].push_back(shardId);
+                        // TODO: initialize tasksGraph.GetMeta().UseFollowers ?
+                        auto kqpShardsResolver = CreateKqpShardsResolver(SelfId(), 0, false, std::move(shardIds));
+                        RegisterWithSameMailbox(kqpShardsResolver);
+                        auto resolveEv = co_await ActorWaitForEvent<NShardResolver::TEvShardsResolveStatus>(0);
+                        if (resolveEv->Get()->Status != Ydb::StatusIds::SUCCESS) {
+                            ReplyResolveError(*resolveEv->Get());
+                            co_return;
+                        }
+                        tasksGraph.GetMeta().ShardIdToNodeId = std::move(resolveEv->Get()->ShardNodes);
+                        for (const auto& [shardId, nodeId] : tasksGraph.GetMeta().ShardIdToNodeId) {
+                            tasksGraph.GetMeta().ShardsOnNode[nodeId].push_back(shardId);
                         }
                     }
                 }
@@ -875,6 +886,10 @@ public:
                 // Cerr << tasksGraph.DumpToString();
             }
 
+            co_return ReplyPrepareResult();
+        }
+
+        if (QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_PREPARE) {
             co_return ReplyPrepareResult();
         }
 

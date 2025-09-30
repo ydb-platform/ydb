@@ -144,7 +144,7 @@ class CanonicalCaptureAuditFileOutput:
         self.__canonize_apply_regex(json_record, r'Host: \"[^\"]+\"', 'Host: \"<canonized_host_name>\"')
         self.__canonize_apply_regex(json_record, r'RestartTabletID=\d+', 'RestartTabletID=<canonized_tablet_id>')
         # source_location is used only in debug builds like relwithdebinfo and debug
-        self.__canonize_apply_regex(json_record, r', source_location: [A-Za-z0-9_/.]+\.(cpp|h):\d+', '')
+        self.__canonize_apply_regex(json_record, r', source_location: [A-Za-z0-9_\-\\/.]+\.(cpp|h):\d+', '')
         return json.dumps(json_record, sort_keys=True) + '\n'
 
     def __validate_field(self, json_record, field_name):

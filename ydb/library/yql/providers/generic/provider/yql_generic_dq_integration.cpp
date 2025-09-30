@@ -243,7 +243,7 @@ namespace NYql {
 
                     // We set token name to the protobuf message that will be received
                     // by the read actor during the execution phase.
-                    // It will use token name to extract credentials from the from secureParams.
+                    // It will use token name to extract credentials from the secureParams.
                     const auto tokenName = TString("cluster:default_") += clusterConfig.name();
                     source.SetTokenName(tokenName);
 

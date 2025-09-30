@@ -17,6 +17,28 @@
 
 namespace NInterconnect::NRdma {
 
+class TWr;
+
+class TIbVerbsBuilderImpl final : public IIbVerbsBuilder {
+public:
+    TIbVerbsBuilderImpl(size_t hint) noexcept {
+        WorkBuf.reserve(hint);
+    }
+
+    void AddReadVerb(void* mrAddr, ui32 mrlKey, void* dstAddr, ui32 dstRkey, ui32 dstSize,
+        std::function<void(NActors::TActorSystem* as, TEvRdmaIoDone*)> ioCb) noexcept;
+    size_t GetVerbsNum() const noexcept;
+    ibv_send_wr* BuildListOfVerbs(std::vector<TWr*>& preparedWr) noexcept;
+
+private:
+    struct TWrVerbData {
+        ibv_sge Sg;
+        ibv_send_wr Wr;
+        std::function<void(NActors::TActorSystem* as, TEvRdmaIoDone*)> IoCb;
+    };
+    std::vector<TWrVerbData> WorkBuf;
+};
+
 class TCqCommon : public ICq {
 public:
     TCqCommon(NActors::TActorSystem* as)
@@ -92,10 +114,18 @@ public:
         }
     }
 
-    void ReplyErr(NActors::TActorSystem* as) noexcept {
+    void ReplyCqErr(NActors::TActorSystem* as) noexcept {
         if (Cb) {
             Cb(as, TEvRdmaIoDone::CqError());
             Cb = TCb();
+        }
+    }
+
+    void ReplyWrErr(NActors::TActorSystem* as, int err) noexcept {
+        if (Cb) {
+            Cb(as, TEvRdmaIoDone::WrError(err));
+            Cb = TCb();
+            CqCommon->ReturnWr(this);
         }
     }
 
@@ -130,12 +160,20 @@ static NMonitoring::TDynamicCounterPtr MakeCounters(NMonitoring::TDynamicCounter
 class TSimpleCqBase : public TCqCommon {
 protected:
     struct TWaiterCtx {
-        TWaiterCtx(std::function<int(NActors::TActorSystem*, ICq::IWr*)> wrCb, std::function<void(NActors::TActorSystem* as, TEvRdmaIoDone*)> ioCb) noexcept
-            : WrCb(std::move(wrCb))
-            , IoCb(std::move(ioCb))
+        TWaiterCtx(std::shared_ptr<TQueuePair> qp, std::unique_ptr<IIbVerbsBuilder> verbsBuilder) noexcept
+            : Qp(std::move(qp))
+            , VerbsBuilder(std::move(verbsBuilder))
         {}
-        std::function<int(NActors::TActorSystem* as, ICq::IWr*)> WrCb;
-        std::function<void(NActors::TActorSystem* as, TEvRdmaIoDone*)> IoCb;
+        size_t GetVerbsNum() const noexcept {
+            return static_cast<TIbVerbsBuilderImpl*>(VerbsBuilder.get())->GetVerbsNum();
+        }
+
+        ibv_send_wr* BuildListOfVerbs(std::vector<TWr*>& preparedWr) noexcept {
+            return static_cast<TIbVerbsBuilderImpl*>(VerbsBuilder.get())->BuildListOfVerbs(preparedWr);
+        }
+
+        std::shared_ptr<TQueuePair> Qp;
+        std::unique_ptr<IIbVerbsBuilder> VerbsBuilder;
     };
 public:
     TSimpleCqBase(NActors::TActorSystem* as, size_t sz, NMonitoring::TDynamicCounters* c) noexcept
@@ -186,21 +224,45 @@ public:
         };
     }
 
-    bool ProcessWr(std::unique_ptr<TWaiterCtx>& ctx) noexcept {
+    std::optional<TErr> DoWrBatchAsync(std::shared_ptr<TQueuePair> qp, std::unique_ptr<IIbVerbsBuilder> builder) noexcept override {
+        if (Err.load(std::memory_order_relaxed)) {
+            return TErr();
+        }
+        Waiters.Enqueue(new TWaiterCtx(std::move(qp), std::move(builder)));
+        return {};
+    }
+
+    bool ProcessWr(std::unique_ptr<TWaiterCtx>& ctx, std::vector<TWr*>& preparedWr) noexcept {
         if (ctx) {
             TWr* wr = nullptr;
             Queue.Dequeue(&wr);
             if (wr) {
-                wr->AttachCb(std::move(ctx->IoCb));
+                preparedWr.emplace_back(wr);
+                if (preparedWr.size() < ctx->GetVerbsNum()) {
+                    // we need more work requests
+                    return true;
+                }
+
+                ibv_send_wr* wrList = ctx->BuildListOfVerbs(preparedWr);
+
                 if (Err.load(std::memory_order_relaxed)) {
-                    wr->ReplyErr(As);
+                    for (auto x : preparedWr) {
+                        x->ReplyCqErr(As);
+                    }
                 } else {
-                    Allocated.fetch_add(1);
-                    int err = ctx->WrCb(As, wr);
-                    if (!err) {
-                        wr->ResetTimer();
+                    Allocated.fetch_add(preparedWr.size());
+                    ibv_send_wr* wrErr = nullptr;
+                    int err = ctx->Qp->PostSend(wrList, &wrErr);
+                    if (err) {
+                        while (wrErr) {
+                            TWr* x = &WrBuf[wrErr->wr_id];
+                            x->ReplyWrErr(As, err);
+                            wrErr = wrErr->next;
+                        }
                     }
                 }
+
+                preparedWr.clear();
                 ctx.reset();
                 return true;
             } else {
@@ -223,6 +285,7 @@ public:
 
     void Loop() noexcept {
         std::unique_ptr<TWaiterCtx> curCtx;
+        std::vector<TWr*> preparedWr;
         while (Cont.load(std::memory_order_relaxed)) {
             const constexpr size_t wcBatchSize = 16;
             std::array<ibv_wc, wcBatchSize> wcs;
@@ -235,7 +298,7 @@ public:
                     //TODO: Is it correct err handling?
                     Err.store(true, std::memory_order_relaxed);
                 } else if (rv == 0) {
-                    if (!ProcessWr(curCtx)) {
+                    if (!ProcessWr(curCtx, preparedWr)) {
                         Idle();
                     }
                 } else {
@@ -249,7 +312,7 @@ public:
     void HandleErr() noexcept {
         for (size_t i = 0; i < WrBuf.size(); i++) {
             TWr* wr = &WrBuf[i];
-            wr->ReplyErr(As);
+            wr->ReplyCqErr(As);
             //This it retminal error. Cq should be recreated.
             // So no need to return wr in to the queue
         }
@@ -315,14 +378,6 @@ public:
             return  TBusy();
         }
     }
-
-    std::optional<TErr> AllocWrAsync(std::function<int(NActors::TActorSystem* as, ICq::IWr*)> wrCb, std::function<void(NActors::TActorSystem* as, TEvRdmaIoDone*)> ioCb) noexcept override {
-        if (Err.load(std::memory_order_relaxed)) {
-            return TErr();
-        }
-        Waiters.Enqueue(new TWaiterCtx(std::move(wrCb), std::move(ioCb)));
-        return {};
-    }
 };
 
 class TSimpleCqMock: public TSimpleCqBase, public ICqMockControl {
@@ -348,14 +403,6 @@ public:
         } else {
             return  TBusy();
         }
-    }
-
-    std::optional<TErr> AllocWrAsync(std::function<int(NActors::TActorSystem* as, ICq::IWr*)> wrCb, std::function<void(NActors::TActorSystem* as, TEvRdmaIoDone*)> ioCb) noexcept override {
-        if (Err.load(std::memory_order_relaxed)) {
-            return TErr();
-        }
-        Waiters.Enqueue(new TWaiterCtx(std::move(wrCb), std::move(ioCb)));
-        return {};
     }
 
     void SetBusy(bool busy) noexcept override {
@@ -548,6 +595,10 @@ int TQueuePair::SendRdmaReadWr(ui64 wrId, void* mrAddr, ui32 mrlKey, void* dstAd
     return ibv_post_send(Qp, &wr, &bad_wr);
 }
 
+int TQueuePair::PostSend(struct ::ibv_send_wr *wr, struct ::ibv_send_wr **bad_wr) noexcept {
+    return ibv_post_send(Qp, wr, bad_wr);
+}
+
 ui32 TQueuePair::GetQpNum() const noexcept {
    return Qp->qp_num;
 }
@@ -588,6 +639,62 @@ TQueuePair::TQpState TQueuePair::GetState(bool forseUpdate) const noexcept {
 
 TRdmaCtx* TQueuePair::GetCtx() const noexcept {
     return Ctx;
+}
+
+void TIbVerbsBuilderImpl::AddReadVerb(void* mrAddr, ui32 mrlKey, void* dstAddr, ui32 dstRkey, ui32 dstSize,
+    std::function<void(NActors::TActorSystem* as, TEvRdmaIoDone*)> ioCb) noexcept
+{
+    WorkBuf.emplace_back(
+        TWrVerbData {
+            .Sg = {
+                .addr = (ui64)mrAddr,
+                .length = dstSize,
+                .lkey = mrlKey,
+            },
+            .Wr = {
+               .wr_id = 0/*wrId*/,
+               .sg_list = nullptr,
+               .num_sge = 1,
+               .opcode = IBV_WR_RDMA_READ,
+               .send_flags = IBV_SEND_SIGNALED,
+               .wr = {
+                   .rdma = {
+                       .remote_addr = (ui64)dstAddr,
+                       .rkey = dstRkey,
+                    },
+                },
+            },
+            .IoCb = std::move(ioCb)
+        }
+    );
+}
+
+ibv_send_wr* TIbVerbsBuilderImpl::BuildListOfVerbs(std::vector<TWr*>& wr) noexcept {
+    Y_DEBUG_ABORT_UNLESS(wr.size() == WorkBuf.size());
+    Y_DEBUG_ABORT_UNLESS(wr.size());
+
+    WorkBuf[0].Wr.sg_list = &WorkBuf[0].Sg;
+    WorkBuf[0].Wr.wr_id = wr[0]->GetId();
+    wr[0]->AttachCb(std::move(WorkBuf[0]).IoCb);
+
+    for (size_t i = 1; i < WorkBuf.size(); i++) {
+        WorkBuf[i].Wr.sg_list = &WorkBuf[i].Sg;
+        WorkBuf[i - 1].Wr.next = &WorkBuf[i].Wr;
+        WorkBuf[i].Wr.wr_id = wr[i]->GetId();
+        wr[i]->AttachCb(std::move(WorkBuf[i]).IoCb);
+        wr[i]->ResetTimer();
+    }
+
+    return &WorkBuf[0].Wr;
+}
+
+size_t TIbVerbsBuilderImpl::GetVerbsNum() const noexcept {
+    return WorkBuf.size();
+}
+
+// Creates builder for work requests, hint - number of expected verbs to preallocate memory
+std::unique_ptr<IIbVerbsBuilder> CreateIbVerbsBuilder(size_t hint) noexcept {
+    return std::make_unique<TIbVerbsBuilderImpl>(hint);
 }
 
 }

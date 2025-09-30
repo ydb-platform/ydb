@@ -3,7 +3,7 @@
 {%-     for from_sandbox in current_target.from_sandboxes %}
 
 val {{ varprefix }}{{ from_sandbox['_object_index'] }} = tasks.register<Exec>("{{ varprefix }}{{ from_sandbox['_object_index'] }}") {
-    workingDir = file("$buildDir{%- if from_sandbox.reldir != "." -%}/{{ from_sandbox.reldir }}{%- endif -%}")
+    workingDir(layout.buildDirectory.dir("{%- if from_sandbox.reldir != "." -%}/{{ from_sandbox.reldir }}{%- endif -%}"))
     commandLine("bash", "-c", listOf(
         "{{ arcadia_root }}/ya",
         "download",

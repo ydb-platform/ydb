@@ -5,8 +5,6 @@
 #include <ydb/public/sdk/cpp/src/client/types/core_facility/core_facility.h>
 #include <ydb/public/api/grpc/ydb_auth_v1.grpc.pb.h>
 
-#include <ydb/core/base/backtrace.h>
-
 #include <util/string/cast.h>
 
 #include <jwt-cpp/jwt.h>

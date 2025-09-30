@@ -15,6 +15,8 @@ struct TClusterBalancingSettings {
     ui32 MaxReplicatingPDisks = 5;
     ui32 MaxReplicatingVDisks = 40;
     ui32 IterationIntervalMs = 5000;
+    bool PreferLessOccupiedRack = false;
+    bool WithAttentionToReplication = false;
 };
 
 TClusterBalancingSettings ParseClusterBalancingSettings(const std::shared_ptr<const NKikimrBlobStorage::TStorageConfig> storageConfig);

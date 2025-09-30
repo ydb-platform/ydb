@@ -224,7 +224,7 @@ protected:
     ::NMonitoring::TDynamicCounterPtr TaskCounters;
     IDqAsyncIoFactory::TPtr Factory;
     NDqProto::TDqInputTransformLookupSettings Settings;
-    const THashMap<TString, TString>& SecureParams;
+    const THashMap<TString, TString> SecureParams;
 protected:
     NActors::TActorId LookupSourceId;
     size_t MaxKeysInRequest;

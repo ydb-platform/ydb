@@ -13,7 +13,7 @@ namespace NYql::NDq {
     std::pair<NYql::NDq::IDqAsyncLookupSource*, NActors::IActor*>
     CreateGenericLookupActor(
         NConnector::IClient::TPtr connectorClient,
-        ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
+        ISecuredServiceAccountCredentialsFactory::TPtr securedServiceAccountCredentialsFactory,
         NActors::TActorId parentId,
         ::NMonitoring::TDynamicCounterPtr taskCounters,
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,

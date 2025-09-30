@@ -607,9 +607,6 @@ namespace {
                 );
                 YQL_ENSURE(result);
                 request->mutable_partitioning_settings()->mutable_auto_partitioning_settings()->set_strategy(strategy);
-            } else if (name == "setMetricsLevel") {
-                auto metricsLevel = FromString<i32>(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
-                request->set_metrics_level(metricsLevel);
             }
         }
     }
@@ -1720,7 +1717,7 @@ public:
                                     return SyncError();
                                 } else if (constraint.Name().Value() == "default") {
                                     if (table.Metadata->Kind == EKikimrTableKind::Olap) {
-                                        ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()),
+                                        ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()), 
                                             "Default values are not supported in column tables"));
                                         return SyncError();
                                     }
@@ -2082,7 +2079,7 @@ public:
                                         break;
                                     }
                                     default:
-                                        ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder()
+                                        ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder() 
                                             << "Unknown index setting: " << name.StringValue()));
                                         return SyncError();
                                 }

@@ -8,7 +8,6 @@ import "ydb/public/api/protos/annotations/validation.proto";
 
 import "google/protobuf/empty.proto";
 import "google/protobuf/duration.proto";
-import "google/protobuf/empty.proto";
 import "google/protobuf/timestamp.proto";
 
 package Ydb.Topic;
@@ -1315,10 +1314,7 @@ message AlterTopicRequest {
     MeteringMode set_metering_mode = 14;
 
     // Setup or remove counters level settings.
-    oneof metrics_level {
-        uint32 set_metrics_level = 15;
-        google.protobuf.Empty reset_metrics_level = 16;
-    }
+    optional uint32 set_metrics_level = 15;
 }
 
 // Update topic response sent from server to client.

@@ -86,7 +86,8 @@ private:
     }
 
     void FetchSecrets() {
-        RegisterDescribeSecretsActor(SelfId(), UserToken, SecretNames, ActorContext().ActorSystem());
+        // TODO(yurikiselev): Add user groups!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        RegisterDescribeSecretsActor(SelfId(), new NACLib::TUserToken(UserToken, {}), SecretNames, ActorContext().ActorSystem());
     }
 
     void Handle(TEvDescribeSecretsResponse::TPtr& ev) {

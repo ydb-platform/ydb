@@ -25,18 +25,18 @@ public:
     struct TEvResolveSecret : public NActors::TEventLocal<TEvResolveSecret, EvResolveSecret> {
     public:
         TEvResolveSecret(
-            const TString& ownerUserId,
+            const TIntrusiveConstPtr<NACLib::TUserToken> userToken,
             const TVector<TString>& secretNames,
             NThreading::TPromise<TEvDescribeSecretsResponse::TDescription> promise
         )
-            : UserToken(NACLib::TUserToken{ownerUserId, TVector<NACLib::TSID>{}})
+            : UserToken(userToken)
             , SecretNames(secretNames)
             , Promise(promise)
         {
         }
 
     public:
-        const NACLib::TUserToken UserToken;
+        const TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
         const TVector<TString> SecretNames;
         NThreading::TPromise<TEvDescribeSecretsResponse::TDescription> Promise;
     };
@@ -74,7 +74,7 @@ private:
 
     void FillResponse(const ui64& requestId, const TEvDescribeSecretsResponse::TDescription& response);
     void SaveIncomingRequestInfo(const TEvResolveSecret& req);
-    void SendSchemeCacheRequests(const TVector<TString>& secretNames, const NACLib::TUserToken& userToken);
+    void SendSchemeCacheRequests(const TVector<TString>& secretNames, const TIntrusiveConstPtr<NACLib::TUserToken> userToken);
     bool LocalCacheHasActualVersion(const TVersionedSecret& secret, const ui64& cacheSecretVersion);
     bool LocalCacheHasActualObject(const TVersionedSecret& secret, const ui64& cacheSecretPathId);
     bool HandleSchemeCacheErrorsIfAny(const ui64& requestId, NSchemeCache::TSchemeCacheNavigate& result);
@@ -104,9 +104,18 @@ private:
     ISecretUpdateListener* SecretUpdateListener;
 };
 
-void RegisterDescribeSecretsActor(const TActorId& replyActorId, const TString& ownerUserId, const std::vector<TString>& secretIds, TActorSystem* actorSystem);
+void RegisterDescribeSecretsActor(
+    const NActors::TActorId& replyActorId,
+    const TIntrusiveConstPtr<NACLib::TUserToken> userToken,
+    const std::vector<TString>& secretIds,
+    NActors::TActorSystem* actorSystem
+);
 
-NThreading::TFuture<TEvDescribeSecretsResponse::TDescription> DescribeExternalDataSourceSecrets(const NKikimrSchemeOp::TAuth& authDescription, const TString& ownerUserId, TActorSystem* actorSystem);
+NThreading::TFuture<TEvDescribeSecretsResponse::TDescription> DescribeExternalDataSourceSecrets(
+    const NKikimrSchemeOp::TAuth& authDescription,
+    const TIntrusiveConstPtr<NACLib::TUserToken> userToken,
+    TActorSystem* actorSystem
+);
 
 IActor* CreateDescribeSchemaSecretsService();
 

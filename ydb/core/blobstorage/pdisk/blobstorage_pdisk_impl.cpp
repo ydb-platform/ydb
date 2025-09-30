@@ -73,6 +73,7 @@ TPDisk::TPDisk(std::shared_ptr<TPDiskCtx> pCtx, const TIntrusivePtr<TPDiskConfig
     // 1 - LightYellowMove
     // 2 - YellowStop
     SemiStrictSpaceIsolation = TControlWrapper(0, 0, 2);
+    SemiStrictSpaceIsolationCached = 0;
 
     if (Cfg->SectorMap) {
         auto diskModeParams = Cfg->SectorMap->GetDiskModeParams();
@@ -3874,10 +3875,10 @@ void TPDisk::Update() {
         }
 
         using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
-        if (static i64 cached = SemiStrictSpaceIsolation; cached != SemiStrictSpaceIsolation) {
+        if (i64 currentIsolation = SemiStrictSpaceIsolation; currentIsolation != SemiStrictSpaceIsolationCached) {
             TColor::E colorBorder = GetColorBorderIcb();
             Keeper.SetColorBorder(colorBorder);
-            cached = SemiStrictSpaceIsolation;
+            SemiStrictSpaceIsolationCached = currentIsolation;
         }
 
         // Switch the scheduler when possible

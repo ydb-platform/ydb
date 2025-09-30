@@ -107,6 +107,8 @@ struct TDistributedTransaction {
     size_t PredicateAcksCount = 0;
 
     bool Pending = false;
+
+    TMaybe<NKikimrPQ::TError> Error;
 };
 
 }

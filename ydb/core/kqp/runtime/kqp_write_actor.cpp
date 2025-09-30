@@ -2091,7 +2091,7 @@ struct TEvBufferWriteResult : public TEventLocal<TEvBufferWriteResult, TKqpEvent
 }
 
 
-class TKqpBufferWriteActor :public TActorBootstrapped<TKqpBufferWriteActor>, public IKqpTableWriterCallbacks {
+class TKqpBufferWriteActor : public TActorBootstrapped<TKqpBufferWriteActor>, public IKqpTableWriterCallbacks, public IKqpBufferTableLookupCallbacks {
     using TBase = TActorBootstrapped<TKqpBufferWriteActor>;
     using TTopicTabletTxs = NTopic::TTopicOperationTransactions;
 
@@ -2102,6 +2102,8 @@ public:
         , MessageSettings(GetWriteActorSettings())
         , TxManager(settings.TxManager)
         , Alloc(settings.Alloc)
+        , TypeEnv(std::move(settings.TypeEnv))
+        , HolderFactory(std::move(settings.HolderFactory))
         , Counters(settings.Counters)
         , TxProxyMon(settings.TxProxyMon)
         , BufferWriteActorSpan(TWilsonKqp::BufferWriteActor, NWilson::TTraceId(settings.TraceId), "BufferWriteActor", NWilson::EFlags::AUTO_END)
@@ -2263,8 +2265,8 @@ public:
                 return {ptr, id};
             };
 
-            auto checkSchemaVersion = [&](TKqpTableWriteActor* writeActor, const TTableId tableId, const TString& tablePath) -> bool {
-                if (writeActor->GetTableId().SchemaVersion != tableId.SchemaVersion) {
+            auto checkSchemaVersion = [&](auto* actor, const TTableId tableId, const TString& tablePath) -> bool {
+                if (actor->GetTableId().SchemaVersion != tableId.SchemaVersion) {
                     CA_LOG_E("Scheme changed for table `"
                         << tablePath << "`.");
                     ReplyErrorAndDie(
@@ -2275,9 +2277,36 @@ public:
                         {});
                     return false;
                 }
-                AFL_ENSURE(writeActor->GetTableId() == tableId);  
+                AFL_ENSURE(actor->GetTableId() == tableId);  
                 return true;
             };
+
+            auto createLookupActor = [&](const TTableId tableId, const TString& tablePath) -> std::pair<IKqpBufferTableLookup*, TActorId> {
+                auto [ptr, actor] = CreateKqpBufferTableLookup(TKqpBufferTableLookupSettings{
+                    .Callbacks = this,
+
+                    .TableId = tableId,
+                    .TablePath = tablePath,
+
+                    .LockTxId = LockTxId,
+                    .LockNodeId = LockNodeId,
+                    .LockMode = settings.TransactionSettings.LockMode,
+                    .MvccSnapshot = settings.TransactionSettings.MvccSnapshot,
+
+                    .TxManager = TxManager,
+                    .TypeEnv = *TypeEnv,
+                    .HolderFactory = *HolderFactory,
+                    .SessionActorId = SessionActorId,
+                    .Counters = Counters,
+                });
+
+                // TODO: tracing
+                TActorId id = RegisterWithSameMailbox(actor);
+                CA_LOG_D("Create new KqpBufferTableLookup for table `" << tablePath << "` (" << tableId << "). lockId=" << LockTxId << ". ActorId=" << id);
+
+                return {ptr, id};
+            };
+
 
             auto& writeInfo = WriteInfos[settings.TableId.PathId];
             if (!writeInfo.Actors.contains(settings.TableId.PathId)) {
@@ -2296,6 +2325,24 @@ public:
                 }
             }
 
+            if (!settings.LookupColumns.empty()) {
+                auto lookupInfo = LookupInfos[settings.TableId.PathId];
+                if (!lookupInfo.Actors.contains(settings.TableId.PathId)) {
+                    const auto [ptr, id] = createLookupActor(settings.TableId, settings.TablePath);
+                    lookupInfo.Actors.emplace(settings.TableId.PathId, TLookupInfo::TActorInfo{
+                        .LookupActor = ptr,
+                        .Id = id,
+                    });
+                } else {
+                    if (!checkSchemaVersion(
+                            lookupInfo.Actors.at(settings.TableId.PathId).LookupActor,
+                            settings.TableId,
+                            settings.TablePath)) {
+                        return;
+                    }
+                }
+            }
+
             for (const auto& indexSettings : settings.Indexes) {
                 if (!writeInfo.Actors.contains(indexSettings.TableId.PathId)) {
                     const auto [ptr, id] = createWriteActor(indexSettings.TableId, indexSettings.TablePath, indexSettings.KeyColumns);
@@ -2309,6 +2356,8 @@ public:
                         indexSettings.TablePath)) {
                     return;
                 }
+
+                // TODO: lookup for uniq indexes
             }
 
             EnableStreamWrite &= settings.EnableStreamWrite;
@@ -2316,6 +2365,7 @@ public:
             token = TWriteToken{settings.TableId.PathId, CurrentWriteToken++};
 
             std::vector<TKqpWriteTask::TPathWriteInfo> writes;
+            std::vector<TKqpWriteTask::TPathLookupInfo> lookups;
 
             AFL_ENSURE(writeInfo.Actors.size() > settings.Indexes.size());
             for (auto& indexSettings : settings.Indexes) {
@@ -2350,6 +2400,8 @@ public:
                     .KeyProjection = std::move(keyProjection),
                     .WriteActor = writeInfo.Actors.at(indexSettings.TableId.PathId).WriteActor,
                 });
+
+                // TODO: lookup for uniq indexes
             }
 
             IDataBatchProjectionPtr projection = nullptr;
@@ -2361,6 +2413,12 @@ public:
                     settings.Columns,
                     settings.WriteIndex,
                     Alloc);
+                
+                auto lookupInfo = LookupInfos.at(settings.TableId.PathId);
+                lookups.emplace_back(TKqpWriteTask::TPathLookupInfo{
+                    .KeyIndexes = {},
+                    .Lookup = lookupInfo.Actors.at(settings.TableId.PathId).LookupActor,
+                });
             }
 
             writeInfo.Actors.at(settings.TableId.PathId).WriteActor->Open(
@@ -2383,7 +2441,7 @@ public:
                     settings.TableId.PathId,
                     settings.OperationType,
                     std::move(writes),
-                    {},
+                    std::move(lookups),
                     Alloc
                 });
         } else {
@@ -2864,6 +2922,17 @@ public:
         ForEachWriteActor([](TKqpTableWriteActor* actor, const TActorId) {
             actor->Terminate();
         });
+
+        ForEachLookupActor([](IKqpBufferTableLookup* actor, const TActorId) {
+            actor->Terminate();
+        });
+
+        {
+            Y_ABORT_UNLESS(Alloc);
+            TGuard<NMiniKQL::TScopedAlloc> allocGuard(*Alloc);
+            HolderFactory.reset();
+            TypeEnv.reset();
+        }
 
         Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvUnlink(0));
         TActorBootstrapped<TKqpBufferWriteActor>::PassAway();
@@ -3549,6 +3618,10 @@ public:
         Y_ABORT_UNLESS(GetTotalMemory() == 0);
     }
 
+    void OnLookupTaskFinished() override {
+        Process();
+    }
+
     void OnError(NYql::NDqProto::StatusIds::StatusCode statusCode, NYql::EYqlIssueCode id, const TString& message, const NYql::TIssues& subIssues) override {
         ReplyErrorAndDie(statusCode, id, message, subIssues);
     }
@@ -3655,6 +3728,22 @@ public:
         }
     }
 
+    void ForEachLookupActor(std::function<void(IKqpBufferTableLookup*, const TActorId)>&& func) {
+        for (auto& [_, lookupInfo] : LookupInfos) {
+            for (auto& [_, actorInfo] : lookupInfo.Actors) {
+                func(actorInfo.LookupActor, actorInfo.Id);
+            }
+        }
+    }
+
+    void ForEachLookupActor(std::function<void(const IKqpBufferTableLookup*, const TActorId)>&& func) const {
+        for (auto& [_, lookupInfo] : LookupInfos) {
+            for (auto& [_, actorInfo] : lookupInfo.Actors) {
+                func(actorInfo.LookupActor, actorInfo.Id);
+            }
+        }
+    }
+
 private:
     TString LogPrefix;
     const TActorId SessionActorId;
@@ -3674,6 +3763,8 @@ private:
     std::optional<ui64> Coordinator;
 
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
+    std::shared_ptr<NMiniKQL::TTypeEnvironment> TypeEnv;
+    std::shared_ptr<NMiniKQL::THolderFactory> HolderFactory;
 
     struct TWriteInfo {
         struct TActorInfo {

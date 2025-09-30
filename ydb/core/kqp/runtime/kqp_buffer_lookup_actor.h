@@ -24,6 +24,8 @@ public:
     virtual TTableId GetTableId() const = 0;
     virtual const TVector<NScheme::TTypeInfo>& GetKeyColumnTypes() const = 0;
     virtual ui32 LookupColumnsCount(ui64 cookie) const = 0;
+
+    virtual void Terminate() = 0;
 };
 
 struct TKqpBufferTableLookupSettings {
@@ -33,7 +35,7 @@ struct TKqpBufferTableLookupSettings {
 
     ui64 LockTxId;
     ui64 LockNodeId;
-    NKikimrDataEvents::ELockMode lockMode;
+    NKikimrDataEvents::ELockMode LockMode;
     std::optional<NKikimrDataEvents::TMvccSnapshot> MvccSnapshot;
 
     IKqpTransactionManagerPtr TxManager;
@@ -45,9 +47,10 @@ struct TKqpBufferTableLookupSettings {
     TIntrusivePtr<TKqpCounters> Counters;
 };
 
-using IKqpBufferTableLookupPtr = TIntrusivePtr<IKqpBufferTableLookup>;
-
-IKqpBufferTableLookupPtr CreateKqpBufferTableLookup(TKqpBufferTableLookupSettings&& settings);
+std::pair<IKqpBufferTableLookup*, NActors::IActor*> CreateKqpBufferTableLookup(TKqpBufferTableLookupSettings&& settings) {
+    Y_UNUSED(settings);
+    return {nullptr, nullptr};
+}
 
 }
 }

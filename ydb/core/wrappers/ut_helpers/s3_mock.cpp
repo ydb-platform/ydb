@@ -187,7 +187,7 @@ bool TS3Mock::TRequest::HttpServeList(const TReplyParams& params, TStringBuf buc
 
     TVector<TString> paths;
     for (const auto& [key, value] : Parent->Data) {
-        if (key.StartsWith(TStringBuilder() << bucketName << prefix)) {
+        if (key.StartsWith(TStringBuilder() << bucketName << "/" << prefix)) {
             paths.push_back(key);
         }
     }

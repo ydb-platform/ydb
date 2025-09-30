@@ -5438,7 +5438,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
                   endpoint: "localhost:%d"
                   scheme: HTTP
                   items {
-                    source_prefix: "/%s"
+                    source_prefix: "%s"
                     destination_path: "/MyRoot/%s"
                   }
                 }

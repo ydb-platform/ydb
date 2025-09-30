@@ -17,53 +17,53 @@ import time
 
 def get_alert_logins() -> str:
     """
-    Получает список логинов для уведомлений из переменной окружения GH_ALERTS_TG_LOGINS.
+    Gets the list of logins for notifications from GH_ALERTS_TG_LOGINS environment variable.
     
     Returns:
-        Строка с логинами, разделенными пробелами, или дефолтный логин
+        String with logins separated by spaces, or default login
     """
     logins = os.getenv('GH_ALERTS_TG_LOGINS')
     return logins.strip() if logins else "@KirLynx"
 
 def get_tail_message() -> str:
     """
-    Генерирует TAIL_MESSAGE с динамическими логинами.
+    Generates TAIL_MESSAGE with dynamic logins.
     
     Returns:
-        Строка с tail сообщением
+        String with tail message
     """
     logins = get_alert_logins()
     return f"📊 [Dashboard details](https://datalens.yandex/wkptiaeyxz7qj?tab=ka)\n\nFYI: {logins}"
 
-# Константы
+# Constants
 TAIL_MESSAGE = get_tail_message()
 
-# Настройки фильтрации
-MAX_AGE_DAYS = 3  # Максимальный возраст jobs в днях (исключаем баги GitHub)
+# Filtering settings
+MAX_AGE_DAYS = 3  # Maximum job age in days (excludes GitHub bugs)
 
-# Настройки отправки сообщений
+# Message sending settings
 SEND_WHEN_ALL_GOOD = False  # Whether to send a message when all jobs are working fine
 
-# Критерии для определения застрявших jobs
-# Каждый элемент: [pattern, threshold_hours, display_name]
+# Criteria for determining stuck jobs
+# Each element: [pattern, threshold_hours, display_name]
 WORKFLOW_THRESHOLDS = [
-    ["PR-check", 0,5, "PR-check"],
-    ["Postcommit", 6, "Postcommit"],
-    # Пример добавления нового типа:
+    ["PR-check", 0.5, "PR-check"],
+    ["Postcommit", 3, "Postcommit"],
+    # Example of adding a new type:
     # ["Nightly", 12, "Nightly-Build"]
 ]
 
 def fetch_workflow_runs(status: str = "queued", per_page: int = 1000, page: int = 1) -> tuple[Dict[str, Any], str]:
     """
-    Получает данные о workflow runs из GitHub API.
+    Fetches workflow runs data from GitHub API.
     
     Args:
-        status: Статус workflow runs (queued, in_progress, completed, etc.)
-        per_page: Количество записей на страницу
-        page: Номер страницы
+        status: Status of workflow runs (queued, in_progress, completed, etc.)
+        per_page: Number of records per page
+        page: Page number
     
     Returns:
-        Кортеж (данные, ошибка). Если успешно - (data, ""), если ошибка - ({}, error_message)
+        Tuple (data, error). If successful - (data, ""), if error - ({}, error_message)
     """
     url = "https://api.github.com/repos/ydb-platform/ydb/actions/runs"
     params = {
@@ -98,13 +98,13 @@ def fetch_workflow_runs(status: str = "queued", per_page: int = 1000, page: int 
 
 def get_effective_start_time(run: Dict[str, Any]) -> datetime:
     """
-    Получает эффективное время начала для run (учитывает retry).
+    Gets the effective start time for run (accounts for retry).
     
     Args:
-        run: Workflow run объект
+        run: Workflow run object
     
     Returns:
-        datetime: Эффективное время начала
+        datetime: Effective start time
     """
     run_attempt = run.get('run_attempt', 1)
     run_started_at_str = run.get('run_started_at')
@@ -131,25 +131,25 @@ def get_effective_start_time(run: Dict[str, Any]) -> datetime:
 
 def is_retry_job(run: Dict[str, Any]) -> bool:
     """
-    Определяет, является ли job retry.
+    Determines if the job is a retry.
     
     Args:
-        run: Workflow run объект
+        run: Workflow run object
     
     Returns:
-        bool: True если это retry job
+        bool: True if this is a retry job
     """
     return run.get('run_attempt', 1) > 1
 
 def analyze_queued_workflows(workflow_runs: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
     """
-    Анализирует workflow runs в очереди и находит самый старый job для каждого типа.
+    Analyzes workflow runs in queue and finds the oldest job for each type.
     
     Args:
-        workflow_runs: Список workflow runs из API
+        workflow_runs: List of workflow runs from API
     
     Returns:
-        Словарь с информацией о каждом типе workflow
+        Dictionary with information about each workflow type
     """
     workflow_info = defaultdict(lambda: {
         'count': 0,
@@ -210,14 +210,14 @@ def format_time_ago(created_at: datetime) -> str:
 
 def filter_old_jobs(workflow_runs: List[Dict[str, Any]], max_age_days: int = None) -> List[Dict[str, Any]]:
     """
-    Фильтрует jobs старше max_age_days (исключает баги GitHub).
+    Filters jobs older than max_age_days (excludes GitHub bugs).
     
     Args:
-        workflow_runs: Список workflow runs в очереди
-        max_age_days: Максимальный возраст в днях (по умолчанию MAX_AGE_DAYS)
+        workflow_runs: List of workflow runs in queue
+        max_age_days: Maximum age in days (defaults to MAX_AGE_DAYS)
     
     Returns:
-        Отфильтрованный список workflow runs
+        Filtered list of workflow runs
     """
     if max_age_days is None:
         max_age_days = MAX_AGE_DAYS
@@ -251,14 +251,14 @@ def filter_old_jobs(workflow_runs: List[Dict[str, Any]], max_age_days: int = Non
 
 def is_job_stuck_by_criteria(run, waiting_hours):
     """
-    Проверяет, является ли job застрявшим по нашим критериям.
+    Checks if job is stuck by our criteria.
     
     Args:
-        run: Workflow run объект
-        waiting_hours: Время ожидания в часах
+        run: Workflow run object
+        waiting_hours: Waiting time in hours
     
     Returns:
-        bool: True если job считается застрявшим
+        bool: True if job is considered stuck
     """
     workflow_name = run.get('name', '')
     
@@ -271,13 +271,13 @@ def is_job_stuck_by_criteria(run, waiting_hours):
 
 def generate_stuck_jobs_summary(stuck_jobs: List[Dict[str, Any]]) -> List[str]:
     """
-    Генерирует краткое описание застрявших jobs в виде списка строк, каждая начинающаяся с ⚠️
+    Generates brief description of stuck jobs as a list of strings, each starting with ⚠️
     
     Args:
-        stuck_jobs: Список застрявших jobs
+        stuck_jobs: List of stuck jobs
     
     Returns:
-        Список строк с описанием застрявших jobs
+        List of strings with description of stuck jobs
     """
     if not stuck_jobs:
         return []
@@ -305,13 +305,13 @@ def generate_stuck_jobs_summary(stuck_jobs: List[Dict[str, Any]]) -> List[str]:
 
 def count_stuck_jobs_by_type(stuck_jobs: List[Dict[str, Any]]) -> Dict[str, int]:
     """
-    Подсчитывает количество застрявших jobs по типам.
+    Counts the number of stuck jobs by types.
     
     Args:
-        stuck_jobs: Список застрявших jobs
+        stuck_jobs: List of stuck jobs
     
     Returns:
-        Словарь с количеством застрявших jobs по типам
+        Dictionary with count of stuck jobs by types
     """
     # Инициализируем счетчики для всех типов из конфигурации
     counts = {}
@@ -338,14 +338,14 @@ def count_stuck_jobs_by_type(stuck_jobs: List[Dict[str, Any]]) -> Dict[str, int]
 
 def check_for_stuck_jobs(workflow_runs: List[Dict[str, Any]], threshold_hours: int = 1) -> List[Dict[str, Any]]:
     """
-    Находит "застрявшие" jobs по нашим критериям из WORKFLOW_THRESHOLDS.
+    Finds "stuck" jobs by our criteria from WORKFLOW_THRESHOLDS.
     
     Args:
-        workflow_runs: Список workflow runs в очереди
-        threshold_hours: Не используется, оставлен для совместимости
+        workflow_runs: List of workflow runs in queue
+        threshold_hours: Not used, kept for compatibility
     
     Returns:
-        Список застрявших jobs
+        List of stuck jobs
     """
     stuck_jobs = []
     current_time = datetime.now(timezone.utc)
@@ -367,27 +367,27 @@ def check_for_stuck_jobs(workflow_runs: List[Dict[str, Any]], threshold_hours: i
 
 def format_telegram_messages(workflow_info: Dict[str, Dict[str, Any]], stuck_jobs: List[Dict[str, Any]], total_queued: int, excluded_count: int = 0) -> List[str]:
     """
-    Форматирует сообщения для отправки в Telegram (разбивает на 2 части).
+    Formats messages for sending to Telegram (splits into 2 parts).
     
     Args:
-        workflow_info: Информация о workflow
-        stuck_jobs: Список застрявших jobs
-        total_queued: Общее количество jobs в очереди
-        excluded_count: Количество исключенных jobs (старше MAX_AGE_DAYS дней)
+        workflow_info: Information about workflows
+        stuck_jobs: List of stuck jobs
+        total_queued: Total number of jobs in queue
+        excluded_count: Number of excluded jobs (older than MAX_AGE_DAYS days)
     
     Returns:
-        Список из 2 сообщений для Telegram
+        List of 2 messages for Telegram
     """
     messages = []
     
-    # Первое сообщение - общая статистика
+    # First message - general statistics
     message1_parts = []
     
     # Header
     if stuck_jobs:
         message1_parts.append("🚨 *GITHUB ACTIONS MONITORING*")
         
-        # Заменяем "Stuck jobs detected!" на описательные сообщения о застрявших jobs (по одной строке на тип)
+        # Replace "Stuck jobs detected!" with descriptive messages about stuck jobs (one line per type)
         stuck_summary_lines = generate_stuck_jobs_summary(stuck_jobs)
         if stuck_summary_lines:
             message1_parts.extend(stuck_summary_lines)
@@ -403,7 +403,7 @@ def format_telegram_messages(workflow_info: Dict[str, Dict[str, Any]], stuck_job
     message1_parts.append(f"📊 *Statistics:*")
     message1_parts.append(f"• Total in queue: {total_queued} jobs")
     
-    # Статистика застрявших jobs по типам
+    # Statistics of stuck jobs by types
     stuck_counts = count_stuck_jobs_by_type(stuck_jobs)
     total_stuck = sum(stuck_counts.values())
     
@@ -502,15 +502,15 @@ def format_telegram_messages(workflow_info: Dict[str, Dict[str, Any]], stuck_job
 
 def test_telegram_connection(bot_token: str, chat_id: str, thread_id: int = None) -> bool:
     """
-    Тестирует соединение с Telegram без отправки сообщений.
+    Tests connection to Telegram without sending messages.
     
     Args:
-        bot_token: Токен Telegram бота
-        chat_id: ID чата
-        thread_id: ID thread для групповых сообщений
+        bot_token: Telegram bot token
+        chat_id: Chat ID
+        thread_id: Thread ID for group messages
     
     Returns:
-        True если соединение успешно, False иначе
+        True if connection is successful, False otherwise
     """
     print(f"🔍 Тестируем соединение с Telegram для чата {chat_id}...")
     if thread_id:
@@ -545,10 +545,10 @@ def test_telegram_connection(bot_token: str, chat_id: str, thread_id: int = None
 
 def get_current_workflow_url() -> str:
     """
-    Получает URL текущего workflow run из переменных окружения GitHub Actions.
+    Gets current workflow run URL from GitHub Actions environment variables.
     
     Returns:
-        URL текущего workflow run или пустую строку если переменные недоступны
+        Current workflow run URL or empty string if variables are unavailable
     """
     github_repository = os.getenv('GITHUB_REPOSITORY', 'ydb-platform/ydb')
     github_run_id = os.getenv('GITHUB_RUN_ID')
@@ -559,16 +559,16 @@ def get_current_workflow_url() -> str:
 
 def send_api_error_notification(bot_token: str, chat_id: str, error_message: str, thread_id: int = None) -> bool:
     """
-    Отправляет уведомление об ошибке API в Telegram.
+    Sends API error notification to Telegram.
     
     Args:
-        bot_token: Токен Telegram бота
-        chat_id: ID чата
-        error_message: Сообщение об ошибке
-        thread_id: ID thread для групповых сообщений
+        bot_token: Telegram bot token
+        chat_id: Chat ID
+        error_message: Error message
+        thread_id: Thread ID for group messages
     
     Returns:
-        True если успешно, False иначе
+        True if successful, False otherwise
     """
     # Получаем ссылку на текущий workflow run
     workflow_url = get_current_workflow_url()
@@ -579,16 +579,16 @@ def send_api_error_notification(bot_token: str, chat_id: str, error_message: str
 
 def send_telegram_message(bot_token: str, chat_id: str, message: str, thread_id: int = None, parse_mode: str = "MarkdownV2") -> bool:
     """
-    Отправляет сообщение в Telegram используя внешний скрипт.
+    Sends message to Telegram using external script.
     
     Args:
-        bot_token: Токен Telegram бота
-        chat_id: ID чата
-        message: Текст сообщения
-        thread_id: ID thread для групповых сообщений
+        bot_token: Telegram bot token
+        chat_id: Chat ID
+        message: Message text
+        thread_id: Thread ID for group messages
     
     Returns:
-        True если успешно, False иначе
+        True if successful, False otherwise
     """
     try:
         # Получаем путь к скрипту send_telegram_message.py
@@ -626,8 +626,8 @@ def send_telegram_message(bot_token: str, chat_id: str, message: str, thread_id:
         return False
 
 def main():
-    """Основная функция скрипта."""
-    # Парсим аргументы командной строки
+    """Main script function."""
+    # Parse command line arguments
     parser = argparse.ArgumentParser(description="Мониторинг workflow runs в очереди GitHub Actions")
     parser.add_argument('--dry-run', action='store_true', 
                        help='Режим отладки без отправки в Telegram')
@@ -651,7 +651,7 @@ def main():
     print("🔍 Мониторинг workflow runs в очереди GitHub Actions")
     print("=" * 60)
     
-    # Получаем параметры из аргументов или переменных окружения
+    # Get parameters from arguments or environment variables
     bot_token = args.bot_token or os.getenv('TELEGRAM_BOT_TOKEN')
     chat_id = args.channel or args.chat_id or os.getenv('TELEGRAM_CHAT_ID')
     thread_id = args.thread_id or os.getenv('TELEGRAM_THREAD_ID')

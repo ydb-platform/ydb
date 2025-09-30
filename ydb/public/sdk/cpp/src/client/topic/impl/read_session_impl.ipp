@@ -33,6 +33,7 @@ namespace NYdb::inline Dev::NTopic {
 
 static const bool RangesMode = !std::string{std::getenv("PQ_OFFSET_RANGES_MODE") ? std::getenv("PQ_OFFSET_RANGES_MODE") : ""}.empty();
 static const bool ExperimentalDirectRead = !std::string{std::getenv("PQ_EXPERIMENTAL_DIRECT_READ") ? std::getenv("PQ_EXPERIMENTAL_DIRECT_READ") : ""}.empty();
+static const bool DecompressEverything = !std::string{std::getenv("PQ_DECOMPRESS_EVERYTHING") ? std::getenv("PQ_DECOMPRESS_EVERYTHING") : ""}.empty();
 
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1734,11 +1735,13 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::StartDecompressionTask
     UpdateMemoryUsageStatisticsImpl();
     const i64 limit = GetDecompressedDataSizeLimit();
     Y_ABORT_UNLESS(limit > 0);
-    while (DecompressedDataSize < limit
-           && (static_cast<size_t>(CompressedDataSize + DecompressedDataSize) < Settings.MaxMemoryUsageBytes_
-               || DecompressedDataSize == 0 /* Allow decompression of at least one message even if memory is full. */)
-           && !DecompressionQueue.empty())
-    {
+    while (
+        !DecompressionQueue.empty()
+        && (DecompressEverything
+            || (DecompressedDataSize < limit
+                && (static_cast<size_t>(CompressedDataSize + DecompressedDataSize) < Settings.MaxMemoryUsageBytes_
+                    || DecompressedDataSize == 0 /* Allow decompression of at least one message even if memory is full. */)))
+    ) {
         TDecompressionQueueItem& current = DecompressionQueue.front();
         auto sentToDecompress = current.BatchInfo->StartDecompressionTasks(Settings.DecompressionExecutor_,
                                                                            Max(limit - DecompressedDataSize, static_cast<i64>(1)),

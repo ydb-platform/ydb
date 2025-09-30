@@ -452,9 +452,6 @@ private:
                                   const TActorContext& ctx);
     TString GetKeyConfig() const;
 
-    void InitPendingUserInfoForImportantClients(const NKikimrPQ::TPQTabletConfig& config,
-                                                const TActorContext& ctx);
-
     void Initialize(const TActorContext& ctx);
     template <typename T>
     void EmplacePendingRequest(T&& body, NWilson::TSpan&& span, const TActorContext& ctx) {

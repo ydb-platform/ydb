@@ -3346,7 +3346,7 @@ private:
         if (cluster.empty()) {
             cluster = Clusters_->GetDefaultClusterName();
         }
-        auto execCtx = MakeExecCtx(std::move(options), session, cluster, pull.Raw(), &ctx);
+        auto execCtx = MakeExecCtx(std::move(options), session, cluster, nullptr, nullptr);
 
         if (auto read = pull.Input().Maybe<TCoRight>().Input().Maybe<TYtReadTable>()) {
             execCtx->SetInput(read.Cast().Input(), false, {});

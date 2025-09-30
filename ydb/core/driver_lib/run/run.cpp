@@ -176,6 +176,7 @@ namespace NKikimr {
 class TGRpcServersManager : public TActorBootstrapped<TGRpcServersManager> {
     std::weak_ptr<TGRpcServersWrapper> GRpcServersWrapper;
     TIntrusivePtr<NMemory::IProcessMemoryInfoProvider> ProcessMemoryInfoProvider;
+    bool Started = false;
 
 public:
     enum {
@@ -214,6 +215,10 @@ public:
     }
 
     void Start() {
+        if (Started) {
+            return;
+        }
+        Started = true;
         auto wrapper = GRpcServersWrapper.lock();
         if (!wrapper) {
             return;
@@ -251,6 +256,10 @@ public:
     }
 
     void Stop() {
+        if (!Started) {
+            return;
+        }
+        Started = false;
         auto wrapper = GRpcServersWrapper.lock();
         if (!wrapper) {
             return;

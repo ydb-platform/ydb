@@ -96,7 +96,39 @@ Y_UNIT_TEST_SUITE(DescribeSchemaSecretsService) {
     }
 
     Y_UNIT_TEST(GetDroppedValue) {
-        NKikimr::NKqp::TKikimrRunner kikimr;
+        class TTestSecretUpdateListener : public NKikimr::NKqp::TDescribeSchemaSecretsService::ISecretUpdateListener {
+        public:
+            NThreading::TPromise<TString> DeletionPromise = NThreading::NewPromise<TString>();
+
+        public:
+            void HandleNotifyDelete(const TString& secretName) override {
+                Y_ENSURE(!DeletionPromise.HasValue()); // only one call of HandleNotifyDelete is expected
+                DeletionPromise.SetValue(secretName);
+            }
+        };
+
+        class TTestDescribeSchemaSecretsServiceFactory : public NKikimr::NKqp::IDescribeSchemaSecretsServiceFactory {
+        public:
+            TTestDescribeSchemaSecretsServiceFactory(NKikimr::NKqp::TDescribeSchemaSecretsService::ISecretUpdateListener* secretUpdateListener)
+                : SecretUpdateListener(secretUpdateListener)
+            {
+            }
+
+            NActors::IActor* CreateService() override {
+                auto* service = new NKikimr::NKqp::TDescribeSchemaSecretsService();
+                service->SetSecretUpdateListener(SecretUpdateListener);
+                return service;
+            }
+
+        private:
+            NKikimr::NKqp::TDescribeSchemaSecretsService::ISecretUpdateListener* SecretUpdateListener;
+        };
+
+        NKikimr::NKqp::TKikimrSettings settings;
+        auto secretUpdateListener = MakeHolder<TTestSecretUpdateListener>();
+        auto factory = std::make_shared<TTestDescribeSchemaSecretsServiceFactory>(secretUpdateListener.Get());
+        settings.SetDescribeSchemaSecretsServiceFactory(factory);
+        NKikimr::NKqp::TKikimrRunner kikimr(settings);
         kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableSchemaSecrets(true);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -109,6 +141,7 @@ Y_UNIT_TEST_SUITE(DescribeSchemaSecretsService) {
         UNIT_ASSERT_VALUES_EQUAL(secretValue, promise.GetFuture().GetValueSync().SecretValues[0]);
 
         DropSchemaSecret(secretName, session);
+        UNIT_ASSERT_VALUES_EQUAL("/Root/secret-name", secretUpdateListener->DeletionPromise.GetFuture().GetValueSync());
 
         promise = ResolveSecret("/Root/secret-name", kikimr);
         AssertBadRequest(promise, "<main>: Error: secret `/Root/secret-name` not found\n");

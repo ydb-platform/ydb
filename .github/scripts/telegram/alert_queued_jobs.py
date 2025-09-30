@@ -47,7 +47,7 @@ SEND_WHEN_ALL_GOOD = False  # Whether to send a message when all jobs are workin
 # Criteria for determining stuck jobs
 # Each element: [pattern, threshold_hours, display_name]
 WORKFLOW_THRESHOLDS = [
-    ["PR-check", 0.5, "PR-check"],
+    ["PR-check", 0.01, "PR-check"],
     ["Postcommit", 0.5, "Postcommit"],
     # Example of adding a new type:
     # ["Nightly", 12, "Nightly-Build"]
@@ -177,91 +177,81 @@ def is_retry_job(run: Dict[str, Any]) -> bool:
     """
     return run.get('run_attempt', 1) > 1
 
-def is_workflow_actually_stuck(run: Dict[str, Any]) -> bool:
+def has_stuck_jobs(run: Dict[str, Any], threshold_hours: float) -> tuple[bool, List[Dict[str, Any]]]:
     """
-    Checks if workflow is actually stuck by examining its jobs.
+    Checks if workflow has any individual jobs stuck in queue beyond threshold.
     
     Args:
         run: Workflow run object
+        threshold_hours: Time threshold in hours for considering a job stuck
     
     Returns:
-        bool: True if workflow is actually stuck (no active jobs)
+        tuple: (has_stuck_jobs, list_of_stuck_jobs)
     """
     run_id = run.get('id')
     workflow_name = run.get('name', 'Unknown')
     
     if not run_id:
-        return True  # If no ID, consider it stuck
+        return True, []  # If no ID, consider it stuck
     
     # Fetch jobs for this workflow run
     jobs_data, error = fetch_workflow_jobs(run_id)
     if error:
         print(f"⚠️ Could not fetch jobs for run {run_id} ({workflow_name}): {error}")
-        return True  # If can't fetch jobs, consider it stuck to be safe
+        return True, []  # If can't fetch jobs, consider it stuck to be safe
     
     jobs = jobs_data.get('jobs', [])
     if not jobs:
         print(f"⚠️ No jobs found for run {run_id} ({workflow_name})")
-        return True  # No jobs found, consider stuck
+        return True, []  # No jobs found, consider stuck
     
     current_time = datetime.now(timezone.utc)
-    active_jobs = 0
-    queued_jobs = 0
-    recent_activity = False
+    stuck_jobs = []
+    threshold_minutes = threshold_hours * 60
     
-    print(f"🔍 Analyzing {len(jobs)} jobs for {workflow_name} (ID: {run_id})")
+    print(f"🔍 Checking {len(jobs)} jobs for {workflow_name} (ID: {run_id}) with threshold {threshold_hours}h")
     
     for job in jobs:
         job_name = job.get('name', 'Unknown')
         job_status = job.get('status')
         
-        # Count job statuses
-        if job_status == 'in_progress':
-            active_jobs += 1
-            print(f"  ✅ Active job: {job_name} (in_progress)")
-            return False  # Any active job means workflow is not stuck
-        elif job_status == 'queued':
-            queued_jobs += 1
-            # Check how long this job has been queued
+        # Only check queued jobs
+        if job_status == 'queued':
             created_at_str = job.get('created_at')
             if created_at_str:
                 try:
                     created_at = datetime.fromisoformat(created_at_str.replace('Z', '+00:00'))
-                    time_queued = (current_time - created_at).total_seconds() / 60
-                    print(f"  ⏳ Queued job: {job_name} (waiting {time_queued:.1f} min)")
+                    time_queued_minutes = (current_time - created_at).total_seconds() / 60
+                    time_queued_hours = time_queued_minutes / 60
                     
-                    # If job has been queued for less than 30 minutes, workflow is not stuck
-                    if time_queued < 30:
-                        recent_activity = True
+                    print(f"  ⏳ Queued job: {job_name} (waiting {time_queued_minutes:.1f} min)")
+                    
+                    # Check if this individual job exceeds threshold
+                    if time_queued_minutes > threshold_minutes:
+                        print(f"  🚨 STUCK JOB: {job_name} (waiting {time_queued_hours:.1f}h > {threshold_hours}h)")
+                        stuck_jobs.append({
+                            'job_name': job_name,
+                            'job_id': job.get('id'),
+                            'waiting_hours': time_queued_hours,
+                            'waiting_minutes': time_queued_minutes
+                        })
+                    else:
+                        print(f"  ✅ OK: {job_name} (waiting {time_queued_hours:.1f}h < {threshold_hours}h)")
                 except ValueError:
-                    pass
-        
-        # Check for recent completions
-        completed_at_str = job.get('completed_at')
-        if completed_at_str:
-            try:
-                completed_at = datetime.fromisoformat(completed_at_str.replace('Z', '+00:00'))
-                time_since_completion = (current_time - completed_at).total_seconds() / 60
-                if time_since_completion < 10:  # Completed within last 10 minutes
-                    recent_activity = True
-                    print(f"  🎯 Recently completed: {job_name} ({time_since_completion:.1f} min ago)")
-            except ValueError:
-                pass
+                    print(f"  ⚠️ Could not parse created_at for job: {job_name}")
+        elif job_status == 'in_progress':
+            print(f"  🔄 Running: {job_name} (in_progress)")
+        elif job_status == 'completed':
+            conclusion = job.get('conclusion', 'unknown')
+            print(f"  ✅ Done: {job_name} ({conclusion})")
     
-    # Decision logic
-    if active_jobs > 0:
-        return False  # Active jobs = not stuck
+    has_stuck = len(stuck_jobs) > 0
+    if has_stuck:
+        print(f"  🚨 Found {len(stuck_jobs)} stuck job(s) in {workflow_name}")
+    else:
+        print(f"  ✅ No stuck jobs in {workflow_name}")
     
-    if queued_jobs > 0 and recent_activity:
-        print(f"  ✅ Has {queued_jobs} queued jobs with recent activity - not stuck")
-        return False  # Recent queued jobs = not stuck
-    
-    if recent_activity:
-        print(f"  ✅ Recent activity detected - not stuck")
-        return False  # Any recent activity = not stuck
-    
-    print(f"  🚨 No active jobs, no recent activity - likely stuck")
-    return True  # No activity = likely stuck
+    return has_stuck, stuck_jobs
 
 def analyze_queued_workflows(workflow_runs: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
     """
@@ -455,40 +445,50 @@ def count_stuck_jobs_by_type(stuck_jobs: List[Dict[str, Any]]) -> Dict[str, int]
 
 def check_for_stuck_jobs(workflow_runs: List[Dict[str, Any]], threshold_hours: int = 1) -> List[Dict[str, Any]]:
     """
-    Finds "stuck" jobs by our criteria from WORKFLOW_THRESHOLDS.
-    Now includes deep inspection via Jobs API to avoid false positives.
+    Finds workflows with individual jobs stuck in queue beyond thresholds.
+    Uses Jobs API to check each individual job's queue time.
     
     Args:
         workflow_runs: List of workflow runs in queue
         threshold_hours: Not used, kept for compatibility
     
     Returns:
-        List of stuck jobs
+        List of workflows with stuck jobs
     """
-    stuck_jobs = []
-    current_time = datetime.now(timezone.utc)
+    stuck_workflows = []
     
     for run in workflow_runs:
-        # Get effective start time (accounts for retry)
-        effective_start_time = get_effective_start_time(run)
-        time_diff = current_time - effective_start_time
-        waiting_hours = time_diff.total_seconds() / 3600
+        workflow_name = run.get('name', '')
         
-        # First check: does it exceed our time thresholds?
-        if is_job_stuck_by_criteria(run, waiting_hours):
-            # Second check: is it actually stuck (via Jobs API)?
-            if is_workflow_actually_stuck(run):
-                stuck_jobs.append({
-                    'run': run,
-                    'waiting_hours': waiting_hours
-                })
-            else:
-                # Log that we filtered out a false positive
-                workflow_name = run.get('name', 'Unknown')
-                run_id = run.get('id', 'Unknown')
-                print(f"✅ Filtered out false positive: {workflow_name} (ID: {run_id}) - has active jobs")
+        # Determine threshold for this workflow type
+        threshold_hours = None
+        for pattern, threshold_h, display_name in WORKFLOW_THRESHOLDS:
+            if pattern in workflow_name:
+                threshold_hours = threshold_h
+                break
+        
+        # Skip if no threshold defined for this workflow type
+        if threshold_hours is None:
+            continue
+        
+        # Check if this workflow has any stuck individual jobs
+        has_stuck, stuck_job_list = has_stuck_jobs(run, threshold_hours)
+        
+        if has_stuck:
+            # Calculate overall waiting time for compatibility
+            current_time = datetime.now(timezone.utc)
+            effective_start_time = get_effective_start_time(run)
+            time_diff = current_time - effective_start_time
+            overall_waiting_hours = time_diff.total_seconds() / 3600
+            
+            stuck_workflows.append({
+                'run': run,
+                'waiting_hours': overall_waiting_hours,
+                'stuck_jobs': stuck_job_list,  # List of individual stuck jobs
+                'threshold_hours': threshold_hours
+            })
     
-    return stuck_jobs
+    return stuck_workflows
 
 def format_telegram_messages(workflow_info: Dict[str, Dict[str, Any]], stuck_jobs: List[Dict[str, Any]], total_queued: int, excluded_count: int = 0) -> List[str]:
     """
@@ -582,34 +582,48 @@ def format_telegram_messages(workflow_info: Dict[str, Dict[str, Any]], stuck_job
         # Sort by waiting time (oldest first)
         stuck_jobs_sorted = sorted(stuck_jobs, key=lambda x: x['waiting_hours'], reverse=True)
         
-        for i, stuck_job in enumerate(stuck_jobs_sorted[:15], 1):  # Show up to 15 jobs
-            run = stuck_job['run']
-            waiting_hours = stuck_job['waiting_hours']
+        job_counter = 1
+        for stuck_workflow in stuck_jobs_sorted[:10]:  # Show up to 10 workflows
+            run = stuck_workflow['run']
             workflow_name = run.get('name', 'Unknown')
             run_id = run.get('id')
             run_attempt = run.get('run_attempt', 1)
-            
-            if waiting_hours > 24:
-                waiting_str = f"{waiting_hours/24:.1f}d"
-            elif waiting_hours > 1:
-                waiting_str = f"{waiting_hours:.1f}h"
-            else:
-                waiting_str = f"{waiting_hours*60:.0f}m"
+            threshold_hours = stuck_workflow.get('threshold_hours', 0.5)
+            individual_stuck_jobs = stuck_workflow.get('stuck_jobs', [])
             
             # Add retry information
             retry_info = f" (retry #{run_attempt})" if run_attempt > 1 else ""
             
             github_url = f"https://github.com/ydb-platform/ydb/actions/runs/{run_id}" if run_id else "N/A"
-            message2_parts.append(f"{i}. `{workflow_name}`{retry_info} - {waiting_str}")
+            message2_parts.append(f"{job_counter}. `{workflow_name}`{retry_info}")
             if run_id:
                 message2_parts.append(f"   [Run {run_id}]({github_url})")
+            
+            # Show individual stuck jobs within this workflow
+            for stuck_job in individual_stuck_jobs[:5]:  # Max 5 jobs per workflow
+                job_name = stuck_job.get('job_name', 'Unknown')
+                waiting_hours = stuck_job.get('waiting_hours', 0)
+                
+                if waiting_hours > 24:
+                    waiting_str = f"{waiting_hours/24:.1f}d"
+                elif waiting_hours > 1:
+                    waiting_str = f"{waiting_hours:.1f}h"
+                else:
+                    waiting_str = f"{waiting_hours*60:.0f}m"
+                
+                message2_parts.append(f"   🚨 `{job_name}` - {waiting_str} (>{threshold_hours}h threshold)")
+            
+            if len(individual_stuck_jobs) > 5:
+                message2_parts.append(f"   • ... and {len(individual_stuck_jobs) - 5} more stuck jobs")
+            
+            message2_parts.append("")
+            job_counter += 1
+        
+        if len(stuck_jobs) > 10:
+            message2_parts.append(f"• ... and {len(stuck_jobs) - 10} more workflows with stuck jobs")
             message2_parts.append("")
         
-        if len(stuck_jobs) > 15:
-            message2_parts.append(f"• ... and {len(stuck_jobs) - 15} more jobs")
-        
         # Add dashboard link
-        message2_parts.append("")
         message2_parts.append(TAIL_MESSAGE)
         
         messages.append("\n".join(message2_parts))

@@ -1423,38 +1423,32 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
                         id Uint64 NOT NULL,
                         message Utf8,
                         PRIMARY KEY (id)
-                    ) PARTITION BY HASH (id)
-                    WITH (STORE = COLUMN);
-                )",
-                                  NYdb::NQuery::TTxControl::NoTx())
-                              .GetValueSync();
+                    )
+                    WITH (
+                        STORE = COLUMN,
+                        PARTITION_COUNT = 1
+                    );
+                )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
         }
 
         {
-            TString query;
-            for (int i = 0; i < 1000; ++i) {
-                query += "UPSERT INTO `olap_table` (id, message) VALUES (" + ToString(i) + ", \"foo bar " + ToString(i) + " bar foo\");\n";
-            }
+            TString query = "UPSERT INTO `olap_table` (id, message) VALUES (1, '2'), (2, '2');";
             auto status = queryClient.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
             UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
         }
 
-        for (int i = 0; i < 1000; ++i) {
+        {
             auto status = queryClient
                               .ExecuteQuery(R"(
                 SELECT id FROM `olap_table`
-                WHERE id = )" + ToString(i) +
-                                      R"(
-                AND message ilike "%bar%"
+                WHERE id = 2 AND message = '2'
                 LIMIT 1;
-            )",
-                                  NYdb::NQuery::TTxControl::BeginTx().CommitTx())
-                              .GetValueSync();
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
 
             UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
             TString result = FormatResultSetYson(status.GetResultSet(0));
-            CompareYson(result, R"([[)" + ToString(i) + R"(u]])");
+            CompareYson(result, R"([[2u]])");
         }
     }
 

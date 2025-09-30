@@ -48,7 +48,7 @@ def execute_ydbd(cluster, token, cmd, check_exit_code=True):
 
 
 def get_dstool_binary_path():
-    return yatest.common.binary_path(os.getenv('YDB_DSTOOL_BINARY', 'ydb/apps/dstool/ydb-dstool'))
+    return yatest.common.binary_path(os.getenv('YDB_DSTOOL_BINARY'))
 
 
 def execute_dstool_grpc(cluster, token, cmd, check_exit_code=True):

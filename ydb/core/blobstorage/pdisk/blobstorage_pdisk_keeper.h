@@ -176,8 +176,16 @@ public:
         return ChunkTracker.ColorFlagLimit(owner, color);
     }
 
+    //
+    // Runtime (re)configuration
+    //
+
     void SetExpectedOwnerCount(size_t newOwnerCount) {
         ChunkTracker.SetExpectedOwnerCount(newOwnerCount);
+    }
+
+    void SetColorBorder(NKikimrBlobStorage::TPDiskSpaceColor::E colorBorder) {
+        ChunkTracker.SetColorBorder(colorBorder);
     }
 
     //

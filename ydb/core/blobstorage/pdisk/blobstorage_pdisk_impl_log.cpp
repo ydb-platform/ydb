@@ -1655,7 +1655,7 @@ void TPDisk::ProcessReadLogResult(const NPDisk::TEvReadLogResult &evReadLogResul
                 }
                 params.CommonLogSize = LogChunks.size();
                 params.MaxCommonLogChunks = Cfg->MaxCommonLogChunks;
-                params.SpaceColorBorder = Cfg->SpaceColorBorder;
+                params.SpaceColorBorder = GetColorBorderIcb();
                 ui64 chunkBaseLimitIcb = ChunkBaseLimitPerMille;
                 if (chunkBaseLimitIcb) {
                     params.ChunkBaseLimit = std::clamp(chunkBaseLimitIcb,

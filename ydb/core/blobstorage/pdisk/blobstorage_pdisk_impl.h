@@ -111,6 +111,16 @@ public:
     TControlWrapper UseNoopSchedulerSSD;
     TControlWrapper UseNoopSchedulerHDD;
     TControlWrapper ChunkBaseLimitPerMille;
+    TControlWrapper SemiStrictSpaceIsolation;
+    i64 SemiStrictSpaceIsolationCached = 0;
+    NKikimrBlobStorage::TPDiskSpaceColor::E GetColorBorderIcb() {
+        using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
+        switch (SemiStrictSpaceIsolation) {
+            case 1: return TColor::LIGHT_YELLOW;
+            case 2: return TColor::YELLOW;
+            default: return Cfg->SpaceColorBorder;
+        }
+    }
     bool UseNoopSchedulerCached = false;
 
     // SectorMap Controls

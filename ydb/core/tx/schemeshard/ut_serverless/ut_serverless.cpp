@@ -331,6 +331,22 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
         }));
         env.TestWaitNotification(runtime, txId);
 
+        ui64 tenantSchemeShard = 0;
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/ServerlessDB"), {
+            NLs::PathExist,
+            NLs::ExtractTenantSchemeshard(&tenantSchemeShard),
+        });
+
+        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerlessDB", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
+
+        WriteRow(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerlessDB/Table", 0, 1, "v1");
+
         TBlockEvents<NMetering::TEvMetering::TEvWriteMeteringJson> block(runtime);
         runtime.WaitFor("metering", [&]{ return block.size() >= 1; });
 

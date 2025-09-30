@@ -130,7 +130,7 @@ public:
             if (!Database || IsInDatabase(path)) {
                 return RewriteAbsolutePath(path);
             }
-        } else {
+        } else if (!BackupPathPrefix.empty() && !RestorePathPrefix.empty()) {
             return BuildRelativePath(NDump::RewriteAbsolutePath(BuildAbsolutePath(path), BackupRoot, RestoreRoot));
         }
 

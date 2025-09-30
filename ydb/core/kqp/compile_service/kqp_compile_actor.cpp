@@ -96,10 +96,6 @@ public:
             } else {
                 Config->_ResultRowsLimit.Clear();
             }
-
-            if (UserRequestContext && UserRequestContext->IsStreamingQuery) {
-                Config->HashJoinMode = NYql::NDq::EHashJoinMode::Map;
-            }
         }
         PerStatementResult = perStatementResult && Config->EnablePerStatementQueryExecution;
 

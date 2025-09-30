@@ -91,7 +91,6 @@ END DO];
 Примеры:
 
 ```sql
-
 -- Stop query
 ALTER STREAMING QUERY `my_queries/query_name` SET (
     RUN = FALSE

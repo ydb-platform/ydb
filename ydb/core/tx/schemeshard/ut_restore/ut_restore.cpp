@@ -5314,10 +5314,10 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         return {
             {changefeedPath, GenerateTestData({EPathTypeCdcStream, changefeedDesc, std::move(attr)})},
             [changefeedPath = TString(changefeedPath), isPartitioningAvailable, maxPartitions](TTestBasicRuntime& runtime) {
-                TestDescribeResult(DescribePath(runtime, "/MyRoot/" + changefeedPath, false, false, true), {
+                TestDescribeResult(DescribePath(runtime, "/MyRoot" + changefeedPath, false, false, true), {
                     NLs::PathExist,
                 });
-                TestDescribeResult(DescribePath(runtime, "/MyRoot/" + changefeedPath + "/streamImpl", false, false, true), {
+                TestDescribeResult(DescribePath(runtime, "/MyRoot" + changefeedPath + "/streamImpl", false, false, true), {
                     NLs::ConsumerExist("my_consumer"),
                     NLs::MinTopicPartitionsCountEqual(isPartitioningAvailable ? 2 : 1),
                     NLs::MaxTopicPartitionsCountEqual(maxPartitions),
@@ -5493,6 +5493,8 @@ Y_UNIT_TEST_SUITE(TImportTests) {
     // Test that identical changefeeds are correctly applied to their respective tables with common prefix
     Y_UNIT_TEST(ChangefeedTablePrefixConflictDiffTableDesc) {      
         TestImportChangefeeds({
+            {"table", "UINT32", 1, AddedScheme, 3},       // partitioning available (table property)
+            {"table_prefix", "UTF8", 1, AddedScheme, 3}   // partitioning unavailable (table property)
             {"table", "UINT32", 1, AddedScheme, 3},       // partitioning available (table property)
             {"table_prefix", "UTF8", 1, AddedScheme, 3}   // partitioning unavailable (table property)
         });

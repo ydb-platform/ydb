@@ -111,6 +111,7 @@ struct TListQueriesOptions
 
     bool SearchByTokenPrefix = false;
     bool UseFullTextSearch = true;
+    EListQueriesSortOrder SortOrder = EListQueriesSortOrder::Cursor;
 };
 
 struct TQuery

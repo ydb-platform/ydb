@@ -2572,6 +2572,7 @@ TFuture<TListQueriesResult> TClient::ListQueries(
     req->set_search_by_token_prefix(options.SearchByTokenPrefix);
     req->set_use_full_text_search(options.UseFullTextSearch);
     req->set_tutorial_filter(options.TutorialFilter);
+    req->set_sort_order(static_cast<NProto::EListQueriesSortOrder>(options.SortOrder));
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspListQueriesPtr& rsp) {
         return TListQueriesResult{

@@ -318,6 +318,7 @@ void TListQueriesCommand::Register(TRegistrar registrar)
             return command->Options.SearchByTokenPrefix;
         })
         .Optional(/*init*/ false);
+
     registrar.ParameterWithUniversalAccessor<bool>(
         "use_full_text_search",
         [] (TThis* command) -> auto& {
@@ -328,6 +329,12 @@ void TListQueriesCommand::Register(TRegistrar registrar)
         "tutorial_filter",
         [] (TThis* command) -> auto& {
             return command->Options.TutorialFilter;
+        })
+        .Optional(/*init*/ false);
+    registrar.ParameterWithUniversalAccessor<EListQueriesSortOrder>(
+        "sort_order",
+        [] (TThis* command) -> auto& {
+            return command->Options.SortOrder;
         })
         .Optional(/*init*/ false);
 }

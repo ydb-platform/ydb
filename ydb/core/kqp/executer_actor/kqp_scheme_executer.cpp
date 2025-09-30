@@ -76,7 +76,7 @@ public:
     TKqpSchemeExecuter(
         TKqpPhyTxHolder::TConstPtr phyTx, NKikimrKqp::EQueryType queryType, const TActorId& target, const TMaybe<TString>& requestType,
         const TString& database, TIntrusiveConstPtr<NACLib::TUserToken> userToken, const TString& clientAddress,
-        bool temporary, bool createTmpDir, bool isCreateTableAs, TString sessionId, TIntrusivePtr<TUserRequestContext> ctx,
+        bool temporary, bool createTmpDir, bool isCreateTableAs, TString tempDirName, TIntrusivePtr<TUserRequestContext> ctx,
         const TActorId& kqpTempTablesAgentActor)
         : PhyTx(phyTx)
         , QueryType(queryType)
@@ -87,7 +87,7 @@ public:
         , Temporary(temporary)
         , CreateTmpDir(createTmpDir)
         , IsCreateTableAs(isCreateTableAs)
-        , SessionId(sessionId)
+        , TempDirName(tempDirName)
         , RequestContext(std::move(ctx))
         , RequestType(requestType)
         , KqpTempTablesAgentActor(kqpTempTablesAgentActor)
@@ -157,7 +157,7 @@ public:
         modifyScheme->SetFailOnExist(true);
 
         auto* makeDir = modifyScheme->MutableMkDir();
-        makeDir->SetName(SessionId);
+        makeDir->SetName(TempDirName);
         ActorIdToProto(KqpTempTablesAgentActor, modifyScheme->MutableTempDirOwnerActorId());
 
         if (UserToken) {
@@ -329,11 +329,12 @@ public:
         switch (schemeOp.GetOperationCase()) {
             case NKqpProto::TKqpSchemeOperation::kCreateTable: {
                 auto modifyScheme = schemeOp.GetCreateTable();
+                AFL_ENSURE(!IsCreateTableAs || Temporary);
                 if (Temporary) {
                     auto changePath = [this](NKikimrSchemeOp::TTableDescription* tableDesc) {
                         const auto fullPath = JoinPath({tableDesc->GetPath(), tableDesc->GetName()});
                         YQL_ENSURE(fullPath.size() > 1);
-                        tableDesc->SetName(GetCreateTempTablePath(Database, SessionId, fullPath));
+                        tableDesc->SetName(GetCreateTempTablePath(Database, TempDirName, fullPath));
                         tableDesc->SetPath(Database);
                     };
 
@@ -348,7 +349,7 @@ public:
                         }
                         case NKikimrSchemeOp::ESchemeOpCreateColumnTable: {
                             modifyScheme.MutableCreateColumnTable()->SetName(
-                                GetCreateTempTablePath(Database, SessionId, modifyScheme.GetCreateColumnTable().GetName()));
+                                GetCreateTempTablePath(Database, TempDirName, modifyScheme.GetCreateColumnTable().GetName()));
                             break;
                         }
                         default:
@@ -369,6 +370,7 @@ public:
 
             case NKqpProto::TKqpSchemeOperation::kAlterTable: {
                 const auto& modifyScheme = schemeOp.GetAlterTable();
+                AFL_ENSURE(!IsCreateTableAs || modifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpMoveTable);
                 ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
                 break;
             }
@@ -803,7 +805,7 @@ public:
     void Handle(TEvPrivate::TEvMakeSessionDirResult::TPtr& result) {
         if (!result->Get()->Result.Success()) {
             InternalError(TStringBuilder()
-                << "Error creating directory for session " << SessionId
+                << "Error creating directory for session " << TempDirName
                 << ": " << result->Get()->Result.Issues().ToString(true));
         }
         MakeSchemeOperationRequest();
@@ -1102,7 +1104,7 @@ private:
     bool Temporary;
     bool CreateTmpDir;
     bool IsCreateTableAs;
-    TString SessionId;
+    TString TempDirName;
     ui64 TxId = 0;
     TActorId SchemePipeActorId_;
     ui64 SchemeShardTabletId = 0;
@@ -1118,11 +1120,11 @@ IActor* CreateKqpSchemeExecuter(
     const TMaybe<TString>& requestType, const TString& database,
     TIntrusiveConstPtr<NACLib::TUserToken> userToken, const TString& clientAddress,
     bool temporary, bool createTmpDir, bool isCreateTableAs,
-    TString sessionId, TIntrusivePtr<TUserRequestContext> ctx, const TActorId& kqpTempTablesAgentActor)
+    TString tempDirName, TIntrusivePtr<TUserRequestContext> ctx, const TActorId& kqpTempTablesAgentActor)
 {
     return new TKqpSchemeExecuter(
         phyTx, queryType, target, requestType, database, userToken, clientAddress,
-        temporary, createTmpDir, isCreateTableAs, sessionId, std::move(ctx), kqpTempTablesAgentActor);
+        temporary, createTmpDir, isCreateTableAs, tempDirName, std::move(ctx), kqpTempTablesAgentActor);
 }
 
 } // namespace NKikimr::NKqp

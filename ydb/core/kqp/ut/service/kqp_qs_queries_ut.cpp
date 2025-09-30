@@ -1793,14 +1793,24 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
     Y_UNIT_TEST(CreateTempTable) {
         auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings().SetKqpSettings({setting}).SetAuthToken("user0@builtin");
+        auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
         serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableTempTablesForUser(true);
         TKikimrRunner kikimr(
             serverSettings.SetWithSampleTables(false).SetEnableTempTables(true));
-        auto clientConfig = NGRpcProxy::TGRpcClientConfig(kikimr.GetEndpoint());
-        auto client = kikimr.GetQueryClient();
 
-        TString SessionId;
+        kikimr.GetTestClient().GrantConnect("user0@builtin");
+        kikimr.GetTestServer().GetRuntime()->GetAppData().AdministrationAllowedSIDs.emplace_back("root@builtin");
+
+        auto driverConfig = TDriverConfig()
+            .SetEndpoint(kikimr.GetEndpoint())
+            .SetAuthToken("user0@builtin")
+            .SetDatabase("/Root");
+        auto driver = TDriver(driverConfig);
+        auto client = NYdb::NQuery::TQueryClient(driver);
+
+        auto clientConfig = NGRpcProxy::TGRpcClientConfig(kikimr.GetEndpoint());
+
+        TString TempDirName;
         {
             auto session = client.GetSession().GetValueSync().GetSession();
             auto id = session.GetId();
@@ -1825,8 +1835,15 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
                 querySelect, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_C(resultSelect.IsSuccess(), resultSelect.GetIssues().ToString());
 
-            const TVector<TString> sessionIdSplitted = StringSplitter(id).SplitByString("&id=");
-            SessionId = sessionIdSplitted.back();
+            {
+                auto schemeClient = kikimr.GetSchemeClient();
+                auto listResult = schemeClient.ListDirectory(
+                    "/Root/.tmp/sessions"
+                    ).GetValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(listResult.GetStatus(), NYdb::EStatus::SUCCESS, listResult.GetIssues().ToString());
+                UNIT_ASSERT_VALUES_EQUAL(listResult.GetChildren().size(), 1);
+                TempDirName = listResult.GetChildren()[0].Name;
+            }
 
             const auto queryCreateRestricted = Q_(fmt::format(R"(
                 --!syntax_v1
@@ -1834,7 +1851,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
                     Key Uint64 NOT NULL,
                     Value String,
                     PRIMARY KEY (Key)
-                );)", SessionId));
+                );)", TempDirName));
 
             auto resultCreateRestricted = session.ExecuteQuery(queryCreateRestricted, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT(!resultCreateRestricted.IsSuccess());
@@ -1862,7 +1879,16 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         {
             auto schemeClient = kikimr.GetSchemeClient();
             auto listResult = schemeClient.ListDirectory(
-                fmt::format("/Root/.tmp/sessions/{}", SessionId)
+                fmt::format("/Root/.tmp/sessions/{}", TempDirName)
+                ).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(listResult.GetStatus(), NYdb::EStatus::SCHEME_ERROR, listResult.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(listResult.GetIssues().ToString(), "Path not found",listResult.GetIssues().ToString());
+        }
+
+        {
+            auto schemeClient = kikimr.GetSchemeClient();
+            auto listResult = schemeClient.ListDirectory(
+                fmt::format("/Root/.tmp/sessions/{}", TempDirName)
                 ).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(listResult.GetStatus(), NYdb::EStatus::SCHEME_ERROR, listResult.GetIssues().ToString());
             UNIT_ASSERT_STRING_CONTAINS_C(listResult.GetIssues().ToString(), "Path not found",listResult.GetIssues().ToString());

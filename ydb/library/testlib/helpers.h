@@ -38,13 +38,35 @@
 
 // Y_UNIT_TEST_SUITE_TWIN allows to create a test suite that runs twice - 
 // once with a boolean flag set to true, and once with it set to false.
-// Usage:
-//   #define SUITE_BODY(OPT_NAME) \
-//       Y_UNIT_TEST(Test1) { if (TCurrentTest::OPT_NAME) { ... } else { ... } }
-//   
-//   Y_UNIT_TEST_SUITE_TWIN(MySuite, UseFeature, SUITE_BODY)
+// All tests in the suite can access the flag value via TCurrentTest::OPT.
 //
-// This will create two test suites: MySuite+UseFeature and MySuite-UseFeature
+// This is useful for testing code that has conditional behavior based on a feature flag.
+//
+// Usage:
+//   #define MY_SUITE_TESTS(FlagName) \
+//       Y_UNIT_TEST(TestFeatureBehavior) { \
+//           if (TCurrentTest::FlagName) { \
+//               /* Test with feature enabled */ \
+//               UNIT_ASSERT(true); \
+//           } else { \
+//               /* Test with feature disabled */ \
+//               UNIT_ASSERT(true); \
+//           } \
+//       } \
+//       Y_UNIT_TEST(AnotherTest) { \
+//           /* All tests can access TCurrentTest::FlagName */ \
+//           bool featureEnabled = TCurrentTest::FlagName; \
+//           /* ... */ \
+//       }
+//   
+//   Y_UNIT_TEST_SUITE_TWIN(FeatureTestSuite, UseNewAlgorithm, MY_SUITE_TESTS)
+//
+// This will create two test suites:
+//   - FeatureTestSuite+UseNewAlgorithm (with UseNewAlgorithm=true)
+//   - FeatureTestSuite-UseNewAlgorithm (with UseNewAlgorithm=false)
+//
+// Note: Test definitions must be provided as a macro that takes the flag name as a parameter.
+// This is required because the C preprocessor needs to expand the tests into both suite variants.
 #define Y_UNIT_TEST_SUITE_TWIN(N, OPT, BODY)                                                                           \
     namespace NTestSuite##N##On {                                                                                      \
         class TCurrentTestCase: public ::NUnitTest::TBaseTestCase {                                                    \

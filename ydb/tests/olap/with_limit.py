@@ -36,13 +36,12 @@ class TestOrderBy(object):
     def write_one_portion_data(self, table: str):
         column_types = ydb.BulkUpsertColumns()
         column_types.add_column("id", ydb.PrimitiveType.Uint64)
-        column_types.add_column("id2", ydb.PrimitiveType.Uint64)
         column_types.add_column("value", ydb.PrimitiveType.Utf8)
 
         self.ydb_client.bulk_upsert(
             table,
             column_types,
-            [{"id": 1, "id2": 2, "value": str(2)}, {"id": 2, "id2": 2, "value": str(2)}, {"id": 3, "id2": 2, "value": str(2)}],
+            [{"id": 1, "value": '2'}, {"id": 2, "value": '2'}],
         )
 
     def write_data(self, table: str):
@@ -121,9 +120,8 @@ class TestOrderBy(object):
             f"""
             CREATE TABLE `{table_path}` (
                 id Uint64 NOT NULL,
-                id2 Uint64 NOT NULL,
                 value Utf8 NOT NULL,
-                PRIMARY KEY(id, id2),
+                PRIMARY KEY(id),
             )
             WITH (
                 STORE = COLUMN,

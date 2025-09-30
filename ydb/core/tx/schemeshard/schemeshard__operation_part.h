@@ -604,7 +604,7 @@ ISubOperation::TPtr CreateDropSolomon(TOperationId id, TTxState::ETxState state)
 ISubOperation::TPtr CreateInitializeBuildIndexMainTable(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateInitializeBuildIndexMainTable(TOperationId id, TTxState::ETxState state);
 
-ISubOperation::TPtr CreateInitializeBuildIndexImplTable(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreateInitializeBuildIndexImplTable(TOperationId id, const TTxTransaction& tx, const THashSet<TString>& localSequences = {});
 ISubOperation::TPtr CreateInitializeBuildIndexImplTable(TOperationId id, TTxState::ETxState state);
 
 ISubOperation::TPtr CreateFinalizeBuildIndexImplTable(TOperationId id, const TTxTransaction& tx);

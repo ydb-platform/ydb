@@ -107,7 +107,7 @@ class TActorCoordinator : public TActorBootstrapped<TActorCoordinator> {
     };
 
     struct RowDispatcherInfo {
-        RowDispatcherInfo(bool connected, bool isLocal) 
+        RowDispatcherInfo(bool connected, bool isLocal)
             : Connected(connected)
             , IsLocal(isLocal) {}
         bool Connected = false;
@@ -348,7 +348,7 @@ void TActorCoordinator::HandleConnected(TEvInterconnect::TEvNodeConnected::TPtr&
 
 void TActorCoordinator::HandleDisconnected(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
     LOG_ROW_DISPATCHER_DEBUG("TEvNodeDisconnected, node id " << ev->Get()->NodeId);
-   
+
     for (auto& [actorId, info] : RowDispatchers) {
         if (ev->Get()->NodeId != actorId.NodeId()) {
             continue;

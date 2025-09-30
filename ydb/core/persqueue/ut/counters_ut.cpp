@@ -126,7 +126,7 @@ void PartitionLevelCounters(bool featureFlagEnabled, bool firstClassCitizen, TSt
 
     tc.Runtime->GetAppData(0).FeatureFlags.SetEnableMetricsLevel(featureFlagEnabled);
 
-    PQTabletPrepare({ .metricsLevel = 2 }, {}, tc);
+    PQTabletPrepare({ .metricsLevel = 3 }, {}, tc);
     CmdWrite(0, "sourceid0", TestData(), tc, false, {}, true);
     CmdWrite(0, "sourceid1", TestData(), tc, false);
     CmdWrite(0, "sourceid2", TestData(), tc, false);

@@ -356,6 +356,9 @@ void TArrowBatchBuilder::ReserveData(ui32 columnNo, size_t size) {
 std::shared_ptr<arrow::RecordBatch> TArrowBatchBuilder::FlushBatch(bool reinitialize, bool flushEmpty) {
     if (NumRows || flushEmpty) {
         auto status = BatchBuilder->Flush(reinitialize, &Batch);
+        if (!status.ok()) {
+            Cerr << status.ToString() << Endl;
+        }
         Y_ABORT_UNLESS(status.ok(), "Failed to flush batch: %s", status.ToString().c_str());
     }
     NumRows = NumBytes = 0;

@@ -75,6 +75,32 @@ TString FromCells(const TConstArrayRef<TCell>& cells,
     return NArrow::SerializeBatchNoCompression(batch);
 }
 
+// TODO: try to use fields only
+TString FromCells(const TConstArrayRef<TCell>& cells,
+    const std::vector<std::pair<TString, NScheme::TTypeInfo>>& columns,
+    const std::vector<std::shared_ptr<arrow::Field>>& fields) {
+    Y_ABORT_UNLESS(cells.size() == columns.size());
+    if (cells.empty()) {
+        return {};
+    }
+
+    std::vector<NScheme::TTypeInfo> types = ExtractTypes(columns);
+
+    NArrow::TArrowBatchBuilder batchBuilder;
+    batchBuilder.Reserve(1);
+    auto schema = std::make_shared<arrow::Schema>(fields);
+    auto startStatus = batchBuilder.Start(columns, schema);
+    Y_ABORT_UNLESS(startStatus.ok(), "%s", startStatus.ToString().c_str());
+
+    batchBuilder.AddRow(NKikimr::TDbTupleRef(), NKikimr::TDbTupleRef(types.data(), cells.data(), cells.size()));
+
+    auto batch = batchBuilder.FlushBatch(false);
+    Y_ABORT_UNLESS(batch);
+    Y_ABORT_UNLESS(batch->num_columns() == (int)cells.size());
+    Y_ABORT_UNLESS(batch->num_rows() == 1);
+    return NArrow::SerializeBatchNoCompression(batch);
+}
+
 std::pair<NKikimr::NOlap::TPredicate, NKikimr::NOlap::TPredicate> TPredicate::DeserializePredicatesRange(
     const TSerializedTableRange& range, const std::vector<std::pair<TString, NScheme::TTypeInfo>>& columns, 
     const std::shared_ptr<arrow::Schema>& schema) {
@@ -151,7 +177,13 @@ std::shared_ptr<arrow::RecordBatch> TPredicate::CutNulls(const std::shared_ptr<a
         ++idx;
     }
     AFL_VERIFY(colsNotNull.size());
-    return arrow::RecordBatch::Make(std::make_shared<arrow::Schema>(fieldsNotNull), 1, colsNotNull);
+
+    auto schema = std::make_shared<arrow::Schema>(std::move(fieldsNotNull));
+    if (schema->ToString(true) == "id: uint64") {
+        PrintBackTrace();
+    }
+
+    return arrow::RecordBatch::Make(schema, 1, colsNotNull);
 }
 
 bool TPredicate::IsEqualSchema(const std::shared_ptr<arrow::Schema>& schema) const {

@@ -126,15 +126,11 @@ class TDqPqReadActor : public NActors::TActor<TDqPqReadActor>, public NYql::NDq:
             const TTxId& txId,
             ui64 taskId,
             const ::NMonitoring::TDynamicCounterPtr& counters,
-            const ::NMonitoring::TDynamicCounterPtr& taskCounters,
             const NPq::NProto::TDqPqTopicSource& sourceParams)
             : TxId(std::visit([](auto arg) { return ToString(arg); }, txId))
-            , Counters(counters)
-            , TaskCounters(taskCounters) {
+            , Counters(counters) {
             if (counters) {
                 SubGroup = Counters->GetSubgroup("source", "PqRead");
-            } else if (taskCounters) {
-                SubGroup = TaskCounters->GetSubgroup("source", "PqRead");
             } else {
                 SubGroup = MakeIntrusive<::NMonitoring::TDynamicCounters>();
             }
@@ -160,7 +156,6 @@ class TDqPqReadActor : public NActors::TActor<TDqPqReadActor>, public NYql::NDq:
 
         TString TxId;
         ::NMonitoring::TDynamicCounterPtr Counters;
-        ::NMonitoring::TDynamicCounterPtr TaskCounters;
         ::NMonitoring::TDynamicCounterPtr SubGroup;
         ::NMonitoring::TDynamicCounters::TCounterPtr InFlyAsyncInputData;
         ::NMonitoring::TDynamicCounters::TCounterPtr InFlySubscribe;
@@ -202,13 +197,12 @@ public:
         std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
         const NActors::TActorId& computeActorId,
         const ::NMonitoring::TDynamicCounterPtr& counters,
-        const ::NMonitoring::TDynamicCounterPtr& taskCounters,
         i64 bufferSize,
         const IPqGateway::TPtr& pqGateway,
         ui32 topicPartitionsCount)
         : TActor<TDqPqReadActor>(&TDqPqReadActor::StateFunc)
         , TDqPqReadActorBase(inputIndex, taskId, this->SelfId(), txId, std::move(sourceParams), std::move(readParams), computeActorId)
-        , Metrics(txId, taskId, counters, taskCounters, SourceParams)
+        , Metrics(txId, taskId, counters, SourceParams)
         , BufferSize(bufferSize)
         , HolderFactory(holderFactory)
         , Driver(std::move(driver))
@@ -927,21 +921,17 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqReadActor(
     TTxId txId,
     ui64 taskId,
     const THashMap<TString, TString>& secureParams,
-    const THashMap<TString, TString>& taskParams,
-    const TVector<TString>& readRanges,
+    TVector<NPq::NProto::TDqReadTaskParams>&& readTaskParamsMsg,
     NYdb::TDriver driver,
     ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
     const NActors::TActorId& computeActorId,
     const NKikimr::NMiniKQL::THolderFactory& holderFactory,
     const ::NMonitoring::TDynamicCounterPtr& counters,
-    const ::NMonitoring::TDynamicCounterPtr& taskCounters,
     IPqGateway::TPtr pqGateway,
+    ui32 topicPartitionsCount,
     i64 bufferSize
     )
 {
-    TVector<NPq::NProto::TDqReadTaskParams> readTaskParamsMsg;
-    ui32 topicPartitionsCount = ExtractPartitionsFromParams(readTaskParamsMsg, taskParams, readRanges);
-
     const TString& tokenName = settings.GetToken().GetName();
     const TString token = secureParams.Value(tokenName, TString());
     const bool addBearerToToken = settings.GetAddBearerToToken();
@@ -958,7 +948,6 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqReadActor(
         CreateCredentialsProviderFactoryForStructuredToken(credentialsFactory, token, addBearerToToken),
         computeActorId,
         counters,
-        taskCounters,
         bufferSize,
         pqGateway,
         topicPartitionsCount
@@ -979,6 +968,9 @@ void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driv
             settings.SetReconnectPeriod(reconnectPeriod);
         }
 
+        TVector<NPq::NProto::TDqReadTaskParams> readTaskParamsMsg;
+        ui32 topicPartitionsCount = ExtractPartitionsFromParams(readTaskParamsMsg, args.TaskParams, args.ReadRanges);
+
         if (!settings.GetSharedReading()) {
             return CreateDqPqReadActor(
                 std::move(settings),
@@ -987,15 +979,14 @@ void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driv
                 args.TxId,
                 args.TaskId,
                 args.SecureParams,
-                args.TaskParams,
-                args.ReadRanges,
+                std::move(readTaskParamsMsg),
                 driver,
                 credentialsFactory,
                 args.ComputeActorId,
                 args.HolderFactory,
-                counters,
-                args.TaskCounters,
+                counters ? counters : args.TaskCounters,
                 pqGateway,
+                topicPartitionsCount,
                 PQReadDefaultFreeSpace);
         }
 
@@ -1007,13 +998,13 @@ void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driv
             args.TxId,
             args.TaskId,
             args.SecureParams,
-            args.TaskParams,
+            std::move(readTaskParamsMsg),
             driver,
             credentialsFactory,
             args.ComputeActorId,
             NFq::RowDispatcherServiceActorId(),
             args.HolderFactory,
-            counters,
+            counters ? counters : args.TaskCounters,
             PQReadDefaultFreeSpace,
             pqGateway);
     });

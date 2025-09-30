@@ -21,6 +21,7 @@
 #include <ydb/core/kqp/workload_service/kqp_workload_service.h>
 #include <ydb/core/resource_pools/resource_pool_settings.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
+#include <ydb/library/yql/dq/actors/compute/dq_checkpoints.h>
 #include <ydb/library/yql/dq/actors/spilling/spilling_file.h>
 #include <ydb/library/yql/dq/actors/spilling/spilling.h>
 #include <ydb/core/actorlib_impl/long_timer.h>
@@ -32,6 +33,9 @@
 #include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/core/protos/workload_manager_config.pb.h>
 #include <ydb/core/sys_view/common/registry.h>
+#include <ydb/core/fq/libs/checkpoint_storage/storage_service.h>
+#include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
+#include <ydb/core/fq/libs/row_dispatcher/row_dispatcher_service.h>
 
 #include <ydb/library/yql/utils/actor_log/log.h>
 #include <yql/essentials/core/services/mounts/yql_mounts.h>
@@ -323,6 +327,9 @@ public:
 
         KqpTempTablesAgentActor = Register(new TKqpTempTablesAgentActor());
 
+        InitSharedReading();
+        InitCheckpointStorage();
+
         Become(&TKqpProxyService::MainState);
         StartCollectPeerProxyData();
         AskSelfNodeInfo();
@@ -408,6 +415,12 @@ public:
 
         Send(KqpWorkloadService, new TEvents::TEvPoison());
         Send(KqpComputeSchedulerService, new TEvents::TEvPoison());
+        if (RowDispatcherService) {
+            Send(RowDispatcherService, new TEvents::TEvPoison());
+        }
+        if (CheckpointStorageService) {
+            Send(CheckpointStorageService, new TEvents::TEvPoison());
+        }
 
         LocalSessions->ForEachNode([this](TNodeId node) {
             Send(TActivationContext::InterconnectProxy(node), new TEvents::TEvUnsubscribe);
@@ -1743,6 +1756,45 @@ private:
         ResourcePoolsCache.UpdateResourcePoolClassifiersInfo(ev->Get()->GetSnapshotAs<TResourcePoolClassifierSnapshot>(), ActorContext());
     }
 
+    void InitSharedReading() {
+        const auto& sharedReading = QueryServiceConfig.GetSharedReading();
+        if (!sharedReading.GetEnabled() || !FederatedQuerySetup) {
+            return;
+        }
+        auto rowDispatcher = NFq::NewRowDispatcherService(
+            QueryServiceConfig.GetSharedReading(),
+            NKikimr::CreateYdbCredentialsProviderFactory,
+            FederatedQuerySetup->CredentialsFactory,
+            AppData()->FunctionRegistry,
+            AppData()->TenantName,
+            Counters->GetKqpCounters()->GetSubgroup("subsystem", "row_dispatcher"),
+            FederatedQuerySetup->PqGateway,
+            *FederatedQuerySetup->Driver,
+            AppData()->Mon,
+            Counters->GetKqpCounters());
+
+        RowDispatcherService = TActivationContext::Register(rowDispatcher.release());
+        TActivationContext::ActorSystem()->RegisterLocalService(
+            NFq::RowDispatcherServiceActorId(), RowDispatcherService);
+    }
+    
+    void InitCheckpointStorage() {
+        const auto& checkpointConfig = QueryServiceConfig.GetCheckpointsConfig();
+        if (!checkpointConfig.GetEnabled() || !FederatedQuerySetup) {
+            return;
+        }
+        auto service = NFq::NewCheckpointStorageService(
+            checkpointConfig,
+            "cs",
+            NKikimr::CreateYdbCredentialsProviderFactory,
+            *FederatedQuerySetup->Driver,
+            Counters->GetKqpCounters()->GetSubgroup("subsystem", "storage_service"));
+            
+        CheckpointStorageService = TActivationContext::Register(service.release());
+        TActivationContext::ActorSystem()->RegisterLocalService(
+            NYql::NDq::MakeCheckpointStorageID(), CheckpointStorageService);
+    }
+
 private:
     NKikimrConfig::TLogConfig LogConfig;
     NKikimrConfig::TTableServiceConfig TableServiceConfig;
@@ -1789,6 +1841,8 @@ private:
     TActorId WhiteBoardService;
     TActorId KqpWorkloadService;
     TActorId KqpComputeSchedulerService;
+    TActorId RowDispatcherService;
+    TActorId CheckpointStorageService;
     NYql::NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
 
     enum class EScriptExecutionsCreationStatus {

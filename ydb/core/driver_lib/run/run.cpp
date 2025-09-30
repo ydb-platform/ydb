@@ -1738,7 +1738,7 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
     sil->AddServiceInitializer(new TMemoryControllerInitializer(runConfig, ProcessMemoryInfoProvider));
 
     if (serviceMask.EnableKqp) {
-        sil->AddServiceInitializer(new TKqpServiceInitializer(runConfig, ModuleFactories, *this, YqSharedResources));
+        sil->AddServiceInitializer(new TKqpServiceInitializer(runConfig, ModuleFactories, *this));
     }
 
     if (serviceMask.EnableMetadataProvider) {

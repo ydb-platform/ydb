@@ -58,9 +58,6 @@ public:
             partitioningParams->SetEachTopicPartitionGroupId(PartitionId1);
             partitioningParams->SetDqPartitionsCount(1);
 
-            TString serializedParams;
-            UNIT_ASSERT(params.SerializeToString(&serializedParams));
-
             auto [dqAsyncInput, dqAsyncInputAsActor] = CreateDqPqRdReadActor(
                 actor.TypeEnv,
                 std::move(settings),
@@ -69,7 +66,7 @@ public:
                 "query_1",
                 0,
                 {},
-                {{"pq", serializedParams}},
+                TVector<NPq::NProto::TDqReadTaskParams>{params},
                 Driver,
                 {},
                 actor.SelfId(),         // computeActorId

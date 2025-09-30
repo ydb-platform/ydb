@@ -32,9 +32,6 @@ public:
             partitioningParams->SetEachTopicPartitionGroupId(0);
             partitioningParams->SetDqPartitionsCount(1);
 
-            TString serializedParams;
-            UNIT_ASSERT(params.SerializeToString(&serializedParams));
-
             TPqGatewayServices pqServices(
                 Driver,
                 nullptr,
@@ -52,15 +49,14 @@ public:
                 "query_1",
                 0,
                 {},
-                {{"pq", serializedParams}},
-                {},
+                {params},
                 Driver,
                 nullptr,
                 actor.SelfId(),
                 actor.GetHolderFactory(),
                 MakeIntrusive<NMonitoring::TDynamicCounters>(),
-                MakeIntrusive<NMonitoring::TDynamicCounters>(),
                 CreatePqNativeGateway(std::move(pqServices)),
+                1,
                 freeSpace
             );
 

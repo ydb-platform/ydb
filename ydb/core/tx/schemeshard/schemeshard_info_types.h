@@ -3499,6 +3499,18 @@ public:
         }
     }
 
+    // Implicitly uses tools/enum_parser to validate enum values O_o
+    // Otherwise we crash during IndexBuildInfo log output on unknown states or build kinds
+    template<class T>
+    static bool isEnumValid(T v) {
+        try {
+            TStringBuilder() << v;
+        } catch (...) {
+            return false;
+        }
+        return true;
+    }
+
     template<class TRow>
     static void FillFromRow(const TRow& row, TIndexBuildInfo* indexInfo) {
         Y_ENSURE(indexInfo); // TODO: pass by ref
@@ -3510,18 +3522,34 @@ public:
         indexInfo->Id = id;
         indexInfo->Uid = uid;
 
-        indexInfo->State = TIndexBuildInfo::EState(
-            row.template GetValue<Schema::IndexBuild::State>());
-        indexInfo->SubState = TIndexBuildInfo::ESubState(
-            row.template GetValueOrDefault<Schema::IndexBuild::SubState>(ui32(TIndexBuildInfo::ESubState::None)));
         indexInfo->Issue =
             row.template GetValueOrDefault<Schema::IndexBuild::Issue>();
+
+        indexInfo->State = TIndexBuildInfo::EState(
+            row.template GetValue<Schema::IndexBuild::State>());
+        if (!isEnumValid(indexInfo->State)) {
+            indexInfo->IsBroken = true;
+            indexInfo->AddIssue(TStringBuilder() << "Unknown build state: " << ui32(indexInfo->State));
+            indexInfo->State = TIndexBuildInfo::EState::Invalid;
+        }
+        indexInfo->SubState = TIndexBuildInfo::ESubState(
+            row.template GetValueOrDefault<Schema::IndexBuild::SubState>(ui32(TIndexBuildInfo::ESubState::None)));
+        if (!isEnumValid(indexInfo->SubState)) {
+            indexInfo->IsBroken = true;
+            indexInfo->AddIssue(TStringBuilder() << "Unknown build sub-state: " << ui32(indexInfo->SubState));
+            indexInfo->SubState = TIndexBuildInfo::ESubState::None;
+        }
 
         // note: please note that here we specify BuildSecondaryIndex as operation default,
         // because previously this table was dedicated for build secondary index operations only.
         indexInfo->BuildKind = TIndexBuildInfo::EBuildKind(
             row.template GetValueOrDefault<Schema::IndexBuild::BuildKind>(
                 ui32(TIndexBuildInfo::EBuildKind::BuildSecondaryIndex)));
+        if (!isEnumValid(indexInfo->BuildKind)) {
+            indexInfo->IsBroken = true;
+            indexInfo->AddIssue(TStringBuilder() << "Unknown build kind: " << ui32(indexInfo->BuildKind));
+            indexInfo->BuildKind = TIndexBuildInfo::EBuildKind::BuildKindUnspecified;
+        }
 
         indexInfo->DomainPathId =
             TPathId(row.template GetValue<Schema::IndexBuild::DomainOwnerId>(),

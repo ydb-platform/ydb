@@ -4,13 +4,13 @@ PY3TEST()
     ENV(YDB_ENABLE_COLUMN_TABLES="true")
 
     TEST_SRCS(
-        order_by_with_limit.py
+        data_read_correctness.py
         tablets_movement.py
         test_cs_many_updates.py
         test_log_scenario.py
-        upgrade_to_internal_path_id.py
-        data_read_correctness.py
         test_overloads.py
+        upgrade_to_internal_path_id.py
+        with_limit.py
         zip_bomb.py
     )
     FORK_SUBTESTS()

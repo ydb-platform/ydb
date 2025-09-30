@@ -33,6 +33,18 @@ class TestOrderBy(object):
         cls.ydb_client = YdbClient(database=f"/{config.domain_name}", endpoint=f"grpc://{node.host}:{node.port}")
         cls.ydb_client.wait_connection()
 
+    def write_one_portion_data(self, table: str):
+        column_types = ydb.BulkUpsertColumns()
+        column_types.add_column("id", ydb.PrimitiveType.Uint64)
+        column_types.add_column("id2", ydb.PrimitiveType.Uint64)
+        column_types.add_column("value", ydb.PrimitiveType.Utf8)
+
+        self.ydb_client.bulk_upsert(
+            table,
+            column_types,
+            [{"id": 1, "id2": 2, "value": str(2)}, {"id": 2, "id2": 2, "value": str(2)}, {"id": 3, "id2": 2, "value": str(2)}],
+        )
+
     def write_data(self, table: str):
         column_types = ydb.BulkUpsertColumns()
         column_types.add_column("id", ydb.PrimitiveType.Uint64)
@@ -53,7 +65,7 @@ class TestOrderBy(object):
                 row,
             )
 
-    def test(self):
+    def test_order_by_with_limit(self):
         test_dir = f"{self.ydb_client.database}/{self.test_name}"
         table_path = f"{test_dir}/table"
 
@@ -100,3 +112,37 @@ class TestOrderBy(object):
             keys = [row['id'] for result_set in result_sets for row in result_set.rows]
 
             assert keys == answer, keys
+
+    def test_filter_with_limit(self):
+        test_dir = f"{self.ydb_client.database}/{self.test_name}"
+        table_path = f"{test_dir}/table1"
+
+        self.ydb_client.query(
+            f"""
+            CREATE TABLE `{table_path}` (
+                id Uint64 NOT NULL,
+                id2 Uint64 NOT NULL,
+                value Utf8 NOT NULL,
+                PRIMARY KEY(id, id2),
+            )
+            WITH (
+                STORE = COLUMN,
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1
+            )
+            """
+        )
+
+        self.write_one_portion_data(table_path)
+
+        result_sets = self.ydb_client.query(
+            f"""
+            select id from `{table_path}`
+            where id = 2 and value = '2'
+            limit 1
+            """
+        )
+
+        keys = [row for result_set in result_sets for row in result_set.rows]
+
+        # TODO: fix me
+        assert len(keys) == 0

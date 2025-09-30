@@ -48,7 +48,7 @@ SEND_WHEN_ALL_GOOD = False  # Whether to send a message when all jobs are workin
 # Each element: [pattern, threshold_hours, display_name]
 WORKFLOW_THRESHOLDS = [
     ["PR-check", 0.5, "PR-check"],
-    ["Postcommit", 3, "Postcommit"],
+    ["Postcommit", 6, "Postcommit"],
     # Example of adding a new type:
     # ["Nightly", 12, "Nightly-Build"]
 ]
@@ -289,17 +289,12 @@ def generate_stuck_jobs_summary(stuck_jobs: List[Dict[str, Any]]) -> List[str]:
     for pattern, threshold_hours, display_name in WORKFLOW_THRESHOLDS:
         count = stuck_counts.get(display_name, 0)
         if count > 0:
-            job_word = "job" if count == 1 else "jobs"
-            have_word = "has" if count == 1 else "have"
-            hour_word = "hour" if threshold_hours == 1 else "hours"
-            descriptions.append(f"⚠️ {display_name} {job_word} {have_word} been in the queue for more than {threshold_hours} {hour_word}! Total: {count} {job_word}.")
+            descriptions.append(f"⚠️ {display_name} job(s) have been in the queue for more than {threshold_hours} hour(s)! Total: {count} job(s).")
     
     # Add Other if any
     other_count = stuck_counts.get('Other', 0)
     if other_count > 0:
-        job_word = "job" if other_count == 1 else "jobs"
-        are_word = "is" if other_count == 1 else "are"
-        descriptions.append(f"⚠️ Other {job_word} {are_word} stuck! Total: {other_count} {job_word}.")
+        descriptions.append(f"⚠️ Other job(s) are stuck! Total: {other_count} job(s).")
     
     return descriptions
 

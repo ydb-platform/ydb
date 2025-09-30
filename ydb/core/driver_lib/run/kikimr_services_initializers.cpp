@@ -2265,7 +2265,7 @@ void TKqpServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setu
             TActorSetupCmd(finalize, TMailboxType::HTSwap, appData->UserPoolId)));
 
         if (appData->FeatureFlags.GetEnableSchemaSecrets()) {
-            auto describeSchemaSecretsService = NKqp::CreateDescribeSchemaSecretsService();
+            auto describeSchemaSecretsService = NKqp::TDescribeSchemaSecretsServiceFactory().CreateService();
             setup->LocalServices.push_back(std::make_pair(
                 NKqp::MakeKqpDescribeSchemaSecretServiceId(NodeId),
                 TActorSetupCmd(describeSchemaSecretsService, TMailboxType::HTSwap, appData->UserPoolId)));

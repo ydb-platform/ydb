@@ -1416,9 +1416,7 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
 
         auto queryClient = kikimr.GetQueryClient();
         {
-            auto status = queryClient
-                              .ExecuteQuery(
-                                  R"(
+            auto status = queryClient.ExecuteQuery(R"(
                     CREATE TABLE IF NOT EXISTS `olap_table` (
                         id Uint64 NOT NULL,
                         message Utf8,
@@ -1439,8 +1437,7 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
         }
 
         {
-            auto status = queryClient
-                              .ExecuteQuery(R"(
+            auto status = queryClient.ExecuteQuery(R"(
                 SELECT id FROM `olap_table`
                 WHERE id = 2 AND message = '2'
                 LIMIT 1;

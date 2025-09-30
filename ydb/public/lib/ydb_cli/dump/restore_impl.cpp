@@ -1203,10 +1203,12 @@ TRestoreResult TRestoreClient::Restore(NScheme::ESchemeEntryType type, const TFs
             if (!delay) {
                 return RestoreView(fsPath, dbRestoreRoot, dbPathRelativeToRestoreRoot, settings);
             }
+            [[fallthrough]];
         case ESchemeEntryType::Replication:
             if (!delay) {
                 return RestoreReplication(fsPath, dbRestoreRoot, dbPathRelativeToRestoreRoot, settings);
             }
+            [[fallthrough]];
         case ESchemeEntryType::Transfer:
             if (!delay) {
                 return RestoreTransfer(fsPath, dbRestoreRoot, dbPathRelativeToRestoreRoot, settings);

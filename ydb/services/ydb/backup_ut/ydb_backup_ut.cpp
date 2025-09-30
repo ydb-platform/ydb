@@ -131,7 +131,7 @@ struct TTransferTestConfig {
     bool ComplexLambda = false;
     bool UseConnectionString = true;
     bool LambdaInsideUsing = false;
-    ui32 BackupRestoreAtteemptsCount = 1;
+    ui32 BackupRestoreAttemptsCount = 1;
 };
 
 }
@@ -1373,7 +1373,7 @@ void TestTransferSettingsArePreserved(
     const TTransferTestConfig& config = {}
 ) {
     UNIT_ASSERT_C(!(config.UseSecret && config.UseUserLogin), "useSecret and useUserLogin options are mutually exclusive");
-    UNIT_ASSERT_C(config.BackupRestoreAtteemptsCount < 10, "backup-restore attempts number must be less than 10");
+    UNIT_ASSERT_C(config.BackupRestoreAttemptsCount < 10, "backup-restore attempts number must be less than 10");
 
     if (config.UseSecret || config.UseUserLogin) {
         ExecuteQuery(session, "CREATE OBJECT `transfer_secret_name` (TYPE SECRET) WITH (value = 'root@builtin');", true);
@@ -1472,7 +1472,7 @@ void TestTransferSettingsArePreserved(
         checkDescription();
 
         cleanBackupFolder();
-    } while (++attempt < config.BackupRestoreAtteemptsCount);
+    } while (++attempt < config.BackupRestoreAttemptsCount);
 }
 
 Ydb::Table::DescribeExternalDataSourceResult DescribeExternalDataSource(TSession& session, const TString& path) {
@@ -2340,7 +2340,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         server.GetRuntime()->GetAppData().FeatureFlags.SetEnableTopicTransfer(true);
         
         const auto endpoint = Sprintf("localhost:%u", server.GetPort());
-        auto driverConfig = TDriverConfig().SetEndpoint(endpoint);
+        auto driverConfig = TDriverConfig().SetEndpoint(endpoint).SetDatabase("/Root");
         if (config.UseSecret || config.UseUserLogin) {
             driverConfig.SetAuthToken("root@builtin");
         }
@@ -2850,7 +2850,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         TestTransferBackupRestore(TTransferTestConfig {
             .UseSecret = true,
             .UseUserLogin = false,
-            .BackupRestoreAtteemptsCount = 3,
+            .BackupRestoreAttemptsCount = 3,
         });
     }
 
@@ -2858,7 +2858,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         TestTransferBackupRestore(TTransferTestConfig {
             .UseSecret = false,
             .UseUserLogin = true,
-            .BackupRestoreAtteemptsCount = 3,
+            .BackupRestoreAttemptsCount = 3,
         });
     }
 
@@ -2866,14 +2866,14 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         TestTransferBackupRestore(TTransferTestConfig {
             .UseSecret = false,
             .UseUserLogin = false,
-            .BackupRestoreAtteemptsCount = 3,
+            .BackupRestoreAttemptsCount = 3,
         });
     }
 
     Y_UNIT_TEST(BackupRestoreTransfer_NoConnectionString) {
         TestTransferBackupRestore(TTransferTestConfig {
             .UseConnectionString = false,
-            .BackupRestoreAtteemptsCount = 3,
+            .BackupRestoreAttemptsCount = 3,
         });
     }
 
@@ -2881,7 +2881,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         TestTransferBackupRestore(TTransferTestConfig {
             .FlushInterval = TDuration::Seconds(1),
             .Replace = true,
-            .BackupRestoreAtteemptsCount = 3,
+            .BackupRestoreAttemptsCount = 3,
         });
     }
 
@@ -2891,7 +2891,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             .FlushInterval = TDuration::Seconds(86399),
             .Replace = false,
             .ComplexLambda = true,
-            .BackupRestoreAtteemptsCount = 3,
+            .BackupRestoreAttemptsCount = 3,
         });
     }
 
@@ -2901,7 +2901,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             .FlushInterval = TDuration::Seconds(5),
             .Replace = true,
             .ComplexLambda = true,
-            .BackupRestoreAtteemptsCount = 3,
+            .BackupRestoreAttemptsCount = 3,
         });
     }
 
@@ -2912,7 +2912,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             .Replace = false,
             .ComplexLambda = true,
             .LambdaInsideUsing = true,
-            .BackupRestoreAtteemptsCount = 3,
+            .BackupRestoreAttemptsCount = 3,
         });
     }
 
@@ -2923,7 +2923,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             .Replace = true,
             .ComplexLambda = true,
             .LambdaInsideUsing = true,
-            .BackupRestoreAtteemptsCount = 3,
+            .BackupRestoreAttemptsCount = 3,
         });
     }
 
@@ -2934,7 +2934,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             .FlushInterval = TDuration::Seconds(86399),
             .Replace =  true,
             .ComplexLambda = true,
-            .BackupRestoreAtteemptsCount = 5,
+            .BackupRestoreAttemptsCount = 5,
         });
     }
 
@@ -2945,7 +2945,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             .FlushInterval = TDuration::Seconds(5),
             .Replace =  false,
             .ComplexLambda = true,
-            .BackupRestoreAtteemptsCount = 5,
+            .BackupRestoreAttemptsCount = 5,
         });
     }
 

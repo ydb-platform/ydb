@@ -59,7 +59,7 @@ Y_UNIT_TEST_SUITE(TFetchRequestTests) {
         TPartitionFetchRequest p2{"Root/PQ/rt3.dc1--topic2", 3, 0, 10000};
         TPartitionFetchRequest pbad{"Root/PQ/rt3.dc1--topic2", 2, 1, 10000};
 
-        TFetchRequestSettings settings{{}, {p1, p2, pbad}, 10000, 10000, {}};
+        TFetchRequestSettings settings{{}, NKikimr::NPQ::CLIENTID_WITHOUT_CONSUMER, {p1, p2, pbad}, 1000, 1000};
         auto fetchId = runtime.Register(CreatePQFetchRequestActor(settings, MakeSchemeCacheID(), edgeId));
         runtime.EnableScheduleForActor(fetchId);
         runtime.DispatchEvents();
@@ -99,7 +99,7 @@ Y_UNIT_TEST_SUITE(TFetchRequestTests) {
         TPartitionFetchRequest p1{"Root/PQ/rt3.dc1--topic1", 1, 1, 10000};
         TPartitionFetchRequest p2{"Root/PQ/rt3.dc1--topic2", 3, 0, 10000};
 
-        TFetchRequestSettings settings{{}, {p1, p2}, 10000, 10000, {}};
+        TFetchRequestSettings settings{{}, NKikimr::NPQ::CLIENTID_WITHOUT_CONSUMER, {p1, p2}, 1000, 1000};
         auto fetchId = runtime.Register(CreatePQFetchRequestActor(settings, MakeSchemeCacheID(), edgeId));
         runtime.EnableScheduleForActor(fetchId);
         
@@ -110,32 +110,56 @@ Y_UNIT_TEST_SUITE(TFetchRequestTests) {
     Y_UNIT_TEST(CheckAccess) {
         auto setup = std::make_shared<TPersQueueYdbSdkTestSetup>(TEST_CASE_NAME);
         auto& runtime = setup->GetRuntime();
+        runtime.SetLogPriority(NKikimrServices::PQ_FETCH_REQUEST, NActors::NLog::EPriority::PRI_DEBUG);
         StartSchemeCache(runtime);
 
         ui32 totalPartitions = 5;
         setup->CreateTopic("topic1", "dc1", totalPartitions);
-        NACLib::TDiffACL acl;
-        acl.AddAccess(NACLib::EAccessType::Allow, NACLib::SelectRow, "user1@staff");
-        setup->GetServer().AnnoyingClient->ModifyACL("/Root/PQ", "rt3.dc1--topic1", acl.SerializeAsString());
 
         auto edgeId = runtime.AllocateEdgeActor();
         TPartitionFetchRequest p1{"Root/PQ/rt3.dc1--topic1", 1, 1, 10000};
-        auto goodToken = MakeIntrusiveConst<NACLib::TUserToken>("user1@staff", TVector<TString>{});
-        auto badToken = MakeIntrusiveConst<NACLib::TUserToken>("bad-user@staff", TVector<TString>{});
-        TFetchRequestSettings settings{{}, {p1}, 10000, 10000, {}, goodToken};
-        auto fetchId = runtime.Register(CreatePQFetchRequestActor(settings, MakeSchemeCacheID(), edgeId));
-        runtime.EnableScheduleForActor(fetchId);
-        
-        auto ev = runtime.GrabEdgeEvent<TEvPQ::TEvFetchResponse>();
-        UNIT_ASSERT_C(ev->Status == Ydb::StatusIds::SUCCESS, ev->Message);
-        settings.User = badToken;
 
-        fetchId = runtime.Register(CreatePQFetchRequestActor(settings, MakeSchemeCacheID(), edgeId));
-        runtime.EnableScheduleForActor(fetchId);
-        
-        ev = runtime.GrabEdgeEvent<TEvPQ::TEvFetchResponse>();
-        UNIT_ASSERT_C(ev->Status == Ydb::StatusIds::UNAUTHORIZED, ev->Message);
+        {
+            NACLib::TDiffACL acl;
+            acl.AddAccess(NACLib::EAccessType::Allow, NACLib::SelectRow, "user1@staff");
+            setup->GetServer().AnnoyingClient->ModifyACL("/Root/PQ", "rt3.dc1--topic1", acl.SerializeAsString());
 
+            auto goodToken = MakeIntrusiveConst<NACLib::TUserToken>("user1@staff", TVector<TString>{});
+            TFetchRequestSettings settings{
+                .Database = {},
+                .Consumer = NKikimr::NPQ::CLIENTID_WITHOUT_CONSUMER,
+                .Partitions = {p1},
+                .MaxWaitTimeMs = 100,
+                .TotalMaxBytes = 10000,
+                .RuPerRequest = false,
+                .UserToken = goodToken
+            };
+
+            auto fetchId = runtime.Register(CreatePQFetchRequestActor(settings, MakeSchemeCacheID(), edgeId));
+            runtime.EnableScheduleForActor(fetchId);
+
+            auto ev = runtime.GrabEdgeEvent<TEvPQ::TEvFetchResponse>();
+            UNIT_ASSERT_C(ev->Status == Ydb::StatusIds::SUCCESS, ev->Message);
+        }
+        
+        {
+            auto badToken = MakeIntrusiveConst<NACLib::TUserToken>("bad-user@staff", TVector<TString>{});
+            TFetchRequestSettings settings{
+                .Database = {},
+                .Consumer = NKikimr::NPQ::CLIENTID_WITHOUT_CONSUMER,
+                .Partitions = {p1},
+                .MaxWaitTimeMs = 100,
+                .TotalMaxBytes = 10000,
+                .RuPerRequest = false,
+                .UserToken = badToken
+            };
+
+            auto fetchId = runtime.Register(CreatePQFetchRequestActor(settings, MakeSchemeCacheID(), edgeId));
+            runtime.EnableScheduleForActor(fetchId);
+            
+            auto ev = runtime.GrabEdgeEvent<TEvPQ::TEvFetchResponse>();
+            UNIT_ASSERT_C(ev->Status == Ydb::StatusIds::UNAUTHORIZED, ev->Message);
+        }
     }
 };
 

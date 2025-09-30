@@ -38,3 +38,9 @@ SELECT * FROM postgresql_datasource.source_table
 ## Экспорт данных {#export}
 
 На данный момент экспорт данных с использованием федеративных запросов поддержан только для S3-совместимых хранилищ, подробнее смотреть в статье [{#T}](s3/write_data.md#export-to-s3).
+
+### Отображение типов при экспорте данных в формат parquet {#type-mapping}
+
+При экспорте данных в формате parquet в {{ ydb-short-name }} используется следующее отображение типов YQL на типы arrow:
+
+{% include [!](_includes/types_mapping.md) %}

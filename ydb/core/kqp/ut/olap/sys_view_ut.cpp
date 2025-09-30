@@ -232,7 +232,6 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
             auto selectQuery = TString(R"(
                 SELECT Sum(Rows) as Rows
                 FROM `/Root/olapStore/olapTable_1/.sys/primary_index_portion_stats`
-                WHERE Activity = 1
             )");
 
             auto rows = ExecuteScanQuery(tableClient, selectQuery);

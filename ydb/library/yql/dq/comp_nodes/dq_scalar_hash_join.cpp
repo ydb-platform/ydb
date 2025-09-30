@@ -1,17 +1,35 @@
 #include "dq_scalar_hash_join.h"
 
+#include <dq_hash_join_table.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders_codegen.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_impl.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
+#include <ranges>
 
 namespace NKikimr::NMiniKQL {
 
 namespace {
+TKeyTypes KeyTypesFromColumns(const std::vector<TType*>& types) {
+    TKeyTypes kt;
+    std::ranges::copy(types | std::views::transform([](TType* type) {
+                          Y_ABORT_UNLESS(type->IsData(), "exepected data type");
+                          return std::pair{*static_cast<const TDataType*>(type)->GetDataSlot(), false};
+                      }), std::back_inserter(kt));
+    return kt;
+}
 
 class TScalarHashJoinState : public TComputationValue<TScalarHashJoinState> {
     using TBase = TComputationValue<TScalarHashJoinState>;
+    IComputationWideFlowNode* BuildSide() const {
+        return RightFinished_ ? nullptr : RightFlow_;
+    }
+
+    IComputationWideFlowNode* ProbeSide() const {
+        return LeftFinished_ ? nullptr : LeftFlow_;
+    }
+
 public:
 
     TScalarHashJoinState(TMemoryUsageInfo* memInfo,
@@ -28,46 +46,79 @@ public:
     ,   RightColumnTypes_(rightColumnTypes)
     ,   Logger_(logger)
     ,   LogComponent_(logComponent)
+    ,   KeyTypes_(KeyTypesFromColumns(leftColumnTypes))
+    ,   Table_(std::ssize(leftColumnTypes), TWideUnboxedEqual{KeyTypes_}, TWideUnboxedHasher{KeyTypes_})
+    
+    ,   Values_(rightColumnTypes.size())
+    ,   Pointers_()
+    ,   Output_()
     {
+        for (int index = 0; index < std::ssize(Values_); ++index) {
+            Pointers_.push_back(&Values_[index]);
+        }
+
         UDF_LOG(Logger_, LogComponent_, NUdf::ELogLevel::Debug, "TScalarHashJoinState created");
     }
 
-    EFetchResult FetchValues(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) {
-        if (!LeftFinished_) {
-            auto result = LeftFlow_->FetchValues(ctx, output);
-            if (result == EFetchResult::One) {
-                return EFetchResult::One;
-            } else if (result == EFetchResult::Finish) {
-                LeftFinished_ = true;
-            } else if (result == EFetchResult::Yield) {
-                return EFetchResult::Yield;
-            }
-        }
+    EFetchResult FetchValues(TComputationContext& ctx, NUdf::TUnboxedValue* const* output) {
+        Cout << "ScalarHashJoin::FetchValues" << Endl;
+        if (auto* buildSide = BuildSide()) {
+            auto res = buildSide->FetchValues(ctx, Pointers_.data());
+            switch (res) {
 
-        if (!RightFinished_) {
-            auto result = RightFlow_->FetchValues(ctx, output);
-            if (result == EFetchResult::One) {
-                return EFetchResult::One;
-            } else if (result == EFetchResult::Finish) {
+            case EFetchResult::Finish: {
+                Table_.Build();
                 RightFinished_ = true;
-            } else if (result == EFetchResult::Yield) {
                 return EFetchResult::Yield;
             }
+            case EFetchResult::Yield: {
+                return EFetchResult::Yield;
+            }
+            case EFetchResult::One: {
+                Table_.Add(Values_);
+                return EFetchResult::Yield;
+            }
+            default:
+                Y_ABORT("unreachable");
+            }
         }
-
-        if (LeftFinished_ && RightFinished_) {
-            return EFetchResult::Finish;
+        if (!Output_.empty()) {
+            Y_ABORT_IF(std::ssize(Output_) < std::ssize(RightColumnTypes_),
+                       "output size must e divisible by columns size");
+            for (int index = 0; index < std::ssize(RightColumnTypes_); ++index) {
+                int myIndex = std::ssize(Output_) - std::ssize(RightColumnTypes_) + index;
+                int theirIndex = index;
+                *output[theirIndex] = Output_[myIndex];
+            }
+            Output_.resize(std::ssize(Output_) - std::ssize(RightColumnTypes_));
+            return EFetchResult::One;
         }
-
-        return EFetchResult::Yield;
+        if (auto* probeSide = ProbeSide()) {
+            auto result = LeftFlow_->FetchValues(ctx, Pointers_.data());
+            switch (result) {
+            case EFetchResult::Finish: {
+                LeftFinished_ = true;
+                return EFetchResult::Finish;
+            }
+            case EFetchResult::Yield: {
+                return EFetchResult::Yield;
+            }
+            case EFetchResult::One: {
+                Table_.Lookup(Values_.data(), [this](NJoinTable::TTuple matched) {
+                    std::copy(matched, matched + std::ssize(Values_), std::back_inserter(Output_));
+                });
+                return EFetchResult::Yield;
+            }
+            default:
+                Y_ABORT("unreachable");
+            }
+        }
+        Y_ABORT("unreachable");
     }
 
 private:
     IComputationWideFlowNode* const LeftFlow_;
     IComputationWideFlowNode* const RightFlow_;
-
-    bool LeftFinished_ = false;
-    bool RightFinished_ = false;
 
     const std::vector<ui32> LeftKeyColumns_;
     const std::vector<ui32> RightKeyColumns_;
@@ -76,6 +127,13 @@ private:
 
     const NUdf::TLoggerPtr Logger_;
     const NUdf::TLogComponentId LogComponent_;
+    const TKeyTypes KeyTypes_;
+    bool LeftFinished_ = false;
+    bool RightFinished_ = false;
+    NJoinTable::TStdJoinTable Table_;
+    std::vector<NUdf::TUnboxedValue> Values_;
+    std::vector<NUdf::TUnboxedValue*> Pointers_;
+    std::vector<NUdf::TUnboxedValue> Output_;
 };
 
 class TScalarHashJoinWrapper : public TStatefulWideFlowComputationNode<TScalarHashJoinWrapper> {

@@ -32,7 +32,6 @@ class TStdJoinTable {
     }
 
     void Lookup(TTuple key, std::function<void(TTuple)> produce) const {
-        Y_ABORT_IF(BuiltTable.empty(), "call Build first");
         auto it = BuiltTable.find(key);
         if (it != BuiltTable.end()) {
             std::ranges::for_each(it->second, produce);

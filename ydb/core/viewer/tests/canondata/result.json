@@ -72,6 +72,24 @@
                             "ydb.generic.manage"
                         ],
                         "subject": "DATABASE-ADMINS"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.generic.read"
+                        ],
+                        "subject": "database"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.generic.read"
+                        ],
+                        "subject": "viewer"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.generic.read"
+                        ],
+                        "subject": "monitoring"
                     }
                 ],
                 "name": "TestAsyncReplication",
@@ -156,18 +174,23 @@
                         "plan_step": "not-zero-number-text",
                         "tx_id": "not-zero-number-text"
                     },
-                    "name": ".sys",
-                    "owner": "metadata@system",
-                    "type": "DIRECTORY"
+                    "name": "table1",
+                    "owner": "root@builtin",
+                    "type": "TABLE"
                 },
                 {
                     "created_at": {
                         "plan_step": "not-zero-number-text",
                         "tx_id": "not-zero-number-text"
                     },
-                    "name": "table1",
+                    "name": "topic1",
                     "owner": "root@builtin",
-                    "type": "TABLE"
+                    "type": "TOPIC"
+                },
+                {
+                    "created_at": {},
+                    "name": ".sys",
+                    "type": "DIRECTORY"
                 }
             ],
             "self": {
@@ -221,10 +244,48 @@
                             "ydb.generic.manage"
                         ],
                         "subject": "DATABASE-ADMINS"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.generic.read"
+                        ],
+                        "subject": "database"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.generic.read"
+                        ],
+                        "subject": "viewer"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.generic.read"
+                        ],
+                        "subject": "monitoring"
                     }
                 ],
                 "name": "Root/dedicated_db",
-                "owner": "root",
+                "owner": "user1",
+                "permissions": [
+                    {
+                        "permission_names": [
+                            "ydb.generic.read"
+                        ],
+                        "subject": "database"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.generic.read"
+                        ],
+                        "subject": "viewer"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.generic.read"
+                        ],
+                        "subject": "monitoring"
+                    }
+                ],
                 "type": "DATABASE"
             }
         },
@@ -248,15 +309,6 @@
                         "plan_step": "not-zero-number-text",
                         "tx_id": "not-zero-number-text"
                     },
-                    "name": ".sys",
-                    "owner": "metadata@system",
-                    "type": "DIRECTORY"
-                },
-                {
-                    "created_at": {
-                        "plan_step": "not-zero-number-text",
-                        "tx_id": "not-zero-number-text"
-                    },
                     "name": "table1",
                     "owner": "root@builtin",
                     "type": "TABLE"
@@ -268,6 +320,20 @@
                     },
                     "name": "test_dir",
                     "owner": "root@builtin",
+                    "type": "DIRECTORY"
+                },
+                {
+                    "created_at": {
+                        "plan_step": "not-zero-number-text",
+                        "tx_id": "not-zero-number-text"
+                    },
+                    "name": "topic1",
+                    "owner": "root@builtin",
+                    "type": "TOPIC"
+                },
+                {
+                    "created_at": {},
+                    "name": ".sys",
                     "type": "DIRECTORY"
                 }
             ],
@@ -322,10 +388,48 @@
                             "ydb.generic.manage"
                         ],
                         "subject": "DATABASE-ADMINS"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.generic.read"
+                        ],
+                        "subject": "database"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.generic.read"
+                        ],
+                        "subject": "viewer"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.generic.read"
+                        ],
+                        "subject": "monitoring"
                     }
                 ],
                 "name": "Root/dedicated_db",
-                "owner": "root",
+                "owner": "user1",
+                "permissions": [
+                    {
+                        "permission_names": [
+                            "ydb.generic.read"
+                        ],
+                        "subject": "database"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.generic.read"
+                        ],
+                        "subject": "viewer"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.generic.read"
+                        ],
+                        "subject": "monitoring"
+                    }
+                ],
                 "type": "DATABASE"
             }
         },
@@ -349,18 +453,23 @@
                         "plan_step": "not-zero-number-text",
                         "tx_id": "not-zero-number-text"
                     },
-                    "name": ".sys",
-                    "owner": "metadata@system",
-                    "type": "DIRECTORY"
+                    "name": "table1",
+                    "owner": "root@builtin",
+                    "type": "TABLE"
                 },
                 {
                     "created_at": {
                         "plan_step": "not-zero-number-text",
                         "tx_id": "not-zero-number-text"
                     },
-                    "name": "table1",
+                    "name": "topic1",
                     "owner": "root@builtin",
-                    "type": "TABLE"
+                    "type": "TOPIC"
+                },
+                {
+                    "created_at": {},
+                    "name": ".sys",
+                    "type": "DIRECTORY"
                 }
             ],
             "self": {
@@ -414,10 +523,48 @@
                             "ydb.generic.manage"
                         ],
                         "subject": "DATABASE-ADMINS"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.generic.read"
+                        ],
+                        "subject": "database"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.generic.read"
+                        ],
+                        "subject": "viewer"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.generic.read"
+                        ],
+                        "subject": "monitoring"
                     }
                 ],
                 "name": "Root/dedicated_db",
-                "owner": "root",
+                "owner": "user1",
+                "permissions": [
+                    {
+                        "permission_names": [
+                            "ydb.generic.read"
+                        ],
+                        "subject": "database"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.generic.read"
+                        ],
+                        "subject": "viewer"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.generic.read"
+                        ],
+                        "subject": "monitoring"
+                    }
+                ],
                 "type": "DATABASE"
             }
         }
@@ -1194,18 +1341,6 @@
                     "StorageSize": 9,
                     "TimestampDiff": "number",
                     "WriteTimestamp": "not-zero-number"
-                },
-                {
-                    "Codec": 0,
-                    "CreateTimestamp": "not-zero-number",
-                    "Message": "bWVzc2FnZS0z",
-                    "Offset": 3,
-                    "OriginalSize": 9,
-                    "ProducerId": "not-zero-number-text",
-                    "SeqNo": 4,
-                    "StorageSize": 9,
-                    "TimestampDiff": "number",
-                    "WriteTimestamp": "not-zero-number"
                 }
             ],
             "StartOffset": 0,
@@ -1442,6 +1577,24 @@
                             "ydb.generic.manage"
                         ],
                         "subject": "DATABASE-ADMINS"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.generic.read"
+                        ],
+                        "subject": "database"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.generic.read"
+                        ],
+                        "subject": "viewer"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.generic.read"
+                        ],
+                        "subject": "monitoring"
                     }
                 ],
                 "name": "TestTransfer",
@@ -1517,8 +1670,7 @@
                             "CreateTable",
                             "CreateQueue",
                             "RemoveSchema",
-                            "AlterSchema",
-                            "WriteUserAttributes"
+                            "AlterSchema"
                         ],
                         "AccessType": "Allow",
                         "InheritanceType": [
@@ -1598,8 +1750,7 @@
                             "CreateTable",
                             "CreateQueue",
                             "RemoveSchema",
-                            "AlterSchema",
-                            "WriteUserAttributes"
+                            "AlterSchema"
                         ],
                         "AccessType": "Allow",
                         "InheritanceType": [
@@ -1685,8 +1836,7 @@
                             "CreateTable",
                             "CreateQueue",
                             "RemoveSchema",
-                            "AlterSchema",
-                            "WriteUserAttributes"
+                            "AlterSchema"
                         ],
                         "AccessType": "Allow",
                         "InheritanceType": [
@@ -1766,8 +1916,7 @@
                             "CreateTable",
                             "CreateQueue",
                             "RemoveSchema",
-                            "AlterSchema",
-                            "WriteUserAttributes"
+                            "AlterSchema"
                         ],
                         "AccessType": "Allow",
                         "InheritanceType": [
@@ -1853,8 +2002,7 @@
                             "CreateTable",
                             "CreateQueue",
                             "RemoveSchema",
-                            "AlterSchema",
-                            "WriteUserAttributes"
+                            "AlterSchema"
                         ],
                         "AccessType": "Allow",
                         "InheritanceType": [
@@ -1934,8 +2082,7 @@
                             "CreateTable",
                             "CreateQueue",
                             "RemoveSchema",
-                            "AlterSchema",
-                            "WriteUserAttributes"
+                            "AlterSchema"
                         ],
                         "AccessType": "Allow",
                         "InheritanceType": [
@@ -2021,8 +2168,7 @@
                             "CreateTable",
                             "CreateQueue",
                             "RemoveSchema",
-                            "AlterSchema",
-                            "WriteUserAttributes"
+                            "AlterSchema"
                         ],
                         "AccessType": "Allow",
                         "InheritanceType": [
@@ -2102,8 +2248,7 @@
                             "CreateTable",
                             "CreateQueue",
                             "RemoveSchema",
-                            "AlterSchema",
-                            "WriteUserAttributes"
+                            "AlterSchema"
                         ],
                         "AccessType": "Allow",
                         "InheritanceType": [
@@ -2189,8 +2334,7 @@
                             "CreateTable",
                             "CreateQueue",
                             "RemoveSchema",
-                            "AlterSchema",
-                            "WriteUserAttributes"
+                            "AlterSchema"
                         ],
                         "AccessType": "Allow",
                         "InheritanceType": [
@@ -2270,8 +2414,7 @@
                             "CreateTable",
                             "CreateQueue",
                             "RemoveSchema",
-                            "AlterSchema",
-                            "WriteUserAttributes"
+                            "AlterSchema"
                         ],
                         "AccessType": "Allow",
                         "InheritanceType": [
@@ -2321,6 +2464,42 @@
                         "InheritanceType": [
                             "Inherit"
                         ],
+                        "Subject": "database"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "viewer"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "monitoring"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
                         "Subject": "user1"
                     }
                 ],
@@ -2374,8 +2553,7 @@
                             "CreateTable",
                             "CreateQueue",
                             "RemoveSchema",
-                            "AlterSchema",
-                            "WriteUserAttributes"
+                            "AlterSchema"
                         ],
                         "AccessType": "Allow",
                         "InheritanceType": [
@@ -2414,6 +2592,42 @@
                         "InheritanceType": [
                             "Inherit"
                         ],
+                        "Subject": "database"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "viewer"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "monitoring"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
                         "Subject": "user1"
                     }
                 ],
@@ -2424,6 +2638,44 @@
         {},
         {
             "Common": {
+                "ACL": [
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "database"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "viewer"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "monitoring"
+                    }
+                ],
                 "EffectiveACL": [
                     {
                         "AccessRights": [
@@ -2474,8 +2726,7 @@
                             "CreateTable",
                             "CreateQueue",
                             "RemoveSchema",
-                            "AlterSchema",
-                            "WriteUserAttributes"
+                            "AlterSchema"
                         ],
                         "AccessType": "Allow",
                         "InheritanceType": [
@@ -2503,6 +2754,42 @@
                             "Inherit"
                         ],
                         "Subject": "DATABASE-ADMINS"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "database"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "viewer"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "monitoring"
                     }
                 ],
                 "Owner": "root",
@@ -2512,6 +2799,44 @@
         {},
         {
             "Common": {
+                "ACL": [
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "database"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "viewer"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "monitoring"
+                    }
+                ],
                 "EffectiveACL": [
                     {
                         "AccessRights": [
@@ -2562,8 +2887,7 @@
                             "CreateTable",
                             "CreateQueue",
                             "RemoveSchema",
-                            "AlterSchema",
-                            "WriteUserAttributes"
+                            "AlterSchema"
                         ],
                         "AccessType": "Allow",
                         "InheritanceType": [
@@ -2591,6 +2915,42 @@
                             "Inherit"
                         ],
                         "Subject": "DATABASE-ADMINS"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "database"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "viewer"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "monitoring"
                     }
                 ],
                 "Owner": "user1",
@@ -2602,10 +2962,6 @@
         "/Root": {
             "Result": {
                 "Entities": [
-                    {
-                        "Name": ".sys",
-                        "Type": "dir"
-                    },
                     {
                         "Name": ".metadata",
                         "Type": "dir"
@@ -2623,7 +2979,7 @@
                         "Type": "ext_sub_domain"
                     }
                 ],
-                "Total": 5
+                "Total": 4
             },
             "Success": true,
             "Version": 2
@@ -2632,10 +2988,6 @@
             "Result": {
                 "Entities": [
                     {
-                        "Name": ".sys",
-                        "Type": "dir"
-                    },
-                    {
                         "Name": "table1",
                         "Type": "table"
                     },
@@ -2644,7 +2996,7 @@
                         "Type": "dir"
                     }
                 ],
-                "Total": 3
+                "Total": 2
             },
             "Success": true,
             "Version": 2
@@ -2653,15 +3005,11 @@
             "Result": {
                 "Entities": [
                     {
-                        "Name": ".sys",
-                        "Type": "dir"
-                    },
-                    {
                         "Name": "table1",
                         "Type": "table"
                     }
                 ],
-                "Total": 2
+                "Total": 1
             },
             "Success": true,
             "Version": 2
@@ -2669,10 +3017,6 @@
         "/Root/shared_db": {
             "Result": {
                 "Entities": [
-                    {
-                        "Name": ".sys",
-                        "Type": "dir"
-                    },
                     {
                         "Name": "table1",
                         "Type": "table"
@@ -2682,7 +3026,7 @@
                         "Type": "dir"
                     }
                 ],
-                "Total": 3
+                "Total": 2
             },
             "Success": true,
             "Version": 2
@@ -2936,20 +3280,6 @@
                     },
                     {
                         "ACL": "",
-                        "ChildrenExist": true,
-                        "CreateFinished": true,
-                        "CreateStep": "not-zero-number-text",
-                        "CreateTxId": "not-zero-number-text",
-                        "Name": ".sys",
-                        "Owner": "metadata@system",
-                        "ParentPathId": "1",
-                        "PathId": "not-zero-number-text",
-                        "PathState": 2,
-                        "PathType": 1,
-                        "SchemeshardId": "72057594046678944"
-                    },
-                    {
-                        "ACL": "",
                         "CreateFinished": true,
                         "CreateStep": "not-zero-number-text",
                         "CreateTxId": "not-zero-number-text",
@@ -2986,6 +3316,14 @@
                         "PathState": 2,
                         "PathType": 10,
                         "SchemeshardId": "72057594046678944"
+                    },
+                    {
+                        "CreateFinished": true,
+                        "CreateStep": "0",
+                        "CreateTxId": "0",
+                        "Name": ".sys",
+                        "PathType": 1,
+                        "SchemeshardId": "72057594046678944"
                     }
                 ],
                 "DomainDescription": {
@@ -2997,7 +3335,7 @@
                     "PQPartitionsInside": "0",
                     "PQPartitionsLimit": "1000000",
                     "PathId_Depricated": "1",
-                    "PathsInside": "42",
+                    "PathsInside": "7",
                     "PathsLimit": "10000",
                     "ProcessingParams": {
                         "Coordinators": [
@@ -3146,7 +3484,7 @@
                     "PathState": 2,
                     "PathSubType": 0,
                     "PathType": 1,
-                    "PathVersion": "19",
+                    "PathVersion": "16",
                     "SchemeshardId": "72057594046678944"
                 }
             },
@@ -3176,20 +3514,6 @@
                     },
                     {
                         "ACL": "",
-                        "ChildrenExist": true,
-                        "CreateFinished": true,
-                        "CreateStep": "not-zero-number-text",
-                        "CreateTxId": "not-zero-number-text",
-                        "Name": ".sys",
-                        "Owner": "metadata@system",
-                        "ParentPathId": "1",
-                        "PathId": "not-zero-number-text",
-                        "PathState": 2,
-                        "PathType": 1,
-                        "SchemeshardId": "72075186224037897"
-                    },
-                    {
-                        "ACL": "",
                         "ChildrenExist": false,
                         "CreateFinished": true,
                         "CreateStep": "not-zero-number-text",
@@ -3201,6 +3525,14 @@
                         "PathState": 3,
                         "PathType": 2,
                         "SchemeshardId": "72075186224037897"
+                    },
+                    {
+                        "CreateFinished": true,
+                        "CreateStep": "0",
+                        "CreateTxId": "0",
+                        "Name": ".sys",
+                        "PathType": 1,
+                        "SchemeshardId": "72075186224037897"
                     }
                 ],
                 "DomainDescription": {
@@ -3211,8 +3543,8 @@
                     },
                     "PQPartitionsInside": "0",
                     "PQPartitionsLimit": "1000000",
-                    "PathId_Depricated": "41",
-                    "PathsInside": "34",
+                    "PathId_Depricated": "6",
+                    "PathsInside": "5",
                     "PathsLimit": "10000",
                     "ProcessingParams": {
                         "Coordinators": [
@@ -3270,7 +3602,7 @@
                     ]
                 },
                 "Self": {
-                    "ACL": "",
+                    "ACL": "text",
                     "CreateFinished": true,
                     "CreateStep": "0",
                     "CreateTxId": "not-zero-number-text",
@@ -3282,7 +3614,7 @@
                     "PathState": 2,
                     "PathSubType": 0,
                     "PathType": 4,
-                    "PathVersion": "13",
+                    "PathVersion": "16",
                     "SchemeshardId": "72075186224037897"
                 }
             },
@@ -3298,20 +3630,6 @@
                 "Children": [
                     {
                         "ACL": "",
-                        "ChildrenExist": true,
-                        "CreateFinished": true,
-                        "CreateStep": "not-zero-number-text",
-                        "CreateTxId": "not-zero-number-text",
-                        "Name": ".sys",
-                        "Owner": "metadata@system",
-                        "ParentPathId": "1",
-                        "PathId": "not-zero-number-text",
-                        "PathState": 2,
-                        "PathType": 1,
-                        "SchemeshardId": "72075186224038899"
-                    },
-                    {
-                        "ACL": "",
                         "ChildrenExist": false,
                         "CreateFinished": true,
                         "CreateStep": "not-zero-number-text",
@@ -3323,6 +3641,14 @@
                         "PathState": 3,
                         "PathType": 2,
                         "SchemeshardId": "72075186224038899"
+                    },
+                    {
+                        "CreateFinished": true,
+                        "CreateStep": "0",
+                        "CreateTxId": "0",
+                        "Name": ".sys",
+                        "PathType": 1,
+                        "SchemeshardId": "72075186224038899"
                     }
                 ],
                 "DomainDescription": {
@@ -3333,8 +3659,8 @@
                     },
                     "PQPartitionsInside": "0",
                     "PQPartitionsLimit": "1000000",
-                    "PathId_Depricated": "43",
-                    "PathsInside": "30",
+                    "PathId_Depricated": "8",
+                    "PathsInside": "1",
                     "PathsLimit": "10000",
                     "ProcessingParams": {
                         "Coordinators": [
@@ -3402,7 +3728,7 @@
                     "PathState": 2,
                     "PathSubType": 0,
                     "PathType": 4,
-                    "PathVersion": "9",
+                    "PathVersion": "6",
                     "SchemeshardId": "72075186224038899"
                 }
             },
@@ -3432,20 +3758,6 @@
                     },
                     {
                         "ACL": "",
-                        "ChildrenExist": true,
-                        "CreateFinished": true,
-                        "CreateStep": "not-zero-number-text",
-                        "CreateTxId": "not-zero-number-text",
-                        "Name": ".sys",
-                        "Owner": "metadata@system",
-                        "ParentPathId": "1",
-                        "PathId": "not-zero-number-text",
-                        "PathState": 2,
-                        "PathType": 1,
-                        "SchemeshardId": "72075186224038898"
-                    },
-                    {
-                        "ACL": "",
                         "ChildrenExist": false,
                         "CreateFinished": true,
                         "CreateStep": "not-zero-number-text",
@@ -3457,6 +3769,14 @@
                         "PathState": 3,
                         "PathType": 2,
                         "SchemeshardId": "72075186224038898"
+                    },
+                    {
+                        "CreateFinished": true,
+                        "CreateStep": "0",
+                        "CreateTxId": "0",
+                        "Name": ".sys",
+                        "PathType": 1,
+                        "SchemeshardId": "72075186224038898"
                     }
                 ],
                 "DomainDescription": {
@@ -3467,8 +3787,8 @@
                     },
                     "PQPartitionsInside": "0",
                     "PQPartitionsLimit": "1000000",
-                    "PathId_Depricated": "42",
-                    "PathsInside": "34",
+                    "PathId_Depricated": "7",
+                    "PathsInside": "5",
                     "PathsLimit": "10000",
                     "ProcessingParams": {
                         "Coordinators": [
@@ -3538,7 +3858,7 @@
                     "PathState": 2,
                     "PathSubType": 0,
                     "PathType": 4,
-                    "PathVersion": "13",
+                    "PathVersion": "10",
                     "SchemeshardId": "72075186224038898"
                 }
             },
@@ -4288,7 +4608,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "41"
+                                "X2": "6"
                             },
                             "Utilization": "number"
                         },
@@ -4305,7 +4625,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "42"
+                                "X2": "7"
                             },
                             "Utilization": "number"
                         }
@@ -4653,7 +4973,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "42"
+                                "X2": "7"
                             },
                             "Utilization": "number"
                         }
@@ -4677,7 +4997,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "41"
+                                "X2": "6"
                             },
                             "Utilization": "number"
                         },
@@ -4694,7 +5014,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "41"
+                                "X2": "6"
                             },
                             "Utilization": "number"
                         }
@@ -4859,7 +5179,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "41"
+                                "X2": "6"
                             },
                             "Utilization": "number"
                         }
@@ -4883,7 +5203,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "42"
+                                "X2": "7"
                             },
                             "Utilization": "number"
                         },
@@ -4900,7 +5220,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "42"
+                                "X2": "7"
                             },
                             "Utilization": "number"
                         }
@@ -5055,7 +5375,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "41"
+                                "X2": "6"
                             },
                             "Utilization": "number"
                         }
@@ -5079,7 +5399,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "42"
+                                "X2": "7"
                             },
                             "Utilization": "number"
                         },
@@ -5096,7 +5416,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "42"
+                                "X2": "7"
                             },
                             "Utilization": "number"
                         }
@@ -5265,7 +5585,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "41"
+                                "X2": "6"
                             },
                             "Utilization": "number"
                         },
@@ -5282,7 +5602,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "42"
+                                "X2": "7"
                             },
                             "Utilization": "number"
                         }
@@ -5672,7 +5992,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "41"
+                                "X2": "6"
                             },
                             "Utilization": "number"
                         }
@@ -5696,7 +6016,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "42"
+                                "X2": "7"
                             },
                             "Utilization": "number"
                         },
@@ -5713,7 +6033,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "42"
+                                "X2": "7"
                             },
                             "Utilization": "number"
                         }
@@ -5868,7 +6188,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "42"
+                                "X2": "7"
                             },
                             "Utilization": "number"
                         }
@@ -5892,7 +6212,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "41"
+                                "X2": "6"
                             },
                             "Utilization": "number"
                         },
@@ -5909,7 +6229,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "41"
+                                "X2": "6"
                             },
                             "Utilization": "number"
                         }
@@ -7674,7 +7994,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "41"
+                                "X2": "6"
                             },
                             "Utilization": "number"
                         },
@@ -7691,7 +8011,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "42"
+                                "X2": "7"
                             },
                             "Utilization": "number"
                         }
@@ -8043,7 +8363,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "41"
+                                "X2": "6"
                             },
                             "Utilization": "number"
                         },
@@ -8060,7 +8380,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "42"
+                                "X2": "7"
                             },
                             "Utilization": "number"
                         }
@@ -8412,7 +8732,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "41"
+                                "X2": "6"
                             },
                             "Utilization": "number"
                         },
@@ -8429,7 +8749,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "42"
+                                "X2": "7"
                             },
                             "Utilization": "number"
                         }
@@ -8781,7 +9101,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "41"
+                                "X2": "6"
                             },
                             "Utilization": "number"
                         },
@@ -8798,7 +9118,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "42"
+                                "X2": "7"
                             },
                             "Utilization": "number"
                         }
@@ -9150,7 +9470,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "41"
+                                "X2": "6"
                             },
                             "Utilization": "number"
                         },
@@ -9167,7 +9487,7 @@
                             "PingTimeUs": "text",
                             "ScopeId": {
                                 "X1": "72057594046678944",
-                                "X2": "42"
+                                "X2": "7"
                             },
                             "Utilization": "number"
                         }
@@ -11156,7 +11476,7 @@
                 "CoresTotal": "not-zero-number",
                 "CoresUsed": "not-zero-number",
                 "DatabaseQuotas": {},
-                "Id": "41",
+                "Id": "6",
                 "MemoryLimit": "not-zero-number-text",
                 "MemoryStats": {},
                 "Metrics": "not-empty-object",
@@ -11223,12 +11543,12 @@
             {
                 "CoresUsed": "not-zero-number",
                 "DatabaseQuotas": {},
-                "Id": "43",
+                "Id": "8",
                 "Metrics": "not-empty-object",
                 "Name": "/Root/serverless_db",
                 "Overall": "Green",
                 "Owner": "root",
-                "ResourceId": "42",
+                "ResourceId": "7",
                 "State": "RUNNING",
                 "StateStats": [
                     {
@@ -11243,7 +11563,7 @@
                 "CoresTotal": "not-zero-number",
                 "CoresUsed": "not-zero-number",
                 "DatabaseQuotas": {},
-                "Id": "42",
+                "Id": "7",
                 "MemoryLimit": "not-zero-number-text",
                 "MemoryStats": {},
                 "Metrics": "not-empty-object",
@@ -11361,7 +11681,7 @@
                     "CoresTotal": "not-zero-number",
                     "CoresUsed": "not-zero-number",
                     "DatabaseQuotas": {},
-                    "Id": "41",
+                    "Id": "6",
                     "MemoryLimit": "not-zero-number-text",
                     "MemoryStats": {},
                     "Metrics": "not-empty-object",
@@ -11432,11 +11752,11 @@
                 {
                     "CoresUsed": "not-zero-number",
                     "DatabaseQuotas": {},
-                    "Id": "43",
+                    "Id": "8",
                     "Metrics": "not-empty-object",
                     "Name": "/Root/serverless_db",
                     "Owner": "root",
-                    "ResourceId": "42",
+                    "ResourceId": "7",
                     "State": "RUNNING",
                     "StateStats": [
                         {
@@ -11455,7 +11775,7 @@
                     "CoresTotal": "not-zero-number",
                     "CoresUsed": "not-zero-number",
                     "DatabaseQuotas": {},
-                    "Id": "42",
+                    "Id": "7",
                     "MemoryLimit": "not-zero-number-text",
                     "MemoryStats": {},
                     "Metrics": "not-empty-object",
@@ -11568,7 +11888,7 @@
                     "CoresTotal": "not-zero-number",
                     "CoresUsed": "not-zero-number",
                     "DatabaseQuotas": {},
-                    "Id": "41",
+                    "Id": "6",
                     "MemoryLimit": "not-zero-number-text",
                     "MemoryStats": {},
                     "Metrics": "not-empty-object",
@@ -11635,12 +11955,12 @@
                 {
                     "CoresUsed": "not-zero-number",
                     "DatabaseQuotas": {},
-                    "Id": "43",
+                    "Id": "8",
                     "Metrics": "not-empty-object",
                     "Name": "/Root/serverless_db",
                     "Overall": "Green",
                     "Owner": "root",
-                    "ResourceId": "42",
+                    "ResourceId": "7",
                     "State": "RUNNING",
                     "StateStats": [
                         {
@@ -11655,7 +11975,7 @@
                     "CoresTotal": "not-zero-number",
                     "CoresUsed": "not-zero-number",
                     "DatabaseQuotas": {},
-                    "Id": "42",
+                    "Id": "7",
                     "MemoryLimit": "not-zero-number-text",
                     "MemoryStats": {},
                     "Metrics": "not-empty-object",

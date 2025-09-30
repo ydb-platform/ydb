@@ -48,7 +48,6 @@ public:
     ,   LogComponent_(logComponent)
     ,   KeyTypes_(KeyTypesFromColumns(leftColumnTypes))
     ,   Table_(std::ssize(leftColumnTypes), TWideUnboxedEqual{KeyTypes_}, TWideUnboxedHasher{KeyTypes_})
-    
     ,   Values_(rightColumnTypes.size())
     ,   Pointers_()
     ,   Output_()

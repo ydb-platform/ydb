@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 import time
 
 # Константы
-TAIL_MESSAGE = "📊 [Подробности на дашборде](https://datalens.yandex/wkptiaeyxz7qj?tab=ka)\n\nFYI: @KirLynx"
+TAIL_MESSAGE = "📊 [Dashboard details](https://datalens.yandex/wkptiaeyxz7qj?tab=ka)\n\nFYI: @KirLynx"
 
 # Настройки фильтрации
 MAX_AGE_DAYS = 3  # Максимальный возраст jobs в днях (исключаем баги GitHub)
@@ -160,16 +160,16 @@ def analyze_queued_workflows(workflow_runs: List[Dict[str, Any]]) -> Dict[str, D
 
 def format_time_ago(created_at: datetime) -> str:
     """
-    Форматирует время в удобочитаемый вид "X минут/часов/дней назад".
+    Formats time into a human-readable format "X minutes/hours/days ago".
     
     Args:
-        created_at: Время создания
+        created_at: Creation time
     
     Returns:
-        Строка с описанием времени
+        String with time description
     """
     if created_at is None:
-        return "Неизвестно"
+        return "Unknown"
     
     current_time = datetime.now(timezone.utc)
     time_diff = current_time - created_at
@@ -177,16 +177,16 @@ def format_time_ago(created_at: datetime) -> str:
     total_seconds = time_diff.total_seconds()
     
     if total_seconds < 60:
-        return f"{int(total_seconds)} сек"
+        return f"{int(total_seconds)}s"
     elif total_seconds < 3600:
         minutes = total_seconds / 60
-        return f"{minutes:.1f} мин"
+        return f"{minutes:.1f}m"
     elif total_seconds < 86400:
         hours = total_seconds / 3600
-        return f"{hours:.1f} ч"
+        return f"{hours:.1f}h"
     else:
         days = total_seconds / 86400
-        return f"{days:.1f} дн"
+        return f"{days:.1f}d"
 
 def filter_old_jobs(workflow_runs: List[Dict[str, Any]], max_age_days: int = None) -> List[Dict[str, Any]]:
     """
@@ -329,41 +329,41 @@ def format_telegram_messages(workflow_info: Dict[str, Dict[str, Any]], stuck_job
     # Первое сообщение - общая статистика
     message1_parts = []
     
-    # Заголовок
+    # Header
     if stuck_jobs:
-        message1_parts.append("🚨 *МОНИТОРИНГ GITHUB ACTIONS*")
-        message1_parts.append("⚠️ *Обнаружены застрявшие jobs!*")
+        message1_parts.append("🚨 *GITHUB ACTIONS MONITORING*")
+        message1_parts.append("⚠️ *Stuck jobs detected!*")
     else:
-        message1_parts.append("✅ *МОНИТОРИНГ GITHUB ACTIONS*")
-        message1_parts.append("Все jobs в очереди работают нормально")
+        message1_parts.append("✅ *GITHUB ACTIONS MONITORING*")
+        message1_parts.append("All jobs in the queue are working normally")
     
     message1_parts.append("")
     
-    # Общая статистика
-    message1_parts.append(f"📊 *Статистика:*")
-    message1_parts.append(f"• Всего в очереди: {total_queued} jobs")
+    # General statistics
+    message1_parts.append(f"📊 *Statistics:*")
+    message1_parts.append(f"• Total in queue: {total_queued} jobs")
     
     # Статистика застрявших jobs по типам
     stuck_counts = count_stuck_jobs_by_type(stuck_jobs)
     total_stuck = sum(stuck_counts.values())
     
     if total_stuck > 0:
-        # Показываем детальную статистику по типам
+        # Show detailed statistics by types
         for pattern, threshold_hours, display_name in WORKFLOW_THRESHOLDS:
             if stuck_counts[display_name] > 0:
-                message1_parts.append(f"• Застрявших {display_name} (>{threshold_hours}ч): {stuck_counts[display_name]}")
+                message1_parts.append(f"• Stuck {display_name} (>{threshold_hours}h): {stuck_counts[display_name]}")
         if stuck_counts['Other'] > 0:
-            message1_parts.append(f"• Застрявших Other: {stuck_counts['Other']}")
+            message1_parts.append(f"• Stuck Other: {stuck_counts['Other']}")
     else:
-        message1_parts.append(f"• Застрявших: 0")
+        message1_parts.append(f"• Stuck: 0")
     
     if excluded_count > 0:
-        message1_parts.append(f"• Исключено (>3дн): {excluded_count} jobs")
+        message1_parts.append(f"• Excluded (>3d): {excluded_count} jobs")
     message1_parts.append("")
     
-    # Сводка по типам workflow
+    # Summary by workflow types
     if workflow_info:
-        message1_parts.append("📋 *По типам workflow:*")
+        message1_parts.append("📋 *By workflow types:*")
         
         # Сначала показываем типы из WORKFLOW_THRESHOLDS
         threshold_workflows = []
@@ -390,23 +390,23 @@ def format_telegram_messages(workflow_info: Dict[str, Dict[str, Any]], stuck_job
             count = info['count']
             oldest_time = info['oldest_created_at']
             time_ago = format_time_ago(oldest_time)
-            message1_parts.append(f"• `{workflow_name}`: {count} jobs (старейший: {time_ago})")
+            message1_parts.append(f"• `{workflow_name}`: {count} jobs (oldest: {time_ago})")
     
     message1_parts.append("")
-    message1_parts.append(f"🕐 *Время проверки:* {datetime.now().strftime('%H:%M:%S UTC')}")
+    message1_parts.append(f"🕐 *Check time:* {datetime.now().strftime('%H:%M:%S UTC')}")
     
     messages.append("\n".join(message1_parts))
     
-    # Второе сообщение - детали по застрявшим jobs (только если есть)
+    # Second message - details about stuck jobs (only if any)
     if stuck_jobs:
         message2_parts = []
-        message2_parts.append("🚨 *Застрявшие jobs:*")
+        message2_parts.append("🚨 *Stuck jobs:*")
         message2_parts.append("")
         
-        # Сортируем по времени ожидания (самые старые сначала)
+        # Sort by waiting time (oldest first)
         stuck_jobs_sorted = sorted(stuck_jobs, key=lambda x: x['waiting_hours'], reverse=True)
         
-        for i, stuck_job in enumerate(stuck_jobs_sorted[:15], 1):  # Показываем до 15 jobs
+        for i, stuck_job in enumerate(stuck_jobs_sorted[:15], 1):  # Show up to 15 jobs
             run = stuck_job['run']
             waiting_hours = stuck_job['waiting_hours']
             workflow_name = run.get('name', 'Unknown')
@@ -414,13 +414,13 @@ def format_telegram_messages(workflow_info: Dict[str, Dict[str, Any]], stuck_job
             run_attempt = run.get('run_attempt', 1)
             
             if waiting_hours > 24:
-                waiting_str = f"{waiting_hours/24:.1f} дн"
+                waiting_str = f"{waiting_hours/24:.1f}d"
             elif waiting_hours > 1:
-                waiting_str = f"{waiting_hours:.1f} ч"
+                waiting_str = f"{waiting_hours:.1f}h"
             else:
-                waiting_str = f"{waiting_hours*60:.0f} мин"
+                waiting_str = f"{waiting_hours*60:.0f}m"
             
-            # Добавляем информацию о retry
+            # Add retry information
             retry_info = f" (retry #{run_attempt})" if run_attempt > 1 else ""
             
             github_url = f"https://github.com/ydb-platform/ydb/actions/runs/{run_id}" if run_id else "N/A"
@@ -430,9 +430,9 @@ def format_telegram_messages(workflow_info: Dict[str, Dict[str, Any]], stuck_job
             message2_parts.append("")
         
         if len(stuck_jobs) > 15:
-            message2_parts.append(f"• ... и еще {len(stuck_jobs) - 15} jobs")
+            message2_parts.append(f"• ... and {len(stuck_jobs) - 15} more jobs")
         
-        # Добавляем ссылку на дашборд
+        # Add dashboard link
         message2_parts.append("")
         message2_parts.append(TAIL_MESSAGE)
         
@@ -483,6 +483,20 @@ def test_telegram_connection(bot_token: str, chat_id: str, thread_id: int = None
         print(f"❌ Ошибка соединения с Telegram: {e}")
         return False
 
+def get_current_workflow_url() -> str:
+    """
+    Получает URL текущего workflow run из переменных окружения GitHub Actions.
+    
+    Returns:
+        URL текущего workflow run или пустую строку если переменные недоступны
+    """
+    github_repository = os.getenv('GITHUB_REPOSITORY', 'ydb-platform/ydb')
+    github_run_id = os.getenv('GITHUB_RUN_ID')
+    
+    if github_run_id:
+        return f"https://github.com/{github_repository}/actions/runs/{github_run_id}"
+    return ""
+
 def send_api_error_notification(bot_token: str, chat_id: str, error_message: str, thread_id: int = None) -> bool:
     """
     Отправляет уведомление об ошибке API в Telegram.
@@ -496,7 +510,11 @@ def send_api_error_notification(bot_token: str, chat_id: str, error_message: str
     Returns:
         True если успешно, False иначе
     """
-    message = f"⚠️ *ОШИБКА МОНИТОРИНГА GITHUB ACTIONS*\n\n{error_message}\n\n🕐 *Время:* {datetime.now().strftime('%H:%M:%S UTC')}\n\n{TAIL_MESSAGE}"
+    # Получаем ссылку на текущий workflow run
+    workflow_url = get_current_workflow_url()
+    workflow_link = f"\n\n🔗 [Workflow Run]({workflow_url})" if workflow_url else ""
+    
+    message = f"⚠️ *GITHUB ACTIONS MONITORING ERROR*\n\n{error_message}\n\n🕐 *Time:* {datetime.now().strftime('%H:%M:%S UTC')}{workflow_link}\n\n{TAIL_MESSAGE}"
     return send_telegram_message(bot_token, chat_id, message, thread_id, "MarkdownV2")
 
 def send_telegram_message(bot_token: str, chat_id: str, message: str, thread_id: int = None, parse_mode: str = "MarkdownV2") -> bool:
@@ -619,9 +637,13 @@ def main():
         # Отправляем уведомление об ошибке API если включено
         if notify_on_api_errors:
             if dry_run:
+                # Получаем ссылку на текущий workflow run для dry-run
+                workflow_url = get_current_workflow_url()
+                workflow_link = f"\n\n🔗 [Workflow Run]({workflow_url})" if workflow_url else ""
+                
                 print(f"\n📤 DRY-RUN: Уведомление об ошибке API для Telegram {chat_id}:{thread_id}")
                 print("-" * 50)
-                print(f"⚠️ *ОШИБКА МОНИТОРИНГА GITHUB ACTIONS*\n\n{error}\n\n🕐 *Время:* {datetime.now().strftime('%H:%M:%S UTC')}\n\n{TAIL_MESSAGE}")
+                print(f"⚠️ *GITHUB ACTIONS MONITORING ERROR*\n\n{error}\n\n🕐 *Time:* {datetime.now().strftime('%H:%M:%S UTC')}{workflow_link}\n\n{TAIL_MESSAGE}")
                 print("-" * 50)
             else:
                 print("📤 Отправляем уведомление об ошибке API в Telegram...")
@@ -639,7 +661,7 @@ def main():
     if not queued_runs:
         print("✅ Нет workflow runs в очереди")
         # Отправляем сообщение о том, что очередь пуста
-        message = "✅ *МОНИТОРИНГ GITHUB ACTIONS*\n\nОчередь пуста - все jobs работают нормально! 🎉"
+        message = "✅ *GITHUB ACTIONS MONITORING*\n\nQueue is empty - all jobs are working normally! 🎉"
         
         if dry_run:
             print(f"\n📤 DRY-RUN: Сообщение для Telegram:{chat_id}:{thread_id}")
@@ -664,7 +686,7 @@ def main():
     if not filtered_runs:
         print("✅ Нет актуальных workflow runs в очереди")
         # Отправляем сообщение о том, что очередь пуста
-        message = "✅ *МОНИТОРИНГ GITHUB ACTIONS*\n\nОчередь пуста - все jobs работают нормально! 🎉"
+        message = "✅ *GITHUB ACTIONS MONITORING*\n\nQueue is empty - all jobs are working normally! 🎉"
         
         if dry_run:
             print(f"\n📤 DRY-RUN: Сообщение для Telegram:{chat_id}:{thread_id}")

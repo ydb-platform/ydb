@@ -48,9 +48,7 @@ namespace {
         if (userSid.empty() && groupSids.empty()) {
             return nullptr;
         }
-        auto token = NACLib::TUserToken(userSid, groupSids);
-        token.SaveSerializationInfo();
-        return MakeIntrusive<NACLib::TUserToken>(token);
+        return new NACLib::TUserToken(userSid, groupSids);
     }
 }
 

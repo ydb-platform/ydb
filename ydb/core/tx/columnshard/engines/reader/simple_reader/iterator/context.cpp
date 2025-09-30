@@ -7,8 +7,17 @@
 #include <ydb/core/tx/columnshard/engines/reader/simple_reader/duplicates/manager.h>
 #include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/collections/constructors.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
+#include <ydb/core/tx/columnshard/engines/portions/written.h>
 
 namespace NKikimr::NOlap::NReader::NSimple {
+
+// enum that shows if the portion is committed, own uncommitted or uncommitted by another tx
+enum class EPortionStatus {
+    Committed,
+    OwnUncommitted,
+    UncommittedByAnotherTx,
+    Unknown
+};
 
 std::shared_ptr<TFetchingScript> TSpecialReadContext::DoGetColumnsFetchingPlan(
     const std::shared_ptr<NCommon::IDataSource>& sourceExt, const bool isFinalSyncPoint) {
@@ -26,8 +35,27 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::DoGetColumnsFetchingPlan(
         }
         return false;
     }();
+
     const auto* source = sourceExt->GetAs<IDataSource>();
-    const bool needSnapshots = GetReadMetadata()->GetRequestSnapshot() < source->GetRecordSnapshotMax();
+
+    EPortionStatus portionStatus = EPortionStatus::Unknown;
+    if (source->GetType() == NCommon::IDataSource::EType::SimplePortion) {
+        const auto* portion = static_cast<const TPortionDataSource*>(source);
+        const auto& portionInfo = portion->GetPortionInfo();
+        if (portionInfo.IsCommitted()) {
+            portionStatus = EPortionStatus::Committed;
+        } else {
+            const auto& wPortionInfo = static_cast<const TWrittenPortionInfo&>(portionInfo);
+            wPortionInfo.GetInsertWriteId();
+            if (portion->GetContext()->GetReadMetadata()->IsMyUncommitted(wPortionInfo.GetInsertWriteId())) {
+                portionStatus = EPortionStatus::OwnUncommitted;
+            } else {
+                portionStatus = EPortionStatus::UncommittedByAnotherTx;
+            }
+        }
+    }
+
+    const bool needSnapshots = GetReadMetadata()->GetRequestSnapshot() < source->GetRecordSnapshotMax() || portionStatus == EPortionStatus::UncommittedByAnotherTx;
 
     const bool useIndexes = false;
     const bool hasDeletions = source->GetHasDeletions();
@@ -38,7 +66,7 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::DoGetColumnsFetchingPlan(
             needShardingFilter = true;
         }
     }
-    const bool preventDuplicates = NeedDuplicateFiltering();
+    const bool preventDuplicates = NeedDuplicateFiltering() && portionStatus != EPortionStatus::UncommittedByAnotherTx;
     {
         auto& result = CacheFetchingScripts[needSnapshots ? 1 : 0][partialUsageByPK ? 1 : 0][useIndexes ? 1 : 0][needShardingFilter ? 1 : 0]
                                            [hasDeletions ? 1 : 0][preventDuplicates ? 1 : 0];

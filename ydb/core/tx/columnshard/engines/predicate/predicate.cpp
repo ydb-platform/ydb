@@ -172,13 +172,7 @@ std::shared_ptr<arrow::RecordBatch> TPredicate::CutNulls(const std::shared_ptr<a
         ++idx;
     }
     AFL_VERIFY(colsNotNull.size());
-
-    auto schema = std::make_shared<arrow::Schema>(std::move(fieldsNotNull));
-    if (schema->ToString(true) == "id: uint64") {
-        PrintBackTrace();
-    }
-
-    return arrow::RecordBatch::Make(schema, 1, colsNotNull);
+    return arrow::RecordBatch::Make(std::make_shared<arrow::Schema>(fieldsNotNull), 1, colsNotNull);
 }
 
 bool TPredicate::IsEqualSchema(const std::shared_ptr<arrow::Schema>& schema) const {

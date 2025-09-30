@@ -22,7 +22,7 @@ namespace NKikimr {
                     TActorId ActorId;
                     TIntrusivePtr<NBackpressure::TFlowRecord> FlowRecord;
                     std::optional<bool> ExtraBlockChecksSupport;
-                    std::optional<bool> Checksumming;
+                    std::atomic<bool> Checksumming;
                     std::shared_ptr<const TCostModel> CostModel = nullptr;
                     volatile bool IsConnected = false;
                 };
@@ -190,7 +190,7 @@ namespace NKikimr {
                 .Queues
                 .GetQueue(queueId)
                 .Checksumming
-                .value_or(false);
+                .load();
         }
 
         ui64 GetPredictedDelayNsByOrderNumber(ui32 orderNumber, NKikimrBlobStorage::EVDiskQueueId queueId) {

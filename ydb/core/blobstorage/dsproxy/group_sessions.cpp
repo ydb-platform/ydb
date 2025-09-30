@@ -129,7 +129,7 @@ void TGroupSessions::QueueConnectUpdate(ui32 orderNumber, NKikimrBlobStorage::EV
     if (connected) {
         ConnectedQueuesMask[orderNumber] |= 1 << queueId;
         q.ExtraBlockChecksSupport = extraGroupChecksSupport;
-        q.Checksumming = checksumming;
+        q.Checksumming.store(checksumming);
         Y_ABORT_UNLESS(costModel);
         if (!q.CostModel || *q.CostModel != *costModel) {
             updated = true;
@@ -138,7 +138,7 @@ void TGroupSessions::QueueConnectUpdate(ui32 orderNumber, NKikimrBlobStorage::EV
     } else {
         ConnectedQueuesMask[orderNumber] &= ~(1 << queueId);
         q.ExtraBlockChecksSupport.reset();
-        q.Checksumming.reset();
+        q.Checksumming.store(false);
         if (q.CostModel) {
             updated = true;
             q.CostModel = nullptr;

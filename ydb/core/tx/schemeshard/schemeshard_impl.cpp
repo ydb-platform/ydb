@@ -8276,10 +8276,10 @@ void TSchemeShard::Handle(TEvPrivate::TEvSendBaseStatsToSA::TPtr&, const TActorC
 
 void TSchemeShard::InitializeStatistics(const TActorContext& ctx) {
     ResolveSA();
-    // since columnshard statistics is now sent once in a minute,
-    // we expect that in most cases we will gather full stats
-    // before sending them to StatisticsAggregator
-    ctx.Schedule(TDuration::Seconds(120), new TEvPrivate::TEvSendBaseStatsToSA());
+    // Give table shards some time to report statistics. This is not required for correctness,
+    // but if we tried to send the statistics right away, info for all paths would probably
+    // be incomplete.
+    ctx.Schedule(TDuration::Seconds(30), new TEvPrivate::TEvSendBaseStatsToSA());
 }
 
 void TSchemeShard::ResolveSA() {

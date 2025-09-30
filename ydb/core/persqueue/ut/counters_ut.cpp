@@ -126,7 +126,7 @@ void PartitionLevelCounters(bool featureFlagEnabled, bool firstClassCitizen, TSt
 
     tc.Runtime->GetAppData(0).FeatureFlags.SetEnableMetricsLevel(featureFlagEnabled);
 
-    PQTabletPrepare({ .metricsLevel = 1 }, {}, tc);
+    PQTabletPrepare({ .metricsLevel = 2 }, {}, tc);
     CmdWrite(0, "sourceid0", TestData(), tc, false, {}, true);
     CmdWrite(0, "sourceid1", TestData(), tc, false);
     CmdWrite(0, "sourceid2", TestData(), tc, false);
@@ -166,7 +166,7 @@ void PartitionLevelCounters(bool featureFlagEnabled, bool firstClassCitizen, TSt
     {
         // Turn on per partition counters, check counters.
 
-        PQTabletPrepare({ .metricsLevel = 2 }, {}, tc);
+        PQTabletPrepare({ .metricsLevel = 4 }, {}, tc);
 
         // partition, sourceId, data, text
         CmdWrite({ .Partition = 0, .SourceId = "sourceid3", .Data = TestData(), .TestContext = tc, .Error = false });
@@ -237,7 +237,7 @@ void PartitionLevelCounters(bool featureFlagEnabled, bool firstClassCitizen, TSt
     {
         // Disable per partition counters, the counters should be empty.
 
-        PQTabletPrepare({ .metricsLevel = 1 }, {}, tc);
+        PQTabletPrepare({ .metricsLevel = 3 }, {}, tc);
         TString counters = getCountersHtml();
         TString referenceCounters = NResource::Find(TStringBuilder() << referenceDir << "_turned_off.html");
         counters = zeroUnreliableValues(counters) + (featureFlagEnabled ? "\n" : "");

@@ -1409,6 +1409,55 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
         TestTableWithNulls({ testCase }, /* generic */ true);
     }
 
+    Y_UNIT_TEST(IlikeWIthLimit) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        TKikimrRunner kikimr(settings);
+
+        auto queryClient = kikimr.GetQueryClient();
+        {
+            auto status = queryClient
+                              .ExecuteQuery(
+                                  R"(
+                    CREATE TABLE IF NOT EXISTS `olap_table` (
+                        id Uint64 NOT NULL,
+                        message Utf8,
+                        PRIMARY KEY (id)
+                    ) PARTITION BY HASH (id)
+                    WITH (STORE = COLUMN);
+                )",
+                                  NYdb::NQuery::TTxControl::NoTx())
+                              .GetValueSync();
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+        }
+
+        {
+            TString query;
+            for (int i = 0; i < 1000; ++i) {
+                query += "UPSERT INTO `olap_table` (id, message) VALUES (" + ToString(i) + ", \"foo bar " + ToString(i) + " bar foo\");\n";
+            }
+            auto status = queryClient.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+        }
+
+        for (int i = 0; i < 1000; ++i) {
+            auto status = queryClient
+                              .ExecuteQuery(R"(
+                SELECT id FROM `olap_table`
+                WHERE id = )" + ToString(i) +
+                                      R"(
+                AND message ilike "%bar%"
+                LIMIT 1;
+            )",
+                                  NYdb::NQuery::TTxControl::BeginTx().CommitTx())
+                              .GetValueSync();
+
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+            TString result = FormatResultSetYson(status.GetResultSet(0));
+            CompareYson(result, R"([[)" + ToString(i) + R"(u]])");
+        }
+    }
+
     Y_UNIT_TEST(FloatSum) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);

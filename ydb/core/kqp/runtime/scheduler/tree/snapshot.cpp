@@ -1,6 +1,7 @@
 #include "snapshot.h"
 
 #include "dynamic.h"
+#include "../kqp_compute_scheduler_service.h"
 
 namespace NKikimr::NKqp::NScheduler::NHdrf::NSnapshot {
 

@@ -8353,7 +8353,7 @@ TDuration TSchemeShard::SendBaseStatsToSA() {
     }
 
     int count = 0;
-    bool areAllStatsFull = true;
+    int incompleteCount = 0;
 
     NKikimrStat::TSchemeShardStats record;
     for (const auto& [pathId, tableInfo] : Tables) {
@@ -8369,9 +8369,11 @@ TDuration TSchemeShard::SendBaseStatsToSA() {
         entry->SetBytesSize(areStatsFull ? aggregated.DataSize : 0);
         entry->SetIsColumnTable(false);
         entry->SetAreStatsFull(areStatsFull);
-        areAllStatsFull = areAllStatsFull && areStatsFull;
 
         ++count;
+        if (!areStatsFull) {
+            ++incompleteCount;
+        }
     }
 
     auto columnTablesPathIds = ColumnTables.GetAllPathIds();
@@ -8401,9 +8403,11 @@ TDuration TSchemeShard::SendBaseStatsToSA() {
         entry->SetBytesSize(areStatsFull ? aggregated.DataSize : 0);
         entry->SetIsColumnTable(true);
         entry->SetAreStatsFull(areStatsFull);
-        areAllStatsFull = areAllStatsFull && areStatsFull;
 
         ++count;
+        if (!areStatsFull) {
+            ++incompleteCount;
+        }
     }
 
     if (!count) {
@@ -8413,7 +8417,7 @@ TDuration TSchemeShard::SendBaseStatsToSA() {
         return TDuration::Seconds(30);
     }
 
-    record.SetAreAllStatsFull(areAllStatsFull);
+    record.SetAreAllStatsFull(incompleteCount == 0);
 
     TString stats;
     Y_PROTOBUF_SUPPRESS_NODISCARD record.SerializeToString(&stats);
@@ -8427,6 +8431,7 @@ TDuration TSchemeShard::SendBaseStatsToSA() {
     LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
         "SendBaseStatsToSA()"
         << ", path count: " << count
+        << ", paths with incomplete stats: " << incompleteCount
         << ", at schemeshard: " << TabletID());
 
     if (IsServerlessDomain(SubDomains.at(RootPathId()))) {

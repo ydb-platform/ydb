@@ -15,6 +15,21 @@ from typing import Dict, List, Any
 from datetime import datetime, timezone
 import time
 
+
+# Filtering settings
+MAX_AGE_DAYS = 3  # Maximum job age in days (excludes GitHub bugs)
+
+# Message sending settings
+SEND_WHEN_ALL_GOOD = False  # Whether to send a message when all jobs are working fine
+
+# Criteria for determining stuck jobs
+# Each element: [pattern, threshold_hours, display_name]
+WORKFLOW_THRESHOLDS = [
+    ["PR-check", 0.5, "PR-check"],
+    ["Postcommit", 6, "Postcommit"],
+    # Example of adding a new type:
+    # ["Nightly", 12, "Nightly-Build"]
+]
 def get_alert_logins() -> str:
     """
     Gets the list of logins for notifications from GH_ALERTS_TG_LOGINS environment variable.
@@ -59,22 +74,6 @@ def get_github_headers() -> Dict[str, str]:
 
 # Constants
 TAIL_MESSAGE = get_tail_message()
-
-# Filtering settings
-MAX_AGE_DAYS = 3  # Maximum job age in days (excludes GitHub bugs)
-
-# Message sending settings
-SEND_WHEN_ALL_GOOD = False  # Whether to send a message when all jobs are working fine
-
-# Criteria for determining stuck jobs
-# Each element: [pattern, threshold_hours, display_name]
-WORKFLOW_THRESHOLDS = [
-    ["PR-check", 0.5, "PR-check"],
-    ["Postcommit", 6, "Postcommit"],
-    # Example of adding a new type:
-    # ["Nightly", 12, "Nightly-Build"]
-]
-
 def fetch_workflow_jobs(run_id: int) -> tuple[Dict[str, Any], str]:
     """
     Fetches jobs for a specific workflow run from GitHub API.
@@ -612,8 +611,8 @@ def format_telegram_messages(workflow_info: Dict[str, Dict[str, Any]], stuck_job
             workflow_name = run.get('name', 'Unknown')
             run_id = run.get('id')
             run_attempt = run.get('run_attempt', 1)
-            threshold_hours = stuck_workflow.get('threshold_hours', 0.5)
-            individual_stuck_jobs = stuck_workflow.get('stuck_jobs', [])
+            threshold_hours = stuck_workflow['threshold_hours']
+            individual_stuck_jobs = stuck_workflow['stuck_jobs']
             
             # Add retry information
             retry_info = f" (retry #{run_attempt})" if run_attempt > 1 else ""
@@ -624,21 +623,25 @@ def format_telegram_messages(workflow_info: Dict[str, Dict[str, Any]], stuck_job
                 message2_parts.append(f"   [Run {run_id}]({github_url})")
             
             # Show individual stuck jobs within this workflow
-            for stuck_job in individual_stuck_jobs[:5]:  # Max 5 jobs per workflow
-                job_name = stuck_job.get('job_name', 'Unknown')
-                waiting_hours = stuck_job.get('waiting_hours', 0)
+            if individual_stuck_jobs:
+                for stuck_job in individual_stuck_jobs[:5]:  # Max 5 jobs per workflow
+                    job_name = stuck_job.get('job_name', 'Unknown')
+                    waiting_hours = stuck_job.get('waiting_hours', 0)
+                    
+                    if waiting_hours > 24:
+                        waiting_str = f"{waiting_hours/24:.1f}d"
+                    elif waiting_hours > 1:
+                        waiting_str = f"{waiting_hours:.1f}h"
+                    else:
+                        waiting_str = f"{waiting_hours*60:.0f}m"
+                    
+                    message2_parts.append(f"   🚨 `{job_name}` - {waiting_str} (>{threshold_hours}h threshold)")
                 
-                if waiting_hours > 24:
-                    waiting_str = f"{waiting_hours/24:.1f}d"
-                elif waiting_hours > 1:
-                    waiting_str = f"{waiting_hours:.1f}h"
-                else:
-                    waiting_str = f"{waiting_hours*60:.0f}m"
-                
-                message2_parts.append(f"   🚨 `{job_name}` - {waiting_str} (>{threshold_hours}h threshold)")
-            
-            if len(individual_stuck_jobs) > 5:
-                message2_parts.append(f"   • ... and {len(individual_stuck_jobs) - 5} more stuck jobs")
+                if len(individual_stuck_jobs) > 5:
+                    message2_parts.append(f"   • ... and {len(individual_stuck_jobs) - 5} more stuck jobs")
+            else:
+                # No individual job details available (API error or no jobs found)
+                message2_parts.append(f"   ⚠️ Could not fetch individual job details (API error or no jobs found)")
             
             message2_parts.append("")
             job_counter += 1

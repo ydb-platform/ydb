@@ -15,7 +15,6 @@ from typing import Dict, List, Any
 from datetime import datetime, timezone
 import time
 
-
 # Filtering settings
 MAX_AGE_DAYS = 3  # Maximum job age in days (excludes GitHub bugs)
 
@@ -260,8 +259,8 @@ def has_stuck_jobs(run: Dict[str, Any], threshold_hours: float) -> tuple[bool, L
                         })
                     else:
                         print(f"  ✅ OK: {job_name} (waiting {time_queued_hours:.1f}h < {threshold_hours}h)")
-                except ValueError:
-                    print(f"  ⚠️ Could not parse created_at for job: {job_name}")
+                except ValueError as e:
+                    print(f"  ⚠️ Could not parse created_at for job: {job_name} - {e}")
         elif job_status == 'in_progress':
             print(f"  🔄 Running: {job_name} (in_progress)")
         elif job_status == 'completed':

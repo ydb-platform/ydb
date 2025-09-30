@@ -587,6 +587,8 @@ ui32 TACL::SpecialRightsFromString(const TString& string) {
             result |= EAccessRights::GrantAccessRights;
         if (r == "ConnDB")
             result |= EAccessRights::ConnectDatabase;
+        if (r == "WUA")
+            result |= EAccessRights::WriteUserAttributes;
     }
     return result;
 }

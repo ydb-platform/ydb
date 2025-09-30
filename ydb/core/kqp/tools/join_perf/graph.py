@@ -3,6 +3,8 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import sys
 import os
+import numpy as np
+import math
 from pathlib import Path
 if len(sys.argv) < 2:
     print("usage: python3 graph.py folder/file.jsonl")
@@ -24,6 +26,15 @@ for _, obj in j.iterrows():
             'key_type': name_parts[1]
         }
     )
+# is_time_sampled = only_needed[0]["input_data_flavour"].startswith("Sampling")
+def geo_mean_70percent_lowest(series):
+    size = len(series)
+    smallest = series.nsmallest(math.ceil(size * 0.7))
+    positive = smallest[smallest > 0]
+    if len(positive) == 0:
+        return np.nan
+    return np.exp(np.mean(np.log(positive)))
+
 df = pd.DataFrame(only_needed)
 df = df.drop('run_name', axis=1)
 images_root_base = str(Path.home())+"/.join_perf/images"
@@ -42,15 +53,15 @@ for data_flavour in data_flovours:
         print(graph_name)
         subset = df[(df["input_data_flavour"] == data_flavour) & 
             (df["key_type"] == key_type)]
-        print(subset)
         fig, axes = plt.subplots(nrows=1, ncols=1, figsize=(10, 8), sharex=True)
         
         for name, group in subset.groupby('join_algorithm'):
+            group = group.groupby('left_table_size')['time'].apply(lambda x: geo_mean_70percent_lowest(x)).sort_values()
             axes.plot(
-                group['left_table_size'], 
-                group['time'], 
-                label=name,
-                marker='o'
+                group.index, 
+                group.values, 
+                label=name, 
+                marker='o' 
             )
         axes.set_ylabel('time')
         axes.set_xlabel('left_rows')
@@ -66,4 +77,3 @@ for data_flavour in data_flovours:
 
 print(f"images without y-axis log scaling are written to {simple_images}") 
 print(f"images with y-axis log scaling are written to {log_images}") 
-

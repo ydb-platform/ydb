@@ -41,8 +41,9 @@ void ValidateViewQuery(const TString& query, const TString& dbPath, NYql::TIssue
 }
 
 bool RewriteTablePathPrefix(TString& query, TStringBuf backupRoot, TStringBuf restoreRoot,
-    bool restoreRootIsDatabase, NYql::TIssues& issues
+    bool restoreRootIsDatabase, TString& effectiveTablePathPrefix, NYql::TIssues& issues
 ) {
+    effectiveTablePathPrefix = restoreRoot;
     if (backupRoot == restoreRoot) {
         return true;
     }
@@ -79,6 +80,7 @@ bool RewriteTablePathPrefix(TString& query, TStringBuf backupRoot, TStringBuf re
         return false;
     }
 
+    effectiveTablePathPrefix = std::move(pathPrefix);
     return true;
 }
 
@@ -130,11 +132,12 @@ bool RewriteCreateViewQuery(TString& query, const TString& restoreRoot, bool res
 ) {
     const auto backupRoot = GetBackupRoot(query);
 
-    if (!RewriteTablePathPrefix(query, backupRoot, restoreRoot, restoreRootIsDatabase, issues)) {
+    TString effectiveTablePathPrefix;
+    if (!RewriteTablePathPrefix(query, backupRoot, restoreRoot, restoreRootIsDatabase, effectiveTablePathPrefix, issues)) {
         return false;
     }
 
-    if (!RewriteTableRefs(query, backupRoot, restoreRoot, issues)) {
+    if (!RewriteTableRefs(query, backupRoot, restoreRoot, effectiveTablePathPrefix, issues)) {
         return false;
     }
 

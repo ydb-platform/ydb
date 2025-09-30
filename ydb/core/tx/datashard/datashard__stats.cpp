@@ -175,19 +175,6 @@ private:
             << (ev->HasSchemaChanges ? ", with schema changes" : "")
             << ", LoadedSize " << PagesSize << ", " << NFmt::Do(*Spent));
 
-        if (const auto& stats = ev->Stats; stats.DataSize.Size > 10_MB && stats.RowCount > 100
-            && Min(stats.RowCountHistogram.size(), stats.DataSizeHistogram.size()) < HistogramBucketsCount / 2)
-        {
-            LOG_ERROR_S(GetActorContext(), NKikimrServices::TABLET_STATS_BUILDER, "Stats at datashard " << TabletId << ", for tableId " << TableId
-                << " don't have enough keys: "
-                << ev->Stats.ToString()
-                << ", RowCountHistogramSize=" << stats.RowCountHistogram.size()
-                << ", DataSizeHistogramSize=" << stats.DataSizeHistogram.size()
-                << ", HistogramBucketsCount=" << HistogramBucketsCount
-                << ", MinHistogramSize=" << Min(stats.RowCountHistogram.size(), stats.DataSizeHistogram.size())
-                << ", Threshold=" << HistogramBucketsCount / 2);
-        }
-
         Send(ReplyTo, ev.Release());
 
         ReleaseResources();

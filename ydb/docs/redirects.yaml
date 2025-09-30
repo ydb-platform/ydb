@@ -171,10 +171,6 @@ common:
   - from: /cluster/system-requirements.md
     to: /devops/concepts/system-requirements.md
 
-  # Redirects for maintenance folder
-  - from: /maintenance/(.*)$
-    to: /devops/deployment-options/manual/$1
-
   # Dev-related redirects
   - from: /db/index.md
     to: /dev/index.md

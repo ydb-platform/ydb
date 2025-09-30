@@ -44,6 +44,24 @@ static const ui32 MAX_KEYS = 10000;
 static const ui32 MAX_TXS = 1000;
 static const ui32 MAX_WRITE_CYCLE_SIZE = 16_MB;
 
+TStringBuilder MakeTxWriteErrorMessage(TMaybe<ui64> txId,
+                                       TStringBuf topicName, const TPartitionId& partitionId,
+                                       TStringBuf sourceId, ui64 seqNo)
+{
+    TStringBuilder ss;
+    ss << "[TxId: " << txId << ", Topic: '" << topicName << "', Partition " << partitionId << ", SourceId '" << sourceId << ", SeqNo " << seqNo << "] ";
+    return ss;
+}
+
+TStringBuilder MakeTxReadErrorMessage(TMaybe<ui64> txId,
+                                      TStringBuf topicName, const TPartitionId& partitionId,
+                                      TStringBuf consumer)
+{
+    TStringBuilder ss;
+    ss << "[TxId: " << txId << ", Topic: '" << topicName << "', Partition " << partitionId << ", Consumer '" << consumer << "] ";
+    return ss;
+}
+
 auto GetStepAndTxId(ui64 step, ui64 txId)
 {
     return std::make_pair(step, txId);
@@ -1065,7 +1083,8 @@ void TPartition::ProcessPendingEvent(std::unique_ptr<TEvPQ::TEvTxCalcPredicate> 
                  MakeHolder<TEvPQ::TEvTxCalcPredicateResult>(ev->Step,
                                                              ev->TxId,
                                                              Partition,
-                                                             Nothing()).Release());
+                                                             Nothing(),
+                                                             TString()).Release());
             return;
         }
     }
@@ -1276,7 +1295,9 @@ TPartition::EProcessResult TPartition::ApplyWriteInfoResponse(TTransaction& tx) 
             continue;
         if (s.second.MinSeqNo <= existing->second.SeqNo) {
             tx.Predicate = false;
-            tx.Message = TStringBuilder() << "MinSeqNo violation failure on " << s.first;
+            tx.Message = (MakeTxWriteErrorMessage(tx.GetTxId(), TopicName(), Partition, s.first, existing->second.SeqNo) <<
+                          "MinSeqNo violation failure. " <<
+                          "SeqNo " << s.second.MinSeqNo);
             tx.WriteInfoApplied = true;
             break;
         }
@@ -1340,7 +1361,8 @@ void TPartition::ReplyToProposeOrPredicate(TSimpleSharedPtr<TTransaction>& tx, b
              MakeHolder<TEvPQ::TEvTxCalcPredicateResult>(tx->Tx->Step,
                                                          tx->Tx->TxId,
                                                          Partition,
-                                                         *tx->Predicate).Release());
+                                                         *tx->Predicate,
+                                                         tx->Message).Release());
     } else {
         auto insRes = TransactionsInflight.emplace(tx->ProposeConfig->TxId, tx);
         Y_ABORT_UNLESS(insRes.second);
@@ -2162,7 +2184,7 @@ TPartition::EProcessResult TPartition::PreProcessUserActionOrTransaction(TSimple
             ReplyToProposeOrPredicate(t, true);
             return EProcessResult::Continue;
         }
-        result = BeginTransaction(*t->Tx, t->Predicate);
+        result = BeginTransaction(*t->Tx, t->Predicate, t->Message);
         if (t->Predicate.Defined()) {
             ReplyToProposeOrPredicate(t, true);
         }
@@ -2227,7 +2249,8 @@ bool TPartition::ExecUserActionOrTransaction(TSimpleSharedPtr<TTransaction>& t, 
     return true;
 }
 
-TPartition::EProcessResult TPartition::BeginTransaction(const TEvPQ::TEvTxCalcPredicate& tx, TMaybe<bool>& predicate)
+TPartition::EProcessResult TPartition::BeginTransaction(const TEvPQ::TEvTxCalcPredicate& tx,
+                                                        TMaybe<bool>& predicate, TString& issueMsg)
 {
     const auto& ctx = ActorContext();
     THashSet<TString> consumers;
@@ -2245,6 +2268,8 @@ TPartition::EProcessResult TPartition::BeginTransaction(const TEvPQ::TEvTxCalcPr
             LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE,
                         "Partition " << Partition <<
                         " Consumer '" << consumer << "' has been removed");
+            issueMsg = (MakeTxReadErrorMessage(tx.TxId, TopicName(), Partition, consumer) <<
+                        "Consumer has been removed");
             ok = false;
             break;
         }
@@ -2253,6 +2278,8 @@ TPartition::EProcessResult TPartition::BeginTransaction(const TEvPQ::TEvTxCalcPr
             LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE,
                         "Partition " << Partition <<
                         " Unknown consumer '" << consumer << "'");
+            issueMsg = (MakeTxReadErrorMessage(tx.TxId, TopicName(), Partition, consumer) <<
+                        "Unknown consumer");
             ok = false;
             break;
         }
@@ -2267,6 +2294,10 @@ TPartition::EProcessResult TPartition::BeginTransaction(const TEvPQ::TEvTxCalcPr
                         " Bad request (invalid range) " <<
                         " Begin " << operation.GetBegin() <<
                         " End " << operation.GetEnd());
+            issueMsg = (MakeTxReadErrorMessage(tx.TxId, TopicName(), Partition, consumer) <<
+                        "Invalid range. " <<
+                        "Range begin " << operation.GetBegin() <<
+                        ", range end " << operation.GetEnd());
             ok = false;
         } else if (userInfo.Offset != (i64)operation.GetBegin()) {
             LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE,
@@ -2275,6 +2306,10 @@ TPartition::EProcessResult TPartition::BeginTransaction(const TEvPQ::TEvTxCalcPr
                         " Bad request (gap) " <<
                         " Offset " << userInfo.Offset <<
                         " Begin " << operation.GetBegin());
+            issueMsg = (MakeTxReadErrorMessage(tx.TxId, TopicName(), Partition, consumer) <<
+                        "Gap. " <<
+                        "Offset " << userInfo.Offset <<
+                        ", range begin " << operation.GetBegin());
             ok = false;
         } else if (operation.GetEnd() > EndOffset) {
             LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE,
@@ -2283,6 +2318,10 @@ TPartition::EProcessResult TPartition::BeginTransaction(const TEvPQ::TEvTxCalcPr
                         " Bad request (behind the last offset) " <<
                         " EndOffset " << EndOffset <<
                         " End " << operation.GetEnd());
+            issueMsg = (MakeTxReadErrorMessage(tx.TxId, TopicName(), Partition, consumer) <<
+                        "Behind the last offset. " <<
+                        "Partition end offset " << EndOffset <<
+                        ", range end " << operation.GetEnd());
             ok = false;
         }
 

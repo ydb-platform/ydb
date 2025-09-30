@@ -402,6 +402,9 @@ Y_UNIT_TEST_SUITE(BasicStatistics) {
             });
             runtime.WaitFor("TEvSchemeShardStats", [&]{ return statsUpdateSent; });
 
+            // Give the aggregator time to (unsuccessfully) try to commit the update.
+            runtime.SimulateSleep(TDuration::Seconds(1));
+
             bool propagateSent = false;
             auto propagateObserver = runtime.AddObserver<TEvStatistics::TEvPropagateStatistics>([&](auto& ev){
                 if (ev->Recipient.NodeId() == runtime.GetNodeId(nodeIdx)) {

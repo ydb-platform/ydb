@@ -31,6 +31,7 @@ using TGRpcServersFactory = std::function<TGRpcServers()>;
 
 struct TGRpcServersWrapper {
     TGRpcServers Servers;
+    TGRpcServersFactory GrpcServersFactory;
     TMutex Mutex;
 
     TGuard<TMutex> Guard() {
@@ -79,7 +80,6 @@ protected:
     TKikimrRunner(std::shared_ptr<TModuleFactories> factories = {});
 
     std::shared_ptr<TGRpcServersWrapper> GRpcServersWrapper;
-    TGRpcServersFactory GRpcServersFactory;
     TActorId GRpcServersManager;
 
     virtual ~TKikimrRunner();

@@ -191,9 +191,9 @@ bool CreateConsistentCopyTables(
                 Y_ABORT_UNLESS(srcImplTable.Base()->PathId == srcImplTablePathId);
                 TPath dstImplTable = dstIndexPath.Child(srcImplTableName);
 
-                result.push_back(CreateCopyTable(
-                                     NextPartId(nextId, result),
-                                     CopyTableTask(srcImplTable, dstImplTable, descr)));
+                result.push_back(CreateCopyTable(NextPartId(nextId, result),
+                    CopyTableTask(srcImplTable, dstImplTable, descr), GetLocalSequences(context, srcImplTable)));
+                AddCopySequences(nextId, tx, context, result, srcImplTable, dstImplTable.PathString());
             }
         }
 

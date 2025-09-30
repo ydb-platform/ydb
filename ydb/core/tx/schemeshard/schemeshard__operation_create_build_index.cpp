@@ -117,7 +117,7 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
         result.push_back(CreateInitializeBuildIndexMainTable(NextPartId(opId, result), outTx));
     }
 
-    auto createImplTable = [&](NKikimrSchemeOp::TTableDescription&& implTableDesc) {
+    auto createImplTable = [&](NKikimrSchemeOp::TTableDescription&& implTableDesc, const THashSet<TString>& localSequences = {}) {
         if (indexType != NKikimrSchemeOp::EIndexTypeGlobalUnique) {
             implTableDesc.MutablePartitionConfig()->SetShadowData(true);
         }
@@ -126,7 +126,7 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
         *outTx.MutableCreateTable() = std::move(implTableDesc);
         outTx.SetInternal(tx.GetInternal());
 
-        return CreateInitializeBuildIndexImplTable(NextPartId(opId, result), outTx);
+        return CreateInitializeBuildIndexImplTable(NextPartId(opId, result), outTx, localSequences);
     };
 
     if (indexDesc.GetType() == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
@@ -145,7 +145,13 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
         result.push_back(createImplTable(CalcVectorKmeansTreePostingImplTableDesc(tableInfo, tableInfo->PartitionConfig(), indexDataColumns, indexPostingTableDesc)));
         if (prefixVectorIndex) {
             const THashSet<TString> prefixColumns{indexDesc.GetKeyColumnNames().begin(), indexDesc.GetKeyColumnNames().end() - 1};
-            result.push_back(createImplTable(CalcVectorKmeansTreePrefixImplTableDesc(prefixColumns, tableInfo, tableInfo->PartitionConfig(), implTableColumns, indexPrefixTableDesc)));
+            result.push_back(createImplTable(CalcVectorKmeansTreePrefixImplTableDesc(
+                prefixColumns, tableInfo, tableInfo->PartitionConfig(), implTableColumns, indexPrefixTableDesc),
+                THashSet<TString>{NTableIndex::NKMeans::IdColumnSequence}));
+            auto outTx = TransactionTemplate(index.PathString() + "/" + NTableIndex::NKMeans::PrefixTable, NKikimrSchemeOp::EOperationType::ESchemeOpCreateSequence);
+            outTx.MutableSequence()->SetName(NTableIndex::NKMeans::IdColumnSequence);
+            outTx.SetInternal(tx.GetInternal());
+            result.push_back(CreateNewSequence(NextPartId(opId, result), outTx));
         }
     } else {
         NKikimrSchemeOp::TTableDescription indexTableDesc;

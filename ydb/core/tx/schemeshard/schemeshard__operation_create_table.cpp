@@ -827,9 +827,11 @@ ISubOperation::TPtr CreateNewTable(TOperationId id, TTxState::ETxState state) {
     return MakeSubOperation<TCreateTable>(id, state);
 }
 
-ISubOperation::TPtr CreateInitializeBuildIndexImplTable(TOperationId id, const TTxTransaction& tx) {
+ISubOperation::TPtr CreateInitializeBuildIndexImplTable(TOperationId id, const TTxTransaction& tx, const THashSet<TString>& localSequences) {
     auto obj = MakeSubOperation<TCreateTable>(id, tx);
-    static_cast<TCreateTable*>(obj.Get())->SetAllowShadowDataForBuildIndex();
+    TCreateTable *createTable = static_cast<TCreateTable*>(obj.Get());
+    createTable->SetAllowShadowDataForBuildIndex();
+    createTable->SetLocalSequences(localSequences);
     return obj;
 }
 

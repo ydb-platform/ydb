@@ -307,6 +307,7 @@ auto CalcVectorKmeansTreePrefixImplTableDescImpl(
         idColumn->SetType(NTableIndex::NKMeans::ClusterIdTypeName);
         idColumn->SetTypeId(NSchemeShard::ClusterIdTypeId);
         idColumn->SetNotNull(true);
+        idColumn->SetDefaultFromSequence(NKMeans::IdColumnSequence);
     }
     implTableDesc.AddKeyColumnNames(NKMeans::IdColumn);
 

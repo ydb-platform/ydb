@@ -195,19 +195,9 @@ public:
 
     std::set<ui32> GetProcessingColumnIds() const {
         AFL_VERIFY(ResultIndexSchema);
-        std::set<ui32> result;
-        const auto& indexInfo = ResultIndexSchema->GetIndexInfo();
-        for (auto&& columnId : GetProgram().GetProcessingColumns()) {
-            if (indexInfo.HasColumnId(columnId)) {
-                result.emplace(columnId);
-            } else {
-                AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "skip_unknown_processing_column")("column_id", columnId);
-            }
-        }
-
+        std::set<ui32> result(GetProgram().GetProcessingColumns().begin(), GetProgram().GetProcessingColumns().end());
         return result;
     }
-
     bool IsAscSorted() const {
         return Sorting == ESorting::ASC;
     }

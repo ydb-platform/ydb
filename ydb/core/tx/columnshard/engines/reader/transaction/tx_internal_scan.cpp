@@ -77,6 +77,12 @@ void TTxInternalScan::Complete(const TActorContext& ctx) {
             readMetadataRange = TValidator::CheckNotNull(newRange.DetachResult());
         }
     }
+
+    if (request.GetSchemaVersion() && readMetadataRange->GetResultSchema()->GetVersion() != *request.GetSchemaVersion()) {
+        return SendError("invalid schema version",
+            TStringBuilder() << "request=" << *request.GetSchemaVersion() << ", actual=" << readMetadataRange->GetResultSchema()->GetVersion(), ctx);
+    }
+
     TStringBuilder detailedInfo;
     if (IS_LOG_PRIORITY_ENABLED(NActors::NLog::PRI_TRACE, NKikimrServices::TX_COLUMNSHARD_SCAN)) {
         detailedInfo << " read metadata: (" << readMetadataRange->DebugString() << ")";

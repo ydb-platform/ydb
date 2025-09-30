@@ -23,21 +23,23 @@
 #
 
 __doc__ = """
-pyparsing module - Classes and methods to define and execute parsing grammars
-=============================================================================
+pyparsing - Classes and methods to define and execute parsing grammars
+======================================================================
 
-The pyparsing module is an alternative approach to creating and
-executing simple grammars, vs. the traditional lex/yacc approach, or the
-use of regular expressions.  With pyparsing, you don't need to learn
-a new syntax for defining grammars or matching expressions - the parsing
-module provides a library of classes that you use to construct the
-grammar directly in Python.
+Pyparsing is an alternative approach to creating and executing simple
+grammars, vs. the traditional lex/yacc approach, or the use of regular
+expressions.  With pyparsing, you don't need to learn a new syntax for
+defining grammars or matching expressions - the parsing module provides
+a library of classes that you use to construct the grammar directly in
+Python.
 
 Here is a program to parse "Hello, World!" (or any greeting of the form
 ``"<salutation>, <addressee>!"``), built up using :class:`Word`,
 :class:`Literal`, and :class:`And` elements
 (the :meth:`'+'<ParserElement.__add__>` operators create :class:`And` expressions,
-and the strings are auto-converted to :class:`Literal` expressions)::
+and the strings are auto-converted to :class:`Literal` expressions):
+
+.. testcode::
 
     from pyparsing import Word, alphas
 
@@ -47,7 +49,9 @@ and the strings are auto-converted to :class:`Literal` expressions)::
     hello = "Hello, World!"
     print(hello, "->", greet.parse_string(hello))
 
-The program outputs the following::
+The program outputs the following:
+
+.. testoutput::
 
     Hello, World! -> ['Hello', ',', 'World', '!']
 
@@ -69,8 +73,8 @@ vexing when writing text parsers:
   - embedded comments
 
 
-Getting Started -
------------------
+Getting Started
+---------------
 Visit the classes :class:`ParserElement` and :class:`ParseResults` to
 see the base classes that most other pyparsing
 classes inherit from. Use the docstrings for examples of how to:
@@ -120,8 +124,8 @@ class version_info(NamedTuple):
         return f"{__name__}.{type(self).__name__}({', '.join('{}={!r}'.format(*nv) for nv in zip(self._fields, self))})"
 
 
-__version_info__ = version_info(3, 2, 3, "final", 1)
-__version_time__ = "25 Mar 2025 01:38 UTC"
+__version_info__ = version_info(3, 2, 5, "final", 1)
+__version_time__ = "16 Sep 2025 22:24 UTC"
 __version__ = __version_info__.__version__
 __versionTime__ = __version_time__
 __author__ = "Paul McGuire <ptmcg.gm+pyparsing@gmail.com>"

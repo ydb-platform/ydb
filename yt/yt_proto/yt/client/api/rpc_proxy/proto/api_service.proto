@@ -2229,12 +2229,9 @@ message TReqPartitionTables
 
     optional bool enable_cookies = 10;
 
-    // COMPAT(apollo1321): Remove in 25.2 release.
-    optional bool use_new_slicing_implementation_in_unordered_pool = 12 [default=true];
-
     optional TTransactionalOptions transactional_options = 100;
 
-    reserved 11;
+    reserved 11, 12;
 }
 
 message TMultiTablePartition

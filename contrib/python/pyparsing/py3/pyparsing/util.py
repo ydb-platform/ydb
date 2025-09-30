@@ -45,7 +45,7 @@ def col(loc: int, strg: str) -> int:
 
     Note: the default parsing behavior is to expand tabs in the input string
     before starting the parsing process.  See
-    :class:`ParserElement.parse_string` for more
+    :meth:`ParserElement.parse_string` for more
     information on parsing strings containing ``<TAB>`` s, and suggested
     methods to maintain a consistent view of the parsed string, the parse
     location, and line and column positions within the parsed string.
@@ -60,7 +60,7 @@ def lineno(loc: int, strg: str) -> int:
     The first line is number 1.
 
     Note - the default parsing behavior is to expand tabs in the input string
-    before starting the parsing process.  See :class:`ParserElement.parse_string`
+    before starting the parsing process.  See :meth:`ParserElement.parse_string`
     for more information on parsing strings containing ``<TAB>`` s, and
     suggested methods to maintain a consistent view of the parsed string, the
     parse location, and line and column positions within the parsed string.
@@ -186,12 +186,24 @@ class _GroupConsecutive:
     """
     Used as a callable `key` for itertools.groupby to group
     characters that are consecutive:
-        itertools.groupby("abcdejkmpqrs", key=IsConsecutive())
-        yields:
-            (0, iter(['a', 'b', 'c', 'd', 'e']))
-            (1, iter(['j', 'k']))
-            (2, iter(['m']))
-            (3, iter(['p', 'q', 'r', 's']))
+    
+    .. testcode::
+
+       from itertools import groupby
+       from pyparsing.util import _GroupConsecutive
+
+       grouped = groupby("abcdejkmpqrs", key=_GroupConsecutive())
+       for index, group in grouped:
+           print(tuple([index, list(group)]))
+
+    prints:
+
+    .. testoutput::
+
+       (0, ['a', 'b', 'c', 'd', 'e'])
+       (1, ['j', 'k'])
+       (2, ['m'])
+       (3, ['p', 'q', 'r', 's'])
     """
 
     def __init__(self) -> None:
@@ -214,21 +226,28 @@ def _collapse_string_to_ranges(
     Take a string or list of single-character strings, and return
     a string of the consecutive characters in that string collapsed
     into groups, as might be used in a regular expression '[a-z]'
-    character set:
+    character set::
+
         'a' -> 'a' -> '[a]'
         'bc' -> 'bc' -> '[bc]'
         'defgh' -> 'd-h' -> '[d-h]'
         'fdgeh' -> 'd-h' -> '[d-h]'
         'jklnpqrtu' -> 'j-lnp-rtu' -> '[j-lnp-rtu]'
-    Duplicates get collapsed out:
+
+    Duplicates get collapsed out::
+
         'aaa' -> 'a' -> '[a]'
         'bcbccb' -> 'bc' -> '[bc]'
         'defghhgf' -> 'd-h' -> '[d-h]'
         'jklnpqrjjjtu' -> 'j-lnp-rtu' -> '[j-lnp-rtu]'
-    Spaces are preserved:
+
+    Spaces are preserved::
+
         'ab c' -> ' a-c' -> '[ a-c]'
+
     Characters that are significant when defining regex ranges
-    get escaped:
+    get escaped::
+
         'acde[]-' -> r'\-\[\]ac-e' -> r'[\-\[\]ac-e]'
     """
 
@@ -425,7 +444,10 @@ def replaced_by_pep8(compat_name: str, fn: C) -> C:
             # )
             return fn(*args, **kwargs)
 
-    _inner.__doc__ = f"""Deprecated - use :class:`{fn.__name__}`"""
+    _inner.__doc__ = f"""
+        .. deprecated:: 3.0.0
+           Use :class:`{fn.__name__}` instead
+        """
     _inner.__name__ = compat_name
     _inner.__annotations__ = fn.__annotations__
     if isinstance(fn, types.FunctionType):

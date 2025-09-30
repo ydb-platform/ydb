@@ -433,7 +433,13 @@ public:
             return nullptr;
         }
 
-        TCiString func(Func_);
+        TString func = Func_;
+        if (auto issue = NormalizeName(Pos_, func)) {
+            ctx.Error(Pos_) << issue->GetMessage();
+            ctx.IncrementMonCounter("sql_errors", "NormalizeTableFunctionError");
+            return nullptr;
+        }
+
         if (func != "object" && func != "walkfolders") {
             for (auto& arg: Args_) {
                 if (arg.Expr->GetLabel()) {
@@ -442,7 +448,7 @@ public:
                 }
             }
         }
-        if (func == "concat_strict") {
+        if (func == "concatstrict") {
             auto tuple = Y();
             for (auto& arg: Args_) {
                 ExtractTableName(ctx, arg);
@@ -492,8 +498,8 @@ public:
             return concat;
         }
 
-        else if (func == "range" || func == "range_strict" || func == "like" || func == "like_strict" ||
-            func == "regexp" || func == "regexp_strict" || func == "filter" || func == "filter_strict") {
+        else if (func == "range" || func == "rangestrict" || func == "like" || func == "likestrict" ||
+            func == "regexp" || func == "regexpstrict" || func == "filter" || func == "filterstrict") {
             bool isRange = func.StartsWith("range");
             bool isFilter = func.StartsWith("filter");
             size_t minArgs = isRange ? 1 : 2;
@@ -539,7 +545,7 @@ public:
             if (!path) {
                 return nullptr;
             }
-            auto range = Y(func.EndsWith("_strict") ? "MrTableRangeStrict" : "MrTableRange", path);
+            auto range = Y(func.EndsWith("strict") ? "MrTableRangeStrict" : "MrTableRange", path);
             TNodePtr predicate;
             TDeferredAtom suffix;
             if (func.StartsWith("range")) {
@@ -618,7 +624,7 @@ public:
             }
 
             return key;
-        } else if (func == "each" || func == "each_strict") {
+        } else if (func == "each" || func == "eachstrict") {
             auto each = Y(func == "each" ? "MrTableEach" : "MrTableEachStrict");
             for (auto& arg : Args_) {
                 if (arg.HasAt) {
@@ -833,6 +839,37 @@ public:
 
             result = L(result, Q(settings));
             return result;
+        }
+        else if (func == "partitionlist" || func == "partitionliststrict") {
+            auto requiredLangVer = MakeLangVersion(2025, 4);
+            if (!IsBackwardCompatibleFeatureAvailable(ctx.Settings.LangVer, requiredLangVer, ctx.Settings.BackportMode)) {
+                auto str = FormatLangVersion(requiredLangVer);
+                YQL_ENSURE(str);
+                ctx.Error(Pos_) << "PARTITION_LIST table function is not available before language version " << *str;
+                return nullptr;
+            }
+            if (Args_.size() != 1) {
+                ctx.Error(Pos_) << "Single argument required, but got " << Args_.size() << " arguments";
+                return nullptr;
+            }
+            const auto& arg = Args_.front();
+            if (arg.HasAt) {
+                ctx.Error(Pos_) << "Temporary tables are not supported here, expecting expression";
+                return nullptr;
+            }
+            if (!arg.View.empty()) {
+                ctx.Error(Pos_) << "Views are not supported here, expecting expression";
+                return nullptr;
+            }
+            if (!arg.Id.Empty()) {
+                ctx.Error(Pos_) << "Expecting expression as argument, but got identifier";
+                return nullptr;
+            }
+            if (!arg.Expr) {
+                ctx.Error(Pos_) << "Expecting expression as argument";
+                return nullptr;
+            }
+            return Y(func.EndsWith("strict") ? "MrPartitionListStrict" : "MrPartitionList", Y("EvaluateExpr", arg.Expr));
         }
 
         ctx.Error(Pos_) << "Unknown table name preprocessor: " << Func_;

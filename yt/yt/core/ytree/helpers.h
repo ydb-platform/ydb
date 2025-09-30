@@ -47,7 +47,9 @@ struct TAttributeDictionarySerializer
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void ValidateYTreeKey(IAttributeDictionary::TKeyView key);
+void ValidateYTreeKey(
+    IAttributeDictionary::TKeyView key,
+    int maxLength = std::numeric_limits<int>::max());
 
 [[noreturn]] void ThrowYPathResolutionDepthExceeded(TYPathBuf path);
 

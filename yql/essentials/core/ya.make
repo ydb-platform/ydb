@@ -29,6 +29,7 @@ SRCS(
     yql_join.cpp
     yql_join.h
     yql_library_compiler.cpp
+    yql_linear_checker.cpp
     yql_opt_hopping.cpp
     yql_opt_match_recognize.cpp
     yql_opt_match_recognize.h
@@ -69,6 +70,7 @@ PEERDIR(
     library/cpp/type_info/tz
     library/cpp/yson
     library/cpp/yson/node
+    library/cpp/containers/stack_vector
     yql/essentials/ast
     yql/essentials/core/file_storage
     yql/essentials/core/sql_types

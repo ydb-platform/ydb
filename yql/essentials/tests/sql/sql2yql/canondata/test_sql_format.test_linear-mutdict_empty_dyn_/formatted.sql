@@ -1,3 +1,0 @@
-SELECT
-    Block(($parent) -> (FromMutDict(ToDynamicLinear(MutDictCreate(String, Int32, $parent)))))
-;

@@ -154,12 +154,6 @@ DEFINE_ENUM(ETableSchemaMode,
     ((Strong)    (1))
 );
 
-// TODO(cherepashka): remove after corresponding compat in 25.1 will be removed.
-DEFINE_ENUM(ECompatOptimizeFor,
-    ((Lookup)  (0))
-    ((Scan)    (1))
-);
-
 DEFINE_ENUM_WITH_UNDERLYING_TYPE(EOptimizeFor, i32,
     ((Lookup)  (0))
     ((Scan)    (1))

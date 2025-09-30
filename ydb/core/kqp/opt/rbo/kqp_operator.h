@@ -22,6 +22,10 @@ enum EOperator : ui32 {
     Root
 };
 
+/**
+ * Info Unit is a reference to a column in the plan
+ * Currently we only record the name and alias of the column, but we will extend it in the future
+ */
 struct TInfoUnit {
     TInfoUnit(TString alias, TString column): Alias(alias), ColumnName(column) {}
     TInfoUnit(TString name);
@@ -47,8 +51,15 @@ struct TInfoUnit {
     };
 };
 
+/**
+ * Extract all into units from an expression in YQL
+ */
 void GetAllMembers(TExprNode::TPtr node, TVector<TInfoUnit>& IUs);
 
+/**
+ * The following structures are used to extract filter information in convenient form from a filter expression
+ * The filter is split into conjuncts and they are separated into generic filter conditions and potential join conditions
+ */
 struct TFilterInfo {
     TExprNode::TPtr FilterBody;
     TVector<TInfoUnit> FilterIUs;
@@ -66,11 +77,19 @@ struct TConjunctInfo {
     TVector<TJoinConditionInfo> JoinConditions;
 };
 
+/**
+ * Per-operator physical plan properties
+ * TODO: Make this more generic and extendable
+ */
 struct TPhysicalOpProps {
     std::optional<int> StageId;
     std::optional<TString> Algorithm;
 };
 
+/**
+ * Connection structs for the Stage graph
+ * We make a special case for a Source connection that is required due to the limitation of the Data shard sources
+ */
 struct TConnection {
     TConnection(TString type, bool fromSourceStage) : Type(type), FromSourceStage(fromSourceStage) {}
     virtual TExprNode::TPtr BuildConnection(TExprNode::TPtr inputStage, TExprNode::TPtr & node, TExprNode::TPtr & newStage, TExprContext& ctx) = 0;
@@ -114,6 +133,12 @@ struct TSourceConnection : public TConnection {
 
 };
 
+/**
+ * Stage graph
+ * 
+ * TODO: Add validation, clean up interfaces
+ */
+
 struct TStageGraph {
     TVector<int> StageIds;
     THashMap<int, TVector<TInfoUnit>> StageAttributes;
@@ -151,16 +176,26 @@ struct TStageGraph {
         return Connections.at(std::make_pair(from,to));
     }
 
+    /**
+     * Generate an expression for stage inputs
+     * The complication is the special handling of Source stage due to limitation of data shard reader
+     */
     std::pair<TExprNode::TPtr,TExprNode::TPtr> GenerateStageInput(int & stageInputCounter, TExprNode::TPtr & node, TExprContext& ctx, int fromStage);
 
     void TopologicalSort();
 };
 
+/**
+ * Global plan properties
+ */
 struct TPlanProps {
     TStageGraph StageGraph;
     int InternalVarIdx=1;
 };
 
+/**
+ * Interface for the operator
+ */
 class IOperator {
     public:
 
@@ -177,8 +212,16 @@ class IOperator {
 
     bool HasChildren() const { return Children.size() != 0; }
 
+    /**
+     * Get the information units that are in the output of this operator
+     * Currently recursively computes the correct values
+     * TODO: Add caching with the ability to invalidate
+     */
     virtual TVector<TInfoUnit> GetOutputIUs() = 0;
 
+    /***
+     * Rename information units of this operator using a specified mapping
+     */
     virtual void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> & renameMap, TExprContext & ctx);
 
     virtual TString ToString() = 0;
@@ -192,6 +235,9 @@ class IOperator {
     TVector<std::weak_ptr<IOperator>> Parents;
 };
 
+/***
+ * FIXME: This doesn't work correctly
+ */
 template <class K>
 bool MatchOperator(const std::shared_ptr<IOperator> & op) {
     auto dyn = std::dynamic_pointer_cast<K>(op);

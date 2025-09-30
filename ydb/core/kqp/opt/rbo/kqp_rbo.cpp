@@ -22,7 +22,17 @@ bool TSimplifiedRule::TestAndApply(std::shared_ptr<IOperator>& input,
         return false;
     }
 }
-
+/**
+ * Run a rule-based stage
+ * 
+ * Currently we obtain an iterator to the operators, match the rules, and if at least one matched we 
+ * apply it and start again. 
+ * 
+ * TODO: We should have a clear list of properties that are reqiuired by the rules of current stage and
+ * ensure they are computed/maintained properly
+ * 
+ * TODO: Add sanity checks that can be tunred on in debug mode to immediately catch transformation problems
+ */
 void TRuleBasedStage::RunStage(TRuleBasedOptimizer* optimizer, TOpRoot & root, TExprContext& ctx) {
 
     bool fired = true;

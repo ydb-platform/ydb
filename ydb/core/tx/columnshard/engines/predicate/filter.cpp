@@ -7,6 +7,18 @@
 
 namespace NKikimr::NOlap {
 
+std::optional<ui32> TPKRangesFilter::GetFilteredCountLimit(const std::shared_ptr<arrow::Schema>& pkSchema) {
+    ui32 result = 0;
+    for (auto&& i : SortedRanges) {
+        if (i.IsPointRange(pkSchema)) {
+            ++result;
+        } else {
+            return std::nullopt;
+        }
+    }
+    return result;
+}
+
 NKikimr::NArrow::TColumnFilter TPKRangesFilter::BuildFilter(const std::shared_ptr<NArrow::TGeneralContainer>& data) const {
     if (SortedRanges.empty()) {
         return NArrow::TColumnFilter::BuildAllowFilter();
@@ -53,6 +65,17 @@ TConclusionStatus TPKRangesFilter::Add(
     SortedRanges.emplace_back(pkRangeFilterConclusion.DetachResult());
     return TConclusionStatus::Success();
 }
+
+std::set<std::string> TPKRangesFilter::GetColumnNames() const {
+    std::set<std::string> result;
+    for (auto&& i : SortedRanges) {
+        for (auto&& c : i.GetColumnNames()) {
+            result.emplace(c);
+        }
+    }
+    return result;
+}
+
 
 TString TPKRangesFilter::DebugString() const {
     if (SortedRanges.empty()) {
@@ -193,4 +216,157 @@ TString TPKRangesFilter::SerializeToString(const std::shared_ptr<arrow::Schema>&
     return NArrow::NSerialization::TNativeSerializer().SerializeFull(SerializeToRecordBatch(pkSchema));
 }
 
-}   // namespace NKikimr::NOlap
+const TPKRangeFilter& TPKRangesFilter::Front() const {
+    Y_ABORT_UNLESS(Size());
+    return SortedRanges.front();
+}
+
+TConclusion<TPKRangesFilter> TPKRangesFilter::BuildFromProto(
+    const NKikimrTxDataShard::TEvKqpScan& proto, const std::vector<TNameTypeInfo>& ydbPk, const std::shared_ptr<arrow::Schema>& arrPk) {
+    
+    TPKRangesFilter result;
+    for (auto& protoRange : proto.GetRanges()) {
+        auto fromPredicate = std::make_shared<TPredicate>();
+        auto toPredicate = std::make_shared<TPredicate>();
+        std::tie(*fromPredicate, *toPredicate) = TPredicate::DeserializePredicatesRange(TSerializedTableRange{ protoRange }, ydbPk, arrPk);
+        auto status = result.Add(fromPredicate, toPredicate, arrPk);
+        if (status.IsFail()) {
+            return status;
+        }
+    }
+    return result;
+}
+
+
+bool IScanCursor::CheckSourceIntervalUsage(const ui64 sourceId, const ui32 indexStart, const ui32 recordsCount) const {
+    AFL_VERIFY(IsInitialized());
+    return DoCheckSourceIntervalUsage(sourceId, indexStart, recordsCount);
+}
+
+bool IScanCursor::CheckEntityIsBorder(const ICursorEntity& entity, bool& usage) const {
+    AFL_VERIFY(IsInitialized());
+    return DoCheckEntityIsBorder(entity, usage);
+}
+
+TConclusionStatus IScanCursor::DeserializeFromProto(const NKikimrKqp::TEvKqpScanCursor &proto) {
+  if (proto.HasTabletId()) {
+    TabletId = proto.GetTabletId();
+  }
+  return DoDeserializeFromProto(proto);
+}
+
+NKikimrKqp::TEvKqpScanCursor IScanCursor::SerializeToProto() const {
+  NKikimrKqp::TEvKqpScanCursor result;
+  if (TabletId) {
+    result.SetTabletId(*TabletId);
+  }
+  DoSerializeToProto(result);
+  return result;
+}
+
+void TSimpleScanCursor::DoSerializeToProto(NKikimrKqp::TEvKqpScanCursor& proto) const {
+    proto.MutableColumnShardSimple()->SetSourceId(SourceId);
+    proto.MutableColumnShardSimple()->SetStartRecordIndex(RecordIndex);
+}
+
+bool TSimpleScanCursor::DoCheckEntityIsBorder(const ICursorEntity& entity, bool& usage) const {
+    if (SourceId != entity.GetEntityId()) {
+        return false;
+    }
+    if (!entity.GetEntityRecordsCount()) {
+        usage = false;
+    } else {
+        AFL_VERIFY(RecordIndex <= entity.GetEntityRecordsCount());
+        usage = RecordIndex < entity.GetEntityRecordsCount();
+    }
+    return true;
+}
+
+TConclusionStatus TSimpleScanCursor::DoDeserializeFromProto(const NKikimrKqp::TEvKqpScanCursor& proto) {
+    if (!proto.HasColumnShardSimple()) {
+        return TConclusionStatus::Fail("absent sorted cursor data");
+    }
+    if (!proto.GetColumnShardSimple().HasSourceId()) {
+        return TConclusionStatus::Fail("incorrect source id for cursor initialization");
+    }
+    SourceId = proto.GetColumnShardSimple().GetSourceId();
+    if (!proto.GetColumnShardSimple().HasStartRecordIndex()) {
+        return TConclusionStatus::Fail("incorrect record index for cursor initialization");
+    }
+    RecordIndex = proto.GetColumnShardSimple().GetStartRecordIndex();
+    return TConclusionStatus::Success();
+}
+
+bool TSimpleScanCursor::DoCheckSourceIntervalUsage(const ui64 sourceId, const ui32 indexStart, const ui32 recordsCount) const {
+  AFL_VERIFY(sourceId == SourceId);
+  if (indexStart >= RecordIndex) {
+    return true;
+  }
+  AFL_VERIFY(indexStart + recordsCount <= RecordIndex);
+  return false;
+}
+
+TSimpleScanCursor::TSimpleScanCursor(const std::shared_ptr<NArrow::TSimpleRow> &pk, const ui64 portionId, const ui32 recordIndex)
+    : PrimaryKey(pk), SourceId(portionId), RecordIndex(recordIndex) {
+}
+
+
+void TNotSortedSimpleScanCursor::DoSerializeToProto(NKikimrKqp::TEvKqpScanCursor &proto) const {
+  auto &data = *proto.MutableColumnShardNotSortedSimple();
+  data.SetSourceId(SourceId);
+  data.SetStartRecordIndex(RecordIndex);
+}
+
+bool TNotSortedSimpleScanCursor::DoCheckEntityIsBorder(const ICursorEntity &entity, bool &usage) const {
+  if (SourceId != entity.GetEntityId()) {
+    return false;
+  }
+  if (!entity.GetEntityRecordsCount()) {
+    usage = false;
+  } else {
+    AFL_VERIFY(RecordIndex <= entity.GetEntityRecordsCount())
+    ("index", RecordIndex)("count", entity.GetEntityRecordsCount());
+    usage = RecordIndex < entity.GetEntityRecordsCount();
+  }
+  return true;
+}
+
+TConclusionStatus TNotSortedSimpleScanCursor::DoDeserializeFromProto(const NKikimrKqp::TEvKqpScanCursor &proto) {
+  if (!proto.HasColumnShardNotSortedSimple()) {
+    return TConclusionStatus::Fail("absent unsorted cursor data");
+  }
+  auto &data = proto.GetColumnShardNotSortedSimple();
+  if (!data.HasSourceId()) {
+    return TConclusionStatus::Fail(
+        "incorrect source id for cursor initialization");
+  }
+  SourceId = data.GetSourceId();
+  if (!data.HasStartRecordIndex()) {
+    return TConclusionStatus::Fail(
+        "incorrect record index for cursor initialization");
+  }
+  RecordIndex = data.GetStartRecordIndex();
+  return TConclusionStatus::Success();
+}
+
+bool TNotSortedSimpleScanCursor::DoCheckSourceIntervalUsage(const ui64 sourceId, const ui32 indexStart, const ui32 recordsCount) const {
+  AFL_VERIFY(sourceId == SourceId);
+  if (indexStart >= RecordIndex) {
+    return true;
+  }
+  AFL_VERIFY(indexStart + recordsCount <= RecordIndex);
+  return false;
+}
+
+
+const std::shared_ptr<NArrow::TSimpleRow> & TPlainScanCursor::DoGetPKCursor() const {
+  AFL_VERIFY(!!PrimaryKey);
+  return PrimaryKey;
+}
+
+TPlainScanCursor::TPlainScanCursor(const std::shared_ptr<NArrow::TSimpleRow>& pk)
+    : PrimaryKey(pk) {
+    AFL_VERIFY(PrimaryKey);
+}
+
+} // namespace NKikimr::NOlap

@@ -110,6 +110,33 @@ def fetch_workflow_jobs(run_id: int) -> tuple[Dict[str, Any], str]:
     except Exception as e:
         return {}, f"Unexpected error: {e}"
 
+def fetch_workflow_jobs_with_retry(run_id: int, max_retries: int = 2) -> tuple[Dict[str, Any], str]:
+    """
+    Fetches jobs for a specific workflow run from GitHub API with retry logic.
+    
+    Args:
+        run_id: Workflow run ID
+        max_retries: Maximum number of retry attempts
+    
+    Returns:
+        Tuple (data, error). If successful - (data, ""), if error - ({}, error_message)
+    """
+    for attempt in range(max_retries + 1):
+        if attempt > 0:
+            print(f"🔄 Retry attempt {attempt}/{max_retries} for run {run_id}...")
+            time.sleep(5)  # Wait 5 seconds before retry
+        
+        jobs_data, error = fetch_workflow_jobs(run_id)
+        
+        if not error:
+            if attempt > 0:
+                print(f"✅ Successfully fetched jobs for run {run_id} on attempt {attempt + 1}")
+            return jobs_data, ""
+        
+        print(f"⚠️ Attempt {attempt + 1} failed for run {run_id}: {error}")
+    
+    return {}, f"Failed after {max_retries + 1} attempts: {error}"
+
 def fetch_workflow_runs(status: str = "queued", per_page: int = 1000, page: int = 1) -> tuple[Dict[str, Any], str]:
     """
     Fetches workflow runs data from GitHub API.
@@ -216,10 +243,10 @@ def has_stuck_jobs(run: Dict[str, Any], threshold_hours: float) -> tuple[bool, L
     if not run_id:
         return True, []  # If no ID, consider it stuck
     
-    # Fetch jobs for this workflow run
-    jobs_data, error = fetch_workflow_jobs(run_id)
+    # Fetch jobs for this workflow run with retry
+    jobs_data, error = fetch_workflow_jobs_with_retry(run_id)
     if error:
-        print(f"⚠️ Could not fetch jobs for run {run_id} ({workflow_name}): {error}")
+        print(f"⚠️ Could not fetch jobs for run {run_id} ({workflow_name}) after retries: {error}")
         return True, []  # If can't fetch jobs, consider it stuck to be safe
     
     jobs = jobs_data.get('jobs', [])

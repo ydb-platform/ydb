@@ -2007,6 +2007,7 @@ private:
         auto configProvider = CreateConfigProvider(*TypesCtx, gatewaysConfig, {}, allowSettings);
         TypesCtx->AddDataSource(ConfigProviderName, configProvider);
         TypesCtx->MatchRecognize = QueryServiceConfig.GetEnableMatchRecognize();
+        TypesCtx->StreamLookupJoin = true;
 
         YQL_ENSURE(TypesCtx->Initialize(*ExprCtx));
 

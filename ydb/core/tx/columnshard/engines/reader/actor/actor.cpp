@@ -179,7 +179,7 @@ void TColumnShardScan::CheckHanging(const bool logging) const {
             "scan_actor_id", ScanActorId)("tx_id", TxId)("scan_id", ScanId)("gen", ScanGen)("tablet", TabletId)(
             "debug", ScanIterator ? ScanIterator->DebugString() : Default<TString>())("last", LastResultInstant);
     }
-    const bool ok = !!FinishInstant || !ScanIterator || !ChunksLimiter.HasMore() || ScanCountersPool.InWaiting();
+    const bool ok = !!FinishInstant || !ScanIterator || !ChunksLimiter.HasMore() || ScanCountersPool.InWaiting() || TMonotonic::Now() < GetComputeDeadline();
     AFL_VERIFY_DEBUG(ok)
     ("finished", ScanIterator->Finished())
     ("scan_actor_id", ScanActorId)("tx_id", TxId)("scan_id", ScanId)("gen", ScanGen)("tablet", TabletId)("debug", ScanIterator->DebugString())(
@@ -306,10 +306,6 @@ void TColumnShardScan::ContinueProcessing() {
     while (ScanIterator && ProduceResults()) {
     }
     if (!!AckReceivedInstant) {
-        if (!ResultsForReplyBuildGuard) {
-            ResultsForReplyBuildGuard.emplace(ScanCountersPool.GetResultsForReplyGuard());
-        }
-
         LastResultInstant = TMonotonic::Now();
     }
 
@@ -411,7 +407,6 @@ bool TColumnShardScan::SendResult(bool pageFault, bool lastBatch) {
     }
     ReadMetadataRange->OnReplyConstruction(TabletId, *Result);
     AckReceivedInstant.reset();
-    ResultsForReplyBuildGuard.reset();
     LastResultInstant = TMonotonic::Now();
 
     Result->CpuTime = ScanCountersPool.GetExecutionDuration();

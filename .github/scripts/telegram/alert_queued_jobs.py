@@ -35,6 +35,28 @@ def get_tail_message() -> str:
     logins = get_alert_logins()
     return f"📊 [Dashboard details](https://datalens.yandex/wkptiaeyxz7qj?tab=ka)\n\nFYI: {logins}"
 
+def get_github_headers() -> Dict[str, str]:
+    """
+    Gets GitHub API headers with token if available.
+    
+    Returns:
+        Dictionary with headers for GitHub API requests
+    """
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28"
+    }
+    
+    # Try to get GitHub token from environment variables
+    github_token = os.getenv('GITHUB_TOKEN') or os.getenv('GH_TOKEN')
+    if github_token:
+        headers["Authorization"] = f"Bearer {github_token}"
+        print("🔑 Using GitHub token for API requests")
+    else:
+        print("⚠️ No GitHub token found, using unauthenticated requests (may hit rate limits)")
+    
+    return headers
+
 # Constants
 TAIL_MESSAGE = get_tail_message()
 
@@ -47,8 +69,8 @@ SEND_WHEN_ALL_GOOD = False  # Whether to send a message when all jobs are workin
 # Criteria for determining stuck jobs
 # Each element: [pattern, threshold_hours, display_name]
 WORKFLOW_THRESHOLDS = [
-    ["PR-check", 0.01, "PR-check"],
-    ["Postcommit", 0.5, "Postcommit"],
+    ["PR-check", 0.5, "PR-check"],
+    ["Postcommit", 6, "Postcommit"],
     # Example of adding a new type:
     # ["Nightly", 12, "Nightly-Build"]
 ]
@@ -64,9 +86,10 @@ def fetch_workflow_jobs(run_id: int) -> tuple[Dict[str, Any], str]:
         Tuple (data, error). If successful - (data, ""), if error - ({}, error_message)
     """
     url = f"https://api.github.com/repos/ydb-platform/ydb/actions/runs/{run_id}/jobs"
+    headers = get_github_headers()
     
     try:
-        response = requests.get(url, timeout=30)
+        response = requests.get(url, headers=headers, timeout=30)
         
         if response.status_code == 200:
             return response.json(), ""
@@ -107,9 +130,10 @@ def fetch_workflow_runs(status: str = "queued", per_page: int = 1000, page: int 
         "page": page,
         "status": status
     }
+    headers = get_github_headers()
     
     try:
-        response = requests.get(url, params=params, timeout=30)
+        response = requests.get(url, params=params, headers=headers, timeout=30)
         
         if response.status_code == 200:
             return response.json(), ""

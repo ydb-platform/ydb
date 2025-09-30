@@ -29,6 +29,7 @@ jobs:
       env:
         TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_YDBOT_TOKEN }}
         GH_ALERTS_TG_LOGINS: ${{ vars.GH_ALERTS_TG_LOGINS }}
+        GITHUB_TOKEN: ${{ secrets.YDBOT_TOKEN }}
       run: |
         python .github/scripts/telegram/alert_queued_jobs.py \
           --chat-id 3017506311 \

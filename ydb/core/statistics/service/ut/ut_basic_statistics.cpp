@@ -244,22 +244,23 @@ Y_UNIT_TEST_SUITE(BasicStatistics) {
         // Block stats updates from one of the shards and pass others through.
         std::optional<ui64> blockedShardId;
         THashSet<ui64> updatedShardIds;
+        auto blockPredicate = [&](const TEvDataShard::TEvPeriodicTableStats::TPtr& ev) {
+            const auto& record = ev->Get()->Record;
+            if (record.GetTableLocalId() != pathId.LocalPathId) {
+                return false;
+            }
+            if (!blockedShardId) {
+                blockedShardId = record.GetDatashardId();
+                return true;
+            } else if (blockedShardId == record.GetDatashardId()) {
+                return true;
+            } else {
+                updatedShardIds.insert(record.GetDatashardId());
+                return false;
+            }
+        };
         TBlockEvents<TEvDataShard::TEvPeriodicTableStats> blockShardStats(
-            runtime, [&](const TEvDataShard::TEvPeriodicTableStats::TPtr& ev) {
-                const auto& record = ev->Get()->Record;
-                if (record.GetTableLocalId() != pathId.LocalPathId) {
-                    return false;
-                }
-                if (!blockedShardId) {
-                    blockedShardId = record.GetDatashardId();
-                    return true;
-                } else if (blockedShardId == record.GetDatashardId()) {
-                    return true;
-                } else {
-                    updatedShardIds.insert(record.GetDatashardId());
-                    return false;
-                }
-            });
+            runtime, blockPredicate);
 
         runtime.WaitFor(
             "TEvPeriodicTableStats",
@@ -267,13 +268,14 @@ Y_UNIT_TEST_SUITE(BasicStatistics) {
         // Give SchemeShard time to process shard stats updates
         runtime.SimulateSleep(TDuration::Seconds(1));
 
-        {
-            // Check that the row count in SchemeShard got partially updated.
+        auto getDescribeRowCount = [&]() {
             auto sender = runtime.AllocateEdgeActor();
             auto describe = DescribeTable(runtime, sender, "/Root/Database/Table");
-            ui64 rowCount = describe.GetPathDescription().GetTableStats().GetRowCount();
-            UNIT_ASSERT_GT(rowCount, 0);
-        }
+            return describe.GetPathDescription().GetTableStats().GetRowCount();
+        };
+
+        // Check that the row count in SchemeShard got partially updated.
+        UNIT_ASSERT_GT(getDescribeRowCount(), 0);
 
         const ui32 nodeIdx = 1;
 
@@ -291,6 +293,28 @@ Y_UNIT_TEST_SUITE(BasicStatistics) {
         WaitForStatsUpdateFromSchemeShard(runtime, ssTabletId, saTabletId);
         WaitForStatsPropagate(runtime, nodeIdx);
 
+        // Block updates from one of the shards again and reboot SchemeShard
+        TBlockEvents<TEvDataShard::TEvPeriodicTableStats> blockShardStatsAgain(
+            runtime, blockPredicate);
+        RebootTablet(runtime, ssTabletId, runtime.AllocateEdgeActor());
+        updatedShardIds.clear();
+        runtime.WaitFor(
+            "TEvPeriodicTableStats2",
+            [&]{ return updatedShardIds.size() >= shardCount - 1; });
+        // Give SchemeShard time to process shard stats updates
+        runtime.SimulateSleep(TDuration::Seconds(1));
+
+        {
+            // Check that the row count in SchemeShard got partially updated.
+            ui64 rc = getDescribeRowCount();
+            UNIT_ASSERT_GT(rc, 0);
+            UNIT_ASSERT_LT(rc, expectedRowCount);
+        }
+
+        // Check that after an update from SchemeShard with incomplete stats for the table,
+        // statistics service still reports correct row count.
+        WaitForStatsUpdateFromSchemeShard(runtime, ssTabletId, saTabletId);
+        WaitForStatsPropagate(runtime, nodeIdx);
         UNIT_ASSERT_VALUES_EQUAL(GetRowCount(runtime, nodeIdx, pathId), expectedRowCount);
     }
 

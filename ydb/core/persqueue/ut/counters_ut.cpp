@@ -5,6 +5,7 @@
 #include <ydb/core/mon/mon.h>
 #include <ydb/core/persqueue/ut/common/pq_ut_common.h>
 #include <ydb/core/persqueue/public/counters/percentile_counter.h>
+#include <ydb/core/persqueue/pqtablet/common/constants.h>
 #include <ydb/core/persqueue/pqtablet/partition/partition.h>
 #include <ydb/core/sys_view/service/sysview_service.h>
 #include <ydb/core/testlib/fake_scheme_shard.h>
@@ -126,7 +127,7 @@ void PartitionLevelCounters(bool featureFlagEnabled, bool firstClassCitizen, TSt
 
     tc.Runtime->GetAppData(0).FeatureFlags.SetEnableMetricsLevel(featureFlagEnabled);
 
-    PQTabletPrepare({ .metricsLevel = 3 }, {}, tc);
+    PQTabletPrepare({ .metricsLevel = METRICS_LEVEL_OBJECT }, {}, tc);
     CmdWrite(0, "sourceid0", TestData(), tc, false, {}, true);
     CmdWrite(0, "sourceid1", TestData(), tc, false);
     CmdWrite(0, "sourceid2", TestData(), tc, false);
@@ -166,7 +167,7 @@ void PartitionLevelCounters(bool featureFlagEnabled, bool firstClassCitizen, TSt
     {
         // Turn on per partition counters, check counters.
 
-        PQTabletPrepare({ .metricsLevel = 4 }, {}, tc);
+        PQTabletPrepare({ .metricsLevel = METRICS_LEVEL_DETAILED }, {}, tc);
 
         // partition, sourceId, data, text
         CmdWrite({ .Partition = 0, .SourceId = "sourceid3", .Data = TestData(), .TestContext = tc, .Error = false });
@@ -237,7 +238,7 @@ void PartitionLevelCounters(bool featureFlagEnabled, bool firstClassCitizen, TSt
     {
         // Disable per partition counters, the counters should be empty.
 
-        PQTabletPrepare({ .metricsLevel = 3 }, {}, tc);
+        PQTabletPrepare({ .metricsLevel = METRICS_LEVEL_OBJECT }, {}, tc);
         TString counters = getCountersHtml();
         TString referenceCounters = NResource::Find(TStringBuilder() << referenceDir << "_turned_off.html");
         counters = zeroUnreliableValues(counters) + (featureFlagEnabled ? "\n" : "");

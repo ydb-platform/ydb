@@ -35,8 +35,8 @@ void KafkaReadSessionProxyActor::Bootstrap() {
 }
 
 template<typename TRequest>
-void KafkaReadSessionProxyActor::HandleOnWork(TRequest& ev) {
-    KAFKA_LOG_D("HandleOnWork ");
+void KafkaReadSessionProxyActor::DoHandle(TRequest& ev) {
+    KAFKA_LOG_D("HandleOnWork");
     switch (Context->ReadSession.BalancingMode) {
         case EBalancingMode::Native:
             Register(new TKafkaBalancerActor(Context, 0, ev->Get()->CorrelationId, ev->Get()->Request));
@@ -49,32 +49,51 @@ void KafkaReadSessionProxyActor::HandleOnWork(TRequest& ev) {
     }
 }
 
-template<>
-void KafkaReadSessionProxyActor::HandleOnWork<TEvKafka::TEvJoinGroupRequest::TPtr>(TEvKafka::TEvJoinGroupRequest::TPtr& ev) {
+void KafkaReadSessionProxyActor::Handle(TEvKafka::TEvJoinGroupRequest::TPtr& ev) {
     KAFKA_LOG_D("HandleOnWork<TEvKafka::TEvJoinGroupRequest>");
     Context->ReadSession.BalancingMode = Context->ReadSession.PendingBalancingMode.value_or(GetBalancingMode(*ev->Get()->Request));
     Context->ReadSession.PendingBalancingMode.reset();
     KAFKA_LOG_D("Balancing mode: " << Context->ReadSession.BalancingMode);
 
-    switch (Context->ReadSession.BalancingMode) {
-        case EBalancingMode::Native:
-            Register(new TKafkaBalancerActor(Context, 0, ev->Get()->CorrelationId, ev->Get()->Request));
-            break;
-
-        case EBalancingMode::Server:
-            EnsureReadSessionActor();
-            Forward(ev, ReadSessionActorId);
-            break;
-    }
+    DoHandle(ev);
 }
 
-template<>
-void KafkaReadSessionProxyActor::HandleOnWork<TEvKafka::TEvFetchRequest::TPtr>(TEvKafka::TEvFetchRequest::TPtr& ev) {
+void KafkaReadSessionProxyActor::Handle(TEvKafka::TEvSyncGroupRequest::TPtr& ev) {
+    if (Context->ReadSession.PendingBalancingMode.has_value()) {
+        TSyncGroupResponseData::TPtr response = std::make_shared<TSyncGroupResponseData>();
+        response->ErrorCode = EKafkaErrors::ILLEGAL_GENERATION;
+        response->Assignment = "";
+
+        Send(Context->ConnectionId, new TEvKafka::TEvResponse(ev->Get()->CorrelationId, response, EKafkaErrors::ILLEGAL_GENERATION));
+        return;
+    }
+
+    DoHandle(ev);
+}
+
+void KafkaReadSessionProxyActor::Handle(TEvKafka::TEvHeartbeatRequest::TPtr& ev) {
+    if (Context->ReadSession.PendingBalancingMode.has_value()) {
+        THeartbeatResponseData::TPtr response = std::make_shared<THeartbeatResponseData>();
+        response->ErrorCode = EKafkaErrors::REBALANCE_IN_PROGRESS;
+
+        Send(Context->ConnectionId, new TEvKafka::TEvResponse(ev->Get()->CorrelationId, response, EKafkaErrors::REBALANCE_IN_PROGRESS));
+        return;
+    }
+
+    DoHandle(ev);
+}
+
+void KafkaReadSessionProxyActor::Handle(TEvKafka::TEvLeaveGroupRequest::TPtr& ev) {
+    DoHandle(ev);
+}
+
+void KafkaReadSessionProxyActor::Handle(TEvKafka::TEvFetchRequest::TPtr& ev) {
     KAFKA_LOG_D("HandleOnWork<TEvKafka::TEvFetchRequest>");
     if (Context->ReadSession.BalancingMode == EBalancingMode::Server) {
         Register(CreateKafkaFetchActor(Context, ev->Get()->CorrelationId, ev->Get()->Request));
         return;
     }
+
     for (auto& topic : GetTopics(*ev->Get()->Request, Context)) {
         if (Topics.contains(topic)) {
             continue;
@@ -187,6 +206,10 @@ void KafkaReadSessionProxyActor::Handle(TEvPersQueue::TEvBalancingSubscribeNotif
     topicInfo.ReadBalancerGeneration = record.GetGeneration();
     topicInfo.ReadBalancerNotifyCookie = record.GetCookie();
 
+    if (*topicInfo.UsedServerBalancing && Context->ReadSession.BalancingMode == EBalancingMode::Native) {
+        Context->ReadSession.PendingBalancingMode = EBalancingMode::Server;
+    }
+
     ProcessPendingRequestIfPossible();
 }
 
@@ -217,11 +240,11 @@ void KafkaReadSessionProxyActor::ProcessPendingRequestIfPossible() {
 
 STFUNC(KafkaReadSessionProxyActor::StateWork) {
     switch (ev->GetTypeRewrite()) {
-        hFunc(TEvKafka::TEvJoinGroupRequest, HandleOnWork);
-        hFunc(TEvKafka::TEvSyncGroupRequest, HandleOnWork);
-        hFunc(TEvKafka::TEvHeartbeatRequest, HandleOnWork);
-        hFunc(TEvKafka::TEvLeaveGroupRequest, HandleOnWork);
-        hFunc(TEvKafka::TEvFetchRequest, HandleOnWork);
+        hFunc(TEvKafka::TEvJoinGroupRequest, Handle);
+        hFunc(TEvKafka::TEvSyncGroupRequest, Handle);
+        hFunc(TEvKafka::TEvHeartbeatRequest, Handle);
+        hFunc(TEvKafka::TEvLeaveGroupRequest, Handle);
+        hFunc(TEvKafka::TEvFetchRequest, Handle);
         hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
         hFunc(TEvPersQueue::TEvBalancingSubscribeNotify, Handle);
     }

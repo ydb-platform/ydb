@@ -19,8 +19,14 @@ public:
 
     void Bootstrap();
 
+    void Handle(TEvKafka::TEvJoinGroupRequest::TPtr&);
+    void Handle(TEvKafka::TEvSyncGroupRequest::TPtr&);
+    void Handle(TEvKafka::TEvHeartbeatRequest::TPtr&);
+    void Handle(TEvKafka::TEvLeaveGroupRequest::TPtr&);
+    void Handle(TEvKafka::TEvFetchRequest::TPtr&);
+
     template<typename TRequest>
-    void HandleOnWork(TRequest&);
+    void DoHandle(TRequest&);
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr&);
     void Handle(TEvPersQueue::TEvBalancingSubscribeNotify::TPtr&);

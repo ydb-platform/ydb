@@ -1459,9 +1459,15 @@ TMaybe<TSourcePtr> TSqlTranslation::AsTableImpl(const TRule_table_ref& node) {
 
     if (block.Alt_case() == TRule_table_ref::TBlock3::kAlt2) {
         auto& alt = block.GetAlt2();
-        TCiString func(Id(alt.GetRule_an_id_expr1(), *this));
 
-        if (func == "as_table") {
+        TString func = Id(alt.GetRule_an_id_expr1(), *this);
+        if (auto issue = NormalizeName(Ctx_.Pos(), func)) {
+            Error() << issue->GetMessage();
+            Ctx_.IncrementMonCounter("sql_errors", "NormalizeTableFunctionError");
+            return nullptr;
+        }
+
+        if (func == "astable") {
             if (node.HasBlock1()) {
                 Ctx_.Error() << "Cluster shouldn't be specified for AS_TABLE source";
                 return TMaybe<TSourcePtr>(nullptr);

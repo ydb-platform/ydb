@@ -2946,7 +2946,7 @@ namespace NTypeAnnImpl {
         const auto dataSlot = dataType->GetSlot();
         if (IsDataTypeDecimal(dataSlot)) {
             const auto params = static_cast<const TDataExprParamsType*>(dataType);
-            if (const auto scale = FromString<ui8>(params->GetParamTwo())) {
+            if (/* const auto scale = */ FromString<ui8>(params->GetParamTwo())) {
                     output = ctx.Expr.Builder(input->Pos())
                         .Callable(IncOrDec ? "Add" : "Sub")
                             .Add(0, input->Child(0))
@@ -5391,7 +5391,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         }
 
         TVector<TString> supportedSystems = { "yt", "kikimr", "rtmr" };
-        if (auto p = FindPtr(supportedSystems, input->Tail().Content())) {
+        if (/* auto p = */ FindPtr(supportedSystems, input->Tail().Content())) {
         } else {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Tail().Pos()), TStringBuilder() << "Unknown system: "
                 << input->Tail().Content() << ", supported: " << JoinSeq(",", supportedSystems)));
@@ -8041,6 +8041,12 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             input->SetPosAware();
         }
 
+        if (cachedType->UseStaticLinear()) {
+            if (!CheckLinearLangver(input->Pos(), ctx.Types.LangVer, ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+        }
+
         return IGraphTransformer::TStatus::Ok;
     }
 
@@ -8200,6 +8206,12 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         input->SetTypeAnn(callableType);
         if (ctx.Types.DebugPositions) {
             input->SetPosAware();
+        }
+
+        if (callableType->UseStaticLinear()) {
+            if (!CheckLinearLangver(input->Pos(), ctx.Types.LangVer, ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
         }
 
         return IGraphTransformer::TStatus::Ok;
@@ -8747,7 +8759,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         return IGraphTransformer::TStatus::Repeat;
     }
 
-    IGraphTransformer::TStatus CallableWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    IGraphTransformer::TStatus CallableWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         Y_UNUSED(output);
         if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
@@ -8793,6 +8805,12 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(lambda->Pos()), TStringBuilder() << "Mismatch of lambda return type: "
                 << *lambda->GetTypeAnn() << " != " << *callableType->GetReturnType()));
             return IGraphTransformer::TStatus::Error;
+        }
+
+        if (callableType->UseStaticLinear()) {
+            if (!CheckLinearLangver(input->Pos(), ctx.Types.LangVer, ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
         }
 
         input->SetTypeAnn(callableType);
@@ -13197,7 +13215,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         ExtFunctions["NamedApply"] = &NamedApplyWrapper;
         Functions["PositionalArgs"] = &PositionalArgsWrapper;
         ExtFunctions["SqlCall"] = &SqlCallWrapper;
-        Functions["Callable"] = &CallableWrapper;
+        ExtFunctions["Callable"] = &CallableWrapper;
         ExtFunctions["CallableType"] = &TypeWrapper<ETypeAnnotationKind::Callable>;
         ExtFunctions["CallableResultType"] = &TypeArgWrapper<ETypeArgument::CallableResult>;
         ExtFunctions["CallableArgumentType"] = &TypeArgWrapper<ETypeArgument::CallableArgument>;

@@ -69,7 +69,7 @@ TConclusionStatus TOneCompactionCommand::DoExecute(TKikimrRunner& /*kikimr*/) {
     const i64 compactions = controller->GetCompactionFinishedCounter().Val();
     controller->EnableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
     const TInstant start = TInstant::Now();
-    while (TInstant::Now() - start < TDuration::Seconds(10)) {
+    while (TInstant::Now() - start < TDuration::Seconds(60)) {
         if (compactions < controller->GetCompactionFinishedCounter().Val()) {
             Cerr << "COMPACTION_HAPPENED: " << compactions << " -> " << controller->GetCompactionFinishedCounter().Val() << Endl;
             break;

@@ -1,0 +1,6 @@
+/* custom error: Linear types can be used */
+$handler = ($x) -> (FromMutDict($x));
+
+SELECT
+    ListMap([MutDictCreate(Int32, String, 0), MutDictCreate(Int32, String, 1)], $handler)
+;

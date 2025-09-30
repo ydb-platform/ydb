@@ -1675,9 +1675,6 @@ TEST_F(TxUsageQuery, TEST_NAME(WriteToTopic_Demo_15))
 
 void TxUsage::TestWriteToTopic17()
 {
-    // TODO(abcdef): temporarily deleted
-    return;
-
     CreateTopic("topic_A");
 
     auto session = CreateSession();

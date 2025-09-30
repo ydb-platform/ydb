@@ -803,7 +803,7 @@ namespace NKikimr::NBsController {
             if (Expired()) {
                 return PassAway();
             }
-            switch (const ui32 type = ev->GetTypeRewrite()) {
+            switch ([[maybe_unused]] const ui32 type = ev->GetTypeRewrite()) {
                 cFunc(TEvents::TSystem::Poison, PassAway);
                 cFunc(TEvents::TSystem::Bootstrap, Bootstrap);
                 hFunc(TEvTabletPipe::TEvClientConnected, Handle);

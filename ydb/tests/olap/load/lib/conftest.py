@@ -29,6 +29,32 @@ class LoadSuiteBase:
             self.timeout = timeout
             self.query_prefix = query_prefix
 
+    class KeyMeasurement:
+        class Interval:
+            def __init__(self, color: str, min: Optional[float] = None, max: Optional[float] = None):
+                self.color = color
+                self.min = min
+                self.max = max
+
+            def get_color(self, value: float) -> str:
+                if self.min is not None and value < self.min:
+                    return ''
+                if self.max is not None and value > self.max:
+                    return ''
+                return self.color
+
+        def __init__(self, name: str, caption: Optional[str] = None, intervals: list[LoadSuiteBase.KeyMeasurement.Interval] = []):
+            self.name = name
+            self.caption = caption if caption else name
+            self.intervals = intervals
+
+        def get_color(self, value: float) -> str:
+            for i in self.intervals:
+                c = i.get_color(value)
+                if c:
+                    return c
+            return ''
+
     iterations: int = 5
     workload_type: WorkloadType = None
     timeout: float = 1800.
@@ -84,6 +110,10 @@ class LoadSuiteBase:
             if q.query_prefix is not None:
                 result.query_prefix = q.query_prefix
         return result
+
+    @classmethod
+    def get_key_measurements(cls) -> list[LoadSuiteBase.KeyMeasurement]:
+        return []
 
     @classmethod
     @allure.step('check tables size')
@@ -283,6 +313,23 @@ class LoadSuiteBase:
         return ooms
 
     @classmethod
+    def __get_key_measurements_block(cls, result: YdbCliHelper.WorkloadRunResult, query_name: str) -> str:
+        stats = result.get_stats(query_name)
+        empty = True
+        result = '''<h3>Key Measurements</h3>
+        <table border='1' cellpadding='2px' style='border-collapse: collapse; font-size: 12px;'>
+        <tr style='background-color: #f0f0f0;'><th>Measurement</th><th>Value</th></tr>'''
+        for m in cls.get_key_measurements():
+            value = stats.get(m.name)
+            if value is None:
+                continue
+            empty = False
+            color = m.get_color(value)
+            result += f"<tr style='background-color: {color};'><td>{m.caption}</td><td>{value:.6g}</td></tr>"
+        result += '</table>'
+        return '' if empty else result
+
+    @classmethod
     def check_nodes(cls, result: YdbCliHelper.WorkloadRunResult, end_time: float) -> list[NodeErrors]:
         if cls.__nodes_state is None:
             return []
@@ -378,7 +425,10 @@ class LoadSuiteBase:
         allure_test_description(
             cls.suite(), query_name,
             start_time=result.start_time, end_time=end_time, node_errors=cls.check_nodes(result, end_time),
-            workload_result=result, workload_params=None
+            workload_result=result, workload_params=None,
+            addition_blocks=[
+                cls.__get_key_measurements_block(result, query_name)
+            ]
         )
         stats = result.get_stats(query_name)
         for p in ['Mean']:

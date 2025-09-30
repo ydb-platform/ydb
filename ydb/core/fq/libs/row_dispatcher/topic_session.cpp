@@ -5,13 +5,11 @@
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
 #include <ydb/core/fq/libs/row_dispatcher/format_handler/format_handler.h>
 #include <ydb/core/protos/config.pb.h>
-
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/yql/dq/actors/dq.h>
-
+#include <ydb/library/yql/providers/pq/common/pq_events_processor.h>
 #include <ydb/public/sdk/cpp/adapters/issue/issue.h>
-
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 
 #include <util/generic/queue.h>
@@ -62,6 +60,7 @@ struct TEvPrivate {
         EvCreateSession,
         EvSendStatistic,
         EvReconnectSession,
+        EvExecuteTopicEvent,
         EvEnd
     };
     static_assert(EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE)");
@@ -71,13 +70,16 @@ struct TEvPrivate {
     struct TEvCreateSession : public TEventLocal<TEvCreateSession, EvCreateSession> {};
     struct TEvSendStatistic : public TEventLocal<TEvSendStatistic, EvSendStatistic> {};
     struct TEvReconnectSession : public TEventLocal<TEvReconnectSession, EvReconnectSession> {};
+    struct TEvExecuteTopicEvent : public NYql::TTopicEventBase<TEvExecuteTopicEvent, EvExecuteTopicEvent> {
+        using TTopicEventBase::TTopicEventBase;
+    };
 };
 
 constexpr ui64 SendStatisticPeriodSec = 2;
 constexpr ui64 MaxHandledEventsCount = 1000;
 constexpr ui64 MaxHandledEventsSize = 1000000;
 
-class TTopicSession : public TActorBootstrapped<TTopicSession> {
+class TTopicSession : public TActorBootstrapped<TTopicSession>, NYql::TTopicEventProcessor<TEvPrivate::TEvExecuteTopicEvent> {
 private:
     using TBase = TActorBootstrapped<TTopicSession>;
 
@@ -315,7 +317,7 @@ public:
     [[maybe_unused]] static constexpr char ActorName[] = "FQ_ROW_DISPATCHER_SESSION";
 
 private:
-    NYdb::NTopic::TTopicClientSettings GetTopicClientSettings(bool useSsl) const;
+    NYdb::NTopic::TTopicClientSettings GetTopicClientSettings(bool useSsl);
     NYql::ITopicClient& GetTopicClient(bool useSsl);
     NYdb::NTopic::TReadSessionSettings GetReadSessionSettings(const TString& consumerName) const;
     void CreateTopicSession();
@@ -351,6 +353,7 @@ private:
 private:
 
     STRICT_STFUNC_EXC(StateFunc,
+        hFunc(TEvPrivate::TEvExecuteTopicEvent, HandleTopicEvent);
         hFunc(NFq::TEvPrivate::TEvPqEventsReady, Handle);
         hFunc(NFq::TEvPrivate::TEvCreateSession, Handle);
         hFunc(NFq::TEvPrivate::TEvSendStatistic, Handle);
@@ -364,6 +367,7 @@ private:
 
     STRICT_STFUNC_EXC(ErrorState,
         cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
+        hFunc(TEvPrivate::TEvExecuteTopicEvent, HandleTopicEvent);
         IgnoreFunc(NFq::TEvPrivate::TEvPqEventsReady);
         IgnoreFunc(NFq::TEvPrivate::TEvCreateSession);
         IgnoreFunc(TEvRowDispatcher::TEvGetNextBatch);
@@ -446,12 +450,16 @@ void TTopicSession::SubscribeOnNextEvent() {
     });
 }
 
-NYdb::NTopic::TTopicClientSettings TTopicSession::GetTopicClientSettings(bool useSsl) const {
-    return PqGateway->GetTopicClientSettings()
-        .Database(Database)
+NYdb::NTopic::TTopicClientSettings TTopicSession::GetTopicClientSettings(bool useSsl) {
+    auto opts = PqGateway->GetTopicClientSettings();
+    SetupTopicClientSettings(ActorContext().ActorSystem(), SelfId(), opts);
+
+    opts.Database(Database)
         .DiscoveryEndpoint(Endpoint)
         .SslCredentials(NYdb::TSslCredentials(useSsl))
         .CredentialsProviderFactory(CredentialsProviderFactory);
+
+    return opts;
 }
 
 NYql::ITopicClient& TTopicSession::GetTopicClient(bool useSsl) {
@@ -698,7 +706,7 @@ void TTopicSession::SendData(TClientsInfo& info) {
 
         ui64 batchSize = 0;
         while (!buffer.empty()) {
-            auto [serializedData, offsets, watermarksUs] = std::move(buffer.front());
+            auto [serializedData, offsets, watermark] = std::move(buffer.front());
             Y_ENSURE(!offsets.empty(), "Expected non empty message batch");
             buffer.pop();
 
@@ -707,7 +715,9 @@ void TTopicSession::SendData(TClientsInfo& info) {
             NFq::NRowDispatcherProto::TEvMessage message;
             message.SetPayloadId(event->AddPayload(std::move(serializedData)));
             message.MutableOffsets()->Assign(offsets.begin(), offsets.end());
-            message.MutableWatermarksUs()->Assign(watermarksUs.begin(), watermarksUs.end());
+            if (watermark) {
+                message.AddWatermarksUs(watermark->MicroSeconds());
+            }
             event->Record.AddMessages()->CopyFrom(std::move(message));
             event->Record.SetNextMessageOffset(*offsets.rbegin() + 1);
 
@@ -983,7 +993,7 @@ void TTopicSession::RefreshParsers() {
     }
 }
 
-}  // anonymous namespace
+} // anonymous namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -1006,4 +1016,4 @@ std::unique_ptr<IActor> NewTopicSession(
     return std::unique_ptr<IActor>(new TTopicSession(readGroup, topicPath, endpoint, database, config, functionRegistry, rowDispatcherActorId, compileServiceActorId, partitionId, std::move(driver), credentialsProviderFactory, counters, countersRoot, pqGateway, maxBufferSize));
 }
 
-}  // namespace NFq
+} // namespace NFq

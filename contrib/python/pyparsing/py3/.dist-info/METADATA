@@ -1,14 +1,14 @@
-Metadata-Version: 2.1
+Metadata-Version: 2.4
 Name: pyparsing
-Version: 3.2.3
-Summary: pyparsing module - Classes and methods to define and execute parsing grammars
+Version: 3.2.5
+Summary: pyparsing - Classes and methods to define and execute parsing grammars
 Author-email: Paul McGuire <ptmcg.gm+pyparsing@gmail.com>
 Requires-Python: >=3.9
 Description-Content-Type: text/x-rst
+License-Expression: MIT
 Classifier: Development Status :: 5 - Production/Stable
 Classifier: Intended Audience :: Developers
 Classifier: Intended Audience :: Information Technology
-Classifier: License :: OSI Approved :: MIT License
 Classifier: Operating System :: OS Independent
 Classifier: Programming Language :: Python
 Classifier: Programming Language :: Python :: 3
@@ -24,6 +24,7 @@ Classifier: Programming Language :: Python :: Implementation :: PyPy
 Classifier: Topic :: Software Development :: Compilers
 Classifier: Topic :: Text Processing
 Classifier: Typing :: Typed
+License-File: LICENSE
 Requires-Dist: railroad-diagrams ; extra == "diagrams"
 Requires-Dist: jinja2 ; extra == "diagrams"
 Project-URL: Homepage, https://github.com/pyparsing/pyparsing/

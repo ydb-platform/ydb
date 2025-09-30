@@ -174,16 +174,16 @@ void TCheckPermissionCommand::DoExecute(ICommandContextPtr context)
                     .DoListFor(*response.RowLevelAcl, [&] (auto fluent, const auto& rowLevelAce) {
                         fluent
                             .Item().BeginMap()
-                                .Item(TSerializableAccessControlEntry::ExpressionKey).Value(rowLevelAce.Expression)
-                                // NB(coteeq): The DoIf will try to hide the whole inapplicable_expression_mode
+                                .Item(TSerializableAccessControlEntry::RowAccessPredicateKey).Value(rowLevelAce.RowAccessPredicate)
+                                // NB(coteeq): The DoIf will try to hide the whole inapplicable_row_access_predicate_mode
                                 // mechanism from too curious users.
-                                // EInapplicableExpressionMode::Ignore is not a good choice in the common case
+                                // EInapplicableRowAccessPredicateMode::Ignore is not a good choice in the common case
                                 // from security perspective, but it may be necessary to be able to have
                                 // tables with completely different schemas in one directory.
-                                .DoIf(rowLevelAce.InapplicableExpressionMode != EInapplicableExpressionMode::Fail, [&] (auto fluent) {
+                                .DoIf(rowLevelAce.InapplicableRowAccessPredicateMode != EInapplicableRowAccessPredicateMode::Fail, [&] (auto fluent) {
                                     fluent
-                                        .Item(TSerializableAccessControlEntry::InapplicableExpressionModeKey)
-                                        .Value(rowLevelAce.InapplicableExpressionMode);
+                                        .Item(TSerializableAccessControlEntry::InapplicableRowAccessPredicateModeKey)
+                                        .Value(rowLevelAce.InapplicableRowAccessPredicateMode);
                                 })
                             .EndMap();
                     });

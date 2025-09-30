@@ -69,6 +69,10 @@ public:
                     return {};
                 }
 
+                if (read.Arg(2).Ref().IsCallable({MrPartitionListName, MrPartitionListStrictName})) {
+                    return ExpandPartitionList(read, ctx);
+                }
+
                 TYtInputKeys keys;
                 if (!keys.Parse(read.Arg(2).Ref(), ctx)) {
                     return {};
@@ -523,6 +527,13 @@ public:
                             .Value<TCoAtom>().Value(key.GetView()).Build()
                         .Build();
                     }
+                    if (auto extraColumns = key.GetExtraColumns()) {
+                        settingsBuilder.Add()
+                            .Name().Value(ToString(EYtSettingType::ExtraColumns)).Build()
+                            .Value(key.GetExtraColumns()).Build()
+                        .Build();
+                    }
+
                     tableInfo.Settings = settingsBuilder.Done();
 
                     TYtPathInfo pathInfo;
@@ -589,6 +600,87 @@ public:
     }
 
 private:
+    TExprNode::TPtr ExpandPartitionList(TYtRead read, TExprContext& ctx) {
+        const auto& partListNode = read.Arg(2).Ref();
+        YQL_ENSURE(partListNode.ChildrenSize() == 1);
+        const auto& partList = partListNode.Head();
+
+        // TODO: support empty list with user schema via BuildEmptyTableRead()
+        if (!partList.IsCallable("AsList") ||
+            partList.ChildrenSize() == 0 ||
+            !AllOf(partList.ChildrenList(), [](const auto& node) { return node->IsCallable({"AsStruct", "Struct"}); }))
+        {
+            ctx.AddError(TIssue(ctx.GetPosition(partList.Pos()),
+                TStringBuilder() << "Argument of " << partListNode.Content() << " should be non-empty literal list of structs"));
+            return {};
+        }
+
+        TExprNodeList keys;
+        for (auto entry : partList.ChildrenList()) {
+            YQL_ENSURE(entry->IsCallable({"AsStruct", "Struct"}));
+            TExprNodeList newChildren;
+            TMaybe<TStringBuf> tablePath;
+            for (ui32 i = entry->IsCallable("Struct") ? 1 : 0; i < entry->ChildrenSize(); ++i) {
+                auto structItem = entry->ChildPtr(i);
+                YQL_ENSURE(structItem->IsList() && structItem->ChildrenSize() == 2);
+                YQL_ENSURE(structItem->Head().IsAtom());
+                if (structItem->Head().Content() == MrPartitionListTableMember) {
+                    YQL_ENSURE(!tablePath.Defined(), "Duplicate member " << MrPartitionListTableMember);
+                    if (!structItem->Tail().IsCallable({"String", "Utf8"})) {
+                        ctx.AddError(TIssue(ctx.GetPosition(structItem->Pos()),
+                            TStringBuilder() << "Member " << MrPartitionListTableMember << " should be Strung/Utf8 literal"));
+                        return {};
+                    }
+
+                    tablePath = structItem->Tail().Head().Content();
+                } else {
+                    newChildren.emplace_back(structItem);
+                }
+            }
+            if (!tablePath.Defined()) {
+                ctx.AddError(TIssue(ctx.GetPosition(entry->Pos()),
+                    TStringBuilder() << "Required member " << MrPartitionListTableMember << " not found"));
+                return {};
+            }
+            if (tablePath->empty()) {
+                ctx.AddError(TIssue(ctx.GetPosition(entry->Pos()),
+                    TStringBuilder() << "Empty table path in " << MrPartitionListTableMember));
+                return {};
+            }
+
+            TExprNodeList keyArgs;
+            keyArgs.push_back(ctx.Builder(entry->Pos())
+                .List()
+                    .Atom(0, "table")
+                    .Callable(1, "String")
+                        .Atom(0, *tablePath)
+                    .Seal()
+                .Seal()
+                .Build());
+            if (!newChildren.empty()) {
+                keyArgs.push_back(ctx.Builder(entry->Pos())
+                    .List()
+                        .Atom(0, ToString(EYtSettingType::ExtraColumns))
+                        .Add(1, ctx.NewCallable(entry->Pos(), "AsStruct", std::move(newChildren)))
+                    .Seal()
+                    .Build());
+            }
+            keys.push_back(ctx.NewCallable(entry->Pos(), "Key", std::move(keyArgs)));
+        }
+        YQL_CLOG(INFO, ProviderYt) << "Expanding " << partListNode.Content() << " with " << keys.size() << " tables";
+
+        auto settings = read.Arg(4).Ptr();
+        if (!partListNode.IsCallable(MrPartitionListStrictName)) {
+            settings = NYql::AddSetting(*settings, EYtSettingType::WeakConcat, {}, ctx);
+        }
+
+        auto res = read.Ptr();
+        res->ChildRef(2) = ctx.NewCallable(partListNode.Pos(), MrTableConcatName, std::move(keys));
+        res->ChildRef(4) = settings;
+
+        return res;
+    }
+
     TExprNode::TPtr ConvertTableScheme(TYtRead read, const TYtKey& key, TExprContext& ctx) {
         if (!read.Arg(3).Ref().IsCallable(TCoVoid::CallableName())) {
             ctx.AddError(TIssue(ctx.GetPosition(read.Arg(3).Pos()), TStringBuilder()
@@ -640,7 +732,9 @@ private:
                 }
                 if (type & (EYtSettingType::InferScheme | EYtSettingType::ForceInferScheme |
                     EYtSettingType::DoNotFailOnInvalidSchema | EYtSettingType::XLock |
-                    EYtSettingType::UserSchema | EYtSettingType::UserColumns | EYtSettingType::IgnoreTypeV3)) {
+                    EYtSettingType::UserSchema | EYtSettingType::UserColumns | EYtSettingType::IgnoreTypeV3 |
+                    EYtSettingType::ExtraColumns))
+                {
                     tableSettings.push_back(setting);
                 } else {
                     readSettings.push_back(setting);

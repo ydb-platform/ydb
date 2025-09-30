@@ -49,6 +49,10 @@ $per_run_data = SELECT
     JSON_VALUE(Info, '$.ci_launch_start_time') AS CiLaunchStartTime,
     JSON_VALUE(Info, '$.ci_job_title') AS CiJobTitle,
     JSON_VALUE(Info, '$.ci_cluster_name') AS CiClusterName,
+    JSON_VALUE(Info, '$.ci_nemesis') AS CiNemesis,
+    
+    -- Порядок выполнения теста в рамках RunId (на основе Timestamp)
+    ROW_NUMBER() OVER (PARTITION BY RunId ORDER BY Timestamp) AS OrderInRun
 
 FROM `nemesis/tests_results`
 WHERE 
@@ -83,9 +87,11 @@ SELECT
     CiLaunchStartTime,
     CiJobTitle,
     CiClusterName,
+    CiNemesis,
     TestToolsVersion,
     ReportUrl,
     CiLaunchId,
+    OrderInRun,
     
     -- Извлекаем ветку из версии
     COALESCE(SubString(CAST(ClusterVersion AS String), 0U, FIND(CAST(ClusterVersion AS String), '.')), 'unknown') AS Branch,

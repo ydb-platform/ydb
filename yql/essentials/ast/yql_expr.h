@@ -187,6 +187,7 @@ enum ETypeAnnotationFlags : ui32 {
     TypeNonComparableInternal = 0x4000,
     TypeHasError = 0x8000,
     TypeHasStaticLinear = 0x10000,
+    TypeUseStaticLinear = 0x20000,
 };
 
 const ui64 TypeHashMagic = 0x1000000;
@@ -308,6 +309,18 @@ public:
         return GetKind() == ETypeAnnotationKind::Scalar;
     }
 
+    bool IsLinearOrDynamicLinear() const {
+        return IsLinear() || IsDynamicLinear();
+    }
+
+    bool IsLinear() const {
+        return GetKind() == ETypeAnnotationKind::Linear;
+    }
+
+    bool IsDynamicLinear() const {
+        return GetKind() == ETypeAnnotationKind::DynamicLinear;
+    }
+
     bool HasFixedSizeRepr() const {
         return (GetFlags() & (TypeHasDynamicSize | TypeNonPersistable | TypeNonComputable)) == 0;
     }
@@ -326,6 +339,14 @@ public:
 
     bool HasErrors() const {
         return (GetFlags() & TypeHasError) != 0;
+    }
+
+    bool HasStaticLinear() const {
+        return (GetFlags() & TypeHasStaticLinear) != 0;
+    }
+
+    bool UseStaticLinear() const {
+        return (GetFlags() & TypeUseStaticLinear) != 0;
     }
 
     ui32 GetFlags() const {
@@ -1317,9 +1338,16 @@ public:
 private:
     static ui32 MakeFlags(const TVector<TArgumentInfo>& arguments, const TTypeAnnotationNode* returnType) {
         ui32 flags = TypeNonPersistable;
-        flags |= returnType->GetFlags();
+        flags |= returnType->GetFlags() & ~TypeHasStaticLinear;
+        if (returnType->GetFlags() & TypeHasStaticLinear) {
+            flags |= TypeUseStaticLinear;
+        }
+
         for (const auto& arg : arguments) {
-            flags |= (arg.Type->GetFlags() & TypeHasError);
+            flags |= arg.Type->GetFlags() & TypeHasError;
+            if (arg.Type->GetFlags() & (TypeUseStaticLinear | TypeHasStaticLinear)) {
+                flags |= TypeUseStaticLinear;
+            }
         }
 
         return flags;

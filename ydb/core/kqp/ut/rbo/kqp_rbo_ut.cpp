@@ -264,6 +264,117 @@ Y_UNIT_TEST_SUITE(KqpRbo) {
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
     }
 
+    Y_UNIT_TEST(AliasesRenames) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/foo_0` (
+                id Int64 NOT NULL,
+	            join_id Int64 NOT NULL,
+                c Int64,
+                primary key(id)
+            );
+
+            CREATE TABLE `/Root/foo_1` (
+                id Int64	NOT NULL,
+	            join_id Int64 NOT NULL,
+                c Int64,
+                primary key(id)
+            );
+
+            CREATE TABLE `/Root/foo_2` (
+                id Int64 NOT NULL,
+	            join_id Int64 NOT NULL,
+                c Int64,
+                primary key(id)
+            );
+
+        )").GetValueSync();
+
+        db = kikimr.GetTableClient();
+        auto session2 = db.CreateSession().GetValueSync().GetSession();
+
+        auto result = session2.ExecuteDataQuery(R"(
+            --!syntax_pg
+            SET TablePathPrefix = "/Root/";
+            
+            WITH cte as (
+                SELECT a1.id2, join_id FROM (SELECT id as "id2", join_id FROM foo_0) as a1)
+
+            SELECT X1.id2, X2.id2
+            FROM
+               (SELECT id2
+               FROM foo_1, cte
+               WHERE foo_1.join_id = cte.join_id) as X1,
+               
+               (SELECT id2
+               FROM foo_2, cte
+               WHERE foo_2.join_id = cte.join_id) as X2;
+        )", TTxControl::BeginTx().CommitTx()).GetValueSync();
+
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+    }
+
+    Y_UNIT_TEST(AliasesRenamesOldRBO) {
+        NKikimrConfig::TAppConfig appConfig;
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/foo_0` (
+                id Int64 NOT NULL,
+	            join_id Int64 NOT NULL,
+                c Int64,
+                primary key(id)
+            );
+
+            CREATE TABLE `/Root/foo_1` (
+                id Int64	NOT NULL,
+	            join_id Int64 NOT NULL,
+                c Int64,
+                primary key(id)
+            );
+
+            CREATE TABLE `/Root/foo_2` (
+                id Int64 NOT NULL,
+	            join_id Int64 NOT NULL,
+                c Int64,
+                primary key(id)
+            );
+
+        )").GetValueSync();
+
+        db = kikimr.GetTableClient();
+        auto session2 = db.CreateSession().GetValueSync().GetSession();
+
+        auto result = session2.ExecuteDataQuery(R"(
+            --!syntax_pg
+            SET TablePathPrefix = "/Root/";
+            
+            WITH cte as (
+                SELECT a1.id2, join_id FROM (SELECT id as "id2", join_id FROM foo_0) as a1)
+
+            SELECT X1.id2, X2.id2
+            FROM
+               (SELECT id2
+               FROM foo_1, cte
+               WHERE foo_1.join_id = cte.join_id) as X1,
+               
+               (SELECT id2
+               FROM foo_2, cte
+               WHERE foo_2.join_id = cte.join_id) as X2;
+        )", TTxControl::BeginTx().CommitTx()).GetValueSync();
+
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+    }
+
     Y_UNIT_TEST(JoinFilter) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);

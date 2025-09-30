@@ -58,10 +58,21 @@ SRCS(
     src/stdlib_typeinfo.cpp
 )
 
-IF (NOT MUSL)
-    CFLAGS(
-        -DHAVE___CXA_THREAD_ATEXIT_IMPL
-    )
+IF (OS_ANDROID)
+    # __cxa_thread_atexit_impl was introduced in Android 6.0
+    # https://android.googlesource.com/platform/bionic/+/main/libc/libc.map.txt#16
+    IF (ANDROID_API >= 23)
+        CFLAGS(
+            -DHAVE___CXA_THREAD_ATEXIT_IMPL
+        )
+    ENDIF()
+ELSE()
+    # As of 1.2.3, musl libc does not provide __cxa_thread_atexit_impl
+    IF (NOT MUSL)
+        CFLAGS(
+            -DHAVE___CXA_THREAD_ATEXIT_IMPL
+        )
+    ENDIF()
 ENDIF()
 
 IF (OS_EMSCRIPTEN AND ARCH_WASM64)

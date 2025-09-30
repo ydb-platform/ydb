@@ -30,7 +30,7 @@ TFederatedWriteSessionImpl::TFederatedWriteSessionImpl(
     const TFederatedTopicClientSettings& clientSettings,
     std::shared_ptr<TFederatedDbObserver> observer,
     std::shared_ptr<std::unordered_map<NTopic::ECodec, std::unique_ptr<NTopic::ICodec>>> codecs,
-    NTopic::IExecutor::TPtr subsessionHandlersExecutor
+    IExecutor::TPtr subsessionHandlersExecutor
 )
     : Settings(settings)
     , Connections(std::move(connections))

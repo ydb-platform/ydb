@@ -188,6 +188,7 @@ namespace NSQLComplete {
                       "FOLDER",
                       "WalkFolders",
                       "EACH",
+                      "PARTITION_LIST",
                   }, NormalizeName))
         {
         }

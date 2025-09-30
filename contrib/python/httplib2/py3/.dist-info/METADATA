@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: httplib2
-Version: 0.30.0
+Version: 0.31.0
 Summary: A comprehensive HTTP client library.
 Home-page: https://github.com/httplib2/httplib2
 Author: Joe Gregorio

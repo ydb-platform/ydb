@@ -654,7 +654,7 @@ public:
 
 private:
     NJson::TJsonValue ColumnPrimitiveValueToJsonValue(NYdb::TValueParser& valueParser) {
-        switch (const auto primitive = valueParser.GetPrimitiveType()) {
+        switch (valueParser.GetPrimitiveType()) {
             case NYdb::EPrimitiveType::Bool:
                 return valueParser.GetBool();
             case NYdb::EPrimitiveType::Int8:

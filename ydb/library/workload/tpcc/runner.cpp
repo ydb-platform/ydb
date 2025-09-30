@@ -158,6 +158,12 @@ TPCCRunner::TPCCRunner(const NConsoleClient::TClientCommand::TConfig& connection
     if (Config.ThreadCount == 0) {
         threadCount = std::min(maxTerminalThreadCountAvailable, terminalsCount);
         threadCount = std::min(threadCount, recommendedThreadCount);
+
+        // in TUI even number of threads looks cute: increase number of threads
+        // if we have enough CPU cores
+        if (threadCount % 2 != 0 && threadCount < maxTerminalThreadCountAvailable) {
+            ++threadCount;
+        }
     } else {
         // user provided value: don't give us a chance to break things:
         // with too many threads, we get poor result

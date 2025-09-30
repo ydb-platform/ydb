@@ -56,15 +56,19 @@ Y_UNIT_TEST_SUITE(NFulltext) {
         UNIT_ASSERT_VALUES_EQUAL(error, "columns should have a single value");
     }
 
-    Y_UNIT_TEST(FillSettings) {
-        TVector<std::pair<TString, TString>> list{
-            {"layout", "flat"},
-            {"tokenizer", "standard"},
-            {"use_filter_lowercase", "true"}
-        };
+    Y_UNIT_TEST(FillSetting) {
+        Ydb::Table::FulltextIndexSettings settings;
+        settings.add_columns()->set_column("text");
 
         TString error;
-        auto settings = FillSettings("text", list, error);
+        
+        UNIT_ASSERT_C(FillSetting(settings, "layout", "flat", error), error);
+        UNIT_ASSERT_VALUES_EQUAL(error, "");
+
+        UNIT_ASSERT_C(FillSetting(settings, "tokenizer", "standard", error), error);
+        UNIT_ASSERT_VALUES_EQUAL(error, "");
+
+        UNIT_ASSERT_C(FillSetting(settings, "use_filter_lowercase", "true", error), error);
         UNIT_ASSERT_VALUES_EQUAL(error, "");
 
         UNIT_ASSERT_EQUAL(settings.layout(), Ydb::Table::FulltextIndexSettings::FLAT);
@@ -74,34 +78,23 @@ Y_UNIT_TEST_SUITE(NFulltext) {
         UNIT_ASSERT_VALUES_EQUAL(settings.columns().at(0).analyzers().use_filter_lowercase(), true);
     }
 
-    Y_UNIT_TEST(FillSettingsInvalid) {
+    Y_UNIT_TEST(FillSettingInvalid) {
         {
-            TVector<std::pair<TString, TString>> list{
-                {"asdf", "qwer"}
-            };
+            Ydb::Table::FulltextIndexSettings settings;
+            settings.add_columns()->set_column("text");
+
             TString error;
-            auto settings = FillSettings("text", list, error);
+            UNIT_ASSERT_C(!FillSetting(settings, "asdf", "qwer", error), error);
             UNIT_ASSERT_VALUES_EQUAL(error, "Unknown index setting: asdf");
         }
 
         {
-            TVector<std::pair<TString, TString>> list{
-                {"layout", "flat"},
-                {"tokenizer", "standard"},
-                {"use_filter_lowercase", "asdf"}
-            };
-            TString error;
-            auto settings = FillSettings("text", list, error);
-            UNIT_ASSERT_VALUES_EQUAL(error, "Invalid use_filter_lowercase: asdf");
-        }
+            Ydb::Table::FulltextIndexSettings settings;
+            settings.add_columns()->set_column("text");
 
-        {
-            TVector<std::pair<TString, TString>> list{
-                {"layout", "flat"},
-            };
             TString error;
-            auto settings = FillSettings("text", list, error);
-            UNIT_ASSERT_VALUES_EQUAL(error, "tokenizer should be set");
+            UNIT_ASSERT_C(!FillSetting(settings, "use_filter_lowercase", "asdf", error), error);
+            UNIT_ASSERT_VALUES_EQUAL(error, "Invalid use_filter_lowercase: asdf");
         }
     }
 

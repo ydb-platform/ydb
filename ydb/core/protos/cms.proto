@@ -432,7 +432,7 @@ message TCmsConfig {
 
     message TSentinelConfig {
         message TStateStorageSelfHealConfig {
-            optional bool Enable = 1 [default = true];
+            optional bool Enable = 1 [default = false];
             optional uint32 NodeGoodStateLimit = 2 [default = 10];
             optional uint32 NodePrettyGoodStateLimit = 3 [default = 7];
             optional uint32 NodeBadStateLimit = 4 [default = 10];

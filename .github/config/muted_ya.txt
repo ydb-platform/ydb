@@ -27,13 +27,6 @@ ydb/core/keyvalue/ut_trace TKeyValueTracingTest.ReadHuge
 ydb/core/keyvalue/ut_trace TKeyValueTracingTest.ReadSmall
 ydb/core/keyvalue/ut_trace TKeyValueTracingTest.WriteHuge
 ydb/core/keyvalue/ut_trace TKeyValueTracingTest.WriteSmall
-ydb/core/kqp/federated_query/ut_service DescribeSchemaSecretsService.GetDroppedValue
-ydb/core/kqp/federated_query/ut_service DescribeSchemaSecretsService.GetInParallel
-ydb/core/kqp/federated_query/ut_service DescribeSchemaSecretsService.GetNewValue
-ydb/core/kqp/federated_query/ut_service DescribeSchemaSecretsService.GetUpdatedValue
-ydb/core/kqp/provider/ut KikimrIcGateway.TestLoadBasicSecretValueFromExternalDataSourceMetadata+UseSchemaSecrets
-ydb/core/kqp/provider/ut KikimrIcGateway.TestLoadServiceAccountSecretValueFromExternalDataSourceMetadata+UseSchemaSecrets
-ydb/core/kqp/provider/ut KikimrIcGateway.TestLoadTokenSecretValueFromExternalDataSourceMetadata+UseSchemaSecrets
 ydb/core/kqp/ut/close_with_load KqpQueryService.CloseSessionsWithLoad
 ydb/core/kqp/ut/close_with_load KqpService.CloseSessionsWithLoad
 ydb/core/kqp/ut/indexes KqpMultishardIndex.WriteIntoRenamingAsyncIndex

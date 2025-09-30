@@ -15,8 +15,28 @@ from typing import Dict, List, Any
 from datetime import datetime, timezone
 import time
 
+def get_alert_logins() -> str:
+    """
+    Получает список логинов для уведомлений из переменной окружения GH_ALERTS_TG_LOGINS.
+    
+    Returns:
+        Строка с логинами, разделенными пробелами, или дефолтный логин
+    """
+    logins = os.getenv('GH_ALERTS_TG_LOGINS')
+    return logins.strip() if logins else "@KirLynx"
+
+def get_tail_message() -> str:
+    """
+    Генерирует TAIL_MESSAGE с динамическими логинами.
+    
+    Returns:
+        Строка с tail сообщением
+    """
+    logins = get_alert_logins()
+    return f"📊 [Dashboard details](https://datalens.yandex/wkptiaeyxz7qj?tab=ka)\n\nFYI: {logins}"
+
 # Константы
-TAIL_MESSAGE = "📊 [Dashboard details](https://datalens.yandex/wkptiaeyxz7qj?tab=ka)\n\nFYI: @KirLynx"
+TAIL_MESSAGE = get_tail_message()
 
 # Настройки фильтрации
 MAX_AGE_DAYS = 3  # Максимальный возраст jobs в днях (исключаем баги GitHub)
@@ -27,7 +47,7 @@ SEND_WHEN_ALL_GOOD = False  # Whether to send a message when all jobs are workin
 # Критерии для определения застрявших jobs
 # Каждый элемент: [pattern, threshold_hours, display_name]
 WORKFLOW_THRESHOLDS = [
-    ["PR-check", 1, "PR-check"],
+    ["PR-check", 0,5, "PR-check"],
     ["Postcommit", 6, "Postcommit"],
     # Пример добавления нового типа:
     # ["Nightly", 12, "Nightly-Build"]
@@ -249,6 +269,40 @@ def is_job_stuck_by_criteria(run, waiting_hours):
     
     return False
 
+def generate_stuck_jobs_summary(stuck_jobs: List[Dict[str, Any]]) -> List[str]:
+    """
+    Генерирует краткое описание застрявших jobs в виде списка строк, каждая начинающаяся с ⚠️
+    
+    Args:
+        stuck_jobs: Список застрявших jobs
+    
+    Returns:
+        Список строк с описанием застрявших jobs
+    """
+    if not stuck_jobs:
+        return []
+    
+    stuck_counts = count_stuck_jobs_by_type(stuck_jobs)
+    
+    # Собираем описания по типам
+    descriptions = []
+    for pattern, threshold_hours, display_name in WORKFLOW_THRESHOLDS:
+        count = stuck_counts.get(display_name, 0)
+        if count > 0:
+            job_word = "job" if count == 1 else "jobs"
+            have_word = "has" if count == 1 else "have"
+            hour_word = "hour" if threshold_hours == 1 else "hours"
+            descriptions.append(f"⚠️ {display_name} {job_word} {have_word} been in the queue for more than {threshold_hours} {hour_word}! Total: {count} {job_word}.")
+    
+    # Добавляем Other если есть
+    other_count = stuck_counts.get('Other', 0)
+    if other_count > 0:
+        job_word = "job" if other_count == 1 else "jobs"
+        are_word = "is" if other_count == 1 else "are"
+        descriptions.append(f"⚠️ Other {job_word} {are_word} stuck! Total: {other_count} {job_word}.")
+    
+    return descriptions
+
 def count_stuck_jobs_by_type(stuck_jobs: List[Dict[str, Any]]) -> Dict[str, int]:
     """
     Подсчитывает количество застрявших jobs по типам.
@@ -319,7 +373,7 @@ def format_telegram_messages(workflow_info: Dict[str, Dict[str, Any]], stuck_job
         workflow_info: Информация о workflow
         stuck_jobs: Список застрявших jobs
         total_queued: Общее количество jobs в очереди
-        excluded_count: Количество исключенных jobs (старше 3 дней)
+        excluded_count: Количество исключенных jobs (старше MAX_AGE_DAYS дней)
     
     Returns:
         Список из 2 сообщений для Telegram
@@ -332,7 +386,13 @@ def format_telegram_messages(workflow_info: Dict[str, Dict[str, Any]], stuck_job
     # Header
     if stuck_jobs:
         message1_parts.append("🚨 *GITHUB ACTIONS MONITORING*")
-        message1_parts.append("⚠️ *Stuck jobs detected!*")
+        
+        # Заменяем "Stuck jobs detected!" на описательные сообщения о застрявших jobs (по одной строке на тип)
+        stuck_summary_lines = generate_stuck_jobs_summary(stuck_jobs)
+        if stuck_summary_lines:
+            message1_parts.extend(stuck_summary_lines)
+        else:
+            message1_parts.append("⚠️ *Stuck jobs detected!*")
     else:
         message1_parts.append("✅ *GITHUB ACTIONS MONITORING*")
         message1_parts.append("All jobs in the queue are working normally")
@@ -358,12 +418,12 @@ def format_telegram_messages(workflow_info: Dict[str, Dict[str, Any]], stuck_job
         message1_parts.append(f"• Stuck: 0")
     
     if excluded_count > 0:
-        message1_parts.append(f"• Excluded (>3d): {excluded_count} jobs")
+        message1_parts.append(f"• Excluded (>{MAX_AGE_DAYS}d): {excluded_count} jobs")
     message1_parts.append("")
     
     # Summary by workflow types
     if workflow_info:
-        message1_parts.append("📋 *By workflow types:*")
+        message1_parts.append("📋 *Workflows in queue:*")
         
         # Сначала показываем типы из WORKFLOW_THRESHOLDS
         threshold_workflows = []
@@ -574,7 +634,7 @@ def main():
     parser.add_argument('--bot-token', 
                        help='Telegram bot token (или используйте TELEGRAM_BOT_TOKEN env var)')
     parser.add_argument('--chat-id', 
-                       help='Telegram chat ID (по умолчанию: 1003017506311)')
+                       help='Telegram chat ID')
     parser.add_argument('--channel', 
                        help='Telegram channel ID (альтернатива для --chat-id)')
     parser.add_argument('--thread-id', type=int,
@@ -593,7 +653,7 @@ def main():
     
     # Получаем параметры из аргументов или переменных окружения
     bot_token = args.bot_token or os.getenv('TELEGRAM_BOT_TOKEN')
-    chat_id = args.channel or args.chat_id or os.getenv('TELEGRAM_CHAT_ID', '1003017506311')
+    chat_id = args.channel or args.chat_id or os.getenv('TELEGRAM_CHAT_ID')
     thread_id = args.thread_id or os.getenv('TELEGRAM_THREAD_ID')
     dry_run = args.dry_run or os.getenv('DRY_RUN', 'false').lower() == 'true'
     send_when_all_good = args.send_when_all_good or os.getenv('SEND_WHEN_ALL_GOOD', 'false').lower() == 'true'

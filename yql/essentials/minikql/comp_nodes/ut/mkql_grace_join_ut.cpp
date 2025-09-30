@@ -1,3 +1,4 @@
+
 #include "mkql_computation_node_ut.h"
 #include <yql/essentials/minikql/mkql_runtime_version.h>
 #include <yql/essentials/minikql/comp_nodes/mkql_grace_join_imp.h>
@@ -11,6 +12,7 @@
 #include <cstdlib>
 #include <stdlib.h>
 #include <random>
+#include <functional>
 
 #include <util/system/compiler.h>
 #include <util/stream/null.h>
@@ -2631,10 +2633,13 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
 constexpr std::string_view LeftStreamName = "LeftTestStream";
 constexpr std::string_view RightStreamName = "RightTestStream";
 
-struct TTestStreamParams {
-    ui64 MaxAllowedNumberOfFetches;
-    ui64 StreamSize;
-};
+// Лямбда для кастомной логики Fetch
+// Принимает: 
+// - totalFetches - ссылка на счетчик вызовов Fetch (можно изменять)
+// - compCtx - контекст вычислений для создания результатов
+// - result - ссылка на результат, который нужно заполнить
+// Возвращает: статус операции (Ok, Finish, Yield)
+using TFetchFunction = std::function<NUdf::EFetchStatus(ui64& totalFetches, TComputationContext& compCtx, NUdf::TUnboxedValue& result)>;
 
 class TTestStreamWrapper: public TMutableComputationNode<TTestStreamWrapper> {
 using TBaseComputation = TMutableComputationNode<TTestStreamWrapper>;
@@ -2643,57 +2648,44 @@ public:
     public:
         using TBase = TComputationValue<TStreamValue>;
 
-        TStreamValue(TMemoryUsageInfo* memInfo, TComputationContext& compCtx, TTestStreamParams& params)
-            : TBase(memInfo), CompCtx(compCtx), Params(params)
+        TStreamValue(TMemoryUsageInfo* memInfo, TComputationContext& compCtx, TFetchFunction fetchFunc)
+            : TBase(memInfo), CompCtx(compCtx), FetchFunc(std::move(fetchFunc))
         {}
     private:
         NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override {
-            ++TotalFetches;
-
-            UNIT_ASSERT_LE(TotalFetches, Params.MaxAllowedNumberOfFetches);
-
-            if (TotalFetches > Params.StreamSize) {
-                return NUdf::EFetchStatus::Finish;
-            }
-
-            NUdf::TUnboxedValue* items = nullptr;
-            result = CompCtx.HolderFactory.CreateDirectArrayHolder(2, items);
-            items[0] = NUdf::TUnboxedValuePod(TotalFetches);
-            items[1] = MakeString(ToString(TotalFetches) * 5);
-
-            return NUdf::EFetchStatus::Ok;
+            return FetchFunc(TotalFetches, CompCtx, result);
         }
 
     private:
         TComputationContext& CompCtx;
-        TTestStreamParams& Params;
+        TFetchFunction FetchFunc;
         ui64 TotalFetches = 0;
     };
 
-    TTestStreamWrapper(TComputationMutables& mutables, TTestStreamParams& params)
+    TTestStreamWrapper(TComputationMutables& mutables, TFetchFunction fetchFunc)
         : TBaseComputation(mutables)
-        , Params(params)
+        , FetchFunc(std::move(fetchFunc))
     {}
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        return ctx.HolderFactory.Create<TStreamValue>(ctx, Params);
+        return ctx.HolderFactory.Create<TStreamValue>(ctx, FetchFunc);
     }
 private:
     void RegisterDependencies() const final {}
 
-    TTestStreamParams& Params;
+    TFetchFunction FetchFunc;
 };
 
-IComputationNode* WrapTestStream(const TComputationNodeFactoryContext& ctx, TTestStreamParams& params) {
-    return new TTestStreamWrapper(ctx.Mutables, params);
+IComputationNode* WrapTestStream(const TComputationNodeFactoryContext& ctx, TFetchFunction fetchFunc) {
+    return new TTestStreamWrapper(ctx.Mutables, std::move(fetchFunc));
 }
 
-TComputationNodeFactory GetNodeFactory(TTestStreamParams& leftParams, TTestStreamParams& rightParams) {
-    return [&leftParams, &rightParams](TCallable& callable, const TComputationNodeFactoryContext& ctx) -> IComputationNode* {
+TComputationNodeFactory GetNodeFactory(TFetchFunction leftFetchFunc, TFetchFunction rightFetchFunc) {
+    return [leftFetchFunc = std::move(leftFetchFunc), rightFetchFunc = std::move(rightFetchFunc)](TCallable& callable, const TComputationNodeFactoryContext& ctx) -> IComputationNode* {
         if (callable.GetType()->GetName() == LeftStreamName) {
-            return WrapTestStream(ctx, leftParams);
+            return WrapTestStream(ctx, leftFetchFunc);
         } else if (callable.GetType()->GetName() == RightStreamName) {
-            return WrapTestStream(ctx, rightParams);
+            return WrapTestStream(ctx, rightFetchFunc);
         }
         return GetBuiltinFactory()(callable, ctx);
     };
@@ -2714,6 +2706,26 @@ TRuntimeNode MakeStream(TSetup<false>& setup, bool isRight) {
 }
 
 Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinEmptyInputTest) {
+
+    // Фабрика для создания стандартной лямбды Fetch
+    static auto CreateStandardFetchFunc(ui64 streamSize, ui64 maxExpectedFetches) -> TFetchFunction {
+        return [streamSize, maxExpectedFetches](ui64& totalFetches, TComputationContext& compCtx, NUdf::TUnboxedValue& result) -> NUdf::EFetchStatus {
+            ++totalFetches;
+
+            UNIT_ASSERT_LE(totalFetches, maxExpectedFetches);
+
+            if (totalFetches > streamSize) {
+                return NUdf::EFetchStatus::Finish;
+            }
+
+            NUdf::TUnboxedValue* items = nullptr;
+            result = compCtx.HolderFactory.CreateDirectArrayHolder(2, items);
+            items[0] = NUdf::TUnboxedValuePod(totalFetches);
+            items[1] = MakeString(ToString(totalFetches) * 5);
+
+            return NUdf::EFetchStatus::Ok;
+        };
+    }
 
     void RunGraceJoinEmptyCaseTest(EJoinKind joinKind, bool emptyLeft, bool emptyRight) {
         const ui64 streamSize = 5;
@@ -2737,9 +2749,11 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinEmptyInputTest) {
             }
         }
 
-        TTestStreamParams leftParams(maxExpectedFetchesFromLeftStream, leftStreamSize);
-        TTestStreamParams rightParams(maxExpectedFetchesFromRightStream, rightStreamSize);
-        TSetup<false> setup(GetNodeFactory(leftParams, rightParams));
+        // Создаем лямбды для левого и правого стримов
+        auto leftFetchFunc = CreateStandardFetchFunc(leftStreamSize, maxExpectedFetchesFromLeftStream);
+        auto rightFetchFunc = CreateStandardFetchFunc(rightStreamSize, maxExpectedFetchesFromRightStream);
+
+        TSetup<false> setup(GetNodeFactory(leftFetchFunc, rightFetchFunc));
         TProgramBuilder& pb = *setup.PgmBuilder;
 
         const auto leftStream = MakeStream(setup, false);
@@ -2794,7 +2808,86 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinEmptyInputTest) {
     ADD_JOIN_TESTS_FOR_KIND(Exclusion)
 
 #undef ADD_JOIN_TESTS_FOR_KIND
+
 }
+
+Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinYieldTest) {
+    // Фабрика для создания стандартной лямбды Fetch
+    static auto CreateStandardFetchFunc(ui64 streamSize) -> TFetchFunction {
+        return [streamSize](ui64& totalFetches, TComputationContext& compCtx, NUdf::TUnboxedValue& result) -> NUdf::EFetchStatus {
+            ++totalFetches;
+
+            if (streamSize == 100 && totalFetches % 5 == 0) {
+                return NUdf::EFetchStatus::Yield;
+            }
+
+            if (totalFetches > streamSize) {
+                return NUdf::EFetchStatus::Finish;
+            }
+
+            NUdf::TUnboxedValue* items = nullptr;
+            result = compCtx.HolderFactory.CreateDirectArrayHolder(2, items);
+            items[0] = NUdf::TUnboxedValuePod(totalFetches);
+            items[1] = MakeString(ToString(totalFetches) * 5);
+
+            return NUdf::EFetchStatus::Ok;
+        };
+    }
+
+    void RunGraceJoinEmptyCaseTest() {
+        // Создаем лямбды для левого и правого стримов
+        auto leftFetchFunc = CreateStandardFetchFunc(10);
+        auto rightFetchFunc = CreateStandardFetchFunc(100);
+
+        TSetup<false> setup(GetNodeFactory(leftFetchFunc, rightFetchFunc));
+        TProgramBuilder& pb = *setup.PgmBuilder;
+
+        const auto leftStream = MakeStream(setup, false);
+        const auto rightStream = MakeStream(setup, true);
+
+        const auto resultType = pb.NewFlowType(pb.NewMultiType({
+            pb.NewDataType(NUdf::TDataType<char*>::Id),
+            pb.NewDataType(NUdf::TDataType<char*>::Id)
+        }));
+
+        const auto joinFlow = pb.GraceJoin(
+            pb.ExpandMap(pb.ToFlow(leftStream), [&](TRuntimeNode item) -> TRuntimeNode::TList {
+                return {pb.Nth(item, 0U), pb.Nth(item, 1U)};
+            }),
+            pb.ExpandMap(pb.ToFlow(rightStream), [&](TRuntimeNode item) -> TRuntimeNode::TList {
+                return {pb.Nth(item, 0U), pb.Nth(item, 1U)};
+            }),
+            EJoinKind::Inner,
+            {0U}, {0U},
+            {1U, 0U}, {1U, 1U},
+            resultType);
+
+        const auto pgmReturn = pb.FromFlow(pb.NarrowMap(joinFlow, [&](TRuntimeNode::TList items) -> TRuntimeNode {
+            return pb.NewTuple(items);
+        }));
+
+        const auto graph = setup.BuildGraph(pgmReturn);
+        const auto streamVal = graph->GetValue();
+        NUdf::TUnboxedValue result;
+
+        auto status = NUdf::EFetchStatus::Ok;
+        while (status != NUdf::EFetchStatus::Finish) {
+            status = streamVal.Fetch(result);
+        }
+    }
+
+#define ADD_JOIN_TESTS_FOR_KIND(Kind)                               \
+    Y_UNIT_TEST(Kind##_EmptyLeft) {                                 \
+        RunGraceJoinEmptyCaseTest();    \
+    }                                                               \
+
+    ADD_JOIN_TESTS_FOR_KIND(Inner)
+
+#undef ADD_JOIN_TESTS_FOR_KIND
+
 }
 
 }
+
+}
+

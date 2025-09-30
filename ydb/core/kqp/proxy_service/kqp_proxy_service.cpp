@@ -1765,6 +1765,7 @@ private:
             QueryServiceConfig.GetSharedReading(),
             NKikimr::CreateYdbCredentialsProviderFactory,
             FederatedQuerySetup->CredentialsFactory,
+            AppData()->FunctionRegistry,
             AppData()->TenantName,
             Counters->GetKqpCounters()->GetSubgroup("subsystem", "row_dispatcher"),
             FederatedQuerySetup->PqGateway,

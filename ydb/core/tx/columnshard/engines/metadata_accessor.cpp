@@ -21,8 +21,34 @@ ITableMetadataAccessor::ITableMetadataAccessor(const TString& tablePath)
     AFL_VERIFY(!!TablePath);
 }
 
+NColumnShard::TUnifiedPathId ITableMetadataAccessor::GetPathIdVerified() const {
+    std::optional<NColumnShard::TUnifiedOptionalPathId> result = GetPathId();
+    AFL_VERIFY(result);
+    return *result;
+}
+
+std::vector<TNameTypeInfo> ITableMetadataAccessor::GetPrimaryKeyInfo(const TVersionedPresetSchemas& vSchemas) const {
+    return GetSnapshotSchemaVerified(vSchemas, TSnapshot::Max())->GetIndexInfo().GetPrimaryKeyColumns();
+}
+
+const std::shared_ptr<arrow::Schema>& ITableMetadataAccessor::GetPrimaryKeyScheme(const TVersionedPresetSchemas& vSchemas) const {
+    return GetSnapshotSchemaVerified(vSchemas, TSnapshot::Max())->GetIndexInfo().GetPrimaryKey();
+}
+
 TString ITableMetadataAccessor::GetTableName() const {
     return TFsPath(TablePath).Fix().GetName();
+}
+
+std::shared_ptr<ISnapshotSchema> ITableMetadataAccessor::GetSnapshotSchemaVerified(const TVersionedPresetSchemas& vSchemas, const TSnapshot& snapshot) const {
+    auto result = GetSnapshotSchemaOptional(vSchemas, snapshot);
+    AFL_VERIFY(!!result);
+    return result;
+}
+
+std::shared_ptr<const TVersionedIndex> ITableMetadataAccessor::GetVersionedIndexCopyVerified(TVersionedPresetSchemas& vSchemas) const {
+    auto result = GetVersionedIndexCopyOptional(vSchemas);
+    AFL_VERIFY(!!result);
+    return result;
 }
 
 TUserTableAccessor::TUserTableAccessor(const TString& tableName, const NColumnShard::TUnifiedPathId& pathId)

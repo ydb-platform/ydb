@@ -21,19 +21,7 @@ public:
     bool IsEqualSchema(const std::shared_ptr<arrow::Schema>& schema) const;
     bool IsEqualTo(const TPredicate& item) const;
 
-    NArrow::ECompareType GetCompareType() const {
-        if (Operation == EOperation::GreaterEqual) {
-            return NArrow::ECompareType::GREATER_OR_EQUAL;
-        } else if (Operation == EOperation::Greater) {
-            return NArrow::ECompareType::GREATER;
-        } else if (Operation == EOperation::LessEqual) {
-            return NArrow::ECompareType::LESS_OR_EQUAL;
-        } else if (Operation == EOperation::Less) {
-            return NArrow::ECompareType::LESS;
-        } else {
-            Y_ABORT_UNLESS(false);
-        }
-    }
+    NArrow::ECompareType GetCompareType() const;
 
     template <class TArrayColumn>
     std::optional<typename TArrayColumn::value_type> Get(
@@ -52,9 +40,7 @@ public:
     bool Empty() const noexcept {
         return Batch.get() == nullptr;
     }
-    bool Good() const {
-        return !Empty() && Batch->num_columns() && Batch->num_rows() == 1;
-    }
+    bool Good() const;
     bool IsFrom() const noexcept {
         return Operation == EOperation::Greater || Operation == EOperation::GreaterEqual;
     }
@@ -67,12 +53,11 @@ public:
 
     std::vector<TString> ColumnNames() const;
 
-    std::string ToString() const {
-        return Empty() ? "()" : Batch->schema()->ToString();
-    }
+    std::string ToString() const;
 
-    static std::pair<TPredicate, TPredicate> DeserializePredicatesRange(
-        const TSerializedTableRange& range, const std::vector<std::pair<TString, NScheme::TTypeInfo>>& columns);
+    static std::pair<NKikimr::NOlap::TPredicate, NKikimr::NOlap::TPredicate> DeserializePredicatesRange(
+        const TSerializedTableRange& range, const std::vector<std::pair<TString, NScheme::TTypeInfo>>& columns, 
+        const std::shared_ptr<arrow::Schema>& schema);
 
     constexpr TPredicate() noexcept = default;
 

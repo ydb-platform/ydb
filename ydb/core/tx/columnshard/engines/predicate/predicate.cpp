@@ -34,6 +34,11 @@ std::vector<TString> TPredicate::ColumnNames() const {
     return out;
 }
 
+std::string TPredicate::ToString() const {
+    return Empty() ? "()" : Batch->schema()->ToString();
+}
+
+
 std::vector<NScheme::TTypeInfo> ExtractTypes(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& columns) {
     std::vector<NScheme::TTypeInfo> types;
     types.reserve(columns.size());
@@ -65,21 +70,50 @@ TString FromCells(const TConstArrayRef<TCell>& cells, const std::vector<std::pai
     return NArrow::SerializeBatchNoCompression(batch);
 }
 
+// TODO: try to use fields only
+TString FromCells(const TConstArrayRef<TCell>& cells,
+    const std::vector<std::pair<TString, NScheme::TTypeInfo>>& columns,
+    const std::vector<std::shared_ptr<arrow::Field>>& fields) {
+    Y_ABORT_UNLESS(cells.size() == columns.size());
+    if (cells.empty()) {
+        return {};
+    }
+
+    std::vector<NScheme::TTypeInfo> types = ExtractTypes(columns);
+
+    NArrow::TArrowBatchBuilder batchBuilder;
+    batchBuilder.Reserve(1);
+    auto schema = std::make_shared<arrow::Schema>(fields);
+    auto startStatus = batchBuilder.Start(columns, schema);
+    Y_ABORT_UNLESS(startStatus.ok(), "%s", startStatus.ToString().c_str());
+
+    batchBuilder.AddRow(NKikimr::TDbTupleRef(), NKikimr::TDbTupleRef(types.data(), cells.data(), cells.size()));
+
+    auto batch = batchBuilder.FlushBatch(false);
+    Y_ABORT_UNLESS(batch);
+    Y_ABORT_UNLESS(batch->num_columns() == (int)cells.size());
+    Y_ABORT_UNLESS(batch->num_rows() == 1);
+    return NArrow::SerializeBatchNoCompression(batch);
+}
+
 std::pair<NKikimr::NOlap::TPredicate, NKikimr::NOlap::TPredicate> TPredicate::DeserializePredicatesRange(
-    const TSerializedTableRange& range, const std::vector<std::pair<TString, NScheme::TTypeInfo>>& columns) {
+    const TSerializedTableRange& range, const std::vector<std::pair<TString, NScheme::TTypeInfo>>& columns, 
+    const std::shared_ptr<arrow::Schema>& schema) {
     std::vector<TCell> leftCells;
     std::vector<std::pair<TString, NScheme::TTypeInfo>> leftColumns;
+    std::vector<std::shared_ptr<arrow::Field>> leftFields;
     bool leftTrailingNull = false;
     {
         TConstArrayRef<TCell> cells = range.From.GetCells();
         const size_t size = cells.size();
-        Y_ASSERT(size <= columns.size());
+        Y_ASSERT(size <= (size_t)schema->num_fields());
         leftCells.reserve(size);
         leftColumns.reserve(size);
         for (size_t i = 0; i < size; ++i) {
             if (!cells[i].IsNull()) {
                 leftCells.push_back(cells[i]);
                 leftColumns.push_back(columns[i]);
+                leftFields.push_back(schema->field(i));
                 leftTrailingNull = false;
             } else {
                 leftTrailingNull = true;
@@ -89,17 +123,19 @@ std::pair<NKikimr::NOlap::TPredicate, NKikimr::NOlap::TPredicate> TPredicate::De
 
     std::vector<TCell> rightCells;
     std::vector<std::pair<TString, NScheme::TTypeInfo>> rightColumns;
+    std::vector<std::shared_ptr<arrow::Field>> rightFields;
     bool rightTrailingNull = false;
     {
         TConstArrayRef<TCell> cells = range.To.GetCells();
         const size_t size = cells.size();
-        Y_ASSERT(size <= columns.size());
+        Y_ASSERT(size <= (size_t)schema->num_fields());
         rightCells.reserve(size);
         rightColumns.reserve(size);
         for (size_t i = 0; i < size; ++i) {
             if (!cells[i].IsNull()) {
                 rightCells.push_back(cells[i]);
                 rightColumns.push_back(columns[i]);
+                rightFields.push_back(schema->field(i));
                 rightTrailingNull = false;
             } else {
                 rightTrailingNull = true;
@@ -110,15 +146,15 @@ std::pair<NKikimr::NOlap::TPredicate, NKikimr::NOlap::TPredicate> TPredicate::De
     const bool fromInclusive = range.FromInclusive || leftTrailingNull;
     const bool toInclusive = range.ToInclusive && !rightTrailingNull;
 
-    TString leftBorder = FromCells(leftCells, leftColumns);
-    TString rightBorder = FromCells(rightCells, rightColumns);
-    auto leftSchema = NArrow::MakeArrowSchema(leftColumns);
-    Y_ASSERT(leftSchema.ok());
-    auto rightSchema = NArrow::MakeArrowSchema(rightColumns);
-    Y_ASSERT(rightSchema.ok());
+    TString leftBorder = FromCells(leftCells, leftColumns, leftFields);
+    TString rightBorder = FromCells(rightCells, rightColumns, rightFields);
+    auto leftSchema = std::make_shared<arrow::Schema>(leftFields);
+    Y_ASSERT(leftSchema);
+    auto rightSchema = std::make_shared<arrow::Schema>(rightFields);
+    Y_ASSERT(rightSchema);
     return std::make_pair(
-        TPredicate(fromInclusive ? NKernels::EOperation::GreaterEqual : NKernels::EOperation::Greater, leftBorder, leftSchema.ValueUnsafe()),
-        TPredicate(toInclusive ? NKernels::EOperation::LessEqual : NKernels::EOperation::Less, rightBorder, rightSchema.ValueUnsafe()));
+        TPredicate(fromInclusive ? NKernels::EOperation::GreaterEqual : NKernels::EOperation::Greater, leftBorder, leftSchema),
+        TPredicate(toInclusive ? NKernels::EOperation::LessEqual : NKernels::EOperation::Less, rightBorder, rightSchema));
 }
 
 std::shared_ptr<arrow::RecordBatch> TPredicate::CutNulls(const std::shared_ptr<arrow::RecordBatch>& batch) {
@@ -136,7 +172,13 @@ std::shared_ptr<arrow::RecordBatch> TPredicate::CutNulls(const std::shared_ptr<a
         ++idx;
     }
     AFL_VERIFY(colsNotNull.size());
-    return arrow::RecordBatch::Make(std::make_shared<arrow::Schema>(fieldsNotNull), 1, colsNotNull);
+
+    auto schema = std::make_shared<arrow::Schema>(std::move(fieldsNotNull));
+    if (schema->ToString(true) == "id: uint64") {
+        PrintBackTrace();
+    }
+
+    return arrow::RecordBatch::Make(schema, 1, colsNotNull);
 }
 
 bool TPredicate::IsEqualSchema(const std::shared_ptr<arrow::Schema>& schema) const {
@@ -173,6 +215,20 @@ bool TPredicate::IsEqualTo(const TPredicate& item) const {
     return true;
 }
 
+NArrow::ECompareType TPredicate::GetCompareType() const {
+    if (Operation == EOperation::GreaterEqual) {
+        return NArrow::ECompareType::GREATER_OR_EQUAL;
+    } else if (Operation == EOperation::Greater) {
+        return NArrow::ECompareType::GREATER;
+    } else if (Operation == EOperation::LessEqual) {
+        return NArrow::ECompareType::LESS_OR_EQUAL;
+    } else if (Operation == EOperation::Less) {
+        return NArrow::ECompareType::LESS;
+    } else {
+        Y_ABORT_UNLESS(false);
+    }
+}
+
 IOutputStream& operator<<(IOutputStream& out, const TPredicate& pred) {
     out << NArrow::NSSA::TSimpleFunction::GetFunctionName(pred.Operation);
 
@@ -203,4 +259,8 @@ IOutputStream& operator<<(IOutputStream& out, const TPredicate& pred) {
     return out;
 }
 
-}   // namespace NKikimr::NOlap
+bool TPredicate::Good() const {
+    return !Empty() && Batch->num_columns() && Batch->num_rows() == 1;
+}
+
+} // namespace NKikimr::NOlap

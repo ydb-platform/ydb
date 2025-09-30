@@ -240,6 +240,17 @@ arrow::Status TArrowBatchBuilder::Start(const std::vector<std::pair<TString, NSc
     return arrow::Status::OK();
 }
 
+arrow::Status TArrowBatchBuilder::Start(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& ydbColumns, const std::shared_ptr<arrow::Schema>& schema) {
+    YdbSchema = ydbColumns;
+
+    auto status = arrow::RecordBatchBuilder::Make(schema, MemoryPool, RowsToReserve, &BatchBuilder);
+    NumRows = NumBytes = 0;
+    if (!status.ok()) {
+        return arrow::Status::FromArgs(status.code(), "Cannot make arrow builder: ", status.ToString());
+    }
+    return arrow::Status::OK();
+}
+
 arrow::Status TArrowBatchBuilder::Start(const std::vector<std::pair<TString, NKikimr::NMiniKQL::TType*>> yqlColumns) {
     YqlSchema = yqlColumns;
     auto schema = MakeArrowSchema(yqlColumns, NotNullColumns);
@@ -345,6 +356,9 @@ void TArrowBatchBuilder::ReserveData(ui32 columnNo, size_t size) {
 std::shared_ptr<arrow::RecordBatch> TArrowBatchBuilder::FlushBatch(bool reinitialize, bool flushEmpty) {
     if (NumRows || flushEmpty) {
         auto status = BatchBuilder->Flush(reinitialize, &Batch);
+        if (!status.ok()) {
+            Cerr << status.ToString() << Endl;
+        }
         Y_ABORT_UNLESS(status.ok(), "Failed to flush batch: %s", status.ToString().c_str());
     }
     NumRows = NumBytes = 0;

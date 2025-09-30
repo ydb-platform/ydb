@@ -380,13 +380,12 @@ namespace NYql {
                 // If exist, copy service account creds to obtain tokens during request execution phase.
                 // If exists, copy previously created token.
                 if (clusterConfig.kind() == NYql::EGenericDataSourceKind::YDB) {
-                    // source.SetServiceAccountId(clusterConfig.GetServiceAccountId());
-                    // source.SetServiceAccountIdSignature(clusterConfig.GetServiceAccountIdSignature());
-                    // source.SetToken(State_->Types->Credentials->FindCredentialContent(
-                    //     "default_" + clusterConfig.name(),
-                    //     "default_generic",
-                    //     clusterConfig.GetToken()));
-
+                    source.SetServiceAccountId(clusterConfig.GetServiceAccountId());
+                    source.SetServiceAccountIdSignature(clusterConfig.GetServiceAccountIdSignature());
+                    source.SetToken(State_->Types->Credentials->FindCredentialContent(
+                        "default_" + clusterConfig.name(),
+                        "default_generic",
+                        clusterConfig.GetToken()));
                 }
 
                 // We set token name to the protobuf message that will be received

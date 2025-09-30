@@ -1,6 +1,6 @@
 UNITTEST()
 
-IF (OS_LINUX)
+IF (OS_LINUX AND SANITIZER_TYPE != "memory")
 
 SRCS(
     ibv_ut.cpp

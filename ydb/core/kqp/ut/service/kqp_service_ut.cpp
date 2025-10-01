@@ -549,7 +549,6 @@ struct TDictCase {
                                         .SetUseRealThreads(false));
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
         ui32 const nodeId = runtime.GetNodeId(0);
-        Cerr << "nodeId in test: " << nodeId << Endl;
 
         auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); } );
         auto session = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); } );

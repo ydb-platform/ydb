@@ -66,6 +66,13 @@ TPDisk::TPDisk(std::shared_ptr<TPDiskCtx> pCtx, const TIntrusivePtr<TPDiskConfig
     UseNoopSchedulerSSD = TControlWrapper(Cfg->UseNoopScheduler, 0, 1);
     UseNoopSchedulerHDD = TControlWrapper(Cfg->UseNoopScheduler, 0, 1);
 
+    // Override PDiskConfig.SpaceColorBorder:
+    // 0 - overriding disabled, respect PDiskConfig value
+    // 1 - LightYellowMove
+    // 2 - YellowStop
+    SemiStrictSpaceIsolation = TControlWrapper(0, 0, 2);
+    SemiStrictSpaceIsolationCached = 0;
+
     if (Cfg->SectorMap) {
         auto diskModeParams = Cfg->SectorMap->GetDiskModeParams();
         if (diskModeParams) {
@@ -2878,6 +2885,7 @@ bool TPDisk::Initialize() {
             REGISTER_LOCAL_CONTROL(ForsetiOpPieceSizeRot);
             icb->RegisterSharedControl(UseNoopSchedulerHDD, "PDiskControls.UseNoopSchedulerHDD");
             icb->RegisterSharedControl(UseNoopSchedulerSSD, "PDiskControls.UseNoopSchedulerSSD");
+            icb->RegisterSharedControl(SemiStrictSpaceIsolation, "PDiskControls.SemiStrictSpaceIsolation");
 
             if (Cfg->SectorMap) {
                 auto diskModeParams = Cfg->SectorMap->GetDiskModeParams();
@@ -3860,6 +3868,13 @@ void TPDisk::Update() {
             while (!ForsetiScheduler.IsEmpty()) {
                 GetJobsFromForsetti();
             }
+        }
+
+        using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
+        if (i64 currentIsolation = SemiStrictSpaceIsolation; currentIsolation != SemiStrictSpaceIsolationCached) {
+            TColor::E colorBorder = GetColorBorderIcb();
+            Keeper.SetColorBorder(colorBorder);
+            SemiStrictSpaceIsolationCached = currentIsolation;
         }
 
         // Switch the scheduler when possible

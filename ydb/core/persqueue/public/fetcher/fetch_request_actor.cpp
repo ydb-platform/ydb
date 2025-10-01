@@ -395,7 +395,7 @@ public:
             return;
         }
 
-        AFL_ENSURE(FetchRequestCurrentPartitionIndex < Settings.Partitions.size())
+        AFL_ENSURE(FetchRequestCurrentPartitionIndex <= Settings.Partitions.size())
             ("l", FetchRequestCurrentPartitionIndex)
             ("r", Settings.Partitions.size());
 

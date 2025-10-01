@@ -265,9 +265,9 @@ class LoadSuiteBase:
             end_time: End of analysis time interval (Unix timestamp)
 
         Returns:
-            Dictionary with hosts as keys and sanitizer output (first 150 lines per error) as values:
+            Dictionary with hosts as keys and number of occurances and sanitizer output (first 150 lines per error) as values:
             {
-                "host1.example.com": "First 150 lines of every ThreadSanitizer error",
+                "host1.example.com": (18, "First 150 lines of every ThreadSanitizer error"),
             }
         """
         tz = timezone('Europe/Moscow')
@@ -281,37 +281,17 @@ class LoadSuiteBase:
             for h in hosts
         }
 
+        def count_regex_matches(pattern, text):
+            return sum(1 for _ in regex.finditer(pattern, text))
+
         host_logs = {}
         for h, exec in core_processes.items():
             exec.wait(check_exit_code=False)
             if exec.returncode != 0:
                 logging.error(f'Error while process sanitizers on host {h}: {exec.stderr}')
             else:
-                host_logs[h] = exec.stdout
+                host_logs[h] = (count_regex_matches(sanitizer_regex_params, exec.stdout), exec.stdout)
         return host_logs
-
-    @classmethod
-    def __count_sanitizer_events(cls, hosts: set[str], start_time: float, end_time: float) -> dict[str, int]:
-        tz = timezone('Europe/Moscow')
-        start = datetime.fromtimestamp(start_time, tz).isoformat()
-        end = datetime.fromtimestamp(end_time + 10, tz).isoformat()
-
-        sanitizer_regex_params = r'(ERROR|WARNING|SUMMARY): (AddressSanitizer|MemorySanitizer|ThreadSanitizer|LeakSanitizer|UndefinedBehaviorSanitizer)'
-
-        core_processes = {
-            h: cls.execute_ssh(h, f"ulimit -n 100500;unified_agent select -S '{start}' -U '{end}' -s kikimr-start | grep -Pc '{sanitizer_regex_params}'")
-            for h in hosts
-        }
-
-        total_host_san_triggers = dict()
-        for h, exec in core_processes.items():
-            exec.wait(check_exit_code=False)
-            if exec.returncode != 0:
-                logging.error(f'Error while process sanitizers on host {h}: {exec.stderr}')
-            else:
-                total_host_san_triggers[h] = int(exec.stdout)
-
-        return total_host_san_triggers
 
     @classmethod
     def __get_verify_fails(
@@ -692,7 +672,7 @@ class LoadSuiteBase:
         return cls.check_nodes_diagnostics_with_timing(result, result.start_time, end_time)
 
     @classmethod
-    def check_node_verifies_with_timing(cls, start_time: float, end_time: float):
+    def check_nodes_verifies_with_timing(cls, start_time: float, end_time: float):
         """Aggregates information about VERIFY failed errors across hosts.
 
         Collects and analyzes verification failures within specified time range,
@@ -721,28 +701,6 @@ class LoadSuiteBase:
         return cls.__get_verify_fails(all_hosts, start_time, end_time)
 
     @classmethod
-    def check_node_sanitizer_with_timing(cls, start_time: float, end_time: float):
-        """Aggregates information about sanitizer errors across hosts.
-
-        Collects and analyzes sanitizer failures within specified time range.
-
-        Args:
-            hosts: Set of target hostnames to analyze
-            start_time: Beginning of analysis time interval (Unix timestamp)
-            end_time: End of analysis time interval (Unix timestamp)
-
-        Returns:
-            Dictionary with hosts as keys and sanitizer output (first 150 lines per error) as values:
-            {
-                "host1.example.com": "First 150 lines of every ThreadSanitizer error",
-            }
-        """
-        if cls.__nodes_state is None:
-            return []
-        all_hosts = {node.host for node in cls.__nodes_state.values()}
-        return cls.__get_sanitizer_events(all_hosts, start_time, end_time)
-
-    @classmethod
     def check_nodes_diagnostics_with_timing(cls, result: YdbCliHelper.WorkloadRunResult, start_time: float, end_time: float) -> list[NodeErrors]:
         """
         Собирает диагностическую информацию о нодах с кастомным временным интервалом.
@@ -762,7 +720,7 @@ class LoadSuiteBase:
         # Собираем диагностическую информацию для всех хостов
         core_hashes = cls.__get_core_hashes_by_pod(all_hosts, start_time, end_time)
         ooms = cls.__get_hosts_with_omms(all_hosts, start_time, end_time)
-        hosts_with_sanitizer = cls.__count_sanitizer_events(all_hosts, start_time, end_time)
+        hosts_with_sanitizer = cls.__get_sanitizer_events(all_hosts, start_time, end_time)
         hosts_with_verifies = cls.__count_verify_fails(all_hosts, start_time, end_time)
 
         # Создаем NodeErrors для каждой ноды с диагностической информацией
@@ -781,7 +739,8 @@ class LoadSuiteBase:
                 if node.host in hosts_with_verifies:
                     node_error.verifies = hosts_with_verifies[node.host]
                 if node.host in hosts_with_sanitizer:
-                    node_error.sanitizer_errors = hosts_with_sanitizer[node.host]
+                    node_error.sanitizer_errors = hosts_with_sanitizer[node.host][0]
+                    node_error.sanitizer_output = hosts_with_sanitizer[node.host][1]
                 node_errors.append(node_error)
 
                 # Добавляем ошибки в результат (cores и OOM - это errors)
@@ -834,7 +793,7 @@ class LoadSuiteBase:
             node_errors = []
         return node_errors
 
-    def _create_allure_report(self, result, workload_name, workload_params, node_errors, use_node_subcols, verify_errors, sanitizer_errors):
+    def _create_allure_report(self, result, workload_name, workload_params, node_errors, use_node_subcols, verify_errors):
         """Формирует allure-отчёт по результатам workload"""
         end_time = time()
         start_time = result.start_time if result.start_time else end_time - 1
@@ -863,7 +822,6 @@ class LoadSuiteBase:
             addition_table_strings=additional_table_strings,
             node_errors=node_errors,
             verify_errors=verify_errors,
-            sanitizer_errors=sanitizer_errors,
             workload_result=result,
             workload_params=workload_params,
             use_node_subcols=use_node_subcols,

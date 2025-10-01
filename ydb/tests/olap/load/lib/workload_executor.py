@@ -2224,7 +2224,6 @@ class WorkloadTestBase(LoadSuiteBase):
             # Собираем информацию об ошибках нод
             node_errors = []
             verify_errors = {}
-            sanitizer_errors = {}
 
             # Проверяем состояние нод и собираем ошибки
             try:
@@ -2233,8 +2232,7 @@ class WorkloadTestBase(LoadSuiteBase):
                 diagnostics_start_time = getattr(
                     result, "workload_start_time", result.start_time
                 )
-                verify_errors = self.check_node_verifies_with_timing(diagnostics_start_time, end_time)
-                sanitizer_errors = self.check_node_sanitizer_with_timing(diagnostics_start_time, end_time)
+                verify_errors = self.check_nodes_verifies_with_timing(diagnostics_start_time, end_time)
                 node_errors = self.check_nodes_diagnostics_with_timing(
                     result, diagnostics_start_time, end_time
                 )
@@ -2340,7 +2338,7 @@ class WorkloadTestBase(LoadSuiteBase):
             # 3. Формирование summary/статистики (with_errors/with_warnings автоматически добавляются в ydb_cli.py)
 
             # 4. Формирование allure-отчёта
-            self._create_allure_report(result, workload_name, workload_params, node_errors, use_node_subcols, verify_errors, sanitizer_errors)
+            self._create_allure_report(result, workload_name, workload_params, node_errors, use_node_subcols, verify_errors)
 
             # Сохраняем node_errors для использования после выгрузки
             result._node_errors = node_errors

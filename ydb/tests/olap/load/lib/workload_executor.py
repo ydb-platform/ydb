@@ -17,7 +17,6 @@ from ydb.tests.olap.lib.remote_execution import (
 from ydb.tests.olap.lib.ydb_cli import YdbCliHelper
 from ydb.tests.olap.lib.results_processor import ResultsProcessor
 from ydb.tests.olap.lib.utils import get_external_param
-from ydb.tests.olap.lib.allure_utils import allure_test_description
 
 # Импортируем LoadSuiteBase чтобы наследоваться от него
 from ydb.tests.olap.load.lib.conftest import LoadSuiteBase

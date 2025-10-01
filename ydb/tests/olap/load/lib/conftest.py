@@ -255,6 +255,22 @@ class LoadSuiteBase:
 
     @classmethod
     def __get_sanitizer_events(cls, hosts: set[str], start_time: float, end_time: float) -> dict[str, str]:
+        """Aggregates information about sanitizer errors across hosts.
+
+        Collects and analyzes verification failures within specified time range,
+        grouping errors by unique patterns and counting occurrences per host.
+
+        Args:
+            hosts: Set of target hostnames to analyze
+            start_time: Beginning of analysis time interval (Unix timestamp)
+            end_time: End of analysis time interval (Unix timestamp)
+
+        Returns:
+            Dictionary with hosts as keys and sanitizer output (first 150 lines per error) as values:
+            {
+                "host1.example.com": "First 150 lines of every ThreadSanitizer error",
+            }
+        """
         tz = timezone('Europe/Moscow')
         start = datetime.fromtimestamp(start_time, tz).isoformat()
         end = datetime.fromtimestamp(end_time + 10, tz).isoformat()
@@ -299,7 +315,34 @@ class LoadSuiteBase:
         return total_host_san_triggers
 
     @classmethod
-    def __get_verify_fails(cls, hosts: set[str], start_time: float, end_time: float):
+    def __get_verify_fails(
+        cls,
+        hosts: set[str],
+        start_time: float,
+        end_time: float
+    ) -> dict[str, dict[str, str | dict[str, int]]]:
+        """Aggregates information about VERIFY failed errors across hosts.
+
+        Collects and analyzes verification failures within specified time range,
+        grouping errors by unique patterns and counting occurrences per host.
+
+        Args:
+            hosts: Set of target hostnames to analyze
+            start_time: Beginning of analysis time interval (Unix timestamp)
+            end_time: End of analysis time interval (Unix timestamp)
+
+        Returns:
+            Dictionary with verification failure patterns as keys and structured information as values:
+            {
+                "verify failed at example.cpp:123": {
+                    "full_trace": "Full VERIFY failed text",
+                    "hosts_count": {
+                        "host1.example.com": 3,
+                        "host2.example.com": 1
+                    }
+                }
+            }
+        """
         tz = timezone('Europe/Moscow')
         start = datetime.fromtimestamp(start_time, tz).isoformat()
         end = datetime.fromtimestamp(end_time + 10, tz).isoformat()
@@ -646,6 +689,9 @@ class LoadSuiteBase:
 
     @classmethod
     def check_node_verifies_with_timing(cls, start_time: float, end_time: float):
+        """
+
+        """
         if cls.__nodes_state is None:
             return []
         all_hosts = {node.host for node in cls.__nodes_state.values()}

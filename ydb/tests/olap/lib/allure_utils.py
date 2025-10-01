@@ -858,7 +858,7 @@ def allure_test_description(
     
     html += _set_node_errors(node_errors)
     html += _produce_verify_report(verify_errors)
-    logs_in_html = external_param_is_true('save_logs_in_html')
+    logs_in_html = external_param_is_true('save_san_logs_in_html')
     if logs_in_html:
         html += _produce_sanitizer_report(sanitizer_errors)
     elif sanitizer_errors:

@@ -122,9 +122,17 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
 void TSpecialReadContext::RegisterActors(const NCommon::ISourcesConstructor& sources) {
     AFL_VERIFY(!DuplicatesManager);
     if (NeedDuplicateFiltering()) {
-        const auto* portions = dynamic_cast<const NCommon::TSourcesConstructorWithAccessors<TSourceConstructor>*>(&sources);
-        AFL_VERIFY(portions);
-        DuplicatesManager = NActors::TActivationContext::Register(new NDuplicateFiltering::TDuplicateManager(*this, portions->GetConstructors()));
+        const auto* casted_sources = dynamic_cast<const NCommon::TSourcesConstructorWithAccessors<TSourceConstructor>*>(&sources);
+        AFL_VERIFY(casted_sources);
+        // we do not pass uncommitted portions of concurrent txs to the duplicate filter because they are invisible for the given tx
+        std::deque<std::shared_ptr<TPortionInfo>> portionsToDuplicateFilter;
+        for (auto&& constructor : casted_sources->GetConstructors()) {
+            const auto info = constructor.GetPortion();
+            if (GetPortionCommitStatus(*info) != NCommon::EPortionCommitStatus::UncommittedByAnotherTx) {
+                portionsToDuplicateFilter.emplace_back(std::move(info));
+            }
+        }
+        DuplicatesManager = NActors::TActivationContext::Register(new NDuplicateFiltering::TDuplicateManager(*this, portionsToDuplicateFilter));
     }
 }
 

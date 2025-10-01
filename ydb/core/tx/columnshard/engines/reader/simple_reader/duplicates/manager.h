@@ -75,16 +75,11 @@ private:
     ui64 ExpectedIntersectionCount = 0;
 
 private:
-    static TPortionIntervalTree MakeIntervalTree(const TSpecialReadContext& context, const std::deque<NSimple::TSourceConstructor>& portions) {
+    static TPortionIntervalTree MakeIntervalTree(const std::deque<std::shared_ptr<TPortionInfo>>& portions) {
         TPortionIntervalTree intervals;
         for (const auto& portion : portions) {
-            const auto info = portion.GetPortion();
-            // uncommitted changes by other txs are not visible for the given tx, so we ignore them here
-            if (context.GetPortionCommitStatus(*info) == NCommon::EPortionCommitStatus::UncommittedByAnotherTx) {
-                continue;
-            }
-            intervals.AddRange(TPortionIntervalTree::TOwnedRange(portion.GetPortion()->IndexKeyStart(), true,
-                                   portion.GetPortion()->IndexKeyEnd(), true), portion.GetPortion());
+            intervals.AddRange(TPortionIntervalTree::TOwnedRange(portion->IndexKeyStart(), true,
+                                   portion->IndexKeyEnd(), true), portion);
         }
         return intervals;
     }
@@ -161,7 +156,7 @@ private:
         THashSet<ui64>& portionIdsToFetch, std::vector<TIntervalInfo>& intervalsToBuild);
 
 public:
-    TDuplicateManager(const TSpecialReadContext& context, const std::deque<NSimple::TSourceConstructor>& portions);
+    TDuplicateManager(const TSpecialReadContext& context, const std::deque<std::shared_ptr<TPortionInfo>>& portions);
 };
 
 }   // namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering

@@ -187,13 +187,13 @@ public:
 #define LOCAL_LOG_TRACE \
     AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("component", "duplicates_manager")("self", TActivationContext::AsActorContext().SelfID)
 
-TDuplicateManager::TDuplicateManager(const TSpecialReadContext& context, const std::deque<NSimple::TSourceConstructor>& portions)
+TDuplicateManager::TDuplicateManager(const TSpecialReadContext& context, const std::deque<std::shared_ptr<TPortionInfo>>& portions)
     : TActor(&TDuplicateManager::StateMain)
     , LastSchema(context.GetCommonContext()->GetReadMetadata()->GetIndexVersions().GetLastSchema())
     , PKColumns(context.GetPKColumns())
     , PKSchema(context.GetCommonContext()->GetReadMetadata()->GetIndexVersions().GetPrimaryKey())
     , Counters(context.GetCommonContext()->GetCounters().GetDuplicateFilteringCounters())
-    , Intervals(MakeIntervalTree(context, portions))
+    , Intervals(MakeIntervalTree(portions))
     , Portions(MakePortionsIndex(Intervals))
     , DataAccessorsManager(context.GetCommonContext()->GetDataAccessorsManager())
     , ColumnDataManager(context.GetCommonContext()->GetColumnDataManager())

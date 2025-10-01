@@ -2308,6 +2308,10 @@ class WorkloadTestBase(LoadSuiteBase):
                             node_error_messages.append(f"Node {node_error.node.slot} coredump {core_id}")
                     if node_error.was_oom:
                         node_error_messages.append(f"Node {node_error.node.slot} experienced OOM")
+                    if hasattr(node_error, 'verifies') and node_error.verifies > 0:
+                        node_error_messages.append(f"Node {node_error.node.host} had {node_error.verifies} VERIFY fails")
+                    if hasattr(node_error, 'sanitizer_errors') and node_error.sanitizer_errors > 0:
+                        node_error_messages.append(f"Node {node_error.node.host} has {node_error.sanitizer_errors} SAN errors")
 
                 # Собираем workload ошибки (не связанные с нодами)
                 if result.errors:

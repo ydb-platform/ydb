@@ -21,8 +21,20 @@ namespace NKikimr {
                 struct TQueue {
                     TActorId ActorId;
                     TIntrusivePtr<NBackpressure::TFlowRecord> FlowRecord;
-                    std::optional<bool> ExtraBlockChecksSupport;
-                    std::atomic<bool> Checksumming;
+                    struct AtomicParameter : public std::atomic<bool> {
+                        AtomicParameter& operator=(const AtomicParameter& other) {
+                            store(other.load());
+                            return *this;
+                        }
+
+                        AtomicParameter(const AtomicParameter& other) {
+                            store(other.load());
+                        }
+
+                        AtomicParameter() {
+                            store(false);
+                        }
+                    } ExtraBlockChecksSupport, Checksumming;
                     std::shared_ptr<const TCostModel> CostModel = nullptr;
                     volatile bool IsConnected = false;
                 };

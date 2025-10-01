@@ -85,7 +85,7 @@ TGroupSessions::TGroupSessions(const TIntrusivePtr<TBlobStorageGroupInfo>& info,
             auto& q = stateVDisk.Queues.GetQueue(queueId);
             q.ActorId = queue;
             q.FlowRecord = std::move(flowRecord);
-            q.ExtraBlockChecksSupport.reset();
+            q.ExtraBlockChecksSupport.store(false);
         }
     }
 }
@@ -128,7 +128,7 @@ void TGroupSessions::QueueConnectUpdate(ui32 orderNumber, NKikimrBlobStorage::EV
 
     if (connected) {
         ConnectedQueuesMask[orderNumber] |= 1 << queueId;
-        q.ExtraBlockChecksSupport = extraGroupChecksSupport;
+        q.ExtraBlockChecksSupport.store(extraGroupChecksSupport);
         q.Checksumming.store(checksumming);
         Y_ABORT_UNLESS(costModel);
         if (!q.CostModel || *q.CostModel != *costModel) {
@@ -137,7 +137,7 @@ void TGroupSessions::QueueConnectUpdate(ui32 orderNumber, NKikimrBlobStorage::EV
         }
     } else {
         ConnectedQueuesMask[orderNumber] &= ~(1 << queueId);
-        q.ExtraBlockChecksSupport.reset();
+        q.ExtraBlockChecksSupport.store(false);
         q.Checksumming.store(false);
         if (q.CostModel) {
             updated = true;

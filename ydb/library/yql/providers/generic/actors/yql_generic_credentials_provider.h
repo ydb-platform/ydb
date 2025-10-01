@@ -22,7 +22,7 @@ namespace NYql::NDq {
             const TString& ServiceAccountIdSignature,
             const ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory);
         TGenericCredentialsProvider(
-            const TString& structuredToken, 
+            const TString& structuredToken,
             const ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory);
 
         // FillCredentials sets the credentials to access the remote datasource into the DataSourceInstance object.
@@ -46,7 +46,7 @@ namespace NYql::NDq {
     CreateGenericCredentialsProvider(
         const TString& structuredTokenJSON,
         /*[[deprecated]]*/ const TString& staticIamToken,
-        /*[[deprecated]]*/ const TString& serviceAccountId, 
+        /*[[deprecated]]*/ const TString& serviceAccountId,
         /*[[deprecated]]*/ const TString& serviceAccountIdSignature,
         const ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory);
 } // namespace NYql::NDq

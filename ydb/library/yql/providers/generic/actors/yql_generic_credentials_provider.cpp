@@ -10,7 +10,7 @@ namespace NYql::NDq {
     }
 
     TGenericCredentialsProvider::TGenericCredentialsProvider(
-        const TString& serviceAccountId, 
+        const TString& serviceAccountId,
         const TString& serviceAccountIdSignature,
         const ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory) {
         Y_ENSURE(!serviceAccountId.empty(), "No service account provided");
@@ -28,7 +28,7 @@ namespace NYql::NDq {
     }
 
     TGenericCredentialsProvider::TGenericCredentialsProvider(
-        const TString& structuredTokenJSON, 
+        const TString& structuredTokenJSON,
         const ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory) {
         Y_ENSURE(!structuredTokenJSON.empty(), "empty structured token");
         Y_ENSURE(credentialsFactory, "CredentialsFactory is not initialized");
@@ -41,13 +41,12 @@ namespace NYql::NDq {
             parser.GetBasicAuth(login, password);
             BasicAuthCredentials_ = {login, password};
             return;
-        } 
-        
+        }
+
         auto credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(
-            credentialsFactory, 
-            structuredTokenJSON, 
-            false
-        );
+            credentialsFactory,
+            structuredTokenJSON,
+            false);
 
         CredentialsProvider_ = credentialsProviderFactory->CreateProvider();
     }
@@ -55,8 +54,9 @@ namespace NYql::NDq {
     TString TGenericCredentialsProvider::FillCredentials(NYql::TGenericDataSourceInstance& dsi) const {
         // 1. If basic auth creds have been provided, use it
         if (BasicAuthCredentials_) {
-            *dsi.mutable_credentials()->mutable_basic()->mutable_username() = BasicAuthCredentials_->Username;
-            *dsi.mutable_credentials()->mutable_basic()->mutable_password() = BasicAuthCredentials_->Password;
+            auto basic = dsi.mutable_credentials()->mutable_basic();
+            *basic->mutable_username() = BasicAuthCredentials_->Username;
+            *basic->mutable_password() = BasicAuthCredentials_->Password;
             return {};
         }
 
@@ -87,10 +87,10 @@ namespace NYql::NDq {
 
     TGenericCredentialsProvider::TPtr
     CreateGenericCredentialsProvider(const TString& structuredTokenJSON,
-                               /*[[deprecated]]*/ const TString& staticIamToken,
-                               /*[[deprecated]]*/ const TString& serviceAccountId,
-                               /*[[deprecated]]*/ const TString& serviceAccountIdSignature,
-                               const ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory) {
+                                     /*[[deprecated]]*/ const TString& staticIamToken,
+                                     /*[[deprecated]]*/ const TString& serviceAccountId,
+                                     /*[[deprecated]]*/ const TString& serviceAccountIdSignature,
+                                     const ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory) {
         if (!structuredTokenJSON.empty()) {
             return std::make_unique<TGenericCredentialsProvider>(structuredTokenJSON, credentialsFactory);
         }

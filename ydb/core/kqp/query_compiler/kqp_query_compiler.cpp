@@ -1480,7 +1480,7 @@ private:
                 shuffleProto.AddKeyColumns(TString(keyColumn));
             }
 
-            NDq::EHashShuffleFuncType hashFuncType = Config->DefaultHashShuffleFuncType;
+            NDq::EHashShuffleFuncType hashFuncType = NDq::EHashShuffleFuncType::HashV1;
             if (shuffle.HashFunc().IsValid()) {
                 hashFuncType = FromString<NDq::EHashShuffleFuncType>(shuffle.HashFunc().Cast().StringValue());
             }

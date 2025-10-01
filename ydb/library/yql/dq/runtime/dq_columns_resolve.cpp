@@ -31,6 +31,10 @@ TMaybe<TColumnInfo> FindColumnInfo(const NKikimr::NMiniKQL::TType* type, TString
         idx = *columnIndex;
     }
 
+    if (memberType->GetKind() == TType::EKind::Optional) {
+        memberType = static_cast<TOptionalType&>(*memberType).GetItemType();
+    }
+
     return TColumnInfo{TString(columnName), idx, memberType, isScalar};
 }
 

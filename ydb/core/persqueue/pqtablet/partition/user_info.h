@@ -208,16 +208,19 @@ public:
     const TUserInfo* GetIfExists(const TString& user) const;
     TUserInfo* GetIfExists(const TString& user);
 
+    // iterate over a mutable list of UserInfo
     auto GetAll() {
         auto proj = [](auto& ni) -> std::pair<const TString&, TUserInfo&> { return {ni.first, *ni.second}; };
         return std::views::transform(UsersInfo, proj);
     }
 
+    // iterate over a constant list of UserInfo
     auto ViewAll() const {
         auto proj = [](auto& ni) -> std::pair<const TString&, const TUserInfo&> { return {ni.first, *ni.second}; };
         return std::views::transform(UsersInfo, proj);
     }
 
+    // iterate over a constant list of UserInfo with important flag or non-zero availability period
     auto ViewImportant() const {
         auto proj = [](auto& ni) -> std::pair<const TString&, const TUserInfo&> { return {ni.first, *ni.second}; };
         return std::views::transform(ImportantExtUsersInfoSlice, proj);

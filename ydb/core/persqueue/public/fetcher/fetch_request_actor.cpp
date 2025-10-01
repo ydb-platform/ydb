@@ -143,9 +143,9 @@ public:
 
     void Handle(TEvents::TEvWakeup::TPtr& ev, const TActorContext& ctx) {
         if (ev->Get()->Tag == TimeoutWakeupTag) {
-            HandleTimeout(ctx);
-            return;
+            return FinishProcessing(ctx);
         }
+
         const auto tag = static_cast<EWakeupTag>(ev->Get()->Tag);
         OnWakeup(tag);
         switch (tag) {
@@ -409,7 +409,11 @@ public:
             if (status == EPartitionStatus::DataReceived) {
                 ++FetchRequestCurrentPartitionIndex;
                 continue;
-            };
+            }
+
+            if (FetchRequestBytesLeft == 0) {
+                return;
+            }
 
             auto& req = Settings.Partitions[FetchRequestCurrentPartitionIndex];
             auto [topic, topicInfo] = GetTopicInfo(req.Topic);
@@ -460,9 +464,9 @@ public:
 
         auto& partition = Settings.Partitions[partitionIndex];
         if (record.GetEndOffset() < partition.Offset) {
-            AddResult(partitionIndex, NPersQueue::NErrorCode::EErrorCode::READ_ERROR_TOO_BIG_OFFSET);
+            AddResult(partitionIndex, NPersQueue::NErrorCode::EErrorCode::READ_ERROR_TOO_BIG_OFFSET, record.GetEndOffset());
         } else if (record.GetEndOffset() == partition.Offset) {
-            AddResult(partitionIndex, NPersQueue::NErrorCode::EErrorCode::READ_NOT_DONE);
+            AddResult(partitionIndex, NPersQueue::NErrorCode::EErrorCode::READ_NOT_DONE, record.GetEndOffset());
         }
 
         ProceedFetchRequest(ctx);
@@ -510,7 +514,7 @@ public:
         SetMeteringMode(topicInfo.PQInfo->Description.GetPQTabletConfig().GetMeteringMode());
 
         if (FetchRequestBytesLeft == 0) {
-            SendReplyOnDoneAndDie(ctx);
+            FinishProcessing(ctx);
         } else if (IsQuotaRequired()) {
             PendingQuotaAmount = CalcRuConsumption(GetPayloadSize(record)) + (Settings.RuPerRequest ? 1 : 0);
             Settings.RuPerRequest = false;
@@ -528,7 +532,7 @@ public:
         return ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, tabletId, clientConfig));
     }
 
-    void AddResult(size_t partitionIndex, NPersQueue::NErrorCode::EErrorCode errorCode) {
+    void AddResult(size_t partitionIndex, NPersQueue::NErrorCode::EErrorCode errorCode, std::optional<ui64> maxOffset = std::nullopt) {
         EnsureResponse();
 
         PartitionStatus[partitionIndex] = EPartitionStatus::DataReceived;
@@ -540,6 +544,9 @@ public:
         res->SetPartition(req.Partition);
         auto* read = res->MutableReadResult();
         read->SetErrorCode(errorCode);
+        if (maxOffset) {
+            read->SetMaxOffset(*maxOffset);
+        }
     }
 
     void HandlePipeError(const ui64 tabletId, const TActorContext& ctx) {
@@ -558,8 +565,9 @@ public:
 
         if (FetchRequestCurrentReadTablet == tabletId) {
             FetchRequestCurrentReadTablet = 0;
-            ProceedFetchRequest(ctx);
         }
+
+        ProceedFetchRequest(ctx);
     }
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx) {
@@ -573,7 +581,7 @@ public:
         HandlePipeError(ev->Get()->TabletId, ctx);
     }
 
-    void HandleTimeout(const TActorContext& ctx) {
+    void FinishProcessing(const TActorContext& ctx) {
         for (size_t i = 0; i < PartitionStatus.size(); ++i) {
             if (PartitionStatus[i] == EPartitionStatus::HasDataRequested) { // rerequest HasData without timeout
                 auto& p = Settings.Partitions[i];
@@ -588,6 +596,9 @@ public:
                 NTabletPipe::SendData(ctx, TabletInfo[tabletId].PipeClient, fetchInfo.release());
             }
         }
+
+        FetchRequestBytesLeft = 0;
+        ProceedFetchRequest(ctx);
     }
 
     std::pair<const TString&, TTopicInfo&> GetTopicInfo(const TString& topicPath) {

@@ -2102,8 +2102,10 @@ public:
         , MessageSettings(GetWriteActorSettings())
         , TxManager(settings.TxManager)
         , Alloc(settings.Alloc)
-        , TypeEnv(std::move(settings.TypeEnv))
-        , HolderFactory(std::move(settings.HolderFactory))
+        , TypeEnv(std::make_shared<NKikimr::NMiniKQL::TTypeEnvironment>(*Alloc))
+        , MemInfo("TKqpBufferWriteActor")
+        , HolderFactory(std::make_shared<NKikimr::NMiniKQL::THolderFactory>(
+            Alloc->Ref(), MemInfo, AppData()->FunctionRegistry))
         , Counters(settings.Counters)
         , TxProxyMon(settings.TxProxyMon)
         , BufferWriteActorSpan(TWilsonKqp::BufferWriteActor, NWilson::TTraceId(settings.TraceId), "BufferWriteActor", NWilson::EFlags::AUTO_END)
@@ -3764,6 +3766,7 @@ private:
 
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
     std::shared_ptr<NMiniKQL::TTypeEnvironment> TypeEnv;
+    NKikimr::NMiniKQL::TMemoryUsageInfo MemInfo;
     std::shared_ptr<NMiniKQL::THolderFactory> HolderFactory;
 
     struct TWriteInfo {

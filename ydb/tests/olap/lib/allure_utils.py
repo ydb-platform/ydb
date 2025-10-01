@@ -35,11 +35,11 @@ def _set_monitoring(test_info: dict[str, str], start_time: float, end_time: floa
 
     if len(YdbCluster.get_monitoring_urls()) > 0:
         test_info['monitoring'] = ', '.join([
-            f"< a target = '_blank' href ='{monitoring.url.format(
+            f"<a target='_blank' href='{monitoring.url.format(
                 database=database,
                 start_time=monitoring_start,
                 end_time=monitoring_end
-            )}'> {monitoring.caption} < /a >"
+            )}'> {monitoring.caption} </a>"
             for monitoring in YdbCluster.get_monitoring_urls()
         ])
 
@@ -80,7 +80,7 @@ def _set_node_errors(node_errors: list[NodeErrors]) -> str:
     for host, problems in host_errors.items():
         html += '<tr>'
         html += f'<td>{host}</td>'
-        html += f'<td>{' < br / >'.join(problems.values())}</td>'
+        html += f'<td>{'<br/>'.join(problems.values())}</td>'
         html += f'<td>{host_cores[host]}</td>'
         html += '</tr>'
     html += '</table>'
@@ -97,7 +97,7 @@ def _produce_verify_report(verify_errors) -> str:
         html += '<table border="1" cellpadding="2px" style="margin-top: 5px"><tr><th>Node</th><th>VERIFY failed times</th></tr>'
         for host, triggered_times in verify_info['hosts_count'].items():
             html += f'<tr bgcolor="{'  # 90EE90' if triggered_times == 0 else '#FA8072'}"><td>{host}</td><td>{triggered_times}</td></tr>'
-        html += f'</table><br/><code>{''.join(verify_info['full_trace']).replace('\n', ' < br / >')}</code></details>'
+        html += f'</table><br/><code>{''.join(verify_info['full_trace']).replace('\n', '<br/>')}</code></details>'
     return html
 
 
@@ -112,7 +112,7 @@ def _produce_sanitizer_report(node_errors: list[NodeErrors]) -> str:
         host = node_error.node.host
         if host not in reported_hosts:
             html += f'<details style="margin-bottom: 15px"><summary style="display: list-item">Sanitizer output at {host}</summary>'
-            html += f'<code>{node_error.sanitizer_output.replace('\n', ' < br / >')}</code></details>'
+            html += f'<code>{node_error.sanitizer_output.replace('\n', '<br/>')}</code></details>'
             reported_hosts.add(host)
     return html
 
@@ -124,7 +124,7 @@ def _attach_sanitizer_outputs(node_errors: list[NodeErrors]):
     reported_hosts = set()
     for node_error in node_errors:
         host = node_error.node.host
-        if host not in reported_hosts:
+        if host not in reported_hosts and node_error.sanitizer_output:
             allure.attach(node_error.sanitizer_output, f"SAN output for {host}", allure.attachment_type.TEXT)
             reported_hosts.add(host)
 

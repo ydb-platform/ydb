@@ -44,7 +44,7 @@ public:
     };
 
     TMon(TConfig config);
-    virtual ~TMon() = default;
+    virtual ~TMon();
 
     std::future<void> Start(TActorSystem* actorSystem); // signals when monitoring is ready
     void Stop();

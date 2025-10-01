@@ -28,11 +28,14 @@ const TEncryptionKey& SelectKey(const TString& alg) {
 Y_UNIT_TEST_SUITE(EncryptedFileSerializerTest) {
     Y_UNIT_TEST(SerializeWholeFileAtATime) {
         TEncryptionIV iv = TEncryptionIV::Generate();
-        TBuffer fileData = TEncryptedFileSerializer::EncryptFullFile("aes-128_gcm", Key16, iv, "short data file");
-        TBuffer data = TEncryptedFileDeserializer::DecryptFullFile(Key16, iv, fileData);
-        TString dataStr;
-        data.AsString(dataStr);
-        UNIT_ASSERT_STRINGS_EQUAL(dataStr, "short data file");
+        TString content = "Short example text file with data that is to be encrypted and the decrypted";
+        for (const TString& alg : Algorithms) {
+            TBuffer fileData = TEncryptedFileSerializer::EncryptFullFile(alg, SelectKey(alg), iv, content);
+            TBuffer data = TEncryptedFileDeserializer::DecryptFullFile(SelectKey(alg), iv, fileData);
+            TString dataStr;
+            data.AsString(dataStr);
+            UNIT_ASSERT_STRINGS_EQUAL(dataStr, content);
+        }
     }
 
     Y_UNIT_TEST(WrongParametersForSerializer) {

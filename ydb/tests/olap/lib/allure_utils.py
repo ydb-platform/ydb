@@ -18,6 +18,7 @@ class NodeErrors:
         self.core_hashes: list[tuple[str, str]] = []    # id, aggregated hash
         self.verifies: int = 0
         self.sanitizer_errors: int = 0
+        self.sanitizer_output: str = None
         self.was_oom: bool = False
         self.message: str = message
 
@@ -99,15 +100,31 @@ def _produce_verify_report(verify_errors) -> str:
     return html
 
 
-def _produce_sanitizer_report(sanitizer_errors) -> str:
-    if not sanitizer_errors or len(sanitizer_errors) == 0:
+def _produce_sanitizer_report(node_errors: list[NodeErrors]) -> str:
+    if not node_errors or len(node_errors) == 0:
         return ''
     html = '<h4>Sanitizer Errors</h4>'
 
-    for host, san_output in sanitizer_errors.items():
-        html += f'<details style="margin-bottom: 15px"><summary style="display: list-item">Sanitizer output at {host}</summary>'
-        html += f'<code>{san_output.replace('\n', '<br/>')}</code></details>'
+    reported_hosts = set()
+
+    for node_error in node_errors:
+        host = node_error.node.host
+        if host not in reported_hosts:
+            html += f'<details style="margin-bottom: 15px"><summary style="display: list-item">Sanitizer output at {host}</summary>'
+            html += f'<code>{node_error.sanitizer_output.replace('\n', '<br/>')}</code></details>'
+            reported_hosts.add(host)
     return html
+
+def _attach_sanitizer_outputs(node_errors: list[NodeErrors]):
+    if not node_errors or len(node_errors) == 0:
+        return ''
+
+    reported_hosts = set()
+    for node_error in node_errors:
+        host = node_error.node.host
+        if host not in reported_hosts:
+            allure.attach(node_error.sanitizer_output, f"SAN output for {host}", allure.attachment_type.TEXT)
+            reported_hosts.add(host)
 
 
 def _set_results_plot(test_info: dict[str, str], suite: str, test: str, refference_set: str) -> None:
@@ -308,6 +325,7 @@ def __create_iterations_table(result: YdbCliHelper.WorkloadRunResult = None, nod
                 'message': '',
                 'verifies': 0,
                 'sanitizer_errors': 0,
+                'sanitizer_output': None,
                 'core_hashes': [],
                 'was_oom': False
             })()
@@ -532,6 +550,7 @@ def __create_iterations_table_with_node_subcols(result: YdbCliHelper.WorkloadRun
                 'message': '',
                 'verifies': 0,
                 'sanitizer_errors': 0,
+                'sanitizer_output': None,
                 'core_hashes': [],
                 'was_oom': False
             })()
@@ -805,7 +824,6 @@ def allure_test_description(
     refference_set: str = '',
     node_errors: list[NodeErrors] = None,
     verify_errors=None,
-    sanitizer_errors=None,
     workload_result=None,
     workload_params: dict = None,
     use_node_subcols: bool = False,
@@ -860,10 +878,9 @@ def allure_test_description(
     html += _produce_verify_report(verify_errors)
     logs_in_html = external_param_is_true('save_san_logs_in_html')
     if logs_in_html:
-        html += _produce_sanitizer_report(sanitizer_errors)
-    elif sanitizer_errors:
-        for host, output in sanitizer_errors.items():
-            allure.attach(output, f"SAN output for {host}", allure.attachment_type.TEXT)
+        html += _produce_sanitizer_report(node_errors)
+    else:
+        _attach_sanitizer_outputs(node_errors)
     html += '\n'.join([f'<div>\n{b}\n</div>\n\n' for b in addition_blocks])
 
     iterations_table = __create_iterations_table(workload_result, node_errors, workload_params, use_node_subcols)

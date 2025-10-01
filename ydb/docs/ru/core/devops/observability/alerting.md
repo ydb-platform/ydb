@@ -180,12 +180,7 @@ summary: YDB Health Issue in /Root (Status: RED)
 
 ## Полный конфигурационный файл
 
-```yaml
-groups:
-- name: ydb-rules
-  rules:
-  # Здесь размещаются все правила из секций выше
-```
+Полный конфигурационный файл со всеми правилами указанными выше доступен по [ссылке] (https://github.com/ydb-platform/ydb/blob/main/ydb/deploy/helm/ydb-prometheus/examples/ydb_prometheus_example.yaml)
 
 ## Рекомендации по настройке
 

@@ -26,8 +26,6 @@ SEND_WHEN_ALL_GOOD = False  # Whether to send a message when all jobs are workin
 WORKFLOW_THRESHOLDS = [
     ["PR-check", 0.5, "PR-check"],
     ["Postcommit", 6, "Postcommit"],
-    # Example of adding a new type:
-    # ["Nightly", 12, "Nightly-Build"]
 ]
 def get_alert_logins() -> str:
     """
@@ -62,7 +60,7 @@ def get_github_headers() -> Dict[str, str]:
     }
     
     # Try to get GitHub token from environment variables
-    github_token = os.getenv('GITHUB_TOKEN') or os.getenv('GH_TOKEN')
+    github_token = os.getenv('GITHUB_TOKEN')
     if github_token:
         headers["Authorization"] = f"Bearer {github_token}"
         print("🔑 Using GitHub token for API requests")
@@ -226,33 +224,34 @@ def is_retry_job(run: Dict[str, Any]) -> bool:
     """
     return run.get('run_attempt', 1) > 1
 
-def has_stuck_jobs(run: Dict[str, Any], threshold_hours: float) -> tuple[bool, List[Dict[str, Any]]]:
+def get_stuck_jobs(run: Dict[str, Any], threshold_hours: float) -> List[Dict[str, Any]]:
     """
-    Checks if workflow has any individual jobs stuck in queue beyond threshold.
+    Gets list of individual jobs stuck in queue beyond threshold.
     
     Args:
         run: Workflow run object
         threshold_hours: Time threshold in hours for considering a job stuck
     
     Returns:
-        tuple: (has_stuck_jobs, list_of_stuck_jobs)
+        List of stuck jobs. Empty list means no stuck jobs.
+        If API error or no jobs found, returns special error job entry.
     """
     run_id = run.get('id')
     workflow_name = run.get('name', 'Unknown')
     
     if not run_id:
-        return True, []  # If no ID, consider it stuck
+        return [{'job_name': 'Unknown', 'job_id': None, 'waiting_hours': 0, 'waiting_minutes': 0, 'error': 'No run ID'}]  # If no ID, consider it stuck
     
     # Fetch jobs for this workflow run with retry
     jobs_data, error = fetch_workflow_jobs_with_retry(run_id)
     if error:
         print(f"⚠️ Could not fetch jobs for run {run_id} ({workflow_name}) after retries: {error}")
-        return True, []  # If can't fetch jobs, consider it stuck to be safe
+        return [{'job_name': 'API Error', 'job_id': None, 'waiting_hours': 0, 'waiting_minutes': 0, 'error': error}]  # If can't fetch jobs, consider it stuck to be safe
     
     jobs = jobs_data.get('jobs', [])
     if not jobs:
         print(f"⚠️ No jobs found for run {run_id} ({workflow_name})")
-        return True, []  # No jobs found, consider stuck
+        return [{'job_name': 'No Jobs', 'job_id': None, 'waiting_hours': 0, 'waiting_minutes': 0, 'error': 'No jobs found'}]  # No jobs found, consider stuck
     
     current_time = datetime.now(timezone.utc)
     stuck_jobs = []
@@ -294,13 +293,12 @@ def has_stuck_jobs(run: Dict[str, Any], threshold_hours: float) -> tuple[bool, L
             conclusion = job.get('conclusion', 'unknown')
             print(f"  ✅ Done: {job_name} ({conclusion})")
     
-    has_stuck = len(stuck_jobs) > 0
-    if has_stuck:
+    if stuck_jobs:
         print(f"  🚨 Found {len(stuck_jobs)} stuck job(s) in {workflow_name}")
     else:
         print(f"  ✅ No stuck jobs in {workflow_name}")
     
-    return has_stuck, stuck_jobs
+    return stuck_jobs
 
 def analyze_queued_workflows(workflow_runs: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
     """
@@ -521,9 +519,9 @@ def check_for_stuck_jobs(workflow_runs: List[Dict[str, Any]], threshold_hours: i
             continue
         
         # Check if this workflow has any stuck individual jobs
-        has_stuck, stuck_job_list = has_stuck_jobs(run, threshold_hours)
+        stuck_job_list = get_stuck_jobs(run, threshold_hours)
         
-        if has_stuck:
+        if stuck_job_list:  # If any stuck jobs found
             # Calculate overall waiting time for compatibility
             current_time = datetime.now(timezone.utc)
             effective_start_time = get_effective_start_time(run)
@@ -653,21 +651,27 @@ def format_telegram_messages(workflow_info: Dict[str, Dict[str, Any]], stuck_job
                 for stuck_job in individual_stuck_jobs[:5]:  # Max 5 jobs per workflow
                     job_name = stuck_job.get('job_name', 'Unknown')
                     waiting_hours = stuck_job.get('waiting_hours', 0)
+                    error = stuck_job.get('error')
                     
-                    if waiting_hours > 24:
-                        waiting_str = f"{waiting_hours/24:.1f}d"
-                    elif waiting_hours > 1:
-                        waiting_str = f"{waiting_hours:.1f}h"
+                    if error:
+                        # This is an error job (API error, no jobs, etc.)
+                        message2_parts.append(f"   ⚠️ `{job_name}` - {error}")
                     else:
-                        waiting_str = f"{waiting_hours*60:.0f}m"
-                    
-                    message2_parts.append(f"   🚨 `{job_name}` - {waiting_str} (>{threshold_hours}h threshold)")
+                        # This is a real stuck job
+                        if waiting_hours > 24:
+                            waiting_str = f"{waiting_hours/24:.1f}d"
+                        elif waiting_hours > 1:
+                            waiting_str = f"{waiting_hours:.1f}h"
+                        else:
+                            waiting_str = f"{waiting_hours*60:.0f}m"
+                        
+                        message2_parts.append(f"   🚨 `{job_name}` - {waiting_str} (>{threshold_hours}h threshold)")
                 
                 if len(individual_stuck_jobs) > 5:
                     message2_parts.append(f"   • ... and {len(individual_stuck_jobs) - 5} more stuck jobs")
             else:
-                # No individual job details available (API error or no jobs found)
-                message2_parts.append(f"   ⚠️ Could not fetch individual job details (API error or no jobs found)")
+                # No individual job details available (should not happen with new interface)
+                message2_parts.append(f"   ⚠️ No stuck jobs found")
             
             message2_parts.append("")
             job_counter += 1

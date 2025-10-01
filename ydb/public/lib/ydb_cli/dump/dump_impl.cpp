@@ -18,7 +18,7 @@ TDumpResult TDumpClient::Dump(const TString& dbPath, const TString& fsPath, cons
         NBackup::BackupFolder(
             Driver,
             settings.Database_,
-            RelPathFromAbsolute(settings.Database_, dbPath),
+            (dbPath.StartsWith('/') ? RelPathFromAbsolute(settings.Database_, dbPath) : dbPath),
             fsPath,
             settings.ExclusionPatterns_,
             settings.SchemaOnly_,

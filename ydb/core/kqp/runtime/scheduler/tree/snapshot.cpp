@@ -69,7 +69,7 @@ void TTreeElement::UpdateTopDown(bool allowFairShareOverlimit) {
                 child->FairShare = 0;
             }
 
-            child->UpdateTopDown();
+            child->UpdateTopDown(allowFairShareOverlimit);
         });
     }
     // FIFO variant (when children are queries)

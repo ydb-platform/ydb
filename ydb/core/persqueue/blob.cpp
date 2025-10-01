@@ -166,12 +166,13 @@ TClientBlob TClientBlob::Deserialize(const char* data, ui32 size)
     Y_ABORT_UNLESS(data < end);
     ui16 sz = ReadUnaligned<ui16>(data);
     data += sizeof(ui16);
-    Y_ABORT_UNLESS(data + sz < end);
+    Y_ABORT_UNLESS(data + sz <= end);
     TString sourceId(data, sz);
     data += sz;
-    Y_ABORT_UNLESS(data < end, "size %u SeqNo %" PRIu64 " SourceId %s", size, seqNo, sourceId.c_str());
-    TString dt(data, end - data);
-
+    TString dt;
+    if (data != end) {
+        dt = TString(data, end - data);
+    }
     return TClientBlob(sourceId, seqNo, std::move(dt), std::move(partData), writeTimestamp, createTimestamp, us, partitionKey, explicitHashKey);
 }
 

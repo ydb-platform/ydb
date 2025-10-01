@@ -84,7 +84,7 @@ void LoadGraphState(const NUdf::TUnboxedValue* roots, ui32 rootCount, ui64 hash,
     TStringBuf state(in);
 
     MKQL_ENSURE(state.size() >= sizeof(ui64), "Serialized state is corrupted - no hash");
-    ui64 storedHash = *(ui64*)state.data();
+    ui64 storedHash = ReadUnaligned<ui64>(state.data());
     state.Skip(sizeof(storedHash));
 
     MKQL_ENSURE(hash == storedHash, "Unable to load graph state, different hashes");

@@ -3943,30 +3943,18 @@ TSourcePtr TSqlQuery::Build(const TRule_set_clause_list& stmt) {
 TSourcePtr TSqlQuery::Build(const TRule_multiple_column_assignment& stmt) {
     TVector<TString> targetList;
     FillTargetList(*this, stmt.GetRule_set_target_list1(), targetList);
-    auto simpleValuesNode = stmt.GetRule_simple_values_source4();
+
     const TPosition pos(Ctx_.Pos());
-    switch (simpleValuesNode.Alt_case()) {
-        case TRule_simple_values_source::kAltSimpleValuesSource1: {
-            TVector<TNodePtr> values;
-            TSqlExpression sqlExpr(Ctx_, Mode_);
-            if (!ExprList(sqlExpr, values, simpleValuesNode.GetAlt_simple_values_source1().GetRule_expr_list1())) {
-                return nullptr;
-            }
-            return BuildUpdateValues(pos, targetList, values);
-        }
-        case TRule_simple_values_source::kAltSimpleValuesSource2: {
-            TSqlSelect select(Ctx_, Mode_);
-            TPosition selectPos;
-            auto source = select.Build(simpleValuesNode.GetAlt_simple_values_source2().GetRule_select_stmt1(), selectPos);
-            if (!source) {
-                return nullptr;
-            }
-            return BuildWriteValues(pos, "UPDATE", targetList, std::move(source));
-        }
-        case TRule_simple_values_source::ALT_NOT_SET:
-            Ctx_.IncrementMonCounter("sql_errors", "UnknownSimpleValuesSourceAlt");
-            AltNotImplemented("simple_values_source", simpleValuesNode);
-            return nullptr;
+    auto parenthesis = stmt.GetRule_smart_parenthesis3();
+
+    TNodePtr node = TSqlExpression(Ctx_, Mode_).BuildSourceOrNode(parenthesis);
+    if (TSourcePtr source = MoveOutIfSource(node)) {
+        return BuildWriteValues(pos, "UPDATE", targetList, std::move(source));
+    } else if (TTupleNode* tuple = dynamic_cast<TTupleNode*>(node.Get())) {
+        return BuildUpdateValues(pos, targetList, tuple->Elements());
+    } else {
+        Error() << "Expected source or tuple, but got something else";
+        return nullptr;
     }
 }
 

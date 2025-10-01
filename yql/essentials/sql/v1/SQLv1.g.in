@@ -174,7 +174,6 @@ in_atom_expr:
   | cast_expr
   | case_expr
   | an_id_or_type NAMESPACE (id_or_type | STRING_VALUE)
-  | LPAREN select_stmt RPAREN
 // TODO: resolve ANTLR error: rule in_atom_expr has non-LL(*) decision due to recursive rule invocations reachable from alts 3,8
 //  | LPAREN values_stmt RPAREN
   | value_constructor
@@ -234,8 +233,19 @@ json_query: JSON_QUERY LPAREN
   (json_query_handler ON ERROR)?
 RPAREN;
 
-// struct, tuple or named list
-smart_parenthesis: LPAREN named_expr_list? COMMA? RPAREN;
+select_subexpr:
+  select_subexpr_intersect (union_op select_subexpr_intersect)*
+;
+
+select_subexpr_intersect:
+  select_or_expr (intersect_op select_or_expr)*
+;
+
+select_or_expr: select_kind_partial | tuple_or_expr;
+
+tuple_or_expr: expr (AS an_id_or_type)? (COMMA named_expr)* COMMA?;
+
+smart_parenthesis: LPAREN (select_subexpr | COMMA?) RPAREN;
 
 expr_list: expr (COMMA expr)*;
 
@@ -601,8 +611,6 @@ values_source: values_stmt | select_stmt;
 values_source_row_list: values_source_row (COMMA values_source_row)*;
 values_source_row: LPAREN expr_list RPAREN;
 
-simple_values_source: expr_list | select_stmt;
-
 create_external_data_source_stmt: CREATE (OR REPLACE)? EXTERNAL DATA SOURCE (IF NOT EXISTS)? object_ref
     with_table_settings
 ;
@@ -816,7 +824,7 @@ column_option:
     ;
 
 family_relation: FAMILY an_id;
-nullability: NOT? NULL;  
+nullability: NOT? NULL;
 default_value: DEFAULT expr;
 
 column_order_by_specification: an_id (ASC | DESC)?;
@@ -1041,7 +1049,7 @@ set_clause_choice: set_clause_list | multiple_column_assignment;
 set_clause_list: set_clause (COMMA set_clause)*;
 set_clause: set_target EQUALS expr;
 set_target: column_name;
-multiple_column_assignment: set_target_list EQUALS LPAREN simple_values_source RPAREN;
+multiple_column_assignment: set_target_list EQUALS smart_parenthesis;
 set_target_list: LPAREN set_target (COMMA set_target)* RPAREN;
 
 // topics
@@ -1145,11 +1153,9 @@ window_frame_exclusion: EXCLUDE CURRENT ROW | EXCLUDE GROUP | EXCLUDE TIES | EXC
 // EXTRAS
 use_stmt: USE cluster_expr;
 
-subselect_stmt: (LPAREN select_stmt RPAREN | select_unparenthesized_stmt);
-
 // TODO: [fatal] rule named_nodes_stmt has non-LL(*) decision due to recursive rule invocations reachable from alts 1,3
 // named_nodes_stmt: bind_parameter_list EQUALS (expr | subselect_stmt | values_stmt | LPAREN values_stmt RPAREN);
-named_nodes_stmt: bind_parameter_list EQUALS (expr | subselect_stmt);
+named_nodes_stmt: bind_parameter_list EQUALS (expr | select_unparenthesized_stmt);
 
 commit_stmt: COMMIT;
 

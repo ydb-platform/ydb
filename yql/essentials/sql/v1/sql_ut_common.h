@@ -2516,7 +2516,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
             SELECT * FROM $squ2;
             SELECT * FROM $squ3;
         )");
-        UNIT_ASSERT(res.Root);
+        UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
     }
 
     Y_UNIT_TEST(SubqueriesJoin) {
@@ -10523,5 +10523,240 @@ return /*Комментарий*/ $x;
         tokenProto.SetLine(1);
         tokenProto.SetColumn(0);
         UNIT_ASSERT_VALUES_EQUAL(0, NSQLTranslationV1::GetQueryPosition(query, tokenProto, antlr4));
+    }
+}
+
+Y_UNIT_TEST_SUITE(InlineUncorrelatedSubquery) {
+    Y_UNIT_TEST(EmptyTuple) {
+        NYql::TAstParseResult res = SqlToYql(R"sql(
+            SELECT ();
+            SELECT (());
+            SELECT (,);
+        )sql");
+        UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
+    }
+
+    Y_UNIT_TEST(ParenthesisedExpression) {
+        NYql::TAstParseResult res = SqlToYql(R"sql(
+            SELECT 1;
+            SELECT (1);
+            SELECT ((1));
+            SELECT (((1)));
+        )sql");
+        UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
+    }
+
+    Y_UNIT_TEST(Tuple) {
+        NYql::TAstParseResult res = SqlToYql(R"sql(
+            SELECT (1,);
+            SELECT (1, 2);
+            SELECT (1, 2, 3);
+            SELECT (1, 2, 3, 4);
+            SELECT ((1, 2));
+        )sql");
+        UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
+    }
+
+    Y_UNIT_TEST(Struct) {
+        NYql::TAstParseResult res = SqlToYql(R"sql(
+            SELECT (1 AS a);
+            SELECT (1 AS a, 2 AS b);
+            SELECT (1 AS a, 2 AS b, 3 AS c);
+        )sql");
+        UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
+    }
+
+    Y_UNIT_TEST(Lambda) {
+        NYql::TAstParseResult res = SqlToYql(R"sql(
+            SELECT (($a) -> { RETURN $a; })(1);
+            SELECT (($a, $b) -> { RETURN $a + $b; })(1, 2);
+            SELECT (($a, $b, $c) -> { RETURN $a + $b + $c; })(1, 2, 3);
+        )sql");
+        UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
+    }
+
+    Y_UNIT_TEST(AtProjection) {
+        NSQLTranslation::TTranslationSettings settings;
+        settings.LangVer = NYql::MakeLangVersion(2025, 4);
+
+        NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+            SELECT (SELECT 1);
+            SELECT (SELECT (SELECT 1));
+        )sql", settings);
+        UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
+    }
+
+    Y_UNIT_TEST(AtExpression) {
+        NSQLTranslation::TTranslationSettings settings;
+        settings.LangVer = NYql::MakeLangVersion(2025, 4);
+
+        NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+            SELECT 1 + (SELECT 1);
+            SELECT (SELECT 1) + 1;
+        )sql", settings);
+        UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
+    }
+
+    Y_UNIT_TEST(UnionParenthesis) {
+        NSQLTranslation::TTranslationSettings settings;
+        settings.LangVer = NYql::MakeLangVersion(2025, 4);
+
+        NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+            SELECT ( SELECT 1  UNION  SELECT 1);
+            SELECT ( SELECT 1  UNION (SELECT 1));
+            SELECT ((SELECT 1) UNION  SELECT 1);
+            SELECT ((SELECT 1) UNION (SELECT 1));
+        )sql", settings);
+        UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
+    }
+
+    Y_UNIT_TEST(IntersectParenthesis) {
+        NSQLTranslation::TTranslationSettings settings;
+        settings.LangVer = NYql::MakeLangVersion(2025, 4);
+
+        NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+            SELECT ( SELECT 1  INTERSECT  SELECT 1);
+            SELECT ( SELECT 1  INTERSECT (SELECT 1));
+            SELECT ((SELECT 1) INTERSECT  SELECT 1);
+            SELECT ((SELECT 1) INTERSECT (SELECT 1));
+        )sql", settings);
+        UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
+    }
+
+    Y_UNIT_TEST(UnionIntersect) {
+        NSQLTranslation::TTranslationSettings settings;
+        settings.LangVer = NYql::MakeLangVersion(2025, 4);
+
+        NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+            SELECT (SELECT 1 UNION     SELECT 1 UNION     SELECT 1);
+            SELECT (SELECT 1 UNION     SELECT 1 INTERSECT SELECT 1);
+            SELECT (SELECT 1 INTERSECT SELECT 1 UNION     SELECT 1);
+            SELECT (SELECT 1 INTERSECT SELECT 1 INTERSECT SELECT 1);
+        )sql", settings);
+        UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
+    }
+
+    Y_UNIT_TEST(ScalarExpressionUnion) {
+        NSQLTranslation::TTranslationSettings settings;
+        settings.LangVer = NYql::MakeLangVersion(2025, 4);
+
+        NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+            SELECT ((2 + 2) UNION (2 * 2));
+        )sql", settings);
+        UNIT_ASSERT(!res.IsOk());
+        UNIT_ASSERT_STRING_CONTAINS(
+            res.Issues.ToOneLineString(),
+            "2:24: Error: Expected SELECT/PROCESS/REDUCE statement");
+    }
+
+    Y_UNIT_TEST(OrderByIgnorance1) {
+        NSQLTranslation::TTranslationSettings settings;
+        settings.LangVer = NYql::MakeLangVersion(2025, 4);
+
+        NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+            SELECT (SELECT * FROM (SELECT * FROM (SELECT 1 AS x UNION SELECT 2 AS x) ORDER BY x));
+
+        )sql", settings);
+        UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
+        UNIT_ASSERT_STRING_CONTAINS(
+            res.Issues.ToOneLineString(),
+            "ORDER BY without LIMIT in subquery will be ignored");
+
+        TWordCountHive stat = {{TString("Sort"), 0}};
+        VerifyProgram(res, stat);
+        UNIT_ASSERT_VALUES_EQUAL(stat["Sort"], 0);
+    }
+
+    Y_UNIT_TEST(OrderByIgnorance2) {
+        NSQLTranslation::TTranslationSettings settings;
+        settings.LangVer = NYql::MakeLangVersion(2025, 4);
+
+        NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+            SELECT (SELECT * FROM (SELECT 1 AS x UNION SELECT 2 AS x) ORDER BY x);
+        )sql", settings);
+        UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
+        UNIT_ASSERT_STRING_CONTAINS(
+            res.Issues.ToOneLineString(),
+            "ORDER BY without LIMIT in subquery will be ignored");
+
+        TWordCountHive stat = {{TString("Sort"), 0}};
+        VerifyProgram(res, stat);
+        UNIT_ASSERT_VALUES_EQUAL(stat["Sort"], 0);
+    }
+
+    Y_UNIT_TEST(InSubquery) {
+        NYql::TAstParseResult res;
+
+        res = SqlToYql(R"sql(
+            SELECT 1 IN (SELECT 1);
+        )sql");
+        UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
+
+        res = SqlToYql(R"sql(
+            SELECT * FROM (SELECT 1 AS x) WHERE x IN (SELECT 1);
+        )sql");
+        UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
+
+        res = SqlToYql(R"sql(
+            SELECT * FROM (SELECT 1 AS x) WHERE x IN ((SELECT 1));
+        )sql");
+        UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
+    }
+
+    Y_UNIT_TEST(GroupByUnit) {
+        NYql::TAstParseResult res = SqlToYql(R"sql(
+            SELECT * FROM (SELECT 1) GROUP BY ();
+        )sql");
+        UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
+    }
+
+    Y_UNIT_TEST(NamedNodeUnion) {
+        NYql::TAstParseResult res = SqlToYql(R"sql(
+            $a = (SELECT 1);
+            $b = (SELECT 1);
+            $x = ($a UNION $b);
+            SELECT * FROM $x;
+        )sql");
+        UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
+    }
+
+    Y_UNIT_TEST(NamedNodeExpr) {
+        NYql::TAstParseResult res = SqlToYql(R"sql(
+            $a = 1;            SELECT $a;
+            $b = SELECT 1;     SELECT $b;
+            $c = (SELECT 1);   SELECT $c;
+            $d = ((SELECT 1)); SELECT $d;
+                               SELECT $b + 1;
+                               SELECT ($b);
+        )sql");
+        UNIT_ASSERT_C(res.IsOk(), res.Issues.ToString());
+    }
+
+    Y_UNIT_TEST(NamedNodeProcess) {
+        NYql::TAstParseResult res = SqlToYql(R"sql(
+            $a = SELECT 1, 2;
+            $a = PROCESS $a;
+            SELECT $a;
+        )sql");
+        UNIT_ASSERT_C(res.IsOk(), res.Issues.ToString());
+    }
+
+    Y_UNIT_TEST(SubqueryDeduplication) {
+        NYql::TAstParseResult res = SqlToYql(R"sql(
+            DEFINE SUBQUERY $sub() AS
+                SELECT * FROM (SELECT 1);
+            END DEFINE;
+            SELECT * FROM $sub();
+        )sql");
+        UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
+    }
+
+    Y_UNIT_TEST(NamedNode) {
+        NYql::TAstParseResult res = SqlToYql(R"sql(
+            $x = (SELECT 1 AS x);
+            SELECT 1 < $x;
+            SELECT 1 < ($x);
+        )sql");
+        UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
     }
 }

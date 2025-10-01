@@ -21,8 +21,11 @@ public:
     {
     }
 
+    TNodePtr BuildSourceOrNode(const TRule_expr& node);
     TNodePtr Build(const TRule_expr& node);
     TNodePtr Build(const TRule_lambda_or_parameter& node);
+    TSourcePtr BuildSource(const TRule_select_or_expr& node);
+    TNodePtr BuildSourceOrNode(const TRule_smart_parenthesis& node);
 
     void SetSmartParenthesisMode(ESmartParenthesis mode) {
         SmartParenthesisMode_ = mode;
@@ -127,10 +130,17 @@ private:
         Ctx_.Error(tail.Pos) << "Unexpected token '?' at the end of expression";
     }
 
+    bool IsTopLevelGroupBy() const;
+    TSourcePtr LangVersionedSubSelect(TSourcePtr source);
+    TNodePtr SelectSubExpr(const TRule_select_subexpr& node);
+    TNodePtr SelectOrExpr(const TRule_select_or_expr& node);
+    TNodePtr TupleOrExpr(const TRule_tuple_or_expr& node);
+    TNodePtr EmptyTuple();
     TNodePtr SmartParenthesis(const TRule_smart_parenthesis& node);
 
     ESmartParenthesis SmartParenthesisMode_ = ESmartParenthesis::Default;
     bool MaybeUnnamedSmartParenOnTop_ = true;
+    bool IsSourceAllowed_ = true;
 
     THashMap<TString, TNodePtr> ExprShortcuts_;
 };

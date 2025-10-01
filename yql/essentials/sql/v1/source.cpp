@@ -939,7 +939,7 @@ bool ISource::InitFilters(TContext& ctx) {
 }
 
 TAstNode* ISource::Translate(TContext& ctx) const {
-    Y_DEBUG_ABORT_UNLESS(false);
+    Y_DEBUG_ABORT_UNLESS(false, "Can't tranlsate ISource, maybe it is used in a scalar context");
     Y_UNUSED(ctx);
     return nullptr;
 }
@@ -990,6 +990,16 @@ TNodePtr ISource::BuildMatchRecognize(TContext& ctx, TString&& inputTable){
     YQL_ENSURE(HasMatchRecognize());
     return MatchRecognizeBuilder_->Build(ctx, std::move(inputTable), this);
 };
+
+TSourcePtr MoveOutIfSource(TNodePtr& node) {
+    ISource* source = dynamic_cast<ISource*>(node.Get());
+    if (!source) {
+        return nullptr;
+    }
+
+    YQL_ENSURE(source == node.Release());
+    return source;
+}
 
 IJoin::IJoin(TPosition pos)
     : ISource(pos)

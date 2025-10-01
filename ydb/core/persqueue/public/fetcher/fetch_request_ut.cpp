@@ -141,6 +141,58 @@ Y_UNIT_TEST_SUITE(TFetchRequestTests) {
         }
     }
 
+    Y_UNIT_TEST(EmptyTopic) {
+        auto setup = std::make_shared<TTopicSdkTestSetup>(TEST_CASE_NAME);
+        setup->GetServer().EnableLogs(
+                { NKikimrServices::TX_PROXY_SCHEME_CACHE, NKikimrServices::PQ_FETCH_REQUEST },
+                NActors::NLog::PRI_DEBUG
+        );
+        auto& runtime = setup->GetRuntime();
+        StartSchemeCache(runtime);
+
+        setup->CreateTopic("topic1", "dc1", 2);
+
+        TPartitionFetchRequest p1 {"/Root/topic1", 0, 0, 1_KB};
+        TPartitionFetchRequest p2 {"/Root/topic1", 1, 0, 1_KB};
+
+        TFetchRequestSettings settings{
+            .Database = {},
+            .Consumer = NKikimr::NPQ::CLIENTID_WITHOUT_CONSUMER,
+            .Partitions = {p1, p2},
+            .MaxWaitTimeMs = 100,
+            .TotalMaxBytes = 100
+        };
+
+        auto edgeId = runtime.AllocateEdgeActor();
+        auto fetchActorId = runtime.Register(CreatePQFetchRequestActor(settings, MakeSchemeCacheID(), edgeId));
+        runtime.EnableScheduleForActor(fetchActorId);
+        runtime.DispatchEvents();
+
+        auto ev = runtime.GrabEdgeEvent<TEvPQ::TEvFetchResponse>();
+        Cerr << ev->Response.DebugString() << Endl;
+        UNIT_ASSERT_C(ev->Status == Ydb::StatusIds::SUCCESS, ev->Message);
+
+        UNIT_ASSERT_VALUES_EQUAL(ev->Response.PartResultSize(), 2);
+
+        {
+            auto& result = ev->Response.GetPartResult(0);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetPartition(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(NPersQueue::NErrorCode::EErrorCode_Name(result.GetReadResult().GetErrorCode()),
+                NPersQueue::NErrorCode::EErrorCode_Name(NPersQueue::NErrorCode::EErrorCode::READ_NOT_DONE));
+            UNIT_ASSERT_VALUES_EQUAL(result.GetReadResult().GetMaxOffset(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetReadResult().ResultSize(), 0);
+        }
+
+        {
+            auto& result = ev->Response.GetPartResult(1);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetPartition(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(NPersQueue::NErrorCode::EErrorCode_Name(result.GetReadResult().GetErrorCode()),
+                NPersQueue::NErrorCode::EErrorCode_Name(NPersQueue::NErrorCode::EErrorCode::READ_NOT_DONE));
+            UNIT_ASSERT_VALUES_EQUAL(result.GetReadResult().GetMaxOffset(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetReadResult().ResultSize(), 0);
+        }
+    }
+
     Y_UNIT_TEST(BadTopicName) {
         auto setup = std::make_shared<TTopicSdkTestSetup>(TEST_CASE_NAME);
         auto& runtime = setup->GetRuntime();

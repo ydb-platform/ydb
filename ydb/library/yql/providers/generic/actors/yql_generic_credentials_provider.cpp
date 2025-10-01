@@ -1,5 +1,6 @@
 #include "yql_generic_credentials_provider.h"
 
+#include <ydb/library/yql/providers/generic/proto/source.pb.h>
 #include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
 #include <yql/essentials/utils/log/log.h>
 

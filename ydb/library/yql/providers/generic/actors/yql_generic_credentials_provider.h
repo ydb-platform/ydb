@@ -2,8 +2,11 @@
 
 #include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
 #include <ydb/library/yql/providers/generic/connector/api/service/protos/connector.pb.h>
-#include <ydb/library/yql/providers/generic/proto/source.pb.h>
 #include <yql/essentials/public/issue/yql_issue.h>
+
+namespace NYql {
+    class TGenericDataSourceInstance;
+}
 
 namespace NYql::NDq {
     // When accessing the external data sources, there are several options for authentication:

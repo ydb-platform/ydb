@@ -11,6 +11,13 @@ namespace NKikimr::NOlap::NReader::NCommon {
 class TFetchingScript;
 class IDataSource;
 
+enum class EPortionCommitStatus {
+    Committed,
+    OwnUncommitted,
+    UncommittedByAnotherTx,
+    Unknown
+};
+
 class TSpecialReadContext {
 private:
     YDB_READONLY_DEF(std::shared_ptr<TReadContext>, CommonContext);

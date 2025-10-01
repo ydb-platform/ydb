@@ -30,14 +30,14 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::DoGetColumnsFetchingPlan(
 
     const auto* source = sourceExt->GetAs<IDataSource>();
 
-    EPortionCommitStatus portionCommitStatus = EPortionCommitStatus::Unknown;
+    NCommon::EPortionCommitStatus portionCommitStatus = NCommon::EPortionCommitStatus::Unknown;
     if (source->GetType() == NCommon::IDataSource::EType::SimplePortion) {
         const auto* portion = static_cast<const TPortionDataSource*>(source);
         portionCommitStatus = portion->GetContext()->GetPortionCommitStatus(portion->GetPortionInfo());
     }
 
     // snapshot filters will filter the uncommitted changes by other txs and mark conflicts
-    const bool needSnapshots = GetReadMetadata()->GetRequestSnapshot() < source->GetRecordSnapshotMax() || portionCommitStatus == EPortionCommitStatus::UncommittedByAnotherTx;
+    const bool needSnapshots = GetReadMetadata()->GetRequestSnapshot() < source->GetRecordSnapshotMax() || portionCommitStatus == NCommon::EPortionCommitStatus::UncommittedByAnotherTx;
 
     const bool useIndexes = false;
     const bool hasDeletions = source->GetHasDeletions();
@@ -50,7 +50,7 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::DoGetColumnsFetchingPlan(
     }
 
     // we exclude uncommitted changes by other txs from the duplicate filter because those changes are not visible for the given tx
-    const bool preventDuplicates = NeedDuplicateFiltering() && portionCommitStatus != EPortionCommitStatus::UncommittedByAnotherTx;
+    const bool preventDuplicates = NeedDuplicateFiltering() && portionCommitStatus != NCommon::EPortionCommitStatus::UncommittedByAnotherTx;
     {
         auto& result = CacheFetchingScripts[needSnapshots ? 1 : 0][partialUsageByPK ? 1 : 0][useIndexes ? 1 : 0][needShardingFilter ? 1 : 0]
                                            [hasDeletions ? 1 : 0][preventDuplicates ? 1 : 0];

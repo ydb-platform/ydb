@@ -80,7 +80,7 @@ private:
         for (const auto& portion : portions) {
             const auto info = portion.GetPortion();
             // uncommitted changes by other txs are not visible for the given tx, so we ignore them here
-            if (context.GetPortionCommitStatus(*info) == EPortionCommitStatus::UncommittedByAnotherTx) {
+            if (context.GetPortionCommitStatus(*info) == NCommon::EPortionCommitStatus::UncommittedByAnotherTx) {
                 continue;
             }
             intervals.AddRange(TPortionIntervalTree::TOwnedRange(portion.GetPortion()->IndexKeyStart(), true,

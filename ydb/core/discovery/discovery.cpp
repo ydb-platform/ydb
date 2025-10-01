@@ -238,8 +238,11 @@ namespace NDiscoveryPrivate {
 
     class TDiscoveryCache: public TActorBootstrapped<TDiscoveryCache> {
         THashMap<TString, std::shared_ptr<NDiscovery::TCachedMessageData>> CurrentCachedMessages;
+        THashMap<TString, std::shared_ptr<NDiscovery::TCachedMessageData>> DirtyCachedMessages;
+
         THashMap<TString, std::shared_ptr<NDiscovery::TCachedMessageData>> OldCachedMessages; // when subscriptions are disabled
         THashMap<TString, std::shared_ptr<NDiscovery::TCachedMessageData>> CachedNotAvailable; // for subscriptions
+
         THolder<TEvInterconnect::TEvNodeInfo> NameserviceResponse;
 
         struct TWaiter {
@@ -311,7 +314,10 @@ namespace NDiscoveryPrivate {
 
             Y_ABORT_UNLESS(currentCachedMessage);
 
-            currentCachedMessage->UpdateEntries(std::move(msg->Updates));
+            if (!msg->Updates.empty()) {
+                currentCachedMessage->UpdateEntries(std::move(msg->Updates));
+                DirtyCachedMessages[path] = currentCachedMessage;
+            }
 
             auto it = Requested.find(path);
             Y_ABORT_UNLESS(it == Requested.end());
@@ -335,6 +341,8 @@ namespace NDiscoveryPrivate {
                 NDiscovery::TCachedMessageData(std::move(msg->InfoEntries), NameserviceResponse,
                 EndpointId.GetOrElse({}), {}, msg->Status)
             );
+
+            DirtyCachedMessages.erase(path);
 
             if (AppData()->FeatureFlags.GetEnableSubscriptionsInDiscovery()) {
                 if (msg->Status != TEvStateStorage::TEvBoardInfo::EStatus::Ok) {
@@ -369,9 +377,11 @@ namespace NDiscoveryPrivate {
 
             Y_ABORT_UNLESS(NameserviceResponse);
 
-            for (auto& [_, cachedData] : CurrentCachedMessages) {
+            for (auto& [_, cachedData] : DirtyCachedMessages) {
                 cachedData->UpdateCache(NameserviceResponse, EndpointId.GetOrElse({}));
             }
+
+            DirtyCachedMessages.clear();
 
             Schedule(TDuration::Seconds(1), new TEvents::TEvWakeup());
         }

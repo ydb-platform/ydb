@@ -586,6 +586,17 @@ static TInterconnectSettings GetInterconnectSettings(const NKikimrConfig::TInter
         result.EventDelay = TDuration::MicroSeconds(config.GetEventDelayMicrosec());
     }
 
+    if (config.HasSocketSendOptimization()) {
+        switch (config.GetSocketSendOptimization()) {
+            case NKikimrConfig::TInterconnectConfig::IC_SO_DISABLED:
+                result.SocketSendOptimization = ESocketSendOptimization::DISABLED;
+                break;
+            case NKikimrConfig::TInterconnectConfig::IC_SO_MSG_ZEROCOPY:
+                result.SocketSendOptimization = ESocketSendOptimization::IC_MSG_ZEROCOPY;
+                break;
+        }
+    }
+
     return result;
 }
 

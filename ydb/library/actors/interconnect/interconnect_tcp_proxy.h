@@ -50,6 +50,11 @@ namespace NActors {
             TDuration Ping;
             i64 ClockSkew;
             TString Encryption;
+            enum XDCFlags {
+                NONE = 0,
+                MSG_ZERO_COPY_SEND = 1,
+            };
+            ui8 XDCFlags;
         };
 
         struct TEvStats : TEventLocal<TEvStats, EvStats> {

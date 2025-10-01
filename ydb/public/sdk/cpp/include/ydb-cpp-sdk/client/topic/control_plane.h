@@ -709,8 +709,6 @@ struct TAlterTopicSettings : public TOperationRequestSettings<TAlterTopicSetting
 
     FLUENT_SETTING(TAlterAttributes, AlterAttributes);
 
-    FLUENT_SETTING_OPTIONAL(EMetricsLevel, MetricsLevel);
-
     TAlterTopicAttributesBuilder BeginAlterAttributes() {
         return TAlterTopicAttributesBuilder(*this);
     }
@@ -757,7 +755,20 @@ struct TAlterTopicSettings : public TOperationRequestSettings<TAlterTopicSetting
         return *this;
     }
 
+    TAlterTopicSettings& SetMetricsLevel(EMetricsLevel level) {
+        MetricsLevel_ = level;
+        return *this;
+    }
+    TAlterTopicSettings& ResetMetricsLevel() {
+        MetricsLevel_ = true;
+        return *this;
+    }
+
     std::optional<TAlterPartitioningSettings> AlterPartitioningSettings_;
+    std::variant<
+        bool,         // Reset
+        EMetricsLevel // Set
+    > MetricsLevel_;
 };
 
 inline TPartitioningSettingsBuilder TCreateTopicSettings::BeginConfigurePartitioningSettings() {

@@ -35,13 +35,13 @@ namespace NYdb::NConsoleClient {
             std::pair<TString, NYdb::NTopic::ECodec>("zstd", NYdb::NTopic::ECodec::ZSTD),
         };
 
-        TVector<ui32> ExistingMetricsLevels = {3, 4};
+        TVector<ui32> ExistingMetricsLevels = {2, 3};
 
         THashMap<ui32, TString> MetricsLevelsDescriptions = {
-            {1, "No metrics."},
-            {2, "Database level metrics."},
-            {3, "Database and object level metrics."},
-            {4, "Database, object, and detailed level metrics."},
+            {0, "No metrics."},
+            {1, "Database level metrics."},
+            {2, "Database and topic level metrics."},
+            {3, "Database, topic, and partition level metrics."},
         };
 
         THashMap<TString, NTopic::EMeteringMode> ExistingMeteringModes = {
@@ -178,7 +178,7 @@ namespace NYdb::NConsoleClient {
                      "Couldn't find description for %s metrics level", (TStringBuilder() << level).c_str());
             description << "\n  " << colors.BoldColor() << level << colors.OldColor()
                         << "\n    " << findResult->second;
-            if (level == 3 /* database and topic level metrics */) {
+            if (level == 2 /* database and topic level metrics */) {
                 description << colors.CyanColor() << " (default)" << colors.OldColor();
             }
         }
@@ -515,7 +515,7 @@ namespace NYdb::NConsoleClient {
         }
 
         if (MetricsLevel_.Defined()) {
-            settings.MetricsLevel(*MetricsLevel_);
+            settings.SetMetricsLevel(*MetricsLevel_);
         }
 
         return settings;

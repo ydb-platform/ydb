@@ -7,6 +7,7 @@ import "ydb/public/api/protos/annotations/sensitive.proto";
 import "ydb/public/api/protos/annotations/validation.proto";
 
 import "google/protobuf/duration.proto";
+import "google/protobuf/empty.proto";
 
 package Ydb.PersQueue.V1;
 
@@ -1188,8 +1189,11 @@ message TopicSettings {
     // remote mirror rule for this topic.
     RemoteMirrorRule remote_mirror_rule = 11;
 
-    // Metrics level.
-    optional uint32 metrics_level = 16;
+    // Setup or remove counters level settings.
+    oneof metrics_level {
+        uint32 set_metrics_level = 16;
+        google.protobuf.Empty reset_metrics_level = 17;
+    }
 }
 
 message AutoPartitioningSettings {

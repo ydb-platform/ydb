@@ -157,7 +157,7 @@ message StreamWriteMessage {
             // Message sequence number, provided by client for deduplication.
             // Starts at 1
             int64 seq_no = 1;
-            // Creation timestamp
+            // Creation timestamp.
             google.protobuf.Timestamp created_at = 2;
             // Compressed client message body.
             bytes data = 3;

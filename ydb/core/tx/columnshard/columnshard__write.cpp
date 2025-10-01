@@ -469,25 +469,6 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
         return;
     }
 
-    if (schema->GetVersion() != operation.GetTableId().GetSchemaVersion()) {
-        LWPROBE(EvWrite, TabletID(), source.ToString(), cookie, record.GetTxId(), writeTimeout.value_or(TDuration::Max()), 0, "", false,
-            operation.GetIsBulk(), ToString(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST), "schema version mismatch");
-        sendError("schema version mismatch", NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
-        return;
-    }
-
-    if (operation.GetColumnIds().size()) {
-        const auto& indexInfo = schema->GetIndexInfo();
-        for (auto&& colId : operation.GetColumnIds()) {
-            if (!indexInfo.HasColumnId(colId)) {
-                LWPROBE(EvWrite, TabletID(), source.ToString(), cookie, record.GetTxId(), writeTimeout.value_or(TDuration::Max()), 0, "", false,
-                    operation.GetIsBulk(), ToString(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST), TStringBuilder() << "unknown column id for schema version: " << colId);
-                sendError(TStringBuilder() << "unknown column id for schema version: " << colId, NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
-                return;
-            }
-        }
-    }
-
     const auto schemeShardLocalPathId = TSchemeShardLocalPathId::FromProto(operation.GetTableId());
     const auto& internalPathId = TablesManager.ResolveInternalPathId(schemeShardLocalPathId, false);
     if (!internalPathId) {
@@ -563,6 +544,25 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
     const bool isBulk = operation.HasIsBulk() && operation.GetIsBulk();
 
     const auto& mvccSnapshot = record.HasMvccSnapshot() ? NOlap::TSnapshot{record.GetMvccSnapshot().GetStep(), record.GetMvccSnapshot().GetTxId()} : NOlap::TSnapshot::Zero();
+    auto snapshotSchema = TablesManager.GetPrimaryIndex()->GetVersionedIndex().GetSchemaVerified(mvccSnapshot);
+    if (snapshotSchema->GetVersion() != schema->GetVersion()) {
+        LWPROBE(EvWrite, TabletID(), source.ToString(), cookie, record.GetTxId(), writeTimeout.value_or(TDuration::Max()), 0, "", false,
+            operation.GetIsBulk(), ToString(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST), "schema version mismatch with snapshot");
+        sendError("schema version mismatch with snapshot", NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
+        return;
+    }
+
+    if (!operation.GetColumnIds().empty()) {
+        const auto& snapIndexInfo = snapshotSchema->GetIndexInfo();
+        for (auto&& colId : operation.GetColumnIds()) {
+            if (!snapIndexInfo.HasColumnId(colId)) {
+                LWPROBE(EvWrite, TabletID(), source.ToString(), cookie, record.GetTxId(), writeTimeout.value_or(TDuration::Max()), 0, "", false,
+                    operation.GetIsBulk(), ToString(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST), TStringBuilder() << "unknown column id for snapshot schema: " << colId);
+                sendError(TStringBuilder() << "unknown column id for snapshot schema: " << colId, NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
+                return;
+            }
+        }
+    }
 
     LWPROBE(EvWrite, TabletID(), source.ToString(), cookie, record.GetTxId(), writeTimeout.value_or(TDuration::Max()), arrowData->GetSize(), "", true, operation.GetIsBulk(), "", "");
 

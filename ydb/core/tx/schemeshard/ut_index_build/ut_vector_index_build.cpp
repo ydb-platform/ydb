@@ -1650,6 +1650,64 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
             UNIT_ASSERT_STRING_CONTAINS(buildIndexOperation.DebugString(), "Unknown build state");
             UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "IsBroken: YES");
         }
+
+        {
+            // set a known State but unknown SubState
+            TString writeQuery = Sprintf(R"(
+                (
+                    (let key '( '('Id (Uint64 '%lu)) ) )
+                    (let value '('('State (Uint32 '40)) '('SubState (Uint32 '999999)) ) )
+                    (return (AsList (UpdateRow 'IndexBuild key value) ))
+                )
+            )", buildIndexTx);
+            NKikimrMiniKQL::TResult result;
+            TString err;
+            NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, TTestTxConfig::SchemeShard, writeQuery, result, err);
+            UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::EReplyStatus::OK, err);
+        }
+
+        Cerr << "... rebooting scheme shard" << Endl;
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+
+        {
+            auto buildIndexOperation = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexTx);
+            auto buildIndexHtml = TestGetBuildIndexHtml(runtime, TTestTxConfig::SchemeShard, buildIndexTx);
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                buildIndexOperation.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_TRANSFERING_DATA,
+                buildIndexOperation.DebugString()
+            );
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexOperation.DebugString(), "Unknown build sub-state");
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "IsBroken: YES");
+        }
+
+        {
+            // set a known SubState but unknown BuildKind
+            TString writeQuery = Sprintf(R"(
+                (
+                    (let key '( '('Id (Uint64 '%lu)) ) )
+                    (let value '('('SubState (Uint32 '0)) '('BuildKind (Uint32 '999999)) ) )
+                    (return (AsList (UpdateRow 'IndexBuild key value) ))
+                )
+            )", buildIndexTx);
+            NKikimrMiniKQL::TResult result;
+            TString err;
+            NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, TTestTxConfig::SchemeShard, writeQuery, result, err);
+            UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::EReplyStatus::OK, err);
+        }
+
+        Cerr << "... rebooting scheme shard" << Endl;
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+
+        {
+            auto buildIndexOperation = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexTx);
+            auto buildIndexHtml = TestGetBuildIndexHtml(runtime, TTestTxConfig::SchemeShard, buildIndexTx);
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                buildIndexOperation.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_TRANSFERING_DATA,
+                buildIndexOperation.DebugString()
+            );
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexOperation.DebugString(), "Unknown build kind");
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "IsBroken: YES");
+        }
     }
 
 }

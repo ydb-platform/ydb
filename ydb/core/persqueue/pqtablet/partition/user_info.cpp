@@ -85,7 +85,7 @@ TUserInfo::TUserInfo(
             SetupStreamCounters(streamCountersSubgroup);
         } else {
             LabeledCounters.Reset(new TUserLabeledCounters(
-                user + "/" + (important ? "1" : "0") + "/" + topicConverter->GetClientsideName(),
+                user + "/" + (ImporantOrExtendedAvailabilityPeriod(*this) ? "1" : "0") + "/" + topicConverter->GetClientsideName(),
                 partition));
 
             SetupTopicCounters(ctx, dcId, ToString<ui32>(partition));

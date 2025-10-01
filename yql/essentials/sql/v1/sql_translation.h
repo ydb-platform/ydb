@@ -135,6 +135,12 @@ protected:
         GroupBy,
         SqlLambdaParams,
     };
+
+    TNodePtr NamedExpr(
+        const TRule_expr& exprTree,
+        const TRule_an_id_or_type* nameTree,
+        EExpr exprMode = EExpr::Regular);
+
     TNodePtr NamedExpr(const TRule_named_expr& node, EExpr exprMode = EExpr::Regular);
     bool NamedExprList(const TRule_named_expr_list& node, TVector<TNodePtr>& exprs, EExpr exprMode = EExpr::Regular);
     bool BindList(const TRule_bind_parameter_list& node, TVector<TSymbolNameWithPos>& bindNames);

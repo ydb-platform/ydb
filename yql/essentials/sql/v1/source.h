@@ -164,6 +164,8 @@ namespace NSQLTranslationV1 {
         return cloneArgs;
     }
 
+    TSourcePtr MoveOutIfSource(TNodePtr& node);
+
     struct TJoinLinkSettings {
         enum class EStrategy {
             Default,
@@ -243,6 +245,8 @@ namespace NSQLTranslationV1 {
     // Implemented in select.cpp
     TNodePtr BuildSubquery(TSourcePtr source, const TString& alias, bool inSubquery, int ensureTupleSize, TScopedStatePtr scoped);
     TNodePtr BuildSubqueryRef(TNodePtr subquery, const TString& alias, int tupleIndex = -1);
+    bool IsSubqueryRef(const TSourcePtr& source);
+
     TNodePtr BuildInvalidSubqueryRef(TPosition subqueryPos);
     TNodePtr BuildSourceNode(TPosition pos, TSourcePtr source, bool checkExist = false, bool withTables = false);
     TSourcePtr BuildMuxSource(TPosition pos, TVector<TSourcePtr>&& sources);

@@ -10,6 +10,7 @@ SPLIT_FACTOR(100)
 SIZE(MEDIUM)
 
 ENV(YDB_USE_IN_MEMORY_PDISKS=true)
+ENV(YDB_DSTOOL_BINARY="ydb/apps/dstool/ydb-dstool")
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
 
 TEST_SRCS(

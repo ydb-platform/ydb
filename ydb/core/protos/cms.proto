@@ -439,6 +439,8 @@ message TCmsConfig {
             optional uint32 WaitForConfigStep = 5 [default = 60000000];
             optional uint32 RelaxTime = 6 [default = 600000000];
             optional bool PileupReplicas = 7 [default = false];
+            optional uint32 OverrideReplicasInRingCount = 8 [default = 0];
+            optional uint32 OverrideRingsCount = 9 [default = 0];
         }
 
         message TStateLimit {

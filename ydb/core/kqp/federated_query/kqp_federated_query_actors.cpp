@@ -1,6 +1,7 @@
 #include "kqp_federated_query_actors.h"
 
 #include <ydb/core/kqp/common/simple/services.h>
+#include <ydb/core/tx/scheme_board/subscriber.h>
 #include <ydb/services/metadata/secret/fetcher.h>
 #include <ydb/services/metadata/secret/snapshot.h>
 #include <ydb/library/actors/core/log.h>
@@ -101,6 +102,10 @@ private:
     bool AskSent = false;
 };
 
+IActor* CreateDescribeSecretsActor(const TString& ownerUserId, const std::vector<TString>& secretIds, NThreading::TPromise<TEvDescribeSecretsResponse::TDescription> promise) {
+    return new TDescribeSecretsActor(ownerUserId, secretIds, promise);
+}
+
 }  // anonymous namespace
 
 void TDescribeSchemaSecretsService::HandleIncomingRequest(TEvResolveSecret::TPtr& ev) {
@@ -173,6 +178,10 @@ void TDescribeSchemaSecretsService::HandleSchemeShardResponse(NSchemeShard::TEvS
         return;
     }
 
+    if (const auto it = SchemeBoardSubscribers.find(secretName); it == SchemeBoardSubscribers.end()) {
+        SchemeBoardSubscribers[secretName] = Register(CreateSchemeBoardSubscriber(SelfId(), secretName));
+    }
+
     const auto& secretValue = rec.GetPathDescription().GetSecretDescription().GetValue();
     const auto& secretVersion = rec.GetPathDescription().GetSecretDescription().GetVersion();
     VersionedSecrets[secretName] = TVersionedSecret{
@@ -181,6 +190,7 @@ void TDescribeSchemaSecretsService::HandleSchemeShardResponse(NSchemeShard::TEvS
         .Name = secretName,
         .Value = secretValue,
     };
+
     ++respIt->second.FilledSecretsCnt;
 
     FillResponseIfFinished(ev->Cookie, respIt->second);
@@ -262,13 +272,37 @@ void TDescribeSchemaSecretsService::FillResponseIfFinished(const ui64& requestId
     std::vector<TString> secretValues;
     secretValues.resize(responseCtx.Secrets.size());
     for (const auto& secret : responseCtx.Secrets) {
+        const auto& secretPath = secret.first;
         auto it = VersionedSecrets.find(secret.first);
-        Y_ENSURE(it != VersionedSecrets.end(), "Secrets values were not retrieved for response");
+        if (it == VersionedSecrets.end()) {
+            LOG_N("FillResponseIfFinished: request cookie=" << requestId << ", secret `" << secretPath << "` was dropped during request");
+            FillResponse(requestId, TEvDescribeSecretsResponse::TDescription(Ydb::StatusIds::BAD_REQUEST, { NYql::TIssue("secret `" + secretPath + "` not found") }));
+            return;
+        }
 
         Y_ENSURE(secret.second < secretValues.size());
         secretValues[secret.second] = it->second.Value;
     }
     FillResponse(requestId, TEvDescribeSecretsResponse::TDescription(secretValues));
+}
+
+void TDescribeSchemaSecretsService::HandleNotifyUpdate(TSchemeBoardEvents::TEvNotifyUpdate::TPtr& ev) {
+    Y_UNUSED(ev);
+}
+
+void TDescribeSchemaSecretsService::HandleNotifyDelete(TSchemeBoardEvents::TEvNotifyDelete::TPtr& ev) {
+    const TString& secretName = CanonizePath(ev->Get()->Path);
+
+    if (SecretUpdateListener) {
+        SecretUpdateListener->HandleNotifyDelete(secretName);
+    }
+
+    VersionedSecrets.erase(secretName);
+
+    const auto subscriberIt = SchemeBoardSubscribers.find(secretName);
+    Y_ENSURE(subscriberIt != SchemeBoardSubscribers.end());
+    Send(subscriberIt->second, new TEvents::TEvPoisonPill());
+    SchemeBoardSubscribers.erase(subscriberIt);
 }
 
 NThreading::TFuture<TEvDescribeSecretsResponse::TDescription> DescribeSecret(const TVector<TString>& secretNames, const TString& ownerUserId, TActorSystem* actorSystem) {
@@ -293,15 +327,10 @@ NThreading::TFuture<TEvDescribeSecretsResponse::TDescription> DescribeSecret(con
     return promise.GetFuture();
 }
 
-IActor* CreateDescribeSecretsActor(const TString& ownerUserId, const std::vector<TString>& secretIds, NThreading::TPromise<TEvDescribeSecretsResponse::TDescription> promise) {
-    return new TDescribeSecretsActor(ownerUserId, secretIds, promise);
-}
-
 void RegisterDescribeSecretsActor(const NActors::TActorId& replyActorId, const TString& ownerUserId, const std::vector<TString>& secretIds, NActors::TActorSystem* actorSystem) {
-    auto promise = NThreading::NewPromise<TEvDescribeSecretsResponse::TDescription>();
-    actorSystem->Register(CreateDescribeSecretsActor(ownerUserId, secretIds, promise));
-
-    promise.GetFuture().Subscribe([actorSystem, replyActorId](const NThreading::TFuture<TEvDescribeSecretsResponse::TDescription>& result){
+    TVector<TString> secretNames{secretIds.begin(), secretIds.end()};
+    auto future = DescribeSecret(secretNames, ownerUserId, actorSystem);
+    future.Subscribe([actorSystem, replyActorId](const NThreading::TFuture<TEvDescribeSecretsResponse::TDescription>& result){
         actorSystem->Send(replyActorId, new TEvDescribeSecretsResponse(result.GetValue()));
     });
 }
@@ -343,7 +372,7 @@ NThreading::TFuture<TEvDescribeSecretsResponse::TDescription> DescribeExternalDa
     }
 }
 
-IActor* CreateDescribeSchemaSecretsService() {
+IActor* TDescribeSchemaSecretsServiceFactory::CreateService() {
     return new TDescribeSchemaSecretsService();
 }
 

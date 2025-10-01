@@ -3,11 +3,15 @@
 namespace NKikimr {
 TControlBoardTableHtmlRenderer::TControlBoardTableHtmlRenderer()
     : Html(NMonitoring::TOutputStreamRef(HtmlStrm))
-    , Table(NMonitoring::TTable(*Html, "table table-sortable")) {}
+{
+    Table.ConstructInPlace(*Html, "table table-sortable");
+}
 
 void TControlBoardTableHtmlRenderer::AddNewTable(const TString& caption) {
     if (TableBody) {
         TableBody.Clear(); //Closing existing table
+        Table.Clear();
+        Table.ConstructInPlace(*Html, "table table-sortable");
     }
 
     auto& __stream = *Html;

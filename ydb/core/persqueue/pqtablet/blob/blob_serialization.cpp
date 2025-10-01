@@ -55,7 +55,7 @@ TMessageFlags InitFlags(const TClientBlob& blob) {
     flags.F.HasWriteTimestamp = 1;
     flags.F.HasPartData = !blob.PartData.Empty();
     flags.F.HasUncompressedSize = blob.UncompressedSize != 0;
-    flags.F.HasKinesisData = !blob.PartitionKey.empty() || !blob.ExplicitHashKey.empty();
+    flags.F.HasKinesisData = !blob.PartitionKey.empty();
     return flags;
 }
 

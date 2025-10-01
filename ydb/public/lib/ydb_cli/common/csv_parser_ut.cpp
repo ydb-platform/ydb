@@ -181,6 +181,10 @@ Y_UNIT_TEST_SUITE(YdbCliCsvParserTests) {
         CommonTestParams("name", "строка", {{"$name", TValueBuilder().String("строка").Build()}});
         CommonTestParams("name", "true", {{"$name", TValueBuilder().Bool(true).Build()}});
         CommonTestParams("name", "false", {{"$name", TValueBuilder().Bool(false).Build()}});
+        CommonTestParams("name", "True", {{"$name", TValueBuilder().Bool(true).Build()}});
+        CommonTestParams("name", "False", {{"$name", TValueBuilder().Bool(false).Build()}});
+        CommonTestParams("name", "TRUE", {{"$name", TValueBuilder().Bool(true).Build()}});
+        CommonTestParams("name", "FALSE", {{"$name", TValueBuilder().Bool(false).Build()}});
         CommonTestParams("name", "1.183", {{"$name", TValueBuilder().Float(1.183).Build()}});
         CommonTestParams("name", "1.183", {{"$name", TValueBuilder().Double(1.183).Build()}});
         CommonTestParams("name", "1.183", {{"$name", TValueBuilder().DyNumber("1.183").Build()}});
@@ -202,6 +206,10 @@ Y_UNIT_TEST_SUITE(YdbCliCsvParserTests) {
         CommonTestValue("name", "строка", MakeStruct("name", TValueBuilder().String("строка").Build()));
         CommonTestValue("name", "true", MakeStruct("name", TValueBuilder().Bool(true).Build()));
         CommonTestValue("name", "false", MakeStruct("name", TValueBuilder().Bool(false).Build()));
+        CommonTestValue("name", "True", MakeStruct("name", TValueBuilder().Bool(true).Build()));
+        CommonTestValue("name", "False", MakeStruct("name", TValueBuilder().Bool(false).Build()));
+        CommonTestValue("name", "TRUE", MakeStruct("name", TValueBuilder().Bool(true).Build()));
+        CommonTestValue("name", "FALSE", MakeStruct("name", TValueBuilder().Bool(false).Build()));
         CommonTestValue("name", "1.183", MakeStruct("name", TValueBuilder().Float(1.183).Build()));
         CommonTestValue("name", "1.183", MakeStruct("name", TValueBuilder().Double(1.183).Build()));
         CommonTestValue("name", "1.183", MakeStruct("name", TValueBuilder().DyNumber("1.183").Build()));

@@ -8,7 +8,7 @@ using namespace NMonitoring::NAudit;
 namespace {
 
 NHttp::THttpIncomingRequestPtr MakeRequest(TString method, TString url) {
-    static TDeque<TString> Storage;
+    static TVector<TString> Storage;
 
     auto request = MakeIntrusive<NHttp::THttpIncomingRequest>();
     Storage.emplace_back(std::move(method));

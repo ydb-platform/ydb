@@ -217,6 +217,7 @@ public:
                 return;
             }
         }
+        AuditCtx.LogOnReceived();
         SendRequest();
     }
     void ReplyWith(NHttp::THttpOutgoingResponsePtr response) {
@@ -350,7 +351,6 @@ public:
         if (result && result->UserToken) {
             serializedToken = result->UserToken->GetSerializedToken();
         }
-        AuditCtx.LogOnReceived();
         Send(ActorMonPage->TargetActorId, new NMon::TEvHttpInfo(
             Container, serializedToken), IEventHandle::FlagTrackDelivery);
     }
@@ -377,6 +377,7 @@ public:
     void Handle(NKikimr::NGRpcService::TEvRequestAuthAndCheckResult::TPtr& ev) {
         const NKikimr::NGRpcService::TEvRequestAuthAndCheckResult& result(*ev->Get());
         AuditCtx.AddAuditLogParts(result.AuditLogParts);
+        AuditCtx.LogOnReceived();
         if (result.UserToken) {
             AuditCtx.SetSubjectType(result.UserToken->GetSubjectType());
         }

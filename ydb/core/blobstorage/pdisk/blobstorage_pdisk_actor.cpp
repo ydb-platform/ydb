@@ -198,12 +198,9 @@ class TPDiskActor : public TActorBootstrapped<TPDiskActor> {
         }
 
         void Update(bool& resendRequired) {
-            NKikimrWhiteboard::EFlag flag = NKikimrWhiteboard::Grey;
-            if (!Sources.empty()) {
-                flag = NKikimrWhiteboard::Green;
-                for (TSource& source : Sources) {
-                    flag = Max(flag, source.GetFlag());
-                }
+            NKikimrWhiteboard::EFlag flag = NKikimrWhiteboard::Green;
+            for (TSource& source : Sources) {
+                flag = Max(flag, source.GetFlag());
             }
             if (LastFlag != flag) {
                 LastFlag = flag;
@@ -1228,21 +1225,11 @@ public:
         bool sendFlags = false;
         RealtimeFlag.Update(sendFlags);
         DeviceFlag.Update(sendFlags);
-        
-        // If PDisk is in error state, force flags to Red to indicate the error
-        NKikimrWhiteboard::EFlag realtimeFlag = RealtimeFlag.Get();
-        NKikimrWhiteboard::EFlag deviceFlag = DeviceFlag.Get();
-        if (PDisk && *PDisk->Mon.PDiskBriefState == TPDiskMon::TPDisk::Error) {
-            realtimeFlag = NKikimrWhiteboard::Red;
-            deviceFlag = NKikimrWhiteboard::Red;
-            sendFlags = true;
-        }
-        
         AtomicSet(PDisk->NonRealTimeMs, RealtimeFlag.GetRedMsPs());
         AtomicSet(PDisk->SlowDeviceMs, DeviceFlag.GetRedMsPs());
         if (sendFlags) {
             Send(NodeWhiteboardServiceId, new NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateUpdate(
-                PCtx->PDiskId, realtimeFlag, deviceFlag));
+                PCtx->PDiskId, RealtimeFlag.Get(), DeviceFlag.Get()));
         }
     }
 

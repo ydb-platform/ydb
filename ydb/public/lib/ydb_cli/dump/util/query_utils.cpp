@@ -100,16 +100,18 @@ struct TPathRewriter {
     }
 
     TString BuildRelativePath(const TString& absolutePath) const {
-        Y_DEBUG_ABORT_UNLESS(IsAbsolutePath(absolutePath));
+        Y_DEBUG_ABORT_UNLESS(absolutePath.StartsWith('/'));
         TPathSplitUnix relativeSplit;
 
         TPathSplitUnix absoluteSplit(absolutePath);
         TPathSplitUnix prefixSplit(RestorePathPrefix);
-        Y_DEBUG_ABORT_UNLESS(size(prefixSplit) <= size(absoluteSplit));
         size_t matchedParts = 0;
-        while (matchedParts < size(prefixSplit) && absoluteSplit[matchedParts] == prefixSplit[matchedParts]) {
+        while (matchedParts < size(absoluteSplit) && matchedParts < size(prefixSplit) && absoluteSplit[matchedParts] == prefixSplit[matchedParts]) {
             // skip equal path components
             ++matchedParts;
+        }
+        for (size_t unmatchedParts = matchedParts; unmatchedParts < size(prefixSplit); ++unmatchedParts) {
+            relativeSplit.AppendComponent("..");
         }
         relativeSplit.AppendMany(absoluteSplit.begin() + matchedParts, absoluteSplit.end());
         return relativeSplit.Reconstruct();
@@ -131,7 +133,7 @@ public:
                 return RewriteAbsolutePath(path);
             }
         } else if (!BackupPathPrefix.empty() && !RestorePathPrefix.empty()) {
-            return BuildRelativePath(NDump::RewriteAbsolutePath(BuildAbsolutePath(path), BackupRoot, RestoreRoot));
+            return TStringBuilder() << '`' << BuildRelativePath(NDump::RewriteAbsolutePath(BuildAbsolutePath(path), BackupRoot, RestoreRoot)) << '`';
         }
 
         return path;

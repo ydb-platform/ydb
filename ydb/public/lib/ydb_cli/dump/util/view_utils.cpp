@@ -101,16 +101,18 @@ TViewQuerySplit SplitViewQuery(TStringInput query) {
 }
 
 TString BuildCreateViewQuery(
-    const TString& name, const TString& dbPath, const TString& viewQuery, const TString& backupRoot,
+    const TString& name, const TString& dbPath, const TString& viewQuery, const TString& database, const TString& backupRoot,
     NYql::TIssues& issues
 ) {
     auto [contextRecreation, select] = SplitViewQuery(viewQuery);
 
     const TString creationQuery = std::format(
+        "-- database: \"{}\"\n"
         "-- backup root: \"{}\"\n"
         "{}\n"
         "CREATE VIEW IF NOT EXISTS `{}` WITH (security_invoker = TRUE) AS\n"
         "    {};\n",
+        database.data(),
         backupRoot.data(),
         contextRecreation.data(),
         name.data(),
@@ -131,7 +133,7 @@ bool RewriteCreateViewQuery(TString& query, const TString& restoreRoot, bool res
 ) {
     const auto backupRoot = GetBackupRoot(query);
 
-    TString backupPathPrefix;
+    TString backupPathPrefix = GetDatabase(query);
     TString restorePathPrefix;
     if (!RewriteTablePathPrefix(query, backupRoot, restoreRoot, restoreRootIsDatabase, backupPathPrefix, restorePathPrefix, issues)) {
         return false;

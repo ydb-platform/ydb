@@ -35,7 +35,6 @@ private:
     TVector<NMonitoring::TDynamicCounters::TCounterPtr> ActorsAliveByActivityBuckets;
     TVector<NMonitoring::TDynamicCounters::TCounterPtr> ScheduledEventsByActivityBuckets;
     TVector<NMonitoring::TDynamicCounters::TCounterPtr> StuckActorsByActivityBuckets;
-    TVector<std::array<NMonitoring::TDynamicCounters::TCounterPtr, 10>> UsageByActivityBuckets;
 };
 
 struct TExecutorPoolCounters {

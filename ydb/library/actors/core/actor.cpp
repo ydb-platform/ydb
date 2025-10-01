@@ -426,8 +426,6 @@ namespace NActors {
                 << TBackTrace::FromCurrentException().PrintToString()
                 << Endl;
             return false;
-        } catch (...) {
-            return false;
         }
     }
 

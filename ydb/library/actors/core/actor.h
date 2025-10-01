@@ -365,6 +365,8 @@ namespace NActors {
                 std::rethrow_exception(excPtr);
             } catch (const std::exception& exc) {
                 return OnUnhandledException(exc);
+            } catch (...) {
+                return false;
             }
         }
 

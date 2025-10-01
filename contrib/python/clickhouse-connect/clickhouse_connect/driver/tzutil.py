@@ -33,6 +33,9 @@ def normalize_timezone(timezone: pytz.timezone) -> Tuple[pytz.timezone, bool]:
     return timezone, False
 
 
+def utcfromtimestamp(ts: float) -> datetime:
+    return datetime.fromtimestamp(ts, tz=pytz.UTC).replace(tzinfo=None)
+
 try:
     local_tz = pytz.timezone(os.environ.get('TZ', ''))
 except pytz.UnknownTimeZoneError:

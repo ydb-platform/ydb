@@ -11,14 +11,16 @@
 namespace NKikimr::NMiniKQL {
 
 namespace {
-TKeyTypes KeyTypesFromColumns(const std::vector<TType*>& types) {
+TKeyTypes KeyTypesFromColumns(const std::vector<TType*>& types, const std::vector<ui32>& keyIndexes) {
     TKeyTypes kt;
-    std::ranges::copy(types | std::views::transform([](TType* type) {
+    std::ranges::copy(keyIndexes | std::views::transform([&types](ui32 typeIndex) {
+                          const TType* type = types[typeIndex];
                           Y_ABORT_UNLESS(type->IsData(), "exepected data type");
                           return std::pair{*static_cast<const TDataType*>(type)->GetDataSlot(), false};
                       }), std::back_inserter(kt));
     return kt;
 }
+
 
 class TScalarHashJoinState : public TComputationValue<TScalarHashJoinState> {
     using TBase = TComputationValue<TScalarHashJoinState>;
@@ -28,6 +30,15 @@ class TScalarHashJoinState : public TComputationValue<TScalarHashJoinState> {
 
     IComputationWideFlowNode* ProbeSide() const {
         return LeftFinished_ ? nullptr : LeftFlow_;
+    }
+
+    void AppendTuple(NJoinTable::TTuple probe, NJoinTable::TTuple build, std::vector<NUdf::TUnboxedValue>& output){
+        std::copy(probe, probe + LeftColumnTypes_.size(), std::back_inserter(output));
+        for(int index = 0; index < std::ssize(RightColumnTypes_); ++index){
+            if (std::ranges::find(RightKeyColumns_, index) == RightKeyColumns_.end()){
+                output.push_back(build[index]);
+            }
+        }
     }
 
 public:
@@ -46,20 +57,33 @@ public:
     ,   RightColumnTypes_(rightColumnTypes)
     ,   Logger_(logger)
     ,   LogComponent_(logComponent)
-    ,   KeyTypes_(KeyTypesFromColumns(leftColumnTypes))
+    ,   KeyTypes_(KeyTypesFromColumns(leftColumnTypes, leftKeyColumns))
     ,   Table_(std::ssize(leftColumnTypes), TWideUnboxedEqual{KeyTypes_}, TWideUnboxedHasher{KeyTypes_})
     ,   Values_(rightColumnTypes.size())
     ,   Pointers_()
     ,   Output_()
     {
-        for (int index = 0; index < std::ssize(Values_); ++index) {
-            Pointers_.push_back(&Values_[index]);
+        Y_ABORT_IF(!std::ranges::equal(RightColumnTypes_, LeftColumnTypes_, [](const TType* left, const TType* right){
+            return left->IsSameType(*right);
+        }), "unimplemented");
+        Pointers_.resize(LeftColumnTypes_.size());
+        for (int index = 0; index < std::ssize(LeftKeyColumns_); ++index) {
+            Pointers_[LeftKeyColumns_[index]] = &Values_[index];
         }
+        int valuesIndex = 0;
+        for(int index = 0; index < std::ssize(Pointers_); ++index){
+            if (!Pointers_[index]){
+                Pointers_[index] = &Values_[ std::ssize(LeftKeyColumns_) + valuesIndex];
+                valuesIndex++;
+            }
+        }
+        Y_ABORT_IF(!std::ranges::is_permutation(Values_ | std::views::transform([](auto& value){return &value;}), Pointers_));
 
         UDF_LOG(Logger_, LogComponent_, NUdf::ELogLevel::Debug, "TScalarHashJoinState created");
     }
 
     EFetchResult FetchValues(TComputationContext& ctx, NUdf::TUnboxedValue* const* output) {
+        const int outputTupleSize = std::ssize(RightColumnTypes_) + std::ssize(LeftColumnTypes_) - std::ssize(LeftKeyColumns_);
         Cout << "ScalarHashJoin::FetchValues" << Endl;
         if (auto* buildSide = BuildSide()) {
             auto res = buildSide->FetchValues(ctx, Pointers_.data());
@@ -82,14 +106,14 @@ public:
             }
         }
         if (!Output_.empty()) {
-            Y_ABORT_IF(std::ssize(Output_) < std::ssize(RightColumnTypes_),
-                       "output size must e divisible by columns size");
-            for (int index = 0; index < std::ssize(RightColumnTypes_); ++index) {
-                int myIndex = std::ssize(Output_) - std::ssize(RightColumnTypes_) + index;
+            Y_ABORT_IF(std::ssize(Output_) < outputTupleSize,
+                       "output size must be divisible by columns size");
+            for (int index = 0; index < outputTupleSize; ++index) {
+                int myIndex = std::ssize(Output_) - outputTupleSize + index;
                 int theirIndex = index;
                 *output[theirIndex] = Output_[myIndex];
             }
-            Output_.resize(std::ssize(Output_) - std::ssize(RightColumnTypes_));
+            Output_.resize(std::ssize(Output_) - outputTupleSize);
             return EFetchResult::One;
         }
         if (auto* probeSide = ProbeSide()) {
@@ -104,7 +128,7 @@ public:
             }
             case EFetchResult::One: {
                 Table_.Lookup(Values_.data(), [this](NJoinTable::TTuple matched) {
-                    std::copy(matched, matched + std::ssize(Values_), std::back_inserter(Output_));
+                    AppendTuple(Values_.data(),matched,Output_);
                 });
                 return EFetchResult::Yield;
             }

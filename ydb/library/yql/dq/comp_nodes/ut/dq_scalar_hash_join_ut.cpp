@@ -78,17 +78,18 @@ Y_UNIT_TEST_SUITE(TDqScalarHashJoinBasicTest) {
         TDqSetup<false> setup(GetDqNodeFactory());
         
         TVector<ui64> leftKeys = {1, 2, 3, 4, 5};
-        TVector<TString> leftValues = {"a", "b", "c", "d", "e"};
+        TVector<TString> leftValues = {"a", "b1", "c1", "d1", "e1"};
 
         TVector<ui64> rightKeys = {2, 3, 4, 5, 6};
-        TVector<TString> rightValues = {"b", "c", "d", "e", "f"};
+        TVector<TString> rightValues = {"b2", "c2", "d2", "e2", "f"};
 
         TVector<ui64> expectedKeys = {2, 3, 4, 5};
-        TVector<TString> expectedValues = {"b", "c", "d", "e"};
+        TVector<TString> expectedValues1 = {"b1", "c1", "d1", "e1"};
+        TVector<TString> expectedValues2 = {"b2", "c2", "d2", "e2"};
 
         auto [leftType, leftList] = ConvertVectorsToTuples(setup, leftKeys, leftValues);
         auto [rightType, rightList] = ConvertVectorsToTuples(setup, rightKeys, rightValues);
-        auto [expectedType, expected] = ConvertVectorsToTuples(setup, expectedKeys, expectedValues);
+        auto [expectedType, expected] = ConvertVectorsToTuples(setup, expectedKeys, expectedValues1, expectedValues2);
 
         RunTestDqScalarHashJoin(
             setup, EJoinKind::Inner,

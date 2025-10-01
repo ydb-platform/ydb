@@ -801,12 +801,24 @@ namespace NActors {
                             qp.GetQpNum(), ss.Data());
                         throw TExDestroySession{TDisconnectReason::RdmaError()};
                     }
+
+                    if (ptr + sizeof(ui16) > end) {
+                        LOG_CRIT_IC_SESSION("ICRDMA", "XDC command format error, no cred size");
+                        throw TExDestroySession{TDisconnectReason::FormatError()};
+                    }
+
                     const ui16 credsSerializedSize = ReadUnaligned<ui16>(ptr);
                     ptr += sizeof(ui16);
                     if (!credsSerializedSize) {
-                        LOG_CRIT_IC_SESSION("ICIS02", "XDC RDMA_READ command with zero size");
+                        LOG_CRIT_IC_SESSION("ICRDMA", "XDC RDMA_READ command with zero size");
                         throw TExDestroySession{TDisconnectReason::FormatError()};
                     }
+
+                    if (ptr + credsSerializedSize + sizeof(ui32) > end) {
+                        LOG_CRIT_IC_SESSION("ICRDMA", "XDC command format error, invalid cred data");
+                        throw TExDestroySession{TDisconnectReason::FormatError()};
+                    }
+
                     NActorsInterconnect::TRdmaCreds creds;
                     Y_ABORT_UNLESS(creds.ParseFromArray(ptr, credsSerializedSize));
                     ptr += credsSerializedSize;

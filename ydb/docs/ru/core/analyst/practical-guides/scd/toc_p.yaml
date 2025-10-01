@@ -5,7 +5,5 @@ items:
     href: scd1-transfer.md
   - name: SCD2 с использованием TRANSFER
     href: scd2-transfer.md
-  - name: SCD2 с использованием TRANSFER и операции слияния
-    href: scd2-transfer-merge.md
-  - name: SCD2 с использованием внешнего приложения
-    href: scd2-ext-app.md
+  - name: SCD2 в YDB
+    href: scd2.md

@@ -2242,10 +2242,9 @@ class WorkloadTestBase(LoadSuiteBase):
                 # Добавляем ошибку в результат
                 result.add_warning(f"Error getting nodes state: {e}")
                 node_errors = []  # Устанавливаем пустой список если диагностика не удалась
-            
+
             # Вычисляем время выполнения
             end_time = time_module.time()
-            start_time = result.start_time if result.start_time else end_time - 1
 
             # Добавляем дополнительную информацию для отчета
             additional_table_strings = {}

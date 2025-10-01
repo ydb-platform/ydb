@@ -35,11 +35,11 @@ def _set_monitoring(test_info: dict[str, str], start_time: float, end_time: floa
 
     if len(YdbCluster.get_monitoring_urls()) > 0:
         test_info['monitoring'] = ', '.join([
-            f"<a target='_blank' href='{monitoring.url.format(
+            f"< a target = '_blank' href ='{monitoring.url.format(
                 database=database,
                 start_time=monitoring_start,
                 end_time=monitoring_end
-            )}'>{monitoring.caption}</a>"
+            )}'> {monitoring.caption} < /a >"
             for monitoring in YdbCluster.get_monitoring_urls()
         ])
 
@@ -75,11 +75,12 @@ def _set_node_errors(node_errors: list[NodeErrors]) -> str:
             reported_sanitizer.add(node.node.host)
         for core_id, core_hash in node.core_hashes:
             color = hex(0xFF0000 + hash(str(core_hash)) % 0xFFFF).split('x')[-1]
-            host_cores[node.node.host] += f'{node.node.slot.split('@')[0]} - <a target="_blank" href="https://coredumps.yandex-team.ru/core_trace?core_id={core_id}" style="background-color: #{color}">{core_hash}</a></br>'
+            host_cores[node.node.host] += f'{node.node.slot.split(' @ ')[0]} - \
+<a target="_blank" href="https://coredumps.yandex-team.ru/core_trace?core_id={core_id}" style="background-color: #{color}">{core_hash}</a></br>'
     for host, problems in host_errors.items():
-        html += f'<tr>'
+        html += '<tr>'
         html += f'<td>{host}</td>'
-        html += f'<td>{'<br/>'.join(problems.values())}</td>'
+        html += f'<td>{' < br / >'.join(problems.values())}</td>'
         html += f'<td>{host_cores[host]}</td>'
         html += '</tr>'
     html += '</table>'
@@ -93,10 +94,10 @@ def _produce_verify_report(verify_errors) -> str:
 
     for verify, verify_info in verify_errors.items():
         html += f'<details style="margin-bottom: 15px"><summary style="display: list-item">{verify}</summary>'
-        html += f'<table border="1" cellpadding="2px" style="margin-top: 5px"><tr><th>Node</th><th>VERIFY failed times</th></tr>'
+        html += '<table border="1" cellpadding="2px" style="margin-top: 5px"><tr><th>Node</th><th>VERIFY failed times</th></tr>'
         for host, triggered_times in verify_info['hosts_count'].items():
-            html += f'<tr bgcolor="{'#90EE90' if triggered_times == 0 else '#FA8072'}"><td>{host}</td><td>{triggered_times}</td></tr>'
-        html += f'</table><br/><code>{''.join(verify_info['full_trace']).replace('\n', '<br/>')}</code></details>'
+            html += f'<tr bgcolor="{'  # 90EE90' if triggered_times == 0 else '#FA8072'}"><td>{host}</td><td>{triggered_times}</td></tr>'
+        html += f'</table><br/><code>{''.join(verify_info['full_trace']).replace('\n', ' < br / >')}</code></details>'
     return html
 
 
@@ -111,9 +112,10 @@ def _produce_sanitizer_report(node_errors: list[NodeErrors]) -> str:
         host = node_error.node.host
         if host not in reported_hosts:
             html += f'<details style="margin-bottom: 15px"><summary style="display: list-item">Sanitizer output at {host}</summary>'
-            html += f'<code>{node_error.sanitizer_output.replace('\n', '<br/>')}</code></details>'
+            html += f'<code>{node_error.sanitizer_output.replace('\n', ' < br / >')}</code></details>'
             reported_hosts.add(host)
     return html
+
 
 def _attach_sanitizer_outputs(node_errors: list[NodeErrors]):
     if not node_errors or len(node_errors) == 0:
@@ -197,9 +199,9 @@ def __create_iterations_table(result: YdbCliHelper.WorkloadRunResult = None, nod
         if node_error.was_oom:
             issues.append("oom")
         if node_error.verifies:
-            issues.append(f"verifies: {node_error.verifies}")
+            issues.append(f"verifies:{node_error.verifies}")
         if node_error.sanitizer_errors:
-            issues.append(f"SAN errors")
+            issues.append(f"SAN errors:{node_error.sanitizer_errors}")
         has_critical_issues = node_error.was_oom or node_error.core_hashes or node_error.verifies or node_error.sanitizer_errors
         has_issues = len(issues) > 0
 
@@ -462,7 +464,7 @@ def __create_iterations_table_with_node_subcols(result: YdbCliHelper.WorkloadRun
         if node_error.verifies:
             issues.append(f"verifies: {node_error.verifies}")
         if node_error.sanitizer_errors:
-            issues.append(f"SAN errors")
+            issues.append(f"SAN errors:{node_error.sanitizer_errors}")
         has_critical_issues = node_error.was_oom or node_error.core_hashes or node_error.verifies or node_error.sanitizer_errors
         has_issues = len(issues) > 0
 
@@ -873,7 +875,7 @@ def allure_test_description(
         {table_strings}
         </tbody></table>
     '''
-    
+
     html += _set_node_errors(node_errors)
     html += _produce_verify_report(verify_errors)
     logs_in_html = external_param_is_true('save_san_logs_in_html')

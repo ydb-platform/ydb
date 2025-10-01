@@ -412,6 +412,10 @@ public:
             }
 
             if (FetchRequestBytesLeft == 0) {
+                if (status == EPartitionStatus::HasDataReceived) {
+                    ++FetchRequestCurrentPartitionIndex;
+                    continue;
+                }
                 return;
             }
 
@@ -464,9 +468,11 @@ public:
 
         auto& partition = Settings.Partitions[partitionIndex];
         if (record.GetEndOffset() < partition.Offset) {
-            AddResult(partitionIndex, NPersQueue::NErrorCode::EErrorCode::READ_ERROR_TOO_BIG_OFFSET, record.GetEndOffset());
+            AddResult(partitionIndex, EPartitionStatus::DataReceived, NPersQueue::NErrorCode::EErrorCode::READ_ERROR_TOO_BIG_OFFSET, record.GetEndOffset());
         } else if (record.GetEndOffset() == partition.Offset) {
-            AddResult(partitionIndex, NPersQueue::NErrorCode::EErrorCode::READ_NOT_DONE, record.GetEndOffset());
+            AddResult(partitionIndex, EPartitionStatus::DataReceived, NPersQueue::NErrorCode::EErrorCode::READ_NOT_DONE, record.GetEndOffset());
+        } else {
+            AddResult(partitionIndex, EPartitionStatus::HasDataReceived, NPersQueue::NErrorCode::EErrorCode::OK, record.GetEndOffset());
         }
 
         ProceedFetchRequest(ctx);
@@ -532,10 +538,10 @@ public:
         return ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, tabletId, clientConfig));
     }
 
-    void AddResult(size_t partitionIndex, NPersQueue::NErrorCode::EErrorCode errorCode, std::optional<ui64> maxOffset = std::nullopt) {
+    void AddResult(size_t partitionIndex, EPartitionStatus status, NPersQueue::NErrorCode::EErrorCode errorCode, std::optional<ui64> maxOffset = std::nullopt) {
         EnsureResponse();
 
-        PartitionStatus[partitionIndex] = EPartitionStatus::DataReceived;
+        PartitionStatus[partitionIndex] = status;
 
         const auto& req = Settings.Partitions[partitionIndex];
 
@@ -559,7 +565,7 @@ public:
 
         for (const auto partitionIndex : pipeInfo.PartitionIndexes) {
             if (PartitionStatus[partitionIndex] != EPartitionStatus::DataReceived) {
-                AddResult(partitionIndex, NPersQueue::NErrorCode::EErrorCode::TABLET_PIPE_DISCONNECTED);
+                AddResult(partitionIndex, EPartitionStatus::DataReceived, NPersQueue::NErrorCode::EErrorCode::TABLET_PIPE_DISCONNECTED);
             }
         }
 
@@ -655,19 +661,7 @@ public:
         return access.CheckAccess(NACLib::EAccessRights::SelectRow, *Settings.UserToken);
     }
 
-    void SendReplyOnDoneAndDie(const TActorContext& ctx) {
-        CreateOkResponse();
-
-        for (size_t i = 0; i < PartitionStatus.size(); ++i) {
-            if (PartitionStatus[i] != EPartitionStatus::DataReceived) {
-                AddResult(i, NPersQueue::NErrorCode::EErrorCode::READ_NOT_DONE);
-            }
-        }
-
-        SendReplyAndDie(std::move(Response), ctx);
-    }
-
-     void SendReplyAndDie(THolder<TEvPQ::TEvFetchResponse> event, const TActorContext& ctx) {
+    void SendReplyAndDie(THolder<TEvPQ::TEvFetchResponse> event, const TActorContext& ctx) {
         ctx.Send(RequesterId, event.Release());
         Die(ctx);
     }

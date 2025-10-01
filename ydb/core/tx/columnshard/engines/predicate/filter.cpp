@@ -89,9 +89,6 @@ TPKRangeFilter::EUsageClass TPKRangesFilter::GetUsageClass(const NArrow::TSimple
     if (SortedRanges.empty()) {
         return TPKRangeFilter::EUsageClass::FullUsage;
     }
-    if (SortedRanges.size() == 1) {
-        return SortedRanges.front().GetUsageClass(start, end);
-    }
 
     const TPredicateContainer startPredicate = TPredicateContainer::BuildPredicateFrom(
         std::make_shared<TPredicate>(NKernels::EOperation::GreaterEqual, start.ToBatch()), start.GetSchema())
@@ -101,6 +98,9 @@ TPKRangeFilter::EUsageClass TPKRangesFilter::GetUsageClass(const NArrow::TSimple
             return !range.GetPredicateTo().CrossRanges(predicate);
         });
 
+    if (rangesBegin == SortedRanges.end()) {
+        return TPKRangeFilter::EUsageClass::NoUsage;
+    }
     return rangesBegin->GetUsageClass(start, end);
 }
 

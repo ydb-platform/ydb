@@ -343,6 +343,46 @@ class AsyncClient:
         result = await loop.run_in_executor(self.executor, _query_df)
         return result
 
+    async def query_df_arrow(
+        self,
+        query: str,
+        parameters: Optional[Union[Sequence, Dict[str, Any]]] = None,
+        settings: Optional[Dict[str, Any]] = None,
+        use_strings: Optional[bool] = None,
+        external_data: Optional[ExternalData] = None,
+        transport_settings: Optional[Dict[str, str]] = None,
+        dataframe_library: str = "pandas",
+    ) -> Union["pd.DataFrame", "pl.DataFrame"]:
+        """
+        Query method using the ClickHouse Arrow format to return a DataFrame
+        with PyArrow dtype backend. This provides better performance and memory efficiency
+        compared to the standard query_df method, though fewer output formatting options.
+
+        :param query: Query statement/format string
+        :param parameters: Optional dictionary used to format the query
+        :param settings: Optional dictionary of ClickHouse settings (key/string values)
+        :param use_strings: Convert ClickHouse String type to Arrow string type (instead of binary)
+        :param external_data: ClickHouse "external data" to send with query
+        :param transport_settings: Optional dictionary of transport level settings (HTTP headers, etc.)
+        :param dataframe_library: Library to use for DataFrame creation ("pandas" or "polars")
+        :return: DataFrame (pandas or polars based on dataframe_library parameter)
+        """
+
+        def _query_df_arrow():
+            return self.client.query_df_arrow(
+                query=query,
+                parameters=parameters,
+                settings=settings,
+                use_strings=use_strings,
+                external_data=external_data,
+                transport_settings=transport_settings,
+                dataframe_library=dataframe_library
+            )
+
+        loop = asyncio.get_running_loop()
+        result = await loop.run_in_executor(self.executor, _query_df_arrow)
+        return result
+
     async def query_df_stream(self,
                               query: Optional[str] = None,
                               parameters: Optional[Union[Sequence, Dict[str, Any]]] = None,
@@ -376,6 +416,45 @@ class AsyncClient:
 
         loop = asyncio.get_running_loop()
         result = await loop.run_in_executor(self.executor, _query_df_stream)
+        return result
+
+    async def query_df_arrow_stream(
+        self,
+        query: str,
+        parameters: Optional[Union[Sequence, Dict[str, Any]]] = None,
+        settings: Optional[Dict[str, Any]] = None,
+        use_strings: Optional[bool] = None,
+        external_data: Optional[ExternalData] = None,
+        transport_settings: Optional[Dict[str, str]] = None,
+        dataframe_library: str = "pandas"
+    ) -> StreamContext:
+        """
+        Query method that returns the results as a stream of DataFrames with PyArrow dtype backend.
+        Each DataFrame represents a block from the ClickHouse response.
+
+        :param query: Query statement/format string
+        :param parameters: Optional dictionary used to format the query
+        :param settings: Optional dictionary of ClickHouse settings (key/string values)
+        :param use_strings: Convert ClickHouse String type to Arrow string type (instead of binary)
+        :param external_data: ClickHouse "external data" to send with query
+        :param transport_settings: Optional dictionary of transport level settings (HTTP headers, etc.)
+        :param dataframe_library: Library to use for DataFrame creation ("pandas" or "polars")
+        :return: StreamContext that yields DataFrames (pandas or polars based on dataframe_library parameter)
+        """
+
+        def _query_df_arrow_stream():
+            return self.client.query_df_arrow_stream(
+                query=query,
+                parameters=parameters,
+                settings=settings,
+                use_strings=use_strings,
+                external_data=external_data,
+                transport_settings=transport_settings,
+                dataframe_library=dataframe_library
+            )
+
+        loop = asyncio.get_running_loop()
+        result = await loop.run_in_executor(self.executor, _query_df_arrow_stream)
         return result
 
     def create_query_context(self,
@@ -501,7 +580,7 @@ class AsyncClient:
                       cmd: str,
                       parameters: Optional[Union[Sequence, Dict[str, Any]]] = None,
                       data: Union[str, bytes] = None,
-                      settings: Dict[str, Any] = None,
+                      settings: Optional[Dict[str, Any]] = None,
                       use_database: bool = True,
                       external_data: Optional[ExternalData] = None,
                       transport_settings: Optional[Dict[str, str]] = None) -> Union[str, int, Sequence[str], QuerySummary]:
@@ -640,6 +719,43 @@ class AsyncClient:
 
         loop = asyncio.get_running_loop()
         result = await loop.run_in_executor(self.executor, _insert_arrow)
+        return result
+
+    async def insert_df_arrow(
+        self,
+        table: str,
+        df: Union["pd.DataFrame", "pl.DataFrame"],
+        database: Optional[str] = None,
+        settings: Optional[Dict] = None,
+        transport_settings: Optional[Dict[str, str]] = None,
+    ) -> QuerySummary:
+        """
+        Insert a pandas DataFrame with PyArrow backend or a polars DataFrame into ClickHouse using Arrow format.
+        This method is optimized for DataFrames that already use Arrow format, providing
+        better performance than the standard insert_df method.
+        
+        Validation is performed and an exception will be raised if this requirement is not met.
+        Polars DataFrames are natively Arrow-based and don't require additional validation.
+        
+        :param table: ClickHouse table name
+        :param df: Pandas DataFrame with PyArrow dtype backend or Polars DataFrame
+        :param database: Optional ClickHouse database name
+        :param settings: Optional dictionary of ClickHouse settings (key/string values)
+        :param transport_settings: Optional dictionary of transport level settings (HTTP headers, etc.)
+        :return: QuerySummary with summary information, throws exception if insert fails
+        """
+
+        def _insert_df_arrow():
+            return self.client.insert_df_arrow(
+                table=table,
+                df=df,
+                database=database,
+                settings=settings,
+                transport_settings=transport_settings,
+            )
+
+        loop = asyncio.get_running_loop()
+        result = await loop.run_in_executor(self.executor, _insert_df_arrow)
         return result
 
     async def create_insert_context(self,

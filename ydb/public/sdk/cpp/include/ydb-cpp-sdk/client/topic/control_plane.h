@@ -42,6 +42,7 @@ public:
 
     const std::string& GetConsumerName() const;
     bool GetImportant() const;
+    TDuration GetAvailabilityPeriod() const;
     const TInstant& GetReadFrom() const;
     const std::vector<ECodec>& GetSupportedCodecs() const;
     const std::map<std::string, std::string>& GetAttributes() const;
@@ -49,6 +50,7 @@ public:
 private:
     std::string ConsumerName_;
     bool Important_;
+    TDuration AvailabilityPeriod_;
     TInstant ReadFrom_;
     std::map<std::string, std::string> Attributes_;
     std::vector<ECodec> SupportedCodecs_;
@@ -452,6 +454,7 @@ struct TConsumerSettings {
 
     FLUENT_SETTING(std::string, ConsumerName);
     FLUENT_SETTING_DEFAULT(bool, Important, false);
+    FLUENT_SETTING_DEFAULT(TDuration, AvailabilityPeriod, TDuration::Zero());
     FLUENT_SETTING_DEFAULT(TInstant, ReadFrom, TInstant::Zero());
 
     FLUENT_SETTING_VECTOR(ECodec, SupportedCodecs);
@@ -488,6 +491,11 @@ struct TConsumerSettings {
         return *this;
     }
 
+    TConsumerSettings& SetAvailiabilityPeriod(TDuration availabilityPeriod) {
+        AvailabilityPeriod_ = availabilityPeriod;
+        return *this;
+    }
+
     TSettings& EndAddConsumer() { return Parent_; };
 
 private:
@@ -504,6 +512,7 @@ struct TAlterConsumerSettings {
 
     FLUENT_SETTING(std::string, ConsumerName);
     FLUENT_SETTING_OPTIONAL(bool, SetImportant);
+    FLUENT_SETTING_OPTIONAL(TDuration, SetAvailabilityPeriod);
     FLUENT_SETTING_OPTIONAL(TInstant, SetReadFrom);
 
     FLUENT_SETTING_OPTIONAL_VECTOR(ECodec, SetSupportedCodecs);
@@ -521,6 +530,11 @@ struct TAlterConsumerSettings {
 
     TAlterConsumerSettings& SetSupportedCodecs(const std::vector<ECodec>& codecs) {
         SetSupportedCodecs_ = codecs;
+        return *this;
+    }
+
+    TAlterConsumerSettings& SetAvailabilityPeriod(TDuration availabilityPeriod) {
+        SetAvailabilityPeriod_ = availabilityPeriod;
         return *this;
     }
 

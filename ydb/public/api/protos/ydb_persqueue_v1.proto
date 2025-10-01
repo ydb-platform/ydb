@@ -1159,6 +1159,9 @@ message TopicSettings {
 
         // Client service type.
         string service_type = 7;
+
+        // Message for this consumer will not expire due to retention for at least `availability_period` if they aren't commited.
+        optional google.protobuf.Duration availability_period = 8;
     }
 
     // List of consumer read rules for this topic.

@@ -2382,10 +2382,23 @@ class WorkloadTestBase(LoadSuiteBase):
         all_hosts = {node.host for node in LoadSuiteBase._LoadSuiteBase__nodes_state.values()}
         
         # Собираем все диагностические данные ОДИН РАЗ
+        logging.info(f"Collecting node diagnostics for {len(all_hosts)} hosts: {sorted(all_hosts)}")
+        
+        logging.info("Checking for core dumps...")
         core_hashes = LoadSuiteBase._LoadSuiteBase__get_core_hashes_by_pod(all_hosts, start_time, end_time)
+        logging.info(f"Core dumps found: {len(core_hashes)} hosts with cores")
+        
+        logging.info("Checking for OOM events...")
         ooms = LoadSuiteBase._LoadSuiteBase__get_hosts_with_omms(all_hosts, start_time, end_time)
+        logging.info(f"OOM events found: {len(ooms)} hosts with OOM")
+        
+        logging.info("Checking for VERIFY fails...")
         verify_errors = LoadSuiteBase._LoadSuiteBase__get_verify_fails(all_hosts, start_time, end_time)
+        logging.info(f"VERIFY fails found: {len(verify_errors)} hosts with verify errors")
+        
+        logging.info("Checking for SANITIZER events...")
         sanitizer_errors = LoadSuiteBase._LoadSuiteBase__get_sanitizer_events(all_hosts, start_time, end_time)
+        logging.info(f"SANITIZER events found: {len(sanitizer_errors)} hosts with sanitizer errors")
         
         # Создаем NodeErrors для совместимости с существующим кодом
         node_errors = []
@@ -2423,6 +2436,21 @@ class WorkloadTestBase(LoadSuiteBase):
         
         # Очищаем состояние
         LoadSuiteBase._LoadSuiteBase__nodes_state = None
+        
+        # Итоговое логирование диагностики
+        logging.info(f"Node diagnostics completed: {len(node_errors)} nodes with issues")
+        if node_errors:
+            for node_error in node_errors:
+                issues = []
+                if node_error.core_hashes:
+                    issues.append(f"{len(node_error.core_hashes)} cores")
+                if node_error.was_oom:
+                    issues.append("OOM")
+                if hasattr(node_error, 'verifies') and node_error.verifies > 0:
+                    issues.append(f"{node_error.verifies} VERIFY fails")
+                if hasattr(node_error, 'sanitizer_errors') and node_error.sanitizer_errors > 0:
+                    issues.append(f"{node_error.sanitizer_errors} SAN errors")
+                logging.info(f"  Node {node_error.node.host}: {', '.join(issues)}")
         
         return {
             'node_errors': node_errors,

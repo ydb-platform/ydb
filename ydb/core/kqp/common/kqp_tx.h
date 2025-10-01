@@ -64,7 +64,7 @@ struct TKqpTxLocks {
     ui64 GetLockTxId() const { return LockHandle ? LockHandle.GetLockId() : HasLocks() ? LocksMap.begin()->second.GetLockId() : 0; }
     size_t Size() const { return LocksMap.size(); }
 
-    NYql::TIssue GetIssue() {
+    NYql::TIssue GetIssue() const {
         Y_ENSURE(LockIssue);
         return *LockIssue;
     }
@@ -326,7 +326,7 @@ public:
             || phyQuery.GetForceImmediateEffectsExecution()
             || HasUncommittedChangesRead(ModifiedTablesSinceLastFlush, phyQuery, commit);
         if (NeedUncommittedChangesFlush) {
-            ModifiedTablesSinceLastFlush.clear();   
+            ModifiedTablesSinceLastFlush.clear();
         }
     }
 

@@ -279,9 +279,14 @@ public:
 
     // Query client SDK
 
-    std::vector<TResultSet> ExecQuery(const TString& query, EStatus expectedStatus = EStatus::SUCCESS) {
+    std::vector<TResultSet> ExecQuery(const TString& query, EStatus expectedStatus = EStatus::SUCCESS, const TString& expectedError = "") {
         auto result = GetQueryClient()->ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), expectedStatus, result.GetIssues().ToOneLineString());
+
+        if (expectedError) {
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), expectedError);
+        }
+
         return result.GetResultSets();
     }
 
@@ -1524,6 +1529,61 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             R"({"key": 4, "value": "value4"})",
         });
         ReadTopicMessages(outputTopicName, {"1-4"});
+    }
+
+    Y_UNIT_TEST_F(StreamingQueryReplaceAfterError, TStreamingTestFixture) {
+        constexpr char inputTopicName[] = "createAndAlterStreamingQueryInputTopic";
+        constexpr char outputTopicName[] = "createAndAlterStreamingQueryOutputTopic";
+        CreateTopic(inputTopicName);
+        CreateTopic(outputTopicName);
+
+        constexpr char pqSourceName[] = "sourceName";
+        CreatePqSource(pqSourceName);
+
+        constexpr char queryName[] = "streamingQuery";
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                PRAGMA ydb.OverridePlanner = @@ [
+                    {{ "tx": 0, "stage": 1, "tasks": 32 }}
+                ] @@;
+                INSERT INTO `{pq_source}`.`{output_topic}`
+                SELECT * FROM `{pq_source}`.`{input_topic}`
+            END DO;)",
+            "query_name"_a = queryName,
+            "pq_source"_a = pqSourceName,
+            "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName
+        ), EStatus::GENERIC_ERROR, "Invalid override planner settings");
+
+        CheckScriptExecutionsCount(1, 0);
+
+        const auto streamingQueryDesc = Navigate(GetRuntime(), GetRuntime().AllocateEdgeActor(), JoinPath({"Root", queryName}), NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
+        const auto& streamingQuery = streamingQueryDesc->ResultSet.at(0);
+        UNIT_ASSERT_VALUES_EQUAL(streamingQuery.Kind, NSchemeCache::TSchemeCacheNavigate::EKind::KindStreamingQuery);
+        UNIT_ASSERT(streamingQuery.StreamingQueryInfo);
+        UNIT_ASSERT_VALUES_EQUAL(streamingQuery.StreamingQueryInfo->Description.GetName(), queryName);
+
+        ExecQuery(fmt::format(R"(
+            CREATE OR REPLACE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                PRAGMA ydb.OverridePlanner = @@ [
+                    {{ "tx": 0, "stage": 0, "tasks": 32 }}
+                ] @@;
+                INSERT INTO `{pq_source}`.`{output_topic}`
+                SELECT * FROM `{pq_source}`.`{input_topic}`
+            END DO;)",
+            "query_name"_a = queryName,
+            "pq_source"_a = pqSourceName,
+            "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName
+        ));
+
+        CheckScriptExecutionsCount(2, 1);
+        Sleep(TDuration::Seconds(1));
+
+        WriteTopicMessage(inputTopicName, "test message");
+        ReadTopicMessage(outputTopicName, "test message");
     }
 
     Y_UNIT_TEST_F(StreamingQueryWithS3Join, TStreamingTestFixture) {

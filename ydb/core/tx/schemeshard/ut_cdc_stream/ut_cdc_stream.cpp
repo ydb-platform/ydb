@@ -1203,6 +1203,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
             NLs::PathExist,
             NLs::ExtractTenantSchemeshard(&schemeShard)
         });
+
         UNIT_ASSERT(schemeShard != 0 && schemeShard != TTestTxConfig::SchemeShard);
 
         TestCreateTable(runtime, schemeShard, ++txId, dbName, R"(
@@ -1221,12 +1222,12 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
             for (size_t i = 0; i < 100; ++i) {
                 const unsigned key = 3000 + i;
                 const TString writeQuery = Sprintf(R"(
-                (
-                    (let key   '( '('key   (Uint64 '%u ) ) ) )
-                    (let row   '( '('value (Utf8 '%s) ) ) )
-                    (return (AsList (UpdateRow '__user__%s key row) ))
-                )
-            )", key, value.c_str(), "Table");
+                    (
+                        (let key   '( '('key   (Uint64 '%u ) ) ) )
+                        (let row   '( '('value (Utf8 '%s) ) ) )
+                        (return (AsList (UpdateRow '__user__%s key row) ))
+                    )
+                )", key, value.c_str(), "Table");
                 NKikimrMiniKQL::TResult result;
                 TString err;
                 NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, TTestTxConfig::FakeHiveTablets + 6, writeQuery, result, err);

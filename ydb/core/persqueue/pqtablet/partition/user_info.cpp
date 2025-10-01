@@ -37,6 +37,62 @@ namespace NDeprecatedUserData {
     }
 } // NDeprecatedUserData
 
+TUserInfo::TUserInfo(
+    const TActorContext& ctx,
+    NMonitoring::TDynamicCounterPtr streamCountersSubgroup,
+    NMonitoring::TDynamicCounterPtr partitionCountersSubgroup,
+    const TString& user,
+    const ui64 readRuleGeneration, const bool important, const TDuration availabilityPeriod,
+    const NPersQueue::TTopicConverterPtr& topicConverter,
+    const ui32 partition, const TString& session, ui64 partitionSession, ui32 gen, ui32 step, i64 offset,
+    const ui64 readOffsetRewindSum, const TString& dcId, TInstant readFromTimestamp,
+    const TString& dbPath, bool meterRead, const TActorId& pipeClient, bool anyCommits,
+    const std::optional<TString>& committedMetadata
+)
+    : TUserInfoBase{user, readRuleGeneration, session, gen, step, offset, anyCommits, important, availabilityPeriod,
+                    readFromTimestamp, partitionSession, pipeClient, committedMetadata}
+    , ActualTimestamps(false)
+    , WriteTimestamp(TInstant::Zero())
+    , CreateTimestamp(TInstant::Zero())
+    , ReadTimestamp(TAppData::TimeProvider->Now())
+    , ReadOffset(-1)
+    , ReadWriteTimestamp(TInstant::Zero())
+    , ReadCreateTimestamp(TInstant::Zero())
+    , ReadOffsetRewindSum(readOffsetRewindSum)
+    , ReadScheduled(false)
+    , HasReadRule(false)
+    , TopicConverter(topicConverter)
+    , Counter(nullptr)
+    , ActiveReads(0)
+    , ReadsInQuotaQueue(0)
+    , Subscriptions(0)
+    , Partition(partition)
+    , AvgReadBytes{{TDuration::Seconds(1), 1000}, {TDuration::Minutes(1), 1000},
+                    {TDuration::Hours(1), 2000}, {TDuration::Days(1), 2000}}
+    , WriteLagMs(TDuration::Minutes(1), 100)
+    , NoConsumer(user == CLIENTID_WITHOUT_CONSUMER)
+    , MeterRead(meterRead)
+{
+    if (AppData(ctx)->Counters) {
+        if (partitionCountersSubgroup) {
+            SetupDetailedMetrics(ctx, partitionCountersSubgroup);
+        }
+
+        if (AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
+            LabeledCounters.Reset(new TUserLabeledCounters(
+                EscapeBadChars(user) + "||" + EscapeBadChars(topicConverter->GetClientsideName()), partition, dbPath));
+
+            SetupStreamCounters(streamCountersSubgroup);
+        } else {
+            LabeledCounters.Reset(new TUserLabeledCounters(
+                user + "/" + (important ? "1" : "0") + "/" + topicConverter->GetClientsideName(),
+                partition));
+
+            SetupTopicCounters(ctx, dcId, ToString<ui32>(partition));
+        }
+    }
+}
+
 void TUserInfo::ForgetSubscription(i64 endOffset, const TInstant& now) {
     if (Subscriptions > 0)
         --Subscriptions;

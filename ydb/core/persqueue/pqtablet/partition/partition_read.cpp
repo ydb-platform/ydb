@@ -249,8 +249,10 @@ void TPartition::InitUserInfoForImportantClients(const TActorContext& ctx) {
         important.insert(consumer.GetName());
 
         TUserInfo* userInfo = UsersInfoStorage->GetIfExists(consumer.GetName());
-        if (userInfo && !ImporantOrExtendedAvailabilityPeriod(*userInfo) && userInfo->LabeledCounters) {
-            ctx.Send(TabletActorId, new TEvPQ::TEvPartitionLabeledCountersDrop(Partition, userInfo->LabeledCounters->GetGroup()));
+        if (userInfo) {
+            if (!ImporantOrExtendedAvailabilityPeriod(*userInfo) && userInfo->LabeledCounters) {
+                ctx.Send(TabletActorId, new TEvPQ::TEvPartitionLabeledCountersDrop(Partition, userInfo->LabeledCounters->GetGroup()));
+            }
             UsersInfoStorage->SetImportant(*userInfo, consumer.GetImportant(), TDuration::MilliSeconds(consumer.GetAvailabilityPeriodMs()));
             continue;
         }
@@ -264,11 +266,13 @@ void TPartition::InitUserInfoForImportantClients(const TActorContext& ctx) {
         ReadTimestampForOffset(consumer.GetName(), *userInfo, ctx);
     }
     for (auto&& [consumer, userInfo] : UsersInfoStorage->GetAll()) {
-        if (!important.contains(consumer) && ImporantOrExtendedAvailabilityPeriod(userInfo) && userInfo.LabeledCounters) {
-            ctx.Send(
-                TabletActorId,
-                new TEvPQ::TEvPartitionLabeledCountersDrop(Partition, userInfo.LabeledCounters->GetGroup())
-            );
+        if (!important.contains(consumer) && ImporantOrExtendedAvailabilityPeriod(userInfo)) {
+            if (userInfo.LabeledCounters) {
+                ctx.Send(
+                    TabletActorId,
+                    new TEvPQ::TEvPartitionLabeledCountersDrop(Partition, userInfo.LabeledCounters->GetGroup())
+                );
+            }
             UsersInfoStorage->SetImportant(userInfo, false, TDuration::Zero());
         }
     }

@@ -257,8 +257,7 @@ class LoadSuiteBase:
     def __get_sanitizer_events(cls, hosts: set[str], start_time: float, end_time: float) -> dict[str, str]:
         """Aggregates information about sanitizer errors across hosts.
 
-        Collects and analyzes verification failures within specified time range,
-        grouping errors by unique patterns and counting occurrences per host.
+        Collects and analyzes sanitizer failures within specified time range.
 
         Args:
             hosts: Set of target hostnames to analyze
@@ -292,7 +291,7 @@ class LoadSuiteBase:
         return host_logs
 
     @classmethod
-    def __count_sanitizer_events(cls, hosts: set[str], start_time: float, end_time: float) -> dict[str, str]:
+    def __count_sanitizer_events(cls, hosts: set[str], start_time: float, end_time: float) -> dict[str, int]:
         tz = timezone('Europe/Moscow')
         start = datetime.fromtimestamp(start_time, tz).isoformat()
         end = datetime.fromtimestamp(end_time + 10, tz).isoformat()
@@ -347,6 +346,11 @@ class LoadSuiteBase:
         start = datetime.fromtimestamp(start_time, tz).isoformat()
         end = datetime.fromtimestamp(end_time + 10, tz).isoformat()
 
+        # Matches VERIFY failed error blocks in logs.
+        # Capture groups:
+        #   1. The entire VERIFY failed block (full match).
+        #   2. The indented lines following the VERIFY failed header (typically stack trace or error details).
+        #   3. Lines starting with a digit and a dot (e.g., stack frame lines), possibly repeated.
         verify_regex_params = r'(VERIFY failed \(.+\): .*\n(\s+.*\n\s+.*\n)(\d+\..*\n)*)'
         verify_regex = regex.compile(verify_regex_params)
 
@@ -384,7 +388,7 @@ class LoadSuiteBase:
         return verifies_info
 
     @classmethod
-    def __count_verify_fails(cls, hosts: set[str], start_time: float, end_time: float) -> dict[str, str]:
+    def __count_verify_fails(cls, hosts: set[str], start_time: float, end_time: float) -> dict[str, int]:
         tz = timezone('Europe/Moscow')
         start = datetime.fromtimestamp(start_time, tz).isoformat()
         end = datetime.fromtimestamp(end_time + 10, tz).isoformat()
@@ -689,8 +693,27 @@ class LoadSuiteBase:
 
     @classmethod
     def check_node_verifies_with_timing(cls, start_time: float, end_time: float):
-        """
+        """Aggregates information about VERIFY failed errors across hosts.
 
+        Collects and analyzes verification failures within specified time range,
+        grouping errors by unique patterns and counting occurrences per host.
+
+        Args:
+            hosts: Set of target hostnames to analyze
+            start_time: Beginning of analysis time interval (Unix timestamp)
+            end_time: End of analysis time interval (Unix timestamp)
+
+        Returns:
+            Dictionary with verification failure patterns as keys and structured information as values:
+            {
+                "verify failed at example.cpp:123": {
+                    "full_trace": "Full VERIFY failed text",
+                    "hosts_count": {
+                        "host1.example.com": 3,
+                        "host2.example.com": 1
+                    }
+                }
+            }
         """
         if cls.__nodes_state is None:
             return []
@@ -699,6 +722,21 @@ class LoadSuiteBase:
 
     @classmethod
     def check_node_sanitizer_with_timing(cls, start_time: float, end_time: float):
+        """Aggregates information about sanitizer errors across hosts.
+
+        Collects and analyzes sanitizer failures within specified time range.
+
+        Args:
+            hosts: Set of target hostnames to analyze
+            start_time: Beginning of analysis time interval (Unix timestamp)
+            end_time: End of analysis time interval (Unix timestamp)
+
+        Returns:
+            Dictionary with hosts as keys and sanitizer output (first 150 lines per error) as values:
+            {
+                "host1.example.com": "First 150 lines of every ThreadSanitizer error",
+            }
+        """
         if cls.__nodes_state is None:
             return []
         all_hosts = {node.host for node in cls.__nodes_state.values()}

@@ -13,9 +13,15 @@ struct IKqpBufferTableLookupCallbacks {
     virtual void OnLookupTaskFinished() = 0;
 };
 
-class IKqpBufferTableLookup : public TThrRefBase {
+class IKqpBufferTableLookup {
 public:
-    virtual void SetLookupSettings(ui64 cookie, const std::vector<ui32>& columns) = 0;
+    virtual ~IKqpBufferTableLookup() = default;
+
+    virtual void SetLookupSettings(
+        ui64 cookie,
+        size_t lookupKeyPrefix,
+        TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> keyColumns,
+        TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> lookupColumns) = 0;
 
     virtual void AddLookupTask(ui64 cookie, const std::vector<TConstArrayRef<TCell>>& keys) = 0;
     virtual bool HasResult(ui64 cookie) = 0;
@@ -41,6 +47,7 @@ struct TKqpBufferTableLookupSettings {
 
     IKqpTransactionManagerPtr TxManager;
 
+    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
     const NMiniKQL::TTypeEnvironment& TypeEnv;
     const NMiniKQL::THolderFactory& HolderFactory;
 

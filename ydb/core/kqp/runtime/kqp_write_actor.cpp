@@ -2295,6 +2295,7 @@ public:
                     .LockMode = settings.TransactionSettings.LockMode,
                     .MvccSnapshot = settings.TransactionSettings.MvccSnapshot,
 
+                    .Alloc = Alloc,
                     .TxManager = TxManager,
                     .TypeEnv = *TypeEnv,
                     .HolderFactory = *HolderFactory,
@@ -2417,10 +2418,17 @@ public:
                     Alloc);
                 
                 auto lookupInfo = LookupInfos.at(settings.TableId.PathId);
+                auto lookupActor = lookupInfo.Actors.at(settings.TableId.PathId).LookupActor;
                 lookups.emplace_back(TKqpWriteTask::TPathLookupInfo{
                     .KeyIndexes = {},
-                    .Lookup = lookupInfo.Actors.at(settings.TableId.PathId).LookupActor,
+                    .Lookup = lookupActor,
                 });
+
+                lookupActor->SetLookupSettings(
+                    token.Cookie,
+                    settings.KeyColumns.size(),
+                    settings.KeyColumns,
+                    settings.LookupColumns);
             }
 
             writeInfo.Actors.at(settings.TableId.PathId).WriteActor->Open(

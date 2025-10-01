@@ -89,17 +89,49 @@ TPKRangeFilter::EUsageClass TPKRangesFilter::GetUsageClass(const NArrow::TSimple
     if (SortedRanges.empty()) {
         return TPKRangeFilter::EUsageClass::FullUsage;
     }
-    for (auto&& i : SortedRanges) {
-        switch (i.GetUsageClass(start, end)) {
-            case TPKRangeFilter::EUsageClass::FullUsage:
-                return TPKRangeFilter::EUsageClass::FullUsage;
-            case TPKRangeFilter::EUsageClass::PartialUsage:
-                return TPKRangeFilter::EUsageClass::PartialUsage;
-            case TPKRangeFilter::EUsageClass::NoUsage:
-                break;
-        }
+    if (SortedRanges.size() == 1) {
+        return SortedRanges.front().GetUsageClass(start, end);
     }
-    return TPKRangeFilter::EUsageClass::NoUsage;
+
+    const TPredicateContainer startPredicate = TPredicateContainer::BuildPredicateFrom(
+        std::make_shared<TPredicate>(NKernels::EOperation::GreaterEqual, start.ToBatch()), start.GetSchema())
+                                                   .DetachResult();
+    const auto rangesBegin = std::lower_bound(
+        SortedRanges.begin(), SortedRanges.end(), startPredicate, [](const TPKRangeFilter& range, const TPredicateContainer& predicate) {
+            return !range.GetPredicateTo().CrossRanges(predicate);
+        });
+
+    const TPredicateContainer endPredicate =
+        TPredicateContainer::BuildPredicateTo(std::make_shared<TPredicate>(NKernels::EOperation::LessEqual, end.ToBatch()), end.GetSchema())
+            .DetachResult();
+    const auto rangesEnd = std::upper_bound(
+        SortedRanges.begin(), SortedRanges.end(), endPredicate, [](const TPredicateContainer& predicate, const TPKRangeFilter& range) {
+            return !range.GetPredicateFrom().CrossRanges(predicate);
+        });
+
+    AFL_VERIFY(rangesBegin <= rangesEnd);
+    if (rangesBegin == rangesEnd) {
+        return TPKRangeFilter::EUsageClass::NoUsage;
+    }
+
+    switch (rangesBegin->GetUsageClass(start, end)) {
+        case TPKRangeFilter::EUsageClass::FullUsage:
+            break;
+        case TPKRangeFilter::EUsageClass::PartialUsage:
+            return TPKRangeFilter::EUsageClass::PartialUsage;
+        case TPKRangeFilter::EUsageClass::NoUsage:
+            AFL_VERIFY(false);
+    }
+    switch (std::prev(rangesEnd)->GetUsageClass(start, end)) {
+        case TPKRangeFilter::EUsageClass::FullUsage:
+            break;
+        case TPKRangeFilter::EUsageClass::PartialUsage:
+            return TPKRangeFilter::EUsageClass::PartialUsage;
+        case TPKRangeFilter::EUsageClass::NoUsage:
+            AFL_VERIFY(false);
+    }
+
+    return TPKRangeFilter::EUsageClass::FullUsage;
 }
 
 TPKRangesFilter::TPKRangesFilter() {

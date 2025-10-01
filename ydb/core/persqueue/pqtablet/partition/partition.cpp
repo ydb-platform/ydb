@@ -420,9 +420,6 @@ ui64 TPartition::GetUsedStorage(const TInstant& now) {
 }
 
 static TDuration GetAvailabilityPeriod(const TUserInfo& consumer)  {
-    if (!ImporantOrExtendedAvailabilityPeriod(consumer)) {
-        return TDuration::Zero();
-    }
     if (consumer.Important) {
         return TDuration::Max();
     }

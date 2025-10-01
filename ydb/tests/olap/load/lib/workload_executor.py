@@ -17,7 +17,7 @@ from ydb.tests.olap.lib.remote_execution import (
 from ydb.tests.olap.lib.ydb_cli import YdbCliHelper
 from ydb.tests.olap.lib.results_processor import ResultsProcessor
 from ydb.tests.olap.lib.utils import get_external_param
-from ydb.tests.olap.lib.allure_utils import allure_test_description
+from ydb.tests.olap.lib.allure_utils import allure_test_description, NodeErrors
 
 # Импортируем LoadSuiteBase чтобы наследоваться от него
 from ydb.tests.olap.load.lib.conftest import LoadSuiteBase
@@ -949,13 +949,18 @@ class WorkloadTestBase(LoadSuiteBase):
             nemesis,
         )
 
-        # ФАЗА 3: РЕЗУЛЬТАТЫ
-        final_result = self._finalize_workload_results(
+        # ФАЗА 3: ФИНАЛИЗАЦИЯ РЕЗУЛЬТАТОВ WORKLOAD
+        final_result, workload_params = self._finalize_workload_results(
             workload_name,
             execution_result,
             additional_stats,
             duration_value,
             use_chunks,
+        )
+
+        # ФАЗА 4: ДИАГНОСТИКА НОД И СОЗДАНИЕ ОТЧЕТОВ
+        self.process_workload_result_with_diagnostics(
+            final_result, workload_name, workload_params, False, use_node_subcols=True
         )
 
         logging.info(f"=== Workload test completed for {workload_name} ===")
@@ -2113,7 +2118,17 @@ class WorkloadTestBase(LoadSuiteBase):
         use_chunks: bool,
     ):
         """
-        ФАЗА 3: Финализация результатов и диагностика
+        ФАЗА 3: Финализация результатов workload (БЕЗ диагностики нод)
+        
+        Отвечает ТОЛЬКО за:
+        - Анализ результатов выполнения workload
+        - Сбор статистики выполнения
+        - Подготовку данных для диагностики
+        
+        НЕ занимается:
+        - Диагностикой нод (cores, OOM, verify, sanitizer)
+        - Созданием Allure отчетов
+        - Выгрузкой в базу данных
 
         Args:
             workload_name: Имя workload для отчетов
@@ -2123,23 +2138,22 @@ class WorkloadTestBase(LoadSuiteBase):
             use_chunks: Использовать ли разбивку на итерации (устаревший параметр)
 
         Returns:
-            Финальный результат выполнения
+            Финальный результат выполнения (готовый для диагностики)
         """
-        # Для обратной совместимости переименовываем параметр use_chunks в
-        # use_iterations
+        # Для обратной совместимости переименовываем параметр use_chunks в use_iterations
         use_iterations = use_chunks
 
-        with allure.step("Phase 3: Finalize results and diagnostics"):
+        with allure.step("Phase 3: Finalize workload results (statistics only)"):
             overall_result = execution_result["overall_result"]
             successful_runs = execution_result["successful_runs"]
             total_runs = execution_result["total_runs"]
 
-            # Анализируем результаты и добавляем ошибки/предупреждения
+            # 1. Анализируем результаты выполнения workload
             self._analyze_execution_results(
                 overall_result, successful_runs, total_runs, use_iterations
             )
 
-            # Собираем и добавляем статистику
+            # 2. Собираем и добавляем статистику выполнения
             self._add_execution_statistics(
                 overall_result,
                 workload_name,
@@ -2149,102 +2163,202 @@ class WorkloadTestBase(LoadSuiteBase):
                 use_iterations,
             )
 
-            # Финальная обработка с диагностикой (подготавливает данные для выгрузки)
+            # 3. Сохраняем время начала workload для диагностики
             overall_result.workload_start_time = execution_result["workload_start_time"]
-            self.process_workload_result_with_diagnostics(
-                overall_result, workload_name, False, use_node_subcols=True
-            )
 
-            # Отдельный шаг для выгрузки результатов (ПОСЛЕ подготовки всех данных)
-            self._safe_upload_results(overall_result, workload_name)
-
-            # Финальная обработка статуса (может выбросить исключение, но результаты уже выгружены)
-            # Используем node_errors, сохраненные из диагностики
-            node_errors = getattr(overall_result, '_node_errors', [])
-            self._handle_final_status(overall_result, workload_name, node_errors)
+            # 4. Подготавливаем параметры workload для отчетов
+            workload_params = self._extract_workload_params_for_reports(overall_result, workload_name)
 
             logging.info(
-                f"Final result: success={
-                    overall_result.success}, successful_runs={successful_runs}/{total_runs}"
+                f"Workload results finalized: success={overall_result.success}, "
+                f"successful_runs={successful_runs}/{total_runs}"
             )
-            return overall_result
+            return overall_result, workload_params
+
+    def _extract_workload_params_for_reports(self, result, workload_name):
+        """
+        Извлекает параметры workload для использования в отчетах
+        
+        Args:
+            result: Результат выполнения workload
+            workload_name: Имя workload
+            
+        Returns:
+            dict: Параметры workload для отчетов
+        """
+        workload_params = {}
+        
+        # Извлекаем параметры из статистики
+        workload_stats = result.get_stats(workload_name)
+        if workload_stats:
+            # Добавляем важные параметры в начало
+            important_params = [
+                "total_runs",
+                "planned_duration", 
+                "actual_duration",
+                "use_iterations",
+                "workload_type",
+                "table_type",
+            ]
+            for param in important_params:
+                if param in workload_stats:
+                    workload_params[param] = workload_stats[param]
+
+            # Информация об итерациях и потоках
+            if "total_iterations" in workload_stats:
+                workload_params["total_iterations"] = workload_stats["total_iterations"]
+            if "total_threads" in workload_stats:
+                workload_params["total_threads"] = workload_stats["total_threads"]
+
+            # Добавляем остальные параметры (исключая служебные)
+            for key, value in workload_stats.items():
+                if key not in workload_params and key not in [
+                    "success_rate",
+                    "successful_runs", 
+                    "failed_runs",
+                ]:
+                    workload_params[key] = value
+
+        return workload_params
+
+    def _collect_all_node_diagnostics(self, result, start_time, end_time):
+        """
+        Единый метод для сбора всех диагностических данных о нодах.
+        Возвращает структурированные данные для использования в Allure и базе данных.
+        
+        Args:
+            result: Результат выполнения workload
+            start_time: Время начала диагностики
+            end_time: Время окончания диагностики
+            
+        Returns:
+            dict: Словарь с диагностическими данными:
+                - node_errors: список NodeErrors для совместимости
+                - verify_errors: детальные данные о verify ошибках
+                - sanitizer_errors: детальные данные о sanitizer ошибках
+        """
+        if LoadSuiteBase._LoadSuiteBase__nodes_state is None:
+            return {
+                'node_errors': [],
+                'verify_errors': {},
+                'sanitizer_errors': {}
+            }
+        
+        # Получаем все хосты из сохраненного состояния
+        all_hosts = {node.host for node in LoadSuiteBase._LoadSuiteBase__nodes_state.values()}
+        
+        # Собираем все диагностические данные ОДИН РАЗ
+        core_hashes = LoadSuiteBase._LoadSuiteBase__get_core_hashes_by_pod(all_hosts, start_time, end_time)
+        ooms = LoadSuiteBase._LoadSuiteBase__get_hosts_with_omms(all_hosts, start_time, end_time)
+        verify_errors = LoadSuiteBase._LoadSuiteBase__get_verify_fails(all_hosts, start_time, end_time)
+        sanitizer_errors = LoadSuiteBase._LoadSuiteBase__get_sanitizer_events(all_hosts, start_time, end_time)
+        
+        # Создаем NodeErrors для совместимости с существующим кодом
+        node_errors = []
+        for node in LoadSuiteBase._LoadSuiteBase__nodes_state.values():
+            has_cores = bool(core_hashes.get(node.slot, []))
+            has_oom = node.host in ooms
+            has_verifies = node.host in verify_errors
+            has_san_errors = node.host in sanitizer_errors
+            
+            if has_cores or has_oom or has_verifies or has_san_errors:
+                node_error = NodeErrors(node, 'diagnostic info collected')
+                node_error.core_hashes = core_hashes.get(node.slot, [])
+                node_error.was_oom = has_oom
+                if has_verifies:
+                    # Считаем количество verify ошибок для этого хоста
+                    verify_count = 0
+                    for verify_info in verify_errors.values():
+                        if node.host in verify_info.get('hosts_count', {}):
+                            verify_count += verify_info['hosts_count'][node.host]
+                    node_error.verifies = verify_count
+                if has_san_errors:
+                    # Получаем количество sanitizer ошибок для этого хоста
+                    node_error.sanitizer_errors = int(sanitizer_errors.get(node.host, 0))
+                node_errors.append(node_error)
+                
+                # Добавляем ошибки в результат (для совместимости)
+                if has_verifies:
+                    result.add_error(f'Node {node.host} had {node_error.verifies} VERIFY fails')
+                if has_cores:
+                    result.add_error(f'Node {node.slot} has {len(node_error.core_hashes)} coredump(s)')
+                if has_oom:
+                    result.add_error(f'Node {node.slot} experienced OOM')
+                if has_san_errors:
+                    result.add_error(f'Node {node.host} has SAN errors')
+        
+        # Очищаем состояние
+        LoadSuiteBase._LoadSuiteBase__nodes_state = None
+        
+        return {
+            'node_errors': node_errors,
+            'verify_errors': verify_errors,
+            'sanitizer_errors': sanitizer_errors
+        }
 
     def process_workload_result_with_diagnostics(
         self,
         result: YdbCliHelper.WorkloadRunResult,
         workload_name: str,
+        workload_params: dict,
         check_scheme: bool = True,
         use_node_subcols: bool = False,
     ):
         """
-        Обрабатывает результат workload с добавлением диагностической информации
+        Обрабатывает диагностику нод и создает отчеты (ВСЕГДА вызывается после _finalize_workload_results)
+        
+        Отвечает ТОЛЬКО за:
+        - Сбор диагностических данных с нод кластера (cores, OOM, verify, sanitizer)
+        - Создание Allure отчетов с диагностической информацией
+        - Выгрузку результатов в базу данных
+        - Финальную проверку статуса теста
+        
+        НЕ занимается:
+        - Анализом результатов выполнения workload (это делает _finalize_workload_results)
+        - Сбором статистики выполнения (это делает _finalize_workload_results)
 
         Args:
-            result: Результат выполнения workload
+            result: Результат выполнения workload (уже обработанный _finalize_workload_results)
             workload_name: Имя workload для отчетов
             check_scheme: Проверять ли схему базы данных
             use_node_subcols: Использовать ли подколонки для нод в таблице итераций
         """
         with allure.step(f"Process workload result for {workload_name}"):
-            # Собираем информацию о параметрах workload для заголовка
-            workload_params = {}
+            # ====================================================================
+            # БЛОК 1: ПОДГОТОВКА ПАРАМЕТРОВ ДЛЯ ОТЧЕТОВ
+            # ====================================================================
+            # Параметры workload уже подготовлены в _finalize_workload_results
+            # workload_params передается как параметр
 
-            # Извлекаем параметры из статистики
-            workload_stats = result.get_stats(workload_name)
-            if workload_stats:
-                # Добавляем важные параметры в начало
-                important_params = [
-                    "total_runs",
-                    "planned_duration",
-                    "actual_duration",
-                    "use_iterations",
-                    "workload_type",
-                    "table_type",
-                ]
-                for param in important_params:
-                    if param in workload_stats:
-                        workload_params[param] = workload_stats[param]
-
-                # Информация об итерациях и потоках
-                if "total_iterations" in workload_stats:
-                    workload_params["total_iterations"] = workload_stats[
-                        "total_iterations"
-                    ]
-                if "total_threads" in workload_stats:
-                    workload_params["total_threads"] = workload_stats["total_threads"]
-
-                # Добавляем остальные параметры
-                for key, value in workload_stats.items():
-                    if key not in workload_params and key not in [
-                        "success_rate",
-                        "successful_runs",
-                        "failed_runs",
-                    ]:
-                        workload_params[key] = value
-
-            # Собираем информацию об ошибках нод
+            # ====================================================================
+            # БЛОК 2: СБОР ДИАГНОСТИЧЕСКИХ ДАННЫХ С НОД КЛАСТЕРА
+            # ====================================================================
+            # Собираем информацию об ошибках нод (cores, OOM, verify, sanitizer)
             node_errors = []
             verify_errors = {}
             sanitizer_errors = {}
 
             # Проверяем состояние нод и собираем ошибки
             try:
-                # Используем метод родительского класса для диагностики нод
+                # Используем единый метод для сбора всех диагностических данных ОДИН РАЗ
                 end_time = time_module.time()
                 diagnostics_start_time = getattr(
                     result, "workload_start_time", result.start_time
                 )
-                verify_errors = self.check_node_verifies_with_timing(diagnostics_start_time, end_time)
-                sanitizer_errors = self.check_node_sanitizer_with_timing(diagnostics_start_time, end_time)
-                node_errors = self.check_nodes_diagnostics_with_timing(
+                diagnostics_data = self._collect_all_node_diagnostics(
                     result, diagnostics_start_time, end_time
                 )
+                node_errors = diagnostics_data['node_errors']
+                verify_errors = diagnostics_data['verify_errors']
+                sanitizer_errors = diagnostics_data['sanitizer_errors']
 
             except Exception as e:
                 logging.error(f"Error getting nodes state: {e}")
                 # Добавляем ошибку в результат
                 result.add_warning(f"Error getting nodes state: {e}")
                 node_errors = []  # Устанавливаем пустой список если диагностика не удалась
+                verify_errors = {}
+                sanitizer_errors = {}
             
             # Вычисляем время выполнения
             end_time = time_module.time()
@@ -2298,17 +2412,24 @@ class WorkloadTestBase(LoadSuiteBase):
                     "nodes_with_issues",
                     len(node_errors))
 
-                # Формируем списки ошибок для выгрузки
+                # ====================================================================
+                # БЛОК 3: ОБРАБОТКА ОШИБОК ДЛЯ ВЫГРУЗКИ В БАЗУ ДАННЫХ
+                # ====================================================================
+                # Формируем списки ошибок для выгрузки в базу данных
                 node_error_messages = []
                 workload_error_messages = []
 
-                # Собираем ошибки нод с подробностями
+                # Собираем ошибки нод с подробностями (теперь все типы ошибок обрабатываются)
                 for node_error in node_errors:
                     if node_error.core_hashes:
                         for core_id, core_hash in node_error.core_hashes:
                             node_error_messages.append(f"Node {node_error.node.slot} coredump {core_id}")
                     if node_error.was_oom:
                         node_error_messages.append(f"Node {node_error.node.slot} experienced OOM")
+                    if hasattr(node_error, 'verifies') and node_error.verifies > 0:
+                        node_error_messages.append(f"Node {node_error.node.host} had {node_error.verifies} VERIFY fails")
+                    if hasattr(node_error, 'sanitizer_errors') and node_error.sanitizer_errors > 0:
+                        node_error_messages.append(f"Node {node_error.node.host} has {node_error.sanitizer_errors} SAN errors")
 
                 # Собираем workload ошибки (не связанные с нодами)
                 if result.errors:
@@ -2334,15 +2455,26 @@ class WorkloadTestBase(LoadSuiteBase):
                 result.add_stat(workload_name, "workload_warning_messages", workload_warning_messages)
                 result.add_stat(workload_name, "workload_warnings", len(workload_warning_messages) > 0)
 
+            # ====================================================================
+            # БЛОК 4: СОЗДАНИЕ ALLURE ОТЧЕТА И ВЫГРУЗКА В БАЗУ ДАННЫХ
+            # ====================================================================
             # 3. Формирование summary/статистики (with_errors/with_warnings автоматически добавляются в ydb_cli.py)
 
-            # 4. Формирование allure-отчёта
+            # 4. Создание Allure отчета с диагностической информацией
             self._create_allure_report(result, workload_name, workload_params, node_errors, use_node_subcols, verify_errors, sanitizer_errors)
 
             # Сохраняем node_errors для использования после выгрузки
             result._node_errors = node_errors
 
+            # ====================================================================
+            # БЛОК 5: ВЫГРУЗКА РЕЗУЛЬТАТОВ В БАЗУ ДАННЫХ И ФИНАЛЬНАЯ ПРОВЕРКА
+            # ====================================================================
             # Данные подготовлены, теперь можно выгружать результаты
+            self._safe_upload_results(result, workload_name)
+
+            # Финальная проверка статуса теста (может выбросить исключение)
+            node_errors = getattr(result, '_node_errors', [])
+            self._handle_final_status(result, workload_name, node_errors)
 
     def _safe_upload_results(self, result, workload_name):
         """Безопасная выгрузка результатов с обработкой ошибок и Allure отчетом"""

@@ -8,6 +8,7 @@ import "ydb/public/api/protos/annotations/validation.proto";
 
 import "google/protobuf/empty.proto";
 import "google/protobuf/duration.proto";
+import "google/protobuf/empty.proto";
 import "google/protobuf/timestamp.proto";
 
 package Ydb.Topic;
@@ -1139,7 +1140,7 @@ message DescribeTopicResult {
         MultipleWindowsStat bytes_written = 4;
     }
 
-    // Partition-level counters (e.g. topic.partition.committed_read_lag_milliseconds).
+    // Metrics level.
     optional uint32 metrics_level = 16;
 }
 
@@ -1313,8 +1314,11 @@ message AlterTopicRequest {
     // Set metering mode for topic in serverless database.
     MeteringMode set_metering_mode = 14;
 
-    // Setup or remove counters level settings.
-    optional uint32 set_metrics_level = 15;
+    // Set or reset metrics level.
+    oneof metrics_level {
+        uint32 set_metrics_level = 15;
+        google.protobuf.Empty reset_metrics_level = 16;
+    }
 }
 
 // Update topic response sent from server to client.

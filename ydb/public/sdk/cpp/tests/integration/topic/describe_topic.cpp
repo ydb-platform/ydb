@@ -122,32 +122,37 @@ TEST_F(Describe, TEST_NAME(Location)) {
 TEST_F(Describe, TEST_NAME(MetricsLevel)) {
     TTopicClient client(MakeDriver());
 
-    // const ui32 MetricsLevelDisabled = 1;
-    // const ui32 MetricsLevelDatabase = 2;
-    const ui32 MetricsLevelObject = 3;
-    const ui32 MetricsLevelDetailed = 4;
+    // const ui32 MetricsLevelDisabled = 0;
+    // const ui32 MetricsLevelDatabase = 1;
+    const ui32 MetricsLevelObject = 2;
+    const ui32 MetricsLevelDetailed = 3;
 
-    auto createTopic = [&](std::string topic, EMetricsLevel countersLevel) {
-        auto res = client.CreateTopic(topic, TCreateTopicSettings().MetricsLevel(countersLevel)).GetValueSync();
+    auto createTopic = [&](std::string topic, EMetricsLevel metricsLevel) {
+        auto res = client.CreateTopic(topic, TCreateTopicSettings().MetricsLevel(metricsLevel)).GetValueSync();
         ASSERT_TRUE(res.IsSuccess());
     };
 
-    auto alterTopic = [&](std::string topic, EMetricsLevel countersLevel) {
-        auto res = client.AlterTopic(topic, TAlterTopicSettings().MetricsLevel(countersLevel)).GetValueSync();
+    auto setMetricsLevel = [&](std::string topic, EMetricsLevel metricsLevel) {
+        auto res = client.AlterTopic(topic, TAlterTopicSettings().SetMetricsLevel(metricsLevel)).GetValueSync();
         ASSERT_TRUE(res.IsSuccess());
     };
 
-    auto checkFlag = [&](std::string topic, std::optional<EMetricsLevel> expectedCountersLevel) {
+    auto resetMetricsLevel = [&](std::string topic) {
+        auto res = client.AlterTopic(topic, TAlterTopicSettings().ResetMetricsLevel()).GetValueSync();
+        ASSERT_TRUE(res.IsSuccess());
+    };
+
+    auto checkFlag = [&](std::string topic, std::optional<EMetricsLevel> expectedMetricsLevel) {
         auto res = client.DescribeTopic(topic, {}).GetValueSync();
         Y_ENSURE(res.IsSuccess());
-        return res.GetTopicDescription().GetMetricsLevel() == expectedCountersLevel;
+        return res.GetTopicDescription().GetMetricsLevel() == expectedMetricsLevel;
     };
 
     {
         const std::string topic("topic-with-counters");
         createTopic(topic, MetricsLevelDetailed);
         checkFlag(topic, MetricsLevelDetailed);
-        alterTopic(topic, MetricsLevelObject);
+        setMetricsLevel(topic, MetricsLevelObject);
         Y_ENSURE(checkFlag(topic, MetricsLevelObject));
 
         {
@@ -156,6 +161,11 @@ TEST_F(Describe, TEST_NAME(MetricsLevel)) {
             ASSERT_TRUE(res.IsSuccess());
             Y_ENSURE(checkFlag(topic, MetricsLevelObject));
         }
+
+        {
+            resetMetricsLevel(topic);
+            Y_ENSURE(checkFlag(topic, {}));
+        }
     }
 
     {
@@ -163,7 +173,7 @@ TEST_F(Describe, TEST_NAME(MetricsLevel)) {
         auto res = client.CreateTopic(topic).GetValueSync();
         ASSERT_TRUE(res.IsSuccess());
         Y_ENSURE(checkFlag(topic, {}));
-        alterTopic(topic, MetricsLevelDetailed);
+        setMetricsLevel(topic, MetricsLevelDetailed);
         Y_ENSURE(checkFlag(topic, MetricsLevelDetailed));
 
         {
@@ -178,7 +188,7 @@ TEST_F(Describe, TEST_NAME(MetricsLevel)) {
         const std::string topic("topic-without-counters");
         createTopic(topic, MetricsLevelObject);
         Y_ENSURE(checkFlag(topic, MetricsLevelObject));
-        alterTopic(topic, MetricsLevelDetailed);
+        setMetricsLevel(topic, MetricsLevelDetailed);
         Y_ENSURE(checkFlag(topic, MetricsLevelDetailed));
     }
 }

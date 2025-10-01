@@ -76,7 +76,24 @@ WITH(
 
 ## Загрузка данных в таблицу изменений
 
-Для загрузки данных в таблицу изменений можно использовать любой способ загрузки данных и автоматическую поставку изменений с помощью механизма [трансфер](../../../concepts/transfer.md). Пример трансфера, поставляющего данные в формате, подходящем для данного примера, описан в разделе [{#T}](scd2-transfer.md).
+Для загрузки данных в таблицу изменений можно использовать любой способ загрузки данных и автоматическую поставку изменений с помощью механизма [трансфер](../../../concepts/transfer.md).
+
+Пример запроса для явной загрузки изменений:
+
+```sql
+UPSERT INTO dimension_scd_changes (id, attribute1, attribute2, change_time, operation)
+VALUES ('CUSTOMER_1001', 'John Doe', 'Los Angeles', cast('2025-08-22T17:00:00Z' as DateTime), 'CREATE');
+
+UPSERT INTO dimension_scd_changes (id, attribute1, attribute2, change_time, operation)
+VALUES ('CUSTOMER_1002', 'John Doe', 'New York', cast('2025-08-22T17:00:00Z' as DateTime), 'CREATE');
+
+UPSERT INTO dimension_scd_changes (id, attribute1, attribute2, change_time, operation)
+VALUES ('CUSTOMER_1001', 'John Doe', 'San Francisco', cast('2025-08-22T19:00:00Z' as DateTime), 'UPDATE');
+
+UPSERT INTO dimension_scd_changes (id, attribute1, attribute2, change_time, operation)
+VALUES ('CUSTOMER_1002', 'John Doe', 'New York', cast('2025-08-22T21:00:00Z' as DateTime), 'DELETE');
+  ```
+
 
 ## Запрос для размещения изменений в формате SCD2
 

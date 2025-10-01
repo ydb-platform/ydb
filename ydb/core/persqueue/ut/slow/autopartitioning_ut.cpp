@@ -106,7 +106,7 @@ Y_UNIT_TEST_SUITE(SlowTopicAutopartitioning) {
                 } else if (auto* x = std::get_if<NYdb::NTopic::TReadSessionEvent::TEndPartitionSessionEvent>(&event)) {
                     x->Confirm();
                     Cerr << ">>>>> " << x->DebugString() << Endl << Flush;
-                } else if (auto* sessionClosedEvent = std::get_if<NYdb::NTopic::TSessionClosedEvent>(&event)) {
+                } else if (std::get_if<NYdb::NTopic::TSessionClosedEvent>(&event)) {
                     x->Confirm();
                     Cerr << ">>>>> " << x->DebugString() << Endl << Flush;
                 }

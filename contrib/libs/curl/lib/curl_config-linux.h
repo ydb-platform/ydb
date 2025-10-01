@@ -931,7 +931,7 @@
 #define USE_UNIX_SOCKETS 1
 
 /* enable websockets support */
-/* #undef USE_WEBSOCKETS */
+#define USE_WEBSOCKETS 1
 
 /* Define to 1 if you are building a Windows target with crypto API support.
    */

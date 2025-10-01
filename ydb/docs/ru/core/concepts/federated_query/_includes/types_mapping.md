@@ -9,15 +9,15 @@
 |`Uint16`|`UINT16`|`UINT16`||
 |`Uint32`|`UINT32`|`UINT32`||
 |`Uint64`|`UINT64`|`UINT64`||
-|`Float`|`FLOAT`|`FLOAT`||
-|`Double`|`DOUBLE`|`DOUBLE`||
+|`Float`|`FLOAT (32)`|`FLOAT (32)`||
+|`Double`|`FLOAT (64)`|`FLOAT (64)`||
 |`Date`|`UINT16`|`UINT16`, `INT32`, `UINT32`, `INT64`, `UINT64`, `DATE`, `TIMESTAMP (s, ms, us)`|количество дней, прошедших с начала [Unix-эпохи](https://ru.wikipedia.org/wiki/Unix-время)|
 |`Date32`|`DATE (s)`|`DATE (s)`||
 |`Datetime`|`UINT32`|`UINT16`, `INT32`, `UINT32`, `INT64`, `UINT64`, `DATE`, `TIMESTAMP (s, ms, us)`|количество секунд, прошедших с начала [Unix-эпохи](https://ru.wikipedia.org/wiki/Unix-время)|
 |`Datetime64`|`TIMESTAMP (us)`|`TIMESTAMP (s, ms, us)`||
 |`Timestamp`|`TIMESTAMP (us)`|`TIMESTAMP (s, ms, us)`||
 |`Timestamp64`|`TIMESTAMP (us)`|`TIMESTAMP (s, ms, us)`||
-|`Decimal(n, m)`|`DECIMAL128 (n, m)`|`DECIMAL128 (n, m)`||
+|`Decimal(s, p)`|`DECIMAL (128, s, p)`|`DECIMAL (128, s, p)`||
 |`String`|`BINARY`|`BINARY`||
 |`Utf8`|`BINARY`|`BINARY`||
 |`Json`|`BINARY`|`BINARY`||

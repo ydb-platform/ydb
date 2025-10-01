@@ -41,6 +41,6 @@ SELECT * FROM postgresql_datasource.source_table
 
 ### Отображение типов при экспорте данных в формат parquet {#type_mapping}
 
-При экспорте данных в формате parquet в {{ ydb-short-name }} используется следующее отображение типов YQL на типы arrow:
+При экспорте и импорте данных в формате parquet в {{ ydb-short-name }} используется следующее отображение типов YQL на типы arrow:
 
 {% include [!](_includes/types_mapping.md) %}

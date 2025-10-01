@@ -22,7 +22,6 @@
 
 ## Доступные руководства
 
-* [SCD 1 Transfer](scd1-transfer.md) - 1
-* [SCD 2 Transfer](scd2-transfer.md) - 2
-* [SCD 2 Transfer + Merge](scd2-transfer-merge.md) - 3
-* [SCD 2 ext app](scd2-ext-app.md) - 4
+* [{#T}](scd1-transfer.md)
+* [{#T}](scd2-transfer.md)
+* [{#T}](scd2.md)

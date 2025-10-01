@@ -44,9 +44,9 @@ namespace NYql::NDq {
         } 
         
         auto credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(
-                credentialsFactory, 
-                structuredTokenJSON, 
-                false
+            credentialsFactory, 
+            structuredTokenJSON, 
+            false
         );
 
         CredentialsProvider_ = credentialsProviderFactory->CreateProvider();

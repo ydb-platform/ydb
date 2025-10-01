@@ -4433,9 +4433,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
             TString result = FormatResultSetYson(status.GetResultSet(0));
 
-            CompareYson(result, R"([])");
-            // TODO: FIXME
-            // CompareYson(result, R"([[2u]])");
+            CompareYson(result, R"([[2u]])");
         }
     }
 }

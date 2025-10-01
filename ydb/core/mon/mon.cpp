@@ -354,6 +354,7 @@ public:
                 return;
             }
         }
+        AuditCtx.LogOnReceived();
         SendRequest();
     }
 
@@ -487,7 +488,6 @@ public:
                 << " " << request->URL);
         }
         TString serializedToken = result && result->UserToken ? result->UserToken->GetSerializedToken() : TString();
-        AuditCtx.LogOnReceived();
         Send(ActorMonPage->TargetActorId, new NMon::TEvHttpInfo(
             Container, serializedToken), IEventHandle::FlagTrackDelivery);
     }
@@ -514,6 +514,7 @@ public:
     void Handle(NKikimr::NGRpcService::TEvRequestAuthAndCheckResult::TPtr& ev) {
         const NKikimr::NGRpcService::TEvRequestAuthAndCheckResult& result(*ev->Get());
         AuditCtx.AddAuditLogParts(result.AuditLogParts);
+        AuditCtx.LogOnReceived();
         if (result.UserToken) {
             AuditCtx.SetSubjectType(result.UserToken->GetSubjectType());
             Event->Get()->UserToken = result.UserToken->GetSerializedToken();
@@ -557,11 +558,11 @@ public:
 
     void Bootstrap() {
         AuditCtx.InitAudit(Event, NeedAudit);
+        AuditCtx.LogOnReceived();
         ProcessRequest();
     }
 
     void ProcessRequest() {
-        AuditCtx.LogOnReceived();
         Container.Page->Output(Container);
         NHttp::THttpOutgoingResponsePtr response = Event->Get()->Request->CreateResponseString(Container.Str());
         AuditCtx.LogOnCompleted(response);
@@ -1027,6 +1028,7 @@ public:
                 return;
             }
         }
+        AuditCtx.LogOnReceived();
         SendRequest();
         Become(&THttpMonAuthorizedActorRequest::StateWork);
     }
@@ -1137,7 +1139,6 @@ public:
                 << " " << request->Method
                 << " " << request->URL);
         }
-        AuditCtx.LogOnReceived();
         Send(new IEventHandle(Fields.Handler, SelfId(), Event->ReleaseBase().Release(), IEventHandle::FlagTrackDelivery, Event->Cookie));
     }
 
@@ -1161,6 +1162,7 @@ public:
     void Handle(NKikimr::NGRpcService::TEvRequestAuthAndCheckResult::TPtr& ev) {
         const NKikimr::NGRpcService::TEvRequestAuthAndCheckResult& result(*ev->Get());
         AuditCtx.AddAuditLogParts(result.AuditLogParts);
+        AuditCtx.LogOnReceived();
         if (result.UserToken) {
             AuditCtx.SetSubjectType(result.UserToken->GetSubjectType());
             Event->Get()->UserToken = result.UserToken->GetSerializedToken();

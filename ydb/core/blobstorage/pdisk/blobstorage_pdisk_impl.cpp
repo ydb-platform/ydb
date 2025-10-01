@@ -1620,13 +1620,8 @@ void TPDisk::WhiteboardReport(TWhiteboardReport &whiteboardReport) {
 
         NKikimrBlobStorage::TPDiskMetrics& pDiskMetrics = *reportResult->DiskMetrics->Record.AddPDisksMetrics();
         pDiskMetrics.SetPDiskId(PCtx->PDiskId);
-        
-        // Only report size information when PDisk is not in error state
-        if (*Mon.PDiskBriefState != TPDiskMon::TPDisk::Error) {
-            pDiskMetrics.SetTotalSize(Format.DiskSize);
-            pDiskMetrics.SetAvailableSize(availableSize);
-        }
-        
+        pDiskMetrics.SetTotalSize(Format.DiskSize);
+        pDiskMetrics.SetAvailableSize(availableSize);
         pDiskMetrics.SetMaxReadThroughput(DriveModel.Speed(TDriveModel::OP_TYPE_READ));
         pDiskMetrics.SetMaxWriteThroughput(DriveModel.Speed(TDriveModel::OP_TYPE_WRITE));
         pDiskMetrics.SetNonRealTimeMs(AtomicGet(NonRealTimeMs));

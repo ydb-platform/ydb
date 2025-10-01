@@ -1208,7 +1208,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
 
         TestCreateTable(runtime, schemeShard, ++txId, dbName, R"(
             Name: "Table"
-            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "key" Type: "Uint32" }
             Columns { Name: "value" Type: "Utf8" }
             KeyColumnNames: ["key"]
             UniformPartitionsCount: 2
@@ -1217,22 +1217,10 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
 
         runtime.SetLogPriority(NKikimrServices::PERSQUEUE, NLog::PRI_NOTICE);
         {
-            // should write at least 16MiB to exceed the topics non-metered limit
+            // should write at least 16MiB to exceed the non-metered limit of topic's partition
             const TString value = TString(500_KB, 'x');
             for (size_t i = 0; i < 100; ++i) {
-                const unsigned key = 3000 + i;
-                const TString writeQuery = Sprintf(R"(
-                    (
-                        (let key   '( '('key   (Uint64 '%u ) ) ) )
-                        (let row   '( '('value (Utf8 '%s) ) ) )
-                        (return (AsList (UpdateRow '__user__%s key row) ))
-                    )
-                )", key, value.c_str(), "Table");
-                NKikimrMiniKQL::TResult result;
-                TString err;
-                NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, TTestTxConfig::FakeHiveTablets + 6, writeQuery, result, err);
-                UNIT_ASSERT_VALUES_EQUAL(err, "");
-                UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK);
+                WriteRow(runtime, schemeShard, ++txId, dbName + "/Table", 0, i, value);
             }
         }
 

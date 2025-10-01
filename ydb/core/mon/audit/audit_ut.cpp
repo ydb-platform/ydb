@@ -7,19 +7,16 @@ using namespace NMonitoring::NAudit;
 
 namespace {
 
-struct TRequestHolder : public NHttp::THttpIncomingRequest {
-    TStringBuf Store(TString value) {
-        return Storage.emplace_back(std::move(value));
-    }
-private:
-    TVector<TString> Storage;
-};
-
 NHttp::THttpIncomingRequestPtr MakeRequest(TString method, TString url) {
-    auto request = MakeIntrusive<TRequestHolder>();
-    request->Method = request->Store(std::move(method));
-    request->URL = request->Store(std::move(url));
-    return std::move(request);
+    static TVector<TString> Storage;
+
+    auto request = MakeIntrusive<NHttp::THttpIncomingRequest>();
+    Storage.emplace_back(std::move(method));
+    request->Method = Storage.back();
+    Storage.emplace_back(std::move(url));
+    request->URL = Storage.back();
+
+    return request;
 }
 
 } // namespace
@@ -45,7 +42,7 @@ Y_UNIT_TEST_SUITE(TAuditTest) {
         UNIT_ASSERT(!ctx.AuditableRequest(MakeRequest("OPTIONS", "/path")));
     }
 
-    Y_UNIT_TEST(BlacklistedPathsAreNotAudited) {
+    Y_UNIT_TEST(DeniedPathsAreNotAudited) {
         TAuditCtx ctx;
         UNIT_ASSERT(!ctx.AuditableRequest(MakeRequest("GET", "/counters")));
         UNIT_ASSERT(!ctx.AuditableRequest(MakeRequest("GET", "/viewer/subpage")));

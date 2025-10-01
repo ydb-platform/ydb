@@ -173,7 +173,7 @@ class ResultsProcessor:
                 info['ci_build_type'] = ci_build_type
             if ci_sanitizer:
                 info['ci_sanitizer'] = ci_sanitizer
-                
+
             info['test_tools_version'] = get_self_version()
 
             data = {

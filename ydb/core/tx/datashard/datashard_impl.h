@@ -1647,10 +1647,11 @@ public:
 
     void UpdateProposeQueueSize() const;
 
+    template <typename TEvRequest>
+    bool ShouldDelayUpload(TEvRequest& ev);
     void CheckDelayedProposeQueue(const TActorContext &ctx);
 
     bool CheckDataTxReject(const TString& opDescr,
-                           const TActorContext &ctx,
                            NKikimrTxDataShard::TEvProposeTransactionResult::EStatus& rejectStatus,
                            ERejectReasons& rejectReasons,
                            TString& rejectDescription);

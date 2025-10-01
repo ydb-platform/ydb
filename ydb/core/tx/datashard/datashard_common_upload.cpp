@@ -20,9 +20,47 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
     const auto& record = Ev->Get()->Record;
     Result = MakeHolder<TEvResponse>(self->TabletID());
 
+    if (self->IsReplicated()) {
+        SetError(self, NKikimrTxDataShard::TError::READONLY, "Can't execute bulk upsert at replicated table");
+        return true;
+    }
+
+    {
+        NKikimrTxDataShard::TEvProposeTransactionResult::EStatus rejectStatus;
+        ERejectReasons rejectReasons;
+        TString rejectDescription;
+        if (self->CheckDataTxReject("bulk upsert", rejectStatus, rejectReasons, rejectDescription)) {
+            self->IncCounter(COUNTER_BULK_UPSERT_OVERLOADED);
+            SetError(self, NKikimrTxDataShard::TError::WRONG_SHARD_STATE, rejectDescription, rejectReasons);
+            return true;
+        }
+    }
+
+    if (self->CheckChangesQueueOverflow()) {
+        self->IncCounter(COUNTER_BULK_UPSERT_OVERLOADED);
+        SetError(self, NKikimrTxDataShard::TError::SHARD_IS_BLOCKED,
+            TStringBuilder() << "Change queue overflow at tablet " << self->TabletID(),
+            ERejectReasons::ChangesQueueOverflow);
+        return true;
+    }
+
+    if (self->IsAnyChannelYellowStop()) {
+        self->IncCounter(COUNTER_PREPARE_OUT_OF_SPACE);
+        SetError(self, NKikimrTxDataShard::TError::OUT_OF_SPACE,
+            TStringBuilder() << "Cannot perform writes: out of disk space at tablet " << self->TabletID(),
+            ERejectReasons::YellowChannels);
+        return true;
+    } else if (self->IsSubDomainOutOfSpace()) {
+        self->IncCounter(COUNTER_PREPARE_DISK_SPACE_EXHAUSTED);
+        SetError(self, NKikimrTxDataShard::TError::DISK_SPACE_EXHAUSTED,
+            "Cannot perform writes: database is out of disk space",
+            ERejectReasons::DiskSpace);
+        return true;
+    }
+
     TInstant deadline = TInstant::MilliSeconds(record.GetCancelDeadlineMs());
     if (deadline && deadline < AppData()->TimeProvider->Now()) {
-        SetError(NKikimrTxDataShard::TError::EXECUTION_CANCELLED, "Deadline exceeded");
+        SetError(self, NKikimrTxDataShard::TError::EXECUTION_CANCELLED, "Deadline exceeded");
         return true;
     }
 
@@ -30,7 +68,7 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
     const TTableId fullTableId(self->GetPathOwnerId(), tableId);
     const ui64 localTableId = self->GetLocalTableId(fullTableId);
     if (localTableId == 0) {
-        SetError(NKikimrTxDataShard::TError::SCHEME_ERROR, Sprintf("Unknown table id %" PRIu64, tableId));
+        SetError(self, NKikimrTxDataShard::TError::SCHEME_ERROR, Sprintf("Unknown table id %" PRIu64, tableId));
         return true;
     }
     const ui64 shadowTableId = self->GetShadowTableId(fullTableId);
@@ -41,7 +79,7 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
 
     // Check schemas
     if (record.GetRowScheme().KeyColumnIdsSize() != tableInfo.KeyColumnIds.size()) {
-        SetError(NKikimrTxDataShard::TError::SCHEME_ERROR,
+        SetError(self, NKikimrTxDataShard::TError::SCHEME_ERROR,
             Sprintf("Key column count mismatch: got %" PRIu64 ", expected %" PRIu64,
                 record.GetRowScheme().KeyColumnIdsSize(), tableInfo.KeyColumnIds.size()));
         return true;
@@ -50,7 +88,7 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
     if (record.GetSchemaVersion() && tableInfo.GetTableSchemaVersion() &&
         record.GetSchemaVersion() != tableInfo.GetTableSchemaVersion())
     {
-        SetError(NKikimrTxDataShard::TError::SCHEME_CHANGED, TStringBuilder()
+        SetError(self, NKikimrTxDataShard::TError::SCHEME_CHANGED, TStringBuilder()
             << "Schema version mismatch"
             << ": requested " << record.GetSchemaVersion()
             << ", expected " << tableInfo.GetTableSchemaVersion()
@@ -60,7 +98,7 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
 
     for (size_t i = 0; i < tableInfo.KeyColumnIds.size(); ++i) {
         if (record.GetRowScheme().GetKeyColumnIds(i) != tableInfo.KeyColumnIds[i]) {
-            SetError(NKikimrTxDataShard::TError::SCHEME_ERROR, Sprintf("Key column schema at position %" PRISZT, i));
+            SetError(self, NKikimrTxDataShard::TError::SCHEME_ERROR, Sprintf("Key column schema at position %" PRISZT, i));
             return true;
         }
     }
@@ -91,7 +129,7 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
         }
         auto* col = tableInfo.Columns.FindPtr(colId);
         if (!col) {
-            SetError(NKikimrTxDataShard::TError::SCHEME_ERROR, Sprintf("Missing column with id=%" PRIu32, colId));
+            SetError(self, NKikimrTxDataShard::TError::SCHEME_ERROR, Sprintf("Missing column with id=%" PRIu32, colId));
             return true;
         }
         valueCols.emplace_back(colId, col->Type);
@@ -120,7 +158,7 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
         if (keyCells.GetCells().size() != tableInfo.KeyColumnTypes.size() ||
             valueCells.GetCells().size() != valueCols.size())
         {
-            SetError(NKikimrTxDataShard::TError::SCHEME_ERROR, TStringBuilder() << "Cell count doesn't match row scheme"
+            SetError(self, NKikimrTxDataShard::TError::SCHEME_ERROR, TStringBuilder() << "Cell count doesn't match row scheme"
                     << ": got keys " << keyCells.GetCells().size() << ", values " << valueCells.GetCells().size() 
                     << "; expected keys " << tableInfo.KeyColumnTypes.size() << ", values " << valueCols.size());
             return true;
@@ -137,7 +175,7 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
         }
 
         if (keyBytes > NLimits::MaxWriteKeySize) {
-            SetError(NKikimrTxDataShard::TError::BAD_ARGUMENT,
+            SetError(self, NKikimrTxDataShard::TError::BAD_ARGUMENT,
                      Sprintf("Row key size of %" PRISZT " bytes is larger than the allowed threshold %" PRIu64,
                              keyBytes, NLimits::MaxWriteKeySize));
             return true;
@@ -182,7 +220,7 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
         size_t vi = 0;
         for (const auto& vt : valueCols) {
             if (valueCells.GetCells()[vi].Size() > NLimits::MaxWriteValueSize) {
-                SetError(NKikimrTxDataShard::TError::BAD_ARGUMENT,
+                SetError(self, NKikimrTxDataShard::TError::BAD_ARGUMENT,
                          Sprintf("Row cell size of %" PRISZT " bytes is larger than the allowed threshold %" PRIu64,
                                  valueCells.GetBuffer().size(), NLimits::MaxWriteValueSize));
                 return true;
@@ -333,9 +371,19 @@ TVector<IDataShardChangeCollector::TChange> TCommonUploadOps<TEvRequest, TEvResp
 }
 
 template <typename TEvRequest, typename TEvResponse>
-void TCommonUploadOps<TEvRequest, TEvResponse>::SetError(ui32 status, const TString& descr) {
+void TCommonUploadOps<TEvRequest, TEvResponse>::SetError(TDataShard* self, NKikimrTxDataShard::TError::EKind status, const TString& errorDescription, ERejectReasons rejectReasons) {
+    LOG_LOG_S_THROTTLE(self->GetLogThrottler(TDataShard::ELogThrottlerType::UploadRows_Reject), *TlsActivationContext, NActors::NLog::PRI_NOTICE, NKikimrServices::TX_DATASHARD,
+        "Rejecting bulk upsert request on datashard"
+            << ": tablet# " << self->TabletID()
+            << ", status# " << status
+            << ", reasons# " << rejectReasons
+            << ", error# " << errorDescription);
+
     Result->Record.SetStatus(status);
-    Result->Record.SetErrorDescription(descr);
+    Result->Record.SetErrorDescription(errorDescription);
+
+    std::optional<ui64> overloadSubscribe = Ev->Get()->Record.HasOverloadSubscribe() ? Ev->Get()->Record.GetOverloadSubscribe() : std::optional<ui64>{};
+    self->SetOverloadSubscribed(overloadSubscribe, Ev->Recipient, Ev->Sender, rejectReasons, Result->Record);
 }
 
 template class TCommonUploadOps<TEvDataShard::TEvUploadRowsRequest, TEvDataShard::TEvUploadRowsResponse>;

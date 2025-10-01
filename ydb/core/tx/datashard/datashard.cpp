@@ -2978,7 +2978,6 @@ void TDataShard::Handle(TEvDataShard::TEvStateChangedResult::TPtr& ev, const TAc
 }
 
 bool TDataShard::CheckDataTxReject(const TString& opDescr,
-                                          const TActorContext &ctx,
                                           NKikimrTxDataShard::TEvProposeTransactionResult::EStatus &rejectStatus,
                                           ERejectReasons &rejectReasons,
                                           TString &rejectDescription)
@@ -3035,7 +3034,7 @@ bool TDataShard::CheckDataTxReject(const TString& opDescr,
 
     const float rejectProbabilty = Executor()->GetRejectProbability();
     if (!reject && rejectProbabilty > 0) {
-        float rnd = AppData(ctx)->RandomProvider->GenRandReal2();
+        float rnd = AppData()->RandomProvider->GenRandReal2();
         reject |= (rnd < rejectProbabilty);
         if (reject) {
             rejectReasons |= ERejectReasons::OverloadByProbability;
@@ -3096,7 +3095,7 @@ bool TDataShard::CheckDataTxRejectAndReply(const TEvDataShard::TEvProposeTransac
     NKikimrTxDataShard::TEvProposeTransactionResult::EStatus rejectStatus;
     ERejectReasons rejectReasons;
     TString rejectDescription;
-    bool reject = CheckDataTxReject(txDescr, ctx, rejectStatus, rejectReasons, rejectDescription);
+    bool reject = CheckDataTxReject(txDescr, rejectStatus, rejectReasons, rejectDescription);
 
     if (reject) {
         LWTRACK(ProposeTransactionReject, msg->Orbit);
@@ -3126,7 +3125,7 @@ bool TDataShard::CheckDataTxRejectAndReply(const NEvents::TDataEvents::TEvWrite:
     NKikimrTxDataShard::TEvProposeTransactionResult::EStatus rejectStatus;
     ERejectReasons rejectReasons;
     TString rejectDescription;
-    bool reject = CheckDataTxReject(txDescr, ctx, rejectStatus, rejectReasons, rejectDescription);
+    bool reject = CheckDataTxReject(txDescr, rejectStatus, rejectReasons, rejectDescription);
 
     if (reject) {
         LWTRACK(ProposeTransactionReject, msg->GetOrbit());
@@ -3292,6 +3291,24 @@ void TDataShard::HandleAsFollower(TEvDataShard::TEvProposeTransaction::TPtr &ev,
     IncCounter(COUNTER_PREPARE_ERROR);
     IncCounter(COUNTER_PREPARE_COMPLETE);
 }
+
+template <typename TEvRequest>
+bool TDataShard::ShouldDelayUpload(TEvRequest& ev) {
+    if (MediatorStateWaiting) {
+        MediatorStateWaitingMsgs.emplace_back(ev.Release());
+        UpdateProposeQueueSize();
+        return true;
+    }
+    if (Pipeline.HasProposeDelayers()) {
+        DelayedProposeQueue.emplace_back().Reset(ev.Release());
+        UpdateProposeQueueSize();
+        return true;
+    }
+    return false;
+}
+template bool TDataShard::ShouldDelayUpload<TEvDataShard::TEvUploadRowsRequest::TPtr>(TEvDataShard::TEvUploadRowsRequest::TPtr& ev);
+template bool TDataShard::ShouldDelayUpload<TEvDataShard::TEvEraseRowsRequest::TPtr>(TEvDataShard::TEvEraseRowsRequest::TPtr& ev);
+template bool TDataShard::ShouldDelayUpload<TEvDataShard::TEvS3UploadRowsRequest::TPtr>(TEvDataShard::TEvS3UploadRowsRequest::TPtr& ev);
 
 void TDataShard::CheckDelayedProposeQueue(const TActorContext &ctx) {
     if (DelayedProposeQueue && !Pipeline.HasProposeDelayers()) {
@@ -4455,15 +4472,11 @@ void TDataShard::Handle(TEvDataShard::TEvStoreS3DownloadInfo::TPtr& ev, const TA
 
 void TDataShard::Handle(TEvDataShard::TEvS3UploadRowsRequest::TPtr& ev, const TActorContext& ctx)
 {
-    const float rejectProbabilty = Executor()->GetRejectProbability();
-    if (rejectProbabilty > 0) {
-        const float rnd = AppData(ctx)->RandomProvider->GenRandReal2();
-        if (rnd < rejectProbabilty) {
-            DelayedS3UploadRows.emplace_back().Reset(ev.Release());
-            IncCounter(COUNTER_BULK_UPSERT_OVERLOADED);
-            return;
-        }
+    if (ShouldDelayUpload(ev)) {
+        return;
     }
+
+    // Note: all validation checks are placed inside TCommonUploadOps::Execute
 
     Execute(new TTxS3UploadRows(this, ev), ctx);
 }

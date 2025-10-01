@@ -29,7 +29,7 @@ protected:
     TVector<IDataShardChangeCollector::TChange> GetCollectedChanges() const;
 
 private:
-    void SetError(ui32 status, const TString& descr);
+    void SetError(TDataShard* self, NKikimrTxDataShard::TError::EKind status, const TString& errorDescription, ERejectReasons rejectReasons = ERejectReasons::None);
 };
 
 } // NDataShard

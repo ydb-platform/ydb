@@ -491,7 +491,7 @@ namespace NKafka::NTests {
             request->Topics[0].Partitions[0].Partition = 0;
             request->Topics[0].Partitions[0].PartitionMaxBytes = 10000;
 
-            auto context = std::make_shared<TContext>(kafkaConfig);
+            auto context = std::make_shared<TContext>(kafkaConfig, nullptr);
             context->ConnectionId = edge;
             context->DatabasePath = "/Root";
             context->ResourceDatabasePath = "/Root";

@@ -237,6 +237,34 @@ void KafkaReadSessionProxyActor::ProcessPendingRequestIfPossible() {
     PendingRequest.reset();
 }
 
+void KafkaReadSessionProxyActor::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
+    if (Context->PipeCache->OnConnect(ev)) {
+        return;
+    }
+
+    Reconnect(ev->Get()->TabletId);
+}
+
+void KafkaReadSessionProxyActor::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev) {
+    Context->PipeCache->OnDisconnect(ev);
+    Reconnect(ev->Get()->TabletId);
+}
+
+void KafkaReadSessionProxyActor::Reconnect(ui64 tabletId) {
+    auto topicInfo = FindIf(Topics, [&](const auto& entry) {
+        return entry.second.ReadBalancerTabletId == tabletId;
+    });
+    if (topicInfo == Topics.end()) {
+        return;
+    }
+
+    const auto& topic = topicInfo->first;
+    const auto& readBalancerTabletId = topicInfo->second.ReadBalancerTabletId; 
+
+    Context->PipeCache->Prepare(NActors::TlsActivationContext->AsActorContext(), tabletId);
+    Context->PipeCache->Send(NActors::TlsActivationContext->AsActorContext(), readBalancerTabletId,
+        new TEvPersQueue::TEvBalancingSubscribe(SelfId(), topic, Context->GroupId));
+}
 
 STFUNC(KafkaReadSessionProxyActor::StateWork) {
     switch (ev->GetTypeRewrite()) {
@@ -247,6 +275,8 @@ STFUNC(KafkaReadSessionProxyActor::StateWork) {
         hFunc(TEvKafka::TEvFetchRequest, Handle);
         hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
         hFunc(TEvPersQueue::TEvBalancingSubscribeNotify, Handle);
+        hFunc(TEvTabletPipe::TEvClientConnected, Handle);
+        hFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
     }
 }
 
@@ -259,6 +289,9 @@ void KafkaReadSessionProxyActor::EnsureReadSessionActor() {
 void KafkaReadSessionProxyActor::PassAway() {
     if (ReadSessionActorId) {
         Send(ReadSessionActorId, new NActors::TEvents::TEvPoison());
+    }
+    for (auto& [_, topicInfo] : Topics) {
+        Context->PipeCache->Close(TlsActivationContext->AsActorContext(), topicInfo.ReadBalancerTabletId);        
     }
     TBase::PassAway();
 }

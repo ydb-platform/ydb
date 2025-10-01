@@ -230,7 +230,7 @@ protected:
     }
 
     void HandleMessage(TRequestHeaderData* header, const TMessagePtr<TApiVersionsRequestData>& message) {
-        Register(CreateKafkaApiVersionsActor(Context, header->CorrelationId, message));
+        RegisterWithSameMailbox(CreateKafkaApiVersionsActor(Context, header->CorrelationId, message));
     }
 
     void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TProduceRequestData>& message, const TActorContext& ctx) {
@@ -268,35 +268,35 @@ protected:
     }
 
     void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TInitProducerIdRequestData>& message) {
-        Register(CreateKafkaInitProducerIdActor(Context, header->CorrelationId, message));
+        RegisterWithSameMailbox(CreateKafkaInitProducerIdActor(Context, header->CorrelationId, message));
     }
 
     void HandleMessage(TRequestHeaderData* header, const TMessagePtr<TMetadataRequestData>& message) {
-        Register(CreateKafkaMetadataActor(Context, header->CorrelationId, message, NKafka::MakeKafkaDiscoveryCacheID()));
+        RegisterWithSameMailbox(CreateKafkaMetadataActor(Context, header->CorrelationId, message, NKafka::MakeKafkaDiscoveryCacheID()));
     }
 
     void HandleMessage(TRequestHeaderData* header, const TMessagePtr<TDescribeConfigsRequestData>& message) {
-        Register(CreateKafkaDescribeConfigsActor(Context, header->CorrelationId, message));
+        RegisterWithSameMailbox(CreateKafkaDescribeConfigsActor(Context, header->CorrelationId, message));
     }
 
     void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TSaslAuthenticateRequestData>& message) {
-        Register(CreateKafkaSaslAuthActor(Context, header->CorrelationId, Address, message));
+        RegisterWithSameMailbox(CreateKafkaSaslAuthActor(Context, header->CorrelationId, Address, message));
     }
 
     void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TSaslHandshakeRequestData>& message) {
-        Register(CreateKafkaSaslHandshakeActor(Context, header->CorrelationId, message));
+        RegisterWithSameMailbox(CreateKafkaSaslHandshakeActor(Context, header->CorrelationId, message));
     }
 
     void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TListOffsetsRequestData>& message) {
-        Register(CreateKafkaListOffsetsActor(Context, header->CorrelationId, message));
+        RegisterWithSameMailbox(CreateKafkaListOffsetsActor(Context, header->CorrelationId, message));
     }
 
     void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TDescribeGroupsRequestData>& message) {
-        Register(CreateKafkaDescribeGroupsActor(Context, header->CorrelationId, message));
+        RegisterWithSameMailbox(CreateKafkaDescribeGroupsActor(Context, header->CorrelationId, message));
     }
 
     void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TListGroupsRequestData>& message) {
-        Register(CreateKafkaListGroupsActor(Context, header->CorrelationId, message));
+        RegisterWithSameMailbox(CreateKafkaListGroupsActor(Context, header->CorrelationId, message));
     }
 
     void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TFetchRequestData>& message) {
@@ -305,27 +305,27 @@ protected:
     }
 
     void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TFindCoordinatorRequestData>& message) {
-        Register(CreateKafkaFindCoordinatorActor(Context, header->CorrelationId, message));
+        RegisterWithSameMailbox(CreateKafkaFindCoordinatorActor(Context, header->CorrelationId, message));
     }
 
     void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TOffsetFetchRequestData>& message) {
-        Register(CreateKafkaOffsetFetchActor(Context, header->CorrelationId, message));
+        RegisterWithSameMailbox(CreateKafkaOffsetFetchActor(Context, header->CorrelationId, message));
     }
 
     void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TOffsetCommitRequestData>& message) {
-        Register(CreateKafkaOffsetCommitActor(Context, header->CorrelationId, message));
+        RegisterWithSameMailbox(CreateKafkaOffsetCommitActor(Context, header->CorrelationId, message));
     }
 
     void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TCreateTopicsRequestData>& message) {
-        Register(CreateKafkaCreateTopicsActor(Context, header->CorrelationId, message));
+        RegisterWithSameMailbox(CreateKafkaCreateTopicsActor(Context, header->CorrelationId, message));
     }
 
     void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TCreatePartitionsRequestData>& message) {
-        Register(CreateKafkaCreatePartitionsActor(Context, header->CorrelationId, message));
+        RegisterWithSameMailbox(CreateKafkaCreatePartitionsActor(Context, header->CorrelationId, message));
     }
 
     void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TAlterConfigsRequestData>& message) {
-        Register(CreateKafkaAlterConfigsActor(Context, header->CorrelationId, message));
+        RegisterWithSameMailbox(CreateKafkaAlterConfigsActor(Context, header->CorrelationId, message));
     }
 
     void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TAddPartitionsToTxnRequestData>& message) {

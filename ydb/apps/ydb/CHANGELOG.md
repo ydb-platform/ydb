@@ -1,3 +1,6 @@
+
+## 2.26.0 ##
+
 * Added the `--no-merge` and `--no-cache` options to the `ydb monitoring healthcheck` command.
 * Added query compilation time statistics to the `ydb workload * run` command.
 * **_(Requires server v25.4+)_** Added the `--replace-sys-acl` option to the `tools restore` command, which specifies whether to replace ACL for system objects.

@@ -48,9 +48,13 @@ public:
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        auto data = Data->GetValue(ctx);
-        auto buffer = data.AsStringRef();
-        return ValuePacker.RefMutableObject(ctx, false, Type).Unpack(buffer, ctx.HolderFactory).Release();
+        try {
+            auto data = Data->GetValue(ctx);
+            auto buffer = data.AsStringRef();
+            return ValuePacker.RefMutableObject(ctx, false, Type).Unpack(buffer, ctx.HolderFactory).Release();
+        } catch (const std::exception& e) {
+            UdfTerminate((TStringBuilder() << "Unpack failed. Original error is: " << e.what()).data());
+        }
     }
 
 private:

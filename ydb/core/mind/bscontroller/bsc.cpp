@@ -593,6 +593,8 @@ std::unique_ptr<TEvBlobStorage::TEvControllerConfigRequest> TBlobStorageControll
         request->SetRollback(true);
     }
 
+    request->MutableStorageConfig()->PackFrom(storageConfig);
+
     if (request->CommandSize()) {
         return ev;
     }
@@ -757,21 +759,24 @@ void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerDistconfRequest
                 break;
             }
 
-            const TString& effectiveConfig = storageYaml ? *storageYaml : *mainYaml;
             NKikimrBlobStorage::TStorageConfig storageConfig;
-
-            try {
-                NKikimrConfig::TAppConfig appConfig = NYaml::Parse(effectiveConfig);
-                TString errorReason;
-                if (!NKikimr::NStorage::DeriveStorageConfig(appConfig, &storageConfig, &errorReason)) {
+            if (record.HasStorageConfig()) {
+                record.GetStorageConfig().UnpackTo(&storageConfig);
+            } else {
+                const TString& effectiveConfig = storageYaml ? *storageYaml : *mainYaml;
+                try {
+                    NKikimrConfig::TAppConfig appConfig = NYaml::Parse(effectiveConfig);
+                    TString errorReason;
+                    if (!NKikimr::NStorage::DeriveStorageConfig(appConfig, &storageConfig, &errorReason)) {
+                        rr.SetStatus(NKikimrBlobStorage::TEvControllerDistconfResponse::Error);
+                        rr.SetErrorReason("failed to derive storage config: " + errorReason);
+                        break;
+                    }
+                } catch (const std::exception& ex) {
                     rr.SetStatus(NKikimrBlobStorage::TEvControllerDistconfResponse::Error);
-                    rr.SetErrorReason("failed to derive storage config: " + errorReason);
+                    rr.SetErrorReason(TStringBuilder() << "failed to parse YAML: " << ex.what());
                     break;
                 }
-            } catch (const std::exception& ex) {
-                rr.SetStatus(NKikimrBlobStorage::TEvControllerDistconfResponse::Error);
-                rr.SetErrorReason(TStringBuilder() << "failed to parse YAML: " << ex.what());
-                break;
             }
 
             const ui64 cookie = NextValidationCookie++;

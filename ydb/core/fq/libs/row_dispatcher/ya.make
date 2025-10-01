@@ -29,6 +29,7 @@ PEERDIR(
     ydb/library/yql/dq/actors/common
     ydb/library/yql/dq/actors/compute
     ydb/library/yql/dq/proto
+    ydb/library/yql/providers/pq/common
     ydb/library/yql/providers/pq/provider
 
     ydb/public/sdk/cpp/adapters/issue

@@ -1271,14 +1271,12 @@ struct TEvPQ {
     };
 
     struct TEvRunCompaction : TEventLocal<TEvRunCompaction, EvRunCompaction> {
-        TEvRunCompaction(ui64 maxBlobSize, ui64 cumulativeSize) :
-            MaxBlobSize(maxBlobSize),
-            CumulativeSize(cumulativeSize)
+        explicit TEvRunCompaction(const ui64 blobsCount) :
+            BlobsCount(blobsCount)
         {
         }
 
-        ui64 MaxBlobSize = 0;
-        ui64 CumulativeSize = 0;
+        ui64 BlobsCount = 0;
     };
 };
 

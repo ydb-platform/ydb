@@ -1118,6 +1118,20 @@
             "uri": "https://{canondata_backend}/1597364/e3cc9ef8f734283bf9fd496c14df715b3fd4bb26/resource.tar.gz#test.test_linear-mutdict_update-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[linear-opt_block1-default.txt-Debug]": [
+        {
+            "checksum": "51a43ad4718740e27a3362a64dec2ec5",
+            "size": 515,
+            "uri": "https://{canondata_backend}/1925821/da98b4c164e400e2df4da147a3e67f730e6ed331/resource.tar.gz#test.test_linear-opt_block1-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[linear-opt_block1-default.txt-Results]": [
+        {
+            "checksum": "56d2e17bb8e4a449febe10601f3dd3d0",
+            "size": 1573,
+            "uri": "https://{canondata_backend}/1925821/da98b4c164e400e2df4da147a3e67f730e6ed331/resource.tar.gz#test.test_linear-opt_block1-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[match_recognize-alerts_many_order-default.txt-Debug]": [
         {
             "checksum": "3c4a225c79eb3c1505473aa9a652e73c",

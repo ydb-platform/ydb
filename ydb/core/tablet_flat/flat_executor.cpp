@@ -3758,7 +3758,7 @@ void TExecutor::Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled) 
         UtilizeSubset(*ops->Subset, *ops->Trace, std::move(reusedBundles), commit.Get());
 
         for (auto &gone: ops->Subset->Flatten) {
-            if (auto *found = updatedSlices.FindPtr(gone->Label)) {
+            if (updatedSlices.FindPtr(gone->Label)) {
                 auto *deltaProto = proto.AddBundleDeltas();
                 LogoBlobIDFromLogoBlobID(gone->Label, deltaProto->MutableLabel());
                 deltaProto->SetDelta(NTable::TOverlay::EncodeRemoveSlices(gone.Slices));

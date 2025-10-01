@@ -2,8 +2,6 @@ import logging
 import os
 import time
 
-import ydb
-
 from ydb.tests.fq.streaming.base import StreamingImportTestBase
 from ydb.tests.tools.datastreams_helpers.test_yds_base import TestYdsBase
 
@@ -75,30 +73,25 @@ class TestStreamingInYdb(StreamingImportTestBase, TestYdsBase):
                 SHARED_READING="TRUE",
                 AUTH_METHOD="NONE");""")
 
-        sql = f"""
-            $in = SELECT time FROM {sourceName}.`{self.input_topic}`
+        sql = R'''
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                $in = SELECT time FROM {source_name}.`{input_topic}`
                 WITH (
                     FORMAT="json_each_row",
                     SCHEMA=(time String NOT NULL))
                 WHERE time like "%lunch%";
+                INSERT INTO {source_name}.`{output_topic}` SELECT time FROM $in;
+            END DO;'''
 
-            INSERT INTO {sourceName}.`{self.output_topic}` SELECT time FROM $in;"""
-
-        session1 = ydb.QuerySession(self.ydb_client.driver)
-        session1.create()
-        it1 = session1.execute(sql)
-
-        session2 = ydb.QuerySession(self.ydb_client.driver)
-        session2.create()
-        it2 = session2.execute(sql)
-
+        self.ydb_client.query(sql.format(query_name="query1", source_name=sourceName, input_topic=self.input_topic, output_topic=self.output_topic))
+        self.ydb_client.query(sql.format(query_name="query2", source_name=sourceName, input_topic=self.input_topic, output_topic=self.output_topic))
         time.sleep(3)
         data = ['{"time": "lunch time"}']
         expected_data = ['lunch time', 'lunch time']
         self.write_stream(data)
         assert self.read_stream(len(expected_data), topic_path=self.output_topic) == expected_data
 
-        it1.cancel()
-        session1.delete()
-        it2.cancel()
-        session2.delete()
+        sql = R'''DROP STREAMING QUERY `{query_name}`;'''
+        self.ydb_client.query(sql.format(query_name="query1"))
+        self.ydb_client.query(sql.format(query_name="query2"))

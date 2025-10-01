@@ -2460,9 +2460,11 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
     });
 
     AddCallable("FromMutDict", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        auto type = node.Head().GetTypeAnn();
+        bool isDynamic;
+        auto innerType = GetLinearItemType(*type, isDynamic);
         auto dictType = NTypeAnnImpl::GetCachedMutDictType(
-            node.Head().GetTypeAnn()->Cast<TLinearExprType>()->GetItemType()->Cast<TResourceExprType>()->GetTag(),
-            ctx.ExprCtx);
+            innerType->Cast<TResourceExprType>()->GetTag(), ctx.ExprCtx);
         return ctx.ProgramBuilder.FromMutDict(
             ctx.BuildType(node, *dictType),
             MkqlBuildExpr(node.Head(), ctx));

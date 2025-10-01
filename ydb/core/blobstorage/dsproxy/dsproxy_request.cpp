@@ -918,7 +918,9 @@ namespace NKikimr {
         // ensure that we are dying for the first time
         Y_ABORT_UNLESS(!std::exchange(Dead, true));
         GetActiveCounter()->Dec();
-        SendToProxy(std::make_unique<TEvDeathNote>(Responsiveness));
+        if (DoSendDeathNote) {
+            SendToProxy(std::make_unique<TEvDeathNote>(Responsiveness));
+        }
         TActor::PassAway();
     }
 
@@ -1135,6 +1137,11 @@ namespace NKikimr {
             }
         }
         TActivationContext::Send(ev->Sender, std::move(res));
+    }
+
+    void TBlobStorageGroupProxy::Handle(TEvExplicitMultiPut::TPtr ev) {
+        IActor *reqActor = CreateBlobStorageGroupPutRequest(std::move(ev->Get()->Parameters));
+        TActivationContext::Register(reqActor);
     }
 
 } // NKikimr

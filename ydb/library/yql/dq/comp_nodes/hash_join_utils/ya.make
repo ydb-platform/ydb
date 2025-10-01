@@ -30,6 +30,10 @@ YQL_LAST_ABI_VERSION()
 
 END()
 
+RECURSE(
+    simd
+)
+
 RECURSE_FOR_TESTS(
     ut
 )

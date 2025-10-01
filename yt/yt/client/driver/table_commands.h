@@ -159,9 +159,6 @@ private:
     //! Return cookies that can be used with read_table_partition command
     bool EnableCookies;
 
-    //! COMPAT(apollo1321): remove in 25.2 release.
-    bool UseNewSlicingImplementationInUnorderedPool;
-
     void DoExecute(ICommandContextPtr context) override;
 };
 

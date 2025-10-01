@@ -58,12 +58,12 @@ int LineSize(NKikimr::NMiniKQL::ETestedJoinAlgo algo, std::span<const NYql::NUdf
 
 TVector<TBenchmarkCaseResult> NKikimr::NMiniKQL::RunJoinsBench(const TBenchmarkSettings& params) {
     TVector<TBenchmarkCaseResult> ret;
-    NKikimr::NMiniKQL::TDqSetup<false> setup{NKikimr::NMiniKQL::GetPerfTestFactory()};
     const TVector<const ui32> keyColumns{0};
 
     for (auto keyType : params.KeyTypes) {
         for (auto keyPreset : params.Presets) {
             for (auto sizes : keyPreset.Cases) {
+                NKikimr::NMiniKQL::TDqSetup<false> setup{NKikimr::NMiniKQL::GetPerfTestFactory()};
                 TInnerJoinDescription descr = [&] {
                     using enum ETestedJoinKeyType;
                     switch (keyType) {

@@ -9,6 +9,7 @@
 #include <util/generic/vector.h>
 #include <util/generic/set.h>
 #include <util/generic/map.h>
+#include <util/generic/hash.h>
 #include <util/stream/str.h>
 
 #include <unordered_map>

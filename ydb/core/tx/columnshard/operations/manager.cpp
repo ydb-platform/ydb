@@ -288,7 +288,7 @@ void TOperationsManager::AddEventForLock(
     auto& txLock = GetLockVerified(lockId);
     writer->CheckInteraction(lockId, InteractionsContext, txConflicts, txNotifications);
     for (auto&& i : txConflicts) {
-        if (auto lock = GetLockOptional(i.first)) {
+        if (GetLockOptional(i.first)) {
             GetLockVerified(i.first).AddBrokeOnCommit(i.second);
         } else if (txLock.IsCommitted(i.first)) {
             txLock.SetBroken();

@@ -33,10 +33,40 @@ WHERE
     AND Kind = 'Stability'
     AND JSON_VALUE(Stats, '$.aggregation_level') = 'aggregate';
 
-$aggregate_data = SELECT
+-- Находим уникальные тесты из aggregate записей для каждого RunId
+-- Это даст нам список всех возможных тестов для каждого Suite в каждом RunId
+$unique_aggregate_tests = SELECT DISTINCT
+    Db,
+    Suite,
+    Test,
+    RunId
+FROM `nemesis/tests_results`
+WHERE 
+    CAST(RunId AS Uint64) / 1000UL > $run_id_limit
+    AND Kind = 'Stability'
+    AND JSON_VALUE(Stats, '$.aggregation_level') = 'aggregate';
+
+-- Находим ВСЕ тесты из aggregate, соответствующие Suite и nemesis статусу
+$filtered_aggregate_tests = SELECT DISTINCT
+    uat.Db AS Db,
+    uat.Suite AS Suite,
+    uat.Test AS Test,
+    v.RunId AS RunId
+FROM $unique_aggregate_tests AS uat
+CROSS JOIN $verification_suites AS v
+WHERE 
+    -- Фильтруем по nemesis статусу из verification
+    (
+        (JSON_VALUE(v.VerificationInfo, '$.ci_job_title') LIKE '%nemesis false%' AND uat.Test LIKE '%_nemesis_False')
+        OR (JSON_VALUE(v.VerificationInfo, '$.ci_job_title') LIKE '%nemesis%' AND JSON_VALUE(v.VerificationInfo, '$.ci_job_title') NOT LIKE '%nemesis false%' AND uat.Test LIKE '%_nemesis_True')
+        OR JSON_VALUE(v.VerificationInfo, '$.ci_job_title') NOT LIKE '%nemesis%'
+    );
+
+-- Создаем записи для всех уникальных тестов из aggregate
+$all_possible_tests = SELECT
     v.Db AS Db,
     v.Suite AS Suite,
-    COALESCE(s.Test, String::ReplaceAll(v.Suite, 'Workload', '') || 'Workload') AS Test,
+    CAST(COALESCE(s.Test, uat.Test, String::ReplaceAll(v.Suite, 'Workload', '') || 'Workload') AS Utf8) AS Test,
     CASE WHEN s.Suite IS NULL THEN 1U ELSE 0U END AS IsCrashed,
     v.RunId AS RunId,
     COALESCE(s.Timestamp, v.VerificationTimestamp) AS Timestamp,
@@ -99,7 +129,7 @@ $aggregate_data = SELECT
     -- Извлекаем мониторинг кластера из endpoint (@grpc://host:port/ -> host:monitoring_port)
         CASE
             WHEN JSON_VALUE(COALESCE(s.Info, v.VerificationInfo), '$.cluster.endpoint') IS NOT NULL THEN
-                String::SplitToList(String::SplitToList(JSON_VALUE(COALESCE(s.Info, v.VerificationInfo), '$.cluster.endpoint'), '//')[1], ':')[0] || ':8765'
+                String::SplitToList(String::SplitToList(JSON_VALUE(COALESCE(s.Info, v.VerificationInfo), '$.cluster.endpoint'), '//')[1], ':')[0] || ':8765/'
             ELSE NULL
         END AS ClusterMonitoring,
     CAST(JSON_VALUE(COALESCE(s.Info, v.VerificationInfo), '$.cluster.nodes_count') AS Int32) AS NodesCount,
@@ -112,15 +142,24 @@ $aggregate_data = SELECT
     JSON_VALUE(COALESCE(s.Info, v.VerificationInfo), '$.ci_launch_start_time') AS CiLaunchStartTime,
     JSON_VALUE(COALESCE(s.Info, v.VerificationInfo), '$.ci_job_title') AS CiJobTitle,
     JSON_VALUE(COALESCE(s.Info, v.VerificationInfo), '$.ci_cluster_name') AS CiClusterName,
+    JSON_VALUE(COALESCE(s.Info, v.VerificationInfo), '$.ci_nemesis') AS CiNemesis,
     
     -- Флаг того, что тест имел успешную верификацию 
-    v.VerificationSuccess AS HadVerification
+    v.VerificationSuccess AS HadVerification,
+    
+    -- Порядок выполнения: рассчитываем для каждого уникального Test
+    ROW_NUMBER() OVER (PARTITION BY v.RunId ORDER BY v.VerificationTimestamp, v.Suite, COALESCE(s.Test, uat.Test, String::ReplaceAll(v.Suite, 'Workload', '') || 'Workload')) AS OrderInRun
     
 FROM $verification_suites AS v
 LEFT JOIN $stability_suites AS s 
     ON v.Db = s.Db 
     AND v.RunId = s.RunId
-    AND v.Suite = s.Suite;
+    AND v.Suite = s.Suite
+LEFT JOIN $filtered_aggregate_tests AS uat
+    ON v.Db = uat.Db 
+    AND v.Suite = uat.Suite
+    AND v.RunId = uat.RunId;
+
 
 SELECT
     agg.Db,
@@ -188,7 +227,9 @@ SELECT
     agg.CiLaunchStartTime,
     agg.CiJobTitle,
     agg.CiClusterName,
+    agg.CiNemesis,
     agg.HadVerification,
+    agg.OrderInRun,
     
     -- Извлекаем ветки из версий
     COALESCE(SubString(CAST(agg.ClusterVersion AS String), 0U, FIND(CAST(agg.ClusterVersion AS String), '.')), 'unknown') AS Branch,
@@ -214,14 +255,14 @@ SELECT
     -- Общий статус выполнения
     CASE
         WHEN agg.IsCrashed = 1U AND agg.HadVerification = 0U THEN 'cluster_down_on_start'  -- _Verification есть, но Success != 1
-        WHEN agg.IsCrashed = 1U AND agg.HadVerification = 1U THEN 'crashed_during_execution'  -- Нет Stability записи, но _Verification успешна
+        WHEN agg.IsCrashed = 1U AND agg.HadVerification = 1U THEN 'infrastructure error'  -- Нет Stability записи, но _Verification успешна
         WHEN agg.Success = 1U AND (agg.NodeErrors IS NULL OR agg.NodeErrors = 0U) AND (agg.WorkloadErrors IS NULL OR agg.WorkloadErrors = 0U) THEN 'success'
         WHEN agg.Success = 1U AND (agg.NodeErrors = 1U OR agg.WorkloadErrors = 1U) THEN 'success_with_errors'
         WHEN agg.Success = 0U AND agg.NodeErrors = 1U THEN 'node_failure'
-        WHEN agg.Success = 0U AND agg.WorkloadErrors = 1U THEN 'workload_failure'
+        WHEN agg.Success = 0U AND agg.WorkloadErrors = 1U THEN 'success' -- 'workload_failure'
         WHEN agg.Success = 0U THEN 'failure'
         ELSE 'unknown'
     END AS OverallStatus
 
-FROM $aggregate_data AS agg
+FROM $all_possible_tests AS agg
 ORDER BY RunTs DESC;

@@ -5238,9 +5238,19 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         std::function<void(TTestBasicRuntime&)> Checker;
     };
 
-    TGeneratedChangefeed GenChangefeed(ui64 num = 1, bool isPartitioningAvailable = true) {
+    using SchemeFunction = std::function<std::function<void(TTestBasicRuntime&)>(THashMap<TString, TTestDataWithScheme>&, const TString&, const TString&)>;
+
+    struct TTableWithChangefeeds {
+        TString TableName;
+        TString PkType;
+        ui64 ChangefeedCount;
+        SchemeFunction AddedScheme;
+        int MaxPartitions;
+    };
+
+    TGeneratedChangefeed GenChangefeed(ui64 num = 1, bool isPartitioningAvailable = true, const TString& tableName = "Table", int maxPartitions = 3) {
         const TString changefeedName = TStringBuilder() << "updates_feed" << num;
-        const auto changefeedPath = TStringBuilder() << "/" << changefeedName;
+        const TString changefeedPath = TStringBuilder() << "/" << tableName << "/" << changefeedName;
 
         const auto changefeedDesc = Sprintf(R"(
             name: "%s"
@@ -5249,10 +5259,10 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             state: STATE_ENABLED
         )", changefeedName.c_str());
 
-        const auto topicDesc = R"(
+        const auto topicDesc = Sprintf(R"(
             partitioning_settings {
                 min_active_partitions: 2
-                max_active_partitions: 3
+                max_active_partitions: %d
                 auto_partitioning_settings {
                     strategy: AUTO_PARTITIONING_STRATEGY_SCALE_UP
                     partition_write_speed {
@@ -5297,20 +5307,20 @@ Y_UNIT_TEST_SUITE(TImportTests) {
                     value: "data-streams"
                 }
             }
-        )";
+        )", maxPartitions);
 
         NAttr::TAttributes attr;
         attr.emplace(NAttr::EKeys::TOPIC_DESCRIPTION, topicDesc);
         return {
             {changefeedPath, GenerateTestData({EPathTypeCdcStream, changefeedDesc, std::move(attr)})},
-            [changefeedPath = TString(changefeedPath), isPartitioningAvailable](TTestBasicRuntime& runtime) {
-                TestDescribeResult(DescribePath(runtime, "/MyRoot/Table" + changefeedPath, false, false, true), {
+            [changefeedPath = TString(changefeedPath), isPartitioningAvailable, maxPartitions](TTestBasicRuntime& runtime) {
+                TestDescribeResult(DescribePath(runtime, "/MyRoot" + changefeedPath, false, false, true), {
                     NLs::PathExist,
                 });
-                TestDescribeResult(DescribePath(runtime, "/MyRoot/Table" + changefeedPath + "/streamImpl", false, false, true), {
+                TestDescribeResult(DescribePath(runtime, "/MyRoot" + changefeedPath + "/streamImpl", false, false, true), {
                     NLs::ConsumerExist("my_consumer"),
                     NLs::MinTopicPartitionsCountEqual(isPartitioningAvailable ? 2 : 1),
-                    NLs::MaxTopicPartitionsCountEqual(3),
+                    NLs::MaxTopicPartitionsCountEqual(maxPartitions),
                 });
             }
         };
@@ -5318,13 +5328,13 @@ Y_UNIT_TEST_SUITE(TImportTests) {
 
     TVector<std::function<void(TTestBasicRuntime&)>> GenChangefeeds(
         THashMap<TString, TTestDataWithScheme>& bucketContent, 
-        ui64 count = 1, 
-        bool isPartitioningAvailable = true) 
+        const TTableWithChangefeeds& table) 
     {
         TVector<std::function<void(TTestBasicRuntime&)>> checkers;
-        checkers.reserve(count);
-        for (ui64 i = 1; i <= count; ++i) {
-            auto genChangefeed = GenChangefeed(i, isPartitioningAvailable);
+        checkers.reserve(table.ChangefeedCount);
+        bool isPartitioningAvailable = table.PkType == "UINT32" || table.PkType == "UINT64";
+        for (ui64 i = 1; i <= table.ChangefeedCount; ++i) {
+            const auto genChangefeed = GenChangefeed(i, isPartitioningAvailable, table.TableName, table.MaxPartitions);
             bucketContent.emplace(genChangefeed.Changefeed);
             checkers.push_back(genChangefeed.Checker);
         }
@@ -5334,7 +5344,8 @@ Y_UNIT_TEST_SUITE(TImportTests) {
     std::function<void(TTestBasicRuntime&)> AddedSchemeCommon(
         THashMap<TString, TTestDataWithScheme>& bucketContent,
         const TString& permissions,
-        const TString& pkType)
+        const TString& pkType,
+        const TString& tableName = "Table")
     {
         const auto data = GenerateTestData(Sprintf(R"(
             columns {
@@ -5348,9 +5359,9 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             primary_key: "key"
         )", pkType.c_str()), {{pkType == "UTF8" ? "a" : "", 1}}, permissions);
 
-        bucketContent.emplace("", data);
-        return [](TTestBasicRuntime& runtime) {
-            TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {
+        bucketContent.emplace("/" + tableName, data);
+        return [&tableName](TTestBasicRuntime& runtime) {
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/" + tableName), {
                 NLs::PathExist
             });
         };
@@ -5358,14 +5369,16 @@ Y_UNIT_TEST_SUITE(TImportTests) {
 
     std::function<void(TTestBasicRuntime&)> AddedScheme(
         THashMap<TString, TTestDataWithScheme>& bucketContent,
-        const TString& pkType)
+        const TString& pkType,
+        const TString& tableName = "Table")
     {
-        return AddedSchemeCommon(bucketContent, "", pkType);
+        return AddedSchemeCommon(bucketContent, "", pkType, tableName);
     }
 
     std::function<void(TTestBasicRuntime&)> AddedSchemeWithPermissions(
         THashMap<TString, TTestDataWithScheme>& bucketContent,
-        const TString& pkType) 
+        const TString& pkType,
+        const TString& tableName = "Table")
     {
         const auto permissions = R"(
             actions {
@@ -5390,22 +5403,28 @@ Y_UNIT_TEST_SUITE(TImportTests) {
               }
             }
         )";
-        return AddedSchemeCommon(bucketContent, permissions, pkType);
+        return AddedSchemeCommon(bucketContent, permissions, pkType, tableName);
     }
 
-    using SchemeFunction = std::function<std::function<void(TTestBasicRuntime&)>(THashMap<TString, TTestDataWithScheme>&, const TString&)>;
-
-    void TestImportChangefeeds(ui64 countChangefeed, SchemeFunction addedScheme, const TString& pkType = "UTF8") {
+    void TestImportChangefeeds(const TVector<TTableWithChangefeeds>& tables) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
         runtime.GetAppData().FeatureFlags.SetEnableChangefeedsImport(true);
         runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
 
-        THashMap<TString, TTestDataWithScheme> bucketContent(countChangefeed + 1);
+        THashMap<TString, TTestDataWithScheme> bucketContent;
+        TVector<std::function<void(TTestBasicRuntime&)>> allCheckers;
 
-        auto checkerTable = addedScheme(bucketContent, pkType);
-        auto checkersChangefeeds = GenChangefeeds(bucketContent, countChangefeed, pkType == "UINT32" || pkType == "UINT64");
+        for (const auto& table : tables) {
+            auto checkerTable = table.AddedScheme(bucketContent, table.PkType, table.TableName);
+            allCheckers.push_back(checkerTable);
+
+            if (table.ChangefeedCount > 0) {
+                auto checkersChangefeeds = GenChangefeeds(bucketContent, table);
+                allCheckers.insert(allCheckers.end(), checkersChangefeeds.begin(), checkersChangefeeds.end());
+            }
+        }
 
         TPortManager portManager;
         const ui16 port = portManager.GetPort();
@@ -5413,22 +5432,27 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         TS3Mock s3Mock(ConvertTestData(bucketContent), TS3Mock::TSettings(port));
         UNIT_ASSERT(s3Mock.Start());
 
-        TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
-            ImportFromS3Settings {
-              endpoint: "localhost:%d"
-              scheme: HTTP
-              items {
-                source_prefix: ""
-                destination_path: "/MyRoot/Table"
-              }
-            }
-        )", port));
-        env.TestWaitNotification(runtime, txId);
+        for (const auto& table : tables) {
+            TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+                ImportFromS3Settings {
+                  endpoint: "localhost:%d"
+                  scheme: HTTP
+                  items {
+                    source_prefix: "%s"
+                    destination_path: "/MyRoot/%s"
+                  }
+                }
+            )", port, table.TableName.c_str(), table.TableName.c_str()));
+            env.TestWaitNotification(runtime, txId);
+        }
 
-        checkerTable(runtime);
-        for (const auto& checker : checkersChangefeeds) {
+        for (const auto& checker : allCheckers) {
             checker(runtime);
         }
+    }
+
+    void TestImportChangefeeds(ui64 countChangefeed = 1, SchemeFunction addedScheme = AddedScheme, const TString& pkType = "UTF8", int maxPartitions = 3) {
+        TestImportChangefeeds({{"Table", pkType, countChangefeed, addedScheme, maxPartitions}});
     }
 
     Y_UNIT_TEST(Changefeed) {
@@ -5456,6 +5480,30 @@ Y_UNIT_TEST_SUITE(TImportTests) {
 
     Y_UNIT_TEST(ChangefeedsWithTablePermissions) {
         TestImportChangefeeds(3, AddedSchemeWithPermissions);
+    }
+
+    // Test for tables with similar prefixes
+    Y_UNIT_TEST(ChangefeedTablePrefixConflict) {
+        TestImportChangefeeds({
+            {"table", "UTF8", 0, AddedScheme, 3},         // table without changefeed
+            {"table_prefix", "UTF8", 1, AddedScheme, 3}   // table_prefix with changefeed
+        });
+    }
+
+    // Test that identical changefeeds are correctly applied to their respective tables with common prefix
+    Y_UNIT_TEST(ChangefeedTablePrefixConflictDiffTableDesc) {      
+        TestImportChangefeeds({
+            {"table", "UINT32", 1, AddedScheme, 3},       // partitioning available (table property)
+            {"table_prefix", "UTF8", 1, AddedScheme, 3}   // partitioning unavailable (table property)
+        });
+    }
+
+    // Test that changefeeds with different properties are created under their respective tables
+    Y_UNIT_TEST(ChangefeedTablePrefixConflictDiffChangefeedDesc) {     
+        TestImportChangefeeds({
+            {"table", "UINT32", 1, AddedScheme, 3},       // max partitions 3 (changefeed property)
+            {"table_prefix", "UTF8", 1, AddedScheme, 4}   // max partitions 4 (changefeed property)
+        });
     }
 
     void TestCreateCdcStreams(TTestEnv& env, TTestActorRuntime& runtime, ui64& txId, const TString& dbName, ui64 count, bool isShouldSuccess) {

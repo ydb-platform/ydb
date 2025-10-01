@@ -36,27 +36,30 @@ int main(int argc, char** argv) {
     opts.AddHelpOption('h');
 
     NKikimr::NMiniKQL::TBenchmarkSettings params;
-    opts.AddLongOption('s', "benchmark_sizes")
-        .Help("left and right table sizes to choose for joins benchmark. visit NBenchmarkSizes namespace in "
-              "benchmark_settings.cpp to see exact values")
+    NKikimr::NMiniKQL::TPreset(*presetWithSamples)(int, int);
+    int samples = 1;
+    int scale = 1;
+    opts.AddHelpOption().Help("visit NBenchmarkSizes namespace in benchmark_settings.cpp for explanation");
+    opts.AddLongOption('c', "case")
+        .Help("left and right table sizes to choose for joins benchmark.")
         .Choices({"exp", "linear", "small"})
         .DefaultValue("small")
         .Handler1([&](const NLastGetopt::TOptsParser* option) {
             auto val = TStringBuf(option->CurVal());
-            auto preset = [&]() -> NKikimr::NMiniKQL::TBenchmarkSettings::TPreset {
+            presetWithSamples = [&]() {
                 if (val == "exp") {
-                    return {NKikimr::NMiniKQL::NBenchmarkSizes::ExponentialSizeIncrease(), "ExpGrowth"};
+                    return &NKikimr::NMiniKQL::NBenchmarkSizes::ExponentialSizeIncrease;
                 } else if (val == "linear") {
-                    return {NKikimr::NMiniKQL::NBenchmarkSizes::LinearSizeIncrease(), "LinearGrowth"};
+                    return &NKikimr::NMiniKQL::NBenchmarkSizes::LinearSizeIncrease;
                 } else if (val == "small") {
-                    return {NKikimr::NMiniKQL::NBenchmarkSizes::VerySmallSizes(), "VerySmall"};
+                    return &NKikimr::NMiniKQL::NBenchmarkSizes::VerySmallSizes;
                 } else {
                     Y_ABORT("unknown option for benchmark_sizes");
                 }
             }();
-            params.Presets.push_back(preset);
         });
-
+    opts.AddLongOption('s', "samples").Help("number representing how much to repeat single case. useful for noise reduction.").DefaultValue(1).StoreResult(&samples);
+    opts.AddLongOption("scale").Help("size of smallest table in case").DefaultValue(1<<18).StoreResult(&scale);
     params.Algorithms = {
         NKikimr::NMiniKQL::ETestedJoinAlgo::kBlockMap,
         // NKikimr::NMiniKQL::ETestedJoinAlgo::kBlockHash,
@@ -70,6 +73,7 @@ int main(int argc, char** argv) {
     };
 
     NLastGetopt::TOptsParseResult parsedOptions(&opts, argc, argv);
+    params.Presets.push_back(presetWithSamples(samples, scale));
     AddLittleLeftTablePreset(params);
 
     auto benchmarkResults = NKikimr::NMiniKQL::RunJoinsBench(params);

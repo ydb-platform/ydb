@@ -39,6 +39,68 @@ class XMLToDictTestCase(unittest.TestCase):
         self.assertEqual(parse('<a>data</a>', force_cdata=True),
                          {'a': {'#text': 'data'}})
 
+    def test_selective_force_cdata_tuple(self):
+        xml = "<a><b>data1</b><c>data2</c><d>data3</d></a>"
+        # Test with tuple of specific element names
+        result = parse(xml, force_cdata=("b", "d"))
+        expected = {
+            "a": {"b": {"#text": "data1"}, "c": "data2", "d": {"#text": "data3"}}
+        }
+        self.assertEqual(result, expected)
+
+    def test_selective_force_cdata_single_element(self):
+        xml = "<a><b>data1</b><c>data2</c></a>"
+        # Test with single element name
+        result = parse(xml, force_cdata=("b",))
+        expected = {"a": {"b": {"#text": "data1"}, "c": "data2"}}
+        self.assertEqual(result, expected)
+
+    def test_selective_force_cdata_empty_tuple(self):
+        xml = "<a><b>data1</b><c>data2</c></a>"
+        # Test with empty tuple (should behave like force_cdata=False)
+        result = parse(xml, force_cdata=())
+        expected = {"a": {"b": "data1", "c": "data2"}}
+        self.assertEqual(result, expected)
+
+    def test_selective_force_cdata_callable(self):
+        xml = "<a><b>data1</b><c>data2</c><d>data3</d></a>"
+
+        # Test with callable function
+        def should_force_cdata(path, key, value):
+            return key in ["b", "d"]
+
+        result = parse(xml, force_cdata=should_force_cdata)
+        expected = {
+            "a": {"b": {"#text": "data1"}, "c": "data2", "d": {"#text": "data3"}}
+        }
+        self.assertEqual(result, expected)
+
+    def test_selective_force_cdata_nested_elements(self):
+        xml = "<a><b><c>data1</c></b><d>data2</d></a>"
+        # Test with nested elements - only 'c' should be forced
+        result = parse(xml, force_cdata=("c",))
+        expected = {"a": {"b": {"c": {"#text": "data1"}}, "d": "data2"}}
+        self.assertEqual(result, expected)
+
+    def test_selective_force_cdata_with_attributes(self):
+        xml = '<a><b attr="value">data1</b><c>data2</c></a>'
+        # Test with attributes - force_cdata should still work
+        result = parse(xml, force_cdata=("b",))
+        expected = {"a": {"b": {"@attr": "value", "#text": "data1"}, "c": "data2"}}
+        self.assertEqual(result, expected)
+
+    def test_selective_force_cdata_backwards_compatibility(self):
+        xml = "<a><b>data1</b><c>data2</c></a>"
+        # Test that boolean True still works (backwards compatibility)
+        result_true = parse(xml, force_cdata=True)
+        expected_true = {"a": {"b": {"#text": "data1"}, "c": {"#text": "data2"}}}
+        self.assertEqual(result_true, expected_true)
+
+        # Test that boolean False still works (backwards compatibility)
+        result_false = parse(xml, force_cdata=False)
+        expected_false = {"a": {"b": "data1", "c": "data2"}}
+        self.assertEqual(result_false, expected_false)
+
     def test_custom_cdata(self):
         self.assertEqual(parse('<a>data</a>',
                                force_cdata=True,
@@ -115,7 +177,8 @@ class XMLToDictTestCase(unittest.TestCase):
         self.assertEqual(cb.count, 3)
 
     def test_streaming_interrupt(self):
-        cb = lambda path, item: False
+        def cb(path, item):
+            return False
         self.assertRaises(ParsingInterrupted,
                           parse, '<a>x</a>',
                           item_depth=1, item_callback=cb)
@@ -130,6 +193,14 @@ class XMLToDictTestCase(unittest.TestCase):
         parse((n for n in '<a x="y"><b>1</b><b>2</b><b>3</b></a>'),
               item_depth=2, item_callback=cb)
         self.assertEqual(cb.count, 3)
+
+    def test_streaming_returns_none(self):
+        # When streaming (item_depth > 0), parse should return None
+        def cb(path, item):
+            return True
+
+        result = parse("<a><b>1</b><b>2</b></a>", item_depth=2, item_callback=cb)
+        self.assertIsNone(result)
 
     def test_postprocessor(self):
         def postprocessor(path, key, value):
@@ -163,18 +234,12 @@ class XMLToDictTestCase(unittest.TestCase):
                                postprocessor=postprocessor))
 
     def test_unicode(self):
-        try:
-            value = unichr(39321)
-        except NameError:
-            value = chr(39321)
+        value = chr(39321)
         self.assertEqual({'a': value},
                          parse(f'<a>{value}</a>'))
 
     def test_encoded_string(self):
-        try:
-            value = unichr(39321)
-        except NameError:
-            value = chr(39321)
+        value = chr(39321)
         xml = f'<a>{value}</a>'
         self.assertEqual(parse(xml),
                          parse(xml.encode('utf-8')))
@@ -421,7 +486,7 @@ class XMLToDictTestCase(unittest.TestCase):
             return parser
         expat.ParserCreate = raising_external_ref_handler
         # Using this try/catch because a TypeError is thrown before
-        # the ExpatError, and Python 2.6 is confused by that.
+        # the ExpatError.
         try:
             parse(xml, disable_entities=False, expat=expat)
         except expat.ExpatError:
@@ -458,6 +523,61 @@ class XMLToDictTestCase(unittest.TestCase):
         }
         self.assertEqual(parse(xml, process_comments=True), expectedResult)
 
+    def test_streaming_with_comments_and_attrs(self):
+        xml = """
+        <a>
+            <b attr1="value">
+                <!-- note -->
+                <c>cdata</c>
+            </b>
+        </a>
+        """
+
+        def handler(path, item):
+            expected = {
+                "@attr1": "value",
+                "#comment": "note",
+                "c": "cdata",
+            }
+            self.assertEqual(expected, item)
+            return True
+
+        parse(xml, item_depth=2, item_callback=handler, process_comments=True)
+
+    def test_streaming_memory_usage(self):
+        # Guard against re-introducing accumulation of streamed items into parent
+        try:
+            import tracemalloc
+        except ImportError:
+            self.skipTest("tracemalloc not available")
+
+        NUM_ITEMS = 20000
+
+        def xml_gen():
+            yield "<a>"
+            # generate many children with attribute and text
+            for i in range(NUM_ITEMS):
+                yield f'<b attr="v">{i % 10}</b>'
+            yield "</a>"
+
+        count = 0
+
+        def cb(path, item):
+            nonlocal count
+            count += 1
+            return True
+
+        tracemalloc.start()
+        parse(xml_gen(), item_depth=2, item_callback=cb)
+        current, peak = tracemalloc.get_traced_memory()
+        tracemalloc.stop()
+
+        self.assertEqual(count, NUM_ITEMS)
+        # Peak memory should remain reasonably bounded; choose a conservative threshold
+        # This value should stay well below pathological accumulation levels
+        MAX_BYTES = 32 * 1024  # 32 KiB
+        self.assertLess(peak, MAX_BYTES, f"peak memory too high: {peak} bytes")
+
     def test_streaming_attrs(self):
         xml = """
         <a>
@@ -475,3 +595,28 @@ class XMLToDictTestCase(unittest.TestCase):
             return True
 
         parse(xml, item_depth=2, item_callback=handler)
+
+    def test_namespace_on_root_without_other_attrs(self):
+        xml = """
+        <MyXML xmlns="http://www.xml.org/schemas/Test">
+            <Tag1>Text1</Tag1>
+            <Tag2 attr2="en">Text2</Tag2>
+            <Tag3>Text3</Tag3>
+            <Tag4 attr4="en">Text4</Tag4>
+        </MyXML>
+        """
+        namespaces = {
+            "http://www.xml.org/schemas/Test": None,
+        }
+        expected = {
+            "MyXML": {
+                "@xmlns": {"": "http://www.xml.org/schemas/Test"},
+                "Tag1": "Text1",
+                "Tag2": {"@attr2": "en", "#text": "Text2"},
+                "Tag3": "Text3",
+                "Tag4": {"@attr4": "en", "#text": "Text4"},
+            }
+        }
+        self.assertEqual(
+            parse(xml, process_namespaces=True, namespaces=namespaces), expected
+        )

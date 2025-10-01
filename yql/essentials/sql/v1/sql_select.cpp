@@ -823,7 +823,7 @@ TSourcePtr TSqlSelect::ProcessCore(const TRule_process_core& node, const TWriteS
 
     auto args = call.GetArgs();
     for (auto& arg: args) {
-        if (auto placeholder = dynamic_cast<TTableRows*>(arg.Get())) {
+        if (/* auto placeholder = */ dynamic_cast<TTableRows*>(arg.Get())) {
             if (listCall) {
                 Ctx_.Error() << "Only one TableRows() argument is allowed.";
                 return nullptr;
@@ -946,7 +946,7 @@ TSourcePtr TSqlSelect::ReduceCore(const TRule_reduce_core& node, const TWriteSet
 
     auto args = call.GetArgs();
     for (auto& arg: args) {
-        if (auto placeholder = dynamic_cast<TTableRows*>(arg.Get())) {
+        if (/* auto placeholder = */ dynamic_cast<TTableRows*>(arg.Get())) {
             if (listCall) {
                 Ctx_.Error() << "Only one TableRows() argument is allowed.";
                 return nullptr;

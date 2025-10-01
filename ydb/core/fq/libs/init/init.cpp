@@ -65,12 +65,12 @@ NYdb::NTopic::TTopicClientSettings GetCommonTopicClientSettings(const NFq::NConf
     if (auto threadsNum = config.GetTopicClientHandlersExecutorThreadsNum()) {
         auto threadPool = CreateThreadPool(threadsNum, 0, IThreadPool::TParams().SetThreadNamePrefix("ydb_sdk_client").SetBlocking(true).SetCatching(false));
         auto sharedPool = std::shared_ptr<IThreadPool>(threadPool.Release());
-        settings.DefaultHandlersExecutor(NYdb::NTopic::CreateThreadPoolExecutorAdapter(sharedPool));
+        settings.DefaultHandlersExecutor(NYdb::CreateExternalThreadPoolExecutorAdapter(sharedPool));
     }
     if (auto threadsNum = config.GetTopicClientCompressionExecutorThreadsNum()) {
         auto threadPool = CreateThreadPool(threadsNum, 0, IThreadPool::TParams().SetThreadNamePrefix("ydb_sdk_compession").SetBlocking(true).SetCatching(false));
         auto sharedPool = std::shared_ptr<IThreadPool>(threadPool.Release());
-        settings.DefaultCompressionExecutor(NYdb::NTopic::CreateThreadPoolExecutorAdapter(sharedPool));
+        settings.DefaultCompressionExecutor(NYdb::CreateExternalThreadPoolExecutorAdapter(sharedPool));
     }
     return settings;
 }

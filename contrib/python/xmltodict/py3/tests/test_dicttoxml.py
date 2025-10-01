@@ -1,12 +1,8 @@
-import sys
 from xmltodict import parse, unparse
-from collections import OrderedDict
 
 import unittest
 import re
 from textwrap import dedent
-
-IS_JYTHON = sys.platform.startswith('java')
 
 _HEADER_RE = re.compile(r'^[^\n]*\n')
 
@@ -74,7 +70,7 @@ class DictToXMLTestCase(unittest.TestCase):
         self.assertEqual(unparse({}, full_document=False), '')
 
     def test_multiple_roots_nofulldoc(self):
-        obj = OrderedDict((('a', 1), ('b', 2)))
+        obj = {"a": 1, "b": 2}
         xml = unparse(obj, full_document=False)
         self.assertEqual(xml, '<a>1</a><b>2</b>')
         obj = {'a': [1, 2]}
@@ -95,7 +91,7 @@ class DictToXMLTestCase(unittest.TestCase):
                          '<a><d></d>abcefg</a>')
 
     def test_preprocessor(self):
-        obj = {'a': OrderedDict((('b:int', [1, 2]), ('b', 'c')))}
+        obj = {"a": {"b:int": [1, 2], "b": "c"}}
 
         def p(key, value):
             try:
@@ -118,17 +114,17 @@ class DictToXMLTestCase(unittest.TestCase):
         self.assertEqual(_strip(unparse(obj, preprocessor=p)),
                          '<a><c>2</c></a>')
 
-    if not IS_JYTHON:
-        # Jython's SAX does not preserve attribute order
-        def test_attr_order_roundtrip(self):
-            xml = '<root a="1" b="2" c="3"></root>'
-            self.assertEqual(xml, _strip(unparse(parse(xml))))
+    def test_attr_order_roundtrip(self):
+        xml = '<root a="1" b="2" c="3"></root>'
+        self.assertEqual(xml, _strip(unparse(parse(xml))))
 
     def test_pretty_print(self):
-        obj = {'a': OrderedDict((
-            ('b', [{'c': [1, 2]}, 3]),
-            ('x', 'y'),
-        ))}
+        obj = {
+            "a": {
+                "b": [{"c": [1, 2]}, 3],
+                "x": "y",
+            }
+        }
         newl = '\n'
         indent = '....'
         xml = dedent('''\
@@ -144,11 +140,33 @@ class DictToXMLTestCase(unittest.TestCase):
         self.assertEqual(xml, unparse(obj, pretty=True,
                                       newl=newl, indent=indent))
 
+    def test_unparse_with_element_comment(self):
+        obj = {"a": {"#comment": "note", "b": "1"}}
+        xml = _strip(unparse(obj, full_document=True))
+        self.assertEqual(xml, "<a><!--note--><b>1</b></a>")
+
+    def test_unparse_with_multiple_element_comments(self):
+        obj = {"a": {"#comment": ["n1", "n2"], "b": "1"}}
+        xml = _strip(unparse(obj, full_document=True))
+        self.assertEqual(xml, "<a><!--n1--><!--n2--><b>1</b></a>")
+
+    def test_unparse_with_top_level_comment(self):
+        obj = {"#comment": "top", "a": "1"}
+        xml = _strip(unparse(obj, full_document=True))
+        self.assertEqual(xml, "<!--top--><a>1</a>")
+
+    def test_unparse_with_multiple_top_level_comments(self):
+        obj = {"#comment": ["t1", "t2"], "a": "1"}
+        xml = _strip(unparse(obj, full_document=True))
+        self.assertEqual(xml, "<!--t1--><!--t2--><a>1</a>")
+
     def test_pretty_print_with_int_indent(self):
-        obj = {'a': OrderedDict((
-            ('b', [{'c': [1, 2]}, 3]),
-            ('x', 'y'),
-        ))}
+        obj = {
+            "a": {
+                "b": [{"c": [1, 2]}, 3],
+                "x": "y",
+            }
+        }
         newl = '\n'
         indent = 2
         xml = dedent('''\
@@ -164,11 +182,32 @@ class DictToXMLTestCase(unittest.TestCase):
         self.assertEqual(xml, unparse(obj, pretty=True,
                                       newl=newl, indent=indent))
 
+    def test_comment_roundtrip_limited(self):
+        # Input with top-level comments and an element-level comment
+        xml = """
+        <!--top1--><a><b>1</b><!--e1--></a><!--top2-->
+        """
+        # Parse with comment processing enabled
+        parsed1 = parse(xml, process_comments=True)
+        # Unparse and parse again (roundtrip)
+        xml2 = unparse(parsed1)
+        parsed2 = parse(xml2, process_comments=True)
+
+        # Content preserved
+        self.assertIn('a', parsed2)
+        self.assertEqual(parsed2['a']['b'], '1')
+
+        # Element-level comment preserved under '#comment'
+        self.assertEqual(parsed2['a']['#comment'], 'e1')
+
+        # Top-level comments preserved as a list (order not guaranteed)
+        top = parsed2.get('#comment')
+        self.assertIsNotNone(top)
+        top_list = top if isinstance(top, list) else [top]
+        self.assertEqual(set(top_list), {'top1', 'top2'})
+
     def test_encoding(self):
-        try:
-            value = unichr(39321)
-        except NameError:
-            value = chr(39321)
+        value = chr(39321)
         obj = {'a': value}
         utf8doc = unparse(obj, encoding='utf-8')
         latin1doc = unparse(obj, encoding='iso-8859-1')
@@ -195,21 +234,21 @@ class DictToXMLTestCase(unittest.TestCase):
         self.assertEqual('<a/>', _strip(unparse(obj, short_empty_elements=True)))
 
     def test_namespace_support(self):
-        obj = OrderedDict((
-            ('http://defaultns.com/:root', OrderedDict((
-                ('@xmlns', OrderedDict((
-                    ('', 'http://defaultns.com/'),
-                    ('a', 'http://a.com/'),
-                    ('b', 'http://b.com/'),
-                ))),
-                ('http://defaultns.com/:x', OrderedDict((
-                    ('@http://a.com/:attr', 'val'),
-                    ('#text', '1'),
-                ))),
-                ('http://a.com/:y', '2'),
-                ('http://b.com/:z', '3'),
-            ))),
-        ))
+        obj = {
+            "http://defaultns.com/:root": {
+                "@xmlns": {
+                    "": "http://defaultns.com/",
+                    "a": "http://a.com/",
+                    "b": "http://b.com/",
+                },
+                "http://defaultns.com/:x": {
+                    "@http://a.com/:attr": "val",
+                    "#text": "1",
+                },
+                "http://a.com/:y": "2",
+                "http://b.com/:z": "3",
+            },
+        }
         ns = {
             'http://defaultns.com/': '',
             'http://a.com/': 'a',
@@ -337,3 +376,174 @@ xmlns:b="http://b.com/"><x a:attr="val">1</x><a:y>2</a:y><b:z>3</b:z></root>'''
         for prefix in ['a"b', "a'b", "a=b"]:
             with self.assertRaises(ValueError):
                 unparse({"a": {"@xmlns": {prefix: "http://e/"}}}, full_document=False)
+
+    def test_pretty_print_and_short_empty_elements_consistency(self):
+        """Test that pretty and compact modes produce equivalent results when stripped.
+
+        This test covers issue #352: Edge case with pretty_print and short_empty_elements.
+        When short_empty_elements=True, empty elements should be written as <tag/>
+        regardless of whether pretty printing is enabled.
+        """
+        # Test case from issue #352: empty list child
+        input_dict = {"Foos": {"Foo": []}}
+
+        compact = unparse(
+            input_dict, pretty=False, short_empty_elements=True, full_document=False
+        )
+        pretty = unparse(
+            input_dict, pretty=True, short_empty_elements=True, full_document=False
+        )
+        pretty_compacted = pretty.replace("\n", "").replace("\t", "")
+
+        # They should be equal when pretty formatting is stripped
+        self.assertEqual(pretty_compacted, compact)
+        self.assertEqual(compact, "<Foos/>")
+        self.assertEqual(pretty_compacted, "<Foos/>")
+
+    def test_empty_list_filtering(self):
+        """Test that empty lists are filtered out and don't create empty child elements."""
+        # Test various cases with empty lists
+        test_cases = [
+            # Case 1: Single empty list child
+            ({"Foos": {"Foo": []}}, "<Foos/>"),
+            # Case 2: Multiple empty list children
+            ({"Foos": {"Foo": [], "Bar": []}}, "<Foos/>"),
+            # Case 3: Mixed empty and non-empty children
+            ({"Foos": {"Foo": [], "Bar": "value"}}, "<Foos><Bar>value</Bar></Foos>"),
+            # Case 4: Nested empty lists
+            ({"Foos": {"Foo": {"Bar": []}}}, "<Foos><Foo/></Foos>"),
+            # Case 5: Empty list with attributes
+            ({"Foos": {"@attr": "value", "Foo": []}}, '<Foos attr="value"/>'),
+        ]
+
+        for input_dict, expected_compact in test_cases:
+            with self.subTest(input_dict=input_dict):
+                # Test compact mode
+                compact = unparse(
+                    input_dict,
+                    pretty=False,
+                    short_empty_elements=True,
+                    full_document=False,
+                )
+                self.assertEqual(compact, expected_compact)
+
+                # Test pretty mode
+                pretty = unparse(
+                    input_dict,
+                    pretty=True,
+                    short_empty_elements=True,
+                    full_document=False,
+                )
+                pretty_compacted = pretty.replace("\n", "").replace("\t", "")
+                self.assertEqual(pretty_compacted, expected_compact)
+
+    def test_empty_list_filtering_with_short_empty_elements_false(self):
+        """Test that empty lists are still filtered when short_empty_elements=False."""
+        input_dict = {"Foos": {"Foo": []}}
+
+        # With short_empty_elements=False, empty elements should be <tag></tag>
+        compact = unparse(
+            input_dict, pretty=False, short_empty_elements=False, full_document=False
+        )
+        pretty = unparse(
+            input_dict, pretty=True, short_empty_elements=False, full_document=False
+        )
+        pretty_compacted = pretty.replace("\n", "").replace("\t", "")
+
+        # They should be equal when pretty formatting is stripped
+        self.assertEqual(pretty_compacted, compact)
+        self.assertEqual(compact, "<Foos></Foos>")
+        self.assertEqual(pretty_compacted, "<Foos></Foos>")
+
+    def test_non_empty_lists_are_not_filtered(self):
+        """Test that non-empty lists are not filtered out."""
+        # Test with non-empty lists
+        input_dict = {"Foos": {"Foo": ["item1", "item2"]}}
+
+        compact = unparse(
+            input_dict, pretty=False, short_empty_elements=True, full_document=False
+        )
+        pretty = unparse(
+            input_dict, pretty=True, short_empty_elements=True, full_document=False
+        )
+        pretty_compacted = pretty.replace("\n", "").replace("\t", "")
+
+        # The lists should be processed normally
+        self.assertEqual(pretty_compacted, compact)
+        self.assertEqual(compact, "<Foos><Foo>item1</Foo><Foo>item2</Foo></Foos>")
+        self.assertEqual(
+            pretty_compacted, "<Foos><Foo>item1</Foo><Foo>item2</Foo></Foos>"
+        )
+
+    def test_empty_dict_vs_empty_list_behavior(self):
+        """Test the difference between empty dicts and empty lists."""
+        # Empty dict should create a child element
+        input_dict_dict = {"Foos": {"Foo": {}}}
+        compact_dict = unparse(
+            input_dict_dict,
+            pretty=False,
+            short_empty_elements=True,
+            full_document=False,
+        )
+        self.assertEqual(compact_dict, "<Foos><Foo/></Foos>")
+
+        # Empty list should be filtered out
+        input_dict_list = {"Foos": {"Foo": []}}
+        compact_list = unparse(
+            input_dict_list,
+            pretty=False,
+            short_empty_elements=True,
+            full_document=False,
+        )
+        self.assertEqual(compact_list, "<Foos/>")
+
+        # They should be different
+        self.assertNotEqual(compact_dict, compact_list)
+
+    def test_non_string_text_with_attributes(self):
+        """Test that non-string #text values work when tag has attributes.
+
+        This test covers GitHub issue #366: Tag value (#text) must be a string
+        when tag has additional parameters - unparse.
+
+        Also tests that plain values and explicit #text values are treated
+        consistently (both go through the same conversion logic).
+        """
+        # Test cases for explicit #text values with attributes
+        self.assertEqual(unparse({"a": {"@param": "test", "#text": 1}}, full_document=False),
+                         '<a param="test">1</a>')
+
+        self.assertEqual(unparse({"a": {"@param": 42, "#text": 3.14}}, full_document=False),
+                         '<a param="42">3.14</a>')
+
+        self.assertEqual(unparse({"a": {"@param": "flag", "#text": True}}, full_document=False),
+                         '<a param="flag">true</a>')
+
+        self.assertEqual(unparse({"a": {"@param": "test", "#text": None}}, full_document=False),
+                         '<a param="test">None</a>')
+
+        self.assertEqual(unparse({"a": {"@param": "test", "#text": "string"}}, full_document=False),
+                         '<a param="test">string</a>')
+
+        self.assertEqual(unparse({"a": {"@attr1": "value1", "@attr2": 2, "#text": 100}}, full_document=False),
+                         '<a attr1="value1" attr2="2">100</a>')
+
+        # Test cases for plain values (should be treated the same as #text)
+        self.assertEqual(unparse({"a": 1}, full_document=False), '<a>1</a>')
+        self.assertEqual(unparse({"a": 3.14}, full_document=False), '<a>3.14</a>')
+        self.assertEqual(unparse({"a": True}, full_document=False), '<a>true</a>')
+        self.assertEqual(unparse({"a": "hello"}, full_document=False), '<a>hello</a>')
+        self.assertEqual(unparse({"a": None}, full_document=False), '<a></a>')
+
+        # Consistency tests: plain values should match explicit #text values
+        self.assertEqual(unparse({"a": 42}, full_document=False),
+                         unparse({"a": {"#text": 42}}, full_document=False))
+
+        self.assertEqual(unparse({"a": 3.14}, full_document=False),
+                         unparse({"a": {"#text": 3.14}}, full_document=False))
+
+        self.assertEqual(unparse({"a": True}, full_document=False),
+                         unparse({"a": {"#text": True}}, full_document=False))
+
+        self.assertEqual(unparse({"a": "hello"}, full_document=False),
+                         unparse({"a": {"#text": "hello"}}, full_document=False))

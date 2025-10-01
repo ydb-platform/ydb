@@ -517,8 +517,6 @@ public:
                     i64 nextRowSize = rowCalculator.GetRowBytesSize(index);
 
                     if (toPrepareSize + nextRowSize >= (i64)ColumnShardMaxOperationBytes) {
-                        AFL_ENSURE(index > 0);
-
                         toPrepare.push_back(batch->Slice(0, index));
                         unpreparedBatch.Batches.push_front(batch->Slice(index, batch->num_rows() - index));
 
@@ -541,6 +539,7 @@ public:
                 toPrepare.push_back(batch);
             }
 
+            AFL_ENSURE(!toPrepare.empty() && toPrepare.front()->num_rows() > 0);
             auto batch = MakeIntrusive<TColumnBatch>(NArrow::CombineBatches(toPrepare), Alloc);
             Batches[shardId].emplace_back(batch);
             Memory += batch->GetMemory();

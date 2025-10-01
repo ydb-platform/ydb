@@ -511,7 +511,7 @@ namespace NKikimr {
 
             TMemRec newMemRec(memRec);
 
-            switch (const TBlobType::EType type = memRec.GetType()) {
+            switch (memRec.GetType()) {
                 case TBlobType::DiskBlob:
                     InplaceDataTotalSize += memRec.DataSize();
                     ItemsWithInplacedData += !!memRec.DataSize();

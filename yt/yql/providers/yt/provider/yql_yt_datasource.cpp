@@ -662,6 +662,12 @@ private:
                 updatedSettings = NYql::RemoveSetting(*updatedSettings, EYtSettingType::View, ctx);
             }
 
+            TExprNode::TPtr extraColumns;
+            if (auto extraColumnsSetting = NYql::GetSetting(*updatedSettings, EYtSettingType::ExtraColumns)) {
+                extraColumns = extraColumnsSetting->ChildPtr(1);
+                updatedSettings = NYql::RemoveSetting(*updatedSettings, EYtSettingType::ExtraColumns, ctx);
+            }
+
             bool withQB = tableDesc.QB2RowSpec && view != "raw";
             if (withQB) {
                 if (inlineContent) {
@@ -892,6 +898,56 @@ private:
                 newReadNode = FilterByFields(readNode.Pos(), newReadNode, names, ctx, false);
             }
 
+            if (extraColumns) {
+                YQL_ENSURE(extraColumns->IsCallable("AsStruct"));
+                newReadNode = ctx.Builder(newReadNode->Pos())
+                    .Callable(ctx.IsConstraintEnabled<TSortedConstraintNode>() ? "OrderedSqlProject" : "SqlProject")
+                        .Add(0, newReadNode)
+                        .List(1)
+                            .Callable(0, "SqlProjectStarItem")
+                                .Callable(0, "TypeOf")
+                                    .Add(0, newReadNode)
+                                .Seal()
+                                .Atom(1, "")
+                                .Lambda(2)
+                                    .Param("row")
+                                    .Callable("ForceRemoveMembers")
+                                        .Arg(0, "row")
+                                        .List(1)
+                                            .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                                                for (ui32 i = 0; i < extraColumns->ChildrenSize(); ++i) {
+                                                    auto item = extraColumns->ChildPtr(i);
+                                                    YQL_ENSURE(item->IsList() && item->ChildrenSize() == 2 && item->Head().IsAtom());
+                                                    parent.Add(i, item->HeadPtr());
+                                                }
+                                                return parent;
+                                            })
+                                        .Seal()
+                                    .Seal()
+                                .Seal()
+                            .Seal()
+                            .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                                for (ui32 i = 0; i < extraColumns->ChildrenSize(); ++i) {
+                                    auto item = extraColumns->ChildPtr(i);
+                                    YQL_ENSURE(item->IsList() && item->ChildrenSize() == 2 && item->Head().IsAtom());
+                                    parent
+                                        .Callable(i + 1, "SqlProjectItem")
+                                            .Callable(0, "TypeOf")
+                                                .Add(0, newReadNode)
+                                            .Seal()
+                                            .Add(1, item->HeadPtr())
+                                            .Lambda(2)
+                                                .Param("unused_row")
+                                                .Add(0, item->TailPtr())
+                                            .Seal()
+                                        .Seal();
+                                }
+                                return parent;
+                            })
+                        .Seal()
+                    .Seal()
+                    .Build();
+            }
             tableReads.push_back(newReadNode);
         }
 

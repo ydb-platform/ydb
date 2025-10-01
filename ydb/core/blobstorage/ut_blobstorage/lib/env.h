@@ -1114,7 +1114,7 @@ config:
             std::unique_ptr<typename std::invoke_result_t<TFactory>::element_type> ev(factory());
             Runtime->Send(new IEventHandle(actorId, edge, ev.release(), IEventHandle::FlagTrackDelivery), edge.NodeId());
             auto res = Runtime->WaitForEdgeActorEvent({edge});
-            if (auto *msg = res->CastAsLocal<TEvents::TEvUndelivered>()) {
+            if (res->CastAsLocal<TEvents::TEvUndelivered>()) {
                 UNIT_ASSERT(checkUndelivered);
                 Sim(TDuration::Seconds(5));
             } else {

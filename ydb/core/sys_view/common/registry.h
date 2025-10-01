@@ -864,21 +864,29 @@ struct Schema : NIceDb::Schema {
     };
 
     struct CompileCacheQueries : Table<25> {
-        struct QueryId : Column<1, NScheme::NTypeIds::Utf8> {};
-        struct NodeId : Column<2, NScheme::NTypeIds::Uint32> {};
+        struct NodeId : Column<1, NScheme::NTypeIds::Uint32> {};
+        struct QueryId : Column<2, NScheme::NTypeIds::Utf8> {};
         struct Query : Column<3, NScheme::NTypeIds::Utf8> {};
         struct AccessCount : Column<4, NScheme::NTypeIds::Uint64> {};
-        struct CompiledQueryAt : Column<5, NScheme::NTypeIds::Timestamp> {};
+        struct CompiledAt : Column<5, NScheme::NTypeIds::Timestamp> {};
         struct UserSID : Column<6, NScheme::NTypeIds::Utf8> {};
+        struct LastAccessedAt : Column<7, NScheme::NTypeIds::Timestamp> {};
+        struct CompilationDuration : Column<8, NScheme::NTypeIds::Uint64> {};
+        struct Warnings : Column<9, NScheme::NTypeIds::Utf8> {};
+        struct Metadata : Column<10, NScheme::NTypeIds::Utf8> {};
 
-        using TKey = TableKey<QueryId>;
+        using TKey = TableKey<NodeId, QueryId>;
         using TColumns = TableColumns<
-            QueryId,
             NodeId,
+            QueryId,
             Query,
             AccessCount,
-            CompiledQueryAt,
-            UserSID>;
+            CompiledAt,
+            UserSID,
+            LastAccessedAt,
+            CompilationDuration,
+            Warnings,
+            Metadata>;
     };
 };
 

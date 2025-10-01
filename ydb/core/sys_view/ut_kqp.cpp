@@ -299,11 +299,6 @@ public:
     void CheckShowCreateTable(const std::string& query, const std::string& tableName, TString formatQuery = "", bool temporary = false, bool initialScan = false) {
         auto session = QueryClient.GetSession().GetValueSync().GetSession();
 
-        std::optional<TString> sessionId = std::nullopt;
-        if (temporary) {
-            sessionId = session.GetId();
-        }
-
         ExecuteQuery(session, query);
         auto showCreateTableQuery = ShowCreateTable(session, tableName);
 
@@ -315,12 +310,21 @@ public:
             return;
         }
 
-        auto describeResultOrig = DescribeTable(tableName, sessionId);
+        std::optional<TString> tempDir = std::nullopt;
+        if (temporary) {
+            auto res = Env.GetClient().Ls("/Root/.tmp/sessions");
+            UNIT_ASSERT(res);
+            UNIT_ASSERT(res->Record.HasPathDescription());
+            UNIT_ASSERT(res->Record.GetPathDescription().ChildrenSize() == 1);
+            tempDir = res->Record.GetPathDescription().GetChildren(0).GetName();
+        }
+
+        auto describeResultOrig = DescribeTable(tableName, tempDir);
 
         DropTable(session, tableName);
 
         ExecuteQuery(session, showCreateTableQuery);
-        auto describeResultNew = DescribeTable(tableName, sessionId);
+        auto describeResultNew = DescribeTable(tableName, tempDir);
 
         DropTable(session, tableName);
 
@@ -388,8 +392,7 @@ private:
             tablePath = CanonizePath(JoinPath({"/Root", tablePath}));
         }
         if (sessionId.has_value()) {
-            auto pos = sessionId.value().find("&id=");
-            tablePath = NKqp::GetTempTablePath("Root", sessionId.value().substr(pos + 4), tablePath);
+            tablePath = NKqp::GetTempTablePath("Root", sessionId.value(), tablePath);
         }
         auto tableDesc = describeTable(std::move(tablePath));
 
@@ -3857,7 +3860,7 @@ ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_OPTIONS,
             UNIT_ASSERT_VALUES_EQUAL(entry.Type, ESchemeEntryType::Directory);
 
             auto children = result.GetChildren();
-            UNIT_ASSERT_VALUES_EQUAL(children.size(), 33);
+            UNIT_ASSERT_VALUES_EQUAL(children.size(), 34);
 
             THashSet<TString> names;
             for (const auto& child : children) {
@@ -3880,7 +3883,7 @@ ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_OPTIONS,
 
             auto children = result.GetChildren();
 
-            UNIT_ASSERT_VALUES_EQUAL(children.size(), 27);
+            UNIT_ASSERT_VALUES_EQUAL(children.size(), 28);
 
             THashSet<TString> names;
             for (const auto& child : children) {
@@ -5625,6 +5628,7 @@ ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_OPTIONS,
                     [["/Root/.sys/auth_owners"];["metadata@system"]];
                     [["/Root/.sys/auth_permissions"];["metadata@system"]];
                     [["/Root/.sys/auth_users"];["metadata@system"]];
+                    [["/Root/.sys/compile_cache_queries"];["metadata@system"]];
                     [["/Root/.sys/ds_groups"];["metadata@system"]];
                     [["/Root/.sys/ds_pdisks"];["metadata@system"]];
                     [["/Root/.sys/ds_storage_pools"];["metadata@system"]];
@@ -5688,6 +5692,7 @@ ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_OPTIONS,
                     [["/Root/Tenant1/.sys/auth_owners"];["metadata@system"]];
                     [["/Root/Tenant1/.sys/auth_permissions"];["metadata@system"]];
                     [["/Root/Tenant1/.sys/auth_users"];["metadata@system"]];
+                    [["/Root/Tenant1/.sys/compile_cache_queries"];["metadata@system"]];
                     [["/Root/Tenant1/.sys/nodes"];["metadata@system"]];
                     [["/Root/Tenant1/.sys/partition_stats"];["metadata@system"]];
                     [["/Root/Tenant1/.sys/pg_class"];["metadata@system"]];
@@ -5741,6 +5746,7 @@ ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_OPTIONS,
                     [["/Root/Tenant2/.sys/auth_owners"];["metadata@system"]];
                     [["/Root/Tenant2/.sys/auth_permissions"];["metadata@system"]];
                     [["/Root/Tenant2/.sys/auth_users"];["metadata@system"]];
+                    [["/Root/Tenant2/.sys/compile_cache_queries"];["metadata@system"]];
                     [["/Root/Tenant2/.sys/nodes"];["metadata@system"]];
                     [["/Root/Tenant2/.sys/partition_stats"];["metadata@system"]];
                     [["/Root/Tenant2/.sys/pg_class"];["metadata@system"]];
@@ -5989,6 +5995,7 @@ ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_OPTIONS,
                     [["/Root/.sys/auth_owners"];["metadata@system"]];
                     [["/Root/.sys/auth_permissions"];["metadata@system"]];
                     [["/Root/.sys/auth_users"];["metadata@system"]];
+                    [["/Root/.sys/compile_cache_queries"];["metadata@system"]];
                     [["/Root/.sys/ds_groups"];["metadata@system"]];
                     [["/Root/.sys/ds_pdisks"];["metadata@system"]];
                     [["/Root/.sys/ds_storage_pools"];["metadata@system"]];
@@ -6660,6 +6667,7 @@ ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_OPTIONS,
                     [["/Root/.sys/auth_owners"];["ydb.generic.use"];["user1"]];
                     [["/Root/.sys/auth_permissions"];["ydb.generic.use"];["user1"]];
                     [["/Root/.sys/auth_users"];["ydb.generic.use"];["user1"]];
+                    [["/Root/.sys/compile_cache_queries"];["ydb.generic.use"];["user1"]];
                     [["/Root/.sys/ds_groups"];["ydb.generic.use"];["user1"]];
                     [["/Root/.sys/ds_pdisks"];["ydb.generic.use"];["user1"]];
                     [["/Root/.sys/ds_storage_pools"];["ydb.generic.use"];["user1"]];
@@ -6726,6 +6734,7 @@ ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_OPTIONS,
                     [["/Root/Tenant1/.sys/auth_owners"];["ydb.generic.use"];["user1"]];
                     [["/Root/Tenant1/.sys/auth_permissions"];["ydb.generic.use"];["user1"]];
                     [["/Root/Tenant1/.sys/auth_users"];["ydb.generic.use"];["user1"]];
+                    [["/Root/Tenant1/.sys/compile_cache_queries"];["ydb.generic.use"];["user1"]];
                     [["/Root/Tenant1/.sys/nodes"];["ydb.generic.use"];["user1"]];
                     [["/Root/Tenant1/.sys/partition_stats"];["ydb.generic.use"];["user1"]];
                     [["/Root/Tenant1/.sys/pg_class"];["ydb.generic.use"];["user1"]];

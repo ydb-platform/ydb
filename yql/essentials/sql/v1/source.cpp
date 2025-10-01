@@ -166,7 +166,7 @@ bool ISource::AddExpressions(TContext& ctx, const TVector<TNodePtr>& expressions
         }
 
         if (exprSeat == EExprSeat::GroupBy) {
-            if (auto sessionWindow = dynamic_cast<TSessionWindow*>(expr.Get())) {
+            if (/* auto sessionWindow = */ dynamic_cast<TSessionWindow*>(expr.Get())) {
                 if (SessionWindow_) {
                     ctx.Error(expr->GetPos()) << "Duplicate session window specification:";
                     ctx.Error(SessionWindow_->GetPos()) << "Previous session window is declared here";
@@ -174,7 +174,7 @@ bool ISource::AddExpressions(TContext& ctx, const TVector<TNodePtr>& expressions
                 }
                 SessionWindow_ = expr;
             }
-            if (auto hoppingWindow = dynamic_cast<THoppingWindow*>(expr.Get())) {
+            if (/* auto hoppingWindow = */ dynamic_cast<THoppingWindow*>(expr.Get())) {
                 if (HoppingWindow_) {
                     ctx.Error(expr->GetPos()) << "Duplicate hopping window specification:";
                     ctx.Error(HoppingWindow_->GetPos()) << "Previous hopping window is declared here";

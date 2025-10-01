@@ -620,6 +620,7 @@ public:
     bool HasErrors(const NSchemeCache::TSchemeCacheNavigate& response, TString& message);
 
     bool HasUserToken() const;
+
 };
 
 

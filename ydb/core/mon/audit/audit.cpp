@@ -108,7 +108,11 @@ bool TAuditCtx::AuditableRequest(const NHttp::THttpIncomingRequestPtr& request) 
     return true;
 }
 
-void TAuditCtx::InitAudit(const NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& ev) {
+void TAuditCtx::InitAudit(const NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& ev, bool needAudit) {
+    if (!(Auditable = needAudit)) {
+        return;
+    }
+
     const auto& request = ev->Get()->Request;
     const TString method(request->Method);
     const TString url(request->URL.Before('?'));

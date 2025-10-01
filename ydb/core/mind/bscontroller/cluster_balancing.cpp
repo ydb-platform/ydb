@@ -148,7 +148,7 @@ namespace NKikimr::NBsController {
         }
 
         static void ProcessUnexpectedEvent(TAutoPtr<IEventHandle> ev) {
-            switch (const ui32 type = ev->GetTypeRewrite()) {
+            switch (ev->GetTypeRewrite()) {
                 case TEvents::TSystem::Poison:
                    throw TPoison();
                 default:

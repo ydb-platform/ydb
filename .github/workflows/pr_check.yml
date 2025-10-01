@@ -8,6 +8,7 @@ on:
       - 'stream-nb-*'
       - 'dev-*'
       - 'rc-*'
+      - 'q-stable-*'
     types:
       - 'opened'
       - 'synchronize'
@@ -258,7 +259,7 @@ jobs:
         vars: ${{ format('{{"AWS_BUCKET":"{0}","AWS_ENDPOINT":"{1}","REMOTE_CACHE_URL":"{2}"}}',
           vars.AWS_BUCKET, vars.AWS_ENDPOINT, vars.REMOTE_CACHE_URL_YA ) }}
   update_integrated_status:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, tiny-worker]
     needs: build_and_test
     if: always()
     steps:

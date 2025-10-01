@@ -347,7 +347,7 @@ void TPartitionCompaction::TCompactState::AddCmdWrite(const TKey& key, TBatch& b
     batch.SerializeTo(data);
     TClientBlob::CheckBlob(key, data);
     UpdatedKeys.emplace(key, data.size());
-    PartitionActor->AddCmdWrite(TPartitionedBlob::TFormedBlobInfo{key, data}, Request.Get(), batch.EndWriteTimestamp.Seconds(), PartitionActor->ActorContext(), false);
+    PartitionActor->AddCmdWrite(TPartitionedBlob::TFormedBlobInfo{key, data}, Request.Get(), batch.EndWriteTimestamp, PartitionActor->ActorContext(), false);
     BlobsToWriteInRequest++;
 }
 

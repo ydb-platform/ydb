@@ -181,7 +181,7 @@ namespace NKikimr {
             NPrivate::TChainLayoutBuilder builder("", leftBlocks, milestoneBlocks, rightBlocks, overhead);
             TString tableStr = builder.ToString(AppendBlockSize);
             STR << tableStr << "\n";
-            TVector<NPrivate::TChainLayoutBuilder::TSeg> canonical = {
+            TVector<NPrivate::TLayoutSegment> canonical = {
                 {1, 2}, {2, 3}, {3, 4}, {4, 5}, {5, 6}, {6, 7}, {7, 8}, {8, 10}, {10, 12}, {12, 14}, {14, 16},
                 {16, 18}, {18, 21}, {21, 24}, {24, 28}, {28, 32}, {32, 37}, {37, 42}, {42, 48}, {48, 55},
                 {55, 62}, {62, 70}, {70, 79}, {79, 89}, {89, 101}, {101, 114}, {114, 129}, {129, 145},

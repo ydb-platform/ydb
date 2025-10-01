@@ -81,8 +81,11 @@ namespace NKikimr::NBsController {
             }
 
             void ApplyPDiskDiff(const TPDiskId &pdiskId, const TPDiskInfo &prev, const TPDiskInfo &cur) {
-                if (prev.Mood != cur.Mood) {
-                    // PDisk's mood has changed
+                if (prev.Mood != cur.Mood ||
+                        prev.ExpectedSlotCount != cur.ExpectedSlotCount ||
+                        prev.SlotSizeInUnits != cur.SlotSizeInUnits ||
+                        prev.InferPDiskSlotCountFromUnitSize != cur.InferPDiskSlotCountFromUnitSize ||
+                        prev.InferPDiskSlotCountMax != cur.InferPDiskSlotCountMax) {
                     CreatePDiskEntry(pdiskId, cur);
                 }
             }

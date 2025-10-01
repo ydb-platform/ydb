@@ -54,7 +54,8 @@ public:
         EYtSettingTypes acceptedSettings = EYtSettingType::View | EYtSettingType::Anonymous
             | EYtSettingType::InferScheme | EYtSettingType::ForceInferScheme
             | EYtSettingType::DoNotFailOnInvalidSchema | EYtSettingType::XLock
-            | EYtSettingType::UserSchema | EYtSettingType::UserColumns | EYtSettingType::IgnoreTypeV3;
+            | EYtSettingType::UserSchema | EYtSettingType::UserColumns
+            | EYtSettingType::ExtraColumns | EYtSettingType::IgnoreTypeV3;
         for (auto path: read.Arg(2).Cast<TExprList>()) {
             if (auto table = path.Maybe<TYtPath>().Table()) {
                 if (!TYtTableInfo::Validate(table.Cast().Ref(), acceptedSettings, ctx)) {

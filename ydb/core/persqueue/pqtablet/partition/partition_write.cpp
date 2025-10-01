@@ -1030,7 +1030,7 @@ struct TPartitionsPrivateAddCmdWriteTag {};
 
 void TPartition::AddCmdWrite(const std::optional<TPartitionedBlob::TFormedBlobInfo>& newWrite,
                              TEvKeyValue::TEvRequest* request,
-                             ui64 creationUnixTime,
+                             TInstant creationUnixTime,
                              const TActorContext& ctx,
                              bool includeToWriteCycle) {
     // Y_ASSERT(creationUnixTime > 0);  // TODO: remove test cases from the 1970s and return check
@@ -1039,7 +1039,7 @@ void TPartition::AddCmdWrite(const std::optional<TPartitionedBlob::TFormedBlobIn
 
 void TPartition::AddCmdWriteImpl(const std::optional<TPartitionedBlob::TFormedBlobInfo>& newWrite,
                              TEvKeyValue::TEvRequest* request,
-                             ui64 creationUnixTime,
+                             TInstant creationUnixTime,
                              const TActorContext& ctx,
                              bool includeToWriteCycle,
                              TPartitionsPrivateAddCmdWriteTag)
@@ -1047,8 +1047,9 @@ void TPartition::AddCmdWriteImpl(const std::optional<TPartitionedBlob::TFormedBl
     auto write = request->Record.AddCmdWrite();
     write->SetKey(newWrite->Key.Data(), newWrite->Key.Size());
     write->SetValue(newWrite->Value);
-    if (creationUnixTime) {
-        write->SetCreationUnixTime(creationUnixTime);
+    if (creationUnixTime != TInstant::Zero()) {
+        // note: The time is rounded to second precision.
+        write->SetCreationUnixTime(creationUnixTime.Seconds());
     }
     //PQ_ENSURE(newWrite->Key.IsFastWrite());
     auto channel = GetChannel(NextChannel(newWrite->Key.HasSuffix(), newWrite->Value.size()));
@@ -1066,7 +1067,7 @@ void TPartition::AddCmdWriteWithDeferredTimestamp(const std::optional<TPartition
                              const TActorContext& ctx,
                              bool includeToWriteCycle)
 {
-    AddCmdWriteImpl(newWrite, request, 0, ctx, includeToWriteCycle, {});
+    AddCmdWriteImpl(newWrite, request, TInstant::Zero(), ctx, includeToWriteCycle, {});
 }
 
 void TPartition::RenameFormedBlobs(const std::deque<TPartitionedBlob::TRenameFormedBlobInfo>& formedBlobs,
@@ -1082,6 +1083,9 @@ void TPartition::RenameFormedBlobs(const std::deque<TPartitionedBlob::TRenameFor
             auto rename = request->Record.AddCmdRename();
             rename->SetOldKey(x.OldKey.ToString());
             rename->SetNewKey(x.NewKey.ToString());
+            if (x.CreationUnixTime != TInstant::Zero()) {
+                rename->SetCreationUnixTime(x.CreationUnixTime.Seconds());
+            }
         }
         if (!zone.DataKeysBody.empty() && zone.CompactedKeys.empty()) {
             PQ_ENSURE(zone.DataKeysBody.back().Key.GetOffset() + zone.DataKeysBody.back().Key.GetCount() <= x.NewKey.GetOffset())

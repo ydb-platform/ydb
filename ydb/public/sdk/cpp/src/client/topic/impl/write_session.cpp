@@ -147,9 +147,9 @@ std::optional<TContinuationToken> TSimpleBlockingWriteSession::WaitForToken(cons
             if (auto* readyEvent = std::get_if<TWriteSessionEvent::TReadyToAcceptEvent>(&event)) {
                 Y_ABORT_UNLESS(!token.has_value());
                 token = std::move(readyEvent->ContinuationToken);
-            } else if (auto* ackEvent = std::get_if<TWriteSessionEvent::TAcksEvent>(&event)) {
+            } else if (std::get_if<TWriteSessionEvent::TAcksEvent>(&event)) {
                 // discard
-            } else if (auto* closeSessionEvent = std::get_if<TSessionClosedEvent>(&event)) {
+            } else if (std::get_if<TSessionClosedEvent>(&event)) {
                 Closed.store(true);
                 return std::nullopt;
             }

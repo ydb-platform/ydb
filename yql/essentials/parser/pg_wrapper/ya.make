@@ -164,6 +164,10 @@ FILES(
     verify.sh
 )
 
+SUPPRESSIONS(
+    ubsan.supp
+)
+
 END()
 
 RECURSE(

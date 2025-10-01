@@ -667,7 +667,7 @@ public:
                 return MakeFuture(ResultFromError<TGenericResult>("Empty basename for setting constraint"));
             }
 
-            if (!IsStartWithSlash(dirname)) {
+            if (!IsStartWithSlash(tablePath)) {
                 dirname = JoinPath({GetDatabase(), dirname});
             }
 
@@ -1316,7 +1316,7 @@ public:
                     return MakeFuture(ResultFromError<TGenericResult>("Empty basename for modify permissions"));
                 }
 
-                if (!IsStartWithSlash(dirname)) {
+                if (!IsStartWithSlash(currentPath)) {
                     dirname = JoinPath({GetDatabase(), dirname});
                 }
 

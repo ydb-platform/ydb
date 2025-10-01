@@ -13448,11 +13448,11 @@
             "uri": "file://test_sql_format.test_window-yql-19801_/formatted.sql"
         }
     ],
-    "test_sql_negative.test[action-no_columns_in_do-default.txt]": [
+    "test_sql_negative.test[action-no_columns_in_do-]": [
         {
             "checksum": "0fad6da8e4c5a2ab2c1e5a231ea430d1",
             "size": 105,
-            "uri": "https://{canondata_backend}/1937150/ec0019724df75083b0e89cab22f57e10ef36744e/resource.tar.gz#test_sql_negative.test_action-no_columns_in_do-default.txt_/err_file.out"
+            "uri": "https://{canondata_backend}/212715/1a9c488b7c9c29d2086a52efc59f8278e704da5c/resource.tar.gz#test_sql_negative.test_action-no_columns_in_do-_/err_file.out"
         }
     ],
     "test_sql_negative.test[action-parallel_for_commit-default.txt]": [
@@ -13747,6 +13747,13 @@
             "checksum": "65a7b8293278415ffa823662ca911a21",
             "size": 150,
             "uri": "https://{canondata_backend}/1937150/ec0019724df75083b0e89cab22f57e10ef36744e/resource.tar.gz#test_sql_negative.test_pragma-classic_division-default.txt_/err_file.out"
+        }
+    ],
+    "test_sql_negative.test[pragma-classic_division_sqlfail-default.txt]": [
+        {
+            "checksum": "65a7b8293278415ffa823662ca911a21",
+            "size": 150,
+            "uri": "https://{canondata_backend}/1773845/e3a09370a8d489b3469f4f471f49a926ebc9b894/resource.tar.gz#test_sql_negative.test_pragma-classic_division_sqlfail-default.txt_/err_file.out"
         }
     ],
     "test_sql_negative.test[pragma-messages-default.txt]": [

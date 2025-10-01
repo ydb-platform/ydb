@@ -1,8 +1,8 @@
 #pragma once
 
+#include <ydb/core/persqueue/events/internal.h>
 #include <util/datetime/base.h>
 #include <vector>
-#include <ydb/core/persqueue/events/internal.h>
 
 namespace NKikimr::NPQ {
 
@@ -21,6 +21,6 @@ namespace NKikimr::NPQ {
         std::vector<TConsumerOffset> Consumers_;
     };
 
-    bool ImportantConsumerNeedToKeepCurrentKey(const TDuration availabilityPeriod, ui64 offset, const TDataKey& currentKey, const TDataKey& nextKey, const TInstant now);
+    bool ImportantConsumerNeedToKeepCurrentKey(const TDuration availabilityPeriod, const ui64 offset, const TDataKey& currentKey, const TDataKey& nextKey, const TInstant now);
 
 } // namespace NKikimr::NPQ

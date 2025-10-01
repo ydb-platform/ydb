@@ -2,7 +2,7 @@
 
 namespace NKikimr::NPQ {
 
-bool ImportantConsumerNeedToKeepCurrentKey(const TDuration availabilityPeriod, ui64 offset, const TDataKey& currentKey, const TDataKey& nextKey, const TInstant now) {
+bool ImportantConsumerNeedToKeepCurrentKey(const TDuration availabilityPeriod, const ui64 offset, const TDataKey& currentKey, const TDataKey& nextKey, const TInstant now) {
     const TInstant endOfLife = currentKey.Timestamp + availabilityPeriod; // note: sum with saturation
     if (endOfLife < now) {
         // The current key is too old. It doesn't matter whether the consumer has read it or not. It can be retired.

@@ -35,8 +35,10 @@ using namespace NYT::NConcurrency;
 ////////////////////////////////////////////////////////////////////////////////
 
 // Workaround until better solution is implemented in YT-26196.
-// This timeout is slightly greater than "replication_reader_failure_timeout" in server code.
-const TDuration TableReaderTimeout = TDuration::Minutes(11);
+// This timeout exceeds some timeouts in server code:
+//   - "replication_reader_failure_timeout"
+//   - "session_timeout"
+const TDuration TableReaderTimeout = TDuration::Minutes(35);
 
 ////////////////////////////////////////////////////////////////////////////////
 

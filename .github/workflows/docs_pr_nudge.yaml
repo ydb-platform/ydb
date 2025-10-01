@@ -1,0 +1,210 @@
+name: Documentation PR nudger
+
+# Posts a comment to PR's labeled "documentation" in the following cases:
+# 1) The assignee is not promptly providing feedback for the iteration
+# 2) The author received feedback but hasn't acted on it for a long time
+# Skips weekends and first weeks of January and May.
+#
+# See https://ydb.tech/docs/en/contributor/documentation/review for more details
+
+on:
+  schedule:
+    - cron: '0 0,6,12,18 * * *'
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  nudge:
+    runs-on: ubuntu-latest
+    env:
+      AUTHOR_RESPONSE_THRESHOLD_HOURS: 24         # when to nudge reviewers after author
+      REVIEWER_RESPONSE_THRESHOLD_DAYS: 7         # when to nudge author after reviewer
+      REVIEWER_NUDGE_COOLDOWN_HOURS: 24           # min hours between reviewer-nudges
+      AUTHOR_NUDGE_COOLDOWN_DAYS: 7               # min days between author-nudges
+    steps:
+      - uses: actions/github-script@v7
+        
+        with:
+          github-token: ${{ secrets.YDBOT_TOKEN }}
+          script: |
+            const { owner, repo } = context.repo;
+            const authorThresholdH    = Number(process.env.AUTHOR_RESPONSE_THRESHOLD_HOURS);
+            const reviewerThresholdD  = Number(process.env.REVIEWER_RESPONSE_THRESHOLD_DAYS);
+            const reviewerCooldownH   = Number(process.env.REVIEWER_NUDGE_COOLDOWN_HOURS);
+            const authorCooldownD     = Number(process.env.AUTHOR_NUDGE_COOLDOWN_DAYS);
+            const BOT_MARKER          = '<!-- docs-review-nudge -->';
+  
+            const now   = new Date();
+            const day   = now.getUTCDay();       
+            const date  = now.getUTCDate();      // 1–31
+            const month = now.getUTCMonth() + 1; // 1–12
+  
+            // skip weekends, first week of May, first week of the year
+            if (
+              day === 0 || day === 6 ||  // 0=Sun,6=Sat
+              (month === 5  && date <= 7) ||
+              (month === 1  && date <= 7)
+            ) {
+              console.log(`Skip run: weekend or first-week (month=${month}, date=${date}, day=${day})`);
+              return;
+            }
+  
+            const isWeekend = d => d.getUTCDay() === 0 || d.getUTCDay() === 6;
+  
+            // sum only business-hours between two dates
+            function businessMsBetween(start, end) {
+              let ms = 0;
+              let cur = new Date(start);
+              while (cur < end) {
+                if (!isWeekend(cur)) ms += 3600e3;
+                cur = new Date(cur.getTime() + 3600e3);
+              }
+              return ms;
+            }
+  
+            // count only business-days between two dates
+            function businessDaysBetween(start, end) {
+              let days = 0;
+              let cur = new Date(start);
+              cur.setUTCHours(0,0,0,0);
+              const endDay = new Date(end);
+              endDay.setUTCHours(0,0,0,0);
+              while (cur < endDay) {
+                if (!isWeekend(cur)) days++;
+                cur.setUTCDate(cur.getUTCDate() + 1);
+              }
+              return days;
+            }
+  
+            // 1) search open, non-draft docs PRs
+            const q = [
+              `repo:${owner}/${repo}`,
+              `type:pr`,
+              `state:open`,
+              `label:documentation`,
+              `draft:false`
+            ].join(' ');
+            const { data: { items: docsPRs } } = await github.rest.search.issuesAndPullRequests({ q, per_page: 100 });
+            console.log(`Found ${docsPRs.length} documentation PR(s)`);
+
+            // fetch primary-docs-reviewers (for assignment)
+            const primaryTeamMembers = await github.paginate(
+              github.rest.teams.listMembersInOrg,
+              { org: owner, team_slug: 'primary-docs-reviewers', per_page: 100 }
+            );
+            const primaryReviewerLogins = primaryTeamMembers.map(u => u.login);
+            console.log(`Loaded ${primaryReviewerLogins.length} primary reviewer(s) from team`);
+
+            // fetch final-docs-reviewers (for activity counting)
+            const finalTeamMembers = await github.paginate(
+              github.rest.teams.listMembersInOrg,
+              { org: owner, team_slug: 'final-docs-reviewers', per_page: 100 }
+            );
+            const finalReviewerLogins = finalTeamMembers.map(u => u.login);
+            console.log(`Loaded ${finalReviewerLogins.length} final reviewer(s) from team`);
+
+            for (const prItem of docsPRs) {
+              const prNum = prItem.number;
+              console.log(`\n→ Processing PR #${prNum}`);
+              const pr    = (await github.rest.pulls.get({ owner, repo, pull_number: prNum })).data;
+
+              const assignees = pr.assignees.map(a => a.login);
+              // assign primary reviewer if none assigned
+              if (!assignees.some(a => primaryReviewerLogins.includes(a))) {
+                const pick = primaryReviewerLogins[Math.floor(Math.random() * primaryReviewerLogins.length)];
+                await github.rest.issues.addAssignees({
+                  owner, repo, issue_number: prNum, assignees: [pick]
+                });
+                console.log(`Assigned primary reviewer @${pick} to PR #${prNum}`);
+              }
+
+              // combine assignees + final-reviewers for activity
+              const reviewerLogins = Array.from(new Set([...assignees, ...finalReviewerLogins]));
+  
+              // collect all events
+              const [comments, reviewComments, reviews, commits] = await Promise.all([
+                github.paginate(github.rest.issues.listComments,       { owner, repo, issue_number: prNum, per_page: 100 }),
+                github.paginate(github.rest.pulls.listReviewComments, { owner, repo, pull_number:  prNum, per_page: 100 }),
+                github.paginate(github.rest.pulls.listReviews,        { owner, repo, pull_number: prNum, per_page: 100 }),
+                github.paginate(github.rest.pulls.listCommits,        { owner, repo, pull_number: prNum, per_page: 100 }),
+              ]);
+  
+              const author = pr.user.login;
+  
+              const extract = (arr, whoFn, dateKey) =>
+                arr
+                  .map(i => {
+                    const d = new Date(i[dateKey]);
+                    return { who: whoFn(i), when: d };
+                  })
+                  .filter(x => x.when && !isNaN(x.when.getTime()));
+  
+              const allEvents = [
+                ...extract(comments,       c => c.user.login,                             'created_at'),
+                ...extract(reviewComments, c => c.user.login,                             'created_at'),
+                ...extract(reviews,        r => r.user.login,                             'submitted_at'),
+                ...extract(commits,        c => c.author?.login || c.commit?.author?.name, 'commit.author.date'),
+                { who: author, when: new Date(pr.created_at) }
+              ].filter(e => e.when && !isNaN(e.when.getTime()));
+  
+              const authorEvents   = allEvents.filter(e => e.who === author).map(e => e.when);
+              const reviewerEvents = allEvents.filter(e => reviewerLogins.includes(e.who)).map(e => e.when);
+  
+              const lastAuthorActivity   = authorEvents.length   ? new Date(Math.max(...authorEvents))   : new Date(pr.created_at);
+              const lastReviewerActivity = reviewerEvents.length ? new Date(Math.max(...reviewerEvents)) : new Date(0);
+  
+              // last nudge time
+              const nudgeTimes = comments
+                .map(c => new Date(c.created_at))
+                .filter(d => !isNaN(d.getTime()) && comments.find(cc => cc.body.includes(BOT_MARKER)));
+              const lastNudgeTime = nudgeTimes.length ? new Date(Math.max(...nudgeTimes)) : new Date(0);
+  
+              // RULE 1: nudge reviewers
+              const msSinceAuthor      = businessMsBetween(lastAuthorActivity, now);
+              const hoursSinceAuthor   = Math.floor(msSinceAuthor / 3600e3);
+              const msSinceLastRevNudge= businessMsBetween(lastNudgeTime, now);
+  
+              if (
+                lastAuthorActivity > lastReviewerActivity &&
+                msSinceAuthor > authorThresholdH * 3600e3 &&
+                msSinceLastRevNudge > reviewerCooldownH * 3600e3
+              ) {
+                const { data: comment } = await github.rest.issues.createComment({
+                  owner, repo, issue_number: prNum,
+                  body: `Hey ${assignees.map(a=>`@${a}`).join(', ')}, it has been ${hoursSinceAuthor} business-hours since the author's last update, could you please review? ${BOT_MARKER}`
+                });
+                console.log(`Comment posted on PR #${prNum}: ${comment.html_url}`);
+                continue;
+              } else {
+                const reasons = [];
+                if (!(lastAuthorActivity > lastReviewerActivity))        reasons.push(`lastAuthor(${lastAuthorActivity.toISOString()})≤lastReviewer(${lastReviewerActivity.toISOString()})`);
+                if (!(msSinceAuthor > authorThresholdH * 3600e3))        reasons.push(`hoursSinceAuthor=${hoursSinceAuthor}h≤${authorThresholdH}h`);
+                if (!(msSinceLastRevNudge > reviewerCooldownH * 3600e3)) reasons.push(`hoursSinceLastNudge=${Math.floor(msSinceLastRevNudge/3600e3)}h≤${reviewerCooldownH}h`);
+                console.log(`Reviewer nudge skipped: ${reasons.join('; ')}`);
+              }
+  
+              // RULE 2: nudge author
+              const daysSinceReviewer      = businessDaysBetween(lastReviewerActivity, now);
+              const daysSinceLastAuthNudge = businessDaysBetween(lastNudgeTime, now);
+  
+              if (
+                lastReviewerActivity > lastAuthorActivity &&
+                daysSinceReviewer > reviewerThresholdD &&
+                daysSinceLastAuthNudge > authorCooldownD
+              ) {
+                const { data: comment } = await github.rest.issues.createComment({
+                  owner, repo, issue_number: prNum,
+                  body: `Heads-up: it's been ${daysSinceReviewer} business-days since a reviewer comment. @${author}, any updates? ${assignees.map(a=>`@${a}`).join(' ')}, please check the status with the author. ${BOT_MARKER}`
+                });
+                console.log(`Comment posted on PR #${prNum}: ${comment.html_url}`);
+              } else {
+                const reasons = [];
+                if (!(lastReviewerActivity > lastAuthorActivity))     reasons.push(`lastReviewer(${lastReviewerActivity.toISOString()})≤lastAuthor(${lastAuthorActivity.toISOString()})`);
+                if (!(daysSinceReviewer > reviewerThresholdD))        reasons.push(`daysSinceReviewer=${daysSinceReviewer}d≤${reviewerThresholdD}d`);
+                if (!(daysSinceLastAuthNudge > authorCooldownD))      reasons.push(`daysSinceLastAuthNudge=${daysSinceLastAuthNudge}d≤${authorCooldownD}d`);
+                console.log(`Author nudge skipped: ${reasons.join('; ')}`);
+              }
+            }

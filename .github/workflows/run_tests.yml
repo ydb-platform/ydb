@@ -136,7 +136,7 @@ jobs:
             echo "threads_count=5" >> $GITHUB_ENV
             echo "timeout=1200" >> $GITHUB_ENV
           elif [[ "${{ inputs.build_preset }}" == "release-tsan" ]]; then
-            echo "threads_count=10" >> $GITHUB_ENV
+            echo "threads_count=18" >> $GITHUB_ENV
             echo "timeout=1200" >> $GITHUB_ENV
           else
             echo "Unknown build_preset value."

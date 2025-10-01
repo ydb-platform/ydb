@@ -1,0 +1,92 @@
+name: Weekly Changelog Update
+
+on:
+  schedule:
+    - cron: '0 0 * * 0' # Every Sunday at 00:00
+  workflow_dispatch:
+env:
+  GH_TOKEN: ${{ secrets.YDBOT_TOKEN }}
+
+jobs:
+  gather-branches:
+    runs-on: ubuntu-latest
+
+    outputs:
+      branches: ${{ steps.branch-list.outputs.branches }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        
+      - name: List 'main' and 'stable-*' branches
+        id: branch-list
+        run: |
+          git fetch --all
+          BRANCHES=$(git branch -r | grep -E "origin/(main|stable-25(-[0-9]+)*)$" | grep -v HEAD | sed "s/origin\///" | xargs | tr -d '\n' | jq -R -s -c "split(\" \")")
+          echo "::notice:: BRANCHES $BRANCHES"
+          if [ -z "$BRANCHES" ]; then
+            BRANCHES="[]"
+          fi
+          echo "$BRANCHES" > branches.json
+          echo "branches=$BRANCHES" >> "$GITHUB_OUTPUT"
+
+  gather-prs:
+    runs-on: ubuntu-latest
+    needs: gather-branches
+    strategy:
+      fail-fast: false
+      matrix:
+        branch: ${{ fromJson(needs.gather-branches.outputs.branches) }}
+    outputs:
+      prs: ${{ steps.pr-list.outputs.prs }}
+      base_branch: ${{ steps.branch-name.outputs.base_branch }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+           ref: ${{ github.ref }}
+           
+      - name: Set up date range
+        id: date-setup
+        run: |
+          LAST_WEEK_DATE=$(date -d "7 days ago" '+%Y-%m-%dT%H:%M:%SZ')
+          echo "LAST_WEEK_DATE=$LAST_WEEK_DATE" >> $GITHUB_ENV
+
+      - name: Get merged PRs
+        id: pr-list
+        run: |
+          REF_NAME=${{ matrix.branch }}
+          echo "::notice:: branch = $REF_NAME, date = $LAST_WEEK_DATE"
+          PRS=$(gh pr list -L 1000 --state merged --json number,title,baseRefName,mergedAt --jq ".[] | select(.baseRefName == \"$REF_NAME\" and .mergedAt >= \"$LAST_WEEK_DATE\") | {id: .number}" | jq -c -s ".")
+
+          if [ -z "$PRS" ]; then
+            PRS="[]"
+          fi
+          echo "$PRS" > prs-${{ matrix.branch }}.json
+          echo "PRS=$PRS" >> $GITHUB_ENV          
+          echo "prs=$PRS" >> "$GITHUB_OUTPUT"
+
+      - name: Debug PR list output
+        run: |
+          cat prs-${{ matrix.branch }}.json
+
+      - name: Upload PRs JSON
+        uses: actions/upload-artifact@v4
+        with:
+          name: prs-json-${{ matrix.branch }}
+          path: prs-${{ matrix.branch }}.json
+
+      - name: Get current date
+        id: get-date
+        shell: bash
+        run: echo "suffix=$(date +'%Y-%m-%d')" >> $GITHUB_ENV
+
+      - name: Update Changelog
+        uses: ./.github/actions/update_changelog 
+        env:
+          GH_TOKEN: ${{ secrets.YDBOT_TOKEN }}
+        with:
+          pr_data: ${{ steps.pr-list.outputs.prs }}
+          changelog_path: "./CHANGELOG.md" 
+          base_branch: "${{ matrix.branch }}"
+          suffix: "${{ env.suffix }}"

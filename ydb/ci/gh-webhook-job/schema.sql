@@ -26,4 +26,47 @@ CREATE TABLE gh.workflow_jobs (
 )
 ENGINE = MergeTree
 PARTITION BY toStartOfMonth(started_at)
-ORDER BY (id, updated_at)
+ORDER BY (id, updated_at);
+
+
+CREATE TABLE gh.workflow_job_steps (
+   wf_id UInt64,
+   wf_run_id UInt64,
+   wf_started_at DateTime,
+   name LowCardinality(String),
+   status LowCardinality(String),
+   conclusion LowCardinality(String),
+   number UInt16,
+   started_at DateTime,
+   completed_at DateTime DEFAULT now()
+)
+ENGINE = MergeTree
+PARTITION BY toStartOfMonth(wf_started_at)
+ORDER BY (wf_id, number);
+
+
+CREATE TABLE gh.pull_request (
+    id UInt64,
+    action LowCardinality(String),
+    state LowCardinality(String),
+    number UInt64,
+    url String,
+    html_url String,
+    user_login LowCardinality(String),
+    labels Array(LowCardinality(String)),
+    head_sha String,
+    head_ref String,
+    base_sha String,
+    base_ref String,
+    merge_commit_sha String,
+    draft bool,
+    merged bool,
+    created_at DateTime,
+    updated_at DateTime,
+    closed_at DateTime,
+    merged_at DateTime
+
+)
+ENGINE = MergeTree
+PARTITION BY toStartOfMonth(created_at)
+ORDER BY (number, action);

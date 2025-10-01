@@ -14,7 +14,7 @@ from gunicorn.app.base import BaseApplication
 flask_app = Flask("github-webhook")
 
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("wh")
 
 
 def check_github_signature(f):
@@ -37,21 +37,8 @@ def check_github_signature(f):
     return decorated_func
 
 
-@flask_app.route("/webhooks", methods=["GET", "POST"])
-@check_github_signature
-def webhooks():
-    cfg = current_app.config
-
-    job = request.get_json()
-
-    if "workflow_job" not in job:
-        print("No workflow_job, skip")
-        return jsonify({"status": False, "description": "No workflow_job in the request"})
-
-    # noinspection HttpUrlsUsage
-    ch_url = f"http://{current_app.config['CH_FQDNS'][0]}:8123"
-
-    query = "INSERT INTO workflow_jobs FORMAT JSONEachRow"
+def ch_execute(cfg, query, data):
+    ch_url = f"http://{cfg['CH_FQDNS'][0]}:8123"
 
     params = {
         "database": cfg["CH_DATABASE"],
@@ -70,13 +57,10 @@ def webhooks():
             }
         )
 
-    job = job["workflow_job"]
-    job["steps"] = len(job["steps"])
-
     for i in range(5):
         response = None
         try:
-            response = requests.post(ch_url, params=params, data=json.dumps(job), headers=headers)
+            response = requests.post(ch_url, params=params, data=data, headers=headers)
             response.raise_for_status()
             break
         except Exception as e:
@@ -84,6 +68,73 @@ def webhooks():
             if response:
                 logger.warning("Response text %s", response.text)
             time.sleep(0.1 * i)
+    else:
+        raise Exception("Unable to execute")
+
+    return response
+
+
+def save_workflow_job(cfg, event):
+    logger.info("save_workflow_job")
+    job = event["workflow_job"]
+    orig_steps = job["steps"]
+    job["steps"] = len(job["steps"])
+
+    logger.info("save job")
+    ch_execute(cfg, "INSERT INTO workflow_jobs FORMAT JSONEachRow", json.dumps(job))
+
+    for step in orig_steps:
+        step = step.copy()
+        for f in ["id", "run_id", "started_at"]:
+            step[f"wf_{f}"] = job[f]
+        logger.info("save step")
+        ch_execute(cfg, "INSERT INTO workflow_job_steps FORMAT JSONEachRow", json.dumps(step))
+
+
+def save_pullrequest(cfg, event):
+    action = event["action"]
+
+    logger.info("save_pullrequest")
+
+    pr = event["pull_request"]
+    data = {
+        "id": pr["id"],
+        "action": action,
+        "state": pr["state"],
+        "url": pr["url"],
+        "html_url": pr["html_url"],
+        "number": pr["number"],
+        "user_login": pr["user"]["login"],
+        "labels": [l["name"] for l in pr["labels"]],
+        "head_sha": pr["head"]["sha"],
+        "head_ref": pr["head"]["ref"],
+        "base_sha": pr["base"]["sha"],
+        "base_ref": pr["base"]["ref"],
+        "merge_commit_sha": pr["merge_commit_sha"],
+        "merged": pr["merged"],
+        "draft": pr["draft"],
+        "created_at": pr["created_at"],
+        "updated_at": pr["updated_at"],
+        "closed_at": pr["closed_at"],
+        "merged_at": pr["merged_at"],
+    }
+    ch_execute(cfg, "INSERT INTO pull_request FORMAT JSONEachRow", json.dumps(data))
+
+
+@flask_app.route("/webhooks", methods=["GET", "POST"])
+@check_github_signature
+def webhooks():
+    cfg = current_app.config
+
+    event = request.get_json()
+
+    if "workflow_job" in event:
+        save_workflow_job(cfg, event)
+    elif "pull_request" in event:
+        save_pullrequest(cfg, event)
+    else:
+        logger.error("Unknown event action=%s, keys=%r, skip", event["action"], list(event.keys()))
+        return jsonify({"status": False, "description": "No workflow_job in the request"})
 
     return jsonify({"status": True})
 
@@ -120,12 +171,11 @@ def prepare_logger():
                 },
             },
             "loggers": {
-                "": {
-                    #
+                "wh": {
                     "handlers": ["default"],
                     "level": "INFO",
                     "propagate": False,
-                },
+                }
             },
         }
     )
@@ -143,7 +193,6 @@ def main():
             "GH_WEBHOOK_SECRET": os.environ["GH_WEBHOOK_SECRET"].encode("utf8"),
         }
     )
-
     # https://docs.gunicorn.org/en/stable/settings.html
     config = {
         "bind": f"[::]:{port}",

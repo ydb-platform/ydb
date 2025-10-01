@@ -16,6 +16,7 @@ declare -A top_dirs=(
     [tools/]=1,
     [scripts/]=1,
     [yt/]=1,
+    [yql/]=1,
     [vendor/]=1,
     [devtools/]=1,
 )

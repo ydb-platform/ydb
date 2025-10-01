@@ -1,0 +1,10 @@
+name: 'Configure Git'
+description: 'Configure git user for YDB CLI releases'
+runs:
+  using: 'composite'
+  steps:
+    - name: Configure git
+      shell: bash
+      run: |
+        git config --global user.email ydbot@ydb.tech
+        git config --global user.name YDBot

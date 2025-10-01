@@ -149,7 +149,7 @@ struct TKqpCleanupCtx {
     }
 };
 
-class TKqpSessionActor : public TActorBootstrapped<TKqpSessionActor> {
+class TKqpSessionActor : public TActorBootstrapped<TKqpSessionActor>, IActorExceptionHandler {
 
     class TTimerGuard {
     public:
@@ -3312,6 +3312,30 @@ private:
             Send(ctx->BufferActorId, new TEvKqpBuffer::TEvTerminate{});
             ctx->BufferActorId = {};
         }
+    }
+
+    bool OnUnhandledException(const std::exception_ptr& exception) override {
+        try {
+            if (exception) {
+                std::rethrow_exception(exception);
+            }
+        } catch (const TRequestFail& ex) {
+            ReplyQueryError(ex.Status, ex.what(), ex.Issues);
+            return true;
+        } catch (const yexception& ex) {
+            InternalError(ex.what());
+            return true;
+        } catch (const TMemoryLimitExceededException&) {
+            ReplyQueryError(Ydb::StatusIds::UNDETERMINED,
+                BuildMemoryLimitExceptionMessage());
+            return true;
+        }
+
+        return false;
+    }
+
+    bool OnUnhandledException(const std::exception&) override {
+        return false;
     }
 
 private:

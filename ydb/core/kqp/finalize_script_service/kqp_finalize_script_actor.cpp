@@ -226,7 +226,7 @@ private:
     TString CustomerSuppliedId;
     std::vector<NKqpProto::TKqpExternalSink> Sinks;
 
-    TString UserToken;
+    TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     std::vector<TString> SecretNames;
     std::unordered_map<TString, TString> SecureParams;
 };

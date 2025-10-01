@@ -120,7 +120,8 @@ TPKRangeFilter::EUsageClass TPKRangesFilter::GetUsageClass(const NArrow::TSimple
         case TPKRangeFilter::EUsageClass::PartialUsage:
             return TPKRangeFilter::EUsageClass::PartialUsage;
         case TPKRangeFilter::EUsageClass::NoUsage:
-            AFL_VERIFY(false);
+            AFL_VERIFY(false)("start", start.DebugString())("end", end.DebugString())("first_range", rangesBegin->DebugString())(
+                "last_range", std::prev(rangesEnd)->DebugString());
     }
     switch (std::prev(rangesEnd)->GetUsageClass(start, end)) {
         case TPKRangeFilter::EUsageClass::FullUsage:
@@ -128,7 +129,8 @@ TPKRangeFilter::EUsageClass TPKRangesFilter::GetUsageClass(const NArrow::TSimple
         case TPKRangeFilter::EUsageClass::PartialUsage:
             return TPKRangeFilter::EUsageClass::PartialUsage;
         case TPKRangeFilter::EUsageClass::NoUsage:
-            AFL_VERIFY(false);
+            AFL_VERIFY(false)("start", start.DebugString())("end", end.DebugString())("first_range", rangesBegin->DebugString())(
+                "last_range", std::prev(rangesEnd)->DebugString());
     }
 
     return TPKRangeFilter::EUsageClass::FullUsage;

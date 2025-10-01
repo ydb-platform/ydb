@@ -164,7 +164,7 @@ namespace NKikimr {
             if (msg->Type() == TEvBlobStorage::EvChunkWrite) {
                 auto *write = static_cast<NPDisk::TEvChunkWrite*>(msg.get());
                 return write->PartsPtr ? write->PartsPtr->ByteSize() : 0;
-            } else {
+            } else if (msg->Type() == TEvBlobStorage::EvChunkRead) {
                 auto *read = static_cast<NPDisk::TEvChunkRead*>(msg.get());
                 return read->Size;
             }

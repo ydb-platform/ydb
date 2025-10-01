@@ -6,7 +6,7 @@ Released on September 25, 2025. To update to version **2.26.0**, select the [Dow
 
 ### Features
 
-* Added the `--no-merge` and `--no-cache` options to the `{{ ydb-cli }} monitoring healthcheck` [command](./reference/ydb-cli/commands/monitoring-healthcheck.md).
+* Added the `--no-merge` and `--no-cache` options to the `{{ ydb-cli }} monitoring healthcheck` command.
 * Added query compilation time statistics to the `{{ ydb-cli }} workload * run` [commands](./reference/ydb-cli/commands/workload/index.md).
 * Added the `--retries` option to the `{{ ydb-cli }} tools restore` [command](./reference/ydb-cli/export-import/tools-restore.md), allowing to set the number of retries for every upload data request.
 * **_(Requires server v25.4+)_** Added the `--replace-sys-acl` option to the `{{ ydb-cli }} tools restore` [command](./reference/ydb-cli/export-import/tools-restore.md), which specifies whether to replace the ACL for system objects.

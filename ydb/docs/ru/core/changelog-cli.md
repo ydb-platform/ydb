@@ -6,7 +6,7 @@
 
 ### Функциональность
 
-* Добавлены опции `--no-merge` и `--no-cache` в [команду](./reference/ydb-cli/commands/monitoring-healthcheck.md) `{{ ydb-cli }} monitoring healthcheck`.
+* Добавлены опции `--no-merge` и `--no-cache` в команду `{{ ydb-cli }} monitoring healthcheck`.
 * Добавлена статистика времени компиляции запроса в [команды](./reference/ydb-cli/commands/workload/index.md) `{{ ydb-cli }} workload * run`.
 * Добавлена опция `--retries` в [команду](./reference/ydb-cli/export-import/tools-restore.md) `{{ ydb-cli }} tools restore`, позваляющая задать количество повторных попыток для каждого запроса загрузки данных.
 * **_(Требуется сервер v25.4+)_** Добавлена опция `--replace-sys-acl` в [команду](./reference/ydb-cli/export-import/tools-restore.md) `{{ ydb-cli }} tools restore`, которая задаёт, нужно ли заменять ACL для системных объектов.

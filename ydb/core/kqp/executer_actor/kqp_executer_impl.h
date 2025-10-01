@@ -941,7 +941,7 @@ protected:
     }
 
     void GetSecretsSnapshot() {
-        RegisterDescribeSecretsActor(this->SelfId(), UserToken, SecretNames, this->ActorContext().ActorSystem());
+        RegisterDescribeSecretsActor(this->SelfId(), UserToken, Database, SecretNames, this->ActorContext().ActorSystem());
     }
 
     void GetResourcesSnapshot() {

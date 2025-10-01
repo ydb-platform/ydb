@@ -33,7 +33,7 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::DoGetColumnsFetchingPlan(
     NCommon::EPortionCommitStatus portionCommitStatus = NCommon::EPortionCommitStatus::Unknown;
     if (source->GetType() == NCommon::IDataSource::EType::SimplePortion) {
         const auto* portion = static_cast<const TPortionDataSource*>(source);
-        portionCommitStatus = portion->GetContext()->GetPortionCommitStatus(portion->GetPortionInfo());
+        portionCommitStatus = GetPortionCommitStatus(portion->GetPortionInfo());
     }
 
     // snapshot filters will filter the uncommitted changes by other txs and mark conflicts

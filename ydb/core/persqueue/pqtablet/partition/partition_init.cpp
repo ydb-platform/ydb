@@ -2,8 +2,9 @@
 #include "offload_actor.h"
 #include "partition.h"
 #include "partition_compactification.h"
-#include <ydb/core/persqueue/pqtablet/common/logging.h>
 #include "partition_util.h"
+#include <ydb/core/persqueue/pqtablet/common/logging.h>
+#include <ydb/core/persqueue/pqtablet/common/constants.h>
 
 #include <memory>
 
@@ -1092,7 +1093,7 @@ void TPartition::Initialize(const TActorContext& ctx) {
 }
 
 bool TPartition::DetailedMetricsAreEnabled() const {
-    return AppData()->FeatureFlags.GetEnableMetricsLevel() && (Config.HasMetricsLevel() && Config.GetMetricsLevel() == Ydb::MetricsLevel::Detailed);
+    return AppData()->FeatureFlags.GetEnableMetricsLevel() && (Config.HasMetricsLevel() && Config.GetMetricsLevel() == METRICS_LEVEL_DETAILED);
 }
 
 void TPartition::SetupTopicCounters(const TActorContext& ctx) {

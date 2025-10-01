@@ -259,6 +259,7 @@ void TComputeScheduler::RemoveQuery(const TQueryPtr& query) {
 }
 
 void TComputeScheduler::UpdateFairShare() {
+    // TODO: make unit tests for fair share updates
     auto startTime = TMonotonic::Now();
 
     NHdrf::NSnapshot::TRootPtr snapshot;
@@ -268,7 +269,7 @@ void TComputeScheduler::UpdateFairShare() {
     }
 
     snapshot->UpdateBottomUp(Root->TotalLimit);
-    snapshot->UpdateTopDown();
+    snapshot->UpdateTopDown(ALLOW_FAIRSHARE_OVERLIMIT);
 
     {
         TWriteGuard lock(Mutex);

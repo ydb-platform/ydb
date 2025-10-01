@@ -43,7 +43,7 @@ bool FillConsumer(Ydb::Topic::Consumer& out, const NKikimrPQ::TPQTabletConfig_TC
 bool FillTopicDescription(Ydb::Topic::DescribeTopicResult& out, const NKikimrSchemeOp::TPersQueueGroupDescription& inDesc,
     const NKikimrSchemeOp::TDirEntry& inDirEntry, const TMaybe<TString>& cdcName,
     Ydb::StatusIds_StatusCode& status, TString& error) {
-    
+
     const NKikimrPQ::TPQConfig pqConfig = AppData()->PQConfig;
 
     Ydb::Scheme::Entry *selfEntry = out.mutable_self();
@@ -158,6 +158,10 @@ bool FillTopicDescription(Ydb::Topic::DescribeTopicResult& out, const NKikimrSch
             default:
                 break;
         }
+    }
+
+    if (config.HasMetricsLevel()) {
+        out.set_metrics_level(config.GetMetricsLevel());
     }
 
     for (const auto& consumer : config.GetConsumers()) {

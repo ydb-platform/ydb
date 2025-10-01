@@ -66,9 +66,8 @@ class TPQFetchRequestActor : public TActorBootstrapped<TPQFetchRequestActor>
 private:
     TFetchRequestSettings Settings;
 
-    ui32 FetchRequestReadsDone;
+    size_t FetchRequestCurrentPartitionIndex;
     ui64 FetchRequestCurrentReadTablet;
-    ui64 CurrentCookie;
     ui32 PendingAlterTopicResponses = 0;
     ui32 FetchRequestBytesLeft;
     THolder<TEvPQ::TEvFetchResponse> Response;
@@ -78,8 +77,6 @@ private:
     THashMap<TString, TTopicInfo> TopicInfo;
     // TabletId -> TabletInfo
     THashMap<ui64, TTabletInfo> TabletInfo;
-    // PartitionIndex
-    std::deque<ui64> PartitionsWithData;
 
     TActorId RequesterId;
     ui64 PendingQuotaAmount;
@@ -107,9 +104,8 @@ public:
     TPQFetchRequestActor(const TFetchRequestSettings& settings, const TActorId& schemeCacheId, const TActorId& requesterId)
         : TRlHelpers({}, settings.RlCtx, 8_KB, false, TDuration::Seconds(1))
         , Settings(settings)
-        , FetchRequestReadsDone(0)
+        , FetchRequestCurrentPartitionIndex(0)
         , FetchRequestCurrentReadTablet(0)
-        , CurrentCookie(1)
         , FetchRequestBytesLeft(0)
         , SchemeCache(schemeCacheId)
         , RequesterId(requesterId)
@@ -180,7 +176,7 @@ public:
             new IEventHandle(ctx.SelfID, ctx.SelfID, new TEvents::TEvWakeup(TimeoutWakeupTag)));
 
         SendSchemeCacheRequest(ctx);
-        Become(&TPQFetchRequestActor::StateFunc);
+        Become(&TPQFetchRequestActor::StateDescribe);
     }
 
     void SendSchemeCacheRequest(const TActorContext& ctx) {
@@ -293,6 +289,13 @@ public:
         OnMetadataReceived(ctx);
     }
 
+    STRICT_STFUNC(StateDescribe,
+        HFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleSchemeCacheResponse);
+        HFunc(TEvents::TEvWakeup, Handle);
+        CFunc(NActors::TEvents::TSystem::Poison, Die);
+    )
+
+
     void OnMetadataReceived(const TActorContext& ctx) {
         if (!AppData(ctx)->KafkaProxyConfig.GetAutoCreateConsumersEnable()) {
             return OnTopicAltered(ctx);
@@ -321,6 +324,8 @@ public:
         if (PendingAlterTopicResponses == 0) {
             return OnTopicAltered(ctx);
         }
+
+        Become(&TPQFetchRequestActor::StateAlterTopics);
     }
 
     void Handle(NKikimr::NReplication::TEvYdbProxy::TEvAlterTopicResponse::TPtr& ev, const TActorContext& ctx) {
@@ -334,50 +339,18 @@ public:
         }
     }
 
+    STRICT_STFUNC(StateAlterTopics,
+        HFunc(NKikimr::NReplication::TEvYdbProxy::TEvAlterTopicResponse, Handle);
+        HFunc(TEvents::TEvWakeup, Handle);
+        CFunc(NActors::TEvents::TSystem::Poison, Die);
+    )
+
     void OnTopicAltered(const TActorContext& ctx) {
         for (auto& [name, info]: TopicInfo) {
             ProcessTopicMetadata(name, info, ctx);
         }
-    }
 
-    void Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
-        return ProcessFetchRequestResult(ev, ctx);
-    }
-
-    void Handle(TEvPersQueue::TEvHasDataInfoResponse::TPtr& ev, const TActorContext& ctx) {
-        auto& record = ev->Get()->Record;
-        auto partitionIndex = record.GetCookie();
-        LOG_D("Handle TEvPersQueue::TEvHasDataInfoResponse " << record.ShortDebugString());
-        if (partitionIndex >= PartitionStatus.size()) {
-            Y_VERIFY_DEBUG(partitionIndex < PartitionStatus.size());
-            return;
-        }
-        auto& status = PartitionStatus[partitionIndex];
-        if (status != EPartitionStatus::HasDataRequested) {
-            // On timeout we resend send HasData
-            return;
-        }
-
-        status = EPartitionStatus::HasDataReceived;
-
-        auto& partition = Settings.Partitions[partitionIndex];
-        if (record.GetEndOffset() < partition.Offset) {
-            AddResult(partitionIndex, NPersQueue::NErrorCode::EErrorCode::READ_ERROR_TOO_BIG_OFFSET);
-        } else if (record.GetEndOffset() == partition.Offset) {
-            AddResult(partitionIndex, NPersQueue::NErrorCode::EErrorCode::READ_NOT_DONE);
-        } else {
-            PartitionsWithData.push_back(partitionIndex);
-        }
-
-        ProceedFetchRequest(ctx);
-    }
-
-    TActorId CreatePipe(ui64 tabletId, const TActorContext& ctx) {
-        auto retryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
-        retryPolicy.RetryLimitCount = 5;
-        NTabletPipe::TClientConfig clientConfig(retryPolicy);
-
-        return ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, tabletId, clientConfig));
+        Become(&TPQFetchRequestActor::StateWork);
     }
 
     void ProcessTopicMetadata(const TString& name, TTopicInfo& topicInfo, const TActorContext& ctx) {
@@ -417,6 +390,144 @@ public:
         AFL_ENSURE(!TabletInfo.empty()); // if TabletInfo is empty - topic is empty
     }
 
+    void ProceedFetchRequest(const TActorContext& ctx) {
+        if (FetchRequestCurrentReadTablet) { //already got active read request
+            return;
+        }
+
+        AFL_ENSURE(FetchRequestCurrentPartitionIndex < Settings.Partitions.size())
+            ("l", FetchRequestCurrentPartitionIndex)
+            ("r", Settings.Partitions.size());
+
+        while (true) {
+            if (FetchRequestCurrentPartitionIndex == Settings.Partitions.size()) {
+                CreateOkResponse();
+                return SendReplyAndDie(std::move(Response), ctx);
+            }
+
+            auto& status = PartitionStatus[FetchRequestCurrentPartitionIndex];
+            if (status == EPartitionStatus::DataReceived) {
+                ++FetchRequestCurrentPartitionIndex;
+                continue;
+            };
+
+            auto& req = Settings.Partitions[FetchRequestCurrentPartitionIndex];
+            auto [topic, topicInfo] = GetTopicInfo(req.Topic);
+
+            auto partitionId = req.Partition;
+
+            ui64 tabletId = topicInfo.PartitionToTablet[partitionId];
+            AFL_ENSURE(tabletId)
+                ("topic", topic)
+                ("partition", partitionId)
+                ("tabletId", tabletId);
+
+            auto jt = TabletInfo.find(tabletId);
+            AFL_ENSURE(jt != TabletInfo.end())
+                ("topic", topic)
+                ("partition", partitionId)
+                ("tabletId", tabletId);
+            auto& tabletInfo = jt->second;
+            AFL_ENSURE(!tabletInfo.BrokenPipe); // If pipe is broken, than partition status is DataReceived. It is verified early.
+
+            FetchRequestCurrentReadTablet = tabletId;
+            PartitionStatus[FetchRequestCurrentPartitionIndex] = EPartitionStatus::DataRequested;
+
+            //Form read request
+            auto request = CreateReadRequest(topic, req);
+            LOG_D("Sending request: " << request->Record.ShortDebugString());
+            NTabletPipe::SendData(ctx, tabletInfo.PipeClient, request.release());
+
+            break;
+        }
+    }
+
+    void Handle(TEvPersQueue::TEvHasDataInfoResponse::TPtr& ev, const TActorContext& ctx) {
+        auto& record = ev->Get()->Record;
+        auto partitionIndex = record.GetCookie();
+        LOG_D("Handle TEvPersQueue::TEvHasDataInfoResponse " << record.ShortDebugString());
+        if (partitionIndex >= PartitionStatus.size()) {
+            Y_VERIFY_DEBUG(partitionIndex < PartitionStatus.size());
+            return;
+        }
+        auto& status = PartitionStatus[partitionIndex];
+        if (status != EPartitionStatus::HasDataRequested) {
+            // On timeout we resend send HasData
+            return;
+        }
+
+        status = EPartitionStatus::HasDataReceived;
+
+        auto& partition = Settings.Partitions[partitionIndex];
+        if (record.GetEndOffset() < partition.Offset) {
+            AddResult(partitionIndex, NPersQueue::NErrorCode::EErrorCode::READ_ERROR_TOO_BIG_OFFSET);
+        } else if (record.GetEndOffset() == partition.Offset) {
+            AddResult(partitionIndex, NPersQueue::NErrorCode::EErrorCode::READ_NOT_DONE);
+        }
+
+        ProceedFetchRequest(ctx);
+    }
+
+    void Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
+        auto& record = ev->Get()->Record;
+        AFL_ENSURE(record.HasPartitionResponse());
+
+        if (record.GetPartitionResponse().GetCookie() != FetchRequestCurrentPartitionIndex || FetchRequestCurrentReadTablet == 0) {
+            LOG_W("proxy fetch error: got response from tablet " << record.GetPartitionResponse().GetCookie()
+                                << " while waiting from " << FetchRequestCurrentPartitionIndex << " and requested tablet is " << FetchRequestCurrentReadTablet);
+            return;
+        }
+
+        if (FetchRequestBytesLeft >= (ui32)record.ByteSize()) {
+            FetchRequestBytesLeft -= (ui32)record.ByteSize();
+        } else {
+            FetchRequestBytesLeft = 0;
+        }
+        FetchRequestCurrentReadTablet = 0;
+        EnsureResponse();
+
+        AFL_ENSURE(FetchRequestCurrentPartitionIndex < Settings.Partitions.size());
+        PartitionStatus[FetchRequestCurrentPartitionIndex] = EPartitionStatus::DataReceived;
+
+        const auto& req = Settings.Partitions[FetchRequestCurrentPartitionIndex];
+        const auto& partitionId = req.Partition;
+
+        auto res = Response->Response.MutablePartResult(FetchRequestCurrentPartitionIndex);
+        res->SetTopic(req.Topic);
+        res->SetPartition(partitionId);
+        auto read = res->MutableReadResult();
+        if (record.HasPartitionResponse() && record.GetPartitionResponse().HasCmdReadResult())
+            read->CopyFrom(record.GetPartitionResponse().GetCmdReadResult());
+        if (record.HasErrorCode())
+            read->SetErrorCode(record.GetErrorCode());
+        if (record.HasErrorReason())
+            read->SetErrorReason(record.GetErrorReason());
+
+        ++FetchRequestCurrentPartitionIndex;
+
+        auto [_, topicInfo] = GetTopicInfo(req.Topic);
+
+        SetMeteringMode(topicInfo.PQInfo->Description.GetPQTabletConfig().GetMeteringMode());
+
+        if (FetchRequestBytesLeft == 0) {
+            SendReplyOnDoneAndDie(ctx);
+        } else if (IsQuotaRequired()) {
+            PendingQuotaAmount = CalcRuConsumption(GetPayloadSize(record)) + (Settings.RuPerRequest ? 1 : 0);
+            Settings.RuPerRequest = false;
+            RequestDataQuota(PendingQuotaAmount, ctx);
+        } else {
+            ProceedFetchRequest(ctx);
+        }
+    }
+
+    TActorId CreatePipe(ui64 tabletId, const TActorContext& ctx) {
+        auto retryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
+        retryPolicy.RetryLimitCount = 5;
+        NTabletPipe::TClientConfig clientConfig(retryPolicy);
+
+        return ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, tabletId, clientConfig));
+    }
+
     void AddResult(size_t partitionIndex, NPersQueue::NErrorCode::EErrorCode errorCode) {
         EnsureResponse();
 
@@ -429,8 +540,6 @@ public:
         res->SetPartition(req.Partition);
         auto* read = res->MutableReadResult();
         read->SetErrorCode(errorCode);
-
-        ++FetchRequestReadsDone;
     }
 
     void HandlePipeError(const ui64 tabletId, const TActorContext& ctx) {
@@ -481,40 +590,6 @@ public:
         }
     }
 
-    void Die(const TActorContext& ctx) override {
-        for (auto& [_, tabletInfo]: TabletInfo) {
-            if (!tabletInfo.BrokenPipe) {
-                NTabletPipe::CloseClient(ctx, tabletInfo.PipeClient);
-            }
-        }
-        if (YdbProxy) {
-            Send(YdbProxy, new TEvents::TEvPoison());
-        }
-        if (LongTimer) {
-            Send(LongTimer, new TEvents::TEvPoison());
-        }
-        TRlHelpers::PassAway(SelfId());
-        TActorBootstrapped<TPQFetchRequestActor>::Die(ctx);
-    }
-
-    std::optional<size_t> NextPartition() {
-        if (PartitionsWithData.empty()) {
-            return std::nullopt;
-        }
-        size_t i = RandomNumber<size_t>(PartitionsWithData.size());
-        if (i == 0) {
-            auto partitionIndex = std::move(PartitionsWithData.front());
-            PartitionsWithData.pop_front();
-            return partitionIndex;
-        }
-
-        ui64 result = PartitionsWithData[i];
-        PartitionsWithData[i] = PartitionsWithData.front();
-        PartitionsWithData.pop_front();
-
-        return result;
-    }
-
     std::pair<const TString&, TTopicInfo&> GetTopicInfo(const TString& topicPath) {
         auto* topic = &topicPath;
         auto cdcTopicNameIt = CdcPathToPrivateTopicPath.find(*topic);
@@ -528,67 +603,12 @@ public:
         return {*topic, it->second};
     }
 
-    void ProceedFetchRequest(const TActorContext& ctx) {
-        if (FetchRequestCurrentReadTablet) { //already got active read request
-            return;
-        }
-
-        if (FetchRequestReadsDone == Settings.Partitions.size()) {
-            CreateOkResponse();
-            return SendReplyAndDie(std::move(Response), ctx);
-        }
-        AFL_ENSURE(FetchRequestReadsDone < Settings.Partitions.size())
-            ("l", FetchRequestReadsDone)
-            ("r", Settings.Partitions.size());
-
-        while (true) {
-            auto partitionIndex = NextPartition();
-            if (!partitionIndex) {
-                return;
-            }
-
-            CurrentCookie = *partitionIndex;
-
-            auto& req = Settings.Partitions[*partitionIndex];
-            auto [topic, topicInfo] = GetTopicInfo(req.Topic);
-
-            auto partitionId = req.Partition;
-
-            ui64 tabletId = topicInfo.PartitionToTablet[partitionId];
-            AFL_ENSURE(tabletId)
-                ("topic", topic)
-                ("partition", partitionId)
-                ("tabletId", tabletId);
-
-            auto jt = TabletInfo.find(tabletId);
-            AFL_ENSURE(jt != TabletInfo.end())
-                ("topic", topic)
-                ("partition", partitionId)
-                ("tabletId", tabletId);
-            auto& tabletInfo = jt->second;
-
-            if (tabletInfo.BrokenPipe) {
-                continue;
-            }
-
-            FetchRequestCurrentReadTablet = tabletId;
-            PartitionStatus[*partitionIndex] = EPartitionStatus::DataRequested;
-
-            //Form read request
-            auto request = CreateReadRequest(topic, req);
-            LOG_D("Sending request: " << request->Record.ShortDebugString());
-            NTabletPipe::SendData(ctx, tabletInfo.PipeClient, request.release());
-
-            break;
-        }
-    }
-
     std::unique_ptr<TEvPersQueue::TEvRequest> CreateReadRequest(const TString& topic, const TPartitionFetchRequest& fetchRequest) {
         auto request = std::make_unique<TEvPersQueue::TEvRequest>();
-        request->Record.SetRequestId(TStringBuilder() << "request" << "-id-" << FetchRequestReadsDone << "-" << Settings.Partitions.size());
+        request->Record.SetRequestId(TStringBuilder() << "request" << "-id-" << FetchRequestCurrentPartitionIndex << "-" << Settings.Partitions.size());
 
         auto* partitionRequest = request->Record.MutablePartitionRequest();
-        partitionRequest->SetCookie(CurrentCookie);
+        partitionRequest->SetCookie(FetchRequestCurrentPartitionIndex);
         partitionRequest->SetTopic(topic);
         partitionRequest->SetPartition(fetchRequest.Partition);
 
@@ -602,58 +622,6 @@ public:
         read->SetExternalOperation(true);
 
         return request;
-    }
-
-    void ProcessFetchRequestResult(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
-        auto& record = ev->Get()->Record;
-        AFL_ENSURE(record.HasPartitionResponse());
-
-        if (record.GetPartitionResponse().GetCookie() != CurrentCookie || FetchRequestCurrentReadTablet == 0) {
-            LOG_W("proxy fetch error: got response from tablet " << record.GetPartitionResponse().GetCookie()
-                                << " while waiting from " << CurrentCookie << " and requested tablet is " << FetchRequestCurrentReadTablet);
-            return;
-        }
-
-        if (FetchRequestBytesLeft >= (ui32)record.ByteSize()) {
-            FetchRequestBytesLeft -= (ui32)record.ByteSize();
-        } else {
-            FetchRequestBytesLeft = 0;
-        }
-        FetchRequestCurrentReadTablet = 0;
-        EnsureResponse();
-
-        PartitionStatus[CurrentCookie] = EPartitionStatus::DataReceived;
-
-        AFL_ENSURE(FetchRequestReadsDone < Settings.Partitions.size());
-        const auto& req = Settings.Partitions[CurrentCookie];
-        const auto& partitionId = req.Partition;
-
-        auto res = Response->Response.MutablePartResult(CurrentCookie);
-        res->SetTopic(req.Topic);
-        res->SetPartition(partitionId);
-        auto read = res->MutableReadResult();
-        if (record.HasPartitionResponse() && record.GetPartitionResponse().HasCmdReadResult())
-            read->CopyFrom(record.GetPartitionResponse().GetCmdReadResult());
-        if (record.HasErrorCode())
-            read->SetErrorCode(record.GetErrorCode());
-        if (record.HasErrorReason())
-            read->SetErrorReason(record.GetErrorReason());
-
-        ++FetchRequestReadsDone;
-
-        auto [_, topicInfo] = GetTopicInfo(req.Topic);
-
-        SetMeteringMode(topicInfo.PQInfo->Description.GetPQTabletConfig().GetMeteringMode());
-
-        if (FetchRequestBytesLeft == 0) {
-            SendReplyOnDoneAndDie(ctx);
-        } else if (IsQuotaRequired()) {
-            PendingQuotaAmount = CalcRuConsumption(GetPayloadSize(record)) + (Settings.RuPerRequest ? 1 : 0);
-            Settings.RuPerRequest = false;
-            RequestDataQuota(PendingQuotaAmount, ctx);
-        } else {
-            ProceedFetchRequest(ctx);
-        }
     }
 
     ui64 GetPayloadSize(const NKikimrClient::TResponse& record) const {
@@ -721,20 +689,32 @@ public:
         }
     }
 
-    STRICT_STFUNC(StateFunc,
-            HFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleSchemeCacheResponse);
-            HFunc(NKikimr::NReplication::TEvYdbProxy::TEvAlterTopicResponse, Handle);
+    STRICT_STFUNC(StateWork,
+        HFunc(TEvPersQueue::TEvHasDataInfoResponse, Handle);
+        HFunc(TEvPersQueue::TEvResponse, Handle);
 
-            HFunc(TEvPersQueue::TEvHasDataInfoResponse, Handle);
-            HFunc(TEvPersQueue::TEvResponse, Handle);
+        HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
+        HFunc(TEvTabletPipe::TEvClientConnected, Handle);
 
-            HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
-            HFunc(TEvTabletPipe::TEvClientConnected, Handle);
-
-            HFunc(TEvents::TEvWakeup, Handle);
-
-            CFunc(NActors::TEvents::TSystem::PoisonPill, Die);
+        HFunc(TEvents::TEvWakeup, Handle);
+        CFunc(NActors::TEvents::TSystem::PoisonPill, Die);
     )
+
+    void Die(const TActorContext& ctx) override {
+        for (auto& [_, tabletInfo]: TabletInfo) {
+            if (!tabletInfo.BrokenPipe) {
+                NTabletPipe::CloseClient(ctx, tabletInfo.PipeClient);
+            }
+        }
+        if (YdbProxy) {
+            Send(YdbProxy, new TEvents::TEvPoison());
+        }
+        if (LongTimer) {
+            Send(LongTimer, new TEvents::TEvPoison());
+        }
+        TRlHelpers::PassAway(SelfId());
+        TActorBootstrapped<TPQFetchRequestActor>::Die(ctx);
+    }
 };
 
 NActors::IActor* CreatePQFetchRequestActor(

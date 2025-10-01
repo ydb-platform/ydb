@@ -295,7 +295,7 @@ message TTableServiceConfig {
     optional uint64 IdxLookupJoinPointsLimit = 58 [default = 3];
     reserved 59; //optional bool OldLookupJoinBehaviour = 59 [default = false];
 
-    optional bool EnableOltpSink = 60 [default = false];
+    optional bool EnableOltpSink = 60 [default = true];
 
     enum EBlockChannelsMode {
         BLOCK_CHANNELS_SCALAR = 0;
@@ -333,7 +333,7 @@ message TTableServiceConfig {
 
     optional bool EnableRowsDuplicationCheck = 69 [ default = false ];
 
-    optional bool EnableHtapTx = 71 [default = false];
+    optional bool EnableHtapTx = 71 [default = true];
 
     message TWriteActorSettings {
         optional uint64 InFlightMemoryLimitPerActorBytes = 1 [ default = 67108864 ];
@@ -370,9 +370,9 @@ message TTableServiceConfig {
     optional bool EnableStreamWrite = 77 [default = false];
     optional bool EnableBatchUpdates = 78 [default = false];
 
-    optional bool AllowMultiBroadcasts = 79 [default = false];
+    optional bool AllowMultiBroadcasts = 79 [default = true];
 
-    optional bool DefaultEnableShuffleElimination = 80 [default = false];
+    optional bool DefaultEnableShuffleElimination = 80 [default = true];
 
     message TBatchOperationSettings {
         optional uint64 MaxBatchSize = 1 [ default = 10000 ];
@@ -386,7 +386,7 @@ message TTableServiceConfig {
 
     optional bool EnableFoldUdfs = 82 [ default = true ];
 
-    optional bool FilterPushdownOverJoinOptionalSide = 83 [ default = false ];
+    optional bool FilterPushdownOverJoinOptionalSide = 83 [ default = true ];
 
     optional bool EnableNewRBO = 84 [default = false];
     optional bool EnableSpillingInHashJoinShuffleConnections = 85 [default = true];
@@ -395,11 +395,11 @@ message TTableServiceConfig {
 
     optional bool EnableIndexStreamWrite = 88 [default = false];
 
-    optional bool EnableParallelPointReadConsolidation = 89 [default = false];
+    optional bool EnableParallelPointReadConsolidation = 89 [default = true];
 
     optional uint64 BufferPageAllocSize = 90  [ default = 4096 ];
 
-    optional bool EnableOlapPushdownProjections = 91  [ default = false ];
+    optional bool EnableOlapPushdownProjections = 91  [ default = true ];
 
     optional uint32 DefaultLangVer = 92 [default = 202501];
 
@@ -408,13 +408,13 @@ message TTableServiceConfig {
         HASH_V2 = 1;
     }
 
-    optional EHashKind DefaultHashShuffleFuncType = 93 [ default = HASH_V1 ];
+    optional EHashKind DefaultHashShuffleFuncType = 93 [ default = HASH_V2 ];
 
-    optional bool EnableParallelUnionAllConnectionsForExtend = 94  [ default = false ];
+    optional bool EnableParallelUnionAllConnectionsForExtend = 94  [ default = true ];
 
     optional bool EnableTempTablesForUser = 95 [default = false];
 
-    optional bool EnableSimpleProgramsSinglePartitionOptimization = 96 [default = false];
+    optional bool EnableSimpleProgramsSinglePartitionOptimization = 96 [default = true];
 
     optional bool EnableKqpScanQueryUseLlvm = 97 [default = true];
 
@@ -422,8 +422,8 @@ message TTableServiceConfig {
 
     optional bool EnableOrderOptimizaionFSM = 99 [ default = false ];
 
-    optional bool EnableTopSortSelectIndex = 100 [ default = false ];
-    optional bool EnablePointPredicateSortAutoSelectIndex = 101 [ default = false ];
+    optional bool EnableTopSortSelectIndex = 100 [ default = true ];
+    optional bool EnablePointPredicateSortAutoSelectIndex = 101 [ default = true ];
 
-    optional bool EnableDataShardCreateTableAs = 102 [default = false];
+    optional bool EnableDataShardCreateTableAs = 102 [default = true];
 };

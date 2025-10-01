@@ -1,26 +1,15 @@
 #include "fetch_request_actor.h"
 
-#include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/actors/core/interconnect.h>
-
-#include <ydb/core/protos/msgbus_pq.pb.h>
-#include <ydb/core/protos/msgbus.pb.h>
-
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/client/server/msgbus_server_pq_metacache.h>
-#include <ydb/core/grpc_services/service_scheme.h>
-#include <ydb/core/grpc_services/service_topic.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/events/internal.h>
-#include <ydb/core/persqueue/public/constants.h>
 #include <ydb/core/persqueue/public/pq_rl_helpers.h>
 #include <ydb/core/persqueue/public/write_meta/write_meta.h>
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
-#include <ydb/core/kafka_proxy/actors/actors.h>
-#include <ydb/core/kafka_proxy/actors/kafka_topic_group_path_struct.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/log.h>
-#include <ydb/public/lib/base/msgbus_status.h>
 
 #define LOG_PREFIX "[" << NActors::TlsActivationContext->AsActorContext().SelfID << "] "
 #define LOG_E(stream) LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::PQ_FETCH_REQUEST, LOG_PREFIX << stream)

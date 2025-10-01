@@ -720,6 +720,8 @@ void TPartition::InitComplete(const TActorContext& ctx) {
 
     CreateCompacter();
 
+    InitUserInfoForImportantClients(ctx);
+
     FillReadFromTimestamps(ctx);
     ProcessPendingEvents(ctx);
     ProcessTxsAndUserActs(ctx);
@@ -735,7 +737,6 @@ void TPartition::InitComplete(const TActorContext& ctx) {
     }
     ProcessHasDataRequests(ctx);
 
-    InitUserInfoForImportantClients(ctx);
 
     for (auto&& userInfoPair : UsersInfoStorage->GetAll()) {
         PQ_ENSURE(userInfoPair.second.Offset >= 0);

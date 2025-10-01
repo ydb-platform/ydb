@@ -217,9 +217,9 @@ public:
         auto optSessionId = TryDecodeYdbSessionId(SessionId);
         YQL_ENSURE(optSessionId, "Can't decode ydb session Id");
 
-        TempTablesState.SessionId = *optSessionId;
         TempTablesState.Database = Settings.Database;
-        LOG_D("Create session actor with id " << TempTablesState.SessionId);
+        TempTablesState.TempDirName = TAppData::RandomProvider->GenUuid4().AsUuidString();
+        LOG_D("Create session actor with id " <<  *optSessionId << " (tmp dir name: " << TempTablesState.TempDirName << ")");
     }
 
     void Bootstrap() {
@@ -1549,8 +1549,10 @@ public:
         const TString requestType = QueryState->GetRequestType();
         const bool temporary = GetTemporaryTableInfo(tx).has_value();
 
-        auto executerActor = CreateKqpSchemeExecuter(tx, QueryState->GetType(), SelfId(), requestType, Settings.Database, userToken, clientAddress,
-            temporary, QueryState->IsCreateTableAs(), TempTablesState.SessionId, QueryState->UserRequestContext, KqpTempTablesAgentActor);
+        auto executerActor = CreateKqpSchemeExecuter(
+            tx, QueryState->GetType(), SelfId(), requestType, Settings.Database, userToken, clientAddress,
+            temporary, /* createTmpDir */ temporary && !TempTablesState.NeedCleaning,
+            QueryState->IsCreateTableAs(), TempTablesState.TempDirName, QueryState->UserRequestContext, KqpTempTablesAgentActor);
 
         ExecuterId = RegisterWithSameMailbox(executerActor);
 
@@ -1807,7 +1809,7 @@ public:
             return;
         }
         if (QueryState->IsCreateTableAs()) {
-            TempTablesState.HasCreateTableAs = true;
+            TempTablesState.NeedCleaning = true;
             QueryState->UpdateTempTablesState(TempTablesState);
             return;
         }
@@ -1816,6 +1818,7 @@ public:
         if (optInfo) {
             auto [isCreate, info] = *optInfo;
             if (isCreate) {
+                TempTablesState.NeedCleaning = true;
                 TempTablesState.TempTables[info.first] = info.second;
             } else {
                 TempTablesState.TempTables.erase(info.first);

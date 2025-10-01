@@ -262,14 +262,14 @@ namespace {
         }
 
         const TString tmpTableName = TStringBuilder()
-            << tableName
-            << "_cas_"
-            << TAppData::RandomProvider->GenUuid4().AsUuidString();
+                << tableName
+                << "_"
+                << TAppData::RandomProvider->GenUuid4().AsUuidString();
 
         const TString createTableName = (TStringBuilder()
                 << CanonizePath(sessionCtx->GetDatabase())
                 << "/.tmp/sessions/"
-                << sessionCtx->GetSessionId()
+                << sessionCtx->GetTempTablesState()->TempDirName
                 << CanonizePath(tmpTableName));
 
         create = exprCtx.ReplaceNode(std::move(create), *columns, exprCtx.NewList(pos, std::move(columnNodes)));

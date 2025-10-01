@@ -405,23 +405,23 @@ namespace NActors {
             if (!HandleResumeRunnable(ev) && !HandleRegisteredEvent(ev)) {
                 (this->*StateFunc_)(ev);
             }
-        } catch (const std::exception& exc) {
-            if (!OnUnhandledExceptionSafe(exc)) {
+        } catch (...) {
+            if (!OnUnhandledExceptionSafe(std::current_exception())) {
                 throw;
             }
         }
     }
 
-    bool IActor::OnUnhandledExceptionSafe(const std::exception& originalExc) {
+    bool IActor::OnUnhandledExceptionSafe(const std::exception_ptr& excPtr) {
         auto* handler = dynamic_cast<IActorExceptionHandler*>(this);
         if (!handler) {
             return false;
         }
 
         try {
-            return handler->OnUnhandledException(originalExc);
+            return handler->OnUnhandledException(excPtr);
         } catch (const std::exception& handleExc) {
-            Cerr << "OnUnhandledException throws unhandled exception " 
+            Cerr << "OnUnhandledException throws unhandled exception "
                 << TypeName(handleExc) << ": " << handleExc.what() << Endl
                 << TBackTrace::FromCurrentException().PrintToString()
                 << Endl;

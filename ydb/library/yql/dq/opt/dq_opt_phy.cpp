@@ -3486,8 +3486,12 @@ bool ValidateStreamLookupJoinFlags(const TDqJoin& join, TExprContext& ctx) {
     }
 
     if (!rightAny) {
-        ctx.AddError(TIssue(ctx.GetPosition(join.Pos()), "Streamlookup: must be LEFT JOIN /*+streamlookup(...)*/ ANY"));
-        return false;
+        if (false) { // Temporary change to waring to allow for smooth transition
+            ctx.AddError(TIssue(ctx.GetPosition(join.Pos()), "Streamlookup: must be LEFT JOIN /*+streamlookup(...)*/ ANY"));
+            return false;
+        } else {
+            ctx.AddWarning(TIssue(ctx.GetPosition(join.Pos()), "(Deprecation) Streamlookup: must be LEFT JOIN /*+streamlookup(...)*/ ANY"));
+        }
     }
 
     return true;

@@ -59,13 +59,14 @@ public:
     {}
 
     void Bootstrap() {
-        if (TempTablesState.TempTables.empty() && !TempTablesState.HasCreateTableAs) {
+        if (!TempTablesState.NeedCleaning) {
+            AFL_ENSURE(TempTablesState.TempTables.empty());
             Finish();
             return;
         }
 
         PathsToTraverse.push_back(
-            NKikimr::SplitPath(GetSessionDirPath(Database, TempTablesState.SessionId)));
+            NKikimr::SplitPath(GetSessionDirPath(Database, TempTablesState.TempDirName)));
         TraverseNext();
         Become(&TKqpTempTablesManager::PathSearchState);
     }

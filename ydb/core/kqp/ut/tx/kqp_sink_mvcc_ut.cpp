@@ -183,6 +183,14 @@ Y_UNIT_TEST_SUITE(KqpSinkMvcc) {
             CompareYson(R"([[0u;["0"]]])", FormatResultSetYson(result.GetResultSet(0)));
             auto tx2 = result.GetTransaction();
 
+            // tx2 reads key=1 and sees nothing
+            result = session2.ExecuteQuery(Q1_(R"(
+                select * from KV2 where Key = 1u;
+                )"), TTxControl::Tx(*tx2)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(0)));
+            tx2 = result.GetTransaction();
+
             // bonus checks 1: tx1's reads do not affect the visibility of its writes to other concurrent txs
             
             // tx1 sees (0, 1), (1, 1)

@@ -10,9 +10,18 @@ namespace NKikimr::NColumnShard {
 
 LWTRACE_USING(YDB_CS);
 
-bool TWriteTask::Execute(TColumnShard* owner, const TActorContext& /* ctx */) const {
+bool TWriteTask::Execute(TColumnShard* owner, const TActorContext& ctx) const {
     owner->Counters.GetCSCounters().WritingCounters->OnWritingTaskDequeue(TMonotonic::Now() - Created);
+
+    if (const auto lock = owner->OperationsManager->GetLockOptional(LockId); lock) {
+        if (lock->IsDeleted()) {
+            Abort(owner, "lock is deleted", ctx, NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN);
+            return true;
+        }
+    }
+
     owner->OperationsManager->RegisterLock(LockId, owner->Generation());
+    owner->SubscribeLock(LockId, LockNodeId);
     auto writeOperation = owner->OperationsManager->CreateWriteOperation(PathId, LockId, Cookie, GranuleShardingVersionId, ModificationType, IsBulk);
 
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_WRITE)("writing_size", ArrowData->GetSize())("operation_id", writeOperation->GetIdentifier())(

@@ -43,10 +43,11 @@ class LoadSuiteBase:
                     return ''
                 return self.color
 
-        def __init__(self, name: str, caption: Optional[str] = None, intervals: list[LoadSuiteBase.KeyMeasurement.Interval] = []):
+        def __init__(self, name: str, caption: Optional[str] = None, intervals: list[LoadSuiteBase.KeyMeasurement.Interval] = [], description: str = ''):
             self.name = name
             self.caption = caption if caption else name
             self.intervals = intervals
+            self.description = description
 
         def get_color(self, value: float) -> str:
             for i in self.intervals:
@@ -112,8 +113,8 @@ class LoadSuiteBase:
         return result
 
     @classmethod
-    def get_key_measurements(cls) -> list[LoadSuiteBase.KeyMeasurement]:
-        return []
+    def get_key_measurements(cls) -> tuple[list[LoadSuiteBase.KeyMeasurement], str]:
+        return [], ''
 
     @classmethod
     @allure.step('check tables size')
@@ -318,15 +319,18 @@ class LoadSuiteBase:
         empty = True
         result = '''<h3>Key Measurements</h3>
         <table border='1' cellpadding='2px' style='border-collapse: collapse; font-size: 12px;'>
-        <tr style='background-color: #f0f0f0;'><th>Measurement</th><th>Value</th></tr>'''
-        for m in cls.get_key_measurements():
+        <tr style='background-color: #f0f0f0;'><th>Measurement</th><th>Value</th><th>Description</th></tr>'''
+        measurements, explanations = cls.get_key_measurements()
+        for m in measurements:
             value = stats.get(m.name)
             if value is None:
                 continue
             empty = False
             color = m.get_color(value)
-            result += f"<tr style='background-color: {color};'><td>{m.caption}</td><td>{value:.6g}</td></tr>"
+            result += f"<tr style='background-color: {color};'><td>{m.caption}</td><td>{value:.6g}</td><td>{m.description}</td></tr>"
         result += '</table>'
+        if explanations:
+            result += f'<h4>Explanations</h4>{explanations}'
         return '' if empty else result
 
     @classmethod

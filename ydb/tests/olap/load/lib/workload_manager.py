@@ -250,7 +250,7 @@ class WorkloadManagerComputeScheduler(WorkloadManagerBase):
                 LoadSuiteBase.KeyMeasurement.Interval('#ccffcc', 1.e-5),
                 LoadSuiteBase.KeyMeasurement.Interval('#ffcccc')
             ], f'Satisfaction for resource pool <b>{p.name}</b>. See explanations below.') for p in cls.get_resource_pools()
-        ], '''<p>Parameter <b>satisfaction</b> is a metric that allows you to assess the level of satisfaction of a certain 
+        ], '''<p>Parameter <b>satisfaction</b> is a metric that allows you to assess the level of satisfaction of a certain
         pool with resources (in this case, CPU time). It demonstrates how efficiently the pool uses the resources allocated
         to it compared to the amount that was planned for it.</p>
 

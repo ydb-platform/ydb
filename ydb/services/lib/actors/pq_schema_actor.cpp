@@ -957,9 +957,9 @@ namespace NKikimr::NGRpcProxy::V1 {
             }
         }
 
-        if (settings.has_set_metrics_level()) {
-            pqTabletConfig->SetMetricsLevel(settings.set_metrics_level());
-        } else if (settings.has_reset_metrics_level()) {
+        if (settings.has_metrics_level()) {
+            pqTabletConfig->SetMetricsLevel(settings.metrics_level());
+        } else {
             pqTabletConfig->ClearMetricsLevel();
         }
 

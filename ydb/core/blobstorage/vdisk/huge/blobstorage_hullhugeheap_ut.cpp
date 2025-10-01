@@ -288,7 +288,7 @@ namespace NKikimr {
                 // just serialize/deserialize
                 TString serialized = heap.Serialize();
                 THeap newHeap("vdisk", chunkSize, appendBlockSize, minHugeBlobInBytes, mileStoneBlobInBytes,
-                        maxBlobInBytes, overhead, 0, false, freeChunksReservation);
+                        maxBlobInBytes, overhead, stepsBetweenPowersOf2, useBucketsV2, freeChunksReservation);
                 newHeap.ParseFromString(serialized);
                 newHeap.FinishRecovery();
             }

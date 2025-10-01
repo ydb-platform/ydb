@@ -4,12 +4,12 @@
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/testlib/tenant_runtime.h>
 #include <ydb/core/tx/scheme_board/cache.h>
-#include <ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/ut_utils.h>
+#include <ydb/public/sdk/cpp/src/client/topic/ut/ut_utils/topic_sdk_test_setup.h>
 
 namespace NKikimr::NPQ {
 using namespace NPersQueue;
 //using namespace NYdb::NTopic;
-using namespace NYdb::NPersQueue::NTests;
+using namespace NYdb::NTopic::NTests;
 
 
 Y_UNIT_TEST_SUITE(TFetchRequestTests) {
@@ -26,7 +26,7 @@ Y_UNIT_TEST_SUITE(TFetchRequestTests) {
     }
 
     Y_UNIT_TEST(HappyWay) {
-        auto setup = std::make_shared<TPersQueueYdbSdkTestSetup>(TEST_CASE_NAME);
+        auto setup = std::make_shared<TTopicSdkTestSetup>(TEST_CASE_NAME);
         setup->GetServer().EnableLogs(
                 { NKikimrServices::TX_PROXY_SCHEME_CACHE, NKikimrServices::PQ_FETCH_REQUEST },
                 NActors::NLog::PRI_DEBUG
@@ -36,18 +36,18 @@ Y_UNIT_TEST_SUITE(TFetchRequestTests) {
 
         ui32 totalPartitions = 5;
         setup->CreateTopic("topic1", "dc1", totalPartitions);
-        setup->Write("topic1", 2, "Data 1-1");
-        setup->Write("topic1", 2, "Data 1-2");
-        setup->Write("topic1", 2, "Data 1-3");
+        setup->Write("/Root/topic1", "Data 1-1", 1);
+        setup->Write("/Root/topic1", "Data 1-2", 1);
+        setup->Write("/Root/topic1", "Data 1-3", 1);
 
         setup->CreateTopic("topic2", "dc1", totalPartitions);
-        setup->Write("topic1", 4, "Data 2-1");
-        setup->Write("topic1", 4, "Data 2-2");
+        setup->Write("/Root/topic1", "Data 2-1", 3);
+        setup->Write("/Root/topic1", "Data 2-2", 3);
 
         auto edgeId = runtime.AllocateEdgeActor();
-        TPartitionFetchRequest p1{"Root/PQ/rt3.dc1--topic1", 1, 1, 10000};
-        TPartitionFetchRequest p2{"Root/PQ/rt3.dc1--topic2", 3, 0, 10000};
-        TPartitionFetchRequest pbad{"Root/PQ/rt3.dc1--topic2", 2, 1, 10000};
+        TPartitionFetchRequest p1{"/Root/topic1", 1, 1, 10000};
+        TPartitionFetchRequest p2{"/Root/topic2", 3, 0, 10000};
+        TPartitionFetchRequest pbad{"/Root/topic2", 2, 1, 10000};
 
         TFetchRequestSettings settings{{}, NKikimr::NPQ::CLIENTID_WITHOUT_CONSUMER, {p1, p2, pbad}, 1000, 1000};
         auto fetchId = runtime.Register(CreatePQFetchRequestActor(settings, MakeSchemeCacheID(), edgeId));
@@ -58,25 +58,37 @@ Y_UNIT_TEST_SUITE(TFetchRequestTests) {
         UNIT_ASSERT_C(ev->Status == Ydb::StatusIds::SUCCESS, ev->Message);
         Cerr << "Got event: " << ev->Response.DebugString() << Endl;
         UNIT_ASSERT_VALUES_EQUAL(ev->Response.PartResultSize(), 3);
-        for (const auto& part : ev->Response.GetPartResult()) {
-            if (part.GetTopic().Contains("topic1")) {
-                UNIT_ASSERT(part.GetReadResult().GetErrorCode() == NPersQueue::NErrorCode::EErrorCode::OK);
-                UNIT_ASSERT_VALUES_EQUAL(part.GetPartition(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(part.GetReadResult().GetResult(0).GetOffset(), 1);
-            } else {
-                UNIT_ASSERT(part.GetTopic().Contains("topic2"));
-                if (part.GetPartition() == 2) {
-                    UNIT_ASSERT(part.GetReadResult().GetErrorCode() != NPersQueue::NErrorCode::EErrorCode::OK);
-                } else {
-                    UNIT_ASSERT_VALUES_EQUAL(part.GetPartition(), 3);
-                    UNIT_ASSERT_VALUES_EQUAL(part.GetReadResult().GetResult(0).GetOffset(), 0);
-                }
-            }
+
+        {
+            auto& result = ev->Response.GetPartResult(0);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetTopic(), "/Root/topic1");
+            UNIT_ASSERT_VALUES_EQUAL(result.GetPartition(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(NPersQueue::NErrorCode::EErrorCode_Name(result.GetReadResult().GetErrorCode()),
+                NPersQueue::NErrorCode::EErrorCode_Name(NPersQueue::NErrorCode::EErrorCode::OK));
+            UNIT_ASSERT_VALUES_EQUAL(result.GetReadResult().GetMaxOffset(), 3);
+        }
+
+        {
+            auto& result = ev->Response.GetPartResult(1);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetTopic(), "/Root/topic2");
+            UNIT_ASSERT_VALUES_EQUAL(result.GetPartition(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(NPersQueue::NErrorCode::EErrorCode_Name(result.GetReadResult().GetErrorCode()),
+                NPersQueue::NErrorCode::EErrorCode_Name(NPersQueue::NErrorCode::EErrorCode::OK));
+            UNIT_ASSERT_VALUES_EQUAL(result.GetReadResult().GetMaxOffset(), 0);
+        }
+
+        {
+            auto& result = ev->Response.GetPartResult(2);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetTopic(), "/Root/topic2");
+            UNIT_ASSERT_VALUES_EQUAL(result.GetPartition(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(NPersQueue::NErrorCode::EErrorCode_Name(result.GetReadResult().GetErrorCode()),
+                NPersQueue::NErrorCode::EErrorCode_Name(NPersQueue::NErrorCode::EErrorCode::READ_ERROR_TOO_BIG_OFFSET));
+            UNIT_ASSERT_VALUES_EQUAL(result.GetReadResult().GetMaxOffset(), 0);
         }
     }
 
     Y_UNIT_TEST(SmallBytesRead) {
-        auto setup = std::make_shared<TPersQueueYdbSdkTestSetup>(TEST_CASE_NAME);
+        auto setup = std::make_shared<TTopicSdkTestSetup>(TEST_CASE_NAME);
         setup->GetServer().EnableLogs(
                 { NKikimrServices::TX_PROXY_SCHEME_CACHE, NKikimrServices::PQ_FETCH_REQUEST },
                 NActors::NLog::PRI_DEBUG
@@ -85,21 +97,20 @@ Y_UNIT_TEST_SUITE(TFetchRequestTests) {
         StartSchemeCache(runtime);
 
         setup->CreateTopic("topic1", "dc1", 2);
-        setup->Write("topic1", 0, TString(100_KB, 'a'));
+        setup->Write("/Root/topic1", TString(2_KB, 'a'), 0);
 
-
-        auto edgeId = runtime.AllocateEdgeActor();
-        TPartitionFetchRequest p1 {"Root/PQ/rt3.dc1--topic1", 0, 0, 10000};
-        TPartitionFetchRequest p2 {"Root/PQ/rt3.dc1--topic1", 1, 0, 100};
+        TPartitionFetchRequest p1 {"/Root/topic1", 0, 0, 1_KB};
+        TPartitionFetchRequest p2 {"/Root/topic1", 1, 0, 1_KB};
 
         TFetchRequestSettings settings{
             .Database = {},
             .Consumer = NKikimr::NPQ::CLIENTID_WITHOUT_CONSUMER,
             .Partitions = {p1, p2},
-            .MaxWaitTimeMs = 500,
+            .MaxWaitTimeMs = 1000,
             .TotalMaxBytes = 100
         };
 
+        auto edgeId = runtime.AllocateEdgeActor();
         auto fetchActorId = runtime.Register(CreatePQFetchRequestActor(settings, MakeSchemeCacheID(), edgeId));
         runtime.EnableScheduleForActor(fetchActorId);
         runtime.DispatchEvents();
@@ -115,23 +126,23 @@ Y_UNIT_TEST_SUITE(TFetchRequestTests) {
             UNIT_ASSERT_VALUES_EQUAL(result.GetPartition(), 0);
             UNIT_ASSERT_VALUES_EQUAL(NPersQueue::NErrorCode::EErrorCode_Name(result.GetReadResult().GetErrorCode()),
                 NPersQueue::NErrorCode::EErrorCode_Name(NPersQueue::NErrorCode::EErrorCode::OK));
-            //UNIT_ASSERT_VALUES_EQUAL(result.GetReadResult().GetMaxOffset(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetReadResult().GetMaxOffset(), 1);
             UNIT_ASSERT_VALUES_EQUAL(result.GetReadResult().ResultSize(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetReadResult().GetResult(0).GetData(), TString(100_KB, 'a'));
+            UNIT_ASSERT_VALUES_EQUAL(result.GetReadResult().GetResult(0).GetUncompressedSize(), 2_KB);
         }
 
         {
             auto& result = ev->Response.GetPartResult(1);
             UNIT_ASSERT_VALUES_EQUAL(result.GetPartition(), 1);
             UNIT_ASSERT_VALUES_EQUAL(NPersQueue::NErrorCode::EErrorCode_Name(result.GetReadResult().GetErrorCode()),
-                NPersQueue::NErrorCode::EErrorCode_Name(NPersQueue::NErrorCode::EErrorCode::OK));
+                NPersQueue::NErrorCode::EErrorCode_Name(NPersQueue::NErrorCode::EErrorCode::READ_NOT_DONE));
             UNIT_ASSERT_VALUES_EQUAL(result.GetReadResult().GetMaxOffset(), 0);
             UNIT_ASSERT_VALUES_EQUAL(result.GetReadResult().ResultSize(), 0);
         }
     }
 
     Y_UNIT_TEST(BadTopicName) {
-        auto setup = std::make_shared<TPersQueueYdbSdkTestSetup>(TEST_CASE_NAME);
+        auto setup = std::make_shared<TTopicSdkTestSetup>(TEST_CASE_NAME);
         auto& runtime = setup->GetRuntime();
         StartSchemeCache(runtime);
 
@@ -141,8 +152,8 @@ Y_UNIT_TEST_SUITE(TFetchRequestTests) {
         setup->CreateTopic("topic1", "dc1", totalPartitions);
 
         auto edgeId = runtime.AllocateEdgeActor();
-        TPartitionFetchRequest p1{"Root/PQ/rt3.dc1--topic1", 1, 1, 10000};
-        TPartitionFetchRequest p2{"Root/PQ/rt3.dc1--topic2", 3, 0, 10000};
+        TPartitionFetchRequest p1{"/Root/topic1", 1, 1, 10000};
+        TPartitionFetchRequest p2{"/Root/topic2", 3, 0, 10000};
 
         TFetchRequestSettings settings{{}, NKikimr::NPQ::CLIENTID_WITHOUT_CONSUMER, {p1, p2}, 1000, 1000};
         auto fetchId = runtime.Register(CreatePQFetchRequestActor(settings, MakeSchemeCacheID(), edgeId));
@@ -153,7 +164,7 @@ Y_UNIT_TEST_SUITE(TFetchRequestTests) {
     }
 
     Y_UNIT_TEST(CheckAccess) {
-        auto setup = std::make_shared<TPersQueueYdbSdkTestSetup>(TEST_CASE_NAME);
+        auto setup = std::make_shared<TTopicSdkTestSetup>(TEST_CASE_NAME);
         auto& runtime = setup->GetRuntime();
         runtime.SetLogPriority(NKikimrServices::PQ_FETCH_REQUEST, NActors::NLog::EPriority::PRI_DEBUG);
         StartSchemeCache(runtime);
@@ -162,12 +173,12 @@ Y_UNIT_TEST_SUITE(TFetchRequestTests) {
         setup->CreateTopic("topic1", "dc1", totalPartitions);
 
         auto edgeId = runtime.AllocateEdgeActor();
-        TPartitionFetchRequest p1{"Root/PQ/rt3.dc1--topic1", 1, 1, 10000};
+        TPartitionFetchRequest p1{"/Root/topic1", 1, 1, 10000};
 
         {
             NACLib::TDiffACL acl;
             acl.AddAccess(NACLib::EAccessType::Allow, NACLib::SelectRow, "user1@staff");
-            setup->GetServer().AnnoyingClient->ModifyACL("/Root/PQ", "rt3.dc1--topic1", acl.SerializeAsString());
+            setup->GetServer().AnnoyingClient->ModifyACL("/Root", "topic1", acl.SerializeAsString());
 
             auto goodToken = MakeIntrusiveConst<NACLib::TUserToken>("user1@staff", TVector<TString>{});
             TFetchRequestSettings settings{

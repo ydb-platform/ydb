@@ -17,8 +17,6 @@
 #include <ydb/core/persqueue/public/pq_rl_helpers.h>
 #include <ydb/core/persqueue/public/write_meta/write_meta.h>
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
-#include <ydb/core/tx/replication/ydb_proxy/local_proxy/local_proxy.h>
-#include <ydb/core/tx/replication/ydb_proxy/local_proxy/local_proxy_request.h>
 #include <ydb/core/kafka_proxy/actors/actors.h>
 #include <ydb/core/kafka_proxy/actors/kafka_topic_group_path_struct.h>
 #include <ydb/library/actors/core/log.h>
@@ -70,6 +68,7 @@ private:
     ui64 FetchRequestCurrentReadTablet;
     ui32 PendingAlterTopicResponses = 0;
     ui32 FetchRequestBytesLeft;
+    bool ProcessingFinished = false;
     THolder<TEvPQ::TEvFetchResponse> Response;
     const TActorId SchemeCache;
 
@@ -106,12 +105,11 @@ public:
         , Settings(settings)
         , FetchRequestCurrentPartitionIndex(0)
         , FetchRequestCurrentReadTablet(0)
-        , FetchRequestBytesLeft(0)
+        , FetchRequestBytesLeft(Settings.TotalMaxBytes)
         , SchemeCache(schemeCacheId)
         , RequesterId(requesterId)
     {
         ui64 deadline = TAppData::TimeProvider->Now().MilliSeconds() + Min<ui64>(Settings.MaxWaitTimeMs, MaxTimeout.MilliSeconds());
-        FetchRequestBytesLeft = Settings.TotalMaxBytes;
 
         PartitionStatus.resize(Settings.Partitions.size());
 
@@ -392,6 +390,8 @@ public:
 
     void ProceedFetchRequest(const TActorContext& ctx) {
         if (FetchRequestCurrentReadTablet) { //already got active read request
+            LOG_D("Fetch request is pending. TabletId=" << FetchRequestCurrentReadTablet
+                << " partitionIndex=" << FetchRequestCurrentPartitionIndex << "/" << Settings.Partitions.size());
             return;
         }
 
@@ -400,6 +400,7 @@ public:
             ("r", Settings.Partitions.size());
 
         while (true) {
+            LOG_D("Processing " << FetchRequestCurrentPartitionIndex << "/" << Settings.Partitions.size());
             if (FetchRequestCurrentPartitionIndex == Settings.Partitions.size()) {
                 CreateOkResponse();
                 return SendReplyAndDie(std::move(Response), ctx);
@@ -407,11 +408,13 @@ public:
 
             auto& status = PartitionStatus[FetchRequestCurrentPartitionIndex];
             if (status == EPartitionStatus::DataReceived) {
+                LOG_D("Skip partition " << FetchRequestCurrentPartitionIndex << " because status is DataReceived");
                 ++FetchRequestCurrentPartitionIndex;
                 continue;
             }
 
             if (FetchRequestBytesLeft == 0) {
+                LOG_D("Partition " << FetchRequestCurrentPartitionIndex << " status is " << (int)status << " bytesLeft=" << FetchRequestBytesLeft);
                 if (status == EPartitionStatus::HasDataReceived) {
                     ++FetchRequestCurrentPartitionIndex;
                     continue;
@@ -459,6 +462,7 @@ public:
             return;
         }
         auto& status = PartitionStatus[partitionIndex];
+        LOG_D("Partition " << partitionIndex << " status is " << (int)status);
         if (status != EPartitionStatus::HasDataRequested) {
             // On timeout we resend send HasData
             return;
@@ -507,12 +511,15 @@ public:
         res->SetTopic(req.Topic);
         res->SetPartition(partitionId);
         auto read = res->MutableReadResult();
-        if (record.HasPartitionResponse() && record.GetPartitionResponse().HasCmdReadResult())
+        if (record.HasPartitionResponse() && record.GetPartitionResponse().HasCmdReadResult()) {
             read->CopyFrom(record.GetPartitionResponse().GetCmdReadResult());
-        if (record.HasErrorCode())
+        }
+        if (record.HasErrorCode()) {
             read->SetErrorCode(record.GetErrorCode());
-        if (record.HasErrorReason())
+        }
+        if (record.HasErrorReason()) {
             read->SetErrorReason(record.GetErrorReason());
+        }
 
         ++FetchRequestCurrentPartitionIndex;
 
@@ -520,6 +527,7 @@ public:
 
         SetMeteringMode(topicInfo.PQInfo->Description.GetPQTabletConfig().GetMeteringMode());
 
+        LOG_D("After processing result FetchRequestBytesLeft=" << FetchRequestBytesLeft);
         if (FetchRequestBytesLeft == 0) {
             FinishProcessing(ctx);
         } else if (IsQuotaRequired()) {
@@ -589,6 +597,11 @@ public:
     }
 
     void FinishProcessing(const TActorContext& ctx) {
+        if (ProcessingFinished) {
+            return;
+        }
+        ProcessingFinished = true;
+
         for (size_t i = 0; i < PartitionStatus.size(); ++i) {
             if (PartitionStatus[i] == EPartitionStatus::HasDataRequested) { // rerequest HasData without timeout
                 auto& p = Settings.Partitions[i];
@@ -598,8 +611,10 @@ public:
                 fetchInfo->Record.SetPartition(p.Partition);
                 fetchInfo->Record.SetOffset(p.Offset);
                 fetchInfo->Record.SetCookie(i);
+                fetchInfo->Record.SetDeadline(0);
 
                 auto tabletId = topicInfo.PartitionToTablet[p.Partition];
+                LOG_D("Sending TEvPersQueue::TEvHasDataInfo " << fetchInfo->Record.ShortDebugString());
                 NTabletPipe::SendData(ctx, TabletInfo[tabletId].PipeClient, fetchInfo.release());
             }
         }
@@ -663,6 +678,7 @@ public:
     }
 
     void SendReplyAndDie(THolder<TEvPQ::TEvFetchResponse> event, const TActorContext& ctx) {
+        LOG_D("Reply to " << RequesterId << ": " << event->Response.ShortDebugString());
         ctx.Send(RequesterId, event.Release());
         Die(ctx);
     }

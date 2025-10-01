@@ -32,6 +32,10 @@ public:
                const std::optional<std::string> producer = std::nullopt,
                std::optional<std::uint64_t> seqNo = std::nullopt);
 
+    void Write(const std::string& topic, const std::string& message, std::uint32_t partitionId = 0,
+               const std::optional<std::string> producer = std::nullopt,
+               std::optional<std::uint64_t> seqNo = std::nullopt);
+
     struct TReadResult {
         std::shared_ptr<IReadSession> Reader;
         bool Timeout;

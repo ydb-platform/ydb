@@ -480,8 +480,8 @@ private:
 
         if (auditEnabledReceived || auditEnabledCompleted) {
             if constexpr (IsGrpcRequest) {
-                if (const auto* reqCtx = dynamic_cast<const IRequestCtx*>(requestBaseCtx)) {
-                    requestBaseCtx->AddAuditLogPart("grpc_method", reqCtx->GetRpcMethodName());
+                if (TString grpcMethod = requestBaseCtx->GetRpcMethodName()) {
+                    requestBaseCtx->AddAuditLogPart("grpc_method", requestBaseCtx->GetRpcMethodName());
                 }
             }
             const TString sanitizedToken = TBase::GetSanitizedToken();

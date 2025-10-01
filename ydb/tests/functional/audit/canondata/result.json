@@ -1,0 +1,51 @@
+{
+    "test_canonical_records.test_create_drop_and_alter_database": [
+        {
+            "uri": "file://test_canonical_records.test_create_drop_and_alter_database/audit_log.json"
+        },
+        {
+            "uri": "file://test_canonical_records.test_create_drop_and_alter_database/audit_log.1.json"
+        },
+        {
+            "uri": "file://test_canonical_records.test_create_drop_and_alter_database/audit_log.2.json"
+        },
+        {
+            "uri": "file://test_canonical_records.test_create_drop_and_alter_database/audit_log.3.json"
+        },
+        {
+            "uri": "file://test_canonical_records.test_create_drop_and_alter_database/audit_log.4.json"
+        }
+    ],
+    "test_canonical_records.test_create_drop_and_alter_table": [
+        {
+            "uri": "file://test_canonical_records.test_create_drop_and_alter_table/audit_log.json"
+        },
+        {
+            "uri": "file://test_canonical_records.test_create_drop_and_alter_table/audit_log.1.json"
+        },
+        {
+            "uri": "file://test_canonical_records.test_create_drop_and_alter_table/audit_log.2.json"
+        }
+    ],
+    "test_canonical_records.test_dml_through_http": {
+        "uri": "file://test_canonical_records.test_dml_through_http/audit_log.json"
+    },
+    "test_canonical_records.test_dstool_add_group_http": {
+        "uri": "file://test_canonical_records.test_dstool_add_group_http/audit_log.json"
+    },
+    "test_canonical_records.test_dstool_evict_vdisk_grpc": {
+        "uri": "file://test_canonical_records.test_dstool_evict_vdisk_grpc/audit_log.json"
+    },
+    "test_canonical_records.test_kill_tablet_using_developer_ui": {
+        "uri": "file://test_canonical_records.test_kill_tablet_using_developer_ui/audit_log.json"
+    },
+    "test_canonical_records.test_replace_config": {
+        "uri": "file://test_canonical_records.test_replace_config/audit_log.json"
+    },
+    "test_canonical_records.test_restart_pdisk": {
+        "uri": "file://test_canonical_records.test_restart_pdisk/audit_log.json"
+    },
+    "test_canonical_records.test_topic": {
+        "uri": "file://test_canonical_records.test_topic/audit_log.json"
+    }
+}

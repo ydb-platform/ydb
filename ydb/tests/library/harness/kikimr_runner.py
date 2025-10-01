@@ -269,16 +269,28 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
     def server(self):
         return self.__server
 
-    def __call_kikimr_new_cli(self, cmd, connect_to_server=True):
+    def __call_kikimr_new_cli(self, cmd, connect_to_server=True, token=None):
         server = 'grpc://{server}:{port}'.format(server=self.server, port=self.nodes[1].port)
         full_command = [self.__configurator.binary_path]
         if connect_to_server:
             full_command += ["--server={server}".format(server=server)]
         full_command += cmd
 
+        env = None
+        token = token or self.__configurator.default_clusteradmin
+        if token is not None:
+            env = os.environ.copy()
+            env['YDB_TOKEN'] = token
+        # elif self.__configurator.enable_static_auth:
+        #     # If no token is provided, use the default user from the configuration
+        #     default_user = next(iter(self.__configurator.yaml_config["domains_config"]["security_config"]["default_users"]))
+        #     env = os.environ.copy()
+        #     env['YDB_USER'] = default_user["name"]
+        #     env['YDB_PASSWORD'] = default_user["password"]
+
         logger.debug("Executing command = {}".format(full_command))
         try:
-            return yatest_common.execute(full_command)
+            return yatest_common.execute(full_command, env=env)
         except yatest_common.ExecutionError as e:
             logger.exception("KiKiMR command '{cmd}' failed with error: {e}\n\tstdout: {out}\n\tstderr: {err}".format(
                 cmd=" ".join(str(x) for x in full_command),
@@ -336,8 +348,10 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             )
             pools[p['name']] = p['kind']
 
+        root_token = self.__configurator.default_clusteradmin
+
         if len(pools) > 0:
-            self.client.bind_storage_pools(self.domain_name, pools)
+            self.client.bind_storage_pools(self.domain_name, pools, token=root_token)
             default_pool_name = list(pools.keys())[0]
         else:
             default_pool_name = ""
@@ -346,7 +360,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         logger.info("Cluster started and initialized")
 
         if bs_needed:
-            self.client.add_config_item(read_binary(__name__, "resources/default_profile.txt"))
+            self.client.add_config_item(read_binary(__name__, "resources/default_profile.txt"), token=root_token)
 
     def __run_node(self, node_id):
         """

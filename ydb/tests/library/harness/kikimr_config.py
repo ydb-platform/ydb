@@ -140,6 +140,7 @@ class KikimrConfigGenerator(object):
             enable_pqcd=True,
             enable_metering=False,
             enable_audit_log=False,
+            audit_log_config=None,
             grpc_tls_data_path=None,
             fq_config_path=None,
             public_http_config_path=None,
@@ -166,6 +167,9 @@ class KikimrConfigGenerator(object):
             pg_compatible_expirement=False,
             generic_connector_config=None,  # typing.Optional[TGenericConnectorConfig]
             pgwire_port=None,
+            default_clusteradmin=None,
+            monitoring_allowed_sids=[],
+            viewer_allowed_sids=[],
     ):
         if extra_feature_flags is None:
             extra_feature_flags = []
@@ -311,7 +315,7 @@ class KikimrConfigGenerator(object):
             self.__set_enable_metering()
 
         if enable_audit_log:
-            self.__set_enable_audit_log()
+            self.__set_audit_log(audit_log_config)
 
         self.naming_config = config_pb2.TAppConfig()
         dc_it = itertools.cycle(self._dcs)
@@ -430,6 +434,22 @@ class KikimrConfigGenerator(object):
             self.yaml_config["feature_flags"]["enable_external_data_sources"] = True
             self.yaml_config["feature_flags"]["enable_script_execution_operations"] = True
 
+        self.__default_clusteradmin = default_clusteradmin
+        if self.__default_clusteradmin is not None:
+            security_config = self.yaml_config["domains_config"]["security_config"]
+            security_config.setdefault("administration_allowed_sids", []).append(self.__default_clusteradmin)
+            security_config.setdefault("default_access", []).append('+F:{}'.format(self.__default_clusteradmin))
+
+        for sid in monitoring_allowed_sids:
+            security_config.setdefault("monitoring_allowed_sids", []).append(sid)
+
+        for sid in viewer_allowed_sids:
+            security_config.setdefault("viewer_allowed_sids", []).append(sid)
+
+    @property
+    def default_clusteradmin(self):
+        return self.__default_clusteradmin
+
     @property
     def pdisks_info(self):
         return self._pdisks_info
@@ -494,7 +514,7 @@ class KikimrConfigGenerator(object):
             metering_file.write('')
         self.yaml_config['metering_config'] = {'metering_file_path': metering_file_path}
 
-    def __set_enable_audit_log(self):
+    def __set_audit_log(self, audit_log_config):
         def ensure_path_exists(path):
             if not os.path.isdir(path):
                 os.makedirs(path)
@@ -507,14 +527,23 @@ class KikimrConfigGenerator(object):
 
         cwd = get_cwd_for_test(self.__output_path)
         ensure_path_exists(cwd)
-        audit_file_path = os.path.join(cwd, 'audit.txt')
-        with open(audit_file_path, "w") as audit_file:
-            audit_file.write('')
-        self.yaml_config['audit_config'] = dict(
-            file_backend=dict(
-                file_path=audit_file_path,
-            )
-        )
+
+        if audit_log_config is None:
+            cfg = dict(file_backend=dict())
+        else:
+            cfg = audit_log_config.copy()
+        file_backend_cfg = cfg.get('file_backend')
+
+        # Generate path for audit file
+        if file_backend_cfg is not None:
+            file_path = file_backend_cfg.get('file_path')
+            if file_path is None:
+                audit_file = tempfile.NamedTemporaryFile('w', prefix="audit_log.", suffix=".txt",
+                                                         dir=cwd)
+                file_backend_cfg['file_path'] = audit_file.name
+                with audit_file:
+                    audit_file.write('')
+        self.yaml_config['audit_config'] = cfg
 
     @property
     def metering_file_path(self):

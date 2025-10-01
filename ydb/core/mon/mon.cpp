@@ -3,6 +3,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/ticket_parser.h>
 #include <ydb/core/grpc_services/base/base.h>
+#include <ydb/core/mon/audit/audit.h>
 
 #include <ydb/core/protos/auth.pb.h>
 
@@ -38,7 +39,7 @@ TString GetDatabase(NMonitoring::IMonHttpRequest& request) {
     return {};
 }
 
-IEventHandle* GetRequestAuthAndCheckHandle(const NActors::TActorId& owner, const TString& database, const TString& ticket) {
+IEventHandle* GetRequestAuthAndCheckHandle(const NActors::TActorId& owner, const TString& database, const TString& ticket, TString peerName) {
     return new NActors::IEventHandle(
         NGRpcService::CreateGRpcRequestProxyId(),
         owner,
@@ -46,7 +47,8 @@ IEventHandle* GetRequestAuthAndCheckHandle(const NActors::TActorId& owner, const
             database,
             ticket ? TMaybe<TString>(ticket) : Nothing(),
             owner,
-            NGRpcService::TAuditMode::Modifying(NGRpcService::TAuditMode::TLogClassConfig::ClusterAdmin)),
+            NGRpcService::TAuditMode::Modifying(NGRpcService::TAuditMode::TLogClassConfig::ClusterAdmin),
+            std::move(peerName)),
         IEventHandle::FlagTrackDelivery
     );
 }
@@ -57,9 +59,9 @@ NActors::IEventHandle* SelectAuthorizationScheme(const NActors::TActorId& owner,
     TStringBuf ydbSessionId = request.GetCookie("ydb_session_id");
     TStringBuf authorization = request.GetHeader("Authorization");
     if (!authorization.empty()) {
-        return GetRequestAuthAndCheckHandle(owner, GetDatabase(request), TString(authorization));
+        return GetRequestAuthAndCheckHandle(owner, GetDatabase(request), TString(authorization), NMonitoring::NAudit::ExtractRemoteAddress(&request));
     } else if (!ydbSessionId.empty()) {
-        return GetRequestAuthAndCheckHandle(owner, GetDatabase(request), TString("Login ") + TString(ydbSessionId));
+        return GetRequestAuthAndCheckHandle(owner, GetDatabase(request), TString("Login ") + TString(ydbSessionId), NMonitoring::NAudit::ExtractRemoteAddress(&request));
     } else {
         return nullptr;
     }

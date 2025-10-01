@@ -347,12 +347,8 @@ public:
                 << " " << request->URL);
         }
         TString serializedToken;
-        if (result) {
-            AuditCtx.AddAuditLogParts(result->AuditLogParts);
-            if (result->UserToken) {
-                AuditCtx.SetSubjectType(result->UserToken->GetSubjectType());
-                serializedToken = result->UserToken->GetSerializedToken();
-            }
+        if (result && result->UserToken) {
+            serializedToken = result->UserToken->GetSerializedToken();
         }
         AuditCtx.LogOnReceived();
         Send(ActorMonPage->TargetActorId, new NMon::TEvHttpInfo(
@@ -380,6 +376,10 @@ public:
 
     void Handle(NKikimr::NGRpcService::TEvRequestAuthAndCheckResult::TPtr& ev) {
         const NKikimr::NGRpcService::TEvRequestAuthAndCheckResult& result(*ev->Get());
+        AuditCtx.AddAuditLogParts(result.AuditLogParts);
+        if (result.UserToken) {
+            AuditCtx.SetSubjectType(result.UserToken->GetSubjectType());
+        }
         if (result.Status != Ydb::StatusIds::SUCCESS) {
             return ReplyErrorAndPassAway(result);
         }

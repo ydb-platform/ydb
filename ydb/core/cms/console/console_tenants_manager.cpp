@@ -536,15 +536,22 @@ public:
         }
     }
 
-    void AlterUserAttribute(const TActorContext &ctx) {
-        BLOG_D("TSubDomainManip(" << Tenant->Path << ") alter user attribute ");
+    THolder<TEvTxUserProxy::TEvProposeTransaction> MakeProposeTransaction() {
         auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
 
         request->Record.SetDatabaseName(TString(ExtractDomain(Subdomain.first)));
         request->Record.SetExecTimeoutPeriod(Max<ui64>());
+        //request->Record.SetPeerName(Tenant->PeerName);
 
         if (Tenant->UserToken.GetUserSID())
             request->Record.SetUserToken(Tenant->UserToken.SerializeAsString());
+
+        return request;
+    }
+
+    void AlterUserAttribute(const TActorContext &ctx) {
+        BLOG_D("TSubDomainManip(" << Tenant->Path << ") alter user attribute ");
+        auto request = MakeProposeTransaction();
 
         auto &tx = *request->Record.MutableTransaction()->MutableModifyScheme();
         tx.SetWorkingDir(Subdomain.first);
@@ -563,13 +570,7 @@ public:
     void AlterSubdomain(const TActorContext &ctx)
     {
         BLOG_D("TSubDomainManip(" << Tenant->Path << ") alter subdomain version " << Version);
-
-        auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
-        request->Record.SetDatabaseName(TString(ExtractDomain(Subdomain.first)));
-        request->Record.SetExecTimeoutPeriod(Max<ui64>());
-
-        if (Tenant->UserToken.GetUserSID())
-            request->Record.SetUserToken(Tenant->UserToken.SerializeAsString());
+        auto request = MakeProposeTransaction();
 
         auto &tx = *request->Record.MutableTransaction()->MutableModifyScheme();
         tx.SetWorkingDir(Subdomain.first);
@@ -591,13 +592,7 @@ public:
     void CreateSubdomain(const TActorContext &ctx)
     {
         BLOG_D("TSubDomainManip(" << Tenant->Path << ") create subdomain");
-
-        auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
-        request->Record.SetDatabaseName(TString(ExtractDomain(Subdomain.first)));
-        request->Record.SetExecTimeoutPeriod(Max<ui64>());
-
-        if (Tenant->UserToken.GetUserSID())
-            request->Record.SetUserToken(Tenant->UserToken.SerializeAsString());
+        auto request = MakeProposeTransaction();
 
         auto &tx = *request->Record.MutableTransaction()->MutableModifyScheme();
         tx.SetWorkingDir(Subdomain.first);
@@ -622,12 +617,8 @@ public:
     void DropSubdomain(const TActorContext &ctx)
     {
         BLOG_D("TSubDomainManip(" << Tenant->Path << ") drop subdomain");
+        auto request = MakeProposeTransaction();
 
-        auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
-        request->Record.SetDatabaseName(TString(ExtractDomain(Subdomain.first)));
-        request->Record.SetExecTimeoutPeriod(Max<ui64>());
-        if (Tenant->UserToken.GetUserSID())
-            request->Record.SetUserToken(Tenant->UserToken.SerializeAsString());
         auto &tx = *request->Record.MutableTransaction()->MutableModifyScheme();
         if (Tenant->IsExternalSubdomain) {
             tx.SetOperationType(NKikimrSchemeOp::ESchemeOpForceDropExtSubDomain);
@@ -944,7 +935,7 @@ public:
 
         Become(&TThis::StateResolveHive);
         ResolveHive(ctx);
-    } 
+    }
 
     void ResolveHive(const TActorContext &ctx) const {
         auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
@@ -1004,7 +995,7 @@ public:
         if (!domainInfo || !domainInfo->Params.HasHive()) {
             LOG_ERROR_S(ctx, NKikimrServices::CMS_TENANTS,
                         "TScaleRecommenderManip resolved tenant "
-                        << Tenant->Path 
+                        << Tenant->Path
                         << " that has no hive"
                         << ", entry# " << entry.ToString());
             Finish();
@@ -1035,7 +1026,7 @@ public:
                         default:
                             LOG_ERROR_S(ctx, NKikimrServices::CMS_TENANTS,
                                 "TScaleRecommenderManip got unknown taget for target tracking policy for "
-                                << Tenant->Path 
+                                << Tenant->Path
                                 << ", policy# " << p.target_tracking_policy().ShortDebugString());
                             Finish();
                             break;
@@ -1045,7 +1036,7 @@ public:
                 default:
                     LOG_ERROR_S(ctx, NKikimrServices::CMS_TENANTS,
                         "TScaleRecommenderManip got unknown scale policy for "
-                        << Tenant->Path 
+                        << Tenant->Path
                         << ", policies# " << Tenant->ScaleRecommenderPolicies->ShortDebugString());
                     Finish();
                     return;
@@ -1102,7 +1093,7 @@ public:
             case NKikimrProto::UNKNOWN:
                 LOG_ERROR_S(ctx, NKikimrServices::CMS_TENANTS,
                             "TScaleRecommenderManip got error reply during configuring hive for "
-                            << Tenant->Path 
+                            << Tenant->Path
                             << ", reply# " << ev->Get()->Record.ShortDebugString());
                 Finish();
                 break;

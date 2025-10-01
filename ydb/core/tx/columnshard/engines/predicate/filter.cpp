@@ -101,39 +101,7 @@ TPKRangeFilter::EUsageClass TPKRangesFilter::GetUsageClass(const NArrow::TSimple
             return !range.GetPredicateTo().CrossRanges(predicate);
         });
 
-    const TPredicateContainer endPredicate =
-        TPredicateContainer::BuildPredicateTo(std::make_shared<TPredicate>(NKernels::EOperation::LessEqual, end.ToBatch()), end.GetSchema())
-            .DetachResult();
-    const auto rangesEnd = std::upper_bound(
-        SortedRanges.begin(), SortedRanges.end(), endPredicate, [](const TPredicateContainer& predicate, const TPKRangeFilter& range) {
-            return !range.GetPredicateFrom().CrossRanges(predicate);
-        });
-
-    AFL_VERIFY(rangesBegin <= rangesEnd);
-    if (rangesBegin == rangesEnd) {
-        return TPKRangeFilter::EUsageClass::NoUsage;
-    }
-
-    switch (rangesBegin->GetUsageClass(start, end)) {
-        case TPKRangeFilter::EUsageClass::FullUsage:
-            break;
-        case TPKRangeFilter::EUsageClass::PartialUsage:
-            return TPKRangeFilter::EUsageClass::PartialUsage;
-        case TPKRangeFilter::EUsageClass::NoUsage:
-            AFL_VERIFY(false)("start", start.DebugString())("end", end.DebugString())("first_range", rangesBegin->DebugString())(
-                "last_range", std::prev(rangesEnd)->DebugString());
-    }
-    switch (std::prev(rangesEnd)->GetUsageClass(start, end)) {
-        case TPKRangeFilter::EUsageClass::FullUsage:
-            break;
-        case TPKRangeFilter::EUsageClass::PartialUsage:
-            return TPKRangeFilter::EUsageClass::PartialUsage;
-        case TPKRangeFilter::EUsageClass::NoUsage:
-            AFL_VERIFY(false)("start", start.DebugString())("end", end.DebugString())("first_range", rangesBegin->DebugString())(
-                "last_range", std::prev(rangesEnd)->DebugString());
-    }
-
-    return TPKRangeFilter::EUsageClass::FullUsage;
+    return rangesBegin->GetUsageClass(start, end);
 }
 
 TPKRangesFilter::TPKRangesFilter() {

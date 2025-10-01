@@ -317,7 +317,7 @@ void TExecutor::CheckYellow(TVector<ui32> &&yellowMoveChannels, TVector<ui32> &&
     Stats->IsAnyChannelYellowStop = !Stats->YellowStopChannels.empty();
 
     if (newMoveCount > oldMoveCount) {
-        if (auto line = Logger->Log(ELnLev::Debug)) {
+        if (auto line = Logger->Log(ELnLev::Notice)) {
             line << NFmt::Do(*this) << " CheckYellow current light yellow move channels:";
             for (ui32 channel : Stats->YellowMoveChannels) {
                 line << ' ' << channel;
@@ -325,7 +325,7 @@ void TExecutor::CheckYellow(TVector<ui32> &&yellowMoveChannels, TVector<ui32> &&
         }
     }
     if (newStopCount > oldStopCount) {
-        if (auto line = Logger->Log(ELnLev::Debug)) {
+        if (auto line = Logger->Log(ELnLev::Notice)) {
             line << NFmt::Do(*this) << " CheckYellow current yellow stop channels:";
             for (ui32 channel : Stats->YellowStopChannels) {
                 line << ' ' << channel;
@@ -347,9 +347,17 @@ void TExecutor::CheckYellow(TVector<ui32> &&yellowMoveChannels, TVector<ui32> &&
 }
 
 void TExecutor::SendReassignYellowChannels(const TVector<ui32> &yellowChannels) {
+    Y_ASSERT(yellowChannels);
     if (Owner->ReassignChannelsEnabled()) {
         auto* info = Owner->Info();
         if (Y_LIKELY(info) && info->HiveId) {
+            if (auto logl = Logger->Log(ELnLev::Notice)) {
+                logl << NFmt::Do(*this) << " CheckYellow reassign channels:";
+                for (ui32 channel : yellowChannels) {
+                    logl << ' ' << channel;
+                }
+                logl << " tablet# " << info->TabletID << " hive# " << info->HiveId;
+            }
             Send(MakePipePerNodeCacheID(false),
                 new TEvPipeCache::TEvForward(
                     new TEvHive::TEvReassignTabletSpace(info->TabletID, yellowChannels),

@@ -28,7 +28,7 @@ namespace {
     NThreading::TPromise<NKikimr::NKqp::TEvDescribeSecretsResponse::TDescription>
     ResolveSecret(const TVector<TString>& secretNames, NKikimr::NKqp::TKikimrRunner& kikimr, const TIntrusiveConstPtr<NACLib::TUserToken> userToken = nullptr) {
         auto promise = NThreading::NewPromise<NKikimr::NKqp::TEvDescribeSecretsResponse::TDescription>();
-        const auto evResolveSecret = new NKikimr::NKqp::TDescribeSchemaSecretsService::TEvResolveSecret(userToken, secretNames, promise);
+        const auto evResolveSecret = new NKikimr::NKqp::TDescribeSchemaSecretsService::TEvResolveSecret(userToken, "/Root", secretNames, promise);
         auto actorSystem = kikimr.GetTestServer().GetRuntime()->GetActorSystem(0);
         actorSystem->Send(NKikimr::NKqp::MakeKqpDescribeSchemaSecretServiceId(actorSystem->NodeId), evResolveSecret);
         return promise;

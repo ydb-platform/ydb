@@ -26,17 +26,21 @@ public:
     public:
         TEvResolveSecret(
             const TIntrusiveConstPtr<NACLib::TUserToken> userToken,
+            const TString& database,
             const TVector<TString>& secretNames,
             NThreading::TPromise<TEvDescribeSecretsResponse::TDescription> promise
         )
             : UserToken(userToken)
+            , Database(database)
             , SecretNames(secretNames)
             , Promise(promise)
         {
+            Y_ENSURE(!Database.empty(), "Database name must be set in secret requests");
         }
 
     public:
         const TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
+        const TString Database;
         const TVector<TString> SecretNames;
         NThreading::TPromise<TEvDescribeSecretsResponse::TDescription> Promise;
     };
@@ -73,8 +77,8 @@ private:
     void HandleNotifyUpdate(TSchemeBoardEvents::TEvNotifyUpdate::TPtr& ev);
 
     void FillResponse(const ui64& requestId, const TEvDescribeSecretsResponse::TDescription& response);
-    void SaveIncomingRequestInfo(const TEvResolveSecret& req);
-    void SendSchemeCacheRequests(const TVector<TString>& secretNames, const TIntrusiveConstPtr<NACLib::TUserToken> userToken);
+    void SaveIncomingRequestInfo(const TEvResolveSecret& ev);
+    void SendSchemeCacheRequests(const TEvResolveSecret& ev);
     bool LocalCacheHasActualVersion(const TVersionedSecret& secret, const ui64& cacheSecretVersion);
     bool LocalCacheHasActualObject(const TVersionedSecret& secret, const ui64& cacheSecretPathId);
     bool HandleSchemeCacheErrorsIfAny(const ui64& requestId, NSchemeCache::TSchemeCacheNavigate& result);
@@ -107,6 +111,7 @@ private:
 void RegisterDescribeSecretsActor(
     const NActors::TActorId& replyActorId,
     const TIntrusiveConstPtr<NACLib::TUserToken> userToken,
+    const TString& database,
     const std::vector<TString>& secretIds,
     NActors::TActorSystem* actorSystem
 );
@@ -114,6 +119,7 @@ void RegisterDescribeSecretsActor(
 NThreading::TFuture<TEvDescribeSecretsResponse::TDescription> DescribeExternalDataSourceSecrets(
     const NKikimrSchemeOp::TAuth& authDescription,
     const TIntrusiveConstPtr<NACLib::TUserToken> userToken,
+    const TString& database,
     TActorSystem* actorSystem
 );
 

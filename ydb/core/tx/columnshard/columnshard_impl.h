@@ -41,6 +41,7 @@
 #include <ydb/core/tx/columnshard/overload_manager/overload_manager_events.h>
 #include <ydb/core/tx/data_events/events.h>
 #include <ydb/core/tx/locks/locks.h>
+#include <ydb/core/tx/long_tx_service/public/events.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/tiering/common.h>
 #include <ydb/core/tx/time_cast/time_cast.h>
@@ -302,6 +303,9 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     void Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvColumnShard::TEvOverloadUnsubscribe::TPtr& ev, const TActorContext& ctx);
+    void Handle(NLongTxService::TEvLongTxService::TEvLockStatus::TPtr& ev, const TActorContext& ctx);
+    void SubscribeLock(const ui64 lockId, const ui32 lockNodeId);
+    void MaybeCleanupLock(const ui64 lockId);
 
     void HandleInit(TEvPrivate::TEvTieringModified::TPtr& ev, const TActorContext&);
 
@@ -463,6 +467,7 @@ protected:
             HFunc(NColumnShard::TEvPrivate::TEvAskColumnData, Handle);
             HFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
             HFunc(TEvColumnShard::TEvOverloadUnsubscribe, Handle);
+            HFunc(NLongTxService::TEvLongTxService::TEvLockStatus, Handle);
 
             default:
                 if (!HandleDefaultEvents(ev, SelfId())) {

@@ -70,6 +70,13 @@ enum class EPortionType {
     Compacted
 };
 
+enum class EPortionCommitStatus {
+    Committed,
+    OwnUncommitted,
+    UncommittedByAnotherTx,
+    Unknown
+};
+
 class TPortionInfo {
 public:
     using TConstPtr = std::shared_ptr<const TPortionInfo>;

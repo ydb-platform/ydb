@@ -54,6 +54,8 @@ public:
         return ReadMetadata;
     }
 
+    EPortionCommitStatus GetPortionCommitStatus(const TPortionInfo& portionInfo) const;
+
     template <class T>
     std::shared_ptr<T> GetReadMetadataVerifiedAs() const {
         auto result = std::dynamic_pointer_cast<T>(ReadMetadata);

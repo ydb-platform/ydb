@@ -79,12 +79,10 @@ private:
         TPortionIntervalTree intervals;
         for (const auto& portion : portions) {
             const auto info = portion.GetPortion();
-            if (!info->IsCommitted()) {
-                const auto& wInfo = static_cast<const TWrittenPortionInfo&>(*info);
-                if (!context.GetReadMetadata()->IsMyUncommitted(wInfo.GetInsertWriteId())) {
-                    continue;
-                }
-            } 
+            // uncommitted changes by other txs are not visible for the given tx, so we ignore them here
+            if (context.GetPortionCommitStatus(*info) == EPortionCommitStatus::UncommittedByAnotherTx) {
+                continue;
+            }
             intervals.AddRange(TPortionIntervalTree::TOwnedRange(portion.GetPortion()->IndexKeyStart(), true,
                                    portion.GetPortion()->IndexKeyEnd(), true), portion.GetPortion());
         }

@@ -1916,23 +1916,28 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
     // TO DO: test index impl table split boundaries restoration from a backup
 
     Y_UNIT_TEST(RestoreViewQueryText) {
-        TKikimrWithGrpcAndRootSchema server;
-        server.GetRuntime()->GetAppData().FeatureFlags.SetEnableViews(true);
-        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
+        TBasicKikimrWithGrpcAndRootSchema<TTenantsTestSettings> server;
+        // note: tenant is needed to work around the issue of "/Root" having a dir scheme entry type when described on restore
+        CreateDatabase(*server.Tenants_, "/Root/tenant", "ssd");
+        auto driver = TDriver(TDriverConfig()
+            .SetEndpoint(Sprintf("localhost:%u", server.GetPort()))
+            .SetDatabase("/Root/tenant")
+            .SetDiscoveryMode(EDiscoveryMode::Off) // workaround to enable tenant's sessions
+        );
         NQuery::TQueryClient queryClient(driver);
         auto session = queryClient.GetSession().ExtractValueSync().GetSession();
         TViewClient viewClient(driver);
         TTempDir tempDir;
         const auto& pathToBackup = tempDir.Path();
 
-        constexpr const char* view = "/Root/view";
+        constexpr const char* view = "/Root/tenant/view";
 
         TestViewQueryTextIsPreserved(
             view,
             viewClient,
             session,
-            CreateBackupLambda(driver, pathToBackup),
-            CreateRestoreLambda(driver, pathToBackup)
+            CreateBackupLambda(driver, pathToBackup, "/Root/tenant", "/Root/tenant"),
+            CreateRestoreLambda(driver, pathToBackup, "/Root/tenant")
         );
     }
 

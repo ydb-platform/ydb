@@ -111,6 +111,10 @@ class WorkloadTestBase(LoadSuiteBase):
                 is_successful=result.success,
                 statistics=stats
             )
+            
+            # Если проверка кластера не прошла успешно, поднимаем исключение
+            if cluster_issue and cluster_issue.get("issue_type") is not None:
+                raise Exception(f"Cluster verification failed: {cluster_issue['issue_description']}")
 
     @classmethod
     def _check_cluster_health(cls) -> dict:

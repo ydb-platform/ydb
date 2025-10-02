@@ -366,6 +366,12 @@ void CreateDatabase(TTenants& tenants, TStringBuf path, TStringBuf storagePoolKi
     tenants.CreateTenant(std::move(request));
 }
 
+NQuery::TSession CreateSession(NQuery::TQueryClient& client) {
+    auto sessionCreator = client.GetSession().ExtractValueSync();
+    UNIT_ASSERT_C(sessionCreator.IsSuccess(), sessionCreator.GetIssues().ToString());
+    return sessionCreator.GetSession();
+}
+
 // whole database backup
 using TBackupFunction = std::function<void(void)>;
 // whole database restore
@@ -888,6 +894,60 @@ void TestViewDependentOnAnotherViewIsRestored(
 
     restore();
     CompareResults(GetTableContent(session, dependentView), originalContent);
+}
+
+void TestViewRelativeReferencesArePreserved(
+    const char* view, const char* table, const char* restoredView, NQuery::TSession& session,
+    TBackupFunction&& backup, TRestoreFunction&& restore
+) {
+    ExecuteQuery(session, Sprintf(R"(
+                CREATE TABLE `%s` (
+                    Key Uint32,
+                    Value Utf8,
+                    PRIMARY KEY (Key)
+                );
+            )", table
+        ), true
+    );
+    ExecuteQuery(session, Sprintf(R"(
+            UPSERT INTO `%s` (
+                Key,
+                Value
+            )
+            VALUES
+                (1, "one"),
+                (2, "two"),
+                (3, "three");
+        )",
+        table
+    ));
+
+    const TString viewQuery = Sprintf(R"(
+            SELECT * FROM `%s`
+        )", table
+    );
+    ExecuteQuery(session, Sprintf(R"(
+                CREATE VIEW `%s` WITH security_invoker = TRUE AS %s;
+            )", view, viewQuery.c_str()
+        ), true
+    );
+    const auto originalContent = GetTableContent(session, view);
+
+    backup();
+
+    ExecuteQuery(session, Sprintf(R"(
+                DROP VIEW `%s`;
+            )", view
+        ), true
+    );
+    ExecuteQuery(session, Sprintf(R"(
+                DROP TABLE `%s`;
+            )", table
+        ), true
+    );
+
+    restore();
+    CompareResults(GetTableContent(session, restoredView), originalContent);
 }
 
 void TestReplaceSystemDirectoryACL(
@@ -1596,10 +1656,10 @@ void TestPrimitiveType(
 }
 
 Y_UNIT_TEST_SUITE(BackupRestore) {
-    auto CreateBackupLambda(const TDriver& driver, const TFsPath& fsPath, const TString& dbPath = "/Root") {
+    auto CreateBackupLambda(const TDriver& driver, const TFsPath& fsPath, const TString& dbPath = "/Root", const TString& db = "/Root") {
         return [=, &driver]() {
             NDump::TClient backupClient(driver);
-            const auto result = backupClient.Dump(dbPath, fsPath, NDump::TDumpSettings().Database(dbPath));
+            const auto result = backupClient.Dump(dbPath, fsPath, NDump::TDumpSettings().Database(db));
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         };
     }
@@ -1856,23 +1916,28 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
     // TO DO: test index impl table split boundaries restoration from a backup
 
     Y_UNIT_TEST(RestoreViewQueryText) {
-        TKikimrWithGrpcAndRootSchema server;
-        server.GetRuntime()->GetAppData().FeatureFlags.SetEnableViews(true);
-        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
+        TBasicKikimrWithGrpcAndRootSchema<TTenantsTestSettings> server;
+        // note: tenant is needed to work around the issue of "/Root" having a dir scheme entry type when described on restore
+        CreateDatabase(*server.Tenants_, "/Root/tenant", "ssd");
+        auto driver = TDriver(TDriverConfig()
+            .SetEndpoint(Sprintf("localhost:%u", server.GetPort()))
+            .SetDatabase("/Root/tenant")
+            .SetDiscoveryMode(EDiscoveryMode::Off) // workaround to enable tenant's sessions
+        );
         NQuery::TQueryClient queryClient(driver);
         auto session = queryClient.GetSession().ExtractValueSync().GetSession();
         TViewClient viewClient(driver);
         TTempDir tempDir;
         const auto& pathToBackup = tempDir.Path();
 
-        constexpr const char* view = "/Root/view";
+        constexpr const char* view = "/Root/tenant/view";
 
         TestViewQueryTextIsPreserved(
             view,
             viewClient,
             session,
-            CreateBackupLambda(driver, pathToBackup),
-            CreateRestoreLambda(driver, pathToBackup)
+            CreateBackupLambda(driver, pathToBackup, "/Root/tenant", "/Root/tenant"),
+            CreateRestoreLambda(driver, pathToBackup, "/Root/tenant")
         );
     }
 
@@ -1940,7 +2005,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             restoredView.c_str(),
             aliceSession,
             bobSession,
-            CreateBackupLambda(aliceDriver, pathToBackup, alice),
+            CreateBackupLambda(aliceDriver, pathToBackup, alice, alice),
             CreateRestoreLambda(bobDriver, pathToBackup, bob)
         );
     }
@@ -1963,6 +2028,28 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             session,
             CreateBackupLambda(driver, pathToBackup),
             CreateRestoreLambda(driver, pathToBackup)
+        );
+    }
+
+    Y_UNIT_TEST(RestoreViewRelativeReferences) {
+        TKikimrWithGrpcAndRootSchema server;
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
+        NQuery::TQueryClient queryClient(driver);
+        auto session = CreateSession(queryClient);
+        TTempDir tempDir;
+        const auto& pathToBackup = tempDir.Path();
+
+        constexpr const char* view = "a/b/c/view";
+        constexpr const char* table = "a/b/c/table";
+        constexpr const char* restoredView = "restore/point/view";
+
+        TestViewRelativeReferencesArePreserved(
+            view,
+            table,
+            restoredView,
+            session,
+            CreateBackupLambda(driver, pathToBackup, "/Root/a/b/c"),
+            CreateRestoreLambda(driver, pathToBackup, "/Root/restore/point")
         );
     }
 

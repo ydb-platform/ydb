@@ -29,9 +29,9 @@ void TestWriteBigBatch(bool isCloud) {
         TUnboxedValueBatch res;
         for (int i = 0; i < batchSize; i++) {
             res.emplace_back(CreateStruct(holderFactory, {
-            NUdf::TUnboxedValuePod(static_cast<NUdf::TDataType<NUdf::TTimestamp>::TLayout>(i + 200000)),
-            NKikimr::NMiniKQL::MakeString(std::to_string(i)),
-            NUdf::TUnboxedValuePod(678)
+                NUdf::TUnboxedValuePod(static_cast<NUdf::TDataType<NUdf::TTimestamp>::TLayout>(i + 200000)),
+                NKikimr::NMiniKQL::MakeString(std::to_string(i)),
+                NUdf::TUnboxedValuePod(678)
             }));
         }
 
@@ -107,9 +107,9 @@ Y_UNIT_TEST_SUITE(TDqSolomonWriteActorTest) {
 
             for (int i = 0; i < batchSize; i++) {
                 res.emplace_back(CreateStruct(holderFactory, {
-                NUdf::TUnboxedValuePod(static_cast<NUdf::TDataType<NUdf::TTimestamp>::TLayout>(i + 200000)),
-                NKikimr::NMiniKQL::MakeString("123"),
-                NUdf::TUnboxedValuePod(678)
+                    NUdf::TUnboxedValuePod(static_cast<NUdf::TDataType<NUdf::TTimestamp>::TLayout>(i + 200000)),
+                    NKikimr::NMiniKQL::MakeString("123"),
+                    NUdf::TUnboxedValuePod(678)
                 }));
             }
 
@@ -135,9 +135,9 @@ Y_UNIT_TEST_SUITE(TDqSolomonWriteActorTest) {
 
             for (int i = 0; i < batchSize; i++) {
                 res.emplace_back(CreateStruct(holderFactory, {
-                NUdf::TUnboxedValuePod(static_cast<NUdf::TDataType<NUdf::TTimestamp>::TLayout>(i + 200000)),
-                NKikimr::NMiniKQL::MakeString(std::to_string(i)),
-                NUdf::TUnboxedValuePod(678)
+                    NUdf::TUnboxedValuePod(static_cast<NUdf::TDataType<NUdf::TTimestamp>::TLayout>(i + 200000)),
+                    NKikimr::NMiniKQL::MakeString(std::to_string(i)),
+                    NUdf::TUnboxedValuePod(678)
                 }));
             }
 

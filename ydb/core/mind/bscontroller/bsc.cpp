@@ -306,6 +306,7 @@ void TBlobStorageController::Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev) {
                     "BlobStorageControllerControls.EnableSelfHealWithDegraded");
             }
         }
+        SelfHealSettings = ParseSelfHealSettings(StorageConfig);
         SelfHealId = Register(CreateSelfHealActor());
         PushStaticGroupsToSelfHeal();
         if (StorageConfigObtained) {

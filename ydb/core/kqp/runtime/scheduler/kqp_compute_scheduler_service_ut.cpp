@@ -17,13 +17,15 @@ namespace {
         .AttemptBonus = TDuration::MicroSeconds(5),
         .MaxRandomDelay = TDuration::MicroSeconds(100),
     };
+
+    constexpr TDuration kDefaultUpdateFairSharePeriod = TDuration::MilliSeconds(500);
 }
 
     Y_UNIT_TEST(SingleDatabasePoolQueryStructure) {
         const TOptions options{
             .Counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>()),
             .DelayParams = kDefaultDelayParams,
-            .UpdateFairSharePeriod = TDuration::MilliSeconds(500)
+            .UpdateFairSharePeriod = kDefaultUpdateFairSharePeriod
         };
         TComputeScheduler scheduler(options.Counters, options.DelayParams);
         scheduler.SetTotalCpuLimit(12);
@@ -61,7 +63,7 @@ namespace {
         const TOptions options{
             .Counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>()),
             .DelayParams = kDefaultDelayParams,
-            .UpdateFairSharePeriod = TDuration::MilliSeconds(500)
+            .UpdateFairSharePeriod = kDefaultUpdateFairSharePeriod
         };
         TComputeScheduler scheduler(options.Counters, options.DelayParams);
         scheduler.SetTotalCpuLimit(4);
@@ -104,7 +106,7 @@ namespace {
         const TOptions options{
             .Counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>()),
             .DelayParams = kDefaultDelayParams,
-            .UpdateFairSharePeriod = TDuration::MilliSeconds(500)
+            .UpdateFairSharePeriod = kDefaultUpdateFairSharePeriod
         };
         TComputeScheduler scheduler(options.Counters, options.DelayParams);
         scheduler.SetTotalCpuLimit(10);
@@ -143,7 +145,7 @@ namespace {
         const TOptions options{
             .Counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>()),
             .DelayParams = kDefaultDelayParams,
-            .UpdateFairSharePeriod = TDuration::MilliSeconds(500)
+            .UpdateFairSharePeriod = kDefaultUpdateFairSharePeriod
         };
         TComputeScheduler scheduler(options.Counters, options.DelayParams);
         scheduler.SetTotalCpuLimit(12);
@@ -192,7 +194,7 @@ namespace {
         const TOptions options{
             .Counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>()),
             .DelayParams = kDefaultDelayParams,
-            .UpdateFairSharePeriod = TDuration::MilliSeconds(500)
+            .UpdateFairSharePeriod = kDefaultUpdateFairSharePeriod
         };
         TComputeScheduler scheduler(options.Counters, options.DelayParams);
         scheduler.SetTotalCpuLimit(10);
@@ -210,7 +212,7 @@ namespace {
         const TOptions options{
             .Counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>()),
             .DelayParams = kDefaultDelayParams,
-            .UpdateFairSharePeriod = TDuration::MilliSeconds(500)
+            .UpdateFairSharePeriod = kDefaultUpdateFairSharePeriod
         };
         TComputeScheduler scheduler(options.Counters, options.DelayParams);
         scheduler.SetTotalCpuLimit(10);
@@ -257,7 +259,7 @@ namespace {
         const TOptions options{
             .Counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>()),
             .DelayParams = kDefaultDelayParams,
-            .UpdateFairSharePeriod = TDuration::MilliSeconds(500)
+            .UpdateFairSharePeriod = kDefaultUpdateFairSharePeriod
         };
     
         TComputeScheduler scheduler(options.Counters, options.DelayParams);
@@ -314,7 +316,7 @@ namespace {
         const TOptions options{
             .Counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>()),
             .DelayParams = kDefaultDelayParams,
-            .UpdateFairSharePeriod = TDuration::MilliSeconds(500)
+            .UpdateFairSharePeriod = kDefaultUpdateFairSharePeriod
         };
         TComputeScheduler scheduler(options.Counters, options.DelayParams);
         scheduler.SetTotalCpuLimit(10);
@@ -356,7 +358,7 @@ namespace {
         const TOptions options{
             .Counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>()),
             .DelayParams = kDefaultDelayParams,
-            .UpdateFairSharePeriod = TDuration::MilliSeconds(500)
+            .UpdateFairSharePeriod = kDefaultUpdateFairSharePeriod
         };
 
         TComputeScheduler scheduler(options.Counters, options.DelayParams);
@@ -416,7 +418,7 @@ namespace {
         const TOptions options{
             .Counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>()),
             .DelayParams = kDefaultDelayParams,
-            .UpdateFairSharePeriod = TDuration::MilliSeconds(500)
+            .UpdateFairSharePeriod = kDefaultUpdateFairSharePeriod
         };
         TComputeScheduler scheduler(options.Counters, options.DelayParams);
         scheduler.SetTotalCpuLimit(10);

@@ -62,9 +62,9 @@ class WorkloadTestBase(LoadSuiteBase):
                     raise
 
     @classmethod
-    def perform_verification_with_cluster_check(cls, workload_name: str = None) -> None:
+    def perform_verification_with_cluster_check(cls, workload_name: str) -> None:
         """
-        Выполняет _Verification с проверкой кластера и записью _ClusterIssue при необходимости.
+        Выполняет проверку кластера перед тестом и записывает результат.
         
         Args:
             workload_name: Имя workload теста для матчинга с основными результатами
@@ -73,32 +73,19 @@ class WorkloadTestBase(LoadSuiteBase):
         
         with allure.step(f"Pre-test verification for {suite_name}"):
             verification_start_time = time_module.time()
+            
+            # Выполняем проверки кластера
+            cluster_issue = cls._check_cluster_health()
+            
+            # Создаем результат
             result = YdbCliHelper.WorkloadRunResult()
             result.iterations[0] = YdbCliHelper.Iteration()
             result.start_time = verification_start_time
-            
-            try:
-                # СНАЧАЛА проверяем работоспособность кластера (основная проверка)
-                wait_error = YdbCluster.wait_ydb_alive(int(os.getenv('WAIT_CLUSTER_ALIVE_TIMEOUT', 20 * 60)))
-                if wait_error:
-                    result.add_error(wait_error)
-                
-                # ПОТОМ получаем детали о нодах для диагностики
-                nodes = YdbCluster.get_cluster_nodes()
-                if not nodes:
-                    # Это дополнительная диагностическая информация
-                    result.add_error("No cluster nodes found during pre-test verification")
-                        
-                            
-            except Exception as e:
-                error_msg = f"Exception during cluster check: {e}"
-                result.add_error(error_msg)
-                
-            
-            # Завершаем _Verification
             result.iterations[0].time = time_module.time() - verification_start_time
-            query_name = '_Verification'
-            result.add_stat(query_name, 'Mean', 1000 * result.iterations[0].time)
+            
+            # Добавляем ошибку если есть проблема с кластером
+            if cluster_issue:
+                result.add_error(cluster_issue["description"])
             
             # Устанавливаем start_time для _Verification
             try:
@@ -108,66 +95,77 @@ class WorkloadTestBase(LoadSuiteBase):
             except Exception:
                 result.start_time = verification_start_time - 600
             
-            # Записываем результат проверки кластера с деталями проблем
-            stats = result.get_stats(query_name) or {}
-            stats["verification_phase"] = "pre_test_verification"
-            stats["check_type"] = "cluster_availability"
-            
-            # Добавляем детали проблем, если они есть
-            if result.error_message:
-                # Определяем тип проблемы по содержимому ошибки
-                error_msg = result.error_message.lower()
-                
-                if "exception during cluster check" in error_msg:
-                    stats["issue_type"] = "cluster_check_exception"
-                    stats["issue_description"] = f"Exception during pre-test verification: {result.error_message}"
-                    stats["nodes_count"] = 0
-                    stats["is_critical"] = True
-                elif any(keyword in error_msg for keyword in ["timeout", "don't alive", "disconnected", "too young"]):
-                    # Основные проблемы с работоспособностью кластера
-                    stats["issue_type"] = "cluster_not_alive"
-                    stats["issue_description"] = f"Cluster functionality check failed: {result.error_message}"
-                    try:
-                        nodes = YdbCluster.get_cluster_nodes()
-                        stats["nodes_count"] = len(nodes)
-                    except:
-                        stats["nodes_count"] = 0
-                    stats["is_critical"] = True  # Это критично - кластер не может выполнять запросы
-                elif "no cluster nodes found" in error_msg:
-                    # Проверка наличия работающих нод
-                    stats["issue_type"] = "cluster_no_nodes"
-                    stats["issue_description"] = "No working cluster nodes found"
-                    stats["nodes_count"] = 0
-                    stats["is_critical"] = True  # КРИТИЧНО - без нод кластер не может работать
-                else:
-                    # Неизвестная проблема
-                    stats["issue_type"] = "cluster_unknown_issue"
-                    stats["issue_description"] = f"Unknown cluster issue: {result.error_message}"
-                    try:
-                        nodes = YdbCluster.get_cluster_nodes()
-                        stats["nodes_count"] = len(nodes)
-                    except:
-                        stats["nodes_count"] = 0
-                    stats["is_critical"] = True
-            else:
-                # Кластер OK
-                stats["issue_type"] = None
-                stats["issue_description"] = "Cluster check passed successfully"
-                try:
-                    nodes = YdbCluster.get_cluster_nodes()
-                    stats["nodes_count"] = len(nodes)
-                except:
-                    stats["nodes_count"] = 0
-                stats["is_critical"] = False
+            # Записываем результат проверки кластера
+            stats = {}
+            stats.update({
+                "verification_phase": "pre_test_verification",
+                "check_type": "cluster_availability",
+                **cluster_issue  # Добавляем информацию о проблеме кластера
+            })
             
             ResultsProcessor.upload_results(
-                kind='ClusterCheck',  # Отдельный kind для проверок кластера
+                kind='ClusterCheck',
                 suite=suite_name,
-                test=workload_name if workload_name else '_Verification',  # Используем имя workload теста!
+                test=workload_name,
                 timestamp=time_module.time(),
                 is_successful=result.success,
                 statistics=stats
             )
+
+    @classmethod
+    def _check_cluster_health(cls) -> dict:
+        """
+        Проверяет состояние кластера и возвращает информацию о проблемах.
+        
+        Returns:
+            dict: Информация о проблеме кластера или пустой dict если все OK
+        """
+        try:
+            # Проверяем доступность кластера
+            wait_error = YdbCluster.wait_ydb_alive(int(os.getenv('WAIT_CLUSTER_ALIVE_TIMEOUT', 20 * 60)))
+            if wait_error:
+                return cls._create_cluster_issue("cluster_not_alive", f"Cluster functionality check failed: {wait_error}")
+            
+            # Проверяем наличие нод
+            nodes = YdbCluster.get_cluster_nodes()
+            if not nodes:
+                return cls._create_cluster_issue("cluster_no_nodes", "No working cluster nodes found")
+            
+            # Кластер OK
+            return cls._create_cluster_issue(None, "Cluster check passed successfully", len(nodes))
+            
+        except Exception as e:
+            return cls._create_cluster_issue("cluster_check_exception", f"Exception during cluster check: {e}")
+
+    @classmethod
+    def _create_cluster_issue(cls, issue_type: str, description: str, nodes_count: int = 0) -> dict:
+        """
+        Создает информацию о проблеме кластера.
+        
+        Args:
+            issue_type: Тип проблемы (None если все OK)
+            description: Описание проблемы
+            nodes_count: Количество нод (0 если проблема, реальное количество если OK)
+            
+        Returns:
+            dict: Статистика проблемы кластера
+        """
+        if issue_type is None:
+            # Кластер OK
+            return {
+                "issue_type": None,
+                "issue_description": description,
+                "nodes_count": nodes_count,
+                "is_critical": False
+            }
+        else:
+            # Есть проблема
+            return {
+                "issue_type": issue_type,
+                "issue_description": description,
+                "nodes_count": nodes_count,
+                "is_critical": True
+            }
 
 
     @classmethod
@@ -1533,30 +1531,9 @@ class WorkloadTestBase(LoadSuiteBase):
             with allure.step("Select unique cluster hosts"):
                 nodes = YdbCluster.get_cluster_nodes()
                 if not nodes:
-                    # Записываем информацию о проблеме с кластером в базу данных
-                    try:
-                        suite_name = type(self).suite()  # Используем тот же suite что и в основных тестах
-                        ResultsProcessor.upload_results(
-                            kind='ClusterCheck',  # Проверка кластера на этапе deployment
-                            suite=suite_name,
-                            test=workload_name,  # Используем workload_name для матчинга
-                            timestamp=time_module.time(),
-                            is_successful=False,
-                            statistics={
-                                'issue_type': 'cluster_unavailable',
-                                'issue_description': 'No cluster nodes found during workload deployment',
-                                'verification_phase': 'workload_deployment',
-                                'nodes_count': 0,
-                                'is_critical': True,
-                                'workload_name': workload_name,
-                                'check_type': 'deployment_cluster_check'
-                            }
-                        )
-                        logging.info(f"Cluster issue recorded for {workload_name}: No nodes found")
-                    except Exception as e:
-                        logging.error(f"Failed to record cluster issue: {e}")
-                    
-                    raise Exception("No cluster nodes found")
+                    # Кластер уже проверен в perform_verification_with_cluster_check()
+                    # Если мы дошли сюда, значит что-то пошло не так между проверкой и деплоем
+                    raise Exception("No cluster nodes found - cluster state changed after verification")
 
                 # Собираем уникальные хосты и соответствующие им ноды
                 unique_hosts = {}

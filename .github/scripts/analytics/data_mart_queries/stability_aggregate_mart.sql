@@ -90,6 +90,7 @@ $all_tests = SELECT
     CASE WHEN JSON_VALUE(s.Stats, '$.workload_warnings') = 'true' THEN 1U ELSE 0U END AS WorkloadWarnings,
     
     -- Дополнительные поля
+    s.Stats AS Stats,  -- Добавляем Stats для использования в финальном SELECT
     JSON_VALUE(s.Stats, '$.table_type') AS TableType,
     CAST(JSON_VALUE(s.Stats, '$.test_timestamp') AS Uint64) AS TestTimestamp,
     CAST(s.RunId AS Uint64) AS StatsRunId,
@@ -138,7 +139,7 @@ SELECT
     agg.Db,
     agg.Suite,
     agg.Test,
-    CAST(CAST(agg.RunId AS Uint64)/1000 AS Timestamp) AS RunTs,
+    CAST(CAST(agg.RunId AS Uint64)/1000UL AS Timestamp) AS RunTs,
     agg.StabilityTimestamp AS Timestamp,
     
     -- Четкие поля времени старта и окончания
@@ -280,7 +281,8 @@ SELECT
         WHEN agg.ClusterCheckSuccess = 1U AND agg.Success IS NULL THEN 
             CASE 
                 -- Если прошло больше чем planned_duration * 3 от времени старта ClusterCheck, считаем timeout
-                WHEN agg.ClusterCheckTimestamp < CurrentUtcTimestamp() - INTERVAL('PT' || CAST(COALESCE(agg.PlannedDuration, 1800) * 3 AS String) || 'S') THEN 'timeout'
+                -- Сравниваем время в микросекундах: текущее время - время старта > planned_duration * 3 * 1000000
+                WHEN CAST(CurrentUtcTimestamp() AS Uint64) - CAST(agg.ClusterCheckTimestamp AS Uint64) > CAST(COALESCE(agg.PlannedDuration, 1800) * 3 * 1000000 AS Uint64) THEN 'timeout'
                 ELSE 'in_progress'
             END
         

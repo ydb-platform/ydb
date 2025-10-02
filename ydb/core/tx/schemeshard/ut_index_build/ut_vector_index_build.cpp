@@ -1579,6 +1579,138 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
         }
     }
 
+    Y_UNIT_TEST(UnknownState) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "vectors"
+            Columns { Name: "id" Type: "Uint64" }
+            Columns { Name: "embedding" Type: "String" }
+            KeyColumnNames: [ "id" ]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        NYdb::NTable::TGlobalIndexSettings globalIndexSettings;
+
+        std::unique_ptr<NYdb::NTable::TKMeansTreeSettings> kmeansTreeSettings;
+        {
+            Ydb::Table::KMeansTreeSettings proto;
+            UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(R"(
+                settings {
+                    metric: DISTANCE_COSINE
+                    vector_type: VECTOR_TYPE_FLOAT
+                    vector_dimension: 1024
+                }
+                levels: 5
+                clusters: 4
+            )", &proto));
+            using T = NYdb::NTable::TKMeansTreeSettings;
+            kmeansTreeSettings = std::make_unique<T>(T::FromProto(proto));
+        }
+
+        TBlockEvents<TEvDataShard::TEvLocalKMeansRequest> kmeansBlocker(runtime, [&](const auto& ) {
+            return true;
+        });
+
+        const ui64 buildIndexTx = ++txId;
+        AsyncBuildVectorIndex(runtime, buildIndexTx, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/vectors", "index1", {"embedding"});
+
+        runtime.WaitFor("LocalKMeansRequest", [&]{ return kmeansBlocker.size(); });
+
+        {
+            // set unknown State value
+            TString writeQuery = Sprintf(R"(
+                (
+                    (let key '( '('Id (Uint64 '%lu)) ) )
+                    (let value '('('State (Uint32 '999999)) ) )
+                    (return (AsList (UpdateRow 'IndexBuild key value) ))
+                )
+            )", buildIndexTx);
+            NKikimrMiniKQL::TResult result;
+            TString err;
+            NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, TTestTxConfig::SchemeShard, writeQuery, result, err);
+            UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::EReplyStatus::OK, err);
+        }
+
+        Cerr << "... rebooting scheme shard" << Endl;
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        kmeansBlocker.Stop().Unblock();
+
+        {
+            auto buildIndexOperation = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexTx);
+            auto buildIndexHtml = TestGetBuildIndexHtml(runtime, TTestTxConfig::SchemeShard, buildIndexTx);
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                buildIndexOperation.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_UNSPECIFIED,
+                buildIndexOperation.DebugString()
+            );
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexOperation.DebugString(), "Unknown build state");
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "IsBroken: YES");
+        }
+
+        {
+            // set a known State but unknown SubState
+            TString writeQuery = Sprintf(R"(
+                (
+                    (let key '( '('Id (Uint64 '%lu)) ) )
+                    (let value '('('State (Uint32 '40)) '('SubState (Uint32 '999999)) ) )
+                    (return (AsList (UpdateRow 'IndexBuild key value) ))
+                )
+            )", buildIndexTx);
+            NKikimrMiniKQL::TResult result;
+            TString err;
+            NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, TTestTxConfig::SchemeShard, writeQuery, result, err);
+            UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::EReplyStatus::OK, err);
+        }
+
+        Cerr << "... rebooting scheme shard" << Endl;
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+
+        {
+            auto buildIndexOperation = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexTx);
+            auto buildIndexHtml = TestGetBuildIndexHtml(runtime, TTestTxConfig::SchemeShard, buildIndexTx);
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                buildIndexOperation.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_TRANSFERING_DATA,
+                buildIndexOperation.DebugString()
+            );
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexOperation.DebugString(), "Unknown build sub-state");
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "IsBroken: YES");
+        }
+
+        {
+            // set a known SubState but unknown BuildKind
+            TString writeQuery = Sprintf(R"(
+                (
+                    (let key '( '('Id (Uint64 '%lu)) ) )
+                    (let value '('('SubState (Uint32 '0)) '('BuildKind (Uint32 '999999)) ) )
+                    (return (AsList (UpdateRow 'IndexBuild key value) ))
+                )
+            )", buildIndexTx);
+            NKikimrMiniKQL::TResult result;
+            TString err;
+            NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, TTestTxConfig::SchemeShard, writeQuery, result, err);
+            UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::EReplyStatus::OK, err);
+        }
+
+        Cerr << "... rebooting scheme shard" << Endl;
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+
+        {
+            auto buildIndexOperation = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexTx);
+            auto buildIndexHtml = TestGetBuildIndexHtml(runtime, TTestTxConfig::SchemeShard, buildIndexTx);
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                buildIndexOperation.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_TRANSFERING_DATA,
+                buildIndexOperation.DebugString()
+            );
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexOperation.DebugString(), "Unknown build kind");
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "IsBroken: YES");
+        }
+    }
+
     Y_UNIT_TEST(CreateBuildProposeReject) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

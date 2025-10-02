@@ -15,6 +15,8 @@
 #include <util/string/builder.h>
 #include <util/generic/deque.h>
 
+#include <optional>
+
 LWTRACE_USING(KESUS_QUOTER_PROVIDER);
 
 namespace NKikimr {
@@ -201,6 +203,58 @@ private:
 };
 
 ////////////////////////////////////////////////////////////////////////////////
+class TPublicCounters {
+    static std::optional<TString> GetCategory(const NKikimrKesus::TAccountingConfig::TMetric& cfg) {
+        for (const auto& [label, value] : cfg.GetLabels()) {
+            if (to_lower(label) == "category") {
+                return value;
+            }
+        }
+
+        return std::nullopt;
+    }
+
+public:
+    void Configure(const NKikimrKesus::TAccountingConfig::TMetric& cfg, double limit, ::NMonitoring::TDynamicCounterPtr counters) {
+        std::optional<TString> category;
+        if (!cfg.GetEnabled()
+            || !cfg.GetCloudId()
+            || !cfg.GetFolderId()
+            || !cfg.GetResourceId()
+            || !(category = GetCategory(cfg))
+        ) {
+            Limit.Reset();
+            Consumed.Reset();
+            Counters.Reset();
+            return;
+        }
+
+        Y_ABORT_UNLESS(category.has_value());
+        Counters = GetServiceCounters(counters, "ydb_serverless", false)
+            ->GetSubgroup("host", "")
+            ->GetSubgroup("cloud_id", cfg.GetCloudId())
+            ->GetSubgroup("folder_id", cfg.GetFolderId())
+            ->GetSubgroup("database_id", cfg.GetResourceId())
+            ->GetSubgroup("category", *category);
+        Limit = Counters->GetExpiringNamedCounter("name", "resources.request_units.limit", false);
+        Consumed = Counters->GetExpiringNamedCounter("name", "resources.request_units.consumed", true);
+
+        *Limit = limit;
+    }
+
+    void Consume(double consumed) {
+        if (Consumed) {
+            *Consumed += consumed;
+        }
+    }
+
+private:
+    ::NMonitoring::TDynamicCounterPtr Counters;
+    ::NMonitoring::TDynamicCounters::TCounterPtr Limit;
+    ::NMonitoring::TDynamicCounters::TCounterPtr Consumed;
+};
+
+////////////////////////////////////////////////////////////////////////////////
 class TAccountingActor final: public TActor<TAccountingActor> {
 private:
     // Accounting (aggregate history intervals and split consumption into billing categories)
@@ -219,9 +273,7 @@ private:
 
     // Monitoring
     TRateAccountingCounters Counters;
-    ::NMonitoring::TDynamicCounterPtr PublicCounters;
-    ::NMonitoring::TDynamicCounters::TCounterPtr Limit;
-    ::NMonitoring::TDynamicCounters::TCounterPtr Consumed;
+    TPublicCounters PublicCounters;
 
 public:
     explicit TAccountingActor(const IBillSink::TPtr& billSink, const NKikimrKesus::TStreamingQuoterResource& props, const TString& quoterPath)
@@ -278,30 +330,7 @@ private:
         OnDemand.Configure(accCfg.GetOnDemand(), QuoterPath, props.GetResourcePath(), "ondemand", BillSink);
         Overshoot.Configure(accCfg.GetOvershoot(), QuoterPath, props.GetResourcePath(), "overshoot", BillSink);
 
-        if (const auto& cfg = accCfg.GetOnDemand(); cfg.GetEnabled() && cfg.GetCloudId() && cfg.GetFolderId() && cfg.GetResourceId()) {
-            TString category = "Generic";
-            for (const auto& [label, value] : cfg.GetLabels()) {
-                if (to_lower(label) == "category") {
-                    category = value;
-                    break;
-                }
-            }
-
-            PublicCounters = GetServiceCounters(AppData()->Counters, "ydb_serverless", false)
-                ->GetSubgroup("host", "")
-                ->GetSubgroup("cloud_id", cfg.GetCloudId())
-                ->GetSubgroup("folder_id", cfg.GetFolderId())
-                ->GetSubgroup("database_id", cfg.GetResourceId())
-                ->GetSubgroup("category", category);
-            Limit = PublicCounters->GetExpiringNamedCounter("name", "resources.request_units.limit", false);
-            Consumed = PublicCounters->GetExpiringNamedCounter("name", "resources.request_units.consumed", true);
-
-            *Limit = resCfg.GetMaxUnitsPerSecond();
-        } else {
-            Limit.Reset();
-            Consumed.Reset();
-            PublicCounters.Reset();
-        }
+        PublicCounters.Configure(accCfg.GetOnDemand(), resCfg.GetMaxUnitsPerSecond(), AppData()->Counters);
 
         LWPROBE(ResourceAccountConfigure,
             QuoterPath,
@@ -349,9 +378,7 @@ private:
         OnDemand.Add(onDemand, t, ctx);
         Overshoot.Add(overshoot, t, ctx);
 
-        if (Consumed) {
-            *Consumed += consumed;
-        }
+        PublicCounters.Consume(consumed);
     }
 };
 

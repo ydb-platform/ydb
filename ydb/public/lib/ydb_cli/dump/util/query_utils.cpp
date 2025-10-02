@@ -27,7 +27,7 @@ namespace NYdb::NDump {
 using namespace NSQLv1Generated;
 
 
-TString RewriteAbsolutePath(const TPathSplitUnix& pathSplit, TStringBuf backupRoot, TStringBuf restoreRoot) {
+TPathSplitUnix RewriteAbsolutePath(const TPathSplitUnix& pathSplit, TStringBuf backupRoot, TStringBuf restoreRoot) {
     TPathSplitUnix backupRootSplit(backupRoot);
 
     size_t matchedParts = 0;
@@ -42,7 +42,7 @@ TString RewriteAbsolutePath(const TPathSplitUnix& pathSplit, TStringBuf backupRo
         restoreRootSplit.AppendComponent("..");
     }
 
-    return restoreRootSplit.AppendMany(pathSplit.begin() + matchedParts, pathSplit.end()).Reconstruct();
+    return restoreRootSplit.AppendMany(pathSplit.begin() + matchedParts, pathSplit.end());
 }
 
 TString RewriteAbsolutePath(TStringBuf path, TStringBuf backupRoot, TStringBuf restoreRoot) {
@@ -51,7 +51,7 @@ TString RewriteAbsolutePath(TStringBuf path, TStringBuf backupRoot, TStringBuf r
     }
 
     TPathSplitUnix pathSplit(path);
-    return RewriteAbsolutePath(pathSplit, backupRoot, restoreRoot);
+    return RewriteAbsolutePath(pathSplit, backupRoot, restoreRoot).Reconstruct();
 }
 
 namespace {
@@ -99,11 +99,9 @@ struct TPathRewriter {
         return prefixSplit;
     }
 
-    TString BuildRelativePath(const TString& absolutePath) const {
-        Y_DEBUG_ABORT_UNLESS(absolutePath.StartsWith('/'));
+    TString BuildRelativePath(const TPathSplitUnix& absoluteSplit) const {
+        Y_DEBUG_ABORT_UNLESS(absoluteSplit.IsAbsolute);
         TPathSplitUnix relativeSplit;
-
-        TPathSplitUnix absoluteSplit(absolutePath);
         TPathSplitUnix prefixSplit(RestorePathPrefix);
         size_t matchedParts = 0;
         while (matchedParts < size(absoluteSplit) && matchedParts < size(prefixSplit) && absoluteSplit[matchedParts] == prefixSplit[matchedParts]) {

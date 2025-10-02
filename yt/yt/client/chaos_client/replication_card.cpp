@@ -44,7 +44,7 @@ void FormatProgressWithProjection(
     builder->AppendChar('[');
 
     if (it != segments.begin()) {
-        builder->AppendFormat("<%v, %x>", segments[0].LowerKey, segments[0].Timestamp);
+        builder->AppendFormat("<%v, %v>", segments[0].LowerKey, segments[0].Timestamp);
         if (it != std::next(segments.begin())) {
             builder->AppendString(", ...");
         }
@@ -52,7 +52,7 @@ void FormatProgressWithProjection(
     }
 
     for (; it != segments.end() && it->LowerKey <= replicationProgressProjection.To; ++it) {
-        builder->AppendFormat("%v<%v, %x>", comma ? ", " : "", it->LowerKey,  it->Timestamp);
+        builder->AppendFormat("%v<%v, %v>", comma ? ", " : "", it->LowerKey,  it->Timestamp);
         comma = true;
     }
 
@@ -140,7 +140,7 @@ void FormatValue(
     const auto& segments = replicationProgress.Segments;
     if (!replicationProgressProjection) {
         builder->AppendFormat("%v", MakeFormattableView(segments, [] (auto* builder, const auto& segment) {
-            builder->AppendFormat("<%v, %x>", segment.LowerKey, segment.Timestamp);
+            builder->AppendFormat("<%v, %v>", segment.LowerKey, segment.Timestamp);
         }));
     } else  {
         NDetail::FormatProgressWithProjection(builder, replicationProgress, *replicationProgressProjection);

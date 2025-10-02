@@ -961,7 +961,7 @@ public:
         return Inner_->AddCluster(cluster);
     }
 
-    TClusterConnectionResult GetClusterConnection(const TClusterConnectionOptions&& options) override {
+    TClusterConnectionResult GetClusterConnection(const TClusterConnectionOptions&& options) const override {
         return Inner_->GetClusterConnection(std::move(options));
     }
 

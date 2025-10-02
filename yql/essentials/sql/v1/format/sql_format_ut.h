@@ -2001,3 +2001,90 @@ Y_UNIT_TEST(DropStreamingQuery) {
     TSetup setup;
     setup.Run(cases);
 }
+
+Y_UNIT_TEST(NamedNodeNewLine) {
+    TString input = R"sql(
+DEFINE SUBQUERY $x() AS
+    $a = SELECT 1;
+    $b = SELECT $a;
+    SELECT $b;
+END DEFINE;
+)sql";
+
+    TString expected = R"sql(
+DEFINE SUBQUERY $x() AS
+    $a = (
+        SELECT
+            1
+    );
+
+    $b = (
+        SELECT
+            $a
+    );
+
+    SELECT
+        $b
+    ;
+END DEFINE;
+)sql";
+
+    input.erase(0, 1);
+    expected.erase(0, 1);
+
+    TCases cases = {
+        {input, expected},
+    };
+
+    TSetup setup;
+    setup.Run(cases);
+}
+
+Y_UNIT_TEST(InlineSubquery) {
+        TString input = R"sql(
+SELECT (SELECT 1);
+SELECT (SELECT * FROM t WHERE p);
+SELECT * FROM t WHERE x > (SELECT 1);
+)sql";
+
+    TString expected = R"sql(
+SELECT
+    (
+        SELECT
+            1
+    )
+;
+
+SELECT
+    (
+        SELECT
+            *
+        FROM
+            t
+        WHERE
+            p
+    )
+;
+
+SELECT
+    *
+FROM
+    t
+WHERE
+    x > (
+        SELECT
+            1
+    )
+;
+)sql";
+
+    input.erase(0, 1);
+    expected.erase(0, 1);
+
+    TCases cases = {
+        {input, expected},
+    };
+
+    TSetup setup;
+    setup.Run(cases);
+}

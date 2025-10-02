@@ -63,13 +63,16 @@ void Unref(TFutureState<T>* state);
 //! Constructs a well-known pre-set future like #VoidFuture.
 //! For such futures ref-counting is essentially disabled.
 template <class T>
-[[nodiscard]] TFuture<T> MakeWellKnownFuture(TErrorOr<T> value);
+TFuture<T> MakeWellKnownFuture(TErrorOr<T> value);
 
 template <class T>
 constexpr bool IsFuture = false;
 
 template <class T>
 constexpr bool IsFuture<TFuture<T>> = true;
+
+template <class T>
+constexpr bool IsFuture<TUniqueFuture<T>> = true;
 
 template <class U, class F>
 void InterceptExceptions(const TPromise<U>& promise, const F& func);
@@ -90,9 +93,9 @@ template <class T>
 
 //! Constructs a successful pre-set future.
 template <class T>
-[[nodiscard]] TFuture<T> MakeFuture(TErrorOr<T> value);
+TFuture<T> MakeFuture(TErrorOr<T> value);
 template <class T>
-[[nodiscard]] TFuture<T> MakeFuture(T value);
+TFuture<T> MakeFuture(T value);
 
 ////////////////////////////////////////////////////////////////////////////////
 // Comparison and swap.
@@ -155,8 +158,7 @@ private:
     friend void swap(TCancelable& lhs, TCancelable& rhs);
     template <class U>
     friend struct ::THash;
-    template <class U>
-    friend class TFutureBase;
+    friend class NDetail::TFutureState<void>;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -218,6 +220,7 @@ public:
     /*!
      *  This call will block until the value is set.
      */
+    // TODO(babenko): deprecated, see YT-26319
     TErrorOr<T> GetUnique() const;
 
     //! Waits for the value to become set.
@@ -242,6 +245,7 @@ public:
     /*!
      *  This call does not block.
      */
+    // TODO(babenko): deprecated, see YT-26319
     std::optional<TErrorOr<T>> TryGetUnique() const;
 
     //! Attaches a result handler.
@@ -274,6 +278,7 @@ public:
     /*!
      *  Normally at most one such handler could be attached.
      */
+    // TODO(babenko): deprecated, see YT-26319
     void SubscribeUnique(TCallback<void(TErrorOr<T>&&)> handler) const;
 
     //! Notifies the producer that the promised value is no longer needed.
@@ -311,10 +316,13 @@ public:
     TFuture<R> Apply(TCallback<TFuture<R>(const TErrorOr<T>&)> callback) const;
 
     //! Same as #Apply but assumes that this chaining will be the only subscriber.
+    // TODO(babenko): deprecated, see YT-26319
     template <class R>
     TFuture<R> ApplyUnique(TCallback<R(TErrorOr<T>&&)> callback) const;
+    // TODO(babenko): deprecated, see YT-26319
     template <class R>
     TFuture<R> ApplyUnique(TCallback<TErrorOr<R>(TErrorOr<T>&&)> callback) const;
+    // TODO(babenko): deprecated, see YT-26319
     template <class R>
     TFuture<R> ApplyUnique(TCallback<TFuture<R>(TErrorOr<T>&&)> callback) const;
 
@@ -359,13 +367,22 @@ public:
     template <class R>
     TFuture<R> Apply(TCallback<TFuture<R>(const T&)> callback) const;
     template <class R>
+    TFuture<R> Apply(TCallback<TUniqueFuture<R>(const T&)> callback) const;
+    template <class R>
     TFuture<R> Apply(TCallback<TFuture<R>(T)> callback) const;
+    template <class R>
+    TFuture<R> Apply(TCallback<TUniqueFuture<R>(T)> callback) const;
 
     //! Same as #Apply but assumes that this chaining will be the only subscriber.
+    // TODO(babenko): deprecated, see YT-26319
     template <class R>
     TFuture<R> ApplyUnique(TCallback<R(T&&)> callback) const;
+    // TODO(babenko): deprecated, see YT-26319
     template <class R>
     TFuture<R> ApplyUnique(TCallback<TFuture<R>(T&&)> callback) const;
+
+    //! Converts to TUniqueFuture interface.
+    TUniqueFuture<T> AsUnique() const;
 
     using TFutureBase<T>::Apply;
     using TFutureBase<T>::ApplyUnique;
@@ -400,6 +417,8 @@ public:
     TFuture<R> Apply(TCallback<R()> callback) const;
     template <class R>
     TFuture<R> Apply(TCallback<TFuture<R>()> callback) const;
+    template <class R>
+    TFuture<R> Apply(TCallback<TUniqueFuture<R>()> callback) const;
 
     using TFutureBase<void>::Apply;
 
@@ -415,6 +434,59 @@ private:
     friend class NYT::TFutureBase;
     template <class U>
     friend class TPromiseBase;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+//! Provides the unique-value semantics interface.
+template <class T>
+class [[nodiscard]] TUniqueFuture
+    : public TFutureBase<T>
+{
+public:
+    TUniqueFuture() = default;
+    TUniqueFuture(std::nullopt_t);
+
+    //! Similar to #TFuture::Get but extracts the value by moving it out of the future state.
+    /*!
+     *  This call will block until the value is set.
+     */
+    TErrorOr<T> Get() const;
+
+    //! Similar to #TFuture::TryGet but extracts the value by moving it out of the future state;
+    //! returns null if the value is not set yet.
+    /*!
+     *  This call does not block.
+     */
+    std::optional<TErrorOr<T>> TryGet() const;
+
+    //! Similar to #TFuture::Subscribe but enables moving the value to the handler.
+    /*!
+     *  Normally at most one such handler could be attached.
+     */
+    void Subscribe(TCallback<void(TErrorOr<T>&&)> handler) const;
+
+    //! Same as #TFuture::Apply but assumes that this chaining will be the only subscriber.
+    template <class R>
+    TFuture<R> Apply(TCallback<R(TErrorOr<T>&&)> callback) const;
+    template <class R>
+    TFuture<R> Apply(TCallback<TErrorOr<R>(TErrorOr<T>&&)> callback) const;
+    template <class R>
+    TFuture<R> Apply(TCallback<TFuture<R>(TErrorOr<T>&&)> callback) const;
+    template <class R>
+    TFuture<R> Apply(TCallback<TUniqueFuture<R>(TErrorOr<T>&&)> callback) const;
+    template <class R>
+    TFuture<R> Apply(TCallback<R(T&&)> callback) const;
+    template <class R>
+    TFuture<R> Apply(TCallback<TFuture<R>(T&&)> callback) const;
+    template <class R>
+    TFuture<R> Apply(TCallback<TUniqueFuture<R>(T&&)> callback) const;
+
+private:
+    explicit TUniqueFuture(TIntrusivePtr<NYT::NDetail::TFutureState<T>> impl);
+
+    template <class U>
+    friend class TFuture;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -448,6 +520,8 @@ public:
     //! Sets the value when #another future is set.
     template <class U>
     void SetFrom(const TFuture<U>& another) const;
+    template <class U>
+    void SetFrom(const TUniqueFuture<U>& another) const;
 
     //! Atomically invokes |Set|, if not already set or canceled.
     //! Returns |true| if succeeded, |false| is the promise was already set or canceled.

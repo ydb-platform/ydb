@@ -1377,7 +1377,7 @@ public:
     }
 
     void DoAdd(TInputBuffer& input) final {
-        Y_UNUSED(input.PopChar());
+        Y_UNUSED(input);
     }
 
     void DoAddDefault() final {}

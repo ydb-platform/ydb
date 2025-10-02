@@ -72,9 +72,9 @@ sourceSets {
         java.srcDir("generated/source/proto/main/grpc").include("**/*")
 {%-         endif -%}
 {%-     elif proto_template %}
-        java.srcDir("$buildDir/generated/source/proto/main/java").include("**/*")
+        java.srcDir(layout.buildDirectory.dir("generated/source/proto/main/java")).include("**/*")
 {%-         if target.proto_grpc %}
-        java.srcDir("$buildDir/generated/source/proto/main/grpc").include("**/*")
+        java.srcDir(layout.buildDirectory.dir("generated/source/proto/main/grpc")).include("**/*")
 {%-         endif -%}
 {%-     endif %}
     }
@@ -119,5 +119,7 @@ tasks.processTestResources.configure {
 }
 {%- endif %}
 
-tasks.getByName("sourcesJar").dependsOn(tasks.compileJava)
-tasks.getByName("sourcesJar").mustRunAfter(tasks.compileTestJava)
+tasks.named("sourcesJar").configure {
+    dependsOn(tasks.compileJava)
+    mustRunAfter(tasks.compileTestJava)
+}

@@ -10,7 +10,7 @@ from pytz.exceptions import UnknownTimeZoneError
 
 from clickhouse_connect.driver import tzutil
 from clickhouse_connect.driver.binding import bind_query
-from clickhouse_connect.driver.common import dict_copy, empty_gen, StreamContext
+from clickhouse_connect.driver.common import dict_copy, empty_gen, StreamContext, get_rename_method
 from clickhouse_connect.driver.external import ExternalData
 from clickhouse_connect.driver.types import Matrix, Closable
 from clickhouse_connect.driver.exceptions import StreamClosedError, ProgrammingError
@@ -53,7 +53,8 @@ class QueryContext(BaseQueryContext):
                  streaming: bool = False,
                  apply_server_tz: bool = False,
                  external_data: Optional[ExternalData] = None,
-                 transport_settings: Optional[Dict[str, str]] = None):
+                 transport_settings: Optional[Dict[str, str]] = None,
+                 rename_response_column: Optional[str] = None):
         """
         Initializes various configuration settings for the query context
 
@@ -118,7 +119,18 @@ class QueryContext(BaseQueryContext):
         self.as_pandas = as_pandas
         self.use_pandas_na = as_pandas and pd_extended_dtypes
         self.streaming = streaming
+        self._rename_response_column: Optional[str] = rename_response_column
+        self.column_renamer = get_rename_method(rename_response_column)
         self._update_query()
+
+    @property
+    def rename_response_column(self) -> Optional[str]:
+        return self._rename_response_column
+
+    @rename_response_column.setter
+    def rename_response_column(self, method: Optional[str]):
+        self._rename_response_column = method
+        self.column_renamer = get_rename_method(method)
 
     @property
     def is_select(self) -> bool:
@@ -192,7 +204,8 @@ class QueryContext(BaseQueryContext):
                      as_pandas: bool = False,
                      streaming: bool = False,
                      external_data: Optional[ExternalData] = None,
-                     transport_settings: Optional[Dict[str, str]] = None) -> 'QueryContext':
+                     transport_settings: Optional[Dict[str, str]] = None,
+                     rename_response_column: Optional[str] = None) -> 'QueryContext':
         """
         Creates Query context copy with parameters overridden/updated as appropriate.
         """
@@ -214,7 +227,8 @@ class QueryContext(BaseQueryContext):
                             streaming,
                             self.apply_server_tz,
                             self.external_data if external_data is None else external_data,
-                            self.transport_settings if transport_settings is None else transport_settings)
+                            self.transport_settings if transport_settings is None else transport_settings,
+                            self.rename_response_column if rename_response_column is None else rename_response_column)
 
     def _update_query(self):
         self.final_query, self.bind_params = bind_query(self.query, self.parameters, self.server_tz)

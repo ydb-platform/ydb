@@ -497,11 +497,18 @@ def is_os_supported(cfg):
     return True
 
 
-def is_xfail(cfg):
-    for item in cfg:
-        if item[0] == 'xfail':
-            return True
-    return False
+def is_xsqlfail(cfg, filename=''):
+    return (
+        any(item[0] == 'xsqlfail' for item in cfg) or
+        filename.endswith('.sqlx')
+    )
+
+
+def is_xfail(cfg, filename=''):
+    return (
+        any(item[0] == 'xfail' for item in cfg) or
+        is_xsqlfail(cfg, filename)
+    )
 
 
 def get_langver(cfg):

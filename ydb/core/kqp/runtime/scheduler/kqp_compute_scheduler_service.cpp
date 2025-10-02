@@ -205,6 +205,8 @@ ui64 TComputeScheduler::GetTotalCpuLimit() const {
 void TComputeScheduler::AddOrUpdateDatabase(const TString& databaseId, const NHdrf::TStaticAttributes& attrs) {
     TWriteGuard lock(Mutex);
 
+    Y_ENSURE(attrs.GetWeight() > 0.0, "Weight should be positive");
+
     if (auto database = Root->GetDatabase(databaseId)) {
         database->Update(attrs);
     } else {
@@ -218,6 +220,8 @@ void TComputeScheduler::AddOrUpdatePool(const TString& databaseId, const TString
     TWriteGuard lock(Mutex);
     auto database = Root->GetDatabase(databaseId);
     Y_ENSURE(database, "Database not found: " << databaseId);
+
+    Y_ENSURE(attrs.GetWeight() > 0.0, "Weight should be positive");
 
     if (auto pool = database->GetPool(poolId)) {
         pool->Update(attrs);
@@ -235,6 +239,7 @@ TQueryPtr TComputeScheduler::AddOrUpdateQuery(const TString& databaseId, const T
     auto pool = database->GetPool(poolId);
     Y_ENSURE(pool, "Pool not found: " << poolId);
 
+    Y_ENSURE(attrs.GetWeight() > 0.0, "Weight should be positive");
     TQueryPtr query;
 
     if (query = std::static_pointer_cast<TQuery>(pool->GetQuery(queryId))) {

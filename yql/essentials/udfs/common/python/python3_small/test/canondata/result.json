@@ -57,5 +57,10 @@
             "size": 9172,
             "uri": "https://{canondata_backend}/1130705/493ee46b1e8f2e848ab928f97913d332cb4fffc7/resource.tar.gz#test.test_Switch_/results.txt"
         }
+    ],
+    "test.test[Tagged]": [
+        {
+            "uri": "file://test.test_Tagged_/results.txt"
+        }
     ]
 }

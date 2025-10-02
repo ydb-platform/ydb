@@ -2,6 +2,7 @@ import traceback
 import allure
 import logging
 import os
+import json
 import time as time_module
 import uuid
 import yatest.common
@@ -65,28 +66,28 @@ class WorkloadTestBase(LoadSuiteBase):
     def perform_verification_with_cluster_check(cls, workload_name: str) -> None:
         """
         Выполняет проверку кластера перед тестом и записывает результат.
-        
+
         Args:
             workload_name: Имя workload теста для матчинга с основными результатами
         """
         suite_name = cls.suite()
-        
+
         with allure.step(f"Pre-test verification for {suite_name}"):
             verification_start_time = time_module.time()
-            
+
             # Выполняем проверки кластера
             cluster_issue = cls._check_cluster_health()
-            
+
             # Создаем результат
             result = YdbCliHelper.WorkloadRunResult()
             result.iterations[0] = YdbCliHelper.Iteration()
             result.start_time = verification_start_time
             result.iterations[0].time = time_module.time() - verification_start_time
-            
+
             # Добавляем ошибку если есть проблема с кластером
             if cluster_issue:
                 result.add_error(cluster_issue["issue_description"])
-            
+
             # Устанавливаем start_time для _Verification
             try:
                 nodes_start_time = [n.start_time for n in YdbCluster.get_cluster_nodes(db_only=False)]
@@ -94,7 +95,7 @@ class WorkloadTestBase(LoadSuiteBase):
                 result.start_time = max(verification_start_time - 600, first_node_start_time)
             except Exception:
                 result.start_time = verification_start_time - 600
-            
+
             # Записываем результат проверки кластера
             stats = {}
             stats.update({
@@ -102,16 +103,26 @@ class WorkloadTestBase(LoadSuiteBase):
                 "check_type": "cluster_availability",
                 **cluster_issue  # Добавляем информацию о проблеме кластера
             })
-            
-            ResultsProcessor.upload_results(
-                kind='ClusterCheck',
-                suite=suite_name,
-                test=workload_name,
-                timestamp=time_module.time(),
-                is_successful=result.success,
-                statistics=stats
+
+            # Подготавливаем данные для выгрузки ClusterCheck
+            cluster_check_upload_data = {
+                "kind": 'ClusterCheck',
+                "suite": suite_name,
+                "test": workload_name,
+                "timestamp": time_module.time(),
+                "is_successful": result.success,
+                "statistics": stats
+            }
+
+            # Прикрепляем данные к Allure отчету
+            allure.attach(
+                json.dumps(cluster_check_upload_data, indent=2, default=str),
+                f"Cluster check results upload data for {workload_name}",
+                allure.attachment_type.JSON
             )
-            
+
+            ResultsProcessor.upload_results(**cluster_check_upload_data)
+
             # Если проверка кластера не прошла успешно, поднимаем исключение
             if cluster_issue and cluster_issue.get("issue_type") is not None:
                 raise Exception(f"Cluster verification failed: {cluster_issue['issue_description']}")
@@ -120,7 +131,7 @@ class WorkloadTestBase(LoadSuiteBase):
     def _check_cluster_health(cls) -> dict:
         """
         Проверяет состояние кластера и возвращает информацию о проблемах.
-        
+
         Returns:
             dict: Информация о проблеме кластера или пустой dict если все OK
         """
@@ -129,15 +140,15 @@ class WorkloadTestBase(LoadSuiteBase):
             wait_error = YdbCluster.wait_ydb_alive(int(os.getenv('WAIT_CLUSTER_ALIVE_TIMEOUT', 20 * 60)))
             if wait_error:
                 return cls._create_cluster_issue("cluster_not_alive", f"Cluster functionality check failed: {wait_error}")
-            
+
             # Проверяем наличие нод
             nodes = YdbCluster.get_cluster_nodes()
             if not nodes:
                 return cls._create_cluster_issue("cluster_no_nodes", "No working cluster nodes found")
-            
+
             # Кластер OK
             return cls._create_cluster_issue(None, "Cluster check passed successfully", len(nodes))
-            
+
         except Exception as e:
             return cls._create_cluster_issue("cluster_check_exception", f"Exception during cluster check: {e}")
 
@@ -145,12 +156,12 @@ class WorkloadTestBase(LoadSuiteBase):
     def _create_cluster_issue(cls, issue_type: str, description: str, nodes_count: int = 0) -> dict:
         """
         Создает информацию о проблеме кластера.
-        
+
         Args:
             issue_type: Тип проблемы (None если все OK)
             description: Описание проблемы
             nodes_count: Количество нод (0 если проблема, реальное количество если OK)
-            
+
         Returns:
             dict: Статистика проблемы кластера
         """
@@ -170,7 +181,6 @@ class WorkloadTestBase(LoadSuiteBase):
                 "nodes_count": nodes_count,
                 "is_critical": True
             }
-
 
     @classmethod
     def do_teardown_class(cls):
@@ -994,7 +1004,7 @@ class WorkloadTestBase(LoadSuiteBase):
         # СНАЧАЛА выполняем проверку кластера с правильным workload_name
         with allure.step(f"Pre-workload cluster verification for {workload_name}"):
             self.__class__.perform_verification_with_cluster_check(workload_name)
-        
+
         # Для обратной совместимости переименовываем параметр use_chunks в
         # use_iterations
         use_iterations = use_chunks
@@ -2365,7 +2375,7 @@ class WorkloadTestBase(LoadSuiteBase):
                 # Добавляем ошибку в результат
                 result.add_warning(f"Error getting nodes state: {e}")
                 node_errors = []  # Устанавливаем пустой список если диагностика не удалась
-            
+
             # Вычисляем время выполнения
             end_time = time_module.time()
 
@@ -2525,7 +2535,6 @@ class WorkloadTestBase(LoadSuiteBase):
         if stats is not None:
             stats["aggregation_level"] = "aggregate"
             stats["run_id"] = ResultsProcessor.get_run_id()
-            
             # Добавляем времена workload для правильного анализа
             workload_start_time = getattr(result, 'workload_start_time', None)
             if workload_start_time:
@@ -2534,16 +2543,27 @@ class WorkloadTestBase(LoadSuiteBase):
                 workload_end_time = workload_start_time + stats.get("total_execution_time", 0)
                 stats["workload_end_time"] = workload_end_time
                 stats["workload_duration"] = stats.get("total_execution_time", 0)
-        
+
         end_time = time_module.time()
-        ResultsProcessor.upload_results(
-            kind="Stability",
-            suite=type(self).suite(),
-            test=workload_name,
-            timestamp=end_time,  # Время выгрузки (окончание всего теста)
-            is_successful=result.success,
-            statistics=stats,
+
+        # Подготавливаем данные для выгрузки
+        upload_data = {
+            "kind": "Stability",
+            "suite": type(self).suite(),
+            "test": workload_name,
+            "timestamp": end_time,
+            "is_successful": result.success,
+            "statistics": stats,
+        }
+
+        # Прикрепляем данные к Allure отчету
+        allure.attach(
+            json.dumps(upload_data, indent=2, default=str),
+            f"Aggregate results upload data for {workload_name}",
+            allure.attachment_type.JSON
         )
+
+        ResultsProcessor.upload_results(**upload_data)
 
     def _upload_results_per_workload_run(self, result, workload_name):
         """Переопределенный метод для workload тестов"""
@@ -2575,12 +2595,24 @@ class WorkloadTestBase(LoadSuiteBase):
                     "aggregation_level": "per_run",
                     "run_id": run_id,
                 }
-                ResultsProcessor.upload_results(
-                    kind="Stability",
-                    suite=suite,
-                    test=f"{workload_name}__iter_{iter_num}__run_{run_idx}",
-                    timestamp=time_module.time(),
-                    is_successful=(resolution == "ok"),
-                    duration=stats["duration"],
-                    statistics=stats,
-                )
+
+                # Подготавливаем данные для выгрузки per-run
+                per_run_upload_data = {
+                    "kind": "Stability",
+                    "suite": suite,
+                    "test": f"{workload_name}__iter_{iter_num}__run_{run_idx}",
+                    "timestamp": time_module.time(),
+                    "is_successful": (resolution == "ok"),
+                    "duration": stats["duration"],
+                    "statistics": stats,
+                }
+
+                # Прикрепляем данные к Allure отчету (только для первых нескольких runs чтобы не засорять отчет)
+                if iter_num <= 2 and run_idx <= 2:  # Ограничиваем количество attach'ей
+                    allure.attach(
+                        json.dumps(per_run_upload_data, indent=2, default=str),
+                        f"Per-run results upload data: {workload_name} iter_{iter_num} run_{run_idx}",
+                        allure.attachment_type.JSON
+                    )
+
+                ResultsProcessor.upload_results(**per_run_upload_data)

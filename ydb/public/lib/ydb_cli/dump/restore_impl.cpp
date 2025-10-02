@@ -1455,11 +1455,7 @@ TRestoreResult TRestoreClient::RestoreView(
     }
 
     if (result.GetStatus() == EStatus::SCHEME_ERROR) {
-        if (Log->FiltrationLevel() >= ELogPriority::TLOG_DEBUG) {
-            LOG_D("Failed to create " << dbPath.Quote() << ". Will retry. Issues: " << result.GetIssues().ToOneLineString());
-        } else {
-            LOG_I("Failed to create " << dbPath.Quote() << ". Will retry.");
-        }
+        LOG_I("Failed to create " << dbPath.Quote() << ". Will retry.");
     } else {
         LOG_E("Failed to create " << dbPath.Quote());
     }

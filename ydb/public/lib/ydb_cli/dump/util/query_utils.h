@@ -22,7 +22,6 @@ bool ValidateTableRefs(const NSQLv1Generated::TRule_sql_query& query, NYql::TIss
 
 TString RewriteAbsolutePath(TStringBuf path, TStringBuf backupRoot, TStringBuf restoreRoot);
 bool RewriteTableRefs(TString& query, TStringBuf backupRoot, TStringBuf restoreRoot, TStringBuf backupPathPrefix, TStringBuf restorePathPrefix, NYql::TIssues& issues);
-bool RewriteTableRefs(TString& query, TStringBuf restoreRoot, NYql::TIssues& issues);
 bool RewriteObjectRefs(TString& query, TStringBuf restoreRoot, NYql::TIssues& issues);
 bool RewriteCreateQuery(TString& query, std::string_view pattern, const std::string& dbPath, NYql::TIssues& issues);
 

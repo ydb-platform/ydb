@@ -349,10 +349,6 @@ bool RewriteTableRefs(TString& query, TStringBuf backupRoot, TStringBuf restoreR
     return RewriteRefs<TRule_table_ref>(query, "", backupRoot, restoreRoot, backupPathPrefix, restorePathPrefix, issues);
 }
 
-bool RewriteTableRefs(TString& query, TStringBuf restoreRoot, NYql::TIssues& issues) {
-    return RewriteRefs<TRule_table_ref>(query, GetDatabase(query), GetBackupRoot(query), restoreRoot, "", "", issues);
-}
-
 bool RewriteObjectRefs(TString& query, TStringBuf restoreRoot, NYql::TIssues& issues) {
     return RewriteRefs<TRule_object_ref>(query, GetDatabase(query), GetBackupRoot(query), restoreRoot, "", "", issues);
 }

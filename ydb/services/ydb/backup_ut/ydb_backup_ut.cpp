@@ -2048,7 +2048,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             table,
             restoredView,
             session,
-            CreateBackupLambda(driver, pathToBackup, "a/b/c"),
+            CreateBackupLambda(driver, pathToBackup, "/Root/a/b/c"),
             CreateRestoreLambda(driver, pathToBackup, "/Root/restore/point")
         );
     }

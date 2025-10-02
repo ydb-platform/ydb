@@ -12,10 +12,10 @@ class TFetchingScript;
 class IDataSource;
 
 enum class EPortionCommitStatus {
+    Unknown,
     Committed,
     OwnUncommitted,
-    UncommittedByAnotherTx,
-    Unknown
+    UncommittedByAnotherTx
 };
 
 class TSpecialReadContext {

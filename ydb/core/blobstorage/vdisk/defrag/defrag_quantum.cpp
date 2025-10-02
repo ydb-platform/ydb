@@ -227,7 +227,7 @@ namespace NKikimr {
 
         void Compact(THashSet<ui64> tablesToCompact, bool needsFreshCompaction) {
             if (tablesToCompact) {
-                Send(DCtx->SkeletonId, TEvCompactVDisk::Create(EHullDbType::LogoBlobs, std::move(tablesToCompact)));
+                Send(DCtx->SkeletonId, TEvCompactVDisk::Create(EHullDbType::LogoBlobs, std::move(tablesToCompact)), false);
             } else if (needsFreshCompaction) {
                 Send(DCtx->SkeletonId, TEvCompactVDisk::Create(EHullDbType::LogoBlobs, TEvCompactVDisk::EMode::FRESH_ONLY));
             } else {

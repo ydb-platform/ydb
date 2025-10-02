@@ -1647,6 +1647,9 @@ public:
 
     void UpdateProposeQueueSize() const;
 
+    template <typename TEvRequest>
+    bool ShouldDelayOperation(TEvRequest& ev);
+
     void CheckDelayedProposeQueue(const TActorContext &ctx);
 
     bool CheckDataTxReject(const TString& opDescr,

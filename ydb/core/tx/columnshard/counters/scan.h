@@ -6,6 +6,7 @@
 #include <ydb/core/tx/columnshard/resource_subscriber/counters.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/task.h>
 #include <ydb/core/tx/columnshard/resources/memory.h>
+#include <ydb/library/actors/core/log.h>
 
 #include <ydb/library/signals/histogram.h>
 #include <ydb/library/signals/owner.h>
@@ -337,21 +338,40 @@ public:
 class TCounterGuard: TMoveOnly {
 private:
     std::shared_ptr<TAtomicCounter> Counter;
+    const char* Name = nullptr;
 
 public:
     TCounterGuard(TCounterGuard&& guard) {
         Counter = guard.Counter;
+        Name = guard.Name;
         guard.Counter = nullptr;
     }
 
-    TCounterGuard(const std::shared_ptr<TAtomicCounter>& counter)
-        : Counter(counter) {
+    TCounterGuard(const std::shared_ptr<TAtomicCounter>& counter, const char* name = nullptr)
+        : Counter(counter)
+        , Name(name) {
         AFL_VERIFY(Counter);
         Counter->Inc();
+        if (Name) {
+            const ui64 val = Counter->Val();
+            if (val == 1) {
+                AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "counter_inc_first")("name", Name)("val", val);
+            } else {
+                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "counter_inc")("name", Name)("val", val);
+            }
+        }
     }
     ~TCounterGuard() {
         if (Counter) {
-            AFL_VERIFY(Counter->Dec() >= 0);
+            const i64 v = Counter->Dec();
+            if (Name) {
+                if (v == 0) {
+                    AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "counter_zero")("name", Name)("val", v);
+                } else {
+                    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "counter_dec")("name", Name)("val", v);
+                }
+            }
+            AFL_VERIFY(v >= 0);
         }
     }
 };
@@ -425,48 +445,48 @@ public:
     }
 
     TCounterGuard GetAccessorsForConstructionGuard() const {
-        return TCounterGuard(AccessorsForConstructionGuard);
+        return TCounterGuard(AccessorsForConstructionGuard, "AccessorsForConstructionGuard");
     }
 
 
     TCounterGuard GetResultsForReplyGuard() const {
-        return TCounterGuard(ResultsForReplyGuard);
+        return TCounterGuard(ResultsForReplyGuard, "ResultsForReplyGuard");
     }
 
     TCounterGuard GetFetcherAcessorsGuard() const {
-        return TCounterGuard(FetchAccessorsCount);
+        return TCounterGuard(FetchAccessorsCount, "FetchAccessorsCount");
     }
 
     TCounterGuard GetFetchBlobsGuard() const {
-        return TCounterGuard(FetchBlobsCount);
+        return TCounterGuard(FetchBlobsCount, "FetchBlobsCount");
     }
 
     TCounterGuard GetResultsForSourceGuard() const {
-        return TCounterGuard(ResultsForSourceCount);
+        return TCounterGuard(ResultsForSourceCount, "ResultsForSourceCount");
     }
 
     TCounterGuard GetMergeTasksGuard() const {
-        return TCounterGuard(MergeTasksCount);
+        return TCounterGuard(MergeTasksCount, "MergeTasksCount");
     }
 
     TCounterGuard GetReadTasksGuard() const {
-        return TCounterGuard(ReadTasksCount);
+        return TCounterGuard(ReadTasksCount, "ReadTasksCount");
     }
 
     TCounterGuard GetResourcesAllocationTasksGuard() const {
-        return TCounterGuard(ResourcesAllocationTasksCount);
+        return TCounterGuard(ResourcesAllocationTasksCount, "ResourcesAllocationTasksCount");
     }
 
     TCounterGuard GetAssembleTasksGuard() const {
-        return TCounterGuard(AssembleTasksCount);
+        return TCounterGuard(AssembleTasksCount, "AssembleTasksCount");
     }
 
     TCounterGuard GetFilterFetchingGuard() const {
-        return TCounterGuard(FilterFetchingGuard);
+        return TCounterGuard(FilterFetchingGuard, "FilterFetchingGuard");
     }
 
     TCounterGuard GetAbortsGuard() const {
-        return TCounterGuard(AbortsGuard);
+        return TCounterGuard(AbortsGuard, "AbortsGuard");
     }
 
     bool InWaiting() const {

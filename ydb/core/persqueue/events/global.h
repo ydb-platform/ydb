@@ -56,6 +56,7 @@ namespace TEvPersQueue {
         EvReadingPartitionStarted,
         EvOffloadStatus,
         EvBalancingSubscribe,
+        EvBalancingUnsubscribe,
         EvBalancingSubscribeNotify,
         EvResponse = EvRequest + 256,
         EvInternalEvents = EvResponse + 256,
@@ -278,6 +279,16 @@ namespace TEvPersQueue {
         TEvBalancingSubscribe() = default;
 
         TEvBalancingSubscribe(TActorId client, const TString& topic, const TString& consumer) {
+            ActorIdToProto(client, Record.MutableSourceActor());
+            Record.SetTopic(topic);
+            Record.SetConsumer(consumer);
+        }
+    };
+
+    struct TEvBalancingUnsubscribe : TEventPB<TEvBalancingUnsubscribe, NKikimrPQ::TEvBalancingUnsubscribe, EvBalancingUnsubscribe> {
+        TEvBalancingUnsubscribe() = default;
+
+        TEvBalancingUnsubscribe(TActorId client, const TString& topic, const TString& consumer) {
             ActorIdToProto(client, Record.MutableSourceActor());
             Record.SetTopic(topic);
             Record.SetConsumer(consumer);

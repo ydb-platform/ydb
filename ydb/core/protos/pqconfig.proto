@@ -1222,6 +1222,12 @@ message TEvBalancingSubscribe {
     optional string Consumer = 4;
 }
 
+message TEvBalancingUnsubscribe {
+    optional NActorsProto.TActorId SourceActor = 2;
+    optional string Topic = 3;
+    optional string Consumer = 4;
+}
+
 message TEvBalancingSubscribeNotify {
     enum EStatus {
         UNSPECIFIED = 0;

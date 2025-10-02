@@ -986,6 +986,11 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvBalancingSubscribe::TPtr& e
     Balancer->Handle(ev, ctx);
 }
 
+void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvBalancingUnsubscribe::TPtr& ev, const TActorContext& ctx)
+{
+    Balancer->Handle(ev, ctx);
+}
+
 
 
 //

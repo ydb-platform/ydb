@@ -1654,6 +1654,7 @@ void TBalancer::Handle(TEvTabletPipe::TEvServerConnected::TPtr& ev, const TActor
 }
 
 void TBalancer::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev, const TActorContext& ctx) {
+    PQ_LOG_ERROR("pipe " << ev->Get()->ClientId << " disconnected.");
     Subscriptions.erase(ev->Get()->ClientId);
 
     auto it = Sessions.find(ev->Get()->ClientId);
@@ -1842,7 +1843,7 @@ void TBalancer::ProcessPendingStats(const TActorContext& ctx) {
 
 void TBalancer::Handle(TEvPersQueue::TEvBalancingSubscribe::TPtr& ev, const TActorContext& ctx) {
     auto& record = ev->Get()->Record;
-    PQ_LOG_D("Handle TEvPersQueue::TEvBalancingSubscribe " << record.ShortDebugString());
+    PQ_LOG_ERROR("Handle TEvPersQueue::TEvBalancingSubscribe " << record.ShortDebugString());
     
     auto sender = ActorIdFromProto(record.GetSourceActor());
     auto status = Consumers.contains(record.GetConsumer()) ?
@@ -1850,6 +1851,33 @@ void TBalancer::Handle(TEvPersQueue::TEvBalancingSubscribe::TPtr& ev, const TAct
     Notify(sender, record.GetConsumer(), status, ctx);
 
     Subscriptions[ev->Sender].emplace_back(std::move(sender), std::move(*record.MutableConsumer()));
+}
+
+void TBalancer::Handle(TEvPersQueue::TEvBalancingUnsubscribe::TPtr& ev, const TActorContext&) {
+    auto& record = ev->Get()->Record;
+    PQ_LOG_ERROR("Handle TEvPersQueue::TEvBalancingUnsubscribe " << record.ShortDebugString());
+
+    auto sender = ActorIdFromProto(record.GetSourceActor());
+    auto& consumer = record.GetConsumer();
+
+    auto it = Subscriptions.find(ev->Sender);
+    if (it == Subscriptions.end()) {
+        return;
+    }
+
+    std::vector<TSubscription>& subscriptions = it->second;
+    std::vector<TSubscription> actualSubscriptions;
+    actualSubscriptions.resize(subscriptions.size());
+
+    for (auto& [existsSender, existsConsumer] : subscriptions) {
+        if (sender == existsSender && consumer == existsConsumer) {
+            continue;
+        }
+
+        actualSubscriptions.emplace_back(std::move(existsSender), std::move(existsConsumer));
+    }
+
+    subscriptions = std::move(actualSubscriptions);
 }
 
 void TBalancer::Notify(const TString& consumer, NKikimrPQ::TEvBalancingSubscribeNotify::EStatus status, const TActorContext& ctx) {

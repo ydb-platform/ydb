@@ -252,11 +252,15 @@ void KafkaReadSessionProxyActor::Subscribe(const TString& topic, ui64 tabletId, 
     Send(MakePipePerNodeCacheID(false), forward.release(), IEventHandle::FlagTrackDelivery);
 }
 
-void KafkaReadSessionProxyActor::Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
-    Reconnect(ev->Get()->TabletId);
+void KafkaReadSessionProxyActor::Unsubscribe(const TString& topic, ui64 tabletId) {
+    auto ev = std::make_unique<TEvPersQueue::TEvBalancingUnsubscribe>(SelfId(), topic, Context->GroupId);
+    auto forward = std::make_unique<TEvPipeCache::TEvForward>(ev.release(), tabletId);
+    Send(MakePipePerNodeCacheID(false), forward.release(), IEventHandle::FlagTrackDelivery);
 }
 
-void KafkaReadSessionProxyActor::Reconnect(ui64 tabletId) {
+void KafkaReadSessionProxyActor::Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
+    auto tabletId = ev->Get()->TabletId;
+    auto cookie = ev->Cookie;
     KAFKA_LOG_I("Reconnecting the pipe to the tabletId " << tabletId);
 
     auto topicInfo = FindIf(Topics, [&](const auto& entry) {
@@ -264,6 +268,10 @@ void KafkaReadSessionProxyActor::Reconnect(ui64 tabletId) {
     });
     if (topicInfo == Topics.end()) {
         Y_VERIFY_DEBUG(topicInfo != Topics.end());
+        return;
+    }
+
+    if (topicInfo->second.SubscribeCookie != cookie) {
         return;
     }
 
@@ -294,7 +302,9 @@ void KafkaReadSessionProxyActor::PassAway() {
     if (ReadSessionActorId) {
         Send(ReadSessionActorId, new NActors::TEvents::TEvPoison());
     }
-
+    for (auto& [topicName, topicInfo] : Topics) {
+        Unsubscribe(topicName, topicInfo.ReadBalancerTabletId);
+    }
     Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvUnlink(0));
 
     TBase::PassAway();

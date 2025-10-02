@@ -338,6 +338,7 @@ public:
     void ProcessPendingStats(const TActorContext& ctx);
 
     void Handle(TEvPersQueue::TEvBalancingSubscribe::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPersQueue::TEvBalancingUnsubscribe::TPtr& ev, const TActorContext& ctx);
     void Notify(const TString& consumer, NKikimrPQ::TEvBalancingSubscribeNotify::EStatus status, const TActorContext& ctx);
     void Notify(const TActorId subscriber, const TString& consumer, NKikimrPQ::TEvBalancingSubscribeNotify::EStatus status, const TActorContext& ctx);
 

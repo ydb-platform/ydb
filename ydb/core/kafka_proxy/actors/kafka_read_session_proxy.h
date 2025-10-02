@@ -39,6 +39,7 @@ public:
     void ProcessPendingRequestIfPossible();
     void Reconnect(ui64 tabletId);
     void Subscribe(const TString& topic, ui64 tabletId, const ui64 cookie);
+    void Unsubscribe(const TString& topic, ui64 tabletId);
     void PassAway();
     TActorId CreatePipe(ui64 tabletId);
 

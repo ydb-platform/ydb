@@ -106,6 +106,7 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>,
 
     // Begin kafka integration
     void Handle(TEvPersQueue::TEvBalancingSubscribe::TPtr &ev, const TActorContext& ctx);
+    void Handle(TEvPersQueue::TEvBalancingUnsubscribe::TPtr &ev, const TActorContext& ctx);
     // End kafka integration
 
     TStringBuilder LogPrefix() const;
@@ -294,6 +295,9 @@ public:
             HFunc(NSchemeShard::TEvSchemeShard::TEvSubDomainPathIdFound, Handle);
             HFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
             HFunc(TEvPersQueue::TEvGetPartitionsLocation, HandleOnInit);
+            // From kafka
+            HFunc(TEvPersQueue::TEvBalancingSubscribe, Handle);
+            HFunc(TEvPersQueue::TEvBalancingUnsubscribe, Handle);
             default:
                 StateInitImpl(ev, SelfId());
                 break;
@@ -328,6 +332,7 @@ public:
             HFunc(TEvPQ::TEvBalanceConsumer, Handle);
             // From kafka
             HFunc(TEvPersQueue::TEvBalancingSubscribe, Handle);
+            HFunc(TEvPersQueue::TEvBalancingUnsubscribe, Handle);
             // from PQ
             HFunc(TEvPQ::TEvPartitionScaleStatusChanged, Handle);
             // from TPartitionScaleRequest

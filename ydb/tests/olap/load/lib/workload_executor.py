@@ -85,7 +85,7 @@ class WorkloadTestBase(LoadSuiteBase):
             
             # Добавляем ошибку если есть проблема с кластером
             if cluster_issue:
-                result.add_error(cluster_issue["description"])
+                result.add_error(cluster_issue["issue_description"])
             
             # Устанавливаем start_time для _Verification
             try:

@@ -2557,12 +2557,22 @@ class WorkloadTestBase(LoadSuiteBase):
         if stats is not None:
             stats["aggregation_level"] = "aggregate"
             stats["run_id"] = ResultsProcessor.get_run_id()
+            
+            # Добавляем времена workload для правильного анализа
+            workload_start_time = getattr(result, 'workload_start_time', None)
+            if workload_start_time:
+                stats["workload_start_time"] = workload_start_time
+                # Время окончания workload = время до начала диагностики
+                workload_end_time = workload_start_time + stats.get("total_execution_time", 0)
+                stats["workload_end_time"] = workload_end_time
+                stats["workload_duration"] = stats.get("total_execution_time", 0)
+        
         end_time = time_module.time()
         ResultsProcessor.upload_results(
             kind="Stability",
             suite=type(self).suite(),
             test=workload_name,
-            timestamp=end_time,
+            timestamp=end_time,  # Время выгрузки (окончание всего теста)
             is_successful=result.success,
             statistics=stats,
         )

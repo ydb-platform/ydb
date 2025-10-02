@@ -35,7 +35,7 @@ struct TTableStatsCoroBuilderArgs {
 
 class TTableStatsCoroBuilder : public TActorCoroImpl, private IPages, TTableStatsCoroBuilderArgs {
 private:
-    using ECode = TDataShard::TEvPrivate::TEvTableStatsError::ECode;
+    using ECode = TDataShard::TEvPrivate::TEvBuildTableStatsError::ECode;
 
     static constexpr TDuration MaxCoroutineExecutionTime = TDuration::MilliSeconds(5);
 
@@ -69,9 +69,9 @@ public:
         } catch (const TDtorException&) {
             return; // coroutine terminated
         } catch (const TExTableStatsError& ex) {
-            Send(ReplyTo, new TDataShard::TEvPrivate::TEvTableStatsError(TableId, ex.Code, ex.Message));
+            Send(ReplyTo, new TDataShard::TEvPrivate::TEvBuildTableStatsError(TableId, ex.Code, ex.Message));
         } catch (...) {
-            Send(ReplyTo, new TDataShard::TEvPrivate::TEvTableStatsError(TableId, ECode::UNKNOWN));
+            Send(ReplyTo, new TDataShard::TEvPrivate::TEvBuildTableStatsError(TableId, ECode::UNKNOWN));
 
             Y_DEBUG_ABORT("unhandled exception");
         }
@@ -135,7 +135,7 @@ private:
     void RunImpl() {
         ObtainResources();
 
-        auto ev = MakeHolder<TDataShard::TEvPrivate::TEvAsyncTableStats>();
+        auto ev = MakeHolder<TDataShard::TEvPrivate::TEvBuildTableStatsResult>();
         ev->TableId = TableId;
         ev->StatsUpdateTime = StatsUpdateTime;
         ev->PartCount = Subset->Flatten.size() + Subset->ColdParts.size();
@@ -357,7 +357,7 @@ void ListTableNames(const TTables& tables, TStringBuilder& names) {
     }
 }
 
-void TDataShard::Handle(TEvPrivate::TEvAsyncTableStats::TPtr& ev, const TActorContext& ctx) {
+void TDataShard::Handle(TEvPrivate::TEvBuildTableStatsResult::TPtr& ev, const TActorContext& ctx) {
     Actors.erase(ev->Sender);
 
     ui64 tableId = ev->Get()->TableId;
@@ -408,7 +408,7 @@ void TDataShard::Handle(TEvPrivate::TEvAsyncTableStats::TPtr& ev, const TActorCo
     }
 }
 
-void TDataShard::Handle(TEvPrivate::TEvTableStatsError::TPtr& ev, const TActorContext& ctx) {
+void TDataShard::Handle(TEvPrivate::TEvBuildTableStatsError::TPtr& ev, const TActorContext& ctx) {
     Actors.erase(ev->Sender);
 
     auto msg = ev->Get();

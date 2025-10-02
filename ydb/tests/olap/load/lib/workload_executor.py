@@ -17,7 +17,6 @@ from ydb.tests.olap.lib.remote_execution import (
 from ydb.tests.olap.lib.ydb_cli import YdbCliHelper
 from ydb.tests.olap.lib.results_processor import ResultsProcessor
 from ydb.tests.olap.lib.utils import get_external_param
-from ydb.tests.olap.lib.allure_utils import allure_test_description
 
 # Импортируем LoadSuiteBase чтобы наследоваться от него
 from ydb.tests.olap.load.lib.conftest import LoadSuiteBase
@@ -2224,6 +2223,7 @@ class WorkloadTestBase(LoadSuiteBase):
 
             # Собираем информацию об ошибках нод
             node_errors = []
+            verify_errors = {}
 
             # Проверяем состояние нод и собираем ошибки
             try:
@@ -2232,6 +2232,7 @@ class WorkloadTestBase(LoadSuiteBase):
                 diagnostics_start_time = getattr(
                     result, "workload_start_time", result.start_time
                 )
+                verify_errors = self.check_nodes_verifies_with_timing(diagnostics_start_time, end_time)
                 node_errors = self.check_nodes_diagnostics_with_timing(
                     result, diagnostics_start_time, end_time
                 )
@@ -2244,7 +2245,6 @@ class WorkloadTestBase(LoadSuiteBase):
 
             # Вычисляем время выполнения
             end_time = time_module.time()
-            start_time = result.start_time if result.start_time else end_time - 1
 
             # Добавляем дополнительную информацию для отчета
             additional_table_strings = {}
@@ -2286,19 +2286,6 @@ class WorkloadTestBase(LoadSuiteBase):
                             avg_threads:.1f} threads per iteration"
                     )
 
-            # Создаем отчет
-            allure_test_description(
-                suite="workload",
-                test=workload_name,
-                start_time=start_time,
-                end_time=end_time,
-                addition_table_strings=additional_table_strings,
-                node_errors=node_errors,
-                workload_result=result,
-                workload_params=workload_params,
-                use_node_subcols=use_node_subcols,
-            )
-
             # --- ВАЖНО: выставляем nodes_with_issues для корректного fail ---
             stats = result.get_stats(workload_name)
             if stats is not None:
@@ -2318,6 +2305,10 @@ class WorkloadTestBase(LoadSuiteBase):
                             node_error_messages.append(f"Node {node_error.node.slot} coredump {core_id}")
                     if node_error.was_oom:
                         node_error_messages.append(f"Node {node_error.node.slot} experienced OOM")
+                    if hasattr(node_error, 'verifies') and node_error.verifies > 0:
+                        node_error_messages.append(f"Node {node_error.node.host} had {node_error.verifies} VERIFY fails")
+                    if hasattr(node_error, 'sanitizer_errors') and node_error.sanitizer_errors > 0:
+                        node_error_messages.append(f"Node {node_error.node.host} has {node_error.sanitizer_errors} SAN errors")
 
                 # Собираем workload ошибки (не связанные с нодами)
                 if result.errors:
@@ -2346,7 +2337,7 @@ class WorkloadTestBase(LoadSuiteBase):
             # 3. Формирование summary/статистики (with_errors/with_warnings автоматически добавляются в ydb_cli.py)
 
             # 4. Формирование allure-отчёта
-            self._create_allure_report(result, workload_name, workload_params, node_errors, use_node_subcols)
+            self._create_allure_report(result, workload_name, workload_params, node_errors, use_node_subcols, verify_errors)
 
             # Сохраняем node_errors для использования после выгрузки
             result._node_errors = node_errors

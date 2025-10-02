@@ -25,8 +25,8 @@ void WaitForTableSplit(TTestActorRuntime& runtime, const TString& path, size_t r
         const auto result = DescribePath(runtime, path, true);
         if (result.GetPathDescription().TablePartitionsSize() >= requiredPartitionCount)
             return;
-    }        
-} 
+    }
+}
 }
 
 Y_UNIT_TEST_SUITE(TSchemeShardSplitBySizeTest) {
@@ -236,8 +236,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitBySizeTest) {
         for (ui64 key = 0; key < 1000; ++key) {
             const std::pair<ui64, ui64> decimalKey = NYql::NDecimal::MakePair(
                 NYql::NDecimal::FromString(Sprintf("%d.123456789", key * 1'000'000), 35, 10));
-            UploadRow(runtime, "/MyRoot/Table", 0, {1}, {2, 3}, 
-                {TCell::Make<std::pair<ui64, ui64>>(decimalKey)}, 
+            UploadRow(runtime, "/MyRoot/Table", 0, {1}, {2, 3},
+                {TCell::Make<std::pair<ui64, ui64>>(decimalKey)},
                 {TCell::Make<std::pair<ui64, ui64>>(decimalValue), TCell(stringValue)});
         }
 
@@ -661,9 +661,13 @@ constexpr ui64 CpuLoadMicroseconds(const ui64 percent) {
 // Assumed index configuration: 1 initial datashard, Uint64 key.
 //
 struct TLoadAndSplitSimulator {
-    NKikimrTabletBase::TMetrics MetricsPatch;
+    std::map<ui32, NKikimrTabletBase::TMetrics> MetricsPatchByFollowerId;
     NKikimrTableStats::THistogram KeyAccessHistogramPatch;
     ui64 TableLocalPathId;
+    ui64 TableOwnerId;
+    bool ShouldSendReadRequests;
+    TTestActorRuntime* TestRuntime;
+    TActorId SenderActorId;
 
     std::map<ui64, std::pair<ui64, ui64>> DatashardsKeyRanges;
     TInstant LastSplitAckTime;
@@ -671,11 +675,34 @@ struct TLoadAndSplitSimulator {
     ui64 PeriodicTableStatsCount = 0;
     ui64 KeyAccessSampleReqCount = 0;
     ui64 SplitReqCount = 0;
+    ui64 ReadRequestCount = 0;
 
-    TLoadAndSplitSimulator(ui64 tableLocalPathId, ui64 initialDatashardId, ui64 targetCpuLoadPercent)
-        : TableLocalPathId(tableLocalPathId)
+    class TDummyActor : public TActor<TDummyActor> {
+    public:
+        TDummyActor()
+            : TActor(&TThis::StateWork)
+        {}
+
+        STFUNC(StateWork) {
+            Y_UNUSED(ev);
+        }
+    };
+
+    TLoadAndSplitSimulator(
+        ui64 tableLocalPathId,
+        ui64 tableOwnerId,
+        ui64 initialDatashardId,
+        bool shouldSendReadRequests,
+        const std::map<ui32, ui32>& targetCpuLoadByFolowerId,
+        TTestActorRuntime& testRuntime
+    ) : TableLocalPathId(tableLocalPathId)
+        , TableOwnerId(tableOwnerId)
+        , ShouldSendReadRequests(shouldSendReadRequests)
+        , TestRuntime(&testRuntime)
     {
-        MetricsPatch.SetCPU(CpuLoadMicroseconds(targetCpuLoadPercent));
+        for (const auto& [followerId, targetCpuLoad] : targetCpuLoadByFolowerId) {
+            MetricsPatchByFollowerId[followerId].SetCPU(CpuLoadMicroseconds(targetCpuLoad));
+        }
 
         //NOTE: histogram must have at least 3 buckets with different keys to be able to produce split key
         // (see ydb/core/tx/schemeshard/schemeshard__table_stats_histogram.cpp, DoFindSplitKey() and ChooseSplitKeyByKeySample())
@@ -685,13 +712,113 @@ struct TLoadAndSplitSimulator {
 
         DatashardsKeyRanges[initialDatashardId] = std::make_pair(0, 1000000);
 
-        Cerr << "TEST TLoadAndSplitSimulator for table id " << TableLocalPathId
-            << ", target CPU load " << targetCpuLoadPercent << "%"
-            << Endl;
+        // Use a dummy actor as a sender for events instead of an edge actor
+        // to avoid an infinite loop between the edge actor and the observer
+        if (ShouldSendReadRequests) {
+            SenderActorId = TestRuntime->Register(new TDummyActor());
+        }
+
+        for (const auto& [followerId, targetCpuLoad] : targetCpuLoadByFolowerId) {
+            Cerr << "TEST TLoadAndSplitSimulator for table id " << TableLocalPathId
+                << ", target CPU load for followerId " << followerId
+                << " is " << targetCpuLoad
+                << "%"
+                << Endl;
+        }
+    }
+
+    std::unique_ptr<TEvDataShard::TEvRead> MakeSimpleReadRequest() {
+        std::unique_ptr<TEvDataShard::TEvRead> request(new TEvDataShard::TEvRead());
+        auto& record = request->Record;
+
+        record.SetReadId(++ReadRequestCount);
+        record.SetResultFormat(NKikimrDataEvents::FORMAT_CELLVEC);
+
+        record.MutableTableId()->SetTableId(TableLocalPathId);
+        record.MutableTableId()->SetOwnerId(TableOwnerId);
+
+        record.AddColumns(1);
+        record.AddColumns(2);
+
+        request->Ranges.emplace_back(
+            TSerializedCellVec::Serialize({TCell::Make(Min<ui64>())}),
+            TSerializedCellVec::Serialize({TCell::Make(Min<ui64>())}),
+            true /* fromInclusive */,
+            true /* toInclusive */
+        );
+
+        return request;
     }
 
     void ChangeEvent(TAutoPtr<IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
+            case TEvTablet::TEvTabletActive::EventType:
+                {
+                    auto x = reinterpret_cast<TEvTablet::TEvTabletActive::TPtr*>(&ev);
+                    Cerr << "TEST TLoadAndSplitSimulator for table id " << TableLocalPathId
+                        << ", intercept EvTabletActive from sender " << (*x).Get()->Sender
+                        << " to recipient " << (*x).Get()->GetRecipientRewrite()
+                        << ", version: " << (*x).Get()->Get()->VersionInfo
+                        << Endl;
+
+                    // Followers send EvTabletActive when they are ready to process requests,
+                    // this is the right moment to send a dummy read request to this follower
+                    // to make it start sending periodic stats updates
+                    //
+                    // NOTE: This read request is assumed to be simple and to return no data.
+                    //       In other words, it is assumed to produce only a single final response,
+                    //       which does not need to be acknowledged. Thus, there is no need to block
+                    //       here and wait for the response to come back.
+                    if (ShouldSendReadRequests) {
+                        // Send back to the actor, which sent EvTabletActive
+                        const TActorId readRequestTarget = (*x).Get()->Sender;
+
+                        Cerr << "TEST TLoadAndSplitSimulator for table id " << TableLocalPathId
+                            << ", sending EvRead request to " << readRequestTarget
+                            << Endl;
+
+                        TestRuntime->SendAsync(
+                            new IEventHandle(
+                                readRequestTarget,
+                                SenderActorId,
+                                MakeSimpleReadRequest().release()
+                            )
+                        );
+                    }
+                }
+                break;
+
+            case TEvDataShard::EvRead:
+                {
+                    auto x = reinterpret_cast<TEvDataShard::TEvRead::TPtr*>(&ev);
+                    auto& record = (*x).Get()->Get()->Record;
+
+                    Cerr << "TEST TLoadAndSplitSimulator for table id " << TableLocalPathId
+                        << ", intercept EvRead from sender " << (*x).Get()->Sender
+                        << " to recipient " << (*x).Get()->GetRecipientRewrite()
+                        << ", readId " << record.GetReadId()
+                        << ", tableId " << record.GetTableId().GetTableId()
+                        << Endl;
+                }
+                break;
+
+            case TEvDataShard::EvReadResult:
+                {
+                    auto x = reinterpret_cast<TEvDataShard::TEvReadResult::TPtr*>(&ev);
+                    auto& record = (*x).Get()->Get()->Record;
+
+                    Cerr << "TEST TLoadAndSplitSimulator for table id " << TableLocalPathId
+                        << ", intercept EvReadResult from sender " << (*x).Get()->Sender
+                        << " to recipient " << (*x).Get()->GetRecipientRewrite()
+                        << ", readId " << record.GetReadId()
+                        << ", sequence number " << record.GetSeqNo()
+                        << ", row count " << record.GetRowCount()
+                        << ", status " << record.GetStatus()
+                        << ", finished " << record.GetFinished()
+                        << Endl;
+                }
+                break;
+
             case TEvDataShard::EvPeriodicTableStats:
                 // replace real stats with the simulated ones
                 {
@@ -702,14 +829,25 @@ struct TLoadAndSplitSimulator {
                         return;
                     }
 
-                    auto prevCPU = record.GetTabletMetrics().GetCPU();
-                    record.MutableTabletMetrics()->MergeFrom(MetricsPatch);
-                    auto newCPU = record.GetTabletMetrics().GetCPU();
+                    auto targetCpuForFollower = MetricsPatchByFollowerId.find(record.GetFollowerId());
 
-                    Cerr << "TEST TLoadAndSplitSimulator for table id " << TableLocalPathId
-                        << ", intercept EvPeriodicTableStats, from datashard " << record.GetDatashardId()
-                        << ", patch CPU: " << prevCPU << "->" << newCPU
-                        << Endl;
+                    if (targetCpuForFollower != MetricsPatchByFollowerId.end()) {
+                        const auto prevCPU = record.GetTabletMetrics().GetCPU();
+                        record.MutableTabletMetrics()->MergeFrom(targetCpuForFollower->second);
+                        const auto newCPU = record.GetTabletMetrics().GetCPU();
+
+                        Cerr << "TEST TLoadAndSplitSimulator for table id " << TableLocalPathId
+                            << ", intercept EvPeriodicTableStats, from datashard " << record.GetDatashardId()
+                            << ", from followerId " << record.GetFollowerId()
+                            << ", patched CPU: " << prevCPU << "->" << newCPU
+                            << Endl;
+                    } else {
+                        Cerr << "TEST TLoadAndSplitSimulator for table id " << TableLocalPathId
+                            << ", intercept EvPeriodicTableStats, from datashard " << record.GetDatashardId()
+                            << ", from followerId " << record.GetFollowerId()
+                            << ", unpatched CPU: " << record.GetTabletMetrics().GetCPU()
+                            << Endl;
+                    }
 
                     ++PeriodicTableStatsCount;
                 }
@@ -846,14 +984,39 @@ TTestEnv SetupEnv(TTestBasicRuntime &runtime) {
 
 Y_UNIT_TEST_SUITE(TSchemeShardSplitByLoad) {
 
-    void SplitByLoad(TTestBasicRuntime &runtime, const TString &tablePath, ui32 targetCpuLoadPercent) {
+    /**
+     * Execute a test on the given table, which simulates high CPU load on the leader and/or followers
+     * and verifies that the table is split into the correct number of partitions.
+     *
+     * @param runtime The test runtime
+     * @param tablePath The table to use for the test
+     * @param targetCpuLoadByFolowerId The map from the follower ID (0 == leader)
+     *                                 to the corresponding induced CPU load (as percent)
+     * @param shouldSendReadRequests If true, send EvRead requests to all followers
+     * @param maxTestDuration The maximum duration of the test
+     */
+    void SplitByLoad(
+        TTestActorRuntime& runtime,
+        const TString& tablePath,
+        const std::map<ui32, ui32>& targetCpuLoadByFolowerId,
+        bool shouldSendReadRequests = false,
+        const TDuration& maxTestDuration = TDuration::Max()
+    ) {
         auto tableInfo = DescribePrivatePath(runtime, tablePath, true, true);
         Cerr << "TEST table initial state:" << Endl << tableInfo.DebugString() << Endl;
 
         const ui64 tableLocalPathId = tableInfo.GetPathDescription().GetSelf().GetPathId();
+        const ui64 tableOwnerId = tableInfo.GetPathDescription().GetSelf().GetSchemeshardId();
         const ui64 initialDatashardId = tableInfo.GetPathDescription().GetTablePartitions(0).GetDatashardId();
 
-        TLoadAndSplitSimulator simulator(tableLocalPathId, initialDatashardId, targetCpuLoadPercent);
+        TLoadAndSplitSimulator simulator(
+            tableLocalPathId,
+            tableOwnerId,
+            initialDatashardId,
+            shouldSendReadRequests,
+            targetCpuLoadByFolowerId,
+            runtime
+        );
 
         runtime.SetObserverFunc([&simulator](TAutoPtr<IEventHandle>& event) {
             simulator.ChangeEvent(event);
@@ -866,7 +1029,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitByLoad) {
                 // Cerr << "TEST SplitByLoad, CustomFinalCondition, SplitAckCount " << simulator.SplitAckCount << ", " << (now - simulator.LastSplitAckTime) << " since last split" << Endl;
                 return simulator.SplitAckCount > 0 && (now - simulator.LastSplitAckTime) > TDuration::Seconds(3);
             };
-            runtime.DispatchEvents(opts/*, TDuration::Seconds(120)*/);
+            runtime.DispatchEvents(opts, maxTestDuration);
         }
         Cerr << "TEST SplitByLoad, splitted " << simulator.SplitAckCount << " times"
             << ", datashard count " << simulator.DatashardsKeyRanges.size()
@@ -876,14 +1039,22 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitByLoad) {
         // Cerr << "TEST SplitByLoad, SplitReq " << simulator.SplitReqCount << Endl;
     }
 
-    void NoSplitByLoad(TTestBasicRuntime &runtime, const TString &tablePath, ui32 targetCpuLoadPercent) {
+    void NoSplitByLoad(TTestActorRuntime& runtime, const TString &tablePath, ui32 targetCpuLoadPercent) {
         auto tableInfo = DescribePrivatePath(runtime, tablePath, true, true);
         Cerr << "TEST table initial state:" << Endl << tableInfo.DebugString() << Endl;
 
         const ui64 tableLocalPathId = tableInfo.GetPathDescription().GetSelf().GetPathId();
+        const ui64 tableOwnerId = tableInfo.GetPathDescription().GetSelf().GetSchemeshardId();
         const ui64 initialDatashardId = tableInfo.GetPathDescription().GetTablePartitions(0).GetDatashardId();
 
-        TLoadAndSplitSimulator simulator(tableLocalPathId, initialDatashardId, targetCpuLoadPercent);
+        TLoadAndSplitSimulator simulator(
+            tableLocalPathId,
+            tableOwnerId,
+            initialDatashardId,
+            false /* shouldSendReadRequests */,
+            {{0, targetCpuLoadPercent}}, // Target CPU load for the leader only
+            runtime
+        );
 
         runtime.SetObserverFunc([&simulator](TAutoPtr<IEventHandle>& event) {
             simulator.ChangeEvent(event);
@@ -897,7 +1068,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitByLoad) {
             };
             runtime.DispatchEvents(opts, TDuration::Seconds(60));
         }
-        Cerr << "TEST SplitByLoad, splitted " << simulator.SplitAckCount << " times"
+        Cerr << "TEST NoSplitByLoad, splitted " << simulator.SplitAckCount << " times"
             << ", datashard count " << simulator.DatashardsKeyRanges.size()
             << Endl;
         // Cerr << "TEST SplitByLoad, PeriodicTableStats " << simulator.PeriodicTableStatsCount << Endl;
@@ -942,7 +1113,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitByLoad) {
         TestCreateTable(runtime, ++txId, "/MyRoot", tableScheme);
         env.TestWaitNotification(runtime, txId);
 
-        SplitByLoad(runtime, "/MyRoot/Table", cpuLoadSimulated);
+        SplitByLoad(
+            runtime,
+            "/MyRoot/Table",
+            {{0, cpuLoadSimulated}} // Target CPU load for the leader only
+        );
 
         auto tableInfo = DescribePrivatePath(runtime, "/MyRoot/Table", true, true);
         Cerr << "TEST table final state:" << Endl << tableInfo.DebugString() << Endl;
@@ -992,7 +1167,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitByLoad) {
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", mainTableScheme);
         env.TestWaitNotification(runtime, txId);
 
-        SplitByLoad(runtime, "/MyRoot/Table/by-value/indexImplTable", cpuLoadSimulated);
+        SplitByLoad(
+            runtime,
+            "/MyRoot/Table/by-value/indexImplTable",
+            {{0, cpuLoadSimulated}} // Target CPU load for the leader only
+        );
 
         auto tableInfo = DescribePrivatePath(runtime, "/MyRoot/Table/by-value/indexImplTable", true, true);
         Cerr << "TEST table final state:" << Endl << tableInfo.DebugString() << Endl;
@@ -1044,6 +1223,70 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitByLoad) {
 
         auto tableInfo = DescribePrivatePath(runtime, "/MyRoot/Table/by-value/indexImplTable", true, true);
         Cerr << "TEST table final state:" << Endl << tableInfo.DebugString() << Endl;
+        TestDescribeResult(tableInfo, {NLs::PartitionCount(1)});
+    }
+
+    /**
+     * Verify that a shard is split automatically, when some of the followers
+     * become overloaded with requests.
+     *
+     * @todo Once splitting by the follower load is implemented,
+     *       this test should be adjusted to match the splitting logic.
+     *       For now this test is essentially reversed - it verifies that
+     *       no splitting is triggered, when one of the followers is overloaded.
+     */
+    Y_UNIT_TEST(TableSplitsByFollowerLoad) {
+        TTestBasicRuntime runtime;
+        auto env = SetupEnv(runtime);
+
+        const ui32 expectedPartitionCount = 5;
+        const ui64 cpuLoadSimulated = 100;  // percents
+
+        const auto tableScheme = Sprintf(
+            R"(
+                Name: "Table"
+                Columns { Name: "key"   Type: "Uint64"}
+                Columns { Name: "value" Type: "Uint64"}
+                KeyColumnNames: ["key"]
+                UniformPartitionsCount: 1
+                PartitionConfig {
+                    PartitioningPolicy {
+                        MaxPartitionsCount: %d  # replacement field for required number of partitions
+
+                        SplitByLoadSettings: {
+                            Enabled: true
+                            CpuPercentageThreshold: 1
+                        }
+                    }
+
+                    FollowerCount: 3
+                }
+            )",
+            expectedPartitionCount
+        );
+
+        ui64 txId = 100;
+        TestCreateTable(runtime, txId, "/MyRoot", tableScheme);
+        env.TestWaitNotification(runtime, txId);
+
+        SplitByLoad(
+            runtime,
+            "/MyRoot/Table",
+            {
+                // No simulated CPU load for the leader, only for the followers
+                {1, cpuLoadSimulated},
+                {2, cpuLoadSimulated},
+                {3, cpuLoadSimulated},
+            },
+            true /* shouldSendReadRequests */,
+            /// @todo Remove the time limit once splitting by the replica load is implemented
+            TDuration::Seconds(30) // Only 15 seconds real time
+        );
+
+        auto tableInfo = DescribePrivatePath(runtime, "/MyRoot/Table", true, true);
+        Cerr << "TEST table final state:" << Endl << tableInfo.DebugString() << Endl;
+
+        /// @todo Use expectedPartitionCount instead of 1 once splitting by the follower load is implemented
         TestDescribeResult(tableInfo, {NLs::PartitionCount(1)});
     }
 }

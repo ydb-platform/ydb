@@ -149,6 +149,7 @@ namespace NKikimr {
         const TTabletTypes::EType Type;
         const ui64 TabletId;
         TActorId BootstrapperActorId;
+        TVector<TActorId> FollowerActorIds;
         ETabletState State = ETabletState::Unknown;
         TSubDomainKey ObjectDomain;  // what subdomain tablet belongs to
 

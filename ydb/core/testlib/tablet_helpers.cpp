@@ -1244,6 +1244,58 @@ namespace NKikimr {
                     State->TabletIdToOwner[tabletId] = key;
 
                     LOG_INFO_S(ctx, NKikimrServices::HIVE, logPrefix << "boot OK, tablet id " << tabletId);
+
+                    // After a successful creation of a data shard, need to create
+                    // the given number of followers (if requested)
+                    //
+                    // NOTE: Only the simplest PartitionConfig -> FollowerCount option
+                    //       is supported here. More complex options (for example,
+                    //       FollowerCountPerDataCenter and FollowerGroups options)
+                    //       are completely ignored.
+                    if (type == TTabletTypes::DataShard) {
+                        const ui32 followerCount = ev->Get()->Record.GetFollowerCount();
+
+                        if (followerCount) {
+                            LOG_INFO_S(
+                                ctx,
+                                NKikimrServices::HIVE,
+                                logPrefix << "DataShard created successfully (tabletId: " << tabletId
+                                    << "), creating " << followerCount << " followers"
+                            );
+
+                            for (ui32 i = 0; i < followerCount; ++i) {
+                                const ui32 followerId = i + 1;
+
+                                const auto followerActorId = ctx.Register(
+                                    CreateTabletFollower(
+                                        SelfId(),
+                                        CreateTestTabletInfo(
+                                            tabletId,
+                                            TTabletTypes::DataShard,
+                                            DataGroupErasure
+                                        ),
+                                        new TTabletSetupInfo(
+                                            &CreateDataShard,
+                                            TMailboxType::Simple,
+                                            0,
+                                            TMailboxType::Simple,
+                                            0
+                                        ),
+                                        followerId
+                                    )
+                                );
+
+                                it->second.FollowerActorIds.push_back(followerActorId);
+
+                                LOG_INFO_S(
+                                    ctx,
+                                    NKikimrServices::HIVE,
+                                    logPrefix << "Created follower ID " << followerId << " for tablet ID "
+                                        << tabletId << ": " << followerActorId
+                                );
+                            }
+                        }
+                    }
                 } else {
                     LOG_ERROR_S(ctx, NKikimrServices::HIVE, logPrefix << "boot failed, status " << status);
                 }
@@ -1344,6 +1396,15 @@ namespace NKikimr {
 
             TFakeHiveTabletInfo& tabletInfo = it->second;
             ctx.Send(ctx.SelfID, new TEvFakeHive::TEvNotifyTabletDeleted(tabletInfo.TabletId));
+
+            // Destroy all follower actors, if any
+            for (const auto& followerActorId : it->second.FollowerActorIds) {
+                Cerr << "FAKEHIVE " << TabletID()
+                    << " destroying follower " << followerActorId
+                    << Endl;
+
+                ctx.Send(followerActorId, new TEvents::TEvPoison());
+            }
 
             // Kill the tablet and don't restart it
             TActorId bootstrapperActorId = tabletInfo.BootstrapperActorId;

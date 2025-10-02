@@ -160,6 +160,12 @@ void CreateDatabase(TTenants& tenants, TStringBuf path, TStringBuf storagePoolKi
     tenants.CreateTenant(std::move(request));
 }
 
+NQuery::TSession CreateSession(NQuery::TQueryClient& client) {
+    auto sessionCreator = client.GetSession().ExtractValueSync();
+    UNIT_ASSERT_C(sessionCreator.IsSuccess(), sessionCreator.GetIssues().ToString());
+    return sessionCreator.GetSession();
+}
+
 // whole database backup
 using TBackupFunction = std::function<void(void)>;
 // whole database restore
@@ -492,6 +498,60 @@ void TestViewDependentOnAnotherViewIsRestored(
     CompareResults(GetTableContent(session, dependentView), originalContent);
 }
 
+void TestViewRelativeReferencesArePreserved(
+    const char* view, const char* table, const char* restoredView, NQuery::TSession& session,
+    TBackupFunction&& backup, TRestoreFunction&& restore
+) {
+    ExecuteQuery(session, Sprintf(R"(
+                CREATE TABLE `%s` (
+                    Key Uint32,
+                    Value Utf8,
+                    PRIMARY KEY (Key)
+                );
+            )", table
+        ), true
+    );
+    ExecuteQuery(session, Sprintf(R"(
+            UPSERT INTO `%s` (
+                Key,
+                Value
+            )
+            VALUES
+                (1, "one"),
+                (2, "two"),
+                (3, "three");
+        )",
+        table
+    ));
+
+    const TString viewQuery = Sprintf(R"(
+            SELECT * FROM `%s`
+        )", table
+    );
+    ExecuteQuery(session, Sprintf(R"(
+                CREATE VIEW `%s` WITH security_invoker = TRUE AS %s;
+            )", view, viewQuery.c_str()
+        ), true
+    );
+    const auto originalContent = GetTableContent(session, view);
+
+    backup();
+
+    ExecuteQuery(session, Sprintf(R"(
+                DROP VIEW `%s`;
+            )", view
+        ), true
+    );
+    ExecuteQuery(session, Sprintf(R"(
+                DROP TABLE `%s`;
+            )", table
+        ), true
+    );
+
+    restore();
+    CompareResults(GetTableContent(session, restoredView), originalContent);
+}
+
 }
 
 Y_UNIT_TEST_SUITE(BackupRestore) {
@@ -683,6 +743,28 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             session,
             CreateBackupLambda(driver, pathToBackup),
             CreateRestoreLambda(driver, pathToBackup)
+        );
+    }
+
+    Y_UNIT_TEST(RestoreViewRelativeReferences) {
+        TKikimrWithGrpcAndRootSchema server;
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
+        NQuery::TQueryClient queryClient(driver);
+        auto session = CreateSession(queryClient);
+        TTempDir tempDir;
+        const auto& pathToBackup = tempDir.Path();
+
+        constexpr const char* view = "a/b/c/view";
+        constexpr const char* table = "a/b/c/table";
+        constexpr const char* restoredView = "restore/point/view";
+
+        TestViewRelativeReferencesArePreserved(
+            view,
+            table,
+            restoredView,
+            session,
+            CreateBackupLambda(driver, pathToBackup, "/Root/a/b/c"),
+            CreateRestoreLambda(driver, pathToBackup, "/Root/restore/point")
         );
     }
 

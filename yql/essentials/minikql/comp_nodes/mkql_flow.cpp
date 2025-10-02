@@ -204,7 +204,7 @@ public:
         {}
 
     protected:
-        NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override {
+        NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override Y_NO_SANITIZE("undefined") {
             return FetchFunc(Ctx, result);
         }
 

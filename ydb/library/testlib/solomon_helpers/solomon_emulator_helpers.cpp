@@ -41,4 +41,3 @@ TString GetSolomonMetrics(const TSolomonLocation& location) {
 }
 
 }  // namespace NTestUtils
-

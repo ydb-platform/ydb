@@ -168,7 +168,7 @@ private:
 
             if (dataType.Features & NUdf::DateType || dataType.Features & NUdf::TzDateType) {
                 if (hasTimestampMember) {
-                    ctx.AddError(TIssue(ctx.GetPosition(position), "Multiple timestamps should not used when writing into Monitoring"));
+                    ctx.AddError(TIssue(ctx.GetPosition(position), "Multiple timestamps should not be used when writing into Monitoring"));
                     return false;
                 }
                 hasTimestampMember = true;

@@ -60,6 +60,8 @@ void KafkaReadSessionProxyActor::Handle(TEvKafka::TEvJoinGroupRequest::TPtr& ev)
 
 void KafkaReadSessionProxyActor::Handle(TEvKafka::TEvSyncGroupRequest::TPtr& ev) {
     if (Context->ReadSession.PendingBalancingMode.has_value()) {
+        KAFKA_LOG_D("Handle TEvKafka::TEvSyncGroupRequest with pending balancing mode");
+
         TSyncGroupResponseData::TPtr response = std::make_shared<TSyncGroupResponseData>();
         response->ErrorCode = EKafkaErrors::ILLEGAL_GENERATION;
         response->Assignment = "";
@@ -73,6 +75,8 @@ void KafkaReadSessionProxyActor::Handle(TEvKafka::TEvSyncGroupRequest::TPtr& ev)
 
 void KafkaReadSessionProxyActor::Handle(TEvKafka::TEvHeartbeatRequest::TPtr& ev) {
     if (Context->ReadSession.PendingBalancingMode.has_value()) {
+        KAFKA_LOG_D("Handle TEvKafka::TEvHeartbeatRequest with pending balancing mode");
+
         THeartbeatResponseData::TPtr response = std::make_shared<THeartbeatResponseData>();
         response->ErrorCode = EKafkaErrors::REBALANCE_IN_PROGRESS;
 
@@ -84,11 +88,14 @@ void KafkaReadSessionProxyActor::Handle(TEvKafka::TEvHeartbeatRequest::TPtr& ev)
 }
 
 void KafkaReadSessionProxyActor::Handle(TEvKafka::TEvLeaveGroupRequest::TPtr& ev) {
+    KAFKA_LOG_D("Handle TEvKafka::TEvLeaveGroupRequest");
+
     DoHandle(ev);
 }
 
 void KafkaReadSessionProxyActor::Handle(TEvKafka::TEvFetchRequest::TPtr& ev) {
-    KAFKA_LOG_D("HandleOnWork<TEvKafka::TEvFetchRequest>");
+    KAFKA_LOG_D("Handle TEvKafka::TEvFetchRequest");
+
     if (Context->ReadSession.BalancingMode == EBalancingMode::Server) {
         Register(CreateKafkaFetchActor(Context, ev->Get()->CorrelationId, ev->Get()->Request));
         return;
@@ -106,6 +113,8 @@ void KafkaReadSessionProxyActor::Handle(TEvKafka::TEvFetchRequest::TPtr& ev) {
         Register(CreateKafkaFetchActor(Context, ev->Get()->CorrelationId, ev->Get()->Request));
         return;
     }
+
+    KAFKA_LOG_D("Describe topics: " << JoinRange(", ", NewTopics.begin(), NewTopics.end()));
 
     Y_VERIFY(!PendingRequest.has_value());
     PendingRequest = ev;
@@ -228,12 +237,13 @@ void KafkaReadSessionProxyActor::ProcessPendingRequestIfPossible() {
 
         auto& topicInfo = it->second;
         if (!topicInfo.UsedServerBalancing.has_value()) {
-            KAFKA_LOG_D("Topic " << *topic.Topic << " is not initialized");
-            return;
+            KAFKA_LOG_W("Topic " << *topic.Topic << " is not initialized");
+            //return; TODO
         }
     }
 
     Register(CreateKafkaFetchActor(Context, fetchEv->Get()->CorrelationId, fetchEv->Get()->Request));
+
     PendingRequest.reset();
 }
 
@@ -251,18 +261,20 @@ void KafkaReadSessionProxyActor::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr&
 }
 
 void KafkaReadSessionProxyActor::Reconnect(ui64 tabletId) {
+    KAFKA_LOG_I("Reconnecting the pipe to the tabletId " << tabletId);
+
     auto topicInfo = FindIf(Topics, [&](const auto& entry) {
         return entry.second.ReadBalancerTabletId == tabletId;
     });
     if (topicInfo == Topics.end()) {
+        Y_VERIFY_DEBUG(topicInfo != Topics.end());
         return;
     }
 
     const auto& topic = topicInfo->first;
-    const auto& readBalancerTabletId = topicInfo->second.ReadBalancerTabletId; 
 
     Context->PipeCache->Prepare(NActors::TlsActivationContext->AsActorContext(), tabletId);
-    Context->PipeCache->Send(NActors::TlsActivationContext->AsActorContext(), readBalancerTabletId,
+    Context->PipeCache->Send(NActors::TlsActivationContext->AsActorContext(), tabletId,
         new TEvPersQueue::TEvBalancingSubscribe(SelfId(), topic, Context->GroupId));
 }
 

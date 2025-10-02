@@ -17,6 +17,7 @@ from ydb.tests.olap.lib.remote_execution import (
 from ydb.tests.olap.lib.ydb_cli import YdbCliHelper
 from ydb.tests.olap.lib.results_processor import ResultsProcessor
 from ydb.tests.olap.lib.utils import get_external_param
+from ydb.tests.olap.lib.allure_utils import allure_test_description
 
 # Импортируем LoadSuiteBase чтобы наследоваться от него
 from ydb.tests.olap.load.lib.conftest import LoadSuiteBase
@@ -48,12 +49,135 @@ class WorkloadTestBase(LoadSuiteBase):
     def setup_class(cls) -> None:
         """
         Общая инициализация для workload тестов.
+        НЕ выполняем _Verification здесь - будем делать это перед каждым тестом.
         """
         with allure.step("Workload test setup: initialize"):
             cls._setup_start_time = time_module.time()
 
-            # Наследуемся от LoadSuiteBase
-            super().setup_class()
+            # Выполняем только do_setup_class без _Verification
+            if hasattr(cls, 'do_setup_class'):
+                try:
+                    cls.do_setup_class()
+                except Exception as e:
+                    logging.error(f"Error in do_setup_class: {e}")
+                    raise
+
+    @classmethod
+    def perform_verification_with_cluster_check(cls) -> None:
+        """
+        Выполняет _Verification с проверкой кластера и записью _ClusterIssue при необходимости.
+        """
+        suite_name = cls.suite()
+        
+        with allure.step(f"Pre-test verification for {suite_name}"):
+            verification_start_time = time_module.time()
+            result = YdbCliHelper.WorkloadRunResult()
+            result.iterations[0] = YdbCliHelper.Iteration()
+            result.start_time = verification_start_time
+            
+            try:
+                # Проверяем доступность кластера
+                nodes = YdbCluster.get_cluster_nodes()
+                if not nodes:
+                    # Записываем информацию о проблеме с кластером
+                    try:
+                        ResultsProcessor.upload_results(
+                            kind='Load',
+                            suite=suite_name,
+                            test='_ClusterIssue',
+                            timestamp=time_module.time(),
+                            is_successful=False,
+                            statistics={
+                                'issue_type': 'cluster_unavailable',
+                                'issue_description': 'No cluster nodes found during pre-test verification',
+                                'verification_phase': 'pre_test_verification',
+                                'nodes_count': 0,
+                                'is_critical': True,
+                                'test_suite': suite_name
+                            }
+                        )
+                        logging.info(f"Cluster issue recorded for {suite_name}: No nodes found during verification")
+                    except Exception as e:
+                        logging.error(f"Failed to record cluster issue: {e}")
+                    
+                    result.add_error("No cluster nodes found during pre-test verification")
+                else:
+                    # Кластер доступен, выполняем стандартную проверку
+                    wait_error = YdbCluster.wait_ydb_alive(int(os.getenv('WAIT_CLUSTER_ALIVE_TIMEOUT', 20 * 60)))
+                    if wait_error:
+                        result.add_error(wait_error)
+                        
+                        # Записываем проблему с кластером
+                        try:
+                            ResultsProcessor.upload_results(
+                                kind='Load',
+                                suite=suite_name,
+                                test='_ClusterIssue',
+                                timestamp=time_module.time(),
+                                is_successful=False,
+                                statistics={
+                                    'issue_type': 'cluster_not_alive',
+                                    'issue_description': f'Cluster wait_ydb_alive failed: {wait_error}',
+                                    'verification_phase': 'pre_test_verification',
+                                    'nodes_count': len(nodes),
+                                    'is_critical': True,
+                                    'test_suite': suite_name
+                                }
+                            )
+                            logging.info(f"Cluster issue recorded for {suite_name}: wait_ydb_alive failed")
+                        except Exception as e:
+                            logging.error(f"Failed to record cluster issue: {e}")
+                            
+            except Exception as e:
+                error_msg = f"Exception during cluster check: {e}"
+                result.add_error(error_msg)
+                
+                # Записываем исключение как проблему кластера
+                try:
+                    ResultsProcessor.upload_results(
+                        kind='Load',
+                        suite=suite_name,
+                        test='_ClusterIssue',
+                        timestamp=time_module.time(),
+                        is_successful=False,
+                        statistics={
+                            'issue_type': 'cluster_check_exception',
+                            'issue_description': f'Exception during pre-test verification: {str(e)}',
+                            'verification_phase': 'pre_test_verification',
+                            'nodes_count': 0,
+                            'is_critical': True,
+                            'test_suite': suite_name,
+                            'exception_type': type(e).__name__
+                        }
+                    )
+                    logging.info(f"Cluster exception recorded for {suite_name}: {e}")
+                except Exception as upload_e:
+                    logging.error(f"Failed to record cluster exception: {upload_e}")
+            
+            # Завершаем _Verification
+            result.iterations[0].time = time_module.time() - verification_start_time
+            query_name = '_Verification'
+            result.add_stat(query_name, 'Mean', 1000 * result.iterations[0].time)
+            
+            # Устанавливаем start_time для _Verification
+            try:
+                nodes_start_time = [n.start_time for n in YdbCluster.get_cluster_nodes(db_only=False)]
+                first_node_start_time = min(nodes_start_time) if len(nodes_start_time) > 0 else 0
+                result.start_time = max(verification_start_time - 600, first_node_start_time)
+            except Exception:
+                result.start_time = verification_start_time - 600
+            
+            # Обрабатываем результат _Verification
+            cls.process_query_result(result, query_name, True)
+
+    def setup_method(self, method):
+        """
+        Выполняется перед каждым тестовым методом.
+        Здесь мы выполняем _Verification с проверкой кластера.
+        """
+        with allure.step(f"Setup for test method: {method.__name__}"):
+            # Выполняем _Verification перед каждым тестом
+            self.__class__.perform_verification_with_cluster_check()
 
     @classmethod
     def do_teardown_class(cls):
@@ -1414,6 +1538,28 @@ class WorkloadTestBase(LoadSuiteBase):
             with allure.step("Select unique cluster hosts"):
                 nodes = YdbCluster.get_cluster_nodes()
                 if not nodes:
+                    # Записываем информацию о проблеме с кластером в базу данных
+                    try:
+                        suite_name = workload_name.replace('Workload', '') if 'Workload' in workload_name else workload_name
+                        ResultsProcessor.upload_results(
+                            kind='Load',
+                            suite=suite_name,
+                            test='_ClusterIssue',
+                            timestamp=time_module.time(),
+                            is_successful=False,
+                            statistics={
+                                'issue_type': 'cluster_unavailable',
+                                'issue_description': 'No cluster nodes found during workload deployment',
+                                'verification_phase': 'workload_deployment',
+                                'nodes_count': 0,
+                                'is_critical': True,
+                                'workload_name': workload_name
+                            }
+                        )
+                        logging.info(f"Cluster issue recorded for {workload_name}: No nodes found")
+                    except Exception as e:
+                        logging.error(f"Failed to record cluster issue: {e}")
+                    
                     raise Exception("No cluster nodes found")
 
                 # Собираем уникальные хосты и соответствующие им ноды
@@ -2242,7 +2388,7 @@ class WorkloadTestBase(LoadSuiteBase):
                 # Добавляем ошибку в результат
                 result.add_warning(f"Error getting nodes state: {e}")
                 node_errors = []  # Устанавливаем пустой список если диагностика не удалась
-
+            
             # Вычисляем время выполнения
             end_time = time_module.time()
 
@@ -2286,6 +2432,18 @@ class WorkloadTestBase(LoadSuiteBase):
                             avg_threads:.1f} threads per iteration"
                     )
 
+            # Создаем отчет
+            allure_test_description(
+                suite="workload",
+                test=workload_name,
+                start_time=diagnostics_start_time,
+                end_time=end_time,
+                addition_table_strings=additional_table_strings,
+                node_errors=node_errors,
+                workload_result=result,
+                workload_params=workload_params,
+                use_node_subcols=use_node_subcols,
+            )
             # --- ВАЖНО: выставляем nodes_with_issues для корректного fail ---
             stats = result.get_stats(workload_name)
             if stats is not None:

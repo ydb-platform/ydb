@@ -17,6 +17,21 @@ WHERE
     AND Kind = 'Load'
     AND Test = '_Verification';
 
+-- Находим Suite с _ClusterIssue записями (проблемы с кластером)
+$cluster_issues = SELECT
+    Db,
+    Suite,
+    RunId,
+    Timestamp AS ClusterIssueTimestamp,
+    Success AS ClusterIssueSuccess,
+    Stats AS ClusterIssueStats,
+    Info AS ClusterIssueInfo
+FROM `nemesis/tests_results`
+WHERE 
+    CAST(RunId AS Uint64) / 1000UL > $run_id_limit
+    AND Kind = 'Load'
+    AND Test = '_ClusterIssue';
+
 -- Находим Suite со Stability записями
 $stability_suites = SELECT
     Db,
@@ -67,7 +82,7 @@ $all_possible_tests = SELECT
     v.Db AS Db,
     v.Suite AS Suite,
     CAST(COALESCE(s.Test, uat.Test, String::ReplaceAll(v.Suite, 'Workload', '') || 'Workload') AS Utf8) AS Test,
-    CASE WHEN s.Suite IS NULL THEN 1U ELSE 0U END AS IsCrashed,
+    CASE WHEN s.Suite IS NULL AND ci.Suite IS NULL THEN 1U ELSE 0U END AS IsCrashed,
     v.RunId AS RunId,
     COALESCE(s.Timestamp, v.VerificationTimestamp) AS Timestamp,
     COALESCE(s.Success, 0U) AS Success,
@@ -149,6 +164,14 @@ $all_possible_tests = SELECT
     -- Флаг того, что тест имел успешную верификацию 
     v.VerificationSuccess AS HadVerification,
     
+    -- Информация о проблемах с кластером
+    CASE WHEN ci.Suite IS NOT NULL THEN 1U ELSE 0U END AS HadClusterIssue,
+    ci.ClusterIssueSuccess AS ClusterIssueSuccess,
+    JSON_VALUE(ci.ClusterIssueStats, '$.issue_type') AS ClusterIssueType,
+    JSON_VALUE(ci.ClusterIssueStats, '$.issue_description') AS ClusterIssueDescription,
+    JSON_VALUE(ci.ClusterIssueStats, '$.verification_phase') AS ClusterIssuePhase,
+    CASE WHEN JSON_VALUE(ci.ClusterIssueStats, '$.is_critical') = 'true' THEN 1U ELSE 0U END AS ClusterIssueCritical,
+    
     -- Порядок выполнения: рассчитываем для каждого уникального Test
     ROW_NUMBER() OVER (PARTITION BY v.RunId ORDER BY v.VerificationTimestamp, v.Suite, COALESCE(s.Test, uat.Test, String::ReplaceAll(v.Suite, 'Workload', '') || 'Workload')) AS OrderInRun
     
@@ -160,7 +183,11 @@ LEFT JOIN $stability_suites AS s
 LEFT JOIN $filtered_aggregate_tests AS uat
     ON v.Db = uat.Db 
     AND v.Suite = uat.Suite
-    AND v.RunId = uat.RunId;
+    AND v.RunId = uat.RunId
+LEFT JOIN $cluster_issues AS ci
+    ON v.Db = ci.Db 
+    AND v.RunId = ci.RunId
+    AND v.Suite = ci.Suite;
 
 
 SELECT
@@ -233,6 +260,12 @@ SELECT
     agg.CiBuildType,
     agg.CiSanitizer,
     agg.HadVerification,
+    agg.HadClusterIssue,
+    agg.ClusterIssueSuccess,
+    agg.ClusterIssueType,
+    agg.ClusterIssueDescription,
+    agg.ClusterIssuePhase,
+    agg.ClusterIssueCritical,
     agg.OrderInRun,
     
     -- Извлекаем ветки из версий
@@ -275,8 +308,13 @@ SELECT
     
     -- Общий статус выполнения
     CASE
+        -- Приоритет 1: Критические проблемы с кластером
+        WHEN agg.HadClusterIssue = 1U AND agg.ClusterIssueCritical = 1U THEN 'cluster_unavailable'
+        -- Приоритет 2: Некритические проблемы с кластером  
+        WHEN agg.HadClusterIssue = 1U AND agg.ClusterIssueCritical = 0U THEN 'cluster_degraded'
+        -- Приоритет 3: Существующая логика
         WHEN agg.IsCrashed = 1U AND agg.HadVerification = 0U THEN 'cluster_down_on_start'  -- _Verification есть, но Success != 1
-        WHEN agg.IsCrashed = 1U AND agg.HadVerification = 1U THEN 'infrastructure error'  -- Нет Stability записи, но _Verification успешна
+        WHEN agg.IsCrashed = 1U AND agg.HadVerification = 1U THEN 'infrastructure_error'  -- Нет Stability записи, но _Verification успешна
         WHEN agg.Success = 1U AND (agg.NodeErrors IS NULL OR agg.NodeErrors = 0U) AND (agg.WorkloadErrors IS NULL OR agg.WorkloadErrors = 0U) THEN 'success'
         WHEN agg.Success = 1U AND (agg.NodeErrors = 1U OR agg.WorkloadErrors = 1U) THEN 'success_with_errors'
         WHEN agg.Success = 0U AND agg.NodeErrors = 1U THEN 'node_failure'

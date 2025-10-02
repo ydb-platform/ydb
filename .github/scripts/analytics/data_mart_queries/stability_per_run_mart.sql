@@ -19,9 +19,8 @@ $per_run_data = SELECT
     CASE WHEN JSON_VALUE(Stats, '$.nemesis_enabled') = 'true' THEN 1U ELSE 0U END AS NemesisEnabled,
     JSON_VALUE(Stats, '$.error_message') AS ErrorMessage,
     JSON_VALUE(Stats, '$.warning_message') AS WarningMessage,
+    JSON_QUERY(Stats, '$.node_error_messages') AS NodeErrorMessages, -- JSON массив с ошибками нод (если доступен)
     CAST(JSON_VALUE(Stats, '$.run_id') AS Uint64) AS StatsRunId,
-    -- NOTE: Информация об ошибках нод доступна только в агрегированных данных
-    -- чтобы избежать неточной временной привязки ошибок к конкретным запускам
     
     -- Извлекаем информацию о кластере из Info JSON
     JSON_VALUE(Info, '$.cluster.version') AS ClusterVersion,
@@ -40,7 +39,7 @@ $per_run_data = SELECT
             ELSE NULL
         END AS ClusterMonitoring,
     CAST(JSON_VALUE(Info, '$.cluster.nodes_count') AS Int32) AS NodesCount,
-    JSON_VALUE(Info, '$.cluster.nodes_info') AS NodesInfo, -- JSON массив с информацией о нодах
+    JSON_QUERY(Info, '$.cluster.nodes_info') AS NodesInfo, -- JSON массив с информацией о нодах
     JSON_VALUE(Info, '$.ci_version') AS CiVersion,
     JSON_VALUE(Info, '$.test_tools_version') AS TestToolsVersion,
     JSON_VALUE(Info, '$.report_url') AS ReportUrl,
@@ -50,6 +49,8 @@ $per_run_data = SELECT
     JSON_VALUE(Info, '$.ci_job_title') AS CiJobTitle,
     JSON_VALUE(Info, '$.ci_cluster_name') AS CiClusterName,
     JSON_VALUE(Info, '$.ci_nemesis') AS CiNemesis,
+    JSON_VALUE(Info, '$.ci_build_type') AS CiBuildType,
+    JSON_VALUE(Info, '$.ci_sanitizer') AS CiSanitizer,
     
     -- Порядок выполнения теста в рамках RunId (на основе Timestamp)
     ROW_NUMBER() OVER (PARTITION BY RunId ORDER BY Timestamp) AS OrderInRun
@@ -74,6 +75,7 @@ SELECT
     NemesisEnabled,
     ErrorMessage,
     WarningMessage,
+    NodeErrorMessages,
     StatsRunId,
     ClusterVersion,
     ClusterVersionLink,
@@ -88,6 +90,8 @@ SELECT
     CiJobTitle,
     CiClusterName,
     CiNemesis,
+    CiBuildType,
+    CiSanitizer,
     TestToolsVersion,
     ReportUrl,
     CiLaunchId,
@@ -97,6 +101,23 @@ SELECT
     COALESCE(SubString(CAST(ClusterVersion AS String), 0U, FIND(CAST(ClusterVersion AS String), '.')), 'unknown') AS Branch,
     COALESCE(SubString(CAST(CiVersion AS String), 0U, FIND(CAST(CiVersion AS String), '.')), 'unknown') AS CiBranch,
     COALESCE(SubString(CAST(TestToolsVersion AS String), 0U, FIND(CAST(TestToolsVersion AS String), '.')), 'unknown') AS TestToolsBranch,
+    
+    -- Типы найденных ошибок нод (анализ node_error_messages)
+    CASE
+        WHEN NodeErrorMessages IS NULL OR CAST(NodeErrorMessages AS String) = '[]' OR CAST(NodeErrorMessages AS String) = '' THEN NULL
+        ELSE
+            ListConcat(
+                ListUniq(
+                    ListNotNull(AsList(
+                        CASE WHEN CAST(NodeErrorMessages AS String) LIKE '%coredump%' THEN 'Coredump' ELSE NULL END,
+                        CASE WHEN CAST(NodeErrorMessages AS String) LIKE '%OOM%' OR CAST(NodeErrorMessages AS String) LIKE '%experienced OOM%' THEN 'OOM' ELSE NULL END,
+                        CASE WHEN CAST(NodeErrorMessages AS String) LIKE '%VERIFY%' OR CAST(NodeErrorMessages AS String) LIKE '%verify%' THEN 'Verify' ELSE NULL END,
+                        CASE WHEN CAST(NodeErrorMessages AS String) LIKE '%SAN%' OR CAST(NodeErrorMessages AS String) LIKE '%sanitizer%' THEN 'SAN' ELSE NULL END
+                    ))
+                ),
+                ', '
+            )
+    END AS FacedNodeErrors,
     
     -- Статус выполнения
     CASE

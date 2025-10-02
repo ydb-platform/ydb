@@ -15,7 +15,7 @@ A synchronous index is updated simultaneously with the table that it indexes. Th
 
 ## Asynchronous secondary index {#async}
 
-Unlike a synchronous index, an asynchronous index doesn't use distributed transactions. Instead, it receives changes from an indexed table in the background. Write transactions to a table using this index are performed with no planning overheads due to reduced guarantees: an asynchronous index provides [eventual consistency](https://en.wikipedia.org/wiki/Eventual_consistency), but no strict consistency. You can only use asynchronous indexes in read transactions in [Stale Read Only](transactions.md#modes) mode.
+Unlike a synchronous index, an asynchronous index doesn't use distributed transactions. Instead, it receives changes from an indexed table in the background. Write transactions to a table using this index are performed with no planning overheads due to reduced guarantees: an asynchronous index provides [eventual consistency](https://en.wikipedia.org/wiki/Eventual_consistency), but no strict consistency. You can only use asynchronous indexes in read transactions in [Stale Read Only](../transactions.md#modes) mode.
 
 ## Covering secondary index {#covering}
 
@@ -52,10 +52,10 @@ Creating an index is an asynchronous operation. If the client-server connection 
 
 A secondary index can be:
 
-- Created when creating a table with the YQL [`CREATE TABLE`](../../yql/reference/syntax/create_table.md) statement.
-- Added to an existing table with the YQL [`ALTER TABLE`](../../yql/reference/syntax/alter_table.md) statement or the YDB CLI [`table index add`](../../reference/ydb-cli/commands/secondary_index.md#add) command.
-- Deleted from an existing table with the YQL [`ALTER TABLE`](../../yql/reference/syntax/alter_table.md) statement or the YDB CLI [`table index drop`](../../reference/ydb-cli/commands/secondary_index.md#drop) command.
-- Deleted together with the table using the YQL [`DROP TABLE`](../../yql/reference/syntax/drop_table.md) statement or the YDB CLI `table drop` command.
+- Created when creating a table with the YQL [`CREATE TABLE`](../../yql/reference/syntax/create_table) statement.
+- Added to an existing table with the YQL [`ALTER TABLE`](../../yql/reference/syntax/alter_table) statement or the YDB CLI [`table index add`](../../reference/ydb-cli/commands/secondary_index.md#add) command.
+- Deleted from an existing table with the YQL [`ALTER TABLE`](../../yql/reference/syntax/alter_table) statement or the YDB CLI [`table index drop`](../../reference/ydb-cli/commands/secondary_index.md#drop) command.
+- Deleted together with the table using the YQL [`DROP TABLE`](../../yql/reference/syntax/drop_table) statement or the YDB CLI `table drop` command.
 
 ## Purpose and use of secondary indexes {#best_practices}
 

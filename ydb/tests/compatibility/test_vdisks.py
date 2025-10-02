@@ -1,5 +1,4 @@
 import logging
-import pytest
 import string
 import random
 
@@ -61,6 +60,7 @@ class Utils:
             session.transaction().execute(
                 f"select k, v from `{table_name}`;"
             )
+
 
 class TestTinyVDisks:
     def test_disabled(self):

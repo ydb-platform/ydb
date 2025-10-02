@@ -81,6 +81,15 @@ void TOperationsManager::CommitTransactionOnExecute(
         opPtr->CommitOnExecute(owner, txc, snapshot);
         commited.emplace_back(opPtr);
     }
+
+    // break the conflicting txs locks, they must not be committed
+    for (auto&& i : lock.GetBrokeOnCommit()) {
+        if (auto lockNotify = GetLockOptional(i)) {
+            AFL_WARN(NKikimrServices::TX_COLUMNSHARD_TX)("broken_lock_id", i);
+            lockNotify->SetBroken();
+        }
+    }
+
     OnTransactionFinishOnExecute(commited, lock, txId, txc);
 }
 
@@ -89,12 +98,6 @@ void TOperationsManager::CommitTransactionOnComplete(
     auto& lock = GetLockFeaturesForTxVerified(txId);
     TLogContextGuard gLogging(
         NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_TX)("commit_tx_id", txId)("commit_lock_id", lock.GetLockId()));
-    for (auto&& i : lock.GetBrokeOnCommit()) {
-        if (auto lockNotify = GetLockOptional(i)) {
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD_TX)("broken_lock_id", i);
-            lockNotify->SetBroken();
-        }
-    }
 
     for (auto&& i : lock.GetNotifyOnCommit()) {
         if (auto lockNotify = GetLockOptional(i)) {

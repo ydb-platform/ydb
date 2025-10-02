@@ -26,8 +26,9 @@ TQuery::TQuery(const TQueryId& id, const TDelayParams* delayParams, const TStati
 
 NSnapshot::TQuery* TQuery::TakeSnapshot() {
     auto* newQuery = new NSnapshot::TQuery(std::get<TQueryId>(GetId()), shared_from_this());
-    newQuery->Demand = Demand.load();
+    newQuery->Demand = (Demand.load() + ActualDemand.load()) / 2;
     newQuery->Usage = Usage.load();
+    ActualDemand = 0;
     return newQuery;
 }
 
@@ -58,6 +59,12 @@ ui32 TQuery::ResumeTasks(ui32 count) {
     }
 
     return run;
+}
+
+void TQuery::UpdateActualDemand() {
+    auto demand = Usage + Throttle + 1;
+    auto actualDemand = ActualDemand.load();
+    while (actualDemand < demand && !ActualDemand.compare_exchange_weak(actualDemand, demand)) {}
 }
 
 ///////////////////////////////////////////////////////////////////////////////

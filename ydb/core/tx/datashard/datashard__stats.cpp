@@ -100,21 +100,16 @@ public:
         Send(MakeSharedPageCacheId(), new NSharedCache::TEvRequest(NSharedCache::EPriority::Bkgr, info->PageCollection, { pageId }));
 
         Spent->Alter(false); // pause measurement
-        ReleaseResources();
-
         auto ev = WaitForSpecificEvent<NSharedCache::TEvResult>(&TTableStatsCoroBuilder::ProcessUnexpectedEvent);
-        auto msg = ev->Get();
-
-        if (msg->Status != NKikimrProto::OK) {
+        if (auto status = ev->Get()->Status; status != NKikimrProto::OK) {
             LOG_ERROR_S(GetActorContext(), NKikimrServices::TABLET_STATS_BUILDER, "Failed to build at datashard "
-                << TabletId << ", for tableId " << TableId << " requested pages but got " << msg->Status);
-            throw TExTableStatsError(ECode::FETCH_PAGE_FAILED, NKikimrProto::EReplyStatus_Name(msg->Status));
+                << TabletId << ", for tableId " << TableId << " requested pages but got " << status);
+            throw TExTableStatsError(ECode::FETCH_PAGE_FAILED, NKikimrProto::EReplyStatus_Name(status));
         }
-
-        ObtainResources();
         Spent->Alter(true); // resume measurement
+        UpdateDeadline();
 
-        for (auto& loaded : msg->Pages) {
+        for (auto& loaded : ev->Get()->Pages) {
             partPages.emplace(pageId, TPinnedPageRef(loaded.Page).GetData());
             PageRefs.emplace_back(std::move(loaded.Page));
         }
@@ -142,21 +137,19 @@ private:
 
         Subset->ColdParts.clear(); // stats won't include cold parts, if any
         Spent = new TSpent(TAppData::TimeProvider.Get());
+        UpdateDeadline();
 
         BuildStats(*Subset, ev->Stats, RowCountResolution, DataSizeResolution, HistogramBucketsCount, this, [this](){
             const auto now = GetCycleCountFast();
 
             if (now > CoroutineDeadline) {
-                Spent->Alter(false); // pause measurement
-                ReleaseResources();
-
                 Send(new IEventHandle(EvResume, 0, SelfActorId, {}, nullptr, 0));
+                Spent->Alter(false); // pause measurement
                 WaitForSpecificEvent([](IEventHandle& ev) {
                     return ev.Type == EvResume;
                 }, &TTableStatsCoroBuilder::ProcessUnexpectedEvent);
-
-                ObtainResources();
                 Spent->Alter(true); // resume measurement
+                UpdateDeadline();
             }
         }, TStringBuilder() << "Building stats at datashard " << TabletId << ", for tableId " << TableId << ": ");
 
@@ -170,8 +163,6 @@ private:
             << ", LoadedSize " << PagesSize << ", " << NFmt::Do(*Spent));
 
         Send(ReplyTo, ev.Release());
-
-        ReleaseResources();
     }
 
     void ProcessUnexpectedEvent(TAutoPtr<IEventHandle> ev) {
@@ -217,12 +208,10 @@ private:
         auto msg = ev->Get();
         Y_ENSURE(!msg->Cookie.Get(), "Unexpected cookie in TEvResourceAllocated");
         Y_ENSURE(msg->TaskId == 1, "Unexpected task id in TEvResourceAllocated");
-
-        CoroutineDeadline = GetCycleCountFast() + DurationToCycles(MaxCoroutineExecutionTime);
     }
 
-    void ReleaseResources() {
-        Send(MakeResourceBrokerID(), new TEvResourceBroker::TEvFinishTask(/* task id */ 1, /* cancelled */ false));
+    void UpdateDeadline() {
+        CoroutineDeadline = GetCycleCountFast() + DurationToCycles(MaxCoroutineExecutionTime);
     }
 
     THashMap<const TPart*, THashMap<TPageId, TSharedData>> Pages;

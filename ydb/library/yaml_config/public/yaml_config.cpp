@@ -173,6 +173,10 @@ TYamlConfigModel ParseConfig(NFyaml::TDocument& doc) {
         }
     }
 
+    res.IncompatibilityRules = TIncompatibilityRules::GetDefaultRules();
+    auto userRules = ParseIncompatibilityRules(root);
+    res.IncompatibilityRules.MergeWith(userRules);
+
     return res;
 }
 
@@ -385,6 +389,177 @@ TDocumentConfig Resolve(
     return res;
 }
 
+bool TIncompatibilityRule::TLabelPattern::Matches(
+    const TLabel& label,
+    const TString& actualLabelName) const
+{
+    if (Name != actualLabelName) {
+        return false;
+    }
+    
+    if (std::holds_alternative<std::monostate>(Value)) {
+        return label.Type == TLabel::EType::Empty;
+    }
+    
+    const TString& expectedValue = std::get<TString>(Value);
+    
+    if (label.Type == TLabel::EType::Common) {
+        return label.Value == expectedValue;
+    } else if (label.Type == TLabel::EType::Empty && expectedValue.empty()) {
+        return true;
+    }
+    
+    return false;
+}
+
+TIncompatibilityRules TIncompatibilityRules::GetDefaultRules() {
+    TIncompatibilityRules rules;
+    return rules;
+}
+
+void TIncompatibilityRules::AddRule(TIncompatibilityRule rule) {
+    RulesByName[rule.RuleName] = std::move(rule);
+}
+
+void TIncompatibilityRules::RemoveRule(const TString& ruleName) {
+    RulesByName.erase(ruleName);
+}
+
+bool TIncompatibilityRules::IsCompatible(
+    const TVector<TLabel>& combination,
+    const TVector<std::pair<TString, TSet<TLabel>>>& labelNames) const
+{
+    for (const auto& [ruleName, rule] : RulesByName) {
+        if (DisabledRules.contains(ruleName)) {
+            continue;
+        }
+        
+        bool allPatternsMatch = true;
+        for (const auto& pattern : rule.Patterns) {
+            bool found = false;
+            
+            for (size_t i = 0; i < combination.size(); ++i) {
+                if (pattern.Matches(combination[i], labelNames[i].first)) {
+                    found = true;
+                    break;
+                }
+            }
+            
+            if (!found) {
+                allPatternsMatch = false;
+                break;
+            }
+        }
+        
+        if (allPatternsMatch) {
+            return false;
+        }
+    }
+    
+    return true;
+}
+
+bool TIncompatibilityRules::IsCompatible(const TMap<TString, TString>& labels) const {
+    for (const auto& [ruleName, rule] : RulesByName) {
+        if (DisabledRules.contains(ruleName)) {
+            continue;
+        }
+        
+        bool allPatternsMatch = true;
+        for (const auto& pattern : rule.Patterns) {
+            auto it = labels.find(pattern.Name);
+            
+            if (std::holds_alternative<std::monostate>(pattern.Value)) {
+                if (it != labels.end() && !it->second.empty()) {
+                    allPatternsMatch = false;
+                    break;
+                }
+            } else {
+                const TString& expectedValue = std::get<TString>(pattern.Value);
+                if (it == labels.end() || it->second != expectedValue) {
+                    allPatternsMatch = false;
+                    break;
+                }
+            }
+        }
+        
+        if (allPatternsMatch) {
+            return false;
+        }
+    }
+    
+    return true;
+}
+
+void TIncompatibilityRules::MergeWith(const TIncompatibilityRules& userRules) {
+    for (const auto& ruleName : userRules.DisabledRules) {
+        DisabledRules.insert(ruleName);
+    }
+    
+    for (const auto& [name, rule] : userRules.RulesByName) {
+        AddRule(rule);
+    }
+}
+
+TIncompatibilityRules ParseIncompatibilityRules(const NFyaml::TNodeRef& root) {
+    TIncompatibilityRules userRules;
+    
+    if (!root.Map().Has("incompatibility_overrides")) {
+        return userRules;
+    }
+    
+    auto overrides = root.Map().at("incompatibility_overrides");
+    
+    if (overrides.Map().Has("disable_rules")) {
+        auto disableRules = overrides.Map().at("disable_rules");
+        if (disableRules.Type() == NFyaml::ENodeType::Sequence) {
+            for (auto it = disableRules.Sequence().begin(); it != disableRules.Sequence().end(); ++it) {
+                userRules.DisabledRules.insert(it->Scalar());
+            }
+        }
+    }
+    
+    if (overrides.Map().Has("custom_rules")) {
+        auto customRules = overrides.Map().at("custom_rules");
+        if (customRules.Type() == NFyaml::ENodeType::Sequence) {
+            for (auto ruleIt = customRules.Sequence().begin(); ruleIt != customRules.Sequence().end(); ++ruleIt) {
+                TIncompatibilityRule rule;
+                auto ruleMap = ruleIt->Map();
+                
+                rule.RuleName = ruleMap.at("name").Scalar();
+                rule.Source = TIncompatibilityRule::ESource::UserDefined;
+                
+                if (ruleMap.Has("patterns")) {
+                    auto patterns = ruleMap.at("patterns");
+                    if (patterns.Type() == NFyaml::ENodeType::Sequence) {
+                        for (auto patternIt = patterns.Sequence().begin(); patternIt != patterns.Sequence().end(); ++patternIt) {
+                            TIncompatibilityRule::TLabelPattern pattern;
+                            auto patternMap = patternIt->Map();
+                            
+                            pattern.Name = patternMap.at("label").Scalar();
+                            TString valueStr = patternMap.at("value").Scalar();
+                            
+                            if (valueStr == TIncompatibilityRules::UNSET_LABEL_MARKER) {
+                                pattern.Value = std::monostate{};
+                            } else if (valueStr == TIncompatibilityRules::EMPTY_LABEL_MARKER) {
+                                pattern.Value = TString("");
+                            } else {
+                                pattern.Value = valueStr;
+                            }
+                            
+                            rule.Patterns.push_back(std::move(pattern));
+                        }
+                    }
+                }
+                
+                userRules.AddRule(std::move(rule));
+            }
+        }
+    }
+    
+    return userRules;
+}
+
 void Combine(
     TVector<TVector<TLabel>>& labelCombinations,
     TVector<TLabel>& combination,
@@ -399,6 +574,29 @@ void Combine(
     for (auto& label : labels[offset].second) {
         combination[offset] = label;
         Combine(labelCombinations, combination, labels, offset + 1);
+    }
+}
+
+void CombineWithRules(
+    TVector<TVector<TLabel>>& labelCombinations,
+    TVector<TLabel>& combination,
+    const TVector<std::pair<TString, TSet<TLabel>>>& labels,
+    const TIncompatibilityRules& rules,
+    size_t offset,
+    size_t& prunedCount)
+{
+    if (offset == labels.size()) {
+        if (rules.IsCompatible(combination, labels)) {
+            labelCombinations.push_back(combination);
+        } else {
+            ++prunedCount;
+        }
+        return;
+    }
+
+    for (auto& label : labels[offset].second) {
+        combination[offset] = label;
+        CombineWithRules(labelCombinations, combination, labels, rules, offset + 1, prunedCount);
     }
 }
 
@@ -465,8 +663,29 @@ TResolvedConfig ResolveAll(NFyaml::TDocument& doc)
 
     TVector<TLabel> combination;
     combination.resize(labels.size());
-
-    Combine(labelCombinations, combination, labels, 0);
+    
+    size_t prunedCount = 0;
+    
+    if (config.IncompatibilityRules.GetRuleCount() > 0 || config.IncompatibilityRules.GetDisabledCount() > 0) {
+        CombineWithRules(labelCombinations, combination, labels, config.IncompatibilityRules, 0, prunedCount);
+        
+        size_t totalPossible = 1;
+        for (const auto& [name, labelSet] : labels) {
+            totalPossible *= labelSet.size();
+        }
+        
+        if (totalPossible > 0) {
+            Cerr << "Label combination statistics:" << Endl;
+            Cerr << "  Total possible: " << totalPossible << Endl;
+            Cerr << "  Valid generated: " << labelCombinations.size() << Endl;
+            Cerr << "  Pruned as incompatible: " << prunedCount << Endl;
+            Cerr << "  Reduction: " << (100.0 * prunedCount / totalPossible) << "%" << Endl;
+            Cerr << "  Active rules: " << config.IncompatibilityRules.GetRuleCount() << Endl;
+            Cerr << "  Disabled rules: " << config.IncompatibilityRules.GetDisabledCount() << Endl;
+        }
+    } else {
+        Combine(labelCombinations, combination, labels, 0);
+    }
 
     THashMap<TString, int> nameToIndex;
     nameToIndex.reserve(labelNames.size());

@@ -54,6 +54,6 @@ namespace NKikimr::NBsController {
         {}
     };
 
-    TSelfHealSettings ParseSelfHealSettings(const std::shared_ptr<const NKikimrBlobStorage::TStorageConfig> storageConfig);
+    TSelfHealSettings ParseSelfHealSettings(const NKikimrBlobStorage::TStorageConfig& storageConfig);
 
 } // NKikimr::NBsController

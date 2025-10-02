@@ -1257,14 +1257,14 @@ namespace NKikimr::NBsController {
         Schedule(TDuration::Seconds(15), new TEvPrivate::TEvUpdateSelfHealCounters);
     }
 
-    TSelfHealSettings ParseSelfHealSettings(const std::shared_ptr<const NKikimrBlobStorage::TStorageConfig> storageConfig) {
+    TSelfHealSettings ParseSelfHealSettings(const NKikimrBlobStorage::TStorageConfig& storageConfig) {
         TSelfHealSettings settings;
 
-        if (!storageConfig->HasBlobStorageConfig()) {
+        if (!storageConfig.HasBlobStorageConfig()) {
             return settings;
         }
 
-        const auto& bsConfig = storageConfig->GetBlobStorageConfig();
+        const auto& bsConfig = storageConfig.GetBlobStorageConfig();
 
         if (!bsConfig.HasBscSettings()) {
             return settings;

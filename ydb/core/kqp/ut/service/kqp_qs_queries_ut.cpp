@@ -3504,6 +3504,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             .SetEnableTempTables(true);
         serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
+        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableDataShardCreateTableAs(true);
 
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetQueryClient();

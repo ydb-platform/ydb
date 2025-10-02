@@ -547,6 +547,7 @@ config:
                 ADD_ICB_CONTROL("VDiskControls.EnableDeepScrubbing", false, false, true, Settings.EnableDeepScrubbing);
                 ADD_ICB_CONTROL("DSProxyControls.MaxPutTimeoutSeconds", 60, 1, 1'000'000, Settings.MaxPutTimeoutDSProxy.Seconds());
 
+                ADD_ICB_CONTROL("VDiskControls.HullCompThrottlerBytesRate", 0, 0, 10737418240, 0);
 #undef ADD_ICB_CONTROL
 
                 {

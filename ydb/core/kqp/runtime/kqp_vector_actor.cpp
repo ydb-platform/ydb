@@ -185,9 +185,12 @@ private:
                         for (size_t i = 0; i < PendingRows.size(); i++) {
                             auto rootClusterId = (ui64)PendingRows[i].GetElement(Settings.GetRootClusterColumnIndex()).GetInt128();
                             PrevClusters.push_back(rootClusterId);
-                            LevelClusters.insert(rootClusterId);
+                            if (!NKikimr::NTableIndex::NKMeans::HasPostingParentFlag(rootClusterId)) {
+                                LevelClusters.insert(rootClusterId);
+                            }
                         }
                     } else {
+                        PrevClusters.resize(PendingRows.size());
                         LevelClusters.insert(0);
                     }
                 } else {
@@ -202,8 +205,7 @@ private:
                     LevelsFinished = true;
                     break;
                 }
-                NextClusters.clear();
-                NextClusters.resize(PendingRows.size());
+                NextClusters = PrevClusters;
                 CurClusters.reset();
             }
             while (LevelClusters.size() > 0) {

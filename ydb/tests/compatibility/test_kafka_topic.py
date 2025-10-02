@@ -117,7 +117,11 @@ class TestKafkaTopicMixedClusterFixture(MixedClusterFixture):
     @pytest.fixture(autouse=True, scope="function")
     def setup(self):
         skip_if_unsupported(self.versions)
-        yield from self.setup_cluster()
+        yield from self.setup_cluster(
+            extra_feature_flags=[
+                "enable_topic_compactification_by_key",
+            ],
+        )
 
     def test_workload(self):
         utils = Workload(self.driver, self.endpoint)
@@ -134,7 +138,11 @@ class TestKafkaTopicRollingUpdate(RollingUpgradeAndDowngradeFixture):
     @pytest.fixture(autouse=True, scope="function")
     def setup(self):
         skip_if_unsupported(self.versions)
-        yield from self.setup_cluster()
+        yield from self.setup_cluster(
+            extra_feature_flags=[
+                "enable_topic_compactification_by_key",
+            ],
+        )
 
     def test_workload(self):
         utils = Workload(self.driver, self.endpoint)
@@ -157,7 +165,11 @@ class TestKafkaTopicRestartToAnotherVersion(RestartToAnotherVersionFixture):
         assert self.current_binary_paths_index is not None
         self.current_binary_paths_index = start_version_indices[0]
 
-        yield from self.setup_cluster()
+        yield from self.setup_cluster(
+            extra_feature_flags=[
+                "enable_topic_compactification_by_key",
+            ],
+        )
 
     def test_workload(self):
         utils = Workload(self.driver, self.endpoint)

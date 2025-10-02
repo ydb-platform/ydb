@@ -405,9 +405,9 @@ public:
         if (ev->GetTypeRewrite() == TEvTablet::EvBoot) {
             Counters->BlockForgets = false;
             return false;
-        } else if (auto* msg = TryGetPrivateEvent<NWrappers::NExternalStorage::TEvPutObjectRequest>(ev)) {
+        } else if (TryGetPrivateEvent<NWrappers::NExternalStorage::TEvPutObjectRequest>(ev)) {
             ss << "S3_REQ(put " << ++Counters->ExportCounters.Request << "):";
-        } else if (auto* msg = TryGetPrivateEvent<NWrappers::NExternalStorage::TEvPutObjectResponse>(ev)) {
+        } else if (TryGetPrivateEvent<NWrappers::NExternalStorage::TEvPutObjectResponse>(ev)) {
             if (Counters->CaptureEvictResponse) {
                 Cerr << "CAPTURE S3_RESPONSE(put)" << Endl;
                 --Counters->CaptureEvictResponse;
@@ -416,9 +416,9 @@ public:
             }
 
             ss << "S3_RESPONSE(put " << ++Counters->ExportCounters.Response << "):";
-        } else if (auto* msg = TryGetPrivateEvent<NWrappers::NExternalStorage::TEvDeleteObjectRequest>(ev)) {
+        } else if (TryGetPrivateEvent<NWrappers::NExternalStorage::TEvDeleteObjectRequest>(ev)) {
             ss << "S3_REQ(delete " << ++Counters->ForgetCounters.Request << "):";
-        } else if (auto* msg = TryGetPrivateEvent<NWrappers::NExternalStorage::TEvDeleteObjectResponse>(ev)) {
+        } else if (TryGetPrivateEvent<NWrappers::NExternalStorage::TEvDeleteObjectResponse>(ev)) {
             if (Counters->CaptureForgetResponse) {
                 Cerr << "CAPTURE S3_RESPONSE(delete)" << Endl;
                 --Counters->CaptureForgetResponse;
@@ -437,7 +437,7 @@ public:
             } else {
                 return false;
             }
-        } else if (auto* msg = TryGetPrivateEvent<NKqp::TEvKqpCompute::TEvScanData>(ev)) {
+        } else if (TryGetPrivateEvent<NKqp::TEvKqpCompute::TEvScanData>(ev)) {
             ss << "Got TEvKqpCompute::TEvScanData" << Endl;
         } else {
             return false;

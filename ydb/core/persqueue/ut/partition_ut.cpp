@@ -1205,9 +1205,9 @@ void TPartitionFixture::ShadowPartitionCountersTest(bool isFirstClass) {
                 accWaitTime += 1000;
                 partWaitTime += 10;
                 return TTestActorRuntimeBase::EEventAction::DROP;
-            } else if (auto* msg = ev->CastAsLocal<TEvPQ::TEvConsumed>()) {
+            } else if (ev->CastAsLocal<TEvPQ::TEvConsumed>()) {
                 return TTestActorRuntimeBase::EEventAction::DROP;
-            } else if (auto* msg = ev->CastAsLocal<TEvPQ::TEvProxyResponse>()) {
+            } else if (ev->CastAsLocal<TEvPQ::TEvProxyResponse>()) {
                 return TTestActorRuntimeBase::EEventAction::PROCESS;
             }
             return TTestActorRuntimeBase::EEventAction::PROCESS;
@@ -1439,7 +1439,7 @@ void TPartitionFixture::WaitForQuotaConsumed()
     bool hasQuotaConsumed = false;
 
     auto observer = [&hasQuotaConsumed](TAutoPtr<IEventHandle>& ev) mutable {
-        if (auto* event = ev->CastAsLocal<TEvPQ::TEvConsumed>()) {
+        if (ev->CastAsLocal<TEvPQ::TEvConsumed>()) {
             hasQuotaConsumed = true;
         }
         return TTestActorRuntimeBase::EEventAction::PROCESS;
@@ -1525,7 +1525,7 @@ public:
 
         Ctx->Runtime->GetAppData(0).PQConfig.MutableQuotingConfig()->SetEnableQuoting(false);
         Ctx->Runtime->SetObserverFunc([this](TAutoPtr<IEventHandle>& ev) {
-            if (auto* msg = ev->CastAsLocal<TEvPQ::TEvGetWriteInfoRequest>()) {
+            if (ev->CastAsLocal<TEvPQ::TEvGetWriteInfoRequest>()) {
                 with_lock(this->Lock) {
                     RecievedWriteInfoRequests.emplace(ev->Recipient, ev->Sender);
                 }
@@ -1534,7 +1534,7 @@ public:
                 with_lock(Lock) {
                     BatchSizes.push_back(msg->BatchSize);
                 }
-            } else if (auto* msg = ev->CastAsLocal<TEvKeyValue::TEvRequest>()) {
+            } else if (ev->CastAsLocal<TEvKeyValue::TEvRequest>()) {
                 Cerr << "Got KV request\n";
                 with_lock(Lock) {
                     HadKvRequest = true;

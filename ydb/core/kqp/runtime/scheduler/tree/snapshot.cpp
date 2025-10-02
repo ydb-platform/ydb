@@ -80,8 +80,6 @@ void TTreeElement::UpdateTopDown(bool allowFairShareOverlimit) {
 
         // Give at least 1 fair-share for each demanding child
         ForEachChild<TTreeElement>([&](TTreeElement* child, size_t) -> bool {
-            // We want to allow FairShare to be over Limit.
-            // If you need to change this behaviour change variable's default value
             if (!allowFairShareOverlimit && leftFairShare == 0) {
                 return true;
             }

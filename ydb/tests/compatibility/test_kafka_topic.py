@@ -118,9 +118,9 @@ class TestKafkaTopicMixedClusterFixture(MixedClusterFixture):
     def setup(self):
         skip_if_unsupported(self.versions)
         yield from self.setup_cluster(
-            extra_feature_flags=[
-                "enable_topic_compactification_by_key",
-            ],
+            extra_feature_flags={
+                "enable_topic_compactification_by_key": True,
+            },
         )
 
     def test_workload(self):
@@ -139,9 +139,9 @@ class TestKafkaTopicRollingUpdate(RollingUpgradeAndDowngradeFixture):
     def setup(self):
         skip_if_unsupported(self.versions)
         yield from self.setup_cluster(
-            extra_feature_flags=[
-                "enable_topic_compactification_by_key",
-            ],
+            extra_feature_flags={
+                "enable_topic_compactification_by_key": True,
+            },
         )
 
     def test_workload(self):
@@ -166,9 +166,9 @@ class TestKafkaTopicRestartToAnotherVersion(RestartToAnotherVersionFixture):
         self.current_binary_paths_index = start_version_indices[0]
 
         yield from self.setup_cluster(
-            extra_feature_flags=[
-                "enable_topic_compactification_by_key",
-            ],
+            extra_feature_flags={
+                "enable_topic_compactification_by_key": True,
+            },
         )
 
     def test_workload(self):

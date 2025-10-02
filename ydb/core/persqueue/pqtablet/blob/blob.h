@@ -107,6 +107,8 @@ struct TBatch {
 
 };
 
+void Serialize(const TClientBlob& blob, TBuffer& res);
+
 class TBlobIterator {
 public:
     TBlobIterator(const TKey& key, const TString& blob);

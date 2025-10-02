@@ -5,4 +5,8 @@ SRCS(
     type_codecs_ut.cpp
 )
 
+PEERDIR (
+    ydb/core/persqueue/common
+)
+
 END()

@@ -17,7 +17,6 @@ from ydb.tests.olap.lib.remote_execution import (
 from ydb.tests.olap.lib.ydb_cli import YdbCliHelper
 from ydb.tests.olap.lib.results_processor import ResultsProcessor
 from ydb.tests.olap.lib.utils import get_external_param
-from ydb.tests.olap.lib.allure_utils import allure_test_description
 
 # Импортируем LoadSuiteBase чтобы наследоваться от него
 from ydb.tests.olap.load.lib.conftest import LoadSuiteBase
@@ -2429,18 +2428,6 @@ class WorkloadTestBase(LoadSuiteBase):
                             avg_threads:.1f} threads per iteration"
                     )
 
-            # Создаем отчет
-            allure_test_description(
-                suite="workload",
-                test=workload_name,
-                start_time=diagnostics_start_time,
-                end_time=end_time,
-                addition_table_strings=additional_table_strings,
-                node_errors=node_errors,
-                workload_result=result,
-                workload_params=workload_params,
-                use_node_subcols=use_node_subcols,
-            )
             # --- ВАЖНО: выставляем nodes_with_issues для корректного fail ---
             stats = result.get_stats(workload_name)
             if stats is not None:

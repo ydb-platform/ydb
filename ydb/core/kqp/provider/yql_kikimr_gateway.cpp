@@ -386,18 +386,14 @@ static std::shared_ptr<THashMap<TString, TEnumType>> MakeEnumMapping(
     return result;
 }
 
-static std::shared_ptr<THashMap<TString, Ydb::Topic::Codec>> GetCodecsMapping() {
-    static std::shared_ptr<THashMap<TString, Ydb::Topic::Codec>> codecsMapping;
-    if (codecsMapping == nullptr) {
-        codecsMapping = MakeEnumMapping<Ydb::Topic::Codec>(Ydb::Topic::Codec_descriptor(), "codec_");
-    }
+static std::shared_ptr<const THashMap<TString, Ydb::Topic::Codec>> GetCodecsMapping() {
+    const static std::shared_ptr<THashMap<TString, Ydb::Topic::Codec>> codecsMapping = MakeEnumMapping<Ydb::Topic::Codec>(Ydb::Topic::Codec_descriptor(), "codec_");
     return codecsMapping;
 }
 
-static std::shared_ptr<THashMap<TString, Ydb::Topic::AutoPartitioningStrategy>> GetAutoPartitioningStrategiesMapping() {
-    static std::shared_ptr<THashMap<TString, Ydb::Topic::AutoPartitioningStrategy>> strategiesMapping;
-    if (!strategiesMapping) {
-        strategiesMapping = MakeEnumMapping<Ydb::Topic::AutoPartitioningStrategy>(
+static std::shared_ptr<const THashMap<TString, Ydb::Topic::AutoPartitioningStrategy>> GetAutoPartitioningStrategiesMapping() {
+    const static std::shared_ptr<THashMap<TString, Ydb::Topic::AutoPartitioningStrategy>> strategiesMapping = []() {
+        std::shared_ptr<THashMap<TString, Ydb::Topic::AutoPartitioningStrategy>> strategiesMapping = MakeEnumMapping<Ydb::Topic::AutoPartitioningStrategy>(
             Ydb::Topic::AutoPartitioningStrategy_descriptor(), "auto_partitioning_strategy_");
 
         const TString prefix = "scale_";
@@ -410,17 +406,15 @@ static std::shared_ptr<THashMap<TString, Ydb::Topic::AutoPartitioningStrategy>> 
                 (*strategiesMapping)[newKey] = value;
             }
         }
-    }
+        return strategiesMapping;
+    }();
     return strategiesMapping;
 }
 
-static std::shared_ptr<THashMap<TString, Ydb::Topic::MeteringMode>> GetMeteringModesMapping() {
-    static std::shared_ptr<THashMap<TString, Ydb::Topic::MeteringMode>> metModesMapping;
-    if (metModesMapping == nullptr) {
-        metModesMapping = MakeEnumMapping<Ydb::Topic::MeteringMode>(
-                Ydb::Topic::MeteringMode_descriptor(), "metering_mode_"
-        );
-    }
+static std::shared_ptr<const THashMap<TString, Ydb::Topic::MeteringMode>> GetMeteringModesMapping() {
+    const static std::shared_ptr<THashMap<TString, Ydb::Topic::MeteringMode>> metModesMapping = MakeEnumMapping<Ydb::Topic::MeteringMode>(
+        Ydb::Topic::MeteringMode_descriptor(), "metering_mode_");
+
     return metModesMapping;
 }
 

@@ -13,7 +13,7 @@ class TUnavailableExternalStorageOperator: public IExternalStorageOperator {
 private:
     const TString Exception;
     const TString Reason;
-    mutable THashMap<TString, NKikimr::TBackoff> RetryStateByKey;
+    mutable NKikimr::TBackoff StorageBackoff;
 
     template <class TResponse, class TRequestPtr>
     void ExecuteImpl(TRequestPtr& ev) const {
@@ -42,7 +42,8 @@ private:
 public:
     TUnavailableExternalStorageOperator(const TString& exceptionName, const TString& unavailabilityReason)
         : Exception(exceptionName)
-        , Reason(unavailabilityReason) {
+        , Reason(unavailabilityReason)
+        , StorageBackoff(NKikimr::TBackoff(100, TDuration::Seconds(3), TDuration::Seconds(10))) {
     }
 
     virtual void Execute(TEvCheckObjectExistsRequest::TPtr& ev) const override {
@@ -63,13 +64,7 @@ public:
 
     virtual void Execute(TEvPutObjectRequest::TPtr& ev) const override {
         const TString key(ev->Get()->GetRequest().GetKey().data(), ev->Get()->GetRequest().GetKey().size());
-        NKikimr::TBackoff* backoffPtr = RetryStateByKey.FindPtr(key);
-        if (!backoffPtr) {
-            RetryStateByKey.emplace(key, NKikimr::TBackoff(100, TDuration::Seconds(1), TDuration::Seconds(10)));
-            backoffPtr = RetryStateByKey.FindPtr(key);
-        }
-
-        const TDuration delay = backoffPtr->Next();
+        const TDuration delay = StorageBackoff.Next();
 
         const Aws::S3::S3Error error = Aws::S3::S3Error(
             Aws::Client::AWSError<Aws::Client::CoreErrors>(Aws::Client::CoreErrors::SERVICE_UNAVAILABLE, Exception, Reason, true));

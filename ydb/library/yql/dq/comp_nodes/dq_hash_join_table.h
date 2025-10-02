@@ -14,7 +14,7 @@ class TStdJoinTable {
 
     void Add(std::span<NYql::NUdf::TUnboxedValue> tuple) {
         Y_ABORT_UNLESS(BuiltTable.empty(), "JoinTable is built already");
-        Y_ABORT_UNLESS(std::ssize(tuple) == TupleSize, "tuple size promise vs actual mismatch");
+        MKQL_ENSURE(std::ssize(tuple) == TupleSize, "tuple size promise vs actual mismatch");
         for (int idx = 0; idx < TupleSize; ++idx) {
             Tuples.push_back(tuple[idx]);
         }
@@ -32,7 +32,6 @@ class TStdJoinTable {
     }
 
     void Lookup(TTuple key, std::function<void(TTuple)> produce) const {
-        Y_ABORT_IF(BuiltTable.empty(), "call Build first");
         auto it = BuiltTable.find(key);
         if (it != BuiltTable.end()) {
             std::ranges::for_each(it->second, produce);

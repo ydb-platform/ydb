@@ -88,6 +88,8 @@ namespace NKikimr {
             // last reported FirstLsnToKeep; can't decrease
             mutable ui64 FirstLsnToKeepReported = 0;
             ui64 PersistentLsn = 0;
+            bool LoadedFromProto = false;
+            bool EnableTinyDisks = false;
 
             THullHugeKeeperPersState(TIntrusivePtr<TVDiskContext> vctx,
                                      const ui32 chunkSize,
@@ -96,6 +98,8 @@ namespace NKikimr {
                                      const ui32 milestoneHugeBlobInBytes,
                                      const ui32 maxBlobInBytes,
                                      const ui32 overhead,
+                                     const ui32 stepsBetweenPowersOf2,
+                                     const bool enableTinyDisks,
                                      const ui32 freeChunksReservation,
                                      std::function<void(const TString&)> logFunc);
 
@@ -106,6 +110,8 @@ namespace NKikimr {
                                      const ui32 milestoneHugeBlobInBytes,
                                      const ui32 maxBlobInBytes,
                                      const ui32 overhead,
+                                     const ui32 stepsBetweenPowersOf2,
+                                     const bool enableTinyDisks,
                                      const ui32 freeChunksReservation,
                                      const ui64 entryPointLsn,
                                      const TContiguousSpan &entryPointData,

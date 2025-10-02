@@ -226,7 +226,9 @@ namespace NKikimr {
                 ui32 minHugeBlobInBytes,
                 ui32 milestoneBlobInBytes,
                 ui32 maxHugeBlobInBytes,
-                ui32 overhead);
+                ui32 overhead,
+                ui32 stepsBetweenPowersOf2,
+                bool useBucketsV2);
 
             TAllChains(const TString& vdiskLogPrefix, const NKikimrVDiskData::THugeKeeperHeap& heap);
 
@@ -256,6 +258,8 @@ namespace NKikimr {
 
         private:
             void BuildChains(ui32 milestoneBlobInBytes, ui32 overhead);
+            void BuildChainsV2(ui32 stepsBetweenPowersOf2);
+
             void BuildSearchTable();
             inline ui32 SizeToBlocks(ui32 size) const;
 
@@ -303,6 +307,9 @@ namespace NKikimr {
                 ui32 maxHugeBlobInBytes,
                 // difference between buckets is 1/overhead
                 ui32 overhead,
+                // new bucket scheme
+                ui32 stepsBetweenPowersOf2,
+                bool useBucketsV2,
                 ui32 freeChunksReservation);
 
             THeap(const TString& vdiskLogPrefix, const NKikimrVDiskData::THugeKeeperHeap& heap);

@@ -11,6 +11,7 @@ namespace NYdb::NConsoleClient {
         Offset /* "offset" */,
         SeqNo /* "seq_no" */,
         Meta /* "meta" */,
+        MessageMeta  /* "message_meta" */
     };
 
     enum class ETransformBody {

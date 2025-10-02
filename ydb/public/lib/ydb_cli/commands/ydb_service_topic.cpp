@@ -67,6 +67,7 @@ namespace NYdb::NConsoleClient {
             {ETopicMetadataField::Offset, "Message offset. Offset orders messages in each partition."},
             {ETopicMetadataField::SeqNo, "Message sequence number, used for message deduplication when publishing."},
             {ETopicMetadataField::Meta, "Message additional metadata."},
+            {ETopicMetadataField::MessageMeta, "Message metadata"}
         };
 
         const TVector<ETopicMetadataField> AllTopicMetadataFields = {
@@ -77,6 +78,7 @@ namespace NYdb::NConsoleClient {
             ETopicMetadataField::Offset,
             ETopicMetadataField::SeqNo,
             ETopicMetadataField::Meta,
+            ETopicMetadataField::MessageMeta,
         };
 
         const THashMap<TString, ETopicMetadataField> TopicMetadataFieldsMap = {
@@ -87,6 +89,7 @@ namespace NYdb::NConsoleClient {
             {"offset", ETopicMetadataField::Offset},
             {"seq_no", ETopicMetadataField::SeqNo},
             {"meta", ETopicMetadataField::Meta},
+            {"message_meta", ETopicMetadataField::MessageMeta},
         };
 
         THashMap<ETransformBody, TString> TransformBodyDescriptions = {

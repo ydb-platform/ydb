@@ -19,6 +19,7 @@ namespace {
     };
 
     constexpr TDuration kDefaultUpdateFairSharePeriod = TDuration::MilliSeconds(500);
+    constexpr bool kAllowFairshareOverlimit = true;
 }
 
     Y_UNIT_TEST(SingleDatabasePoolQueryStructure) {
@@ -86,7 +87,7 @@ namespace {
             auto querySnapshot = query->GetSnapshot();
             UNIT_ASSERT(querySnapshot);
 
-            if (TComputeScheduler::ALLOW_FAIRSHARE_OVERLIMIT) {
+            if (kAllowFairshareOverlimit) {
                 UNIT_ASSERT_VALUES_EQUAL_C(querySnapshot->FairShare, 1, "With allowed fair-share overlimit each query should have at leat 1 fair-share");
             } else {
                 UNIT_ASSERT_LE(querySnapshot->FairShare, 1);
@@ -208,7 +209,7 @@ namespace {
         UNIT_ASSERT_NO_EXCEPTION(scheduler.UpdateFairShare());
     }
 
-    Y_UNIT_TEST(ZeroWeightPools) {
+    Y_UNIT_TEST(ZeroWeightDatabasePoolQuery) {
         const TOptions options{
             .Counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>()),
             .DelayParams = kDefaultDelayParams,
@@ -220,39 +221,13 @@ namespace {
         const TString databaseId = "db1";
         scheduler.AddOrUpdateDatabase(databaseId, {});
 
-        std::vector<TString> pools = {"pool1", "pool2", "pool3"};
-        const std::vector<double> weights = {0, 1, 1};
-        for (size_t i = 0; i < pools.size(); ++i) {
-            scheduler.AddOrUpdatePool(databaseId, pools[i], {.Weight = weights[i]});
-        }
+        const TString pool = "pool1";
+        scheduler.AddOrUpdatePool(databaseId, pool, {});
 
-        std::vector<NHdrf::NDynamic::TQueryPtr> queries;
-        for (NHdrf::TQueryId queryId = 0; queryId < 3; ++queryId) {
-            auto query = queries.emplace_back(scheduler.AddOrUpdateQuery(databaseId, pools[queryId], queryId, {}));
-            query->Demand = 5;
-        }
-
-        UNIT_ASSERT_NO_EXCEPTION(scheduler.UpdateFairShare());
-
-        for (size_t i = 0; i < queries.size(); ++i) {
-            auto querySnapshot = queries[i]->GetSnapshot();
-            auto* poolSnapshot = querySnapshot->GetParent();
-            UNIT_ASSERT(querySnapshot);
-            UNIT_ASSERT(poolSnapshot);
-
-            if (i != 0) {
-                UNIT_ASSERT_VALUES_EQUAL(querySnapshot->FairShare, 5);
-                UNIT_ASSERT_VALUES_EQUAL(poolSnapshot->FairShare, 5);
-            } else {
-                // should we give 1 fair-share to zero-weight pools?
-                if (TComputeScheduler::ALLOW_FAIRSHARE_OVERLIMIT) {
-                    UNIT_ASSERT_VALUES_EQUAL(querySnapshot->FairShare, 1);
-                } else {
-                    UNIT_ASSERT_VALUES_EQUAL(querySnapshot->FairShare, 0);
-                }
-                UNIT_ASSERT_VALUES_EQUAL(poolSnapshot->FairShare, 0);
-            }
-        }
+        const NHdrf::TQueryId queryId = 1;
+        UNIT_ASSERT_EXCEPTION(scheduler.AddOrUpdateQuery(databaseId, pool, queryId, {.Weight = 0}), yexception);
+        UNIT_ASSERT_EXCEPTION(scheduler.AddOrUpdatePool(databaseId, pool, {.Weight = 0}), yexception);
+        UNIT_ASSERT_EXCEPTION(scheduler.AddOrUpdateDatabase(databaseId, {.Weight = 0}), yexception);
     }
 
     Y_UNIT_TEST(AddUpdateQueries) {

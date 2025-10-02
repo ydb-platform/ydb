@@ -1,7 +1,7 @@
 # Конфигурация внешних источников
 
 Параметры работы {{ ydb-short-name }} с внешними источниками данных с помощью функциональности федеративных запросов настраиваиваются в секциях конфига [feature_flags](../../reference/configuration/feature_flags.md), `query_service_config`.
-Если для доступа к нужному вам источнику требуется развернуть коннектор, необходимо также необходимо настроить [коннектор](architecture.md#connectors) по [инструкции](../../devops/deployment-options/manual/federated-queries/connector-deployment.md).
+Если для доступа к нужному вам источнику требуется развернуть коннектор, необходимо также настроить [коннектор](architecture.md#connectors) по [инструкции](../../devops/deployment-options/manual/federated-queries/connector-deployment.md).
 Имеется возможность разрешить подключение {{ ydb-short-name }} либо ко всем типам внешних источников данных, либо только к определенным типам.
 
 #|
@@ -10,24 +10,24 @@
 | Включение внешних источников.
 Значение по умолчанию: `false` (все внешние источники недоступны) ||
 || `query_service_config.generic.connector.endpoint.host`
-| fqdn коннектора.
+| Имя хоста коннектора.
 Значение по умолчанию: `localhost`||
 || `query_service_config.generic.connector.endpoint.port`
-| Порт коннектора.
+| TCP порт коннектора.
 Значение по умолчанию: `2130`||
 || `query_service_config.generic.connector.use_ssl`
-| Использование ssl.
+| Использование SSL.
  При совместном размещении коннектора и динамического узла {{ ydb-short-name }} на одном сервере установка шифрованных соединений между ними *не требуется*, но в случае необходимости вы можете включить шифрование.
 Значение по умолчанию: `false`||
 || `query_service_config.generic.connector.ssl_ca_crt`
 | Путь до сертификата CA, использованного для подписи TLS-ключей коннектора.||
 || `query_service_config.available_external_data_sources`
-| Список с разрешенным типами внешними источниками.
+| Список с разрешенными типами внешними источниками.
 Применяется при `all_external_data_sources_are_available: false`.
 Значение по умолчанию: пустой список. ||
 || `query_service_config.all_external_data_sources_are_available`
 | Включение всех типов внешних источников.
-При true, значение `available_external_data_sources` не используется.  
+При true значение `available_external_data_sources` не используется.  
 Значение по умолчанию: `false` ||
 |#
 

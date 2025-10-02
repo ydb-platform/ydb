@@ -270,12 +270,8 @@ SELECT
     
     -- Общий статус выполнения с детализацией кластерных проблем
     CASE
-        -- Приоритет 1: Конкретные проблемы с кластером (ClusterCheck failed)
-        WHEN agg.ClusterCheckSuccess = 0U AND agg.ClusterIssueType = 'cluster_not_alive' THEN 'cluster_not_alive'
-        WHEN agg.ClusterCheckSuccess = 0U AND agg.ClusterIssueType = 'cluster_no_nodes' THEN 'cluster_no_nodes'
-        WHEN agg.ClusterCheckSuccess = 0U AND agg.ClusterIssueType = 'cluster_check_exception' THEN 'cluster_check_exception'
-        WHEN agg.ClusterCheckSuccess = 0U AND agg.ClusterIssueType = 'cluster_unknown_issue' THEN 'cluster_unknown_issue'
-        WHEN agg.ClusterCheckSuccess = 0U THEN 'cluster_issue'  -- Fallback для неизвестных кластерных проблем
+        -- Приоритет 1: Проблемы с инфраструктурой (ClusterCheck failed)
+        WHEN agg.ClusterCheckSuccess = 0U THEN 'infrastructure_error'
         
         -- Приоритет 2: Кластер OK, но нет Stability записи (тест завис/не завершился)
         WHEN agg.ClusterCheckSuccess = 1U AND agg.Success IS NULL THEN 

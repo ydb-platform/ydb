@@ -259,7 +259,6 @@ void TComputeScheduler::RemoveQuery(const TQueryPtr& query) {
 }
 
 void TComputeScheduler::UpdateFairShare() {
-    // TODO: make unit tests for fair share updates
     auto startTime = TMonotonic::Now();
 
     NHdrf::NSnapshot::TRootPtr snapshot;

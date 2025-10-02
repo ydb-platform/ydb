@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/actors/core/actor.h>
 #include <ydb/core/wrappers/abstract.h>
 #include <ydb/core/util/backoff.h>
 #include <ydb/core/util/aws.h>
@@ -64,16 +65,20 @@ public:
         const TString key(ev->Get()->GetRequest().GetKey().data(), ev->Get()->GetRequest().GetKey().size());
         NKikimr::TBackoff* backoffPtr = RetryStateByKey.FindPtr(key);
         if (!backoffPtr) {
-            RetryStateByKey.emplace(key, NKikimr::TBackoff(100, TDuration::Seconds(1), TDuration::Seconds(5)));
+            RetryStateByKey.emplace(key, NKikimr::TBackoff(100, TDuration::Seconds(1), TDuration::Seconds(10)));
             backoffPtr = RetryStateByKey.FindPtr(key);
         }
 
         const TDuration delay = backoffPtr->Next();
-        if (delay > TDuration::Zero()) {
-            Sleep(delay);
-        }
 
-        ExecuteImpl<TEvPutObjectResponse>(ev);
+        const Aws::S3::S3Error error = Aws::S3::S3Error(
+            Aws::Client::AWSError<Aws::Client::CoreErrors>(Aws::Client::CoreErrors::SERVICE_UNAVAILABLE, Exception, Reason, true));
+        std::unique_ptr<TEvPutObjectResponse> direct = std::make_unique<TEvPutObjectResponse>(key, error);
+        std::unique_ptr<IEventBase> rebuilt = ReplyAdapter.RebuildReplyEvent(std::move(direct));
+
+        const NActors::TActorId recipient = ReplyAdapter.GetRecipient(ev->Sender);
+        auto* handle = new NActors::IEventHandle(recipient, NActors::TActorId(), rebuilt.release());
+        TlsActivationContext->ActorSystem()->Schedule(delay, handle);
     }
 
     virtual void Execute(TEvDeleteObjectRequest::TPtr& ev) const override {

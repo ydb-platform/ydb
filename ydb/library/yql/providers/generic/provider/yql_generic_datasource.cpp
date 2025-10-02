@@ -144,7 +144,7 @@ namespace NYql {
                 auto authMethod = properties.Value("authMethod", "");
 
                 TString structuredToken = "";
-                if (authMethod == "BASIC") {
+                if (authMethod == "BASIC" || authMethod == "MDB_BASIC") {
                     const TString& login = properties.Value("login", "");
                     const TString& passwordReference = properties.Value("passwordReference", "");
                     const TString& password = properties.Value("password", "");

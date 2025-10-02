@@ -283,8 +283,7 @@ class WorkloadManagerComputeScheduler(WorkloadManagerBase):
                   '</tr>\n')
         norm_metrics = []
         sum_satisfaction = {}
-        first_req_num = None
-        last_req_num = None
+        count_satisfaction = {}
         for r in range(len(cls.metrics)):
             record: dict[str, float] = {}
             cur_t, cur_m = cls.metrics[r]
@@ -295,25 +294,26 @@ class WorkloadManagerComputeScheduler(WorkloadManagerBase):
                     else:
                         prev_t, prev_m = cls.metrics[r - 1]
                         record[k] = (v - prev_m.get(k, 0.)) / (cur_t - prev_t)
-                else:
+                elif not k.endswith('satisfaction') or v >= 0.:
                     record[k] = v
-            ss = 0.
             for p in pools:
                 sum_satisfaction.setdefault(p.name, 0.)
-                s = record.get(f'{p.name} satisfaction', 0.)
-                sum_satisfaction[p.name] += s
-                ss += s
-            if ss > 0:
-                last_req_num = r
-                if first_req_num is None:
-                    first_req_num = r
+                count_satisfaction.setdefault(p.name, 0.)
+                s = record.get(f'{p.name} satisfaction', -1.)
+                if s >= 0.:
+                    sum_satisfaction[p.name] += s
+                    count_satisfaction[p.name] += 1
             norm_metrics.append(record)
-            report += f'<tr><th style="padding-left: 10; padding-right: 10">{datetime.fromtimestamp(cur_t)}</th>'
+            line = f'<tr><th style="padding-left: 10; padding-right: 10">{datetime.fromtimestamp(cur_t)}</th>'
+            empty = True
             for k in keys:
                 v = record.get(k)
-                v = f'{record.get(k):.1f}' if v is not None else ''
-                report += f'<td style="padding-left: 10; padding-right: 10">{v}</td>'
-            report += '</tr>\n'
+                empty = empty and v is None
+                v = f'{v:.3f}' if v is not None else ''
+                line += f'<td style="padding-left: 10; padding-right: 10">{v}</td>'
+            line += '</tr>\n'
+            if not empty:
+                report += line
         report += '</table></body></html>'
         allure.attach(report, 'metrics', allure.attachment_type.HTML)
         times = [datetime.fromtimestamp(t) for t, _ in cls.metrics]
@@ -331,9 +331,10 @@ class WorkloadManagerComputeScheduler(WorkloadManagerBase):
         pyplot.savefig('satisfaction.plot.svg', format='svg')
         with open('satisfaction.plot.svg') as s:
             allure.attach(s.read(), 'satisfaction.plot.svg', allure.attachment_type.SVG)
-        if first_req_num is not None:
-            for pool, sum_s in sum_satisfaction.items():
-                result.add_stat('test', f'satisfaction_avg_{pool}', sum_s / (1 + last_req_num - first_req_num))
+        for pool, sum_s in sum_satisfaction.items():
+            count = count_satisfaction[pool]
+            value = sum_s / count if count > 0 else -1.
+            result.add_stat('test', f'satisfaction_avg_{pool}', value)
 
     @classmethod
     def check_signals(cls) -> str:
@@ -344,14 +345,18 @@ class WorkloadManagerComputeScheduler(WorkloadManagerBase):
             })
         metrics = YdbCluster.get_metrics(db_only=True, counters='kqp', metrics=metrics_request)
         sum = {}
+        count = {}
         for slot, values in metrics.items():
             for k, v in values.items():
                 sum.setdefault(k, 0.)
-                sum[k] += v
+                count.setdefault(k, 0)
+                if not k.endswith('satisfaction') or v >= 0.:
+                    sum[k] += v
+                    count[k] += 1
                 cls.metrics_keys.add(k)
         for k in sum.keys():
-            if not k.endswith(' d'):
-                sum[k] /= len(metrics)
+            if not k.endswith(' d') and count[k] > 0:
+                sum[k] /= count[k]
             if k.endswith('satisfaction'):
                 sum[k] /= 1.e6
         cls.metrics.append((time.time(), sum))

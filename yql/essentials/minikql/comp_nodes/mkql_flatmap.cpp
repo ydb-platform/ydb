@@ -725,7 +725,7 @@ public:
                 if (NewItem == Items[i] || Items[i]->GetDependencesCount() > 0U)
                     fields[i] = &Items[i]->RefValue(ctx);
 
-            switch (const auto result = Flow->FetchValues(ctx, fields)) {
+            switch (Flow->FetchValues(ctx, fields)) {
                 case EFetchResult::Finish:
                     return NUdf::TUnboxedValuePod::MakeFinish();
                 case EFetchResult::Yield:

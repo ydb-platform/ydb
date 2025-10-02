@@ -821,7 +821,7 @@ public:
 
             for (;;) {
                 NUdf::TUnboxedValue item;
-                switch (auto status = Input.Fetch(item)) {
+                switch (Input.Fetch(item)) {
                     case NUdf::EFetchStatus::Ok: {
                         Item->SetValue(Ctx, std::move(item));
                         SetAccum->Add(Key->GetValue(Ctx));
@@ -1173,7 +1173,7 @@ public:
                 if (Key == Items[i] || Items[i]->GetDependencesCount() > 0U)
                     fields[i] = &Items[i]->RefValue(ctx);
 
-            switch (const auto result = Flow->FetchValues(ctx, fields)) {
+            switch (Flow->FetchValues(ctx, fields)) {
                 case EFetchResult::One:
                     statePtr->Insert(Key->GetValue(ctx).Release());
                     continue;
@@ -1333,7 +1333,7 @@ public:
 
             for (;;) {
                 NUdf::TUnboxedValue item;
-                switch (auto status = Input.Fetch(item)) {
+                switch (Input.Fetch(item)) {
                     case NUdf::EFetchStatus::Ok: {
                         Item->SetValue(Ctx, std::move(item));
                         MapAccum->Add(Key->GetValue(Ctx), Payload->GetValue(Ctx));
@@ -1675,7 +1675,7 @@ public:
                 if (Key == Items[i] || Payload == Items[i] || Items[i]->GetDependencesCount() > 0U)
                     fields[i] = &Items[i]->RefValue(ctx);
 
-            switch (const auto result = Flow->FetchValues(ctx, fields)) {
+            switch (Flow->FetchValues(ctx, fields)) {
                 case EFetchResult::One:
                     statePtr->Insert(Key->GetValue(ctx).Release(), Payload->GetValue(ctx).Release());
                     continue;

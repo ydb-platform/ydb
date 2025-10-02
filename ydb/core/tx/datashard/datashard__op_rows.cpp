@@ -112,9 +112,6 @@ public:
     TTxType GetTxType() const override { return TXTYPE_ERASE_ROWS; }
 };
 
-template <typename TEvResponse>
-ECumulativeCounters OverloadedCounter();
-
 static void OutOfSpace(NKikimrTxDataShard::TEvUploadRowsResponse& response) {
     response.SetStatus(NKikimrTxDataShard::TError::OUT_OF_SPACE);
 }
@@ -135,19 +132,8 @@ static void Overloaded(NKikimrTxDataShard::TEvUploadRowsResponse& response) {
     response.SetStatus(NKikimrTxDataShard::TError::SHARD_IS_BLOCKED);
 }
 
-template <>
-ECumulativeCounters OverloadedCounter<NKikimrTxDataShard::TEvUploadRowsResponse>() {
+ECumulativeCounters OverloadedCounter(TEvDataShard::TEvUploadRowsRequest::TPtr&) {
     return COUNTER_BULK_UPSERT_OVERLOADED;
-}
-
-static void OutOfSpace(NKikimrTxDataShard::TEvEraseRowsResponse& response) {
-    // NOTE: this function is never called, because erase is allowed when out of space
-    response.SetStatus(NKikimrTxDataShard::TEvEraseRowsResponse::WRONG_SHARD_STATE);
-}
-
-static void DiskSpaceExhausted(NKikimrTxDataShard::TEvEraseRowsResponse& response) {
-    // NOTE: this function is never called, because erase is allowed when out of space
-    response.SetStatus(NKikimrTxDataShard::TEvEraseRowsResponse::WRONG_SHARD_STATE);
 }
 
 static void WrongShardState(NKikimrTxDataShard::TEvEraseRowsResponse& response) {
@@ -162,8 +148,7 @@ static void Overloaded(NKikimrTxDataShard::TEvEraseRowsResponse& response) {
     response.SetStatus(NKikimrTxDataShard::TEvEraseRowsResponse::SHARD_OVERLOADED);
 }
 
-template <>
-ECumulativeCounters OverloadedCounter<NKikimrTxDataShard::TEvEraseRowsResponse>() {
+ECumulativeCounters OverloadedCounter(TEvDataShard::TEvEraseRowsRequest::TPtr&) {
     return COUNTER_ERASE_ROWS_OVERLOADED;
 }
 
@@ -191,8 +176,8 @@ static void Reject(TDataShard* self, TEvRequest& ev, const TString& txDesc,
     ctx.Send(ev->Sender, std::move(response));
 }
 
-template <typename TEvResponse, typename TEvRequest>
-static bool MaybeReject(TDataShard* self, TEvRequest& ev, const TActorContext& ctx, const TString& txDesc, bool isWrite, TDataShard::ELogThrottlerType logThrottlerType) {
+template <typename TEvResponse, bool IsWrite, typename TEvRequest>
+static bool MaybeReject(TDataShard* self, TEvRequest& ev, const TActorContext& ctx, const TString& txDesc, TDataShard::ELogThrottlerType logThrottlerType) {
     ERejectReasons rejectReasons = ERejectReasons::None;
     TString rejectDescription;
     
@@ -205,20 +190,20 @@ static bool MaybeReject(TDataShard* self, TEvRequest& ev, const TActorContext& c
     
     NKikimrTxDataShard::TEvProposeTransactionResult::EStatus rejectStatus;
     if (self->CheckDataTxReject(txDesc, ctx, rejectStatus, rejectReasons, rejectDescription)) {
-        self->IncCounter(OverloadedCounter<TEvResponse>());
+        self->IncCounter(OverloadedCounter(ev));
         Reject<TEvResponse, TEvRequest>(self, ev, txDesc, rejectReasons, rejectDescription, &WrongShardState, ctx, logThrottlerType);
         return true;
     }
 
     if (self->CheckChangesQueueOverflow()) {
-        self->IncCounter(OverloadedCounter<TEvResponse>());
+        self->IncCounter(OverloadedCounter(ev));
         rejectReasons = ERejectReasons::ChangesQueueOverflow;
         rejectDescription = TStringBuilder() << "Change queue overflow at tablet " << self->TabletID();
         Reject<TEvResponse, TEvRequest>(self, ev, txDesc, rejectReasons, rejectDescription, &Overloaded, ctx, logThrottlerType);
         return true;
     }
 
-    if (isWrite) {
+    if constexpr (IsWrite) {
         if (self->IsAnyChannelYellowStop()) {
             self->IncCounter(COUNTER_PREPARE_OUT_OF_SPACE);
             rejectReasons = ERejectReasons::YellowChannels;
@@ -242,7 +227,7 @@ void TDataShard::Handle(TEvDataShard::TEvUploadRowsRequest::TPtr& ev, const TAct
         return;
     }
     
-    if (!MaybeReject<TEvDataShard::TEvUploadRowsResponse>(this, ev, ctx, "bulk upsert", true, TDataShard::ELogThrottlerType::UploadRows_Reject)) {
+    if (!MaybeReject<TEvDataShard::TEvUploadRowsResponse, true>(this, ev, ctx, "bulk upsert", TDataShard::ELogThrottlerType::UploadRows_Reject)) {
         Executor()->Execute(new TTxUploadRows(this, ev), ctx);
     }
 }
@@ -252,7 +237,7 @@ void TDataShard::Handle(TEvDataShard::TEvEraseRowsRequest::TPtr& ev, const TActo
         return;
     }
     
-    if (!MaybeReject<TEvDataShard::TEvEraseRowsResponse>(this, ev, ctx, "erase", false, TDataShard::ELogThrottlerType::EraseRows_Reject)) {
+    if (!MaybeReject<TEvDataShard::TEvEraseRowsResponse, false>(this, ev, ctx, "erase", TDataShard::ELogThrottlerType::EraseRows_Reject)) {
         Executor()->Execute(new TTxEraseRows(this, ev), ctx);
     }
 }

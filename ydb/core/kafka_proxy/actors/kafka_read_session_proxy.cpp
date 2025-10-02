@@ -5,7 +5,6 @@
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
-
 namespace NKafka {
 
 using namespace NKikimr::NSchemeCache;
@@ -181,13 +180,13 @@ void KafkaReadSessionProxyActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySet
         }
 
         ui64 readBalancerTabletId = entry.PQGroupInfo->Description.GetBalancerTabletID();
-        Context->PipeCache->Prepare(NActors::TlsActivationContext->AsActorContext(), readBalancerTabletId);
+        ui64 cookie = 1;
         Topics[topic] = {
-            .ReadBalancerTabletId = readBalancerTabletId
+            .ReadBalancerTabletId = readBalancerTabletId,
+            .SubscribeCookie = cookie
         };
 
-        Context->PipeCache->Send(NActors::TlsActivationContext->AsActorContext(), readBalancerTabletId,
-            new TEvPersQueue::TEvBalancingSubscribe(SelfId(), topic, Context->GroupId));
+        Subscribe(topic, readBalancerTabletId, cookie);
     }
 
     NewTopics.clear();
@@ -247,16 +246,13 @@ void KafkaReadSessionProxyActor::ProcessPendingRequestIfPossible() {
     PendingRequest.reset();
 }
 
-void KafkaReadSessionProxyActor::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
-    if (Context->PipeCache->OnConnect(ev)) {
-        return;
-    }
-
-    Reconnect(ev->Get()->TabletId);
+void KafkaReadSessionProxyActor::Subscribe(const TString& topic, ui64 tabletId, const ui64 cookie) {
+    auto ev = std::make_unique<TEvPersQueue::TEvBalancingSubscribe>(SelfId(), topic, Context->GroupId);
+    auto forward = std::make_unique<TEvPipeCache::TEvForward>(ev.release(), tabletId, true, cookie);
+    Send(MakePipePerNodeCacheID(false), forward.release(), IEventHandle::FlagTrackDelivery);
 }
 
-void KafkaReadSessionProxyActor::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev) {
-    Context->PipeCache->OnDisconnect(ev);
+void KafkaReadSessionProxyActor::Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
     Reconnect(ev->Get()->TabletId);
 }
 
@@ -272,10 +268,7 @@ void KafkaReadSessionProxyActor::Reconnect(ui64 tabletId) {
     }
 
     const auto& topic = topicInfo->first;
-
-    Context->PipeCache->Prepare(NActors::TlsActivationContext->AsActorContext(), tabletId);
-    Context->PipeCache->Send(NActors::TlsActivationContext->AsActorContext(), tabletId,
-        new TEvPersQueue::TEvBalancingSubscribe(SelfId(), topic, Context->GroupId));
+    Subscribe(topic, tabletId, ++topicInfo->second.SubscribeCookie);
 }
 
 STFUNC(KafkaReadSessionProxyActor::StateWork) {
@@ -287,8 +280,7 @@ STFUNC(KafkaReadSessionProxyActor::StateWork) {
         hFunc(TEvKafka::TEvFetchRequest, Handle);
         hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
         hFunc(TEvPersQueue::TEvBalancingSubscribeNotify, Handle);
-        hFunc(TEvTabletPipe::TEvClientConnected, Handle);
-        hFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
+        hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
     }
 }
 
@@ -302,9 +294,9 @@ void KafkaReadSessionProxyActor::PassAway() {
     if (ReadSessionActorId) {
         Send(ReadSessionActorId, new NActors::TEvents::TEvPoison());
     }
-    for (auto& [_, topicInfo] : Topics) {
-        Context->PipeCache->Close(TlsActivationContext->AsActorContext(), topicInfo.ReadBalancerTabletId);        
-    }
+
+    Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvUnlink(0));
+
     TBase::PassAway();
 }
 

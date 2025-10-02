@@ -3,7 +3,7 @@
 #include "actors.h"
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/kafka_proxy/kafka_events.h>
 #include <ydb/core/persqueue/events/internal.h>
 
@@ -31,14 +31,14 @@ public:
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr&);
     void Handle(TEvPersQueue::TEvBalancingSubscribeNotify::TPtr&);
 
-    void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev);
-    void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev);
+    void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev);
 
     STFUNC(StateWork);
 
     void EnsureReadSessionActor();
     void ProcessPendingRequestIfPossible();
     void Reconnect(ui64 tabletId);
+    void Subscribe(const TString& topic, ui64 tabletId, const ui64 cookie);
     void PassAway();
     TActorId CreatePipe(ui64 tabletId);
 
@@ -54,6 +54,8 @@ private:
         ui64 ReadBalancerGeneration = 0;
         ui64 ReadBalancerNotifyCookie = 0;
         std::optional<bool> UsedServerBalancing;
+
+        ui64 SubscribeCookie = 1;
     };
     std::unordered_map<TString, TTopicInfo> Topics;
     std::vector<TString> NewTopics;

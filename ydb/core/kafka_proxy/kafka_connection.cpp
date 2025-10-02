@@ -96,7 +96,7 @@ public:
         , Step(SIZE_READ)
         , Demand(NoDemand)
         , InflightSize(0)
-        , Context(std::make_shared<TContext>(config, CreateBoundedClientCache(MakeIntrusive<NKikimr::NTabletPipe::TBoundedClientCacheConfig>())))
+        , Context(std::make_shared<TContext>(config))
     {
         SetNonBlock();
         IsSslRequired = Socket->IsSslSupported();

@@ -37,19 +37,16 @@ struct TReadSession {
 struct TContext {
     using TPtr = std::shared_ptr<TContext>;
 
-    TContext(const NKikimrConfig::TKafkaProxyConfig& config, NKikimr::NTabletPipe::IClientCache* pipeCache)
-        : Config(config)
-        , PipeCache(pipeCache) {
+    TContext(const NKikimrConfig::TKafkaProxyConfig& config)
+        : Config(config) {
     }
 
     TContext(const TContext& other)
         : Config(other.Config)
-        , PipeCache(other.PipeCache)
     {
     }
 
     const NKikimrConfig::TKafkaProxyConfig& Config;
-    const std::shared_ptr<NKikimr::NTabletPipe::IClientCache> PipeCache;
 
     TActorId ConnectionId;
     TString KafkaClient;

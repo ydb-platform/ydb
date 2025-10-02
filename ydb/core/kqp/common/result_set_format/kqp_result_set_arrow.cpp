@@ -745,6 +745,18 @@ NUdf::TUnboxedValue GetUnboxedValue(std::shared_ptr<arrow::Array> column, ui32 r
     return NUdf::TUnboxedValuePod(static_cast<typename TArrowType::c_type>(array->Value(row)));
 }
 
+template <> // For darwin build
+NUdf::TUnboxedValue GetUnboxedValue<arrow::UInt64Type>(std::shared_ptr<arrow::Array> column, ui32 row) {
+    auto array = std::static_pointer_cast<arrow::UInt64Array>(column);
+    return NUdf::TUnboxedValuePod(static_cast<ui64>(array->Value(row)));
+}
+
+template <> // For darwin build
+NUdf::TUnboxedValue GetUnboxedValue<arrow::Int64Type>(std::shared_ptr<arrow::Array> column, ui32 row) {
+    auto array = std::static_pointer_cast<arrow::Int64Array>(column);
+    return NUdf::TUnboxedValuePod(static_cast<i64>(array->Value(row)));
+}
+
 template <>
 NUdf::TUnboxedValue GetUnboxedValue<arrow::StructType>(std::shared_ptr<arrow::Array> column, ui32 row) {
     auto array = std::static_pointer_cast<arrow::StructArray>(column);

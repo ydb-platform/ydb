@@ -36,7 +36,7 @@ void KafkaReadSessionProxyActor::Bootstrap() {
 
 template<typename TRequest>
 void KafkaReadSessionProxyActor::DoHandle(TRequest& ev) {
-    KAFKA_LOG_D("HandleOnWork");
+    KAFKA_LOG_D("DoHandle");
     switch (Context->ReadSession.BalancingMode) {
         case EBalancingMode::Native:
             Register(new TKafkaBalancerActor(Context, 0, ev->Get()->CorrelationId, ev->Get()->Request));

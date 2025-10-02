@@ -2,6 +2,9 @@
 
 #include <ydb/library/actors/core/log.h>
 #include <ydb/core/wrappers/abstract.h>
+#include <ydb/core/util/backoff.h>
+#include <ydb/core/util/aws.h>
+#include <util/generic/hash.h>
 
 namespace NKikimr::NWrappers::NExternalStorage {
 
@@ -9,11 +12,12 @@ class TUnavailableExternalStorageOperator: public IExternalStorageOperator {
 private:
     const TString Exception;
     const TString Reason;
+    mutable THashMap<TString, NKikimr::TBackoff> RetryStateByKey;
 
     template <class TResponse, class TRequestPtr>
     void ExecuteImpl(TRequestPtr& ev) const {
         const Aws::S3::S3Error error = Aws::S3::S3Error(
-            Aws::Client::AWSError<Aws::Client::CoreErrors>(Aws::Client::CoreErrors::SERVICE_UNAVAILABLE, Exception, Reason, false));
+            Aws::Client::AWSError<Aws::Client::CoreErrors>(Aws::Client::CoreErrors::SERVICE_UNAVAILABLE, Exception, Reason, true));
         std::unique_ptr<TResponse> response;
         constexpr bool hasKey = requires(const TRequestPtr& r) { r->Get()->GetRequest().GetKey(); };
         constexpr bool hasRange = std::is_same_v<TResponse, TEvGetObjectResponse>;
@@ -39,39 +43,63 @@ public:
         : Exception(exceptionName)
         , Reason(unavailabilityReason) {
     }
+
     virtual void Execute(TEvCheckObjectExistsRequest::TPtr& ev) const override {
         ExecuteImpl<TEvCheckObjectExistsResponse>(ev);
     }
+
     virtual void Execute(TEvListObjectsRequest::TPtr& ev) const override {
         ExecuteImpl<TEvListObjectsResponse>(ev);
     }
+
     virtual void Execute(TEvGetObjectRequest::TPtr& ev) const override {
         ExecuteImpl<TEvGetObjectResponse>(ev);
     }
+
     virtual void Execute(TEvHeadObjectRequest::TPtr& ev) const override {
         ExecuteImpl<TEvHeadObjectResponse>(ev);
     }
+
     virtual void Execute(TEvPutObjectRequest::TPtr& ev) const override {
+        const TString key(ev->Get()->GetRequest().GetKey().data(), ev->Get()->GetRequest().GetKey().size());
+        NKikimr::TBackoff* backoffPtr = RetryStateByKey.FindPtr(key);
+        if (!backoffPtr) {
+            RetryStateByKey.emplace(key, NKikimr::TBackoff(100, TDuration::Seconds(1), TDuration::Seconds(5)));
+            backoffPtr = RetryStateByKey.FindPtr(key);
+        }
+
+        const TDuration delay = backoffPtr->Next();
+        if (delay > TDuration::Zero()) {
+            Sleep(delay);
+        }
+
         ExecuteImpl<TEvPutObjectResponse>(ev);
     }
+
     virtual void Execute(TEvDeleteObjectRequest::TPtr& ev) const override {
         ExecuteImpl<TEvDeleteObjectResponse>(ev);
     }
+
     virtual void Execute(TEvDeleteObjectsRequest::TPtr& ev) const override {
         ExecuteImpl<TEvDeleteObjectsResponse>(ev);
     }
+
     virtual void Execute(TEvCreateMultipartUploadRequest::TPtr& ev) const override {
         ExecuteImpl<TEvCreateMultipartUploadResponse>(ev);
     }
+
     virtual void Execute(TEvUploadPartRequest::TPtr& ev) const override {
         ExecuteImpl<TEvUploadPartResponse>(ev);
     }
+
     virtual void Execute(TEvCompleteMultipartUploadRequest::TPtr& ev) const override {
         ExecuteImpl<TEvCompleteMultipartUploadResponse>(ev);
     }
+
     virtual void Execute(TEvAbortMultipartUploadRequest::TPtr& ev) const override {
         ExecuteImpl<TEvAbortMultipartUploadResponse>(ev);
     }
+
     virtual void Execute(TEvUploadPartCopyRequest::TPtr& ev) const override {
         ExecuteImpl<TEvUploadPartCopyResponse>(ev);
     }

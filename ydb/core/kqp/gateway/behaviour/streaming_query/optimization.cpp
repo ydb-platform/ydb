@@ -55,8 +55,8 @@ bool ExploreStreamingQueryNode(TExprNode::TPtr node, TStreamingExploreCtx& res) 
 
     if (const auto maybeDataSink = TMaybeNode<TCoDataSink>(providerArg)) {
         const auto dataSinkCategory = maybeDataSink.Cast().Category().Value();
-        if (dataSinkCategory == NYql::PqProviderName) {
-            ++res.StreamingWrites;
+        if (IsIn({NYql::PqProviderName, NYql::SolomonProviderName}, dataSinkCategory)) {
+            res.StreamingWrites += dataSinkCategory == NYql::PqProviderName;
             return true;
         }
 

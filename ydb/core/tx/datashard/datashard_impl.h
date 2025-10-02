@@ -381,7 +381,6 @@ class TDataShard
         struct TEvPeriodicWakeup : public TEventLocal<TEvPeriodicWakeup, EvPeriodicWakeup> {};
 
         struct TEvBuildTableStatsResult : public TEventLocal<TEvBuildTableStatsResult, EvAsyncTableStats> {
-        struct TEvBuildTableStatsResult : public TEventLocal<TEvBuildTableStatsResult, EvAsyncTableStats> {
             ui64 TableId = -1;
             TInstant StatsUpdateTime;
             NTable::TStats Stats;

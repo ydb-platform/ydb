@@ -317,19 +317,13 @@ void TExecutor::CheckYellow(TVector<ui32> &&yellowMoveChannels, TVector<ui32> &&
     Stats->IsAnyChannelYellowStop = !Stats->YellowStopChannels.empty();
 
     if (newMoveCount > oldMoveCount) {
-        if (auto line = Logger->Log(ELnLev::Debug)) {
-            line << NFmt::Do(*this) << " CheckYellow current light yellow move channels:";
-            for (ui32 channel : Stats->YellowMoveChannels) {
-                line << ' ' << channel;
-            }
+        if (auto line = Logger->Log(ELnLev::Notice)) {
+            line << NFmt::Do(*this) << " CheckYellow current light yellow move channels: " << Stats->YellowMoveChannels;
         }
     }
     if (newStopCount > oldStopCount) {
-        if (auto line = Logger->Log(ELnLev::Debug)) {
-            line << NFmt::Do(*this) << " CheckYellow current yellow stop channels:";
-            for (ui32 channel : Stats->YellowStopChannels) {
-                line << ' ' << channel;
-            }
+        if (auto line = Logger->Log(ELnLev::Notice)) {
+            line << NFmt::Do(*this) << " CheckYellow current yellow stop channels: " << Stats->YellowStopChannels;
         }
     }
 
@@ -347,9 +341,14 @@ void TExecutor::CheckYellow(TVector<ui32> &&yellowMoveChannels, TVector<ui32> &&
 }
 
 void TExecutor::SendReassignYellowChannels(const TVector<ui32> &yellowChannels) {
+    Y_ASSERT(yellowChannels);
     if (Owner->ReassignChannelsEnabled()) {
         auto* info = Owner->Info();
         if (Y_LIKELY(info) && info->HiveId) {
+            if (auto logl = Logger->Log(ELnLev::Notice)) {
+                logl << NFmt::Do(*this) << " CheckYellow reassign channels: " << yellowChannels
+                    << " tablet# " << info->TabletID << " hive# " << info->HiveId;
+            }
             Send(MakePipePerNodeCacheID(false),
                 new TEvPipeCache::TEvForward(
                     new TEvHive::TEvReassignTabletSpace(info->TabletID, yellowChannels),
@@ -5142,4 +5141,12 @@ void TExecutor::Handle(NBackup::TEvSnapshotCompleted::TPtr& ev) {
 }
 
 }
+}
+
+template<> inline
+void Out<TVector<ui32>>(IOutputStream& o, const TVector<ui32> &vec) {
+    o << "[ ";
+    for (const auto &x : vec)
+        o << x << ' ';
+    o << "]";
 }

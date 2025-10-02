@@ -49,7 +49,7 @@ void KafkaReadSessionProxyActor::DoHandle(TRequest& ev) {
 }
 
 void KafkaReadSessionProxyActor::Handle(TEvKafka::TEvJoinGroupRequest::TPtr& ev) {
-    KAFKA_LOG_D("HandleOnWork<TEvKafka::TEvJoinGroupRequest>");
+    KAFKA_LOG_D("HandleOnWork TEvKafka::TEvJoinGroupRequest");
     Context->ReadSession.BalancingMode = Context->ReadSession.PendingBalancingMode.value_or(GetBalancingMode(*ev->Get()->Request));
     Context->ReadSession.PendingBalancingMode.reset();
     KAFKA_LOG_D("Balancing mode: " << Context->ReadSession.BalancingMode);
@@ -141,7 +141,7 @@ void KafkaReadSessionProxyActor::Handle(TEvKafka::TEvFetchRequest::TPtr& ev) {
 }
 
 void KafkaReadSessionProxyActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-    KAFKA_LOG_D("Handle<TEvTxProxySchemeCache::TEvNavigateKeySetResult>");
+    KAFKA_LOG_D("Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult");
     auto& result = ev->Get()->Request;
 
     for (size_t i = 0; i < result->ResultSet.size(); ++i) {
@@ -204,9 +204,13 @@ void KafkaReadSessionProxyActor::Handle(TEvPersQueue::TEvBalancingSubscribeNotif
 
     auto& topicInfo = it->second;
     if (topicInfo.ReadBalancerGeneration > record.GetGeneration()) {
+        KAFKA_LOG_D("Handle TEvPersQueue::TEvBalancingSubscribeNotify generation mismatch: "
+            << topicInfo.ReadBalancerGeneration << " vs " << record.GetGeneration());
         return;
     }
     if (topicInfo.ReadBalancerGeneration == record.GetGeneration() && topicInfo.ReadBalancerNotifyCookie >= record.GetCookie()) {
+        KAFKA_LOG_D("Handle TEvPersQueue::TEvBalancingSubscribeNotify cookie mismatch: "
+            << topicInfo.ReadBalancerNotifyCookie << " vs " << record.GetCookie());
         return;
     }
 
@@ -215,6 +219,7 @@ void KafkaReadSessionProxyActor::Handle(TEvPersQueue::TEvBalancingSubscribeNotif
     topicInfo.ReadBalancerNotifyCookie = record.GetCookie();
 
     if (*topicInfo.UsedServerBalancing && Context->ReadSession.BalancingMode == EBalancingMode::Native) {
+        KAFKA_LOG_D("Change balancing mode to server");
         Context->ReadSession.PendingBalancingMode = EBalancingMode::Server;
     }
 
@@ -223,6 +228,7 @@ void KafkaReadSessionProxyActor::Handle(TEvPersQueue::TEvBalancingSubscribeNotif
 
 void KafkaReadSessionProxyActor::ProcessPendingRequestIfPossible() {
     if (!PendingRequest.has_value()) {
+        Y_VERIFY_DEBUG(PendingRequest.has_value());
         return;
     }
 

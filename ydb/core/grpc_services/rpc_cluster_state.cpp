@@ -43,16 +43,26 @@ public:
     TMap<ui32, NKikimrWhiteboard::TEvPDiskStateResponse> PDiskInfo;
     TMap<ui32, NKikimrWhiteboard::TEvTabletStateResponse> TabletInfo;
     TMap<ui32, NKikimrWhiteboard::TEvBSGroupStateResponse> BSGroupInfo;
+    TMap<ui32, NKikimrWhiteboard::TEvSystemStateResponse> SystemInfo;
+    TMap<ui32, NKikimrWhiteboard::TEvBridgeInfoResponse> BridgeInfo;
+    TMap<ui32, NKikimrWhiteboard::TEvNodeStateResponse> NodeInfo;
     Ydb::Monitoring::SelfCheckResult SelfCheck;
     Ydb::StatusIds_StatusCode Status = Ydb::StatusIds::SUCCESS;
 
     void SendRequest(ui32 nodeId) {
         TActorId whiteboardServiceId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(nodeId);
-        Send(whiteboardServiceId, new NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateRequest(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, nodeId);
-        Send(whiteboardServiceId, new NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateRequest(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, nodeId);
-        Send(whiteboardServiceId, new NNodeWhiteboard::TEvWhiteboard::TEvTabletStateRequest(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, nodeId);
-        Send(whiteboardServiceId, new NNodeWhiteboard::TEvWhiteboard::TEvBSGroupStateRequest(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, nodeId);
-        Requested += 4;
+#define request(NAME) \
+        Send(whiteboardServiceId, new NNodeWhiteboard::TEvWhiteboard::NAME(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, nodeId); \
+        Requested++;
+
+        request(TEvVDiskStateRequest);
+        request(TEvPDiskStateRequest);
+        request(TEvTabletStateRequest);
+        request(TEvBSGroupStateRequest);
+        request(TEvSystemStateRequest);
+        request(TEvBridgeInfoRequest);
+        request(TEvNodeStateRequest);
+#undef request
     }
 
     void HandleBrowse(TEvInterconnect::TEvNodesInfo::TPtr& ev) {
@@ -70,69 +80,53 @@ public:
 
     void Undelivered(TEvents::TEvUndelivered::TPtr &ev) {
         ui32 nodeId = ev.Get()->Cookie;
+#define processCase(NAME, INFO) \
+    case NNodeWhiteboard::TEvWhiteboard::NAME: \
+        if (INFO.emplace(nodeId, NKikimrWhiteboard::T##NAME{}).second) { \
+            NodeStateInfoReceived(); \
+        } \
+        break;
         switch (ev->Get()->SourceType) {
-        case NNodeWhiteboard::TEvWhiteboard::EvVDiskStateRequest:
-            if (VDiskInfo.emplace(nodeId, NKikimrWhiteboard::TEvVDiskStateResponse{}).second) {
-                NodeStateInfoReceived();
-            }
-            break;
-        case NNodeWhiteboard::TEvWhiteboard::EvPDiskStateRequest:
-            if (PDiskInfo.emplace(nodeId, NKikimrWhiteboard::TEvPDiskStateResponse{}).second) {
-                NodeStateInfoReceived();
-            }
-            break;
-        case NNodeWhiteboard::TEvWhiteboard::EvTabletStateRequest:
-            if (TabletInfo.emplace(nodeId, NKikimrWhiteboard::TEvTabletStateResponse{}).second) {
-                NodeStateInfoReceived();
-            }
-            break;
-        case NNodeWhiteboard::TEvWhiteboard::EvBSGroupStateRequest:
-            if (BSGroupInfo.emplace(nodeId, NKikimrWhiteboard::TEvBSGroupStateResponse{}).second) {
-                NodeStateInfoReceived();
-            }
-            break;
+            processCase(EvVDiskStateResponse, VDiskInfo)
+            processCase(EvPDiskStateResponse, PDiskInfo)
+            processCase(EvTabletStateResponse, TabletInfo)
+            processCase(EvBSGroupStateResponse, BSGroupInfo)
+            processCase(EvSystemStateResponse, SystemInfo)
+            processCase(EvBridgeInfoResponse, BridgeInfo)
+            processCase(EvNodeStateResponse, NodeInfo)
         }
     }
 
     void Disconnected(TEvInterconnect::TEvNodeDisconnected::TPtr &ev) {
         ui32 nodeId = ev->Get()->NodeId;
-        if (VDiskInfo.emplace(nodeId, NKikimrWhiteboard::TEvVDiskStateResponse{}).second) {
-            NodeStateInfoReceived();
-        }
-        if (PDiskInfo.emplace(nodeId, NKikimrWhiteboard::TEvPDiskStateResponse{}).second) {
-            NodeStateInfoReceived();
-        }
-        if (TabletInfo.emplace(nodeId, NKikimrWhiteboard::TEvTabletStateResponse{}).second) {
-            NodeStateInfoReceived();
-        }
-        if (BSGroupInfo.emplace(nodeId, NKikimrWhiteboard::TEvBSGroupStateResponse{}).second) {
-            NodeStateInfoReceived();
-        }
+#define process(NAME, INFO) \
+    if (VDiskInfo.emplace(nodeId, NKikimrWhiteboard::TEvVDiskStateResponse{}).second) { \
+        NodeStateInfoReceived(); \
+    }
+        process(TEvVDiskStateResponse, VDiskInfo)
+        process(TEvPDiskStateResponse, PDiskInfo)
+        process(TEvTabletStateResponse, TabletInfo)
+        process(TEvBSGroupStateResponse, BSGroupInfo)
+        process(TEvSystemStateResponse, SystemInfo)
+        process(TEvBridgeInfoResponse, BridgeInfo)
+        process(TEvNodeStateResponse, NodeInfo)
+#undef process
     }
 
-    void Handle(NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateResponse::TPtr& ev) {
-        ui64 nodeId = ev.Get()->Cookie;
-        VDiskInfo[nodeId] = std::move(ev->Get()->Record);
-        NodeStateInfoReceived();
+#define HandleWhiteboard(NAME, INFO) \
+    void Handle(NNodeWhiteboard::TEvWhiteboard::NAME::TPtr& ev) { \
+        ui64 nodeId = ev.Get()->Cookie; \
+        INFO[nodeId] = std::move(ev->Get()->Record); \
+        NodeStateInfoReceived(); \
     }
 
-    void Handle(NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateResponse::TPtr& ev) {
-        ui64 nodeId = ev.Get()->Cookie;
-        PDiskInfo[nodeId] = std::move(ev->Get()->Record);
-        NodeStateInfoReceived();
-    }
-
-    void Handle(NNodeWhiteboard::TEvWhiteboard::TEvTabletStateResponse::TPtr& ev) {
-        ui64 nodeId = ev.Get()->Cookie;
-        TabletInfo[nodeId] = std::move(ev->Get()->Record);
-        NodeStateInfoReceived();
-    }
-
-    void Handle(NNodeWhiteboard::TEvWhiteboard::TEvBSGroupStateResponse::TPtr& ev) {
-        ui64 nodeId = ev.Get()->Cookie;
-        BSGroupInfo[nodeId] = std::move(ev->Get()->Record);
-        NodeStateInfoReceived();
-    }
+    HandleWhiteboard(TEvVDiskStateResponse, VDiskInfo)
+    HandleWhiteboard(TEvPDiskStateResponse, PDiskInfo)
+    HandleWhiteboard(TEvTabletStateResponse, TabletInfo)
+    HandleWhiteboard(TEvBSGroupStateResponse, BSGroupInfo)
+    HandleWhiteboard(TEvSystemStateResponse, SystemInfo)
+    HandleWhiteboard(TEvBridgeInfoResponse, BridgeInfo)
+    HandleWhiteboard(TEvNodeStateResponse, NodeInfo)
 
     void NodeStateInfoReceived() {
         ++Received;
@@ -188,6 +182,9 @@ public:
             hFunc(NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateResponse, Handle);
             hFunc(NNodeWhiteboard::TEvWhiteboard::TEvTabletStateResponse, Handle);
             hFunc(NNodeWhiteboard::TEvWhiteboard::TEvBSGroupStateResponse, Handle);
+            hFunc(NNodeWhiteboard::TEvWhiteboard::TEvSystemStateResponse, Handle);
+            hFunc(NNodeWhiteboard::TEvWhiteboard::TEvBridgeInfoResponse, Handle);
+            hFunc(NNodeWhiteboard::TEvWhiteboard::TEvNodeStateResponse, Handle);
             hFunc(TEvents::TEvUndelivered, Undelivered);
             hFunc(TEvInterconnect::TEvNodeDisconnected, Disconnected);
             cFunc(TEvents::TSystem::Wakeup, Timeout);
@@ -222,6 +219,9 @@ public:
         serializeDict("PDiskInfo", PDiskInfo);
         serializeDict("TabletInfo", TabletInfo);
         serializeDict("BSGroupInfo", BSGroupInfo);
+        serializeDict("SystemInfo", SystemInfo);
+        serializeDict("BridgeInfo", BridgeInfo);
+        serializeDict("NodeInfo", NodeInfo);
         serialize("SelfCheck", SelfCheck);
 
         res << "\"version\": 1}\n";

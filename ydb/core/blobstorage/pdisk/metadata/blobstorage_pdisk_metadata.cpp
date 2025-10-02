@@ -185,23 +185,11 @@ void WritePDiskMetadata(const TString& path, const NKikimrBlobStorage::TPDiskMet
         if (!cfg->HasPrevConfig() && havePrevious) {
             if (previous.HasCommittedStorageConfig()) {
                 cfg->MutablePrevConfig()->CopyFrom(previous.GetCommittedStorageConfig());
-            } else if (previous.HasProposedStorageConfig()) {
-                cfg->MutablePrevConfig()->CopyFrom(previous.GetProposedStorageConfig());
             }
         }
         UpdateStorageConfigFingerprint(cfg);
     }
-    if (adjustedRecord.HasProposedStorageConfig()) {
-        auto* cfg = adjustedRecord.MutableProposedStorageConfig();
-        if (!cfg->HasPrevConfig() && havePrevious) {
-            if (previous.HasCommittedStorageConfig()) {
-                cfg->MutablePrevConfig()->CopyFrom(previous.GetCommittedStorageConfig());
-            } else if (previous.HasProposedStorageConfig()) {
-                cfg->MutablePrevConfig()->CopyFrom(previous.GetProposedStorageConfig());
-            }
-        }
-        UpdateStorageConfigFingerprint(cfg);
-    }
+
     TActorSystemCreator creator;
     auto* sys = creator.GetActorSystem();
     auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();

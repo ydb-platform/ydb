@@ -34,9 +34,17 @@ TRuntimeNode ToWideFlow(TProgramBuilder& pgmBuilder, TRuntimeNode list);
 // WideFlow -> List<Tuple<...>>
 TRuntimeNode FromWideFlow(TProgramBuilder& pgmBuilder, TRuntimeNode wideFlow);
 
+// Stream<Multi<...>> -> Stream<Tuple<...>>
+TRuntimeNode FromWideStreamToTupleStream(TProgramBuilder& pgmBuilder, TRuntimeNode stream);
+
 TVector<NUdf::TUnboxedValue> ConvertListToVector(const NUdf::TUnboxedValue& list); 
 
-void CompareListsIgnoringOrder(const TType* type, const NUdf::TUnboxedValue& expected, const NUdf::TUnboxedValue& got);
+TVector<NUdf::TUnboxedValue> ConvertStreamToVector(IComputationGraph& tupleStream);
+
+void CompareListsIgnoringOrder(const TType* type, const NUdf::TUnboxedValue& expected,
+                               const NUdf::TUnboxedValue& gotList);
+void CompareListAndStreamIgnoringOrder(const TType* type, const NUdf::TUnboxedValue& expected,
+                                       IComputationGraph& gotStream);
 template<typename Type>
 const TVector<const TRuntimeNode> BuildListNodes(TProgramBuilder& pb,
     const TVector<Type>& vector

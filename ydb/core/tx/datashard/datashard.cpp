@@ -3293,6 +3293,24 @@ void TDataShard::HandleAsFollower(TEvDataShard::TEvProposeTransaction::TPtr &ev,
     IncCounter(COUNTER_PREPARE_COMPLETE);
 }
 
+template <typename TEvRequest>
+bool TDataShard::ShouldDelayOperation(TEvRequest& ev) {
+    if (MediatorStateWaiting) {
+        MediatorStateWaitingMsgs.emplace_back(ev.Release());
+        UpdateProposeQueueSize();
+        return true;
+    }
+    if (Pipeline.HasProposeDelayers()) {
+        DelayedProposeQueue.emplace_back().Reset(ev.Release());
+        UpdateProposeQueueSize();
+        return true;
+    }
+    return false;
+}
+template bool TDataShard::ShouldDelayOperation<TEvDataShard::TEvUploadRowsRequest::TPtr>(TEvDataShard::TEvUploadRowsRequest::TPtr& ev);
+template bool TDataShard::ShouldDelayOperation<TEvDataShard::TEvEraseRowsRequest::TPtr>(TEvDataShard::TEvEraseRowsRequest::TPtr& ev);
+template bool TDataShard::ShouldDelayOperation<TEvDataShard::TEvS3UploadRowsRequest::TPtr>(TEvDataShard::TEvS3UploadRowsRequest::TPtr& ev);
+
 void TDataShard::CheckDelayedProposeQueue(const TActorContext &ctx) {
     if (DelayedProposeQueue && !Pipeline.HasProposeDelayers()) {
         for (auto& ev : DelayedProposeQueue) {
@@ -4455,6 +4473,10 @@ void TDataShard::Handle(TEvDataShard::TEvStoreS3DownloadInfo::TPtr& ev, const TA
 
 void TDataShard::Handle(TEvDataShard::TEvS3UploadRowsRequest::TPtr& ev, const TActorContext& ctx)
 {
+    if (ShouldDelayOperation(ev)) {
+        return;
+    }
+
     const float rejectProbabilty = Executor()->GetRejectProbability();
     if (rejectProbabilty > 0) {
         const float rnd = AppData(ctx)->RandomProvider->GenRandReal2();

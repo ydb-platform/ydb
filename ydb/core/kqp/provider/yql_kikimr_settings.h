@@ -184,7 +184,6 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool EnableAstCache = false;
     bool EnablePgConstsToParams = false;
     ui64 ExtractPredicateRangesLimit = 0;
-    std::optional<ui64> ExtractPredicateParameterListSizeLimit;
     bool EnablePerStatementQueryExecution = false;
     bool EnableCreateTableAs = false;
     bool EnableDataShardCreateTableAs = false;

@@ -314,10 +314,9 @@ TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx
     }
 
     if (kqpCtx.QueryCtx->RuntimeParameterSizeLimitSatisfied &&
-        kqpCtx.Config->EnableSimpleProgramsSinglePartitionOptimization &&
-        kqpCtx.Config->ExtractPredicateParameterListSizeLimit.has_value())
+        kqpCtx.QueryCtx->RuntimeParameterSizeLimit > 0)
     {
-        settings.ExternalParameterMaxSize = *kqpCtx.Config->ExtractPredicateParameterListSizeLimit;
+        settings.ExternalParameterMaxSize = kqpCtx.QueryCtx->RuntimeParameterSizeLimit;
     }
 
     auto extractor = MakePredicateRangeExtractor(settings);

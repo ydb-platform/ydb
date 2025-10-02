@@ -14,6 +14,7 @@ namespace NKikimr::NKqp {
 struct TKqpQuerySettings {
     bool DocumentApiRestricted = true;
     bool IsInternalCall = false;
+    i32 RuntimeParameterSizeLimit = 0;
     bool RuntimeParameterSizeLimitSatisfied = false;
 
     NKikimrKqp::EQueryType QueryType = NKikimrKqp::EQueryType::QUERY_TYPE_UNDEFINED;
@@ -28,6 +29,7 @@ struct TKqpQuerySettings {
             IsInternalCall == other.IsInternalCall &&
             QueryType == other.QueryType &&
             Syntax == other.Syntax &&
+            RuntimeParameterSizeLimit == other.RuntimeParameterSizeLimit &&
             RuntimeParameterSizeLimitSatisfied == other.RuntimeParameterSizeLimitSatisfied;
     }
 
@@ -52,6 +54,7 @@ struct TKqpQuerySettings {
             << "DocumentApiRestricted: " << DocumentApiRestricted << ", "
             << "IsInternalCall: " << IsInternalCall << ", "
             << "QueryType: " << QueryType << ", "
+            << "RuntimeParameterSizeLimit: " << RuntimeParameterSizeLimit
             << "RuntimeParameterSizeLimitSatisfied: " << RuntimeParameterSizeLimitSatisfied
             << "}";
         return result;

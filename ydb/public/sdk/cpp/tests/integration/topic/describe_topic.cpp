@@ -122,10 +122,10 @@ TEST_F(Describe, TEST_NAME(Location)) {
 TEST_F(Describe, TEST_NAME(MetricsLevel)) {
     TTopicClient client(MakeDriver());
 
-    // const ui32 MetricsLevelDisabled = 0;
-    // const ui32 MetricsLevelDatabase = 1;
-    const ui32 MetricsLevelObject = 2;
-    const ui32 MetricsLevelDetailed = 3;
+    // const std::uint32_t MetricsLevelDisabled = 0;
+    // const std::uint32_t MetricsLevelDatabase = 1;
+    const std::uint32_t MetricsLevelObject = 2;
+    const std::uint32_t MetricsLevelDetailed = 3;
 
     auto createTopic = [&](std::string topic, EMetricsLevel metricsLevel) {
         auto res = client.CreateTopic(topic, TCreateTopicSettings().MetricsLevel(metricsLevel)).GetValueSync();

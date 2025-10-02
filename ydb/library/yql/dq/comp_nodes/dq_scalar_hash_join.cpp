@@ -15,7 +15,7 @@ TKeyTypes KeyTypesFromColumns(const std::vector<TType*>& types, const std::vecto
     TKeyTypes kt;
     std::ranges::copy(keyIndexes | std::views::transform([&types](ui32 typeIndex) {
                           const TType* type = types[typeIndex];
-                          Y_ABORT_UNLESS(type->IsData(), "exepected data type");
+                          MKQL_ENSURE(type->IsData(), "exepected data type");
                           return std::pair{*static_cast<const TDataType*>(type)->GetDataSlot(), false};
                       }), std::back_inserter(kt));
     return kt;
@@ -63,9 +63,7 @@ public:
     ,   Pointers_()
     ,   Output_()
     {
-        Y_ABORT_IF(!std::ranges::equal(RightColumnTypes_, LeftColumnTypes_, [](const TType* left, const TType* right){
-            return left->IsSameType(*right);
-        }), "unimplemented");
+        MKQL_ENSURE(RightColumnTypes_.size() == LeftColumnTypes_.size(), "unimplemented");
         Pointers_.resize(LeftColumnTypes_.size());
         for (int index = 0; index < std::ssize(LeftKeyColumns_); ++index) {
             Pointers_[LeftKeyColumns_[index]] = &Values_[index];
@@ -77,14 +75,13 @@ public:
                 valuesIndex++;
             }
         }
-        Y_ABORT_IF(!std::ranges::is_permutation(Values_ | std::views::transform([](auto& value){return &value;}), Pointers_));
+        MKQL_ENSURE(std::ranges::is_permutation(Values_ | std::views::transform([](auto& value){return &value;}), Pointers_), "Pointers_ should be a permutation of Values_ addresses");
 
         UDF_LOG(Logger_, LogComponent_, NUdf::ELogLevel::Debug, "TScalarHashJoinState created");
     }
 
     EFetchResult FetchValues(TComputationContext& ctx, NUdf::TUnboxedValue* const* output) {
         const int outputTupleSize = std::ssize(RightColumnTypes_) + std::ssize(LeftColumnTypes_) - std::ssize(LeftKeyColumns_);
-        Cout << "ScalarHashJoin::FetchValues" << Endl;
         if (auto* buildSide = BuildSide()) {
             auto res = buildSide->FetchValues(ctx, Pointers_.data());
             switch (res) {
@@ -102,12 +99,12 @@ public:
                 return EFetchResult::Yield;
             }
             default:
-                Y_ABORT("unreachable");
+                MKQL_ENSURE(false, "unreachable");
             }
         }
         if (!Output_.empty()) {
-            Y_ABORT_IF(std::ssize(Output_) < outputTupleSize,
-                       "output size must be divisible by columns size");
+            MKQL_ENSURE(std::ssize(Output_) >= outputTupleSize,
+                       "Output_ must contain at least one tuple");
             for (int index = 0; index < outputTupleSize; ++index) {
                 int myIndex = std::ssize(Output_) - outputTupleSize + index;
                 int theirIndex = index;
@@ -133,10 +130,10 @@ public:
                 return EFetchResult::Yield;
             }
             default:
-                Y_ABORT("unreachable");
+                MKQL_ENSURE(false, "unreachable");
             }
         }
-        Y_ABORT("unreachable");
+        MKQL_ENSURE(false, "unreachable");
     }
 
 private:
@@ -168,11 +165,11 @@ public:
         TComputationMutables&       mutables,
         IComputationWideFlowNode*   leftFlow,
         IComputationWideFlowNode*   rightFlow,
-        const TVector<TType*>&&     resultItemTypes,
-        const TVector<TType*>&&     leftColumnTypes,
-        const TVector<ui32>&&       leftKeyColumns,
-        const TVector<TType*>&&     rightColumnTypes,
-        const TVector<ui32>&&       rightKeyColumns
+        TVector<TType*>&&           resultItemTypes,
+        TVector<TType*>&&           leftColumnTypes,
+        TVector<ui32>&&             leftKeyColumns,
+        TVector<TType*>&&           rightColumnTypes,
+        TVector<ui32>&&             rightKeyColumns
     )
         : TBaseComputation(mutables, nullptr, EValueRepresentation::Boxed)
         , LeftFlow_(leftFlow)
@@ -182,7 +179,6 @@ public:
         , LeftKeyColumns_(std::move(leftKeyColumns))
         , RightColumnTypes_(std::move(rightColumnTypes))
         , RightKeyColumns_(std::move(rightKeyColumns))
-
     {}
 
     EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue* const* output) const {
@@ -229,7 +225,7 @@ IComputationWideFlowNode* WrapDqScalarHashJoin(TCallable& callable, const TCompu
     MKQL_ENSURE(joinType->IsFlow(), "Expected WideFlow as a resulting flow");
     const auto joinComponents = GetWideComponents(joinType);
     MKQL_ENSURE(joinComponents.size() > 0, "Expected at least one column");
-    const TVector<TType*> joinItems(joinComponents.cbegin(), joinComponents.cend());
+    TVector<TType*> joinItems(joinComponents.cbegin(), joinComponents.cend());
 
     const auto leftType = callable.GetInput(0).GetStaticType();
     MKQL_ENSURE(leftType->IsFlow(), "Expected WideFlow as a left flow");
@@ -238,7 +234,7 @@ IComputationWideFlowNode* WrapDqScalarHashJoin(TCallable& callable, const TCompu
                 "Expected Multi as a left flow item type");
     const auto leftFlowComponents = GetWideComponents(leftFlowType);
     MKQL_ENSURE(leftFlowComponents.size() > 0, "Expected at least one column");
-    const TVector<TType*> leftFlowItems(leftFlowComponents.cbegin(), leftFlowComponents.cend());
+    TVector<TType*> leftFlowItems(leftFlowComponents.cbegin(), leftFlowComponents.cend());
 
     const auto rightType = callable.GetInput(1).GetStaticType();
     MKQL_ENSURE(rightType->IsFlow(), "Expected WideFlow as a right flow");
@@ -247,7 +243,7 @@ IComputationWideFlowNode* WrapDqScalarHashJoin(TCallable& callable, const TCompu
                 "Expected Multi as a right flow item type");
     const auto rightFlowComponents = GetWideComponents(rightFlowType);
     MKQL_ENSURE(rightFlowComponents.size() > 0, "Expected at least one column");
-    const TVector<TType*> rightFlowItems(rightFlowComponents.cbegin(), rightFlowComponents.cend());
+    TVector<TType*> rightFlowItems(rightFlowComponents.cbegin(), rightFlowComponents.cend());
 
     const auto joinKindNode = callable.GetInput(2);
     const auto rawKind = AS_VALUE(TDataLiteral, joinKindNode)->AsValue().Get<ui32>();

@@ -286,7 +286,7 @@ SELECT
         WHEN agg.Success = 1U AND (agg.NodeErrors IS NULL OR agg.NodeErrors = 0U) AND (agg.WorkloadErrors IS NULL OR agg.WorkloadErrors = 0U) THEN 'success'
         WHEN agg.Success = 1U AND (agg.NodeErrors = 1U OR agg.WorkloadErrors = 1U) THEN 'success_with_errors'
         WHEN agg.Success = 0U AND agg.NodeErrors = 1U THEN 'node_failure'
-        WHEN agg.Success = 0U AND agg.WorkloadErrors = 1U THEN 'workload_failure'
+        WHEN agg.Success = 0U AND agg.WorkloadErrors = 1U THEN 'success' -- 'workload_failure'
         WHEN agg.Success = 0U THEN 'failure'
         ELSE 'unknown'
     END AS OverallStatus

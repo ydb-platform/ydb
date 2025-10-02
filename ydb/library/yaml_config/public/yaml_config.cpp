@@ -668,21 +668,6 @@ TResolvedConfig ResolveAll(NFyaml::TDocument& doc)
     
     if (config.IncompatibilityRules.GetRuleCount() > 0 || config.IncompatibilityRules.GetDisabledCount() > 0) {
         CombineWithRules(labelCombinations, combination, labels, config.IncompatibilityRules, 0, prunedCount);
-        
-        size_t totalPossible = 1;
-        for (const auto& [name, labelSet] : labels) {
-            totalPossible *= labelSet.size();
-        }
-        
-        if (totalPossible > 0) {
-            Cerr << "Label combination statistics:" << Endl;
-            Cerr << "  Total possible: " << totalPossible << Endl;
-            Cerr << "  Valid generated: " << labelCombinations.size() << Endl;
-            Cerr << "  Pruned as incompatible: " << prunedCount << Endl;
-            Cerr << "  Reduction: " << (100.0 * prunedCount / totalPossible) << "%" << Endl;
-            Cerr << "  Active rules: " << config.IncompatibilityRules.GetRuleCount() << Endl;
-            Cerr << "  Disabled rules: " << config.IncompatibilityRules.GetDisabledCount() << Endl;
-        }
     } else {
         Combine(labelCombinations, combination, labels, 0);
     }

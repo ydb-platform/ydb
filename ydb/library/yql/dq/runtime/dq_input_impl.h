@@ -315,7 +315,13 @@ public:
             return;
         }
         SkipWatermarksBeforeBarrier();
+#if 0
         Y_ENSURE(!PendingBarriers.empty());
+#else
+        if (PendingBarriers.empty() || PendingBarriers.front().Barrier > watermark ) {
+            PendingBarriers.emplace_front(TBarrier { .Barrier = watermark });
+        }
+#endif
         Y_ENSURE(PendingBarriers.front().Barrier >= watermark);
     }
 
@@ -366,10 +372,21 @@ public:
         }
     }
 
+    // p1       w10       < ignoring              @9<empty>|w10
+    // p2            w9                p.w = w 9  @9
+    //                    | idle event            pausing
+    // p1       w9        < ignoring              dropping w9 | @11
+    // p2            w11               p.w = w11                @11
+    //                    | idle event
     void AddWatermark(TInstant watermark) override {
+        if (!PendingBarriers.empty() && PendingBarriers.back().Barrier >= watermark) {
+            // must be idle channel; TODO verify
+            return;
+        }
         if (!PendingBarriers.empty() && PendingBarriers.back().Batches == 0 && !PendingBarriers.back().IsCheckpoint()) {
             Y_ENSURE(PendingBarriers.back().Rows == 0);
             Y_ENSURE(PendingBarriers.back().Bytes == 0);
+            Y_ENSURE(PendingBarriers.back().Barrier <= watermark);
             PendingBarriers.back().Barrier = watermark;
         } else {
             PendingBarriers.emplace_back(TBarrier { .Barrier = watermark });

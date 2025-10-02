@@ -107,6 +107,30 @@ struct TDistributedTransaction {
     size_t PredicateAcksCount = 0;
 
     bool Pending = false;
+
+    void SetExecuteSpan(NWilson::TSpan&& span);
+    void EndExecuteSpan();
+    NWilson::TSpan CreatePlanStepSpan(ui64 tabletId, ui64 step);
+    void BeginWaitRSSpan(ui64 tabletId);
+    void SetLastTabletSentByRS(ui64 tabletId);
+    void EndWaitRSSpan();
+    void BeginWaitRSAcksSpan(ui64 tabletId);
+    void EndWaitRSAcksSpan();
+    void BeginPersistSpan(ui64 tabletId, EState state, const NWilson::TTraceId& traceId);
+    void EndPersistSpan();
+    void BeginDeleteSpan(ui64 tabletId, const NWilson::TTraceId& traceId);
+    void EndDeleteSpan();
+
+    NWilson::TTraceId GetExecuteSpanTraceId();
+
+private:
+    NWilson::TSpan CreateSpan(const char* name, ui64 tabletId);
+
+    NWilson::TSpan ExecuteSpan;
+    NWilson::TSpan PersistSpan;
+    NWilson::TSpan WaitRSSpan;
+    NWilson::TSpan WaitRSAcksSpan;
+    NWilson::TSpan DeleteSpan;
 };
 
 }

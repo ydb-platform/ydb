@@ -146,8 +146,6 @@ private:
 
     template<class TEvent>
     void PreHandle(TAutoPtr<TEventHandle<TEvent>>& event, const TActorContext& ctx) {
-        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "+++PreHandle");
-        // CanHandleEventWithoutDatabase(event);
         LogRequest(event);
 
         IRequestProxyCtx* requestBaseCtx = event->Get();
@@ -167,7 +165,6 @@ private:
             Handle(event, ctx);
             return;
         }
-        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "+++ State != OK");
 
         auto state = requestBaseCtx->GetAuthState();
 
@@ -177,7 +174,6 @@ private:
             return;
         }
 
-        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "+++ State != FAIL");
 
         if (state.State == NYdbGrpc::TAuthState::AS_UNAVAILABLE) {
             Counters->IncDatabaseUnavailableCounter();
@@ -188,7 +184,6 @@ private:
             requestBaseCtx->FinishSpan();
             return;
         }
-        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "+++ State != UNAVAILABLE");
 
         TString databaseName;
         const TDatabaseInfo* database = nullptr;
@@ -198,7 +193,6 @@ private:
         bool skipCheckConnectRights = false;
 
         if (state.State == NYdbGrpc::TAuthState::AS_NOT_PERFORMED) {
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "+++ State == NOT_PERFORMED");
             const auto& maybeDatabaseName = requestBaseCtx->GetDatabaseName();
             if (maybeDatabaseName && !maybeDatabaseName.GetRef().empty()) {
                 databaseName = CanonizePath(maybeDatabaseName.GetRef());
@@ -213,7 +207,6 @@ private:
                     skipCheckConnectRights = true;
                 }
             }
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::GRPC_SERVER, TStringBuilder() << "+++ database name: " << databaseName);
             if (databaseName.empty()) {
                 Counters->IncDatabaseUnavailableCounter();
                 requestBaseCtx->ReplyUnauthenticated("Empty database name");
@@ -222,33 +215,26 @@ private:
             }
             auto it = Databases.find(databaseName);
             if (it != Databases.end() && it->second.IsDatabaseReady()) {
-                LOG_ERROR_S(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "+++ get database");
                 database = &it->second;
+            } else if (CanHandleEventWithoutDatabase(event)) {
+                HandleEventWithoutDatabase(event, skipCheckConnectRights);
+                return;
             } else {
-                LOG_ERROR_S(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "+++ Database is not ready");
-                if (CanHandleEventWithoutDatabase(event)) {
-                    LOG_ERROR_S(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "+++ HandleEventWithoutDatabase");
-                    HandleEventWithoutDatabase(event, skipCheckConnectRights);
-                    return;
-                } else {
-                    LOG_ERROR_S(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "+++ DeferAndStartUpdate");
-                    // No given database found, start update if possible
-                    if (!DeferAndStartUpdate(databaseName, event, requestBaseCtx)) {
-                        Counters->IncDatabaseUnavailableCounter();
-                        const TString error = "Grpc proxy is not ready to accept request, database unknown";
-                        LOG_ERROR(ctx, NKikimrServices::GRPC_SERVER, "Limit for deferred events per database %s reached", databaseName.c_str());
-                        const auto issue = MakeIssue(NKikimrIssues::TIssuesIds::YDB_DB_NOT_READY, error);
-                        requestBaseCtx->RaiseIssue(issue);
-                        requestBaseCtx->ReplyWithYdbStatus(Ydb::StatusIds::UNAVAILABLE);
-                        requestBaseCtx->FinishSpan();
-                        return;
-                    }
+                // No given database found, start update if possible
+                if (!DeferAndStartUpdate(databaseName, event, requestBaseCtx)) {
+                    Counters->IncDatabaseUnavailableCounter();
+                    const TString error = "Grpc proxy is not ready to accept request, database unknown";
+                    LOG_ERROR(ctx, NKikimrServices::GRPC_SERVER, "Limit for deferred events per database %s reached", databaseName.c_str());
+                    const auto issue = MakeIssue(NKikimrIssues::TIssuesIds::YDB_DB_NOT_READY, error);
+                    requestBaseCtx->RaiseIssue(issue);
+                    requestBaseCtx->ReplyWithYdbStatus(Ydb::StatusIds::UNAVAILABLE);
+                    requestBaseCtx->FinishSpan();
                     return;
                 }
+                return;
             }
         }
 
-        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "+++ before check database");
         if (database) {
             TVector<std::pair<TString, TString>> rootAttributes;
             auto rootIt = Databases.find(RootDatabase);
@@ -307,7 +293,6 @@ private:
                 requestBaseCtx->FinishSpan();
                 return;
             }
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "+++ CreateGrpcRequestCheckActor");
             Register(CreateGrpcRequestCheckActor<TEvent>(SelfId(),
                 database->SchemeBoardResult->DescribeSchemeResult,
                 database->SecurityObject,
@@ -506,26 +491,18 @@ void TGRpcRequestProxyImpl::HandleEventWithoutDatabase(TAutoPtr<TEventHandle<TEv
 
 template<typename TEvent>
 bool TGRpcRequestProxyImpl::CanHandleEventWithoutDatabase(TAutoPtr<TEventHandle<TEvent>>& event) {
-    LOG_ERROR_S(*TlsActivationContext, NKikimrServices::GRPC_SERVER, TStringBuilder() << "+++ func: " << __PRETTY_FUNCTION__);
-    LOG_ERROR_S(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "+++ CanHandleEventWithoutDatabase qqq");
     if constexpr (TEvent::EventType == TRpcServices::EvListEndpoints) {
-        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "+++ EvListEndpoints");
         return true;
     } else if constexpr (TEvent::EventType == TRpcServices::EvGrpcRuntimeRequest) {
-        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "+++ TEvProxyRuntimeEvent");
         switch (event->Get()->GetRuntimeEventType()) {
         case NRuntimeEvents::EType::BOOTSTRAP_CLUSTER:
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "+++ BOOTSTRAP_CLUSTER");
             return true;
         case NRuntimeEvents::EType::UNKNOWN:
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "+++ UNKNOWN");
             return false;
         }
     } else {
-        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::GRPC_SERVER, TStringBuilder() << "+++ unknownEvent: " << event->GetTypeRewrite());
+        return false;
     }
-    LOG_ERROR_S(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "+++ return false");
-    return false;
 }
 
 template<class TEvent>

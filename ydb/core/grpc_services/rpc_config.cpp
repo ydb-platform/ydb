@@ -557,12 +557,8 @@ void DoBootstrapCluster(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvide
             TBase::Bootstrap(ctx);
             Become(&TBootstrapClusterRequest::StateFunc);
 
-            if (true) {
-                TString userSid;
-                if (Request().GetInternalToken()) {
-                    userSid = Request().GetInternalToken().Get()->GetUserSID();
-                }
-                Request().RaiseIssue(NYql::TIssue(TStringBuilder() << "Access denied: '" << userSid << "'"));
+            if (!CheckAccess()) {
+                Request().RaiseIssue(NYql::TIssue("Access denied"));
                 Reply(Ydb::StatusIds::UNAUTHORIZED, ctx);
                 return;
             }

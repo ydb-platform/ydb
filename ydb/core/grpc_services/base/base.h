@@ -1120,10 +1120,6 @@ class TEvProxyRuntimeEvent
     , public TEventLocal<TEvProxyRuntimeEvent, TRpcServices::EvGrpcRuntimeRequest>
 {
 public:
-    TEvProxyRuntimeEvent() {
-        Cout << "+++ TEvProxyRuntimeEvent()" << Endl;
-    }
-
     const TMaybe<TString> GetSdkBuildInfo() const {
         return GetPeerMetaValues(NYdb::YDB_SDK_BUILD_INFO_HEADER);
     }
@@ -1133,22 +1129,14 @@ public:
     }
 
     virtual NRuntimeEvents::EType GetRuntimeEventType() {
-        Cout << "+++ TEvProxyRuntimeEvent: UNKNOWN" << Endl;
         return NRuntimeEvents::EType::UNKNOWN;
     }
 };
 
-template <typename NRuntimeEvents::EType RuntimeEventType = NRuntimeEvents::EType::UNKNOWN>
+template <NRuntimeEvents::EType RuntimeEventType = NRuntimeEvents::EType::UNKNOWN>
 class TEvProxyRuntimeEventWithType : public TEvProxyRuntimeEvent {
-    NRuntimeEvents::EType Type;
-
 public:
-    TEvProxyRuntimeEventWithType() : TEvProxyRuntimeEvent(), Type(RuntimeEventType) {
-        Cout << "+++ TEvProxyRuntimeEventWithType(): " << static_cast<ui32>(Type) << Endl;
-    }
-
     NRuntimeEvents::EType GetRuntimeEventType() override {
-        Cout << "+++ TEvProxyRuntimeEventWithType: " << static_cast<ui32>(RuntimeEventType) << Endl;
         return RuntimeEventType;
     }
 };
@@ -1174,7 +1162,7 @@ template <ui32 TRpcId,
     bool IsOperation,
     typename TDerived,
     class TMethodAccessorTraits = TYdbGrpcMethodAccessorTraits<TReq, TResp, IsOperation>,
-    typename NRuntimeEvents::EType RuntimeEventType = NRuntimeEvents::EType::UNKNOWN>
+    NRuntimeEvents::EType RuntimeEventType = NRuntimeEvents::EType::UNKNOWN>
 class TGRpcRequestWrapperImpl
     : public std::conditional_t<IsOperation,
         TGrpcResponseSenderImpl<TGRpcRequestWrapperImpl<TRpcId, TReq, TResp, IsOperation, TDerived>>,
@@ -1199,7 +1187,6 @@ public:
         if (!TraceId) {
             TraceId = UlidGen.Next().ToString();
         }
-        Cout << "+++ TGRpcRequestWrapperImpl: " << static_cast<ui32>(RuntimeEventType) << Endl;
     }
 
     const TMaybe<TString> GetYdbToken() const override {
@@ -1545,15 +1532,13 @@ template <ui32 TRpcId,
     bool IsOperation,
     typename TDerived,
     class TMethodAccessorTraits = TYdbGrpcMethodAccessorTraits<TReq, TResp, IsOperation>,
-    typename NRuntimeEvents::EType RuntimeEventType = NRuntimeEvents::EType::UNKNOWN>
+    NRuntimeEvents::EType RuntimeEventType = NRuntimeEvents::EType::UNKNOWN>
 class TGRpcRequestValidationWrapperImpl : public TGRpcRequestWrapperImpl<TRpcId, TReq, TResp, IsOperation, TDerived, TMethodAccessorTraits, RuntimeEventType> {
 public:
 
     TGRpcRequestValidationWrapperImpl(NYdbGrpc::IRequestContextBase* ctx)
         : TGRpcRequestWrapperImpl<TRpcId, TReq, TResp, IsOperation, TDerived, TMethodAccessorTraits, RuntimeEventType>(ctx)
-    {
-        Cout << "+++ TGRpcRequestValidationWrapperImpl: " << static_cast<ui32>(RuntimeEventType) << Endl;
-    }
+    { }
 
     bool Validate(TString& error) override {
         return this->GetProtoRequest()->validate(error);
@@ -1634,9 +1619,7 @@ public:
         : TBase(ctx)
         , PassMethod(std::forward<TCallback>(cb))
         , AuxSettings(std::move(auxSettings))
-    {
-        Cout << "+++ TGrpcRequestCall: " << static_cast<ui32>(RuntimeEventType) << Endl;
-    }
+    { }
 
     void Pass(const IFacilityProvider& facility) override {
         try {

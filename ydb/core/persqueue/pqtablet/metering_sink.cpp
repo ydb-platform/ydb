@@ -167,16 +167,19 @@ const TMeteringSink::FlushParameters TMeteringSink::GetFlushParameters(const EMe
     case EMeteringJson::UsedStorageV1: {
         ui64 duration = (now - lastFlush).MilliSeconds();
         ui64 avgUsage = duration > 0 ? CurrentUsedStorage_ * 1_MB * 1000 / duration : 0;
+        ui64 quantity = (avgUsage > 0) ? 1 : 0;
 
         CurrentUsedStorage_ = 0;
 
         return TMeteringSink::FlushParameters(
             "used_storage",
             "ydb.serverless.v1",
-            "byte*second"
+            "byte*second",
+            quantity
         ).withTags({
                 {"ydb_size", avgUsage}
             })
+        .withImplicitZero()
         .withVersion("1.0.0");
     }
 
@@ -195,7 +198,7 @@ void TMeteringSink::Flush(TInstant now, bool force) {
             continue;
         }
 
-        auto parameters = GetFlushParameters(whichOne, now, lastFlush);
+        const auto parameters = GetFlushParameters(whichOne, now, lastFlush);
 
         if (parameters.OneFlush) {
             const auto isTimeToFlushUnits = now.Hours() > lastFlush.Hours();
@@ -218,13 +221,15 @@ void TMeteringSink::Flush(TInstant now, bool force) {
             auto interval = TInstant::Hours(lastFlush.Hours()) + Parameters_.FlushLimit;
 
             auto tryFlush = [&](TInstant start, TInstant finish) {
-                const auto metricsJson = GetMeteringJson(
-                    parameters,
-                    parameters.Quantity * (finish.Seconds() - start.Seconds()),
-                    start,
-                    finish,
-                    now);
-                FlushFunction_(metricsJson);
+                if (parameters.Quantity > 0 || !parameters.ImplicitZero) {
+                    const auto metricsJson = GetMeteringJson(
+                        parameters,
+                        parameters.Quantity * (finish.Seconds() - start.Seconds()),
+                        start,
+                        finish,
+                        now);
+                    FlushFunction_(metricsJson);
+                }
 
                 lastFlush = finish;
             };

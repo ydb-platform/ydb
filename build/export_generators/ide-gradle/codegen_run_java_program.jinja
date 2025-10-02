@@ -8,9 +8,9 @@ val {{ varprefix }}{{ run['_object_index'] }} = tasks.register<JavaExec>("{{ var
 
 {#- Ignore default CWD to export_root -#}
 {%-        if run.cwd and run.cwd != export_root %}
-    workingDir = file({{ PatchRoots(run.cwd) }})
+    workingDir({{ PatchRoots(run.cwd) }})
 {%-        else %}
-    workingDir = file("$buildDir")
+    workingDir(layout.buildDirectory)
 {%-        endif -%}
 
 {%-        set classpaths = run.classpath|reject('eq', '@.cplst') -%}
@@ -18,8 +18,10 @@ val {{ varprefix }}{{ run['_object_index'] }} = tasks.register<JavaExec>("{{ var
 {%             for classpath in classpaths -%}
 {%-                set rel_file_classpath = classpath|replace('@', '')|replace(export_root, '')|replace(arcadia_root, '')|replace(output_root, '') %}
 
-    val classpaths = "$output_root/" + File("$output_root{{ rel_file_classpath }}").readText().trim().replace(":", ":$output_root/")
-    classpath = files(classpaths.split(":"))
+    val classpaths = providers.fileContents(layout.projectDirectory.file("$output_root{{ rel_file_classpath }}")).asText.map { classpath ->
+        classpath.trim().split(":").map { "$output_root/$it" }
+    }
+    classpath = files(classpaths)
 {%-            endfor -%}
 {%-        endif %}
 

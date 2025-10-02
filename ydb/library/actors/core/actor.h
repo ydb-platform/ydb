@@ -357,6 +357,20 @@ namespace NActors {
 
     public:
         /**
+         * Handles std::exception_ptr which allows to catch any thrown object.
+         * By default ignores anything that is not an std::exception subclass.
+         */
+        virtual bool OnUnhandledException(const std::exception_ptr& excPtr) {
+            try {
+                std::rethrow_exception(excPtr);
+            } catch (const std::exception& exc) {
+                return OnUnhandledException(exc);
+            } catch (...) {
+                return false;
+            }
+        }
+
+        /**
          * Called when actor's event handler throws an std::exception subclass
          *
          * The implementation is supposed to return true for handled exceptions
@@ -784,7 +798,7 @@ namespace NActors {
         }
 
     private:
-        bool OnUnhandledExceptionSafe(const std::exception& exc);
+        bool OnUnhandledExceptionSafe(const std::exception_ptr& exc);
 
     protected:
         void SetEnoughCpu(bool isEnough);

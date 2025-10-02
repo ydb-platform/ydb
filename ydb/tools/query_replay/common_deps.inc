@@ -64,7 +64,6 @@ SET(YDB_REPLAY_PEERDIRS
     ydb/services/ydb
     ydb/library/yql/dq/comp_nodes/llvm16
     ydb/library/yql/udfs/common/clickhouse/client
-    ydb/library/yql/udfs/common/datetime
     yql/essentials/udfs/common/datetime2
     yql/essentials/udfs/common/digest
     yql/essentials/udfs/common/histogram

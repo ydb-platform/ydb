@@ -76,6 +76,9 @@ def create_client(*,
       validity.  This option can be used if using an ssh_tunnel or other indirect means to an ClickHouse server
       where the `host` argument refers to the tunnel or proxy and not the actual ClickHouse server
     :param autogenerate_session_id  If set, this will override the 'autogenerate_session_id' common setting.
+    :param form_encode_query_params  If True, query parameters will be sent as form-encoded data in the request body
+      instead of as URL parameters. This is useful for queries with large parameter sets that might exceed URL length
+      limits. Only available for query operations (not inserts). Default: False
     :return: ClickHouse Connect Client instance
     """
     if dsn:
@@ -131,8 +134,8 @@ def default_port(interface: str, secure: bool):
 
 
 async def create_async_client(*,
-                              host: str = None,
-                              username: str = None,
+                              host: Optional[str] = None,
+                              username: Optional[str] = None,
                               password: str = '',
                               database: str = '__default__',
                               interface: Optional[str] = None,
@@ -194,6 +197,9 @@ async def create_async_client(*,
       validity.  This option can be used if using an ssh_tunnel or other indirect means to an ClickHouse server
       where the `host` argument refers to the tunnel or proxy and not the actual ClickHouse server
     :param autogenerate_session_id  If set, this will override the 'autogenerate_session_id' common setting.
+    :param form_encode_query_params  If True, query parameters will be sent as form-encoded data in the request body
+      instead of as URL parameters. This is useful for queries with large parameter sets that might exceed URL length
+      limits. Only available for query operations (not inserts). Default: False
     :return: ClickHouse Connect Client instance
     """
 

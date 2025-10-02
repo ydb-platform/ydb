@@ -47,6 +47,7 @@ public:
         , SchemeCacheRequestTimeout(SCHEME_CACHE_REQUEST_TIMEOUT)
         , LookupStrategy(settings.GetLookupStrategy())
         , StreamLookupWorker(CreateStreamLookupWorker(std::move(settings), args.TypeEnv, args.HolderFactory, args.InputDesc))
+        , IsolationLevel(settings.GetIsolationLevel())
         , Counters(counters)
         , LookupActorSpan(TWilsonKqp::LookupActor, std::move(args.TraceId), "LookupActor")
     {
@@ -379,6 +380,9 @@ private:
             return RuntimeError(errorMsg, NYql::NDqProto::StatusIds::SCHEME_ERROR);
         }
 
+        if (IsolationLevel == NKikimrKqp::EIsolationLevel::ISOLATION_LEVEL_SNAPSHOT_RO) {
+            YQL_ENSURE(!LockTxId, "SnapshotReadOnly should not take locks");
+        }
         LookupActorStateSpan.EndOk();
 
         auto& resultSet = ev->Get()->Request->ResultSet;
@@ -811,6 +815,7 @@ private:
     size_t TotalRetryAttempts = 0;
     size_t TotalResolveShardsAttempts = 0;
     bool ResolveShardsInProgress = false;
+    NKikimrKqp::EIsolationLevel IsolationLevel;
 
     // stats
     ui64 ReadRowsCount = 0;

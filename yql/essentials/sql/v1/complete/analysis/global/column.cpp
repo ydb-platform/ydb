@@ -295,6 +295,30 @@ namespace NSQLComplete {
             const TNamedNodes* Nodes_;
         };
 
+        class TEnclosingSelectVisitor: public TSQLv1NarrowingVisitor {
+        public:
+            explicit TEnclosingSelectVisitor(const TParsedInput& input)
+                : TSQLv1NarrowingVisitor(input)
+            {
+            }
+
+            std::any visitSelect_core(SQLv1::Select_coreContext* ctx) override {
+                if (!IsEnclosing(ctx)) {
+                    return {};
+                }
+
+                Enclosing_ = ctx;
+                return visitChildren(ctx);
+            }
+
+            SQLv1::Select_coreContext* GetEnclosing() && {
+                return Enclosing_;
+            }
+
+        private:
+            SQLv1::Select_coreContext* Enclosing_ = nullptr;
+        };
+
         class TVisitor: public TSQLv1NarrowingVisitor {
         public:
             TVisitor(const TParsedInput& input, const TNamedNodes* nodes)
@@ -343,11 +367,23 @@ namespace NSQLComplete {
             const TNamedNodes* Nodes_;
         };
 
+        antlr4::ParserRuleContext* Enclosing(const TParsedInput& input) {
+            TEnclosingSelectVisitor visitor(input);
+            visitor.visit(input.SqlQuery);
+
+            antlr4::ParserRuleContext* ctx = std::move(visitor).GetEnclosing();
+            if (!ctx) {
+                ctx = input.SqlQuery;
+            }
+
+            return ctx;
+        }
+
     } // namespace
 
     TMaybe<TColumnContext> InferColumnContext(TParsedInput input, const TNamedNodes& nodes) {
         // TODO: add utility `auto ToMaybe<T>(std::any any) -> TMaybe<T>`
-        std::any result = TVisitor(input, &nodes).visit(input.SqlQuery);
+        std::any result = TVisitor(input, &nodes).visit(Enclosing(input));
         if (!result.has_value()) {
             return Nothing();
         }

@@ -944,27 +944,37 @@ TTableHints GetTableFuncHints(TStringBuf funcName) {
     return res;
 }
 
-
-TNodePtr TSqlTranslation::NamedExpr(const TRule_named_expr& node, EExpr exprMode) {
+TNodePtr TSqlTranslation::NamedExpr(
+    const TRule_expr& exprTree,
+    const TRule_an_id_or_type* nameTree,
+    EExpr exprMode)
+{
     TSqlExpression expr(Ctx_, Mode_);
     if (exprMode == EExpr::GroupBy) {
         expr.SetSmartParenthesisMode(TSqlExpression::ESmartParenthesis::GroupBy);
     } else if (exprMode == EExpr::SqlLambdaParams) {
         expr.SetSmartParenthesisMode(TSqlExpression::ESmartParenthesis::SqlLambdaParams);
     }
-    if (node.HasBlock2()) {
+    if (nameTree) {
         expr.MarkAsNamed();
     }
-    TNodePtr exprNode(expr.Build(node.GetRule_expr1()));
+    TNodePtr exprNode = expr.Build(exprTree);
     if (!exprNode) {
         Ctx_.IncrementMonCounter("sql_errors", "NamedExprInvalid");
         return nullptr;
     }
-    if (node.HasBlock2()) {
+    if (nameTree) {
         exprNode = SafeClone(exprNode);
-        exprNode->SetLabel(Id(node.GetBlock2().GetRule_an_id_or_type2(), *this));
+        exprNode->SetLabel(Id(*nameTree, *this));
     }
     return exprNode;
+}
+
+TNodePtr TSqlTranslation::NamedExpr(const TRule_named_expr& node, EExpr exprMode) {
+    return NamedExpr(
+        node.GetRule_expr1(),
+        (node.HasBlock2() ? &node.GetBlock2().GetRule_an_id_or_type2() : nullptr),
+        exprMode);
 }
 
 bool TSqlTranslation::NamedExprList(const TRule_named_expr_list& node, TVector<TNodePtr>& exprs, EExpr exprMode) {
@@ -3803,8 +3813,7 @@ bool TSqlTranslation::TopicRefImpl(const TRule_topic_ref& node, TTopicRef& resul
 }
 
 TNodePtr TSqlTranslation::NamedNode(const TRule_named_nodes_stmt& rule, TVector<TSymbolNameWithPos>& names) {
-    // named_nodes_stmt: bind_parameter_list EQUALS (expr | subselect_stmt);
-    // subselect_stmt: (LPAREN select_stmt RPAREN | select_unparenthesized_stmt);
+    // named_nodes_stmt: bind_parameter_list EQUALS (expr | select_unparenthesized_stmt);
     if (!BindList(rule.GetRule_bind_parameter_list1(), names)) {
         return {};
     }
@@ -3813,30 +3822,18 @@ TNodePtr TSqlTranslation::NamedNode(const TRule_named_nodes_stmt& rule, TVector<
     switch (rule.GetBlock3().Alt_case()) {
     case TRule_named_nodes_stmt::TBlock3::kAlt1: {
         TSqlExpression expr(Ctx_, Mode_);
-        auto result = expr.Build(rule.GetBlock3().GetAlt1().GetRule_expr1());
+        auto result = expr.BuildSourceOrNode(rule.GetBlock3().GetAlt1().GetRule_expr1());
+        if (TSourcePtr source = MoveOutIfSource(result)) {
+            result = BuildSourceNode(Ctx_.Pos(), std::move(source));
+        }
         return result;
     }
 
     case TRule_named_nodes_stmt::TBlock3::kAlt2:{
-        const auto& subselect_rule = rule.GetBlock3().GetAlt2().GetRule_subselect_stmt1();
+        const auto& subselect_rule = rule.GetBlock3().GetAlt2().GetRule_select_unparenthesized_stmt1();
 
-        TSqlSelect expr(Ctx_, Mode_);
         TPosition pos;
-        TSourcePtr source = nullptr;
-        switch (subselect_rule.GetBlock1().Alt_case()) {
-            case TRule_subselect_stmt::TBlock1::kAlt1:
-                source = expr.Build(subselect_rule.GetBlock1().GetAlt1().GetRule_select_stmt2(), pos);
-                break;
-
-            case TRule_subselect_stmt::TBlock1::kAlt2:
-                source = expr.Build(subselect_rule.GetBlock1().GetAlt2().GetRule_select_unparenthesized_stmt1(), pos);
-                break;
-
-            case TRule_subselect_stmt::TBlock1::ALT_NOT_SET:
-                AltNotImplemented("subselect_stmt", subselect_rule.GetBlock1());
-                Ctx_.IncrementMonCounter("sql_errors", "UnknownNamedNode");
-                return nullptr;
-        }
+        TSourcePtr source = TSqlSelect(Ctx_, Mode_).Build(subselect_rule, pos);
 
         if (!source) {
             return {};

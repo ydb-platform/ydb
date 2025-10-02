@@ -119,7 +119,7 @@ void TDescribeSchemaSecretsService::HandleIncomingRequest(TEvResolveSecret::TPtr
     }
 
     SaveIncomingRequestInfo(*ev->Get());
-    SendSchemeCacheRequests(ev->Get()->SecretNames, ev->Get()->UserToken);
+    SendSchemeCacheRequests(*ev->Get());
 }
 
 void TDescribeSchemaSecretsService::HandleSchemeCacheResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
@@ -148,11 +148,13 @@ void TDescribeSchemaSecretsService::HandleSchemeCacheResponse(TEvTxProxySchemeCa
             ++respIt->second.FilledSecretsCnt;
         } else {
             // make TxProxy request
-            TAutoPtr<TEvTxUserProxy::TEvNavigate> req(new TEvTxUserProxy::TEvNavigate());
-            NKikimrSchemeOp::TDescribePath* record = req->Record.MutableDescribePath();
+            TAutoPtr<TEvTxUserProxy::TEvNavigate> navigateRequest(new TEvTxUserProxy::TEvNavigate());
+            Y_ENSURE(!request->DatabaseName.empty(), "Database name must be set in TxProxy requests");
+            navigateRequest->Record.SetDatabaseName(request->DatabaseName);
+            NKikimrSchemeOp::TDescribePath* record = navigateRequest->Record.MutableDescribePath();
             record->SetPath(secretPath);
             record->MutableOptions()->SetReturnSecretValue(true);
-            Send(MakeTxProxyID(), req.Release(), 0, ev->Cookie);
+            Send(MakeTxProxyID(), navigateRequest.Release(), 0, ev->Cookie);
         }
     }
 
@@ -207,29 +209,31 @@ void TDescribeSchemaSecretsService::Bootstrap() {
     Become(&TDescribeSchemaSecretsService::StateWait);
 }
 
-void TDescribeSchemaSecretsService::SaveIncomingRequestInfo(const TEvResolveSecret& req) {
+void TDescribeSchemaSecretsService::SaveIncomingRequestInfo(const TEvResolveSecret& ev) {
     TResponseContext ctx;
-    for (size_t i = 0; i < req.SecretNames.size(); ++i) {
-        ctx.Secrets[req.SecretNames[i]] = i;
-        ctx.Result = req.Promise;
+    for (size_t i = 0; i < ev.SecretNames.size(); ++i) {
+        ctx.Secrets[ev.SecretNames[i]] = i;
+        ctx.Result = ev.Promise;
     }
     ResolveInFlight[LastCookie] = std::move(ctx);
 }
 
-void TDescribeSchemaSecretsService::SendSchemeCacheRequests(const TVector<TString>& secretNames, const NACLib::TUserToken& userToken) {
+void TDescribeSchemaSecretsService::SendSchemeCacheRequests(const TEvResolveSecret& ev) {
+    const auto userToken = ev.UserToken;
     TAutoPtr<NSchemeCache::TSchemeCacheNavigate> request(new NSchemeCache::TSchemeCacheNavigate());
-    for (const auto& secretName : secretNames) {
+    for (const auto& secretName : ev.SecretNames) {
         NSchemeCache::TSchemeCacheNavigate::TEntry entry;
         entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
         entry.Path = SplitPath(secretName);    
-        if (userToken.GetUserSID()) {    
+        if (userToken && userToken->GetUserSID()) {
             entry.Access = NACLib::SelectRow;
         }
         request->ResultSet.emplace_back(entry);
     }
-    if (userToken.GetUserSID()) {        
-        request->UserToken = new NACLib::TUserToken(userToken);
+    if (userToken && userToken->GetUserSID()) {
+        request->UserToken = userToken;
     }
+    request->DatabaseName = ev.Database;
 
     Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request), 0, LastCookie++);
 }
@@ -305,7 +309,12 @@ void TDescribeSchemaSecretsService::HandleNotifyDelete(TSchemeBoardEvents::TEvNo
     SchemeBoardSubscribers.erase(subscriberIt);
 }
 
-NThreading::TFuture<TEvDescribeSecretsResponse::TDescription> DescribeSecret(const TVector<TString>& secretNames, const TString& ownerUserId, TActorSystem* actorSystem) {
+NThreading::TFuture<TEvDescribeSecretsResponse::TDescription> DescribeSecret(
+    const TVector<TString>& secretNames,
+    const TIntrusiveConstPtr<NACLib::TUserToken> userToken,
+    const TString& database,
+    TActorSystem* actorSystem
+) {
     auto promise = NThreading::NewPromise<TEvDescribeSecretsResponse::TDescription>();
     if (actorSystem->AppData<TAppData>()->FeatureFlags.GetEnableSchemaSecrets()) {
         bool schemaSecrets = false;
@@ -318,28 +327,40 @@ NThreading::TFuture<TEvDescribeSecretsResponse::TDescription> DescribeSecret(con
         if (schemaSecrets) {
             actorSystem->Send(
                 MakeKqpDescribeSchemaSecretServiceId(actorSystem->NodeId),
-                new TDescribeSchemaSecretsService::TEvResolveSecret(ownerUserId, secretNames, promise));
+                new TDescribeSchemaSecretsService::TEvResolveSecret(userToken, database, secretNames, promise)
+            );
             return promise.GetFuture();
         }
     }
 
-    actorSystem->Register(CreateDescribeSecretsActor(ownerUserId, secretNames, promise));
+    actorSystem->Register(CreateDescribeSecretsActor(userToken ? userToken->GetUserSID() : "", secretNames, promise));
     return promise.GetFuture();
 }
 
-void RegisterDescribeSecretsActor(const NActors::TActorId& replyActorId, const TString& ownerUserId, const std::vector<TString>& secretIds, NActors::TActorSystem* actorSystem) {
+void RegisterDescribeSecretsActor(
+    const NActors::TActorId& replyActorId,
+    const TIntrusiveConstPtr<NACLib::TUserToken> userToken,
+    const TString& database,
+    const std::vector<TString>& secretIds,
+    NActors::TActorSystem* actorSystem
+) {
     TVector<TString> secretNames{secretIds.begin(), secretIds.end()};
-    auto future = DescribeSecret(secretNames, ownerUserId, actorSystem);
+    auto future = DescribeSecret(secretNames, userToken, database, actorSystem);
     future.Subscribe([actorSystem, replyActorId](const NThreading::TFuture<TEvDescribeSecretsResponse::TDescription>& result){
         actorSystem->Send(replyActorId, new TEvDescribeSecretsResponse(result.GetValue()));
     });
 }
 
-NThreading::TFuture<TEvDescribeSecretsResponse::TDescription> DescribeExternalDataSourceSecrets(const NKikimrSchemeOp::TAuth& authDescription, const TString& ownerUserId, TActorSystem* actorSystem) {
+NThreading::TFuture<TEvDescribeSecretsResponse::TDescription> DescribeExternalDataSourceSecrets(
+    const NKikimrSchemeOp::TAuth& authDescription,
+    const TIntrusiveConstPtr<NACLib::TUserToken> userToken,
+    const TString& database,
+    TActorSystem* actorSystem
+) {
     switch (authDescription.identity_case()) {
         case NKikimrSchemeOp::TAuth::kServiceAccount: {
             const TString& saSecretId = authDescription.GetServiceAccount().GetSecretName();
-            return DescribeSecret({saSecretId}, ownerUserId, actorSystem);
+            return DescribeSecret({saSecretId}, userToken, database, actorSystem);
         }
 
         case NKikimrSchemeOp::TAuth::kNone:
@@ -347,24 +368,24 @@ NThreading::TFuture<TEvDescribeSecretsResponse::TDescription> DescribeExternalDa
 
         case NKikimrSchemeOp::TAuth::kBasic: {
             const TString& passwordSecretId = authDescription.GetBasic().GetPasswordSecretName();
-            return DescribeSecret({passwordSecretId}, ownerUserId, actorSystem);
+            return DescribeSecret({passwordSecretId}, userToken, database, actorSystem);
         }
 
         case NKikimrSchemeOp::TAuth::kMdbBasic: {
             const TString& saSecretId = authDescription.GetMdbBasic().GetServiceAccountSecretName();
             const TString& passwordSecreId = authDescription.GetMdbBasic().GetPasswordSecretName();
-            return DescribeSecret({saSecretId, passwordSecreId}, ownerUserId, actorSystem);
+            return DescribeSecret({saSecretId, passwordSecreId}, userToken, database, actorSystem);
         }
 
         case NKikimrSchemeOp::TAuth::kAws: {
             const TString& awsAccessKeyIdSecretId = authDescription.GetAws().GetAwsAccessKeyIdSecretName();
             const TString& awsAccessKeyKeySecretId = authDescription.GetAws().GetAwsSecretAccessKeySecretName();
-            return DescribeSecret({awsAccessKeyIdSecretId, awsAccessKeyKeySecretId}, ownerUserId, actorSystem);
+            return DescribeSecret({awsAccessKeyIdSecretId, awsAccessKeyKeySecretId}, userToken, database, actorSystem);
         }
 
         case NKikimrSchemeOp::TAuth::kToken: {
             const TString& tokenSecretId = authDescription.GetToken().GetTokenSecretName();
-            return DescribeSecret({tokenSecretId}, ownerUserId, actorSystem);
+            return DescribeSecret({tokenSecretId}, userToken, database, actorSystem);
         }
 
         case NKikimrSchemeOp::TAuth::IDENTITY_NOT_SET:

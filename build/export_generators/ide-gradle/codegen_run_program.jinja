@@ -8,9 +8,9 @@ val {{ varprefix }}{{ custom_run['_object_index'] }} = tasks.register<Exec>("{{ 
 
 {#- Ignore default CWD to export_root -#}
 {%-        if custom_run.cwd and custom_run.cwd != export_root %}
-    workingDir = file({{ PatchRoots(custom_run.cwd) }})
+    workingDir({{ PatchRoots(custom_run.cwd) }})
 {%-        else %}
-    workingDir = file("$buildDir")
+    workingDir(layout.buildDirectory)
 {%-        endif %}
 
     commandLine("bash", "-c", listOf(

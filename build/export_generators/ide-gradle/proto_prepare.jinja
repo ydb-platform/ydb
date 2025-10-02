@@ -59,11 +59,17 @@ val extractMainLibrariesProtos = tasks.register<Copy>("extractMainLibrariesProto
 
 afterEvaluate {
 {%- if prepareProtosTask %}
-    tasks.getByName("extractProto").dependsOn(prepareMainProtos)
+    tasks.named("extractProto").configure {
+        dependsOn(prepareMainProtos)
+    }
 {%- endif %}
 {%- if extractLibrariesProtosTask %}
-    tasks.getByName("extractProto").dependsOn(extractMainLibrariesProtos)
+    tasks.named("extractProto").configure {
+        dependsOn(extractMainLibrariesProtos)
+    }
 {%- endif %}
 }
 
-tasks.getByName("compileJava").dependsOn("generateProto")
+tasks.named("compileJava").configure {
+    dependsOn("generateProto")
+}

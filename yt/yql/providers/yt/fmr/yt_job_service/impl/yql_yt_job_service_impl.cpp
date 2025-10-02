@@ -18,9 +18,10 @@ public:
         const TClusterConnection& clusterConnection,
         const TYtReaderSettings& readerSettings
     ) override {
+
         auto richPath = ytTablePart.RichPath;
+        NormalizeRichPath(richPath);
         YQL_ENSURE(richPath.Cluster_);
-        TFmrTableId fmrId(*richPath.Cluster_, richPath.Path_);
         auto client = CreateClient(clusterConnection);
         auto transaction = client->AttachTransaction(GetGuid(clusterConnection.TransactionId));
 
@@ -43,7 +44,22 @@ public:
         if (writerSetttings.MaxRowWeight) {
             writerOptions.Config(NYT::TNode()("max_row_weight", *writerSetttings.MaxRowWeight));
         }
-        return transaction->CreateRawWriter(ytTable.RichPath, NYT::TFormat::YsonBinary(), writerOptions);
+        auto richPath = ytTable.RichPath;
+        NormalizeRichPath(richPath);
+        richPath.Append(true);
+        return transaction->CreateRawWriter(richPath, NYT::TFormat::YsonBinary(), writerOptions);
+    }
+
+    void Create(
+        const TYtTableRef& ytTable,
+        const TClusterConnection& clusterConnection,
+        const NYT::TNode& attributes
+    ) override {
+        auto client = CreateClient(clusterConnection);
+        auto transaction = client->AttachTransaction(GetGuid(clusterConnection.TransactionId));
+        auto richPath = ytTable.RichPath;
+        NormalizeRichPath(richPath);
+        transaction->Create(richPath.Path_, NYT::NT_TABLE, NYT::TCreateOptions().Recursive(true).IgnoreExisting(true).Attributes(attributes));
     }
 };
 

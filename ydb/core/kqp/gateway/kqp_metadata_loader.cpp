@@ -572,9 +572,14 @@ void UpdateExternalDataSourceSecretsValue(TTableMetadataResult& externalDataSour
     }
 }
 
-NThreading::TFuture<TEvDescribeSecretsResponse::TDescription> LoadExternalDataSourceSecretValues(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TActorSystem* actorSystem) {
+NThreading::TFuture<TEvDescribeSecretsResponse::TDescription> LoadExternalDataSourceSecretValues(
+    const NSchemeCache::TSchemeCacheNavigate::TEntry& entry,
+    const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
+    const TString& database,
+    TActorSystem* actorSystem
+) {
     const auto& authDescription = entry.ExternalDataSourceInfo->Description.GetAuth();
-    return DescribeExternalDataSourceSecrets(authDescription, userToken ? userToken->GetUserSID() : "", actorSystem);
+    return DescribeExternalDataSourceSecrets(authDescription, userToken, database, actorSystem);
 }
 
 } // anonymous namespace
@@ -982,7 +987,7 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                         if (externalPath) {
                             externalDataSourceMetadata.Metadata->ExternalSource.TableLocation = *externalPath;
                         }
-                        LoadExternalDataSourceSecretValues(entry, userToken, locked->ActorSystem)
+                        LoadExternalDataSourceSecretValues(entry, userToken, database, locked->ActorSystem)
                             .Subscribe([promise, externalDataSourceMetadata, settings, table, database, externalPath, locked](const TFuture<TEvDescribeSecretsResponse::TDescription>& result) mutable
                         {
                             UpdateExternalDataSourceSecretsValue(externalDataSourceMetadata, result.GetValue());

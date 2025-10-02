@@ -438,6 +438,7 @@ void TKqpTasksGraph::BuildStreamLookupChannels(const TStageInfo& stageInfo, ui32
     settings->SetLookupStrategy(streamLookup.GetLookupStrategy());
     settings->SetKeepRowsOrder(streamLookup.GetKeepRowsOrder());
     settings->SetAllowNullKeysPrefixSize(streamLookup.GetAllowNullKeysPrefixSize());
+    settings->SetIsolationLevel(GetMeta().RequestIsolationLevel);
 
     if (streamLookup.GetIsTableImmutable()
         && GetMeta().RequestIsolationLevel == NKikimrKqp::EIsolationLevel::ISOLATION_LEVEL_READ_STALE)
@@ -2454,6 +2455,7 @@ TMaybe<size_t> TKqpTasksGraph::BuildScanTasksFromSource(TStageInfo& stageInfo, b
         FillTableMeta(stageInfo, settings->MutableTable());
 
         settings->SetIsTableImmutable(source.GetIsTableImmutable());
+        settings->SetIsolationLevel(GetMeta().RequestIsolationLevel);
 
         for (auto& keyColumn : keyTypes) {
             auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(keyColumn, "");

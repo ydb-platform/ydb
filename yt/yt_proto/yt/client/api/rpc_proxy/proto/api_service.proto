@@ -153,6 +153,13 @@ enum EOperationSortDirection
     OSD_FUTURE = 2;
 }
 
+enum EListQueriesSortOrder
+{
+    LQSO_CURSOR = 0;
+    LQSO_ASCENDING = 1;
+    LQSO_DESCENDING = 2;
+}
+
 enum EJobType
 {
     JT_UNKNOWN = 1000;
@@ -3590,7 +3597,8 @@ message TReqListQueries
     optional NYT.NYTree.NProto.TAttributeFilter attributes = 11;
     optional bool search_by_token_prefix = 12 [default = false];
     optional bool use_full_text_search = 13 [default = true];
-    optional bool tutorial_filter = 14 [default = false];
+    optional EListQueriesSortOrder sort_order = 14 [default = LQSO_CURSOR];
+    optional bool tutorial_filter = 15 [default = false];
 }
 
 message TRspListQueries

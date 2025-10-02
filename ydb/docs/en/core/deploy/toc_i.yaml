@@ -4,6 +4,5 @@ items:
 - name: Configuration
   href: configuration/config.md
 - include:
-  mode: link
-  path: manual/toc_p.yaml
-
+    mode: link
+    path: manual/toc_p.yaml

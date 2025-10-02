@@ -36,11 +36,11 @@ ALTER TABLE episodes DROP column is_deleted;
 ALTER TABLE `series` ADD INDEX `title_index` GLOBAL ON (`title`);
 ```
 
-Могут быть указаны все параметры индекса, описанные в команде [`CREATE TABLE`](../create_table.md#secondary_index)
+Могут быть указаны все параметры индекса, описанные в команде [`CREATE TABLE`](../create_table#secondary_index)
 
 {% if backend_name == "YDB" %}
 
-Также добавить вторичный индекс можно с помощью команды {% if oss == "true" %}[table index](../../../../reference/ydb-cli/commands/secondary_index.md#add){% else %}table index{% endif %} {{ ydb-short-name }} CLI.
+Также добавить вторичный индекс можно с помощью команды {% if oss == "true" %}[table index](../../../../../reference/ydb-cli/commands/secondary_index.md#add){% else %}table index{% endif %} {{ ydb-short-name }} CLI.
 
 {% endif %}
 
@@ -50,7 +50,7 @@ ALTER TABLE `series` ADD INDEX `title_index` GLOBAL ON (`title`);
 
 {% note info %}
 
-В настоящее время задание настроек партиционирования вторичных индексов при создании индекса не поддерживается ни в операторе [`ALTER TABLE ADD INDEX`](#add-index), ни в операторе [`CREATE TABLE INDEX`](../create_table.md#secondary_index).
+В настоящее время задание настроек партиционирования вторичных индексов при создании индекса не поддерживается ни в операторе [`ALTER TABLE ADD INDEX`](#add-index), ни в операторе [`CREATE TABLE INDEX`](../create_table#secondary_index).
 
 {% endnote %}
 
@@ -100,7 +100,7 @@ ALTER TABLE `series` DROP INDEX `title_index`;
 
 {% if backend_name == "YDB" %}
 
-Также удалить вторичный индекс можно с помощью команды {% if oss == "true" %}[table index](../../../../reference/ydb-cli/commands/secondary_index.md#drop){% else %}table index{% endif %} {{ ydb-short-name }} CLI.
+Также удалить вторичный индекс можно с помощью команды {% if oss == "true" %}[table index](../../../../../reference/ydb-cli/commands/secondary_index.md#drop){% else %}table index{% endif %} {{ ydb-short-name }} CLI.
 
 {% endif %}
 
@@ -112,7 +112,7 @@ ALTER TABLE `series` DROP INDEX `title_index`;
 
 {% if backend_name == "YDB" %}
 
-Возможность атомарной замены индекса под нагрузкой поддерживается командой {% if oss == "true" %}[{{ ydb-cli }} table index rename](../../../../reference/ydb-cli/commands/secondary_index.md#rename){% else %}{{ ydb-cli }} table index rename{% endif %} {{ ydb-short-name }} CLI и специализированными методами {{ ydb-short-name }} SDK.
+Возможность атомарной замены индекса под нагрузкой поддерживается командой {% if oss == "true" %}[{{ ydb-cli }} table index rename](../../../../../reference/ydb-cli/commands/secondary_index.md#rename){% else %}{{ ydb-cli }} table index rename{% endif %} {{ ydb-short-name }} CLI и специализированными методами {{ ydb-short-name }} SDK.
 
 {% endif %}
 
@@ -128,7 +128,7 @@ ALTER TABLE `series` RENAME INDEX `title_index` TO `title_index_new`;
 
 ## Добавление или удаление потока изменений {#changefeed}
 
-`ADD CHANGEFEED <name> WITH (<option> = <value>[, ...])` — добавляет {% if oss == "true" %}[поток изменений (changefeed)](../../../../concepts/cdc){% else %}поток изменений (changefeed){% endif %} с указанным именем и параметрами.
+`ADD CHANGEFEED <name> WITH (<option> = <value>[, ...])` — добавляет {% if oss == "true" %}[поток изменений (changefeed)](../../../../../concepts/cdc.md){% else %}поток изменений (changefeed){% endif %} с указанным именем и параметрами.
 
 ### Параметры потока изменений {#changefeed-options}
 
@@ -139,15 +139,15 @@ ALTER TABLE `series` RENAME INDEX `title_index` TO `title_index_new`;
   * `OLD_IMAGE` — будут записаны значения всех столбцов, предшествующие изменению.
   * `NEW_AND_OLD_IMAGES` - комбинация режимов `NEW_IMAGE` и `OLD_IMAGE`. Будут записаны значения всех столбцов _до_ и _в результате_ изменения.
 * `FORMAT` — формат данных, в котором будут записаны данные.
-  * `JSON` — записывать данные в формате {% if oss == "true" %}[JSON](../../../../concepts/cdc.md#json-record-structure){% else %}JSON{% endif %}.
+  * `JSON` — записывать данные в формате {% if oss == "true" %}[JSON](../../../../../concepts/cdc.md#json-record-structure){% else %}JSON{% endif %}.
 {% if audience == "tech" %}
-  * `DYNAMODB_STREAMS_JSON` — записывать данные в {% if oss == "true" %}[JSON-формате, совместимом с Amazon DynamoDB Streams](../../../../concepts/cdc#dynamodb-streams-json-record-structure){% else %}JSON-формате, совместимом с Amazon DynamoDB Streams{% endif %}.
-  * `DEBEZIUM_JSON` — записывать данные в {% if oss == "true" %}[JSON-формате, аналогичном Debezium формату](../../../../concepts/cdc.md#debezium-json-record-structure){% else %}JSON-формате, аналогичном Debezium формату{% endif %}.
+  * `DYNAMODB_STREAMS_JSON` — записывать данные в {% if oss == "true" %}[JSON-формате, совместимом с Amazon DynamoDB Streams](../../../../../concepts/cdc#dynamodb-streams-json-record-structure){% else %}JSON-формате, совместимом с Amazon DynamoDB Streams{% endif %}.
+  * `DEBEZIUM_JSON` — записывать данные в {% if oss == "true" %}[JSON-формате, аналогичном Debezium формату](../../../../../concepts/cdc.md#debezium-json-record-structure){% else %}JSON-формате, аналогичном Debezium формату{% endif %}.
 {% endif %}
-* `VIRTUAL_TIMESTAMPS` — включение-выключение {% if oss == "true" %}[виртуальных меток времени](../../../../concepts/cdc.md#virtual-timestamps){% else %}виртуальных меток времени{% endif %}. По умолчанию выключено.
-* `RETENTION_PERIOD` — {% if oss == "true" %}[время хранения записей](../../../../concepts/cdc.md#retention-period){% else %}время хранения записей{% endif %}. Тип значения — `Interval`, значение по умолчанию — 24 часа (`Interval('PT24H')`).
-* `TOPIC_MIN_ACTIVE_PARTITIONS` — {% if oss == "true" %}[количество партиций топика](../../../../concepts/cdc.md#topic-partitions){% else %}количество партиций топика{% endif %}. По умолчанию количество партиций топика равно количеству партиций таблицы.
-* `INITIAL_SCAN` — включение-выключение {% if oss == "true" %}[первоначального сканирования](../../../../concepts/cdc.md#initial-scan){% else %}первоначального сканирования{% endif %} таблицы. По умолчанию выключено.
+* `VIRTUAL_TIMESTAMPS` — включение-выключение {% if oss == "true" %}[виртуальных меток времени](../../../../../concepts/cdc.md#virtual-timestamps){% else %}виртуальных меток времени{% endif %}. По умолчанию выключено.
+* `RETENTION_PERIOD` — {% if oss == "true" %}[время хранения записей](../../../../../concepts/cdc.md#retention-period){% else %}время хранения записей{% endif %}. Тип значения — `Interval`, значение по умолчанию — 24 часа (`Interval('PT24H')`).
+* `TOPIC_MIN_ACTIVE_PARTITIONS` — {% if oss == "true" %}[количество партиций топика](../../../../../concepts/cdc.md#topic-partitions){% else %}количество партиций топика{% endif %}. По умолчанию количество партиций топика равно количеству партиций таблицы.
+* `INITIAL_SCAN` — включение-выключение {% if oss == "true" %}[первоначального сканирования](../../../../../concepts/cdc.md#initial-scan){% else %}первоначального сканирования{% endif %} таблицы. По умолчанию выключено.
 {% if audience == "tech" %}
 * `AWS_REGION` — значение, которое будет записано в поле `awsRegion`. Применимо только совместно с форматом `DYNAMODB_STREAMS_JSON`.
 {% endif %}
@@ -257,7 +257,7 @@ ALTER TABLE series_with_families ALTER FAMILY default SET DATA "hdd";
 
 {% endnote %}
 
-Могут быть указаны все параметры группы колонок, описанные в команде [`CREATE TABLE`](create_table.md#column-family)
+Могут быть указаны все параметры группы колонок, описанные в команде [`CREATE TABLE`](create_table#column-family)
 
 
 ## Изменение дополнительных параметров таблицы {#additional-alter}

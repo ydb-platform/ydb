@@ -8,7 +8,6 @@ import "ydb/public/api/protos/annotations/validation.proto";
 
 import "google/protobuf/empty.proto";
 import "google/protobuf/duration.proto";
-import "google/protobuf/empty.proto";
 import "google/protobuf/timestamp.proto";
 
 package Ydb.Topic;

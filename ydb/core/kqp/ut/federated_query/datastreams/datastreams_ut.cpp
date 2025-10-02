@@ -21,7 +21,6 @@ using namespace NYdb;
 using namespace NYdb::NQuery;
 using namespace NKikimr::NKqp::NFederatedQueryTest;
 using namespace fmt::literals;
-using namespace NTestUtils;
 using namespace NYql::NConnector::NTest;
 using namespace NYql::NConnector::NApi;
 
@@ -92,6 +91,7 @@ public:
             queryServiceConfig.SetProgressStatsPeriodMs(1000);
 
             Kikimr = MakeKikimrRunner(true, ConnectorClient, nullptr, AppConfig, NYql::NDq::CreateS3ActorsFactory(), {
+                .CredentialsFactory = CreateCredentialProvider(),
                 .PqGateway = PqGateway,
                 .CheckpointPeriod = CheckpointPeriod,
             });

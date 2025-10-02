@@ -69,7 +69,7 @@ WHERE
 
 UNION ALL
 
--- Добавляем записи _ClusterIssue как специальные per_run записи
+-- Добавляем записи ClusterCheck как специальные per_run записи
 SELECT
     Db,
     Suite,
@@ -82,7 +82,14 @@ SELECT
     -- Поля per_run (NULL для кластерных проблем)
     NULL AS Iteration,
     NULL AS RunIndex,
-    'cluster_issue' AS Resolution,
+    CASE 
+        WHEN JSON_VALUE(Stats, '$.issue_type') = 'cluster_not_alive' THEN 'cluster_not_alive'
+        WHEN JSON_VALUE(Stats, '$.issue_type') = 'cluster_no_nodes' THEN 'cluster_no_nodes'
+        WHEN JSON_VALUE(Stats, '$.issue_type') = 'cluster_check_exception' THEN 'cluster_check_exception'
+        WHEN JSON_VALUE(Stats, '$.issue_type') = 'cluster_unknown_issue' THEN 'cluster_unknown_issue'
+        WHEN Success = 0U THEN 'cluster_issue'
+        ELSE 'cluster_ok'
+    END AS Resolution,
     0U AS NemesisEnabled,
     JSON_VALUE(Stats, '$.issue_description') AS ErrorMessage,
     NULL AS WarningMessage,
@@ -106,7 +113,7 @@ SELECT
     JSON_VALUE(Info, '$.cluster.database') AS ClusterDatabase,
     CASE
         WHEN JSON_VALUE(Info, '$.cluster.endpoint') IS NOT NULL THEN
-            String::SplitToList(String::SplitToList(JSON_VALUE(Info, '$.cluster.endpoint'), '//')[1], ':')[0] || ':8765/'
+            String::SplitToList(String::SplitToList(JSON_VALUE(Info, '$.cluster.endpoint'), '//')[1], ':')[0] || ':8765'
         ELSE NULL
     END AS ClusterMonitoring,
     CAST(JSON_VALUE(Info, '$.cluster.nodes_count') AS Int32) AS NodesCount,
@@ -129,8 +136,7 @@ SELECT
 FROM `nemesis/tests_results`
 WHERE 
     CAST(RunId AS Uint64) / 1000 > $run_id_limit
-    AND Kind = 'Load'
-    AND Test = '_ClusterIssue';
+    AND Kind = 'ClusterCheck';
 
 SELECT
     Db,
@@ -194,10 +200,17 @@ SELECT
             )
     END AS FacedNodeErrors,
     
-    -- Статус выполнения
+    -- Статус выполнения с детализацией кластерных проблем
     CASE
-        WHEN Resolution = 'cluster_issue' AND ClusterIssueCritical = 1U THEN 'cluster_unavailable'
-        WHEN Resolution = 'cluster_issue' AND ClusterIssueCritical = 0U THEN 'cluster_degraded'
+        -- Конкретные типы кластерных проблем
+        WHEN Resolution = 'cluster_not_alive' THEN 'cluster_not_alive'
+        WHEN Resolution = 'cluster_no_nodes' THEN 'cluster_no_nodes'
+        WHEN Resolution = 'cluster_check_exception' THEN 'cluster_check_exception'
+        WHEN Resolution = 'cluster_unknown_issue' THEN 'cluster_unknown_issue'
+        WHEN Resolution = 'cluster_issue' THEN 'cluster_issue'  -- Fallback
+        WHEN Resolution = 'cluster_ok' THEN 'cluster_check_passed'
+        
+        -- Обычные статусы workload
         WHEN Resolution = 'ok' THEN 'success'
         WHEN Resolution = 'error' THEN 'error'
         WHEN Resolution = 'timeout' THEN 'timeout'

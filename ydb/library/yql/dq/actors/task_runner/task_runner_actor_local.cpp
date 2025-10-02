@@ -219,16 +219,15 @@ private:
         }
 
         if (!ev->Get()->CheckpointOnly) {
-            res = TaskRunner->Run();
-
-            if (res == ERunStatus::PendingInput && !WatermarkRequests.empty()) {
+            if (!WatermarkRequests.empty()) {
                 auto watermarkRequest = WatermarkRequests.front();
                 if (TaskRunner->GetWatermark().WatermarkIn < watermarkRequest && ReadyToWatermark()) {
                     LOG_T("Task runner. Inject watermark " << watermarkRequest);
                     TaskRunner->SetWatermarkIn(watermarkRequest);
-                    res = TaskRunner->Run();
                 }
             }
+
+            res = TaskRunner->Run();
         }
 
         for (auto& channelId : inputMap) {

@@ -672,7 +672,7 @@ TCreateTopicSettings::TCreateTopicSettings(const Ydb::Topic::CreateTopicRequest&
     , PartitionWriteSpeedBytesPerSecond_(proto.partition_write_speed_bytes_per_second())
     , PartitionWriteBurstBytes_(proto.partition_write_burst_bytes())
     , Attributes_(DeserializeAttributes(proto.attributes()))
-    , MetricsLevel_(proto.has_metrics_level() ? std::optional(static_cast<EMetricsLevel>(proto.metrics_level())) : std::optional<EMetricsLevel>())
+    , MetricsLevel_(proto.has_metrics_level() ? std::optional(static_cast<EMetricsLevel>(proto.metrics_level())) : std::nullopt)
 {
     Consumers_ = DeserializeConsumers(*this, proto.consumers());
 }

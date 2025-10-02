@@ -5,30 +5,30 @@
 Имеется возможность разрешить подключение {{ ydb-short-name }} либо ко всем типам внешних источников данных, либо только к определенным типам.
 
 #|
-|| Параметр | Описание ||
+|| Параметр | Описание | Значение по умолчанию ||
 || `feature_flags.enable_external_data_sources`
 | Включение внешних источников.
-Значение по умолчанию: `false` (все внешние источники недоступны) ||
+| `false` (все внешние источники недоступны) ||
 || `query_service_config.generic.connector.endpoint.host`
 | Имя хоста коннектора.
-Значение по умолчанию: `localhost`||
+| `localhost`||
 || `query_service_config.generic.connector.endpoint.port`
 | TCP порт коннектора.
-Значение по умолчанию: `2130`||
+| `2130`||
 || `query_service_config.generic.connector.use_ssl`
 | Использование SSL.
  При совместном размещении коннектора и динамического узла {{ ydb-short-name }} на одном сервере установка шифрованных соединений между ними *не требуется*, но в случае необходимости вы можете включить шифрование.
-Значение по умолчанию: `false`||
+| `false`||
 || `query_service_config.generic.connector.ssl_ca_crt`
 | Путь до сертификата CA, использованного для подписи TLS-ключей коннектора.||
 || `query_service_config.available_external_data_sources`
 | Список с разрешенными типами внешними источниками.
 Применяется при `all_external_data_sources_are_available: false`.
-Значение по умолчанию: пустой список. ||
+| пустой список. ||
 || `query_service_config.all_external_data_sources_are_available`
 | Включение всех типов внешних источников.
 При true значение `available_external_data_sources` не используется.  
-Значение по умолчанию: `false` ||
+| `false` ||
 |#
 
 Пример конфига (доступны только выбранные типы):

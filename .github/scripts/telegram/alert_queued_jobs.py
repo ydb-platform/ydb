@@ -15,6 +15,18 @@ from typing import Dict, List, Any
 from datetime import datetime, timezone
 import time
 
+# Filtering settings
+MAX_AGE_DAYS = 3  # Maximum job age in days (excludes GitHub bugs)
+
+# Message sending settings
+SEND_WHEN_ALL_GOOD = False  # Whether to send a message when all jobs are working fine
+
+# Criteria for determining stuck jobs
+# Each element: [pattern, threshold_hours, display_name]
+WORKFLOW_THRESHOLDS = [
+    ["PR-check", 0.5, "PR-check"],
+    ["Postcommit", 6, "Postcommit"],
+]
 def get_alert_logins() -> str:
     """
     Gets the list of logins for notifications from GH_ALERTS_TG_LOGINS environment variable.
@@ -35,23 +47,93 @@ def get_tail_message() -> str:
     logins = get_alert_logins()
     return f"📊 [Dashboard details](https://datalens.yandex/wkptiaeyxz7qj?tab=ka)\n\nFYI: {logins}"
 
+def get_github_headers() -> Dict[str, str]:
+    """
+    Gets GitHub API headers with token if available.
+    
+    Returns:
+        Dictionary with headers for GitHub API requests
+    """
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28"
+    }
+    
+    # Try to get GitHub token from environment variables
+    github_token = os.getenv('GITHUB_TOKEN')
+    if github_token:
+        headers["Authorization"] = f"Bearer {github_token}"
+        print("🔑 Using GitHub token for API requests")
+    else:
+        print("⚠️ No GitHub token found, using unauthenticated requests (may hit rate limits)")
+    
+    return headers
+
 # Constants
 TAIL_MESSAGE = get_tail_message()
+def fetch_workflow_jobs(run_id: int) -> tuple[Dict[str, Any], str]:
+    """
+    Fetches jobs for a specific workflow run from GitHub API.
+    
+    Args:
+        run_id: Workflow run ID
+    
+    Returns:
+        Tuple (data, error). If successful - (data, ""), if error - ({}, error_message)
+    """
+    url = f"https://api.github.com/repos/ydb-platform/ydb/actions/runs/{run_id}/jobs"
+    headers = get_github_headers()
+    
+    try:
+        response = requests.get(url, headers=headers, timeout=30)
+        
+        if response.status_code == 200:
+            return response.json(), ""
+        else:
+            # Return error as is from API
+            try:
+                error_data = response.json()
+                error_message = error_data.get("message", f"HTTP {response.status_code}")
+            except:
+                error_message = f"HTTP {response.status_code}: {response.text}"
+            
+            return {}, error_message
+            
+    except requests.exceptions.Timeout:
+        return {}, "Timeout: Request exceeded timeout (30 sec)"
+    except requests.exceptions.ConnectionError:
+        return {}, "Connection error: Failed to connect to API"
+    except requests.exceptions.RequestException as e:
+        return {}, f"Request error: {e}"
+    except Exception as e:
+        return {}, f"Unexpected error: {e}"
 
-# Filtering settings
-MAX_AGE_DAYS = 3  # Maximum job age in days (excludes GitHub bugs)
-
-# Message sending settings
-SEND_WHEN_ALL_GOOD = False  # Whether to send a message when all jobs are working fine
-
-# Criteria for determining stuck jobs
-# Each element: [pattern, threshold_hours, display_name]
-WORKFLOW_THRESHOLDS = [
-    ["PR-check", 0.5, "PR-check"],
-    ["Postcommit", 6, "Postcommit"],
-    # Example of adding a new type:
-    # ["Nightly", 12, "Nightly-Build"]
-]
+def fetch_workflow_jobs_with_retry(run_id: int, max_retries: int = 2) -> tuple[Dict[str, Any], str]:
+    """
+    Fetches jobs for a specific workflow run from GitHub API with retry logic.
+    
+    Args:
+        run_id: Workflow run ID
+        max_retries: Maximum number of retry attempts
+    
+    Returns:
+        Tuple (data, error). If successful - (data, ""), if error - ({}, error_message)
+    """
+    for attempt in range(max_retries + 1):
+        if attempt > 0:
+            print(f"🔄 Retry attempt {attempt}/{max_retries} for run {run_id}...")
+            time.sleep(5)  # Wait 5 seconds before retry
+        
+        jobs_data, error = fetch_workflow_jobs(run_id)
+        
+        if not error:
+            if attempt > 0:
+                print(f"✅ Successfully fetched jobs for run {run_id} on attempt {attempt + 1}")
+            return jobs_data, ""
+        
+        print(f"⚠️ Attempt {attempt + 1} failed for run {run_id}: {error}")
+    
+    return {}, f"Failed after {max_retries + 1} attempts: {error}"
 
 def fetch_workflow_runs(status: str = "queued", per_page: int = 1000, page: int = 1) -> tuple[Dict[str, Any], str]:
     """
@@ -71,9 +153,10 @@ def fetch_workflow_runs(status: str = "queued", per_page: int = 1000, page: int 
         "page": page,
         "status": status
     }
+    headers = get_github_headers()
     
     try:
-        response = requests.get(url, params=params, timeout=30)
+        response = requests.get(url, params=params, headers=headers, timeout=30)
         
         if response.status_code == 200:
             return response.json(), ""
@@ -140,6 +223,82 @@ def is_retry_job(run: Dict[str, Any]) -> bool:
         bool: True if this is a retry job
     """
     return run.get('run_attempt', 1) > 1
+
+def get_stuck_jobs(run: Dict[str, Any], threshold_hours: float) -> List[Dict[str, Any]]:
+    """
+    Gets list of individual jobs stuck in queue beyond threshold.
+    
+    Args:
+        run: Workflow run object
+        threshold_hours: Time threshold in hours for considering a job stuck
+    
+    Returns:
+        List of stuck jobs. Empty list means no stuck jobs.
+        If API error or no jobs found, returns special error job entry.
+    """
+    run_id = run.get('id')
+    workflow_name = run.get('name', 'Unknown')
+    
+    if not run_id:
+        return [{'job_name': 'Unknown', 'job_id': None, 'waiting_hours': 0, 'waiting_minutes': 0, 'error': 'No run ID'}]  # If no ID, consider it stuck
+    
+    # Fetch jobs for this workflow run with retry
+    jobs_data, error = fetch_workflow_jobs_with_retry(run_id)
+    if error:
+        print(f"⚠️ Could not fetch jobs for run {run_id} ({workflow_name}) after retries: {error}")
+        return [{'job_name': 'API Error', 'job_id': None, 'waiting_hours': 0, 'waiting_minutes': 0, 'error': error}]  # If can't fetch jobs, consider it stuck to be safe
+    
+    jobs = jobs_data.get('jobs', [])
+    if not jobs:
+        print(f"⚠️ No jobs found for run {run_id} ({workflow_name})")
+        return [{'job_name': 'No Jobs', 'job_id': None, 'waiting_hours': 0, 'waiting_minutes': 0, 'error': 'No jobs found'}]  # No jobs found, consider stuck
+    
+    current_time = datetime.now(timezone.utc)
+    stuck_jobs = []
+    threshold_minutes = threshold_hours * 60
+    
+    print(f"🔍 Checking {len(jobs)} jobs for {workflow_name} (ID: {run_id}) with threshold {threshold_hours}h")
+    
+    for job in jobs:
+        job_name = job.get('name', 'Unknown')
+        job_status = job.get('status')
+        
+        # Only check queued jobs
+        if job_status == 'queued':
+            created_at_str = job.get('created_at')
+            if created_at_str:
+                try:
+                    created_at = datetime.fromisoformat(created_at_str.replace('Z', '+00:00'))
+                    time_queued_minutes = (current_time - created_at).total_seconds() / 60
+                    time_queued_hours = time_queued_minutes / 60
+                    
+                    print(f"  ⏳ Queued job: {job_name} (waiting {time_queued_minutes:.1f} min)")
+                    
+                    # Check if this individual job exceeds threshold
+                    if time_queued_minutes > threshold_minutes:
+                        print(f"  🚨 STUCK JOB: {job_name} (waiting {time_queued_hours:.1f}h > {threshold_hours}h)")
+                        stuck_jobs.append({
+                            'job_name': job_name,
+                            'job_id': job.get('id'),
+                            'waiting_hours': time_queued_hours,
+                            'waiting_minutes': time_queued_minutes
+                        })
+                    else:
+                        print(f"  ✅ OK: {job_name} (waiting {time_queued_hours:.1f}h < {threshold_hours}h)")
+                except ValueError as e:
+                    print(f"  ⚠️ Could not parse created_at for job: {job_name} - {e}")
+        elif job_status == 'in_progress':
+            print(f"  🔄 Running: {job_name} (in_progress)")
+        elif job_status == 'completed':
+            conclusion = job.get('conclusion', 'unknown')
+            print(f"  ✅ Done: {job_name} ({conclusion})")
+    
+    if stuck_jobs:
+        print(f"  🚨 Found {len(stuck_jobs)} stuck job(s) in {workflow_name}")
+    else:
+        print(f"  ✅ No stuck jobs in {workflow_name}")
+    
+    return stuck_jobs
 
 def analyze_queued_workflows(workflow_runs: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
     """
@@ -333,32 +492,50 @@ def count_stuck_jobs_by_type(stuck_jobs: List[Dict[str, Any]]) -> Dict[str, int]
 
 def check_for_stuck_jobs(workflow_runs: List[Dict[str, Any]], threshold_hours: int = 1) -> List[Dict[str, Any]]:
     """
-    Finds "stuck" jobs by our criteria from WORKFLOW_THRESHOLDS.
+    Finds workflows with individual jobs stuck in queue beyond thresholds.
+    Uses Jobs API to check each individual job's queue time.
     
     Args:
         workflow_runs: List of workflow runs in queue
         threshold_hours: Not used, kept for compatibility
     
     Returns:
-        List of stuck jobs
+        List of workflows with stuck jobs
     """
-    stuck_jobs = []
-    current_time = datetime.now(timezone.utc)
+    stuck_workflows = []
     
     for run in workflow_runs:
-        # Get effective start time (accounts for retry)
-        effective_start_time = get_effective_start_time(run)
-        time_diff = current_time - effective_start_time
-        waiting_hours = time_diff.total_seconds() / 3600
+        workflow_name = run.get('name', '')
         
-        # Use our criteria to determine stuck jobs
-        if is_job_stuck_by_criteria(run, waiting_hours):
-            stuck_jobs.append({
+        # Determine threshold for this workflow type
+        threshold_hours = None
+        for pattern, threshold_h, display_name in WORKFLOW_THRESHOLDS:
+            if pattern in workflow_name:
+                threshold_hours = threshold_h
+                break
+        
+        # Skip if no threshold defined for this workflow type
+        if threshold_hours is None:
+            continue
+        
+        # Check if this workflow has any stuck individual jobs
+        stuck_job_list = get_stuck_jobs(run, threshold_hours)
+        
+        if stuck_job_list:  # If any stuck jobs found
+            # Calculate overall waiting time for compatibility
+            current_time = datetime.now(timezone.utc)
+            effective_start_time = get_effective_start_time(run)
+            time_diff = current_time - effective_start_time
+            overall_waiting_hours = time_diff.total_seconds() / 3600
+            
+            stuck_workflows.append({
                 'run': run,
-                'waiting_hours': waiting_hours
+                'waiting_hours': overall_waiting_hours,
+                'stuck_jobs': stuck_job_list,  # List of individual stuck jobs
+                'threshold_hours': threshold_hours
             })
     
-    return stuck_jobs
+    return stuck_workflows
 
 def format_telegram_messages(workflow_info: Dict[str, Dict[str, Any]], stuck_jobs: List[Dict[str, Any]], total_queued: int, excluded_count: int = 0) -> List[str]:
     """
@@ -452,34 +629,58 @@ def format_telegram_messages(workflow_info: Dict[str, Dict[str, Any]], stuck_job
         # Sort by waiting time (oldest first)
         stuck_jobs_sorted = sorted(stuck_jobs, key=lambda x: x['waiting_hours'], reverse=True)
         
-        for i, stuck_job in enumerate(stuck_jobs_sorted[:15], 1):  # Show up to 15 jobs
-            run = stuck_job['run']
-            waiting_hours = stuck_job['waiting_hours']
+        job_counter = 1
+        for stuck_workflow in stuck_jobs_sorted[:10]:  # Show up to 10 workflows
+            run = stuck_workflow['run']
             workflow_name = run.get('name', 'Unknown')
             run_id = run.get('id')
             run_attempt = run.get('run_attempt', 1)
-            
-            if waiting_hours > 24:
-                waiting_str = f"{waiting_hours/24:.1f}d"
-            elif waiting_hours > 1:
-                waiting_str = f"{waiting_hours:.1f}h"
-            else:
-                waiting_str = f"{waiting_hours*60:.0f}m"
+            threshold_hours = stuck_workflow['threshold_hours']
+            individual_stuck_jobs = stuck_workflow['stuck_jobs']
             
             # Add retry information
             retry_info = f" (retry #{run_attempt})" if run_attempt > 1 else ""
             
             github_url = f"https://github.com/ydb-platform/ydb/actions/runs/{run_id}" if run_id else "N/A"
-            message2_parts.append(f"{i}. `{workflow_name}`{retry_info} - {waiting_str}")
+            message2_parts.append(f"{job_counter}. `{workflow_name}`{retry_info}")
             if run_id:
                 message2_parts.append(f"   [Run {run_id}]({github_url})")
+            
+            # Show individual stuck jobs within this workflow
+            if individual_stuck_jobs:
+                for stuck_job in individual_stuck_jobs[:5]:  # Max 5 jobs per workflow
+                    job_name = stuck_job.get('job_name', 'Unknown')
+                    waiting_hours = stuck_job.get('waiting_hours', 0)
+                    error = stuck_job.get('error')
+                    
+                    if error:
+                        # This is an error job (API error, no jobs, etc.)
+                        message2_parts.append(f"   ⚠️ `{job_name}` - {error}")
+                    else:
+                        # This is a real stuck job
+                        if waiting_hours > 24:
+                            waiting_str = f"{waiting_hours/24:.1f}d"
+                        elif waiting_hours > 1:
+                            waiting_str = f"{waiting_hours:.1f}h"
+                        else:
+                            waiting_str = f"{waiting_hours*60:.0f}m"
+                        
+                        message2_parts.append(f"   🚨 `{job_name}` - {waiting_str} (>{threshold_hours}h threshold)")
+                
+                if len(individual_stuck_jobs) > 5:
+                    message2_parts.append(f"   • ... and {len(individual_stuck_jobs) - 5} more stuck jobs")
+            else:
+                # No individual job details available (should not happen with new interface)
+                message2_parts.append(f"   ⚠️ No stuck jobs found")
+            
+            message2_parts.append("")
+            job_counter += 1
+        
+        if len(stuck_jobs) > 10:
+            message2_parts.append(f"• ... and {len(stuck_jobs) - 10} more workflows with stuck jobs")
             message2_parts.append("")
         
-        if len(stuck_jobs) > 15:
-            message2_parts.append(f"• ... and {len(stuck_jobs) - 15} more jobs")
-        
         # Add dashboard link
-        message2_parts.append("")
         message2_parts.append(TAIL_MESSAGE)
         
         messages.append("\n".join(message2_parts))

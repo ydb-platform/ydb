@@ -40,15 +40,17 @@ private:
             return TStatus::Error;
         }
 
-        const auto& writeInput = write.Input().Ref();
-        const auto inputPos = writeInput.Pos();
-        const TTypeAnnotationNode* inputItemType = nullptr;
-        if (!EnsureNewSeqType<true, true, true>(inputPos, *writeInput.GetTypeAnn(), ctx, &inputItemType)) {
-            return TStatus::Error;
-        }
+        if (!State_->IsRtmrMode()) {
+            const auto& writeInput = write.Input().Ref();
+            const auto inputPos = writeInput.Pos();
+            const TTypeAnnotationNode* inputItemType = nullptr;
+            if (!EnsureNewSeqType<true, true, true>(inputPos, *writeInput.GetTypeAnn(), ctx, &inputItemType)) {
+                return TStatus::Error;
+            }
 
-        if (!State_->IsRtmrMode() && !ValidateWriteTypeAnnotation(inputPos, inputItemType, ctx)) {
-            return TStatus::Error;
+            if (!ValidateWriteTypeAnnotation(inputPos, inputItemType, ctx)) {
+                return TStatus::Error;
+            }
         }
 
         input.Ptr()->SetTypeAnn(write.World().Ref().GetTypeAnn());

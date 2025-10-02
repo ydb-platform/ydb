@@ -5953,6 +5953,55 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
     }
 
+    Y_UNIT_TEST(ModifyPermissionsByRelativePathWithoutSlashes) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto query = TStringBuilder() << R"(
+            --!syntax_v1
+            CREATE USER ydbuser PASSWORD 'password1';
+            )";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            {
+                const TString query = R"(
+                    CREATE TABLE Orders (
+                        id Int32 NOT NULL,
+                        value Int32,
+                        PRIMARY KEY (id)
+                    );
+                )";
+
+                auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            }
+
+            {
+                const TString query = R"(
+                    GRANT SELECT ON Orders TO ydbuser;
+                )";
+
+                auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                CheckPermissions(session, {{.Path = "/Root/Orders", .Permissions = {{"ydbuser", {"ydb.generic.read"}}}}});
+            }
+
+            {
+                const TString query = R"(
+                    REVOKE SELECT ON Orders FROM ydbuser;
+                )";
+
+                auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                CheckPermissions(session, {{.Path = "/Root/Orders", .Permissions = {}}});
+            }
+        }
+    }
+
     Y_UNIT_TEST(ModifyPermissionsByIncorrectPaths) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();

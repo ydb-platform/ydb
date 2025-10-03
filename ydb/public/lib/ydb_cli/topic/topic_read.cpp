@@ -117,10 +117,10 @@ namespace NYdb::NConsoleClient {
                         row.Column(idx, json);
                     }
                     break;
-                case ETopicMetadataField::MessageMeta:
+                case ETopicMetadataField::SessionMeta:
                     {
                         NJson::TJsonValue json;
-                        for (auto const& [k, v] : message.GetMessageMeta()->Fields) {
+                        for (auto const& [k, v] : message.GetSessionMeta()->Fields) {
                             json[k] = v;
                         }
                         row.Column(idx, json);

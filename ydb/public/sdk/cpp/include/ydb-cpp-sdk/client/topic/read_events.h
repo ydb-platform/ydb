@@ -89,7 +89,7 @@ struct TReadSessionEvent {
             uint64_t SeqNo;
             TInstant CreateTime;
             TInstant WriteTime;
-            TWriteSessionMeta::TPtr Meta;
+            TWriteSessionMeta::TPtr SessionMeta;
             TMessageMeta::TPtr MessageMeta;
             uint64_t UncompressedSize;
             std::string MessageGroupId;
@@ -125,10 +125,10 @@ struct TReadSessionEvent {
             TInstant GetWriteTime() const;
 
             //! Metainfo.
-            const TWriteSessionMeta::TPtr& GetMeta() const;
+            const TMessageMeta::TPtr& GetMeta() const;
 
             //! Message level meta info.
-            const TMessageMeta::TPtr& GetMessageMeta() const;
+            const TWriteSessionMeta::TPtr& GetSessionMeta() const;
 
         protected:
             std::string Data;

@@ -41,7 +41,7 @@ TMessageInformation::TMessageInformation(
     uint64_t seqNo,
     TInstant createTime,
     TInstant writeTime,
-    TWriteSessionMeta::TPtr meta,
+    TWriteSessionMeta::TPtr sessionMeta,
     TMessageMeta::TPtr messageMeta,
     uint64_t uncompressedSize,
     std::string messageGroupId
@@ -51,7 +51,7 @@ TMessageInformation::TMessageInformation(
     , SeqNo(seqNo)
     , CreateTime(createTime)
     , WriteTime(writeTime)
-    , Meta(meta)
+    , SessionMeta(sessionMeta)
     , MessageMeta(messageMeta)
     , UncompressedSize(uncompressedSize)
     , MessageGroupId(messageGroupId)
@@ -116,12 +116,12 @@ TInstant TMessageBase::GetWriteTime() const {
     return Information.WriteTime;
 }
 
-const TWriteSessionMeta::TPtr& TMessageBase::GetMeta() const {
-    return Information.Meta;
+const TMessageMeta::TPtr& TMessageBase::GetMeta() const {
+    return Information.MessageMeta;
 }
 
-const TMessageMeta::TPtr& TMessageBase::GetMessageMeta() const {
-    return Information.MessageMeta;
+const TWriteSessionMeta::TPtr& TMessageBase::GetSessionMeta() const {
+    return Information.SessionMeta;
 }
 
 template<>
@@ -151,9 +151,9 @@ void TPrintable<TMessageBase>::DebugString(TStringBuilder& ret, bool printData) 
         firstKey = false;
     }
     ret << " }";
-    ret << " MessageMeta: {";
+    ret << " SessionMeta: {";
     firstKey = true;
-    for (const auto& [k, v] : self->GetMessageMeta()->Fields) {
+    for (const auto& [k, v] : self->GetSessionMeta()->Fields) {
         ret << (firstKey ? " \"" : ", \"") << k << "\": \"" << v << "\"";
         firstKey = false;
     }

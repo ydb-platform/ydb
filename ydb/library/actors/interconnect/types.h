@@ -62,6 +62,7 @@ namespace NActors {
         TString AuthCN;
         NActors::TScopeId PeerScopeId;
         bool UseRdma = {};
+        bool ChecksumRdmaEvent = {};
     };
 
 } // NActors

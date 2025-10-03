@@ -57,6 +57,7 @@ message TRdmaHandshake {
     oneof Verb {
         TRdmaCred Read = 6;
     }
+    optional bool RdmaChecksum = 11;
 }
 
 message TRdmaCreds {

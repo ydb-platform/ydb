@@ -677,11 +677,15 @@ struct TLoadAndSplitSimulator {
     ui64 SplitReqCount = 0;
     ui64 ReadRequestCount = 0;
 
+    /**
+     * An empty actor, which is used only as a sender for sending messages to other actors.
+     */
     class TDummyActor : public TActor<TDummyActor> {
     public:
         TDummyActor()
             : TActor(&TThis::StateWork)
-        {}
+        {
+        }
 
         STFUNC(StateWork) {
             Y_UNUSED(ev);
@@ -727,6 +731,11 @@ struct TLoadAndSplitSimulator {
         }
     }
 
+    /**
+     * Create a simple EvRead request, which contains a query for the first key.
+     *
+     * @return The corresponding EvRead request
+     */
     std::unique_ptr<TEvDataShard::TEvRead> MakeSimpleReadRequest() {
         std::unique_ptr<TEvDataShard::TEvRead> request(new TEvDataShard::TEvRead());
         auto& record = request->Record;
@@ -754,11 +763,9 @@ struct TLoadAndSplitSimulator {
         switch (ev->GetTypeRewrite()) {
             case TEvTablet::TEvTabletActive::EventType:
                 {
-                    auto x = reinterpret_cast<TEvTablet::TEvTabletActive::TPtr*>(&ev);
                     Cerr << "TEST TLoadAndSplitSimulator for table id " << TableLocalPathId
-                        << ", intercept EvTabletActive from sender " << (*x).Get()->Sender
-                        << " to recipient " << (*x).Get()->GetRecipientRewrite()
-                        << ", version: " << (*x).Get()->Get()->VersionInfo
+                        << ", intercept EvTabletActive from sender " << ev->Sender
+                        << " to recipient " << ev->GetRecipientRewrite()
                         << Endl;
 
                     // Followers send EvTabletActive when they are ready to process requests,
@@ -771,7 +778,7 @@ struct TLoadAndSplitSimulator {
                     //       here and wait for the response to come back.
                     if (ShouldSendReadRequests) {
                         // Send back to the actor, which sent EvTabletActive
-                        const TActorId readRequestTarget = (*x).Get()->Sender;
+                        const TActorId readRequestTarget = ev->Sender;
 
                         Cerr << "TEST TLoadAndSplitSimulator for table id " << TableLocalPathId
                             << ", sending EvRead request to " << readRequestTarget
@@ -790,31 +797,29 @@ struct TLoadAndSplitSimulator {
 
             case TEvDataShard::EvRead:
                 {
-                    auto x = reinterpret_cast<TEvDataShard::TEvRead::TPtr*>(&ev);
-                    auto& record = (*x).Get()->Get()->Record;
+                    const auto msg = ev->Get<TEvDataShard::TEvRead>();
 
                     Cerr << "TEST TLoadAndSplitSimulator for table id " << TableLocalPathId
-                        << ", intercept EvRead from sender " << (*x).Get()->Sender
-                        << " to recipient " << (*x).Get()->GetRecipientRewrite()
-                        << ", readId " << record.GetReadId()
-                        << ", tableId " << record.GetTableId().GetTableId()
+                        << ", intercept EvRead from sender " << ev->Sender
+                        << " to recipient " << ev->GetRecipientRewrite()
+                        << ", readId " << msg->Record.GetReadId()
+                        << ", tableId " << msg->Record.GetTableId().GetTableId()
                         << Endl;
                 }
                 break;
 
             case TEvDataShard::EvReadResult:
                 {
-                    auto x = reinterpret_cast<TEvDataShard::TEvReadResult::TPtr*>(&ev);
-                    auto& record = (*x).Get()->Get()->Record;
+                    const auto msg = ev->Get<TEvDataShard::TEvReadResult>();
 
                     Cerr << "TEST TLoadAndSplitSimulator for table id " << TableLocalPathId
-                        << ", intercept EvReadResult from sender " << (*x).Get()->Sender
-                        << " to recipient " << (*x).Get()->GetRecipientRewrite()
-                        << ", readId " << record.GetReadId()
-                        << ", sequence number " << record.GetSeqNo()
-                        << ", row count " << record.GetRowCount()
-                        << ", status " << record.GetStatus()
-                        << ", finished " << record.GetFinished()
+                        << ", intercept EvReadResult from sender " << ev->Sender
+                        << " to recipient " << ev->GetRecipientRewrite()
+                        << ", readId " << msg->Record.GetReadId()
+                        << ", sequence number " << msg->Record.GetSeqNo()
+                        << ", row count " << msg->Record.GetRowCount()
+                        << ", status " << msg->Record.GetStatus()
+                        << ", finished " << msg->Record.GetFinished()
                         << Endl;
                 }
                 break;
@@ -822,30 +827,29 @@ struct TLoadAndSplitSimulator {
             case TEvDataShard::EvPeriodicTableStats:
                 // replace real stats with the simulated ones
                 {
-                    auto x = reinterpret_cast<TEvDataShard::TEvPeriodicTableStats::TPtr*>(&ev);
-                    auto& record = (*x).Get()->Get()->Record;
+                    const auto msg = ev->Get<TEvDataShard::TEvPeriodicTableStats>();
 
-                    if (record.GetTableLocalId() != TableLocalPathId) {
+                    if (msg->Record.GetTableLocalId() != TableLocalPathId) {
                         return;
                     }
 
-                    auto targetCpuForFollower = MetricsPatchByFollowerId.find(record.GetFollowerId());
+                    const auto itTargetCpuForFollower = MetricsPatchByFollowerId.find(msg->Record.GetFollowerId());
 
-                    if (targetCpuForFollower != MetricsPatchByFollowerId.end()) {
-                        const auto prevCPU = record.GetTabletMetrics().GetCPU();
-                        record.MutableTabletMetrics()->MergeFrom(targetCpuForFollower->second);
-                        const auto newCPU = record.GetTabletMetrics().GetCPU();
+                    if (itTargetCpuForFollower != MetricsPatchByFollowerId.end()) {
+                        const auto prevCPU = msg->Record.GetTabletMetrics().GetCPU();
+                        msg->Record.MutableTabletMetrics()->MergeFrom(itTargetCpuForFollower->second);
+                        const auto newCPU = msg->Record.GetTabletMetrics().GetCPU();
 
                         Cerr << "TEST TLoadAndSplitSimulator for table id " << TableLocalPathId
-                            << ", intercept EvPeriodicTableStats, from datashard " << record.GetDatashardId()
-                            << ", from followerId " << record.GetFollowerId()
+                            << ", intercept EvPeriodicTableStats, from datashard " << msg->Record.GetDatashardId()
+                            << ", from followerId " << msg->Record.GetFollowerId()
                             << ", patched CPU: " << prevCPU << "->" << newCPU
                             << Endl;
                     } else {
                         Cerr << "TEST TLoadAndSplitSimulator for table id " << TableLocalPathId
-                            << ", intercept EvPeriodicTableStats, from datashard " << record.GetDatashardId()
-                            << ", from followerId " << record.GetFollowerId()
-                            << ", unpatched CPU: " << record.GetTabletMetrics().GetCPU()
+                            << ", intercept EvPeriodicTableStats, from datashard " << msg->Record.GetDatashardId()
+                            << ", from followerId " << msg->Record.GetFollowerId()
+                            << ", unpatched CPU: " << msg->Record.GetTabletMetrics().GetCPU()
                             << Endl;
                     }
 
@@ -855,17 +859,16 @@ struct TLoadAndSplitSimulator {
             case TEvDataShard::EvGetTableStats:
                 // count requests for key access samples, as they indicate consideration of performing a split
                 {
-                    auto x = reinterpret_cast<TEvDataShard::TEvGetTableStats::TPtr*>(&ev);
-                    auto& record = (*x).Get()->Get()->Record;
+                    const auto msg = ev->Get<TEvDataShard::TEvGetTableStats>();
 
-                    if (record.GetTableId() != TableLocalPathId) {
+                    if (msg->Record.GetTableId() != TableLocalPathId) {
                         return;
                     }
 
                     // Cerr << "TEST TLoadAndSplitSimulator for table id " << TableLocalPathId
                     //     << ", intercept EvGetTableStats" << Endl;
 
-                    if (record.GetCollectKeySample()) {
+                    if (msg->Record.GetCollectKeySample()) {
                         ++KeyAccessSampleReqCount;
                     }
                 }
@@ -873,27 +876,26 @@ struct TLoadAndSplitSimulator {
             case TEvDataShard::EvGetTableStatsResult:
                 // replace real key access samples with the simulated ones
                 {
-                    auto x = reinterpret_cast<TEvDataShard::TEvGetTableStatsResult::TPtr*>(&ev);
-                    auto& record = (*x).Get()->Get()->Record;
+                    const auto msg = ev->Get<TEvDataShard::TEvGetTableStatsResult>();
 
-                    if (record.GetTableLocalId() != TableLocalPathId) {
+                    if (msg->Record.GetTableLocalId() != TableLocalPathId) {
                         return;
                     }
 
-                    record.MutableTableStats()->MutableKeyAccessSample()->CopyFrom(KeyAccessHistogramPatch);
+                    msg->Record.MutableTableStats()->MutableKeyAccessSample()->CopyFrom(KeyAccessHistogramPatch);
 
-                    auto [start, end] = DatashardsKeyRanges[record.GetDatashardId()];
+                    auto [start, end] = DatashardsKeyRanges[msg->Record.GetDatashardId()];
                     //NOTE: zero end means infinity -- this is a final shard
                     if (end == 0) {
                         end = 1000000;
                     }
-                    ui64 splitPoint = (end - start) / 2;
-                    record.MutableTableStats()->MutableKeyAccessSample()->MutableBuckets(0)->SetKey(ToSerialized(splitPoint - 1));
-                    record.MutableTableStats()->MutableKeyAccessSample()->MutableBuckets(1)->SetKey(ToSerialized(splitPoint));
-                    record.MutableTableStats()->MutableKeyAccessSample()->MutableBuckets(2)->SetKey(ToSerialized(splitPoint + 1));
+                    const ui64 splitPoint = (end - start) / 2;
+                    msg->Record.MutableTableStats()->MutableKeyAccessSample()->MutableBuckets(0)->SetKey(ToSerialized(splitPoint - 1));
+                    msg->Record.MutableTableStats()->MutableKeyAccessSample()->MutableBuckets(1)->SetKey(ToSerialized(splitPoint));
+                    msg->Record.MutableTableStats()->MutableKeyAccessSample()->MutableBuckets(2)->SetKey(ToSerialized(splitPoint + 1));
 
                     Cerr << "TEST TLoadAndSplitSimulator for table id " << TableLocalPathId
-                        << ", intercept EvGetTableStatsResult, from datashard " << record.GetDatashardId()
+                        << ", intercept EvGetTableStatsResult, from datashard " << msg->Record.GetDatashardId()
                         << ", patch KeyAccessSample: split point " << splitPoint
                         << Endl;
                 }
@@ -901,28 +903,27 @@ struct TLoadAndSplitSimulator {
             case TEvDataShard::EvSplit:
                 // save key ranges of the new datashards
                 {
-                    auto x = reinterpret_cast<TEvDataShard::TEvSplit::TPtr*>(&ev);
-                    auto& record = (*x).Get()->Get()->Record;
+                    const auto msg = ev->Get<TEvDataShard::TEvSplit>();
 
                     // remove info for the source shard(s) that will be splitted
                     // (split will have single source range)
-                    for (const auto& i : record.GetSplitDescription().GetSourceRanges()) {
+                    for (const auto& i : msg->Record.GetSplitDescription().GetSourceRanges()) {
                         DatashardsKeyRanges.erase(i.GetTabletID());
                     }
                     // add info for destination shards
-                    for (const auto& i : record.GetSplitDescription().GetDestinationRanges()) {
+                    for (const auto& i : msg->Record.GetSplitDescription().GetDestinationRanges()) {
                         auto& [start, end] = DatashardsKeyRanges[i.GetTabletID()];
                         start = FromSerialized(i.GetKeyRangeBegin());
                         //NOTE: empty KeyRangeEnd means infinity
-                        auto keyRangeEnd = i.GetKeyRangeEnd();
+                        const auto keyRangeEnd = i.GetKeyRangeEnd();
                         end = (keyRangeEnd.size() > 0) ? FromSerialized(keyRangeEnd) : 0;
                     }
 
                     Cerr << "TEST TLoadAndSplitSimulator for table id " << TableLocalPathId
-                        << ", intercept EvSplit, to datashard " << record.GetSplitDescription().GetSourceRanges(0).GetTabletID()
+                        << ", intercept EvSplit, to datashard " << msg->Record.GetSplitDescription().GetSourceRanges(0).GetTabletID()
                         << ", event:"
                         << Endl
-                        << record.DebugString()
+                        << msg->Record.DebugString()
                         << Endl;
 
                     ++SplitReqCount;
@@ -931,15 +932,14 @@ struct TLoadAndSplitSimulator {
             case TEvDataShard::EvSplitAck:
                 // count splits
                 {
-                    auto x = reinterpret_cast<TEvDataShard::TEvSplitAck::TPtr*>(&ev);
-                    auto& record = (*x).Get()->Get()->Record;
+                    const auto msg = ev->Get<TEvDataShard::TEvSplitAck>();
 
-                    auto now = TInstant::Now();
-                    auto elapsed = now - LastSplitAckTime;
+                    const auto now = TInstant::Now();
+                    const auto elapsed = now - LastSplitAckTime;
                     LastSplitAckTime = now;
 
                     Cerr << "TEST TLoadAndSplitSimulator for table id " << TableLocalPathId
-                        << ", intercept EvSplitAck, from datashard " << record.GetTabletId()
+                        << ", intercept EvSplitAck, from datashard " << msg->Record.GetTabletId()
                         << ", " << elapsed << " since last split ack"
                         << Endl;
 
@@ -988,12 +988,12 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitByLoad) {
      * Execute a test on the given table, which simulates high CPU load on the leader and/or followers
      * and verifies that the table is split into the correct number of partitions.
      *
-     * @param runtime The test runtime
-     * @param tablePath The table to use for the test
-     * @param targetCpuLoadByFolowerId The map from the follower ID (0 == leader)
-     *                                 to the corresponding induced CPU load (as percent)
-     * @param shouldSendReadRequests If true, send EvRead requests to all followers
-     * @param maxTestDuration The maximum duration of the test
+     * @param[in] runtime The test runtime
+     * @param[in] tablePath The table to use for the test
+     * @param[in] targetCpuLoadByFolowerId The map from the follower ID (0 == leader)
+     *                                     to the corresponding induced CPU load (as percent)
+     * @param[in] shouldSendReadRequests If true, send EvRead requests to all followers
+     * @param[in] maxTestDuration The maximum duration of the test
      */
     void SplitByLoad(
         TTestActorRuntime& runtime,

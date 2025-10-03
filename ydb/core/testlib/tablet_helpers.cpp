@@ -1096,6 +1096,130 @@ namespace NKikimr {
         runtime.GrabEdgeEvent<TEvents::TEvWakeup>(handle);
     }
 
+    /**
+     * A special actor, which starts a tablet follower and restarts it, if needed.
+     */
+    class TFollowerLauncher : public TActor<TFollowerLauncher> {
+    private:
+        ui64 TabletId;
+        ui32 FollowerId;
+        TActorId FollowerActorId;
+
+    public:
+        TFollowerLauncher(ui64 tabletId, ui32 follewerId)
+            : TActor(&TThis::StateWork)
+            , TabletId(tabletId)
+            , FollowerId(follewerId)
+        {
+        }
+
+        STFUNC(StateWork) {
+            switch (ev->GetTypeRewrite()) {
+                HFunc(TEvTablet::TEvTabletDead, Handle);
+                HFunc(TEvents::TEvPoison, Handle);
+            }
+        }
+
+        void Handle(TEvTablet::TEvTabletDead::TPtr& ev, const TActorContext& ctx) {
+            if (ev->Sender != FollowerActorId) {
+                LOG_INFO_S(
+                    ctx,
+                    NKikimrServices::HIVE,
+                    "[Follower launcher " << SelfId()
+                        << "] Received EvTabletDead for tabletId " << ev->Get()->TabletID
+                        << ", but from an unknown actor ID, ignored: " << FollowerActorId
+                );
+
+                return;
+            }
+
+            LOG_INFO_S(
+                ctx,
+                NKikimrServices::HIVE,
+                "[Follower launcher " << SelfId()
+                    << "] Received EvTabletDead from follower ID " << FollowerId
+                    << " for tabletId " << TabletId
+                    << ": " << FollowerActorId
+            );
+
+            // The follower has died, start a new one
+            FollowerActorId = {};
+            CreateFollower(ctx);
+
+            LOG_INFO_S(
+                ctx,
+                NKikimrServices::HIVE,
+                "[Follower launcher " << SelfId()
+                    << "] Restarted follower ID " << FollowerId
+                    << " for tabletId " << TabletId
+                    << ": " << FollowerActorId
+            );
+        }
+
+        void Handle(TEvents::TEvPoison::TPtr& /* ev */, const TActorContext& ctx) {
+            if (FollowerActorId) {
+                LOG_INFO_S(
+                    ctx,
+                    NKikimrServices::HIVE,
+                    "[Follower launcher " << SelfId()
+                        << "] Destroying follower ID " << FollowerId
+                        << " for tabletId " << TabletId
+                        << ": " << FollowerActorId
+                );
+
+                ctx.Send(FollowerActorId, new TEvents::TEvPoisonPill());
+                FollowerActorId = {};
+            };
+
+            Die(ctx);
+        }
+
+        /**
+         * Registers itself, starts a new follower and begins monitoring its life cycle.
+         *
+         * @param[in] ctx The actor context
+         *
+         * @return The actor ID for itself.
+         */
+        TActorId Start(const TActorContext& ctx) {
+            ctx.Register(this);
+            CreateFollower(ctx);
+
+            LOG_INFO_S(
+                ctx,
+                NKikimrServices::HIVE,
+                "[Follower launcher " << SelfId()
+                    << "] Created follower ID " << FollowerId
+                    << " for tabletId " << TabletId
+                    << ": " << FollowerActorId
+            );
+
+            return SelfId();
+        }
+
+    private:
+        void CreateFollower(const TActorContext& ctx) {
+            FollowerActorId = ctx.Register(
+                CreateTabletFollower(
+                    SelfId(),
+                    CreateTestTabletInfo(
+                        TabletId,
+                        TTabletTypes::DataShard,
+                        DataGroupErasure
+                    ),
+                    new TTabletSetupInfo(
+                        &CreateDataShard,
+                        TMailboxType::Simple,
+                        0,
+                        TMailboxType::Simple,
+                        0
+                    ),
+                    FollowerId
+                )
+            );
+        }
+    };
+
     class TFakeHive : public TActor<TFakeHive>, public NTabletFlatExecutor::TTabletExecutedFlat {
     public:
         static std::function<IActor* (const TActorId &, TTabletStorageInfo*)> DefaultGetTabletCreationFunc(ui32 type) {
@@ -1265,34 +1389,9 @@ namespace NKikimr {
 
                             for (ui32 i = 0; i < followerCount; ++i) {
                                 const ui32 followerId = i + 1;
+                                const auto launcher = new TFollowerLauncher(tabletId, followerId);
 
-                                const auto followerActorId = ctx.Register(
-                                    CreateTabletFollower(
-                                        SelfId(),
-                                        CreateTestTabletInfo(
-                                            tabletId,
-                                            TTabletTypes::DataShard,
-                                            DataGroupErasure
-                                        ),
-                                        new TTabletSetupInfo(
-                                            &CreateDataShard,
-                                            TMailboxType::Simple,
-                                            0,
-                                            TMailboxType::Simple,
-                                            0
-                                        ),
-                                        followerId
-                                    )
-                                );
-
-                                it->second.FollowerActorIds.push_back(followerActorId);
-
-                                LOG_INFO_S(
-                                    ctx,
-                                    NKikimrServices::HIVE,
-                                    logPrefix << "Created follower ID " << followerId << " for tablet ID "
-                                        << tabletId << ": " << followerActorId
-                                );
+                                it->second.FollowerLaunchers[followerId] = launcher->Start(ctx);
                             }
                         }
                     }
@@ -1398,12 +1497,14 @@ namespace NKikimr {
             ctx.Send(ctx.SelfID, new TEvFakeHive::TEvNotifyTabletDeleted(tabletInfo.TabletId));
 
             // Destroy all follower actors, if any
-            for (const auto& followerActorId : it->second.FollowerActorIds) {
+            for (const auto& [followerId, launcherActorId] : it->second.FollowerLaunchers) {
                 Cerr << "FAKEHIVE " << TabletID()
-                    << " destroying follower " << followerActorId
+                    << " Destroying launcher for the followerId " << followerId
+                    << " for tabletId " << it->second.TabletId
+                    << ": " << launcherActorId
                     << Endl;
 
-                ctx.Send(followerActorId, new TEvents::TEvPoison());
+                ctx.Send(launcherActorId, new TEvents::TEvPoison());
             }
 
             // Kill the tablet and don't restart it

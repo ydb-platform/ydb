@@ -14,7 +14,6 @@ namespace NActors {
 
     void DoActorInit(TActorSystem* sys, IActor* actor, const TActorId& self, const TActorId& owner) {
         actor->SelfActorId = self;
-        actor->DoActorInit();
         actor->Registered(sys, owner);
     }
 
@@ -37,17 +36,6 @@ namespace NActors {
 
         const TMonotonic now = ActorSystem->Monotonic();
 
-        for (auto& u : stats.UsageByActivity) {
-            u.fill(0);
-        }
-
-        auto accountUsage = [&](ui32 activityType, double usage) {
-            Y_ABORT_UNLESS(0 <= usage);
-            Y_ABORT_UNLESS(usage <= 1);
-            int bin = Min<int>(9, usage * 10);
-            ++stats.UsageByActivity[activityType][bin];
-        };
-
         std::fill(stats.StuckActorsByActivity.begin(), stats.StuckActorsByActivity.end(), 0);
 
         with_lock (StuckObserverMutex) {
@@ -58,12 +46,7 @@ namespace NActors {
                 if (delta > TDuration::Seconds(30)) {
                     ++stats.StuckActorsByActivity[actor->GetActivityType()];
                 }
-                accountUsage(actor->GetActivityType(), actor->GetUsage(GetCycleCountFast()));
             }
-            for (const auto& [activityType, usage] : DeadActorsUsage) {
-                accountUsage(activityType, usage);
-            }
-            DeadActorsUsage.clear();
         }
     }
 #endif

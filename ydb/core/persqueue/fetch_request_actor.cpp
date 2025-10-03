@@ -155,7 +155,7 @@ public:
     }
 
     void Bootstrap(const TActorContext& ctx) {
-        LOG_INFO_S(ctx, NKikimrServices::PQ_FETCH_REQUEST, "Fetch request actor boostrapped. Request is valid: " << (!Response));
+        LOG_I("Fetch request actor boostrapped. Request is valid: " << (!Response));
 
         // handle error from constructor
         if (Response) {
@@ -170,7 +170,7 @@ public:
     }
 
     void SendSchemeCacheRequest(const TActorContext& ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::PQ_FETCH_REQUEST, "SendSchemeCacheRequest");
+        LOG_D("SendSchemeCacheRequest");
 
         auto schemeCacheRequest = std::make_unique<TSchemeCacheNavigate>(1);
         schemeCacheRequest->DatabaseName = Settings.Database;
@@ -202,7 +202,7 @@ public:
     }
 
     void HandleSchemeCacheResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::PQ_FETCH_REQUEST, "Handle SchemeCache response");
+        LOG_D("Handle SchemeCache response");
         auto& result = ev->Get()->Request;
         AnyCdcTopicInRequest = false;
         for (const auto& entry : result->ResultSet) {
@@ -284,7 +284,6 @@ public:
         HFunc(TEvents::TEvWakeup, Handle);
         CFunc(NActors::TEvents::TSystem::Poison, Die);
     )
-
 
     void OnMetadataReceived(const TActorContext& ctx) {
         for (auto& [name, info]: TopicInfo) {

@@ -822,7 +822,11 @@ namespace NActors {
                     NActorsInterconnect::TRdmaCreds creds;
                     Y_ABORT_UNLESS(creds.ParseFromArray(ptr, credsSerializedSize));
                     ptr += credsSerializedSize;
-                    context.PendingEvents.back().RdmaCheckSum = ReadUnaligned<ui32>(ptr);
+                    if (Params.ChecksumRdmaEvent) {
+                        context.PendingEvents.back().RdmaCheckSum = ReadUnaligned<ui32>(ptr);
+                    } else {
+                        context.PendingEvents.back().RdmaCheckSum = 0;
+                    }
                     ptr += sizeof(ui32);
                     auto err = context.ScheduleRdmaReadRequests(creds, RdmaCq, SelfId(), channel);
                     if (std::holds_alternative<ICq::TBusy>(err)) {
@@ -912,9 +916,12 @@ namespace NActors {
             ui32 expectedChecksum = descr.Checksum ?: pendingEvent.RdmaCheckSum;
             if (expectedChecksum) {
                 ui32 checksum = 0;
+                XXH3_state_t state;
+                XXH3_64bits_reset(&state);
                 for (const auto&& [data, size] : payload) {
-                    checksum = Crc32cExtendMSanCompatible(checksum, data, size);
+                    XXH3_64bits_update(&state, data, size);
                 }
+                checksum = XXH3_64bits_digest(&state);
                 if (checksum != expectedChecksum) {
                     LOG_CRIT_IC_SESSION("ICIS05", "event checksum error Type# 0x%08" PRIx32, descr.Type);
                     throw TExReestablishConnection{TDisconnectReason::ChecksumError()};

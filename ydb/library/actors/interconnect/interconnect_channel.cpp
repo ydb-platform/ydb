@@ -110,7 +110,7 @@ namespace NActors {
                             Y_ABORT_UNLESS(totalSize, "got empty sz, sections: %d type: %d ", SerializationInfo->Sections.size(),  event.Event->Type());
                             NActorsInterconnect::TRdmaCreds rdmaCreds;
                             ui32 checkSum = 0;
-                            if (SerializeEventRdma(event, rdmaCreds, checkSum, rdmaDeviceIndex)) {
+                            if (SerializeEventRdma(event, rdmaCreds, task.Params.ChecksumRdmaEvent ? &checkSum : nullptr, rdmaDeviceIndex)) {
                                 SendViaRdma.emplace(TRdmaSerializationArtifacts{std::move(rdmaCreds), checkSum});
                                 Chunker.DiscardEvent();
                             }
@@ -317,7 +317,7 @@ namespace NActors {
     }
 
     bool TEventOutputChannel::SerializeEventRdma(TEventHolder& event, NActorsInterconnect::TRdmaCreds& rdmaCreds,
-        ui32& checkSum, ssize_t rdmaDeviceIndex)
+        ui32* checkSum, ssize_t rdmaDeviceIndex)
     {
         if (!event.Buffer && event.Event) {
             std::optional<TRope> rope = event.Event->SerializeToRope(
@@ -332,6 +332,11 @@ namespace NActors {
             Iter = event.Buffer->GetBeginIter();
         }
 
+        XXH3_state_t state;
+        if (checkSum) {
+            XXH3_64bits_reset(&state);
+        }
+
         if (event.Buffer) {
             for (; Iter.Valid(); ++Iter) {
                 TRcBuf buf = Iter.GetChunk();
@@ -341,13 +346,19 @@ namespace NActors {
                     Iter = event.Buffer->GetBeginIter();
                     return false;
                 }
-                checkSum = Crc32cExtendMSanCompatible(checkSum, buf.GetData(), buf.GetSize());
+                if (checkSum) {
+                    XXH3_64bits_update(&state, buf.GetData(), buf.GetSize());
+                }
                 auto cred = rdmaCreds.AddCreds();
                 cred->SetAddress(reinterpret_cast<ui64>(memReg.GetAddr()));
                 cred->SetSize(memReg.GetSize());
                 cred->SetRkey(memReg.GetRKey(rdmaDeviceIndex));
             }
         } 
+
+        if (checkSum) {
+            *checkSum = XXH3_64bits_digest(&state);
+        }
         return true;
     }
 

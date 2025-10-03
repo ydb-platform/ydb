@@ -66,6 +66,7 @@ namespace NActors {
         double ErrorSleepRetryMultiplier = 4.0;
         TDuration EventDelay = TDuration::Zero();
         ESocketSendOptimization SocketSendOptimization = ESocketSendOptimization::DISABLED;
+        bool RdmaChecksum = true;
     };
 
     struct TWhiteboardSessionStatus {

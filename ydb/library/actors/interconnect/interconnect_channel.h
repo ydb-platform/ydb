@@ -157,7 +157,7 @@ namespace NActors {
 
         template<bool External>
         bool SerializeEvent(TTcpPacketOutTask& task, TEventHolder& event, size_t *bytesSerialized);
-        bool SerializeEventRdma(TEventHolder& event, NActorsInterconnect::TRdmaCreds& rdmaCreds, ui32& checkSum, ssize_t rdmaDeviceIndex);
+        bool SerializeEventRdma(TEventHolder& event, NActorsInterconnect::TRdmaCreds& rdmaCreds, ui32* checkSum, ssize_t rdmaDeviceIndex);
 
         bool FeedPayload(TTcpPacketOutTask& task, TEventHolder& event, ssize_t rdmaDeviceIndex);
         std::optional<bool> FeedInlinePayload(TTcpPacketOutTask& task, TEventHolder& event);

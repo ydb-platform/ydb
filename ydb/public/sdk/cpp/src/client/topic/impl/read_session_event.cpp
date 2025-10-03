@@ -146,7 +146,7 @@ void TPrintable<TMessageBase>::DebugString(TStringBuilder& ret, bool printData) 
         << " MessageGroupId: \"" << self->GetMessageGroupId() << "\"";
     ret << " Meta: {";
     bool firstKey = true;
-    for (const auto& [k, v] : self->GetMeta()->Fields) {
+    for (const auto& [k, v] : self->GetMessageMeta()->Fields) {
         ret << (firstKey ? " \"" : ", \"") << k << "\": \"" << v << "\"";
         firstKey = false;
     }

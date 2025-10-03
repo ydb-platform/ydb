@@ -23,6 +23,7 @@ class TConstraintNode {
 protected:
     TConstraintNode(TExprContext& ctx, std::string_view name);
     TConstraintNode(TConstraintNode&& constr);
+
 public:
     using TListType = std::vector<const TConstraintNode*>;
 
@@ -66,7 +67,9 @@ public:
     virtual void ToJson(NJson::TJsonWriter& out) const = 0;
     virtual NYT::TNode ToYson() const = 0;
 
-    virtual bool IsApplicableToType(const TTypeAnnotationNode&) const { return true; }
+    virtual bool IsApplicableToType(const TTypeAnnotationNode&) const {
+        return true;
+    }
 
     template <typename T>
     const T* Cast() const {
@@ -81,6 +84,7 @@ public:
     const std::string_view& GetName() const {
         return Name_;
     }
+
 protected:
     ui64 Hash_;
     std::string_view Name_;
@@ -88,10 +92,11 @@ protected:
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-class TPartOfConstraintBase : public TConstraintNode {
+class TPartOfConstraintBase: public TConstraintNode {
 protected:
     TPartOfConstraintBase(TExprContext& ctx, std::string_view name);
     TPartOfConstraintBase(TPartOfConstraintBase&& constr) = default;
+
 public:
     // Path to constraint components through nested static containers (Struct/Tuple/Multi).
     // All elements is struct member name or tuple element index.
@@ -120,7 +125,7 @@ protected:
     static bool HasDuplicates(const TSetOfSetsType& sets);
 };
 
-class TConstraintWithFieldsNode : public TPartOfConstraintBase {
+class TConstraintWithFieldsNode: public TPartOfConstraintBase {
 protected:
     TConstraintWithFieldsNode(TExprContext& ctx, std::string_view name);
     TConstraintWithFieldsNode(TConstraintWithFieldsNode&& constr) = default;
@@ -132,18 +137,21 @@ protected:
     // Combine list of separeted fields of static containers (Struct/Tuple/Multi) in single path if possible.
     // As example (/tuple_of_two_elements/0,/tuple_of_two_elements/1) -> (/tuple_of_two_elements)
     virtual const TConstraintWithFieldsNode* DoGetSimplifiedForType(const TTypeAnnotationNode& type, TExprContext& ctx) const = 0;
+
 public:
     // Leaves in the set of references only those that currently contain some complete constraint. Basically all or nothing.
     virtual void FilterUncompleteReferences(TPartOfConstraintBase::TSetType& references) const = 0;
 };
 
-template<class TTnheritConstraint>
-class TPartOfConstraintBaseT : public TPartOfConstraintBase {
+template <class TTnheritConstraint>
+class TPartOfConstraintBaseT: public TPartOfConstraintBase {
 protected:
     TPartOfConstraintBaseT(TExprContext& ctx, std::string_view name)
-      : TPartOfConstraintBase(ctx, name)
-    {}
+        : TPartOfConstraintBase(ctx, name)
+    {
+    }
     TPartOfConstraintBaseT(TPartOfConstraintBaseT&& constr) = default;
+
 public:
     const TTnheritConstraint* FilterFields(TExprContext& ctx, const TPathFilter& predicate) const {
         return static_cast<const TTnheritConstraint*>(DoFilterFields(ctx, predicate));
@@ -154,13 +162,15 @@ public:
     }
 };
 
-template<class TTnheritConstraint>
-class TConstraintWithFieldsT : public TConstraintWithFieldsNode {
+template <class TTnheritConstraint>
+class TConstraintWithFieldsT: public TConstraintWithFieldsNode {
 protected:
     TConstraintWithFieldsT(TExprContext& ctx, std::string_view name)
-      : TConstraintWithFieldsNode(ctx, name)
-    {}
+        : TConstraintWithFieldsNode(ctx, name)
+    {
+    }
     TConstraintWithFieldsT(TConstraintWithFieldsT&& constr) = default;
+
 public:
     const TTnheritConstraint* FilterFields(TExprContext& ctx, const TPathFilter& predicate) const {
         return static_cast<const TTnheritConstraint*>(DoFilterFields(ctx, predicate));
@@ -187,8 +197,8 @@ public:
     TConstraintSet(const TConstraintSet&) = default;
     TConstraintSet(TConstraintSet&&) = default;
 
-    TConstraintSet& operator =(const TConstraintSet&) = default;
-    TConstraintSet& operator =(TConstraintSet&&) = default;
+    TConstraintSet& operator=(const TConstraintSet&) = default;
+    TConstraintSet& operator=(TConstraintSet&&) = default;
 
     template <class TConstraintType>
     const TConstraintType* GetConstraint() const {
@@ -214,11 +224,11 @@ public:
         return !Constraints_.empty();
     }
 
-    bool operator ==(const TConstraintSet& s) const {
+    bool operator==(const TConstraintSet& s) const {
         return Constraints_ == s.Constraints_;
     }
 
-    bool operator !=(const TConstraintSet& s) const {
+    bool operator!=(const TConstraintSet& s) const {
         return Constraints_ != s.Constraints_;
     }
 
@@ -232,6 +242,7 @@ public:
     void Out(IOutputStream& out) const;
     void ToJson(NJson::TJsonWriter& writer) const;
     NYT::TNode ToYson() const;
+
 private:
     TConstraintNode::TListType Constraints_;
 };
@@ -241,12 +252,14 @@ private:
 class TSortedConstraintNode final: public TConstraintWithFieldsT<TSortedConstraintNode> {
 public:
     using TContainerType = TSmallVec<std::pair<TSetType, bool>>;
+
 private:
     friend struct TExprContext;
 
     TSortedConstraintNode(TExprContext& ctx, TContainerType&& content);
     TSortedConstraintNode(TExprContext& ctx, const NYT::TNode& serialized);
     TSortedConstraintNode(TSortedConstraintNode&& constr);
+
 public:
     static constexpr std::string_view Name() {
         return "Sorted";
@@ -275,6 +288,7 @@ public:
     const TSortedConstraintNode* MakeCommon(const TSortedConstraintNode* other, TExprContext& ctx) const;
 
     bool IsApplicableToType(const TTypeAnnotationNode& type) const override;
+
 private:
     const TConstraintWithFieldsNode* DoFilterFields(TExprContext& ctx, const TPathFilter& predicate) const final;
     const TConstraintWithFieldsNode* DoRenameFields(TExprContext& ctx, const TPathReduce& reduce) const final;
@@ -295,12 +309,15 @@ private:
     TChoppedConstraintNode(TExprContext& ctx, const TSetType& keys);
     TChoppedConstraintNode(TExprContext& ctx, const NYT::TNode& serialized);
     TChoppedConstraintNode(TChoppedConstraintNode&& constr);
+
 public:
     static constexpr std::string_view Name() {
         return "Chopped";
     }
 
-    const TSetOfSetsType& GetContent() const { return Sets_; }
+    const TSetOfSetsType& GetContent() const {
+        return Sets_;
+    }
 
     TSetType GetFullSet() const;
 
@@ -318,6 +335,7 @@ public:
     const TChoppedConstraintNode* MakeCommon(const TChoppedConstraintNode* other, TExprContext& ctx) const;
 
     bool IsApplicableToType(const TTypeAnnotationNode& type) const override;
+
 private:
     const TConstraintWithFieldsNode* DoFilterFields(TExprContext& ctx, const TPathFilter& predicate) const final;
     const TConstraintWithFieldsNode* DoRenameFields(TExprContext& ctx, const TPathReduce& reduce) const final;
@@ -330,11 +348,12 @@ private:
     TSetOfSetsType Sets_;
 };
 
-template<bool Distinct>
+template <bool Distinct>
 class TUniqueConstraintNodeBase final: public TConstraintWithFieldsT<TUniqueConstraintNodeBase<Distinct>> {
 public:
     using TBase = TConstraintWithFieldsT<TUniqueConstraintNodeBase<Distinct>>;
     using TContentType = NSorted::TSimpleSet<TConstraintWithFieldsNode::TSetOfSetsType>;
+
 protected:
     friend struct TExprContext;
 
@@ -342,12 +361,15 @@ protected:
     TUniqueConstraintNodeBase(TExprContext& ctx, TContentType&& sets);
     TUniqueConstraintNodeBase(TExprContext& ctx, const NYT::TNode& serialized);
     TUniqueConstraintNodeBase(TUniqueConstraintNodeBase&& constr);
+
 public:
     static constexpr std::string_view Name() {
         return Distinct ? "Distinct" : "Unique";
     }
 
-    const TContentType& GetContent() const { return Content_; }
+    const TContentType& GetContent() const {
+        return Content_;
+    }
 
     TPartOfConstraintBase::TSetType GetFullSet() const;
 
@@ -369,6 +391,7 @@ public:
     static const TUniqueConstraintNodeBase* Merge(const TUniqueConstraintNodeBase* one, const TUniqueConstraintNodeBase* two, TExprContext& ctx);
 
     bool IsApplicableToType(const TTypeAnnotationNode& type) const override;
+
 private:
     const TConstraintWithFieldsNode* DoFilterFields(TExprContext& ctx, const TPartOfConstraintBase::TPathFilter& predicate) const final;
     const TConstraintWithFieldsNode* DoRenameFields(TExprContext& ctx, const TPartOfConstraintBase::TPathReduce& reduce) const final;
@@ -388,7 +411,7 @@ private:
 using TUniqueConstraintNode = TUniqueConstraintNodeBase<false>;
 using TDistinctConstraintNode = TUniqueConstraintNodeBase<true>;
 
-template<class TOriginalConstraintNode>
+template <class TOriginalConstraintNode>
 class TPartOfConstraintNode final: public TPartOfConstraintBaseT<TPartOfConstraintNode<TOriginalConstraintNode>> {
 public:
     using TBase = TPartOfConstraintBaseT<TPartOfConstraintNode<TOriginalConstraintNode>>;
@@ -396,12 +419,14 @@ public:
     using TPartType = NSorted::TSimpleMap<typename TBase::TPathType, typename TBase::TPathType>;
     using TReversePartType = NSorted::TSimpleMap<typename TBase::TPathType, NSorted::TSimpleSet<typename TBase::TPathType>>;
     using TMapType = std::unordered_map<const TMainConstraint*, TPartType>;
+
 private:
     friend struct TExprContext;
 
     TPartOfConstraintNode(TPartOfConstraintNode&& constr);
     TPartOfConstraintNode(TExprContext& ctx, TMapType&& mapping);
     TPartOfConstraintNode(TExprContext& ctx, const NYT::TNode& serialized);
+
 public:
     static constexpr std::string_view Name();
 
@@ -429,6 +454,7 @@ public:
     static const TMainConstraint* MakeComplete(TExprContext& ctx, const TPartOfConstraintNode* partial, const TMainConstraint* original, const std::string_view& field = {});
 
     bool IsApplicableToType(const TTypeAnnotationNode& type) const override;
+
 private:
     const TPartOfConstraintBase* DoFilterFields(TExprContext& ctx, const TPartOfConstraintBase::TPathFilter& predicate) const final;
     const TPartOfConstraintBase* DoRenameFields(TExprContext& ctx, const TPartOfConstraintBase::TPathReduce& reduce) const final;
@@ -441,22 +467,22 @@ using TPartOfChoppedConstraintNode = TPartOfConstraintNode<TChoppedConstraintNod
 using TPartOfUniqueConstraintNode = TPartOfConstraintNode<TUniqueConstraintNode>;
 using TPartOfDistinctConstraintNode = TPartOfConstraintNode<TDistinctConstraintNode>;
 
-template<>
+template <>
 constexpr std::string_view TPartOfSortedConstraintNode::Name() {
     return "PartOfSorted";
 }
 
-template<>
+template <>
 constexpr std::string_view TPartOfChoppedConstraintNode::Name() {
     return "PartOfChopped";
 }
 
-template<>
+template <>
 constexpr std::string_view TPartOfUniqueConstraintNode::Name() {
     return "PartOfUnique";
 }
 
-template<>
+template <>
 constexpr std::string_view TPartOfDistinctConstraintNode::Name() {
     return "PartOfDistinct";
 }
@@ -493,6 +519,7 @@ protected:
     TVarIndexConstraintNode(TExprContext& ctx, size_t mapItemsCount);
     TVarIndexConstraintNode(TExprContext& ctx, const NYT::TNode& serialized);
     TVarIndexConstraintNode(TVarIndexConstraintNode&& constr);
+
 public:
     static constexpr std::string_view Name() {
         return "VarIndex";
@@ -523,11 +550,13 @@ private:
 class TMultiConstraintNode final: public TConstraintNode {
 public:
     using TMapType = NSorted::TSimpleMap<ui32, TConstraintSet>;
+
 public:
     TMultiConstraintNode(TExprContext& ctx, TMapType&& items);
     TMultiConstraintNode(TExprContext& ctx, ui32 index, const TConstraintSet& constraints);
     TMultiConstraintNode(TExprContext& ctx, const NYT::TNode& serialized);
     TMultiConstraintNode(TMultiConstraintNode&& constr);
+
 public:
     static constexpr std::string_view Name() {
         return "Multi";
@@ -560,4 +589,3 @@ private:
 };
 
 } // namespace NYql
-

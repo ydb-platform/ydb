@@ -443,7 +443,7 @@ void TGetQueryTrackerInfoCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void TGetDeclaredParametersInfoCommand::Register(TRegistrar registrar)
+void TGetQueryDeclaredParametersInfoCommand::Register(TRegistrar registrar)
 {
     registrar.ParameterWithUniversalAccessor<std::string>(
         "stage",
@@ -474,9 +474,9 @@ void TGetDeclaredParametersInfoCommand::Register(TRegistrar registrar)
         .Optional(/*init*/ false);
 }
 
-void TGetDeclaredParametersInfoCommand::DoExecute(ICommandContextPtr context)
+void TGetQueryDeclaredParametersInfoCommand::DoExecute(ICommandContextPtr context)
 {
-    auto result = WaitFor(context->GetClient()->GetDeclaredParametersInfo(Options))
+    auto result = WaitFor(context->GetClient()->GetQueryDeclaredParametersInfo(Options))
         .ValueOrThrow();
 
     context->ProduceOutputValue(BuildYsonStringFluently()

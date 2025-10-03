@@ -1,4 +1,5 @@
 #include "user_info.h"
+#include <ydb/core/persqueue/pqtablet/common/constants.h>
 
 namespace NKikimr {
 namespace NPQ {
@@ -438,7 +439,7 @@ void TUsersInfoStorage::ResetDetailedMetrics() {
 }
 
 bool TUsersInfoStorage::DetailedMetricsAreEnabled() const {
-    return AppData()->FeatureFlags.GetEnableMetricsLevel() && (Config.HasMetricsLevel() && Config.GetMetricsLevel() == Ydb::MetricsLevel::Detailed);
+    return AppData()->FeatureFlags.GetEnableMetricsLevel() && (Config.HasMetricsLevel() && Config.GetMetricsLevel() == METRICS_LEVEL_DETAILED);
 }
 
 const TUserInfo* TUsersInfoStorage::GetIfExists(const TString& user) const {

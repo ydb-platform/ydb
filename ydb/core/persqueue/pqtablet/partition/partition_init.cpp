@@ -1278,29 +1278,47 @@ void TPartition::SetupStreamCounters(const TActorContext& ctx) {
         NPersQueue::GetCountersForTopic(counters, IsServerless),
         {},
         subgroups,
-        {"topic.compaction.unprocessed_count_max"},
+        {"topic.partition.blobs.uncompacted_count_max"},
         false,
         "name",
-        false
-    };
+        false};
     CompactionUnprocessedBytes = TMultiCounter{
         NPersQueue::GetCountersForTopic(counters, IsServerless),
         {},
         subgroups,
-        {"topic.compaction.unprocessed_bytes_max"},
+        {"topic.partition.blobs.uncompacted_bytes_max"},
         false,
         "name",
-        false
-    };
+        false};
     CompactionTimeLag = TMultiCounter{
         NPersQueue::GetCountersForTopic(counters, IsServerless),
         {},
         subgroups,
-        {"topic.compaction.lag_milliseconds_max"},
+        {"topic.partition.blobs.compaction_lag_milliseconds_max"},
         false, // not deriv
         "name",
         false // not expiring
     };
+
+    // KeyCompactionReadCyclesTotal = TMultiCounter{
+    //     NPersQueue::GetCountersForTopic(counters, IsServerless),
+    //     {},
+    //     subgroups,
+    //     {"topic.key_compaction.read_cycles_complete_total"},
+    //     true, // deriv
+    //     "name",
+    //     true // expiring
+    // };
+
+    // KeyCompactionWriteCyclesTotal = TMultiCounter{
+    //     NPersQueue::GetCountersForTopic(counters, IsServerless),
+    //     {},
+    //     subgroups,
+    //     {"topic.key_compaction.write_cycles_complete_total"},
+    //     true, // deriv
+    //     "name",
+    //     true // expiring
+    // };
 
     TVector<NPersQueue::TPQLabelsInfo> aggr = {{{{"Account", TopicConverter->GetAccount()}}, {"total"}}};
     ui32 border = AppData(ctx)->PQConfig.GetWriteLatencyBigMs();
@@ -1338,21 +1356,31 @@ void TPartition::SetupStreamCounters(const TActorContext& ctx) {
 }
 
 void TPartition::CreateCompacter() {
-    if (!Config.GetEnableCompactification() || !AppData()->FeatureFlags.GetEnableTopicCompactificationByKey() || IsSupportive()) {
+    if (!IsKeyCompactionEnabled()) {
         if (!IsSupportive()) {
             Send(ReadQuotaTrackerActor, new TEvPQ::TEvReleaseExclusiveLock());
         }
         Compacter.Reset();
+        PartitionCompactionCounters.Reset();
         return;
     }
     if (Compacter) {
         Compacter->TryCompactionIfPossible();
         return;
     }
-
-    auto& userInfo = UsersInfoStorage->GetOrCreate(CLIENTID_COMPACTION_CONSUMER, ActorContext()); //ToDo: Fix!
+    auto& userInfo = UsersInfoStorage->GetOrCreate(CLIENTID_COMPACTION_CONSUMER, ActorContext());
     ui64 compStartOffset = userInfo.Offset;
     Compacter = MakeHolder<TPartitionCompaction>(compStartOffset, ++CompacterCookie, this);
+
+    //Init compacter counters
+    if (AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
+        PartitionCompactionCounters.Reset(new TPartitionKeyCompactionCounters(EscapeBadChars(TopicName()),
+                                                                           Partition.OriginalPartitionId,
+                                                                           Config.GetYdbDatabasePath()));
+    } else {
+        PartitionCompactionCounters.Reset(new TPartitionKeyCompactionCounters(TopicName(),
+                                                                           Partition.OriginalPartitionId));
+    }
     Compacter->TryCompactionIfPossible();
 }
 

@@ -13,6 +13,37 @@ namespace NKikimr::NMiniKQL {
 } // namespace NKikimr::NMiniKQL
 
 namespace NYql {
+    ///
+    /// A key for a select query on a cluster table. Hash value is
+    /// calculated in a constructor and stored in a Hash field.
+    ///
+    struct TSelectKey {
+        const TString Cluster;
+        const TString Table;
+        const std::vector<TString> Columns;
+        const TString Where;
+        const size_t Hash;
+
+        TSelectKey(const TSelectKey& select) = default;
+
+        TSelectKey(const TString& Cluster, const NConnector::NApi::TSelect& select);
+
+        bool operator==(const TSelectKey& other) const = default;
+
+        TSelectKey& operator=(const TSelectKey& other) = default;
+
+        size_t CalculateHash() const;
+    };
+
+    ///
+    /// Hasher for TSelectKey
+    ///
+    struct TSelectKeyHash {
+        size_t operator()(const TSelectKey& key) const noexcept {
+            return key.Hash;
+        }
+    };
+
     struct TGenericState: public TThrRefBase {
         using TPtr = TIntrusivePtr<TGenericState>;
 
@@ -31,9 +62,9 @@ namespace NYql {
             explicit operator size_t() const;
 
             ///
-            /// Make an unique key for a select request on a cluster table
+            /// Make a key for a select request on a cluster table
             ///
-            size_t MakeKeyFor(const NConnector::NApi::TSelect& select) const;
+            TSelectKey MakeKeyFor(const NConnector::NApi::TSelect& select) const;
         };
 
         struct TTableMeta {
@@ -48,14 +79,14 @@ namespace NYql {
             // Contains some binary description of table splits (partitions) produced by Connector
             std::vector<NYql::NConnector::NApi::TSplit> Splits;
             // Contains splits for a particular select
-            std::unordered_map<size_t, std::vector<NYql::NConnector::NApi::TSplit>> SelectSplits;
+            std::unordered_map<TSelectKey, std::vector<NYql::NConnector::NApi::TSplit>, TSelectKeyHash> SelectSplits;
 
-            bool HasSplitsForSelect(const NConnector::NApi::TSelect& select) const;
+            bool HasSplitsForSelect(const TSelectKey& key) const;
 
-            void AttachSplitsForSelect(const NConnector::NApi::TSelect& select,
+            void AttachSplitsForSelect(const TSelectKey& key,
                                        std::vector<NYql::NConnector::NApi::TSplit>& splits);
 
-            const std::vector<NYql::NConnector::NApi::TSplit>& GetSplitsForSelect(const NConnector::NApi::TSelect& select) const;
+            const std::vector<NYql::NConnector::NApi::TSplit>& GetSplitsForSelect(const TSelectKey& key) const;
         };
 
         using TGetTableResult = std::pair<const TTableMeta*, TIssues>;
@@ -82,7 +113,7 @@ namespace NYql {
         bool HasTable(const TTableAddress& tableAddress);
         void AddTable(const TTableAddress& tableAddress, TTableMeta&& tableMeta);
         std::optional<TIssue> AttachSplitsToTable(const TTableAddress& tableAddress,
-                                                  const NConnector::NApi::TSelect& select,
+                                                  const TSelectKey& key,
                                                   std::vector<NYql::NConnector::NApi::TSplit>& splits);
         TGetTableResult GetTable(const TTableAddress& tableAddress) const;
 

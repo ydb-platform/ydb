@@ -52,7 +52,7 @@ IGraphTransformer::TStatus TGenericListSplitTransformer::DoTransform(TExprNode::
         return TStatus::Ok;
     }
 
-    std::unordered_map<size_t, TListSplitRequestData> pendingRequests;
+    std::unordered_map<TSelectKey, TListSplitRequestData, TSelectKeyHash> pendingRequests;
 
     // Iterate over all settings in the input expression, create ListSplit request if needed
     for (const auto& r : readsSettings) {
@@ -73,16 +73,17 @@ IGraphTransformer::TStatus TGenericListSplitTransformer::DoTransform(TExprNode::
         NConnector::NApi::TSelect select;
         FillSelectFromGenSourceSettings(select, settings, ctx, table.first);
 
+        auto selectKey = tableAddress.MakeKeyFor(select);
+
         // The one sql query could contain multiple selects, e.g.
         // join, subquery etc. If splits has been already acquired for a
         // select, skip it
-        if (table.first->HasSplitsForSelect(select)) {
+        if (table.first->HasSplitsForSelect(selectKey)) {
             continue;
         }
 
-        auto k = tableAddress.MakeKeyFor(select);
-        auto v = TListSplitRequestData{k, std::move(select), tableAddress};
-        pendingRequests.emplace(k, v);
+        auto v = TListSplitRequestData{selectKey, std::move(select), tableAddress};
+        pendingRequests.emplace(selectKey, v);
     }
 
     if (pendingRequests.empty()) {
@@ -227,14 +228,15 @@ IGraphTransformer::TStatus TGenericListSplitTransformer::DoApplyAsyncChanges(TEx
         // Grab select from a read table query
         NConnector::NApi::TSelect select;
         FillSelectFromGenSourceSettings(select, settings, ctx, table.first);
+        auto selectKey = tableAddress.MakeKeyFor(select);
 
         // If splits for a similar select for this table was created skip it
-        if (table.first->HasSplitsForSelect(select)) {
+        if (table.first->HasSplitsForSelect(selectKey)) {
             continue;
         }
 
         // Find appropriate response
-        auto iter = ListResponses_.find(tableAddress.MakeKeyFor(select));
+        auto iter = ListResponses_.find(selectKey);
 
         if (iter == ListResponses_.end()) {
             auto msg = TStringBuilder()
@@ -260,7 +262,7 @@ IGraphTransformer::TStatus TGenericListSplitTransformer::DoApplyAsyncChanges(TEx
 
         Y_ENSURE(result->Splits.size() > 0);
 
-        if (auto issue = State_->AttachSplitsToTable(tableAddress, select, result->Splits); issue) {
+        if (auto issue = State_->AttachSplitsToTable(tableAddress, selectKey, result->Splits); issue) {
             ctx.AddError(*issue);
             return TStatus::Error;
         }

@@ -26,7 +26,7 @@ namespace NYql {
 ///
 class TGenericListSplitTransformer : public TGraphTransformerBase {
     struct TListSplitRequestData {
-        size_t Key;
+        TSelectKey Key;
         NConnector::NApi::TSelect Select;
         TGenericState::TTableAddress TableAddress;
     };
@@ -39,7 +39,7 @@ class TGenericListSplitTransformer : public TGraphTransformerBase {
     };
 
     using TListResponseMap =
-        std::unordered_map<size_t, TListResponse::TPtr>;
+        std::unordered_map<TSelectKey, TListResponse::TPtr, TSelectKeyHash>;
 
 public:
     explicit TGenericListSplitTransformer(TGenericState::TPtr state);

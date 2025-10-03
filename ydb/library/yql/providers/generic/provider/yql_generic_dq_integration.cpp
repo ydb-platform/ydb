@@ -171,7 +171,8 @@ namespace NYql {
                 NConnector::NApi::TSelect select;
                 FillSelect(select, TDqSource(&node), ctx);
 
-                auto splits = tableMeta->GetSplitsForSelect(select);
+                auto selectKey = tableAddress.MakeKeyFor(select);
+                auto splits = tableMeta->GetSplitsForSelect(selectKey);
                 const size_t totalSplits = splits.size();
 
                 partitions.clear();

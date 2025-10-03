@@ -57,46 +57,4 @@ namespace NYql {
         }
     }
 
-    ///
-    /// Combine hash, inspired by boost::hash_combine. The constant 0x9e3779b9 is an integer
-    /// representation of the fractional part of the Golden Ratio's reciprocal. It's primary purpose is
-    /// achieving a strong avalanche effect (small changes in input lead to large changes in output)
-    ///
-    void HashCombine(size_t& currentSeed, const size_t& hash) {
-        currentSeed ^= hash + 0x9e3779b9 + (currentSeed << 6) + (currentSeed >> 2);
-    }
-
-    ///
-    /// Get an unique key for a select request
-    ///
-    size_t GetSelectKey(const NConnector::NApi::TSelect& select) {
-        Y_ENSURE(select.has_from());
-        size_t seed = 0;
-
-        auto const where = select.has_where() && select.where().has_filter_typed() ?
-            select.where().filter_typed().SerializeAsString() : "";
-
-        HashCombine(seed, std::hash<TString>()(select.from().table()));
-        HashCombine(seed, std::hash<TString>()(where));
-
-        if (select.has_what() && !select.what().items().empty()) {
-            std::vector<TString> columns;
-            columns.reserve(select.what().items().size());
-
-            for (const auto& item : select.what().items()) {
-                if (!item.column().name().empty()) {
-                    columns.push_back(item.column().name());
-                }
-            }
-
-            std::sort(columns.begin(), columns.end());
-
-            for (const auto& col : columns) {
-                HashCombine(seed, std::hash<TString>()(col));
-            }
-        }
-
-        return seed;
-    }
-
 } // namespace NYql

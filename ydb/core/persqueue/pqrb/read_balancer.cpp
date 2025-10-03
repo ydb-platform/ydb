@@ -613,7 +613,7 @@ void TPersQueueReadBalancer::UpdateCounters(const TActorContext& ctx) {
     THolder<TPartitionLabeledCounters> labeledCounters;
     using TConsumerLabeledCounters = TProtobufTabletLabeledCounters<EClientLabeledCounters_descriptor>;
     THolder<TConsumerLabeledCounters> labeledConsumerCounters;
-    using TPartitionKeyCompactionCounters = TProtobufTabletLabeledCounters<EPartitionCompactionLabeledCounters_descriptor>;
+    using TPartitionKeyCompactionCounters = TProtobufTabletLabeledCounters<EPartitionKeyCompactionLabeledCounters_descriptor>;
     THolder<TPartitionKeyCompactionCounters> compactionCounters;
     labeledCounters.Reset(new TPartitionLabeledCounters("topic", 0, DatabasePath));
     labeledConsumerCounters.Reset(new TConsumerLabeledCounters("topic|x|consumer", 0, DatabasePath));
@@ -631,11 +631,9 @@ void TPersQueueReadBalancer::UpdateCounters(const TActorContext& ctx) {
     if (TabletConfig.GetEnableCompactification()) {
         if (AggregatedCompactionCounters.empty()) {
             for (ui32 i = 0; i < compactionCounters->GetCounters().Size(); ++i) {
-                TString name = compactionCounters->GetNames()[i];
-                TStringBuf nameBuf = name;
+                TStringBuf nameBuf = compactionCounters->GetNames()[i];
                 nameBuf.SkipPrefix("PQ/");
-                name = nameBuf;
-                AggregatedCompactionCounters.push_back(name.empty() ? nullptr : DynamicCounters->GetExpiringNamedCounter("name", name, false));
+                AggregatedCompactionCounters.push_back(nameBuf.empty() ? nullptr : DynamicCounters->GetExpiringNamedCounter("name", TString(nameBuf), false));
             }
         }
     } else {
@@ -701,9 +699,7 @@ void TPersQueueReadBalancer::UpdateCounters(const TActorContext& ctx) {
         AggregatedCounters[i]->Set(val);
     }
 
-    for (ui32 i = 0; compactionAggr->HasCounters() && i < compactionAggr->GetCounters().Size()
-                     && i < AggregatedCompactionCounters.size(); ++i
-        ) {
+    for (ui32 i = 0; i < compactionAggr->GetCounters().Size() && i < AggregatedCompactionCounters.size(); ++i) {
         if (!AggregatedCompactionCounters[i]) {
             continue;
         }

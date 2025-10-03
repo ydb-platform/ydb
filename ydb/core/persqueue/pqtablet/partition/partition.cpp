@@ -986,7 +986,7 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
         for (ui32 i = 0; i < PartitionCountersLabeled->GetCounters().Size(); ++i) {
             ac->AddValues(PartitionCountersLabeled->GetCounters()[i].Get());
         }
-        if (IsKeyCompactionEnabled()) {
+        if (PartitionCompactionCounters) {
             for (ui32 i = 0; i < PartitionCompactionCounters->GetCounters().Size(); ++i) {
                 ac->MutableCompactionCounters()->AddValues(PartitionCompactionCounters->GetCounters()[i].Get());
             }
@@ -2020,7 +2020,8 @@ bool TPartition::UpdateCounters(const TActorContext& ctx, bool force) {
             PartitionCountersLabeled->GetCounters()[METRIC_READ_QUOTA_PARTITION_TOTAL_USAGE].Set(quotaUsage);
         }
     }
-    if (PartitionCompactionCounters && Compacter) {
+    if (PartitionCompactionCounters) {
+        Y_ENSURE(Compacter);
         auto counters = Compacter->GetCounters();
         if (counters.UncompactedSize != PartitionCompactionCounters->GetCounters()[METRIC_UNCOMPACTED_SIZE_MAX].Get()) {
             PartitionCompactionCounters->GetCounters()[METRIC_UNCOMPACTED_SIZE_MAX].Set(counters.UncompactedSize);
@@ -4287,6 +4288,10 @@ const NKikimrPQ::TPQTabletConfig::TPartition* TPartition::GetPartitionConfig(con
 bool TPartition::IsSupportive() const
 {
     return Partition.IsSupportivePartition();
+}
+
+bool TPartition::IsKeyCompactionEnabled() const {
+    return Config.GetEnableCompactification() && AppData()->FeatureFlags.GetEnableTopicCompactificationByKey() && !IsSupportive();
 }
 
 void TPartition::AttachPersistRequestSpan(NWilson::TSpan& span)

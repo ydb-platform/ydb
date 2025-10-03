@@ -1300,10 +1300,6 @@ void TPartition::InitSplitMergeSlidingWindow() {
     SplitMergeAvgWriteBytes = std::make_unique<Tui64SumSlidingWindow>(TDuration::Seconds(Config.GetPartitionStrategy().GetScaleThresholdSeconds()), 1000);
 }
 
-bool TPartition::IsKeyCompactionEnabled() const {
-    return Config.GetEnableCompactification() && AppData()->FeatureFlags.GetEnableTopicCompactificationByKey() && !IsSupportive();
-}
-
 void TPartition::CreateCompacter() {
     if (!IsKeyCompactionEnabled()) {
         if (!IsSupportive()) {
@@ -1313,20 +1309,22 @@ void TPartition::CreateCompacter() {
         PartitionCompactionCounters.Reset();
         return;
     }
-    if (!Compacter) {
-        auto& userInfo = UsersInfoStorage->GetOrCreate(CLIENTID_COMPACTION_CONSUMER, ActorContext());
-        ui64 compStartOffset = userInfo.Offset;
-        Compacter = MakeHolder<TPartitionCompaction>(compStartOffset, ++CompacterCookie, this);
+    if (Compacter) {
+        Compacter->TryCompactionIfPossible();
+        return;
     }
-    if (!PartitionCompactionCounters) {
-        if (AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
-            PartitionCompactionCounters.Reset(new TPartitionCompactionCounters(EscapeBadChars(TopicName()),
-                                                                                Partition.InternalPartitionId,
-                                                                                Config.GetYdbDatabasePath()));
-        } else {
-            PartitionCompactionCounters.Reset(new TPartitionCompactionCounters(TopicName(),
-                                                                            Partition.InternalPartitionId));
-        }
+    auto& userInfo = UsersInfoStorage->GetOrCreate(CLIENTID_COMPACTION_CONSUMER, ActorContext());
+    ui64 compStartOffset = userInfo.Offset;
+    Compacter = MakeHolder<TPartitionCompaction>(compStartOffset, ++CompacterCookie, this);
+
+    //Init compacter counters
+    if (AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
+        PartitionCompactionCounters.Reset(new TPartitionKeyCompactionCounters(EscapeBadChars(TopicName()),
+                                                                           Partition.OriginalPartitionId,
+                                                                           Config.GetYdbDatabasePath()));
+    } else {
+        PartitionCompactionCounters.Reset(new TPartitionKeyCompactionCounters(TopicName(),
+                                                                           Partition.OriginalPartitionId));
     }
     Compacter->TryCompactionIfPossible();
 }

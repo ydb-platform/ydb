@@ -244,7 +244,7 @@ enum EPartitionLabeledCounters {
     METRIC_READ_QUOTA_NO_CONSUMER_USAGE = 41                      [(LabeledCounterOpts) = {Name: "" AggrFunc : EAF_MAX SVName: "topic.partition.read_without_consumer.throttled_microseconds_max"}];
 }
 
-enum EPartitionCompactionLabeledCounters {
+enum EPartitionKeyCompactionLabeledCounters {
     option (GlobalGroupNamesOpts) = {
         Names: "topic"
     };

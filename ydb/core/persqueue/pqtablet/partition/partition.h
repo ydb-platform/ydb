@@ -916,7 +916,7 @@ private:
 
     TTabletCountersBase TabletCounters;
     THolder<TPartitionLabeledCounters> PartitionCountersLabeled;
-    THolder<TPartitionCompactionCounters> PartitionCompactionCounters;
+    THolder<TPartitionKeyCompactionCounters> PartitionCompactionCounters;
 
     TInstant LastCountersUpdate;
 

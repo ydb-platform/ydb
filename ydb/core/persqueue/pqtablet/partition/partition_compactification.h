@@ -26,20 +26,20 @@ struct TBlobInfo {
 
 };
 
-using TPartitionCompactionCounters = TProtobufTabletLabeledCounters<EPartitionCompactionLabeledCounters_descriptor>;
+using TPartitionKeyCompactionCounters = TProtobufTabletLabeledCounters<EPartitionKeyCompactionLabeledCounters_descriptor>;
 
 struct TKeyCompactionCounters {
     ui64 UncompactedSize = 0;
     ui64 CompactedSize = 0;
     ui64 UncompactedCount = 0;
     ui64 CompactedCount = 0;
-    ui64 GetUncompactedRatio() {
-        if (UncompactedSize > 0) {
-            return 100.0 * CompactedSize / UncompactedSize;
-        } else {
-            return 0;
-        }
-    }
+    // ui64 GetUncompactedRatio() {
+    //     if (UncompactedSize > 0) {
+    //         return 100.0 * CompactedSize / UncompactedSize;
+    //     } else {
+    //         return 0;
+    //     }
+    // }
     TDuration CurrReadCycleDuration = TDuration::Zero();
     ui64 CurrentReadCycleKeys = 0;
     ui64 ReadCyclesCount = 0;
@@ -117,12 +117,11 @@ public:
 
         TMaybe<ui64> SkipOffset;
         TMap<ui64, TKey> EmptyBlobs;
+        TKeyCompactionCounters* Counters;
 
-        ui64 TotalMessagesWritten = 0;
+        TCompactState(THashMap<TString, ui64>&& data, ui64 firstUncompactedOffset, ui64 maxOffset, TPartition* partitionActor, TKeyCompactionCounters* counters);
 
-        TCompactState(THashMap<TString, ui64>&& data, ui64 firstUncompactedOffset, ui64 maxOffset, TPartition* partitionActor);
-
-        bool ProcessKVResponse(TEvKeyValue::TEvResponse::TPtr& ev, TKeyCompactionCounters& counters);
+        bool ProcessKVResponse(TEvKeyValue::TEvResponse::TPtr& ev);
         bool ProcessResponse(TEvPQ::TEvProxyResponse::TPtr& ev);
 
         EStep ContinueIfPossible(ui64 nextCookie);
@@ -131,7 +130,7 @@ public:
         void AddDeleteRange(const TKey& key);
         void SendCommit(ui64 cookie);
         void SaveLastBatch();
-        void UpdateDataKeysBody(TKeyCompactionCounters& counters);
+        void UpdateDataKeysBody();
     };
 
     EStep Step = EStep::PENDING;
@@ -153,7 +152,7 @@ public:
     void ProcessResponse(TEvPQ::TEvError::TPtr& ev);
 
     TKeyCompactionCounters GetCounters() const;
-    void RecalcBodySize();
+    void UpdateSizeCounters();
 };
 
 } // namespace NKikimr::NPQ

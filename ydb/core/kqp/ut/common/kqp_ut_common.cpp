@@ -645,7 +645,8 @@ void TKikimrRunner::Initialize(const TKikimrSettings& settings) {
     SetupLogLevelFromTestParam(NKikimrServices::TX_COLUMNSHARD_SCAN);
     SetupLogLevelFromTestParam(NKikimrServices::LOCAL_PGWIRE);
     SetupLogLevelFromTestParam(NKikimrServices::SSA_GRAPH_EXECUTION);
-
+    SetupLogLevelFromTestParam(NKikimrServices::DISCOVERY);
+    SetupLogLevelFromTestParam(NKikimrServices::DISCOVERY_CACHE);
 
     RunCall([this, domain = settings.DomainRoot]{
         this->Client->InitRootScheme(domain);

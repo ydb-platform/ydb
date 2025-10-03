@@ -122,7 +122,6 @@ namespace NActors {
                         actorPtr = pool->Actors.back();
                         actorPtr->StuckIndex = i;
                         pool->Actors.pop_back();
-                        pool->DeadActorsUsage.emplace_back(actor->GetActivityType(), actor->GetUsage(GetCycleCountFast()));
                     }
                 }
             }
@@ -207,7 +206,6 @@ namespace NActors {
 
         for (; Ctx.ExecutedEvents < Ctx.EventsPerMailbox; ++Ctx.ExecutedEvents) {
             if (TAutoPtr<IEventHandle> evExt = mailbox->Pop()) {
-                mailbox->ProcessEvents(mailbox);
                 recipient = evExt->GetRecipientRewrite();
                 TActorContext ctx(*mailbox, *this, eventStart, recipient);
                 TlsActivationContext = &ctx; // ensure dtor (if any) is called within actor system
@@ -253,14 +251,10 @@ namespace NActors {
                     hpnow = GetCycleCountFast();
                     hpprev = TlsThreadContext->UpdateStartOfProcessingEventTS(hpnow);
 
-                    mailbox->ProcessEvents(mailbox);
-                    actor->OnDequeueEvent();
-
                     size_t dyingActorsCnt = DyingActors.size();
                     Ctx.UpdateActorsStats(dyingActorsCnt);
                     if (dyingActorsCnt) {
                         DropUnregistered();
-                        mailbox->ProcessEvents(mailbox);
                         actor = nullptr;
                     }
 

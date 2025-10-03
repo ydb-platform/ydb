@@ -397,6 +397,101 @@ Y_UNIT_TEST_SUITE(TDqScalarHashJoinBasicTest) {
         );
     }
 
+    Y_UNIT_TEST(TestLeftSemiKind) {
+        TDqSetup<false> setup(GetDqNodeFactory());
+        TVector<ui64> leftKeys = {2, 3, 4};
+        TVector<TString> leftValues = {"b1","c1","d1"};
+
+        TVector<ui64> rightKeys = {1, 2, 3};
+        TVector<TString> rightValues = {"a2", "b2", "c2"};        
+
+        TVector<std::optional<ui64>> expectedKeys = {2, 3};
+        TVector<std::optional<TString>> expectedValues = {"b1","c1"};
+
+        auto [leftType, leftList] = ConvertVectorsToTuples(setup, leftKeys, leftValues);
+        auto [rightType, rightList] = ConvertVectorsToTuples(setup, rightKeys, rightValues);
+        auto [expectedType, expected] = ConvertVectorsToTuples(setup, expectedKeys, expectedValues);
+
+        RunTestDqScalarHashJoin(
+            setup, EJoinKind::LeftSemi,
+            expectedType, expected,
+            leftType, std::move(leftList), {0},
+            rightType, std::move(rightList), {0}
+        );
+    }
+    
+
+    Y_UNIT_TEST(TestRightSemiKind) {
+        TDqSetup<false> setup(GetDqNodeFactory());
+        TVector<ui64> leftKeys = {2, 3, 4};
+        TVector<TString> leftValues = {"b1","c1","d1"};
+
+        TVector<ui64> rightKeys = {1, 2, 3};
+        TVector<TString> rightValues = {"a2", "b2", "c2"};        
+
+        TVector<std::optional<ui64>> expectedKeys = {2, 3};
+        TVector<std::optional<TString>> expectedValues = {"b2","c2"};
+
+        auto [leftType, leftList] = ConvertVectorsToTuples(setup, leftKeys, leftValues);
+        auto [rightType, rightList] = ConvertVectorsToTuples(setup, rightKeys, rightValues);
+        auto [expectedType, expected] = ConvertVectorsToTuples(setup, expectedKeys, expectedValues);
+
+        RunTestDqScalarHashJoin(
+            setup, EJoinKind::RightSemi,
+            expectedType, expected,
+            leftType, std::move(leftList), {0},
+            rightType, std::move(rightList), {0}
+        );
+    }
+    
+    Y_UNIT_TEST(TestLeftOnlyKind) {
+        TDqSetup<false> setup(GetDqNodeFactory());
+        TVector<ui64> leftKeys = {2, 3, 4};
+        TVector<TString> leftValues = {"b1","c1","d1"};
+
+        TVector<ui64> rightKeys = {1, 2, 3};
+        TVector<TString> rightValues = {"a2", "b2", "c2"};        
+
+        TVector<std::optional<ui64>> expectedKeys = {4};
+        TVector<std::optional<TString>> expectedValues = {"d1"};
+
+        auto [leftType, leftList] = ConvertVectorsToTuples(setup, leftKeys, leftValues);
+        auto [rightType, rightList] = ConvertVectorsToTuples(setup, rightKeys, rightValues);
+        auto [expectedType, expected] = ConvertVectorsToTuples(setup, expectedKeys, expectedValues);
+
+        RunTestDqScalarHashJoin(
+            setup, EJoinKind::LeftOnly,
+            expectedType, expected,
+            leftType, std::move(leftList), {0},
+            rightType, std::move(rightList), {0}
+        );
+    }
+    
+
+    Y_UNIT_TEST(TestRightOnlyKind) {
+        TDqSetup<false> setup(GetDqNodeFactory());
+        TVector<ui64> leftKeys = {2, 3, 4};
+        TVector<TString> leftValues = {"b1","c1","d1"};
+
+        TVector<ui64> rightKeys = {1, 2, 3};
+        TVector<TString> rightValues = {"a2", "b2", "c2"};        
+
+        TVector<std::optional<ui64>> expectedKeys = {1};
+        TVector<std::optional<TString>> expectedValues = {"a2"};
+
+        auto [leftType, leftList] = ConvertVectorsToTuples(setup, leftKeys, leftValues);
+        auto [rightType, rightList] = ConvertVectorsToTuples(setup, rightKeys, rightValues);
+        auto [expectedType, expected] = ConvertVectorsToTuples(setup, expectedKeys, expectedValues);
+
+        RunTestDqScalarHashJoin(
+            setup, EJoinKind::RightOnly,
+            expectedType, expected,
+            leftType, std::move(leftList), {0},
+            rightType, std::move(rightList), {0}
+        );
+    }
+    
+
 
 }
 

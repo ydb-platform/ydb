@@ -21,6 +21,32 @@ TKeyTypes KeyTypesFromColumns(const std::vector<TType*>& types, const std::vecto
     return kt;
 }
 
+bool SemiOrOnlyJoin(EJoinKind kind){
+    switch (kind){
+        using enum EJoinKind;
+        case RightOnly:
+        case RightSemi:
+        case LeftOnly:
+        case LeftSemi:
+        return true;
+        default:
+        return false;
+    }
+
+}
+bool IsInner(EJoinKind kind) {
+    switch (kind){
+        using enum EJoinKind;
+        case Inner:
+        case Full:
+        case Left:
+        case Right:
+        return true;
+        default:
+        return false;
+    }
+}
+
 // bool SwitchSides(EJoinKind kind){
 //     switch (kind){
 //         using enum EJoinKind;
@@ -80,18 +106,13 @@ public:
         std::ssize(rightColumnTypes)
         , TWideUnboxedEqual{KeyTypes_}
         , TWideUnboxedHasher{KeyTypes_}
-        , IsLeftOptional(joinKind))
+        , NJoinTable::NeedToTrackUnusedRightTuples(joinKind))
     ,   Values_(rightColumnTypes.size())
     ,   Pointers_()
     ,   Output_()
     {
         MKQL_ENSURE(RightColumnTypes_.size() == LeftColumnTypes_.size(), "unimplemented");
-        MKQL_ENSURE(joinKind == EJoinKind::Inner 
-            || joinKind == EJoinKind::Left 
-            || joinKind == EJoinKind::Right 
-            || joinKind == EJoinKind::Full
-            || joinKind == EJoinKind::Exclusion
-            , "Unsupported join kind");
+        MKQL_ENSURE(joinKind != EJoinKind::Cross, "Unsupported join kind");
         Pointers_.resize(LeftColumnTypes_.size());
         for (int index = 0; index < std::ssize(LeftKeyColumns_); ++index) {
             Pointers_[LeftKeyColumns_[index]] = &Values_[index];
@@ -109,7 +130,13 @@ public:
     }
 
     EFetchResult FetchValues(TComputationContext& ctx, NUdf::TUnboxedValue* const* output) {
-        const int outputTupleSize = std::ssize(RightColumnTypes_) + std::ssize(LeftColumnTypes_);
+        const int outputTupleSize = [&] {
+            if (SemiOrOnlyJoin(JoinKind_)) {
+                return std::ssize(RightColumnTypes_);
+            } else {
+                return std::ssize(RightColumnTypes_) * 2;
+            }
+        }();
         if (auto* buildSide = BuildSide()) {
             auto res = buildSide->FetchValues(ctx, Pointers_.data());
             switch (res) {
@@ -147,10 +174,23 @@ public:
             case EFetchResult::Finish: {
                 LeftFinished_ = true;
                 if (Table_.UnusedTrackingOn()) {
+                    for (auto& v : Table_.MapView()){
+                        if (v.second.Used && JoinKind_ == EJoinKind::RightSemi ) {
+                            for( NJoinTable::TTuple used: v.second.Tuples ) {
+                                std::copy_n(used, std::ssize(RightColumnTypes_), std::back_inserter(Output_));
+                            }
+                        }
+                    }
                     Table_.ForEachUnused([this](NJoinTable::TTuple unused) {
-                        AppendTuple(nullptr, unused, Output_);
+                        if (JoinKind_ == EJoinKind::RightOnly){
+                            std::copy_n(unused, std::ssize(RightColumnTypes_), std::back_inserter(Output_));
+                        }
+                        if (JoinKind_ == EJoinKind::Exclusion || JoinKind_ == EJoinKind::Right || JoinKind_ == EJoinKind::Full){
+                            AppendTuple(nullptr, unused, Output_);
+                        }
                     });
                 }
+                
                 return EFetchResult::Yield;
             }
             case EFetchResult::Yield: {
@@ -159,12 +199,16 @@ public:
             case EFetchResult::One: {
                 bool found = false;
                 Table_.Lookup(Values_.data(), [this, &found](NJoinTable::TTuple matched) {
-                    if ((static_cast<int>(JoinKind_) & static_cast<int>(EJoinKind::Inner)) != 0){
+                    if (IsInner(JoinKind_)) { 
+                        // MKQL_ENSURE(JoinKind_ != NKikimrWhiteboard::TEvTabletStateReques, message)
                         AppendTuple(Values_.data(),matched,Output_);
-                    }
+                    } 
                     found = true;
                 });
-                if (!found && NJoinTable::NeedToTrackUnusedLeftTuples(JoinKind_)) {
+                if (!found && JoinKind_ == EJoinKind::LeftOnly || found && JoinKind_ == EJoinKind::LeftSemi) { 
+                    std::copy(Values_.data(), Values_.data() + std::ssize(LeftColumnTypes_), std::back_inserter(Output_));
+                }
+                if (!found && (JoinKind_ == EJoinKind::Exclusion || JoinKind_ == EJoinKind::Left || JoinKind_ == EJoinKind::Full)) {
                     AppendTuple(Values_.data(), nullptr, Output_);
                 }
                 return EFetchResult::Yield;

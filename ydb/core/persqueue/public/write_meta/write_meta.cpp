@@ -53,7 +53,7 @@ TString GetSerializedData(const NYdb::NTopic::TReadSessionEvent::TDataReceivedEv
             SetMetaField(proto, TString{item.first}, TString{item.second});
         }
     }
-    auto& fields = message.GetMessageMeta()->Fields;
+    auto& fields = message.GetMeta()->Fields;
     if (!fields.empty()) {
         for (const auto& item : fields) {
             auto& metaItem = *proto.AddMessageMeta();
@@ -82,4 +82,3 @@ NKikimrPQClient::TDataChunk GetDeserializedData(const TString& string) {
 }
 
 } // NKikimr
-

@@ -17,9 +17,9 @@ When adding, updating, or deleting a table row, CDC generates a change record by
 
 * Changefeeds support records of the following types of operations:
 
-  * Updates: overwriting the values of the specified columns.
-  * Replacements: overwriting the values of the specified columns, the values of the unspecified columns are replaced by their default values.
-  * Erases.
+  * Updates: overwriting the values of the specified columns. Query example: [UPDATE](../yql/reference/syntax/update.md).
+  * Replacements: overwriting the values of the specified columns, the values of the unspecified columns are replaced by their default values. Query example: [REPLACE INTO](../yql/reference/syntax/replace_into.md).
+  * Erases. Query example: [DELETE FROM](../yql/reference/syntax/delete.md).
 
 Adding rows is a special update or replace case, and a record of adding a row in a changefeed will look similar to an update or replace record, depending on the original request that led to the change.
 

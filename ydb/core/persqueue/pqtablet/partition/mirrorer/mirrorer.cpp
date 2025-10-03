@@ -112,7 +112,7 @@ bool TMirrorer::AddToWriteRequest(
     auto write = request.AddCmdWrite();
     write->SetData(GetSerializedData(message));
     TString producerId{message.GetProducerId()};
-    for (const auto& item : message.GetMeta()->Fields) {
+    for (const auto& item : message.GetSessionMeta()->Fields) {
         if (item.first == "_encoded_producer_id") {
             producerId = Base64Decode(item.second);
             break;

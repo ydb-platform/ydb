@@ -231,7 +231,7 @@ namespace NKikimr::NPersQueueTests {
                 }
                 std::vector messages = event->GetMessages();
                 for (NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage& message : messages) {
-                    Cerr << (TStringBuilder() << "READ " << LabeledOutput(description, message.GetOffset(), message.GetProducerId(), message.GetMessageGroupId(), message.GetSeqNo(), message.GetData().size(), message.GetMeta()->Fields.contains("precharge")) << "\n") << Flush;
+                    Cerr << (TStringBuilder() << "READ " << LabeledOutput(description, message.GetOffset(), message.GetProducerId(), message.GetMessageGroupId(), message.GetSeqNo(), message.GetData().size(), message.GetSessionMeta()->Fields.contains("precharge")) << "\n") << Flush;
                     if (!passFilter(message)) {
                         filteredOut += 1;
                         continue;
@@ -254,7 +254,7 @@ namespace NKikimr::NPersQueueTests {
         }
 
         bool SkipPrecharge(const NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage& message) {
-            const auto& meta = message.GetMeta()->Fields;
+            const auto& meta = message.GetSessionMeta()->Fields;
             return !meta.contains("precharge");
         }
 
@@ -273,8 +273,8 @@ namespace NKikimr::NPersQueueTests {
                 UNIT_ASSERT_VALUES_EQUAL_C(dstMessage.GetSeqNo(), srcMessage.GetSeqNo(), caseDescription);
                 UNIT_ASSERT_VALUES_EQUAL_C(dstMessage.GetCreateTime(), srcMessage.GetCreateTime(), caseDescription);
                 UNIT_ASSERT_VALUES_EQUAL_C(dstMessage.GetWriteTime(), srcMessage.GetWriteTime(), caseDescription);
-                const auto& dstMeta = dstMessage.GetMeta()->Fields;
-                const auto& srcMeta = srcMessage.GetMeta()->Fields;
+                const auto& dstMeta = dstMessage.GetSessionMeta()->Fields;
+                const auto& srcMeta = srcMessage.GetSessionMeta()->Fields;
                 UNIT_ASSERT_VALUES_EQUAL(dstMeta.size(), srcMeta.size());
                 for (auto& item : srcMeta) {
                     UNIT_ASSERT(dstMeta.count(item.first));

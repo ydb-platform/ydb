@@ -223,7 +223,7 @@ std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeReque
         const auto& task = TasksGraph.GetTask(taskId);
         auto* serializedTask = TasksGraph.ArenaSerializeTaskToProto(task, true);
         if (ArrayBufferMinFillPercentage) {
-            serializedTask->SetArrayBufferMinFillPercentage(*ArrayBufferMinFillPercentage);
+            serializedTask->SetArrayBufferMinFillPercentage(ArrayBufferMinFillPercentage);
         }
         request.AddTasks()->Swap(serializedTask);
     }
@@ -479,11 +479,11 @@ TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) 
     }
 
     if (ArrayBufferMinFillPercentage) {
-        taskDesc->SetArrayBufferMinFillPercentage(*ArrayBufferMinFillPercentage);
+        taskDesc->SetArrayBufferMinFillPercentage(ArrayBufferMinFillPercentage);
     }
 
     if (BufferPageAllocSize) {
-        taskDesc->SetBufferPageAllocSize(*BufferPageAllocSize);
+        taskDesc->SetBufferPageAllocSize(BufferPageAllocSize);
     }
 
     auto startResult = CaFactory_->CreateKqpComputeActor({

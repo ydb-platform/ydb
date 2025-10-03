@@ -64,8 +64,8 @@ public:
         const std::shared_ptr<NKikimr::NKqp::NRm::IKqpResourceManager>& ResourceManager_;
         const std::shared_ptr<NKikimr::NKqp::NComputeActor::IKqpNodeComputeActorFactory>& CaFactory_;
         const NKikimrConfig::TTableServiceConfig::EBlockTrackingMode BlockTrackingMode;
-        const TMaybe<ui8> ArrayBufferMinFillPercentage;
-        const TMaybe<size_t> BufferPageAllocSize;
+        const ui8 ArrayBufferMinFillPercentage;
+        const size_t BufferPageAllocSize;
         const bool VerboseMemoryLimitException;
         NScheduler::NHdrf::NDynamic::TQueryPtr Query;
         const TActorId& CheckpointCoordinator;
@@ -144,8 +144,8 @@ private:
     TIntrusivePtr<NRm::TTxState> TxInfo;
     TVector<TProgressStat> LastStats;
     const NKikimrConfig::TTableServiceConfig::EBlockTrackingMode BlockTrackingMode;
-    const TMaybe<ui8> ArrayBufferMinFillPercentage;
-    const TMaybe<size_t> BufferPageAllocSize;
+    const ui8 ArrayBufferMinFillPercentage;
+    const size_t BufferPageAllocSize;
     const bool VerboseMemoryLimitException;
     NScheduler::NHdrf::NDynamic::TQueryPtr Query;
     TActorId CheckpointCoordinatorId;

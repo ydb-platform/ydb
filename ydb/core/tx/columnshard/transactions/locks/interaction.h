@@ -400,6 +400,7 @@ public:
 class TInteractionsContext {
 private:
     THashMap<TInternalPathId, TReadIntervals> ReadIntervalsByPathId;
+    THashMap<ui64, ui64> IntervalCountByTx;
 
 public:
     bool HasReadIntervals(const TInternalPathId pathId) const {
@@ -431,6 +432,7 @@ public:
             it->second.AddIntervalTx(txId);
         }
         itTo->second.AddFinish(txId, to.IsIncluded());
+        ++IntervalCountByTx[txId];
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "add_interval")("interactions_info", DebugJson().GetStringRobust());
     }
 
@@ -458,7 +460,23 @@ public:
         if (intervals.IsEmpty()) {
             ReadIntervalsByPathId.erase(itIntervals);
         }
+        {
+            auto findCounter = IntervalCountByTx.find(txId);
+            AFL_VERIFY(findCounter != IntervalCountByTx.end());
+            AFL_VERIFY(findCounter->second);
+            --findCounter->second;
+            if (!findCounter->second) {
+                IntervalCountByTx.erase(findCounter);
+            }
+        }
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "remove_interval")("interactions_info", DebugJson().GetStringRobust());
+    }
+
+    ui64 GetIntervalCount(const ui64 txId) const {
+        if (auto findCounter = IntervalCountByTx.FindPtr(txId)) {
+            return *findCounter;
+        }
+        return 0;
     }
 };
 

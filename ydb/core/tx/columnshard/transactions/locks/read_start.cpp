@@ -1,4 +1,6 @@
 #include "read_start.h"
+
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/tx/columnshard/transactions/protos/tx_event.pb.h>
 
 namespace NKikimr::NOlap::NTxInteractions {
@@ -33,7 +35,13 @@ void TEvReadStart::DoSerializeToProto(NKikimrColumnShardTxProto::TEvent& proto) 
 }
 
 void TEvReadStart::DoAddToInteraction(const ui64 txId, TInteractionsContext& context) const {
+    const ui64 softLimit = AppDataVerified().ColumnShardConfig.GetTxLockRangesSoftLimit();
     for (auto&& i : *Filter) {
+        if (context.GetIntervalCount(txId) >= softLimit) {
+            context.AddInterval(txId, PathId.InternalPathId, TIntervalPoint::From(i.GetPredicateFrom(), Schema),
+                TIntervalPoint::To(std::prev(Filter->end())->GetPredicateTo(), Schema));
+            break;
+        }
         context.AddInterval(txId, PathId.InternalPathId, TIntervalPoint::From(i.GetPredicateFrom(), Schema), TIntervalPoint::To(i.GetPredicateTo(), Schema));
     }
 }

@@ -21,10 +21,6 @@ TKeyTypes KeyTypesFromColumns(const std::vector<TType*>& types, const std::vecto
     return kt;
 }
 
-struct Renames{
-    std::vector<int> LeftIndexes;
-    std::vector<int> RightIndexes;
-};
 
 class TScalarHashJoinState : public TComputationValue<TScalarHashJoinState> {
     using TBase = TComputationValue<TScalarHashJoinState>;

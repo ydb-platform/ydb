@@ -606,6 +606,8 @@ protected:
         const auto& databaseId = GetUserRequestContext()->DatabaseId;
         const auto& poolId = GetUserRequestContext()->PoolId.empty() ? NResourcePool::DEFAULT_POOL_ID : GetUserRequestContext()->PoolId;
 
+        LWTRACK(KqpBaseExecuterHandleReady, ResponseEv->Orbit, TxId);
+
         if (!databaseId.empty() && (poolId != NResourcePool::DEFAULT_POOL_ID || AccountDefaultPoolInScheduler)) {
             const auto schedulerServiceId = MakeKqpSchedulerServiceId(SelfId().NodeId());
 
@@ -645,7 +647,6 @@ protected:
                 break;
         }
 
-        LWTRACK(KqpBaseExecuterHandleReady, ResponseEv->Orbit, TxId);
         if (IsDebugLogEnabled()) {
             for (auto& tx : Request.Transactions) {
                 LOG_D("Executing physical tx, type: " << (ui32) tx.Body->GetType() << ", stages: " << tx.Body->StagesSize());

@@ -904,6 +904,12 @@ namespace NKikimr::NGRpcProxy::V1 {
             }
         }
 
+        if (settings.has_metrics_level()) {
+            pqTabletConfig->SetMetricsLevel(settings.metrics_level());
+        } else {
+            pqTabletConfig->ClearMetricsLevel();
+        }
+
         return CheckConfig(*pqTabletConfig, supportedClientServiceTypes, error, pqConfig, Ydb::StatusIds::BAD_REQUEST);
     }
 
@@ -1101,6 +1107,10 @@ namespace NKikimr::NGRpcProxy::V1 {
                 error = messageAndCode.Message;
                 return TYdbPqCodes(Ydb::StatusIds::BAD_REQUEST, messageAndCode.PQCode);
             }
+        }
+
+        if (request.has_metrics_level()) {
+            pqTabletConfig->SetMetricsLevel(request.metrics_level());
         }
 
         return TYdbPqCodes(CheckConfig(*pqTabletConfig, supportedClientServiceTypes, error, pqConfig, Ydb::StatusIds::BAD_REQUEST),
@@ -1342,6 +1352,12 @@ namespace NKikimr::NGRpcProxy::V1 {
                 error = messageAndCode.Message;
                 return Ydb::StatusIds::BAD_REQUEST;
             }
+        }
+
+        if (request.has_set_metrics_level()) {
+            pqTabletConfig->SetMetricsLevel(request.set_metrics_level());
+        } else if (request.has_reset_metrics_level()) {
+            pqTabletConfig->ClearMetricsLevel();
         }
 
         return CheckConfig(*pqTabletConfig, supportedClientServiceTypes, error, pqConfig, Ydb::StatusIds::ALREADY_EXISTS);

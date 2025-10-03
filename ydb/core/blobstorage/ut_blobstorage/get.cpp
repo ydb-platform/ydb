@@ -1,6 +1,8 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 #include <ydb/core/blobstorage/ut_blobstorage/lib/common.h>
 
+#include <ydb/library/actors/interconnect/rdma/mem_pool.h>
+
 Y_UNIT_TEST_SUITE(Get) {
 
     void SendGet(
@@ -107,5 +109,55 @@ Y_UNIT_TEST_SUITE(Get) {
         SendGet(test, originalBlobId, data, NKikimrProto::OK);
         // check that now TEvGet returns BLOCKED for blocked generation with reader params
         SendGet(test, originalBlobId, data, NKikimrProto::BLOCKED, TEvBlobStorage::TEvGet::TReaderTabletData(tabletId, tabletGeneration));
+    }
+
+    Y_UNIT_TEST(TestRdmaRegiseredMemory) {
+        TEnvironmentSetup env(true);
+        TTestInfo test = InitTest(env);
+
+        auto groups = env.GetGroups();
+        auto groupInfo = env.GetGroupInfo(groups.front());
+
+        ui64 tabletId = 1;
+        ui32 tabletGeneration = 1;
+
+        constexpr ui32 size = 1000;
+        TString data(size, 'a');
+        TLogoBlobID originalBlobId(tabletId, tabletGeneration, 0, 0, size, 0);
+
+        SendPut(test, originalBlobId, data, NKikimrProto::OK);
+        env.CompactVDisk(groupInfo->GetActorId(0));
+
+        auto memPool = NInterconnect::NRdma::CreateDummyMemPool();
+        env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvChunkReadResult) {
+                Cerr << "TEvChunkReadResult: " << ev->ToString() << Endl;
+                auto* res = ev->CastAsLocal<NPDisk::TEvChunkReadResult>();
+                auto buf = res->Data.ToString();
+                auto newBuf = memPool->AllocRcBuf(buf.size(), NInterconnect::NRdma::IMemPool::EMPTY);
+                UNIT_ASSERT(newBuf);
+                std::memcpy(newBuf->UnsafeGetDataMut(), buf.GetData(), buf.GetSize());
+                res->Data = TBufferWithGaps(0, std::move(*newBuf));
+                res->Data.Commit();
+            } else if (ev->GetTypeRewrite() == TEvBlobStorage::EvVGetResult) {
+                Cerr << "TEvVGetResult: " << ev->ToString() << Endl;
+                auto* res = ev->CastAsLocal<TEvBlobStorage::TEvVGetResult>();
+                auto payload = res->GetPayload();
+                UNIT_ASSERT_VALUES_EQUAL(payload.size(), 1);
+                for (auto& rope : payload) {
+                    for (auto it = rope.Begin(); it != rope.End(); ++it) {
+                        const TRcBuf& chunk = it.GetChunk();
+                        auto memReg = NInterconnect::NRdma::TryExtractFromRcBuf(chunk);
+                        UNIT_ASSERT_C(!memReg.Empty(), "unable to extract mem region from chunk");
+                        UNIT_ASSERT_VALUES_EQUAL_C(memReg.GetSize(), size, "invalid size for memReg");
+                        UNIT_ASSERT_C(memReg.GetLKey(0) != 0, "invalid lkey");
+                        UNIT_ASSERT_C(memReg.GetRKey(0) != 0, "invalid rkey");
+                    }
+                }
+            }
+            return true;
+        };
+
+        SendGet(test, originalBlobId, data, NKikimrProto::OK, TEvBlobStorage::TEvGet::TReaderTabletData(tabletId, tabletGeneration));
     }
 }

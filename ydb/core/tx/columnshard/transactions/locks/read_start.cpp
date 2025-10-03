@@ -44,6 +44,7 @@ void TEvReadStart::DoAddToInteraction(const ui64 txId, TInteractionsContext& con
         }
         context.AddInterval(txId, PathId.InternalPathId, TIntervalPoint::From(i.GetPredicateFrom(), Schema), TIntervalPoint::To(i.GetPredicateTo(), Schema));
     }
+    context.GetCounters().OnReadStart(context.GetIntervalCount(txId));
 }
 
 void TEvReadStart::DoRemoveFromInteraction(const ui64 txId, TInteractionsContext& context) const {

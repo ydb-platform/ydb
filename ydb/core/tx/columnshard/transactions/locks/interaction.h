@@ -2,6 +2,7 @@
 #include <ydb/core/formats/arrow/process_columns.h>
 #include <ydb/core/formats/arrow/rows/view.h>
 #include <ydb/core/tx/columnshard/common/path_id.h>
+#include <ydb/core/tx/columnshard/counters/tx_interactions.h>
 
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/accessor/validator.h>
@@ -401,6 +402,7 @@ class TInteractionsContext {
 private:
     THashMap<TInternalPathId, TReadIntervals> ReadIntervalsByPathId;
     THashMap<ui64, ui64> IntervalCountByTx;
+    YDB_READONLY_DEF(NColumnShard::TTxInteractionCounters, Counters);
 
 public:
     bool HasReadIntervals(const TInternalPathId pathId) const {

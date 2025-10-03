@@ -1,6 +1,25 @@
 #include "blob_scanner.h"
+#include "impl.h"
 
 namespace NKikimr {
+
+void TBlobStorageController::TGroupInfo::IsScanPlanned(TDuration period) const {
+    if (IsScanInProgress) {
+        return true;
+    }
+
+    if (!ScanPlannedTimestamp) {
+        return false;
+    }
+
+    TMonotonic now = TActivationContext::Monotonic();
+    if (now + period >= ScanPlannedTimestamp) {
+        return true;
+    }
+
+    return false;
+}
+
 
 TBlobCheckerGroupState::TBlobCheckerGroupState(NKikimrBlobChecker::TBlobCheckerGroupState serializedState) {
     ShortStatus = serializedState.GetShortStatus();

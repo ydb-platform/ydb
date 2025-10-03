@@ -3,7 +3,7 @@
 #include <ydb/public/sdk/cpp/src/client/topic/ut/ut_utils/topic_sdk_test_setup.h>
 
 #include <library/cpp/testing/unittest/registar.h>
-#include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
+#include <ydb/core/persqueue/public/partition_key_range/partition_key_range.h>
 #include <ydb/core/persqueue/pqrb/partition_scale_manager.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/test_env.h>
@@ -202,6 +202,42 @@ Y_UNIT_TEST_SUITE(WithSDK) {
             // check that verify didn`t happened
             UNIT_ASSERT(event.has_value());
         }
+    }
+
+    Y_UNIT_TEST(Read_WithConsumer_WithBadPartitions) {
+        TTopicSdkTestSetup setup = CreateSetup();
+        setup.CreateTopic(TEST_TOPIC);
+
+        TTopicClient client(setup.MakeDriver());
+
+        TReadSessionSettings settings;
+        settings.AppendTopics(TTopicReadSettings().Path(TEST_TOPIC)
+            .AppendPartitionIds(0)
+            .AppendPartitionIds(101)
+            .AppendPartitionIds(113));
+        settings.ConsumerName(TEST_CONSUMER);
+        auto session = client.CreateReadSession(settings);
+        auto event = session->GetEvent(true);
+        // check that verify didn`t happened
+        UNIT_ASSERT(event.has_value());
+    }
+
+    Y_UNIT_TEST(Read_WithoutConsumer_WithBadPartitions) {
+        TTopicSdkTestSetup setup = CreateSetup();
+        setup.CreateTopic(TEST_TOPIC);
+
+        TTopicClient client(setup.MakeDriver());
+
+        TReadSessionSettings settings;
+        settings.AppendTopics(TTopicReadSettings().Path(TEST_TOPIC)
+            .AppendPartitionIds(0)
+            .AppendPartitionIds(101)
+            .AppendPartitionIds(113));
+        settings.WithoutConsumer();
+        auto session = client.CreateReadSession(settings);
+        auto event = session->GetEvent(true);
+        // check that verify didn`t happened
+        UNIT_ASSERT(event.has_value());
     }
 }
 

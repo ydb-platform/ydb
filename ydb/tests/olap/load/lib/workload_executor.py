@@ -125,6 +125,7 @@ class WorkloadTestBase(LoadSuiteBase):
                     False, "Stopping nemesis during teardown", nemesis_log
                 )
                 cls._nemesis_started = False
+                YdbCluster.wait_ydb_alive(120)
 
             except Exception as e:
                 error_msg = f"Error stopping nemesis: {e}"
@@ -261,7 +262,7 @@ class WorkloadTestBase(LoadSuiteBase):
                         # 1. Устанавливаем права на выполнение для nemesis
                         chmod_cmd = "sudo chmod +x /Berkanavt/nemesis/bin/nemesis"
                         chmod_result = execute_command(
-                            host=host, cmd=chmod_cmd, raise_on_error=False
+                            host=host, cmd=chmod_cmd, raise_on_error=False, timeout=10
                         )
 
                         chmod_stderr = (
@@ -410,7 +411,7 @@ class WorkloadTestBase(LoadSuiteBase):
                 try:
                     cmd = f"sudo service nemesis {action}"
                     result = execute_command(
-                        host=host, cmd=cmd, raise_on_error=False)
+                        host=host, cmd=cmd, raise_on_error=False, timeout=10)
 
                     stdout = result.stdout if result.stdout else ""
                     stderr = result.stderr if result.stderr else ""
@@ -585,7 +586,8 @@ class WorkloadTestBase(LoadSuiteBase):
             result = execute_command(
                 host=host,
                 cmd=f"sudo cp {fallback_source} {remote_path}",
-                raise_on_error=False
+                raise_on_error=False,
+                timeout=10
             )
 
         # Проверяем результат
@@ -1782,50 +1784,6 @@ class WorkloadTestBase(LoadSuiteBase):
 
         return result
 
-    def _check_scheme_state(self):
-        """Проверяет состояние схемы базы данных"""
-        with allure.step("Checking scheme state"):
-            try:
-
-                ydb_cli_path = yatest.common.binary_path(
-                    os.getenv("YDB_CLI_BINARY"))
-                execution = yatest.common.execute(
-                    [
-                        ydb_cli_path,
-                        "--endpoint",
-                        f"{YdbCluster.ydb_endpoint}",
-                        "--database",
-                        f"/{YdbCluster.ydb_database}",
-                        "scheme",
-                        "ls",
-                        "-lR",
-                    ],
-                    wait=True,
-                    check_exit_code=False,
-                )
-                scheme_stdout = (
-                    execution.std_out.decode(
-                        "utf-8") if execution.std_out else ""
-                )
-                scheme_stderr = (
-                    execution.std_err.decode(
-                        "utf-8") if execution.std_err else ""
-                )
-            except Exception as e:
-                scheme_stdout = ""
-                scheme_stderr = str(e)
-
-            allure.attach(
-                scheme_stdout, "Scheme state stdout", allure.attachment_type.TEXT
-            )
-            if scheme_stderr:
-                allure.attach(
-                    scheme_stderr, "Scheme state stderr", allure.attachment_type.TEXT
-                )
-            logging.info(f"scheme stdout: {scheme_stdout}")
-            if scheme_stderr:
-                logging.warning(f"scheme stderr: {scheme_stderr}")
-
     def _process_single_run_result(
         self,
         overall_result,
@@ -2175,9 +2133,6 @@ class WorkloadTestBase(LoadSuiteBase):
             successful_runs = execution_result["successful_runs"]
             total_runs = execution_result["total_runs"]
 
-            # Проверяем состояние схемы
-            self._check_scheme_state()
-
             # Анализируем результаты и добавляем ошибки/предупреждения
             self._analyze_execution_results(
                 overall_result, successful_runs, total_runs, use_iterations
@@ -2193,11 +2148,19 @@ class WorkloadTestBase(LoadSuiteBase):
                 use_iterations,
             )
 
-            # Финальная обработка с диагностикой
+            # Финальная обработка с диагностикой (подготавливает данные для выгрузки)
             overall_result.workload_start_time = execution_result["workload_start_time"]
             self.process_workload_result_with_diagnostics(
                 overall_result, workload_name, False, use_node_subcols=True
             )
+
+            # Отдельный шаг для выгрузки результатов (ПОСЛЕ подготовки всех данных)
+            self._safe_upload_results(overall_result, workload_name)
+
+            # Финальная обработка статуса (может выбросить исключение, но результаты уже выгружены)
+            # Используем node_errors, сохраненные из диагностики
+            node_errors = getattr(overall_result, '_node_errors', [])
+            self._handle_final_status(overall_result, workload_name, node_errors)
 
             logging.info(
                 f"Final result: success={
@@ -2260,6 +2223,7 @@ class WorkloadTestBase(LoadSuiteBase):
 
             # Собираем информацию об ошибках нод
             node_errors = []
+            verify_errors = {}
 
             # Проверяем состояние нод и собираем ошибки
             try:
@@ -2268,6 +2232,7 @@ class WorkloadTestBase(LoadSuiteBase):
                 diagnostics_start_time = getattr(
                     result, "workload_start_time", result.start_time
                 )
+                verify_errors = self.check_nodes_verifies_with_timing(diagnostics_start_time, end_time)
                 node_errors = self.check_nodes_diagnostics_with_timing(
                     result, diagnostics_start_time, end_time
                 )
@@ -2276,13 +2241,10 @@ class WorkloadTestBase(LoadSuiteBase):
                 logging.error(f"Error getting nodes state: {e}")
                 # Добавляем ошибку в результат
                 result.add_warning(f"Error getting nodes state: {e}")
+                node_errors = []  # Устанавливаем пустой список если диагностика не удалась
 
             # Вычисляем время выполнения
             end_time = time_module.time()
-            start_time = result.start_time if result.start_time else end_time - 1
-
-            # Добавляем информацию о workload в отчет
-            from ydb.tests.olap.lib.allure_utils import allure_test_description
 
             # Добавляем дополнительную информацию для отчета
             additional_table_strings = {}
@@ -2324,19 +2286,6 @@ class WorkloadTestBase(LoadSuiteBase):
                             avg_threads:.1f} threads per iteration"
                     )
 
-            # Создаем отчет
-            allure_test_description(
-                suite="workload",
-                test=workload_name,
-                start_time=start_time,
-                end_time=end_time,
-                addition_table_strings=additional_table_strings,
-                node_errors=node_errors,
-                workload_result=result,
-                workload_params=workload_params,
-                use_node_subcols=use_node_subcols,
-            )
-
             # --- ВАЖНО: выставляем nodes_with_issues для корректного fail ---
             stats = result.get_stats(workload_name)
             if stats is not None:
@@ -2345,16 +2294,110 @@ class WorkloadTestBase(LoadSuiteBase):
                     "nodes_with_issues",
                     len(node_errors))
 
-            # --- Обработка финального статуса (используем методы из базового класса) ---
-            self._update_summary_flags(result, workload_name)
-            self._handle_final_status(result, workload_name, node_errors)
+                # Формируем списки ошибок для выгрузки
+                node_error_messages = []
+                workload_error_messages = []
 
-            # --- Загрузка результатов ---
-            self._upload_results(result, workload_name)
-            self._upload_results_per_workload_run(result, workload_name)
+                # Собираем ошибки нод с подробностями
+                for node_error in node_errors:
+                    if node_error.core_hashes:
+                        for core_id, core_hash in node_error.core_hashes:
+                            node_error_messages.append(f"Node {node_error.node.slot} coredump {core_id}")
+                    if node_error.was_oom:
+                        node_error_messages.append(f"Node {node_error.node.slot} experienced OOM")
+                    if hasattr(node_error, 'verifies') and node_error.verifies > 0:
+                        node_error_messages.append(f"Node {node_error.node.host} had {node_error.verifies} VERIFY fails")
+                    if hasattr(node_error, 'sanitizer_errors') and node_error.sanitizer_errors > 0:
+                        node_error_messages.append(f"Node {node_error.node.host} has {node_error.sanitizer_errors} SAN errors")
+
+                # Собираем workload ошибки (не связанные с нодами)
+                if result.errors:
+                    for err in result.errors:
+                        if "coredump" not in err.lower() and "oom" not in err.lower():
+                            workload_error_messages.append(err)
+
+                # Добавляем в статистику
+                result.add_stat(workload_name, "node_error_messages", node_error_messages)
+                result.add_stat(workload_name, "workload_error_messages", workload_error_messages)
+
+                # Добавляем boolean флаги
+                result.add_stat(workload_name, "node_errors", len(node_error_messages) > 0)
+                result.add_stat(workload_name, "workload_errors", len(workload_error_messages) > 0)
+
+                # Собираем workload предупреждения (исключая node-специфичные)
+                workload_warning_messages = []
+                if result.warnings:
+                    for warn in result.warnings:
+                        if "coredump" not in warn.lower() and "oom" not in warn.lower():
+                            workload_warning_messages.append(warn)
+
+                result.add_stat(workload_name, "workload_warning_messages", workload_warning_messages)
+                result.add_stat(workload_name, "workload_warnings", len(workload_warning_messages) > 0)
+
+            # 3. Формирование summary/статистики (with_errors/with_warnings автоматически добавляются в ydb_cli.py)
+
+            # 4. Формирование allure-отчёта
+            self._create_allure_report(result, workload_name, workload_params, node_errors, use_node_subcols, verify_errors)
+
+            # Сохраняем node_errors для использования после выгрузки
+            result._node_errors = node_errors
+
+            # Данные подготовлены, теперь можно выгружать результаты
+
+    def _safe_upload_results(self, result, workload_name):
+        """Безопасная выгрузка результатов с обработкой ошибок и Allure отчетом"""
+        with allure.step("Upload results to YDB"):
+            if not ResultsProcessor.send_results:
+                allure.attach("Results upload is disabled (send_results=false)",
+                              "Upload status", allure.attachment_type.TEXT)
+                return
+
+            try:
+                # Выгружаем агрегированные результаты
+                self._upload_results(result, workload_name)
+
+                # Выгружаем результаты по каждому запуску
+                per_run_count = sum(len(getattr(iteration, "runs", [iteration]))
+                                    for iteration in result.iterations.values())
+                self._upload_results_per_workload_run(result, workload_name)
+
+                # Информативное сообщение о том, что было выгружено
+                upload_summary = [
+                    "Results uploaded successfully:",
+                    "• Aggregate results: 1 record (kind=Stability)",
+                    f"• Per-run results: {per_run_count} records (kind=Stability)",
+                    f"• Total iterations: {len(result.iterations)}",
+                    f"• Workload: {workload_name}",
+                    f"• Suite: {type(self).suite()}",
+                ]
+                allure.attach("\n".join(upload_summary),
+                              "Upload summary", allure.attachment_type.TEXT)
+            except Exception as e:
+                # Логируем ошибку выгрузки, но не прерываем выполнение
+                error_msg = f"Failed to upload results: {e}"
+                logging.error(error_msg)
+                result.add_warning(error_msg)
+                # После добавления warning нужно пересчитать summary флаги
+                # summary флаги (with_errors/with_warnings) автоматически добавляются в ydb_cli.py
+
+                # Подробная информация об ошибке для Allure
+                error_details = [
+                    f"Error type: {type(e).__name__}",
+                    f"Error message: {str(e)}",
+                    f"Timestamp: {time_module.strftime('%Y-%m-%d %H:%M:%S')}",
+                ]
+
+                # Добавляем дополнительную информацию если это YDB ошибка
+                if hasattr(e, 'issues'):
+                    error_details.append(f"YDB issues: {e.issues}")
+                if hasattr(e, 'status'):
+                    error_details.append(f"Status: {e.status}")
+
+                allure.attach("\n".join(error_details),
+                              "Upload error details", allure.attachment_type.TEXT)
 
     def _upload_results(self, result, workload_name):
-        """Переопределенный метод для workload тестов с kind='Stability'"""
+        """Переопределенный метод для workload тестов"""
         stats = result.get_stats(workload_name)
         if stats is not None:
             stats["aggregation_level"] = "aggregate"
@@ -2370,7 +2413,7 @@ class WorkloadTestBase(LoadSuiteBase):
         )
 
     def _upload_results_per_workload_run(self, result, workload_name):
-        """Переопределенный метод для workload тестов с kind='Stability'"""
+        """Переопределенный метод для workload тестов"""
         suite = type(self).suite()
         agg_stats = result.get_stats(workload_name)
         nemesis_enabled = agg_stats.get(

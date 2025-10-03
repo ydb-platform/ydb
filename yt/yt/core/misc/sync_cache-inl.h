@@ -208,7 +208,7 @@ void TSyncSlruCacheBase<TKey, TValue, THash>::UpdateWeight(const TKey& key)
         MissedWeightCounter_.Increment(weightDelta);
     }
 
-    OnWeightUpdated(weightDelta);
+    OnTotalWeightUpdated(weightDelta);
 
     Trim(shard, guard);
 }
@@ -241,6 +241,8 @@ bool TSyncSlruCacheBase<TKey, TValue, THash>::TryInsert(const TValuePtr& value, 
 
     PushToYounger(shard, item);
 
+    OnTotalWeightUpdated(item->CachedWeight);
+
     // NB: Releases the lock.
     Trim(shard, guard);
 
@@ -263,6 +265,8 @@ void TSyncSlruCacheBase<TKey, TValue, THash>::Trim(TShard* shard, NThreading::TW
         MoveToYounger(shard, item);
     }
 
+    i64 totalWeightDelta = 0;
+
     // Evict from younger.
     std::vector<TValuePtr> evictedValues;
     while (!shard->YoungerLruList.Empty() &&
@@ -278,8 +282,12 @@ void TSyncSlruCacheBase<TKey, TValue, THash>::Trim(TShard* shard, NThreading::TW
 
         evictedValues.emplace_back(std::move(item->Value));
 
+        totalWeightDelta -= item->CachedWeight;
+
         delete item;
     }
+
+    OnTotalWeightUpdated(totalWeightDelta);
 
     guard.Release();
 
@@ -309,6 +317,8 @@ bool TSyncSlruCacheBase<TKey, TValue, THash>::TryRemove(const TKey& key)
     --Size_;
 
     Pop(shard, item);
+
+    OnTotalWeightUpdated(-item->CachedWeight);
 
     delete item;
 
@@ -343,6 +353,8 @@ bool TSyncSlruCacheBase<TKey, TValue, THash>::TryRemove(const TValuePtr& value)
     --Size_;
 
     Pop(shard, item);
+
+    OnTotalWeightUpdated(-item->CachedWeight);
 
     delete item;
 
@@ -402,7 +414,7 @@ void TSyncSlruCacheBase<TKey, TValue, THash>::OnRemoved(const TValuePtr& /*value
 { }
 
 template <class TKey, class TValue, class THash>
-void TSyncSlruCacheBase<TKey, TValue, THash>::OnWeightUpdated(i64/*weightDelta*/)
+void TSyncSlruCacheBase<TKey, TValue, THash>::OnTotalWeightUpdated(i64 /*weightDelta*/)
 { }
 
 template <class TKey, class TValue, class THash>
@@ -494,25 +506,13 @@ TMemoryTrackingSyncSlruCacheBase<TKey, TValue, THash>::~TMemoryTrackingSyncSlruC
 }
 
 template <class TKey, class TValue, class THash>
-void TMemoryTrackingSyncSlruCacheBase<TKey, TValue, THash>::OnWeightUpdated(i64 weightDelta)
+void TMemoryTrackingSyncSlruCacheBase<TKey, TValue, THash>::OnTotalWeightUpdated(i64 weightDelta)
 {
     if (weightDelta > 0) {
         MemoryTracker_->Acquire(weightDelta);
     } else {
         MemoryTracker_->Release(-weightDelta);
     }
-}
-
-template <class TKey, class TValue, class THash>
-void TMemoryTrackingSyncSlruCacheBase<TKey, TValue, THash>::OnAdded(const TValuePtr& value)
-{
-    MemoryTracker_->Acquire(this->GetWeight(value));
-}
-
-template <class TKey, class TValue, class THash>
-void TMemoryTrackingSyncSlruCacheBase<TKey, TValue, THash>::OnRemoved(const TValuePtr& value)
-{
-    MemoryTracker_->Release(this->GetWeight(value));
 }
 
 template <class TKey, class TValue, class THash>

@@ -1,5 +1,6 @@
 #include "yql_kikimr_provider_impl.h"
 
+#include <ydb/core/base/fulltext.h>
 #include <ydb/core/base/kmeans_clusters.h>
 #include <ydb/core/docapi/traits.h>
 
@@ -437,6 +438,27 @@ namespace {
         return alterSequenceSettings;
     }
 
+    TSecretSettings ParseSecretSettings(TKiCreateSecret createSecret) {
+        TSecretSettings settings;
+        settings.Name = TString(createSecret.Secret());
+        settings.Value = TString(createSecret.Value());
+        settings.InheritPermissions = FromString<bool>(TString(createSecret.InheritPermissions()));
+        return settings;
+    }
+
+    TSecretSettings ParseSecretSettings(TKiAlterSecret alterSecret) {
+        TSecretSettings settings;
+        settings.Name = TString(alterSecret.Secret());
+        settings.Value = TString(alterSecret.Value());
+        return settings;
+    }
+
+    TSecretSettings ParseSecretSettings(TKiDropSecret dropSecret) {
+        TSecretSettings settings;
+        settings.Name = TString(dropSecret.Secret());
+        return settings;
+    }
+
     [[nodiscard]] TString AddConsumerToTopicRequest(
             Ydb::Topic::Consumer* protoConsumer, const TCoTopicConsumer& consumer
     ) {
@@ -793,6 +815,18 @@ namespace {
             } else if (name == "password_secret_name") {
                 dstSettings.EnsureStaticCredentials().PasswordSecretName =
                     setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
+            } else if (name == "service_account_id") {
+                dstSettings.EnsureIamCredentials().ServiceAccountId =
+                    setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
+            } else if (name == "initial_token") {
+                dstSettings.EnsureIamCredentials().InitialToken.Token =
+                    setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
+            } else if (name == "initial_token_secret_name") {
+                dstSettings.EnsureIamCredentials().InitialToken.TokenSecretName =
+                    setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
+            } else if (name == "resource_id") {
+                dstSettings.EnsureIamCredentials().ResourceId =
+                    setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
             } else if (name == "ca_cert") {
                 dstSettings.CaCert = setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
             } else if (name == "state") {
@@ -828,9 +862,12 @@ namespace {
             return false;
         }
 
-        if (dstSettings.OAuthToken && dstSettings.StaticCredentials) {
+        const auto authCredentials = int(!!dstSettings.OAuthToken)
+            + int(!!dstSettings.StaticCredentials)
+            + int(!!dstSettings.IamCredentials);
+        if (authCredentials > 1) {
             ctx.AddError(TIssue(ctx.GetPosition(pos),
-                "TOKEN and USER/PASSWORD are mutually exclusive"));
+                "TOKEN, USER/PASSWORD and SERVICE_ACCOUNT_ID/INITIAL_TOKEN are mutually exclusive"));
             return false;
         }
 
@@ -843,6 +880,12 @@ namespace {
         if (const auto& x = dstSettings.StaticCredentials; x && x->Password && x->PasswordSecretName) {
             ctx.AddError(TIssue(ctx.GetPosition(pos),
                 "PASSWORD and PASSWORD_SECRET_NAME are mutually exclusive"));
+            return false;
+        }
+
+        if (const auto& x = dstSettings.IamCredentials; x && x->InitialToken.Token && x->InitialToken.TokenSecretName) {
+            ctx.AddError(TIssue(ctx.GetPosition(pos),
+                "INITIAL_TOKEN and INITIAL_TOKEN_SECRET_NAME are mutually exclusive"));
             return false;
         }
 
@@ -1334,6 +1377,79 @@ private:
 protected:
     virtual TFuture<IKikimrGateway::TGenericResult> DoExecute(const TString& cluster, const TDropObjectSettings& settings) override {
         return GetGateway()->DropObject(cluster, settings);
+    }
+public:
+    using TBase::TBase;
+};
+
+
+template <class TKiObject>
+class TSecretTransformer {
+private:
+    TIntrusivePtr<IKikimrGateway> Gateway;
+    TString ActionInfo;
+protected:
+    TIntrusivePtr<TKikimrSessionContext> SessionCtx;
+    virtual TFuture<IKikimrGateway::TGenericResult> DoExecute(const TString& cluster, const TSecretSettings& settings) = 0;
+    TIntrusivePtr<IKikimrGateway> GetGateway() const {
+        return Gateway;
+    }
+public:
+    TSecretTransformer(const TString& actionInfo, TIntrusivePtr<IKikimrGateway> gateway, TIntrusivePtr<TKikimrSessionContext> sessionCtx)
+        : Gateway(gateway)
+        , ActionInfo(actionInfo)
+        , SessionCtx(sessionCtx)
+    {
+    }
+
+    std::pair<IGraphTransformer::TStatus, TAsyncTransformCallbackFuture> Execute(const TKiObject& kiObject, const TExprNode::TPtr& input) {
+        auto requireStatus = RequireChild(*input, 0);
+            if (requireStatus.Level != IGraphTransformer::TStatus::Ok) {
+                return SyncStatus(requireStatus);
+            }
+
+            auto cluster = TString(kiObject.DataSink().Cluster());
+            auto settings = ParseSecretSettings(kiObject);
+
+            auto future = DoExecute(cluster, settings);
+
+            return WrapFuture(future,
+                [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {
+                Y_UNUSED(res);
+                auto resultNode = ctx.NewWorld(input->Pos());
+                return resultNode;
+            }, "Executing " + ActionInfo);
+    }
+};
+
+class TCreateSecretTransformer: public TSecretTransformer<TKiCreateSecret> {
+private:
+    using TBase = TSecretTransformer<TKiCreateSecret>;
+protected:
+    virtual TFuture<IKikimrGateway::TGenericResult> DoExecute(const TString& cluster, const TSecretSettings& settings) override {
+        return GetGateway()->CreateSecret(cluster, settings);
+    }
+public:
+    using TBase::TBase;
+};
+
+class TAlterSecretTransformer: public TSecretTransformer<TKiAlterSecret> {
+private:
+    using TBase = TSecretTransformer<TKiAlterSecret>;
+protected:
+    virtual TFuture<IKikimrGateway::TGenericResult> DoExecute(const TString& cluster, const TSecretSettings& settings) override {
+        return GetGateway()->AlterSecret(cluster, settings);
+    }
+public:
+    using TBase::TBase;
+};
+
+class TDropSecretTransformer: public TSecretTransformer<TKiDropSecret> {
+private:
+    using TBase = TSecretTransformer<TKiDropSecret>;
+protected:
+    virtual TFuture<IKikimrGateway::TGenericResult> DoExecute(const TString& cluster, const TSecretSettings& settings) override {
+        return GetGateway()->DropSecret(cluster, settings);
     }
 public:
     using TBase::TBase;
@@ -1896,8 +2012,14 @@ public:
                                         TStringBuilder() << "Vector index support is disabled"));
                                     return SyncError();
                                 }
-
                                 add_index->mutable_global_vector_kmeans_tree_index();
+                            } else if (type == "globalFulltext") {
+                                if (!SessionCtx->Config().FeatureFlags.GetEnableFulltextIndex()) {
+                                    ctx.AddError(TIssue(ctx.GetPosition(columnTuple.Item(1).Cast<TCoAtom>().Pos()),
+                                        TStringBuilder() << "Fulltext index support is disabled"));
+                                    return SyncError();
+                                }
+                                add_index->mutable_global_fulltext_index();
                             } else {
                                 ctx.AddError(TIssue(ctx.GetPosition(columnTuple.Item(1).Cast<TCoAtom>().Pos()),
                                     TStringBuilder() << "Unknown index type: " << type));
@@ -1930,28 +2052,86 @@ public:
                                 }
                             }
                         } else if (name == "indexSettings") {
-                            YQL_ENSURE(add_index->type_case() == Ydb::Table::TableIndex::kGlobalVectorKmeansTreeIndex);
-                            auto indexSettings = columnTuple.Item(1).Cast<TCoAtomList>();
-                            TVector<std::pair<TString, TString>> settings(::Reserve(indexSettings.Size()));
-                            for (const auto& vectorSetting : indexSettings.Cast<TCoNameValueTupleList>()) {
-                                YQL_ENSURE(vectorSetting.Value().Maybe<TCoAtom>());
-                                settings.emplace_back(vectorSetting.Name().Value(), vectorSetting.Value().Cast<TCoAtom>().StringValue());
+                            if (add_index->type_case() == Ydb::Table::TableIndex::kGlobalFulltextIndex) {
+                                // fulltext index has per-column analyzers settings, single value for now
+                                add_index->mutable_global_fulltext_index()->mutable_fulltext_settings()->add_columns()->set_column(
+                                    add_index->index_columns().empty() ? "<none>" : *add_index->index_columns().rbegin()
+                                );
                             }
-                            TString error;
-                            *add_index->mutable_global_vector_kmeans_tree_index()->mutable_vector_settings() = NKikimr::NKMeans::FillSettings(settings, error);
-                            if (error) {
-                                ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), error));
-                                return SyncError();
+                            auto indexSettings = columnTuple.Item(1).Cast<TCoAtomList>();
+                            for (const auto& indexSetting : indexSettings.Cast<TCoNameValueTupleList>()) {
+                                YQL_ENSURE(indexSetting.Value().Maybe<TCoAtom>());
+                                const auto& name = indexSetting.Name();
+                                const auto& value = indexSetting.Value().Cast<TCoAtom>();
+
+                                TString error;
+                                switch (add_index->type_case()) {
+                                    case Ydb::Table::TableIndex::kGlobalVectorKmeansTreeIndex: {
+                                        NKikimr::NKMeans::FillSetting(
+                                            *add_index->mutable_global_vector_kmeans_tree_index()->mutable_vector_settings(),
+                                            name.StringValue(), value.StringValue(), error);
+                                        break;
+                                    }
+                                    case Ydb::Table::TableIndex::kGlobalFulltextIndex: {
+                                        NKikimr::NFulltext::FillSetting(
+                                            *add_index->mutable_global_fulltext_index()->mutable_fulltext_settings(),
+                                            name.StringValue(), value.StringValue(), error);
+                                        break;
+                                    }
+                                    default:
+                                        ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder() 
+                                            << "Unknown index setting: " << name.StringValue()));
+                                        return SyncError();
+                                }
+
+                                if (error) {
+                                    ctx.AddError(TIssue(ctx.GetPosition(value.Pos()), error));
+                                    return SyncError();
+                                }
                             }
                         }
                         else {
-                            ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder() << "Unknown add vector index setting: " << name));
+                            ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder() << "Unknown index setting: " << name));
                             return SyncError();
                         }
                     }
-                    YQL_ENSURE(add_index->name());
-                    YQL_ENSURE(add_index->type_case() != Ydb::Table::TableIndex::TYPE_NOT_SET);
-                    YQL_ENSURE(add_index->index_columns_size());
+
+                    if (!add_index->name()) {
+                        ctx.AddError(TIssue(ctx.GetPosition(action.Pos()), "Index name should be set"));
+                        return SyncError();
+                    }
+                    if (add_index->index_columns().empty()) {
+                        ctx.AddError(TIssue(ctx.GetPosition(action.Pos()), "Index columns should be set"));
+                        return SyncError();
+                    }
+
+                    switch (add_index->type_case()) {
+                        case Ydb::Table::TableIndex::kGlobalIndex:
+                        case Ydb::Table::TableIndex::kGlobalAsyncIndex:
+                        case Ydb::Table::TableIndex::kGlobalUniqueIndex:
+                            // no settings validation
+                            break;
+                        case Ydb::Table::TableIndex::kGlobalVectorKmeansTreeIndex: {
+                            TString error;
+                            if (!NKikimr::NKMeans::ValidateSettings(add_index->global_vector_kmeans_tree_index().vector_settings(), error)) {
+                                ctx.AddError(TIssue(ctx.GetPosition(action.Pos()), error));
+                                return SyncError();
+                            }
+                            break;
+                        }
+                        case Ydb::Table::TableIndex::kGlobalFulltextIndex: {
+                            TString error;
+                            if (!NKikimr::NFulltext::ValidateSettings(add_index->global_fulltext_index().fulltext_settings(), error)) {
+                                ctx.AddError(TIssue(ctx.GetPosition(action.Pos()), error));
+                                return SyncError();
+                            }
+                            break;
+                        }
+                        case Ydb::Table::TableIndex::TYPE_NOT_SET: {
+                            ctx.AddError(TIssue(ctx.GetPosition(action.Pos()), "Index type should be set"));
+                            return SyncError();
+                        }
+                    }
                 } else if (name == "alterIndex") {
                     if (maybeAlter.Cast().Actions().Size() > 1) {
                         ctx.AddError(
@@ -2431,6 +2611,18 @@ public:
                 return SyncError();
             }
 
+            if (const auto& x = settings.Settings.IamCredentials; x && !x->ServiceAccountId) {
+                ctx.AddError(TIssue(ctx.GetPosition(createReplication.Pos()),
+                    "SERVICE_ACCOUNT_ID is not provided"));
+                return SyncError();
+            }
+
+            if (const auto& x = settings.Settings.IamCredentials; x && !x->InitialToken.Token && !x->InitialToken.TokenSecretName) {
+                ctx.AddError(TIssue(ctx.GetPosition(createReplication.Pos()),
+                    "Neither INITIAL_TOKEN nor INITIAL_TOKEN_SECRET_NAME are provided"));
+                return SyncError();
+            }
+
             auto cluster = TString(createReplication.DataSink().Cluster());
             auto future = Gateway->CreateReplication(cluster, settings);
 
@@ -2527,6 +2719,18 @@ public:
             if (const auto& x = settings.Settings.StaticCredentials; x && !x->Password && !x->PasswordSecretName) {
                 ctx.AddError(TIssue(ctx.GetPosition(createTransfer.Pos()),
                     "Neither PASSWORD nor PASSWORD_SECRET_NAME are provided"));
+                return SyncError();
+            }
+
+            if (const auto& x = settings.Settings.IamCredentials; x && !x->ServiceAccountId) {
+                ctx.AddError(TIssue(ctx.GetPosition(createTransfer.Pos()),
+                    "SERVICE_ACCOUNT_ID is not provided"));
+                return SyncError();
+            }
+
+            if (const auto& x = settings.Settings.IamCredentials; x && !x->InitialToken.Token && !x->InitialToken.TokenSecretName) {
+                ctx.AddError(TIssue(ctx.GetPosition(createTransfer.Pos()),
+                    "Neither INITIAL_TOKEN nor INITIAL_TOKEN_SECRET_NAME are provided"));
                 return SyncError();
             }
 
@@ -2961,6 +3165,16 @@ public:
                 auto resultNode = ctx.NewWorld(input->Pos());
                 return resultNode;
             }, "Executing RESTORE");
+        }
+
+        if (auto kiObject = TMaybeNode<TKiCreateSecret>(input)) {
+            return TCreateSecretTransformer("CREATE SECRET", Gateway, SessionCtx).Execute(kiObject.Cast(), input);
+        }
+        if (auto kiObject = TMaybeNode<TKiAlterSecret>(input)) {
+            return TAlterSecretTransformer("ALTER SECRET", Gateway, SessionCtx).Execute(kiObject.Cast(), input);
+        }
+        if (auto kiObject = TMaybeNode<TKiDropSecret>(input)) {
+            return TDropSecretTransformer("DROP SECRET", Gateway, SessionCtx).Execute(kiObject.Cast(), input);
         }
 
         ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder()

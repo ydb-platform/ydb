@@ -107,8 +107,10 @@ bool TPredicateContainer::CrossRanges(const TPredicateContainer& ext) const {
             return ext.IsForwardInterval();
         } else if (Object->Batch->num_columns() == ext.Object->Batch->num_columns()) {
             return IsInclude() && ext.IsInclude();
+        } else if (Object->Batch->num_columns() < ext.Object->Batch->num_columns()) {
+            return IsInclude();
         } else {
-            return true;
+            return ext.IsInclude();
         }
     } else {
         return true;

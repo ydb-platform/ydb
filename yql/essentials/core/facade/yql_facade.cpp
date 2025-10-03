@@ -141,6 +141,13 @@ std::function<TString(const TString&, const TString&)> BuildCompositeTokenResolv
     };
 }
 
+void AddSqlFlagsFromPatch(THashSet<TString>& flags, const TString& gatewaysPatch) {
+    TGatewaysConfig config;
+    YQL_ENSURE(NProtoBuf::TextFormat::ParseFromString(gatewaysPatch, &config));
+    auto patchFlags = ExtractSqlFlags(config);
+    flags.insert(patchFlags.begin(), patchFlags.end());
+}
+
 } // namspace
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -720,7 +727,7 @@ THashSet<TString> ExtractSqlFlags(const NYT::TNode& dataNode) {
 
 } // namespace
 
-void UpdateSqlFlagsFromQContext(const TQContext& qContext, THashSet<TString>& flags) {
+void UpdateSqlFlagsFromQContext(const TQContext& qContext, THashSet<TString>& flags, TMaybe<TString> gatewaysPatch) {
     if (qContext.CanRead()) {
         auto loaded = qContext.GetReader()->Get({FacadeComponent, TranslationLabel}).GetValueSync();
         if (!loaded) {
@@ -729,6 +736,10 @@ void UpdateSqlFlagsFromQContext(const TQContext& qContext, THashSet<TString>& fl
 
         auto dataNode = NYT::NodeFromYsonString(loaded->Value);
         flags = ExtractSqlFlags(dataNode);
+
+        if (gatewaysPatch) {
+            AddSqlFlagsFromPatch(flags, *gatewaysPatch);
+        }
     }
 }
 
@@ -769,6 +780,10 @@ void TProgram::HandleTranslationSettings(NSQLTranslation::TTranslationSettings& 
         }
 
         loadedSettings.Flags = ExtractSqlFlags(dataNode);
+        if (GatewaysForMerge_) {
+            AddSqlFlagsFromPatch(loadedSettings.Flags, *GatewaysForMerge_);
+        }
+
         loadedSettings.V0Behavior = (NSQLTranslation::EV0Behavior)dataNode["V0Behavior"].AsUint64();
         loadedSettings.V0WarnAsError = NSQLTranslation::ISqlFeaturePolicy::Make(dataNode["V0WarnAsError"].AsBool());
         loadedSettings.DqDefaultAuto = NSQLTranslation::ISqlFeaturePolicy::Make(dataNode["DqDefaultAuto"].AsBool());
@@ -1688,6 +1703,10 @@ TMaybe<TString> TProgram::GetDiagnostics() {
     }
 
     if (!Transformer_) {
+        return Nothing();
+    }
+
+    if (VolatileResults_) {
         return Nothing();
     }
 

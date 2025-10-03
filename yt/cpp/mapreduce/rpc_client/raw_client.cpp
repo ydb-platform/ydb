@@ -34,6 +34,14 @@ using namespace NYT::NConcurrency;
 
 ////////////////////////////////////////////////////////////////////////////////
 
+// Workaround until better solution is implemented in YT-26196.
+// This timeout exceeds some timeouts in server code:
+//   - "replication_reader_failure_timeout"
+//   - "session_timeout"
+const TDuration TableReaderTimeout = TDuration::Minutes(35);
+
+////////////////////////////////////////////////////////////////////////////////
+
 ESecurityAction FromApiSecurityAction(NSecurityClient::ESecurityAction action)
 {
     switch (action) {
@@ -1232,6 +1240,8 @@ std::unique_ptr<IInputStream> TRpcRawClient::ReadTable(
 
     auto req = proxy.ReadTable();
     clientBase->InitStreamingRequest(*req);
+    req->ClientAttachmentsStreamingParameters().ReadTimeout = TableReaderTimeout;
+    req->ClientAttachmentsStreamingParameters().WriteTimeout = TableReaderTimeout;
 
     ToProto(req->mutable_path(), ToApiRichPath(path));
 
@@ -1240,6 +1250,7 @@ std::unique_ptr<IInputStream> TRpcRawClient::ReadTable(
     req->set_enable_table_index(apiOptions.EnableTableIndex);
     req->set_enable_row_index(apiOptions.EnableRowIndex);
     req->set_enable_range_index(apiOptions.EnableRangeIndex);
+    req->set_enable_any_unpacking(apiOptions.EnableAnyUnpacking);
 
     if (apiOptions.Config) {
         req->set_config(NYson::ConvertToYsonString(*apiOptions.Config).ToString());

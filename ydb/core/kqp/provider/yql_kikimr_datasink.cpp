@@ -313,6 +313,24 @@ private:
         return TStatus::Error;
     }
 
+    TStatus HandleCreateSecret(TKiCreateSecret node, TExprContext& ctx) override {
+        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
+                << "CreateSecret is not yet implemented for intent determination transformer"));
+        return TStatus::Ok;
+    }
+
+    TStatus HandleAlterSecret(TKiAlterSecret node, TExprContext& ctx) override {
+        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
+                << "AlterSecret is not yet implemented for intent determination transformer"));
+        return TStatus::Ok;
+    }
+
+    TStatus HandleDropSecret(TKiDropSecret node, TExprContext& ctx) override {
+        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
+                << "DropSecret is not yet implemented for intent determination transformer"));
+        return TStatus::Ok;
+    }
+
     static void HandleDropTable(TIntrusivePtr<TKikimrSessionContext>& ctx, const NCommon::TWriteTableSettings& settings,
         const TKikimrKey& key, const TStringBuf& cluster)
     {
@@ -474,6 +492,8 @@ private:
             case TKikimrKey::Type::BackupCollection:
                 return TStatus::Ok;
             case TKikimrKey::Type::Sequence:
+                return TStatus::Ok;
+            case TKikimrKey::Type::Secret:
                 return TStatus::Ok;
         }
 
@@ -710,6 +730,13 @@ public:
         if (node.IsCallable(TKiBackup::CallableName())
             || node.IsCallable(TKiBackupIncremental::CallableName())
             || node.IsCallable(TKiRestore::CallableName())
+        ) {
+            return true;
+        }
+
+        if (node.IsCallable(TKiCreateSecret::CallableName())
+            || node.IsCallable(TKiAlterSecret::CallableName())
+            || node.IsCallable(TKiDropSecret::CallableName())
         ) {
             return true;
         }
@@ -1803,6 +1830,40 @@ public:
                 }
                 break;
             }
+            case TKikimrKey::Type::Secret: {
+                TWriteSecretSettings settings = ParseSecretSettings(TExprList(node->Child(4)), ctx);
+                YQL_ENSURE(settings.Mode);
+                auto mode = settings.Mode.Cast();
+                if (mode == "create") {
+                    return Build<TKiCreateSecret>(ctx, node->Pos())
+                        .World(node->Child(0))
+                        .DataSink(node->Child(1))
+                        .Secret().Build(key.GetSecretPath())
+                        .Value(settings.Value.Cast())
+                        .InheritPermissions(settings.InheritPermissions.IsValid() ? settings.InheritPermissions.Cast() : Build<TCoAtom>(ctx, node->Pos()).Value("0").Done())
+                        .Done()
+                        .Ptr();
+                } else if (mode == "alter") {
+                    return Build<TKiAlterSecret>(ctx, node->Pos())
+                        .World(node->Child(0))
+                        .DataSink(node->Child(1))
+                        .Secret().Build(key.GetSecretPath())
+                        .Value(settings.Value.Cast())
+                        .Done()
+                        .Ptr();
+                } else if (mode == "drop") {
+                    return Build<TKiDropSecret>(ctx, node->Pos())
+                        .World(node->Child(0))
+                        .DataSink(node->Child(1))
+                        .Secret().Build(key.GetSecretPath())
+                        .Done()
+                        .Ptr();
+                } else {
+                    ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << "Unknown operation type for secret: " << TString(mode)));
+                    return nullptr;
+                }
+                break;
+            }
         }
 
         ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "Failed to rewrite IO."));
@@ -1901,6 +1962,33 @@ TWriteBackupCollectionSettings ParseWriteBackupCollectionSettings(TExprList node
     ret.BackupCollectionSettings = builtSettings;
 
     return ret;
+}
+
+TWriteSecretSettings ParseSecretSettings(NNodes::TExprList node, TExprContext& ctx) {
+    Y_UNUSED(ctx);
+    TMaybeNode<TCoAtom> mode;
+    TMaybeNode<TCoAtom> value;
+    TMaybeNode<TCoAtom> inheritPermissions;
+
+    for (auto child : node) {
+        if (auto maybeTuple = child.Maybe<TCoNameValueTuple>()) {
+            auto tuple = maybeTuple.Cast();
+            auto name = tuple.Name().Value();
+            if (name == "mode") {
+                YQL_ENSURE(tuple.Value().Maybe<TCoAtom>());
+                mode = tuple.Value().Cast<TCoAtom>();
+            } else if (name == "value") {
+                // TODO(yurikiselev): support parsing from declare
+                YQL_ENSURE(tuple.Value().Maybe<TCoAtom>());
+                value = tuple.Value().Cast<TCoAtom>();
+            } else if (name == "inherit_permissions") {
+                YQL_ENSURE(tuple.Value().Maybe<TCoAtom>());
+                inheritPermissions = tuple.Value().Cast<TCoAtom>();
+            }
+        }
+    }
+
+    return TWriteSecretSettings(std::move(mode), std::move(value), std::move(inheritPermissions));
 }
 
 IGraphTransformer::TStatus TKiSinkVisitorTransformer::DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output,
@@ -2093,6 +2181,18 @@ IGraphTransformer::TStatus TKiSinkVisitorTransformer::DoTransform(TExprNode::TPt
 
     if (auto node = TMaybeNode<TKiRestore>(input)) {
         return HandleRestore(node.Cast(), ctx);
+    }
+
+    if (auto node = TMaybeNode<TKiCreateSecret>(input)) {
+        return HandleCreateSecret(node.Cast(), ctx);
+    }
+
+    if (auto node = TMaybeNode<TKiAlterSecret>(input)) {
+        return HandleAlterSecret(node.Cast(), ctx);
+    }
+
+    if (auto node = TMaybeNode<TKiDropSecret>(input)) {
+        return HandleDropSecret(node.Cast(), ctx);
     }
 
     ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "(Kikimr DataSink) Unsupported function: "

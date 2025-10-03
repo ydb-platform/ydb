@@ -55,7 +55,7 @@ void TPartitionQuoterBase::CheckTotalPartitionQuota(TRequestContext&& context) {
 
 void TPartitionQuoterBase::HandleAccountQuotaApproved(NAccountQuoterEvents::TEvResponse::TPtr& ev, const TActorContext& ctx) {
     auto pendingIter = PendingAccountQuotaRequests.find(ev->Get()->Request->Cookie);
-    Y_ABORT_UNLESS(!pendingIter.IsEnd());
+    AFL_ENSURE(!pendingIter.IsEnd());
 
     TRequestContext context{std::move(pendingIter->second.Request), pendingIter->second.PartitionActor, ev->Get()->WaitTime, ctx.Now()};
     context.Request->Request = std::move(ev->Get()->Request->Request);
@@ -94,10 +94,9 @@ void TPartitionQuoterBase::HandleConsumed(TEvPQ::TEvConsumed::TPtr& ev, const TA
         RequestsInflight--;
         ProcessInflightQueue();
     } else {
-        LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE,
-                        "Attempt to make the inflight counter below zero. Topic " << TopicConverter->GetClientsideName() <<
-                        " partition " << Partition <<
-                        " readCookie " << ev->Get()->RequestCookie);
+        LOG_E("Attempt to make the inflight counter below zero. Topic " << TopicConverter->GetClientsideName() <<
+              " partition " << Partition <<
+              " readCookie " << ev->Get()->RequestCookie);
     }
 
     if (!RequestsInflight && (ExclusiveLockState == EExclusiveLockState::EAcquiring)) {
@@ -150,7 +149,7 @@ void TPartitionQuoterBase::ScheduleWakeUp(const TActorContext& ctx) {
 
 void TPartitionQuoterBase::HandleAcquireExclusiveLock(TEvPQ::TEvAcquireExclusiveLock::TPtr& ev, const TActorContext& ctx)
 {
-    Y_ABORT_UNLESS(ExclusiveLockState != EExclusiveLockState::EAcquired);
+    AFL_ENSURE(ExclusiveLockState != EExclusiveLockState::EAcquired);
     switch (ExclusiveLockState) {
     case EExclusiveLockState::EReleased:
         ExclusiveLockState = EExclusiveLockState::EAcquiring;
@@ -210,8 +209,12 @@ IEventBase* TReadQuoter::MakeQuotaApprovedEvent(TRequestContext& context) {
     return new TEvPQ::TEvApproveReadQuota(IEventHandle::Downcast<TEvPQ::TEvRead>(std::move(context.Request->Request)), context.TotalQuotaWaitTime);
 };
 
+TString TReadQuoter::BuildLogPrefix() const {
+    return TStringBuilder() << "[ReadQuoter][" << Partition << "] ";
+}
+
 void TReadQuoter::CheckConsumerPerPartitionQuota(TRequestContext&& context) {
-    Y_ABORT_UNLESS(context.Request->Request);
+    AFL_ENSURE(context.Request->Request);
     auto consumerQuota = GetOrCreateConsumerQuota(
             context.Request->Request->CastAsLocal<TEvPQ::TEvRead>()->ClientId,
             ActorContext()
@@ -339,7 +342,7 @@ THolder<TAccountQuoterHolder> TReadQuoter::CreateAccountQuotaTracker(const TStri
     if (GetTabletActor() && quotingConfig.GetEnableQuoting()) {
         Y_ENSURE(TopicConverter);
         if (quotingConfig.GetEnableReadQuoting()) {
-            actorId = TActivationContext::Register(
+            actorId = TActivationContext::RegisterWithSameMailbox(
                 new TAccountReadQuoter(
                     GetTabletActor(),
                     ctx.SelfID,
@@ -361,7 +364,7 @@ THolder<TAccountQuoterHolder> TReadQuoter::CreateAccountQuotaTracker(const TStri
 }
 
 TConsumerReadQuota* TReadQuoter::GetOrCreateConsumerQuota(const TString& consumerStr, const TActorContext& ctx) {
-    Y_ABORT_UNLESS(!consumerStr.empty());
+    AFL_ENSURE(!consumerStr.empty());
     auto it = ConsumerQuotas.find(consumerStr);
     if (it == ConsumerQuotas.end()) {
         TConsumerReadQuota consumer(

@@ -304,9 +304,17 @@ void TAttributeDictionarySerializer::LoadNonNull(TStreamLoadContext& context, co
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void ValidateYTreeKey(IAttributeDictionary::TKeyView key)
+void ValidateYTreeKey(
+    IAttributeDictionary::TKeyView key,
+    int maxLength)
 {
-    Y_UNUSED(key);
+    if (auto keyLength = std::ssize(key); keyLength > maxLength) {
+        THROW_ERROR_EXCEPTION(
+            NYTree::EErrorCode::MaxKeyLengthViolation,
+            "Key is too long: actual %v, limit %v",
+            keyLength,
+            maxLength);
+    }
     // XXX(vvvv): Disabled due to existing data with empty keys, see https://st.yandex-team.ru/YQL-2640
 #if 0
     if (key.empty()) {

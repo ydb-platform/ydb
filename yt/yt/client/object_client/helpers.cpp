@@ -175,8 +175,7 @@ bool IsUserType(EObjectType type)
         type == EObjectType::SchedulerPool ||
         type == EObjectType::SchedulerPoolTree ||
         type == EObjectType::ChaosReplicatedTable ||
-        type == EObjectType::HunkStorage ||
-        type == EObjectType::SecondaryIndex;
+        type == EObjectType::HunkStorage;
 }
 
 bool IsSchemafulType(EObjectType type)

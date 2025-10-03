@@ -9,9 +9,8 @@ std::optional<TVector<TUpdateOp>> MakeRestoreUpdates(TArrayRef<const TCell> cell
     TVector<TUpdateOp> updates(::Reserve(cells.size() - 1));
 
     int specialColumnCount = 0;
-    NKikimrBackup::TColumnStateMap columnStateMap;
-    bool deletedFlag = false;
-    bool hasNullStateData = false;
+    NKikimrBackup::TChangeMetadata changeMetadata;
+    bool hasChangeMetadata = false;
     
     Y_ENSURE(cells.size() == tags.size());
     
@@ -20,17 +19,12 @@ std::optional<TVector<TUpdateOp>> MakeRestoreUpdates(TArrayRef<const TCell> cell
         auto it = columns.find(tag);
         Y_ENSURE(it != columns.end());
         
-        if (it->second.Name == "__ydb_incrBackupImpl_deleted") {
-            if (const auto& cell = cells.at(pos); !cell.IsNull() && cell.AsValue<bool>()) {
-                deletedFlag = true;
-            }
-            specialColumnCount++;
-        } else if (it->second.Name == "__ydb_incrBackupImpl_columnStates") {
+        if (it->second.Name == "__ydb_incrBackupImpl_changeMetadata") {
             if (const auto& cell = cells.at(pos); !cell.IsNull()) {
-                TString serializedNullState(cell.Data(), cell.Size());
-                if (!serializedNullState.empty()) {
-                    if (columnStateMap.ParseFromString(serializedNullState)) {
-                        hasNullStateData = true;
+                TString serializedMetadata(cell.Data(), cell.Size());
+                if (!serializedMetadata.empty()) {
+                    if (changeMetadata.ParseFromString(serializedMetadata)) {
+                        hasChangeMetadata = true;
                     }
                 }
             }
@@ -38,9 +32,10 @@ std::optional<TVector<TUpdateOp>> MakeRestoreUpdates(TArrayRef<const TCell> cell
         }
     }
     
-    Y_ENSURE(specialColumnCount == 1 || specialColumnCount == 2);
+    Y_ENSURE(specialColumnCount == 1);
     
-    if (deletedFlag) {
+    // Check if this is a deleted row
+    if (hasChangeMetadata && changeMetadata.GetIsDeleted()) {
         return std::nullopt;
     }
     
@@ -50,8 +45,8 @@ std::optional<TVector<TUpdateOp>> MakeRestoreUpdates(TArrayRef<const TCell> cell
     };
     
     THashMap<ui32, TColumnState> tagToColumnState;
-    if (hasNullStateData) {
-        for (const auto& columnState : columnStateMap.GetColumnStates()) {
+    if (hasChangeMetadata) {
+        for (const auto& columnState : changeMetadata.GetColumnStates()) {
             tagToColumnState[columnState.GetTag()] = {columnState.GetIsNull(), columnState.GetIsChanged()};
         }
     }
@@ -61,13 +56,12 @@ std::optional<TVector<TUpdateOp>> MakeRestoreUpdates(TArrayRef<const TCell> cell
         auto it = columns.find(tag);
         Y_ENSURE(it != columns.end());
         
-        if (it->second.Name == "__ydb_incrBackupImpl_deleted" || 
-            it->second.Name == "__ydb_incrBackupImpl_columnStates") {
+        if (it->second.Name == "__ydb_incrBackupImpl_changeMetadata") {
             continue;
         }
         
         
-        if (hasNullStateData) {
+        if (hasChangeMetadata) {
             auto columnStateIt = tagToColumnState.find(tag);
             
             if (columnStateIt != tagToColumnState.end() && !columnStateIt->second.IsChanged) {

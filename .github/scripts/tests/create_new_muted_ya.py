@@ -36,7 +36,7 @@ DATABASE_PATH = config["QA_DB"]["DATABASE_PATH"]
 
 # Константы для временных окон mute-логики
 MUTE_DAYS = 4
-UNMUTE_DAYS = 4
+UNMUTE_DAYS = 7
 DELETE_DAYS = 7
 
 def is_chunk_test(test):
@@ -360,7 +360,7 @@ def is_flaky_test(test, aggregated_data):
         return False
     
     total_runs = test_data['pass_count'] + test_data['fail_count']
-    return (test_data['fail_count'] >= 2) or (test_data['fail_count'] >= 1 and total_runs <= 10)
+    return (test_data['fail_count'] >= 3 and total_runs > 10) or (test_data['fail_count'] >= 2 and total_runs <= 10)
 
 def is_unmute_candidate(test, aggregated_data):
     """Проверяет, является ли тест кандидатом на размьют за указанный период"""
@@ -384,16 +384,11 @@ def is_unmute_candidate(test, aggregated_data):
     total_runs = test_data['pass_count'] + test_data['fail_count'] + test_data['mute_count']
     total_fails = test_data['fail_count'] + test_data['mute_count']
     
-    # Проверяем, что не было состояний no_runs в истории
-    state_history = test_data.get('state', [])
-    if 'no_runs' in state_history:
-        return False
-    
-    result = total_runs > 4 and total_fails == 0
+    result = total_runs >= 4 and total_fails == 0
     
     # Добавляем детальное логирование для диагностики
     if test_data.get('is_muted', False):  # Логируем только для замьюченных тестов
-        logging.debug(f"UNMUTE_CHECK: {test.get('full_name')} - runs:{total_runs}, fails:{total_fails}, muted:{test_data.get('is_muted')}, result:{result}")
+        logging.debug(f"UNMUTE_CHECK: {test.get('full_name')} - runs:{total_runs}, fails:{total_fails}, mute_count:{test_data['mute_count']}, state:{test_data.get('state')}, muted:{test_data.get('is_muted')}, result:{result}")
     
     return result
 

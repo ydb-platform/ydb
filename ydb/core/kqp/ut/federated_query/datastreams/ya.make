@@ -16,6 +16,8 @@ PEERDIR(
     ydb/core/kqp/ut/federated_query/common
     ydb/library/testlib/pq_helpers
     ydb/library/testlib/s3_recipe_helper
+    ydb/library/yql/providers/generic/connector/libcpp
+    ydb/library/yql/providers/generic/connector/libcpp/ut_helpers
     yql/essentials/sql/pg
     yql/essentials/parser/pg_wrapper
 )

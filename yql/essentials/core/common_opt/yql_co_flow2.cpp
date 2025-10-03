@@ -304,7 +304,7 @@ TExprNode::TPtr LMapSubsetFields(const TCoMapBase& node, TExprContext& ctx, TOpt
 
 TExprNode::TPtr OptimizeLMap(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
     const TCoMapBase self(node);
-    if (!optCtx.IsSingleUsage(self.Input().Ref())) {
+    if (!AllowSubsetFieldsForNode(self.Input().Ref(), optCtx)) {
         return node;
     }
     auto ret = LMapSubsetFields(self, ctx, optCtx);
@@ -1918,13 +1918,7 @@ bool IsMemberOrJustMember(TExprNode::TPtr node, const TCoArgument& arg, bool& is
     return false;
 }
 
-TExprNode::TPtr FilterNullMembersToSkipNullMembers(const TCoFlatMapBase& node, TExprContext& ctx, const TOptimizeContext& optCtx) {
-    YQL_ENSURE(optCtx.Types);
-    static const char optName[] = "MemberNthOverFlatMap";
-    if (IsOptimizerDisabled<optName>(*optCtx.Types)) {
-        return node.Ptr();
-    }
-
+TExprNode::TPtr FilterNullMembersToSkipNullMembers(const TCoFlatMapBase& node, TExprContext& ctx) {
     auto filter = node.Input().Cast<TCoFilterNullMembers>();
 
     THashSet<TStringBuf> memberNames;
@@ -2155,7 +2149,7 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
             }
 
             if (self.Input().Maybe<TCoFilterNullMembers>()) {
-                auto ret = FilterNullMembersToSkipNullMembers(self, ctx, optCtx);
+                auto ret = FilterNullMembersToSkipNullMembers(self, ctx);
                 if (ret != self.Ptr()) {
                     return ret;
                 }
@@ -2383,11 +2377,7 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
 
     map["ExtractMembers"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
         TCoExtractMembers self(node);
-        const bool optInput = self.Input().Ref().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional;
-        static const char splitFlag[] = "MemberNthOverFlatMap";
-        YQL_ENSURE(optCtx.Types);
-        const bool split = IsOptimizerDisabled<splitFlag>(*optCtx.Types);
-        if (!optCtx.IsSingleUsage(self.Input()) && (!optInput || !split)) {
+        if (!optCtx.IsSingleUsage(self.Input())) {
             return node;
         }
 
@@ -2406,7 +2396,7 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
         }
 
         if (self.Input().Maybe<TCoFilterNullMembersBase>()) {
-            if (auto res = ApplyExtractMembersToFilterSkipNullMembers(self.Input().Ptr(), self.Members().Ptr(), ctx, optCtx, {})) {
+            if (auto res = ApplyExtractMembersToFilterSkipNullMembers(self.Input().Ptr(), self.Members().Ptr(), ctx, {})) {
                 return res;
             }
             return node;
@@ -2461,7 +2451,11 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
             return node;
         }
 
-        if (self.Input().Maybe<TCoPartitionByKey>()) {
+        if (self.Input().Maybe<TCoPartitionByKeyBase>()) {
+            if (self.Input().Maybe<TCoPartitionsByKeys>() && !CanApplyExtractMembersToPartitionsByKeys(optCtx.Types)) {
+                return node;
+            }
+
             if (auto res = ApplyExtractMembersToPartitionByKey(self.Input().Ptr(), self.Members().Ptr(), ctx, {})) {
                 return res;
             }
@@ -3197,16 +3191,6 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
         if (node->Head().IsCallable("TopSort")) {
             YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();
             return ctx.RenameNode(node->Head(), "Top");
-        }
-
-        static const char optName[] = "UnorderedOverSortImproved";
-        YQL_ENSURE(optCtx.Types);
-        const bool optEnabled = !IsOptimizerDisabled<optName>(*optCtx.Types);
-
-        if (!optEnabled && node->Head().IsCallable({"Sort", "AssumeSorted"})) {
-            // if optEnabled this action is performed in yql_co_simple1.cpp (without multiusage check)
-            YQL_CLOG(DEBUG, Core) << node->Content() << " absorbs " << node->Head().Content();
-            return ctx.ChangeChild(*node, 0U, node->Head().HeadPtr());
         }
 
         return node;

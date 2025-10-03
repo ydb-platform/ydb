@@ -215,9 +215,10 @@ namespace NKikimr {
             ui8 partId,
             const TIngress &ingress,
             TRope buffer,
+            std::optional<ui64> checksum,
             ui64 lsn)
     {
-        ReplayAddLogoBlobCmd(ctx, id, partId, ingress, std::move(buffer), lsn, THullDbRecovery::NORMAL);
+        ReplayAddLogoBlobCmd(ctx, id, partId, ingress, std::move(buffer), checksum, lsn, THullDbRecovery::NORMAL);
     }
 
     void THull::AddHugeLogoBlob(

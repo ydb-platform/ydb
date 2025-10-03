@@ -24,12 +24,15 @@ public:
         THPTimer timer;
 
         const auto& record = request->Get()->Record;
-        STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXSG01, "Handle TEvControllerSelectGroups", (Request, record));
+        STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXSG01, "Handle TEvControllerSelectGroups", (Request, record),
+            (Sender, request->Sender), (Cookie, request->Cookie));
 
         auto result = MakeHolder<TEvBlobStorage::TEvControllerSelectGroupsResult>();
         auto& out = result->Record;
         out.SetStatus(NKikimrProto::OK);
         out.SetNewStyleQuerySupported(true);
+
+        THashSet<TGroupId> missingGroupIds;
 
         if (!record.GetReturnAllMatchingGroups()) {
             Y_DEBUG_ABORT("obsolete command");
@@ -56,18 +59,24 @@ public:
                         reportedGroup->SetStoragePoolName(Self->StoragePools.at(group->StoragePoolId).Name);
                         reportedGroup->SetPhysicalGroup(group->IsPhysicalGroup());
                         reportedGroup->SetDecommitted(group->IsDecommitted());
-                        group->FillInGroupParameters(reportedGroup, Self);
+                        if (!group->FillInGroupParameters(reportedGroup, Self)) {
+                            missingGroupIds.insert(group->ID);
+                        }
                     }
                 }
             }
         }
 
-        if (record.GetBlockUntilAllResourcesAreComplete()) {
-            auto it = Self->SelectGroupsQueue.emplace(Self->SelectGroupsQueue.end(), request->Sender, request->Cookie,
-                std::move(result));
-            Self->ProcessSelectGroupsQueueItem(it);
+        if (record.GetBlockUntilAllResourcesAreComplete() && !missingGroupIds.empty()) {
+            STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXSG05, "TEvControllerSelectGroups failed", (MissingGroupIds, missingGroupIds),
+                (Sender, request->Sender), (Cookie, request->Cookie));
+            auto iter = Self->WaitingSelectGroups.emplace(Self->WaitingSelectGroups.end(), request, std::move(missingGroupIds));
+            for (TGroupId groupId : iter->MissingGroups) {
+                Self->GroupToWaitingSelectGroupsItem.emplace(groupId, iter);
+            }
         } else {
-            STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXSG04, "TEvControllerSelectGroups finished", (Result, result->Record));
+            STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXSG04, "TEvControllerSelectGroups finished", (Result, result->Record),
+                (Sender, request->Sender), (Cookie, request->Cookie));
             Response = std::make_unique<IEventHandle>(request->Sender, Self->SelfId(), result.Release(), 0, request->Cookie);
 
             const TDuration passed = TDuration::Seconds(timer.Passed());
@@ -88,52 +97,26 @@ void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerSelectGroups::T
     Execute(new TTxSelectGroups(ev, this));
 }
 
-void TBlobStorageController::ProcessSelectGroupsQueueItem(TList<TSelectGroupsQueueItem>::iterator it) {
-    for (const TPDiskId& key : std::exchange(it->BlockedPDisks, {})) {
-        const ui32 num = PDiskToQueue.erase(std::make_pair(key, it));
-        Y_ABORT_UNLESS(num);
-    }
-
-    bool missing = false;
-
-    auto& record = it->Event->Record;
-    for (size_t i = 0; i < record.MatchingGroupsSize(); ++i) {
-        auto& mg = *record.MutableMatchingGroups(i);
-        for (size_t j = 0; j < mg.GroupsSize(); ++j) {
-            auto& g = *mg.MutableGroups(j);
-
-            const auto hasResources = [&] {
-                const auto& assured = g.GetAssuredResources();
-                const auto& current = g.GetCurrentResources();
-                return assured.HasSpace()
-                    && assured.HasIOPS()
-                    && assured.HasReadThroughput()
-                    && assured.HasWriteThroughput()
-                    && current.HasSpace()
-                    && current.HasIOPS()
-                    && current.HasReadThroughput()
-                    && current.HasWriteThroughput();
-
-            };
-
-            if (TGroupInfo *group = FindGroup(TGroupId::FromProto(&g, &NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters::GetGroupID)); group && !hasResources()) {
-                group->FillInGroupParameters(&g, this);
-                if (!hasResources()) {
-                    // any of PDisks will do
-                    for (const TVSlotInfo *vslot : group->VDisksInGroup) {
-                        const TPDiskId pdiskId = vslot->VSlotId.ComprisingPDiskId();
-                        it->BlockedPDisks.insert(pdiskId);
-                        PDiskToQueue.emplace(pdiskId, it);
-                    }
-                    missing = true;
-                }
+void TBlobStorageController::UpdateWaitingGroups(const THashSet<TGroupId>& groupIds) {
+    auto process = [&](TGroupId groupId) {
+        auto it = GroupToWaitingSelectGroupsItem.lower_bound(std::make_tuple(groupId,
+            std::list<TWaitingSelectGroupsItem>::iterator()));
+        while (it != GroupToWaitingSelectGroupsItem.end() && std::get<0>(*it) == groupId) {
+            auto iter = std::get<1>(*it);
+            it = GroupToWaitingSelectGroupsItem.erase(it);
+            const size_t n = iter->MissingGroups.erase(groupId);
+            Y_ABORT_UNLESS(n == 1);
+            if (iter->MissingGroups.empty()) {
+                TActivationContext::Send(iter->Request.Release()); // restart this query
+                WaitingSelectGroups.erase(iter);
             }
         }
-    }
-
-    if (!missing) {
-        Send(it->RespondTo, it->Event.Release(), 0, it->Cookie);
-        SelectGroupsQueue.erase(it);
+    };
+    for (TGroupId groupId : groupIds) {
+        process(groupId);
+        if (TGroupInfo *group = FindGroup(groupId); group && group->BridgeProxyGroupId) {
+            process(*group->BridgeProxyGroupId);
+        }
     }
 }
 

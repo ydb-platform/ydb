@@ -219,11 +219,10 @@ def get_latest_generation_pile(pile_world_views: Dict[str, PileWorldView]) -> Tu
     return (latest_generation, pile_with_latest_generation,)
 
 
-# TODO: use public API instead
-def _async_fetch_pile_list(path_to_cli: str, endpoints: List[str], executor: ThreadPoolExecutor) -> Future:
+def _async_fetch_pile_list(path_to_cli: str, endpoints: List[str], executor: ThreadPoolExecutor, ydb_auth_opts: Optional[List[str]] = None) -> Future:
     def worker() -> Optional[PileAdminStates]:
         cmd = ["admin", "cluster", "bridge", "list", "--format=json"]
-        result = execute_cli_command_parallel(path_to_cli, cmd, endpoints)
+        result = execute_cli_command_parallel(path_to_cli, cmd, endpoints, ydb_auth_opts=ydb_auth_opts)
         if result is None:
             return None
         try:
@@ -246,8 +245,7 @@ def _async_fetch_pile_list(path_to_cli: str, endpoints: List[str], executor: Thr
     return executor.submit(worker)
 
 
-# TODO: use public API instead
-def _async_pile_health_check(pile_name, endpoints, executor: ThreadPoolExecutor, use_https=False) -> Future:
+def _async_pile_health_check(path_to_cli: str, pile_name: str, endpoints, executor: ThreadPoolExecutor) -> Future:
     def filter_pile_issue(issue):
         try:
             type = issue["type"]
@@ -275,22 +273,19 @@ def _async_pile_health_check(pile_name, endpoints, executor: ThreadPoolExecutor,
 
         return EndpointHealthCheckResult(self_check_result, bad_piles)
 
-    def fetch_health(endpoint: str) -> Optional[Tuple[str, Dict[str, Any]]]:
+    def fetch_health(path_to_cli, endpoint: str) -> Optional[Tuple[str, Dict[str, Any]]]:
         try:
             start_ts = time.monotonic()
-            scheme = "https" if use_https else "http"
-            r = requests.get(
-                f"{scheme}://{endpoint}:8765/viewer/healthcheck",
-                params={"merge_records": "true", "timeout": str(YDB_HEALTHCHECK_TIMEOUT_MS)},
-                verify=False,
-                # TODO add requests timeout?
-            )
+            cmd = ["-d", "", "monitoring", "healthcheck", "-v", "--format=json", "--no-merge", "--no-cache"]
+            cmd += ["--timeout", str(YDB_HEALTHCHECK_TIMEOUT_MS)]
+            result = execute_cli_command(path_to_cli, cmd, [endpoint,])
+            if result is None:
+                return None
+            data = json.loads(result.stdout.decode())
             end_ts = time.monotonic()
             delta = end_ts - start_ts
             if delta > HEALTH_REPLY_TTL_SECONDS:
                 logger.warning(f"Healthcheck to {endpoint} took {delta:.1f} seconds, which is above TTL")
-            r.raise_for_status()
-            data = r.json()
             return (endpoint, data)
         except Exception as e:
             logger.debug(f"_async_pile_health_check: request failed for pile '{pile_name}' {endpoint}: {e}")
@@ -301,7 +296,7 @@ def _async_pile_health_check(pile_name, endpoints, executor: ThreadPoolExecutor,
         if not endpoints:
             return PileHealth(pile_name, {})
 
-        future_map = {executor.submit(fetch_health, endpoint): endpoint for endpoint in endpoints}
+        future_map = {executor.submit(fetch_health, path_to_cli, endpoint): endpoint for endpoint in endpoints}
         for f in as_completed(list(future_map.keys())):
             try:
                 res = f.result()
@@ -329,10 +324,10 @@ class AsyncHealthcheckRunner:
     - get_health_state() is thread-safe and returns a snapshot for BridgeSkipper
     """
 
-    def __init__(self, path_to_cli, initial_piles, use_https=False):
+    def __init__(self, path_to_cli, initial_piles, ydb_auth_opts: Optional[List[str]] = None):
         self.path_to_cli = path_to_cli
         self.pile_to_endpoints = initial_piles
-        self.use_https = use_https
+        self.ydb_auth_opts = list(ydb_auth_opts or [])
 
         self._lock = threading.Lock()
 
@@ -417,7 +412,7 @@ class AsyncHealthcheckRunner:
             # to return correct result
             endpoints = endpoints[:MINIMAL_EXPECTED_ENDPOINTS_PER_PILE]
 
-            future = _async_fetch_pile_list(self.path_to_cli, endpoints, self._executor)
+            future = _async_fetch_pile_list(self.path_to_cli, endpoints, self._executor, self.ydb_auth_opts)
             future_to_pile[future] = pile_name
 
         for future in as_completed(list(future_to_pile.keys())):
@@ -447,7 +442,7 @@ class AsyncHealthcheckRunner:
 
             logger.trace(f"Running health check of {pile_name} using {endpoints}")
 
-            future = _async_pile_health_check(pile_name, endpoints, self._executor, use_https=self.use_https)
+            future = _async_pile_health_check(self.path_to_cli, pile_name, endpoints, self._executor)
             future_to_pile[future] = pile_name
 
         # TODO: we can break as soon as have quorum, but for now and for simplicity

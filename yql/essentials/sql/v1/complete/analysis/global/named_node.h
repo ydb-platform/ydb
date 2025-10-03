@@ -13,7 +13,6 @@ namespace NSQLComplete {
 
     using TNamedNode = std::variant<
         SQLv1::ExprContext*,
-        SQLv1::Subselect_stmtContext*,
         NYT::TNode,
         std::monostate>;
 

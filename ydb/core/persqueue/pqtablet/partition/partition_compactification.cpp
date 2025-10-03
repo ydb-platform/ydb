@@ -77,7 +77,7 @@ void TPartitionCompaction::TryCompactionIfPossible() {
 void TPartitionCompaction::ProcessResponse(TEvPQ::TEvError::TPtr& ev) {
     PQ_LOG_ERROR("Compaction for topic '" << PartitionActor->TopicConverter->GetClientsideName() << ", partition: "
                                       << PartitionActor->Partition << " proxy ERROR response: " << ev->Get()->Error);
-    PartitionActor->Send(PartitionActor->Tablet, new TEvents::TEvPoisonPill());
+    PartitionActor->Send(PartitionActor->TabletActorId, new TEvents::TEvPoison());
     Step = EStep::PENDING;
     return;
 }
@@ -91,12 +91,12 @@ void TPartitionCompaction::ProcessResponse(TEvPQ::TEvProxyResponse::TPtr& ev) {
     bool processResponseResult = true;
     switch (Step) {
         case EStep::READING: {
-            Y_ABORT_UNLESS(ReadState);
+            AFL_ENSURE(ReadState);
             processResponseResult = ReadState->ProcessResponse(ev);
             break;
         }
         case EStep::COMPACTING: {
-            Y_ABORT_UNLESS(CompactState);
+            AFL_ENSURE(CompactState);
             processResponseResult = CompactState->ProcessResponse(ev);
             break;
         }
@@ -106,7 +106,7 @@ void TPartitionCompaction::ProcessResponse(TEvPQ::TEvProxyResponse::TPtr& ev) {
             Y_ABORT();
     }
     if (!processResponseResult) {
-        PartitionActor->Send(PartitionActor->Tablet, new TEvents::TEvPoisonPill());
+        PartitionActor->Send(PartitionActor->TabletActorId, new TEvents::TEvPoison());
         return;
     }
     TryCompactionIfPossible();
@@ -114,7 +114,7 @@ void TPartitionCompaction::ProcessResponse(TEvPQ::TEvProxyResponse::TPtr& ev) {
 
 void TPartitionCompaction::ProcessResponse(TEvKeyValue::TEvResponse::TPtr& ev) {
     //Partition must reset this flag;
-    Y_ABORT_UNLESS(!PartitionActor->CompacterKvRequestInflight);
+    AFL_ENSURE(!PartitionActor->CompacterKvRequestInflight);
     PQ_LOG_D("Compaction for topic '" << PartitionActor->TopicConverter->GetClientsideName() << ", partition: "
               << PartitionActor->Partition << " Process KV response");
     if (CompactState) {
@@ -122,7 +122,7 @@ void TPartitionCompaction::ProcessResponse(TEvKeyValue::TEvResponse::TPtr& ev) {
             PQ_LOG_ERROR("Compaction for topic '" << PartitionActor->TopicConverter->GetClientsideName() << ", partition: "
                                               << PartitionActor->Partition << " Process KV response: BAD Status");
 
-            PartitionActor->Send(PartitionActor->Tablet, new TEvents::TEvPoisonPill());
+            PartitionActor->Send(PartitionActor->TabletActorId, new TEvents::TEvPoison());
         }
     }
 }
@@ -185,7 +185,7 @@ bool TPartitionCompaction::TReadState::ProcessResponse(TEvPQ::TEvProxyResponse::
             }
             // otherwise it's a single part message, will parse it in place
         } else { //glue to last res
-            Y_ABORT_UNLESS(LastMessage.Defined());
+            AFL_ENSURE(LastMessage.Defined());
             //auto rr = partResp->MutableResult(partResp->ResultSize() - 1);
             if (LastMessage->GetSeqNo() != res.GetSeqNo()
                 || LastMessage->GetPartNo() + 1 != res.GetPartNo()
@@ -194,13 +194,13 @@ bool TPartitionCompaction::TReadState::ProcessResponse(TEvPQ::TEvProxyResponse::
                              << "," << LastMessage->GetPartNo() << " readed now " << res.GetSeqNo()
                              << ", " << res.GetPartNo());
             }
-            Y_ABORT_UNLESS(LastMessage->GetSeqNo() == res.GetSeqNo());
+            AFL_ENSURE(LastMessage->GetSeqNo() == res.GetSeqNo());
             (*LastMessage->MutableData()) += res.GetData();
             LastMessage->SetPartitionKey(res.GetPartitionKey());
             LastMessage->SetPartNo(res.GetPartNo());
             LastMessage->SetUncompressedSize(LastMessage->GetUncompressedSize() + res.GetUncompressedSize());
             if (res.HasTotalParts() && res.GetPartNo() + 1 == res.GetTotalParts()) {
-                Y_ABORT_UNLESS((ui32)LastMessage->GetTotalSize() == (ui32)LastMessage->GetData().size());
+                AFL_ENSURE((ui32)LastMessage->GetTotalSize() == (ui32)LastMessage->GetData().size());
             }
         }
         if (isLastPart) {
@@ -225,7 +225,7 @@ bool TPartitionCompaction::TReadState::ProcessResponse(TEvPQ::TEvProxyResponse::
 
             LastMessage = Nothing();
         } else {
-            Y_ABORT_UNLESS(LastMessage.Defined());
+            AFL_ENSURE(LastMessage.Defined());
             OffsetToRead = LastMessage->GetOffset();
             NextPartNo = LastMessage->GetPartNo() + 1;
         }
@@ -301,7 +301,7 @@ TPartitionCompaction::EStep TPartitionCompaction::TCompactState::ContinueIfPossi
     if (Failure) {
         return EStep::PENDING;
     }
-    Y_ABORT_UNLESS(!PartitionActor->CompacterPartitionRequestInflight && !PartitionActor->CompacterKvRequestInflight);
+    AFL_ENSURE(!PartitionActor->CompacterPartitionRequestInflight && !PartitionActor->CompacterKvRequestInflight);
 
     bool doFinalize = false;
     while (KeysIter != DataKeysBody.end()) {
@@ -347,7 +347,7 @@ void TPartitionCompaction::TCompactState::AddCmdWrite(const TKey& key, TBatch& b
     batch.SerializeTo(data);
     TClientBlob::CheckBlob(key, data);
     UpdatedKeys.emplace(key, data.size());
-    PartitionActor->AddCmdWrite(TPartitionedBlob::TFormedBlobInfo{key, data}, Request.Get(), PartitionActor->ActorContext(), false);
+    PartitionActor->AddCmdWrite(TPartitionedBlob::TFormedBlobInfo{key, data}, Request.Get(), batch.EndWriteTimestamp, PartitionActor->ActorContext(), false);
     BlobsToWriteInRequest++;
 }
 
@@ -464,7 +464,7 @@ bool TPartitionCompaction::TCompactState::ProcessResponse(TEvPQ::TEvProxyRespons
             Y_ABORT();
             CurrentMessage = Nothing();
         }
-        Y_ABORT_UNLESS(res.GetData().size() != 0);
+        AFL_ENSURE(res.GetData().size() != 0);
 
         bool isLastPart = !res.HasTotalParts()
                           || res.GetTotalParts() == res.GetPartNo() + 1;
@@ -473,7 +473,7 @@ bool TPartitionCompaction::TCompactState::ProcessResponse(TEvPQ::TEvProxyRespons
         if (isNewMsg) {
             CurrentMessage.ConstructInPlace().CopyFrom(res);
         } else { //glue to last res
-            Y_ABORT_UNLESS(CurrentMessage.Defined());
+            AFL_ENSURE(CurrentMessage.Defined());
             if (CurrentMessage->GetSeqNo() != res.GetSeqNo()
                 || CurrentMessage->GetPartNo() + 1 != res.GetPartNo()
             ) {
@@ -481,7 +481,7 @@ bool TPartitionCompaction::TCompactState::ProcessResponse(TEvPQ::TEvProxyRespons
                              << "," << CurrentMessage->GetPartNo() << " readed now " << res.GetSeqNo()
                              << ", " << res.GetPartNo());
             }
-            Y_ABORT_UNLESS(CurrentMessage->GetSeqNo() == res.GetSeqNo());
+            AFL_ENSURE(CurrentMessage->GetSeqNo() == res.GetSeqNo());
             (*CurrentMessage->MutableData()) += res.GetData();
             CurrentMessage->SetPartitionKey(res.GetPartitionKey());
             CurrentMessage->SetPartNo(res.GetPartNo());
@@ -492,7 +492,7 @@ bool TPartitionCompaction::TCompactState::ProcessResponse(TEvPQ::TEvProxyRespons
 
         if (isLastPart) {
             LastProcessedOffset = res.GetOffset();
-            Y_ABORT_UNLESS(!CurrentMessage->HasTotalSize() || (ui32)CurrentMessage->GetTotalSize() == CurrentMessage->GetData().size());
+            AFL_ENSURE(!CurrentMessage->HasTotalSize() || (ui32)CurrentMessage->GetTotalSize() == CurrentMessage->GetData().size());
             auto proto(GetDeserializedData(CurrentMessage->GetData()));
             if (proto.GetChunkType() != NKikimrPQClient::TDataChunk::REGULAR) {
                 CurrentMessage = Nothing();
@@ -605,8 +605,8 @@ void TPartitionCompaction::TCompactState::AddDeleteRange(const TKey& key) {
 void TPartitionCompaction::TCompactState::RunKvRequest() {
     // TODO verify that the last message is full
     CurrentMessage.Clear();
-    Y_ABORT_UNLESS(Request);
-    Y_ABORT_UNLESS(!PartitionActor->CompacterKvRequestInflight);
+    AFL_ENSURE(Request);
+    AFL_ENSURE(!PartitionActor->CompacterKvRequestInflight);
 
     for (const auto&[offset, key] : EmptyBlobs) {
         AddDeleteRange(key);
@@ -620,7 +620,7 @@ void TPartitionCompaction::TCompactState::RunKvRequest() {
 
 
 bool TPartitionCompaction::TCompactState::ProcessKVResponse(TEvKeyValue::TEvResponse::TPtr& ev) {
-    Y_ABORT_UNLESS(!PartitionActor->CompacterKvRequestInflight);
+    AFL_ENSURE(!PartitionActor->CompacterKvRequestInflight);
     auto& response = ev->Get()->Record;
     if (response.GetStatus() != NMsgBusProxy::MSTATUS_OK) {
         PQ_LOG_CRIT("Partition compaction state: Got not OK KV response");
@@ -659,7 +659,7 @@ void TPartitionCompaction::TCompactState::SendCommit(ui64 cookie) {
 }
 
 void TPartitionCompaction::TCompactState::UpdateDataKeysBody() {
-    Y_ABORT_UNLESS(UpdatedKeys || DeletedKeys);
+    AFL_ENSURE(UpdatedKeys || DeletedKeys);
 
     auto itUpdated = UpdatedKeys.begin();
     auto itDeleted = DeletedKeys.begin();
@@ -689,12 +689,18 @@ void TPartitionCompaction::TCompactState::UpdateDataKeysBody() {
             addCurrentKey();
             itUpdated++;
         } else {
-            Y_ABORT_UNLESS(itUpdated == UpdatedKeys.end() || itUpdated->first.GetOffset() > itExisting->Key.GetOffset()
-                || itUpdated->first.GetOffset() == itExisting->Key.GetOffset() && itUpdated->first.GetPartNo() > itExisting->Key.GetPartNo(),
-                "offset: %" PRIu64 " VS %" PRIu64 " && partNo: %" PRIu64 " VS %" PRIu64, itUpdated->first.GetOffset(), itExisting->Key.GetOffset(), itUpdated->first.GetPartNo(), itExisting->Key.GetPartNo());
-            Y_ABORT_UNLESS(itDeleted == DeletedKeys.end() || itDeleted->GetOffset() > itExisting->Key.GetOffset()
-                || itDeleted->GetOffset() == itExisting->Key.GetOffset() && itDeleted->GetPartNo() > itExisting->Key.GetPartNo(),
-                "offset: %" PRIu64 " VS %" PRIu64 " && partNo: %" PRIu64 " VS %" PRIu64, itDeleted->GetOffset(), itExisting->Key.GetOffset(), itDeleted->GetPartNo(), itExisting->Key.GetPartNo());
+            AFL_ENSURE(itUpdated == UpdatedKeys.end() || itUpdated->first.GetOffset() > itExisting->Key.GetOffset()
+                || itUpdated->first.GetOffset() == itExisting->Key.GetOffset() && itUpdated->first.GetPartNo() > itExisting->Key.GetPartNo())
+                ("offset l", itUpdated->first.GetOffset())
+                ("offset r", itExisting->Key.GetOffset())
+                ("partNo l", itUpdated->first.GetPartNo())
+                ("partNo r", itExisting->Key.GetPartNo());
+            AFL_ENSURE(itDeleted == DeletedKeys.end() || itDeleted->GetOffset() > itExisting->Key.GetOffset()
+                || itDeleted->GetOffset() == itExisting->Key.GetOffset() && itDeleted->GetPartNo() > itExisting->Key.GetPartNo())
+                ("offset l", itDeleted->GetOffset())
+                ("offset r", itExisting->Key.GetOffset())
+                ("partNo l", itDeleted->GetPartNo())
+                ("partNo r", itExisting->Key.GetPartNo());
             addCurrentKey();
         }
         itExisting++;

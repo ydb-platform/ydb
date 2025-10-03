@@ -623,7 +623,7 @@ and writes it to the backup folder designated for this view.
 \param fsBackupFolder the path on the file system to write the file with the CREATE VIEW statement to
 \param issues the accumulated backup issues container
 */
-void BackupView(TDriver driver, const TString& dbBackupRoot, const TString& dbPathRelativeToBackupRoot,
+void BackupView(TDriver driver, const TString& db, const TString& dbBackupRoot, const TString& dbPathRelativeToBackupRoot,
     const TFsPath& fsBackupFolder, NYql::TIssues& issues
 ) {
     Y_ENSURE(!dbPathRelativeToBackupRoot.empty());
@@ -637,6 +637,7 @@ void BackupView(TDriver driver, const TString& dbBackupRoot, const TString& dbPa
         TString(TPathSplitUnix(dbPathRelativeToBackupRoot).back()),
         dbPath,
         query,
+        db,
         dbBackupRoot,
         issues
     );
@@ -1039,7 +1040,7 @@ void BackupFolderImpl(TDriver driver, const TString& database, const TString& db
                 }
             }
             if (dbIt.IsView()) {
-                BackupView(driver, dbIt.GetTraverseRoot(), dbIt.GetRelPath(), childFolderPath, issues);
+                BackupView(driver, database, dbIt.GetTraverseRoot(), dbIt.GetRelPath(), childFolderPath, issues);
             } else if (dbIt.IsTopic()) {
                 BackupTopic(driver, dbIt.GetFullPath(), childFolderPath);
             } else if (dbIt.IsCoordinationNode()) {

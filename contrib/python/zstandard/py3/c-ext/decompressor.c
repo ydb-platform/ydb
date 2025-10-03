@@ -1743,7 +1743,7 @@ PyType_Slot ZstdDecompressorSlots[] = {
 };
 
 PyType_Spec ZstdDecompressorSpec = {
-    "zstd.ZstdDecompressor",
+    "zstandard.backend_c.ZstdDecompressor",
     sizeof(ZstdDecompressor),
     0,
     Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE,

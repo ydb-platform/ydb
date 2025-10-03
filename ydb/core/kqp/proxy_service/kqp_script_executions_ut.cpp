@@ -661,7 +661,7 @@ Y_UNIT_TEST_SUITE(TestScriptExecutionsUtils) {
 
     Y_UNIT_TEST(TestRetryLimiter) {
         constexpr ui64 RETRY_COUNT = 10;
-        const TInstant now = TInstant::Now();
+        TInstant now = TInstant::Now();
 
         TRetryLimiter limiter;
         limiter.Assign(RETRY_COUNT, now, 0.0);
@@ -675,13 +675,13 @@ Y_UNIT_TEST_SUITE(TestScriptExecutionsUtils) {
         {   // Retry rate limit
             TRetryPolicyItem policy(RETRY_COUNT, 0, RETRY_PERIOD, BACKOFF_DURATION);
 
-            for (ui64 i = 0; i <= 2 * RETRY_COUNT; ++i) {
-                Sleep(RETRY_PERIOD / (2 * RETRY_COUNT));
-                if (i < 2 * RETRY_COUNT) {
-                    UNIT_ASSERT_C(limiter.UpdateOnRetry(TInstant::Now(), policy), i << ": " << limiter.RetryRate << ", error=" << limiter.LastError);
-                    UNIT_ASSERT_DOUBLES_EQUAL(limiter.Backoff.SecondsFloat(), (1.0 + 0.5 * static_cast<double>(i + 1)) * BACKOFF_DURATION.SecondsFloat(), 0.1);
+            for (ui64 i = 0; i < 2 * RETRY_COUNT; ++i) {
+                now += RETRY_PERIOD / (2 * RETRY_COUNT);
+                if (i + 1 < 2 * RETRY_COUNT) {
+                    UNIT_ASSERT_C(limiter.UpdateOnRetry(now, policy, now), i << ": " << limiter.RetryRate << ", error=" << limiter.LastError);
+                    UNIT_ASSERT_DOUBLES_EQUAL_C(limiter.Backoff.SecondsFloat(), (1.0 + 0.5 * static_cast<double>(i + 1)) * BACKOFF_DURATION.SecondsFloat(), 0.1, i << ": " << limiter.RetryRate);
                 } else {
-                    UNIT_ASSERT_C(!limiter.UpdateOnRetry(TInstant::Now(), policy), limiter.RetryRate);
+                    UNIT_ASSERT_C(!limiter.UpdateOnRetry(now, policy, now), limiter.RetryRate);
                     UNIT_ASSERT_STRING_CONTAINS(limiter.LastError, TStringBuilder() << "failure rate " << limiter.RetryRate << " exceeds limit of "  << RETRY_COUNT);
                 }
             }
@@ -690,11 +690,11 @@ Y_UNIT_TEST_SUITE(TestScriptExecutionsUtils) {
         {   // Retry count limit
             TRetryPolicyItem policy(8 * RETRY_COUNT, 4 * RETRY_COUNT, RETRY_PERIOD, BACKOFF_DURATION);
 
-            for (ui64 i = 0; i <= RETRY_COUNT; ++i) {
-                if (i < RETRY_COUNT) {
-                    UNIT_ASSERT_C(limiter.UpdateOnRetry(TInstant::Now(), policy), i << ": rate=" << limiter.RetryRate << ", count=" << limiter.RetryCount << ", error=" << limiter.LastError);
+            for (ui64 i = 0; i <= RETRY_COUNT + 1; ++i) {
+                if (i <= RETRY_COUNT) {
+                    UNIT_ASSERT_C(limiter.UpdateOnRetry(now, policy, now), i << ": rate=" << limiter.RetryRate << ", count=" << limiter.RetryCount << ", error=" << limiter.LastError);
                 } else {
-                    UNIT_ASSERT_C(!limiter.UpdateOnRetry(TInstant::Now(), policy), limiter.RetryCount);
+                    UNIT_ASSERT_C(!limiter.UpdateOnRetry(now, policy, now), limiter.RetryCount);
                     UNIT_ASSERT_STRING_CONTAINS(limiter.LastError, TStringBuilder() << "retry count reached limit of " << 4 * RETRY_COUNT);
                 }
             }

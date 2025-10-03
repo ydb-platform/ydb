@@ -65,6 +65,15 @@ namespace NTi {
     /// Create new `TzTimestamp` type using the default heap factory.
     TTzTimestampTypePtr TzTimestamp();
 
+    /// Create new `TzDate32` type using the default heap factory.
+    TTzDate32TypePtr TzDate32();
+
+    /// Create new `TzDatetime64` type using the default heap factory.
+    TTzDatetime64TypePtr TzDatetime64();
+
+    /// Create new `TzTimestamp64` type using the default heap factory.
+    TTzTimestamp64TypePtr TzTimestamp64();
+
     /// Create new `Interval` type using the default heap factory.
     TIntervalTypePtr Interval();
 

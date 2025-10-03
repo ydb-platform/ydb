@@ -35,7 +35,7 @@ struct TTableStatsCoroBuilderArgs {
 
 class TTableStatsCoroBuilder : public TActorCoroImpl, private IPages, TTableStatsCoroBuilderArgs {
 private:
-    using ECode = TDataShard::TEvPrivate::TEvTableStatsError::ECode;
+    using ECode = TDataShard::TEvPrivate::TEvBuildTableStatsError::ECode;
 
     static constexpr TDuration MaxCoroutineExecutionTime = TDuration::MilliSeconds(5);
 
@@ -47,10 +47,6 @@ private:
         TExTableStatsError(ECode code, const TString& msg)
             : Code(code)
             , Message(msg)
-        {}
-
-        TExTableStatsError(ECode code)
-            : TExTableStatsError(code, "")
         {}
 
         ECode Code;
@@ -69,11 +65,9 @@ public:
         } catch (const TDtorException&) {
             return; // coroutine terminated
         } catch (const TExTableStatsError& ex) {
-            Send(ReplyTo, new TDataShard::TEvPrivate::TEvTableStatsError(TableId, ex.Code, ex.Message));
-        } catch (...) {
-            Send(ReplyTo, new TDataShard::TEvPrivate::TEvTableStatsError(TableId, ECode::UNKNOWN));
-
-            Y_DEBUG_ABORT("unhandled exception");
+            Send(ReplyTo, new TDataShard::TEvPrivate::TEvBuildTableStatsError(TableId, ex.Code, ex.Message));
+        } catch (const std::exception& exc) {
+            Send(ReplyTo, new TDataShard::TEvPrivate::TEvBuildTableStatsError(TableId, std::current_exception(), exc.what()));
         }
 
         Send(MakeResourceBrokerID(), new TEvResourceBroker::TEvNotifyActorDied);
@@ -119,7 +113,7 @@ public:
 
         ObtainResources();
         Spent->Alter(true); // resume measurement
-        
+
         for (auto& loaded : msg->Pages) {
             partPages.emplace(pageId, TPinnedPageRef(loaded.Page).GetData());
             PageRefs.emplace_back(std::move(loaded.Page));
@@ -135,7 +129,7 @@ private:
     void RunImpl() {
         ObtainResources();
 
-        auto ev = MakeHolder<TDataShard::TEvPrivate::TEvAsyncTableStats>();
+        auto ev = MakeHolder<TDataShard::TEvPrivate::TEvBuildTableStatsResult>();
         ev->TableId = TableId;
         ev->StatsUpdateTime = StatsUpdateTime;
         ev->PartCount = Subset->Flatten.size() + Subset->ColdParts.size();
@@ -151,22 +145,22 @@ private:
 
         BuildStats(*Subset, ev->Stats, RowCountResolution, DataSizeResolution, HistogramBucketsCount, this, [this](){
             const auto now = GetCycleCountFast();
-    
+
             if (now > CoroutineDeadline) {
                 Spent->Alter(false); // pause measurement
                 ReleaseResources();
 
                 Send(new IEventHandle(EvResume, 0, SelfActorId, {}, nullptr, 0));
-                WaitForSpecificEvent([](IEventHandle& ev) { 
-                    return ev.Type == EvResume; 
+                WaitForSpecificEvent([](IEventHandle& ev) {
+                    return ev.Type == EvResume;
                 }, &TTableStatsCoroBuilder::ProcessUnexpectedEvent);
 
                 ObtainResources();
                 Spent->Alter(true); // resume measurement
             }
         }, TStringBuilder() << "Building stats at datashard " << TabletId << ", for tableId " << TableId << ": ");
-        
-        Y_DEBUG_ABORT_UNLESS(IndexSize == ev->Stats.IndexSize.Size);
+
+        Y_ASSERT(IndexSize == ev->Stats.IndexSize.Size);
 
         LOG_INFO_S(GetActorContext(), NKikimrServices::TABLET_STATS_BUILDER, "Stats at datashard " << TabletId << ", for tableId " << TableId << ": "
             << ev->Stats.ToString()
@@ -174,14 +168,6 @@ private:
             << (ev->PartOwners.size() > 1 || ev->PartOwners.size() == 1 && *ev->PartOwners.begin() != TabletId ? ", with borrowed parts" : "")
             << (ev->HasSchemaChanges ? ", with schema changes" : "")
             << ", LoadedSize " << PagesSize << ", " << NFmt::Do(*Spent));
-        
-        if (const auto& stats = ev->Stats; stats.DataSize.Size > 10_MB && stats.RowCount > 100
-            && Min(stats.RowCountHistogram.size(), stats.DataSizeHistogram.size()) < HistogramBucketsCount / 2)
-        {
-            LOG_ERROR_S(GetActorContext(), NKikimrServices::TABLET_STATS_BUILDER, "Stats at datashard " << TabletId << ", for tableId " << TableId
-                << " don't have enough keys: "
-                << ev->Stats.ToString());
-        }
 
         Send(ReplyTo, ev.Release());
 
@@ -192,7 +178,7 @@ private:
         switch (ev->GetTypeRewrite()) {
             case TEvResourceBroker::EvTaskOperationError: {
                 const auto* msg = ev->CastAsLocal<TEvResourceBroker::TEvTaskOperationError>();
-                LOG_ERROR_S(GetActorContext(), NKikimrServices::TABLET_STATS_BUILDER, "Failed to allocate resource" 
+                LOG_ERROR_S(GetActorContext(), NKikimrServices::TABLET_STATS_BUILDER, "Failed to allocate resource"
                     << " error '" << msg->Status.Message << "'"
                     << " at datashard " << TabletId << ", for tableId " << TableId);
                 throw TExTableStatsError(ECode::RESOURCE_ALLOCATION_FAILED, msg->Status.Message);
@@ -209,12 +195,11 @@ private:
                 break;
 
             case TEvents::TSystem::Poison:
-                throw TExTableStatsError(ECode::ACTOR_DIED);
+                throw TExTableStatsError(ECode::ACTOR_DIED, "Poisoned");
 
-            default: {
-                const auto typeName = ev->GetTypeName();
-                Y_DEBUG_ABORT("unexpected event Type: %s", typeName.c_str());
-            }
+            default:
+                throw TExTableStatsError(ECode::UNHANDLED_EVENT, TStringBuilder() <<
+                    "Unhandled event type: " << ev->GetTypeRewrite() << " event: " << ev->ToString());
         }
     }
 
@@ -365,7 +350,7 @@ void ListTableNames(const TTables& tables, TStringBuilder& names) {
     }
 }
 
-void TDataShard::Handle(TEvPrivate::TEvAsyncTableStats::TPtr& ev, const TActorContext& ctx) {
+void TDataShard::Handle(TEvPrivate::TEvBuildTableStatsResult::TPtr& ev, const TActorContext& ctx) {
     Actors.erase(ev->Sender);
 
     ui64 tableId = ev->Get()->TableId;
@@ -416,14 +401,18 @@ void TDataShard::Handle(TEvPrivate::TEvAsyncTableStats::TPtr& ev, const TActorCo
     }
 }
 
-void TDataShard::Handle(TEvPrivate::TEvTableStatsError::TPtr& ev, const TActorContext& ctx) {
+void TDataShard::Handle(TEvPrivate::TEvBuildTableStatsError::TPtr& ev, const TActorContext& ctx) {
     Actors.erase(ev->Sender);
 
     auto msg = ev->Get();
 
-    LOG_ERROR_S(ctx, NKikimrServices::TABLET_STATS_BUILDER, "Stats rebuilt error '" << msg->Message 
-        << "', code: " << ui32(msg->Code) 
+    LOG_ERROR_S(ctx, NKikimrServices::TABLET_STATS_BUILDER, "Stats rebuilt error '" << msg->Message
+        << "', code: " << ui32(msg->Code)
         << " at datashard " << TabletID() << ", for tableId " << msg->TableId);
+    
+    if (msg->Exception) {
+        std::rethrow_exception(msg->Exception);
+    }
 
     auto it = TableInfos.find(msg->TableId);
     if (it != TableInfos.end()) {

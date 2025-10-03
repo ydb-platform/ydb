@@ -20,16 +20,8 @@ Run Docker following [the quickstart guide](../../quickstart.md#install), and th
 
 ### Reading
 
-Consider the following limitations of using the Kafka API for reading:
+{{ ydb-short-name }} Topics Kafka API lacks support for the [check.crcs](https://kafka.apache.org/documentation/#consumerconfigs_check.crcs) option. Therefore, the following parameter must always be specified in the reader configuration: `check.crcs=false`.
 
-- No support for the [check.crcs](https://kafka.apache.org/documentation/#consumerconfigs_check.crcs) option.
-- Only one partition assignment strategy - `roundrobin`.
-- No reading without a pre-created consumer group.
-
-Therefore, in the consumer configuration, you must always specify the **consumer group name** and the parameters:
-
-- `check.crcs=false`
-- `partition.assignment.strategy=org.apache.kafka.clients.consumer.RoundRobinAssignor`
 
 Below are examples of reading using the Kafka protocol for various applications, programming languages, and frameworks without authentication.
 For examples of how to set up authentication, see [Authentication examples](#authentication-examples).
@@ -52,15 +44,11 @@ For examples of how to set up authentication, see [Authentication examples](#aut
 
 - Spark
 
-  {% include [index.md](_includes/spark-constraints.md) %}
-
   {% include [index.md](_includes/java/kafka-api-spark-read-no-auth.md) %}
 
   {% include [index.md](_includes/spark-version-notice.md) %}
 
 - Flink
-
-  {% include [index.md](_includes/flink-constraints.md) %}
 
   {% include [index.md](_includes/java/kafka-api-flink-read-no-auth.md) %}
 
@@ -68,33 +56,7 @@ For examples of how to set up authentication, see [Authentication examples](#aut
 
 {% endlist %}
 
-#### Frequent problems and solutions
-
-##### Unexpected error in join group response
-
-Full text of an exception:
-
-```txt
-Unexpected error in join group response: This most likely occurs because of a request being malformed by the client library or the message was sent to an incompatible broker. See the broker logs for more details.
-```
-
-Most likely it means that a consumer group is not specified or, if specified, it does not exist in the YDB cluster.
-
-
-Solution: create a consumer group in {{ ydb-short-name }} using [CLI](../ydb-cli/topic-consumer-add.md) or [SDK](../ydb-sdk/topic.md#alter-topic).
-
-
-
 ### Writing
-
-{% note info %}
-
-Using Kafka transactions when writing via Kafka API is currently not supported. Transactions are only available when using the [YDB Topic API](../ydb-sdk/topic.md#write-tx).
-
-Otherwise, writing to Apache Kafka and {{ ydb-short-name }} Topics through Kafka API is no different.
-
-
-{% endnote %}
 
 {% list tabs %}
 
@@ -114,15 +76,11 @@ Otherwise, writing to Apache Kafka and {{ ydb-short-name }} Topics through Kafka
 
 - Spark
 
-  {% include [index.md](_includes/spark-constraints.md) %}
-
   {% include [index.md](_includes/java/kafka-api-spark-write-no-auth.md) %}
 
   {% include [index.md](_includes/spark-version-notice.md) %}
 
 - Flink
-
-  {% include [index.md](_includes/flink-constraints.md) %}
 
   {% include [index.md](_includes/java/kafka-api-flink-write-no-auth.md) %}
 
@@ -142,11 +100,9 @@ Otherwise, writing to Apache Kafka and {{ ydb-short-name }} Topics through Kafka
 
 For more details on authentication, see the [Authentication](./auth.md) section. Below are examples of authentication in a cloud database and a local database.
 
-
 {% note info %}
 
 Currently, the only available authentication mechanism with Kafka API in {{ ydb-short-name }} Topics is `SASL_PLAIN`.
-
 
 {% endnote %}
 

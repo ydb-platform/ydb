@@ -123,9 +123,21 @@ message LockAction {
     google.protobuf.Duration duration = 2;
 }
 
+// Moving tablets away.
+message DrainAction {
+    ActionScope scope = 1;
+}
+
+// Ensuring no new tablets run there.
+message CordonAction {
+    ActionScope scope = 1;
+}
+
 message Action {
     oneof action {
         LockAction lock_action = 1;
+        DrainAction drain_action = 2;
+        CordonAction cordon_action = 3;
     }
 }
 
@@ -158,6 +170,8 @@ message ActionState {
         ACTION_STATUS_PENDING = 1;
         // Action performed: e.g. lock is taken.
         ACTION_STATUS_PERFORMED = 2;
+        // Action is currently in progress
+        ACTION_STATUS_IN_PROGRESS = 3;
     }
 
     enum ActionReason {
@@ -184,7 +198,7 @@ message ActionState {
     ActionUid action_uid = 2;
     ActionStatus status = 3;
     ActionReason reason = 4;
-    string reason_details = 6;
+    string details = 6;
     google.protobuf.Timestamp deadline = 5;
 }
 

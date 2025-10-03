@@ -187,6 +187,7 @@ private:
             addQueryEvent->PoolId = poolId;
             addQueryEvent->QueryId = txId;
             Send(schedulerServiceId, addQueryEvent.Release(), 0, txId);
+
             query = (co_await ActorWaitForEvent<NScheduler::TEvQueryResponse>(txId))->Get()->Query;
         }
 
@@ -528,7 +529,6 @@ private:
     void ReplyError(ui64 txId, TActorId executer, const NKikimrKqp::TEvStartKqpTasksRequest& request,
         NKikimrKqp::TEvStartKqpTasksResponse::ENotStartedTaskReason reason, ui64 requestId, const TString& message = "")
     {
-        
         auto ev = MakeHolder<TEvKqpNode::TEvStartKqpTasksResponse>();
         ev->Record.SetTxId(txId);
         for (auto& task : request.GetTasks()) {

@@ -12,6 +12,26 @@ namespace {
 using namespace NKikimr;
 using namespace NSchemeShard;
 
+TString InterruptInheritanceExceptDescribe(const TString& initialAcl) {
+    NACLib::TACL secObj(initialAcl);
+    NACLib::TACL resultSecObj;
+    resultSecObj.SetInterruptInheritance(true);
+    for (auto& ace : *secObj.MutableACE()) {
+        if (ace.GetAccessRight() & NACLib::EAccessRights::DescribeSchema) {
+            resultSecObj.AddAccess(
+                static_cast<NACLib::EAccessType>(ace.GetAccessType()),
+                NACLib::EAccessRights::DescribeSchema,
+                ace.GetSID(),
+                ace.GetInheritanceType()
+            );
+        }
+    }
+
+    TString resultAcl;
+    Y_ABORT_UNLESS(resultSecObj.SerializeToString(&resultAcl));
+    return resultAcl;
+}
+
 class TPropose : public TSubOperationState {
 private:
     const TOperationId OperationId;
@@ -160,7 +180,6 @@ public:
             }
         }
 
-        // TODO(yurikiselev): Support inherit_permissions mode [issue:23460]
         const TString acl = Transaction.GetModifyACL().GetDiffACL();
 
         NSchemeShard::TPath dstPath = parentPath.Child(secretName);
@@ -223,8 +242,19 @@ public:
         secretPath->PathType = TPathElement::EPathType::EPathTypeSecret;
         secretPath->CreateTxId = OperationId.GetTxId();
         secretPath->LastTxId = OperationId.GetTxId();
+
         if (!acl.empty()) {
             secretPath->ApplyACL(acl);
+        } else {
+            /** By default, secrets should not inherit permissions from their parent object, except for the DescribeSchema grant.
+              * This is done to prevent users from accidentally granting permissions to such sensitive objects.
+              * However, the DescribeSchema grant is quite harmless and allows users to view the object's ACL to request access from the owner.
+              * There is also an inherit_permissions flag, which, when set, allows grant inheritance similarly to all other schema objects.
+              */
+            if (!createSecretProto.GetInheritPermissions()) {
+                secretPath->ACL = InterruptInheritanceExceptDescribe(dstPath.GetEffectiveACL());
+                secretPath->ACLVersion++;
+            }
         }
 
         NKikimrSchemeOp::TSecretDescription secretDescription;

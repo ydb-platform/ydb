@@ -67,10 +67,11 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         TControlWrapper mkqlInitialMemoryLimit;
         TControlWrapper mkqlMaxMemoryLimit;
 
-        mkqlInitialMemoryLimit = kikimr.GetTestServer().GetRuntime()->GetAppData().Icb->RegisterSharedControl(
-            mkqlInitialMemoryLimit, "KqpSession.MkqlInitialMemoryLimit");
-        mkqlMaxMemoryLimit = kikimr.GetTestServer().GetRuntime()->GetAppData().Icb->RegisterSharedControl(
-            mkqlMaxMemoryLimit, "KqpSession.MkqlMaxMemoryLimit");
+        auto& icb = *kikimr.GetTestServer().GetRuntime()->GetAppData().Icb;
+        TControlBoard::RegisterSharedControl(
+            mkqlInitialMemoryLimit, icb.KQPSessionControls.MkqlInitialMemoryLimit);
+        TControlBoard::RegisterSharedControl(
+            mkqlMaxMemoryLimit, icb.KQPSessionControls.MkqlMaxMemoryLimit);
 
         mkqlInitialMemoryLimit = 1_KB;
         mkqlMaxMemoryLimit = 1_KB;
@@ -147,10 +148,11 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         TControlWrapper mkqlInitialMemoryLimit;
         TControlWrapper mkqlMaxMemoryLimit;
 
-        mkqlInitialMemoryLimit = kikimr.GetTestServer().GetRuntime()->GetAppData().Icb->RegisterSharedControl(
-            mkqlInitialMemoryLimit, "KqpSession.MkqlInitialMemoryLimit");
-        mkqlMaxMemoryLimit = kikimr.GetTestServer().GetRuntime()->GetAppData().Icb->RegisterSharedControl(
-            mkqlMaxMemoryLimit, "KqpSession.MkqlMaxMemoryLimit");
+        auto& icb = *kikimr.GetTestServer().GetRuntime()->GetAppData().Icb;
+        TControlBoard::RegisterSharedControl(
+            mkqlInitialMemoryLimit, icb.KQPSessionControls.MkqlInitialMemoryLimit);
+        TControlBoard::RegisterSharedControl(
+            mkqlMaxMemoryLimit, icb.KQPSessionControls.MkqlMaxMemoryLimit);
 
         mkqlInitialMemoryLimit = 1_KB;
         mkqlMaxMemoryLimit = 1_KB;
@@ -180,11 +182,11 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         TControlWrapper mkqlInitialMemoryLimit;
         TControlWrapper mkqlMaxMemoryLimit;
 
-        mkqlInitialMemoryLimit = kikimr.GetTestServer().GetRuntime()->GetAppData().Icb->RegisterSharedControl(
-            mkqlInitialMemoryLimit, "KqpSession.MkqlInitialMemoryLimit");
-        mkqlMaxMemoryLimit = kikimr.GetTestServer().GetRuntime()->GetAppData().Icb->RegisterSharedControl(
-            mkqlMaxMemoryLimit, "KqpSession.MkqlMaxMemoryLimit");
-
+        auto& icb = *kikimr.GetTestServer().GetRuntime()->GetAppData().Icb;
+        TControlBoard::RegisterSharedControl(
+            mkqlInitialMemoryLimit, icb.KQPSessionControls.MkqlInitialMemoryLimit);
+        TControlBoard::RegisterSharedControl(
+            mkqlMaxMemoryLimit, icb.KQPSessionControls.MkqlMaxMemoryLimit);
 
         mkqlInitialMemoryLimit = 1_KB;
         mkqlMaxMemoryLimit = 1_KB;

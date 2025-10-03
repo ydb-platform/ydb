@@ -351,6 +351,11 @@
                 "ColumnId": 21,
                 "ColumnName": "InferPDiskSlotCountFromUnitSize",
                 "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 22,
+                "ColumnName": "InferPDiskSlotCountMax",
+                "ColumnType": "Uint32"
             }
         ],
         "ColumnsDropped": [],
@@ -375,7 +380,8 @@
                     18,
                     19,
                     20,
-                    21
+                    21,
+                    22
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -1940,6 +1946,11 @@
                 "ColumnId": 8,
                 "ColumnName": "InferPDiskSlotCountFromUnitSize",
                 "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 9,
+                "ColumnName": "InferPDiskSlotCountMax",
+                "ColumnType": "Uint32"
             }
         ],
         "ColumnsDropped": [],
@@ -1953,7 +1964,8 @@
                     5,
                     6,
                     7,
-                    8
+                    8,
+                    9
                 ],
                 "RoomID": 0,
                 "Codec": 0,

@@ -1104,7 +1104,7 @@ handle_timeout() {{
     # Убиваем процессы statistics_workload
     pkill -9 -f "statistics_workload" || true
 
-  else [[ "{base_command}" == *"topic_kafka_workload"* ]]; then
+  elif [[ "{base_command}" == *"topic_kafka_workload"* ]]; then
     echo "[$(date +'%Y-%m-%d %H:%M:%S.%N')] Performing topic_kafka_workload specific cleanup"
     # Убиваем процессы topic_kafka_workload
     pkill -9 -f "topic_kafka_workload" || true

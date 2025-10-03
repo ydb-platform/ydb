@@ -122,6 +122,14 @@ kapt-processors="list"
 kapt-classpaths="list"
 kapt-ap_opts="list"
 
+from_sandboxes="list"
+from_sandboxes-mode="str"
+from_sandboxes-resource_id="str"
+from_sandboxes-renames="list"
+from_sandboxes-outs="list"
+from_sandboxes-reldir="str"
+from_sandboxes-executable="bool"
+
 [attrs.root]
 
 [attrs.dir]

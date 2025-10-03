@@ -79,6 +79,7 @@ namespace NDqHashOperatorParams
 struct TDqHashOperatorParams
 {
     size_t InputWidth = 0;
+    bool IsStream = false;
     TKeyTypes KeyTypes;
     std::vector<TType*> KeyItemTypes;
     std::vector<TType*> StateItemTypes;

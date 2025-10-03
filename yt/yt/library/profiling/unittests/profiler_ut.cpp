@@ -56,7 +56,7 @@ TEST(Profiler, SaveOptions)
     }
 
     {
-        auto newProfiler = profiler.WithPrefix("new_prefix");
+        auto newProfiler = profiler.WithPrefix("/new_prefix");
         ASSERT_EQ(TTesting::ReadOptions(newProfiler).TimeHistogramBounds.size(), 1u);
     }
     {

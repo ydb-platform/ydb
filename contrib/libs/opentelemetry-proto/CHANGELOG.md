@@ -4,6 +4,32 @@
 
 The full list of changes can be found in the compare view for the respective release at <https://github.com/open-telemetry/opentelemetry-proto/releases>.
 
+## 1.8.0 - 2025-09-02
+
+### Changed
+
+- profiles: drop gzip requirement. [#661](https://github.com/open-telemetry/opentelemetry-proto/pull/661)
+- profiles: avoid `optional` keyword usage. [#659](https://github.com/open-telemetry/opentelemetry-proto/pull/659)
+- profiles: make `profile_id` optional. [#665](https://github.com/open-telemetry/opentelemetry-proto/pull/665)
+- profiles: use single `Profile.sample_type` and clarify use of timestamps. [#649](https://github.com/open-telemetry/opentelemetry-proto/pull/649)
+- all: add notes about the attribute values restrictions. [#683](https://github.com/open-telemetry/opentelemetry-proto/pull/683)<br>
+  ⚠️ **IMPORTANT**: These restrictions can be dropped in a future minor release.
+- profiles: clarify usage of the zero value as the first element of tables in `ProfilesDictionary`. [#688](https://github.com/open-telemetry/opentelemetry-proto/pull/688), [#698](https://github.com/open-telemetry/opentelemetry-proto/pull/698)
+- profiles: unsigned `time_nanos` and `duration_nanos` in `Profile`. [#692](https://github.com/open-telemetry/opentelemetry-proto/pull/692)
+- profiles: improve attribute encoding in `ProfilesDictionary`. [#672](https://github.com/open-telemetry/opentelemetry-proto/pull/672)
+- profiles: simplify profile stack trace representation. [#708](https://github.com/open-telemetry/opentelemetry-proto/pull/708)
+
+### Fixed
+
+- examples: fix OTLP JSON Event example body. [#666](https://github.com/open-telemetry/opentelemetry-proto/pull/666)
+- docs: minor specification fixes around `UNAVAILABLE` and `RetryInfo`. [#669](https://github.com/open-telemetry/opentelemetry-proto/pull/669)
+
+### Removed
+
+- profiles: remove `default_sample_type`. [#679](https://github.com/open-telemetry/opentelemetry-proto/pull/679)
+- profiles: remove `has_*` debug info fields, they are moving to attributes. [#595](https://github.com/open-telemetry/opentelemetry-proto/pull/595)
+- profiles: remove `Location.is_folded`. [#690](https://github.com/open-telemetry/opentelemetry-proto/pull/690)
+
 ## 1.7.0 - 2025-05-19
 
 ### Added

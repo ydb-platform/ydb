@@ -975,9 +975,7 @@ bool TActiveTransaction::OnStopping(TDataShard& self, const TActorContext& ctx) 
     } else {
         // Distributed operations send notification when proposed
         if (GetTarget() && !HasCompletedFlag()) {
-            auto notify = MakeHolder<TEvDataShard::TEvProposeTransactionRestart>(
-                self.TabletID(), GetTxId());
-            ctx.Send(GetTarget(), notify.Release(), 0, GetCookie());
+            self.SendRestartNotification(this);
         }
 
         // Distributed ops avoid doing new work when stopping

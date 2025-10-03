@@ -8,21 +8,33 @@
 
 namespace NYql::NFmr {
 
-TFmrUserJobLauncher::TFmrUserJobLauncher(bool runInSeparateProcess, const TString& fmrJobBinaryPath)
-    : RunInSeparateProcess_(runInSeparateProcess), FmrJobBinaryPath_(fmrJobBinaryPath)
+TFmrUserJobLauncher::TFmrUserJobLauncher(const TFmrUserJobLauncherOptions& options)
+    : RunInSeparateProcess_(options.RunInSeparateProcess)
+    , FmrJobBinaryPath_(options.FmrJobBinaryPath)
+    , TableDataServiceDiscoveryFilePath_(options.TableDataServiceDiscoveryFilePath)
+    , GatewayType_(options.GatewayType)
 {
 }
 
 std::variant<TError, TStatistics> TFmrUserJobLauncher::LaunchJob(TFmrUserJob& job) {
     if (!RunInSeparateProcess_) {
-        return job.DoFmrJob();
+        return job.DoFmrJob(TFmrUserJobOptions{.WriteStatsToFile = false});
     }
 
     YQL_ENSURE(!FmrJobBinaryPath_.empty(), "Job should be executed in separate process");
+    YQL_ENSURE(!TableDataServiceDiscoveryFilePath_.empty());
+    YQL_ENSURE(GatewayType_ == "native" || GatewayType_ == "file");
     // serialize to temporary file
     TTempDir tmpDir;
     TFile jobStateFile(tmpDir.Path().Child("fmrjob.bin"), CreateNew | RdWr);
     TFile mapResultStatsFile(tmpDir.Path().Child("stats.bin"), CreateNew | RdWr);
+
+    TString tmpDirTableDataServiceDiscoveryPath = "table_data_service_discovery.txt";
+    NFs::HardLinkOrCopy(TableDataServiceDiscoveryFilePath_, tmpDir.Path().Child(tmpDirTableDataServiceDiscoveryPath));
+    job.SetTableDataService(tmpDirTableDataServiceDiscoveryPath);
+
+    job.SetYtJobServiceType(GatewayType_);
+
     TFileOutput jobStateFileOutputStream(jobStateFile);
     job.Save(jobStateFileOutputStream);
     jobStateFileOutputStream.Flush();
@@ -57,6 +69,10 @@ std::variant<TError, TStatistics> TFmrUserJobLauncher::LaunchJob(TFmrUserJob& jo
     NProto::TStatistics protoStats;
     protoStats.ParseFromStringOrThrow(serializedProtoStats);
     return StatisticsFromProto(protoStats);
+}
+
+bool TFmrUserJobLauncher::RunInSeperateProcess() const {
+    return RunInSeparateProcess_;
 }
 
 

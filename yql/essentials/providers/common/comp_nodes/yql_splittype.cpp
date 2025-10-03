@@ -192,6 +192,20 @@ public:
             return MakeString(castedType->GetName());
         }
 
+        case NYql::ETypeAnnotationKind::Linear: {
+            const NYql::TTypeAnnotationNode* itemType;
+            if (type->GetKind() == NYql::ETypeAnnotationKind::Linear) {
+                itemType = type->Cast<NYql::TLinearExprType>()->GetItemType();
+            } else if (type->GetKind() == NYql::ETypeAnnotationKind::DynamicLinear) {
+                itemType = type->Cast<NYql::TDynamicLinearExprType>()->GetItemType();
+            } else {
+                ReportError(*exprCtxPtr, NYql::TIssue(Pos_, TStringBuilder() << "Cannot cast type " << *type << " to (dynamic) linear type"));
+                UdfTerminate(exprCtxPtr->IssueManager.GetIssues().ToString().data());
+            }
+
+            return NUdf::TUnboxedValuePod(new TYqlTypeResource(exprCtxPtr, itemType));
+        }
+
         default:
             MKQL_ENSURE(false, "Unsupported kind:" << Kind);
         }
@@ -249,6 +263,9 @@ template IComputationNode* WrapSplitType<NYql::ETypeAnnotationKind::Callable>
     (TCallable& callable, const TComputationNodeFactoryContext& ctx, ui32 exprCtxMutableIndex);
 
 template IComputationNode* WrapSplitType<NYql::ETypeAnnotationKind::Pg>
+    (TCallable& callable, const TComputationNodeFactoryContext& ctx, ui32 exprCtxMutableIndex);
+
+template IComputationNode* WrapSplitType<NYql::ETypeAnnotationKind::Linear>
     (TCallable& callable, const TComputationNodeFactoryContext& ctx, ui32 exprCtxMutableIndex);
 
 }

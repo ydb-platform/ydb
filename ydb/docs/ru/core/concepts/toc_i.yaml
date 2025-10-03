@@ -1,6 +1,10 @@
 items:
 - name: Глоссарий
   href: glossary.md
+- name: Аналитические возможности
+  include:
+    path: analytics/toc_p.yaml
+    mode: link
 - name: Архитектура
   href: architecture.md
 - name: Соединение с БД

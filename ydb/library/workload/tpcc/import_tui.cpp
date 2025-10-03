@@ -47,8 +47,15 @@ Element TImportTui::BuildUpperPart() {
             << "Avg: " << DataToDisplay.StatusData.AvgSpeedMiBs << " MiB/s   "
             << "Elapsed: " << DataToDisplay.StatusData.ElapsedMinutes << ":"
             << std::setfill('0') << std::setw(2) << DataToDisplay.StatusData.ElapsedSeconds << "   "
-            << "ETA: " << DataToDisplay.StatusData.EstimatedTimeLeftMinutes << ":"
-            << std::setfill('0') << std::setw(2) << DataToDisplay.StatusData.EstimatedTimeLeftSeconds;
+            << "ETA: ";
+
+    if (DataToDisplay.StatusData.EstimatedTimeLeftMinutes != 0 || DataToDisplay.StatusData.EstimatedTimeLeftSeconds != 0) {
+        speedSs << std::fixed << std::setprecision(1)
+            << DataToDisplay.StatusData.EstimatedTimeLeftMinutes << ":"
+                << std::setfill('0') << std::setw(2) << DataToDisplay.StatusData.EstimatedTimeLeftSeconds;
+    } else {
+        speedSs << "n/a";
+    }
 
     // Calculate progress ratio for gauge
     float progressRatio = static_cast<float>(DataToDisplay.StatusData.PercentLoaded / 100.0);

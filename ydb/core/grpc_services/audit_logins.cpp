@@ -46,7 +46,7 @@ void AuditLogLogin(IAuditCtx* ctx, const TString& database, const Ydb::Auth::Log
         AUDIT_PART("remote_address", (!peerName.empty() ? peerName : EmptyValue))
         AUDIT_PART("database", (!database.empty() ? database : EmptyValue))
         AUDIT_PART("operation", LoginOperationName)
-        AUDIT_PART("status", (status == Ydb::StatusIds::SUCCESS ? TString("SUCCESS") : TString("ERROR")))
+        AUDIT_PART("status", (status == Ydb::StatusIds::SUCCESS ? "SUCCESS" : "ERROR"))
         AUDIT_PART("detailed_status", detailed_status, status != Ydb::StatusIds::SUCCESS)
         AUDIT_PART("reason", reason, status != Ydb::StatusIds::SUCCESS)
 

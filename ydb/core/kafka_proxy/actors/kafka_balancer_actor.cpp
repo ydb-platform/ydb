@@ -1370,12 +1370,7 @@ NYdb::TParamsBuilder TKafkaBalancerActor::BuildLeaveGroupParams() {
     params.AddParam("$Database").Utf8(Context->DatabasePath).Build();
     params.AddParam("$LastMasterHeartbeat").Datetime(TInstant::Now() - TDuration::Seconds(1)).Build();
     params.AddParam("$State").Uint64(GROUP_STATE_MASTER_IS_DEAD).Build();
-
-    if (IsMaster) {
-        params.AddParam("$UpdateState").Bool(true).Build();
-    } else {
-        params.AddParam("$UpdateState").Bool(false).Build();
-    }
+    params.AddParam("$UpdateState").Bool(IsMaster).Build();
 
     return params;
 }
@@ -1398,12 +1393,7 @@ NYdb::TParamsBuilder TKafkaBalancerActor::BuildUpdateLastHeartbeatsParams() {
     params.AddParam("$Database").Utf8(Context->DatabasePath).Build();
     params.AddParam("$LastMasterHeartbeat").Datetime(now).Build();
     params.AddParam("$HeartbeatDeadline").Datetime(now + TDuration::MilliSeconds(SessionTimeoutMs)).Build();
-
-    if (IsMaster) {
-        params.AddParam("$UpdateGroupHeartbeat").Bool(true).Build();
-    } else {
-        params.AddParam("$UpdateGroupHeartbeat").Bool(false).Build();
-    }
+    params.AddParam("$UpdateGroupHeartbeat").Bool(IsMaster).Build();
 
     return params;
 }
@@ -1472,6 +1462,7 @@ void TKafkaBalancerActor::SendJoinGroupResponseOk(const TActorContext& ctx, ui64
         }
     }
 
+    Send(Context->ConnectionId, new TEvKafka::TEvReadSessionInfo(GroupId));
     Send(Context->ConnectionId, new TEvKafka::TEvResponse(correlationId, response, EKafkaErrors::NONE_ERROR));
     Die(ctx);
 }

@@ -34,7 +34,7 @@ namespace {
 
 //-----------------------------------------------------------------------------
 
-constexpr auto GracefulShutdownTimeout = std::chrono::seconds(10);
+constexpr auto GracefulShutdownTimeout = std::chrono::seconds(20);
 constexpr auto MinWarmupPerTerminalMs = std::chrono::milliseconds(1);
 
 constexpr auto MaxPerTerminalTransactionsInflight = 1;
@@ -158,6 +158,12 @@ TPCCRunner::TPCCRunner(const NConsoleClient::TClientCommand::TConfig& connection
     if (Config.ThreadCount == 0) {
         threadCount = std::min(maxTerminalThreadCountAvailable, terminalsCount);
         threadCount = std::min(threadCount, recommendedThreadCount);
+
+        // in TUI even number of threads looks cute: increase number of threads
+        // if we have enough CPU cores
+        if (threadCount % 2 != 0 && threadCount < maxTerminalThreadCountAvailable) {
+            ++threadCount;
+        }
     } else {
         // user provided value: don't give us a chance to break things:
         // with too many threads, we get poor result
@@ -181,6 +187,33 @@ TPCCRunner::TPCCRunner(const NConsoleClient::TClientCommand::TConfig& connection
     // For now, we don't have more than 32 network threads (check TClientCommand::TConfig::GetNetworkThreadNum()),
     // so that maxTerminalThreads will be around more or less around 100.
     const size_t driverCount = Config.DriverCount == 0 ? threadCount : Config.DriverCount;
+    Drivers.reserve(driverCount);
+    for (size_t i = 0; i < driverCount; ++i) {
+        Drivers.emplace_back(NConsoleClient::TYdbCommand::CreateDriver(ConnectionConfig));
+    }
+
+    if (Config.MaxInflight == 0) {
+        int32_t computeCores = 0;
+        std::string reason;
+        try {
+            computeCores = NumberOfComputeCpus(Drivers[0]);
+        } catch (const std::exception& ex) {
+            reason = ex.what();
+        }
+
+        if (computeCores == 0) {
+            std::cerr << "Failed to autodetect max number of sessions";
+            if (!reason.empty()) {
+                std::cerr << ": " << reason;
+            }
+
+            std::cerr << ". Please specify '-m' manually." << std::endl;
+            std::exit(1);
+        }
+
+        Config.MaxInflight = std::min(terminalsCount, computeCores * SESSIONS_PER_COMPUTE_CORE);
+        LOG_I("Set max sessions to " << Config.MaxInflight << ", feel free to manually adjust if needed");
+    }
 
     const size_t maxSessionsPerClient = (Config.MaxInflight + driverCount - 1) / driverCount;
     NQuery::TSessionPoolSettings sessionPoolSettings;
@@ -190,12 +223,10 @@ TPCCRunner::TPCCRunner(const NConsoleClient::TClientCommand::TConfig& connection
     NQuery::TClientSettings clientSettings;
     clientSettings.SessionPoolSettings(sessionPoolSettings);
 
-    Drivers.reserve(driverCount);
     std::vector<std::shared_ptr<NQuery::TQueryClient>> clients;
     clients.reserve(driverCount);
     for (size_t i = 0; i < driverCount; ++i) {
-        auto& driver = Drivers.emplace_back(NConsoleClient::TYdbCommand::CreateDriver(ConnectionConfig));
-        clients.emplace_back(std::make_shared<NQuery::TQueryClient>(driver, clientSettings));
+        clients.emplace_back(std::make_shared<NQuery::TQueryClient>(Drivers[i], clientSettings));
     }
 
     PerThreadTerminalStats.reserve(threadCount);

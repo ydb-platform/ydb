@@ -75,8 +75,7 @@ TTransformationPipeline& TTransformationPipeline::AddExpressionEvaluation(const 
 
 TTransformationPipeline& TTransformationPipeline::AddPreTypeAnnotation(EYqlIssueCode issueCode) {
     auto& typeCtx = *TypeAnnotationContext_;
-    Transformers_.push_back(TTransformStage(CreateFunctorTransformer(&ExpandApply), "ExpandApply",
-        issueCode));
+    Transformers_.push_back(TTransformStage(CreateFunctorTransformer(&ExpandApply), "ExpandApply", issueCode));
     Transformers_.push_back(TTransformStage(CreateFunctorTransformer(
         [&](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
             return ValidateProviders(input, output, ctx, typeCtx);
@@ -84,6 +83,10 @@ TTransformationPipeline& TTransformationPipeline::AddPreTypeAnnotation(EYqlIssue
 
     Transformers_.push_back(TTransformStage(
         CreateConfigureTransformer(*TypeAnnotationContext_), "Configure", issueCode));
+    Transformers_.push_back(TTransformStage(CreateFunctorTransformer(
+        [&](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
+            return ExpandSeq(input, output, ctx, typeCtx);
+        }), "ExpandSeq", issueCode));
 
     return *this;
 }

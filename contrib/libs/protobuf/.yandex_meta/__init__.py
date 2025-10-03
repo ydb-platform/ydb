@@ -66,7 +66,6 @@ PROTOC_PROTO_FILES = [
 
 
 LIBPROTOC_DIR = "contrib/libs/protoc"
-PYTHON_DIR = "contrib/python/protobuf/py3"
 
 POSSIBLE_STD_STRING_USAGE_PATTERNS = [
     # It can be referenced to as `::std::string` or `std::string`
@@ -75,7 +74,14 @@ POSSIBLE_STD_STRING_USAGE_PATTERNS = [
 ]
 
 
+def remove_linker_scripts(self):
+    for script in fileutil.files(self.dstdir, rel=True, test=lambda path: path.endswith(".map")):
+        os.remove(f"{self.dstdir}/{script}")
+
+
 def post_build(self):
+    remove_linker_scripts(self)
+
     # Replace std::string with TProtoStringType.
     for pattern in POSSIBLE_STD_STRING_USAGE_PATTERNS:
         fileutil.re_sub_dir(
@@ -88,6 +94,10 @@ def post_build(self):
 
 
 def post_install(self):
+    for yamake in self.yamakes.values():
+        if "-DPROTOBUF_USE_DLLS" in yamake.CFLAGS:
+            yamake.CFLAGS.remove("-DPROTOBUF_USE_DLLS")
+
     with self.yamakes["."] as libprotobuf:
         libprotobuf.PROVIDES = ["protobuf"]
 
@@ -118,39 +128,34 @@ def post_install(self):
         libprotobuf.after("SRCS", Linkable(FILES=RUNTIME_PROTO_FILES))
         libprotobuf.after(
             "ORIGINAL_SOURCE",
-            """IF (OPENSOURCE_REPLACE_PROTOBUF AND EXPORT_CMAKE)
-
-    OPENSOURCE_EXPORT_REPLACEMENT(
-        CMAKE Protobuf
-        CMAKE_TARGET protobuf::libprotobuf protobuf::libprotoc
-        CONAN protobuf/${OPENSOURCE_REPLACE_PROTOBUF}
-        CONAN_ADDITIONAL_SEMS
-            "&& conan_require_tool" protobuf/${OPENSOURCE_REPLACE_PROTOBUF} "&& conan-tool_requires" protobuf/${OPENSOURCE_REPLACE_PROTOBUF}
-            "&& conan_import \\"bin, protoc* -> ./bin\\" && conan-imports 'bin, protoc* -> ./bin' && vanilla_protobuf"
-    )
-
-ELSE()
-
-    ADDINCL(
-        GLOBAL contrib/libs/protobuf/src
-        GLOBAL FOR proto contrib/libs/protobuf/src
-    )
-
-ENDIF()
-""",
+            """
+            IF (OPENSOURCE_REPLACE_PROTOBUF AND EXPORT_CMAKE)
+                OPENSOURCE_EXPORT_REPLACEMENT(
+                    CMAKE Protobuf
+                    CMAKE_TARGET protobuf::libprotobuf protobuf::libprotoc
+                    CONAN protobuf/${OPENSOURCE_REPLACE_PROTOBUF}
+                    CONAN_ADDITIONAL_SEMS
+                        "&& conan_require_tool" protobuf/${OPENSOURCE_REPLACE_PROTOBUF} "&& conan-tool_requires" protobuf/${OPENSOURCE_REPLACE_PROTOBUF}
+                        "&& conan_import \\"bin, protoc* -> ./bin\\" && conan-imports 'bin, protoc* -> ./bin' && vanilla_protobuf"
+                )
+            ELSE()
+                ADDINCL(
+                    GLOBAL contrib/libs/protobuf/src
+                    GLOBAL FOR proto contrib/libs/protobuf/src
+                )
+            ENDIF()
+            """,
         )
 
-        libprotobuf.ADDINCL = ["contrib/libs/protobuf/third_party/utf8_range"]
-
-        libprotobuf.SRCS.add("third_party/utf8_range/utf8_validity.cc")
-
-        libprotobuf.RECURSE = ["builtin_proto"]
+        libprotobuf.RECURSE = [
+            "builtin_proto",
+            "third_party/utf8_range",
+        ]
 
         libprotobuf.PEERDIR.add("library/cpp/sanitizer/include")
 
     del self.yamakes["src/google/protobuf/compiler"]
-    # merging src/google/protobuf/compiler/protoc library and
-    # src/google/protobuf/compiler binary into top-level binary
+    # Move protoc and libprotoc to contrib/libs/protoc
     with self.yamakes.pop("src/google/protobuf/compiler/protoc") as libprotoc:
         libprotoc.VERSION = self.version
         libprotoc.ORIGINAL_SOURCE = self.source_url
@@ -160,22 +165,18 @@ ENDIF()
             "ORIGINAL_SOURCE",
             """
             IF (OPENSOURCE_REPLACE_PROTOBUF AND EXPORT_CMAKE)
-
-            OPENSOURCE_EXPORT_REPLACEMENT(
-                CMAKE Protobuf
-                CMAKE_TARGET protobuf::libprotobuf protobuf::libprotoc
-                CONAN protobuf/${OPENSOURCE_REPLACE_PROTOBUF}
-                CONAN_ADDITIONAL_SEMS
-                    "&& conan_require_tool" protobuf/${OPENSOURCE_REPLACE_PROTOBUF} "&& conan-tool_requires" protobuf/${OPENSOURCE_REPLACE_PROTOBUF}
-                    "&& conan_import \\"bin, protoc* -> ./bin\\" && conan-imports 'bin, protoc* -> ./bin' && vanilla_protobuf"
-            )
-
+                OPENSOURCE_EXPORT_REPLACEMENT(
+                    CMAKE Protobuf
+                    CMAKE_TARGET protobuf::libprotobuf protobuf::libprotoc
+                    CONAN protobuf/${OPENSOURCE_REPLACE_PROTOBUF}
+                    CONAN_ADDITIONAL_SEMS
+                        "&& conan_require_tool" protobuf/${OPENSOURCE_REPLACE_PROTOBUF} "&& conan-tool_requires" protobuf/${OPENSOURCE_REPLACE_PROTOBUF}
+                        "&& conan_import \\"bin, protoc* -> ./bin\\" && conan-imports 'bin, protoc* -> ./bin' && vanilla_protobuf"
+                )
             ELSE()
-
                 ADDINCL(
                     GLOBAL contrib/libs/protoc/src
                 )
-
             ENDIF()
             """,
         )
@@ -223,24 +224,35 @@ ENDIF()
 
 
 protobuf = CMakeNinjaNixProject(
-    owners=["g:cpp-committee", "g:cpp-contrib"],
     arcdir="contrib/libs/protobuf",
     nixattr="protobuf",
     license_analysis_extra_dirs=[
         LIBPROTOC_DIR,
     ],
+    use_full_libnames=True,
     install_targets=[
         # Do not install protobuf lite, as nobody needs it
-        "protobuf",
-        # Specifying protoc will install both libprotoc and protoc executable
+        "libprotobuf",
+        "libprotoc",
+        "libutf8_validity",
         "protoc",
     ],
+    put={
+        "libprotobuf": ".",
+        "libprotoc": "src/google/protobuf/compiler/protoc",
+        "libutf8_validity": "third_party/utf8_range",
+        "protoc": "src/google/protobuf/compiler",
+    },
     unbundle_from={
         "abseil-cpp-tstring": "third_party/abseil-cpp",
     },
-    put={"protobuf": "."},
+    # FIXME: import protobuf against abseil-cpp from buildInputs
+    # use_provides=[
+    #     "contrib/restricted/abseil-cpp-tstring/.yandex_meta",
+    # ],
     disable_includes=[
         "sys/isa_defs.h",
+        "third_party/absl",
     ],
     keep_paths=[
         # ya.make generation for legacy PACKAGE at protobuf/python/ya.make is not configure by yamaker.

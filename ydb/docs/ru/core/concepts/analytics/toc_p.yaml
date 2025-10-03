@@ -1,0 +1,10 @@
+items:
+  - name: Обзор
+    href: index.md
+  - name: Детально
+    include:
+      mode: link
+      path: concepts/toc_p.yaml
+  - name: Основные функции
+    href: olap_features.md
+

@@ -9,6 +9,15 @@
 namespace NKikimr::NKMeans {
 
 namespace {
+    constexpr ui64 MinVectorDimension = 1;
+    constexpr ui64 MaxVectorDimension = 16384;
+    constexpr ui64 MinLevels = 1;
+    constexpr ui64 MaxLevels = 16;
+    constexpr ui64 MinClusters = 2;
+    constexpr ui64 MaxClusters = 2048;
+    constexpr ui64 MaxClustersPowLevels = ui64(1) << 30;
+    constexpr ui64 MaxVectorDimensionMultiplyClusters = ui64(4) << 20; // 4 bytes per dimension for float vector type ~= 16 MB
+
     bool ValidateSettingInRange(const TString& name, std::optional<ui64> value, ui64 minValue, ui64 maxValue, TString& error) {
         if (!value.has_value()) {
             error = TStringBuilder() << name << " should be set";
@@ -23,7 +32,8 @@ namespace {
         return false;
     };
 
-    Ydb::Table::VectorIndexSettings_Metric ParseDistance(const TString& distance, TString& error) {
+    Ydb::Table::VectorIndexSettings_Metric ParseDistance(const TString& distance_, TString& error) {
+        const TString distance = to_lower(distance_);
         if (distance == "cosine")
             return Ydb::Table::VectorIndexSettings::DISTANCE_COSINE;
         else if (distance == "manhattan")
@@ -31,23 +41,25 @@ namespace {
         else if (distance == "euclidean")
             return Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN;
         else {
-            error = TStringBuilder() << "Invalid distance: " << distance;
+            error = TStringBuilder() << "Invalid distance: " << distance_;
             return Ydb::Table::VectorIndexSettings::METRIC_UNSPECIFIED;
         }
     };
     
-    Ydb::Table::VectorIndexSettings_Metric ParseSimilarity(const TString& similarity, TString& error) {
+    Ydb::Table::VectorIndexSettings_Metric ParseSimilarity(const TString& similarity_, TString& error) {
+        const TString similarity = to_lower(similarity_);
         if (similarity == "cosine")
             return Ydb::Table::VectorIndexSettings::SIMILARITY_COSINE;
         else if (similarity == "inner_product")
             return Ydb::Table::VectorIndexSettings::SIMILARITY_INNER_PRODUCT;
         else {
-            error = TStringBuilder() << "Invalid similarity: " << similarity;
+            error = TStringBuilder() << "Invalid similarity: " << similarity_;
             return Ydb::Table::VectorIndexSettings::METRIC_UNSPECIFIED;
         }
     };
     
-    Ydb::Table::VectorIndexSettings_VectorType ParseVectorType(const TString& vectorType, TString& error) {
+    Ydb::Table::VectorIndexSettings_VectorType ParseVectorType(const TString& vectorType_, TString& error) {
+        const TString vectorType = to_lower(vectorType_);
         if (vectorType == "float")
             return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT;
         else if (vectorType == "uint8")
@@ -57,16 +69,18 @@ namespace {
         else if (vectorType == "bit")
             return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_BIT;
         else {
-            error = TStringBuilder() << "Invalid vector_type: " << vectorType;
+            error = TStringBuilder() << "Invalid vector_type: " << vectorType_;
             return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UNSPECIFIED;
         }
     };
 
-    ui32 ParseUInt32(const TString& name, const TString& value, TString& error) {
+    ui32 ParseUInt32(const TString& name, const TString& value, ui64 minValue, ui64 maxValue, TString& error) {
         ui32 result = 0;
         if (!TryFromString(value, result)) {
             error = TStringBuilder() << "Invalid " << name << ": " << value;
+            return result;
         }
+        ValidateSettingInRange(name, result, minValue, maxValue, error);
         return result;
     }
 }
@@ -436,12 +450,7 @@ std::unique_ptr<IClusters> CreateClusters(const Ydb::Table::VectorIndexSettings&
 }
 
 bool ValidateSettings(const Ydb::Table::KMeansTreeSettings& settings, TString& error) {
-    constexpr ui64 MinLevels = 1;
-    constexpr ui64 MaxLevels = 16;
-    constexpr ui64 MinClusters = 2;
-    constexpr ui64 MaxClusters = 2048;
-    constexpr ui64 MaxClustersPowLevels = ui64(1) << 30;
-    constexpr ui64 MaxVectorDimensionMultiplyClusters = ui64(4) << 20; // 4 bytes per dimension for float vector type ~= 16 MB
+    error = "";
 
     if (!settings.has_settings()) {
         error = TStringBuilder() << "vector index settings should be set";
@@ -483,13 +492,11 @@ bool ValidateSettings(const Ydb::Table::KMeansTreeSettings& settings, TString& e
         return false;
     }
 
+    error = "";
     return true;
 }
 
 bool ValidateSettings(const Ydb::Table::VectorIndexSettings& settings, TString& error) {
-    constexpr ui64 MinVectorDimension = 1;
-    constexpr ui64 MaxVectorDimension = 16384;
-
     if (!settings.has_metric() || settings.metric() == Ydb::Table::VectorIndexSettings::METRIC_UNSPECIFIED) {
         error = TStringBuilder() << "either distance or similarity should be set";
         return false;
@@ -513,49 +520,44 @@ bool ValidateSettings(const Ydb::Table::VectorIndexSettings& settings, TString& 
         MinVectorDimension, MaxVectorDimension,
         error))
     {
+        Y_ASSERT(error);
         return false;
     }
 
+    error = "";
     return true;
 }
 
-Ydb::Table::KMeansTreeSettings FillSettings(const TVector<std::pair<TString, TString>>& settings, TString& error) {
-    Ydb::Table::KMeansTreeSettings result;
+bool FillSetting(Ydb::Table::KMeansTreeSettings& settings, const TString& name, const TString& value, TString& error) {
+    error = "";
 
-    for (const auto& [name, value] : settings) {
-        if (name == "distance") {
-            if (result.mutable_settings()->has_metric()) {
-                error = "only one of distance or similarity should be set, not both";
-                return result;
-            }
-            result.mutable_settings()->set_metric(ParseDistance(value, error));
-        } else if (name == "similarity") {
-            if (result.mutable_settings()->has_metric()) {
-                error = "only one of distance or similarity should be set, not both";
-                return result;
-            }
-            result.mutable_settings()->set_metric(ParseSimilarity(value, error));
-        } else if (name =="vector_type") {
-            result.mutable_settings()->set_vector_type(ParseVectorType(value, error));
-        } else if (name =="vector_dimension") {
-            result.mutable_settings()->set_vector_dimension(ParseUInt32(name, value, error));
-        } else if (name =="clusters") {
-            result.set_clusters(ParseUInt32(name, value, error));
-        } else if (name =="levels") {
-            result.set_levels(ParseUInt32(name, value, error));
-        } else {
-            error = TStringBuilder() << "Unknown index setting: " << name;
-            return result;
+    const TString nameLower = to_lower(name);
+    if (nameLower == "distance") {
+        if (settings.mutable_settings()->has_metric()) {
+            error = "only one of distance or similarity should be set, not both";
+            return false;
         }
-
-        if (error) {
-            return result;
+        settings.mutable_settings()->set_metric(ParseDistance(value, error));
+    } else if (nameLower == "similarity") {
+        if (settings.mutable_settings()->has_metric()) {
+            error = "only one of distance or similarity should be set, not both";
+            return false;
         }
+        settings.mutable_settings()->set_metric(ParseSimilarity(value, error));
+    } else if (nameLower =="vector_type") {
+        settings.mutable_settings()->set_vector_type(ParseVectorType(value, error));
+    } else if (nameLower =="vector_dimension") {
+        settings.mutable_settings()->set_vector_dimension(ParseUInt32(name, value, MinVectorDimension, MaxVectorDimension, error));
+    } else if (nameLower =="clusters") {
+        settings.set_clusters(ParseUInt32(name, value, MinClusters, MaxClusters, error));
+    } else if (nameLower =="levels") {
+        settings.set_levels(ParseUInt32(name, value, MinLevels, MaxLevels, error));
+    } else {
+        error = TStringBuilder() << "Unknown index setting: " << name;
+        return false;
     }
 
-    ValidateSettings(result, error);
-
-    return result;
+    return !error;
 }
 
 }

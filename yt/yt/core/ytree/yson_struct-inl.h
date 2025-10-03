@@ -24,6 +24,7 @@
 #include <yt/yt/core/actions/bind.h>
 
 #include <library/cpp/yt/misc/enum.h>
+#include <library/cpp/yt/misc/source_location.h>
 
 #include <util/datetime/base.h>
 
@@ -46,6 +47,21 @@ const std::type_info& CallCtor()
         T dummy;
         return typeid(T);
     }
+}
+
+template <class T>
+IMapNodePtr GetDefaultStructNode()
+{
+    auto builder = CreateBuilderFromFactory(GetEphemeralNodeFactory());
+    builder->BeginTree();
+
+    if constexpr (std::convertible_to<T*, TRefCountedBase*>) {
+        New<T>()->Save(builder.get());
+    } else {
+        T().Save(builder.get());
+    }
+
+    return builder->EndTree()->AsMap();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -95,7 +111,7 @@ YT_PREVENT_TLS_CACHING TStruct* TExternalizedYsonStruct::GetDefault() noexcept
 // When it is first called for a particular struct it will initialize TYsonStructMeta for that struct.
 // Also this method initializes defaults for the struct.
 template <class TStruct>
-void TYsonStructRegistry::InitializeStruct(TStruct* target)
+void TYsonStructRegistry::InitializeStruct(TStruct* target, const NYT::TSourceLocation& sourceLocation)
 {
     TForbidCachedDynamicCastGuard guard(target);
 
@@ -109,8 +125,13 @@ void TYsonStructRegistry::InitializeStruct(TStruct* target)
         return;
     }
 
-    auto metaConstructor = [] {
-        auto* result = new TYsonStructMeta();
+    auto metaConstructor = [&] {
+        auto defaultStructNodeGetter = [] {
+            static auto defaultStructNode = GetDefaultStructNode<TStruct>();
+            return defaultStructNode;
+        };
+
+        auto* result = new TYsonStructMeta(sourceLocation, defaultStructNodeGetter);
         NSan::MarkAsIntentionallyLeaked(result);
 
         // NB: Here initialization of TYsonStructMeta of particular struct takes place.
@@ -182,7 +203,7 @@ TYsonStructParameter<TValue>& TYsonStructRegistrar<TStruct>::BaseClassParameter(
 {
     static_assert(std::derived_from<TStruct, TBase>);
     int fieldIndex = ssize(Meta_->GetParameterMap());
-    auto parameter = New<TYsonStructParameter<TValue>>(key, std::make_unique<TYsonFieldAccessor<TBase, TValue>>(field), fieldIndex);
+    auto parameter = New<TYsonStructParameter<TValue>>(key, std::make_unique<TYsonFieldAccessor<TBase, TValue>>(field), fieldIndex, typeid(TStruct));
     Meta_->RegisterParameter(key, parameter);
     return *parameter;
 }
@@ -192,7 +213,7 @@ template <class TValue>
 TYsonStructParameter<TValue>& TYsonStructRegistrar<TStruct>::ParameterWithUniversalAccessor(const std::string& key, std::function<TValue&(TStruct*)> accessor)
 {
     int fieldIndex = ssize(Meta_->GetParameterMap());
-    auto parameter = New<TYsonStructParameter<TValue>>(key, std::make_unique<TUniversalYsonParameterAccessor<TStruct, TValue>>(std::move(accessor)), fieldIndex);
+    auto parameter = New<TYsonStructParameter<TValue>>(key, std::make_unique<TUniversalYsonParameterAccessor<TStruct, TValue>>(std::move(accessor)), fieldIndex, typeid(TStruct));
     Meta_->RegisterParameter(key, parameter);
     return *parameter;
 }
@@ -446,7 +467,7 @@ private: \
     friend class ::NYT::NYTree::TYsonStructRegistry;
 
 #define YSON_STRUCT_IMPL__CTOR_BODY \
-    ::NYT::NYTree::TYsonStructRegistry::Get()->InitializeStruct(this);
+    ::NYT::NYTree::TYsonStructRegistry::Get()->InitializeStruct(this, YT_CURRENT_SOURCE_LOCATION);
 
 #define YSON_STRUCT_LITE_IMPL__CTOR_BODY(TStruct) \
     YSON_STRUCT_IMPL__CTOR_BODY \

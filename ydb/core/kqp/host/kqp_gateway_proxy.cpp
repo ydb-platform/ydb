@@ -662,7 +662,12 @@ public:
     TFuture<TGenericResult> SetConstraint(const TString& tablePath, TVector<TSetColumnConstraintSettings>&& settings) override {
         try {
             auto [dirname, tableName] = NSchemeHelpers::SplitPathByDirAndBaseNames(tablePath);
-            if (!dirname.empty() && !IsStartWithSlash(dirname)) {
+
+            if (tableName.empty()) {
+                return MakeFuture(ResultFromError<TGenericResult>("Empty basename for setting constraint"));
+            }
+
+            if (!IsStartWithSlash(tablePath)) {
                 dirname = JoinPath({GetDatabase(), dirname});
             }
 
@@ -695,6 +700,14 @@ public:
         }
 
         const auto [dirname, basename] = NSchemeHelpers::SplitPathByDirAndBaseNames(settings.DatabasePath);
+
+        if (basename.empty()) {
+            TGenericResult result;
+            result.SetStatus(TIssuesIds_EIssueCode_KIKIMR_BAD_REQUEST);
+            result.AddIssue(TIssue("Empty basename for ALTER DATABASE").SetCode(result.Status(), TSeverityIds_ESeverityId_S_ERROR));
+            return result;
+        }
+
         modifyScheme.SetWorkingDir(dirname);
 
         if (settings.Owner) {
@@ -798,8 +811,19 @@ public:
                             indexDesc->AddDataColumnNames(col);
                         }
 
-                        if (index.Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
-                            *indexDesc->MutableVectorIndexKmeansTreeDescription()->MutableSettings() = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(index.SpecializedIndexDescription).GetSettings();
+                        switch (index.Type) {
+                            case TIndexDescription::EType::GlobalSync:
+                            case TIndexDescription::EType::GlobalAsync:
+                            case TIndexDescription::EType::GlobalSyncUnique:
+                                // no specialized index description
+                                Y_ASSERT(std::holds_alternative<std::monostate>(index.SpecializedIndexDescription));
+                                break;
+                            case TIndexDescription::EType::GlobalSyncVectorKMeansTree:
+                                *indexDesc->MutableVectorIndexKmeansTreeDescription()->MutableSettings() = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(index.SpecializedIndexDescription).GetSettings();
+                                break;
+                            case TIndexDescription::EType::GlobalFulltext:
+                                *indexDesc->MutableFulltextIndexDescription()->MutableSettings() = std::get<NKikimrKqp::TFulltextIndexDescription>(index.SpecializedIndexDescription).GetSettings();
+                                break;
                         }
                     }
                     FillCreateTableColumnDesc(*tableDesc, pathPair.second, metadata);
@@ -1287,7 +1311,12 @@ public:
 
             for (const auto& currentPath : settings.Paths) {
                 auto [dirname, basename] = NSchemeHelpers::SplitPathByDirAndBaseNames(currentPath);
-                if (!dirname.empty() && !IsStartWithSlash(dirname)) {
+
+                if (basename.empty()) {
+                    return MakeFuture(ResultFromError<TGenericResult>("Empty basename for modify permissions"));
+                }
+
+                if (!IsStartWithSlash(currentPath)) {
                     dirname = JoinPath({GetDatabase(), dirname});
                 }
 
@@ -2548,6 +2577,9 @@ public:
             if (const auto& staticCreds = settings.Settings.StaticCredentials) {
                 staticCreds->Serialize(*params.MutableStaticCredentials());
             }
+            if (const auto& iamCreds = settings.Settings.IamCredentials) {
+                iamCreds->Serialize(*params.MutableIamCredentials());
+            }
             if (const auto& caCert = settings.Settings.CaCert) {
                 params.SetCaCert(*caCert);
             }
@@ -2623,6 +2655,7 @@ public:
                 || settings.Settings.Database
                 || settings.Settings.OAuthToken
                 || settings.Settings.StaticCredentials
+                || settings.Settings.IamCredentials
                 || settings.Settings.CaCert
             ) {
                 auto& config = *op.MutableConfig();
@@ -2644,6 +2677,9 @@ public:
                 }
                 if (const auto& staticCreds = settings.Settings.StaticCredentials) {
                     staticCreds->Serialize(*params.MutableStaticCredentials());
+                }
+                if (const auto& iamCreds = settings.Settings.IamCredentials) {
+                    iamCreds->Serialize(*params.MutableIamCredentials());
                 }
                 if (const auto& caCert = settings.Settings.CaCert) {
                     params.SetCaCert(*caCert);
@@ -2754,6 +2790,9 @@ public:
             if (const auto& staticCreds = settings.Settings.StaticCredentials) {
                 staticCreds->Serialize(*params.MutableStaticCredentials());
             }
+            if (const auto& iamCreds = settings.Settings.IamCredentials) {
+                iamCreds->Serialize(*params.MutableIamCredentials());
+            }
             if (const auto& caCert = settings.Settings.CaCert) {
                 params.SetCaCert(*caCert);
             }
@@ -2851,6 +2890,7 @@ public:
                 || settings.Settings.Database
                 || settings.Settings.OAuthToken
                 || settings.Settings.StaticCredentials
+                || settings.Settings.IamCredentials
                 || settings.Settings.CaCert
             ) {
                 auto& config = *op.MutableConfig();
@@ -2872,6 +2912,9 @@ public:
                 }
                 if (const auto& staticCreds = settings.Settings.StaticCredentials) {
                     staticCreds->Serialize(*params.MutableStaticCredentials());
+                }
+                if (const auto& iamCreds = settings.Settings.IamCredentials) {
+                    iamCreds->Serialize(*params.MutableIamCredentials());
                 }
                 if (const auto& caCert = settings.Settings.CaCert) {
                     params.SetCaCert(*caCert);
@@ -2972,6 +3015,177 @@ public:
         catch (yexception& e) {
             return MakeFuture(ResultFromException<TGenericResult>(e));
         }
+    }
+
+    template<class TSecretSchemaOp>
+    class TSecretSchemaModifier {
+    public:
+        TSecretSchemaModifier(TIntrusivePtr<IKqpGateway> gateway, TIntrusivePtr<TKikimrSessionContext> sessionCtx)
+            : Gateway_(gateway)
+            , SessionCtx_(sessionCtx)
+        {
+        }
+
+        TFuture<TGenericResult> StartModification(const TString& cluster, const NYql::TSecretSettings& settings) {
+            if (!SessionCtx_->Config().FeatureFlags.GetEnableSchemaSecrets()) {
+                return MakeErrorFuture<IKikimrGateway::TGenericResult>(
+                    std::make_exception_ptr(yexception() << "Secrets are disabled. Please contact your system administrator to enable it")
+                );
+            }
+
+            try {
+                if (cluster != SessionCtx_->GetCluster()) {
+                    return MakeFuture(ResultFromError<TGenericResult>("Invalid cluster: " + cluster));
+                }
+
+                TString error;
+                std::pair<TString, TString> pathPair;
+                if (!NSchemeHelpers::SplitTablePath(settings.Name, SessionCtx_->GetDatabase(), pathPair, error, /* createDir */ false)) {
+                    return MakeFuture(ResultFromError<TGenericResult>(error));
+                }
+
+                NKikimrSchemeOp::TModifyScheme tx;
+                tx.SetWorkingDir(pathPair.first);
+                tx.SetOperationType(GetOperationType());
+
+                TSecretSchemaOp& op = GetSecretSchemaOp(tx);
+                op.SetName(pathPair.second);
+                FillSchemaOperation(settings, op);
+
+                if (SessionCtx_->Query().PrepareOnly) {
+                    auto& phyQuery = *SessionCtx_->Query().PreparingQuery->MutablePhysicalQuery();
+                    auto& phyTx = *phyQuery.AddTransactions();
+                    phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
+                    FillKqpSchemeOperation(*phyTx.MutableSchemeOperation(), std::move(tx));
+
+                    TGenericResult result;
+                    result.SetSuccess();
+                    return MakeFuture(result);
+                } else {
+                    return Gateway_->ModifyScheme(std::move(tx));
+                }
+            } catch (yexception& e) {
+                return MakeFuture(ResultFromException<TGenericResult>(e));
+            }
+        }
+
+    protected:
+        virtual NKikimrSchemeOp::EOperationType GetOperationType() const = 0;
+        virtual void FillKqpSchemeOperation(NKqpProto::TKqpSchemeOperation& op, NKikimrSchemeOp::TModifyScheme&& tx) const = 0;
+        virtual TSecretSchemaOp& GetSecretSchemaOp(NKikimrSchemeOp::TModifyScheme& tx) const = 0;
+        virtual void FillSchemaOperation(const NYql::TSecretSettings& settings, TSecretSchemaOp& op) const = 0;
+
+    private:
+        TIntrusivePtr<IKqpGateway> Gateway_;
+        TIntrusivePtr<TKikimrSessionContext> SessionCtx_;
+    };
+
+    template<class TSecretSchemaOp>
+    class TCreateSecretSchemaModifier : public TSecretSchemaModifier<TSecretSchemaOp> {
+    public:
+        TCreateSecretSchemaModifier(TIntrusivePtr<IKqpGateway> gateway, TIntrusivePtr<TKikimrSessionContext> sessionCtx)
+            : TSecretSchemaModifier<TSecretSchemaOp>(gateway, sessionCtx)
+        {
+        }
+
+    protected:
+        NKikimrSchemeOp::EOperationType GetOperationType() const override {
+            return NKikimrSchemeOp::ESchemeOpCreateSecret;
+        }
+
+        void FillKqpSchemeOperation(NKqpProto::TKqpSchemeOperation& op, NKikimrSchemeOp::TModifyScheme&& tx) const override {
+            op.MutableCreateSecret()->Swap(&tx);
+        }
+
+        TSecretSchemaOp& GetSecretSchemaOp(NKikimrSchemeOp::TModifyScheme& tx) const override {
+            return *tx.MutableCreateSecret();
+        }
+
+        void FillSchemaOperation(const NYql::TSecretSettings& settings, TSecretSchemaOp& op) const override {
+            op.SetValue(settings.Value);
+            op.SetInheritPermissions(settings.InheritPermissions);
+        }
+
+    private:
+        TIntrusivePtr<IKqpGateway> Gateway_;
+        TIntrusivePtr<TKikimrSessionContext> SessionCtx_;
+    };
+
+    template<class TSecretSchemaOp>
+    class TAlterSecretSchemaModifier : public TSecretSchemaModifier<TSecretSchemaOp> {
+    public:
+        TAlterSecretSchemaModifier(TIntrusivePtr<IKqpGateway> gateway, TIntrusivePtr<TKikimrSessionContext> sessionCtx)
+            : TSecretSchemaModifier<TSecretSchemaOp>(gateway, sessionCtx)
+        {
+        }
+
+    protected:
+        NKikimrSchemeOp::EOperationType GetOperationType() const override {
+            return NKikimrSchemeOp::ESchemeOpAlterSecret;
+        }
+
+        void FillKqpSchemeOperation(NKqpProto::TKqpSchemeOperation& op, NKikimrSchemeOp::TModifyScheme&& tx) const override {
+            op.MutableAlterSecret()->Swap(&tx);
+        }
+
+        TSecretSchemaOp& GetSecretSchemaOp(NKikimrSchemeOp::TModifyScheme& tx) const override {
+            return *tx.MutableAlterSecret();
+        }
+
+        void FillSchemaOperation(const NYql::TSecretSettings& settings, TSecretSchemaOp& op) const override {
+            op.SetValue(settings.Value);
+        }
+
+    private:
+        TIntrusivePtr<IKqpGateway> Gateway_;
+        TIntrusivePtr<TKikimrSessionContext> SessionCtx_;
+    };
+
+    template<class TSecretSchemaOp>
+    class TDropSecretSchemaModifier : public TSecretSchemaModifier<TSecretSchemaOp> {
+    public:
+        TDropSecretSchemaModifier(TIntrusivePtr<IKqpGateway> gateway, TIntrusivePtr<TKikimrSessionContext> sessionCtx)
+            : TSecretSchemaModifier<TSecretSchemaOp>(gateway, sessionCtx)
+        {
+        }
+
+    protected:
+        NKikimrSchemeOp::EOperationType GetOperationType() const override {
+            return NKikimrSchemeOp::ESchemeOpDropSecret;
+        }
+
+        void FillKqpSchemeOperation(NKqpProto::TKqpSchemeOperation& op, NKikimrSchemeOp::TModifyScheme&& tx) const override {
+            op.MutableDropSecret()->Swap(&tx);
+        }
+
+        TSecretSchemaOp& GetSecretSchemaOp(NKikimrSchemeOp::TModifyScheme& tx) const override {
+            return *tx.MutableDrop();
+        }
+
+        void FillSchemaOperation(const NYql::TSecretSettings&, TSecretSchemaOp&) const override {
+        }
+
+    private:
+        TIntrusivePtr<IKqpGateway> Gateway_;
+        TIntrusivePtr<TKikimrSessionContext> SessionCtx_;
+    };
+
+    TFuture<TGenericResult> CreateSecret(const TString& cluster, const NYql::TSecretSettings& settings) override {
+        CHECK_PREPARED_DDL(CreateSecret);
+
+        return TCreateSecretSchemaModifier<NKikimrSchemeOp::TSecretSchemaOp>(Gateway, SessionCtx).StartModification(cluster, settings);
+    }
+
+    TFuture<TGenericResult> AlterSecret(const TString& cluster, const NYql::TSecretSettings& settings) override {
+        CHECK_PREPARED_DDL(AlterSecret);
+
+        return TAlterSecretSchemaModifier<NKikimrSchemeOp::TSecretSchemaOp>(Gateway, SessionCtx).StartModification(cluster, settings);
+    }
+
+    TFuture<TGenericResult> DropSecret(const TString& cluster, const NYql::TSecretSettings& settings) override {
+        CHECK_PREPARED_DDL(DropSecret);
+
+        return TDropSecretSchemaModifier<NKikimrSchemeOp::TDrop>(Gateway, SessionCtx).StartModification(cluster, settings);
     }
 
     TVector<NKikimrKqp::TKqpTableMetadataProto> GetCollectedSchemeData() override {

@@ -7,6 +7,7 @@ import "ydb/core/protos/blobstorage_disk_color.proto";
 import "ydb/core/protos/blobstorage_pdisk_config.proto";
 import "ydb/core/protos/blob_depot_config.proto";
 import "ydb/library/actors/protos/interconnect.proto";
+import "google/protobuf/any.proto";
 
 package NKikimrBlobStorage;
 
@@ -25,6 +26,7 @@ message THostConfigDrive {
     // optional PDisk config for these drives; if not set, default configuration is applied; overrides host-wide default
     NKikimrBlobStorage.TPDiskConfig PDiskConfig = 6;
     uint64 InferPDiskSlotCountFromUnitSize = 7;
+    uint32 InferPDiskSlotCountMax = 8;
 }
 
 // Command used to define typical host configuration. It it used while defining new typical host configurations and as
@@ -235,7 +237,8 @@ message TMaintenanceStatus {
     enum E {
         NOT_SET = 0;                        // unset status, default value
         NO_REQUEST = 1;                     // no active maintenance request
-        LONG_TERM_MAINTENANCE_PLANNED = 2;  // maintence requested, VDisks should be moved asynchronously from PDisk
+        LONG_TERM_MAINTENANCE_PLANNED = 2;  // maintenance requested, VDisks should be moved asynchronously from PDisk
+        NO_NEW_VDISKS = 3;                  // no new VDisks should be allocated on this PDisk, but existing ones are not moved
     }
 }
 
@@ -276,6 +279,8 @@ message TReassignGroupDisk {
     bool SuppressDonorMode = 7; // when set, donor mode is not used even if it is enabled through BSC
     reserved 8;
     bool OnlyToLessOccupiedPDisk = 9; // when set, reassignment will only commence if new pdisk is less occupied than the old one
+    bool PreferLessOccupiedRack = 10; // when set, pick rack with more free slots
+    bool WithAttentionToReplication = 11; // when set, pick pdisk with less replicating vdisks (both per-pdisk and per-node)
 }
 
 message TSanitizeGroup {
@@ -497,6 +502,13 @@ message TClusterBalancingSettings {
     optional uint64 IterationIntervalMs = 2;
     optional uint32 MaxReplicatingPDisks = 3;
     optional uint32 MaxReplicatingVDisks = 4;
+    optional bool PreferLessOccupiedRack = 5;
+    optional bool WithAttentionToReplication = 6;
+}
+
+message TSelfHealSettings {
+    optional bool PreferLessOccupiedRack = 1;
+    optional bool WithAttentionToReplication = 2;
 }
 
 message TUpdateSettings {
@@ -536,6 +548,7 @@ message TBscConfig {
     optional bool UseSelfHealLocalPolicy = 13;
     optional bool TryToRelocateBrokenDisksLocallyFirst = 14;
     optional TClusterBalancingSettings ClusterBalancingSettings = 15;
+    optional TSelfHealSettings SelfHealSettings = 16;
 }
 
 message TBoxStoragePoolId {
@@ -682,6 +695,9 @@ message TConfigRequest {
 
     // requesting user identifier
     string UserSID = 13;
+
+    // current TStorageConfig against which we are processing this request
+    google.protobuf.Any StorageConfig = 14;
 }
 
 enum ETriStateBool {
@@ -719,6 +735,7 @@ message TBaseConfig {
         bool ReadOnly = 19;
         TMaintenanceStatus.E MaintenanceStatus = 20;
         uint64 InferPDiskSlotCountFromUnitSize = 21;
+        uint32 InferPDiskSlotCountMax = 22;
     }
     message TVSlot {
         message TDonorDisk {

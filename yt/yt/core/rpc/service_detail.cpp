@@ -30,6 +30,8 @@
 
 #include <yt/yt/core/profiling/timing.h>
 
+#include <yt/yt/core/utilex/random.h>
+
 #include <library/cpp/yt/misc/tls.h>
 
 namespace NYT::NRpc {
@@ -1391,6 +1393,7 @@ void TRequestQueue::Configure(const TMethodConfigPtr& config)
 {
     BytesThrottler_.Reconfigure(config->RequestBytesThrottler);
     WeightThrottler_.Reconfigure(config->RequestWeightThrottler);
+    TestingDelay_.store(config->Testing.RandomDelay.value_or(TDuration::Zero()));
 
     ScheduleRequestsFromQueue();
     SubscribeToThrottlers();
@@ -1538,15 +1541,37 @@ void TRequestQueue::RunRequest(TServiceBase::TServiceContextPtr context)
     auto options = RuntimeInfo_->Descriptor.Options;
     options.SetHeavy(RuntimeInfo_->Heavy.load(std::memory_order::relaxed));
 
+    TDuration testingDelay;
+    if (auto maxDelay = TestingDelay_.load()) {
+        testingDelay = RandomDuration(maxDelay);
+    }
+
     if (options.Heavy) {
-        BIND([context, options, heavyHandler = RuntimeInfo_->Descriptor.HeavyHandler] {
-            return heavyHandler.Run(context, options);
-        })
-            .AsyncVia(TDispatcher::Get()->GetHeavyInvoker())
-            .Run()
-            .Subscribe(BIND(&TServiceBase::TServiceContext::CheckAndRun, context));
+        auto callback = BIND([context, options, heavyHandler = RuntimeInfo_->Descriptor.HeavyHandler] {
+                return heavyHandler.Run(context, options);
+            })
+                .AsyncVia(TDispatcher::Get()->GetHeavyInvoker());
+
+        if (testingDelay) {
+            TDelayedExecutor::MakeDelayed(testingDelay)
+                .Apply(callback)
+                .Subscribe(BIND(&TServiceBase::TServiceContext::CheckAndRun, context));
+
+        } else {
+            callback.Run().Subscribe(BIND(&TServiceBase::TServiceContext::CheckAndRun, context));
+        }
     } else {
-        context->Run(RuntimeInfo_->Descriptor.LiteHandler);
+        if (testingDelay) {
+            TDelayedExecutor::Submit(
+                BIND(
+                    &TServiceBase::TServiceContext::Run,
+                    context,
+                    RuntimeInfo_->Descriptor.LiteHandler)
+                    .Via(GetCurrentInvoker()),
+                testingDelay);
+        } else {
+            context->Run(RuntimeInfo_->Descriptor.LiteHandler);
+        }
     }
 }
 

@@ -73,6 +73,7 @@ SRCS(
     tx__restart_tablet.cpp
     tx__seize_tablets.cpp
     tx__seize_tablets_reply.cpp
+    tx__set_down.cpp
     tx__resume_tablet.cpp
     tx__start_tablet.cpp
     tx__status.cpp

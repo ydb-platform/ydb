@@ -110,6 +110,8 @@ PEERDIR(
     library/cpp/containers/stack_vector
     library/cpp/digest/crc32c
     library/cpp/html/pcdata
+    library/cpp/http/io
+    library/cpp/json/writer
     library/cpp/lwtrace
     library/cpp/lwtrace/mon
     ydb/core/base

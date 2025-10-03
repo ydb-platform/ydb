@@ -12,6 +12,8 @@
 #include <util/string/join.h>
 #include <util/string/vector.h>
 
+#define PQ_ENSURE(condition) AFL_ENSURE(condition)("tablet_id", TabletId)("partition_id", Partition)
+
 namespace NKikimr {
 namespace NPQ {
 
@@ -32,13 +34,12 @@ TBasicAccountQuoter::TBasicAccountQuoter(
     const TTabletCountersBase& counters,
     const TDuration& doNotQuoteAfterErrorPeriod
 )
-        : KesusPath(params.KesusPath)
+        : TBaseActor(tabletId, tabletActor, NKikimrServices::PQ_RATE_LIMITER)
+        , KesusPath(params.KesusPath)
         , ResourcePath(params.ResourcePath)
         , TopicConverter(topicConverter)
         , Partition(partition)
-        , TabletActor(tabletActor)
         , Recepient(recepient)
-        , TabletId(tabletId)
         , CreditBytes(quotaCreditBytes)
         , DoNotQuoteAfterErrorPeriod(doNotQuoteAfterErrorPeriod)
 {
@@ -58,11 +59,11 @@ void TBasicAccountQuoter::InitCounters(const TActorContext& ctx) {
 }
 
 void TBasicAccountQuoter::Handle(TEvents::TEvPoisonPill::TPtr&, const TActorContext& ctx) {
-    LOG_INFO_S(ctx, NKikimrServices::PQ_RATE_LIMITER, LimiterDescription() << " killed");
+    LOG_I("killed");
     for (const auto& event : Queue) {
         auto cookie = event.Request->Get()->Cookie;
         ReplyPersQueueError(
-            TabletActor, ctx, TabletId, TopicConverter->GetClientsideName(), Partition, Counters, NKikimrServices::PQ_RATE_LIMITER,
+            TabletActorId, ctx, TabletId, TopicConverter->GetClientsideName(), Partition, Counters, NKikimrServices::PQ_RATE_LIMITER,
             cookie, NPersQueue::NErrorCode::INITIALIZING,
             TStringBuilder() << "Tablet is restarting, topic " << TopicConverter->GetClientsideName() << " (ReadInfo) cookie " << cookie
         );
@@ -76,9 +77,7 @@ void TBasicAccountQuoter::HandleUpdateCounters(TEvPQ::TEvUpdateCounters::TPtr&, 
 }
 
 void TBasicAccountQuoter::HandleQuotaRequest(NAccountQuoterEvents::TEvRequest::TPtr& ev, const TActorContext& ctx) {
-    LOG_DEBUG_S(ctx, NKikimrServices::PQ_RATE_LIMITER,
-        LimiterDescription() << ": quota required for cookie=" << ev->Get()->Cookie
-    );
+    LOG_D("quota required for cookie=" << ev->Get()->Cookie);
     InitCounters(ctx);
     bool hasActualErrors = ctx.Now() - LastReportedErrorTime < DoNotQuoteAfterErrorPeriod;
     if (ResourcePath && (QuotaRequestInFlight || !InProcessQuotaRequestCookies.empty()) && !hasActualErrors) {
@@ -90,13 +89,12 @@ void TBasicAccountQuoter::HandleQuotaRequest(NAccountQuoterEvents::TEvRequest::T
 
 void TBasicAccountQuoter::HandleQuotaConsumed(NAccountQuoterEvents::TEvConsumed::TPtr& ev, const TActorContext& ctx) {
     ConsumedBytesInCredit += ev->Get()->BytesConsumed;
-    LOG_DEBUG_S(ctx, NKikimrServices::PQ_RATE_LIMITER, LimiterDescription()
-        << "consumed quota " << ev->Get()->BytesConsumed
+    LOG_D("consumed quota " << ev->Get()->BytesConsumed
         << " bytes by cookie=" << ev->Get()->RequestCookie
         << ", consumed in credit " << ConsumedBytesInCredit << "/" << CreditBytes
     );
     auto it = InProcessQuotaRequestCookies.find(ev->Get()->RequestCookie);
-    Y_ABORT_UNLESS(it != InProcessQuotaRequestCookies.end());
+    PQ_ENSURE(it != InProcessQuotaRequestCookies.end());
     InProcessQuotaRequestCookies.erase(it);
 
     if (!QuotaRequestInFlight) {
@@ -121,20 +119,18 @@ void TBasicAccountQuoter::HandleQuotaConsumed(NAccountQuoterEvents::TEvConsumed:
 void TBasicAccountQuoter::HandleClearance(TEvQuota::TEvClearance::TPtr& ev, const TActorContext& ctx) {
     QuotaRequestInFlight = false;
     const ui64 cookie = ev->Cookie;
-    LOG_DEBUG_S(ctx, NKikimrServices::PQ_RATE_LIMITER,
-        LimiterDescription() << "Got quota from Kesus:" << ev->Get()->Result << ". Cookie: " << cookie
-    );
+    LOG_D("Got quota from Kesus:" << ev->Get()->Result << ". Cookie: " << cookie);
 
-    Y_ABORT_UNLESS(CurrentQuotaRequestCookie == cookie);
+    PQ_ENSURE(CurrentQuotaRequestCookie == cookie);
     if (!Queue.empty()) {
         ApproveQuota(Queue.front().Request, Queue.front().StartWait, ctx);
         Queue.pop_front();
     }
 
     if (Y_UNLIKELY(ev->Get()->Result != TEvQuota::TEvClearance::EResult::Success)) {
-        Y_ABORT_UNLESS(ev->Get()->Result != TEvQuota::TEvClearance::EResult::Deadline); // We set deadline == inf in quota request.
+        PQ_ENSURE(ev->Get()->Result != TEvQuota::TEvClearance::EResult::Deadline); // We set deadline == inf in quota request.
         if (ctx.Now() - LastReportedErrorTime > TDuration::Minutes(1)) {
-            LOG_ERROR_S(ctx, NKikimrServices::PQ_RATE_LIMITER, LimiterDescription() << "Got quota request error: " << ev->Get()->Result);
+            LOG_E("Got quota request error: " << ev->Get()->Result);
             LastReportedErrorTime = ctx.Now();
         }
         return;
@@ -142,8 +138,7 @@ void TBasicAccountQuoter::HandleClearance(TEvQuota::TEvClearance::TPtr& ev, cons
 }
 
 void TBasicAccountQuoter::ApproveQuota(NAccountQuoterEvents::TEvRequest::TPtr& ev, TInstant startWait, const TActorContext& ctx) {
-    LOG_DEBUG_S(ctx, NKikimrServices::PQ_RATE_LIMITER,
-        LimiterDescription() << " approve read for cookie=" << ev->Get()->Cookie
+    LOG_D("approve read for cookie=" << ev->Get()->Cookie
     );
     InProcessQuotaRequestCookies.insert(ev->Get()->Cookie);
 
@@ -183,8 +178,7 @@ TAccountReadQuoter::TAccountReadQuoter(
             AppData()->PQConfig.GetQuotingConfig().GetReadCreditBytes(), counters, DO_NOT_QUOTE_AFTER_ERROR_PERIOD)
     , User(user)
 {
-    LOG_INFO_S(TActivationContext::AsActorContext(), NKikimrServices::PQ_RATE_LIMITER,
-        LimiterDescription() <<" kesus=" << KesusPath << " resource_path=" << ResourcePath);
+    LOG_I("kesus=" << KesusPath << " resource_path=" << ResourcePath);
     ConsumerPath = NPersQueue::ConvertOldConsumerName(user);
 }
 
@@ -213,8 +207,8 @@ THolder<NAccountQuoterEvents::TEvCounters> TAccountReadQuoter::MakeCountersUpdat
     return MakeHolder<NAccountQuoterEvents::TEvCounters>(Counters, true, User);
 }
 
-TString TAccountReadQuoter::LimiterDescription() const {
-    return TStringBuilder() << "topic=" << TopicConverter->GetClientsideName() << ":" << Partition << " user=" << User << ": ";
+TString TAccountReadQuoter::BuildLogPrefix() const {
+    return TStringBuilder()  << "topic=" << TopicConverter->GetClientsideName() << ":" << Partition << " user=" << User << ": ";
 }
 
 
@@ -232,6 +226,11 @@ TAccountWriteQuoter::TAccountWriteQuoter(
                           0, counters,
                           TDuration::Zero())
 {
+    LOG_D("topicWriteQuotaResourcePath '" << ResourcePath
+                << "' topicWriteQuoterPath '" << KesusPath
+                << "' account '" << topicConverter->GetAccount()
+                << "'"
+    );
 }
 
 TQuoterParams TAccountWriteQuoter::CreateQuoterParams(
@@ -240,7 +239,7 @@ TQuoterParams TAccountWriteQuoter::CreateQuoterParams(
 ) {
     TQuoterParams params;
     const auto& quotingConfig = pqConfig.GetQuotingConfig();
-    Y_ABORT_UNLESS(quotingConfig.GetTopicWriteQuotaEntityToLimit() != NKikimrPQ::TPQConfig::TQuotingConfig::UNSPECIFIED);
+    AFL_ENSURE(quotingConfig.GetTopicWriteQuotaEntityToLimit() != NKikimrPQ::TPQConfig::TQuotingConfig::UNSPECIFIED);
     auto topicPath = topicConverter->GetFederationPath();
 
     auto topicParts = SplitPath(topicPath); // account/folder/topic // account is first element
@@ -253,12 +252,6 @@ TQuoterParams TAccountWriteQuoter::CreateQuoterParams(
     params.KesusPath = TStringBuilder() << quotingConfig.GetQuotersDirectoryPath() << "/" << topicConverter->GetAccount();
     params.ResourcePath = JoinPath(topicParts);
 
-    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE,
-                "topicWriteQuutaResourcePath '" << params.ResourcePath
-                << "' topicWriteQuoterPath '" << params.KesusPath
-                << "' account '" << topicConverter->GetAccount()
-                << "'"
-    );
     return params;
 }
 
@@ -269,7 +262,7 @@ THolder<NAccountQuoterEvents::TEvCounters> TAccountWriteQuoter::MakeCountersUpda
     return MakeHolder<NAccountQuoterEvents::TEvCounters>(Counters, false, TString{});
 }
 
-TString TAccountWriteQuoter::LimiterDescription() const {
+TString TAccountWriteQuoter::BuildLogPrefix() const {
     return TStringBuilder() << "topic=" << TopicConverter->GetClientsideName() << ":" << Partition << " writeQuoter" << ": ";
 }
 

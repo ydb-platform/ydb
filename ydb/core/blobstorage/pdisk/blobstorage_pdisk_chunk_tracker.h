@@ -250,6 +250,7 @@ using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
     THolder<TQuotaRecord> SharedQuota;
     THolder<TPerOwnerQuotaTracker> OwnerQuota;
     TKeeperParams Params;
+    TColorLimits ColorLimits;
 
     TColor::E ColorBorder = NKikimrBlobStorage::TPDiskSpaceColor::GREEN;
     double ColorBorderOccupancy = 0;
@@ -275,6 +276,7 @@ public:
 
     bool Reset(const TKeeperParams &params, const TColorLimits &limits, TString &outErrorReason) {
         Params = params;
+        ColorLimits = limits;
 
         GlobalQuota->Reset(params.TotalChunks, limits);
         i64 unappropriated = params.TotalChunks;
@@ -605,6 +607,15 @@ public:
                     break;
             }
         }
+    }
+
+    void SetExpectedOwnerCount(size_t newOwnerCount) {
+        OwnerQuota->SetExpectedOwnerCount(newOwnerCount);
+    }
+
+    void SetColorBorder(NKikimrBlobStorage::TPDiskSpaceColor::E colorBorder) {
+        ColorBorder = colorBorder;
+        ColorBorderOccupancy = ColorLimits.GetOccupancyForColor(ColorBorder, GlobalQuota->GetHardLimit(OwnerBeginUser));
     }
 };
 

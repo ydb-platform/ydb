@@ -155,7 +155,7 @@ TString EncodeSimple(const TString& sourceId) {
 }
 
 TString DecodeSimple(const TString& sourceId) {
-    Y_ABORT_UNLESS(!sourceId.empty() && sourceId[0] == TTags::Simple);
+    Y_ENSURE(!sourceId.empty() && sourceId[0] == TTags::Simple);
     return sourceId.substr(1);
 }
 
@@ -179,7 +179,7 @@ TString EncodeBase64(const TString& sourceId) {
 }
 
 TString DecodeBase64(const TString& sourceId) {
-    Y_ABORT_UNLESS(!sourceId.empty() && sourceId[0] == TTags::Base64);
+    Y_ENSURE(!sourceId.empty() && sourceId[0] == TTags::Base64);
     return Base64Prefix + StripStringRight(Base64EncodeUrl(sourceId.substr(1)), EqualsStripAdapter(','));
 }
 
@@ -192,7 +192,7 @@ TString Encode(const TString& sourceId) {
 }
 
 TString Decode(const TString& sourceId) {
-    Y_ABORT_UNLESS(!sourceId.empty());
+    Y_ENSURE(!sourceId.empty());
 
     switch (sourceId[0]) {
     case TTags::Simple:

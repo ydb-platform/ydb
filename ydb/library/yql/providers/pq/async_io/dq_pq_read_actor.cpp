@@ -1,46 +1,43 @@
 #include "dq_pq_read_actor.h"
+#include "dq_pq_meta_extractor.h"
+#include "dq_pq_rd_read_actor.h"
+#include "dq_pq_read_actor_base.h"
 #include "probes.h"
 
-#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io_factory.h>
-#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
-#include <ydb/library/yql/dq/actors/compute/dq_source_watermark_tracker.h>
-#include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
-#include <ydb/library/yql/dq/common/dq_common.h>
-#include <ydb/library/yql/dq/actors/compute/dq_checkpoints_states.h>
-
-#include <yql/essentials/minikql/comp_nodes/mkql_saveload.h>
-#include <yql/essentials/minikql/mkql_alloc.h>
-#include <yql/essentials/minikql/mkql_string_util.h>
-#include <ydb/library/yql/providers/pq/async_io/dq_pq_meta_extractor.h>
-#include <ydb/library/yql/providers/pq/async_io/dq_pq_rd_read_actor.h>
-#include <ydb/library/yql/providers/pq/async_io/dq_pq_read_actor_base.h>
-#include <ydb/library/yql/providers/pq/common/pq_meta_fields.h>
-#include <ydb/library/yql/providers/pq/common/pq_partition_key.h>
-#include <ydb/library/yql/providers/pq/proto/dq_io_state.pb.h>
-#include <yql/essentials/utils/log/log.h>
-#include <yql/essentials/utils/yql_panic.h>
-
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/federated_topic/federated_topic.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
-
+#include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/log_backend/actor_log_backend.h>
-#include <library/cpp/lwtrace/mon/mon_lwtrace.h>
-
-#include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
-
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io_factory.h>
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
+#include <ydb/library/yql/dq/actors/compute/dq_source_watermark_tracker.h>
+#include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
+#include <ydb/library/yql/dq/common/dq_common.h>
+#include <ydb/library/yql/dq/actors/compute/dq_checkpoints_states.h>
+#include <ydb/library/yql/providers/pq/common/pq_events_processor.h>
+#include <ydb/library/yql/providers/pq/common/pq_meta_fields.h>
+#include <ydb/library/yql/providers/pq/common/pq_partition_key.h>
+#include <ydb/library/yql/providers/pq/proto/dq_io_state.pb.h>
 #include <ydb/public/sdk/cpp/adapters/issue/issue.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/federated_topic/federated_topic.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
+
+#include <yql/essentials/minikql/comp_nodes/mkql_saveload.h>
+#include <yql/essentials/minikql/mkql_alloc.h>
+#include <yql/essentials/minikql/mkql_string_util.h>
+#include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/utils/yql_panic.h>
+
+#include <library/cpp/lwtrace/mon/mon_lwtrace.h>
 
 #include <util/generic/algorithm.h>
 #include <util/generic/hash.h>
 #include <util/generic/utility.h>
 #include <util/string/join.h>
-
 
 #include <queue>
 #include <variant>
@@ -81,6 +78,7 @@ struct TEvPrivate {
         EvReconnectSession,
         EvReceivedClusters,
         EvDescribeTopicResult,
+        EvExecuteTopicEvent,
 
         EvEnd
     };
@@ -116,25 +114,25 @@ struct TEvPrivate {
         ui32 PartitionsCount;
         TMaybe<NYdb::TStatus> Status;
     };
+    struct TEvExecuteTopicEvent : public TTopicEventBase<TEvExecuteTopicEvent, EvExecuteTopicEvent> {
+        using TTopicEventBase::TTopicEventBase;
+    };
 };
 
-} // namespace
-class TDqPqReadActor : public NActors::TActor<TDqPqReadActor>, public NYql::NDq::NInternal::TDqPqReadActorBase  {
+} // anonymous namespace
+
+class TDqPqReadActor : public NActors::TActor<TDqPqReadActor>, public NYql::NDq::NInternal::TDqPqReadActorBase, TTopicEventProcessor<TEvPrivate::TEvExecuteTopicEvent> {
     static constexpr bool StaticDiscovery = true;
     struct TMetrics {
         TMetrics(
             const TTxId& txId,
             ui64 taskId,
             const ::NMonitoring::TDynamicCounterPtr& counters,
-            const ::NMonitoring::TDynamicCounterPtr& taskCounters,
             const NPq::NProto::TDqPqTopicSource& sourceParams)
             : TxId(std::visit([](auto arg) { return ToString(arg); }, txId))
-            , Counters(counters)
-            , TaskCounters(taskCounters) {
+            , Counters(counters) {
             if (counters) {
                 SubGroup = Counters->GetSubgroup("source", "PqRead");
-            } else if (taskCounters) {
-                SubGroup = TaskCounters->GetSubgroup("source", "PqRead");
             } else {
                 SubGroup = MakeIntrusive<::NMonitoring::TDynamicCounters>();
             }
@@ -160,7 +158,6 @@ class TDqPqReadActor : public NActors::TActor<TDqPqReadActor>, public NYql::NDq:
 
         TString TxId;
         ::NMonitoring::TDynamicCounterPtr Counters;
-        ::NMonitoring::TDynamicCounterPtr TaskCounters;
         ::NMonitoring::TDynamicCounterPtr SubGroup;
         ::NMonitoring::TDynamicCounters::TCounterPtr InFlyAsyncInputData;
         ::NMonitoring::TDynamicCounters::TCounterPtr InFlySubscribe;
@@ -202,13 +199,12 @@ public:
         std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
         const NActors::TActorId& computeActorId,
         const ::NMonitoring::TDynamicCounterPtr& counters,
-        const ::NMonitoring::TDynamicCounterPtr& taskCounters,
         i64 bufferSize,
         const IPqGateway::TPtr& pqGateway,
         ui32 topicPartitionsCount)
         : TActor<TDqPqReadActor>(&TDqPqReadActor::StateFunc)
         , TDqPqReadActorBase(inputIndex, taskId, this->SelfId(), txId, std::move(sourceParams), std::move(readParams), computeActorId)
-        , Metrics(txId, taskId, counters, taskCounters, SourceParams)
+        , Metrics(txId, taskId, counters, SourceParams)
         , BufferSize(bufferSize)
         , HolderFactory(holderFactory)
         , Driver(std::move(driver))
@@ -238,8 +234,10 @@ public:
         return opts;
     }
 
-    NYdb::NTopic::TTopicClientSettings GetTopicClientSettings(TClusterState& state) const {
+    NYdb::NTopic::TTopicClientSettings GetTopicClientSettings(TClusterState& state) {
         NYdb::NTopic::TTopicClientSettings opts = PqGateway->GetTopicClientSettings();
+        SetupTopicClientSettings(ActorContext().ActorSystem(), SelfId(), opts);
+
         opts.Database(SourceParams.GetDatabase())
             .DiscoveryEndpoint(SourceParams.GetEndpoint())
             .SslCredentials(NYdb::TSslCredentials(SourceParams.GetUseSsl()))
@@ -336,6 +334,7 @@ private:
         hFunc(TEvPrivate::TEvReconnectSession, Handle);
         hFunc(TEvPrivate::TEvReceivedClusters, Handle);
         hFunc(TEvPrivate::TEvDescribeTopicResult, Handle);
+        hFunc(TEvPrivate::TEvExecuteTopicEvent, HandleTopicEvent);
     )
 
     void Handle(TEvPrivate::TEvSourceDataReady::TPtr& ev) {
@@ -927,21 +926,17 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqReadActor(
     TTxId txId,
     ui64 taskId,
     const THashMap<TString, TString>& secureParams,
-    const THashMap<TString, TString>& taskParams,
-    const TVector<TString>& readRanges,
+    TVector<NPq::NProto::TDqReadTaskParams>&& readTaskParamsMsg,
     NYdb::TDriver driver,
     ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
     const NActors::TActorId& computeActorId,
     const NKikimr::NMiniKQL::THolderFactory& holderFactory,
     const ::NMonitoring::TDynamicCounterPtr& counters,
-    const ::NMonitoring::TDynamicCounterPtr& taskCounters,
     IPqGateway::TPtr pqGateway,
+    ui32 topicPartitionsCount,
     i64 bufferSize
     )
 {
-    TVector<NPq::NProto::TDqReadTaskParams> readTaskParamsMsg;
-    ui32 topicPartitionsCount = ExtractPartitionsFromParams(readTaskParamsMsg, taskParams, readRanges);
-
     const TString& tokenName = settings.GetToken().GetName();
     const TString token = secureParams.Value(tokenName, TString());
     const bool addBearerToToken = settings.GetAddBearerToToken();
@@ -958,7 +953,6 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqReadActor(
         CreateCredentialsProviderFactoryForStructuredToken(credentialsFactory, token, addBearerToToken),
         computeActorId,
         counters,
-        taskCounters,
         bufferSize,
         pqGateway,
         topicPartitionsCount
@@ -979,6 +973,9 @@ void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driv
             settings.SetReconnectPeriod(reconnectPeriod);
         }
 
+        TVector<NPq::NProto::TDqReadTaskParams> readTaskParamsMsg;
+        ui32 topicPartitionsCount = ExtractPartitionsFromParams(readTaskParamsMsg, args.TaskParams, args.ReadRanges);
+
         if (!settings.GetSharedReading()) {
             return CreateDqPqReadActor(
                 std::move(settings),
@@ -987,15 +984,14 @@ void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driv
                 args.TxId,
                 args.TaskId,
                 args.SecureParams,
-                args.TaskParams,
-                args.ReadRanges,
+                std::move(readTaskParamsMsg),
                 driver,
                 credentialsFactory,
                 args.ComputeActorId,
                 args.HolderFactory,
-                counters,
-                args.TaskCounters,
+                counters ? counters : args.TaskCounters,
                 pqGateway,
+                topicPartitionsCount,
                 PQReadDefaultFreeSpace);
         }
 
@@ -1007,13 +1003,13 @@ void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driv
             args.TxId,
             args.TaskId,
             args.SecureParams,
-            args.TaskParams,
+            std::move(readTaskParamsMsg),
             driver,
             credentialsFactory,
             args.ComputeActorId,
             NFq::RowDispatcherServiceActorId(),
             args.HolderFactory,
-            counters,
+            counters ? counters : args.TaskCounters,
             PQReadDefaultFreeSpace,
             pqGateway);
     });

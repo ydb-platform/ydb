@@ -86,6 +86,9 @@ struct TKikimrData {
         DataSinkNames.insert(TKiBackup::CallableName());
         DataSinkNames.insert(TKiBackupIncremental::CallableName());
         DataSinkNames.insert(TKiRestore::CallableName());
+        DataSinkNames.insert(TKiCreateSecret::CallableName());
+        DataSinkNames.insert(TKiAlterSecret::CallableName());
+        DataSinkNames.insert(TKiDropSecret::CallableName());
 
         CommitModes.insert(CommitModeFlush);
         CommitModes.insert(CommitModeRollback);
@@ -142,7 +145,10 @@ struct TKikimrData {
             TYdbOperation::DropBackupCollection |
             TYdbOperation::Backup |
             TYdbOperation::BackupIncremental |
-            TYdbOperation::Restore;
+            TYdbOperation::Restore |
+            TYdbOperation::CreateSecret |
+            TYdbOperation::AlterSecret |
+            TYdbOperation::DropSecret;
 
         SystemColumns = {
             {"_yql_partition_id", NKikimr::NUdf::EDataSlot::Uint64}
@@ -267,7 +273,7 @@ std::optional<TString> TKikimrTablesData::GetTempTablePath(const TStringBuf& tab
     auto tempTableInfoIt = TempTablesState->FindInfo(table, false);
 
     if (tempTableInfoIt != TempTablesState->TempTables.end()) {
-        return NKikimr::NKqp::GetTempTablePath(TempTablesState->Database, TempTablesState->SessionId, tempTableInfoIt->first);
+        return NKikimr::NKqp::GetTempTablePath(TempTablesState->Database, TempTablesState->TempDirName, tempTableInfoIt->first);
     }
     return std::nullopt;
 }
@@ -507,6 +513,14 @@ bool TKikimrKey::Extract(const TExprNode& key) {
     } else if (tagName == "databasePath") {
         KeyType = Type::Database;
         Target = key.Child(0)->Child(1)->Child(0)->Content();
+    } else if (tagName == "secret") {
+        KeyType = Type::Secret;
+        const TExprNode* nameNode = key.Child(0)->Child(1);
+        if (!nameNode->IsCallable("String")) {
+            Ctx.AddError(TIssue(Ctx.GetPosition(key.Pos()), "Expected String as secret key."));
+            return false;
+        }
+        Target = nameNode->Child(0)->Content();
     } else {
         Ctx.AddError(TIssue(Ctx.GetPosition(key.Child(0)->Pos()), TString("Unexpected tag for kikimr key: ") + tagName));
         return false;

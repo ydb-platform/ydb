@@ -1,6 +1,7 @@
 #include "yql_kikimr_provider_impl.h"
 #include "yql_kikimr_type_ann_pg.h"
 
+#include <ydb/core/base/fulltext.h>
 #include <ydb/core/base/kmeans_clusters.h>
 #include <ydb/core/docapi/traits.h>
 
@@ -57,7 +58,7 @@ const TTypeAnnotationNode* GetExpectedRowType(const TKikimrTableDescription& tab
 }
 
 IGraphTransformer::TStatus ConvertTableRowType(TExprNode::TPtr& input, const TKikimrTableDescription& tableDesc,
-    TExprContext& ctx)
+    TExprContext& ctx, const TTypeAnnotationContext& typeCtx)
 {
     YQL_ENSURE(input->GetTypeAnn());
 
@@ -94,7 +95,7 @@ IGraphTransformer::TStatus ConvertTableRowType(TExprNode::TPtr& input, const TKi
             break;
     }
 
-    auto convertStatus = TryConvertTo(input, *expectedType, ctx);
+    auto convertStatus = TryConvertTo(input, *expectedType, ctx, typeCtx);
 
     if (convertStatus.Level == IGraphTransformer::TStatus::Error) {
         ctx.AddError(TIssue(pos, TStringBuilder()
@@ -274,6 +275,10 @@ private:
             {
                 return TStatus::Ok;
             }
+            case TKikimrKey::Type::Secret:
+            {
+                return TStatus::Ok;
+            }
         }
 
         return TStatus::Error;
@@ -364,7 +369,8 @@ namespace {
         return true;
     }
 
-    bool ParseConstraintNode(TExprContext& ctx, TKikimrColumnMetadata& columnMeta, const TExprList& columnTuple, TCoNameValueTuple constraint, bool& needEval, bool isAlter = false) {
+    bool ParseConstraintNode(TExprContext& ctx, const TTypeAnnotationContext& typeCtx, TKikimrColumnMetadata& columnMeta, const TExprList& columnTuple,
+        TCoNameValueTuple constraint, bool& needEval, bool isAlter = false) {
         auto nameNode = columnTuple.Item(0).Cast<TCoAtom>();
         auto typeNode = columnTuple.Item(1);
 
@@ -406,7 +412,7 @@ namespace {
 
             if (!skipAnnotationValidation && !IsSameAnnotation(*defaultType, *actualType)) {
                 auto constrPtr = constraint.Value().Cast().Ptr();
-                auto status = TryConvertTo(constrPtr, *type, ctx);
+                auto status = TryConvertTo(constrPtr, *type, ctx, typeCtx);
                 if (status == IGraphTransformer::TStatus::Error) {
                     ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()), TStringBuilder() << "Default expr " << columnName
                         << " type mismatch, expected: " << (*actualType) << ", actual: " << *(defaultType)));
@@ -518,7 +524,7 @@ private:
                 }
 
                 TExprNode::TPtr node = value.Ptr();
-                if (TryConvertTo(node, *expectedType, ctx) == TStatus::Error) {
+                if (TryConvertTo(node, *expectedType, ctx, Types) == TStatus::Error) {
                     ctx.AddError(YqlIssue(ctx.GetPosition(node->Pos()), TIssuesIds::KIKIMR_BAD_COLUMN_TYPE, TStringBuilder()
                         << "Failed to convert input columns types to scheme types"));
                     return TStatus::Error;
@@ -718,7 +724,7 @@ private:
             }
         }
 
-        auto status = ConvertTableRowType(node.Ptr()->ChildRef(TKiWriteTable::idx_Input), *table, ctx);
+        auto status = ConvertTableRowType(node.Ptr()->ChildRef(TKiWriteTable::idx_Input), *table, ctx, Types);
         if (status != IGraphTransformer::TStatus::Ok) {
             return status;
         }
@@ -836,7 +842,7 @@ private:
 
 
         auto updateBody = node.Update().Body().Ptr();
-        auto status = ConvertTableRowType(updateBody, *table, ctx);
+        auto status = ConvertTableRowType(updateBody, *table, ctx, Types);
         if (status != IGraphTransformer::TStatus::Ok) {
             if (status == IGraphTransformer::TStatus::Repeat) {
                 updateLambda = Build<TCoLambda>(ctx, node.Update().Pos())
@@ -949,7 +955,7 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                 const auto& columnConstraints = columnTuple.Item(2).Cast<TCoNameValueTuple>();
                 for(const auto& constraint: columnConstraints.Value().Cast<TCoNameValueTupleList>()) {
                     bool needEval = false;
-                    if (!ParseConstraintNode(ctx, columnMeta, columnTuple, constraint, needEval)) {
+                    if (!ParseConstraintNode(ctx, Types, columnMeta, columnTuple, constraint, needEval)) {
                         return TStatus::Error;
                     }
 
@@ -987,7 +993,17 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
             } else if (type == "syncGlobalUnique") {
                 indexType = TIndexDescription::EType::GlobalSyncUnique;
             } else if (type == "globalVectorKmeansTree") {
+                if (!SessionCtx->Config().FeatureFlags.GetEnableVectorIndex()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(index.Pos()), "Vector index support is disabled"));
+                    return TStatus::Error;
+                }
                 indexType = TIndexDescription::EType::GlobalSyncVectorKMeansTree;
+            } else if (type == "globalFulltext") {
+                if (!SessionCtx->Config().FeatureFlags.GetEnableFulltextIndex()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(index.Pos()), "Fulltext index support is disabled"));
+                    return TStatus::Error;
+                }
+                indexType = TIndexDescription::EType::GlobalFulltext;
             } else {
                 YQL_ENSURE(false, "Unknown index type: " << type);
             }
@@ -1013,18 +1029,66 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                 dataColums.emplace_back(TString(dataCol.Value()));
             }
 
-            TIndexDescription::TSpecializedIndexDescription specializedIndexDescription;
-            if (indexType == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
-                TVector<std::pair<TString, TString>> settings(::Reserve(index.IndexSettings().Size()));
-                for (const auto& indexSetting : index.IndexSettings()) {
-                    settings.emplace_back(indexSetting.Name().Value(), indexSetting.Value().Cast<TCoAtom>().StringValue());
-                }
+            NKikimrKqp::TVectorIndexKmeansTreeDescription vectorIndexKmeansTreeDescription;
+            NKikimrKqp::TFulltextIndexDescription fulltextIndexDescription;
+            // fulltext index has per-column analyzers settings, single value for now
+            fulltextIndexDescription.mutable_settings()->add_columns()->set_column(
+                indexColums.empty() ? "<none>" : indexColums.back()
+            );
+            for (const auto& indexSetting : index.IndexSettings()) {
+                const auto& name = indexSetting.Name();
+                const auto& value = indexSetting.Value().Cast<TCoAtom>();
+
                 TString error;
-                *specializedIndexDescription.emplace<NKikimrKqp::TVectorIndexKmeansTreeDescription>()
-                     .MutableSettings() = NKikimr::NKMeans::FillSettings(settings, error);
+                switch (indexType) {
+                    case TIndexDescription::EType::GlobalSyncVectorKMeansTree: {
+                        NKikimr::NKMeans::FillSetting(
+                            *vectorIndexKmeansTreeDescription.MutableSettings(),
+                            name.StringValue(), value.StringValue(), error);
+                        break;
+                    }
+                    case TIndexDescription::EType::GlobalFulltext: {
+                        NKikimr::NFulltext::FillSetting(
+                            *fulltextIndexDescription.MutableSettings(),
+                            name.StringValue(), value.StringValue(), error);
+                        break;
+                    }
+                    default:
+                        ctx.AddError(TIssue(ctx.GetPosition(value.Pos()), TStringBuilder() 
+                            << "Unknown index setting: " << name.StringValue()));
+                        return IGraphTransformer::TStatus::Error;
+                }
                 if (error) {
-                    ctx.AddError(TIssue(ctx.GetPosition(index.Pos()), error));
+                    ctx.AddError(TIssue(ctx.GetPosition(value.Pos()), error));
                     return IGraphTransformer::TStatus::Error;
+                }
+            }
+
+            TIndexDescription::TSpecializedIndexDescription specializedIndexDescription;
+            switch (indexType) {
+                case TIndexDescription::EType::GlobalSync:
+                case TIndexDescription::EType::GlobalAsync:
+                case TIndexDescription::EType::GlobalSyncUnique:
+                    // no specialized index description
+                    // no settings validation
+                    break;
+                case TIndexDescription::EType::GlobalSyncVectorKMeansTree: {
+                    TString error;
+                    if (!NKikimr::NKMeans::ValidateSettings(vectorIndexKmeansTreeDescription.GetSettings(), error)) {
+                        ctx.AddError(TIssue(ctx.GetPosition(index.IndexSettings().Pos()), error));
+                        return IGraphTransformer::TStatus::Error;
+                    }
+                    specializedIndexDescription = std::move(vectorIndexKmeansTreeDescription);
+                    break;
+                }
+                case TIndexDescription::EType::GlobalFulltext: {
+                    TString error;
+                    if (!NKikimr::NFulltext::ValidateSettings(fulltextIndexDescription.GetSettings(), error)) {
+                        ctx.AddError(TIssue(ctx.GetPosition(index.IndexSettings().Pos()), error));
+                        return IGraphTransformer::TStatus::Error;
+                    }
+                    specializedIndexDescription = std::move(fulltextIndexDescription);
+                    break;
                 }
             }
 
@@ -1242,7 +1306,7 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                         TExprNode::TPtr keyNode = boundaries.Item(j).Ptr();
                         TString content(keyNode->Child(0)->Content());
                         if (keyNode->GetTypeAnn()->Cast<TDataExprType>()->GetSlot() != keyTypes[j]->GetSlot()) {
-                            if (TryConvertTo(keyNode, *keyTypes[j], ctx) == TStatus::Error) {
+                            if (TryConvertTo(keyNode, *keyTypes[j], ctx, Types) == TStatus::Error) {
                                 ctx.AddError(TIssue(ctx.GetPosition(keyNode->Pos()), TStringBuilder()
                                     << "Failed to convert value \"" << content
                                     << "\" to a corresponding key column type"));
@@ -1402,7 +1466,7 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                         const auto& columnConstraints = columnTuple.Item(2).Cast<TCoNameValueTuple>();
                         for(const auto& constraint: columnConstraints.Value().Cast<TCoNameValueTupleList>()) {
                             bool needEval = false;
-                            if (!ParseConstraintNode(ctx, columnMeta, columnTuple, constraint, needEval, true)) {
+                            if (!ParseConstraintNode(ctx, Types, columnMeta, columnTuple, constraint, needEval, true)) {
                                 return TStatus::Error;
                             }
 
@@ -1803,6 +1867,10 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
             "user",
             "password",
             "password_secret_name",
+            "service_account_id",
+            "initial_token",
+            "initial_token_secret_name",
+            "resource_id",
             "ca_cert",
             "consistency_level",
             "commit_interval",
@@ -1831,6 +1899,10 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
             "user",
             "password",
             "password_secret_name",
+            "service_account_id",
+            "initial_token",
+            "initial_token_secret_name",
+            "resource_id",
             "ca_cert",
             "state",
             "failover_mode",
@@ -1864,6 +1936,10 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
             "user",
             "password",
             "password_secret_name",
+            "service_account_id",
+            "initial_token",
+            "initial_token_secret_name",
+            "resource_id",
             "ca_cert",
             "commit_interval",
             "flush_interval",
@@ -1895,6 +1971,10 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
             "user",
             "password",
             "password_secret_name",
+            "service_account_id",
+            "initial_token",
+            "initial_token_secret_name",
+            "resource_id",
             "ca_cert",
             "state",
             "failover_mode",
@@ -2402,6 +2482,21 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
     }
 
     TStatus HandleRestore(TKiRestore node, TExprContext&) override {
+        node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
+        return TStatus::Ok;
+    }
+
+    TStatus HandleCreateSecret(TKiCreateSecret node, TExprContext&) override {
+        node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
+        return TStatus::Ok;
+    }
+
+    TStatus HandleAlterSecret(TKiAlterSecret node, TExprContext&) override {
+        node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
+        return TStatus::Ok;
+    }
+
+    TStatus HandleDropSecret(TKiDropSecret node, TExprContext&) override {
         node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
         return TStatus::Ok;
     }

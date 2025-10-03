@@ -113,7 +113,7 @@ TUnboxedValuePod MakeVariant(const ITypeInfoHelper* typeHelper, const TType* sha
     const auto index = value.GetVariantIndex();
     const auto& item = value.GetVariantItem();
     const auto underlyingType = TVariantTypeInspector(*typeHelper, shape).GetUnderlyingType();
-    switch (const auto kind = typeHelper->GetTypeKind(underlyingType)) {
+    switch (/* const auto kind = */ typeHelper->GetTypeKind(underlyingType)) {
         case ETypeKind::Tuple:
             if (const auto tupleTypeInspector = TTupleTypeInspector(*typeHelper, underlyingType); index < tupleTypeInspector.GetElementsCount())
                 return MakeDom(typeHelper, tupleTypeInspector.GetElementType(index), item, valueBuilder);

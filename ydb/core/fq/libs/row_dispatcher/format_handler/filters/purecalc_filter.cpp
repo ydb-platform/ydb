@@ -10,24 +10,30 @@ namespace NFq::NRowDispatcher {
 
 namespace {
 
-constexpr const char* OFFSET_FIELD_NAME = "_offset";
-constexpr const char* WATERMARK_FIELD_NAME = "watermark";
+constexpr std::string_view OFFSET_FIELD_NAME = "_offset";
+constexpr std::string_view WATERMARK_FIELD_NAME = "_watermark";
 
-NYT::TNode CreateTypeNode(const TString& fieldType) {
-    return NYT::TNode::CreateList()
-        .Add("DataType")
-        .Add(fieldType);
+NYT::TNode CreateNamedNode(std::string_view name, NYT::TNode&& node) {
+    return NYT::TNode::CreateList().Add(NYT::TNode(name)).Add(std::move(node));
 }
 
-void AddField(NYT::TNode& node, const TString& fieldName, const TString& fieldType) {
-    node.Add(
-        NYT::TNode::CreateList()
-            .Add(fieldName)
-            .Add(CreateTypeNode(fieldType))
-    );
+NYT::TNode CreateTypeNode(NYT::TNode&& typeNode) {
+    return CreateNamedNode("DataType", std::move(typeNode));
 }
 
-void AddColumn(NYT::TNode& node, const TSchemaColumn& column) {
+NYT::TNode CreateOptionalTypeNode(NYT::TNode&& typeNode) {
+    return CreateNamedNode("OptionalType", std::move(typeNode));
+}
+
+NYT::TNode CreateStructTypeNode(NYT::TNode&& membersNode) {
+    return CreateNamedNode("StructType", std::move(membersNode));
+}
+
+NYT::TNode CreateFieldNode(std::string_view fieldName, NYT::TNode&& typeNode) {
+    return CreateNamedNode(fieldName, std::move(typeNode));
+}
+
+NYT::TNode CreateColumnNode(const TSchemaColumn& column) {
     TString parseTypeError;
     TStringOutput errorStream(parseTypeError);
     NYT::TNode parsedType;
@@ -35,46 +41,45 @@ void AddColumn(NYT::TNode& node, const TSchemaColumn& column) {
         throw yexception() << "Failed to parse column '" << column.Name << "' type yson " << column.TypeYson << ", error: " << parseTypeError;
     }
 
-    node.Add(
-        NYT::TNode::CreateList()
-            .Add(column.Name)
-            .Add(parsedType)
-    );
+
+    return CreateNamedNode(column.Name, std::move(parsedType));
 }
 
 NYT::TNode MakeFilterInputSchema(const TVector<TSchemaColumn>& columns) {
-    auto structMembers = NYT::TNode::CreateList();
-    AddField(structMembers, OFFSET_FIELD_NAME, "Uint64");
+    auto structMembers = NYT::TNode::CreateList()
+        .Add(CreateFieldNode(OFFSET_FIELD_NAME, CreateTypeNode("Uint64")));
     for (const auto& column : columns) {
-        AddColumn(structMembers, column);
+        structMembers.Add(CreateColumnNode(column));
     }
-    return NYT::TNode::CreateList().Add("StructType").Add(std::move(structMembers));
+    return CreateStructTypeNode(std::move(structMembers));
 }
 
 NYT::TNode MakeFilterOutputSchema() {
-    auto structMembers = NYT::TNode::CreateList();
-    AddField(structMembers, OFFSET_FIELD_NAME, "Uint64");
-    return NYT::TNode::CreateList().Add("StructType").Add(std::move(structMembers));
+    return CreateStructTypeNode(
+        NYT::TNode::CreateList()
+            .Add(CreateFieldNode(OFFSET_FIELD_NAME, CreateTypeNode("Uint64")))
+    );
 }
 
 NYT::TNode MakeWatermarkInputSchema(const TVector<TSchemaColumn>& columns) {
-    auto structMembers = NYT::TNode::CreateList();
-    AddField(structMembers, OFFSET_FIELD_NAME, "Uint64");
+    auto membersNode = NYT::TNode::CreateList()
+        .Add(CreateFieldNode(OFFSET_FIELD_NAME, CreateTypeNode("Uint64")));
     for (const auto& column : columns) {
-        AddColumn(structMembers, column);
+        membersNode.Add(CreateColumnNode(column));
     }
-    return NYT::TNode::CreateList().Add("StructType").Add(std::move(structMembers));
+    return CreateStructTypeNode(std::move(membersNode));
 }
 
 NYT::TNode MakeWatermarkOutputSchema() {
-    auto structMembers = NYT::TNode::CreateList();
-    AddField(structMembers, OFFSET_FIELD_NAME, "Uint64");
-    AddField(structMembers, WATERMARK_FIELD_NAME, "Timestamp");
-    return NYT::TNode::CreateList().Add("StructType").Add(std::move(structMembers));
+    return CreateStructTypeNode(
+        NYT::TNode::CreateList()
+            .Add(CreateFieldNode(OFFSET_FIELD_NAME, CreateTypeNode("Uint64")))
+            .Add(CreateFieldNode(WATERMARK_FIELD_NAME, CreateOptionalTypeNode(CreateTypeNode("Timestamp"))))
+    );
 }
 
 struct TInputType {
-    const TVector<const TVector<NYql::NUdf::TUnboxedValue>*>& Values;
+    const TVector<std::span<NYql::NUdf::TUnboxedValue>>& Values;
     ui64 NumberRows;
 };
 
@@ -151,8 +156,9 @@ public:
 
                 items[OffsetPosition] = NYql::NUdf::TUnboxedValuePod(rowId);
 
-                for (ui64 fieldId = 0; const auto column : input.Values) {
-                    items[FieldsPositions[fieldId++]] = column->at(rowId);
+                for (ui64 fieldId = 0; const auto& column : input.Values) {
+                    Y_DEBUG_ABORT_UNLESS(column.size() > rowId);
+                    items[FieldsPositions[fieldId++]] = column[rowId];
                 }
 
                 Worker->Push(std::move(result));
@@ -414,7 +420,7 @@ public:
         ActiveFilters_->Dec();
     }
 
-    void ProcessData(const TVector<const TVector<NYql::NUdf::TUnboxedValue>*>& values, ui64 numberRows) const override {
+    void ProcessData(const TVector<std::span<NYql::NUdf::TUnboxedValue>>& values, ui64 numberRows) const override {
         LOG_ROW_DISPATCHER_TRACE("ProcessData for " << numberRows << " rows");
 
         if (!ProgramHolder_) {

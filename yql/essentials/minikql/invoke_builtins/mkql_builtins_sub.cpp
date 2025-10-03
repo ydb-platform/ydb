@@ -161,13 +161,16 @@ struct TBigIntervalSub {
     {
         i64 lv = left.Get<i64>();
         i64 rv = right.Get<i64>();
-        i64 ret = lv - rv;
+
         // detect overflow
-        if (lv > 0 && rv < 0 && ret < 0) {
+        if (rv > 0 && lv < std::numeric_limits<i64>::min() + rv ||
+            rv < 0 && lv > std::numeric_limits<i64>::max() + rv)
+        {
             return NUdf::TUnboxedValuePod();
-        } else if (lv < 0 && rv > 0 && ret > 0) {
-            return NUdf::TUnboxedValuePod();
-        } else if (IsBadInterval<NUdf::TDataType<NUdf::TInterval64>>(ret)) {
+        }
+
+        i64 ret = lv - rv;
+        if (IsBadInterval<NUdf::TDataType<NUdf::TInterval64>>(ret)) {
             return NUdf::TUnboxedValuePod();
         }
         return NUdf::TUnboxedValuePod(ret);

@@ -270,6 +270,7 @@ public:
         TString path = setup.GetWorkingDir() + "/" + setup.GetTableName();
 
         auto request = std::make_unique<TEvTxUserProxy::TEvNavigate>();
+        request->Record.SetDatabaseName(Request.GetTableSetup().GetWorkingDir());
         request->Record.MutableDescribePath()->SetPath(path);
 
         ctx.Send(MakeTxProxyID(), request.release());

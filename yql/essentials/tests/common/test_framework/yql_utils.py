@@ -497,11 +497,18 @@ def is_os_supported(cfg):
     return True
 
 
-def is_xfail(cfg):
-    for item in cfg:
-        if item[0] == 'xfail':
-            return True
-    return False
+def is_xsqlfail(cfg, filename=''):
+    return (
+        any(item[0] == 'xsqlfail' for item in cfg) or
+        filename.endswith('.sqlx')
+    )
+
+
+def is_xfail(cfg, filename=''):
+    return (
+        any(item[0] == 'xfail' for item in cfg) or
+        is_xsqlfail(cfg, filename)
+    )
 
 
 def get_langver(cfg):
@@ -588,7 +595,8 @@ def execute(
         output_tables=None,
         pretty_plan=True,
         parameters={},
-        langver=None
+        langver=None,
+        attrs={}
 ):
     '''
     Executes YQL/SQL
@@ -605,6 +613,7 @@ def execute(
     :param output_tables: list of Table (will be returned)
     :param pretty_plan: whether to use pretty printing for plan or not
     :param parameters: query parameters as dict like {name: json_value}
+    :param attrs: query operation attributes as dict like {attr_name: attr value}
     :return: YQLExecResult
     '''
 
@@ -628,7 +637,8 @@ def execute(
         tables=(output_tables + input_tables),
         pretty_plan=pretty_plan,
         parameters=parameters,
-        langver=langver
+        langver=langver,
+        attrs=attrs
     )
 
     try:

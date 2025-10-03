@@ -2508,6 +2508,301 @@ TRuntimeNode TProgramBuilder::NewVariant(TRuntimeNode item, const std::string_vi
     return TRuntimeNode(TVariantLiteral::Create(item, index, type, Env_), true);
 }
 
+TRuntimeNode TProgramBuilder::ToDynamicLinear(TRuntimeNode item) {
+    if constexpr (RuntimeVersion < 68U) {
+        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
+    }
+
+    auto linType = AS_TYPE(TLinearType, item.GetStaticType());
+    MKQL_ENSURE(!linType->IsDynamic(), "Expected static linear type");
+
+    auto retType = TLinearType::Create(linType->GetItemType(), true, Env_);
+
+    TCallableBuilder callableBuilder(Env_, __func__, retType);
+    callableBuilder.Add(item);
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
+TRuntimeNode TProgramBuilder::FromDynamicLinear(TRuntimeNode item, const std::string_view& file, ui32 row, ui32 column) {
+    if constexpr (RuntimeVersion < 68U) {
+        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
+    }
+
+    auto linType = AS_TYPE(TLinearType, item.GetStaticType());
+    MKQL_ENSURE(linType->IsDynamic(), "Expected dynamic linear type");
+
+    auto retType = TLinearType::Create(linType->GetItemType(), false, Env_);
+
+    TCallableBuilder callableBuilder(Env_, __func__, retType);
+    callableBuilder.Add(item);
+    callableBuilder.Add(NewDataLiteral<NUdf::EDataSlot::String>(file));
+    callableBuilder.Add(NewDataLiteral(row));
+    callableBuilder.Add(NewDataLiteral(column));
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
+void TProgramBuilder::ValidateMutDictType(TType* type) const {
+    auto linType = AS_TYPE(TLinearType, type);
+    MKQL_ENSURE(!linType->IsDynamic(), "Expected static linear type");
+    MKQL_ENSURE(linType->GetItemType()->IsResource(), "Expected resource");
+}
+
+TRuntimeNode TProgramBuilder::ToMutDict(TRuntimeNode dict, TType* mdictType, const TArrayRef<const TRuntimeNode>& dependentNodes) {
+    if constexpr (RuntimeVersion < 69U) {
+        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
+    }
+
+    MKQL_ENSURE(dict.GetStaticType()->IsDict(), "Expected dict");
+    ValidateMutDictType(mdictType);
+
+    TCallableBuilder callableBuilder(Env_, __func__, mdictType);
+    callableBuilder.Add(dict);
+    for (auto node : dependentNodes) {
+        callableBuilder.Add(node);
+    }
+
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
+TRuntimeNode TProgramBuilder::MutDictCreate(TType* dictType, TType* mdictType, const TArrayRef<const TRuntimeNode>& dependentNodes) {
+    if constexpr (RuntimeVersion < 69U) {
+        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
+    }
+
+    MKQL_ENSURE(dictType->IsDict(), "Expected dict");
+    ValidateMutDictType(mdictType);
+    TCallableBuilder callableBuilder(Env_, __func__, mdictType);
+    callableBuilder.Add(TRuntimeNode(dictType, true));
+    for (auto node : dependentNodes) {
+        callableBuilder.Add(node);
+    }
+
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
+TRuntimeNode TProgramBuilder::MutDictInsert(TType* dictType, TRuntimeNode mdict, TRuntimeNode key, TRuntimeNode value) {
+    if constexpr (RuntimeVersion < 69U) {
+        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
+    }
+
+    MKQL_ENSURE(dictType->IsDict(), "Expected dict");
+    ValidateMutDictType(mdict.GetStaticType());
+    MKQL_ENSURE(AS_TYPE(TDictType, dictType)->GetKeyType()->IsSameType(*key.GetStaticType()), "Mismatch key type");
+    MKQL_ENSURE(AS_TYPE(TDictType, dictType)->GetPayloadType()->IsSameType(*value.GetStaticType()), "Mismatch value type");
+
+    TCallableBuilder callableBuilder(Env_, __func__, mdict.GetStaticType());
+    callableBuilder.Add(TRuntimeNode(dictType, true));
+    callableBuilder.Add(mdict);
+    callableBuilder.Add(key);
+    callableBuilder.Add(value);
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
+TRuntimeNode TProgramBuilder::MutDictUpsert(TType* dictType, TRuntimeNode mdict, TRuntimeNode key, TRuntimeNode value) {
+    if constexpr (RuntimeVersion < 69U) {
+        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
+    }
+
+    MKQL_ENSURE(dictType->IsDict(), "Expected dict");
+    ValidateMutDictType(mdict.GetStaticType());
+    MKQL_ENSURE(AS_TYPE(TDictType, dictType)->GetKeyType()->IsSameType(*key.GetStaticType()), "Mismatch key type");
+    MKQL_ENSURE(AS_TYPE(TDictType, dictType)->GetPayloadType()->IsSameType(*value.GetStaticType()), "Mismatch value type");
+
+    TCallableBuilder callableBuilder(Env_, __func__, mdict.GetStaticType());
+    callableBuilder.Add(TRuntimeNode(dictType, true));
+    callableBuilder.Add(mdict);
+    callableBuilder.Add(key);
+    callableBuilder.Add(value);
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
+TRuntimeNode TProgramBuilder::MutDictUpdate(TType* dictType, TRuntimeNode mdict, TRuntimeNode key, TRuntimeNode value) {
+    if constexpr (RuntimeVersion < 69U) {
+        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
+    }
+
+    MKQL_ENSURE(dictType->IsDict(), "Expected dict");
+    ValidateMutDictType(mdict.GetStaticType());
+    MKQL_ENSURE(AS_TYPE(TDictType, dictType)->GetKeyType()->IsSameType(*key.GetStaticType()), "Mismatch key type");
+    MKQL_ENSURE(AS_TYPE(TDictType, dictType)->GetPayloadType()->IsSameType(*value.GetStaticType()), "Mismatch value type");
+
+    TCallableBuilder callableBuilder(Env_, __func__, mdict.GetStaticType());
+    callableBuilder.Add(TRuntimeNode(dictType, true));
+    callableBuilder.Add(mdict);
+    callableBuilder.Add(key);
+    callableBuilder.Add(value);
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
+TRuntimeNode TProgramBuilder::MutDictRemove(TType* dictType, TRuntimeNode mdict, TRuntimeNode key) {
+    if constexpr (RuntimeVersion < 69U) {
+        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
+    }
+
+    MKQL_ENSURE(dictType->IsDict(), "Expected dict");
+    ValidateMutDictType(mdict.GetStaticType());
+    MKQL_ENSURE(AS_TYPE(TDictType, dictType)->GetKeyType()->IsSameType(*key.GetStaticType()), "Mismatch key type");
+
+    TCallableBuilder callableBuilder(Env_, __func__, mdict.GetStaticType());
+    callableBuilder.Add(TRuntimeNode(dictType, true));
+    callableBuilder.Add(mdict);
+    callableBuilder.Add(key);
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
+TRuntimeNode TProgramBuilder::MutDictPop(TType* dictType, TRuntimeNode mdict, TRuntimeNode key) {
+    if constexpr (RuntimeVersion < 69U) {
+        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
+    }
+
+    MKQL_ENSURE(dictType->IsDict(), "Expected dict");
+    ValidateMutDictType(mdict.GetStaticType());
+    MKQL_ENSURE(AS_TYPE(TDictType, dictType)->GetKeyType()->IsSameType(*key.GetStaticType()), "Mismatch key type");
+
+    auto optValueType = NewOptionalType(AS_TYPE(TDictType, dictType)->GetPayloadType());
+    auto retType = NewTupleType({mdict.GetStaticType(), optValueType});
+    TCallableBuilder callableBuilder(Env_, __func__, retType);
+    callableBuilder.Add(TRuntimeNode(dictType, true));
+    callableBuilder.Add(mdict);
+    callableBuilder.Add(key);
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
+TRuntimeNode TProgramBuilder::MutDictContains(TType* dictType, TRuntimeNode mdict, TRuntimeNode key) {
+    if constexpr (RuntimeVersion < 69U) {
+        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
+    }
+
+    MKQL_ENSURE(dictType->IsDict(), "Expected dict");
+    ValidateMutDictType(mdict.GetStaticType());
+    MKQL_ENSURE(AS_TYPE(TDictType, dictType)->GetKeyType()->IsSameType(*key.GetStaticType()), "Mismatch key type");
+
+    auto boolType = NewDataType(NUdf::EDataSlot::Bool);
+    auto retType = NewTupleType({mdict.GetStaticType(), boolType});
+    TCallableBuilder callableBuilder(Env_, __func__, retType);
+    callableBuilder.Add(TRuntimeNode(dictType, true));
+    callableBuilder.Add(mdict);
+    callableBuilder.Add(key);
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
+TRuntimeNode TProgramBuilder::MutDictLookup(TType* dictType, TRuntimeNode mdict, TRuntimeNode key) {
+    if constexpr (RuntimeVersion < 69U) {
+        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
+    }
+
+    MKQL_ENSURE(dictType->IsDict(), "Expected dict");
+    ValidateMutDictType(mdict.GetStaticType());
+    MKQL_ENSURE(AS_TYPE(TDictType, dictType)->GetKeyType()->IsSameType(*key.GetStaticType()), "Mismatch key type");
+
+    auto optValueType = NewOptionalType(AS_TYPE(TDictType, dictType)->GetPayloadType());
+    auto retType = NewTupleType({mdict.GetStaticType(), optValueType});
+    TCallableBuilder callableBuilder(Env_, __func__, retType);
+    callableBuilder.Add(TRuntimeNode(dictType, true));
+    callableBuilder.Add(mdict);
+    callableBuilder.Add(key);
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
+TRuntimeNode TProgramBuilder::MutDictLength(TType* dictType, TRuntimeNode mdict) {
+    if constexpr (RuntimeVersion < 69U) {
+        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
+    }
+
+    MKQL_ENSURE(dictType->IsDict(), "Expected dict");
+    ValidateMutDictType(mdict.GetStaticType());
+
+    auto ui64Type = NewDataType(NUdf::EDataSlot::Uint64);
+    auto retType = NewTupleType({mdict.GetStaticType(), ui64Type});
+    TCallableBuilder callableBuilder(Env_, __func__, retType);
+    callableBuilder.Add(TRuntimeNode(dictType, true));
+    callableBuilder.Add(mdict);
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
+TRuntimeNode TProgramBuilder::MutDictHasItems(TType* dictType, TRuntimeNode mdict) {
+    if constexpr (RuntimeVersion < 69U) {
+        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
+    }
+
+    MKQL_ENSURE(dictType->IsDict(), "Expected dict");
+    ValidateMutDictType(mdict.GetStaticType());
+
+    auto boolType = NewDataType(NUdf::EDataSlot::Bool);
+    auto retType = NewTupleType({mdict.GetStaticType(), boolType});
+    TCallableBuilder callableBuilder(Env_, __func__, retType);
+    callableBuilder.Add(TRuntimeNode(dictType, true));
+    callableBuilder.Add(mdict);
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
+TRuntimeNode TProgramBuilder::MutDictItems(TType* dictType, TRuntimeNode mdict) {
+    if constexpr (RuntimeVersion < 69U) {
+        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
+    }
+
+    MKQL_ENSURE(dictType->IsDict(), "Expected dict");
+    ValidateMutDictType(mdict.GetStaticType());
+
+    TType* listItemType = NewTupleType({
+        AS_TYPE(TDictType, dictType)->GetKeyType(),
+        AS_TYPE(TDictType, dictType)->GetPayloadType()});
+
+    auto listType = NewListType(listItemType);
+    auto retType = NewTupleType({mdict.GetStaticType(), listType});
+    TCallableBuilder callableBuilder(Env_, __func__, retType);
+    callableBuilder.Add(TRuntimeNode(dictType, true));
+    callableBuilder.Add(mdict);
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
+TRuntimeNode TProgramBuilder::MutDictKeys(TType* dictType, TRuntimeNode mdict) {
+    if constexpr (RuntimeVersion < 69U) {
+        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
+    }
+
+    MKQL_ENSURE(dictType->IsDict(), "Expected dict");
+    ValidateMutDictType(mdict.GetStaticType());
+
+    TType* listItemType = AS_TYPE(TDictType, dictType)->GetKeyType();
+    auto listType = NewListType(listItemType);
+    auto retType = NewTupleType({mdict.GetStaticType(), listType});
+    TCallableBuilder callableBuilder(Env_, __func__, retType);
+    callableBuilder.Add(TRuntimeNode(dictType, true));
+    callableBuilder.Add(mdict);
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
+TRuntimeNode TProgramBuilder::MutDictPayloads(TType* dictType, TRuntimeNode mdict) {
+    if constexpr (RuntimeVersion < 69U) {
+        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
+    }
+
+    MKQL_ENSURE(dictType->IsDict(), "Expected dict");
+    ValidateMutDictType(mdict.GetStaticType());
+
+    TType* listItemType = AS_TYPE(TDictType, dictType)->GetPayloadType();
+    auto listType = NewListType(listItemType);
+    auto retType = NewTupleType({mdict.GetStaticType(), listType});
+    TCallableBuilder callableBuilder(Env_, __func__, retType);
+    callableBuilder.Add(TRuntimeNode(dictType, true));
+    callableBuilder.Add(mdict);
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
+TRuntimeNode TProgramBuilder::FromMutDict(TType* dictType, TRuntimeNode mdict) {
+    if constexpr (RuntimeVersion < 69U) {
+        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
+    }
+
+    MKQL_ENSURE(dictType->IsDict(), "Expected dict");
+    ValidateMutDictType(mdict.GetStaticType());
+
+    TCallableBuilder callableBuilder(Env_, __func__, dictType);
+    callableBuilder.Add(mdict);
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
 TRuntimeNode TProgramBuilder::Coalesce(TRuntimeNode data, TRuntimeNode defaultData) {
     bool isOptional = false;
     const auto dataType = UnpackOptional(data, isOptional);
@@ -4455,6 +4750,10 @@ TRuntimeNode TProgramBuilder::InversePresortString(TRuntimeNode data) {
 TRuntimeNode TProgramBuilder::InverseString(TRuntimeNode data) {
     const std::array<TRuntimeNode, 1U> args = {{ data }};
     return Invoke(__func__, NewDataType(NUdf::TDataType<char*>::Id), args);
+}
+
+TRuntimeNode TProgramBuilder::Block(const TUnaryLambda& lambda) {
+    return lambda(NewDataLiteral<ui32>(0));
 }
 
 TRuntimeNode TProgramBuilder::Random(const TArrayRef<const TRuntimeNode>& dependentNodes) {

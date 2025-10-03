@@ -2,6 +2,7 @@
 
 #include "defs.h"
 #include "dsproxy.h"
+#include "dsproxy_test_helpers.h"
 
 #include <ydb/core/blobstorage/base/utility.h>
 
@@ -229,11 +230,13 @@ class TBlobStorageGroupProxy : public TActorBootstrapped<TBlobStorageGroupProxy>
                 << ", dropping the queue (" << (ui64)InitQueue.size() << ")" << " Marker# DSP08");
             if (CurrentStateFunc() == &TThis::StateUnconfigured) {
                 ErrorDescription = TStringBuilder() << "Too many requests while waiting for configuration (DSPE2)."
+                        << " GroupId# " << GroupId
                         << " UnconfiguredStateTs# " << UnconfiguredStateTs
                         << " UnconfiguredStateReason " << UnconfiguredStateReasonStr(UnconfiguredStateReason);
                 SetStateUnconfiguredTimeout();
             } else if (CurrentStateFunc() == &TThis::StateEstablishingSessions) {
                 ErrorDescription = TStringBuilder() << "Too many requests while establishing sessions (DSPE5)."
+                        << " GroupId# " << GroupId
                         << " EstablishingSessionsStateTs# " << EstablishingSessionsStateTs;
                 SetStateEstablishingSessionsTimeout();
             }
@@ -292,6 +295,7 @@ class TBlobStorageGroupProxy : public TActorBootstrapped<TBlobStorageGroupProxy>
     void Handle(TEvBlobStorage::TEvBunchOfEvents::TPtr ev);
     void Handle(TEvDeathNote::TPtr ev);
     void Handle(TEvGetQueuesInfo::TPtr ev);
+    void Handle(TEvExplicitMultiPut::TPtr ev);
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Error state
@@ -386,6 +390,7 @@ public:
         fFunc(Ev5min, Handle5min);
         cFunc(EvCheckDeadlines, CheckDeadlines);
         hFunc(TEvGetQueuesInfo, Handle);
+        hFunc(TEvExplicitMultiPut, Handle);
     )
 
 #define HANDLE_EVENTS(HANDLER) \

@@ -41,11 +41,7 @@ class TestScheme:
     def test_no_scheme1(self):
         u = URL("google.com:80")
         # See: https://bugs.python.org/issue27657
-        if (
-            sys.version_info[:3] == (3, 7, 6)
-            or sys.version_info[:3] == (3, 8, 1)
-            or sys.version_info >= (3, 9, 0)
-        ):
+        if sys.version_info[:3] == (3, 8, 1) or sys.version_info >= (3, 9, 0):
             assert u.scheme == "google.com"
             assert u.host is None
             assert u.path == "80"
@@ -214,19 +210,14 @@ class TestPort:
         assert u.query_string == ""
         assert u.fragment == ""
 
-    @pytest.mark.xfail(
-        # FIXME: remove "no cover" pragmas upon xfail marker deletion
-        reason="https://github.com/aio-libs/yarl/issues/821",
-        raises=ValueError,
-    )
     def test_no_host(self):
-        u = URL("//:80")
-        assert u.scheme == ""  # pragma: no cover
-        assert u.host == ""  # pragma: no cover
-        assert u.port == 80  # pragma: no cover
-        assert u.path == "/"  # pragma: no cover
-        assert u.query_string == ""  # pragma: no cover
-        assert u.fragment == ""  # pragma: no cover
+        u = URL("//:77")
+        assert u.scheme == ""
+        assert u.host == ""
+        assert u.port == 77
+        assert u.path == "/"
+        assert u.query_string == ""
+        assert u.fragment == ""
 
     def test_double_port(self):
         with pytest.raises(ValueError):
@@ -461,9 +452,19 @@ class TestFragment:
 
 
 class TestStripEmptyParts:
-    def test_all_empty(self):
+    def test_all_empty_http(self):
         with pytest.raises(ValueError):
-            URL("//@:?#")
+            URL("http://@:?#")
+
+    def test_all_empty(self):
+        u = URL("//@:?#")
+        assert u.scheme == ""
+        assert u.user is None
+        assert u.password is None
+        assert u.host == ""
+        assert u.path == ""
+        assert u.query_string == ""
+        assert u.fragment == ""
 
     def test_path_only(self):
         u = URL("///path")
@@ -584,3 +585,22 @@ class TestStripEmptyParts:
         assert u.path == ""
         assert u.query_string == ""
         assert u.fragment == ""
+
+
+@pytest.mark.parametrize(
+    ("scheme"),
+    [
+        ("http"),
+        ("https"),
+        ("ws"),
+        ("wss"),
+        ("ftp"),
+    ],
+)
+def test_schemes_that_require_host(scheme: str) -> None:
+    """Verify that schemes that require a host raise with empty host."""
+    expect = (
+        "Invalid URL: host is required for " f"absolute urls with the {scheme} scheme"
+    )
+    with pytest.raises(ValueError, match=expect):
+        URL(f"{scheme}://:1")

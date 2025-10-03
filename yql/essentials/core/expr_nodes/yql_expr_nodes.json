@@ -795,6 +795,14 @@
             "Match": {"Type": "Callable", "Name": "Sync!"}
         },
         {
+            "Name": "TCoSeq",
+            "Base": "TFreeArgCallable",
+            "Match": {"Type": "Callable", "Name": "Seq!"},
+            "Children": [
+                {"Index": 0, "Name": "World", "Type": "TExprBase"}
+            ]
+        },
+        {
             "Name": "TCoDataSource",
             "Base": "TFreeArgCallable",
             "Match": {"Type": "Callable", "Name": "DataSource"},

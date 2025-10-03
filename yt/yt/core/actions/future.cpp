@@ -1,6 +1,14 @@
 #include "future.h"
 #include "invoker_util.h"
 
+#include <yt/yt/core/misc/backtrace.h>
+
+#include <library/cpp/yt/backtrace/backtrace.h>
+
+#ifndef NDEBUG
+#   define YT_ENRICH_PROMISE_ABANDONED_WITH_BACKTRACE
+#endif
+
 namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -251,7 +259,17 @@ void TFutureState<void>::OnLastPromiseRefLost()
     }
 
     // Slow path: notify the subscribers in a dedicated thread.
-    GetFinalizerInvoker()->Invoke(BIND_NO_PROPAGATE([this, error = std::move(cancelationError)] {
+    GetFinalizerInvoker()->Invoke(BIND_NO_PROPAGATE([
+#ifndef YT_ENRICH_PROMISE_ABANDONED_WITH_BACKTRACE
+        backtrace = NYT::CaptureBacktrace(),
+#endif
+        this,
+        error = std::move(cancelationError)
+    ] () mutable {
+#ifndef YT_ENRICH_PROMISE_ABANDONED_WITH_BACKTRACE
+        // NB: Backtrace symbolization can take a quite and thus is being offloaded to Finalizer thread.
+        error <<= TErrorAttribute("backtrace_origin", NBacktrace::SymbolizeBacktrace(backtrace));
+#endif
         // Set the promise if the value is still missing.
         TrySetError(std::move(error));
         // Kill the fake weak reference.

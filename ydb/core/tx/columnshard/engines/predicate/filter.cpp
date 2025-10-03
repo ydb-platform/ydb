@@ -89,23 +89,25 @@ TPKRangeFilter::EUsageClass TPKRangesFilter::GetUsageClass(const NArrow::TSimple
     if (SortedRanges.empty()) {
         return TPKRangeFilter::EUsageClass::FullUsage;
     }
-    for (auto&& i : SortedRanges) {
-        switch (i.GetUsageClass(start, end)) {
-            case TPKRangeFilter::EUsageClass::FullUsage:
-                return TPKRangeFilter::EUsageClass::FullUsage;
-            case TPKRangeFilter::EUsageClass::PartialUsage:
-                return TPKRangeFilter::EUsageClass::PartialUsage;
-            case TPKRangeFilter::EUsageClass::NoUsage:
-                break;
-        }
+
+    const TPredicateContainer startPredicate = TPredicateContainer::BuildPredicateFrom(
+        std::make_shared<TPredicate>(NKernels::EOperation::GreaterEqual, start.ToBatch()), start.GetSchema())
+                                                   .DetachResult();
+    const auto rangesBegin = std::lower_bound(
+        SortedRanges.begin(), SortedRanges.end(), startPredicate, [](const TPKRangeFilter& range, const TPredicateContainer& predicate) {
+            return !range.GetPredicateTo().CrossRanges(predicate);
+        });
+
+    if (rangesBegin == SortedRanges.end()) {
+        return TPKRangeFilter::EUsageClass::NoUsage;
     }
-    return TPKRangeFilter::EUsageClass::NoUsage;
+    return rangesBegin->GetUsageClass(start, end);
 }
 
 TPKRangesFilter::TPKRangesFilter() {
     auto range = TPKRangeFilter::Build(TPredicateContainer::BuildNullPredicateFrom(), TPredicateContainer::BuildNullPredicateTo());
-    Y_ABORT_UNLESS(range);
-    SortedRanges.emplace_back(*range);
+    Y_ABORT_UNLESS(range.IsSuccess());
+    SortedRanges.emplace_back(range.DetachResult());
 }
 
 std::shared_ptr<arrow::RecordBatch> TPKRangesFilter::SerializeToRecordBatch(const std::shared_ptr<arrow::Schema>& pkSchema) const {

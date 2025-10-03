@@ -3,13 +3,12 @@
 ---
 
 ### Mute a test if in the last 4 days:
-- **2 or more failures**
-- **OR** 1 failure and runs (pass + fail) not more than 10
+- **3 or more failures AND runs (pass + fail) more than 10**
+- **OR** 2 or more failures AND runs (pass + fail) not more than 10
 
-### Unmute a test if in the last 4 days:
-- **Runs (pass + fail + mute) > 4**
+### Unmute a test if in the last 7 days:
+- **Runs (pass + fail + mute) >= 4**
 - **AND no failures (fail + mute = 0)**
-- **AND no `no_runs` states in history** (test ran consistently)
 
 ### Remove from mute if in the last 7 days:
 - **No runs at all** (pass + fail + mute + skip = 0)
@@ -17,7 +16,7 @@
 ---
 
 ### Notes
-- For all rules, only the last N days are considered (N=3 for mute, N=4 for unmute, N=7 for delete), including the current day.
+- For all rules, only the last N days are considered (N=4 for mute, N=7 for unmute, N=7 for delete), including the current day.
 - A "run" is any test execution with result pass, fail, or mute.
 - A "failure" is a test execution with result fail or mute.
 - Statistics aggregation is done by key (test_name, suite_folder, full_name, build_type, branch).
@@ -25,9 +24,9 @@
 ---
 
 **Example:**
+- If a test ran 15 times in 3 days with 3 failures — the test will be muted.
 - If a test ran 5 times in 3 days with 2 failures — the test will be muted.
-- If a test ran 5 times in 4 days and all passed successfully, and there were no days without runs — the test will be unmuted.
-- If a test ran 5 times in 4 days and all passed successfully, but there was a day without runs (`no_runs`) — the test will NOT be unmuted.
+- If a test ran 4 times in 7 days and all passed successfully — the test will be unmuted.
 - If a test didn't run at all in 7 days — it will be removed from mute.
 
 ## 🔄 Automated Workflow
@@ -89,12 +88,12 @@ For analyzing test status, finding mute/unmute candidates, and tracking stabilit
 
 ### 🔇 [to_mute.txt](mute_update/to_mute.txt)
 **Content:** Mute candidates by new rules  
-**Rules:** In 4 days ≥2 failures **OR** (≥1 failure and runs ≤10)  
+**Rules:** In 4 days (≥3 failures **AND** runs >10) **OR** (≥2 failures **AND** runs ≤10)  
 **Usage:** Main file for mute decisions
 
 ### 🔊 [to_unmute.txt](mute_update/to_unmute.txt)
 **Content:** Unmute candidates by new rules  
-**Rules:** In 4 days >4 runs (pass+fail+mute), no failures (fail+mute=0), and no `no_runs` states  
+**Rules:** In 7 days ≥4 runs (pass+fail+mute), no failures (fail+mute=0)  
 **Usage:** Main file for unmute decisions
 
 ### 🗑️ [to_remove_from_mute.txt](mute_update/to_remove_from_mute.txt)
@@ -162,7 +161,7 @@ This table shows all files created by the mute logic script, with descriptions o
 | File | Description | Rules | Usage |
 |------|----------|---------|---------------|
 | `to_mute.txt` | Mute candidates | In 4 days ≥2 failures **OR** (≥1 failure and runs ≤10) | Main file for mute decisions |
-| `to_unmute.txt` | Unmute candidates | In 4 days >4 runs (pass+fail+mute), no failures (fail+mute=0), and no `no_runs` states | Main file for unmute decisions |
+| `to_unmute.txt` | Unmute candidates | In 7 days ≥4 runs (pass+fail+mute), no failures (fail+mute=0) | Main file for unmute decisions |
 | `to_remove_from_mute.txt` | Tests to remove from mute | No runs in 7 days | Main file for removal from mute |
 
 ## 📊 Additional analysis files

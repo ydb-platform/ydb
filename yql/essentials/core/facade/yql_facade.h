@@ -472,6 +472,6 @@ private:
     TMaybe<TIssue> ParametersIssue_;
 };
 
-void UpdateSqlFlagsFromQContext(const TQContext& qContext, THashSet<TString>& flags);
+void UpdateSqlFlagsFromQContext(const TQContext& qContext, THashSet<TString>& flags, TMaybe<TString> gatewaysPatch = {});
 
 } // namspace NYql

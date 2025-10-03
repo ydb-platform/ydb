@@ -186,11 +186,12 @@ namespace NKikimr {
             return;
         }
 
-        TString details = TStringBuilder() << "UnconfiguredStateTs# " << UnconfiguredStateTs
+        TString details = TStringBuilder() << " GroupId# " << GroupId
+                << " UnconfiguredStateTs# " << UnconfiguredStateTs
                 << " UnconfiguredStateReason# " << UnconfiguredStateReasonStr(UnconfiguredStateReason);
 
-        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::BS_PROXY, "Group# " << GroupId
-                << " Unconfigured Wakeup TIMEOUT Marker# DSP05 " << details);
+        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::BS_PROXY,
+                "Unconfigured Wakeup TIMEOUT Marker# DSP05 " << details);
                 
         ErrorDescription = "Configuration timeout occured (DSPE1). " + details;
         EstablishingSessionsPutMuteChecker.Unmute();
@@ -215,10 +216,11 @@ namespace NKikimr {
         if (ev && ev->Get() != EstablishingSessionsTimeoutEv) {
             return;
         }
-        TString details = TStringBuilder() << "EstablishingSessionsStateTs# " << EstablishingSessionsStateTs
+        TString details = TStringBuilder() << " GroupId# " << GroupId
+                << " EstablishingSessionsStateTs# " << EstablishingSessionsStateTs
                 << " NumUnconnectedDisks# " << NumUnconnectedDisks;
-        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::BS_PROXY, "Group# " << GroupId
-                << " StateEstablishingSessions Wakeup TIMEOUT Marker# DSP12 " << details);
+        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::BS_PROXY,
+                "StateEstablishingSessions Wakeup TIMEOUT Marker# DSP12 " << details);
         ErrorDescription = "Timeout while establishing sessions (DSPE4). " + details;
         SetStateEstablishingSessionsTimeout();
     }
@@ -234,7 +236,7 @@ namespace NKikimr {
         auto *msg = ev->Get();
         Y_ABORT_UNLESS(Topology);
         Sessions->QueueConnectUpdate(Topology->GetOrderNumber(msg->VDiskId), msg->QueueId, msg->IsConnected,
-            msg->ExtraBlockChecksSupport, msg->CostModel, *Topology);
+            msg->ExtraBlockChecksSupport, msg->Checksumming, msg->CostModel, *Topology);
         MinHugeBlobInBytes = Sessions->GetMinHugeBlobInBytes();
         if (msg->IsConnected && (CurrentStateFunc() == &TThis::StateEstablishingSessions ||
                 CurrentStateFunc() == &TThis::StateEstablishingSessionsTimeout)) {

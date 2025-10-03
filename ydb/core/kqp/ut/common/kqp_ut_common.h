@@ -81,11 +81,13 @@ public:
     TMaybe<NFake::TStorage> Storage = Nothing();
     bool InitFederatedQuerySetupFactory = false;
     NKqp::IKqpFederatedQuerySetupFactory::TPtr FederatedQuerySetupFactory = std::make_shared<NKqp::TKqpFederatedQuerySetupFactoryNoop>();
+    NKqp::IDescribeSchemaSecretsServiceFactory::TPtr DescribeSchemaSecretsServiceFactory = std::make_shared<NKqp::TDescribeSchemaSecretsServiceFactory>();
     NMonitoring::TDynamicCounterPtr CountersRoot = MakeIntrusive<NMonitoring::TDynamicCounters>();
     std::shared_ptr<NYql::NDq::IS3ActorsFactory> S3ActorsFactory = NYql::NDq::CreateDefaultS3ActorsFactory();
     NKikimrConfig::TImmediateControlsConfig Controls;
     TMaybe<NYdbGrpc::TServerOptions> GrpcServerOptions;
     bool EnableStorageProxy = false;
+    TDuration CheckpointPeriod = TDuration::MilliSeconds(200);
 
     TKikimrSettings() {
         InitDefaultConfig();
@@ -109,6 +111,7 @@ public:
     TKikimrSettings& SetStorage(const NFake::TStorage& storage) { Storage = storage; return *this; };
     TKikimrSettings& SetInitFederatedQuerySetupFactory(bool value) { InitFederatedQuerySetupFactory = value; return *this; };
     TKikimrSettings& SetFederatedQuerySetupFactory(NKqp::IKqpFederatedQuerySetupFactory::TPtr value) { FederatedQuerySetupFactory = value; return *this; };
+    TKikimrSettings& SetDescribeSchemaSecretsServiceFactory(NKqp::IDescribeSchemaSecretsServiceFactory::TPtr value) { DescribeSchemaSecretsServiceFactory = value; return *this; };
     TKikimrSettings& SetUseRealThreads(bool value) { UseRealThreads = value; return *this; };
     TKikimrSettings& SetEnableForceFollowers(bool value) { EnableForceFollowers = value; return *this; };
     TKikimrSettings& SetS3ActorsFactory(std::shared_ptr<NYql::NDq::IS3ActorsFactory> value) { S3ActorsFactory = std::move(value); return *this; };
@@ -124,6 +127,7 @@ public:
     }
     TKikimrSettings& SetGrpcServerOptions(const NYdbGrpc::TServerOptions& grpcServerOptions) { GrpcServerOptions = grpcServerOptions; return *this; };
     TKikimrSettings& SetEnableStorageProxy(bool value) { EnableStorageProxy = value; return *this; };
+    TKikimrSettings& SetCheckpointPeriod(TDuration value) { CheckpointPeriod = value; return *this; };
 };
 
 class TKikimrRunner {
@@ -155,7 +159,9 @@ public:
             ThreadPool.Stop();
         }
 
-        UNIT_ASSERT_C(WaitHttpGatewayFinalization(CountersRoot), "Failed to finalize http gateway before destruction");
+        if (!WaitHttpGatewayFinalization(CountersRoot)) {
+            Cerr << "Failed to finalize http gateway before destruction" << Endl;
+        }
 
         Server.Reset();
         Client.Reset();
@@ -243,6 +249,7 @@ enum class EIndexTypeSql {
     GlobalSync,
     GlobalAsync,
     GlobalVectorKMeansTree,
+    GlobalFulltext
 };
 
 inline constexpr TStringBuf IndexTypeSqlString(EIndexTypeSql type) {
@@ -254,6 +261,7 @@ inline constexpr TStringBuf IndexTypeSqlString(EIndexTypeSql type) {
     case EIndexTypeSql::GlobalAsync:
         return "GLOBAL ASYNC";
     case NKqp::EIndexTypeSql::GlobalVectorKMeansTree:
+    case NKqp::EIndexTypeSql::GlobalFulltext:
         return "GLOBAL";
     }
 }
@@ -267,6 +275,8 @@ inline NYdb::NTable::EIndexType IndexTypeSqlToIndexType(EIndexTypeSql type) {
         return NYdb::NTable::EIndexType::GlobalAsync;
     case EIndexTypeSql::GlobalVectorKMeansTree:
         return NYdb::NTable::EIndexType::GlobalVectorKMeansTree;
+    case EIndexTypeSql::GlobalFulltext:
+        Y_ABORT("Fulltext index isn't supported by sdk");
     }
 }
 

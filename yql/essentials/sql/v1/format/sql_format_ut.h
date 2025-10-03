@@ -358,7 +358,10 @@ Y_UNIT_TEST(CreateTable) {
             "WITH (tiering = 'some');\n"},
         {"create table if not  exists user(user int32)", "CREATE TABLE IF NOT EXISTS user (\n\tuser int32\n);\n"},
         {"create temp   table    user(user int32)", "CREATE TEMP TABLE user (\n\tuser int32\n);\n"},
-        {"create   temporary   table    user(user int32)", "CREATE TEMPORARY TABLE user (\n\tuser int32\n);\n"}
+        {"create   temporary   table    user(user int32)", "CREATE TEMPORARY TABLE user (\n\tuser int32\n);\n"},
+        {"create table user(user int32 (default 0, not null))","CREATE TABLE user (\n\tuser int32 (DEFAULT 0, NOT NULL)\n);\n"},
+        {"create table user(user int32 (default 0, not null, family f))","CREATE TABLE user (\n\tuser int32 (DEFAULT 0, NOT NULL, FAMILY f)\n);\n"},
+        {"create table user(user int32 (default 0, family f, not null))","CREATE TABLE user (\n\tuser int32 (DEFAULT 0, FAMILY f, NOT NULL)\n);\n"}
     };
 
     TSetup setup;
@@ -1993,6 +1996,93 @@ Y_UNIT_TEST(DropStreamingQuery) {
             "dRop sTReaMing qUErY If ExIsTs TheQuery",
             "DROP STREAMING QUERY IF EXISTS TheQuery;\n"
         }
+    };
+
+    TSetup setup;
+    setup.Run(cases);
+}
+
+Y_UNIT_TEST(NamedNodeNewLine) {
+    TString input = R"sql(
+DEFINE SUBQUERY $x() AS
+    $a = SELECT 1;
+    $b = SELECT $a;
+    SELECT $b;
+END DEFINE;
+)sql";
+
+    TString expected = R"sql(
+DEFINE SUBQUERY $x() AS
+    $a = (
+        SELECT
+            1
+    );
+
+    $b = (
+        SELECT
+            $a
+    );
+
+    SELECT
+        $b
+    ;
+END DEFINE;
+)sql";
+
+    input.erase(0, 1);
+    expected.erase(0, 1);
+
+    TCases cases = {
+        {input, expected},
+    };
+
+    TSetup setup;
+    setup.Run(cases);
+}
+
+Y_UNIT_TEST(InlineSubquery) {
+        TString input = R"sql(
+SELECT (SELECT 1);
+SELECT (SELECT * FROM t WHERE p);
+SELECT * FROM t WHERE x > (SELECT 1);
+)sql";
+
+    TString expected = R"sql(
+SELECT
+    (
+        SELECT
+            1
+    )
+;
+
+SELECT
+    (
+        SELECT
+            *
+        FROM
+            t
+        WHERE
+            p
+    )
+;
+
+SELECT
+    *
+FROM
+    t
+WHERE
+    x > (
+        SELECT
+            1
+    )
+;
+)sql";
+
+    input.erase(0, 1);
+    expected.erase(0, 1);
+
+    TCases cases = {
+        {input, expected},
     };
 
     TSetup setup;

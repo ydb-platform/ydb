@@ -336,6 +336,7 @@ TStringBuf TType::GetKindAsStr() const {
     xx(Block, TBlockType) \
     xx(Pg, TPgType) \
     xx(Multi, TMultiType) \
+    xx(Linear, TLinearType)
 
 void TType::Accept(INodeVisitor& visitor) {
     switch (Kind) {
@@ -1137,6 +1138,42 @@ TNode* TOptionalType::DoCloneOnCallableWrite(const TTypeEnvironment& env) const 
 }
 
 void TOptionalType::DoFreeze(const TTypeEnvironment& env) {
+    Y_UNUSED(env);
+}
+
+TLinearType::TLinearType(TType* itemType, bool isDynamic, const TTypeEnvironment& env, bool validate)
+    : TType(EKind::Linear, env.GetTypeOfTypeLazy(), itemType->IsPresortSupported())
+    , Data_(itemType)
+    , IsDynamic_(isDynamic)
+{
+    Y_UNUSED(validate);
+}
+
+TLinearType* TLinearType::Create(TType* itemType, bool isDynamic, const TTypeEnvironment& env) {
+    return ::new(env.Allocate<TLinearType>()) TLinearType(itemType, isDynamic, env);
+}
+
+bool TLinearType::IsSameType(const TLinearType& typeToCompare) const {
+    return IsDynamic() == typeToCompare.IsDynamic() && GetItemType()->IsSameType(*typeToCompare.GetItemType());
+}
+
+size_t TLinearType::CalcHash() const {
+    return CombineHashes(Data_->CalcHash(), size_t(IsDynamic_));
+}
+
+bool TLinearType::IsConvertableTo(const TLinearType& typeToCompare, bool ignoreTagged) const {
+    return IsDynamic() == typeToCompare.IsDynamic() && GetItemType()->IsConvertableTo(*typeToCompare.GetItemType(), ignoreTagged);
+}
+
+TNode* TLinearType::DoCloneOnCallableWrite(const TTypeEnvironment& env) const {
+    auto newTypeNode = (TNode*)GetItemType()->GetCookie();
+    if (!newTypeNode)
+        return const_cast<TLinearType*>(this);
+
+    return ::new(env.Allocate<TLinearType>()) TLinearType(static_cast<TType*>(newTypeNode), IsDynamic_, env, false);
+}
+
+void TLinearType::DoFreeze(const TTypeEnvironment& env) {
     Y_UNUSED(env);
 }
 
@@ -2167,6 +2204,10 @@ EValueRepresentation GetValueRepresentation(const TType* type) {
 
         case TType::EKind::Tagged:
             return GetValueRepresentation(static_cast<const TTaggedType*>(type)->GetBaseType());
+        case TType::EKind::Linear: {
+            auto linType = static_cast<const TLinearType*>(type);
+            return linType->IsDynamic() ? EValueRepresentation::Boxed : GetValueRepresentation(linType->GetItemType());
+        }
 
         default:
             Y_ABORT("Unsupported type.");

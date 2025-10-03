@@ -17,64 +17,36 @@ class WorkloadManagerWorkload:
         self.batch_size = 1000
 
     def create_resource_pool(self):
-        query = """
+        self.execute_query("""
             CREATE RESOURCE POOL TestResourcePool WITH (
                 CONCURRENT_QUERY_LIMIT=20,
                 QUEUE_SIZE=1000
             );
-        """
-        try:
-            with ydb.QuerySessionPool(self.driver) as session_pool:
-                session_pool.execute_with_retries(query)
-        except Exception:
-            assert self.wait_for_connection(), "Failed to restore connection in create_resource_pool"
-            with ydb.QuerySessionPool(self.driver) as session_pool:
-                session_pool.execute_with_retries(query)
+        """)
 
     def alter_resource_pool(self):
-        query = """
+        self.execute_query("""
             ALTER RESOURCE POOL TestResourcePool
                 SET (CONCURRENT_QUERY_LIMIT = 30, QUEUE_SIZE = 100),
                 RESET (QUERY_MEMORY_LIMIT_PERCENT_PER_NODE);
-        """
-        try:
-            with ydb.QuerySessionPool(self.driver) as session_pool:
-                session_pool.execute_with_retries(query)
-        except Exception:
-            assert self.wait_for_connection(), "Failed to restore connection in alter_resource_pool"
-            with ydb.QuerySessionPool(self.driver) as session_pool:
-                session_pool.execute_with_retries(query)
+        """)
 
     def create_resource_pool_classifier(self):
-        query = """
+        self.execute_query("""
             CREATE RESOURCE POOL CLASSIFIER TestResourcePoolClassifier WITH (
                 RANK=20,
                 RESOURCE_POOL="TestResourcePool"
             );
-        """
-        try:
-            with ydb.QuerySessionPool(self.driver) as session_pool:
-                session_pool.execute_with_retries(query)
-        except Exception:
-            assert self.wait_for_connection(), "Failed to restore connection in create_resource_pool_classifier"
-            with ydb.QuerySessionPool(self.driver) as session_pool:
-                session_pool.execute_with_retries(query)
+        """)
 
     def alter_resource_pool_classifier(self):
-        query = """
+        self.execute_query("""
             ALTER RESOURCE POOL CLASSIFIER TestResourcePoolClassifier
                 SET (RANK = 1, RESOURCE_POOL = "TestResourcePool"),
                 RESET (MEMBER_NAME);
-        """
-        try:
-            with ydb.QuerySessionPool(self.driver) as session_pool:
-                session_pool.execute_with_retries(query)
-        except Exception:
-            assert self.wait_for_connection(), "Failed to restore connection in alter_resource_pool_classifier"
-            with ydb.QuerySessionPool(self.driver) as session_pool:
-                session_pool.execute_with_retries(query)
+        """)
 
-    def wait_for_connection(self, timeout_seconds=120):
+    def wait_for_connection(self, timeout_seconds=240):
         def predicate():
             try:
                 with ydb.QuerySessionPool(self.driver) as session_pool:
@@ -89,12 +61,12 @@ class WorkloadManagerWorkload:
         try:
             with ydb.QuerySessionPool(self.driver) as session_pool:
                 result = session_pool.execute_with_retries(query_body)
-                return result[0].rows
+                return result[0].rows if result else None
         except Exception:
             assert self.wait_for_connection(), "Failed to restore connection in execute_query"
             with ydb.QuerySessionPool(self.driver) as session_pool:
                 result = session_pool.execute_with_retries(query_body)
-                return result[0].rows
+                return result[0].rows if result else None
 
     def get_resource_pool(self, throw_exception):
         query = "SELECT * FROM `.sys/resource_pools` WHERE Name = 'TestResourcePool'"

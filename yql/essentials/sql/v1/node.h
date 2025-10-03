@@ -1,6 +1,7 @@
 #pragma once
 
 #include <google/protobuf/message.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 #include <yql/essentials/utils/resetable_setting.h>
 #include <yql/essentials/parser/proto_ast/common.h>
 #include <yql/essentials/public/udf/udf_data_type.h>
@@ -693,11 +694,10 @@ namespace NSQLTranslationV1 {
             , Name(name) {}
     };
 
-    struct TColumnConstraints {
+    struct TColumnOptions {
         TNodePtr DefaultExpr;
         bool Nullable = true;
-
-        TColumnConstraints(TNodePtr defaultExpr, bool nullable);
+        TVector<TIdentifier> Families;
     };
 
     struct TColumnSchema {
@@ -1187,39 +1187,20 @@ namespace NSQLTranslationV1 {
         TNodePtr CacheMode;
     };
 
-    struct TVectorIndexSettings {
-        enum class EDistance {
-              Cosine        /* "cosine" */
-            , Manhattan     /* "manhattan" */
-            , Euclidean     /* "euclidean" */
-        };
-
-        enum class ESimilarity {
-              Cosine        /* "cosine" */
-            , InnerProduct  /* "inner_product" */
-        };
-
-        enum class EVectorType {
-              Float         /* "float" */
-            , Uint8         /* "uint8" */
-            , Int8          /* "int8" */
-            , Bit           /* "bit" */
-        };
-
-        std::optional<EDistance> Distance;
-        std::optional<ESimilarity> Similarity;
-        std::optional<EVectorType> VectorType;
-        std::optional<ui32> VectorDimension;
-        std::optional<ui32> Clusters;
-        std::optional<ui32> Levels;
-    };
-
     struct TIndexDescription {
         enum class EType {
             GlobalSync,
             GlobalAsync,
             GlobalSyncUnique,
             GlobalVectorKmeansTree,
+            GlobalFulltext
+        };
+
+        struct TIndexSetting {
+            TString Name;
+            TPosition NamePosition;
+            TString Value;
+            TPosition ValuePosition;
         };
 
         TIndexDescription(const TIdentifier& name, EType type = EType::GlobalSync)
@@ -1233,7 +1214,7 @@ namespace NSQLTranslationV1 {
         TVector<TIdentifier> DataColumns;
         TTableSettings TableSettings;
 
-        using TIndexSettings = std::variant<std::monostate, TVectorIndexSettings>;
+        using TIndexSettings = TMap<TString, TIndexSetting>;
         TIndexSettings IndexSettings;
     };
 

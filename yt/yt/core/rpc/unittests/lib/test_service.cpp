@@ -74,6 +74,7 @@ public:
         RegisterMethod(RPC_SERVICE_METHOD_DESC(RequestBytesThrottledCall));
         RegisterMethod(RPC_SERVICE_METHOD_DESC(NoReply));
         RegisterMethod(RPC_SERVICE_METHOD_DESC(FlakyCall));
+        RegisterMethod(RPC_SERVICE_METHOD_DESC(DelayedCall));
         RegisterMethod(RPC_SERVICE_METHOD_DESC(RequireCoolFeature));
         RegisterMethod(RPC_SERVICE_METHOD_DESC(StreamingEcho)
             .SetStreamingEnabled(true)
@@ -345,6 +346,12 @@ public:
         } else {
             context->Reply(TError(NRpc::EErrorCode::TransportError, "Flaky call iteration"));
         }
+    }
+
+    DECLARE_RPC_SERVICE_METHOD(NTestRpc, DelayedCall)
+    {
+        context->SetRequestInfo();
+        context->Reply();
     }
 
     DECLARE_RPC_SERVICE_METHOD(NTestRpc, RequireCoolFeature)

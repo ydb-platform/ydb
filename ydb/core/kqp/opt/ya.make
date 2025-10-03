@@ -9,6 +9,7 @@ SRCS(
     kqp_opt_phase.cpp
     kqp_opt_phy_check.cpp
     kqp_opt_phy_finalize.cpp
+    kqp_opt_sink_precompute.cpp
     kqp_query_blocks_transformer.cpp
     kqp_query_plan.cpp
     kqp_statistics_transformer.cpp

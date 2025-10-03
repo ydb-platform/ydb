@@ -866,6 +866,20 @@
             "uri": "https://{canondata_backend}/1946324/dc59c53f5d19891b3c597a8faed7d5051f6d3c89/resource.tar.gz#test.test_expr-variant_tuple_comp-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[file-eval_over_pending_file_path--Debug]": [
+        {
+            "checksum": "40c338646902a1addafdbce430950d74",
+            "size": 327,
+            "uri": "https://{canondata_backend}/1130705/c50021e7e31522dea6187ba1a63726273178ab6e/resource.tar.gz#test.test_file-eval_over_pending_file_path--Debug_/opt.yql"
+        }
+    ],
+    "test.test[file-eval_over_pending_file_path--Results]": [
+        {
+            "checksum": "b48e12d7643de4fa20db189c7efc3763",
+            "size": 701,
+            "uri": "https://{canondata_backend}/1130705/c50021e7e31522dea6187ba1a63726273178ab6e/resource.tar.gz#test.test_file-eval_over_pending_file_path--Results_/results.txt"
+        }
+    ],
     "test.test[file-file_list_bools--Debug]": [
         {
             "checksum": "01a93027ae3a46ce3d0b8cc50eee3ece",
@@ -1013,6 +1027,62 @@
             "checksum": "4f140efd3491b22880e294dce1c735c2",
             "size": 9773,
             "uri": "https://{canondata_backend}/1871102/cf0bf303bf8ddaa5f80dc41d0b1079fd931793f8/resource.tar.gz#test.test_like-ilike-Ansi-Results_/results.txt"
+        }
+    ],
+    "test.test[linear-dict_update-default.txt-Debug]": [
+        {
+            "checksum": "d4bf7b5307cbf2ec9b0943e230c0fe9a",
+            "size": 561,
+            "uri": "https://{canondata_backend}/1942415/df3e80ac994c18318b1f7c88f726afeb48326be8/resource.tar.gz#test.test_linear-dict_update-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[linear-dict_update-default.txt-Results]": [
+        {
+            "checksum": "489dc346769a9ecaf47aa338990093b6",
+            "size": 2412,
+            "uri": "https://{canondata_backend}/1942415/df3e80ac994c18318b1f7c88f726afeb48326be8/resource.tar.gz#test.test_linear-dict_update-default.txt-Results_/results.txt"
+        }
+    ],
+    "test.test[linear-mutdict_contains-default.txt-Debug]": [
+        {
+            "checksum": "46e4961f3a6861e7cf1dc80e89733cdb",
+            "size": 502,
+            "uri": "https://{canondata_backend}/1936842/3408b583683ceec1bc0db56850313771a1e2cdad/resource.tar.gz#test.test_linear-mutdict_contains-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[linear-mutdict_contains-default.txt-Results]": [
+        {
+            "checksum": "aed9665bb4d4b4a8ceaea2981b63c7b7",
+            "size": 2214,
+            "uri": "https://{canondata_backend}/1936842/3408b583683ceec1bc0db56850313771a1e2cdad/resource.tar.gz#test.test_linear-mutdict_contains-default.txt-Results_/results.txt"
+        }
+    ],
+    "test.test[linear-mutdict_payloads-default.txt-Debug]": [
+        {
+            "checksum": "9d4fe2ac3003c0a995a4cad4fbd5b2f3",
+            "size": 543,
+            "uri": "https://{canondata_backend}/1936842/3408b583683ceec1bc0db56850313771a1e2cdad/resource.tar.gz#test.test_linear-mutdict_payloads-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[linear-mutdict_payloads-default.txt-Results]": [
+        {
+            "checksum": "686a87466b136f3571ce4f8eee7b7ea3",
+            "size": 2469,
+            "uri": "https://{canondata_backend}/1936842/3408b583683ceec1bc0db56850313771a1e2cdad/resource.tar.gz#test.test_linear-mutdict_payloads-default.txt-Results_/results.txt"
+        }
+    ],
+    "test.test[linear-types-default.txt-Debug]": [
+        {
+            "checksum": "013b2c346f23df65f2e461b9a9cff6f9",
+            "size": 420,
+            "uri": "https://{canondata_backend}/1781765/972251ebb8228a889fb9ce1afa36c3b56345fcfe/resource.tar.gz#test.test_linear-types-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[linear-types-default.txt-Results]": [
+        {
+            "checksum": "c41448a02612fcc93b6ebd7962faad93",
+            "size": 1625,
+            "uri": "https://{canondata_backend}/1781765/972251ebb8228a889fb9ce1afa36c3b56345fcfe/resource.tar.gz#test.test_linear-types-default.txt-Results_/results.txt"
         }
     ],
     "test.test[match_recognize-alerts_without_order-default.txt-Debug]": [

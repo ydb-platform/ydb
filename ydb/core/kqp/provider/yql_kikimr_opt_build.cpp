@@ -191,7 +191,6 @@ struct TKiExploreTxResults {
             const auto indexTables = NKikimr::NKqp::NSchemeHelpers::CreateIndexTablePath(name, index);
             TString indexTable;
             if (index.Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
-                YQL_ENSURE(index.KeyColumns.size() == 1, "Prefixed vector index is not supported");
                 indexTable = indexTables[1];
                 YQL_ENSURE(indexTable.EndsWith(NKikimr::NTableIndex::NKMeans::PostingTable));
             } else {
@@ -218,7 +217,6 @@ struct TKiExploreTxResults {
             const auto indexTables = NKikimr::NKqp::NSchemeHelpers::CreateIndexTablePath(name, index);
             TString indexTable;
             if (index.Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
-                YQL_ENSURE(index.KeyColumns.size() == 1, "Prefixed vector index is not supported");
                 indexTable = indexTables[1];
                 YQL_ENSURE(indexTable.EndsWith(NKikimr::NTableIndex::NKMeans::PostingTable));
             } else {

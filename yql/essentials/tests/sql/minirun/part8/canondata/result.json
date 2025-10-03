@@ -1097,6 +1097,34 @@
             "uri": "https://{canondata_backend}/995452/d62a19412f7a8c91f28f3bd535745c621a6e845a/resource.tar.gz#test.test_join-yql-6297-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[linear-good_struct-default.txt-Debug]": [
+        {
+            "checksum": "c45aa7fcd880aaed313b4c569594ff6b",
+            "size": 584,
+            "uri": "https://{canondata_backend}/1777230/6e473151fbf481344c570ab0d47156cb2f756cad/resource.tar.gz#test.test_linear-good_struct-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[linear-good_struct-default.txt-Results]": [
+        {
+            "checksum": "b5aa181c9d09ce654ae4a2525fc40187",
+            "size": 1058,
+            "uri": "https://{canondata_backend}/995452/2a9bf70a388b4961fa1bf1282481d6b5f39f7a8c/resource.tar.gz#test.test_linear-good_struct-default.txt-Results_/results.txt"
+        }
+    ],
+    "test.test[linear-mutdict_empty-default.txt-Debug]": [
+        {
+            "checksum": "150da420b336d2664ecc61938a5559a8",
+            "size": 326,
+            "uri": "https://{canondata_backend}/212715/29904ee3fd0a837860e52fb350761f0b97d609bf/resource.tar.gz#test.test_linear-mutdict_empty-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[linear-mutdict_empty-default.txt-Results]": [
+        {
+            "checksum": "f10f5ddf3886810d583bdfb4d0d2b2aa",
+            "size": 1058,
+            "uri": "https://{canondata_backend}/212715/29904ee3fd0a837860e52fb350761f0b97d609bf/resource.tar.gz#test.test_linear-mutdict_empty-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[match_recognize-permute-default.txt-Debug]": [
         {
             "checksum": "d85f6b9f632284167abb3f3ac686e0f9",
@@ -1561,9 +1589,9 @@
     ],
     "test.test[seq_mode-shared_subquery_expr-default.txt-Debug]": [
         {
-            "checksum": "337165dd15b27237457781df32eaf9b5",
-            "size": 268,
-            "uri": "https://{canondata_backend}/1937429/f07d607c2797952b0e405c5e49adc94025f9df81/resource.tar.gz#test.test_seq_mode-shared_subquery_expr-default.txt-Debug_/opt.yql"
+            "checksum": "c586f99b0ac6dde9d43012f4d9af0865",
+            "size": 352,
+            "uri": "https://{canondata_backend}/1130705/5474fe1be194e0244a73036ccf0ae9718d4bcbfc/resource.tar.gz#test.test_seq_mode-shared_subquery_expr-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[seq_mode-shared_subquery_expr-default.txt-Results]": [

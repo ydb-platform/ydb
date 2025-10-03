@@ -143,6 +143,9 @@ public:
             case TType::EKind::Tagged:
                 TBase::SaveTaggedType(*static_cast<const TTaggedType*>(type));
                 break;
+            case TType::EKind::Linear:
+                TBase::SaveLinearType(*static_cast<const TLinearType*>(type));
+                break;
             default:
                 YQL_ENSURE(false, "Unsupported type kind:" << (ui32)type->GetKind());
         }
@@ -263,6 +266,12 @@ struct TRuntimeTypeLoader {
     }
     TMaybe<TType> LoadDictType(TType keyType, TType valType, ui32 /*level*/) {
         return Builder.NewDictType(keyType, valType, false);
+    }
+    TMaybe<TType> LoadLinearType(TType itemType, ui32 /*level*/) {
+        return Builder.NewLinearType(itemType, false);
+    }
+    TMaybe<TType> LoadDynamicLinearType(TType itemType, ui32 /*level*/) {
+        return Builder.NewLinearType(itemType, true);
     }
     TMaybe<TType> LoadCallableType(TType returnType, const TVector<TType>& argTypes, const TVector<TString>& argNames,
         const TVector<ui64>& argFlags, size_t optionalCount, const TString& payload, ui32 /*level*/) {

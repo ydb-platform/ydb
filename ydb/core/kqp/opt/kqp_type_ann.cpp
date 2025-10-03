@@ -522,21 +522,21 @@ TStatus AnnotateLookupTable(const TExprNode::TPtr& node, TExprContext& ctx, cons
                 return TStatus::Error;
             }
 
-            if (!EnsureOptionalType(node->Pos(), *tupleType->GetItems()[0], ctx)) {
+            if (!EnsureOptionalType(node->Pos(), *tupleType->GetItems()[1], ctx)) {
                 return TStatus::Error;
             }
 
-            auto joinKeyType = tupleType->GetItems()[0]->Cast<TOptionalExprType>()->GetItemType();
+            auto joinKeyType = tupleType->GetItems()[1]->Cast<TOptionalExprType>()->GetItemType();
             if (!EnsureStructType(node->Pos(), *joinKeyType, ctx)) {
                 return TStatus::Error;
             }
 
-            if (!EnsureStructType(node->Pos(), *tupleType->GetItems()[1], ctx)) {
+            if (!EnsureStructType(node->Pos(), *tupleType->GetItems()[0], ctx)) {
                 return TStatus::Error;
             }
 
             structType = joinKeyType->Cast<TStructExprType>();
-            auto leftRowType = tupleType->GetItems()[1]->Cast<TStructExprType>();
+            auto leftRowType = tupleType->GetItems()[0]->Cast<TStructExprType>();
 
             TVector<const TTypeAnnotationNode*> outputTypes;
             outputTypes.push_back(leftRowType);
@@ -1882,21 +1882,21 @@ TStatus AnnotateStreamLookupConnection(const TExprNode::TPtr& node, TExprContext
             return TStatus::Error;
         }
 
-        if (!EnsureOptionalType(node->Pos(), *inputTupleType->GetItems()[0], ctx)) {
+        if (!EnsureOptionalType(node->Pos(), *inputTupleType->GetItems()[1], ctx)) {
             return TStatus::Error;
         }
 
-        auto joinKeyType = inputTupleType->GetItems()[0]->Cast<TOptionalExprType>()->GetItemType();
+        auto joinKeyType = inputTupleType->GetItems()[1]->Cast<TOptionalExprType>()->GetItemType();
         if (!EnsureStructType(node->Pos(), *joinKeyType, ctx)) {
             return TStatus::Error;
         }
 
-        if (!EnsureStructType(node->Pos(), *inputTupleType->GetItems()[1], ctx)) {
+        if (!EnsureStructType(node->Pos(), *inputTupleType->GetItems()[0], ctx)) {
             return TStatus::Error;
         }
 
         const TStructExprType* joinKeys = joinKeyType->Cast<TStructExprType>();
-        const TStructExprType* leftRowType = inputTupleType->GetItems()[1]->Cast<TStructExprType>();
+        const TStructExprType* leftRowType = inputTupleType->GetItems()[0]->Cast<TStructExprType>();
 
         for (const auto& inputKey : joinKeys->GetItems()) {
             if (!table.second->GetKeyColumnIndex(TString(inputKey->GetName()))) {
@@ -2003,12 +2003,10 @@ TStatus AnnotateVectorResolveConnection(const TExprNode::TPtr& node, TExprContex
             return TStatus::Error;
         }
     }
-    for (const auto& keyColumn : indexDesc->KeyColumns) {
-        if (!inputColSet.contains(keyColumn)) {
-            ctx.AddError(TIssue(ctx.GetPosition(node->Child(TKqpCnVectorResolve::idx_InputType)->Pos()),
-                TStringBuilder() << "Input must contain all vector index key columns"));
-            return TStatus::Error;
-        }
+    if (!inputColSet.contains(indexDesc->KeyColumns.back())) {
+        ctx.AddError(TIssue(ctx.GetPosition(node->Child(TKqpCnVectorResolve::idx_InputType)->Pos()),
+            TStringBuilder() << "Input must contain the embedding column: " << indexDesc->KeyColumns.back()));
+        return TStatus::Error;
     }
 
     // Generate output type
@@ -2231,11 +2229,11 @@ TStatus AnnotateOpEmptySource(const TExprNode::TPtr& input, TExprContext& ctx) {
     return TStatus::Ok;
 }
 
-TStatus AnnotateOpMapElement(const TExprNode::TPtr& input, TExprContext& ctx) {
-    const TTypeAnnotationNode* inputType = input->ChildPtr(TKqpOpMapElement::idx_Input)->GetTypeAnn();
+TStatus AnnotateOpMapElementLambda(const TExprNode::TPtr& input, TExprContext& ctx) {
+    const TTypeAnnotationNode* inputType = input->ChildPtr(TKqpOpMapElementLambda::idx_Input)->GetTypeAnn();
     const TTypeAnnotationNode* itemType = inputType->Cast<TListExprType>()->GetItemType();
 
-    auto& lambda = input->ChildRef(TKqpOpMapElement::idx_Lambda);
+    auto& lambda = input->ChildRef(TKqpOpMapElementLambda::idx_Lambda);
     if (!UpdateLambdaAllArgumentsTypes(lambda, {itemType}, ctx)) {
         return IGraphTransformer::TStatus::Error;
     }
@@ -2245,44 +2243,92 @@ TStatus AnnotateOpMapElement(const TExprNode::TPtr& input, TExprContext& ctx) {
         return IGraphTransformer::TStatus::Repeat;
     }
 
-    input->SetTypeAnn(lambdaType);
+    auto variable = input->ChildRef(TKqpOpMapElementLambda::idx_Variable);
+    auto res = ctx.MakeType<TItemExprType>(variable->Content(), lambdaType);
+
+    input->SetTypeAnn(res);
+    return TStatus::Ok;
+}
+
+TStatus AnnotateOpMapElementRename(const TExprNode::TPtr& input, TExprContext& ctx) {
+    Y_UNUSED(ctx);
+
+    const TTypeAnnotationNode* inputType = input->ChildPtr(TKqpOpMapElementLambda::idx_Input)->GetTypeAnn();
+    auto structType = inputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+    auto typeItems = structType->GetItems();
+
+    auto from = input->ChildRef(TKqpOpMapElementRename::idx_From);
+    auto typeIt = std::find_if(typeItems.begin(), typeItems.end(), [&from](const TItemExprType* t){
+        return from->Content() == t->GetName();
+    });
+
+    if (typeIt==typeItems.end()) {
+        YQL_CLOG(TRACE, CoreDq) << "Trying to find " << from->Content() << " in " << *(TTypeAnnotationNode*)structType;
+    }
+
+    Y_ENSURE(typeIt!=typeItems.end());
+
+    auto variable = input->ChildRef(TKqpOpMapElementRename::idx_Variable);
+    auto res = ctx.MakeType<TItemExprType>(variable->Content(), (*typeIt)->GetItemType());
+
+    input->SetTypeAnn(res);
     return TStatus::Ok;
 }
 
 TStatus AnnotateOpMap(const TExprNode::TPtr& input, TExprContext& ctx, TTypeAnnotationContext& typesCtx) {
-
-    const TTypeAnnotationNode* inputType = input->ChildPtr(TKqpOpMap::idx_Input)->GetTypeAnn();
-    //YQL_CLOG(TRACE, CoreDq) << "Annotating OpMap, input type:" << *inputType;
-
-    const TTypeAnnotationNode* itemType = inputType->Cast<TListExprType>()->GetItemType();
-    //YQL_CLOG(TRACE, CoreDq) << "item type:" << *itemType;
+    Y_UNUSED(typesCtx);
 
     TVector<const TItemExprType*> structItemTypes;
 
+    if (input->ChildrenSize() <= TKqpOpMap::idx_Project) {
+        const TTypeAnnotationNode* inputType = input->ChildPtr(TKqpOpMap::idx_Input)->GetTypeAnn();
+        auto structType = inputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+
+        for (auto t : structType->GetItems()) {
+            structItemTypes.push_back(t);
+        }
+    }
+
     for (size_t idx = 0; idx < input->ChildPtr(TKqpOpMap::idx_MapElements)->ChildrenSize(); idx++) {
         auto& element = input->ChildPtr(TKqpOpMap::idx_MapElements)->ChildRef(idx);
-        auto variable = element->ChildPtr(TKqpOpMapElement::idx_Variable);
-        auto& lambda = element->ChildRef(TKqpOpMapElement::idx_Lambda);
-
-        if (!UpdateLambdaAllArgumentsTypes(lambda, {itemType}, ctx)) {
-            return IGraphTransformer::TStatus::Error;
-        }
-
-        auto lambdaType = lambda->GetTypeAnn();
-        if (!lambdaType) {
-            return IGraphTransformer::TStatus::Repeat;
-        }
-
-        structItemTypes.push_back(ctx.MakeType<TItemExprType>(variable->Content(),lambdaType));
+        auto type = element->GetTypeAnn();
+        structItemTypes.push_back((TItemExprType*)type);
     }
 
     auto resultItemType = ctx.MakeType<TStructExprType>(structItemTypes);
     const TTypeAnnotationNode* resultAnn = ctx.MakeType<TListExprType>(resultItemType);
 
     input->SetTypeAnn(resultAnn);
-    typesCtx.ExpectedTypes[input->UniqueId()] = resultAnn;
+    //typesCtx.ExpectedTypes[input->UniqueId()] = resultAnn;
 
     YQL_CLOG(TRACE, CoreDq) << "Type annotation for OpMap done: " << *resultAnn;
+
+    return TStatus::Ok;
+}
+
+TStatus AnnotateOpProject(const TExprNode::TPtr& input, TExprContext& ctx) {
+    auto structType = input->ChildPtr(TKqpOpProject::idx_Input)->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+    TVector<const TItemExprType*> structItemTypes;
+    auto typeItems = structType->GetItems();
+
+    for (size_t i=0; i<input->ChildPtr(TKqpOpProject::idx_ProjectList)->ChildrenSize(); i++) {
+        auto proj = input->ChildPtr(TKqpOpProject::idx_ProjectList)->ChildRef(i);
+        auto typeItemIt = std::find_if(typeItems.begin(), typeItems.end(), [&proj](const TItemExprType* t){
+            return proj->Content() == t->GetName();
+        });
+        if (typeItemIt == typeItems.end()) {
+            continue;
+        }
+
+        structItemTypes.push_back(*typeItemIt);
+    }
+
+    auto resultItemType = ctx.MakeType<TStructExprType>(structItemTypes);
+    const TTypeAnnotationNode* resultAnn = ctx.MakeType<TListExprType>(resultItemType);
+
+    input->SetTypeAnn(resultAnn);
+
+    YQL_CLOG(TRACE, CoreDq) << "Type annotation for OpProject done: " << *resultAnn;
 
     return TStatus::Ok;
 }
@@ -2538,14 +2584,22 @@ TAutoPtr<IGraphTransformer> CreateKqpTypeAnnotationTransformer(const TString& cl
                 return AnnotateOpEmptySource(input, ctx);
             }
 
-            if (TKqpOpMapElement::Match(input.Get())) {
-                return AnnotateOpMapElement(input, ctx);
+            if (TKqpOpMapElementLambda::Match(input.Get())) {
+                return AnnotateOpMapElementLambda(input, ctx);
+            }
+
+            if (TKqpOpMapElementRename::Match(input.Get())) {
+                return AnnotateOpMapElementRename(input, ctx);
             }
 
             if (TKqpOpMap::Match(input.Get())) {
                 return AnnotateOpMap(input, ctx, typesCtx);
             }
 
+            if (TKqpOpProject::Match(input.Get())) {
+                return AnnotateOpProject(input, ctx);
+            }
+            
             if (TKqpOpFilter::Match(input.Get())) {
                 return AnnotateOpFilter(input, ctx);
             }

@@ -699,13 +699,19 @@ bool TSqlTranslation::CreateTableIndex(const TRule_table_index& node, TVector<TI
 
     if (node.GetRule_table_index_type3().HasBlock2()) {
         const TString subType = to_upper(IdEx(node.GetRule_table_index_type3().GetBlock2().GetRule_index_subtype2().GetRule_an_id1(), *this).Name) ;
-        if (subType == "VECTOR_KMEANS_TREE") {
+        if (subType == "VECTOR_KMEANS_TREE" || subType == "FULLTEXT") {
             if (indexes.back().Type != TIndexDescription::EType::GlobalSync) {
                 Ctx_.Error() << subType << " index can only be GLOBAL [SYNC]";
                 return false;
             }
 
-            indexes.back().Type = TIndexDescription::EType::GlobalVectorKmeansTree;
+            if (subType == "VECTOR_KMEANS_TREE") {
+                indexes.back().Type = TIndexDescription::EType::GlobalVectorKmeansTree;
+            } else if (subType == "FULLTEXT") {
+                indexes.back().Type = TIndexDescription::EType::GlobalFulltext;
+            } else {
+                Y_ABORT("Unreachable");
+            }
         } else {
             Ctx_.Error() << subType << " index subtype is not supported";
             return false;
@@ -716,12 +722,10 @@ bool TSqlTranslation::CreateTableIndex(const TRule_table_index& node, TVector<TI
     if (node.HasBlock10()) {
         //const auto& with = node.GetBlock4();
         auto& index = indexes.back();
-        if (index.Type == TIndexDescription::EType::GlobalVectorKmeansTree) {
-            index.IndexSettings.emplace<TVectorIndexSettings>();
-            if (!CreateIndexSettings(node.GetBlock10().GetRule_with_index_settings1(), index.Type, index.IndexSettings)) {
+        if (index.Type == TIndexDescription::EType::GlobalVectorKmeansTree || index.Type == TIndexDescription::EType::GlobalFulltext) {
+            if (!FillIndexSettings(node.GetBlock10().GetRule_with_index_settings1(), index.IndexSettings)) {
                 return false;
             }
-
         } else {
             AltNotImplemented("with", indexType);
             return false;
@@ -826,16 +830,15 @@ bool TSqlTranslation::ParseDatabaseSetting(const TRule_database_setting& in, THa
     return true;
 }
 
-bool TSqlTranslation::CreateIndexSettings(const TRule_with_index_settings& settingsNode,
-        TIndexDescription::EType indexType,
+bool TSqlTranslation::FillIndexSettings(const TRule_with_index_settings& settingsNode,
         TIndexDescription::TIndexSettings& indexSettings) {
     const auto& firstEntry = settingsNode.GetRule_index_setting_entry3();
-    if (!CreateIndexSettingEntry(IdEx(firstEntry.GetRule_an_id1(), *this), firstEntry.GetRule_index_setting_value3(), indexType, indexSettings)) {
+    if (!AddIndexSetting(IdEx(firstEntry.GetRule_an_id1(), *this), firstEntry.GetRule_index_setting_value3(), indexSettings)) {
         return false;
     }
     for (auto& block : settingsNode.GetBlock4()) {
         const auto& entry = block.GetRule_index_setting_entry2();
-        if (!CreateIndexSettingEntry(IdEx(entry.GetRule_an_id1(), *this), entry.GetRule_index_setting_value3(), indexType, indexSettings)) {
+        if (!AddIndexSetting(IdEx(entry.GetRule_an_id1(), *this), entry.GetRule_index_setting_value3(), indexSettings)) {
             return false;
         }
     }
@@ -860,109 +863,26 @@ TString TSqlTranslation::GetIndexSettingStringValue(const TRule_index_setting_va
     }
 }
 
-template<typename T>
-std::tuple<bool, T, TString> TSqlTranslation::GetIndexSettingValue(const TRule_index_setting_value& node) {
-    T value{};
-    const TString stringValue = GetIndexSettingStringValue(node);
-    if (node.GetAltCase() != NSQLv1Generated::TRule_index_setting_value::kAltIndexSettingValue1
-        && node.GetAltCase() != NSQLv1Generated::TRule_index_setting_value::kAltIndexSettingValue2
-        || stringValue.empty())
-    {
-        return {false, value, stringValue};
-    }
-    if (!TryFromString<T>(to_lower(stringValue), value)) {
-        return {false, value, stringValue};
-    }
-    return {true, value, stringValue};
-}
-
-template<>
-std::tuple<bool, ui32, TString> TSqlTranslation::GetIndexSettingValue(const TRule_index_setting_value& node) {
-    ui32 value = 0;
-    const TString stringValue = GetIndexSettingStringValue(node);
-    if (node.GetAltCase() != NSQLv1Generated::TRule_index_setting_value::kAltIndexSettingValue3 || stringValue.empty()) {
-        return {false, value, stringValue};
-    }
-    TString suffix;
-    ui64 value64;
-    if (!ParseNumbers(Ctx_, stringValue, value64, suffix) || value64 > Max<ui32>()) {
-        return {false, value, stringValue};
-    }
-    return {true, value = static_cast<ui32>(value64), stringValue};
-}
-
-template<>
-std::tuple<bool, bool, TString> TSqlTranslation::GetIndexSettingValue(const TRule_index_setting_value& node) {
-    bool value = false;
-    const TString stringValue = GetIndexSettingStringValue(node);
-    if (node.GetAltCase() != NSQLv1Generated::TRule_index_setting_value::kAltIndexSettingValue4 || stringValue.empty()) {
-        return {false, value, stringValue};
-    }
-    if (!TryFromString<bool>(to_lower(stringValue), value)) {
-        return {false, value, stringValue};
-    }
-    return {true, value, stringValue};
-}
-
-bool TSqlTranslation::CreateIndexSettingEntry(const TIdentifier &id,
+bool TSqlTranslation::AddIndexSetting(const TIdentifier &id,
         const TRule_index_setting_value& node,
-        TIndexDescription::EType indexType,
         TIndexDescription::TIndexSettings& indexSettings) {
 
+    // TODO: remove to_lower transformation after the next release to keep backward compatibility
+    const auto name = to_lower(id.Name);
+    const auto value = to_lower(GetIndexSettingStringValue(node));
 
-    if (indexType == TIndexDescription::EType::GlobalVectorKmeansTree) {
-        TVectorIndexSettings &vectorIndexSettings = std::get<TVectorIndexSettings>(indexSettings);
+    TIndexDescription::TIndexSetting indexSetting {
+        .Name = name,
+        .NamePosition = id.Pos,
+        .Value = value,
+        .ValuePosition = Ctx_.Pos()
+    };
 
-        if (to_lower(id.Name) == "distance") {
-            const auto [success, value, stringValue] = GetIndexSettingValue<TVectorIndexSettings::EDistance>(node);
-            if (!success) {
-                Ctx_.Error() << "Invalid distance: " << stringValue;
-                return false;
-            }
-            vectorIndexSettings.Distance = value;
-        } else if (to_lower(id.Name) == "similarity") {
-            const auto [success, value, stringValue] = GetIndexSettingValue<TVectorIndexSettings::ESimilarity>(node);
-            if (!success) {
-                Ctx_.Error() << "Invalid similarity: " << stringValue;
-                return false;
-            }
-            vectorIndexSettings.Similarity = value;
-        } else if (to_lower(id.Name) == "vector_type") {
-            const auto [success, value, stringValue] = GetIndexSettingValue<TVectorIndexSettings::EVectorType>(node);
-            if (!success) {
-                Ctx_.Error() << "Invalid vector_type: " << stringValue;
-                return false;
-            }
-            vectorIndexSettings.VectorType = value;
-        } else if (to_lower(id.Name) == "vector_dimension") {
-            const auto [success, value, stringValue] = GetIndexSettingValue<ui32>(node);
-            if (!success) {
-                Ctx_.Error() << "Invalid vector_dimension: " << stringValue;
-                return false;
-            }
-            vectorIndexSettings.VectorDimension = value;
-        } else if (to_lower(id.Name) == "clusters") {
-            const auto [success, value, stringValue] = GetIndexSettingValue<ui32>(node);
-            if (!success) {
-                Ctx_.Error() << "Invalid clusters: " << stringValue;
-                return false;
-            }
-            vectorIndexSettings.Clusters = value;
-        } else if (to_lower(id.Name) == "levels") {
-            const auto [success, value, stringValue] = GetIndexSettingValue<ui32>(node);
-            if (!success) {
-                Ctx_.Error() << "Invalid levels: " << stringValue;
-                return false;
-            }
-            vectorIndexSettings.Levels = value;
-        } else {
-            Ctx_.Error() << "Unknown index setting: " << id.Name;
-            return false;
-        }
-    } else {
-        Ctx_.Error() << "Unknown index setting: " << id.Name;
+    if (!indexSettings.emplace(name, indexSetting).second) {
+        Ctx_.Error() << "Duplicated " << name;
         return false;
     }
+
     return true;
 
 }
@@ -1024,27 +944,37 @@ TTableHints GetTableFuncHints(TStringBuf funcName) {
     return res;
 }
 
-
-TNodePtr TSqlTranslation::NamedExpr(const TRule_named_expr& node, EExpr exprMode) {
+TNodePtr TSqlTranslation::NamedExpr(
+    const TRule_expr& exprTree,
+    const TRule_an_id_or_type* nameTree,
+    EExpr exprMode)
+{
     TSqlExpression expr(Ctx_, Mode_);
     if (exprMode == EExpr::GroupBy) {
         expr.SetSmartParenthesisMode(TSqlExpression::ESmartParenthesis::GroupBy);
     } else if (exprMode == EExpr::SqlLambdaParams) {
         expr.SetSmartParenthesisMode(TSqlExpression::ESmartParenthesis::SqlLambdaParams);
     }
-    if (node.HasBlock2()) {
+    if (nameTree) {
         expr.MarkAsNamed();
     }
-    TNodePtr exprNode(expr.Build(node.GetRule_expr1()));
+    TNodePtr exprNode = expr.Build(exprTree);
     if (!exprNode) {
         Ctx_.IncrementMonCounter("sql_errors", "NamedExprInvalid");
         return nullptr;
     }
-    if (node.HasBlock2()) {
+    if (nameTree) {
         exprNode = SafeClone(exprNode);
-        exprNode->SetLabel(Id(node.GetBlock2().GetRule_an_id_or_type2(), *this));
+        exprNode->SetLabel(Id(*nameTree, *this));
     }
     return exprNode;
+}
+
+TNodePtr TSqlTranslation::NamedExpr(const TRule_named_expr& node, EExpr exprMode) {
+    return NamedExpr(
+        node.GetRule_expr1(),
+        (node.HasBlock2() ? &node.GetBlock2().GetRule_an_id_or_type2() : nullptr),
+        exprMode);
 }
 
 bool TSqlTranslation::NamedExprList(const TRule_named_expr_list& node, TVector<TNodePtr>& exprs, EExpr exprMode) {
@@ -1539,9 +1469,15 @@ TMaybe<TSourcePtr> TSqlTranslation::AsTableImpl(const TRule_table_ref& node) {
 
     if (block.Alt_case() == TRule_table_ref::TBlock3::kAlt2) {
         auto& alt = block.GetAlt2();
-        TCiString func(Id(alt.GetRule_an_id_expr1(), *this));
 
-        if (func == "as_table") {
+        TString func = Id(alt.GetRule_an_id_expr1(), *this);
+        if (auto issue = NormalizeName(Ctx_.Pos(), func)) {
+            Error() << issue->GetMessage();
+            Ctx_.IncrementMonCounter("sql_errors", "NormalizeTableFunctionError");
+            return nullptr;
+        }
+
+        if (func == "astable") {
             if (node.HasBlock1()) {
                 Ctx_.Error() << "Cluster shouldn't be specified for AS_TABLE source";
                 return TMaybe<TSourcePtr>(nullptr);
@@ -1574,23 +1510,132 @@ TMaybe<TSourcePtr> TSqlTranslation::AsTableImpl(const TRule_table_ref& node) {
     return Nothing();
 }
 
-TMaybe<TColumnConstraints> ColumnConstraints(const TRule_column_schema& node, TTranslation& ctx) {
-    TNodePtr defaultExpr = nullptr;
+TMaybe<TColumnOptions> ColumnOptions(const TRule_column_schema& node, TTranslation& ctx) {
+    TNodePtr defaultExpr;
     bool nullable = true;
+    TVector<TIdentifier> families;
 
-    auto constraintsNode = node.GetRule_opt_column_constraints4();
-    if (constraintsNode.HasBlock1()) {
-        nullable = !constraintsNode.GetBlock1().HasBlock1();
-    }
-    if (constraintsNode.HasBlock2()) {
-        TSqlExpression expr(ctx.Context(), ctx.Context().Settings.Mode);
-        defaultExpr = expr.Build(constraintsNode.GetBlock2().GetRule_expr2());
-        if (!defaultExpr) {
-            return {};
+    const auto& optionsList = node.GetRule_column_option_list3();
+
+    enum class EOption {
+        Family,
+        NotNull,
+        DefaultValue
+    };
+
+    std::vector<TRule_column_option> columnOptions;
+    columnOptions.reserve(static_cast<size_t>(EOption::DefaultValue) + 1);
+
+    {
+        switch (optionsList.Alt_case()) {
+            case TRule_column_option_list::kAltColumnOptionList1: {
+                const auto& block = optionsList.GetAlt_column_option_list1().GetRule_column_option_list_space1().GetBlock1();
+                for (const auto& item : block) {
+                    const auto& rule = item.GetRule_column_option1();
+                    columnOptions.push_back(rule);
+                }
+
+                break;
+            }
+
+            case TRule_column_option_list::kAltColumnOptionList2: {
+                const auto& optionsNode = optionsList.GetAlt_column_option_list2().GetRule_column_option_list_comma1();
+                const auto& firstColumnOption = optionsNode.GetRule_column_option2();
+                columnOptions.push_back(firstColumnOption);
+
+                {
+                    auto block = optionsNode.GetBlock3();
+
+                    for (const auto& item : block) {
+                        const auto& rule = item.GetRule_column_option2();
+                        columnOptions.push_back(rule);
+                    }
+                }
+
+                break;
+            }
+
+            case TRule_column_option_list::ALT_NOT_SET: {
+                Y_ABORT("You should change implementation according to grammar changes");
+            }
         }
+
     }
 
-    return TColumnConstraints(defaultExpr, nullable);
+    {
+        std::vector<EOption> usedOptions;
+        usedOptions.reserve(static_cast<size_t>(EOption::DefaultValue) + 1);
+
+        for (const auto& rule : columnOptions) {
+            switch (rule.Alt_case()) {
+                case TRule_column_option::kAltColumnOption1: {
+                    if (std::find(usedOptions.begin(), usedOptions.end(), EOption::Family) != usedOptions.end()) {
+                        ctx.Context().Error() << "'FAMILY' option can be specified only once";
+                        return {};
+                    }
+
+                    usedOptions.push_back(EOption::Family);
+
+                    const auto& familyRelation = rule.GetAlt_column_option1().GetRule_family_relation1();
+                    families.push_back(IdEx(familyRelation.GetRule_an_id2(), ctx));
+                    break;
+                }
+                case TRule_column_option::kAltColumnOption2: {
+                    if (std::find(usedOptions.begin(), usedOptions.end(), EOption::NotNull) != usedOptions.end()) {
+                        ctx.Context().Error() << "'NOT NULL' option can be specified only once";
+                        return {};
+                    }
+
+                    usedOptions.push_back(EOption::NotNull);
+
+                    nullable = !rule.GetAlt_column_option2().GetRule_nullability1().HasBlock1();
+                    break;
+                }
+                case TRule_column_option::kAltColumnOption3: {
+                    if (std::find(usedOptions.begin(), usedOptions.end(), EOption::DefaultValue) != usedOptions.end()) {
+                        ctx.Context().Error() << "'DEFAULT' option can be specified only once";
+                        return {};
+                    }
+
+                    usedOptions.push_back(EOption::DefaultValue);
+
+                    TSqlExpression expr(ctx.Context(), ctx.Context().Settings.Mode);
+
+                    // TODO: We need to refact it
+                    auto legacyNotNullLastValue = ctx.Context().DisableLegacyNotNull;
+                    Y_DEFER {
+                        ctx.Context().DisableLegacyNotNull = legacyNotNullLastValue;
+                    };
+
+                    ctx.Context().DisableLegacyNotNull = true;
+
+                    defaultExpr = expr.Build(rule.GetAlt_column_option3().GetRule_default_value1().GetRule_expr2());
+
+                    if (AnyOf(ctx.Context().Issues.begin(), ctx.Context().Issues.end(), [](const auto& issue) {
+                        return issue.GetCode() == TIssuesIds::YQL_MISSING_IS_BEFORE_NOT_NULL;
+                    })) {
+                        ctx.Context().Error() << "'DEFAULT' option can not use expr which contains literall 'NOT NULL'."
+                                              << " If you wanted to use two different options 'DEFAULT' and 'NOT NULL',"
+                                              << " it is recommended to use the syntax '(DEFAULT value, NOT NULL, ...)'";
+
+                        return {};
+                    }
+
+                    if (!defaultExpr) {
+                        return {};
+                    }
+
+                    break;
+                }
+                case TRule_column_option::ALT_NOT_SET: {
+                    Y_ABORT("You should change implementation according to grammar changes");
+                }
+            }
+        }
+
+    }
+
+    return TColumnOptions{std::move(defaultExpr), nullable, std::move(families)};
 }
 
 TMaybe<TColumnSchema> TSqlTranslation::ColumnSchemaImpl(const TRule_column_schema& node) {
@@ -1599,10 +1644,12 @@ TMaybe<TColumnSchema> TSqlTranslation::ColumnSchemaImpl(const TRule_column_schem
     TNodePtr type = SerialTypeNode(node.GetRule_type_name_or_bind2());
     const bool serial = (type != nullptr);
 
-    const auto constraints = ColumnConstraints(node, *this);
-    if (!constraints){
+    auto columnOptions = ColumnOptions(node, *this);
+    if (!columnOptions) {
         return {};
     }
+
+    auto [defaultExpr, nullable, families] = columnOptions.GetRef();
 
     if (!type) {
         type = TypeNodeOrBind(node.GetRule_type_name_or_bind2());
@@ -1611,12 +1658,16 @@ TMaybe<TColumnSchema> TSqlTranslation::ColumnSchemaImpl(const TRule_column_schem
     if (!type) {
         return {};
     }
-    TVector<TIdentifier> families;
-    if (node.HasBlock3()) {
-        const auto& familyRelation = node.GetBlock3().GetRule_family_relation1();
-        families.push_back(IdEx(familyRelation.GetRule_an_id2(), *this));
-    }
-    return TColumnSchema(pos, name, type, constraints->Nullable, families, serial, constraints->DefaultExpr);
+
+    return TColumnSchema(
+        std::move(pos),
+        std::move(name),
+        std::move(type),
+        nullable,
+        std::move(families),
+        serial,
+        std::move(defaultExpr)
+    );
 }
 
 TNodePtr TSqlTranslation::SerialTypeNode(const TRule_type_name_or_bind& node) {
@@ -3762,8 +3813,7 @@ bool TSqlTranslation::TopicRefImpl(const TRule_topic_ref& node, TTopicRef& resul
 }
 
 TNodePtr TSqlTranslation::NamedNode(const TRule_named_nodes_stmt& rule, TVector<TSymbolNameWithPos>& names) {
-    // named_nodes_stmt: bind_parameter_list EQUALS (expr | subselect_stmt);
-    // subselect_stmt: (LPAREN select_stmt RPAREN | select_unparenthesized_stmt);
+    // named_nodes_stmt: bind_parameter_list EQUALS (expr | select_unparenthesized_stmt);
     if (!BindList(rule.GetRule_bind_parameter_list1(), names)) {
         return {};
     }
@@ -3772,30 +3822,18 @@ TNodePtr TSqlTranslation::NamedNode(const TRule_named_nodes_stmt& rule, TVector<
     switch (rule.GetBlock3().Alt_case()) {
     case TRule_named_nodes_stmt::TBlock3::kAlt1: {
         TSqlExpression expr(Ctx_, Mode_);
-        auto result = expr.Build(rule.GetBlock3().GetAlt1().GetRule_expr1());
+        auto result = expr.BuildSourceOrNode(rule.GetBlock3().GetAlt1().GetRule_expr1());
+        if (TSourcePtr source = MoveOutIfSource(result)) {
+            result = BuildSourceNode(Ctx_.Pos(), std::move(source));
+        }
         return result;
     }
 
     case TRule_named_nodes_stmt::TBlock3::kAlt2:{
-        const auto& subselect_rule = rule.GetBlock3().GetAlt2().GetRule_subselect_stmt1();
+        const auto& subselect_rule = rule.GetBlock3().GetAlt2().GetRule_select_unparenthesized_stmt1();
 
-        TSqlSelect expr(Ctx_, Mode_);
         TPosition pos;
-        TSourcePtr source = nullptr;
-        switch (subselect_rule.GetBlock1().Alt_case()) {
-            case TRule_subselect_stmt::TBlock1::kAlt1:
-                source = expr.Build(subselect_rule.GetBlock1().GetAlt1().GetRule_select_stmt2(), pos);
-                break;
-
-            case TRule_subselect_stmt::TBlock1::kAlt2:
-                source = expr.Build(subselect_rule.GetBlock1().GetAlt2().GetRule_select_unparenthesized_stmt1(), pos);
-                break;
-
-            case TRule_subselect_stmt::TBlock1::ALT_NOT_SET:
-                AltNotImplemented("subselect_stmt", subselect_rule.GetBlock1());
-                Ctx_.IncrementMonCounter("sql_errors", "UnknownNamedNode");
-                return nullptr;
-        }
+        TSourcePtr source = TSqlSelect(Ctx_, Mode_).Build(subselect_rule, pos);
 
         if (!source) {
             return {};
@@ -4918,7 +4956,7 @@ bool TSqlTranslation::DefineActionOrSubqueryStatement(const TRule_define_action_
         return false;
     }
 
-    auto ret = hasValidBody ? BuildQuery(Ctx_.Pos(), innerBlocks, false, Ctx_.Scoped, Ctx_.SeqMode) : nullptr;
+    auto ret = hasValidBody ? BuildQuery(Ctx_.Pos(), innerBlocks, false, Ctx_.Scoped, !isSubquery && Ctx_.SeqMode) : nullptr;
     if (!WarnUnusedNodes()) {
         return false;
     }

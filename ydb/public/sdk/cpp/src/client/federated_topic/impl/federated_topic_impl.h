@@ -76,8 +76,8 @@ public:
 
 private:
 
-     // Use single-threaded executor to prevent deadlocks inside subsession event handlers.
-     NTopic::IExecutor::TPtr GetSubsessionHandlersExecutor();
+    // Use single-threaded executor to prevent deadlocks inside subsession event handlers.
+    IExecutor::TPtr GetSubsessionHandlersExecutor();
 
 private:
     std::shared_ptr<TGRpcConnectionsImpl> Connections;
@@ -86,7 +86,7 @@ private:
     std::shared_ptr<std::unordered_map<NTopic::ECodec, std::unique_ptr<NTopic::ICodec>>> ProvidedCodecs =
          std::make_shared<std::unordered_map<NTopic::ECodec, std::unique_ptr<NTopic::ICodec>>>();
 
-    NTopic::IExecutor::TPtr SubsessionHandlersExecutor;
+    IExecutor::TPtr SubsessionHandlersExecutor;
 
     TAdaptiveLock Lock;
 };

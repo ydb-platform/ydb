@@ -136,6 +136,14 @@ void Deserialize(EValueType& valueType, const TNode& node)
         {"interval64", VT_INTERVAL64},
 
         {"uuid", VT_UUID},
+
+        {"tz_date", VT_TZ_DATE},
+        {"tz_datetime", VT_TZ_DATETIME},
+        {"tz_timestamp", VT_TZ_TIMESTAMP},
+
+        {"tz_date32", VT_TZ_DATE32},
+        {"tz_datetime64", VT_TZ_DATETIME64},
+        {"tz_timestamp64", VT_TZ_TIMESTAMP64},
     };
 
     auto it = str2ValueType.find(nodeStr);

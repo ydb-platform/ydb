@@ -714,7 +714,7 @@ public:
 
     virtual void AddCluster(const TYtClusterConfig& cluster) = 0;
 
-    virtual TClusterConnectionResult GetClusterConnection(const TClusterConnectionOptions&& options) = 0;
+    virtual TClusterConnectionResult GetClusterConnection(const TClusterConnectionOptions&& options) const = 0;
 
     virtual TMaybe<TString> GetTableFilePath(const TGetTableFilePathOptions&& options) = 0;
 

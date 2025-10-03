@@ -1,6 +1,7 @@
 import "ydb/public/api/protos/draft/persqueue_error_codes.proto";
 
 import "ydb/public/api/protos/annotations/sensitive.proto";
+import "ydb/public/api/protos/ydb_common.proto";
 
 import "ydb/core/protos/base.proto";
 import "ydb/core/protos/msgbus_kv.proto";
@@ -375,6 +376,7 @@ message TPQTabletConfig {
         optional uint64 Version = 7 [default = 0];
         optional uint64 Generation = 8 [default = 0];
         optional bool Important = 9 [default = false];
+        optional uint64 AvailabilityPeriodMs = 10 [default = 0];
     }
 
     repeated TConsumer Consumers = 37;
@@ -445,6 +447,11 @@ message TPQTabletConfig {
     optional TOffloadConfig OffloadConfig = 38;
 
     optional bool EnableCompactification = 39 [default = false];
+
+    optional Ydb.MetricsLevel MetricsLevel = 40;
+
+    // The ID of the Monitoring project that will be used as the value of `project` label for detailed metrics level.
+    optional string MonitoringProjectId = 41;
 }
 
 message THeartbeat {
@@ -816,6 +823,7 @@ message TStatusResponse {
 
         optional EScaleStatus ScaleStatus = 35;
         optional TPartitionScaleParticipants ScaleParticipatingPartitions = 36;
+        optional string SplitBoundary = 37;
     }
 
     message TConsumerResult {
@@ -1097,6 +1105,7 @@ message TEvPartitionScaleStatusChanged {
     required uint32 PartitionId = 1;
     required EScaleStatus ScaleStatus = 2;
     optional TPartitionScaleParticipants ParticipatingPartitions = 3;
+    optional string SplitBoundary = 4;
 };
 
 message TPartitions {

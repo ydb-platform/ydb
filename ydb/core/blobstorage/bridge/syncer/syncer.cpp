@@ -6,11 +6,14 @@
 namespace NKikimr::NBridge {
 
     TSyncerActor::TSyncerActor(TIntrusivePtr<TBlobStorageGroupInfo> info, TGroupId sourceGroupId, TGroupId targetGroupId,
-            std::shared_ptr<TSyncerDataStats> syncerDataStats)
+            std::shared_ptr<TSyncerDataStats> syncerDataStats, TReplQuoter::TPtr syncRateQuoter,
+            TBlobStorageGroupType sourceGroupType)
         : Info(std::move(info))
         , SourceGroupId(sourceGroupId)
         , TargetGroupId(targetGroupId)
         , SyncerDataStats(std::move(syncerDataStats))
+        , SyncRateQuoter(std::move(syncRateQuoter))
+        , SourceGroupType(sourceGroupType)
     {
         Y_ABORT_UNLESS(Info);
         Y_ABORT_UNLESS(Info->IsBridged());
@@ -298,8 +301,10 @@ namespace NKikimr::NBridge {
             for (size_t i = 0; i < numBlobs; ++i) {
                 q[i].Set(*jt++);
             }
-            IssueQuery(true, std::make_unique<TEvBlobStorage::TEvGet>(q, numBlobs, TInstant::Max(),
-                NKikimrBlobStorage::FastRead, true, true));
+            auto ev = std::make_unique<TEvBlobStorage::TEvGet>(q, numBlobs, TInstant::Max(),
+                NKikimrBlobStorage::FastRead, true, true);
+            ev->DoNotReportIndexRestoreGetMissingBlobs = true; // they may be missing, do not report errors in this case
+            IssueQuery(true, std::move(ev));
 
             RestoreQueue.erase(RestoreQueue.begin(), it);
         }
@@ -365,7 +370,8 @@ namespace NKikimr::NBridge {
         return false;
     }
 
-    void TSyncerActor::IssueQuery(bool toTargetGroup, std::unique_ptr<IEventBase> ev, TQueryPayload payload) {
+    void TSyncerActor::IssueQuery(bool toTargetGroup, std::unique_ptr<IEventBase> ev, TQueryPayload payload,
+            ui64 quoterBytes) {
         switch (ev->Type()) {
 #define MSG(TYPE) \
             case TEvBlobStorage::TYPE: { \
@@ -396,11 +402,21 @@ namespace NKikimr::NBridge {
         std::unique_ptr<IEventHandle> handle(CreateEventForBSProxy(SelfId(),
             toTargetGroup ? TargetGroupId : SourceGroupId, ev.release(), cookie));
 
+        const TMonotonic now = TActivationContext::Monotonic();
+        const TDuration timeout = SyncRateQuoter && quoterBytes
+            ? SyncRateQuoter->Take(now, quoterBytes)
+            : TDuration::Zero();
+        const TMonotonic timestamp = now + timeout;
+
         if (QueriesInFlight < MaxQueriesInFlight) {
-            TActivationContext::Send(handle.release());
+            if (now < timestamp) {
+                TActivationContext::Schedule(timestamp, handle.release());
+            } else {
+                TActivationContext::Send(handle.release());
+            }
             ++QueriesInFlight;
         } else {
-            PendingQueries.push_back(std::move(handle));
+            PendingQueries.emplace_back(std::move(handle), timestamp);
         }
     }
 
@@ -476,8 +492,9 @@ namespace NKikimr::NBridge {
                     ++SyncerDataStats->BlobsDone;
                 } else if (r.Status == NKikimrProto::NODATA) {
                     // we have to query this blob and do full rewrite -- there was no data for it
+                    const ui64 quoterBytes = r.Id.BlobSize() * SourceGroupType.TotalPartCount() / SourceGroupType.DataParts();
                     IssueQuery(false, std::make_unique<TEvBlobStorage::TEvGet>(r.Id, 0, 0, TInstant::Max(),
-                        NKikimrBlobStorage::FastRead));
+                        NKikimrBlobStorage::FastRead), {}, quoterBytes);
                 } else if (r.Status == NKikimrProto::ERROR) {
                     SyncerDataStats->BytesError += r.Id.BlobSize();
                     ++SyncerDataStats->BlobsError;
@@ -509,7 +526,13 @@ namespace NKikimr::NBridge {
             --QueriesInFlight;
         } else {
             Y_ABORT_UNLESS(QueriesInFlight == MaxQueriesInFlight);
-            TActivationContext::Send(PendingQueries.front().release());
+            TMonotonic now = TActivationContext::Monotonic();
+            auto& [handle, timestamp] = PendingQueries.front();
+            if (now < timestamp) {
+                TActivationContext::Schedule(timestamp, handle.release());
+            } else {
+                TActivationContext::Send(handle.release());
+            }
             PendingQueries.pop_front();
         }
 
@@ -598,8 +621,10 @@ namespace NKikimr::NBridge {
     )
 
     IActor *CreateSyncerActor(TIntrusivePtr<TBlobStorageGroupInfo> info, TGroupId sourceGroupId, TGroupId targetGroupId,
-            std::shared_ptr<TSyncerDataStats> syncerDataStats) {
-        return new TSyncerActor(std::move(info), sourceGroupId, targetGroupId, std::move(syncerDataStats));
+            std::shared_ptr<TSyncerDataStats> syncerDataStats, TReplQuoter::TPtr syncRateQuoter,
+            TBlobStorageGroupType sourceGroupType) {
+        return new TSyncerActor(std::move(info), sourceGroupId, targetGroupId, std::move(syncerDataStats),
+            std::move(syncRateQuoter), sourceGroupType);
     }
 
 } // NKikimr::NBridge

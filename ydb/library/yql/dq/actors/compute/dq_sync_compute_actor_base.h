@@ -113,6 +113,7 @@ protected: //TDqComputeActorChannels::ICalbacks
             Y_ABORT_UNLESS(inputChannel->CheckpointingMode != NDqProto::CHECKPOINTING_MODE_DISABLED);
             Y_ABORT_UNLESS(this->Checkpoints);
             const auto& checkpoint = channelData.Proto.GetCheckpoint();
+            auto guard = TBase::BindAllocator();
             inputChannel->Pause(checkpoint);
             this->Checkpoints->RegisterCheckpoint(checkpoint, channelData.Proto.GetChannelId());
         }

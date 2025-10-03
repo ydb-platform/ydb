@@ -55,6 +55,7 @@ MKQL_AS_TYPE(Tagged)
 MKQL_AS_TYPE(Block)
 MKQL_AS_TYPE(Pg)
 MKQL_AS_TYPE(Multi)
+MKQL_AS_TYPE(Linear)
 
 MKQL_AS_VALUE(Any, Type)
 MKQL_AS_VALUE(Callable, Type)

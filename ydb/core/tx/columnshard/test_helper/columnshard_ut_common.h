@@ -547,6 +547,13 @@ public:
                     }
                 }
 
+                if constexpr (std::is_same<TData, NYdb::TUuidValue>::value) {
+                    if constexpr (std::is_same<T, arrow::FixedSizeBinaryType>::value) {
+                        Y_ABORT_UNLESS(typedBuilder.Append(data.Buf_.Bytes).ok());
+                        return true;
+                    }
+                }
+
                 Y_ABORT("Unknown type combination");
                 return false;
             }));

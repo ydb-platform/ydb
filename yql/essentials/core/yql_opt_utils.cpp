@@ -2158,7 +2158,7 @@ bool IsYieldTransparent(const TExprNode::TPtr& root, const TTypeAnnotationContex
 }
 
 TMaybe<bool> IsStrictNoRecurse(const TExprNode& node) {
-    if (node.IsCallable({"Unwrap", "Ensure", "ScriptUdf", "Error", "ErrorType"})) {
+    if (node.IsCallable({"Unwrap", "Ensure", "ScriptUdf", "Error", "ErrorType", "Unpickle", "FromDynamicLinear"})) {
         return false;
     }
     if (node.IsCallable("Udf")) {
@@ -2285,13 +2285,12 @@ bool HasOnlyOneJoinType(const TExprNode& joinTree, TStringBuf joinType) {
 
 void OptimizeSubsetFieldsForNodeWithMultiUsage(const TExprNode::TPtr& node, const TParentsMap& parentsMap,
     TNodeOnNodeOwnedMap& toOptimize, TExprContext& ctx,
-    std::function<TExprNode::TPtr(const TExprNode::TPtr&, const TExprNode::TPtr&, const TParentsMap&, TExprContext&)> handler,
-    bool withOptionals)
+    std::function<TExprNode::TPtr(const TExprNode::TPtr&, const TExprNode::TPtr&, const TParentsMap&, TExprContext&)> handler)
 {
     auto kind = node->GetTypeAnn()->GetKind();
 
     // Ignore stream input, because it cannot be used multiple times
-    if (!(kind == ETypeAnnotationKind::List || (withOptionals && kind == ETypeAnnotationKind::Optional))) {
+    if (!(kind == ETypeAnnotationKind::List || kind == ETypeAnnotationKind::Optional)) {
         return;
     }
 
@@ -2839,6 +2838,12 @@ bool CanFuseLambdas(const TExprNode& outer, const TExprNode& inner, const TTypeA
     } else {
         YQL_ENSURE(false, "Incompatible lambdas for fuse");
     }
+}
+
+bool CanApplyExtractMembersToPartitionsByKeys(const TTypeAnnotationContext* types) {
+    YQL_ENSURE(types);
+    static const char optName[] = "ExtractMembersForPartitionsByKeys";
+    return IsOptimizerEnabled<optName>(*types) && !IsOptimizerDisabled<optName>(*types);
 }
 
 }

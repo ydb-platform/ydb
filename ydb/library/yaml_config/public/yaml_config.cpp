@@ -403,32 +403,25 @@ void Combine(
 }
 
 bool Fit(
-    const TSelector& selector,
-    const TVector<TLabel>& labels,
-    const TVector<std::pair<TString, TSet<TLabel>>>& names)
+    const TVector<std::pair<int, const TLabelValueSet*>>& in,
+    const TVector<std::pair<int, const TLabelValueSet*>>& notIn,
+    const TVector<TLabel>& labels)
 {
-    for (size_t i = 0; i < labels.size(); ++ i) {
-        auto& label = labels[i];
-        auto& name = names[i].first;
-        switch(label.Type) {
-            case TLabel::EType::Negative:
-                if (selector.In.contains(name)) {
-                    return false;
-                }
-                break;
-            case TLabel::EType::Empty: [[fallthrough]];
-            case TLabel::EType::Common:
-                if (auto it = selector.In.find(name); it != selector.In.end()
-                    && !it->second.Values.contains(label.Value)) {
-
-                    return false;
-                }
-                if (auto it = selector.NotIn.find(name); it != selector.NotIn.end()
-                    && it->second.Values.contains(label.Value)) {
-
-                    return false;
-                }
-                break;
+    for (size_t i = 0; i < notIn.size(); ++i) {
+        int idx = notIn[i].first;
+        const auto& label = labels[idx];
+        if (label.Type != TLabel::EType::Negative && notIn[i].second->Values.contains(label.Value)) {
+            return false;
+        }
+    }
+    for (size_t i = 0; i < in.size(); ++i) {
+        int idx = in[i].first;
+        const auto& label = labels[idx];
+        if (label.Type == TLabel::EType::Negative) {
+            return false;
+        }
+        if (!in[i].second->Values.contains(label.Value)) {
+            return false;
         }
     }
 
@@ -441,9 +434,18 @@ TResolvedConfig ResolveAll(NFyaml::TDocument& doc)
     TVector<std::pair<TString, TSet<TLabel>>> labels;
 
     auto config = ParseConfig(doc);
+    THashSet<TString> usedNames;
+    usedNames.reserve(config.Selectors.size() * 2);
+    for (const auto& selectorModel : config.Selectors) {
+        for (const auto& [label, _] : selectorModel.Selector.In) usedNames.insert(label);
+        for (const auto& [label, _] : selectorModel.Selector.NotIn) usedNames.insert(label);
+    }
     auto namedLabels = CollectLabels(doc);
 
     for (auto& [name, values]: namedLabels) {
+        if (!usedNames.contains(name)) {
+            continue;
+        }
         TSet<TLabel> set;
         if (values.Class == EYamlConfigLabelTypeClass::Open) {
             set.insert(TLabel{TLabel::EType::Negative, {}});
@@ -465,6 +467,38 @@ TResolvedConfig ResolveAll(NFyaml::TDocument& doc)
     combination.resize(labels.size());
 
     Combine(labelCombinations, combination, labels, 0);
+
+    THashMap<TString, int> nameToIndex;
+    nameToIndex.reserve(labelNames.size());
+    for (size_t i = 0; i < labelNames.size(); ++i) {
+        nameToIndex[labelNames[i]] = static_cast<int>(i);
+    }
+
+    struct TCompiledSelector {
+        TVector<std::pair<int, const TLabelValueSet*>> In;
+        TVector<std::pair<int, const TLabelValueSet*>> NotIn;
+    };
+
+    TVector<TCompiledSelector> compiled;
+    compiled.reserve(config.Selectors.size());
+    for (const auto& selectorModel : config.Selectors) {
+        TCompiledSelector cs;
+        cs.In.reserve(selectorModel.Selector.In.size());
+        cs.NotIn.reserve(selectorModel.Selector.NotIn.size());
+        for (const auto& kv : selectorModel.Selector.In) {
+            auto it = nameToIndex.find(kv.first);
+            if (it != nameToIndex.end()) {
+                cs.In.push_back({it->second, &kv.second});
+            }
+        }
+        for (const auto& kv : selectorModel.Selector.NotIn) {
+            auto it = nameToIndex.find(kv.first);
+            if (it != nameToIndex.end()) {
+                cs.NotIn.push_back({it->second, &kv.second});
+            }
+        }
+        compiled.push_back(std::move(cs));
+    }
 
     auto cmp = [](const TVector<int>& lhs, const TVector<int>& rhs) {
         auto lhsIt = lhs.begin();
@@ -506,7 +540,7 @@ TResolvedConfig ResolveAll(NFyaml::TDocument& doc)
         TTriePath triePath({0});
 
         for (size_t i = 0; i < config.Selectors.size(); ++i) {
-            if (Fit(config.Selectors[i].Selector, labelCombinations[j], labels)) {
+            if (Fit(compiled[i].In, compiled[i].NotIn, labelCombinations[j])) {
                 triePath.push_back(i + 1);
                 if (auto it = selectorsTrie.find(triePath); it != selectorsTrie.end()) {
                     cur = it->second;

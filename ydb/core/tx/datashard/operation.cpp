@@ -323,6 +323,24 @@ void TOperation::SetFinishProposeTs() noexcept
     SetFinishProposeTs(AppData()->MonotonicTimeProvider->Now());
 }
 
+std::optional<TString> TOperation::OnMigration(TDataShard&, const TActorContext&)
+{
+    // By default operations cannot be migrated
+    return std::nullopt;
+}
+
+bool TOperation::OnRestoreMigrated(TDataShard&, const TString&)
+{
+    // By default operations cannot be restored
+    return false;
+}
+
+bool TOperation::OnFinishMigration(TDataShard&, const NTable::TScheme&)
+{
+    // By default operations cannot finish migration
+    return false;
+}
+
 bool TOperation::OnStopping(TDataShard&, const TActorContext&)
 {
     // By default operations don't do anything when stopping

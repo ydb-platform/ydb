@@ -821,7 +821,7 @@ public:
 
             for (;;) {
                 NUdf::TUnboxedValue item;
-                switch (auto status = Input.Fetch(item)) {
+                switch (Input.Fetch(item)) {
                     case NUdf::EFetchStatus::Ok: {
                         Item->SetValue(Ctx, std::move(item));
                         SetAccum->Add(Key->GetValue(Ctx));
@@ -1173,7 +1173,7 @@ public:
                 if (Key == Items[i] || Items[i]->GetDependencesCount() > 0U)
                     fields[i] = &Items[i]->RefValue(ctx);
 
-            switch (const auto result = Flow->FetchValues(ctx, fields)) {
+            switch (Flow->FetchValues(ctx, fields)) {
                 case EFetchResult::One:
                     statePtr->Insert(Key->GetValue(ctx).Release());
                     continue;
@@ -1333,7 +1333,7 @@ public:
 
             for (;;) {
                 NUdf::TUnboxedValue item;
-                switch (auto status = Input.Fetch(item)) {
+                switch (Input.Fetch(item)) {
                     case NUdf::EFetchStatus::Ok: {
                         Item->SetValue(Ctx, std::move(item));
                         MapAccum->Add(Key->GetValue(Ctx), Payload->GetValue(Ctx));
@@ -1675,7 +1675,7 @@ public:
                 if (Key == Items[i] || Payload == Items[i] || Items[i]->GetDependencesCount() > 0U)
                     fields[i] = &Items[i]->RefValue(ctx);
 
-            switch (const auto result = Flow->FetchValues(ctx, fields)) {
+            switch (Flow->FetchValues(ctx, fields)) {
                 case EFetchResult::One:
                     statePtr->Insert(Key->GetValue(ctx).Release(), Payload->GetValue(ctx).Release());
                     continue;
@@ -1992,7 +1992,11 @@ IComputationNode* WrapToHashedDictInternal(TCallable& callable, const TComputati
     const auto keyType = callable.GetInput(callable.GetInputsCount() - 5U).GetStaticType();
     const auto payloadType = callable.GetInput(callable.GetInputsCount() - 4U).GetStaticType();
     const bool multi = AS_VALUE(TDataLiteral, callable.GetInput(callable.GetInputsCount() - 3U))->AsValue().Get<bool>();
-    const bool isCompact = AS_VALUE(TDataLiteral, callable.GetInput(callable.GetInputsCount() - 2U))->AsValue().Get<bool>();
+
+    // Compact structures rely on the TAlignedPagePool invariant that every allocated page is aligned to POOL_PAGE_SIZE.
+    // However, this invariant does not hold when PROFILE_MEMORY_ALLOCATIONS is enabled
+    const bool isCompact = TAlignedPagePool::IsDefaultAllocatorUsed() ? false : AS_VALUE(TDataLiteral, callable.GetInput(callable.GetInputsCount() - 2U))->AsValue().Get<bool>();
+
     const auto payloadSelectorNode = callable.GetInput(callable.GetInputsCount() - 4U);
 
     const bool isOptional = keyType->IsOptional();

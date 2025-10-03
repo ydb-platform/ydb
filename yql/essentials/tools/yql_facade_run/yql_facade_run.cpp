@@ -502,7 +502,7 @@ void TFacadeRunOptions::Parse(int argc, const char *argv[]) {
     if (GatewaysConfig && GatewaysConfig->HasSqlCore()) {
         SqlFlags.insert(GatewaysConfig->GetSqlCore().GetTranslationFlags().begin(), GatewaysConfig->GetSqlCore().GetTranslationFlags().end());
     }
-    UpdateSqlFlagsFromQContext(QPlayerContext, SqlFlags);
+    UpdateSqlFlagsFromQContext(QPlayerContext, SqlFlags, GatewaysPatch);
 
     if (!FsConfig) {
         FsConfig = MakeHolder<TFileStorageConfig>();

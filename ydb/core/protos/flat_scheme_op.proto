@@ -1158,6 +1158,7 @@ enum EIndexType {
     EIndexTypeGlobalAsync = 2;
     EIndexTypeGlobalUnique = 3;
     EIndexTypeGlobalVectorKmeansTree = 4;
+    EIndexTypeGlobalFulltext = 5;
 }
 
 enum EIndexState {
@@ -1169,6 +1170,10 @@ enum EIndexState {
 
 message TVectorIndexKmeansTreeDescription {
     optional Ydb.Table.KMeansTreeSettings Settings = 1;
+}
+
+message TFulltextIndexDescription {
+    optional Ydb.Table.FulltextIndexSettings Settings = 1;
 }
 
 message TIndexDescription {
@@ -1192,6 +1197,7 @@ message TIndexDescription {
 
     oneof SpecializedIndexDescription {
         TVectorIndexKmeansTreeDescription VectorIndexKmeansTreeDescription = 11;
+        TFulltextIndexDescription FulltextIndexDescription = 12;
     }
 }
 
@@ -1204,6 +1210,7 @@ message TIndexCreationConfig {
     repeated string DataColumnNames = 6; //columns to be denormalized to read data just from index
     oneof SpecializedIndexDescription {
         TVectorIndexKmeansTreeDescription VectorIndexKmeansTreeDescription = 7;
+        TFulltextIndexDescription FulltextIndexDescription = 8;
     }
 }
 
@@ -1934,6 +1941,7 @@ message TDescribeOptions {
     optional bool ReturnRangeKey = 9 [default = true];
     optional bool ReturnSetVal = 10 [default = false];
     optional bool ReturnIndexTableBoundaries = 11 [default = false];
+    optional bool ReturnSecretValue = 12 [default = false];
 }
 
 // Request to read scheme for a specific path
@@ -1989,6 +1997,7 @@ enum EPathSubType {
     EPathSubTypeAsyncIndexImplTable = 2;
     EPathSubTypeStreamImpl = 3;
     EPathSubTypeVectorKmeansTreeIndexImplTable = 4;
+    EPathSubTypeFulltextIndexImplTable = 5;
 }
 
 enum EPathState {

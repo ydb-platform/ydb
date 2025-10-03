@@ -81,10 +81,11 @@ struct TRowDispatcherReadActorMetrics {
     explicit TRowDispatcherReadActorMetrics(const TTxId& txId, ui64 taskId, const ::NMonitoring::TDynamicCounterPtr& counters, const NPq::NProto::TDqPqTopicSource& sourceParams)
         : TxId(std::visit([](auto arg) { return ToString(arg); }, txId))
         , Counters(counters) {
-        if (!counters) {
-            return;
+        if (Counters) {
+            SubGroup = Counters->GetSubgroup("source", "RdPqRead");
+        } else {
+            SubGroup = MakeIntrusive<::NMonitoring::TDynamicCounters>();
         }
-        SubGroup = Counters->GetSubgroup("source", "RdPqRead");
         for (const auto& sensor : sourceParams.GetTaskSensorLabel()) {
             SubGroup = SubGroup->GetSubgroup(sensor.GetLabel(), sensor.GetValue());
         }
@@ -586,7 +587,7 @@ void TDqPqRdReadActor::InitChild() {
     StartingMessageTimestamp = Parent->StartingMessageTimestamp;
     SRC_LOG_I("Send TEvCoordinatorChangesSubscribe to local RD (" << LocalRowDispatcherActorId << ")");
     Send(LocalRowDispatcherActorId, new NFq::TEvRowDispatcher::TEvCoordinatorChangesSubscribe());
-    Schedule(TDuration::Seconds(PrintStatePeriodSec), new TEvPrivate::TEvPrintState());
+    // Schedule(TDuration::Seconds(PrintStatePeriodSec), new TEvPrivate::TEvPrintState());   // Logs (InternalState) is too big
 }
 
 void TDqPqRdReadActor::ProcessGlobalState() {
@@ -815,12 +816,15 @@ void TDqPqRdReadActor::InitWatermarkTracker() {
 
 std::vector<ui64> TDqPqRdReadActor::GetPartitionsToRead() const {
     std::vector<ui64> res;
-    ui32 partitionsCount = ReadParams.front().GetPartitioningParams().GetTopicPartitionsCount();
-    ui64 currentPartition = ReadParams.front().GetPartitioningParams().GetEachTopicPartitionGroupId();
-    do {
-        res.emplace_back(currentPartition); // 0-based in topic API
-        currentPartition += ReadParams.front().GetPartitioningParams().GetDqPartitionsCount();
-    } while (currentPartition < partitionsCount);
+
+    for (const auto& readParams : ReadParams) {
+        ui32 partitionsCount = readParams.GetPartitioningParams().GetTopicPartitionsCount();
+        ui64 currentPartition = readParams.GetPartitioningParams().GetEachTopicPartitionGroupId();
+        do {
+            res.emplace_back(currentPartition); // 0-based in topic API
+            currentPartition += readParams.GetPartitioningParams().GetDqPartitionsCount();
+        } while (currentPartition < partitionsCount);
+    }
     return res;
 }
 
@@ -1144,8 +1148,10 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvMessageBatch::TPtr& ev) 
             newWatermark = *maybeNewWatermark;
         }
 
-        SRC_LOG_D("SessionId: " << GetSessionId() << " New watermark " << newWatermark << " was generated");
-        activeBatch.Watermark = newWatermark;
+        if (newWatermark) {
+            SRC_LOG_D("SessionId: " << GetSessionId() << " New watermark " << newWatermark << " was generated");
+            activeBatch.Watermark = newWatermark;
+        }
     }
 
     Parent->NotifyCA();
@@ -1481,10 +1487,7 @@ void TDqPqRdReadActor::StartCluster(ui32 clusterIndex) {
     NPq::NProto::TDqPqTopicSource sourceParams = SourceParams;
     sourceParams.SetEndpoint(TString(Clusters[clusterIndex].Info.Endpoint));
     sourceParams.SetDatabase(TString(Clusters[clusterIndex].Info.Path));
-    TVector<NPq::NProto::TDqReadTaskParams> readParams;
-    NPq::NProto::TDqReadTaskParams param = ReadParams.front();
-    param.mutable_partitioningparams()->SetTopicPartitionsCount(Clusters[clusterIndex].PartitionsCount);
-    readParams.emplace_back(param);
+    TVector<NPq::NProto::TDqReadTaskParams> readParams = ReadParams;
     auto actor = new TDqPqRdReadActor(
         InputIndex,
         IngressStats.Level,
@@ -1528,7 +1531,7 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqRdReadActor(
     TTxId txId,
     ui64 taskId,
     const THashMap<TString, TString>& secureParams,
-    const THashMap<TString, TString>& taskParams,
+    TVector<NPq::NProto::TDqReadTaskParams>&& readTaskParamsMsg,
     NYdb::TDriver driver,
     ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
     const NActors::TActorId& computeActorId,
@@ -1538,14 +1541,6 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqRdReadActor(
     i64 bufferSize,
     const IPqGateway::TPtr& pqGateway)
 {
-    auto taskParamsIt = taskParams.find("pq");
-    YQL_ENSURE(taskParamsIt != taskParams.end(), "Failed to get pq task params");
-
-    TVector<NPq::NProto::TDqReadTaskParams> params;
-    NPq::NProto::TDqReadTaskParams readTaskParamsMsg;
-    YQL_ENSURE(readTaskParamsMsg.ParseFromString(taskParamsIt->second), "Failed to parse DqPqRead task params");
-    params.emplace_back(std::move(readTaskParamsMsg));
-
     const TString& tokenName = settings.GetToken().GetName();
     const TString token = secureParams.Value(tokenName, TString());
     const bool addBearerToToken = settings.GetAddBearerToToken();
@@ -1558,7 +1553,7 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqRdReadActor(
         holderFactory,
         typeEnv,
         std::move(settings),
-        std::move(params),
+        std::move(readTaskParamsMsg),
         driver,
         CreateCredentialsProviderFactoryForStructuredToken(credentialsFactory, token, addBearerToToken),
         computeActorId,

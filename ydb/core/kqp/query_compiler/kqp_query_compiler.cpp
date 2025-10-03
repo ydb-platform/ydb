@@ -530,6 +530,7 @@ TIssues ApplyOverridePlannerSettings(const TString& overridePlannerJson, NKqpPro
         ui32 txId = 0;
         ui32 stageId = 0;
         std::optional<ui32> tasks;
+        bool optional = false;
         for (const auto& [key, value] : stageOverride.GetMap()) {
             ui32* result = nullptr;
             if (key == "tx") {
@@ -539,6 +540,9 @@ TIssues ApplyOverridePlannerSettings(const TString& overridePlannerJson, NKqpPro
             } else if (key == "tasks") {
                 tasks = 0;
                 result = &(*tasks);
+            } else if (key == "optional") {
+                optional = value.GetBooleanRobust();
+                continue;
             } else {
                 issues.AddIssue(TStringBuilder() << "Unknown key '" << key << "' in stage override " << i);
                 continue;
@@ -562,13 +566,17 @@ TIssues ApplyOverridePlannerSettings(const TString& overridePlannerJson, NKqpPro
 
         auto& txs = *queryProto.MutableTransactions();
         if (txId >= static_cast<ui32>(txs.size())) {
-            issues.AddIssue(TStringBuilder() << "Invalid tx id: " << txId << " in stage override " << i << ", number of transactions in query: " << txs.size());
+            if (!optional) {
+                issues.AddIssue(TStringBuilder() << "Invalid tx id: " << txId << " in stage override " << i << ", number of transactions in query: " << txs.size());
+            }
             continue;
         }
 
         auto& stages = *txs[txId].MutableStages();
         if (stageId >= static_cast<ui32>(stages.size())) {
-            issues.AddIssue(TStringBuilder() << "Invalid stage id: " << stageId << " in stage override " << i << ", number of stages in transaction " << txId << ": " << stages.size());
+            if (!optional) {
+                issues.AddIssue(TStringBuilder() << "Invalid stage id: " << stageId << " in stage override " << i << ", number of stages in transaction " << txId << ": " << stages.size());
+            }
             continue;
         }
 
@@ -1472,7 +1480,7 @@ private:
                 shuffleProto.AddKeyColumns(TString(keyColumn));
             }
 
-            NDq::EHashShuffleFuncType hashFuncType = NDq::EHashShuffleFuncType::HashV1;
+            NDq::EHashShuffleFuncType hashFuncType = Config->DefaultHashShuffleFuncType;
             if (shuffle.HashFunc().IsValid()) {
                 hashFuncType = FromString<NDq::EHashShuffleFuncType>(shuffle.HashFunc().Cast().StringValue());
             }
@@ -1663,8 +1671,8 @@ private:
                     const auto inputTupleType = inputItemType->Cast<TTupleExprType>();
                     YQL_ENSURE(inputTupleType->GetSize() == 2 || inputTupleType->GetSize() == 3);
 
-                    YQL_ENSURE(inputTupleType->GetItems()[0]->GetKind() == ETypeAnnotationKind::Optional);
-                    const auto joinKeyType = inputTupleType->GetItems()[0]->Cast<TOptionalExprType>()->GetItemType();
+                    YQL_ENSURE(inputTupleType->GetItems()[1]->GetKind() == ETypeAnnotationKind::Optional);
+                    const auto joinKeyType = inputTupleType->GetItems()[1]->Cast<TOptionalExprType>()->GetItemType();
                     YQL_ENSURE(joinKeyType->GetKind() == ETypeAnnotationKind::Struct);
                     const auto& joinKeyColumns = joinKeyType->Cast<TStructExprType>()->GetItems();
                     for (const auto keyColumn : joinKeyColumns) {
@@ -1755,7 +1763,8 @@ private:
             const auto outputItemType = outputType->Cast<TStreamExprType>()->GetItemType();
             vectorResolveProto.SetOutputType(NMiniKQL::SerializeNode(CompileType(pgmBuilder, *outputItemType), TypeEnv));
 
-            // Input columns. Input is strictly mapped to main table's columns to ease passing their types through PhyCnVectorResolve
+            // Input columns. Input is strictly mapped to main table's columns to ease passing their types through PhyCnVectorResolve.
+            // For prefixed indexes, input must contain the __ydb_parent column referring the root cluster ID of the row's prefix.
 
             TMap<TString, ui32> columnIndexes;
             YQL_ENSURE(inputItemType->GetKind() == ETypeAnnotationKind::Struct);
@@ -1763,9 +1772,11 @@ private:
             ui32 n = 0;
             for (const auto inputColumn : inputColumns) {
                 auto name = TString(inputColumn->GetName());
-                YQL_ENSURE(tableMeta->Columns.FindPtr(name), "Unknown column: " << name);
                 vectorResolveProto.AddColumns(name);
-                tablesMap[vectorResolve.Table().Path()].emplace(name);
+                if (name != NTableIndex::NKMeans::ParentColumn) {
+                    YQL_ENSURE(tableMeta->Columns.FindPtr(name), "Unknown column: " << name);
+                    tablesMap[vectorResolve.Table().Path()].emplace(name);
+                }
                 columnIndexes[name] = n++;
             }
 
@@ -1774,6 +1785,12 @@ private:
             auto vectorColumn = indexDesc->KeyColumns.back();
             YQL_ENSURE(columnIndexes.contains(vectorColumn));
             vectorResolveProto.SetVectorColumnIndex(columnIndexes.at(vectorColumn));
+
+            if (indexDesc->KeyColumns.size() > 1) {
+                // Prefixed index
+                YQL_ENSURE(columnIndexes.contains(NTableIndex::NKMeans::ParentColumn));
+                vectorResolveProto.SetRootClusterColumnIndex(columnIndexes.at(NTableIndex::NKMeans::ParentColumn));
+            }
 
             TSet<TString> copyColumns;
             copyColumns.insert(NTableIndex::NKMeans::ParentColumn);

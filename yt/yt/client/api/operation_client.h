@@ -244,6 +244,7 @@ struct TListJobsOptions
     std::optional<bool> WithInterruptionInfo;
     std::optional<TString> TaskName;
     std::optional<std::string> OperationIncarnation;
+    std::optional<std::string> MonitoringDescriptor;
 
     std::optional<TInstant> FromTime;
     std::optional<TInstant> ToTime;

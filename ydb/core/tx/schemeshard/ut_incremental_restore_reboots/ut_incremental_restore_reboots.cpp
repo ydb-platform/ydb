@@ -407,7 +407,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreWithRebootsTests) {
                     Columns { Name: "key"   Type: "Uint32" }
                     Columns { Name: "value" Type: "Utf8" }
                     Columns { Name: "incremental_data" Type: "Utf8" }
-                    Columns { Name: "__ydb_incrBackupImpl_deleted" Type: "Bool" }
+                    Columns { Name: "__ydb_incrBackupImpl_changeMetadata" Type: "String" }
                     KeyColumnNames: ["key"]
                 )");
             env.TestWaitNotification(runtime, txId);
@@ -975,7 +975,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreWithRebootsTests) {
                             Columns { Name: "key"   Type: "Uint32" }
                             Columns { Name: "value" Type: "Utf8" }
                             Columns { Name: "snapshot_data_)" << snapshotNum << R"(" Type: "Utf8" }
-                            Columns { Name: "__ydb_incrBackupImpl_deleted" Type: "Bool" }
+                            Columns { Name: "__ydb_incrBackupImpl_changeMetadata" Type: "String" }
                             KeyColumnNames: ["key"]
                         )");
                     t.TestEnv->TestWaitNotification(runtime, t.TxId);

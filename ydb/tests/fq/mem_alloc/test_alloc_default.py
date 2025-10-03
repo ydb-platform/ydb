@@ -282,6 +282,9 @@ class TestAlloc(TestYdsBase):
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.STREAMING).result.query_id
 
         client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
+        assert wait_until((lambda: kikimr.control_plane.get_task_count(1, query_id) > 0)), (
+            "TaskController not started " + query_id
+        )
 
         task_count = kikimr.control_plane.get_task_count(1, query_id)
         assert (

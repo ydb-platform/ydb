@@ -1462,11 +1462,18 @@ protected:
     TKeyEqual KeyEqual_;
 };
 
+struct TSelect1stUnaligned {
+    template <class TPair>
+    inline typename TPair::first_type operator()(const TPair& x) const {
+        return ::ReadUnaligned<typename TPair::first_type>(&x.first);
+    }
+};
+
 template <typename TKey,
           typename TValue,
           typename TKeyHash = THash<TKey>,
           typename TKeyEqual = TEqualTo<TKey>>
-class TCompactHash: public TCompactHashBase<TKeyValuePair<TKey, TValue>, TKey, TSelect1st, TKeyHash, TKeyEqual> {
+class TCompactHash: public TCompactHashBase<TKeyValuePair<TKey, TValue>, TKey, TSelect1stUnaligned, TKeyHash, TKeyEqual> {
 private:
     static_assert(std::is_trivially_destructible<TKey>::value
         && std::is_trivially_copy_assignable<TKey>::value
@@ -1482,10 +1489,10 @@ private:
         , "Expected POD value type");
 
     using TItem = TKeyValuePair<TKey, TValue>;
-    using TBase = TCompactHashBase<TItem, TKey, TSelect1st, TKeyHash, TKeyEqual>;
+    using TBase = TCompactHashBase<TItem, TKey, TSelect1stUnaligned, TKeyHash, TKeyEqual>;
 public:
     TCompactHash(TAlignedPagePool& pagePool, size_t size = 0, const TKeyHash& keyHash = TKeyHash(), const TKeyEqual& keyEqual = TKeyEqual())
-        : TBase(pagePool, size, TSelect1st(), keyHash, keyEqual)
+        : TBase(pagePool, size, TSelect1stUnaligned(), keyHash, keyEqual)
     {
     }
 
@@ -1541,7 +1548,7 @@ template <typename TKey,
           typename TValue,
           typename TKeyHash = THash<TKey>,
           typename TKeyEqual = TEqualTo<TKey>>
-class TCompactMultiHash: public TCompactHashBase<TKeyNodePair<TKey, TValue>, TKey, TSelect1st, TKeyHash, TKeyEqual, TValue> {
+class TCompactMultiHash: public TCompactHashBase<TKeyNodePair<TKey, TValue>, TKey, TSelect1stUnaligned, TKeyHash, TKeyEqual, TValue> {
 private:
     static_assert(std::is_trivially_destructible<TKey>::value
         && std::is_trivially_copy_assignable<TKey>::value
@@ -1558,13 +1565,13 @@ private:
 
     using TUserItem = std::pair<TKey, TValue>;
     using TStoreItem = TKeyNodePair<TKey, TValue>;
-    using TBase = TCompactHashBase<TStoreItem, TKey, TSelect1st, TKeyHash, TKeyEqual, TValue>;
+    using TBase = TCompactHashBase<TStoreItem, TKey, TSelect1stUnaligned, TKeyHash, TKeyEqual, TValue>;
 
     static_assert(sizeof(TStoreItem) == sizeof(TKey) + sizeof(TNode<TValue>), "Unexpected size");
 
 public:
     TCompactMultiHash(TAlignedPagePool& pagePool, size_t size = 0, const TKeyHash& keyHash = TKeyHash(), const TKeyEqual& keyEqual = TKeyEqual())
-        : TBase(pagePool, size, TSelect1st(), keyHash, keyEqual)
+        : TBase(pagePool, size, TSelect1stUnaligned(), keyHash, keyEqual)
     {
     }
     TCompactMultiHash(const TCompactMultiHash& other)

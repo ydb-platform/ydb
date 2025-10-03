@@ -564,7 +564,7 @@ void TKeyValueState::InitExecute(ui64 tabletId, TActorId keyValueActorId, ui32 e
     if (actorSystem && actorSystem->AppData<TAppData>() && actorSystem->AppData<TAppData>()->Icb) {
         const TIntrusivePtr<NKikimr::TControlBoard>& icb = actorSystem->AppData<TAppData>()->Icb;
 
-        icb->RegisterSharedControl(ReadRequestsInFlightLimit_Base, "KeyValueVolumeControls.ReadRequestsInFlightLimit");
+        TControlBoard::RegisterSharedControl(ReadRequestsInFlightLimit_Base, icb->KeyValueVolumeControls.ReadRequestsInFlightLimit);
         ReadRequestsInFlightLimit.ResetControl(ReadRequestsInFlightLimit_Base);
     }
 

@@ -4,12 +4,8 @@
 
 #include <yql/essentials/parser/proto_ast/gen/v1/SQLv1Lexer.h>
 #include <yql/essentials/sql/settings/translation_settings.h>
-#include <yql/essentials/sql/v1/lexer/antlr3/lexer.h>
-#include <yql/essentials/sql/v1/lexer/antlr3_ansi/lexer.h>
 #include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
 #include <yql/essentials/sql/v1/lexer/antlr4_ansi/lexer.h>
-#include <yql/essentials/sql/v1/proto_parser/antlr3/proto_parser.h>
-#include <yql/essentials/sql/v1/proto_parser/antlr3_ansi/proto_parser.h>
 #include <yql/essentials/sql/v1/proto_parser/antlr4/proto_parser.h>
 #include <yql/essentials/sql/v1/proto_parser/antlr4_ansi/proto_parser.h>
 #include <yql/essentials/sql/v1/sql.h>
@@ -35,8 +31,6 @@ bool BuildTranslationSettings(const TString& query, google::protobuf::Arena& are
 
 TLexers BuildLexers() {
     TLexers lexers;
-    lexers.Antlr3 = MakeAntlr3LexerFactory();
-    lexers.Antlr3Ansi = MakeAntlr3AnsiLexerFactory();
     lexers.Antlr4 = MakeAntlr4LexerFactory();
     lexers.Antlr4Ansi = MakeAntlr4AnsiLexerFactory();
     return lexers;
@@ -44,8 +38,6 @@ TLexers BuildLexers() {
 
 TParsers BuildParsers() {
     TParsers parsers;
-    parsers.Antlr3 = MakeAntlr3ParserFactory();
-    parsers.Antlr3Ansi = MakeAntlr3AnsiParserFactory();
     parsers.Antlr4 = MakeAntlr4ParserFactory();
     parsers.Antlr4Ansi = MakeAntlr4AnsiParserFactory();
     return parsers;

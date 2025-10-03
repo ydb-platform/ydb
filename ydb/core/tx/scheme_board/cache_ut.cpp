@@ -950,43 +950,205 @@ void TCacheTest::WatchRoot() {
 
 void TCacheTest::PathBelongsToDomain() {
     ui64 txId = 100;
-    TestCreateSubDomain(*Context, ++txId, "/Root", "Name: \"SubDomain\"");
-    TestWaitNotification(*Context, {txId}, CreateNotificationSubscriber(*Context, TTestTxConfig::SchemeShard));
-    TestMkDir(*Context, ++txId, "/Root/SubDomain", "DirA");
+    const auto rootSubscriber = CreateNotificationSubscriber(*Context, TTestTxConfig::SchemeShard);
 
-    TTableId testId;
+    TestMkDir(*Context, ++txId, "/Root", "DirA");
+    TestWaitNotification(*Context, {txId}, rootSubscriber);
 
-    // ok
+    TestCreateSubDomain(*Context, ++txId, "/Root", "Name: \"SubDomain1\"");
+    TestMkDir(*Context, ++txId, "/Root/SubDomain1", "DirA");
+    TestWaitNotification(*Context, {txId - 1, txId}, rootSubscriber);
+
+    TestCreateSubDomain(*Context, ++txId, "/Root", "Name: \"SubDomain2\"");
+    TestMkDir(*Context, ++txId, "/Root/SubDomain2", "DirA");
+    TestWaitNotification(*Context, {txId - 1, txId}, rootSubscriber);
+
+    TTableId domain;
+    TTableId dirInDomain;
+    TTableId subDomain1;
+    TTableId dirInSubDomain1;
+    TTableId subDomain2;
+    TTableId dirInSubDomain2;
+
     {
-        auto request = MakeHolder<TNavigate>();
-        request->DatabaseName = "/Root/SubDomain";
-        auto& entry = request->ResultSet.emplace_back();
-        entry.Path = SplitPath("/Root/SubDomain/DirA");
-        entry.RequestType = TNavigate::TEntry::ERequestType::ByPath;
-        auto result  = TestNavigateImpl(std::move(request), TNavigate::EStatus::Ok,
-            "", TNavigate::EOp::OpPath, false, true);
-
-        testId = result.TableId;
+        const auto dirEntry = DescribePath(*Context, "/Root/SubDomain2").GetPathDescription().GetSelf();
+        subDomain2 = TTableId(dirEntry.GetSchemeshardId(), dirEntry.GetPathId());
     }
-    // error, by path
+
     {
-        auto request = MakeHolder<TNavigate>();
-        request->DatabaseName = "/Root";
-        auto& entry = request->ResultSet.emplace_back();
-        entry.Path = SplitPath("/Root/SubDomain/DirA");
-        entry.RequestType = TNavigate::TEntry::ERequestType::ByPath;
-        auto result  = TestNavigateImpl(std::move(request), TNavigate::EStatus::PathErrorUnknown,
-            "", TNavigate::EOp::OpPath, false, true);
+        const auto dirEntry = DescribePath(*Context, "/Root/SubDomain2/DirA").GetPathDescription().GetSelf();
+        dirInSubDomain2 = TTableId(dirEntry.GetSchemeshardId(), dirEntry.GetPathId());
     }
-    // error, by path id
-    {
-        auto request = MakeHolder<TNavigate>();
-        request->DatabaseName = "/Root";
-        auto& entry = request->ResultSet.emplace_back();
-        entry.TableId = testId;
-        entry.RequestType = TNavigate::TEntry::ERequestType::ByTableId;
-        auto result  = TestNavigateImpl(std::move(request), TNavigate::EStatus::PathErrorUnknown,
-            "", TNavigate::EOp::OpPath, false, true);
+
+    TVector<TNavigate::TEntry::ERequestType> requestTypes =
+        {TNavigate::TEntry::ERequestType::ByPath, TNavigate::TEntry::ERequestType::ByTableId};
+
+    for (const auto requestType : requestTypes) {
+        // Domain - Domain root path - ok
+        {
+            auto request = MakeHolder<TNavigate>();
+            request->DatabaseName = "/Root";
+            auto& entry = request->ResultSet.emplace_back();
+            if (requestType == TNavigate::TEntry::ERequestType::ByPath) {
+                entry.Path = SplitPath("/Root");
+            } else {
+                entry.TableId = domain;
+            }
+            entry.RequestType = requestType;
+            auto result = TestNavigateImpl(std::move(request), TNavigate::EStatus::Ok,
+                "", TNavigate::EOp::OpPath, false, true);
+
+            if (requestType == TNavigate::TEntry::ERequestType::ByPath) {
+                domain = result.TableId;
+            }
+        }
+
+        // Domain - Regular path within domain - ok
+        {
+            auto request = MakeHolder<TNavigate>();
+            request->DatabaseName = "/Root";
+            auto& entry = request->ResultSet.emplace_back();
+            if (requestType == TNavigate::TEntry::ERequestType::ByPath) {
+                entry.Path = SplitPath("/Root/DirA");
+            } else {
+                entry.TableId = dirInDomain;
+            }
+            entry.RequestType = requestType;
+            auto result = TestNavigateImpl(std::move(request), TNavigate::EStatus::Ok,
+                "", TNavigate::EOp::OpPath, false, true);
+
+            if (requestType == TNavigate::TEntry::ERequestType::ByPath) {
+                dirInDomain = result.TableId;
+            }
+        }
+
+        // Domain - Subdomain1 root path - ok
+        {
+            auto request = MakeHolder<TNavigate>();
+            request->DatabaseName = "/Root";
+            auto& entry = request->ResultSet.emplace_back();
+            if (requestType == TNavigate::TEntry::ERequestType::ByPath) {
+                entry.Path = SplitPath("/Root/SubDomain1");
+            } else {
+                entry.TableId = subDomain1;
+            }
+            entry.RequestType = requestType;
+            auto result = TestNavigateImpl(std::move(request), TNavigate::EStatus::Ok,
+                "", TNavigate::EOp::OpPath, false, true);
+
+            if (requestType == TNavigate::TEntry::ERequestType::ByPath) {
+                subDomain1 = result.TableId;
+            }
+        }
+
+        // Domain - Regular path within subdomain1 - error
+        {
+            auto request = MakeHolder<TNavigate>();
+            request->DatabaseName = "/Root";
+            auto& entry = request->ResultSet.emplace_back();
+            if (requestType == TNavigate::TEntry::ERequestType::ByPath) {
+                entry.Path = SplitPath("/Root/SubDomain1/DirA");
+            } else {
+                entry.TableId = dirInSubDomain1;
+            }
+            entry.RequestType = requestType;
+            auto result  = TestNavigateImpl(std::move(request), TNavigate::EStatus::PathErrorUnknown,
+                "", TNavigate::EOp::OpPath, false, true);
+        }
+
+        // Subdomain1 - Domain root path - error
+        {
+            auto request = MakeHolder<TNavigate>();
+            request->DatabaseName = "/Root/SubDomain1";
+            auto& entry = request->ResultSet.emplace_back();
+            if (requestType == TNavigate::TEntry::ERequestType::ByPath) {
+                entry.Path = SplitPath("/Root");
+            } else {
+                entry.TableId = domain;
+            }
+            entry.RequestType = requestType;
+            auto result  = TestNavigateImpl(std::move(request), TNavigate::EStatus::PathErrorUnknown,
+                "", TNavigate::EOp::OpPath, false, true);
+        }
+
+        // Subdomain1 - Regular path within domain - error
+        {
+            auto request = MakeHolder<TNavigate>();
+            request->DatabaseName = "/Root/SubDomain1";
+            auto& entry = request->ResultSet.emplace_back();
+            if (requestType == TNavigate::TEntry::ERequestType::ByPath) {
+                entry.Path = SplitPath("/Root/DirA");
+            } else {
+                entry.TableId = dirInDomain;
+            }
+            entry.RequestType = requestType;
+            auto result  = TestNavigateImpl(std::move(request), TNavigate::EStatus::PathErrorUnknown,
+                "", TNavigate::EOp::OpPath, false, true);
+        }
+
+        // Subdomain1 - Subdomain1 root path - ok
+        {
+            auto request = MakeHolder<TNavigate>();
+            request->DatabaseName = "/Root/SubDomain1";
+            auto& entry = request->ResultSet.emplace_back();
+            if (requestType == TNavigate::TEntry::ERequestType::ByPath) {
+                entry.Path = SplitPath("/Root/SubDomain1");
+            } else {
+                entry.TableId = subDomain1;
+            }
+            entry.RequestType = requestType;
+            auto result = TestNavigateImpl(std::move(request), TNavigate::EStatus::Ok,
+                "", TNavigate::EOp::OpPath, false, true);
+        }
+
+        // Subdomain1 - Regular path within subdomain1 - ok
+        {
+            auto request = MakeHolder<TNavigate>();
+            request->DatabaseName = "/Root/SubDomain1";
+            auto& entry = request->ResultSet.emplace_back();
+            if (requestType == TNavigate::TEntry::ERequestType::ByPath) {
+                entry.Path = SplitPath("/Root/SubDomain1/DirA");
+            } else {
+                entry.TableId = dirInSubDomain1;
+            }
+            entry.RequestType = requestType;
+            auto result = TestNavigateImpl(std::move(request), TNavigate::EStatus::Ok,
+                "", TNavigate::EOp::OpPath, false, true);
+
+            if (requestType == TNavigate::TEntry::ERequestType::ByPath) {
+                dirInSubDomain1 = result.TableId;
+            }
+        }
+
+        // Subdomain1 - Subdomain2 root path - error
+        {
+            auto request = MakeHolder<TNavigate>();
+            request->DatabaseName = "/Root/SubDomain1";
+            auto& entry = request->ResultSet.emplace_back();
+            if (requestType == TNavigate::TEntry::ERequestType::ByPath) {
+                entry.Path = SplitPath("/Root/SubDomain2");
+            } else {
+                entry.TableId = subDomain2;
+            }
+            entry.RequestType = requestType;
+            auto result = TestNavigateImpl(std::move(request), TNavigate::EStatus::PathErrorUnknown,
+                "", TNavigate::EOp::OpPath, false, true);
+        }
+
+        // Subdomain1 - Regular path within subdomain2 - error
+        {
+            auto request = MakeHolder<TNavigate>();
+            request->DatabaseName = "/Root/SubDomain1";
+            auto& entry = request->ResultSet.emplace_back();
+            if (requestType == TNavigate::TEntry::ERequestType::ByPath) {
+                entry.Path = SplitPath("/Root/SubDomain2/DirA");
+            } else {
+                entry.TableId = dirInSubDomain2;
+            }
+            entry.RequestType = requestType;
+            auto result = TestNavigateImpl(std::move(request), TNavigate::EStatus::PathErrorUnknown,
+                "", TNavigate::EOp::OpPath, false, true);
+        }
     }
 }
 

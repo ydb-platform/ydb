@@ -153,9 +153,9 @@ private:
                 LOG_DEBUG_S(Ctx(), NKikimrServices::PERSQUEUE_CLUSTER_TRACKER, "HandleWhileWorking TEvQueryResponse UpdateClustersList");
                 UpdateClustersList(parser);
 
-                Y_ABORT_UNLESS(ClustersList);
-                Y_ABORT_UNLESS(ClustersList->Clusters.size());
-                Y_ABORT_UNLESS(ClustersListUpdateTimestamp && *ClustersListUpdateTimestamp);
+                AFL_ENSURE(ClustersList);
+                AFL_ENSURE(ClustersList->Clusters.size());
+                AFL_ENSURE(ClustersListUpdateTimestamp && *ClustersListUpdateTimestamp);
 
                 BroadcastClustersUpdate();
 

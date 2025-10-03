@@ -30,6 +30,9 @@ std::shared_ptr<arrow::Buffer> MakeDenseBitmap(const ui8* srcSparse, size_t len,
 std::shared_ptr<arrow::Buffer> MakeDenseBitmapNegate(const ui8* srcSparse, size_t len, arrow::MemoryPool* pool);
 std::shared_ptr<arrow::Buffer> MakeDenseBitmapCopy(const ui8* src, size_t len, size_t offset, arrow::MemoryPool* pool);
 
+// Note: return src if offsets are same so don't change result bitmap.
+std::shared_ptr<arrow::Buffer> MakeDenseBitmapCopyIfOffsetDiffers(std::shared_ptr<arrow::Buffer> src, size_t len, size_t sourceOffset, size_t resultOffset, arrow::MemoryPool* pool);
+
 std::shared_ptr<arrow::Buffer> MakeDenseFalseBitmap(int64_t len, arrow::MemoryPool* pool);
 
 /// \brief Recursive version of ArrayData::Slice() method
@@ -250,6 +253,7 @@ inline bool IsSingularType(const ITypeInfoHelper& typeInfoHelper, const TType* t
 const TType* SkipTaggedType(const ITypeInfoHelper& typeInfoHelper, const TType* type);
 
 inline bool NeedWrapWithExternalOptional(const ITypeInfoHelper& typeInfoHelper, const TType* type) {
+    type = SkipTaggedType(typeInfoHelper, type);
     TOptionalTypeInspector typeOpt(typeInfoHelper, type);
     if (!typeOpt) {
         return false;

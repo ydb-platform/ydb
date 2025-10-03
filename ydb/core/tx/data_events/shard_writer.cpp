@@ -52,8 +52,7 @@ namespace NKikimr::NEvWrite {
         , LeaderPipeCache(MakePipePerNodeCacheID(false))
         , ActorSpan(parentSpan.BuildChildrenSpan("ShardWriter"))
         , Timeout(timeout)
-        , RetryBySubscription(AppData()->FeatureFlags.GetEnableCSOverloadsSubscriptionRetries())
-    {
+        , RetryBySubscription(AppData()->FeatureFlags.GetEnableCsOverloadsSubscriptionRetries()) {
     }
 
     void TShardWriter::SendWriteRequest() {
@@ -119,6 +118,9 @@ namespace NKikimr::NEvWrite {
             auto gPassAway = PassAwayGuard();
             const TString errMsg = TStringBuilder() << "Shard " << ShardId << " is still overloaded after " << NumRetries << " retries";
             ExternalController->OnFail(Ydb::StatusIds::OVERLOADED, errMsg);
+            ExternalController->GetCounters()->OnRetryBySubscribeOnOverloadLimitExceeded();
+        } else {
+            ExternalController->GetCounters()->OnRetryBySubscribeOnOverload();
         }
     }
 

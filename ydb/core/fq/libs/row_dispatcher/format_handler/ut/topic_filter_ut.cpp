@@ -172,41 +172,41 @@ public:
         Consumer.Reset();
     }
 
-    void Push(const TVector<const TVector<NYql::NUdf::TUnboxedValue>*>& values, ui64 numberRows = 0) {
+    void Push(const TVector<std::span<NYql::NUdf::TUnboxedValue>>& values, ui64 numberRows = 0) {
         for (const auto& [name, runHandler] : RunHandlers) {
-            runHandler->ProcessData(values, numberRows ? numberRows : values.front()->size());
+            runHandler->ProcessData(values, numberRows ? numberRows : values.front().size());
         }
         if (Consumer) {
             Consumer->OnBatchFinish();
         }
     }
 
-    const TVector<NYql::NUdf::TUnboxedValue>* MakeVector(size_t size, std::function<NYql::NUdf::TUnboxedValuePod(size_t)> valueCreator) {
+    std::span<NYql::NUdf::TUnboxedValue> MakeVector(size_t size, std::function<NYql::NUdf::TUnboxedValuePod(size_t)> valueCreator) {
         with_lock (Alloc) {
             auto& holder = Holders.emplace_front();
             for (size_t i = 0; i < size; ++i) {
                 holder.emplace_back(LockObject(valueCreator(i)));
             }
-            return &holder;
+            return holder;
         }
     }
 
     template <typename TValue>
-    const TVector<NYql::NUdf::TUnboxedValue>* MakeVector(const TVector<TValue>& values, bool optional = false) {
+    std::span<NYql::NUdf::TUnboxedValue> MakeVector(const TVector<TValue>& values, bool optional = false) {
         return MakeVector(values.size(), [&](size_t i) {
             NYql::NUdf::TUnboxedValuePod unboxedValue = NYql::NUdf::TUnboxedValuePod(values[i]);
             return optional ? unboxedValue.MakeOptional() : unboxedValue;
         });
     }
 
-    const TVector<NYql::NUdf::TUnboxedValue>* MakeStringVector(const TVector<TString>& values, bool optional = false) {
+    std::span<NYql::NUdf::TUnboxedValue> MakeStringVector(const TVector<TString>& values, bool optional = false) {
         return MakeVector(values.size(), [&](size_t i) {
             NYql::NUdf::TUnboxedValuePod stringValue = NKikimr::NMiniKQL::MakeString(values[i]);
             return optional ? stringValue.MakeOptional() : stringValue;
         });
     }
 
-    const TVector<NYql::NUdf::TUnboxedValue>* MakeEmptyVector(size_t size) {
+    std::span<NYql::NUdf::TUnboxedValue> MakeEmptyVector(size_t size) {
         return MakeVector(size, [&](size_t) {
             return NYql::NUdf::TUnboxedValuePod();
         });
@@ -310,8 +310,8 @@ public:
         Consumer.Reset();
     }
 
-    void ProcessData(const TVector<ui64>& columnIndex, const TVector<const TVector<NYql::NUdf::TUnboxedValue>*>& values, ui64 numberRows = 0) {
-        numberRows = numberRows ? numberRows : values.front()->size();
+    void ProcessData(const TVector<ui64>& columnIndex, const TVector<std::span<NYql::NUdf::TUnboxedValue>>& values, ui64 numberRows = 0) {
+        numberRows = numberRows ? numberRows : values.front().size();
         FiltersSet->ProcessData(columnIndex, TVector<ui64>(numberRows, std::numeric_limits<ui64>::max()), values, numberRows);
     }
 
@@ -506,7 +506,7 @@ Y_UNIT_TEST_SUITE(TestPurecalcFilter) {
         TVector<TMaybe<ui64>> watermarks, expectedWatermarks;
         auto consumer = MakeConsumer(
             {{"ts", "[DataType; String]"}},
-            R"(Unwrap(CAST(`ts` AS Timestamp?) - Interval("PT5S")))",
+            R"(CAST(`ts` AS Timestamp?) - Interval("PT5S"))",
             "",
             [&](ui64 offset, TMaybe<ui64> watermark) {
                 offsets.push_back(offset);
@@ -548,7 +548,7 @@ Y_UNIT_TEST_SUITE(TestPurecalcFilter) {
         TVector<TMaybe<ui64>> watermarks, expectedWatermarks;
         auto consumer = MakeConsumer(
             {{"ts", "[DataType; String]"}, {"pass", "[DataType; Uint64]"}},
-            R"(Unwrap(CAST(`ts` AS Timestamp?) - Interval("PT5S")))",
+            R"(CAST(`ts` AS Timestamp?) - Interval("PT5S"))",
             "WHERE pass > 0",
             [&](ui64 offset, TMaybe<ui64> watermark) {
                 offsets.push_back(offset);
@@ -593,7 +593,7 @@ Y_UNIT_TEST_SUITE(TestPurecalcFilter) {
         TVector<TMaybe<ui64>> watermarks, expectedWatermarks;
         auto consumer = MakeConsumer(
             {{"ts", "[DataType; String]"}},
-            R"(Unwrap(CAST(`ts` AS Timestamp?) - Interval("PT5S")))",
+            R"(CAST(`ts` AS Timestamp?) - Interval("PT5S"))",
             "WHERE FALSE",
             [&](ui64 offset, TMaybe<ui64> watermark) {
                 offsets.push_back(offset);
@@ -726,7 +726,7 @@ Y_UNIT_TEST_SUITE(TestFilterSet) {
         TVector<TMaybe<ui64>> watermarks, expectedWatermarks;
         auto consumer = MakeConsumer(
             {{"ts", "[DataType; String]"}},
-            R"(Unwrap(CAST(`ts` AS Timestamp?) - Interval("PT5S")))",
+            R"(CAST(`ts` AS Timestamp?) - Interval("PT5S"))",
             "",
             [&](ui64 offset, TMaybe<ui64> watermark) {
                 offsets.push_back(offset);
@@ -768,7 +768,7 @@ Y_UNIT_TEST_SUITE(TestFilterSet) {
         TVector<TMaybe<ui64>> watermarks, expectedWatermarks;
         auto consumer = MakeConsumer(
             {{"ts", "[DataType; String]"}, {"pass", "[DataType; Uint64]"}},
-            R"(Unwrap(CAST(`ts` AS Timestamp?) - Interval("PT5S")))",
+            R"(CAST(`ts` AS Timestamp?) - Interval("PT5S"))",
             "WHERE pass > 0",
             [&](ui64 offset, TMaybe<ui64> watermark) {
                 offsets.push_back(offset);
@@ -813,7 +813,7 @@ Y_UNIT_TEST_SUITE(TestFilterSet) {
         TVector<TMaybe<ui64>> watermarks, expectedWatermarks;
         auto consumer = MakeConsumer(
             {{"ts", "[DataType; String]"}},
-            R"(Unwrap(CAST(`ts` AS Timestamp?) - Interval("PT5S")))",
+            R"(CAST(`ts` AS Timestamp?) - Interval("PT5S"))",
             "WHERE FALSE",
             [&](ui64 offset, TMaybe<ui64> watermark) {
                 offsets.push_back(offset);

@@ -355,6 +355,8 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
     Y_UNIT_TEST(MultiWriteInTime) {
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
         settings.AppConfig.MutableColumnShardConfig()->SetWritingBufferDurationMs(15000);
+        settings.AppConfig.MutableColumnShardConfig()->SetWritingBufferVolumeBytes(32_MB);
+        settings.AppConfig.MutableColumnShardConfig()->SetOnlyBulkUpsertWritingBuffer(false);
         TKikimrRunner kikimr(settings);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
         auto csController = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NKikimr::NYDBTest::NColumnShard::TReadOnlyController>();
@@ -412,9 +414,11 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
     Y_UNIT_TEST(MultiWriteInTimeDiffSchemas) {
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
         settings.AppConfig.MutableColumnShardConfig()->SetWritingBufferDurationMs(15000);
+        settings.AppConfig.MutableColumnShardConfig()->SetWritingBufferVolumeBytes(32_MB);
+        settings.AppConfig.MutableColumnShardConfig()->SetBulkUpsertRequireAllColumns(false);
+        settings.AppConfig.MutableColumnShardConfig()->SetOnlyBulkUpsertWritingBuffer(false);
         TKikimrRunner kikimr(settings);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
-        kikimr.GetTestServer().GetRuntime()->GetAppData().ColumnShardConfig.SetBulkUpsertRequireAllColumns(false);
         auto csController = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NKikimr::NYDBTest::NColumnShard::TReadOnlyController>();
         TTypedLocalHelper helper("Utf8", "Utf8", kikimr);
         helper.CreateTestOlapTable();
@@ -475,6 +479,7 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
 
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        settings.AppConfig.MutableColumnShardConfig()->SetMaxReadStaleness_ms(300000);
 
         TKikimrRunner kikimr(settings);
         auto helper = TLocalHelper(kikimr);
@@ -552,20 +557,20 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
                 STORE = COLUMN)
             ;
         )");
-        
+
         auto tableClient = kikimr.GetTableClient();
-        
+
         {
             auto result = queryClient.ExecuteQuery(R"(
-                INSERT INTO `/Root/IntegrityTestTable` (id, uint_field) VALUES 
+                INSERT INTO `/Root/IntegrityTestTable` (id, uint_field) VALUES
                 (1, 100),
                 (2, 200);
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
-        
+
         {
-            auto result = queryClient.ExecuteQuery("SELECT * FROM `/Root/IntegrityTestTable` ORDER BY id", 
+            auto result = queryClient.ExecuteQuery("SELECT * FROM `/Root/IntegrityTestTable` ORDER BY id",
                 NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             auto resultSet = result.GetResultSetParser(0);
@@ -579,7 +584,7 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
             UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(0).GetInt32(), 2);
             UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(1).GetUint32(), 200);
         }
-        
+
         {
             TStringBuilder insertQuery;
             insertQuery << "INSERT INTO `/Root/IntegrityTestTable` (id, uint_field) VALUES ";
@@ -588,27 +593,27 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
                 insertQuery << "(" << i << ", " << (i * 10) << ")";
             }
 
-            insertQuery << ", (102, -1)";            
-            auto result = queryClient.ExecuteQuery(insertQuery, 
+            insertQuery << ", (102, -1)";
+            auto result = queryClient.ExecuteQuery(insertQuery,
                 NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_C(!result.IsSuccess(), "INSERT should have failed with data integrity violation");
             Cerr << "Expected error caught: " << result.GetIssues().ToString() << Endl; // Intentionally inserting -1 as invalid data to trigger a data type violation for Uint32 field.
         }
 
         {
-            auto result = queryClient.ExecuteQuery("SELECT COUNT(*) as count FROM `/Root/IntegrityTestTable`", 
+            auto result = queryClient.ExecuteQuery("SELECT COUNT(*) as count FROM `/Root/IntegrityTestTable`",
                 NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            
+
             auto resultSet = result.GetResultSetParser(0);
             UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 1);
-            
+
             resultSet.TryNextRow();
             UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(0).GetUint64(), 2);
         }
 
         {
-            auto result = queryClient.ExecuteQuery("SELECT * FROM `/Root/IntegrityTestTable` ORDER BY id", 
+            auto result = queryClient.ExecuteQuery("SELECT * FROM `/Root/IntegrityTestTable` ORDER BY id",
                 NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             auto resultSet = result.GetResultSetParser(0);

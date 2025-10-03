@@ -14,7 +14,30 @@ namespace NUdf {
 // opaque type info
 using TType = void;
 
-#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 26)
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 44)
+
+#define UDF_TYPE_KIND_MAP(XX) \
+    XX(Unknown)               \
+    XX(Data)                  \
+    XX(Struct)                \
+    XX(List)                  \
+    XX(Optional)              \
+    XX(Tuple)                 \
+    XX(Dict)                  \
+    XX(Callable)              \
+    XX(Resource)              \
+    XX(Void)                  \
+    XX(Variant)               \
+    XX(Stream)                \
+    XX(Null)                  \
+    XX(EmptyList)             \
+    XX(EmptyDict)             \
+    XX(Tagged)                \
+    XX(Pg)                    \
+    XX(Block)                 \
+    XX(Linear)
+
+#elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 26)
 
 #define UDF_TYPE_KIND_MAP(XX) \
     XX(Unknown)               \
@@ -149,6 +172,10 @@ UDF_ASSERT_TYPE_SIZE(ICallablePayload, 8);
 //////////////////////////////////////////////////////////////////////////////
 class ITypeVisitor1
 {
+protected:
+    ITypeVisitor1(ui16 compatibilityVersion)
+        : AbiCompatibility_(compatibilityVersion)
+    {}
 public:
     inline bool IsCompatibleTo(ui16 compatibilityVersion) const {
         return AbiCompatibility_ >= compatibilityVersion;
@@ -172,7 +199,7 @@ public:
     virtual void OnVariant(const TType* underlyingType) = 0;
     virtual void OnStream(const TType* itemType) = 0;
 private:
-    ui16 AbiCompatibility_ = MakeAbiCompatibilityVersion(UDF_ABI_VERSION_MAJOR, UDF_ABI_VERSION_MINOR);
+    ui16 AbiCompatibility_ = 0;
     ui16 Reserved1_ = 0;
     ui32 Reserved2_ = 0;
 
@@ -185,6 +212,7 @@ private:
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 13)
 class ITypeVisitor2: public ITypeVisitor1 {
 public:
+    using ITypeVisitor1::ITypeVisitor1;
     virtual void OnDecimal(ui8 precision, ui8 scale) = 0;
 };
 #endif
@@ -192,6 +220,7 @@ public:
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 15)
 class ITypeVisitor3: public ITypeVisitor2 {
 public:
+    using ITypeVisitor2::ITypeVisitor2;
     virtual void OnResource(TStringRef tag) = 0;
 };
 #endif
@@ -199,6 +228,7 @@ public:
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 21)
 class ITypeVisitor4: public ITypeVisitor3 {
 public:
+    using ITypeVisitor3::ITypeVisitor3;
     virtual void OnTagged(const TType* baseType, TStringRef tag) = 0;
 };
 #endif
@@ -206,6 +236,7 @@ public:
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 25)
 class ITypeVisitor5: public ITypeVisitor4 {
 public:
+    using ITypeVisitor4::ITypeVisitor4;
     virtual void OnPg(ui32 typeId) = 0;
 };
 #endif
@@ -213,39 +244,60 @@ public:
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 26)
 class ITypeVisitor6: public ITypeVisitor5 {
 public:
+    using ITypeVisitor5::ITypeVisitor5;
     virtual void OnBlock(const TType* itemType, bool isScalar) = 0;
 };
 #endif
 
-#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 26)
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 44)
+class ITypeVisitor7: public ITypeVisitor6 {
+public:
+    using ITypeVisitor6::ITypeVisitor6;
+    virtual void OnLinear(const TType* itemType, bool isDynamic) = 0;
+};
+#endif
+
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 44)
+class ITypeVisitor : public ITypeVisitor7 {
+protected:
+    using TBase = ITypeVisitor7;
+    ITypeVisitor(ui16 compatibilityVersion);
+};
+#elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 26)
 class ITypeVisitor : public ITypeVisitor6 {
 protected:
-    ITypeVisitor();
+    using TBase = ITypeVisitor6;
+    ITypeVisitor(ui16 compatibilityVersion);
 };
 #elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 25)
 class ITypeVisitor : public ITypeVisitor5 {
 protected:
-    ITypeVisitor();
+    using TBase = ITypeVisitor5;
+    ITypeVisitor(ui16 compatibilityVersion);
 };
 #elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 21)
 class ITypeVisitor : public ITypeVisitor4 {
 protected:
-    ITypeVisitor();
+    using TBase = ITypeVisitor4;
+    ITypeVisitor(ui16 compatibilityVersion);
 };
 #elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 15)
 class ITypeVisitor : public ITypeVisitor3 {
 protected:
-    ITypeVisitor();
+    using TBase = ITypeVisitor3;
+    ITypeVisitor(ui16 compatibilityVersion);
 };
 #elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 13)
 class ITypeVisitor : public ITypeVisitor2 {
 protected:
-    ITypeVisitor();
+    using TBase = ITypeVisitor2;
+    ITypeVisitor(ui16 compatibilityVersion);
 };
 #else
 class ITypeVisitor : public ITypeVisitor1 {
 protected:
-    ITypeVisitor();
+    using TBase = ITypeVisitor1;
+    ITypeVisitor(ui16 compatibilityVersion);
 };
 #endif
 

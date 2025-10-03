@@ -120,7 +120,6 @@ namespace NActors {
         TVector<ui64> ScheduledEventsByActivity;
         TVector<ui64> StuckActorsByActivity;
         TVector<TActivationTime> AggregatedCurrentActivationTime;
-        TVector<std::array<ui64, 10>> UsageByActivity;
         ui64 PoolActorRegistrations = 0;
         ui64 PoolDestroyedActors = 0;
         ui64 PoolAllocatedMailboxes = 0;

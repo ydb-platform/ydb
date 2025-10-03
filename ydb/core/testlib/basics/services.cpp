@@ -43,10 +43,6 @@ static constexpr TDuration DISK_DISPATCH_TIMEOUT = NSan::PlainOrUnderSanitizer(T
 
 namespace NKikimr {
 
-namespace NPDisk {
-    extern const ui64 YdbDefaultPDiskSequence = 0x7e5700007e570000;
-}
-
     void SetupIcb(TTestActorRuntime& runtime, ui32 nodeIndex, const NKikimrConfig::TImmediateControlsConfig& config,
             const TIntrusivePtr<NKikimr::TControlBoard>& icb,
             const TIntrusivePtr<NKikimr::TDynamicControlBoard>& dcb)

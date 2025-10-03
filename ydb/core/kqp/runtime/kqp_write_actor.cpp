@@ -2295,15 +2295,15 @@ public:
                     .LockMode = settings.TransactionSettings.LockMode,
                     .MvccSnapshot = settings.TransactionSettings.MvccSnapshot,
 
-                    .Alloc = Alloc,
                     .TxManager = TxManager,
+                    .Alloc = Alloc,
                     .TypeEnv = *TypeEnv,
                     .HolderFactory = *HolderFactory,
                     .SessionActorId = SessionActorId,
                     .Counters = Counters,
                 });
 
-                // TODO: tracing
+                //ptr->SetParentTraceId(BufferWriteActorStateSpan.GetTraceId());
                 TActorId id = RegisterWithSameMailbox(actor);
                 CA_LOG_D("Create new KqpBufferTableLookup for table `" << tablePath << "` (" << tableId << "). lockId=" << LockTxId << ". ActorId=" << id);
 
@@ -3637,6 +3637,21 @@ public:
     }
 
     void OnError(NYql::NDqProto::StatusIds::StatusCode statusCode, NYql::TIssues&& issues) override {
+        ReplyErrorAndDie(statusCode, std::move(issues));
+    }
+
+    void OnError(
+            const TString& message,
+            const NYql::NDqProto::StatusIds::StatusCode statusCode,
+            const NYql::TIssues& subIssues) override {
+        NYql::TIssue rootIssue(message);
+        for (const auto& issue : subIssues) {
+            rootIssue.AddSubIssue(MakeIntrusive<NYql::TIssue>(issue));
+        }
+
+        NYql::TIssues issues;
+        issues.AddIssue(std::move(rootIssue));
+
         ReplyErrorAndDie(statusCode, std::move(issues));
     }
 

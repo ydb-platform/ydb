@@ -2,7 +2,8 @@
 
 #include "kqp_write_table.h"
 #include <ydb/core/kqp/common/kqp_tx_manager.h>
-#include <util/generic/ptr.h>
+#include <ydb/library/yql/dq/actors/protos/dq_status_codes.pb.h>
+
 
 namespace NKikimr {
 namespace NKqp {
@@ -11,6 +12,10 @@ struct IKqpBufferTableLookupCallbacks {
     virtual ~IKqpBufferTableLookupCallbacks() = default;
 
     virtual void OnLookupTaskFinished() = 0;
+    virtual void OnError(
+        const TString& message,
+        const NYql::NDqProto::StatusIds::StatusCode statusCode,
+        const NYql::TIssues& subIssues) = 0;
 };
 
 class IKqpBufferTableLookup {
@@ -55,10 +60,7 @@ struct TKqpBufferTableLookupSettings {
     TIntrusivePtr<TKqpCounters> Counters;
 };
 
-std::pair<IKqpBufferTableLookup*, NActors::IActor*> CreateKqpBufferTableLookup(TKqpBufferTableLookupSettings&& settings) {
-    Y_UNUSED(settings);
-    return {nullptr, nullptr};
-}
+std::pair<IKqpBufferTableLookup*, NActors::IActor*> CreateKqpBufferTableLookup(TKqpBufferTableLookupSettings&& settings);
 
 }
 }

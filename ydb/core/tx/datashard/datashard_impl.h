@@ -397,22 +397,27 @@ class TDataShard
                 FETCH_PAGE_FAILED,
                 RESOURCE_ALLOCATION_FAILED,
                 ACTOR_DIED,
-                UNKNOWN
+                UNHANDLED_EXCEPTION,
+                UNHANDLED_EVENT
             };
 
-            TEvBuildTableStatsError(ui64 tableId, ECode code, const TString& msg)
+            TEvBuildTableStatsError(ui64 tableId, ECode code, const TString& message)
                 : TableId(tableId)
                 , Code(code)
-                , Message(msg)
+                , Message(message)
             {}
 
-            TEvBuildTableStatsError(ui64 tableId, ECode code)
-                : TEvBuildTableStatsError(tableId, code, "")
+            TEvBuildTableStatsError(ui64 tableId, std::exception_ptr exception, const TString& message)
+                : TableId(tableId)
+                , Code(ECode::UNHANDLED_EXCEPTION)
+                , Message(message)
+                , Exception(std::move(exception))
             {}
 
             const ui64 TableId;
             const ECode Code;
             const TString Message;
+            std::exception_ptr Exception;
         };
 
         struct TEvRemoveOldInReadSets : public TEventLocal<TEvRemoveOldInReadSets, EvRemoveOldInReadSets> {};

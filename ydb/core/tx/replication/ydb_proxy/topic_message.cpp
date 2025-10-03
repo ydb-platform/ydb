@@ -12,8 +12,8 @@ TTopicMessage::TTopicMessage(const TDataEvent::TMessageBase& msg, ECodec codec, 
         msg.GetSeqNo(),
         msg.GetCreateTime(),
         msg.GetWriteTime(),
+        msg.GetSessionMeta(),
         msg.GetMeta(),
-        msg.GetMessageMeta(),
         uncompressedSize,
         msg.GetMessageGroupId()
     )

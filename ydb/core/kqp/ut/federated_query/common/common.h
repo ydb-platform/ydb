@@ -31,4 +31,7 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
         std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory = nullptr,
         const TKikimrRunnerOptions& options = {});
 
+    std::shared_ptr<NYql::ISecuredServiceAccountCredentialsFactory> CreateCredentialsFactory(
+        const TString& token = NYql::NConnector::NTest::DEFAULT_PASSWORD);
+
 } // namespace NKikimr::NKqp::NFederatedQueryTest

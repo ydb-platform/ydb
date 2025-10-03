@@ -68,7 +68,7 @@ namespace NYql {
                 if (const auto maybeGenReadTable = TMaybeNode<TGenReadTable>(read)) {
                     const auto genReadTable = maybeGenReadTable.Cast();
                     YQL_ENSURE(genReadTable.Ref().GetTypeAnn(), "No type annotation for node " << genReadTable.Ref().Content());
-                    const auto token = TString("cluster:default_") += genReadTable.DataSource().Cluster().StringValue();
+                    const auto tokenName = TString("cluster:default_") += genReadTable.DataSource().Cluster().StringValue();
                     const auto rowType = genReadTable.Ref()
                                              .GetTypeAnn()
                                              ->Cast<TTupleExprType>()
@@ -94,7 +94,7 @@ namespace NYql {
                             .Cluster(genReadTable.DataSource().Cluster())
                             .Table(genReadTable.Table().Name())
                             .Token<TCoSecureParam>()
-                                .Name().Build(token)
+                                .Name().Build(tokenName)
                                 .Build()
                             .Columns(std::move(columns))
                             .FilterPredicate(genReadTable.FilterPredicate())
@@ -219,6 +219,8 @@ namespace NYql {
                         }
                     }
 
+                    // TODO: remove this block as soon as the first part YQ-4730 is deployed
+                    //
                     // Iceberg/Managed YDB (including YDB underlying Logging) supports access via IAM token.
                     // If exist, copy service account creds to obtain tokens during request execution phase.
                     // If exists, copy previously created token.
@@ -230,6 +232,12 @@ namespace NYql {
                             "default_generic",
                             clusterConfig.GetToken()));
                     }
+
+                    // We set token name to the protobuf message that will be received
+                    // by the read actor during the execution phase.
+                    // It will use token name to extract credentials from the secureParams.
+                    const TString tokenName(settings.Token().Maybe<TCoSecureParam>().Name().Cast());
+                    source.SetTokenName(tokenName);
 
                     // preserve source description for read actor
                     protoSettings.PackFrom(source);
@@ -346,6 +354,8 @@ namespace NYql {
                 source.set_table(tableName);
                 *source.mutable_data_source_instance() = tableMeta->DataSourceInstance;
 
+                // TODO: remove this block as soon as first part YQ-4730 is deployed
+                //
                 // Managed YDB supports access via IAM token.
                 // If exist, copy service account creds to obtain tokens during request execution phase.
                 // If exists, copy previously created token.
@@ -357,6 +367,12 @@ namespace NYql {
                         "default_generic",
                         clusterConfig.GetToken()));
                 }
+
+                // We set token name to the protobuf message that will be received
+                // by the lookup actor during the execution phase.
+                // It will use token name to extract credentials from the secureParams.
+                const TString tokenName(settings.Token().Maybe<TCoSecureParam>().Name().Cast());
+                source.SetTokenName(tokenName);
 
                 // preserve source description for read actor
                 protoSettings.PackFrom(source);

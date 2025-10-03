@@ -647,6 +647,23 @@ NUdf::TUnboxedValue FromPyData(
             << "Unsupported type " << typeId;
 }
 
+TPyObjectPtr ToPyTagged(
+        const TPyCastContext::TPtr& ctx,
+        const NUdf::TType* type,
+        const NUdf::TUnboxedValuePod& value)
+{
+    const NUdf::TTaggedTypeInspector inspector(*ctx->PyCtx->TypeInfoHelper, type);
+    return ToPyObject(ctx, inspector.GetBaseType(), value);
+}
+
+NUdf::TUnboxedValue FromPyTagged(
+        const TPyCastContext::TPtr& ctx,
+        const NUdf::TType* type, PyObject* value)
+{
+    const NUdf::TTaggedTypeInspector inspector(*ctx->PyCtx->TypeInfoHelper, type);
+    return FromPyObject(ctx, inspector.GetBaseType(), value).Release();
+}
+
 TPyObjectPtr ToPyList(
     const TPyCastContext::TPtr& ctx,
     const NUdf::TType* type,
@@ -860,6 +877,7 @@ TPyObjectPtr ToPyObject(
 {
     switch (ctx->PyCtx->TypeInfoHelper->GetTypeKind(type)) {
         case NUdf::ETypeKind::Data: return ToPyData(ctx, type, value);
+        case NUdf::ETypeKind::Tagged: return ToPyTagged(ctx, type, value);
         case NUdf::ETypeKind::Tuple: return ToPyTuple(ctx, type, value);
         case NUdf::ETypeKind::Struct: return ToPyStruct(ctx, type, value);
         case NUdf::ETypeKind::List: return ToPyList(ctx, type, value);
@@ -886,6 +904,7 @@ NUdf::TUnboxedValue FromPyObject(
 {
     switch (ctx->PyCtx->TypeInfoHelper->GetTypeKind(type)) {
         case NUdf::ETypeKind::Data: return FromPyData(ctx, type, value);
+        case NUdf::ETypeKind::Tagged: return FromPyTagged(ctx, type, value);
         case NUdf::ETypeKind::Tuple: return FromPyTuple(ctx, type, value);
         case NUdf::ETypeKind::Struct: return FromPyStruct(ctx, type, value);
         case NUdf::ETypeKind::List: return FromPyList(ctx, type, value);

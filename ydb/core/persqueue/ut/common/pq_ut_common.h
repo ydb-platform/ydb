@@ -272,6 +272,37 @@ void PQTabletPrepare(
     ui64 tabletId,
     TActorId edge);
 
+
+struct TBalancerParams {
+    TString Topic;
+    TVector<std::pair<ui32, std::pair<ui64, ui32>>> Map;
+    ui64 SsId;
+    TTestActorRuntime& Runtime;
+    ui64 BalancerTabletId;
+    TActorId Edge;
+    const bool RequireAuth = false;
+    bool Kill = true;
+    THashSet<TString> XtraConsumers = {};
+    bool EnableKeyCompaction = false;
+
+    static TBalancerParams FromContext(const TString topic,
+            const TVector<std::pair<ui32, std::pair<ui64, ui32>>>& map,
+            const ui64 ssId,
+            TTestContext& context,
+            bool requireAuth = false,
+            bool kill = true,
+            const THashSet<TString>& xtraConsumers = {},
+            bool enableKeyCompaction = false)
+    {
+        return TBalancerParams{
+            .Topic=topic, .Map=map, .SsId=ssId, .Runtime=*context.Runtime, .BalancerTabletId=context.BalancerTabletId,
+            .Edge=context.Edge, .RequireAuth=requireAuth, .Kill=kill, .XtraConsumers=xtraConsumers, .EnableKeyCompaction=enableKeyCompaction};
+    }
+};
+
+
+void PQBalancerPrepare(const TBalancerParams& params);
+
 void PQBalancerPrepare(
     const TString topic,
     const TVector<std::pair<ui32, std::pair<ui64, ui32>>>& map,

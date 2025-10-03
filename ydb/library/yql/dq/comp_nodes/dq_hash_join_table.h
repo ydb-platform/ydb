@@ -4,16 +4,26 @@
 
 namespace NKikimr::NMiniKQL::NJoinTable {
 
-using TTuple = NYql::NUdf::TUnboxedValue*;
+using TTuple = const NYql::NUdf::TUnboxedValue*;
+
+bool NeedToTrackUnusedRightTuples(EJoinKind kind);
+
+bool NeedToTrackUnusedLeftTuples(EJoinKind kind);
 
 class TStdJoinTable {
+    struct TuplesWithSameJoinKey {
+        std::vector<TTuple> Tuples;
+        bool Used;
+    };
   public:
-    TStdJoinTable(int tupleSize, NKikimr::NMiniKQL::TWideUnboxedEqual eq, NKikimr::NMiniKQL::TWideUnboxedHasher hash)
-        : TupleSize(tupleSize), BuiltTable(1, hash, eq)
+    TStdJoinTable(int tupleSize, NKikimr::NMiniKQL::TWideUnboxedEqual eq, NKikimr::NMiniKQL::TWideUnboxedHasher hash, bool trackUnusedTuples)
+        : TupleSize(tupleSize)
+        , TrackUnusedTuples(trackUnusedTuples)
+        , BuiltTable(1, hash, eq)
     {}
 
     void Add(std::span<NYql::NUdf::TUnboxedValue> tuple) {
-        Y_ABORT_UNLESS(BuiltTable.empty(), "JoinTable is built already");
+        MKQL_ENSURE(BuiltTable.empty(), "JoinTable is built already");
         MKQL_ENSURE(std::ssize(tuple) == TupleSize, "tuple size promise vs actual mismatch");
         for (int idx = 0; idx < TupleSize; ++idx) {
             Tuples.push_back(tuple[idx]);
@@ -21,27 +31,43 @@ class TStdJoinTable {
     }
 
     void Build() {
-        Y_ABORT_UNLESS(BuiltTable.empty(), "JoinTable is built already");
+        MKQL_ENSURE(BuiltTable.empty(), "JoinTable is built already");
         for (int index = 0; index < std::ssize(Tuples); index += TupleSize) {
             TTuple thisTuple = &Tuples[index];
-            auto [it, ok] = BuiltTable.emplace(thisTuple, std::vector{thisTuple});
+            auto [it, ok] = BuiltTable.emplace(thisTuple, TuplesWithSameJoinKey{.Tuples = std::vector{thisTuple}, .Used = !TrackUnusedTuples});
             if (!ok) {
-                it->second.emplace_back(thisTuple);
+                it->second.Tuples.emplace_back(thisTuple);
             }
         }
     }
 
-    void Lookup(TTuple key, std::function<void(TTuple)> produce) const {
+    void Lookup(TTuple key, std::function<void(TTuple)> produce) {
         auto it = BuiltTable.find(key);
         if (it != BuiltTable.end()) {
-            std::ranges::for_each(it->second, produce);
+            it->second.Used = true;
+            std::ranges::for_each(it->second.Tuples, produce);
+        }
+    }
+
+    bool UnusedTrackingOn() const { 
+        return TrackUnusedTuples;
+    }
+
+    void ForEachUnused(std::function<void(TTuple)> produce) {
+        MKQL_ENSURE(TrackUnusedTuples, "wasn't tracking tuples at all");
+        for(auto& tuplesSameKey: BuiltTable) {
+            if (!tuplesSameKey.second.Used) {
+                std::ranges::for_each(tuplesSameKey.second.Tuples, produce);
+                tuplesSameKey.second.Used = true;
+            }
         }
     }
 
   private:
     const int TupleSize;
+    const bool TrackUnusedTuples;
     std::vector<NYql::NUdf::TUnboxedValue> Tuples;
-    std::unordered_map<TTuple, std::vector<TTuple>, NKikimr::NMiniKQL::TWideUnboxedHasher,
+    std::unordered_map<TTuple, TuplesWithSameJoinKey, NKikimr::NMiniKQL::TWideUnboxedHasher,
                        NKikimr::NMiniKQL::TWideUnboxedEqual>
         BuiltTable;
 };

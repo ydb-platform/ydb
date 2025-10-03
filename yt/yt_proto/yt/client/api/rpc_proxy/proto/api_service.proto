@@ -2579,6 +2579,8 @@ message TReqListJobs
 
     optional NYT.NYTree.NProto.TAttributeFilter attributes = 27;
 
+    optional string monitoring_descriptor = 28;
+
     optional TMasterReadOptions master_read_options = 102;
 }
 

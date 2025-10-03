@@ -92,7 +92,7 @@ namespace NTable {
                                 break;
                             case EReady::Data:
                                 if (Iter->IsUncommitted()) {
-                                    VersionState = EVersionState::FeedDelta;
+                                    VersionState = EVersionState::FeedDeltaMaybeLock;
                                 } else {
                                     VersionState = EVersionState::EndDeltasThenFeed;
                                 }
@@ -122,9 +122,11 @@ namespace NTable {
 
                     // These are callback states and don't affect the iterator
                     case EVersionState::BeginDeltas:
+                    case EVersionState::FeedDeltaMaybeLock:
                     case EVersionState::FeedDelta:
                     case EVersionState::EndDeltasThenFeed:
                     case EVersionState::EndDeltasAndKey:
+                    case EVersionState::FeedMaybeLock:
                     case EVersionState::Feed:
                     case EVersionState::EndKey:
                         Y_DEBUG_ABORT_UNLESS(VersionScan);
@@ -149,22 +151,40 @@ namespace NTable {
                                 if (Iter->IsUncommitted()) {
                                     VersionState = EVersionState::BeginDeltas;
                                 } else {
-                                    VersionState = EVersionState::Feed;
+                                    VersionState = EVersionState::FeedMaybeLock;
                                 }
                             }
                             break;
 
-                        case EVersionState::BeginDeltas:
+                        case EVersionState::BeginDeltas: {
                             Y_DEBUG_ABORT_UNLESS(Iter->IsUncommitted());
                             op = VersionScan->BeginDeltas();
-                            VersionState = EVersionState::FeedDelta;
+                            VersionState = EVersionState::FeedDeltaMaybeLock;
                             break;
+                        }
+
+                        case EVersionState::FeedDeltaMaybeLock: {
+                            Y_DEBUG_ABORT_UNLESS(Iter->IsUncommitted());
+                            auto [lockMode, lockTxId] = Iter->GetLockInfo();
+                            if (lockMode != ELockMode::None &&
+                                !Subset.RemovedTransactions.Contains(lockTxId) &&
+                                !Subset.CommittedTransactions.Contains(lockTxId))
+                            {
+                                op = VersionScan->Feed(lockMode, lockTxId);
+                                if (op != EScan::Feed) {
+                                    VersionState = EVersionState::FeedDelta;
+                                    break;
+                                }
+                            }
+                            VersionState = EVersionState::FeedDelta;
+                            [[fallthrough]];
+                        }
 
                         case EVersionState::FeedDelta: {
                             Seen++;
                             Y_DEBUG_ABORT_UNLESS(Iter->IsUncommitted());
                             ui64 txId = Iter->GetUncommittedTxId();
-                            if (!Subset.RemovedTransactions.Contains(txId)) {
+                            if (Iter->Row() != ERowOp::Absent && !Subset.RemovedTransactions.Contains(txId)) {
                                 op = VersionScan->Feed(Iter->Row(), txId);
                             } else {
                                 op = EScan::Feed;
@@ -175,13 +195,30 @@ namespace NTable {
 
                         case EVersionState::EndDeltasThenFeed:
                             op = VersionScan->EndDeltas();
-                            VersionState = EVersionState::Feed;
+                            VersionState = EVersionState::FeedMaybeLock;
                             break;
 
                         case EVersionState::EndDeltasAndKey:
                             op = VersionScan->EndDeltas();
                             VersionState = EVersionState::EndKey;
                             break;
+
+                        case EVersionState::FeedMaybeLock: {
+                            Y_DEBUG_ABORT_UNLESS(!Iter->IsUncommitted());
+                            auto [lockMode, lockTxId] = Iter->GetLockInfo();
+                            if (lockMode != ELockMode::None &&
+                                !Subset.RemovedTransactions.Contains(lockTxId) &&
+                                !Subset.CommittedTransactions.Contains(lockTxId))
+                            {
+                                op = VersionScan->Feed(lockMode, lockTxId);
+                                if (op != EScan::Feed) {
+                                    VersionState = EVersionState::Feed;
+                                    break;
+                                }
+                            }
+                            VersionState = EVersionState::Feed;
+                            [[fallthrough]];
+                        }
 
                         case EVersionState::Feed: {
                             Seen++;
@@ -488,10 +525,12 @@ namespace NTable {
         enum class EVersionState {
             BeginKey,
             BeginDeltas,
+            FeedDeltaMaybeLock,
             FeedDelta,
             SkipUncommitted,
             EndDeltasThenFeed,
             EndDeltasAndKey,
+            FeedMaybeLock,
             Feed,
             SkipVersion,
             EndKey,

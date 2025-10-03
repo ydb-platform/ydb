@@ -99,15 +99,14 @@ public:
         PagesSize += info->GetPageSize(pageId);
         Send(MakeSharedPageCacheId(), new NSharedCache::TEvRequest(NSharedCache::EPriority::Bkgr, info->PageCollection, { pageId }));
 
-        Spent->Alter(false); // pause measurement
+        Interrupt();
         auto ev = WaitForSpecificEvent<NSharedCache::TEvResult>(&TTableStatsCoroBuilder::ProcessUnexpectedEvent);
         if (auto status = ev->Get()->Status; status != NKikimrProto::OK) {
             LOG_ERROR_S(GetActorContext(), NKikimrServices::TABLET_STATS_BUILDER, "Failed to build at datashard "
                 << TabletId << ", for tableId " << TableId << " requested pages but got " << status);
             throw TExTableStatsError(ECode::FETCH_PAGE_FAILED, NKikimrProto::EReplyStatus_Name(status));
         }
-        Spent->Alter(true); // resume measurement
-        UpdateDeadline();
+        Resume();
 
         for (auto& loaded : ev->Get()->Pages) {
             partPages.emplace(pageId, TPinnedPageRef(loaded.Page).GetData());
@@ -137,19 +136,19 @@ private:
 
         Subset->ColdParts.clear(); // stats won't include cold parts, if any
         Spent = new TSpent(TAppData::TimeProvider.Get());
-        UpdateDeadline();
+        CoroutineDeadline = GetCycleCountFast() + DurationToCycles(MaxCoroutineExecutionTime);
 
         BuildStats(*Subset, ev->Stats, RowCountResolution, DataSizeResolution, HistogramBucketsCount, this, [this](){
             const auto now = GetCycleCountFast();
 
             if (now > CoroutineDeadline) {
                 Send(new IEventHandle(EvResume, 0, SelfActorId, {}, nullptr, 0));
-                Spent->Alter(false); // pause measurement
+                
+                Interrupt();
                 WaitForSpecificEvent([](IEventHandle& ev) {
                     return ev.Type == EvResume;
                 }, &TTableStatsCoroBuilder::ProcessUnexpectedEvent);
-                Spent->Alter(true); // resume measurement
-                UpdateDeadline();
+                Resume();
             }
         }, TStringBuilder() << "Building stats at datashard " << TabletId << ", for tableId " << TableId << ": ");
 
@@ -210,7 +209,12 @@ private:
         Y_ENSURE(msg->TaskId == 1, "Unexpected task id in TEvResourceAllocated");
     }
 
-    void UpdateDeadline() {
+    void Interrupt() {
+        Spent->Alter(false); // pause measurement
+    }
+
+    void Resume() {
+        Spent->Alter(true); // resume measurement
         CoroutineDeadline = GetCycleCountFast() + DurationToCycles(MaxCoroutineExecutionTime);
     }
 

@@ -74,32 +74,31 @@ TGetLabelsResponse ProcessGetLabelsResponse(NYql::IHTTPGateway::TResult&& respon
     TGetLabelsResult result;
 
     if (response.CurlResponseCode != CURLE_OK) {
-        return TGetLabelsResponse(TStringBuilder{} << "Monitoring api response: " << response.Issues.ToOneLineString());
+        return TGetLabelsResponse(TStringBuilder{} << "Monitoring api get labels response: " << response.Issues.ToOneLineString());
     }
 
     if (response.Content.HttpResponseCode < 200 || response.Content.HttpResponseCode >= 300) {
-        return TGetLabelsResponse(TStringBuilder{} << "Monitoring api response: " << response.Content.data());
+        return TGetLabelsResponse(TStringBuilder{} << "Monitoring api get labels response: " << response.Content.data());
     }
 
     NJson::TJsonValue json;
     try {
         NJson::ReadJsonTree(response.Content.data(), &json, /*throwOnError*/ true);
     } catch (const std::exception& e) {
-        return TGetLabelsResponse("Monitoring api response is invalid");
+        return TGetLabelsResponse("Monitoring api get labels response is invalid");
     }
 
     if (!json.IsMap() || !json.Has("names") || !json["names"].IsArray()) {
-        return TGetLabelsResponse("Monitoring api response is invalid");
+        return TGetLabelsResponse("Monitoring api get labels response is invalid");
     }
 
     const auto names = json["names"].GetArray();
 
     for (const auto& name : names) {
         if (!name.IsString()) {
-            return TGetLabelsResponse("Monitoring api response is invalid");
-        } else {
-            result.Labels.push_back(name.GetString());
+            return TGetLabelsResponse("Monitoring api get labels response is invalid");
         }
+        result.Labels.push_back(name.GetString());
     }
     for (const auto& [key, selector] : knownSelectors) {
         result.Labels.push_back(key);
@@ -112,29 +111,29 @@ TListMetricsResponse ProcessListMetricsResponse(NYql::IHTTPGateway::TResult&& re
     TListMetricsResult result;
 
     if (response.CurlResponseCode != CURLE_OK) {
-        return TListMetricsResponse(TStringBuilder{} << "Monitoring api response: " << response.Issues.ToOneLineString());
+        return TListMetricsResponse(TStringBuilder{} << "Monitoring api list metrics response: " << response.Issues.ToOneLineString());
     }
 
     if (response.Content.HttpResponseCode < 200 || response.Content.HttpResponseCode >= 300) {
-        return TListMetricsResponse(TStringBuilder{} << "Monitoring api response: " << response.Content.data());
+        return TListMetricsResponse(TStringBuilder{} << "Monitoring api list metrics response: " << response.Content.data());
     }
 
     NJson::TJsonValue json;
     try {
         NJson::ReadJsonTree(response.Content.data(), &json, /*throwOnError*/ true);
     } catch (const std::exception& e) {
-        return TListMetricsResponse("Monitoring api response is invalid");
+        return TListMetricsResponse("Monitoring api list metrics response is invalid" );
     }
 
     if (!json.IsMap() || !json.Has("result") || !json.Has("page")) {
-        return TListMetricsResponse("Monitoring api response is invalid");
+        return TListMetricsResponse("Monitoring api list metrics response is invalid");
     }
 
     const auto pagesInfo = json["page"];
     if (!pagesInfo.IsMap() || 
         !pagesInfo.Has("pagesCount") || !pagesInfo["pagesCount"].IsInteger() || 
         !pagesInfo.Has("totalCount") || !pagesInfo["totalCount"].IsInteger()) {
-        return TListMetricsResponse("Monitoring api response is invalid");
+        return TListMetricsResponse("Monitoring api list metrics response is invalid");
     }
 
     result.PagesCount = pagesInfo["pagesCount"].GetInteger();
@@ -142,7 +141,7 @@ TListMetricsResponse ProcessListMetricsResponse(NYql::IHTTPGateway::TResult&& re
 
     for (const auto& metricObj : json["result"].GetArray()) {
         if (!metricObj.IsMap() || !metricObj.Has("labels") || !metricObj["labels"].IsMap() || !metricObj.Has("type") || !metricObj["type"].IsString()) {
-            return TListMetricsResponse("Monitoring api response is invalid");
+            return TListMetricsResponse("Monitoring api list metrics response is invalid");
         }
 
         TSelectors selectors;
@@ -173,22 +172,22 @@ TGetPointsCountResponse ProcessGetPointsCountResponse(NYql::IHTTPGateway::TResul
             }
         }
 
-        return TGetPointsCountResponse(TStringBuilder() << "Monitoring api response: " << issues);
+        return TGetPointsCountResponse(TStringBuilder() << "Monitoring api points count response: " << issues);
     }
 
     if (response.Content.HttpResponseCode < 200 || response.Content.HttpResponseCode >= 300) {
-        return TGetPointsCountResponse(TStringBuilder{} << "Monitoring api response: " << response.Content.data());
+        return TGetPointsCountResponse(TStringBuilder{} << "Monitoring api points count response: " << response.Content.data());
     }
 
     NJson::TJsonValue json;
     try {
         NJson::ReadJsonTree(response.Content.data(), &json, /*throwOnError*/ true);
     } catch (const std::exception& e) {
-        return TGetPointsCountResponse("Monitoring api response is invalid");
+        return TGetPointsCountResponse("Monitoring api points count response is invalid");
     }
 
     if (!json.IsMap() || !json.Has("scalar") || !json["scalar"].IsInteger()) {
-        return TGetPointsCountResponse("Monitoring api response is invalid");
+        return TGetPointsCountResponse("Monitoring api points count response is invalid");
     }
 
     result.PointsCount = json["scalar"].GetInteger() + downsampledPointsCount;
@@ -200,7 +199,7 @@ TGetDataResponse ProcessGetDataResponse(NYdbGrpc::TGrpcStatus&& status, ReadResp
     TGetDataResult result;
 
     if (!status.Ok()) {
-        TString error = TStringBuilder{} << "Monitoring api response: " << status.Msg;
+        TString error = TStringBuilder{} << "Monitoring api get data response: " << status.Msg;
         if (status.GRpcStatusCode == grpc::StatusCode::RESOURCE_EXHAUSTED || status.GRpcStatusCode == grpc::StatusCode::UNAVAILABLE) {
             return TGetDataResponse(error, EStatus::STATUS_RETRIABLE_ERROR);
         }
@@ -208,7 +207,7 @@ TGetDataResponse ProcessGetDataResponse(NYdbGrpc::TGrpcStatus&& status, ReadResp
     }
 
     if (response.response_per_query_size() != 1) {
-        return TGetDataResponse("Monitoring api response is invalid");
+        return TGetDataResponse("Monitoring api get data response is invalid");
     }
 
     const auto& responseValue = response.response_per_query()[0];

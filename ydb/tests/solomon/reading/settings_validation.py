@@ -87,25 +87,25 @@ class TestSettingsValidation(SolomonReadingTestBase):
         # check `from` setting validation
         query = """
             SELECT * FROM local_solomon.settings_validation WITH (
-                program = @@{cluster="settings_validation", service="my_service", test_type="setting_validation"}@@,
+                selectors = @@{cluster="settings_validation", service="my_service", test_type="setting_validation"}@@,
                 from = "invalid time"
             )
         """
-        self.check_query_error(query, "couldn\'t parse `from`, use Iso8601 format")
+        self.check_query_error(query, "couldn\'t parse `from`, use ISO8601 format")
 
         # check `to` setting validation
         query = """
             SELECT * FROM local_solomon.settings_validation WITH (
-                program = @@{cluster="settings_validation", service="my_service", test_type="setting_validation"}@@,
+                selectors = @@{cluster="settings_validation", service="my_service", test_type="setting_validation"}@@,
                 to = "invalid time"
             )
         """
-        self.check_query_error(query, "couldn\'t parse `to`, use Iso8601 format")
+        self.check_query_error(query, "couldn\'t parse `to`, use ISO8601 format")
 
         # check `downsampling.disabled` setting validation
         query = """
             SELECT * FROM local_solomon.settings_validation WITH (
-                program = @@{cluster="settings_validation", service="my_service", test_type="setting_validation"}@@,
+                selectors = @@{cluster="settings_validation", service="my_service", test_type="setting_validation"}@@,
                 `downsampling.disabled` = "ABC"
             )
         """
@@ -114,7 +114,7 @@ class TestSettingsValidation(SolomonReadingTestBase):
         # check `downsampling.aggregation` setting validation
         query = """
             SELECT * FROM local_solomon.settings_validation WITH (
-                program = @@{cluster="settings_validation", service="my_service", test_type="setting_validation"}@@,
+                selectors = @@{cluster="settings_validation", service="my_service", test_type="setting_validation"}@@,
                 `downsampling.aggregation` = "ABC"
             )
         """
@@ -123,7 +123,7 @@ class TestSettingsValidation(SolomonReadingTestBase):
         # check `downsampling.fill` setting validation
         query = """
             SELECT * FROM local_solomon.settings_validation WITH (
-                program = @@{cluster="settings_validation", service="my_service", test_type="setting_validation"}@@,
+                selectors = @@{cluster="settings_validation", service="my_service", test_type="setting_validation"}@@,
                 `downsampling.fill` = "ABC"
             )
         """
@@ -132,7 +132,7 @@ class TestSettingsValidation(SolomonReadingTestBase):
         # check `downsampling.grid_interval` setting validation
         query = """
             SELECT * FROM local_solomon.settings_validation WITH (
-                program = @@{cluster="settings_validation", service="my_service", test_type="setting_validation"}@@,
+                selectors = @@{cluster="settings_validation", service="my_service", test_type="setting_validation"}@@,
                 `downsampling.grid_interval` = "ABC"
             )
         """
@@ -141,7 +141,7 @@ class TestSettingsValidation(SolomonReadingTestBase):
         # check unknown setting validation
         query = """
             SELECT * FROM local_solomon.settings_validation WITH (
-                program = @@{cluster="settings_validation", service="my_service", test_type="setting_validation"}@@,
+                selectors = @@{cluster="settings_validation", service="my_service", test_type="setting_validation"}@@,
                 unk = "ABC"
             )
         """
@@ -150,7 +150,7 @@ class TestSettingsValidation(SolomonReadingTestBase):
         # check additional downsampling settings validation
         query = """
             SELECT * FROM local_solomon.settings_validation WITH (
-                program = @@{cluster="settings_validation", service="my_service", test_type="setting_validation"}@@,
+                selectors = @@{cluster="settings_validation", service="my_service", test_type="setting_validation"}@@,
                 `downsampling.disabled` = "true",
                 `downsampling.aggregation` = "AVG",
                 `downsampling.fill` = "PREVIOUS",
@@ -228,25 +228,25 @@ class TestSettingsValidation(SolomonReadingTestBase):
         # check `from` setting validation
         query = """
             SELECT * FROM local_monitoring.my_service WITH (
-                program = @@{test_type="setting_validation"}@@,
+                selectors = @@{test_type="setting_validation"}@@,
                 from = "invalid time"
             )
         """
-        self.check_query_error(query, "couldn\'t parse `from`, use Iso8601 format")
+        self.check_query_error(query, "couldn\'t parse `from`, use ISO8601 format")
 
         # check `to` setting validation
         query = """
             SELECT * FROM local_monitoring.my_service WITH (
-                program = @@{test_type="setting_validation"}@@,
+                selectors = @@{test_type="setting_validation"}@@,
                 to = "invalid time"
             )
         """
-        self.check_query_error(query, "couldn\'t parse `to`, use Iso8601 format")
+        self.check_query_error(query, "couldn\'t parse `to`, use ISO8601 format")
 
         # check `downsampling.disabled` setting validation
         query = """
             SELECT * FROM local_monitoring.my_service WITH (
-                program = @@{test_type="setting_validation"}@@,
+                selectors = @@{test_type="setting_validation"}@@,
                 `downsampling.disabled` = "ABC"
             )
         """
@@ -255,7 +255,7 @@ class TestSettingsValidation(SolomonReadingTestBase):
         # check `downsampling.aggregation` setting validation
         query = """
             SELECT * FROM local_monitoring.my_service WITH (
-                program = @@{test_type="setting_validation"}@@,
+                selectors = @@{test_type="setting_validation"}@@,
                 `downsampling.aggregation` = "ABC"
             )
         """
@@ -264,7 +264,7 @@ class TestSettingsValidation(SolomonReadingTestBase):
         # check `downsampling.fill` setting validation
         query = """
             SELECT * FROM local_monitoring.my_service WITH (
-                program = @@{test_type="setting_validation"}@@,
+                selectors = @@{test_type="setting_validation"}@@,
                 `downsampling.fill` = "ABC"
             )
         """
@@ -273,7 +273,7 @@ class TestSettingsValidation(SolomonReadingTestBase):
         # check `downsampling.grid_interval` setting validation
         query = """
             SELECT * FROM local_monitoring.my_service WITH (
-                program = @@{test_type="setting_validation"}@@,
+                selectors = @@{test_type="setting_validation"}@@,
                 `downsampling.grid_interval` = "ABC"
             )
         """
@@ -282,7 +282,7 @@ class TestSettingsValidation(SolomonReadingTestBase):
         # check unknown setting validation
         query = """
             SELECT * FROM local_monitoring.my_service WITH (
-                program = @@{test_type="setting_validation"}@@,
+                selectors = @@{test_type="setting_validation"}@@,
                 unk = "ABC"
             )
         """
@@ -291,7 +291,7 @@ class TestSettingsValidation(SolomonReadingTestBase):
         # check additional downsampling settings validation
         query = """
             SELECT * FROM local_monitoring.my_service WITH (
-                program = @@{test_type="setting_validation"}@@,
+                selectors = @@{test_type="setting_validation"}@@,
                 `downsampling.disabled` = "true",
                 `downsampling.aggregation` = "AVG",
                 `downsampling.fill` = "PREVIOUS",

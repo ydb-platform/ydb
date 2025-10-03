@@ -137,7 +137,7 @@ public:
                         return {};
                     }
                     if (!TInstant::TryParseIso8601(value, from)) {
-                        ctx.AddError(TIssue(ctx.GetPosition(settingsRef.Child(i)->Head().Pos()), "couldn't parse `from`, use Iso8601 format, e.g. 2025-03-12T14:40:39Z"));
+                        ctx.AddError(TIssue(ctx.GetPosition(settingsRef.Child(i)->Head().Pos()), "couldn't parse `from`, use ISO8601 format, e.g. 2025-03-12T14:40:39Z"));
                         return {};
                     }
                     continue;
@@ -148,7 +148,7 @@ public:
                         return {};
                     }
                     if (!TInstant::TryParseIso8601(value, to)) {
-                        ctx.AddError(TIssue(ctx.GetPosition(settingsRef.Child(i)->Head().Pos()), "couldn't parse `to`, use Iso8601 format, e.g. 2025-03-12T14:40:39Z"));
+                        ctx.AddError(TIssue(ctx.GetPosition(settingsRef.Child(i)->Head().Pos()), "couldn't parse `to`, use ISO8601 format, e.g. 2025-03-12T14:40:39Z"));
                         return {};
                     }
                     continue;

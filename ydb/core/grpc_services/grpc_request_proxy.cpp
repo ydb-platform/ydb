@@ -491,9 +491,7 @@ void TGRpcRequestProxyImpl::HandleEventWithoutDatabase(TAutoPtr<TEventHandle<TEv
 
 template<typename TEvent>
 bool TGRpcRequestProxyImpl::CanHandleEventWithoutDatabase(TAutoPtr<TEventHandle<TEvent>>& event) {
-    if constexpr (TEvent::EventType == TRpcServices::EvListEndpoints) {
-        return true;
-    } else if constexpr (TEvent::EventType == TRpcServices::EvGrpcRuntimeRequest) {
+    if constexpr (TEvent::EventType == TRpcServices::EvGrpcRuntimeRequest) {
         switch (event->Get()->GetRuntimeEventType()) {
         case NRuntimeEvents::EType::BOOTSTRAP_CLUSTER:
             return true;

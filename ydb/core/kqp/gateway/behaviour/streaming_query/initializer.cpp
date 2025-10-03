@@ -24,7 +24,7 @@ void TStreamingQueryInitializer::DoPrepare(NMetadata::NInitializer::IInitializer
         request.set_path(TStreamingQueryConfig::GetBehaviour()->GetStorageTablePath());
         AddColumn(request, TStreamingQueryConfig::TColumns::DatabaseId, Ydb::Type::UTF8, true);
         AddColumn(request, TStreamingQueryConfig::TColumns::QueryPath, Ydb::Type::UTF8, true);
-        AddColumn(request, TStreamingQueryConfig::TColumns::State, Ydb::Type::JSON_DOCUMENT);
+        AddColumn(request, TStreamingQueryConfig::TColumns::State, Ydb::Type::JSON);
         result.emplace_back(std::make_shared<NMetadata::NInitializer::TGenericTableModifier<NMetadata::NRequest::TDialogCreateTable>>(request, "create"));
     }
 

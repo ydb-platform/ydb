@@ -2,8 +2,9 @@
 #include "offload_actor.h"
 #include "partition.h"
 #include "partition_compactification.h"
-#include <ydb/core/persqueue/pqtablet/common/logging.h>
 #include "partition_util.h"
+#include <ydb/core/persqueue/pqtablet/common/logging.h>
+#include <ydb/core/persqueue/pqtablet/common/constants.h>
 
 #include <memory>
 
@@ -460,7 +461,7 @@ void TInitInfoRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActor
 
 void TInitInfoRangeStep::PostProcessing(const TActorContext& ctx) {
     auto& usersInfoStorage = Partition()->UsersInfoStorage;
-    for (auto& [_, userInfo] : usersInfoStorage->GetAll()) {
+    for (auto&& [_, userInfo] : usersInfoStorage->GetAll()) {
         userInfo.AnyCommits = userInfo.Offset > (i64)Partition()->BlobEncoder.StartOffset;
     }
 
@@ -552,7 +553,7 @@ THashSet<TString> FilterBlobsMetaData(const NKikimrClient::TKeyValueResponse::TR
     std::sort(keys.begin(), keys.end(), compare);
 
     for (size_t i = 0; i < keys.size(); ++i) {
-        PQ_LOG_D("key[" << i << "]: " << keys[i]);
+        PQ_INIT_LOG_D("key[" << i << "]: " << keys[i]);
     }
 
     TVector<TString> filtered;
@@ -560,7 +561,7 @@ THashSet<TString> FilterBlobsMetaData(const NKikimrClient::TKeyValueResponse::TR
 
     for (auto& k : keys) {
         if (filtered.empty()) {
-            PQ_LOG_D("add key " << k);
+            PQ_INIT_LOG_D("add key " << k);
             filtered.push_back(std::move(k));
             lastKey = TKey::FromString(filtered.back(), partitionId);
         } else {
@@ -568,32 +569,41 @@ THashSet<TString> FilterBlobsMetaData(const NKikimrClient::TKeyValueResponse::TR
 
             if (lastKey.GetOffset() == candidate.GetOffset()) {
                 if (lastKey.GetPartNo() == candidate.GetPartNo()) {
-                    // candidate содержит lastKey
-                    AFL_ENSURE(lastKey.GetCount() <= candidate.GetCount())
-                        ("lastKey", lastKey.ToString())("candidate", candidate.ToString().data());
                     if (lastKey.GetCount() < candidate.GetCount()) {
-                        PQ_LOG_D("replace key " << filtered.back() << " to " << k);
+                        // candidate содержит lastKey
+                        PQ_INIT_LOG_D("replace key " << filtered.back() << " to " << k);
                         filtered.back() = std::move(k);
                         lastKey = candidate;
+                    } else if (lastKey.GetCount() == candidate.GetCount()) {
+                        if (lastKey.GetInternalPartsCount() < candidate.GetInternalPartsCount()) {
+                            // candidate содержит lastKey
+                            PQ_INIT_LOG_D("replace key " << filtered.back() << " to " << k);
+                            filtered.back() = std::move(k);
+                            lastKey = candidate;
+                        } else {
+                            // lastKey содержит candidate
+                            PQ_INIT_LOG_D("ignore key " << k);
+                        }
+                    } else {
+                        // lastKey содержит candidate
+                        PQ_INIT_LOG_D("ignore key " << k);
                     }
                 } else if (lastKey.GetPartNo() > candidate.GetPartNo()) {
-                    PQ_LOG_D("ignore key " << k);
+                    // lastKey содержит candidate
+                    PQ_INIT_LOG_D("ignore key " << k);
                 } else {
                     // candidate после lastKey
-                    //PQ_INIT_ENSURE(lastKey.GetPartNo() + lastKey.GetInternalPartsCount() == candidate.GetPartNo(),
-                    //               "lastKey=%s, candidate=%s",
-                    //               lastKey.ToString().data(), candidate.ToString().data());
-                    PQ_LOG_D("add key " << k);
+                    PQ_INIT_LOG_D("add key " << k);
                     filtered.push_back(std::move(k));
                     lastKey = candidate;
                 }
             } else {
                 if (const ui64 nextOffset = lastKey.GetOffset() + lastKey.GetCount(); nextOffset > candidate.GetOffset()) {
                     // lastKey содержит candidate
-                    PQ_LOG_D("ignore key " << k);
+                    PQ_INIT_LOG_D("ignore key " << k);
                 } else {
                     // candidate после lastKey или пропуск между lastKey и candidate
-                    PQ_LOG_D("add key " << k);
+                    PQ_INIT_LOG_D("add key " << k);
                     filtered.push_back(std::move(k));
                     lastKey = candidate;
                 }
@@ -1092,7 +1102,7 @@ void TPartition::Initialize(const TActorContext& ctx) {
 }
 
 bool TPartition::DetailedMetricsAreEnabled() const {
-    return AppData()->FeatureFlags.GetEnableMetricsLevel() && (Config.HasMetricsLevel() && Config.GetMetricsLevel() == Ydb::MetricsLevel::Detailed);
+    return AppData()->FeatureFlags.GetEnableMetricsLevel() && (Config.HasMetricsLevel() && Config.GetMetricsLevel() == METRICS_LEVEL_DETAILED);
 }
 
 void TPartition::SetupTopicCounters(const TActorContext& ctx) {

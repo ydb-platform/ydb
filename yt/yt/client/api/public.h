@@ -102,6 +102,12 @@ DEFINE_ENUM(EOperationSortDirection,
     ((Future) (2))
 );
 
+DEFINE_ENUM(EListQueriesSortOrder,
+    ((Cursor)     (0))
+    ((Ascending)  (1))
+    ((Descending) (2))
+);
+
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class TRow>

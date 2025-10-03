@@ -496,7 +496,9 @@ namespace NKikimr {
                 ui32 minHugeBlobInBytes,
                 ui32 milestoneBlobInBytes,
                 ui32 maxHugeBlobInBytes,
-                ui32 overhead)
+                ui32 overhead,
+                ui32 stepsBetweenPowersOf2,
+                bool useBucketsV2)
             : VDiskLogPrefix(vdiskLogPrefix)
             , ChunkSize(chunkSize)
             , AppendBlockSize(appendBlockSize)
@@ -513,7 +515,13 @@ namespace NKikimr {
                             << " MilestoneBlobInBytes# " << milestoneBlobInBytes << " ChunkSize# " << ChunkSize
                             << " AppendBlockSize# " << AppendBlockSize << ")");
 
-            BuildChains(milestoneBlobInBytes, overhead);
+            if (useBucketsV2) {
+                BuildChainsV2(stepsBetweenPowersOf2);
+            } else {
+                BuildChains(milestoneBlobInBytes, overhead);
+            }
+
+            Y_VERIFY_S(!Chains.empty(), VDiskLogPrefix);
         }
 
         TAllChains::TAllChains(const TString& vdiskLogPrefix, const NKikimrVDiskData::THugeKeeperHeap& heap)
@@ -740,16 +748,9 @@ namespace NKikimr {
             const ui32 endBlocks = MaxHugeBlobInBlocks;
             const ui32 blocksInChunk = ChunkSize / AppendBlockSize;
 
-            NPrivate::TLayout layout;
-            if (true) {
-                NPrivate::TChainLayoutBuilder builder(VDiskLogPrefix,
-                    startBlocks, milestoneBlocks, endBlocks, overhead);
-                layout = builder.GetLayout();
-            } else {
-                NPrivate::TChainLayoutBuilderV2 builder(VDiskLogPrefix, AppendBlockSize,
-                    blocksInChunk, startBlocks, endBlocks, overhead);
-                layout = builder.GetLayout();
-            }
+            NPrivate::TChainLayoutBuilder builder(VDiskLogPrefix,
+                startBlocks, milestoneBlocks, endBlocks, overhead);
+            auto layout = builder.GetLayout();
 
             for (const auto& x : layout) {
                 const ui32 slotSizeInBlocks = x.Right;
@@ -757,8 +758,23 @@ namespace NKikimr {
                 const ui32 slotsInChunk = blocksInChunk / slotSizeInBlocks;
                 Chains.emplace_back(VDiskLogPrefix, slotsInChunk, slotSize);
             }
+        }
 
-            Y_VERIFY_S(!Chains.empty(), VDiskLogPrefix);
+        void TAllChains::BuildChainsV2(ui32 stepsBetweenPowersOf2) {
+            const ui32 startBlocks = MinHugeBlobInBlocks;
+            const ui32 endBlocks = MaxHugeBlobInBlocks;
+            const ui32 blocksInChunk = ChunkSize / AppendBlockSize;
+
+            NPrivate::TChainLayoutBuilderV2 builder(VDiskLogPrefix, AppendBlockSize,
+                blocksInChunk, startBlocks, endBlocks, stepsBetweenPowersOf2);
+            auto layout = builder.GetLayout();
+
+            for (const auto& x : layout) {
+                const ui32 slotSizeInBlocks = x.Right;
+                const ui32 slotSize = slotSizeInBlocks * AppendBlockSize;
+                const ui32 slotsInChunk = blocksInChunk / slotSizeInBlocks;
+                Chains.emplace_back(VDiskLogPrefix, slotsInChunk, slotSize);
+            }
         }
 
         void TAllChains::BuildSearchTable() {
@@ -821,15 +837,18 @@ namespace NKikimr {
                 ui32 mileStoneBlobInBytes,
                 ui32 maxHugeBlobInBytes,
                 ui32 overhead,
+                ui32 stepsBetweenPowersOf2,
+                bool useBucketsV2,
                 ui32 freeChunksReservation)
             : VDiskLogPrefix(vdiskLogPrefix)
             , FreeChunksReservation(freeChunksReservation)
             , Chains(vdiskLogPrefix, chunkSize, appendBlockSize, minHugeBlobInBytes, mileStoneBlobInBytes,
-                maxHugeBlobInBytes, overhead)
+                maxHugeBlobInBytes, overhead, stepsBetweenPowersOf2, useBucketsV2)
         {}
 
         THeap::THeap(const TString& vdiskLogPrefix, const NKikimrVDiskData::THugeKeeperHeap& heap)
-            : Chains(vdiskLogPrefix, heap)
+            : VDiskLogPrefix(vdiskLogPrefix)
+            , Chains(vdiskLogPrefix, heap)
         {
             LoadFromProto(heap);
         }

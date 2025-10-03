@@ -223,7 +223,7 @@ public:
             if (current.HasValue()) {
                 if constexpr (StateContainerOpt) {
                     NUdf::TUnboxedValue result;
-                    switch (const auto status = current.Fetch(result)) {
+                    switch (current.Fetch(result)) {
                         case NUdf::EFetchStatus::Ok: return result.Release();
                         case NUdf::EFetchStatus::Yield: return NUdf::TUnboxedValuePod::MakeYield();
                         case NUdf::EFetchStatus::Finish: break;

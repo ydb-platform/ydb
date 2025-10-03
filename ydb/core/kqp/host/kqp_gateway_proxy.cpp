@@ -662,7 +662,12 @@ public:
     TFuture<TGenericResult> SetConstraint(const TString& tablePath, TVector<TSetColumnConstraintSettings>&& settings) override {
         try {
             auto [dirname, tableName] = NSchemeHelpers::SplitPathByDirAndBaseNames(tablePath);
-            if (!dirname.empty() && !IsStartWithSlash(dirname)) {
+
+            if (tableName.empty()) {
+                return MakeFuture(ResultFromError<TGenericResult>("Empty basename for setting constraint"));
+            }
+
+            if (!IsStartWithSlash(tablePath)) {
                 dirname = JoinPath({GetDatabase(), dirname});
             }
 
@@ -695,6 +700,14 @@ public:
         }
 
         const auto [dirname, basename] = NSchemeHelpers::SplitPathByDirAndBaseNames(settings.DatabasePath);
+
+        if (basename.empty()) {
+            TGenericResult result;
+            result.SetStatus(TIssuesIds_EIssueCode_KIKIMR_BAD_REQUEST);
+            result.AddIssue(TIssue("Empty basename for ALTER DATABASE").SetCode(result.Status(), TSeverityIds_ESeverityId_S_ERROR));
+            return result;
+        }
+
         modifyScheme.SetWorkingDir(dirname);
 
         if (settings.Owner) {
@@ -1298,7 +1311,12 @@ public:
 
             for (const auto& currentPath : settings.Paths) {
                 auto [dirname, basename] = NSchemeHelpers::SplitPathByDirAndBaseNames(currentPath);
-                if (!dirname.empty() && !IsStartWithSlash(dirname)) {
+
+                if (basename.empty()) {
+                    return MakeFuture(ResultFromError<TGenericResult>("Empty basename for modify permissions"));
+                }
+
+                if (!IsStartWithSlash(currentPath)) {
                     dirname = JoinPath({GetDatabase(), dirname});
                 }
 

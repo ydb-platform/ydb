@@ -842,6 +842,8 @@ void TBlobStorageController::SetHostRecords(THostRecordMap hostRecords) {
         }
     }
     Y_ABORT_UNLESS(!SelfHealId);
+
+    SelfHealSettings = ParseSelfHealSettings(StorageConfig);
     SelfHealId = Register(CreateSelfHealActor());
 
     ClusterBalancingSettings = ParseClusterBalancingSettings(StorageConfig);

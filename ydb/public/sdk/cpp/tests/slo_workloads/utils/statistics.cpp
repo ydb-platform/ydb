@@ -359,8 +359,8 @@ void TStat::CalculateFailSeconds() {
     std::sort(LatencyStats.begin(), LatencyStats.end(), [&](const TPeriodStat& a, const TPeriodStat& b) {
         return a.Seconds < b.Seconds;
     });
-    FailSeconds = std::make_unique<size_t>(0);
-    size_t& failSeconds = *FailSeconds;
+    FailSeconds = std::make_unique<std::uint64_t>(0);
+    std::uint64_t& failSeconds = *FailSeconds;
     std::uint64_t lastSecChecked = LatencyStats[0].Seconds - 1;
     for (auto& stat : LatencyStats) {
         failSeconds += stat.Seconds - lastSecChecked - 1;

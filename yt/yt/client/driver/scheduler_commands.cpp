@@ -531,6 +531,11 @@ void TListJobsCommand::Register(TRegistrar registrar)
         [] (TThis* command) -> auto& { return command->Options.OperationIncarnation; })
         .Optional(/*init*/ false);
 
+    registrar.ParameterWithUniversalAccessor<std::optional<std::string>>(
+        "monitoring_descriptor",
+        [] (TThis* command) -> auto& { return command->Options.MonitoringDescriptor; })
+        .Optional(/*init*/ false);
+
     registrar.ParameterWithUniversalAccessor<std::optional<TInstant>>(
         "from_time",
         [] (TThis* command) -> auto& { return command->Options.FromTime; })

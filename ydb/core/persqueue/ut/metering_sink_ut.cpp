@@ -202,6 +202,34 @@ Y_UNIT_TEST(UsedStorageV1) {
     UNIT_ASSERT_VALUES_EQUAL(fullMetering, referenceStorageJson);
 }
 
+Y_UNIT_TEST(UnusedStorageV1) {
+    const ui64 creationTs = 1651752943168786;
+    const ui64 flushTs    = 1651754943168786;
+    const ui32 partitions = 7;
+    const ui64 reservedSpace = 42_GB;
+
+    TMeteringSink meteringSink;
+    meteringSink.Create(TInstant::FromValue(creationTs), {
+            .FlushInterval = TDuration::Seconds(10),
+            .TabletId = "tabletId",
+            .YcCloudId = "cloudId",
+            .YcFolderId = "folderId",
+            .YdbDatabaseId = "databaseId",
+            .StreamName = "streamName",
+            .ResourceId = "streamPath",
+            .PartitionsSize = partitions,
+            .ReservedSpace = reservedSpace,
+        }, {EMeteringJson::UsedStorageV1}, [&](TString json) {
+            UNIT_FAIL("Flush should not be called");
+            Y_UNUSED(json);
+        });
+
+    const ui32 quantity = 0;
+
+    meteringSink.IncreaseQuantity(EMeteringJson::UsedStorageV1, quantity);
+    meteringSink.MayFlushForcibly(TInstant::FromValue(flushTs));
+}
+
 } // Y_UNIT_TEST_SUITE(MeteringSink)
 
 } // namespace NKikimr::NPQ

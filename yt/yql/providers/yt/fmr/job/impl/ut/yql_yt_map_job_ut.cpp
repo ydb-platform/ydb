@@ -107,7 +107,7 @@ Y_UNIT_TEST_SUITE(MapTests) {
             mapJob.SetInputType(type);
         }
 
-        mapJob.DoFmrJob();
+        mapJob.DoFmrJob(TFmrUserJobOptions{.WriteStatsToFile = false});
 
         // Checking correctness
         auto tableDataServiceClient = MakeTableDataServiceClient(port);

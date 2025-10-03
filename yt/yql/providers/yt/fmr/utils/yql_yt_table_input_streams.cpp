@@ -25,10 +25,11 @@ std::vector<NYT::TRawTableReaderPtr> GetYtTableReaders(
         auto fmrTableId = TFmrTableId(richPath);
         auto clusterConnection = TClusterConnection();
 
-        TYtTableRef ytTablePart{.RichPath = richPath};
+        TYtTableRef ytTablePart(richPath);
         if (hasFilePaths) {
             ytTablePart.FilePath = filePaths[i];
         } else {
+            YQL_ENSURE(clusterConnections.contains(fmrTableId)); // for better logging in case of exception
             clusterConnection = clusterConnections.at(fmrTableId);
         }
 

@@ -621,6 +621,7 @@
         "9779624268": "{registry_endpoint}/9779624268",
         "9790047688": "{registry_endpoint}/9790047688",
         "9824364966": "{registry_endpoint}/9824364966",
+        "9854287477": "{registry_endpoint}/9854287477",
         "5486731632": "{registry_endpoint}/5486731632",
         "5514350352": "{registry_endpoint}/5514350352",
         "5514360398": "{registry_endpoint}/5514360398",
@@ -1687,6 +1688,7 @@
         "8418036683": "{registry_endpoint}/8418036683",
         "8435535653": "{registry_endpoint}/8435535653",
         "8559585510": "{registry_endpoint}/8559585510",
+        "9859917178": "{registry_endpoint}/9859917178",
         "2980468199": "{registry_endpoint}/2980468199",
         "5562224408": "{registry_endpoint}/5562224408",
         "7663495611": "{registry_endpoint}/7663495611"
@@ -2309,6 +2311,7 @@
         "9779624268": "devtools/ya/test/programs/test_tool/bin/test_tool for linux",
         "9790047688": "devtools/ya/test/programs/test_tool/bin/test_tool for linux",
         "9824364966": "devtools/ya/test/programs/test_tool/bin/test_tool for linux",
+        "9854287477": "devtools/ya/test/programs/test_tool/bin/test_tool for linux",
         "5486731632": "devtools/ya/test/programs/test_tool/bin3/test_tool3 for linux",
         "5514350352": "devtools/ya/test/programs/test_tool/bin3/test_tool3 for linux",
         "5514360398": "devtools/ya/test/programs/test_tool/bin3/test_tool3 for linux",
@@ -3375,6 +3378,7 @@
         "8418036683": "yt/go/ytrecipe/cmd/ytexec for linux",
         "8435535653": "yt/go/ytrecipe/cmd/ytexec for linux",
         "8559585510": "yt/go/ytrecipe/cmd/ytexec for linux",
+        "9859917178": "yt/go/ytrecipe/cmd/ytexec for linux",
         "2980468199": "ytexec for linux",
         "5562224408": "ytexec for linux",
         "7663495611": "ytexec for linux"

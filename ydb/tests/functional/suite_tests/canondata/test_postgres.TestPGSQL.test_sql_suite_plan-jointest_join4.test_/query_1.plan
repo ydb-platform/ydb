@@ -5,7 +5,7 @@
         "Plans": [
             {
                 "Node Type": "ResultSet_1",
-                "PlanNodeId": 15,
+                "PlanNodeId": 13,
                 "PlanNodeType": "ResultSet",
                 "Plans": [
                     {
@@ -14,18 +14,18 @@
                             {
                                 "Inputs": [
                                     {
-                                        "ExternalPlanNodeId": 13
+                                        "ExternalPlanNodeId": 11
                                     }
                                 ],
                                 "Limit": "1001",
                                 "Name": "Limit"
                             }
                         ],
-                        "PlanNodeId": 14,
+                        "PlanNodeId": 12,
                         "Plans": [
                             {
                                 "Node Type": "UnionAll",
-                                "PlanNodeId": 13,
+                                "PlanNodeId": 11,
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
@@ -47,7 +47,7 @@
                                                         "InternalOperatorId": 2
                                                     },
                                                     {
-                                                        "ExternalPlanNodeId": 10
+                                                        "ExternalPlanNodeId": 8
                                                     }
                                                 ],
                                                 "Name": "InnerJoin (MapJoin)"
@@ -55,14 +55,14 @@
                                             {
                                                 "Inputs": [
                                                     {
-                                                        "ExternalPlanNodeId": 11
+                                                        "ExternalPlanNodeId": 9
                                                     }
                                                 ],
                                                 "Name": "Filter",
                                                 "Predicate": "Exist(item.nt2_id)"
                                             }
                                         ],
-                                        "PlanNodeId": 12,
+                                        "PlanNodeId": 10,
                                         "Plans": [
                                             {
                                                 "Node Type": "TablePointLookup",
@@ -82,14 +82,14 @@
                                                         "Table": "postgres_jointest/join4.test_plan/nt3"
                                                     }
                                                 ],
-                                                "PlanNodeId": 11,
+                                                "PlanNodeId": 9,
                                                 "Tables": [
                                                     "postgres_jointest/join4.test_plan/nt3"
                                                 ]
                                             },
                                             {
                                                 "Node Type": "Broadcast",
-                                                "PlanNodeId": 10,
+                                                "PlanNodeId": 8,
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
@@ -116,14 +116,14 @@
                                                             {
                                                                 "Inputs": [
                                                                     {
-                                                                        "ExternalPlanNodeId": 8
+                                                                        "ExternalPlanNodeId": 6
                                                                     }
                                                                 ],
                                                                 "Name": "Filter",
                                                                 "Predicate": "Exist(item.id)"
                                                             }
                                                         ],
-                                                        "PlanNodeId": 9,
+                                                        "PlanNodeId": 7,
                                                         "Plans": [
                                                             {
                                                                 "Columns": [
@@ -137,7 +137,7 @@
                                                                 ],
                                                                 "Node Type": "TableLookup",
                                                                 "Path": "/Root/postgres_jointest/join4.test_plan/nt1",
-                                                                "PlanNodeId": 8,
+                                                                "PlanNodeId": 6,
                                                                 "PlanNodeType": "Connection",
                                                                 "Plans": [
                                                                     {
@@ -159,7 +159,7 @@
                                                                                 "Name": "PartitionByKey"
                                                                             }
                                                                         ],
-                                                                        "PlanNodeId": 7
+                                                                        "PlanNodeId": 5
                                                                     }
                                                                 ],
                                                                 "Table": "postgres_jointest/join4.test_plan/nt1"
@@ -179,57 +179,44 @@
             {
                 "Node Type": "Precompute_0",
                 "Parent Relationship": "InitPlan",
-                "PlanNodeId": 5,
+                "PlanNodeId": 3,
                 "PlanNodeType": "Materialize",
                 "Plans": [
                     {
-                        "Node Type": "Collect",
-                        "PlanNodeId": 4,
+                        "Node Type": "Filter",
+                        "Operators": [
+                            {
+                                "Inputs": [
+                                    {
+                                        "ExternalPlanNodeId": 1
+                                    }
+                                ],
+                                "Name": "Filter",
+                                "Predicate": "item.b1"
+                            }
+                        ],
+                        "PlanNodeId": 2,
                         "Plans": [
                             {
-                                "Node Type": "UnionAll",
-                                "PlanNodeId": 3,
-                                "PlanNodeType": "Connection",
-                                "Plans": [
+                                "Node Type": "TableFullScan",
+                                "Operators": [
                                     {
-                                        "Node Type": "Filter",
-                                        "Operators": [
-                                            {
-                                                "Inputs": [
-                                                    {
-                                                        "ExternalPlanNodeId": 1
-                                                    }
-                                                ],
-                                                "Name": "Filter",
-                                                "Predicate": "item.b1"
-                                            }
+                                        "Inputs": [],
+                                        "Name": "TableFullScan",
+                                        "Path": "/Root/postgres_jointest/join4.test_plan/nt2",
+                                        "ReadColumns": [
+                                            "id (-\u221e, +\u221e)",
+                                            "b1",
+                                            "nt1_id"
                                         ],
-                                        "PlanNodeId": 2,
-                                        "Plans": [
-                                            {
-                                                "Node Type": "TableFullScan",
-                                                "Operators": [
-                                                    {
-                                                        "Inputs": [],
-                                                        "Name": "TableFullScan",
-                                                        "Path": "/Root/postgres_jointest/join4.test_plan/nt2",
-                                                        "ReadColumns": [
-                                                            "id (-\u221e, +\u221e)",
-                                                            "b1",
-                                                            "nt1_id"
-                                                        ],
-                                                        "ReadRangesPointPrefixLen": "0",
-                                                        "Scan": "Parallel",
-                                                        "Table": "postgres_jointest/join4.test_plan/nt2"
-                                                    }
-                                                ],
-                                                "PlanNodeId": 1,
-                                                "Tables": [
-                                                    "postgres_jointest/join4.test_plan/nt2"
-                                                ]
-                                            }
-                                        ]
+                                        "ReadRangesPointPrefixLen": "0",
+                                        "Scan": "Parallel",
+                                        "Table": "postgres_jointest/join4.test_plan/nt2"
                                     }
+                                ],
+                                "PlanNodeId": 1,
+                                "Tables": [
+                                    "postgres_jointest/join4.test_plan/nt2"
                                 ]
                             }
                         ]

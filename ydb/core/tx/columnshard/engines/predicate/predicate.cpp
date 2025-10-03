@@ -174,7 +174,7 @@ bool TPredicate::IsEqualTo(const TPredicate& item) const {
 }
 
 IOutputStream& operator<<(IOutputStream& out, const TPredicate& pred) {
-    out << NArrow::NSSA::TSimpleFunction::GetFunctionName(pred.Operation);
+    out << NArrow::NSSA::TSimpleFunction::GetFunctionName(pred.Operation) << " ";
 
     for (i32 i = 0; i < pred.Batch->num_columns(); ++i) {
         auto array = pred.Batch->column(i);

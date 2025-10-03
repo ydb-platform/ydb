@@ -99,8 +99,6 @@ namespace NSQLComplete {
 
                 if (auto* expr = ctx->expr()) {
                     (*Names_)[std::move(*id)] = expr;
-                } else if (auto* subselect = ctx->subselect_stmt()) {
-                    (*Names_)[std::move(*id)] = subselect;
                 } else {
                     (*Names_)[std::move(*id)] = std::monostate();
                 }

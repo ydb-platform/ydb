@@ -1,5 +1,7 @@
 #include "sql_format.h"
 
+#include <yql/essentials/sql/v1/proto_parser/parse_tree.h>
+
 #include <yql/essentials/parser/lexer_common/lexer.h>
 #include <yql/essentials/core/sql_types/simple_types.h>
 
@@ -20,10 +22,10 @@ namespace NSQLFormat {
 namespace {
 
 using namespace NSQLv1Generated;
+using namespace NSQLTranslationV1;
 
 using NSQLTranslation::TParsedToken;
 using NSQLTranslation::TParsedTokenList;
-using NSQLTranslationV1::IsProbablyKeyword;
 using TTokenIterator = TParsedTokenList::const_iterator;
 
 TTokenIterator SkipWS(TTokenIterator curr, TTokenIterator end) {
@@ -568,6 +570,14 @@ private:
             ForceExpandedColumn_ = paren.GetColumn();
             ForceExpandedLine_ = paren.GetLine();
             suppressExpr = true;
+        } else if (descr == TRule_smart_parenthesis::GetDescriptor()) {
+            const auto& value = dynamic_cast<const TRule_smart_parenthesis&>(msg);
+            if (IsSelect(value)) {
+                auto& paren = value.GetToken1();
+                ForceExpandedColumn_ = paren.GetColumn();
+                ForceExpandedLine_ = paren.GetLine();
+                suppressExpr = true;
+            }
         } else if (descr == TRule_case_expr::GetDescriptor()) {
             const auto& value = dynamic_cast<const TRule_case_expr&>(msg);
             auto& token = value.GetToken1();
@@ -703,7 +713,13 @@ private:
                 return true;
             case TRule_sql_stmt_core::kAltSqlStmtCore3: { // named nodes
                 const auto& stmt = msg.GetAlt_sql_stmt_core3().GetRule_named_nodes_stmt1();
-                if (stmt.GetBlock3().HasAlt1()) {
+
+                const bool isSelect = (
+                    (stmt.GetBlock3().HasAlt1() &&
+                     IsSelect(stmt.GetBlock3().GetAlt1().GetRule_expr1())) ||
+                    (stmt.GetBlock3().HasAlt2()));
+
+                if (!isSelect) {
                     return true;
                 }
                 break;
@@ -856,6 +872,42 @@ private:
         }
     }
 
+    void VisitSmartParenthesis(const TRule_smart_parenthesis& msg) {
+        if (!IsSelect(msg)) {
+            return VisitAllFields(msg.GetDescriptor(), msg);
+        }
+
+        Y_ENSURE(msg.GetBlock2().HasAlt1());
+
+        Visit(msg.GetToken1());
+        PushCurrentIndent();
+        NewLine();
+        Visit(msg.GetBlock2().GetAlt1().GetRule_select_subexpr1());
+        NewLine();
+        PopCurrentIndent();
+        Visit(msg.GetToken3());
+    }
+
+    void VisitSelectSubExpr(const TRule_select_subexpr& msg) {
+        Visit(msg.GetRule_select_subexpr_intersect1());
+        for (const auto& block : msg.GetBlock2()) {
+            NewLine();
+            Visit(block.GetRule_union_op1());
+            NewLine();
+            Visit(block.GetRule_select_subexpr_intersect2());
+        }
+    }
+
+    void VisitSelectSubExprIntersect(const TRule_select_subexpr_intersect& msg) {
+        Visit(msg.GetRule_select_or_expr1());
+        for (const auto& block : msg.GetBlock2()) {
+            NewLine();
+            Visit(block.GetRule_intersect_op1());
+            NewLine();
+            Visit(block.GetRule_select_or_expr2());
+        }
+    }
+
     void VisitSelectUnparenthesized(const TRule_select_unparenthesized_stmt& msg) {
         NewLine();
         Visit(msg.GetRule_select_unparenthesized_stmt_intersect1());
@@ -893,36 +945,13 @@ private:
 
         case TRule_named_nodes_stmt::TBlock3::kAlt2: {
             const auto& alt = msg.GetBlock3().GetAlt2();
-            const auto& subselect = alt.GetRule_subselect_stmt1();
-            switch (subselect.GetBlock1().Alt_case()) {
-            case TRule_subselect_stmt::TBlock1::kAlt1: {
-                const auto& alt = subselect.GetBlock1().GetAlt1();
-                Visit(alt.GetToken1());
-                NewLine();
-                PushCurrentIndent();
-                Visit(alt.GetRule_select_stmt2());
-                PopCurrentIndent();
-                NewLine();
-                Visit(alt.GetToken3());
-                break;
-            }
-
-            case TRule_subselect_stmt::TBlock1::kAlt2: {
-                const auto& alt = subselect.GetBlock1().GetAlt2();
-                Out(" (");
-                NewLine();
-                PushCurrentIndent();
-                Visit(alt);
-                PopCurrentIndent();
-                NewLine();
-                Out(')');
-                break;
-            }
-
-            default:
-                ythrow yexception() << "Alt is not supported";
-            }
-
+            Out(" (");
+            NewLine();
+            PushCurrentIndent();
+            Visit(alt);
+            PopCurrentIndent();
+            NewLine();
+            Out(')');
             break;
         }
 
@@ -1092,39 +1121,43 @@ private:
                 PopCurrentIndent();
                 Visit(targets.GetToken4());
                 Visit(multiColumn.GetToken2());
-                Visit(multiColumn.GetToken3());
-                NewLine();
-                const auto& simpleValues = multiColumn.GetRule_simple_values_source4();
-                switch (simpleValues.Alt_case()) {
-                case TRule_simple_values_source::kAltSimpleValuesSource1: {
-                    const auto& exprs = simpleValues.GetAlt_simple_values_source1().GetRule_expr_list1();
-                    NewLine();
-                    PushCurrentIndent();
-                    Visit(exprs.GetRule_expr1());
-                    for (const auto& block : exprs.GetBlock2()) {
-                        Visit(block.GetToken1());
-                        NewLine();
-                        Visit(block.GetRule_expr2());
-                    }
 
-                    PopCurrentIndent();
-                    NewLine();
+                const auto& parenthesis = multiColumn.GetRule_smart_parenthesis3();
+
+                const auto* tuple_or_expr = GetTupleOrExpr(parenthesis);
+                if (!tuple_or_expr) {
+                    Visit(parenthesis);
                     break;
                 }
-                case TRule_simple_values_source::kAltSimpleValuesSource2: {
-                    NewLine();
-                    PushCurrentIndent();
-                    Visit(simpleValues.GetAlt_simple_values_source2());
-                    PopCurrentIndent();
-                    NewLine();
+
+                const bool isHeadNamed = tuple_or_expr->HasBlock2();
+                const bool isTailNamed = AnyOf(tuple_or_expr->GetBlock3(), [](const auto& block) {
+                    return block.GetRule_named_expr2().HasBlock2();
+                });
+                if (isHeadNamed || isTailNamed) {
+                    Visit(parenthesis);
                     break;
                 }
-                default:
-                    ythrow yexception() << "Alt is not supported";
+
+
+                Visit(parenthesis.GetToken1());
+                PushCurrentIndent();
+                NewLine();
+
+                Visit(tuple_or_expr->GetRule_expr1());
+                for (auto& block : tuple_or_expr->GetBlock3()) {
+                    Visit(block.GetToken1());
+                    NewLine();
+                    Visit(block.GetRule_named_expr2().GetRule_expr1());
+                }
+                if (tuple_or_expr->HasBlock4()) {
+                    Visit(tuple_or_expr->GetBlock4().GetToken1());
                 }
 
                 NewLine();
-                Visit(multiColumn.GetToken5());
+                PopCurrentIndent();
+                Visit(parenthesis.GetToken3());
+
                 break;
             }
             default:
@@ -2576,21 +2609,6 @@ private:
         NewLine();
     }
 
-    void VisitInAtomExpr(const TRule_in_atom_expr& msg) {
-        if (msg.Alt_case() == TRule_in_atom_expr::kAltInAtomExpr7) {
-            const auto& alt = msg.GetAlt_in_atom_expr7();
-            Visit(alt.GetToken1());
-            NewLine();
-            PushCurrentIndent();
-            Visit(alt.GetRule_select_stmt2());
-            NewLine();
-            PopCurrentIndent();
-            Visit(alt.GetToken3());
-        } else {
-            VisitAllFields(TRule_in_atom_expr::GetDescriptor(), msg);
-        }
-    }
-
     void VisitSelectKindParenthesis(const TRule_select_kind_parenthesis& msg) {
         if (msg.Alt_case() == TRule_select_kind_parenthesis::kAltSelectKindParenthesis2) {
             const auto& alt = msg.GetAlt_select_kind_parenthesis2();
@@ -3063,7 +3081,6 @@ TStaticData::TStaticData()
         {TRule_window_specification::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitWindowSpecification)},
         {TRule_window_partition_clause::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitWindowParitionClause)},
         {TRule_lambda_body::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitLambdaBody)},
-        {TRule_in_atom_expr::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitInAtomExpr)},
         {TRule_select_kind_parenthesis::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitSelectKindParenthesis)},
         {TRule_cast_expr::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCastExpr)},
         {TRule_bitcast_expr::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitBitCastExpr)},
@@ -3092,6 +3109,9 @@ TStaticData::TStaticData()
         {TRule_pragma_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitPragma)},
         {TRule_select_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitSelect)},
         {TRule_select_stmt_intersect::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitSelectIntersect)},
+        {TRule_smart_parenthesis::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitSmartParenthesis)},
+        {TRule_select_subexpr::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitSelectSubExpr)},
+        {TRule_select_subexpr_intersect::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitSelectSubExprIntersect)},
         {TRule_select_unparenthesized_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitSelectUnparenthesized)},
         {TRule_select_unparenthesized_stmt_intersect::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitSelectUnparenthesizedIntersect)},
         {TRule_named_nodes_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitNamedNodes)},

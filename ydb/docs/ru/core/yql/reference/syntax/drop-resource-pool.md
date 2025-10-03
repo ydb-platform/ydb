@@ -1,6 +1,6 @@
 # DROP RESOURCE POOL
 
-`DROP RESOURCE POOL` удаляет [пул ресурсов](../../../../concepts/gloassary#resource-pool).
+`DROP RESOURCE POOL` удаляет [пул ресурсов](../../../concepts/glossary.md#resource-pool).
 
 ## Синтаксис
 
@@ -14,7 +14,7 @@ DROP RESOURCE POOL <name>
 
 ## Разрешения
 
-Требуется [разрешение](../yql/reference/syntax/grant#permissions-list) `REMOVE SCHEMA` до пула в директории `.metadata/workload_manager/pools`, пример выдачи такого разрешения:
+Требуется [разрешение](./grant.md#permissions-list) `REMOVE SCHEMA` до пула в директории `.metadata/workload_manager/pools`, пример выдачи такого разрешения:
 
 ```yql
 GRANT 'REMOVE SCHEMA`' ON `.metadata/workload_manager/pools` TO `user1@domain`;

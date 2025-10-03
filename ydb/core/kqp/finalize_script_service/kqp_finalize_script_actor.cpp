@@ -86,7 +86,7 @@ private:
     }
 
     void FetchSecrets() {
-        RegisterDescribeSecretsActor(SelfId(), UserToken, SecretNames, ActorContext().ActorSystem());
+        RegisterDescribeSecretsActor(SelfId(), UserToken, Database, SecretNames, ActorContext().ActorSystem());
     }
 
     void Handle(TEvDescribeSecretsResponse::TPtr& ev) {

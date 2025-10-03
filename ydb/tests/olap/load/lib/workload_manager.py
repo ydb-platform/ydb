@@ -244,13 +244,29 @@ class WorkloadManagerComputeScheduler(WorkloadManagerBase):
         ]
 
     @classmethod
-    def get_key_measurements(cls) -> list[LoadSuiteBase.KeyMeasurement]:
+    def get_key_measurements(cls) -> tuple[list[LoadSuiteBase.KeyMeasurement], str]:
         return [
             LoadSuiteBase.KeyMeasurement(f'satisfaction_avg_{p.name}', f'Satisfaction Avg {p.name}', [
-                LoadSuiteBase.KeyMeasurement.Interval('#ccffcc', 1.),
+                LoadSuiteBase.KeyMeasurement.Interval('#ccffcc', 1.e-5),
                 LoadSuiteBase.KeyMeasurement.Interval('#ffcccc')
-            ]) for p in cls.get_resource_pools()
-        ]
+            ], f'Satisfaction for resource pool <b>{p.name}</b>. See explanations below.') for p in cls.get_resource_pools()
+        ], '''<p>Parameter <b>satisfaction</b> is a metric that allows you to assess the level of satisfaction of a certain
+        pool with resources (in this case, CPU time). It demonstrates how efficiently the pool uses the resources allocated
+        to it compared to the amount that was planned for it.</p>
+
+        <p>The target value of the metric is 1.0. It means that the pool uses resources
+        in full compliance with the share allocated to it. Values below 1.0 indicate that the pool is underutilized,
+        while values above 1.0 indicate that the pool is using more resources than were planned.</p>
+
+        <p>Calculation formula: Satisfaction = Usage / FairShare<br/>
+
+        where:<br/>
+
+        Usage is the amount of CPU actually used by the pool;
+        FairShare is the planned (fair) amount of CPU for the pool, which is calculated approximately as the product of the total amount
+        of available CPU and the share of resources requested by the pool.</p>
+
+        <p>In this test, we average the satisfaction across all cluster nodes and over time.</p>'''
 
     @classmethod
     def before_workload(cls, result: YdbCliHelper.WorkloadRunResult):
@@ -336,6 +352,8 @@ class WorkloadManagerComputeScheduler(WorkloadManagerBase):
         for k in sum.keys():
             if not k.endswith(' d'):
                 sum[k] /= len(metrics)
+            if k.endswith('satisfaction'):
+                sum[k] /= 1.e6
         cls.metrics.append((time.time(), sum))
         return ''
 

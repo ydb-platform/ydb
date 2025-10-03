@@ -1580,13 +1580,17 @@ void TPDisk::WhiteboardReport(TWhiteboardReport &whiteboardReport) {
         pdiskState.SetPDiskId(PCtx->PDiskId);
         pdiskState.SetPath(Cfg->GetDevicePath());
         pdiskState.SetSerialNumber(Cfg->ExpectedSerial);
-        pdiskState.SetAvailableSize(availableSize);
-        pdiskState.SetTotalSize(totalSize);
         const auto& state = static_cast<NKikimrBlobStorage::TPDiskState::E>(Mon.PDiskState->Val());
         pdiskState.SetState(state);
-        pdiskState.SetSystemSize(Format.ChunkSize * (Keeper.GetOwnerHardLimit(OwnerSystemLog) + Keeper.GetOwnerHardLimit(OwnerSystemReserve)));
-        pdiskState.SetLogUsedSize(Format.ChunkSize * (Keeper.GetOwnerHardLimit(OwnerCommonStaticLog) - Keeper.GetOwnerFree(OwnerCommonStaticLog, {})));
-        pdiskState.SetLogTotalSize(Format.ChunkSize * Keeper.GetOwnerHardLimit(OwnerCommonStaticLog));
+        
+        // Only report size information when PDisk is not in error state
+        if (*Mon.PDiskBriefState != TPDiskMon::TPDisk::Error) {
+            pdiskState.SetAvailableSize(availableSize);
+            pdiskState.SetTotalSize(totalSize);
+            pdiskState.SetSystemSize(Format.ChunkSize * (Keeper.GetOwnerHardLimit(OwnerSystemLog) + Keeper.GetOwnerHardLimit(OwnerSystemReserve)));
+            pdiskState.SetLogUsedSize(Format.ChunkSize * (Keeper.GetOwnerHardLimit(OwnerCommonStaticLog) - Keeper.GetOwnerFree(OwnerCommonStaticLog, {})));
+            pdiskState.SetLogTotalSize(Format.ChunkSize * Keeper.GetOwnerHardLimit(OwnerCommonStaticLog));
+        }
         pdiskState.SetNumActiveSlots(GetNumActiveSlots());
         pdiskState.SetSlotSizeInUnits(Cfg->SlotSizeInUnits);
         if (ExpectedSlotCount) {

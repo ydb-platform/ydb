@@ -116,6 +116,15 @@ namespace NSQLHighlight {
                     {"goBack", 4},
                 },
             });
+            json.AppendValue(NJson::TJsonArray{
+                "{",
+                NJson::TJsonMap{
+                    {"token", "string.json"},
+                    {"nextEmbedded", "json"},
+                    {"next", "@embedded"},
+                    {"goBack", 1},
+                },
+            });
         } else if (unit.Kind == EUnitKind::Comment && ansi) {
             json.AppendValue(NJson::TJsonArray{begin, group, "@" + group});
         }

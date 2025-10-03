@@ -16,6 +16,8 @@ public:
 
     TSourcePtr Build(const TRule_select_stmt& node, TPosition& selectPos);
     TSourcePtr Build(const TRule_select_unparenthesized_stmt& node, TPosition& selectPos);
+    TSourcePtr BuildSubSelect(const TRule_select_kind_partial& node);
+    TSourcePtr BuildSubSelect(const TRule_select_subexpr& node);
 
 private:
     bool SelectTerm(TVector<TNodePtr>& terms, const TRule_result_column& node);
@@ -75,22 +77,30 @@ private:
 
     template <typename TRule>
         requires std::same_as<TRule, TRule_select_stmt> ||
-                 std::same_as<TRule, TRule_select_unparenthesized_stmt>
+                 std::same_as<TRule, TRule_select_unparenthesized_stmt> ||
+                 std::same_as<TRule, TRule_select_subexpr>
     TSourcePtr BuildStmt(const TRule& node, TPosition& pos);
+
+    TSourcePtr BuildStmt(const TRule_select_kind_partial& node);
+
+    TSourcePtr BuildStmt(TSourcePtr result, TBuildExtra extra);
 
     template <typename TRule>
         requires std::same_as<TRule, TRule_select_stmt> ||
-                 std::same_as<TRule, TRule_select_unparenthesized_stmt>
+                 std::same_as<TRule, TRule_select_unparenthesized_stmt> ||
+                 std::same_as<TRule, TRule_select_subexpr>
     TSourcePtr BuildUnionException(const TRule& node, TPosition& pos, TBuildExtra& extra);
 
     template <typename TRule>
         requires std::same_as<TRule, TRule_select_stmt_intersect> ||
-                 std::same_as<TRule, TRule_select_unparenthesized_stmt_intersect>
+                 std::same_as<TRule, TRule_select_unparenthesized_stmt_intersect> ||
+                 std::same_as<TRule, TRule_select_subexpr_intersect>
     TSourcePtr BuildIntersection(const TRule& node, TPosition& pos, TSelectKindPlacement placement, TBuildExtra& extra);
 
     template <typename TRule>
         requires std::same_as<TRule, TRule_select_kind_parenthesis> ||
-                 std::same_as<TRule, TRule_select_kind_partial>
+                 std::same_as<TRule, TRule_select_kind_partial> ||
+                 std::same_as<TRule, TRule_select_or_expr>
     TSelectKindResult BuildAtom(const TRule& node, TPosition& pos, TSelectKindPlacement placement, TBuildExtra& extra);
 
     TSelectKindResult SelectKind(const TRule_select_kind& node, TPosition& selectPos, TMaybe<TSelectKindPlacement> placement);

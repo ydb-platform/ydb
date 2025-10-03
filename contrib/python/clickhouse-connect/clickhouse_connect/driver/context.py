@@ -1,6 +1,6 @@
 import logging
 import re
-from typing import Optional, Dict, Union, Any
+from typing import Optional, Dict, Union, Any, Callable
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +44,7 @@ class BaseQueryContext:
         self.use_extended_dtypes = use_extended_dtypes
         self._active_col_fmt = None
         self._active_col_type_fmts = _empty_map
+        self.column_renamer: Optional[Callable[[str], str]] = None
 
     def start_column(self, name: str):
         self.column_name = name

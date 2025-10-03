@@ -1763,8 +1763,17 @@ message TImmediateControlsConfig {
             MaxValue: 1,
             DefaultValue: 0 }];
 
-        reserved 34;
-        reserved 35;
+        optional uint64 HullCompFullCompPeriodSec = 34 [(ControlOptions) = {
+            Description: "Full compaction will start no more than once during this interval",
+            MinValue: 0,
+            MaxValue: 604800, // 1 week
+            DefaultValue: 0 }];
+
+        optional uint64 HullCompThrottlerBytesRate = 35 [(ControlOptions) = {
+            Description: "Rate bytes in 1 second for requests (sum of write and read) in compaction throttler",
+            MinValue: 0,
+            MaxValue: 10000000000, // 10 GB/s
+            DefaultValue: 0 }];
     }
 
     message TTabletControls {
@@ -2379,6 +2388,7 @@ message TColumnShardConfig {
     optional bool OnlyBulkUpsertWritingBuffer = 50 [default = true];
     optional uint64 BadPortionSizeLimit = 51 [default = 524288];
     optional uint64 BadPortionsLimit = 52;
+    optional uint64 InFlightLocksRangesBytesLimit = 53 [default = 1073741824];
 }
 
 message TSchemeShardConfig {

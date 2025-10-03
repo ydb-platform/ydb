@@ -3494,6 +3494,47 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         }
     }
 
+     Y_UNIT_TEST_TWIN(CTAS_BadKey, IsOlap) {
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetKqpSettings({setting})
+            .SetWithSampleTables(false)
+            .SetEnableTempTables(true);
+        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
+
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetQueryClient();
+
+        {
+            auto result = db.ExecuteQuery(Sprintf(R"(
+                CREATE TABLE Table (
+                    PRIMARY KEY (Key2, Key)
+                ) WITH (STORE=%s)
+                AS SELECT 1u AS Key, "1" AS Value1, "1" AS Value2;
+                )", IsOlap ? "COLUMN" : "ROW"), TTxControl::NoTx(), TExecuteQuerySettings()).ExtractValueSync();
+
+            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_C(
+                result.GetIssues().ToString().contains("Unknown column 'Key2' specified in key column list"),
+                result.GetIssues().ToString());
+        }
+
+        {
+            auto result = db.ExecuteQuery(Sprintf(R"(
+                CREATE TABLE Table (
+                    PRIMARY KEY (Key, Key2)
+                ) WITH (STORE=%s)
+                AS SELECT 1u AS Key, "1" AS Value1, "1" AS Value2;
+                )", IsOlap ? "COLUMN" : "ROW"), TTxControl::NoTx(), TExecuteQuerySettings()).ExtractValueSync();
+
+            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_C(
+                result.GetIssues().ToString().contains("Unknown column 'Key2' specified in key column list"),
+                result.GetIssues().ToString());
+        }
+     }
+
     Y_UNIT_TEST(CheckIsolationLevelFroPerStatementMode) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableAstCache(true);

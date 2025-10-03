@@ -1,6 +1,8 @@
 #pragma once
 
 #include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/core/util/backoff.h>
+#include <ydb/core/wrappers/retry_policy.h>
 
 #include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/core/wrappers/events/abstract.h>
@@ -69,6 +71,7 @@ public:
 class TReplyAdapterContainer {
 private:
     IReplyAdapter::TPtr Adapter;
+    mutable NKikimr::TBackoff Backoff{NKikimr::TBackoff(100, TDuration::Seconds(3), TDuration::Seconds(10))};
 public:
     TReplyAdapterContainer() = default;
     TReplyAdapterContainer(IReplyAdapter::TPtr adapter)
@@ -95,10 +98,35 @@ public:
 
     template <class TBaseEventObject>
     void Reply(const NActors::TActorId& recipientId, std::unique_ptr<TBaseEventObject>&& ev) const {
+        bool doBackoff = false;
+        TDuration delay = TDuration::Zero();
+
+        if constexpr (requires(const TBaseEventObject* p) { p->IsSuccess(); }) {
+            const bool isSuccess = ev->IsSuccess();
+            if (isSuccess) {
+                Backoff.Reset();
+            } else if constexpr (requires(const TBaseEventObject* p) { p->GetError(); }) {
+                const auto& err = ev->GetError();
+                if (NWrappers::ShouldBackoff(err)) {
+                    delay = Backoff.Next();
+                    doBackoff = delay > TDuration::Zero();
+                }
+            }
+        }
+
+        std::unique_ptr<NActors::IEventBase> finalEvent;
         if (Adapter) {
-            TlsActivationContext->ActorSystem()->Send(Adapter->GetRecipient(recipientId), Adapter->RebuildReplyEvent(std::move(ev)).release());
+            finalEvent = Adapter->RebuildReplyEvent(std::move(ev));
         } else {
-            TlsActivationContext->ActorSystem()->Send(recipientId, ev.release());
+            finalEvent.reset(ev.release());
+        }
+
+        const NActors::TActorId recipient = Adapter ? Adapter->GetRecipient(recipientId) : recipientId;
+        if (doBackoff) {
+            auto* handle = new NActors::IEventHandle(recipient, NActors::TActorId(), finalEvent.release());
+            TlsActivationContext->ActorSystem()->Schedule(delay, handle);
+        } else {
+            TlsActivationContext->ActorSystem()->Send(recipient, finalEvent.release());
         }
 
     }

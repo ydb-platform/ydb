@@ -321,7 +321,7 @@ namespace {
         return issues;
     }
 
-     NThreading::TFuture<TGetSchemeEntryResult> GetSchemeEntryTypeImpl(
+    NThreading::TFuture<TGetSchemeEntryResult> GetSchemeEntryTypeImpl(
         TActorSystem *actorSystem,
         const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup,
         const TString& endpoint,
@@ -345,8 +345,8 @@ namespace {
             .CredentialsProviderFactory(credentialsProviderFactory);
         auto schemeClient = std::make_shared<NYdb::NScheme::TSchemeClient>(*driver, opts);
 
-        return schemeClient->DescribePath(!addRoot ? path: "/Root" + path)
-            .Apply([actorSystem, p = path, sc = schemeClient, database, endpoint, f= federatedQuerySetup, useTls, structuredTokenJson, addRoot](const NThreading::TFuture<NYdb::NScheme::TDescribePathResult>& result) {
+        return schemeClient->DescribePath(!addRoot ? path : "/Root" + path)
+            .Apply([actorSystem, p = path, sc = schemeClient, database, endpoint, f = federatedQuerySetup, useTls, structuredTokenJson, addRoot](const NThreading::TFuture<NYdb::NScheme::TDescribePathResult>& result) {
                 auto describePathResult = result.GetValue();
                 TGetSchemeEntryResult res;
                 if (!describePathResult.IsSuccess()) {

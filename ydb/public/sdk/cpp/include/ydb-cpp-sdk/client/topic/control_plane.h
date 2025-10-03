@@ -768,7 +768,7 @@ struct TAlterTopicSettings : public TOperationRequestSettings<TAlterTopicSetting
     std::variant<
         bool,         // Reset
         EMetricsLevel // Set
-    > MetricsLevel_;
+    > MetricsLevel_ = false;
 };
 
 inline TPartitioningSettingsBuilder TCreateTopicSettings::BeginConfigurePartitioningSettings() {

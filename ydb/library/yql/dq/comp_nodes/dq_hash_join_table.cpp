@@ -2,7 +2,6 @@
 
 namespace NKikimr::NMiniKQL::NJoinTable {
 bool NeedToTrackUnusedRightTuples(EJoinKind kind) {
-    Cout << "NeedToTrackUnusedRightTuples: " << (static_cast<int>(kind)&4) << Endl;
     return (static_cast<int>(kind)&4) == 4;
 }
 bool NeedToTrackUnusedLeftTuples(EJoinKind kind) {

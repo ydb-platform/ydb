@@ -23,7 +23,7 @@ class TStdJoinTable {
     {}
 
     void Add(std::span<NYql::NUdf::TUnboxedValue> tuple) {
-        Y_ABORT_UNLESS(BuiltTable.empty(), "JoinTable is built already");
+        MKQL_ENSURE(BuiltTable.empty(), "JoinTable is built already");
         MKQL_ENSURE(std::ssize(tuple) == TupleSize, "tuple size promise vs actual mismatch");
         for (int idx = 0; idx < TupleSize; ++idx) {
             Tuples.push_back(tuple[idx]);
@@ -31,7 +31,7 @@ class TStdJoinTable {
     }
 
     void Build() {
-        Y_ABORT_UNLESS(BuiltTable.empty(), "JoinTable is built already");
+        MKQL_ENSURE(BuiltTable.empty(), "JoinTable is built already");
         for (int index = 0; index < std::ssize(Tuples); index += TupleSize) {
             TTuple thisTuple = &Tuples[index];
             auto [it, ok] = BuiltTable.emplace(thisTuple, TuplesWithSameJoinKey{.Tuples = std::vector{thisTuple}, .Used = !TrackUnusedTuples});
@@ -50,14 +50,13 @@ class TStdJoinTable {
     }
 
     bool UnusedTrackingOn() const { 
-        Cout << "TrackUnusedTuples == " << TrackUnusedTuples << Endl;
         return TrackUnusedTuples;
     }
 
     void ForEachUnused(std::function<void(TTuple)> produce) {
         MKQL_ENSURE(TrackUnusedTuples, "wasn't tracking tuples at all");
-        for(auto& tuplesSameKey: BuiltTable){
-            if (!tuplesSameKey.second.Used){
+        for(auto& tuplesSameKey: BuiltTable) {
+            if (!tuplesSameKey.second.Used) {
                 std::ranges::for_each(tuplesSameKey.second.Tuples, produce);
                 tuplesSameKey.second.Used = true;
             }

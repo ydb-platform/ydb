@@ -38,7 +38,7 @@ class TScalarHashJoinState : public TComputationValue<TScalarHashJoinState> {
     IComputationWideFlowNode* ProbeSide() const {
         return LeftFinished_ ? nullptr : LeftFlow_;
     }
-    void AppendTuple(NJoinTable::TTuple probe, NJoinTable::TTuple build, std::vector<NUdf::TUnboxedValue>& output){
+    void AppendTuple(NJoinTable::TTuple probe, NJoinTable::TTuple build, std::vector<NUdf::TUnboxedValue>& output) {
         MKQL_ENSURE(probe || build,"appending invalid tuple");
         if (probe) {
             for (int index = 0; index < std::ssize(LeftKeyColumns_); ++index) {
@@ -107,8 +107,8 @@ public:
             Pointers_[LeftKeyColumns_[index]] = &Values_[index];
         }
         int valuesIndex = 0;
-        for(int index = 0; index < std::ssize(Pointers_); ++index){
-            if (!Pointers_[index]){
+        for(int index = 0; index < std::ssize(Pointers_); ++index) {
+            if (!Pointers_[index]) {
                 Pointers_[index] = &Values_[ std::ssize(LeftKeyColumns_) + valuesIndex];
                 valuesIndex++;
             }
@@ -133,7 +133,6 @@ public:
                 return EFetchResult::Yield;
             }
             case EFetchResult::One: {
-                Cout << "Added tuple" << Endl;
                 Table_.Add(Values_);
                 return EFetchResult::Yield;
             }
@@ -158,10 +157,8 @@ public:
             case EFetchResult::Finish: {
                 LeftFinished_ = true;
                 if (Table_.UnusedTrackingOn()) {
-                    Cout << "UnusedTrackingOn() == true" << Endl;
                     Table_.ForEachUnused([this](NJoinTable::TTuple unused) {
                         AppendTuple(nullptr, unused, Output_);
-                        Cout << "Foo" << Endl;
                     });
                 }
                 return EFetchResult::Yield;

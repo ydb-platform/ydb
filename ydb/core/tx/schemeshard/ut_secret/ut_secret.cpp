@@ -249,11 +249,24 @@ Y_UNIT_TEST_SUITE(TSchemeShardSecretTest) {
         );
         env.TestWaitNotification(runtime, txId);
 
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/dir/test-secret"), {
-            NLs::HasRight("+(DS):user1"), NLs::HasEffectiveRight("+(DS):user1"),
-            NLs::HasRight("+(AS):user1"), NLs::HasEffectiveRight("+(AS):user1"),
-            NLs::HasRight("-(DS):user2"), NLs::HasEffectiveRight("-(DS):user2"),
-            NLs::HasRight("+(AS):user2"), NLs::HasEffectiveRight("+(AS):user2")});
+        const auto secretDescribePath = DescribePath(runtime, "/MyRoot/dir/test-secret");
+        TestDescribeResult(secretDescribePath, {
+            NLs::HasNoRight("+(DS):user1"), NLs::HasEffectiveRight("+(DS):user1"),
+            NLs::HasNoRight("+(AS):user1"), NLs::HasEffectiveRight("+(AS):user1"),
+            NLs::HasNoRight("-(DS):user2"), NLs::HasEffectiveRight("-(DS):user2"),
+            NLs::HasNoRight("+(AS):user2"), NLs::HasEffectiveRight("+(AS):user2")});
+
+        auto describeResult = secretDescribePath.GetPathDescription().GetSelf();
+        const NACLib::TACL secretAcl(describeResult.GetEffectiveACL());
+        const auto parentDescribePath = DescribePath(runtime, "/MyRoot/dir");
+        describeResult = parentDescribePath.GetPathDescription().GetSelf();
+        const NACLib::TACL parentAcl(describeResult.GetEffectiveACL());
+
+        // Cannot compare rules themselves because they are actually different: i.e. there's an Inherited=true flag at the secret aces
+        UNIT_ASSERT_EQUAL_C(
+            secretAcl.GetACE().size(), parentAcl.GetACE().size(),
+            "Secret ACL must be inherited, hence the number of rules must should be the same")
+        ;
     }
 
     Y_UNIT_TEST(CreateSecretNoInheritPermissions) {
@@ -325,7 +338,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSecretTest) {
         env.TestWaitNotification(runtime, txId);
 
         const auto describeResult = DescribePath(runtime, "/MyRoot/dir/subdir/test-secret").GetPathDescription().GetSelf();
-        const TSecurityObject secObj(describeResult.GetOwner(), /*isEffective ? self.GetEffectiveACL() :*/ describeResult.GetACL(), false);
+        const TSecurityObject secObj(describeResult.GetOwner(), describeResult.GetEffectiveACL(), false);
         const auto user1Token = NACLib::TUserToken(NACLib::TUserToken::TUserTokenInitFields{.UserSID = "user1"});
         const auto user2Token = NACLib::TUserToken(NACLib::TUserToken::TUserTokenInitFields{.UserSID = "user2"});
         UNIT_ASSERT_C(secObj.CheckAccess(NACLib::DescribeSchema, user1Token), "user1 should have grant (inherited from dir)");

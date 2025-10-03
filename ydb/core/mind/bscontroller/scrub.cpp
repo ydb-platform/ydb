@@ -743,7 +743,16 @@ public:
                 working += {&*group->Topology, slot->GetShortVDiskId()};
             }
         }
-        return group->Topology->QuorumChecker->OneStepFromDegradedOrWorse(~working);
+        if (group->Topology->QuorumChecker->OneStepFromDegradedOrWorse(~working)) {
+            // prohibited by DEGRADED logic
+            return false;
+        }
+
+        if (group->IsScanPlanned()) {
+            return true;
+        }
+
+        return true;
     }
 
     void UpdateVDiskState(const TVSlotInfo *slot, TInstant now) {

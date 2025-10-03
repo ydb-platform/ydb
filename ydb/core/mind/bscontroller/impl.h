@@ -8,6 +8,7 @@
 #include "resources.h"
 #include "stat_processor.h"
 #include "indir.h"
+#include "scan_throttler.h"
 #include "self_heal.h"
 #include "storage_pool_stat.h"
 
@@ -646,6 +647,8 @@ public:
 
         // a reference to proxy group id when this group is a part of Bridge group
         std::optional<TGroupId> BridgeProxyGroupId;
+
+        bool IsScanInProgress = false;
 
         struct TGroupStatus {
             // status derived from the actual state of VDisks (IsReady() to be exact)
@@ -1905,6 +1908,11 @@ private:
     void Handle(TEvBlobStorage::TEvControllerScrubReportQuantumInProgress::TPtr ev);
 
     void IssueInitialGroupContent();
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Blob scan handling
+
+    
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Metric collection

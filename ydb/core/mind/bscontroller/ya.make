@@ -51,6 +51,7 @@ SRCS(
     register_node.cpp
     request_controller_info.cpp
     resources.h
+    scan_throttler.cpp
     scheme.h
     scrub.cpp
     shred.cpp

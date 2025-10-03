@@ -307,7 +307,6 @@ struct TCommonAppOptions {
     bool NodeBrokerUseTls = false;
     bool FixedNodeID = false;
     ui32 InterconnectPort = 0;
-    bool IgnoreCmsConfigs = false;
     bool TinyMode = false;
     TString NodeAddress;
     TString NodeHost;
@@ -417,8 +416,6 @@ struct TCommonAppOptions {
             .RequiredArgument("NAME").StoreResult(&NodeKind);
         opts.AddLongOption("node-type", "Type of the node")
             .RequiredArgument("NAME").StoreResult(&NodeType);
-        opts.AddLongOption("ignore-cms-configs", "Don't load configs from CMS")
-            .NoArgument().SetFlag(&IgnoreCmsConfigs);
         opts.AddLongOption("cert", "Path to client certificate file (PEM) for interconnect").RequiredArgument("PATH").StoreResult(&PathToInterconnectCertFile);
         opts.AddLongOption("grpc-cert", "Path to client certificate file (PEM) for grpc").RequiredArgument("PATH").StoreResult(&GrpcSslSettings.PathToGrpcCertFile);
         opts.AddLongOption("ic-cert", "Path to client certificate file (PEM) for interconnect").RequiredArgument("PATH").StoreResult(&PathToInterconnectCertFile);
@@ -1409,10 +1406,6 @@ public:
         if (!NodeName.empty()) {
             Labels["node_name"] = NodeName;
             AddLabelToAppConfig("node_name", Labels["node_name"]);
-        }
-
-        if (CommonAppOptions.IgnoreCmsConfigs) {
-            return;
         }
 
         TVector<TString> addrs;

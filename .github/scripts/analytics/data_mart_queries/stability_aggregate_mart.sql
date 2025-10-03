@@ -79,8 +79,8 @@ $all_tests = SELECT
     
     -- Настройки теста (NULL для кластерных проблем)
     CASE WHEN JSON_VALUE(s.Stats, '$.use_iterations') = 'true' THEN 1U ELSE 0U END AS UseIterations,
-    CASE WHEN JSON_VALUE(s.Stats, '$.nemesis') = 'true' THEN 1U ELSE 0U END AS Nemesis,
-    CASE WHEN JSON_VALUE(s.Stats, '$.nemesis_enabled') = 'true' THEN 1U ELSE 0U END AS NemesisEnabled,
+    CASE WHEN JSON_VALUE(s.Stats, '$.nemesis') = 'true' OR CAST(JSON_VALUE(s.Stats, '$.nemesis') AS Uint64) = 1UL THEN 1U ELSE 0U END AS Nemesis,
+    CASE WHEN JSON_VALUE(s.Stats, '$.nemesis_enabled') = 'true' OR CAST(JSON_VALUE(s.Stats, '$.nemesis_enabled') AS Uint64) = 1UL THEN 1U ELSE 0U END AS NemesisEnabled,
     JSON_VALUE(s.Stats, '$.workload_type') AS WorkloadType,
     JSON_VALUE(s.Stats, '$.path_template') AS PathTemplate,
     
@@ -134,6 +134,129 @@ LEFT JOIN $stability_suites AS s
     AND cc.Test = s.Test  -- Матчим по одинаковому Test имени!
 WHERE s.Stats IS NULL OR JSON_VALUE(s.Stats, '$.aggregation_level') = 'aggregate';
 
+-- Вычисляем статус
+$test_status = SELECT
+    -- Основные поля
+    Db,
+    Suite,
+    Test,
+    RunId,
+    StabilityTimestamp,
+    Success,
+    OrderInRun,
+    
+    -- Статистика тестов
+    TotalRuns,
+    SuccessfulRuns,
+    FailedRuns,
+    TotalIterations,
+    SuccessfulIterations,
+    FailedIterations,
+    
+    -- Временные метрики
+    PlannedDuration,
+    ActualDuration,
+    TotalExecutionTime,
+    
+    -- Метрики производительности
+    SuccessRate,
+    AvgThreadsPerIteration,
+    TotalThreads,
+    NodesPercentage,
+    NodesWithIssues,
+    
+    -- Ошибки и диагностика
+    NodeErrorMessages,
+    WorkloadErrorMessages,
+    WorkloadWarningMessages,
+    
+    -- Настройки теста
+    UseIterations,
+    Nemesis,
+    NemesisEnabled,
+    WorkloadType,
+    PathTemplate,
+    
+    -- Статус ошибок
+    NodeErrors,
+    WorkloadErrors,
+    WorkloadWarnings,
+    
+    -- Дополнительные поля
+    Stats,
+    TableType,
+    TestTimestamp,
+    StatsRunId,
+    
+    -- Информация о кластере
+    ClusterVersion,
+    ClusterVersionLink,
+    ClusterEndpoint,
+    ClusterDatabase,
+    ClusterMonitoring,
+    NodesCount,
+    NodesInfo,
+    CiVersion,
+    TestToolsVersion,
+    ReportUrl,
+    CiLaunchId,
+    CiLaunchUrl,
+    CiLaunchStartTime,
+    CiJobTitle,
+    CiClusterName,
+    CiNemesis,
+    CiBuildType,
+    CiSanitizer,
+    
+    -- ClusterCheck поля
+    ClusterCheckSuccess,
+    ClusterCheckTimestamp,
+    ClusterIssueType,
+    ClusterIssueDescription,
+    ClusterIssuePhase,
+    ClusterCheckType,
+    ClusterIssueCritical,
+    
+    -- Вычисляем FacedNodeErrors
+    CASE
+        WHEN NodeErrorMessages IS NULL OR CAST(NodeErrorMessages AS String) = '[]' OR CAST(NodeErrorMessages AS String) = '' THEN NULL
+        ELSE
+            ListConcat(
+                ListUniq(
+                    ListNotNull(AsList(
+                        CASE WHEN CAST(NodeErrorMessages AS String) LIKE '%coredump%' THEN 'Coredump' ELSE NULL END,
+                        CASE WHEN CAST(NodeErrorMessages AS String) LIKE '%OOM%' OR CAST(NodeErrorMessages AS String) LIKE '%experienced OOM%' THEN 'OOM' ELSE NULL END,
+                        CASE WHEN CAST(NodeErrorMessages AS String) LIKE '%VERIFY%' OR CAST(NodeErrorMessages AS String) LIKE '%verify%' THEN 'Verify' ELSE NULL END,
+                        CASE WHEN CAST(NodeErrorMessages AS String) LIKE '%SAN%' OR CAST(NodeErrorMessages AS String) LIKE '%sanitizer%' THEN 'SAN' ELSE NULL END
+                    ))
+                ),
+                ', '
+            )
+    END AS FacedNodeErrors,
+    
+    -- Вычисляем OverallStatus
+    CASE
+        -- Приоритет 1: Проблемы с инфраструктурой (ClusterCheck failed)
+        WHEN ClusterCheckSuccess = 0U THEN 'infrastructure_error'
+        
+        -- Приоритет 2: Кластер OK, но нет Stability записи (тест завис/не завершился)
+        WHEN ClusterCheckSuccess = 1U AND Success IS NULL THEN 
+            CASE 
+                -- Если прошло больше чем planned_duration * 3 от времени старта ClusterCheck, считаем timeout
+                -- Сравниваем время в микросекундах: текущее время - время старта > planned_duration * 3 * 1000000
+                WHEN CAST(CurrentUtcTimestamp() AS Uint64) - CAST(ClusterCheckTimestamp AS Uint64) > CAST(COALESCE(PlannedDuration, 1800) * 3 * 1000000 AS Uint64) THEN 'timeout'
+                ELSE 'in_progress'
+            END
+        
+        -- Приоритет 3: Обычные workload тесты (если кластер OK и есть Stability запись)
+        WHEN Success = 1U AND (NodeErrors IS NULL OR NodeErrors = 0U) AND (WorkloadErrors IS NULL OR WorkloadErrors = 0U) THEN 'success'
+        WHEN Success = 1U AND (NodeErrors = 1U OR WorkloadErrors = 1U) THEN 'success_with_errors'
+        WHEN Success = 0U AND NodeErrors = 1U THEN 'node_failure'
+        WHEN Success = 0U AND WorkloadErrors = 1U THEN 'success' -- 'workload_failure'
+        WHEN Success = 0U THEN 'failure'
+        ELSE 'unknown'
+    END AS OverallStatus
+FROM $all_tests;
 
 SELECT
     agg.Db,
@@ -251,45 +374,28 @@ SELECT
         ELSE NULL
     END AS DurationRatio,
     
-    -- Типы найденных ошибок нод (анализ node_error_messages)
-    CASE
-        WHEN agg.NodeErrorMessages IS NULL OR CAST(agg.NodeErrorMessages AS String) = '[]' OR CAST(agg.NodeErrorMessages AS String) = '' THEN NULL
-        ELSE
-            ListConcat(
-                ListUniq(
-                    ListNotNull(AsList(
-                        CASE WHEN CAST(agg.NodeErrorMessages AS String) LIKE '%coredump%' THEN 'Coredump' ELSE NULL END,
-                        CASE WHEN CAST(agg.NodeErrorMessages AS String) LIKE '%OOM%' OR CAST(agg.NodeErrorMessages AS String) LIKE '%experienced OOM%' THEN 'OOM' ELSE NULL END,
-                        CASE WHEN CAST(agg.NodeErrorMessages AS String) LIKE '%VERIFY%' OR CAST(agg.NodeErrorMessages AS String) LIKE '%verify%' THEN 'Verify' ELSE NULL END,
-                        CASE WHEN CAST(agg.NodeErrorMessages AS String) LIKE '%SAN%' OR CAST(agg.NodeErrorMessages AS String) LIKE '%sanitizer%' THEN 'SAN' ELSE NULL END
-                    ))
-                ),
-                ', '
-            )
-    END AS FacedNodeErrors,
+    -- Типы найденных ошибок нод (уже вычислено в $test_status)
+    agg.FacedNodeErrors,
     
-    -- Общий статус выполнения с детализацией кластерных проблем
+    -- Общий статус выполнения (уже вычислен в $test_status)
+    agg.OverallStatus,
+    
+    -- Расширенный статус с дополнительной информацией
     CASE
-        -- Приоритет 1: Проблемы с инфраструктурой (ClusterCheck failed)
-        WHEN agg.ClusterCheckSuccess = 0U THEN 'infrastructure_error'
-        
-        -- Приоритет 2: Кластер OK, но нет Stability записи (тест завис/не завершился)
-        WHEN agg.ClusterCheckSuccess = 1U AND agg.Success IS NULL THEN 
-            CASE 
-                -- Если прошло больше чем planned_duration * 3 от времени старта ClusterCheck, считаем timeout
-                -- Сравниваем время в микросекундах: текущее время - время старта > planned_duration * 3 * 1000000
-                WHEN CAST(CurrentUtcTimestamp() AS Uint64) - CAST(agg.ClusterCheckTimestamp AS Uint64) > CAST(COALESCE(agg.PlannedDuration, 1800) * 3 * 1000000 AS Uint64) THEN 'timeout'
-                ELSE 'in_progress'
+        -- Если есть FacedNodeErrors, добавляем их к OverallStatus
+        WHEN agg.FacedNodeErrors IS NOT NULL AND agg.FacedNodeErrors != '' THEN 
+            CASE
+                WHEN agg.ClusterCheckSuccess = 0U THEN 'infrastructure_error:' || agg.ClusterIssueType
+                ELSE agg.OverallStatus || ':' || agg.FacedNodeErrors
             END
         
-        -- Приоритет 3: Обычные workload тесты (если кластер OK и есть Stability запись)
-        WHEN agg.Success = 1U AND (agg.NodeErrors IS NULL OR agg.NodeErrors = 0U) AND (agg.WorkloadErrors IS NULL OR agg.WorkloadErrors = 0U) THEN 'success'
-        WHEN agg.Success = 1U AND (agg.NodeErrors = 1U OR agg.WorkloadErrors = 1U) THEN 'success_with_errors'
-        WHEN agg.Success = 0U AND agg.NodeErrors = 1U THEN 'node_failure'
-        WHEN agg.Success = 0U AND agg.WorkloadErrors = 1U THEN 'success' -- 'workload_failure'
-        WHEN agg.Success = 0U THEN 'failure'
-        ELSE 'unknown'
-    END AS OverallStatus
+        -- Если нет FacedNodeErrors, но есть ClusterIssueType, добавляем его
+        WHEN agg.ClusterIssueType IS NOT NULL THEN 
+            'infrastructure_error:' || agg.ClusterIssueType
+        
+        -- Если нет дополнительной информации, используем обычный OverallStatus
+        ELSE agg.OverallStatus
+    END AS OverallStatusExtended
 
-FROM $all_tests AS agg
-ORDER BY RunTs DESC;
+FROM $test_status AS agg
+--ORDER BY ClusterCheckTimestamp DESC;

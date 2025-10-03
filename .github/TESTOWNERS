@@ -97,6 +97,12 @@
 /ydb/core/http_proxy @ydb-platform/Topics
 /ydb/core/tx/schemeshard/ut_pq_reboots @ydb-platform/Topics
 /ydb/core/transfer @ydb-platform/Topics
+<<<<<<< HEAD
+=======
+/ydb/tests/stress/kafka @ydb-platform/Topics
+/ydb/public/sdk/cpp/src/client/topic/ @ydb-platform/Topics
+/ydb/public/sdk/cpp/tests/integration/topic @ydb-platform/Topics
+>>>>>>> 0f927593c9c (Change owner for cpp client topic (#26315))
 
 #YDB Analytics TEAM:???
 

@@ -84,7 +84,7 @@ Y_UNIT_TEST_SUITE(FastLookupUniqueList) {
         std::unique_ptr<TFastLookupUniqueList<T>> data;
         std::unique_ptr<std::list<T>> reference;
 
-        constexpr ui32 testSteps = 10000;
+        constexpr ui32 testSteps = 1000000;
 
         auto randomValue = [&] {
             return static_cast<T>(RandomNumber(testSteps / 20)); 
@@ -230,9 +230,9 @@ Y_UNIT_TEST_SUITE(FastLookupUniqueList) {
                     break;
                 }
                 T valueData = data->ExtractBack();
-                T valueRefence = reference->back();
+                T valueReference = reference->back();
                 reference->pop_back();
-                UNIT_ASSERT_VALUES_EQUAL_C(valueData, valueRefence, printDebugInfo());
+                UNIT_ASSERT_VALUES_EQUAL_C(valueData, valueReference, printDebugInfo());
                 break;
             }
             case EAction::Front: {
@@ -244,10 +244,6 @@ Y_UNIT_TEST_SUITE(FastLookupUniqueList) {
                 break;
             }
             case EAction::PushFront: {
-                if (reference->empty()) {
-                    UNIT_ASSERT_C(data->IsEmpty(), printDebugInfo());
-                    break;
-                }
                 data->PushFront(value);
                 removeFromReference(value);
                 reference->push_front(value);
@@ -268,9 +264,9 @@ Y_UNIT_TEST_SUITE(FastLookupUniqueList) {
                     break;
                 }
                 T valueData = data->ExtractFront();
-                T valueRefence = reference->front();
+                T valueReference = reference->front();
                 reference->pop_front();
-                UNIT_ASSERT_VALUES_EQUAL_C(valueData, valueRefence, printDebugInfo());
+                UNIT_ASSERT_VALUES_EQUAL_C(valueData, valueReference, printDebugInfo());
                 break;
             }
             case EAction::Contains: {

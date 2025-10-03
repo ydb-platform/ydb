@@ -11,7 +11,7 @@ namespace NKikimr {
 // O(1) PushFront(value), PopFront(), ExtractFront()
 // O(1) Contains(value), Erase(value)
 // O(1) Size()
-// When pushing value already present in container, old value will be erased 
+// When pushing value already present in container, old value will be erased.
 
 template<typename T>
 class TFastLookupUniqueList {
@@ -38,6 +38,7 @@ public:
     }
 
     TFastLookupUniqueList& operator=(const TFastLookupUniqueList& other) {
+        Clear();
         for (const T& value : other) {
             PushBack(value);
         }
@@ -109,7 +110,7 @@ public:
         Erase(value);
 
         Data.push_front(std::forward<T>(value));
-        Lookup[value] = Data.end();
+        Lookup[value] = Data.begin();
     }
 
     void PopFront() {

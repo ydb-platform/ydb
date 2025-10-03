@@ -145,7 +145,11 @@ namespace NTable {
 
         bool IsFinalized(TPos pos) const noexcept
         {
-            return GetCellOp(pos) != ECellOp::Empty;
+            if (pos < State.size()) {
+                return GetCellOp(pos) != ECellOp::Empty;
+            } else {
+                return false;
+            }
         }
 
     private:

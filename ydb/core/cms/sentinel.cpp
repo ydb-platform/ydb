@@ -1153,7 +1153,7 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
         updateRequest->SetPileupReplicas(Config.StateStorageSelfHealConfig.PileupReplicas);
         updateRequest->SetOverrideReplicasInRingCount(Config.StateStorageSelfHealConfig.OverrideReplicasInRingCount);
         updateRequest->SetOverrideRingsCount(Config.StateStorageSelfHealConfig.OverrideRingsCount);
-        updateRequest->SetReplicasDensity(Config.StateStorageSelfHealConfig.ReplicasDensity);
+        updateRequest->SetReplicasSpecificVolume(Config.StateStorageSelfHealConfig.ReplicasSpecificVolume);
         for (auto& [nodeId, node] : SentinelState->Nodes) {
             SentinelState->NeedSelfHealStateStorage |= node.Compute();
             auto* nodeState = updateRequest->AddNodesState();

@@ -56,21 +56,38 @@ struct TStorageWrapper
     }
 };
 
-std::optional<size_t> EstimateUvPackSize(const TUnboxedValuePod* items, size_t width) {
+std::optional<size_t> EstimateUvPackSize(const TArrayRef<const TUnboxedValuePod> items, const TArrayRef<TType* const> types) {
     constexpr const size_t uvSize = sizeof(TUnboxedValuePod);
 
     size_t sizeSum = 0;
 
-    const TUnboxedValuePod* itemPtr = items;
-    for (size_t i = 0; i < width; ++i, ++itemPtr) {
-        const TUnboxedValuePod& item = *itemPtr;
+    auto currType = types.begin();
+    for (const auto& item : items) {
         if (!item.HasValue() || item.IsEmbedded() || item.IsInvalid()) {
             sizeSum += uvSize;
         } else if (item.IsString()) {
             sizeSum += uvSize + item.AsStringRef().Size();
-        } else {
+        } else if (!item.IsBoxed()) {
             return {};
+        } else {
+            auto ty = *currType;
+            while (ty->IsOptional()) {
+                ty = AS_TYPE(TOptionalType, ty)->GetItemType();
+            }
+            if (ty->IsTuple()) {
+                auto tupleType = AS_TYPE(TTupleType, ty);
+                auto elements = tupleType->GetElements();
+                auto tupleSize = EstimateUvPackSize(TArrayRef(item.GetElements(), elements.size()), elements);
+                if (!tupleSize.has_value()) {
+                    return {};
+                }
+                // Tuple contents are generally boxed into a TDirectArrayHolderInplace instance
+                sizeSum += uvSize + sizeof(TDirectArrayHolderInplace) + tupleSize.value();
+            } else {
+                return {};
+            }
         }
+        ++currType;
     }
 
     return sizeSum;
@@ -81,25 +98,40 @@ class TMemoryEstimationHelper
 {
 private:
     static std::optional<size_t> GetUVSizeBound(TType* type) {
-        using NYql::NUdf::EDataSlot;
+        if (type->IsData()) {
+            using NYql::NUdf::EDataSlot;
 
-        bool optional = false;
-        auto dataSlot = UnpackOptionalData(type, optional)->GetDataSlot();
+            bool optional = false;
+            auto dataSlot = UnpackOptionalData(type, optional)->GetDataSlot();
 
-        if (dataSlot.Empty()) {
+            if (dataSlot.Empty()) {
+                return {};
+            }
+
+            switch (dataSlot.GetRef()) {
+            case EDataSlot::DyNumber:
+            case EDataSlot::Json:
+            case EDataSlot::JsonDocument:
+            case EDataSlot::Yson:
+            case EDataSlot::Utf8:
+            case EDataSlot::String:
+                return {};
+            default:
+                return sizeof(TUnboxedValuePod);
+            }
+        } else if (type->IsTuple()) {
+            size_t result = 0;
+            const auto tupleElements = AS_TYPE(TTupleType, type)->GetElements();
+            for (auto* element : tupleElements) {
+                auto sz = GetUVSizeBound(element);
+                if (!sz.has_value()) {
+                    return {};
+                }
+                result += sz.value();
+            }
+            return result + sizeof(TUnboxedValuePod);
+        } else {
             return {};
-        }
-
-        switch (dataSlot.GetRef()) {
-        case EDataSlot::DyNumber:
-        case EDataSlot::Json:
-        case EDataSlot::JsonDocument:
-        case EDataSlot::Yson:
-        case EDataSlot::Utf8:
-        case EDataSlot::String:
-            return {};
-        default:
-            return sizeof(TUnboxedValuePod);
         }
     }
 
@@ -120,9 +152,11 @@ public:
     std::optional<size_t> StateSizeBound;
     std::optional<size_t> KeySizeBound;
     const size_t KeyWidth;
+    const std::vector<TType*> KeyItemTypes;
 
     TMemoryEstimationHelper(std::vector<TType*> keyItemTypes, std::vector<TType*> stateItemTypes)
         : KeyWidth(keyItemTypes.size())
+        , KeyItemTypes(keyItemTypes)
     {
         KeySizeBound = GetMultiUVSizeBound(keyItemTypes);
         StateSizeBound = GetMultiUVSizeBound(stateItemTypes);
@@ -130,7 +164,9 @@ public:
 
     std::optional<size_t> EstimateKeySize(const TUnboxedValuePod* keyPack) const
     {
-        return EstimateUvPackSize(keyPack, KeyWidth);
+        return EstimateUvPackSize(
+            TArrayRef<const TUnboxedValuePod>(keyPack, KeyWidth),
+            TArrayRef<TType* const>(KeyItemTypes.begin(), KeyItemTypes.end()));
     }
 };
 
@@ -172,16 +208,19 @@ private:
     const NDqHashOperatorCommon::TCombinerNodes& Nodes;
     size_t StateWidth;
     size_t StateSize;
+    const std::vector<TType*>& StateItemTypes;
 
 public:
     TGenericAggregation(
         TComputationContext& ctx,
-        const NDqHashOperatorCommon::TCombinerNodes& nodes
+        const NDqHashOperatorCommon::TCombinerNodes& nodes,
+        const std::vector<TType*>& stateItemTypes
     )
         : Ctx(ctx)
         , Nodes(nodes)
         , StateWidth(Nodes.StateNodes.size())
         , StateSize(StateWidth * sizeof(TUnboxedValue))
+        , StateItemTypes(stateItemTypes)
     {
     }
 
@@ -190,7 +229,10 @@ public:
     }
 
     std::optional<size_t> GetStateMemoryUsage(void* rawState) const override {
-        return EstimateUvPackSize(static_cast<const TUnboxedValuePod*>(rawState), StateWidth);
+        return EstimateUvPackSize(
+            TArrayRef<const TUnboxedValuePod>(static_cast<const TUnboxedValuePod*>(rawState), StateWidth),
+            TArrayRef<TType* const>(StateItemTypes)
+        );
     }
 
     // Assumes the input row and extracted keys have already been copied into the input nodes, so row isn't even used here
@@ -390,7 +432,7 @@ public:
 
     TBaseAggregationState(
         TMemoryUsageInfo* memInfo, TComputationContext& ctx, const TMemoryEstimationHelper& memoryHelper, size_t memoryLimit, size_t inputWidth,
-        const NDqHashOperatorCommon::TCombinerNodes& nodes, ui32 wideFieldsIndex, const TKeyTypes& keyTypes
+        const NDqHashOperatorCommon::TCombinerNodes& nodes, ui32 wideFieldsIndex, const TKeyTypes& keyTypes, const std::vector<TType*>& stateItemTypes
     )
         : TBase(memInfo)
         , Ctx(ctx)
@@ -416,7 +458,7 @@ public:
         MaxRowCount = TryAllocMapForRowCount(MaxRowCount);
 
         if (HasGenericAggregation) {
-            Aggs.push_back(std::make_unique<TGenericAggregation>(Ctx, Nodes));
+            Aggs.push_back(std::make_unique<TGenericAggregation>(Ctx, Nodes, stateItemTypes));
         }
 
         MKQL_ENSURE(Aggs.size(), "No aggregations defined");
@@ -588,9 +630,11 @@ public:
         size_t outputWidth,
         const NDqHashOperatorCommon::TCombinerNodes& nodes,
         ui32 wideFieldsIndex,
-        const TKeyTypes& keyTypes
+        const TKeyTypes& keyTypes,
+        const std::vector<TType*>& stateItemTypes
+
     )
-        : TBaseAggregationState(memInfo, ctx, memoryHelper, memoryLimit, inputWidth, nodes, wideFieldsIndex, keyTypes)
+        : TBaseAggregationState(memInfo, ctx, memoryHelper, memoryLimit, inputWidth, nodes, wideFieldsIndex, keyTypes, stateItemTypes)
         , StartMoment(TInstant::Now()) // Temporary. Helps correlate debug outputs with SVGs
         , OutputWidth(outputWidth)
         , DrainMapIterator(nullptr)
@@ -787,9 +831,10 @@ public:
         size_t inputWidth,
         const NDqHashOperatorCommon::TCombinerNodes& nodes,
         ui32 wideFieldsIndex,
-        const TKeyTypes& keyTypes
+        const TKeyTypes& keyTypes,
+        const std::vector<TType*>& stateItemTypes
     )
-        : TBaseAggregationState(memInfo, ctx, memoryHelper, memoryLimit, inputWidth, nodes, wideFieldsIndex, keyTypes)
+        : TBaseAggregationState(memInfo, ctx, memoryHelper, memoryLimit, inputWidth, nodes, wideFieldsIndex, keyTypes, stateItemTypes)
         , InputTypes(inputTypes)
         , OutputTypes(outputTypes)
         , InputColumns(inputTypes.size() - 1)
@@ -1113,6 +1158,7 @@ public:
         , Source(source)
         , InputTypes(inputTypes)
         , OutputTypes(outputTypes)
+        , StateItemTypes(stateItemTypes)
         , InputWidth(inputWidth)
         , Nodes(std::move(nodes))
         , KeyTypes(std::move(keyTypes))
@@ -1394,9 +1440,9 @@ private:
         UDF_LOG(logger, logComponent, NUdf::ELogLevel::Debug, TStringBuilder() << "State initialized");
 
         if (!BlockMode) {
-            state = ctx.HolderFactory.Create<TWideAggregationState>(ctx, MemoryHelper, MemoryLimit, InputWidth, OutputTypes.size(), Nodes, WideFieldsIndex, KeyTypes);
+            state = ctx.HolderFactory.Create<TWideAggregationState>(ctx, MemoryHelper, MemoryLimit, InputWidth, OutputTypes.size(), Nodes, WideFieldsIndex, KeyTypes, StateItemTypes);
         } else {
-            state = ctx.HolderFactory.Create<TBlockAggregationState>(ctx, MemoryHelper, MemoryLimit, InputTypes, OutputTypes, InputWidth, Nodes, WideFieldsIndex, KeyTypes);
+            state = ctx.HolderFactory.Create<TBlockAggregationState>(ctx, MemoryHelper, MemoryLimit, InputTypes, OutputTypes, InputWidth, Nodes, WideFieldsIndex, KeyTypes, StateItemTypes);
         }
     }
 
@@ -1404,6 +1450,7 @@ private:
     IComputationWideFlowNode *const Source;
     std::vector<TType*> InputTypes;
     std::vector<TType*> OutputTypes;
+    const std::vector<TType*> StateItemTypes;
     size_t InputWidth;
     const NDqHashOperatorCommon::TCombinerNodes Nodes;
     const TKeyTypes KeyTypes;
@@ -1430,6 +1477,7 @@ public:
         , StreamSource(streamSource)
         , InputTypes(inputTypes)
         , OutputTypes(outputTypes)
+        , StateItemTypes(stateItemTypes)
         , InputWidth(inputWidth)
         , Nodes(std::move(nodes))
         , KeyTypes(std::move(keyTypes))
@@ -1456,9 +1504,9 @@ private:
         UDF_LOG(logger, logComponent, NUdf::ELogLevel::Debug, TStringBuilder() << "State initialized");
 
         if (!BlockMode) {
-            state = ctx.HolderFactory.Create<TWideAggregationState>(ctx, MemoryHelper, MemoryLimit, InputWidth, OutputTypes.size(), Nodes, WideFieldsIndex, KeyTypes);
+            state = ctx.HolderFactory.Create<TWideAggregationState>(ctx, MemoryHelper, MemoryLimit, InputWidth, OutputTypes.size(), Nodes, WideFieldsIndex, KeyTypes, StateItemTypes);
         } else {
-            state = ctx.HolderFactory.Create<TBlockAggregationState>(ctx, MemoryHelper, MemoryLimit, InputTypes, OutputTypes, InputWidth, Nodes, WideFieldsIndex, KeyTypes);
+            state = ctx.HolderFactory.Create<TBlockAggregationState>(ctx, MemoryHelper, MemoryLimit, InputTypes, OutputTypes, InputWidth, Nodes, WideFieldsIndex, KeyTypes, StateItemTypes);
         }
     }
 
@@ -1474,6 +1522,7 @@ private:
     IComputationNode *const StreamSource;
     std::vector<TType*> InputTypes;
     std::vector<TType*> OutputTypes;
+    const std::vector<TType*> StateItemTypes;
     size_t InputWidth;
     const NDqHashOperatorCommon::TCombinerNodes Nodes;
     const TKeyTypes KeyTypes;

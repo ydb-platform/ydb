@@ -1,6 +1,6 @@
 # Предпочитать пайл c конкретным состоянием
 
-Ниже приведены примеры кода установки опции алгоритма балансировки "предпочитать [пайл](../../concepts/glossary.md#pile) c конкретным [состоянием](../../concepts/bridge.md#pile-states)" в разных {{ ydb-short-name }} SDK.
+Ниже приведен пример кода установки опции алгоритма балансировки "предпочитать [пайл](../../concepts/glossary.md#pile) c конкретным [состоянием](../../concepts/bridge.md#pile-states)" в {{ ydb-short-name }} SDK.
 
 Если при установке опции состояние не задано, SDK предпочитает PRIMARY [пайл](../../concepts/glossary.md#pile).
 
@@ -20,7 +20,7 @@
       .SetBalancingPolicy(NYdb::TBalancingPolicy::UsePreferablePileState(NYdb::EPileState::PRIMARY));
 
     NYdb::TDriver driver(driverConfig);
-    ...
+    // ...
     driver.Stop(true);
     return 0;
   }

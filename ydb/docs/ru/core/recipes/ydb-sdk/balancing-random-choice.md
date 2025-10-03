@@ -32,7 +32,7 @@
       panic(err)
     }
     defer db.Close(ctx)
-    ...
+    // ...
   }
   ```
 
@@ -75,7 +75,7 @@
 
     db := sql.OpenDB(connector)
     defer db.Close()
-    ...
+    // ...
   }
   ```
 
@@ -91,7 +91,7 @@
       .SetBalancingPolicy(NYdb::TBalancingPolicy::UseAllNodes());
 
     NYdb::TDriver driver(driverConfig);
-    ...
+    // ...
     driver.Stop(true);
     return 0;
   }

@@ -32,7 +32,7 @@ Below are examples of the code for setting the "prefer the nearest data center" 
        panic(err)
      }
      defer db.Close(ctx)
-     ...
+     // ...
    }
    ```
 
@@ -77,7 +77,7 @@ Below are examples of the code for setting the "prefer the nearest data center" 
 
      db := sql.OpenDB(connector)
      defer db.Close()
-     ...
+     // ...
    }
    ```
 
@@ -95,7 +95,7 @@ Below are examples of the code for setting the "prefer the nearest data center" 
       .SetBalancingPolicy(NYdb::TBalancingPolicy::UsePreferableLocation());
 
     NYdb::TDriver driver(driverConfig);
-    ...
+    // ...
     driver.Stop(true);
     return 0;
   }

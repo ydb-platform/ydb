@@ -1,6 +1,6 @@
 # Prefer a pile with a specific state
 
-Below are examples of the code for setting the "prefer pile with a specific state" balancing algorithm in different {{ ydb-short-name }} SDKs.
+Below is example of the code for setting the "prefer pile with a specific state" balancing algorithm in {{ ydb-short-name }} SDK.
 
 If no state is specified when setting the option, the SDK prefers the PRIMARY pile.
 
@@ -20,7 +20,7 @@ This option only makes sense if the cluster is operating in bridge mode. If it i
       .SetBalancingPolicy(NYdb::TBalancingPolicy::UsePreferablePileState(NYdb::EPileState::PRIMARY));
 
     NYdb::TDriver driver(driverConfig);
-    ...
+    // ...
     driver.Stop(true);
     return 0;
   }

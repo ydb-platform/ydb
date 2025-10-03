@@ -32,7 +32,7 @@ Below are examples of the code for forced setting of the "random choice" balanci
        panic(err)
      }
      defer db.Close(ctx)
-     ...
+     // ...
    }
    ```
 
@@ -75,7 +75,7 @@ Below are examples of the code for forced setting of the "random choice" balanci
 
      db := sql.OpenDB(connector)
      defer db.Close()
-     ...
+     // ...
    }
    ```
 
@@ -91,7 +91,7 @@ Below are examples of the code for forced setting of the "random choice" balanci
       .SetBalancingPolicy(NYdb::TBalancingPolicy::UseAllNodes());
 
     NYdb::TDriver driver(driverConfig);
-    ...
+    // ...
     driver.Stop(true);
     return 0;
   }

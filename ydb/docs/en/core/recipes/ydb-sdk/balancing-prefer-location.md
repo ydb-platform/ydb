@@ -34,7 +34,7 @@ Below are examples of the code for setting the "prefer the availability zone" ba
        panic(err)
      }
      defer db.Close(ctx)
-     ...
+     // ...
    }
    ```
 
@@ -81,7 +81,7 @@ Below are examples of the code for setting the "prefer the availability zone" ba
 
      db := sql.OpenDB(connector)
      defer db.Close()
-     ...
+     // ...
    }
    ```
 
@@ -99,7 +99,7 @@ Below are examples of the code for setting the "prefer the availability zone" ba
       .SetBalancingPolicy(NYdb::TBalancingPolicy::UsePreferableLocation("datacenter1"));
 
     NYdb::TDriver driver(driverConfig);
-    ...
+    // ...
     driver.Stop(true);
     return 0;
   }

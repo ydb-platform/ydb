@@ -549,7 +549,7 @@ public:
 
                 const NBoot::TCookie cookie(id.Cookie());
                 if (cookie.Type() != NBoot::TCookie::EType::Log) {
-                    return ReplyAndDie("Cookie type is not log");
+                    continue; // skip
                 }
 
                 switch (cookie.Index()) {
@@ -566,7 +566,7 @@ public:
                         schemeUpdate = body;
                     break;
                 default:
-                    return ReplyAndDie("Unsupported blob kind");
+                    continue; // skip
                 }
             }
         }
@@ -605,12 +605,11 @@ public:
         }
 
         if (dataUpdate) {
-            dataUpdate = NPageCollection::TSlicer::Lz4()->Decode(dataUpdate);
-
             b.WriteKey("data_changes");
             b.BeginList();
 
             try {
+                dataUpdate = NPageCollection::TSlicer::Lz4()->Decode(dataUpdate);
                 TChangelogSerializer serializer(b, Schema);
                 NRedo::TPlayer<TChangelogSerializer> redoPlayer(serializer);
                 redoPlayer.Replay(dataUpdate);

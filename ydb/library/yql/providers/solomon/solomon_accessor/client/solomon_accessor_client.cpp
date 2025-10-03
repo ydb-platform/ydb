@@ -85,18 +85,18 @@ TGetLabelsResponse ProcessGetLabelsResponse(NYql::IHTTPGateway::TResult&& respon
     try {
         NJson::ReadJsonTree(response.Content.data(), &json, /*throwOnError*/ true);
     } catch (const std::exception& e) {
-        return TGetLabelsResponse("Monitoring api get labels response is invalid");
+        return TGetLabelsResponse("Monitoring api get labels response is not a valid json");
     }
 
     if (!json.IsMap() || !json.Has("names") || !json["names"].IsArray()) {
-        return TGetLabelsResponse("Monitoring api get labels response is invalid");
+        return TGetLabelsResponse("Monitoring api get labels response doesnt contain requested info");
     }
 
     const auto names = json["names"].GetArray();
 
     for (const auto& name : names) {
         if (!name.IsString()) {
-            return TGetLabelsResponse("Monitoring api get labels response is invalid");
+            return TGetLabelsResponse("Monitoring api get labels response contains invalid label names");
         }
         result.Labels.push_back(name.GetString());
     }
@@ -122,18 +122,18 @@ TListMetricsResponse ProcessListMetricsResponse(NYql::IHTTPGateway::TResult&& re
     try {
         NJson::ReadJsonTree(response.Content.data(), &json, /*throwOnError*/ true);
     } catch (const std::exception& e) {
-        return TListMetricsResponse("Monitoring api list metrics response is invalid" );
+        return TListMetricsResponse("Monitoring api list metrics response is not a valid json" );
     }
 
     if (!json.IsMap() || !json.Has("result") || !json.Has("page")) {
-        return TListMetricsResponse("Monitoring api list metrics response is invalid");
+        return TListMetricsResponse("Monitoring api list metrics response doesnt contain requested info");
     }
 
     const auto pagesInfo = json["page"];
     if (!pagesInfo.IsMap() || 
         !pagesInfo.Has("pagesCount") || !pagesInfo["pagesCount"].IsInteger() || 
         !pagesInfo.Has("totalCount") || !pagesInfo["totalCount"].IsInteger()) {
-        return TListMetricsResponse("Monitoring api list metrics response is invalid");
+        return TListMetricsResponse("Monitoring api list metrics response doesnt contain paging info");
     }
 
     result.PagesCount = pagesInfo["pagesCount"].GetInteger();
@@ -141,7 +141,7 @@ TListMetricsResponse ProcessListMetricsResponse(NYql::IHTTPGateway::TResult&& re
 
     for (const auto& metricObj : json["result"].GetArray()) {
         if (!metricObj.IsMap() || !metricObj.Has("labels") || !metricObj["labels"].IsMap() || !metricObj.Has("type") || !metricObj["type"].IsString()) {
-            return TListMetricsResponse("Monitoring api list metrics response is invalid");
+            return TListMetricsResponse("Monitoring api list metrics response contains invalid metrics");
         }
 
         TSelectors selectors;
@@ -183,11 +183,11 @@ TGetPointsCountResponse ProcessGetPointsCountResponse(NYql::IHTTPGateway::TResul
     try {
         NJson::ReadJsonTree(response.Content.data(), &json, /*throwOnError*/ true);
     } catch (const std::exception& e) {
-        return TGetPointsCountResponse("Monitoring api points count response is invalid");
+        return TGetPointsCountResponse("Monitoring api points count response is not a valid json");
     }
 
     if (!json.IsMap() || !json.Has("scalar") || !json["scalar"].IsInteger()) {
-        return TGetPointsCountResponse("Monitoring api points count response is invalid");
+        return TGetPointsCountResponse("Monitoring api points count response doesnt contain requested info");
     }
 
     result.PointsCount = json["scalar"].GetInteger() + downsampledPointsCount;

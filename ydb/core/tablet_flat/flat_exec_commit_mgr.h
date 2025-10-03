@@ -7,6 +7,7 @@
 #include "flat_sausage_slicer.h"
 #include "flat_executor_gclogic.h"
 #include "flat_executor_counters.h"
+#include "flat_executor_backup.h"
 #include "util_fmt_abort.h"
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/base/tablet.h>
@@ -88,7 +89,15 @@ namespace NTabletFlatExecutor {
             *Step0 = Head = Tail = 1;
         }
 
+        void Stop() const
+        {
+            Y_ENSURE(Ops, "Commit manager is not started");
+            Ops->Send(BackupWriter, new TEvents::TEvPoisonPill());
+        }
+
         void SetTactic(ETactic tactic) noexcept { Tactic = tactic; }
+
+        void SetBackupWriter(TActorId backupWriter) noexcept { BackupWriter = backupWriter; }
 
         ui64 Stamp() const noexcept
         {
@@ -165,6 +174,10 @@ namespace NTabletFlatExecutor {
 
         void SendCommitEv(TLogCommit &commit)
         {
+            if (BackupWriter && commit.Type == ECommit::Redo) {
+                Ops->Send(BackupWriter, new NBackup::TEvWriteChangelog(commit.Step, commit.Embedded, commit.Refs));
+            }
+
             const bool snap = (commit.Type == ECommit::Snap);
 
             auto *ev = new TEvCommit(Tablet, Gen, commit.Step, { commit.Step - 1 }, snap);
@@ -198,6 +211,7 @@ namespace NTabletFlatExecutor {
         TGcLogic * const GcLogic = nullptr;
         TMonCo * MonCo = nullptr;
         TAutoPtr<NPageCollection::TSteppedCookieAllocator> Turns_;
+        TActorId BackupWriter;
 
     public:
         TAutoPtr<NPageCollection::TSteppedCookieAllocator> Annex;

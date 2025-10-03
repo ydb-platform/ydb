@@ -85,8 +85,11 @@ class WorkloadTestBase(LoadSuiteBase):
             result.iterations[0].time = time_module.time() - verification_start_time
 
             # Добавляем ошибку если есть проблема с кластером
-            if cluster_issue:
+            if cluster_issue and cluster_issue.get("issue_type") is not None:
                 result.add_error(cluster_issue["issue_description"])
+                result.success = False
+            else:
+                result.success = True
 
             # Устанавливаем start_time для _Verification
             try:

@@ -228,25 +228,29 @@ void KafkaReadSessionProxyActor::Handle(TEvPersQueue::TEvBalancingSubscribeNotif
 
 void KafkaReadSessionProxyActor::ProcessPendingRequestIfPossible() {
     if (!PendingRequest.has_value()) {
+        KAFKA_LOG_D("Pending request is not set");
         Y_VERIFY_DEBUG(PendingRequest.has_value());
         return;
     }
 
     auto fetchEv = PendingRequest.value();
     for (auto& topic : fetchEv->Get()->Request->Topics) {
-        auto it = Topics.find(*topic.Topic);
+        auto topicPath = NormalizePath(Context->DatabasePath, topic.Topic.value());
+        auto it = Topics.find(topicPath);
         if (it == Topics.end()) {
+            KAFKA_LOG_D("Topic " << topicPath << " is not initialized");
             Y_VERIFY_DEBUG(it == Topics.end());
             return;
         }
 
         auto& topicInfo = it->second;
         if (!topicInfo.UsedServerBalancing.has_value()) {
-            KAFKA_LOG_W("Topic " << *topic.Topic << " is not initialized");
+            KAFKA_LOG_W("Topic " << topicPath << " is not initialized");
             //return; TODO
         }
     }
 
+    KAFKA_LOG_D("Creating the fetch actor"); // TODO TRACE
     Register(CreateKafkaFetchActor(Context, fetchEv->Get()->CorrelationId, fetchEv->Get()->Request));
 
     PendingRequest.reset();

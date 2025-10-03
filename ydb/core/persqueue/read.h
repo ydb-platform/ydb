@@ -291,7 +291,7 @@ namespace NPQ {
             THolder<TEvKeyValue::TEvRequest> request = MakeHolder<TEvKeyValue::TEvRequest>();
             request->Record = std::move(ev->Get()->Record);
             request->Record.SetCookie(cookie);
-            ctx.Send(Tablet, request.Release()); // -> KV
+            ctx.Send(Tablet, request.Release(), 0, 0, std::move(ev->TraceId)); // -> KV
         }
 
         void Handle(TEvPqCache::TEvCacheL2Response::TPtr& ev, const TActorContext& ctx)

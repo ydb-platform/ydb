@@ -41,6 +41,7 @@ namespace NSQLTranslationV1 {
             UnwrapQuotes_ = UnwrapQuotesRule();
             AddSpaceCollapses(SpaceCollapses_);
             UnwrapQuotedSpace_ = UnwrapQuotedSpaceRule();
+            AddRegexOptimizations(RegexOptimizations_);
         }
 
         TString ToRegex(const TStringBuf name) {
@@ -158,11 +159,24 @@ namespace NSQLTranslationV1 {
             UnwrapQuotes_.Apply(text);
             ApplyEachWhileChanging(text, SpaceCollapses_);
             UnwrapQuotedSpace_.Apply(text);
+            ApplyEachWhileChanging(text, RegexOptimizations_);
         }
 
         void AddSpaceCollapses(TRewriteRules& rules) {
             rules.emplace_back(RegexRewriteRule(R"(([^']|^) )", R"(\1)"));
             rules.emplace_back(RegexRewriteRule(R"( ([^']|$))", R"(\1)"));
+        }
+
+        void AddRegexOptimizations(TRewriteRules& rules) {
+            // ([a-z]|_) -> ([a-z_])
+            rules.emplace_back(RegexRewriteRule(
+                R"re(\[([^\^\[\]]+)\]\|(.)([\)\|]))re",
+                R"re([\1\2]\3)re"));
+
+            // ([a-z]|[A-Z]) -> ([a-zA-Z])
+            rules.emplace_back(RegexRewriteRule(
+                R"re(\[([^\^\[\]]+)\]\|\[([^\^\[\]]+)\]([\)\|]))re",
+                R"re([\1\2]\3)re"));
         }
 
         void ApplyEachOnce(TString& text, const TRewriteRules& rules) {
@@ -241,6 +255,7 @@ namespace NSQLTranslationV1 {
         TRewriteRule UnwrapQuotes_;
         TRewriteRules SpaceCollapses_;
         TRewriteRule UnwrapQuotedSpace_;
+        TRewriteRules RegexOptimizations_;
     };
 
     TVector<std::tuple<TString, TString>> MakeRegexByOtherName(const NSQLReflect::TLexerGrammar& grammar, bool ansi) {

@@ -48,6 +48,16 @@ RUN_PROGRAM(
    OUT_NOAUTO prestable-25-3
 )
 
+RUN_PROGRAM(
+   ydb/tests/library/compatibility/binaries/downloader download stable-25-3/release/config-meta.json stable-25-3
+   OUT_NOAUTO stable-25-3
+)
+
+RUN_PROGRAM(
+   ydb/tests/library/compatibility/binaries/downloader download stable-25-3-1/release/config-meta.json stable-25-3-1
+   OUT_NOAUTO stable-25-3-1
+)
+
 IF(DEFINED GIT_BRANCH)
     SET(BRANCH_PARAM --override-branch="${GIT_BRANCH}")
 ENDIF()

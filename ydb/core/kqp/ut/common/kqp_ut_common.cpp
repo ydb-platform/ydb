@@ -165,9 +165,16 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
     appConfig.MutableColumnShardConfig()->SetDisabledOnSchemeShard(false);
     appConfig.MutableTableServiceConfig()->SetEnableRowsDuplicationCheck(true);
     if (settings.EnableStorageProxy) {
-        appConfig.MutableQueryServiceConfig()->MutableCheckpointsConfig()->SetEnabled(true);
-        appConfig.MutableQueryServiceConfig()->MutableCheckpointsConfig()->SetCheckpointingPeriodMillis(200);
-        appConfig.MutableQueryServiceConfig()->MutableCheckpointsConfig()->SetMaxInflight(1);
+        auto& checkpoints = *appConfig.MutableQueryServiceConfig()->MutableCheckpointsConfig();
+        checkpoints.SetEnabled(true);
+        checkpoints.SetCheckpointingPeriodMillis(settings.CheckpointPeriod.MilliSeconds());
+        checkpoints.SetMaxInflight(1);
+        checkpoints.MutableExternalStorage()->SetEndpoint(GetEnv("YDB_ENDPOINT"));
+        checkpoints.MutableExternalStorage()->SetDatabase(GetEnv("YDB_DATABASE"));
+        checkpoints.MutableCheckpointGarbageConfig()->SetEnabled(true);
+    }
+    if (!appConfig.GetQueryServiceConfig().HasAllExternalDataSourcesAreAvailable()) {
+        appConfig.MutableQueryServiceConfig()->SetAllExternalDataSourcesAreAvailable(true);
     }
     ServerSettings->SetAppConfig(appConfig);
     ServerSettings->SetFeatureFlags(settings.FeatureFlags);
@@ -204,6 +211,10 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
         ServerSettings->SetInitializeFederatedQuerySetupFactory(true);
     } else if (settings.FederatedQuerySetupFactory) {
         ServerSettings->SetFederatedQuerySetupFactory(settings.FederatedQuerySetupFactory);
+    }
+
+    if (settings.DescribeSchemaSecretsServiceFactory) {
+        ServerSettings->SetDescribeSchemaSecretsServiceFactory(settings.DescribeSchemaSecretsServiceFactory);
     }
 
     Server.Reset(MakeHolder<Tests::TServer>(*ServerSettings));
@@ -700,15 +711,22 @@ void TKikimrRunner::Initialize(const TKikimrSettings& settings) {
         return true;
     });
 
-    if (settings.AuthToken) {
-        this->Client->GrantConnect(settings.AuthToken);
-    }
-
+    // Create sample tables in anonymous mode
     if (settings.WithSampleTables) {
         RunCall([this] {
             this->CreateSampleTables();
             return true;
         });
+    }
+
+    // Initial user becomes cluster admin.
+    if (settings.AuthToken) {
+        // Cluster admin does not require the explicit EAccessRights::ConnectDatabase right,
+        // but does require explicit EAccessRights::GenericFull rights.
+        // The order is important here, because grants from anonymous user are possible
+        // only while AdministrationAllowedSIDs is empty (which means that anyone is an admin).
+        this->Client->TestGrant("/", settings.DomainRoot, settings.AuthToken, NACLib::EAccessRights::GenericFull);
+        Server->GetRuntime()->GetAppData().AdministrationAllowedSIDs.push_back(settings.AuthToken);
     }
 }
 

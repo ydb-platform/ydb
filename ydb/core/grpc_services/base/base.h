@@ -455,6 +455,8 @@ public:
     }
     virtual void SetAuditLogHook(TAuditLogHook&& hook) = 0;
     virtual void SetDiskQuotaExceeded(bool disk) = 0;
+
+    virtual TString GetRpcMethodName() const = 0;
 };
 
 // Request context
@@ -708,6 +710,10 @@ public:
 
     void SetAuditLogHook(TAuditLogHook&&) override {
         Y_ABORT("unimplemented for TRefreshTokenImpl");
+    }
+
+    TString GetRpcMethodName() const override {
+        return {};
     }
 
     // IRequestCtxBase
@@ -1021,6 +1027,10 @@ public:
     bool WriteAndFinish(TResponse&& message, Ydb::StatusIds::StatusCode status, const grpc::WriteOptions& options, const grpc::Status& grpcStatus = grpc::Status::OK) {
         AuditLogRequestEnd(status);
         return Ctx_->WriteAndFinish(std::move(message), options, grpcStatus);
+    }
+
+    TString GetRpcMethodName() const override {
+        return Ctx_->GetRpcMethodName();
     }
 
 private:
@@ -1726,12 +1736,13 @@ class TEvRequestAuthAndCheck
     : public IRequestProxyCtx
     , public TEventLocal<TEvRequestAuthAndCheck, TRpcServices::EvRequestAuthAndCheck> {
 public:
-    TEvRequestAuthAndCheck(const TString& database, const TMaybe<TString>& ydbToken, NActors::TActorId sender, TAuditMode auditMode)
+    TEvRequestAuthAndCheck(const TString& database, const TMaybe<TString>& ydbToken, NActors::TActorId sender, TAuditMode auditMode, TString peerName = {})
         : Database(database)
         , YdbToken(ydbToken)
         , Sender(sender)
         , AuthState(true)
         , AuditMode(auditMode)
+        , PeerName(std::move(peerName))
     {}
 
     // IRequestProxyCtx
@@ -1885,7 +1896,7 @@ public:
     }
 
     TString GetPeerName() const override {
-        return {};
+        return PeerName;
     }
 
     const TString& GetRequestName() const override {
@@ -1914,6 +1925,10 @@ public:
         return AuditMode;
     }
 
+    TString GetRpcMethodName() const override {
+        return {};
+    }
+
     TString Database;
     TMaybe<TString> YdbToken;
     NActors::TActorId Sender;
@@ -1926,6 +1941,7 @@ public:
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     TInstant deadline = TInstant::Now() + TDuration::Seconds(10);
     TAuditMode AuditMode;
+    TString PeerName;
 
     inline static const TString EmptySerializedTokenMessage;
 };

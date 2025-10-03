@@ -43,8 +43,8 @@ void Serialize(const TSerializableAccessControlEntry& ace, NYson::IYsonConsumer*
             .OptionalItem("subject_tag_filter", ace.SubjectTagFilter)
             .OptionalItem("columns", ace.Columns)
             .OptionalItem("vital", ace.Vital)
-            .OptionalItem("expression", ace.Expression)
-            .OptionalItem(TSerializableAccessControlEntry::ExpressionKey, ace.InapplicableExpressionMode)
+            .OptionalItem(TSerializableAccessControlEntry::RowAccessPredicateKey, ace.RowAccessPredicate)
+            .OptionalItem(TSerializableAccessControlEntry::InapplicableRowAccessPredicateModeKey, ace.InapplicableRowAccessPredicateMode)
         .EndMap();
 }
 
@@ -77,18 +77,17 @@ void Deserialize(TSerializableAccessControlEntry& ace, NYTree::INodePtr node)
     } else {
         ace.Vital.reset();
     }
-    if (auto expressionNode = mapNode->FindChild(std::string(TSerializableAccessControlEntry::ExpressionKey))) {
-        Deserialize(ace.Expression, expressionNode);
+    if (auto rowAccessPredicateNode = mapNode->FindChild(std::string(TSerializableAccessControlEntry::RowAccessPredicateKey))) {
+        Deserialize(ace.RowAccessPredicate, rowAccessPredicateNode);
     } else {
-        ace.Expression.reset();
+        ace.RowAccessPredicate.reset();
     }
-    if (auto inapplicableExpressionModeNode = mapNode->FindChild(std::string(TSerializableAccessControlEntry::InapplicableExpressionModeKey))) {
-        Deserialize(ace.InapplicableExpressionMode, inapplicableExpressionModeNode);
+    if (auto inapplicableRowAccessPredicateModeNode = mapNode->FindChild(std::string(TSerializableAccessControlEntry::InapplicableRowAccessPredicateModeKey))) {
+        Deserialize(ace.InapplicableRowAccessPredicateMode, inapplicableRowAccessPredicateModeNode);
     } else {
-        ace.InapplicableExpressionMode.reset();
+        ace.InapplicableRowAccessPredicateMode.reset();
     }
-    CheckAceCorrect(ace)
-        .ThrowOnError();
+    ValidateAceCorrect(ace);
 }
 
 void Deserialize(TSerializableAccessControlEntry& ace, NYson::TYsonPullParserCursor* cursor)
@@ -124,12 +123,12 @@ void Deserialize(TSerializableAccessControlEntry& ace, NYson::TYsonPullParserCur
         } else if (key == TStringBuf("vital")) {
             cursor->Next();
             Deserialize(ace.Vital, cursor);
-        } else if (key == TSerializableAccessControlEntry::ExpressionKey) {
+        } else if (key == TSerializableAccessControlEntry::RowAccessPredicateKey) {
             cursor->Next();
-            Deserialize(ace.Expression, cursor);
-        } else if (key == TSerializableAccessControlEntry::InapplicableExpressionModeKey) {
+            Deserialize(ace.RowAccessPredicate, cursor);
+        } else if (key == TSerializableAccessControlEntry::InapplicableRowAccessPredicateModeKey) {
             cursor->Next();
-            Deserialize(ace.InapplicableExpressionMode, cursor);
+            Deserialize(ace.InapplicableRowAccessPredicateMode, cursor);
         } else {
             cursor->Next();
             cursor->SkipComplexValue();
@@ -138,8 +137,7 @@ void Deserialize(TSerializableAccessControlEntry& ace, NYson::TYsonPullParserCur
     if (!(HasAction && HasSubjects && HasPermissions)) {
         THROW_ERROR_EXCEPTION("Error parsing ACE: \"action\", \"subject\" and \"permissions\" fields are required");
     }
-    CheckAceCorrect(ace)
-        .ThrowOnError();
+    ValidateAceCorrect(ace);
 }
 
 void TSerializableAccessControlEntry::Persist(const TStreamPersistenceContext& context)
@@ -183,8 +181,8 @@ void Deserialize(TSerializableAccessControlList& acl, NYson::TYsonPullParserCurs
 
 void TRowLevelAccessControlEntry::RegisterMetadata(auto&& registrar)
 {
-    PHOENIX_REGISTER_FIELD(1, Expression);
-    PHOENIX_REGISTER_FIELD(2, InapplicableExpressionMode);
+    PHOENIX_REGISTER_FIELD(1, RowAccessPredicate);
+    PHOENIX_REGISTER_FIELD(2, InapplicableRowAccessPredicateMode);
 }
 
 PHOENIX_DEFINE_TYPE(TRowLevelAccessControlEntry);

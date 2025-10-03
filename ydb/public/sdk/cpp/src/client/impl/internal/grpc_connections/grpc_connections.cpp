@@ -3,6 +3,7 @@
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/exceptions/exceptions.h>
 
+
 namespace NYdb::inline Dev {
 
 bool IsTokenCorrect(const std::string& in) {
@@ -137,7 +138,6 @@ private:
 TGRpcConnectionsImpl::TGRpcConnectionsImpl(std::shared_ptr<IConnectionsParams> params)
     : MetricRegistryPtr_(nullptr)
     , ClientThreadsNum_(params->GetClientThreadsNum())
-    , ResponseQueue_(CreateThreadPool(ClientThreadsNum_))
     , DefaultDiscoveryEndpoint_(params->GetEndpoint())
     , SslCredentials_(params->GetSslCredentials())
     , DefaultDatabase_(params->GetDatabase())
@@ -180,8 +180,14 @@ TGRpcConnectionsImpl::TGRpcConnectionsImpl(std::shared_ptr<IConnectionsParams> p
         AddPeriodicTask(channelPoolUpdateWrapper, SocketIdleTimeout_ * 0.1);
     }
 #endif
-    //TAdaptiveThreadPool ignores params
-    ResponseQueue_->Start(ClientThreadsNum_, MaxQueuedResponses_);
+    if (params->GetExecutor()) {
+        ResponseQueue_ = params->GetExecutor();
+    } else {
+        // TAdaptiveThreadPool ignores params
+        ResponseQueue_ = CreateThreadPoolExecutor(ClientThreadsNum_, MaxQueuedRequests_);
+    }
+
+    ResponseQueue_->Start();
     if (!DefaultDatabase_.empty()) {
         DefaultState_ = StateTracker_.GetDriverState(
             DefaultDatabase_,
@@ -427,7 +433,9 @@ const TLog& TGRpcConnectionsImpl::GetLog() const {
 }
 
 void TGRpcConnectionsImpl::EnqueueResponse(IObjectInQueue* action) {
-    Y_ENSURE(ResponseQueue_->Add(action));
+    ResponseQueue_->Post([action]() {
+        action->Process(nullptr);
+    });
 }
 
 } // namespace NYdb

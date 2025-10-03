@@ -187,6 +187,12 @@ namespace NSQLHighlight {
             {"patterns", NJson::TJsonArray({NJson::TJsonMap{{"include", "source.js"}}})},
         }));
 
+        root["patterns"].AppendValue(NJson::TJsonMap({
+            {"begin", "@@{"},
+            {"end", "@@"},
+            {"patterns", NJson::TJsonArray({NJson::TJsonMap{{"include", "source.json"}}})},
+        }));
+
         THashSet<TString> visited;
         for (const NTextMate::TMatcher& matcher : language.Matchers) {
             root["repository"][matcher.Name]["patterns"].AppendValue(ToJson(matcher));

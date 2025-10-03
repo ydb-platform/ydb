@@ -439,14 +439,14 @@ class TransitionHistory:
 
 
 class BridgeSkipper:
-    def __init__(self, path_to_cli: str, initial_piles: Dict[str, List[str]], use_https: bool = False, auto_failover: bool = True, state_path: Optional[str] = None):
+    def __init__(self, path_to_cli: str, initial_piles: Dict[str, List[str]], auto_failover: bool = True, state_path: Optional[str] = None, ydb_auth_opts: Optional[List[str]] = None):
         self.path_to_cli = path_to_cli
         self.initial_piles = initial_piles
-        self.use_https = use_https
         self.auto_failover = auto_failover
         self.state_path = state_path
+        self.ydb_auth_opts = list(ydb_auth_opts or [])
 
-        self.async_checker = health.AsyncHealthcheckRunner(path_to_cli, initial_piles, use_https=use_https)
+        self.async_checker = health.AsyncHealthcheckRunner(path_to_cli, initial_piles, ydb_auth_opts=self.ydb_auth_opts)
         self.async_checker.start()
 
         # TODO: avoid hack, sleep to give async_checker time to get data
@@ -458,6 +458,19 @@ class BridgeSkipper:
         # Attempt to load previous state if provided
         try:
             self._load_state()
+            # Check that loaded state generation is not ahead of what cluster reports
+            if self.current_state:
+                try:
+                    pile_world_views = self.async_checker.get_health_state()
+                    latest_generation = health.get_latest_generation_pile(pile_world_views)[0]
+                    logger.info(f"Loaded state: {self.current_state}, cluster reported latest generation: {latest_generation}")
+                    if self.current_state.generation and latest_generation and self.current_state.generation > latest_generation:
+                        logger.error(f"Generation {self.current_state.generation} from state file is ahead of cluster generation {latest_generation}")
+                        self.async_checker.stop(wait=True)
+                        sys.exit(1)
+                except Exception as e:
+                    logger.error(f"Failed to get health state or latest generation: {e}")
+
         except Exception as e:
             logger.debug(f"Failed to load saved state: {e}")
 
@@ -574,10 +587,11 @@ class BridgeSkipper:
             some_failed = False
             succeeded_count = 0
             for command in commands:
-                command_str = f"{self.path_to_cli} -e grpc://{endpoints[0]}:2135 " + " ".join(command)
+                auth_preview = " ".join(self.ydb_auth_opts) + " " if self.ydb_auth_opts else ""
+                command_str = f"{self.path_to_cli} {auth_preview}-e grpc://{endpoints[0]}:2135 " + " ".join(command)
                 if self.auto_failover:
                     logger.info(f"Executing command: {command_str}")
-                    result = execute_cli_command(self.path_to_cli, command, endpoints)
+                    result = execute_cli_command(self.path_to_cli, command, endpoints, ydb_auth_opts=self.ydb_auth_opts)
                     if result is None:
                         some_failed = True
                         logger.error(f"Failed to apply command {command}")
@@ -693,13 +707,13 @@ def get_max_status_length():
 
 
 # TODO: resolve must return proper error text when fails
-def resolve(endpoint: str, path_to_cli: str) -> Optional[Dict[str, List[str]]]:
+def resolve(endpoint: str, path_to_cli: str, ydb_auth_opts: Optional[List[str]] = None) -> Optional[Dict[str, List[str]]]:
     """ Returns pile names -> list of their endpoints """
 
     logger.debug(f"Trying to resolve {endpoint} to piles and other endpoints")
 
     cmd = ["admin", "cluster", "config", "fetch"]
-    list_result = execute_cli_command(path_to_cli, cmd, [endpoint,])
+    list_result = execute_cli_command(path_to_cli, cmd, [endpoint,], ydb_auth_opts=ydb_auth_opts)
 
     if list_result is None:
         return None

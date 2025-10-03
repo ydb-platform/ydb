@@ -12,6 +12,8 @@ def add_options(p):
     g.add_argument('--status', type=str, choices=statuses, help='Set status')
     decommit_statuses = kikimr_bsconfig.EDecommitStatus.keys()
     g.add_argument('--decommit-status', type=str, choices=decommit_statuses, help='Set decomission status')
+    maintenance_statuses = kikimr_bsconfig.TMaintenanceStatus.E.keys()
+    g.add_argument('--maintenance-status', type=str, choices=maintenance_statuses, help='Set maintenance status')
     common.add_allow_unusable_pdisks_option(p)
     p.add_argument('--allow-working-disks', action='store_true', help='Allow settlement even if any of enlisted PDisks is still working')
     common.add_ignore_degraded_group_check_option(p)
@@ -34,6 +36,8 @@ def create_request(args, pdisks, node_id_to_host):
             cmd.Status = kikimr_bsconfig.EDriveStatus.Value(args.status)
         if args.decommit_status is not None:
             cmd.DecommitStatus = kikimr_bsconfig.EDecommitStatus.Value(args.decommit_status)
+        if args.maintenance_status is not None:
+            cmd.MaintenanceStatus = kikimr_bsconfig.TMaintenanceStatus.E.Value(args.maintenance_status)
 
     return request
 

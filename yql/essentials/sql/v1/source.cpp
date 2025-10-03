@@ -166,7 +166,7 @@ bool ISource::AddExpressions(TContext& ctx, const TVector<TNodePtr>& expressions
         }
 
         if (exprSeat == EExprSeat::GroupBy) {
-            if (auto sessionWindow = dynamic_cast<TSessionWindow*>(expr.Get())) {
+            if (/* auto sessionWindow = */ dynamic_cast<TSessionWindow*>(expr.Get())) {
                 if (SessionWindow_) {
                     ctx.Error(expr->GetPos()) << "Duplicate session window specification:";
                     ctx.Error(SessionWindow_->GetPos()) << "Previous session window is declared here";
@@ -174,7 +174,7 @@ bool ISource::AddExpressions(TContext& ctx, const TVector<TNodePtr>& expressions
                 }
                 SessionWindow_ = expr;
             }
-            if (auto hoppingWindow = dynamic_cast<THoppingWindow*>(expr.Get())) {
+            if (/* auto hoppingWindow = */ dynamic_cast<THoppingWindow*>(expr.Get())) {
                 if (HoppingWindow_) {
                     ctx.Error(expr->GetPos()) << "Duplicate hopping window specification:";
                     ctx.Error(HoppingWindow_->GetPos()) << "Previous hopping window is declared here";
@@ -939,7 +939,7 @@ bool ISource::InitFilters(TContext& ctx) {
 }
 
 TAstNode* ISource::Translate(TContext& ctx) const {
-    Y_DEBUG_ABORT_UNLESS(false);
+    Y_DEBUG_ABORT_UNLESS(false, "Can't tranlsate ISource, maybe it is used in a scalar context");
     Y_UNUSED(ctx);
     return nullptr;
 }
@@ -990,6 +990,16 @@ TNodePtr ISource::BuildMatchRecognize(TContext& ctx, TString&& inputTable){
     YQL_ENSURE(HasMatchRecognize());
     return MatchRecognizeBuilder_->Build(ctx, std::move(inputTable), this);
 };
+
+TSourcePtr MoveOutIfSource(TNodePtr& node) {
+    ISource* source = dynamic_cast<ISource*>(node.Get());
+    if (!source) {
+        return nullptr;
+    }
+
+    YQL_ENSURE(source == node.Release());
+    return source;
+}
 
 IJoin::IJoin(TPosition pos)
     : ISource(pos)

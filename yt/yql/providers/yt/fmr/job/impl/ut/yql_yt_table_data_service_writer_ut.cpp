@@ -2,14 +2,15 @@
 #include <util/string/join.h>
 #include <yt/yql/providers/yt/fmr/job/impl/yql_yt_table_data_service_writer.h>
 #include <yt/yql/providers/yt/fmr/table_data_service/local/impl/yql_yt_table_data_service_local.h>
+#include <yt/yql/providers/yt/fmr/test_tools/yson/yql_yt_yson_helpers.h>
 
 namespace NYql::NFmr {
 
 const std::vector<TString> TableYsonRows = {
-    "{\"key\"=\"075\";\"subkey\"=\"1\";\"value\"=\"abc\"};",
-    "{\"key\"=\"800\";\"subkey\"=\"2\";\"value\"=\"ddd\"};",
-    "{\"key\"=\"020\";\"subkey\"=\"3\";\"value\"=\"q\"};",
-    "{\"key\"=\"150\";\"subkey\"=\"4\";\"value\"=\"qzz\"};"
+    "{\"key\"=\"075\";\"subkey\"=\"1\";\"value\"=\"abc\"};\n",
+    "{\"key\"=\"800\";\"subkey\"=\"2\";\"value\"=\"ddd\"};\n",
+    "{\"key\"=\"020\";\"subkey\"=\"3\";\"value\"=\"q\"};\n",
+    "{\"key\"=\"150\";\"subkey\"=\"4\";\"value\"=\"qzz\"};\n"
 };
 
 TTableChunkStats WriteDataToTableDataSerice(
@@ -64,8 +65,8 @@ Y_UNIT_TEST_SUITE(FmrWriterTests) {
         auto firstChunkTableContent = tableDataService->Get(group, "0").GetValueSync();
         auto secondChunkTableContent = tableDataService->Get(group, "1").GetValueSync();
 
-        UNIT_ASSERT_NO_DIFF(*firstChunkTableContent, expectedFirstChunkTableContent);
-        UNIT_ASSERT_NO_DIFF(*secondChunkTableContent, expectedSecondChunkTableContent);
+        UNIT_ASSERT_NO_DIFF(GetTextYson(*firstChunkTableContent), expectedFirstChunkTableContent);
+        UNIT_ASSERT_NO_DIFF(GetTextYson(*secondChunkTableContent), expectedSecondChunkTableContent);
     }
     Y_UNIT_TEST(RecordIsLargerThanMaxRowWeight) {
         ui64 chunkSize = 1, maxRowWeight = 3;

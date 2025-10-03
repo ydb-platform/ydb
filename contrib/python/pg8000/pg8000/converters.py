@@ -833,4 +833,4 @@ def _(value: Timedelta):
 
 @literal.register
 def _(value: list):
-    return f"'{array_out(value)}'"
+    return f"{literal(array_out(value))}"

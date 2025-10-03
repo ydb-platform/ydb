@@ -1,5 +1,9 @@
 #include "util.h"
 
+#include <ydb/public/lib/ydb_cli/commands/ydb_command.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
+
+#include <format>
 #include <sstream>
 #include <iomanip>
 
@@ -96,5 +100,30 @@ size_t NumberOfMyCpus() {
 }
 
 #endif // _linux_
+
+size_t NumberOfComputeCpus(TDriver& driver) {
+    using namespace NYdb::NQuery;
+
+    TQueryClient client(driver);
+
+    std::string query = std::format(R"(
+        SELECT SUM(CpuThreads) from `.sys/nodes`;
+    )");
+
+    auto result = client.RetryQuery([&query](TSession session) {
+        return session.ExecuteQuery(query, TTxControl::NoTx());
+    }).GetValueSync();
+
+    if (!result.IsSuccess()) {
+        return 0;
+    }
+
+    TResultSetParser parser(result.GetResultSet(0));
+    if (!parser.TryNextRow()) {
+        return 0;
+    }
+
+    return parser.ColumnParser("column0").GetOptionalUint64().value_or(0);
+}
 
 } // namespace NYdb::NTPCC

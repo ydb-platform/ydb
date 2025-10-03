@@ -29,6 +29,7 @@ struct TEvPrivate {
         EvUpdateTenantNodes,
         EvProcessQueues,
         EvResolveSecretResult,
+        EvResolveResourceIdResult,
         EvAlterDstResult,
         EvRemoveWorker,
         EvDescribeTargetsResult,
@@ -187,17 +188,33 @@ struct TEvPrivate {
     struct TEvProcessQueues: public TEventLocal<TEvProcessQueues, EvProcessQueues> {
     };
 
-    struct TEvResolveSecretResult: public TEventLocal<TEvResolveSecretResult, EvResolveSecretResult> {
+    struct TResolveValueResult {
         const ui64 ReplicationId;
-        const TString SecretValue;
+        const TString Value;
         const bool Success;
         const TString Error;
 
-        explicit TEvResolveSecretResult(ui64 rid, const TString& secretValue);
-        explicit TEvResolveSecretResult(ui64 rid, bool success, const TString& error);
-        TString ToString() const override;
+        explicit TResolveValueResult(ui64 rid, const TString& value);
+        explicit TResolveValueResult(ui64 rid, bool success, const TString& error);
+        TString ToString() const;
 
         bool IsSuccess() const;
+    };
+
+    struct TEvResolveSecretResult
+        : public TEventLocal<TEvResolveSecretResult, EvResolveSecretResult>
+        , public TResolveValueResult
+    {
+        using TResolveValueResult::TResolveValueResult;
+        TString ToString() const override;
+    };
+
+    struct TEvResolveResourceIdResult
+        : public TEventLocal<TEvResolveResourceIdResult, EvResolveResourceIdResult>
+        , public TResolveValueResult
+    {
+        using TResolveValueResult::TResolveValueResult;
+        TString ToString() const override;
     };
 
     struct TEvAlterDstResult: public TGenericSchemeResult<TEvAlterDstResult, EvAlterDstResult> {

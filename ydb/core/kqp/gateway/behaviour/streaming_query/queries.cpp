@@ -47,7 +47,7 @@ using TValueStatus = TConclusionImpl<TStatus, TValue>;
 
 //// Events
 
-TString TruncateString(const TString& str, ui64 maxSize = 100) {
+TString TruncateString(const TString& str, ui64 maxSize = 300) {
     return str.size() > maxSize
         ? TStringBuilder() << str.substr(0, maxSize / 2) << " ... (TRUNCATED) ... " << str.substr(str.size() - maxSize / 2)
         : str;
@@ -539,9 +539,8 @@ class TDescribeStreamingQuerySchemeActor final : public TSchemeActorBase<TDescri
 public:
     using TBase::LogPrefix;
 
-    TDescribeStreamingQuerySchemeActor(const TString& database, const TString& queryPath, const std::optional<NACLib::TUserToken>& userToken, ui32 access)
+    TDescribeStreamingQuerySchemeActor(const TString& database, const TString& queryPath, const std::optional<NACLib::TUserToken>& userToken)
         : TBase(__func__, database, queryPath, userToken)
-        , Access(access)
     {}
 
     STFUNC(StateFunc) {
@@ -608,7 +607,7 @@ public:
 
 protected:
     void StartRequest() final {
-        LOG_D("Describe streaming query in database: " << Database << ", with access: " << Access);
+        LOG_D("Describe streaming query in database: " << Database);
 
         auto request = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
         request->DatabaseName = CanonizePath(Database);
@@ -619,7 +618,7 @@ protected:
         entry.RequestType = NSchemeCache::TSchemeCacheNavigate::TEntry::ERequestType::ByPath;
         entry.ShowPrivatePath = true;
         entry.Path = SplitPath(QueryPath);
-        entry.Access = Access;
+        entry.SyncVersion = true;
 
         Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.release()), IEventHandle::FlagTrackDelivery);
     }
@@ -629,7 +628,6 @@ protected:
     }
 
 private:
-    const ui32 Access = 0;
     std::optional<TSchemeInfo> Info;
 };
 
@@ -887,11 +885,11 @@ protected:
         ExecuteQuery(__func__, sql, &params, txControl);
     }
 
-    void PersistQueryInfo(const NKikimrKqp::TStreamingQueryState& state, const TTxControl& txControl) {
+    void PersistQueryInfo(NKikimrKqp::TStreamingQueryState state, const TTxControl& txControl) {
         const TString sql = fmt::format(R"(
                 DECLARE $database_id AS Text;
                 DECLARE $query_path AS Text;
-                DECLARE $state AS JsonDocument;
+                DECLARE $state AS Json;
 
                 UPSERT INTO `{table}` (
                     database_id, query_path, state
@@ -916,7 +914,7 @@ protected:
                 .Utf8(QueryPath)
                 .Build()
             .AddParam("$state")
-                .JsonDocument(stateWriter.Str())
+                .Json(stateWriter.Str())
                 .Build();
 
         ExecuteQuery(__func__, sql, &params, txControl);
@@ -941,7 +939,7 @@ protected:
             return TStatus::Fail(Ydb::StatusIds::NOT_FOUND, "No such steaming query");
         }
 
-        const std::optional<TString>& stateJsonString = result.ColumnParser(TStreamingQueryConfig::TColumns::State).GetOptionalJsonDocument();
+        const std::optional<TString>& stateJsonString = result.ColumnParser(TStreamingQueryConfig::TColumns::State).GetOptionalJson();
         if (!stateJsonString) {
             return TStatus::Fail(Ydb::StatusIds::INTERNAL_ERROR, "Streaming query state not found");
         }
@@ -2108,7 +2106,7 @@ private:
         State.SetRun(QuerySettings.Run);
         State.SetResourcePool(QuerySettings.ResourcePool);
 
-        if (State.GetStatus() == NKikimrKqp::TStreamingQueryState::STATUS_UNSPECIFIED) {
+        if (IsIn({NKikimrKqp::TStreamingQueryState::STATUS_UNSPECIFIED, NKikimrKqp::TStreamingQueryState::STATUS_CREATING}, State.GetStatus())) {
             State.SetStatus(NKikimrKqp::TStreamingQueryState::STATUS_CREATED);
         }
 
@@ -2135,6 +2133,7 @@ private:
 
         switch (State.GetStatus()) {
             case NKikimrKqp::TStreamingQueryState::STATUS_UNSPECIFIED:
+            case NKikimrKqp::TStreamingQueryState::STATUS_CREATING:
             case NKikimrKqp::TStreamingQueryState::STATUS_CREATED:
             case NKikimrKqp::TStreamingQueryState::STATUS_STOPPED: {
                 if (!StateEnrichedFromSS) {
@@ -2147,7 +2146,6 @@ private:
                 break;
             }
             case NKikimrKqp::TStreamingQueryState::STATUS_RUNNING:
-            case NKikimrKqp::TStreamingQueryState::STATUS_CREATING:
             case NKikimrKqp::TStreamingQueryState::STATUS_STARTING:
             case NKikimrKqp::TStreamingQueryState::STATUS_STOPPING: {
                 StopQuery(TStringBuilder() << "interrupt " << NKikimrKqp::TStreamingQueryState::EStatus_Name(State.GetStatus()));
@@ -2333,7 +2331,7 @@ protected:
 
     void DescribeQuery(const TString& info) {
         // Access by user token will be checked during scheme transaction execution
-        const auto& describerId = TBase::Register(new TDescribeStreamingQuerySchemeActor(Context.GetDatabase(), TBase::QueryPath, NACLib::TUserToken(BUILTIN_ACL_METADATA, TVector<NACLib::TSID>{}), 0));
+        const auto& describerId = TBase::Register(new TDescribeStreamingQuerySchemeActor(Context.GetDatabase(), TBase::QueryPath, NACLib::TUserToken(BUILTIN_ACL_METADATA, TVector<NACLib::TSID>{})));
         LOG_D("Start TDescribeStreamingQuerySchemeActor " << describerId << " (" << info << ")");
     }
 

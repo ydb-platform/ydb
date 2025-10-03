@@ -50,9 +50,7 @@ struct TDistributedWriteSessionPingOptions
 
 struct TDistributedWriteSessionFinishOptions
     : public TTimeoutOptions
-{
-    int MaxChildrenPerAttachRequest = 10'000;
-};
+{ };
 
 struct TTableFragmentWriterOptions
     : public TTableWriterOptions

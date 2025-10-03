@@ -18,6 +18,9 @@ public:
     void SetSuccess() { Status_ = TIssuesIds::SUCCESS; }
     void SetStatus(EYqlIssueCode status) { Status_ = status; }
 
+    void SetRepeat(bool repeat) { Repeat_ = repeat; }
+    bool Repeat() const { return Repeat_; }
+
     void AddIssue(const TIssue& issue);
     void AddIssues(const TIssues& issues);
     void SetException(const std::exception& e, const TPosition& pos = {});
@@ -26,6 +29,7 @@ public:
 private:
     EYqlIssueCode Status_ = TIssuesIds::DEFAULT_ERROR;
     TIssues Issues_;
+    bool Repeat_ = false;
 };
 
 template<typename TResult>

@@ -192,10 +192,20 @@ class ParseBaseException(Exception):
         return copy.copy(self)
 
     def formatted_message(self) -> str:
+        """
+        Output the formatted exception message.
+        Can be overridden to customize the message formatting or contents.
+
+        .. versionadded:: 3.2.0
+        """
         found_phrase = f", found {self.found}" if self.found else ""
         return f"{self.msg}{found_phrase}  (at char {self.loc}), (line:{self.lineno}, col:{self.column})"
 
     def __str__(self) -> str:
+        """
+        .. versionchanged:: 3.2.0
+           Now uses :meth:`formatted_message` to format message.
+        """
         return self.formatted_message()
 
     def __repr__(self):
@@ -229,7 +239,9 @@ class ParseBaseException(Exception):
         Returns a multi-line string listing the ParserElements and/or function names in the
         exception's stack trace.
 
-        Example::
+        Example:
+
+        .. testcode::
 
             # an expression to parse 3 integers
             expr = pp.Word(pp.nums) * 3
@@ -239,11 +251,13 @@ class ParseBaseException(Exception):
             except pp.ParseException as pe:
                 print(pe.explain(depth=0))
 
-        prints::
+        prints:
+
+        .. testoutput::
 
             123 456 A789
                     ^
-            ParseException: Expected W:(0-9), found 'A'  (at char 8), (line:1, col:9)
+            ParseException: Expected W:(0-9), found 'A789'  (at char 8), (line:1, col:9)
 
         Note: the diagnostic output will include string representations of the expressions
         that failed to parse. These representations will be more helpful if you use `set_name` to
@@ -266,7 +280,9 @@ class ParseException(ParseBaseException):
     """
     Exception thrown when a parse expression doesn't match the input string
 
-    Example::
+    Example:
+
+    .. testcode::
 
         integer = Word(nums).set_name("integer")
         try:
@@ -274,7 +290,9 @@ class ParseException(ParseBaseException):
         except ParseException as pe:
             print(pe, f"column: {pe.column}")
 
-    prints::
+    prints:
+
+    .. testoutput::
 
        Expected integer, found 'ABC'  (at char 0), (line:1, col:1) column: 1
 
@@ -299,11 +317,12 @@ class ParseSyntaxException(ParseFatalException):
 
 class RecursiveGrammarException(Exception):
     """
+    .. deprecated:: 3.0.0
+       Only used by the deprecated :meth:`ParserElement.validate`.
+
     Exception thrown by :class:`ParserElement.validate` if the
     grammar could be left-recursive; parser may need to enable
     left recursion using :class:`ParserElement.enable_left_recursion<ParserElement.enable_left_recursion>`
-
-    Deprecated: only used by deprecated method ParserElement.validate.
     """
 
     def __init__(self, parseElementList) -> None:

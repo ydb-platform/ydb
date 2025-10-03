@@ -594,6 +594,11 @@ size_t TYtVersionedConfiguration::FindNodeVer(const TExprNode& node) {
     return ver;
 }
 
+void TYtVersionedConfiguration::CopyNodeVer(const TExprNode& from, const TExprNode& to) {
+    const size_t ver = FindNodeVer(from);
+    NodeIdToVer.emplace(to.UniqueId(), ver);
+}
+
 void TYtVersionedConfiguration::FreezeZeroVersion() {
     if (Y_UNLIKELY(FrozenSettings.empty())) {
         FrozenSettings.push_back(Snapshot());

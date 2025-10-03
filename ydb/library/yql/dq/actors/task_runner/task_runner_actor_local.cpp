@@ -219,15 +219,16 @@ private:
         }
 
         if (!ev->Get()->CheckpointOnly) {
-            if (!WatermarkRequests.empty()) {
+            res = TaskRunner->Run();
+
+            if (res == ERunStatus::PendingInput && !WatermarkRequests.empty()) {
                 auto watermarkRequest = WatermarkRequests.front();
                 if (TaskRunner->GetWatermark().WatermarkIn < watermarkRequest && ReadyToWatermark()) {
                     LOG_T("Task runner. Inject watermark " << watermarkRequest);
                     TaskRunner->SetWatermarkIn(watermarkRequest);
+                    res = TaskRunner->Run();
                 }
             }
-
-            res = TaskRunner->Run();
         }
 
         for (auto& channelId : inputMap) {
@@ -284,6 +285,7 @@ private:
                     LOG_E("Failed to save state: " << e.what());
                     mkqlProgramState = nullptr;
                 }
+                StartResumeByCheckpoint();
                 HasActiveCheckpoint = false;
                 if (!WatermarkRequests.empty()) {
                     auto nextWatermarkRequest = WatermarkRequests.front();
@@ -480,7 +482,7 @@ private:
             checkpoint = hasCheckpoint ? std::move(poppedCheckpoint) : TMaybe<NDqProto::TCheckpoint>();
 
             if (hasCheckpoint) {
-                ResumeByCheckpoint();
+                AdvanceResumeByCheckpoint();
                 break;
             }
 
@@ -504,10 +506,26 @@ private:
             ev->Cookie);
     }
 
-    void ResumeByCheckpoint() {
+    void MaybeResumeByCheckpoint() {
+        if (UnsentCheckpoints > 0) {
+            LOG_T("Pending " << UnsentCheckpoints << " checkpoints to be sent");
+            return;
+        }
         for (const auto& inputId : InputsWithCheckpoints) {
             TaskRunner->GetInputChannel(inputId)->ResumeByCheckpoint();
         }
+    }
+
+    void StartResumeByCheckpoint() {
+        Y_ENSURE(UnsentCheckpoints == 0);
+        UnsentCheckpoints = Sinks.size() + Outputs.size();
+        MaybeResumeByCheckpoint();
+    }
+
+    void AdvanceResumeByCheckpoint() {
+        Y_ENSURE(UnsentCheckpoints > 0);
+        --UnsentCheckpoints;
+        MaybeResumeByCheckpoint();
     }
 
     void ResumeByWatermark(TInstant watermark) {
@@ -539,7 +557,7 @@ private:
         if (hasCheckpoint) {
             checkpointSize = checkpoint.ByteSize();
             maybeCheckpoint.ConstructInPlace(std::move(checkpoint));
-            ResumeByCheckpoint();
+            AdvanceResumeByCheckpoint();
         }
         const bool finished = sink->IsFinished();
         const bool changed = finished || size > 0 || hasCheckpoint;
@@ -618,7 +636,7 @@ private:
                 MemoryQuota->TrySetIncreaseMemoryLimitCallbackWithRSSControl(guard.GetMutex());
             } else {
                 MemoryQuota->TrySetIncreaseMemoryLimitCallback(guard.GetMutex());
-            }   
+            }
         }
 
         if (settings.GetEnableSpilling()) {
@@ -702,6 +720,7 @@ private:
     TMaybe<TInstant> LastWatermark;
     std::deque<TInstant> WatermarkRequests;
     bool HasActiveCheckpoint = false;
+    ui32 UnsentCheckpoints = 0;
 };
 
 struct TLocalTaskRunnerActorFactory: public ITaskRunnerActorFactory {

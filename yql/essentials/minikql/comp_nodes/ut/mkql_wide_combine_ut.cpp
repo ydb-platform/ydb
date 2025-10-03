@@ -30,6 +30,24 @@ public:
     public:
         using TBase = TComputationValue<TStreamValue>;
 
+// XXX: This constant is required only for TestSkipYieldRespectsMemLimit;
+// the aforementioned test is not being run under ASan, so the definition
+// below is also moved under the corresponding ifndef, to suppress unused
+// const variable warning.
+#if !defined(_asan_enabled_)
+        // Total size for the stream item size value, **except**
+        // the size of the string buffer.
+        static constexpr size_t ItemSize =
+            // Size of the struct holder, ...
+            sizeof(TDirectArrayHolderInplace) +
+            // ... size of its payload (members "a" and "b"), ...
+            2 * sizeof(NUdf::TUnboxedValue) +
+            // ... size of the string value object, ...
+            sizeof(NUdf::TStringValue) +
+            // ... and its holder (i.e. NUdf::TStringValue::TData).
+            sizeof(ui32) + sizeof(i32) + sizeof(ui64);
+#endif
+
         TStreamValue(TMemoryUsageInfo* memInfo, TComputationContext& compCtx, TTestStreamParams& params)
             : TBase(memInfo), CompCtx(compCtx), Params(params)
         {}
@@ -499,15 +517,21 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideCombinerTest) {
 // Do not run under ASAN since memory limits is hard to track. Every allocation produce and tracks more memory than requested.
 #if !defined(_asan_enabled_)
     Y_UNIT_TEST_LLVM(TestSkipYieldRespectsMemLimit) {
+        constexpr size_t pageSize = 1 << 16;
+        constexpr size_t stringSize = pageSize - TTestStreamWrapper::TStreamValue::ItemSize;
+        // XXX: Set combiner memory limit be 2.5 * item size, so
+        // non-significant changes in MKQL memory consumption do
+        // not change the order of the assertions below.
+        constexpr size_t memLimit = 5 * pageSize / 2;
         TTestStreamParams params;
-        params.StringSize = 50000;
+        params.StringSize = stringSize;
         params.TestYieldStreamData = {0, TTestStreamParams::Yield, 2, TTestStreamParams::Yield, 3, TTestStreamParams::Yield, 4};
         TSetup<LLVM> setup(GetNodeFactory(params));
         TProgramBuilder& pb = *setup.PgmBuilder;
 
         const auto stream = MakeStream<LLVM>(setup);
         const auto pgmReturn = pb.FromFlow(pb.NarrowMap(pb.WideCombiner(pb.ExpandMap(pb.ToFlow(stream),
-            [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Member(item, "a"), pb.Member(item, "b")}; }), -100000LL,
+            [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Member(item, "a"), pb.Member(item, "b")}; }), -memLimit,
             [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.front()}; },
             [&](TRuntimeNode::TList, TRuntimeNode::TList items) -> TRuntimeNode::TList { return items; },
             [&](TRuntimeNode::TList, TRuntimeNode::TList items, TRuntimeNode::TList state) -> TRuntimeNode::TList { return {state.front(), pb.AggrConcat(state.back(), items.back())}; },

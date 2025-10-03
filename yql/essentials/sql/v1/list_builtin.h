@@ -157,4 +157,33 @@ public:
     }
 };
 
+class TMutDictCreateBuiltin final: public TListBuiltin {
+public:
+    TMutDictCreateBuiltin(TPosition pos,
+                     const TVector<TNodePtr>& args)
+        : TListBuiltin(pos, "MutDictCreate", args)
+    {}
+
+    bool DoInit(TContext& ctx, ISource* src) override;
+    void DoUpdateState() const override;
+
+    TNodePtr DoClone() const final {
+        return new TMutDictCreateBuiltin(Pos_, CloneContainer(Args_));
+    }
+};
+
+class TToMutDictBuiltin final: public TListBuiltin {
+public:
+    TToMutDictBuiltin(TPosition pos,
+                     const TVector<TNodePtr>& args)
+        : TListBuiltin(pos, "ToMutDict", args)
+    {}
+
+    bool DoInit(TContext& ctx, ISource* src) override;
+
+    TNodePtr DoClone() const final {
+        return new TToMutDictBuiltin(Pos_, CloneContainer(Args_));
+    }
+};
+
 } // namespace NSQLTranslationV1

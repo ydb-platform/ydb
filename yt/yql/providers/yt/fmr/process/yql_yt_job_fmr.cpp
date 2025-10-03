@@ -14,7 +14,8 @@ void TFmrUserJob::Save(IOutputStream& s) const {
         InputTables_,
         OutputTables_,
         ClusterConnections_,
-        TableDataServiceDiscoveryFilePath_
+        TableDataServiceDiscoveryFilePath_,
+        YtJobServiceType_
     );
 }
 
@@ -24,7 +25,8 @@ void TFmrUserJob::Load(IInputStream& s) {
         InputTables_,
         OutputTables_,
         ClusterConnections_,
-        TableDataServiceDiscoveryFilePath_
+        TableDataServiceDiscoveryFilePath_,
+        YtJobServiceType_
     );
 }
 
@@ -65,6 +67,11 @@ void TFmrUserJob::FillQueueFromInputTables() {
 }
 
 void TFmrUserJob::InitializeFmrUserJob() {
+    if (!YtJobService_) {
+        YQL_ENSURE(YtJobServiceType_ == "native" || YtJobServiceType_ == "file");
+        YtJobService_ = YtJobServiceType_ == "native" ? MakeYtJobSerivce() : MakeFileYtJobSerivce();
+    }
+
     ui64 inputTablesSize = InputTables_.Inputs.size();
     UnionInputTablesQueue_ = MakeIntrusive<TFmrRawTableQueue>(inputTablesSize);
     QueueReader_ = MakeIntrusive<TFmrRawTableQueueReader>(UnionInputTablesQueue_);
@@ -77,7 +84,7 @@ void TFmrUserJob::InitializeFmrUserJob() {
     }
 }
 
-TStatistics TFmrUserJob::GetStatistics() {
+TStatistics TFmrUserJob::GetStatistics(const TFmrUserJobOptions& options) {
     YQL_ENSURE(OutputTables_.size() == TableDataServiceWriters_.size());
     TStatistics mapJobStats;
     for (ui64 i = 0; i < OutputTables_.size(); ++i) {
@@ -86,17 +93,20 @@ TStatistics TFmrUserJob::GetStatistics() {
     }
     auto serializedProtoMapJobStats = StatisticsToProto(mapJobStats).SerializeAsStringOrThrow();
 
-    TFileOutput statsOutput("stats.bin");
-    statsOutput.Write(serializedProtoMapJobStats.data(), serializedProtoMapJobStats.size());
-    statsOutput.Flush();
+    if (options.WriteStatsToFile) {
+        // don't serialize stats in case DoFmrJob() is called in the same process.
+        TFileOutput statsOutput("stats.bin");
+        statsOutput.Write(serializedProtoMapJobStats.data(), serializedProtoMapJobStats.size());
+        statsOutput.Flush();
+    }
     return mapJobStats;
 }
 
-TStatistics TFmrUserJob::DoFmrJob() {
+TStatistics TFmrUserJob::DoFmrJob(const TFmrUserJobOptions& options) {
     InitializeFmrUserJob();
     FillQueueFromInputTables();
     TYqlUserJobBase::Do();
-    return GetStatistics();
+    return GetStatistics(options);
 }
 
 } // namespace NYql::NFmr

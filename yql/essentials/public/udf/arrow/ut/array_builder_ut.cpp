@@ -291,6 +291,7 @@ Y_UNIT_TEST_SUITE(TArrayBuilderTest) {
             arrayBuilder->Add(TBlockItem::Zero(), 4);
             TInputBuffer inputBuffer("Just arbitrary string");
             arrayBuilder->Add(inputBuffer);
+            UNIT_ASSERT_VALUES_EQUAL_C(inputBuffer.PopChar(), 'J', "The input buffer must not be consumed.");
             arrayBuilder->AddMany(*arrayData, /*popCount=*/3u, /*sparseBitmat=*/nullptr, /*bitmapSize=*/arrayData->length);
             arrayBuilder->AddMany(&arrayDataItem, /*arrayCount=*/1, /*beginIndex=*/1, /*count=*/3u);
             std::vector<ui64> indexes = {1, 5, 7, 10};

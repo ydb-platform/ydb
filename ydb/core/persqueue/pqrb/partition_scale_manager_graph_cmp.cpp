@@ -66,7 +66,7 @@ namespace NKikimr::NPQ::NMirror {
                     .Error = std::format("Missing partition #{} in the source topic description", id),
                 };
             }
-            Y_ABORT_IF(sourceIt->second == nullptr, "BuildPartitionIndexMap invariant failed: no partition %u", id);
+            AFL_ENSURE(sourceIt->second != nullptr)("d", "BuildPartitionIndexMap invariant failed")("id", id);
         }
 
         // Target topic has a set [0, ..., firstMissingRootPartitionId) of root partitions.

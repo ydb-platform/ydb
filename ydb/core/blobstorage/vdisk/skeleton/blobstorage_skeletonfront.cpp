@@ -1603,7 +1603,8 @@ namespace NKikimr {
                 NKikimrProto::EReplyStatus status, const TString& /*errorReason*/, TInstant /*now*/,
                 const std::optional<NBackpressure::TMessageId>& expectedMsgId = std::nullopt) {
             const ui32 flags = IEventHandle::MakeFlags(ev->GetChannel(), 0);
-            auto res = std::make_unique<TEvBlobStorage::TEvVCheckReadinessResult>(status);
+            auto res = std::make_unique<TEvBlobStorage::TEvVCheckReadinessResult>(status,
+                Config->BlobHeaderMode == EBlobHeaderMode::XXH3_64BIT_HEADER);
             auto& record = res->Record;
             SetRacingGroupInfo(ev->Get()->Record, record, GInfo);
             if (expectedMsgId) {

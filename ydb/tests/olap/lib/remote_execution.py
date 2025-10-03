@@ -418,12 +418,12 @@ def ensure_directory_with_permissions(host: str, path: str, raise_on_error: bool
     Создает директорию и устанавливает права 777
     """
     try:
-        if execute_command(host, f"mkdir -p {path} && chmod 777 {path}", raise_on_error=False).exit_code == 0:
+        if execute_command(host, f"mkdir -p {path} && chmod 777 {path}", raise_on_error=False, timeout=10).exit_code == 0:
             return True
-        created_without_sudo = execute_command(host, f"mkdir -p {path} && chmod 777 {path}", raise_on_error=False).exit_code == 0
+        created_without_sudo = execute_command(host, f"mkdir -p {path} && chmod 777 {path}", raise_on_error=False, timeout=10).exit_code == 0
         if created_without_sudo:
             return True
-        created_with_sudo = execute_command(host, f"sudo mkdir -p {path} && sudo chmod 777 {path}", raise_on_error=raise_on_error).exit_code == 0
+        created_with_sudo = execute_command(host, f"sudo mkdir -p {path} && sudo chmod 777 {path}", raise_on_error=raise_on_error, timeout=10).exit_code == 0
         return created_with_sudo
     except Exception as e:
         if raise_on_error:

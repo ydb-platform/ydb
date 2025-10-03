@@ -206,12 +206,24 @@ def wait_for_cluster_ready():
         'query': 'create user database password "2345"'
     })
     call_viewer("/viewer/query", {
+        'database': dedicated_db,
+        'query': 'grant select on `' + dedicated_db + '` to database;'
+    })
+    call_viewer("/viewer/query", {
         'database': domain_name,
         'query': 'create user viewer password "3456"'
     })
     call_viewer("/viewer/query", {
+        'database': dedicated_db,
+        'query': 'grant select on `' + dedicated_db + '` to viewer;'
+    })
+    call_viewer("/viewer/query", {
         'database': domain_name,
         'query': 'create user monitoring password "4567"'
+    })
+    call_viewer("/viewer/query", {
+        'database': dedicated_db,
+        'query': 'grant select on `' + dedicated_db + '` to monitoring;'
     })
     database_session_id = login_user({'user': 'database', 'password': '2345'}).cookies.get('ydb_session_id')
     viewer_session_id = login_user({'user': 'viewer', 'password': '3456'}).cookies.get('ydb_session_id')

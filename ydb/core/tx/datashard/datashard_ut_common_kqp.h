@@ -190,9 +190,9 @@ namespace NKqpHelpers {
         return KqpSimpleExec(runtime, query, true, database);
     }
 
-    inline auto KqpSimpleBeginSend(TTestActorRuntime& runtime, TString& sessionId, const TString& query) {
-        sessionId = CreateSessionRPC(runtime);
-        return SendRequest(runtime, MakeSimpleRequestRPC(query, sessionId, /* txId */ {}, false /* commitTx */));
+    inline auto KqpSimpleBeginSend(TTestActorRuntime& runtime, TString& sessionId, const TString& query, const TString& database = {}) {
+        sessionId = CreateSessionRPC(runtime, database);
+        return SendRequest(runtime, MakeSimpleRequestRPC(query, sessionId, /* txId */ {}, false /* commitTx */), database);
     }
 
     inline TString KqpSimpleBeginWait(TTestActorRuntime& runtime, TString& txId, NThreading::TFuture<Ydb::Table::ExecuteDataQueryResponse> future) {
@@ -207,13 +207,13 @@ namespace NKqpHelpers {
         return FormatResult(result);
     }
 
-    inline TString KqpSimpleBegin(TTestActorRuntime& runtime, TString& sessionId, TString& txId, const TString& query) {
-        return KqpSimpleBeginWait(runtime, txId, KqpSimpleBeginSend(runtime, sessionId, query));
+    inline TString KqpSimpleBegin(TTestActorRuntime& runtime, TString& sessionId, TString& txId, const TString& query, const TString& database = {}) {
+        return KqpSimpleBeginWait(runtime, txId, KqpSimpleBeginSend(runtime, sessionId, query, database));
     }
 
-    inline TString KqpSimpleContinue(TTestActorRuntime& runtime, const TString& sessionId, const TString& txId, const TString& query) {
+    inline TString KqpSimpleContinue(TTestActorRuntime& runtime, const TString& sessionId, const TString& txId, const TString& query, const TString& database = {}) {
         Y_ENSURE(!txId.empty(), "continue on empty transaction");
-        auto response = AwaitResponse(runtime, SendRequest(runtime, MakeSimpleRequestRPC(query, sessionId, txId, false /* commitTx */)));
+        auto response = AwaitResponse(runtime, SendRequest(runtime, MakeSimpleRequestRPC(query, sessionId, txId, false /* commitTx */), database));
         if (response.operation().status() != Ydb::StatusIds::SUCCESS) {
             return TStringBuilder() << "ERROR: " << response.operation().status();
         }
@@ -223,9 +223,9 @@ namespace NKqpHelpers {
         return FormatResult(result);
     }
 
-    inline auto KqpSimpleSendCommit(TTestActorRuntime& runtime, const TString& sessionId, const TString& txId, const TString& query) {
+    inline auto KqpSimpleSendCommit(TTestActorRuntime& runtime, const TString& sessionId, const TString& txId, const TString& query, const TString& database = {}) {
         Y_ENSURE(!txId.empty(), "commit on empty transaction");
-        return SendRequest(runtime, MakeSimpleRequestRPC(query, sessionId, txId, true /* commitTx */));
+        return SendRequest(runtime, MakeSimpleRequestRPC(query, sessionId, txId, true /* commitTx */), database);
     }
 
     inline TString KqpSimpleWaitCommit(TTestActorRuntime& runtime, NThreading::TFuture<Ydb::Table::ExecuteDataQueryResponse> future) {
@@ -239,8 +239,8 @@ namespace NKqpHelpers {
         return FormatResult(result);
     }
 
-    inline TString KqpSimpleCommit(TTestActorRuntime& runtime, const TString& sessionId, const TString& txId, const TString& query) {
-        return KqpSimpleWaitCommit(runtime, KqpSimpleSendCommit(runtime, sessionId, txId, query));
+    inline TString KqpSimpleCommit(TTestActorRuntime& runtime, const TString& sessionId, const TString& txId, const TString& query, const TString& database = {}) {
+        return KqpSimpleWaitCommit(runtime, KqpSimpleSendCommit(runtime, sessionId, txId, query, database));
     }
 
     inline Ydb::Table::ExecuteSchemeQueryRequest MakeSchemeRequestRPC(

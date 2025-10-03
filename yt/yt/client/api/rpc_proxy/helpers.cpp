@@ -232,6 +232,7 @@ void ToProto(
     YT_OPTIONAL_TO_PROTO(proto, subject_name, result.SubjectName);
 
     ToProto(proto->mutable_missing_subjects(), result.MissingSubjects);
+    ToProto(proto->mutable_pending_removal_subjects(), result.PendingRemovalSubjects);
 }
 
 void FromProto(
@@ -244,6 +245,7 @@ void FromProto(
     result->SubjectName = YT_OPTIONAL_FROM_PROTO(proto, subject_name);
 
     FromProto(&result->MissingSubjects, proto.missing_subjects());
+    FromProto(&result->PendingRemovalSubjects, proto.pending_removal_subjects());
 }
 
 void ToProto(
@@ -1402,6 +1404,9 @@ void ToProto(
     if (query.Secrets) {
         protoQuery->set_secrets(ToProto(*query.Secrets));
     }
+    if (query.IsIndexed) {
+        protoQuery->set_is_indexed(*query.IsIndexed);
+    }
 }
 
 void FromProto(
@@ -1445,6 +1450,9 @@ void FromProto(
         query->Secrets = TYsonString(protoQuery.secrets());
     } else if (query->Secrets) {
         query->Secrets = TYsonString{};
+    }
+    if (protoQuery.has_is_indexed()) {
+        query->IsIndexed = protoQuery.is_indexed();
     }
 }
 
@@ -1964,9 +1972,8 @@ void ParseRequest(
 void FillRequest(
     TReqPingDistributedWriteSession* req,
     const TSignedDistributedWriteSessionPtr session,
-    const TDistributedWriteSessionPingOptions& options)
+    const TDistributedWriteSessionPingOptions& /*options*/)
 {
-    Y_UNUSED(options);
     req->set_signed_session(ToProto(ConvertToYsonString(session)));
 }
 
@@ -1984,7 +1991,7 @@ void ParseRequest(
 void FillRequest(
     TReqFinishDistributedWriteSession* req,
     const TDistributedWriteSessionWithResults& sessionWithResults,
-    const TDistributedWriteSessionFinishOptions& options)
+    const TDistributedWriteSessionFinishOptions& /*options*/)
 {
     YT_VERIFY(sessionWithResults.Session);
 
@@ -1993,12 +2000,14 @@ void FillRequest(
         YT_VERIFY(writeResult);
         req->add_signed_write_results(ConvertToYsonString(writeResult).ToString());
     }
-    req->set_max_children_per_attach_request(options.MaxChildrenPerAttachRequest);
+    // TODO(achains): Remove after updated server binaries
+    // Setting default value for MaxChildrenPerAttachRequest from TDistributedWriteDynamicConfig
+    req->set_max_children_per_attach_request(10'000);
 }
 
 void ParseRequest(
     TDistributedWriteSessionWithResults* mutableSessionWithResults,
-    TDistributedWriteSessionFinishOptions* mutableOptions,
+    TDistributedWriteSessionFinishOptions* /*mutableOptions*/,
     const TReqFinishDistributedWriteSession& req)
 {
     mutableSessionWithResults->Results.reserve(req.signed_write_results().size());
@@ -2007,8 +2016,6 @@ void ParseRequest(
     }
 
     mutableSessionWithResults->Session = ConvertTo<TSignedDistributedWriteSessionPtr>(TYsonString(req.signed_session()));
-
-    mutableOptions->MaxChildrenPerAttachRequest = req.max_children_per_attach_request();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

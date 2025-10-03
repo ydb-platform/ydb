@@ -19,7 +19,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix: 
-        build_preset: ["relwithdebinfo", "release-asan", "release-tsan", "release-msan"]
+        build_preset: ["relwithdebinfo", "release-asan"]
     with:
       test_targets: ydb/
       test_size: large

@@ -50,18 +50,21 @@ def build_nm_bundle_path(p):
     return os.path.join(p, NODE_MODULES_WORKSPACE_BUNDLE_FILENAME)
 
 
-def build_nm_store_path(moddir: str) -> str:
-    nots_store_path = os.getenv("NOTS_STORE_PATH", os.path.join(home_dir(), ".nots"))
-    build_path = os.path.join(nots_store_path, "nm_store", moddir)
+def init_nots_path(build_root: str, local_cli: bool):
+    base_dir = home_dir() if local_cli else build_root
+    os.environ.setdefault("NOTS_STORE_PATH", os.path.join(base_dir, ".nots"))
 
-    return build_path
+
+def build_nots_path() -> str:
+    return os.getenv("NOTS_STORE_PATH")
+
+
+def build_nm_store_path(moddir: str) -> str:
+    return os.path.join(build_nots_path(), "nm_store", moddir)
 
 
 def build_traces_store_path(moddir: str) -> str:
-    nots_store_path = os.getenv("NOTS_STORE_PATH", os.path.join(home_dir(), ".nots"))
-    build_path = os.path.join(nots_store_path, "traces", moddir)
-
-    return build_path
+    return os.path.join(build_nots_path(), "traces", moddir)
 
 
 def extract_package_name_from_path(p):

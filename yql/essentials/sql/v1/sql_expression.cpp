@@ -2,10 +2,12 @@
 #include "sql_call_expr.h"
 #include "sql_select.h"
 #include "sql_values.h"
+#include <yql/essentials/sql/v1/proto_parser/parse_tree.h>
 #include <yql/essentials/utils/utf8.h>
 #include <util/charset/wide.h>
 #include <util/string/ascii.h>
 #include <util/string/hex.h>
+#include <util/generic/scope.h>
 #include "antlr_token.h"
 
 namespace NSQLTranslationV1 {
@@ -15,7 +17,7 @@ using NALPDefaultAntlr4::SQLv1Antlr4Lexer;
 
 using namespace NSQLv1Generated;
 
-TNodePtr TSqlExpression::Build(const TRule_expr& node) {
+TNodePtr TSqlExpression::BuildSourceOrNode(const TRule_expr& node) {
         // expr:
         //     or_subexpr (OR or_subexpr)*
         //   | type_name_composite
@@ -32,6 +34,16 @@ TNodePtr TSqlExpression::Build(const TRule_expr& node) {
                 Y_ABORT("You should change implementation according to grammar changes");
         }
     }
+
+TNodePtr TSqlExpression::Build(const TRule_expr& node) {
+    const bool prevIsSourceAllowed = IsSourceAllowed_;
+    Y_DEFER {
+        IsSourceAllowed_ = prevIsSourceAllowed;
+    };
+
+    IsSourceAllowed_ = false;
+    return BuildSourceOrNode(node);
+}
 
 TNodePtr TSqlExpression::Build(const TRule_lambda_or_parameter& node) {
         // lambda_or_parameter:
@@ -57,6 +69,24 @@ TNodePtr TSqlExpression::Build(const TRule_lambda_or_parameter& node) {
                 Y_ABORT("You should change implementation according to grammar changes");
         }
     }
+
+TSourcePtr TSqlExpression::BuildSource(const TRule_select_or_expr& node) {
+    TNodePtr result = SelectOrExpr(node);
+    if (!result) {
+        return nullptr;
+    }
+
+    if (TSourcePtr source = MoveOutIfSource(result)) {
+        return source;
+    }
+
+    Ctx_.Error(result->GetPos()) << "Expected SELECT/PROCESS/REDUCE statement";
+    return nullptr;
+}
+
+TNodePtr TSqlExpression::BuildSourceOrNode(const TRule_smart_parenthesis& node) {
+    return SmartParenthesis(node);
+}
 
 TNodePtr TSqlExpression::SubExpr(const TRule_mul_subexpr& node, const TTrailingQuestions& tail) {
         // mul_subexpr: con_subexpr (DOUBLE_PIPE con_subexpr)*;
@@ -1520,40 +1550,20 @@ TMaybe<TExprOrIdent> TSqlExpression::InAtomExpr(const TRule_in_atom_expr& node, 
             break;
         }
         case TRule_in_atom_expr::kAltInAtomExpr7: {
-            Token(node.GetAlt_in_atom_expr7().GetToken1());
-            // reset column reference scope (select will reenable it where needed)
-            TColumnRefScope scope(Ctx_, EColumnRefState::Deny);
-            TSqlSelect select(Ctx_, Mode_);
-            TPosition pos;
-            auto source = select.Build(node.GetAlt_in_atom_expr7().GetRule_select_stmt2(), pos);
-            if (!source) {
-                Ctx_.IncrementMonCounter("sql_errors", "BadSource");
-                return {};
-            }
-            Ctx_.IncrementMonCounter("sql_features", "InSubquery");
-            const auto alias = Ctx_.MakeName("subquerynode");
-            const auto ref = Ctx_.MakeName("subquery");
-            auto& blocks = Ctx_.GetCurrentBlocks();
-            blocks.push_back(BuildSubquery(std::move(source), alias, Mode_ == NSQLTranslation::ESqlMode::SUBQUERY, -1, Ctx_.Scoped));
-            blocks.back()->SetLabel(ref);
-            result.Expr = BuildSubqueryRef(blocks.back(), ref, -1);
+            result.Expr = ValueConstructor(node.GetAlt_in_atom_expr7().GetRule_value_constructor1());
             break;
         }
-        case TRule_in_atom_expr::kAltInAtomExpr8: {
-            result.Expr = ValueConstructor(node.GetAlt_in_atom_expr8().GetRule_value_constructor1());
+        case TRule_in_atom_expr::kAltInAtomExpr8:
+            result.Expr = BitCastRule(node.GetAlt_in_atom_expr8().GetRule_bitcast_expr1());
             break;
-        }
         case TRule_in_atom_expr::kAltInAtomExpr9:
-            result.Expr = BitCastRule(node.GetAlt_in_atom_expr9().GetRule_bitcast_expr1());
+            result.Expr = ListLiteral(node.GetAlt_in_atom_expr9().GetRule_list_literal1());
             break;
         case TRule_in_atom_expr::kAltInAtomExpr10:
-            result.Expr = ListLiteral(node.GetAlt_in_atom_expr10().GetRule_list_literal1());
+            result.Expr = DictLiteral(node.GetAlt_in_atom_expr10().GetRule_dict_literal1());
             break;
         case TRule_in_atom_expr::kAltInAtomExpr11:
-            result.Expr = DictLiteral(node.GetAlt_in_atom_expr11().GetRule_dict_literal1());
-            break;
-        case TRule_in_atom_expr::kAltInAtomExpr12:
-            result.Expr = StructLiteral(node.GetAlt_in_atom_expr12().GetRule_struct_literal1());
+            result.Expr = StructLiteral(node.GetAlt_in_atom_expr11().GetRule_struct_literal1());
             break;
         case TRule_in_atom_expr::ALT_NOT_SET:
             AltNotImplemented("in_atom_expr", node);
@@ -2310,25 +2320,119 @@ TNodePtr TSqlExpression::SqlInExpr(const TRule_in_expr& node, const TTrailingQue
     TSqlExpression expr(Ctx_, Mode_);
     expr.SetSmartParenthesisMode(TSqlExpression::ESmartParenthesis::InStatement);
     auto result = expr.UnaryExpr(node.GetRule_in_unary_subexpr1(), tail);
+
+    if (TSourcePtr source = MoveOutIfSource(result)) {
+        if (IsSubqueryRef(source)) { // Prevent redundant ref to ref
+            return source;
+        }
+
+        Ctx_.IncrementMonCounter("sql_features", "InSubquery");
+
+        const auto alias = Ctx_.MakeName("subquerynode");
+        const auto ref = Ctx_.MakeName("subquery");
+
+        auto& blocks = Ctx_.GetCurrentBlocks();
+        blocks.emplace_back(BuildSubquery(
+            std::move(source),
+            alias,
+            /* inSubquery = */ Mode_ == NSQLTranslation::ESqlMode::SUBQUERY,
+            /* ensureTupleSize = */ -1,
+            Ctx_.Scoped));
+        blocks.back()->SetLabel(ref);
+
+        return BuildSubqueryRef(blocks.back(), ref, /* tupleIndex = */ -1);
+    }
+
     return result;
 }
 
-TNodePtr TSqlExpression::SmartParenthesis(const TRule_smart_parenthesis& node) {
+bool TSqlExpression::IsTopLevelGroupBy() const {
+    return MaybeUnnamedSmartParenOnTop_ &&
+           SmartParenthesisMode_ == ESmartParenthesis::GroupBy;
+}
+
+TSourcePtr TSqlExpression::LangVersionedSubSelect(TSourcePtr source) {
+    if (!source) {
+        return nullptr;
+    }
+
+    if (!IsSourceAllowed_ && !IsBackwardCompatibleFeatureAvailable(MakeLangVersion(2025, 04))) {
+        Ctx_.Error(source->GetPos()) << "Inline subquery is not available before 2025.04";
+        return nullptr;
+    }
+
+    return source;
+}
+
+TNodePtr TSqlExpression::SelectSubExpr(const TRule_select_subexpr& node) {
+    TNodePtr result;
+    if (IsOnlySubExpr(node)) {
+        result = SelectOrExpr(node.GetRule_select_subexpr_intersect1()
+                                  .GetRule_select_or_expr1());
+    } else {
+        result = LangVersionedSubSelect(TSqlSelect(Ctx_, Mode_).BuildSubSelect(node));
+    }
+
+    if (TSourcePtr source = MoveOutIfSource(result)) {
+        if (IsSourceAllowed_ || IsSubqueryRef(source)) {
+            return source;
+        }
+
+        source->UseAsInner();
+        result = BuildSourceNode(source->GetPos(), std::move(source));
+    }
+
+    return result;
+}
+
+TNodePtr TSqlExpression::SelectOrExpr(const TRule_select_or_expr& node) {
+    switch (node.Alt_case()) {
+    case NSQLv1Generated::TRule_select_or_expr::kAltSelectOrExpr1: {
+        const auto& select_kind = node.GetAlt_select_or_expr1().GetRule_select_kind_partial1();
+        TSourcePtr source = TSqlSelect(Ctx_, Mode_).BuildSubSelect(select_kind);
+        return LangVersionedSubSelect(std::move(source));
+    }
+    case NSQLv1Generated::TRule_select_or_expr::kAltSelectOrExpr2:
+        return TupleOrExpr(node.GetAlt_select_or_expr2().GetRule_tuple_or_expr1());
+    case NSQLv1Generated::TRule_select_or_expr::ALT_NOT_SET:
+        Y_ABORT("You should change implementation according to grammar changes");
+    }
+}
+
+TNodePtr TSqlExpression::TupleOrExpr(const TRule_tuple_or_expr& node) {
     TVector<TNodePtr> exprs;
-    Token(node.GetToken1());
     const TPosition pos(Ctx_.Pos());
-    const bool isTuple = node.HasBlock3();
+
+    const bool isTuple = node.HasBlock4();
+
     bool expectTuple = SmartParenthesisMode_ == ESmartParenthesis::InStatement;
     EExpr mode = EExpr::Regular;
     if (SmartParenthesisMode_ == ESmartParenthesis::SqlLambdaParams) {
         mode = EExpr::SqlLambdaParams;
         expectTuple = true;
     }
-    if (node.HasBlock2() && !NamedExprList(node.GetBlock2().GetRule_named_expr_list1(), exprs, mode)) {
-        return {};
-    }
 
-    bool topLevelGroupBy = MaybeUnnamedSmartParenOnTop_ && SmartParenthesisMode_ == ESmartParenthesis::GroupBy;
+    {
+        const auto& head = node.GetRule_expr1();
+        const auto* headName = node.HasBlock2() ? &node.GetBlock2().GetRule_an_id_or_type2() : nullptr;
+
+        bool isDefinitelyTuple = isTuple || expectTuple || !node.GetBlock3().empty();
+        if ((!headName && !isDefinitelyTuple) || IsSelect(head)) {
+            return BuildSourceOrNode(head);
+        }
+
+        exprs.emplace_back(NamedExpr(head, headName, mode));
+        if (!exprs.back()) {
+            return nullptr;
+        }
+
+        for (const auto& item : node.GetBlock3()) {
+            exprs.emplace_back(NamedExpr(item.GetRule_named_expr2(), mode));
+            if (!exprs.back()) {
+                return nullptr;
+            }
+        }
+    }
 
     bool hasAliases = false;
     bool hasUnnamed = false;
@@ -2338,19 +2442,16 @@ TNodePtr TSqlExpression::SmartParenthesis(const TRule_smart_parenthesis& node) {
         } else {
             hasUnnamed = true;
         }
-        if (hasAliases && hasUnnamed && !topLevelGroupBy) {
+        if (hasAliases && hasUnnamed && !IsTopLevelGroupBy()) {
             Ctx_.IncrementMonCounter("sql_errors", "AnonymousStructMembers");
             Ctx_.Error(pos) << "Structure does not allow anonymous members";
             return nullptr;
         }
     }
-    if (exprs.size() == 1 && hasUnnamed && !isTuple && !expectTuple) {
-        return exprs.back();
-    }
-    if (topLevelGroupBy) {
+    if (IsTopLevelGroupBy()) {
         if (isTuple) {
             Ctx_.IncrementMonCounter("sql_errors", "SimpleTupleInGroupBy");
-            Token(node.GetBlock3().GetToken1());
+            Token(node.GetBlock4().GetToken1());
             Ctx_.Error() << "Unexpected trailing comma in grouping elements list";
             return nullptr;
         }
@@ -2359,6 +2460,26 @@ TNodePtr TSqlExpression::SmartParenthesis(const TRule_smart_parenthesis& node) {
     }
     Ctx_.IncrementMonCounter("sql_features", hasUnnamed ? "SimpleTuple" : "SimpleStruct");
     return (hasUnnamed || expectTuple || exprs.size() == 0) ? BuildTuple(pos, exprs) : BuildStructure(pos, exprs);
+}
+
+TNodePtr TSqlExpression::EmptyTuple() {
+    if (IsTopLevelGroupBy()) {
+        return BuildListOfNamedNodes(Ctx_.Pos(), TVector<TNodePtr>{});
+    }
+
+    return BuildTuple(Ctx_.Pos(), TVector<TNodePtr>{});
+}
+
+TNodePtr TSqlExpression::SmartParenthesis(const TRule_smart_parenthesis& node) {
+    Token(node.GetToken1());
+    switch (node.GetBlock2().GetAltCase()) {
+    case NSQLv1Generated::TRule_smart_parenthesis_TBlock2::kAlt1:
+        return SelectSubExpr(node.GetBlock2().GetAlt1().GetRule_select_subexpr1());
+    case NSQLv1Generated::TRule_smart_parenthesis_TBlock2::kAlt2:
+        return EmptyTuple();
+    case NSQLv1Generated::TRule_smart_parenthesis_TBlock2::ALT_NOT_SET:
+        Y_ABORT("You should change implementation according to grammar changes");
+    }
 }
 
 } // namespace NSQLTranslationV1

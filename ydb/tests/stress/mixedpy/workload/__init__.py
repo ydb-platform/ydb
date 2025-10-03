@@ -19,10 +19,15 @@ class YdbMixedWorkload(WorkloadBase):
         self.endpoint = endpoint
         self.database = database
         self.duration = str(duration // 3)
+        self.tempdir = None
         self._unpack_resource('ydb_cli')
 
+    def __del__(self):
+        self.tempdir.cleanup()
+
     def _unpack_resource(self, name):
-        self.working_dir = os.path.join(tempfile.gettempdir(), "mixed_ydb_cli")
+        self.tempdir = tempfile.TemporaryDirectory(dir=os.getcwd())
+        self.working_dir = os.path.join(self.tempdir.name, "mixed_ydb_cli")
         os.makedirs(self.working_dir, exist_ok=True)
         res = resource.find(name)
         path_to_unpack = os.path.join(self.working_dir, name)
@@ -116,6 +121,10 @@ class YdbMixedWorkload(WorkloadBase):
                     self.cmd_run,
                     command
                 )
+
+        self.cmd_run(
+            self.get_command_prefix(subcmds=['clean'])
+        )
 
     def get_workload_thread_funcs(self):
         r = [self.__loop]

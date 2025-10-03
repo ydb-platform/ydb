@@ -74,6 +74,7 @@ SET(ORIG_SOURCES
     mkql_join_dict.cpp
     mkql_lazy_list.cpp
     mkql_length.cpp
+    mkql_linear.cpp
     mkql_listfromrange.cpp
     mkql_logical.cpp
     mkql_lookup.cpp
@@ -86,6 +87,7 @@ SET(ORIG_SOURCES
     mkql_match_recognize_rows_formatter.cpp
     mkql_multihopping.cpp
     mkql_multimap.cpp
+    mkql_mutdict.cpp
     mkql_narrow_map.cpp
     mkql_next_value.cpp
     mkql_nop.cpp

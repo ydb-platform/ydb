@@ -246,6 +246,8 @@ extern const std::unordered_map<TString, TTabletTypes::EType> TABLET_TYPE_BY_SHO
 
 class THive;
 
+class THiveDrain;
+
 struct THiveSharedSettings {
     NKikimrConfig::THiveConfig CurrentConfig;
 

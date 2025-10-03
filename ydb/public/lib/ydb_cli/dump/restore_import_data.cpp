@@ -829,10 +829,9 @@ class TDataWriter: public NPrivate::IDataWriter {
     }
 
     bool Write(const NPrivate::TBatch& data) {
-        const ui32 maxRetries = 10;
         TDuration retrySleep = TDuration::MilliSeconds(500);
 
-        for (ui32 retryNumber = 0; retryNumber <= maxRetries; ++retryNumber) {
+        for (ui32 retryNumber = 0; retryNumber <= MaxRetries; ++retryNumber) {
             while (!RequestLimiter.IsAvail()) {
                 Sleep(Min(TDuration::MicroSeconds(RequestLimiter.GetWaitTime()), RateLimiterSettings.ReactionTime_));
                 if (IsStopped()) {
@@ -852,8 +851,9 @@ class TDataWriter: public NPrivate::IDataWriter {
                 return true;
             }
 
-            if (retryNumber == maxRetries) {
-                LOG_E("There is no retries left, last result: " << importResult);
+            if (retryNumber == MaxRetries) {
+                LOG_E("There is no retries left while importing data to " << Path.Quote()
+                      << ", last result: " << importResult);
                 SetError(std::move(importResult));
                 return false;
             }
@@ -941,6 +941,7 @@ public:
         , Log(log)
         , RateLimiterSettings(settings.RateLimiterSettings_)
         , RequestLimiter(RateLimiterSettings.GetRps(), RateLimiterSettings.GetRps())
+        , MaxRetries(settings.MaxRetries_)
         , Stopped(0)
     {
         Y_ENSURE(!accumulators.empty());
@@ -997,6 +998,8 @@ private:
 
     using TRpsLimiter = TBucketQuoter<ui64>;
     TRpsLimiter RequestLimiter;
+
+    const ui32 MaxRetries;
 
     THolder<IThreadPool> TasksQueue;
     TAtomic Stopped;

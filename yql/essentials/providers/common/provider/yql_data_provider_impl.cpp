@@ -278,7 +278,11 @@ TExprNode::TPtr TDataProviderBase::OptimizePull(const TExprNode::TPtr& source, c
     Y_UNUSED(ctx);
     Y_UNUSED(optCtx);
     return source;
+}
 
+void TDataProviderBase::RegisterWorldArg(const TExprNode::TPtr& arg, const TExprNode::TPtr& world) {
+    Y_UNUSED(arg);
+    Y_UNUSED(world);
 }
 
 bool TDataProviderBase::CanExecute(const TExprNode& node) {
@@ -374,6 +378,9 @@ TExprNode::TPtr DefaultCleanupWorld(const TExprNode::TPtr& node, TExprContext& c
                     .Seal()
                     .Build();
             }
+        }
+        if (node->IsCallable("WithWorld")) {
+            return node->HeadPtr();
         }
 
         return node;

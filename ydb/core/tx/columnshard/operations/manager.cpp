@@ -146,6 +146,33 @@ void TOperationsManager::AbortTransactionOnComplete(TColumnShard& owner, const u
     OnTransactionFinishOnComplete(aborted, *lock, txId);
 }
 
+void TOperationsManager::AbortLockOnExecute(TColumnShard& owner, const ui64 lockId, NTabletFlatExecutor::TTransactionContext& txc) {
+    auto* lock = GetLockOptional(lockId);
+    if (!lock) {
+        return;
+    }
+
+    for (auto&& opPtr : lock->GetWriteOperations()) {
+        opPtr->AbortOnExecute(owner, txc);
+        RemoveOperationOnExecute(opPtr, txc);
+    }
+}
+
+void TOperationsManager::AbortLockOnComplete(TColumnShard& owner, const ui64 lockId) {
+    auto* lock = GetLockOptional(lockId);
+    if (!lock) {
+        return;
+    }
+
+    for (auto&& opPtr : lock->GetWriteOperations()) {
+        opPtr->AbortOnComplete(owner);
+        RemoveOperationOnComplete(opPtr);
+    }
+
+    lock->RemoveInteractions(InteractionsContext);
+    LockFeatures.erase(lockId);
+}
+
 void TOperationsManager::OnTransactionFinishOnExecute(
     const TVector<TWriteOperation::TPtr>& operations, const TLockFeatures& lock, const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc) {
     for (auto&& op : operations) {
@@ -194,6 +221,9 @@ std::optional<ui64> TOperationsManager::GetLockForTx(const ui64 txId) const {
 }
 
 void TOperationsManager::LinkTransactionOnExecute(const ui64 lockId, const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc) {
+    auto& lock = GetLockVerified(lockId);
+    lock.SetTxIdAssigned();
+
     NIceDb::TNiceDb db(txc.DB);
     db.Table<Schema::OperationTxIds>().Key(txId, lockId).Update();
     Tx2Lock[txId] = lockId;
@@ -288,7 +318,7 @@ void TOperationsManager::AddEventForLock(
     auto& txLock = GetLockVerified(lockId);
     writer->CheckInteraction(lockId, InteractionsContext, txConflicts, txNotifications);
     for (auto&& i : txConflicts) {
-        if (auto lock = GetLockOptional(i.first)) {
+        if (GetLockOptional(i.first)) {
             GetLockVerified(i.first).AddBrokeOnCommit(i.second);
         } else if (txLock.IsCommitted(i.first)) {
             txLock.SetBroken();
@@ -302,6 +332,12 @@ void TOperationsManager::AddEventForLock(
         container.AddToInteraction(InteractionsContext);
         txLock.AddTxEvent(std::move(container));
     }
+}
+
+void TOperationsManager::SetOperationFinished(const TOperationWriteId writeId) {
+    auto operation = GetOperationVerified(writeId);
+    auto& lock = GetLockVerified(operation->GetLockId());
+    lock.OnWriteOperationFinished();
 }
 
 }   // namespace NKikimr::NColumnShard

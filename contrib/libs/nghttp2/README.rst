@@ -126,9 +126,9 @@ following libraries are required:
   <https://github.com/quictls/openssl/tree/OpenSSL_1_1_1w+quic>`_; or
   wolfSSL; or LibreSSL (does not support 0RTT); or aws-lc; or
   `BoringSSL <https://boringssl.googlesource.com/boringssl/>`_ (commit
-  9295969e1dad2c31d0d99481734c1c68dcbc6403); or OpenSSL >= 3.5.0
-* `ngtcp2 <https://github.com/ngtcp2/ngtcp2>`_ >= 1.12.0
-* `nghttp3 <https://github.com/ngtcp2/nghttp3>`_ >= 1.1.0
+  729648fb79df7bc46c145e49b0dfd8d2a24232f1); or OpenSSL >= 3.5.0
+* `ngtcp2 <https://github.com/ngtcp2/ngtcp2>`_ >= 1.15.0
+* `nghttp3 <https://github.com/ngtcp2/nghttp3>`_ >= 1.11.0
 
 Use ``--enable-http3`` configure option to enable HTTP/3 feature for
 h2load and nghttpx.
@@ -340,7 +340,7 @@ Build aws-lc:
 
 .. code-block:: text
 
-   $ git clone --depth 1 -b v1.52.0 https://github.com/aws/aws-lc
+   $ git clone --depth 1 -b v1.58.1 https://github.com/aws/aws-lc
    $ cd aws-lc
    $ cmake -B build -DDISABLE_GO=ON --install-prefix=$PWD/opt
    $ make -j$(nproc) -C build
@@ -351,7 +351,7 @@ Build nghttp3:
 
 .. code-block:: text
 
-   $ git clone --depth 1 -b v1.9.0 https://github.com/ngtcp2/nghttp3
+   $ git clone --depth 1 -b v1.11.0 https://github.com/ngtcp2/nghttp3
    $ cd nghttp3
    $ git submodule update --init --depth 1
    $ autoreconf -i
@@ -364,7 +364,7 @@ Build ngtcp2:
 
 .. code-block:: text
 
-   $ git clone --depth 1 -b v1.12.0 https://github.com/ngtcp2/ngtcp2
+   $ git clone --depth 1 -b v1.15.1 https://github.com/ngtcp2/ngtcp2
    $ cd ngtcp2
    $ git submodule update --init --depth 1
    $ autoreconf -i
@@ -380,7 +380,7 @@ from source:
 
 .. code-block:: text
 
-   $ git clone --depth 1 -b v1.5.1 https://github.com/libbpf/libbpf
+   $ git clone --depth 1 -b v1.6.2 https://github.com/libbpf/libbpf
    $ cd libbpf
    $ PREFIX=$PWD/build make -C src install
    $ cd ..
@@ -394,7 +394,7 @@ Build nghttp2:
    $ git submodule update --init
    $ autoreconf -i
    $ ./configure --with-mruby --enable-http3 --with-libbpf \
-         CC=clang-18 CXX=clang++-18 \
+         CC=clang-19 CXX=clang++-19 \
          PKG_CONFIG_PATH="$PWD/../aws-lc/opt/lib/pkgconfig:$PWD/../nghttp3/build/lib/pkgconfig:$PWD/../ngtcp2/build/lib/pkgconfig:$PWD/../libbpf/build/lib64/pkgconfig" \
          LDFLAGS="$LDFLAGS -Wl,-rpath,$PWD/../aws-lc/opt/lib -Wl,-rpath,$PWD/../libbpf/build/lib64"
    $ make -j$(nproc)

@@ -1,0 +1,5 @@
+items:
+- name: Трансфер - быстрый старт
+  href: quickstart.md
+- name: Трансфер — поставка access логов NGINX в таблицу
+  href: nginx.md

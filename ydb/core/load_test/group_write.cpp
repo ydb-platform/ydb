@@ -17,6 +17,7 @@
 #include <util/generic/set.h>
 #include <util/system/type_name.h>
 #include <util/random/fast.h>
+#include <util/random/shuffle.h>
 
 namespace NKikimr {
 
@@ -1322,6 +1323,13 @@ public:
                     initialAllocation, tracingThrottler));
 
                 WorkersInInitialState++;
+            }
+
+            ui32 numberOfRandomGroupsToPick = profile.GetNumberOfRandomGroupsToPick();
+            if (numberOfRandomGroupsToPick > 0 && numberOfRandomGroupsToPick < TabletWriters.size()) {
+                Shuffle(TabletWriters.begin(), TabletWriters.end());
+                TabletWriters.resize(numberOfRandomGroupsToPick);
+                WorkersInInitialState = numberOfRandomGroupsToPick;
             }
         }
         BlobData = FastGenDataForLZ4<TSharedData>(maxBlobSize);

@@ -218,13 +218,14 @@ SRCS(
     wait_for_plan_unit.cpp
     wait_for_stream_clearance_unit.cpp
 
-    build_index/prefix_kmeans.cpp
+    build_index/fulltext.cpp
     build_index/kmeans_helper.cpp
     build_index/local_kmeans.cpp
-    build_index/sample_k.cpp
-    build_index/secondary_index.cpp
+    build_index/prefix_kmeans.cpp
     build_index/recompute_kmeans.cpp
     build_index/reshuffle_kmeans.cpp
+    build_index/sample_k.cpp
+    build_index/secondary_index.cpp
     build_index/unique_index.cpp
 )
 

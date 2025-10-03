@@ -662,6 +662,10 @@ TNodePtr BuildSubqueryRef(TNodePtr subquery, const TString& alias, int tupleInde
     return new TSubqueryRefNode(std::move(subquery), alias, tupleIndex);
 }
 
+bool IsSubqueryRef(const TSourcePtr& source) {
+    return dynamic_cast<const TSubqueryRefNode*>(source.Get()) != nullptr;
+}
+
 class TInvalidSubqueryRefNode: public ISource {
 public:
     TInvalidSubqueryRefNode(TPosition pos)
@@ -2430,7 +2434,7 @@ public:
             }
 
             if (ListCall_) {
-                if (auto atom = dynamic_cast<TTableRows*>(term.Get())) {
+                if (/* auto atom = */ dynamic_cast<TTableRows*>(term.Get())) {
                     listPosIndex = termIndex;
                 }
             }

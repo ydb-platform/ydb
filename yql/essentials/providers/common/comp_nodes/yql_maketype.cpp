@@ -109,6 +109,18 @@ namespace {
         static constexpr size_t MinValue = 1;
         static constexpr size_t MaxValue = 1;
     };
+
+    template <>
+    struct TMakeTypeArgs<NYql::ETypeAnnotationKind::Linear> {
+        static constexpr size_t MinValue = 1;
+        static constexpr size_t MaxValue = 1;
+    };
+
+    template <>
+    struct TMakeTypeArgs<NYql::ETypeAnnotationKind::DynamicLinear> {
+        static constexpr size_t MinValue = 1;
+        static constexpr size_t MaxValue = 1;
+    };
 }
 
 template <NYql::ETypeAnnotationKind Kind>
@@ -322,6 +334,18 @@ public:
             break;
         }
 
+        case NYql::ETypeAnnotationKind::Linear: {
+            auto type = GetYqlType(Args_[0]->GetValue(ctx));
+            retType = exprCtxPtr->template MakeType<NYql::TLinearExprType>(type);
+            break;
+        }
+
+        case NYql::ETypeAnnotationKind::DynamicLinear: {
+            auto type = GetYqlType(Args_[0]->GetValue(ctx));
+            retType = exprCtxPtr->template MakeType<NYql::TDynamicLinearExprType>(type);
+            break;
+        }
+
         default:
             MKQL_ENSURE(false, "Unsupported kind:" << Kind);
         }
@@ -404,6 +428,12 @@ template IComputationNode* WrapMakeType<NYql::ETypeAnnotationKind::Callable>
     (TCallable& callable, const TComputationNodeFactoryContext& ctx, ui32 exprCtxMutableIndex);
 
 template IComputationNode* WrapMakeType<NYql::ETypeAnnotationKind::Pg>
+    (TCallable& callable, const TComputationNodeFactoryContext& ctx, ui32 exprCtxMutableIndex);
+
+template IComputationNode* WrapMakeType<NYql::ETypeAnnotationKind::Linear>
+    (TCallable& callable, const TComputationNodeFactoryContext& ctx, ui32 exprCtxMutableIndex);
+
+template IComputationNode* WrapMakeType<NYql::ETypeAnnotationKind::DynamicLinear>
     (TCallable& callable, const TComputationNodeFactoryContext& ctx, ui32 exprCtxMutableIndex);
 
 }

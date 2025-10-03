@@ -115,22 +115,22 @@ class WorkloadManagerBase(LoadSuiteBase):
             sessions_pool.execute_with_retries(pool.get_create_sql())
 
     @classmethod
-    def before_workload(cls):
+    def before_workload(cls, result: YdbCliHelper.WorkloadRunResult):
         pass
 
     @classmethod
-    def after_workload(cls):
+    def after_workload(cls, result: YdbCliHelper.WorkloadRunResult):
         pass
 
     def test(self):
         check_thread = Thread(target=self.check_signals_thread)
         self.stop_checking.clear()
         check_thread.start()
-        start_time = time.time()
+        overall_result = YdbCliHelper.WorkloadRunResult()
         try:
             qparams = self._get_query_settings()
             self.save_nodes_state()
-            self.before_workload()
+            self.before_workload(overall_result)
             results = YdbCliHelper.workload_run(
                 path=self.get_path(),
                 query_names=self.get_query_list(),
@@ -151,14 +151,12 @@ class WorkloadManagerBase(LoadSuiteBase):
                         self.process_query_result(result, query, True)
                 except BaseException:
                     pass
-            self.after_workload()
+            self.after_workload(overall_result)
         finally:
             self.stop_checking.set()
             check_thread.join()
-        overall_result = YdbCliHelper.WorkloadRunResult()
         overall_result.merge(*results.values())
         overall_result.iterations.clear()
-        overall_result.start_time = start_time
         self.process_query_result(overall_result, 'test', True)
         if len(self.signal_errors) > 0:
             errors = '\n'.join([f'{d}: {e}' for d, e in self.signal_errors])
@@ -212,12 +210,12 @@ class WorkloadManagerConcurrentQueryLimit(WorkloadManagerBase):
         return [ResourcePool('test_pool', ['testuser'], concurrent_query_limit=cls.query_limit)]
 
     @classmethod
-    def before_workload(cls):
+    def before_workload(cls, result: YdbCliHelper.WorkloadRunResult):
         cls.hard_query_limit = cls.query_limit + len(YdbCluster.get_cluster_nodes(db_only=True))
         cls.threads = 2 * cls.hard_query_limit
 
     @classmethod
-    def after_workload(cls):
+    def after_workload(cls, result: YdbCliHelper.WorkloadRunResult):
         assert cls.max_in_fly > 0, "detector 'max queries in fly' does't work"
 
     @classmethod
@@ -246,18 +244,47 @@ class WorkloadManagerComputeScheduler(WorkloadManagerBase):
         ]
 
     @classmethod
-    def before_workload(cls):
+    def get_key_measurements(cls) -> tuple[list[LoadSuiteBase.KeyMeasurement], str]:
+        return [
+            LoadSuiteBase.KeyMeasurement(f'satisfaction_avg_{p.name}', f'Satisfaction Avg {p.name}', [
+                LoadSuiteBase.KeyMeasurement.Interval('#ccffcc', 1.e-5),
+                LoadSuiteBase.KeyMeasurement.Interval('#ffcccc')
+            ], f'Satisfaction for resource pool <b>{p.name}</b>. See explanations below.') for p in cls.get_resource_pools()
+        ], '''<p>Parameter <b>satisfaction</b> is a metric that allows you to assess the level of satisfaction of a certain
+        pool with resources (in this case, CPU time). It demonstrates how efficiently the pool uses the resources allocated
+        to it compared to the amount that was planned for it.</p>
+
+        <p>The target value of the metric is 1.0. It means that the pool uses resources
+        in full compliance with the share allocated to it. Values below 1.0 indicate that the pool is underutilized,
+        while values above 1.0 indicate that the pool is using more resources than were planned.</p>
+
+        <p>Calculation formula: Satisfaction = Usage / FairShare<br/>
+
+        where:<br/>
+
+        Usage is the amount of CPU actually used by the pool;
+        FairShare is the planned (fair) amount of CPU for the pool, which is calculated approximately as the product of the total amount
+        of available CPU and the share of resources requested by the pool.</p>
+
+        <p>In this test, we average the satisfaction across all cluster nodes and over time.</p>'''
+
+    @classmethod
+    def before_workload(cls, result: YdbCliHelper.WorkloadRunResult):
         cls.metrics = []
         cls.metrics_keys = set()
 
     @classmethod
-    def after_workload(cls):
+    def after_workload(cls, result: YdbCliHelper.WorkloadRunResult):
         keys = sorted(cls.metrics_keys)
+        pools = cls.get_resource_pools()
         report = ('<html><body><table border=1 valign="center" width="100%">'
                   '<tr><th style="padding-left: 10; padding-right: 10">time</th>' +
                   ''.join([f'<th style="padding-left: 10; padding-right: 10">{k[:-2] if k.endswith(' d') else k}</th>' for k in keys]) +
                   '</tr>\n')
         norm_metrics = []
+        sum_satisfaction = {}
+        first_req_num = None
+        last_req_num = None
         for r in range(len(cls.metrics)):
             record: dict[str, float] = {}
             cur_t, cur_m = cls.metrics[r]
@@ -270,6 +297,16 @@ class WorkloadManagerComputeScheduler(WorkloadManagerBase):
                         record[k] = (v - prev_m.get(k, 0.)) / (cur_t - prev_t)
                 else:
                     record[k] = v
+            ss = 0.
+            for p in pools:
+                sum_satisfaction.setdefault(p.name, 0.)
+                s = record.get(f'{p.name} satisfaction', 0.)
+                sum_satisfaction[p.name] += s
+                ss += s
+            if ss > 0:
+                last_req_num = r
+                if first_req_num is None:
+                    first_req_num = r
             norm_metrics.append(record)
             report += f'<tr><th style="padding-left: 10; padding-right: 10">{datetime.fromtimestamp(cur_t)}</th>'
             for k in keys:
@@ -280,7 +317,6 @@ class WorkloadManagerComputeScheduler(WorkloadManagerBase):
         report += '</table></body></html>'
         allure.attach(report, 'metrics', allure.attachment_type.HTML)
         times = [datetime.fromtimestamp(t) for t, _ in cls.metrics]
-        pools = cls.get_resource_pools()
         fig, axs = pyplot.subplots(len(pools), 1, layout='constrained', figsize=(6.4, 3.2 * len(pools)))
         for p in range(len(pools)):
             pool = pools[p]
@@ -295,6 +331,9 @@ class WorkloadManagerComputeScheduler(WorkloadManagerBase):
         pyplot.savefig('satisfaction.plot.svg', format='svg')
         with open('satisfaction.plot.svg') as s:
             allure.attach(s.read(), 'satisfaction.plot.svg', allure.attachment_type.SVG)
+        if first_req_num is not None:
+            for pool, sum_s in sum_satisfaction.items():
+                result.add_stat('test', f'satisfaction_avg_{pool}', sum_s / (1 + last_req_num - first_req_num))
 
     @classmethod
     def check_signals(cls) -> str:
@@ -313,6 +352,8 @@ class WorkloadManagerComputeScheduler(WorkloadManagerBase):
         for k in sum.keys():
             if not k.endswith(' d'):
                 sum[k] /= len(metrics)
+            if k.endswith('satisfaction'):
+                sum[k] /= 1.e6
         cls.metrics.append((time.time(), sum))
         return ''
 
@@ -329,3 +370,4 @@ class TestWorkloadManagerTpchComputeSchedulerS100(WorkloadManagerTpchBase, Workl
     tables_size = tpch.TestTpch100.tables_size
     scale = tpch.TestTpch100.scale
     timeout = tpch.TestTpch100.timeout * len(WorkloadManagerComputeScheduler.get_resource_pools())
+    threads = 1

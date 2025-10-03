@@ -10,6 +10,7 @@ PEERDIR(
     yt/yql/providers/yt/fmr/yt_job_service/interface
     yt/yql/providers/yt/lib/yson_helpers
     yql/essentials/utils
+    yql/essentials/utils/log
 )
 
 YQL_LAST_ABI_VERSION()

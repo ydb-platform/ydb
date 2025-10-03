@@ -17,7 +17,7 @@ struct TViewQuerySplit {
 TViewQuerySplit SplitViewQuery(TStringInput query);
 
 TString BuildCreateViewQuery(
-    const TString& name, const TString& dbPath, const TString& viewQuery, const TString& backupRoot,
+    const TString& name, const TString& dbPath, const TString& viewQuery, const TString& database, const TString& backupRoot,
     NYql::TIssues& issues
 );
 

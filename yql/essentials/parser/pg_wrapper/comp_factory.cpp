@@ -1600,7 +1600,7 @@ private:
         TListValue(TMemoryUsageInfo* memInfo, TComputationContext& compCtx,
             const std::string_view& name, TUnboxedValueVector&& args, const TVector<NPg::TTypeDesc>& argDesc,
             const NPg::TTypeDesc& retTypeDesc, const NPg::TProcDesc& procDesc, const FmgrInfo* fInfo,
-            const TStructType* structType, const TVector<NPg::TTypeDesc>& structTypeDesc, const THolderFactory& holderFactory)
+            const TStructType* structType, const TVector<NPg::TTypeDesc>& structTypeDesc, const THolderFactory& /*holderFactory*/)
             : TCustomListValue(memInfo)
             , CompCtx(compCtx)
             , Name(name)
@@ -1611,7 +1611,6 @@ private:
             , FInfo(fInfo)
             , StructType(structType)
             , StructTypeDesc(structTypeDesc)
-            , HolderFactory(holderFactory)
         {
         }
 
@@ -1629,7 +1628,6 @@ private:
         const FmgrInfo* FInfo;
         const TStructType* StructType;
         const TVector<NPg::TTypeDesc>& StructTypeDesc;
-        const THolderFactory& HolderFactory;
     };
 
 public:

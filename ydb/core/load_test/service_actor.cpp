@@ -259,7 +259,7 @@ private:
                 LOG_N("Received legacy request with tag# 0, assigning it a proper tag in a regular way");
             }
         }
-        while (TakenTags.count(NextTag)) {
+        while (TakenTags.contains(NextTag)) {
             ++NextTag;
         }
         return NextTag++;

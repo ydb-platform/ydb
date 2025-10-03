@@ -106,9 +106,6 @@ runs:
         test_type: ${{ inputs.test_type }}
         run_tests: ${{ inputs.run_tests }}
         increment: ${{ inputs.increment }}
-        testman_token: ${{ fromJSON( inputs.secs ).TESTMO_TOKEN2 }}
-        testman_url: ${{  fromJSON( inputs.vars ).TESTMO_URL }}
-        testman_project_id: ${{  fromJSON( inputs.vars ).TESTMO_PROJECT_ID }}
         link_threads: ${{ inputs.link_threads }}
         additional_ya_make_args: ${{ inputs.additional_ya_make_args }}
         test_threads: ${{ inputs.test_threads }}

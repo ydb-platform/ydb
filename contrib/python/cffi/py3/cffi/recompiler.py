@@ -1,4 +1,4 @@
-import os, sys, io
+import io, os, sys, sysconfig
 from . import ffiplatform, model
 from .error import VerificationError
 from .cffi_opcode import *
@@ -7,9 +7,9 @@ VERSION_BASE = 0x2601
 VERSION_EMBEDDED = 0x2701
 VERSION_CHAR16CHAR32 = 0x2801
 
-USE_LIMITED_API = (sys.platform != 'win32' or sys.version_info < (3, 0) or
-                   sys.version_info >= (3, 5))
-
+USE_LIMITED_API = ((sys.platform != 'win32' or sys.version_info < (3, 0) or
+                   sys.version_info >= (3, 5)) and
+                   not sysconfig.get_config_var("Py_GIL_DISABLED"))  # free-threaded doesn't yet support limited API
 
 class GlobalExpr:
     def __init__(self, name, address, type_op, size=0, check_value=0):
@@ -951,7 +951,7 @@ class Recompiler:
                 if cname is None or fbitsize >= 0:
                     offset = '(size_t)-1'
                 elif named_ptr is not None:
-                    offset = '((char *)&((%s)4096)->%s) - (char *)4096' % (
+                    offset = '(size_t)(((char *)&((%s)4096)->%s) - (char *)4096)' % (
                         named_ptr.name, fldname)
                 else:
                     offset = 'offsetof(%s, %s)' % (tp.get_c_name(''), fldname)

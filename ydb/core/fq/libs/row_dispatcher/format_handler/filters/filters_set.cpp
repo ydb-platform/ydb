@@ -30,7 +30,7 @@ public:
         , Counters_(std::move(counters))
     {}
 
-    void ProcessData(const TVector<ui64>& columnIndex, const TVector<ui64>& offsets, const TVector<const TVector<NYql::NUdf::TUnboxedValue>*>& values, ui64 numberRows) override {
+    void ProcessData(const TVector<ui64>& columnIndex, const TVector<ui64>& offsets, const TVector<std::span<NYql::NUdf::TUnboxedValue>>& values, ui64 numberRows) override {
         LOG_ROW_DISPATCHER_TRACE("ProcessData for " << RunHandlers_.size() << " clients, number rows: " << numberRows);
 
         if (!numberRows) {
@@ -220,18 +220,18 @@ private:
         RunHandlers_.erase(iter);
     }
 
-    void PushToRunner(IProgramRunHandler::TPtr programRunHandler, const TVector<ui64>& /* offsets */, const TVector<ui64>& columnIndex, const TVector<const TVector<NYql::NUdf::TUnboxedValue>*>& values, ui64 numberRows) {
+    void PushToRunner(IProgramRunHandler::TPtr programRunHandler, const TVector<ui64>& /* offsets */, const TVector<ui64>& columnIndex, const TVector<std::span<NYql::NUdf::TUnboxedValue>>& values, ui64 numberRows) {
         const auto consumer = programRunHandler->GetConsumer();
         const auto& columnIds = consumer->GetColumnIds();
 
-        TVector<const TVector<NYql::NUdf::TUnboxedValue>*> result;
+        TVector<std::span<NYql::NUdf::TUnboxedValue>> result;
         result.reserve(columnIds.size());
         for (ui64 columnId : columnIds) {
             Y_ENSURE(columnId < columnIndex.size(), "Unexpected column id " << columnId << ", it is larger than index array size " << columnIndex.size());
             const ui64 index = columnIndex[columnId];
 
             Y_ENSURE(index < values.size(), "Unexpected column index " << index << ", it is larger than values array size " << values.size());
-            if (const auto value = values[index]) {
+            if (const auto value = values[index]; !value.empty()) {
                 result.emplace_back(value);
             } else {
                 LOG_ROW_DISPATCHER_TRACE("Ignore processing for " << consumer->GetClientId() << ", client got parsing error for column " << columnId);

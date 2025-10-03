@@ -1,9 +1,16 @@
 {#- empty string #}
 val baseBuildDir = "{{ export_root }}/gradle.build"
-layout.buildDirectory = file(baseBuildDir + "{%- if common_dir %}/{{ common_dir }}{% endif -%}/" + project.path.replace(":", "/"))
-subprojects {
+allprojects {
     layout.buildDirectory = file(baseBuildDir + "{%- if common_dir %}/{{ common_dir }}{% endif -%}/" + project.path.replace(":", "/"))
 }
+
+{%- if proto_template %}
+
+val mainProtosDir = layout.buildDirectory.dir("main_protos")
+{%-     if extractLibrariesProtosTask %}
+val mainExtractedIncludeProtosDir = layout.buildDirectory.dir("extracted-include-protos/main")
+{%-     endif %}
+{%- endif %}
 
 var mkBuildDir = tasks.register("mkBuildDir") {
     doFirst {

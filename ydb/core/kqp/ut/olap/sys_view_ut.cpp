@@ -182,8 +182,8 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
             WriteTestData(kikimr, "/Root/olapStore/olapTable_1", 0, 1000000 + i * 10000, 1000);
             WriteTestData(kikimr, "/Root/olapStore/olapTable_2", 0, 1000000 + i * 10000, 2000);
         }
-        csController->WaitCompactions(TDuration::Seconds(5));
 
+        csController->WaitCompactions(TDuration::Seconds(5));
         auto tableClient = kikimr.GetTableClient();
         {
             auto selectQuery = TString(R"(
@@ -229,15 +229,15 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
             UNIT_ASSERT_VALUES_EQUAL(rows.size(), 0);
         }
         {
-            auto selectQuery = Sprintf(R"(
-                SELECT COUNT(*)
-                FROM `/Root/olapStore/olapTable_1/.sys/primary_index_stats`
-            )",
-                tablePathId1);
+            auto selectQuery = TString(R"(
+                SELECT Sum(Rows) as Rows
+                FROM `/Root/olapStore/olapTable_1/.sys/primary_index_portion_stats`
+            )");
 
             auto rows = ExecuteScanQuery(tableClient, selectQuery);
+
             UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows.front().at("column0")), 180);
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows.front().at("Rows")), 10 * 1000);
         }
     }
 

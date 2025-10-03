@@ -165,13 +165,13 @@ message TMergeTaskParams {
 message TMapOperationParams {
     repeated TOperationTableRef Input = 1;
     repeated TFmrTableRef Output = 2;
-    string SerializedMapJobState = 3;
+    bytes SerializedMapJobState = 3;
 }
 
 message TMapTaskParams {
     TTaskTableInputRef Input = 1;
     repeated TFmrTableOutputRef Output = 2;
-    string SerializedMapJobState = 3;
+    bytes SerializedMapJobState = 3;
 }
 
 message TOperationParams {

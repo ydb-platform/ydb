@@ -103,6 +103,8 @@ TAutoPtr<NYql::IGraphTransformer> CreateKqpBuildTxsTransformer(const TIntrusiveP
     const TIntrusivePtr<TKqpBuildQueryContext>& buildCtx, TAutoPtr<NYql::IGraphTransformer>&& typeAnnTransformer,
     NYql::TTypeAnnotationContext& typesCtx, NYql::TKikimrConfiguration::TPtr& config);
 
+TAutoPtr<NYql::IGraphTransformer> CreateKqpSinkPrecomputeTransformer(const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx);
+
 TAutoPtr<NYql::IGraphTransformer> CreateKqpBuildPhysicalQueryTransformer(const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx,
     const TIntrusivePtr<TKqpBuildQueryContext>& buildCtx);
 

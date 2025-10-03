@@ -2,19 +2,13 @@
 "Makes working with XML feel like you are working with JSON"
 
 from xml.parsers import expat
-from xml.sax.saxutils import XMLGenerator
+from xml.sax.saxutils import XMLGenerator, escape
 from xml.sax.xmlreader import AttributesImpl
 from io import StringIO
-
-_dict = dict
-import platform
-if tuple(map(int, platform.python_version_tuple()[:2])) < (3, 7):
-    from collections import OrderedDict as _dict
-
 from inspect import isgenerator
 
 __author__ = 'Martin Blech'
-__version__ = "0.14.2"
+__version__ = "1.0.0"  # x-release-please-version
 __license__ = 'MIT'
 
 
@@ -23,21 +17,23 @@ class ParsingInterrupted(Exception):
 
 
 class _DictSAXHandler:
-    def __init__(self,
-                 item_depth=0,
-                 item_callback=lambda *args: True,
-                 xml_attribs=True,
-                 attr_prefix='@',
-                 cdata_key='#text',
-                 force_cdata=False,
-                 cdata_separator='',
-                 postprocessor=None,
-                 dict_constructor=_dict,
-                 strip_whitespace=True,
-                 namespace_separator=':',
-                 namespaces=None,
-                 force_list=None,
-                 comment_key='#comment'):
+    def __init__(
+        self,
+        item_depth=0,
+        item_callback=lambda *args: True,
+        xml_attribs=True,
+        attr_prefix="@",
+        cdata_key="#text",
+        force_cdata=False,
+        cdata_separator="",
+        postprocessor=None,
+        dict_constructor=dict,
+        strip_whitespace=True,
+        namespace_separator=":",
+        namespaces=None,
+        force_list=None,
+        comment_key="#comment",
+    ):
         self.path = []
         self.stack = []
         self.data = []
@@ -85,7 +81,9 @@ class _DictSAXHandler:
     def startElement(self, full_name, attrs):
         name = self._build_name(full_name)
         attrs = self._attrs_to_dict(attrs)
-        if attrs and self.namespace_declarations:
+        if self.namespace_declarations:
+            if not attrs:
+                attrs = self.dict_constructor()
             attrs['xmlns'] = self.namespace_declarations
             self.namespace_declarations = self.dict_constructor()
         self.path.append((name, attrs or None))
@@ -109,6 +107,9 @@ class _DictSAXHandler:
 
     def endElement(self, full_name):
         name = self._build_name(full_name)
+        # If we just closed an item at the streaming depth, emit it and drop it
+        # without attaching it back to its parent. This avoids accumulating all
+        # streamed items in memory when using item_depth > 0.
         if len(self.path) == self.item_depth:
             item = self.item
             if item is None:
@@ -118,6 +119,15 @@ class _DictSAXHandler:
             should_continue = self.item_callback(self.path, item)
             if not should_continue:
                 raise ParsingInterrupted
+            # Reset state for the parent context without keeping a reference to
+            # the emitted item.
+            if self.stack:
+                self.item, self.data = self.stack.pop()
+            else:
+                self.item = None
+                self.data = []
+            self.path.pop()
+            return
         if self.stack:
             data = (None if not self.data
                     else self.cdata_separator.join(self.data))
@@ -125,7 +135,7 @@ class _DictSAXHandler:
             self.item, self.data = self.stack.pop()
             if self.strip_whitespace and data:
                 data = data.strip() or None
-            if data and self.force_cdata and item is None:
+            if data and self._should_force_cdata(name, data) and item is None:
                 item = self.dict_constructor()
             if item is not None:
                 if data:
@@ -180,6 +190,16 @@ class _DictSAXHandler:
         except TypeError:
             return self.force_list(self.path[:-1], key, value)
 
+    def _should_force_cdata(self, key, value):
+        if not self.force_cdata:
+            return False
+        if isinstance(self.force_cdata, bool):
+            return self.force_cdata
+        try:
+            return key in self.force_cdata
+        except TypeError:
+            return self.force_cdata(self.path[:-1], key, value)
+
 
 def parse(xml_input, encoding=None, expat=expat, process_namespaces=False,
           namespace_separator=':', disable_entities=True, process_comments=False, **kwargs):
@@ -201,9 +221,9 @@ def parse(xml_input, encoding=None, expat=expat, process_namespaces=False,
         ... </a>
         ... \"\"\")
         >>> doc['a']['@prop']
-        u'x'
+        'x'
         >>> doc['a']['b']
-        [u'1', u'2']
+        ['1', '2']
 
     If `item_depth` is `0`, the function returns a dictionary for the root
     element (default behavior). Otherwise, it calls `item_callback` every time
@@ -226,8 +246,8 @@ def parse(xml_input, encoding=None, expat=expat, process_namespaces=False,
         ...   <b>1</b>
         ...   <b>2</b>
         ... </a>\"\"\", item_depth=2, item_callback=handle)
-        path:[(u'a', {u'prop': u'x'}), (u'b', None)] item:1
-        path:[(u'a', {u'prop': u'x'}), (u'b', None)] item:2
+        path:[('a', {'prop': 'x'}), ('b', None)] item:1
+        path:[('a', {'prop': 'x'}), ('b', None)] item:2
 
     The optional argument `postprocessor` is a function that takes `path`,
     `key` and `value` as positional arguments and returns a new `(key, value)`
@@ -360,7 +380,66 @@ def parse(xml_input, encoding=None, expat=expat, process_namespaces=False,
     return handler.item
 
 
+def _convert_value_to_string(value):
+    """Convert a value to its string representation for XML output.
+
+    Handles boolean values consistently by converting them to lowercase.
+    """
+    if isinstance(value, (str, bytes)):
+        return value
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    return str(value)
+
+
+def _has_angle_brackets(value):
+    """Return True if value (a str) contains '<' or '>'.
+
+    Non-string values return False. Uses fast substring checks implemented in C.
+    """
+    return isinstance(value, str) and ("<" in value or ">" in value)
+
+
+def _has_invalid_name_chars(value):
+    """Return True if value (a str) contains any disallowed name characters.
+
+    Disallowed: '<', '>', '/', or any whitespace character.
+    Non-string values return False.
+    """
+    if not isinstance(value, str):
+        return False
+    if "<" in value or ">" in value or "/" in value:
+        return True
+    # Check for any whitespace (spaces, tabs, newlines, etc.)
+    return any(ch.isspace() for ch in value)
+
+
+def _validate_name(value, kind):
+    """Validate an element/attribute name for XML safety.
+
+    Raises ValueError with a specific reason when invalid.
+
+    kind: 'element' or 'attribute' (used in error messages)
+    """
+    if not isinstance(value, str):
+        raise ValueError(f"{kind} name must be a string")
+    if value.startswith("?") or value.startswith("!"):
+        raise ValueError(f'Invalid {kind} name: cannot start with "?" or "!"')
+    if "<" in value or ">" in value:
+        raise ValueError(f'Invalid {kind} name: "<" or ">" not allowed')
+    if "/" in value:
+        raise ValueError(f'Invalid {kind} name: "/" not allowed')
+    if '"' in value or "'" in value:
+        raise ValueError(f"Invalid {kind} name: quotes not allowed")
+    if "=" in value:
+        raise ValueError(f'Invalid {kind} name: "=" not allowed')
+    if any(ch.isspace() for ch in value):
+        raise ValueError(f"Invalid {kind} name: whitespace not allowed")
+
+
 def _process_namespace(name, namespaces, ns_sep=':', attr_prefix='@'):
+    if not isinstance(name, str):
+        return name
     if not namespaces:
         return name
     try:
@@ -386,48 +465,71 @@ def _emit(key, value, content_handler,
           namespace_separator=':',
           namespaces=None,
           full_document=True,
-          expand_iter=None):
+          expand_iter=None,
+          comment_key='#comment'):
+    if isinstance(key, str) and key == comment_key:
+        comments_list = value if isinstance(value, list) else [value]
+        if isinstance(indent, int):
+            indent = " " * indent
+        for comment_text in comments_list:
+            if comment_text is None:
+                continue
+            comment_text = _convert_value_to_string(comment_text)
+            if comment_text == "":
+                continue
+            if pretty:
+                content_handler.ignorableWhitespace(depth * indent)
+            content_handler.comment(comment_text)
+            if pretty:
+                content_handler.ignorableWhitespace(newl)
+        return
+
     key = _process_namespace(key, namespaces, namespace_separator, attr_prefix)
     if preprocessor is not None:
         result = preprocessor(key, value)
         if result is None:
             return
         key, value = result
+    # Minimal validation to avoid breaking out of tag context
+    _validate_name(key, "element")
     if not hasattr(value, '__iter__') or isinstance(value, (str, dict)):
         value = [value]
     for index, v in enumerate(value):
         if full_document and depth == 0 and index > 0:
             raise ValueError('document with multiple roots')
         if v is None:
-            v = _dict()
-        elif isinstance(v, bool):
-            v = 'true' if v else 'false'
+            v = {}
         elif not isinstance(v, (dict, str)):
             if expand_iter and hasattr(v, '__iter__'):
-                v = _dict(((expand_iter, v),))
+                v = {expand_iter: v}
             else:
-                v = str(v)
+                v = _convert_value_to_string(v)
         if isinstance(v, str):
-            v = _dict(((cdata_key, v),))
+            v = {cdata_key: v}
         cdata = None
-        attrs = _dict()
+        attrs = {}
         children = []
         for ik, iv in v.items():
             if ik == cdata_key:
-                cdata = iv
+                cdata = _convert_value_to_string(iv)
                 continue
-            if ik.startswith(attr_prefix):
+            if isinstance(ik, str) and ik.startswith(attr_prefix):
                 ik = _process_namespace(ik, namespaces, namespace_separator,
                                         attr_prefix)
                 if ik == '@xmlns' and isinstance(iv, dict):
                     for k, v in iv.items():
+                        _validate_name(k, "attribute")
                         attr = 'xmlns{}'.format(f':{k}' if k else '')
                         attrs[attr] = str(v)
                     continue
                 if not isinstance(iv, str):
                     iv = str(iv)
-                attrs[ik[len(attr_prefix):]] = iv
+                attr_name = ik[len(attr_prefix) :]
+                _validate_name(attr_name, "attribute")
+                attrs[attr_name] = iv
                 continue
+            if isinstance(iv, list) and not iv:
+                continue # Skip empty lists to avoid creating empty child elements
             children.append((ik, iv))
         if isinstance(indent, int):
             indent = ' ' * indent
@@ -441,7 +543,7 @@ def _emit(key, value, content_handler,
                   attr_prefix, cdata_key, depth+1, preprocessor,
                   pretty, newl, indent, namespaces=namespaces,
                   namespace_separator=namespace_separator,
-                  expand_iter=expand_iter)
+                  expand_iter=expand_iter, comment_key=comment_key)
         if cdata is not None:
             content_handler.characters(cdata)
         if pretty and children:
@@ -451,8 +553,13 @@ def _emit(key, value, content_handler,
             content_handler.ignorableWhitespace(newl)
 
 
+class _XMLGenerator(XMLGenerator):
+    def comment(self, text):
+        self._write(f"<!--{escape(text)}-->")
+
+
 def unparse(input_dict, output=None, encoding='utf-8', full_document=True,
-            short_empty_elements=False,
+            short_empty_elements=False, comment_key='#comment',
             **kwargs):
     """Emit an XML document for the given `input_dict` (reverse of `parse`).
 
@@ -468,21 +575,25 @@ def unparse(input_dict, output=None, encoding='utf-8', full_document=True,
     can be customized with the `newl` and `indent` parameters.
 
     """
-    if full_document and len(input_dict) != 1:
-        raise ValueError('Document must have exactly one root.')
     must_return = False
     if output is None:
         output = StringIO()
         must_return = True
     if short_empty_elements:
-        content_handler = XMLGenerator(output, encoding, True)
+        content_handler = _XMLGenerator(output, encoding, True)
     else:
-        content_handler = XMLGenerator(output, encoding)
+        content_handler = _XMLGenerator(output, encoding)
     if full_document:
         content_handler.startDocument()
+    seen_root = False
     for key, value in input_dict.items():
-        _emit(key, value, content_handler, full_document=full_document,
-              **kwargs)
+        if key != comment_key and full_document and seen_root:
+            raise ValueError("Document must have exactly one root.")
+        _emit(key, value, content_handler, full_document=full_document, comment_key=comment_key, **kwargs)
+        if key != comment_key:
+            seen_root = True
+    if full_document and not seen_root:
+        raise ValueError("Document must have exactly one root.")
     if full_document:
         content_handler.endDocument()
     if must_return:
@@ -495,14 +606,11 @@ def unparse(input_dict, output=None, encoding='utf-8', full_document=True,
 
 
 if __name__ == '__main__':  # pragma: no cover
-    import sys
     import marshal
-    try:
-        stdin = sys.stdin.buffer
-        stdout = sys.stdout.buffer
-    except AttributeError:
-        stdin = sys.stdin
-        stdout = sys.stdout
+    import sys
+
+    stdin = sys.stdin.buffer
+    stdout = sys.stdout.buffer
 
     (item_depth,) = sys.argv[1:]
     item_depth = int(item_depth)

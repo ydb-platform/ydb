@@ -11,7 +11,7 @@ public:
     using TCallback = std::function<void(NActors::TActorId, TQueue<TDataBatch>&&)>;
     struct TMessages {
         TVector<ui64> Offsets;
-        TVector<ui64> Watermark;
+        TMaybe<TInstant> Watermark;
         TBatch Batch;
     };
 
@@ -154,7 +154,8 @@ public:
         CompileService = Runtime.Register(CreatePurecalcCompileServiceMock(CompileNotifier));
 
         CreateFormatHandler({
-            .JsonParserConfig = {},
+            .FunctionRegistry = FunctionRegistry,
+            .JsonParserConfig = {.FunctionRegistry = FunctionRegistry},
             .FiltersConfig = {.CompileServiceId = CompileService},
         });
     }
@@ -384,7 +385,7 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
 
     Y_UNIT_TEST_F(ManyRawClients, TFormatHandlerFixture) {
         CreateFormatHandler(
-            {.JsonParserConfig = {}, .FiltersConfig = {.CompileServiceId = CompileService}},
+            {.FunctionRegistry = FunctionRegistry, .JsonParserConfig = {.FunctionRegistry = FunctionRegistry}, .FiltersConfig = {.CompileServiceId = CompileService}},
             {.ParsingFormat = "raw"}
         );
 
@@ -554,14 +555,14 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
         auto messages = TVector<TMessages>{
             {
                 {firstOffset + 2, firstOffset + 3},
-                {39'000'000, 40'000'000},
+                TInstant::Seconds(40),
                 TBatch()
                     .AddRow(TRow().AddString("1970-01-01T00:00:44Z"))
                     .AddRow(TRow().AddString("1970-01-01T00:00:45Z"))
             },
             {
                 {firstOffset + 4, firstOffset + 5},
-                {41'000'000, 42'000'000},
+                TInstant::Seconds(42),
                 TBatch()
                     .AddRow(TRow().AddString("1970-01-01T00:00:46Z"))
                     .AddRow(TRow().AddString("1970-01-01T00:00:47Z"))
@@ -569,7 +570,7 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
         };
         CheckSuccess(MakeClient(
             {{"ts", "[DataType; String]"}},
-            R"(Unwrap(CAST(`ts` AS Timestamp?) - Interval("PT5S")))",
+            R"(CAST(`ts` AS Timestamp?) - Interval("PT5S"))",
             "",
             BatchCheck(messages),
             ExpectedFilteredRows(messages)
@@ -583,22 +584,37 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
         messages = TVector<TMessages>{
             {
                 {firstOffset + 4, firstOffset + 5},
-                {41'000'000, 42'000'000},
+                TInstant::Seconds(42),
                 TBatch()
                     .AddRow(TRow().AddString("1970-01-01T00:00:46Z"))
                     .AddRow(TRow().AddString("1970-01-01T00:00:47Z"))
             },
             {
                 {firstOffset + 6, firstOffset + 7},
-                {43'000'000, 44'000'000},
+                TInstant::Seconds(44),
                 TBatch()
                     .AddRow(TRow().AddString("1970-01-01T00:00:48Z"))
                     .AddRow(TRow().AddString("1970-01-01T00:00:49Z"))
             },
+            {
+                {firstOffset + 60, firstOffset + 70},
+                Nothing(),
+                TBatch()
+                    .AddRow(TRow().AddString("1970-01-01T00:00:01Z")) // watermark = NULL
+                    .AddRow(TRow().AddString("1970-01-01T00:00:02Z")) // watermark = NULL
+            },
+            {
+                {firstOffset + 600, firstOffset + 700, firstOffset + 800},
+                TInstant::Seconds(0),
+                TBatch()
+                    .AddRow(TRow().AddString("1970-01-01T00:00:03Z")) // watermark = NULL
+                    .AddRow(TRow().AddString("1970-01-01T00:00:05Z"))
+                    .AddRow(TRow().AddString("1970-01-01T00:00:04Z")) // watermark = NULL
+            },
         };
         CheckSuccess(MakeClient(
             {{"ts", "[DataType; String]"}},
-            R"(Unwrap(CAST(`ts` AS Timestamp?) - Interval("PT5S")))",
+            R"(CAST(`ts` AS Timestamp?) - Interval("PT5S"))",
             "",
             BatchCheck(messages),
             ExpectedFilteredRows(messages)
@@ -614,6 +630,17 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
         ParseMessages({
             GetMessage(firstOffset + 6, R"({"ts": "1970-01-01T00:00:48Z"})"),
             GetMessage(firstOffset + 7, R"({"ts": "1970-01-01T00:00:49Z"})"),
+        });
+
+        ParseMessages({
+            GetMessage(firstOffset + 60, R"({"ts": "1970-01-01T00:00:01Z"})"),
+            GetMessage(firstOffset + 70, R"({"ts": "1970-01-01T00:00:02Z"})"),
+        });
+
+        ParseMessages({
+            GetMessage(firstOffset + 600, R"({"ts": "1970-01-01T00:00:03Z"})"),
+            GetMessage(firstOffset + 700, R"({"ts": "1970-01-01T00:00:05Z"})"),
+            GetMessage(firstOffset + 800, R"({"ts": "1970-01-01T00:00:04Z"})"),
         });
 
         RemoveClient(ClientIds[1]);
@@ -634,21 +661,21 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
 
         auto messages = TVector<TMessages>{
             {
-                {firstOffset + 2, firstOffset + 3},
-                {39'000'000, 40'000'000},
+                {firstOffset + 2},
+                TInstant::Seconds(40),
                 TBatch()
                     .AddRow(TRow().AddString("1970-01-01T00:00:44Z").AddUint64(1))
             },
             {
-                {firstOffset + 4, firstOffset + 5},
-                {41'000'000, 42'000'000},
+                {firstOffset + 4},
+                TInstant::Seconds(42),
                 TBatch()
                     .AddRow(TRow().AddString("1970-01-01T00:00:46Z").AddUint64(1))
             },
         };
         CheckSuccess(MakeClient(
             {{"ts", "[DataType; String]"}, {"pass", "[DataType; Uint64]"}},
-            R"(Unwrap(CAST(`ts` AS Timestamp?) - Interval("PT5S")))",
+            R"(CAST(`ts` AS Timestamp?) - Interval("PT5S"))",
             "WHERE pass > 0",
             BatchCheck(messages),
             ExpectedFilteredRows(messages)
@@ -661,21 +688,21 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
 
         messages = TVector<TMessages>{
             {
-                {firstOffset + 4, firstOffset + 5},
-                {41'000'000, 42'000'000},
+                {firstOffset + 4},
+                TInstant::Seconds(42),
                 TBatch()
                     .AddRow(TRow().AddString("1970-01-01T00:00:46Z").AddUint64(1))
             },
             {
-                {firstOffset + 6, firstOffset + 7},
-                {43'000'000, 44'000'000},
+                {firstOffset + 6},
+                TInstant::Seconds(44),
                 TBatch()
                     .AddRow(TRow().AddString("1970-01-01T00:00:48Z").AddUint64(1))
             },
         };
         CheckSuccess(MakeClient(
             {{"ts", "[DataType; String]"}, {"pass", "[DataType; Uint64]"}},
-            R"(Unwrap(CAST(`ts` AS Timestamp?) - Interval("PT5S")))",
+            R"(CAST(`ts` AS Timestamp?) - Interval("PT5S"))",
             "WHERE pass > 0",
             BatchCheck(messages),
             ExpectedFilteredRows(messages)
@@ -711,19 +738,19 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
 
         auto messages = TVector<TMessages>{
             {
-                {firstOffset + 2, firstOffset + 3},
-                {39'000'000, 40'000'000},
+                {firstOffset + 3},
+                TInstant::Seconds(40),
                 TBatch()
             },
             {
-                {firstOffset + 4, firstOffset + 5},
-                {41'000'000, 42'000'000},
+                {firstOffset + 5},
+                TInstant::Seconds(42),
                 TBatch()
             },
         };
         CheckSuccess(MakeClient(
             {{"ts", "[DataType; String]"}},
-            R"(Unwrap(CAST(`ts` AS Timestamp?) - Interval("PT5S")))",
+            R"(CAST(`ts` AS Timestamp?) - Interval("PT5S"))",
             "WHERE FALSE",
             BatchCheck(messages),
             ExpectedFilteredRows(messages)
@@ -736,19 +763,19 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
 
         messages = TVector<TMessages>{
             {
-                {firstOffset + 4, firstOffset + 5},
-                {41'000'000, 42'000'000},
+                {firstOffset + 5},
+                TInstant::Seconds(42),
                 TBatch()
             },
             {
-                {firstOffset + 6, firstOffset + 7},
-                {43'000'000, 44'000'000},
+                {firstOffset + 7},
+                TInstant::Seconds(44),
                 TBatch()
             },
         };
         CheckSuccess(MakeClient(
             {{"ts", "[DataType; String]"}},
-            R"(Unwrap(CAST(`ts` AS Timestamp?) - Interval("PT5S")))",
+            R"(CAST(`ts` AS Timestamp?) - Interval("PT5S"))",
             "WHERE FALSE",
             BatchCheck(messages),
             ExpectedFilteredRows(messages)

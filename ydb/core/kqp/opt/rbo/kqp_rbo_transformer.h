@@ -39,7 +39,10 @@ class TKqpNewRBOTransformer : public TSyncTransformerBase {
         TKqpNewRBOTransformer(const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, TTypeAnnotationContext& typeCtx, const TKikimrConfiguration::TPtr& config, TAutoPtr<IGraphTransformer> typeAnnTransformer, TAutoPtr<IGraphTransformer> peephole) : 
             TypeCtx(typeCtx),
             KqpCtx(*kqpCtx),
-            RBO({RuleStage1, RuleStage2}, kqpCtx, typeCtx, config, typeAnnTransformer, peephole) {}
+            RBO({
+                //std::make_shared<TRenameStage>(),
+                std::make_shared<TRuleBasedStage>(RuleStage1), 
+                std::make_shared<TRuleBasedStage>(RuleStage2)}, kqpCtx, typeCtx, config, typeAnnTransformer, peephole) {}
 
         // Main method of the transformer
         IGraphTransformer::TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final;

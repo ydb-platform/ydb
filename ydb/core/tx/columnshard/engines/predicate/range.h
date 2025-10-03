@@ -6,16 +6,43 @@
 
 namespace NKikimr::NOlap {
 
-class TPKRangeFilter {
+class TPKRangeFilter: public TMoveOnly {
 private:
     TPredicateContainer PredicateFrom;
     TPredicateContainer PredicateTo;
     TPKRangeFilter(TPredicateContainer&& f, TPredicateContainer&& t)
         : PredicateFrom(std::move(f))
         , PredicateTo(std::move(t)) {
+        TotalFiltersMemorySize.Add(PredicateFrom.GetMemorySize() + PredicateTo.GetMemorySize());
     }
 
+    static inline TPositiveControlInteger TotalFiltersMemorySize;
+
 public:
+    TPKRangeFilter& operator=(TPKRangeFilter&& rhs) {
+        TotalFiltersMemorySize.Sub(PredicateFrom.GetMemorySize() + PredicateTo.GetMemorySize() + rhs.PredicateFrom.GetMemorySize() + rhs.PredicateTo.GetMemorySize());
+        PredicateFrom = std::move(rhs.PredicateFrom);
+        PredicateTo = std::move(rhs.PredicateTo);
+        TotalFiltersMemorySize.Add(PredicateFrom.GetMemorySize() + PredicateTo.GetMemorySize() + rhs.PredicateFrom.GetMemorySize() + rhs.PredicateTo.GetMemorySize());
+        return *this;
+    }
+
+    TPKRangeFilter(TPKRangeFilter&& rhs)
+        : PredicateFrom([&]() {
+            TotalFiltersMemorySize.Sub(rhs.PredicateFrom.GetMemorySize());
+            return std::move(rhs.PredicateFrom);
+        }())
+        , PredicateTo([&]() {
+            TotalFiltersMemorySize.Sub(rhs.PredicateTo.GetMemorySize());
+            return std::move(rhs.PredicateTo);
+        }()) {
+        TotalFiltersMemorySize.Add(PredicateFrom.GetMemorySize() + PredicateTo.GetMemorySize() + rhs.PredicateFrom.GetMemorySize() + rhs.PredicateTo.GetMemorySize());
+    }
+
+    ~TPKRangeFilter() {
+        TotalFiltersMemorySize.Sub(PredicateFrom.GetMemorySize() + PredicateTo.GetMemorySize());
+    }
+
     bool IsEmpty() const {
         return PredicateFrom.IsEmpty() && PredicateTo.IsEmpty();
     }
@@ -52,6 +79,10 @@ public:
     std::set<ui32> GetColumnIds(const TIndexInfo& indexInfo) const;
     TString DebugString() const;
     std::set<std::string> GetColumnNames() const;
+
+    static size_t GetFiltersTotalMemorySize() {
+        return TotalFiltersMemorySize.Val();
+    }
 };
 
 }   // namespace NKikimr::NOlap

@@ -3168,5 +3168,250 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         );
     }
 
+    Y_UNIT_TEST(VolatileAndNonVolatileWritePlanStepCommitFailure) {
+        TPortManager pm;
+        NKikimrConfig::TAppConfig app;
+        app.MutableTableServiceConfig()->SetEnableOltpSink(true);
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetAppConfig(app);
+
+        auto [runtime, server, sender] = TestCreateServer(serverSettings);
+
+        TDisableDataShardLogBatching disableDataShardLogBatching;
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSchemeExec(runtime, R"(
+                CREATE TABLE `/Root/table` (key int, value int, PRIMARY KEY (key))
+                WITH (PARTITION_AT_KEYS = (10));
+            )"),
+            "SUCCESS"
+        );
+
+        ExecSQL(server, sender, R"(
+            UPSERT INTO `/Root/table` (key, value) VALUES
+                (1, 1001),
+                (11, 1002);
+        )");
+
+        const auto tableId = ResolveTableId(server, sender, "/Root/table");
+        const auto shards = GetTableShards(server, sender, "/Root/table");
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 2u);
+
+        auto shard1 = shards.at(0);
+        auto shard2 = shards.at(1);
+
+        TVector<TShardedTableOptions::TColumn> columns{
+            {"key", "Int32", true, false},
+            {"value", "Int32", false, false},
+        };
+
+        const ui64 coordinator = ChangeStateStorage(Coordinator, server->GetSettings().Domain);
+
+        // Prepare upsert 1 (non-volatile)
+        ui64 txId1 = 1234567890011;
+        auto tx1sender = runtime.AllocateEdgeActor();
+        ui64 tx1minStep;
+        ui64 tx1maxStep;
+        {
+            auto req1 = MakeWriteRequestOneKeyValue(
+                txId1,
+                NKikimrDataEvents::TEvWrite::MODE_PREPARE,
+                NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
+                tableId,
+                columns,
+                2, 1003);
+
+            auto req2 = MakeWriteRequestOneKeyValue(
+                txId1,
+                NKikimrDataEvents::TEvWrite::MODE_PREPARE,
+                NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
+                tableId,
+                columns,
+                12, 1003);
+
+            Cerr << "... preparing tx1 at " << shard1 << Endl;
+            auto res1 = Write(runtime, tx1sender, shard1, std::move(req1));
+            Cerr << "... preparing tx1 at " << shard2 << Endl;
+            auto res2 = Write(runtime, tx1sender, shard2, std::move(req2));
+
+            tx1minStep = Max(res1.GetMinStep(), res2.GetMinStep());
+            tx1maxStep = Min(res1.GetMaxStep(), res2.GetMaxStep());
+        }
+
+        // Prepare upsert 2 (volatile)
+        ui64 txId2 = 1234567890012;
+        auto tx2sender = runtime.AllocateEdgeActor();
+        ui64 tx2minStep;
+        ui64 tx2maxStep;
+        {
+            auto req1 = MakeWriteRequestOneKeyValue(
+                txId2,
+                NKikimrDataEvents::TEvWrite::MODE_VOLATILE_PREPARE,
+                NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
+                tableId,
+                columns,
+                2, 1004);
+            req1->Record.MutableLocks()->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
+            req1->Record.MutableLocks()->AddSendingShards(shard1);
+            req1->Record.MutableLocks()->AddSendingShards(shard2);
+            req1->Record.MutableLocks()->AddReceivingShards(shard1);
+            req1->Record.MutableLocks()->AddReceivingShards(shard2);
+
+            auto req2 = MakeWriteRequestOneKeyValue(
+                txId2,
+                NKikimrDataEvents::TEvWrite::MODE_VOLATILE_PREPARE,
+                NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
+                tableId,
+                columns,
+                13, 1004);
+            req2->Record.MutableLocks()->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
+            req2->Record.MutableLocks()->AddSendingShards(shard1);
+            req2->Record.MutableLocks()->AddSendingShards(shard2);
+            req2->Record.MutableLocks()->AddReceivingShards(shard1);
+            req2->Record.MutableLocks()->AddReceivingShards(shard2);
+
+            Cerr << "... preparing tx2 at " << shard1 << Endl;
+            auto res1 = Write(runtime, tx2sender, shard1, std::move(req1));
+            Cerr << "... preparing tx2 at " << shard2 << Endl;
+            auto res2 = Write(runtime, tx2sender, shard2, std::move(req2));
+
+            tx2minStep = Max(res1.GetMinStep(), res2.GetMinStep());
+            tx2maxStep = Min(res1.GetMaxStep(), res2.GetMaxStep());
+        }
+
+        // Block plan steps at shard 1
+        TBlockEvents<TEvTxProcessing::TEvPlanStep> blockedPlan(runtime,
+            [shard1](const auto& ev) {
+                if (ev->Get()->Record.GetTabletID() == shard1) {
+                    Cerr << "... blocking plan step at " << shard1 << Endl;
+                    return true;
+                }
+                return false;
+            });
+
+        Cerr << "... planning tx1 at " << coordinator << Endl;
+        SendProposeToCoordinator(
+            runtime, tx1sender, shards, {
+                .TxId = txId1,
+                .Coordinator = coordinator,
+                .MinStep = tx1minStep,
+                .MaxStep = tx1maxStep,
+                .Volatile = false,
+            });
+        while (auto ev = runtime.GrabEdgeEventRethrow<TEvTxProxy::TEvProposeTransactionStatus>(tx1sender, TDuration::Seconds(10))) {
+            if (ev->Get()->GetStatus() == TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusPlanned) {
+                break;
+            }
+        }
+
+        Cerr << "... planning tx2 at " << coordinator << Endl;
+        SendProposeToCoordinator(
+            runtime, tx2sender, shards, {
+                .TxId = txId2,
+                .Coordinator = coordinator,
+                .MinStep = tx2minStep,
+                .MaxStep = tx2maxStep,
+                .Volatile = true,
+            });
+        while (auto ev = runtime.GrabEdgeEventRethrow<TEvTxProxy::TEvProposeTransactionStatus>(tx2sender, TDuration::Seconds(10))) {
+            if (ev->Get()->GetStatus() == TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusPlanned) {
+                break;
+            }
+        }
+
+        runtime.WaitFor("blocked plan steps", [&]{
+            return blockedPlan.size() >= 2;
+        });
+        Cerr << "... blocked " << blockedPlan.size() << " plan steps" << Endl;
+        runtime.SimulateSleep(TDuration::MilliSeconds(10));
+
+        // Block commits at shard 1
+        TBlockEvents<TEvBlobStorage::TEvPut> blockedCommits(runtime,
+            [shard1](const auto& ev) {
+                auto* msg = ev->Get();
+                if (msg->Id.TabletID() == shard1 && msg->Id.Channel() == 0) {
+                    Cerr << "... blocking put " << msg->Id << Endl;
+                    return true;
+                }
+                return false;
+            });
+
+        // Block TEvPrivate::TEvProgressTransaction at shard 1
+        TBlockEvents<IEventHandle> blockedProgress(runtime,
+            [actor = ResolveTablet(runtime, shard1)](const TAutoPtr<IEventHandle>& ev) {
+                return ev->GetRecipientRewrite() == actor &&
+                    ev->GetTypeRewrite() == EventSpaceBegin(TKikimrEvents::ES_PRIVATE) + 0;
+            });
+
+        Cerr << "... unblocking plan steps" << Endl;
+        blockedPlan.Unblock();
+        runtime.SimulateSleep(TDuration::MilliSeconds(10));
+        UNIT_ASSERT_C(blockedCommits.size() > 0, "expected to block some commits");
+        Cerr << "... blocked " << blockedCommits.size() << " commits" << Endl;
+
+        Cerr << "... replying ERROR to all blocked commits" << Endl;
+        blockedCommits.Stop();
+        for (auto& ev : blockedCommits) {
+            auto proxy = ev->Recipient;
+            ui32 groupId = GroupIDFromBlobStorageProxyID(proxy);
+            auto res = ev->Get()->MakeErrorResponse(NKikimrProto::ERROR, "Something went wrong", TGroupId::FromValue(groupId));
+            runtime.Send(new IEventHandle(ev->Sender, proxy, res.release()), 0, true);
+        }
+        blockedCommits.clear();
+
+        // Shard 1 will restart and we will block plan steps again
+        // However volatile transaction will be migrated, and since it already
+        // has a plan step it might erroneously execute before another
+        // non-volatile transaction (since plan step commit failed). It is
+        // important that migration transforms such known steps to predicted
+        // plan steps.
+        runtime.WaitFor("blocked plan steps", [&]{
+            return blockedPlan.size() >= 2;
+        });
+        runtime.SimulateSleep(TDuration::MilliSeconds(10));
+        Cerr << "... unblocking plan steps again" << Endl;
+        blockedPlan.Stop().Unblock();
+
+        // Everything should commit successfully
+
+        // Check tx1 replies
+        {
+            auto ev1 = runtime.GrabEdgeEventRethrow<NEvents::TDataEvents::TEvWriteResult>(tx1sender, TDuration::Seconds(10));
+            auto ev2 = runtime.GrabEdgeEventRethrow<NEvents::TDataEvents::TEvWriteResult>(tx1sender, TDuration::Seconds(10));
+            UNIT_ASSERT(ev1 && ev2);
+            UNIT_ASSERT_C(
+                ev1->Get()->Record.GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED &&
+                ev2->Get()->Record.GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED,
+                "Unexpected status: " << ev1->Get()->Record.GetStatus() << " and " << ev2->Get()->Record.GetStatus()
+            );
+        }
+
+        // Check tx2 replies
+        {
+            auto ev1 = runtime.GrabEdgeEventRethrow<NEvents::TDataEvents::TEvWriteResult>(tx2sender, TDuration::Seconds(10));
+            auto ev2 = runtime.GrabEdgeEventRethrow<NEvents::TDataEvents::TEvWriteResult>(tx2sender, TDuration::Seconds(10));
+            UNIT_ASSERT(ev1 && ev2);
+            UNIT_ASSERT_C(
+                ev1->Get()->Record.GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED &&
+                ev2->Get()->Record.GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED,
+                "Unexpected status: " << ev1->Get()->Record.GetStatus() << " and " << ev2->Get()->Record.GetStatus()
+            );
+        }
+
+        // Validate the final result (tx1 should have executed before tx2)
+        Cerr << "... validating table" << Endl;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, R"(
+                SELECT key, value FROM `/Root/table` ORDER BY key;
+            )"),
+            "{ items { int32_value: 1 } items { int32_value: 1001 } }, "
+            "{ items { int32_value: 2 } items { int32_value: 1004 } }, "
+            "{ items { int32_value: 11 } items { int32_value: 1002 } }, "
+            "{ items { int32_value: 12 } items { int32_value: 1003 } }, "
+            "{ items { int32_value: 13 } items { int32_value: 1004 } }");
+    }
+
 } // Y_UNIT_TEST_SUITE(DataShardWrite)
 } // namespace NKikimr

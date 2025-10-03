@@ -16,6 +16,7 @@ PEERDIR(
     ydb/core/persqueue/public/counters
     ydb/core/persqueue/pqtablet/cache
     ydb/core/persqueue/pqtablet/partition
+    ydb/core/persqueue/pqtablet/readproxy
 )
 
 END()
@@ -24,6 +25,7 @@ RECURSE(
     blob
     common
     partition
+    readproxy
 )
 
 RECURSE_FOR_TESTS(

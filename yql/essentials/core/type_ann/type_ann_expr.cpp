@@ -628,14 +628,22 @@ TAutoPtr<IGraphTransformer> CreateFullTypeAnnotationTransformer(
     transformers.push_back(TTransformStage(
         CreateFunctorTransformer(
             [&](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
-            return ValidateProviders(input, output, ctx, typeAnnotationContext);
-        }),
+                return ValidateProviders(input, output, ctx, typeAnnotationContext);
+            }
+        ),
         "ValidateProviders",
         issueCode));
-
     transformers.push_back(TTransformStage(
         CreateConfigureTransformer(typeAnnotationContext),
         "Configure",
+        issueCode));
+    transformers.push_back(TTransformStage(
+        CreateFunctorTransformer(
+            [&typeAnnotationContext](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
+                return ExpandSeq(input, output, ctx, typeAnnotationContext);
+            }
+        ),
+        "ExpandSeq",
         issueCode));
 
     // NOTE: add fake EvaluateExpression step to break infinite loop

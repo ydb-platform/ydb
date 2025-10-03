@@ -92,6 +92,7 @@ namespace NKikimr {
         ui64 LogRecAnubisOsirisPut = 0;
         ui64 LogRecAddBulkSst = 0;
         ui64 LogRecScrub = 0;
+        ui64 LogRecMetadata = 0;
 
 
         // statistics for record dispatching
@@ -140,6 +141,7 @@ namespace NKikimr {
         DISPATCH_SIGNATURE_FUNC_GEN(AnubisOsirisPut, LogRecAnubisOsirisPut)
         DISPATCH_SIGNATURE_FUNC_GEN(AddBulkSst, LogRecAddBulkSst)
         DISPATCH_SIGNATURE_FUNC_GEN(Scrub, LogRecScrub)
+        DISPATCH_SIGNATURE_FUNC_GEN(Metadata, LogRecMetadata)
 
         ///////////////////////////////////////////////////////////////////////////////
         // Log Applied/Skipped items

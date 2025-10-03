@@ -61,33 +61,24 @@
 {%- endif -%}
 
 {%- include "[generator]/common_dir.jinja" -%}
+{%- include "[generator]/vars.jinja" -%}
+{%- include "[generator]/import.jinja" -%}
+{%- include "[generator]/builddir.jinja" -%}
 
 {%- if proto_template -%}
-{%-     include "[generator]/proto_vars.jinja" -%}
-{%-     include "[generator]/import.jinja" -%}
-{%-     include "[generator]/proto_import.jinja" -%}
-{%-     include "[generator]/proto_builddir.jinja" -%}
-{%-     include "[generator]/proto_plugins.jinja" -%}
-{%-     include "[generator]/configuration.jinja" -%}
 {%-     include "[generator]/protobuf.jinja" -%}
 {%-     include "[generator]/proto_prepare.jinja" -%}
-{%-     include "[generator]/build.gradle.kts.common.jinja" -%}
-{%-     include "[generator]/proto_dependencies.jinja" -%}
-{%- else -%}
-{%-     include "[generator]/vars.jinja" -%}
-{%-     include "[generator]/import.jinja" -%}
-{%-     include "[generator]/builddir.jinja" -%}
-{%-     include "[generator]/plugins.jinja" -%}
-{%-     include "[generator]/kotlin_plugins.jinja" -%}
-{%-     include "[generator]/preview.jinja" -%}
-{%-     include "[generator]/configuration.jinja" -%}
-{%-     include "[generator]/test.jinja" -%}
-{%-     include "[generator]/build.gradle.kts.common.jinja" -%}
-{%-     include "[generator]/dependencies.jinja" -%}
-{%-     include "extra-tests.gradle.kts" ignore missing -%}
-{%-     if publish -%}
-{%-         include 'publish.gradle.kts' ignore missing -%}
-{%-     endif -%}
 {%- endif -%}
 
+{%- include "[generator]/plugins.jinja" -%}
+{%- include "[generator]/kotlin_plugins.jinja" -%}
+{%- include "[generator]/configuration.jinja" -%}
+{%- include "[generator]/preview.jinja" -%}
+{%- include "[generator]/test.jinja" -%}
+{%- include "[generator]/build.gradle.kts.common.jinja" -%}
+{%- include "[generator]/dependencies.jinja" -%}
+{%- include "extra-tests.gradle.kts" ignore missing -%}
+{%- if publish -%}
+{%-     include 'publish.gradle.kts' ignore missing -%}
+{%- endif -%}
 {%- include "[generator]/debug.jinja" ignore missing -%}

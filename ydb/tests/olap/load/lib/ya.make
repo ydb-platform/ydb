@@ -24,6 +24,7 @@ PY3_LIBRARY()
         workload_reconfig_state_storage.py
         workload_show_create.py
         workload_cdc.py
+        workload_statistics.py
         upload.py
 
     )
@@ -32,6 +33,7 @@ PY3_LIBRARY()
         contrib/python/allure-pytest
         contrib/python/allure-python-commons
         contrib/python/matplotlib
+        contrib/python/pytest-timeout
         ydb/public/sdk/python/enable_v3_new_behavior
         ydb/tests/olap/lib
         ydb/tests/olap/scenario/helpers

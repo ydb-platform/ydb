@@ -516,7 +516,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         const auto data1 = pb.NewDataLiteral<i32>(1334);
         const auto data2 = pb.NewDataLiteral<i32>(-4378);
         const auto data3 = pb.NewDataLiteral<i32>(0);
-        const auto data4 = pb.NewDataLiteral<i32>(std::numeric_limits<i32>::min());
+        const auto data4 = pb.NewDataLiteral<i32>(std::numeric_limits<i32>::min() + 1);
         const auto list = pb.NewList(dataType, {data1, data2, data3, data4});
 
         const auto pgmReturn = pb.Map(list,
@@ -534,7 +534,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         UNIT_ASSERT(iterator.Next(item));
         UNIT_ASSERT_VALUES_EQUAL(item.template Get<i32>(), 0);
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<i32>(), std::numeric_limits<i32>::min());
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<i32>(), std::numeric_limits<i32>::max());
         UNIT_ASSERT(!iterator.Next(item));
         UNIT_ASSERT(!iterator.Next(item));
     }

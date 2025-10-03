@@ -215,14 +215,7 @@ static bool MaybeReject(TDataShard* self, TEvRequest& ev, const TActorContext& c
 }
 
 void TDataShard::Handle(TEvDataShard::TEvUploadRowsRequest::TPtr& ev, const TActorContext& ctx) {
-    if (MediatorStateWaiting) {
-        MediatorStateWaitingMsgs.emplace_back(ev.Release());
-        UpdateProposeQueueSize();
-        return;
-    }
-    if (Pipeline.HasProposeDelayers()) {
-        DelayedProposeQueue.emplace_back().Reset(ev.Release());
-        UpdateProposeQueueSize();
+    if (ShouldDelayOperation(ev)) {
         return;
     }
     if (IsReplicated()) {
@@ -237,14 +230,7 @@ void TDataShard::Handle(TEvDataShard::TEvUploadRowsRequest::TPtr& ev, const TAct
 }
 
 void TDataShard::Handle(TEvDataShard::TEvEraseRowsRequest::TPtr& ev, const TActorContext& ctx) {
-    if (MediatorStateWaiting) {
-        MediatorStateWaitingMsgs.emplace_back(ev.Release());
-        UpdateProposeQueueSize();
-        return;
-    }
-    if (Pipeline.HasProposeDelayers()) {
-        DelayedProposeQueue.emplace_back().Reset(ev.Release());
-        UpdateProposeQueueSize();
+    if (ShouldDelayOperation(ev)) {
         return;
     }
     if (IsReplicated()) {

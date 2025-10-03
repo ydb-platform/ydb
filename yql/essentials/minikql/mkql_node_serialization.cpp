@@ -278,6 +278,19 @@ namespace {
                 IsProcessed0_ = false;
             }
 
+            void Visit(TLinearType& node) override {
+                if (node.GetCookie() != 0) {
+                    Owner_.WriteReference(node);
+                    IsProcessed0_ = true;
+                    return;
+                }
+
+                Owner_.Write(TypeMarker | (char)TType::EKind::Linear);
+                auto itemType = node.GetItemType();
+                Owner_.AddChildNode(*itemType);
+                IsProcessed0_ = false;
+            }
+
             void Visit(TDictType& node) override {
                 if (node.GetCookie() != 0) {
                     Owner_.WriteReference(node);
@@ -645,6 +658,11 @@ namespace {
             }
 
             void Visit(TOptionalType& node) override {
+                Owner_.RegisterReference(node);
+            }
+
+            void Visit(TLinearType& node) override {
+                Owner_.Write(node.IsDynamic() ? 1 : 0);
                 Owner_.RegisterReference(node);
             }
 
@@ -1208,7 +1226,7 @@ namespace {
                 return 1;
             case TType::EKind::Stream:
                 return 1;
-            case TType::EKind::Optional: // and Tagged
+            case TType::EKind::Optional: // and Tagged, Linear
                 return 1;
             case TType::EKind::Dict:
                 return 2;
@@ -1236,7 +1254,7 @@ namespace {
             case TType::EKind::Type:
                 return ReadTypeType();
             case TType::EKind::Void:
-                return ReadVoidOrEmptyListOrEmptyDictType(code);
+                return ReadVoidOrSimilarType(code);
             case TType::EKind::Data:
                 return ReadDataOrPgType(code);
             case TType::EKind::Struct:
@@ -1246,7 +1264,7 @@ namespace {
             case TType::EKind::Stream:
                 return ReadStreamType();
             case TType::EKind::Optional:
-                return ReadOptionalOrTaggedType(code);
+                return ReadOptionalOrSimilarType(code);
             case TType::EKind::Dict:
                 return ReadDictType();
             case TType::EKind::Callable:
@@ -1273,7 +1291,7 @@ namespace {
             return node;
         }
 
-        TNode* ReadVoidOrEmptyListOrEmptyDictType(char code) {
+        TNode* ReadVoidOrSimilarType(char code) {
             switch ((TType::EKind)(code & TypeMask)) {
             case TType::EKind::Void: return Env_.GetTypeOfVoidLazy();
             case TType::EKind::EmptyList: return Env_.GetTypeOfEmptyListLazy();
@@ -1457,10 +1475,23 @@ namespace {
             return node;
         }
 
-        TNode* ReadOptionalOrTaggedType(char code) {
+        TNode* ReadLinearType() {
+            auto itemTypeNode = PopNode();
+            if (itemTypeNode->GetType()->GetKind() != TType::EKind::Type)
+                ThrowCorrupted();
+
+            auto isDynamic = Read() != 0;
+            auto itemType = static_cast<TType*>(itemTypeNode);
+            auto node = TLinearType::Create(itemType, isDynamic, Env_);
+            Nodes_.push_back(node);
+            return node;
+        }
+
+        TNode* ReadOptionalOrSimilarType(char code) {
             switch ((TType::EKind)(code & TypeMask)) {
             case TType::EKind::Optional: return ReadOptionalType();
             case TType::EKind::Tagged: return ReadTaggedType();
+            case TType::EKind::Linear: return ReadLinearType();
             default:
                 ThrowCorrupted();
             }

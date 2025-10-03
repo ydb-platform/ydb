@@ -1,8 +1,12 @@
 #include "common.h"
 
-#include <library/cpp/testing/unittest/registar.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
+
+#include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/utils/log/tls_backend.h>
+
+#include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr::NKqp::NFederatedQueryTest {
     TString GetSymbolsString(char start, char end, const TString& skip) {
@@ -31,15 +35,22 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
     }
 
     void WaitResourcesPublish(ui32 nodeId, ui32 expectedNodeCount) {
+        const auto timeout = TInstant::Now() + TDuration::Seconds(10);
         std::shared_ptr<NKikimr::NKqp::NRm::IKqpResourceManager> resourceManager;
         while (true) {
             if (!resourceManager) {
                 resourceManager = NKikimr::NKqp::TryGetKqpResourceManager(nodeId);
             }
+
             if (resourceManager && resourceManager->GetClusterResources().size() == expectedNodeCount) {
                 return;
             }
-            Sleep(TDuration::MilliSeconds(10));
+
+            if (TInstant::Now() > timeout) {
+                UNIT_FAIL("Timeout waiting for resources to publish on node [" << nodeId << "], expectedNodeCount: " << expectedNodeCount << " has resourceManager: " << (resourceManager ? "true" : "false") << ", node count: " << (resourceManager ? resourceManager->GetClusterResources().size() : 0));
+            }
+
+            Sleep(TDuration::MilliSeconds(100));
         }
     }
 
@@ -59,6 +70,9 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
         std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory,
         const TKikimrRunnerOptions& options)
     {
+        // Logger should be initialized before http gateway creation
+        NYql::NLog::InitLogger(new NYql::NLog::TTlsLogBackend(NActors::CreateNullBackend()));
+
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableExternalDataSources(true);
         featureFlags.SetEnableScriptExecutionOperations(true);
@@ -96,19 +110,36 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
             nullptr,
             driver);
 
+        const auto& kqpSettings = appConfig->GetKQPConfig().GetSettings();
         settings
             .SetFeatureFlags(featureFlags)
             .SetFederatedQuerySetupFactory(federatedQuerySetupFactory)
-            .SetKqpSettings({})
+            .SetKqpSettings({kqpSettings.begin(), kqpSettings.end()})
             .SetS3ActorsFactory(std::move(s3ActorsFactory))
             .SetWithSampleTables(false)
             .SetDomainRoot(options.DomainRoot)
             .SetNodeCount(options.NodeCount)
-            .SetEnableStorageProxy(true);
+            .SetEnableStorageProxy(true)
+            .SetCheckpointPeriod(options.CheckpointPeriod);
 
         settings.EnableScriptExecutionBackgroundChecks = options.EnableScriptExecutionBackgroundChecks;
 
-        return std::make_shared<TKikimrRunner>(settings);
+        auto kikimr = std::make_shared<TKikimrRunner>(settings);
+
+        if (GetTestParam("DEFAULT_LOG", "enabled") == "enabled") {
+            auto& runtime = *kikimr->GetTestServer().GetRuntime();
+
+            const auto descriptor = NKikimrServices::EServiceKikimr_descriptor();
+            for (i64 i = 0; i < descriptor->value_count(); ++i) {
+                runtime.SetLogPriority(static_cast<NKikimrServices::EServiceKikimr>(descriptor->value(i)->number()), NLog::PRI_NOTICE);
+            }
+
+            runtime.SetLogPriority(NKikimrServices::KQP_EXECUTER, NLog::PRI_INFO);
+            runtime.SetLogPriority(NKikimrServices::KQP_PROXY, NLog::PRI_DEBUG);
+            runtime.SetLogPriority(NKikimrServices::KQP_COMPUTE, NLog::PRI_INFO);
+        }
+
+        return kikimr;
     }
 
 } // namespace NKikimr::NKqp::NFederatedQueryTest

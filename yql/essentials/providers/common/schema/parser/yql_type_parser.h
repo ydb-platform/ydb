@@ -115,6 +115,24 @@ protected:
         Writer_.OnEndList();
     }
 
+    template <typename TLinearType>
+    void SaveLinearType(const TLinearType& linearType) {
+        SaveTypeHeader("LinearType");
+        Writer_.OnListItem();
+        TSelf item(Writer_, ExtendedForm_);
+        item.Save(linearType.GetItemType());
+        Writer_.OnEndList();
+    }
+
+    template <typename TLinearType>
+    void SaveDynamicLinearType(const TLinearType& linearType) {
+        SaveTypeHeader("DynamicLinearType");
+        Writer_.OnListItem();
+        TSelf item(Writer_, ExtendedForm_);
+        item.Save(linearType.GetItemType());
+        Writer_.OnEndList();
+    }
+
     template <typename TDictType>
     void SaveDictType(const TDictType& dictType) {
         SaveTypeHeader("DictType");
@@ -314,6 +332,26 @@ TMaybe<typename TLoader::TType> DoLoadTypeFromYson(TLoader& loader, const NYT::T
             return Nothing();
         }
         return loader.LoadOptionalType(*itemType, level);
+    } else if (typeName == "LinearType") {
+        if (node.Size() != 2) {
+            loader.Error("Invalid optional type scheme");
+            return Nothing();
+        }
+        auto itemType = DoLoadTypeFromYson(loader, node[1], level + 1);
+        if (!itemType) {
+            return Nothing();
+        }
+        return loader.LoadLinearType(*itemType, level);
+    } else if (typeName == "DynamicLinearType") {
+        if (node.Size() != 2) {
+            loader.Error("Invalid optional type scheme");
+            return Nothing();
+        }
+        auto itemType = DoLoadTypeFromYson(loader, node[1], level + 1);
+        if (!itemType) {
+            return Nothing();
+        }
+        return loader.LoadDynamicLinearType(*itemType, level);
     } else if (typeName == "TupleType") {
         if (node.Size() != 2 || !node[1].IsList()) {
             loader.Error("Invalid tuple type scheme");

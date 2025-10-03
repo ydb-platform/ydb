@@ -4,6 +4,8 @@ SUBSCRIBER(g:yql)
 
 YQL_UDF_TEST()
 
+SIZE(MEDIUM)
+
 DEPENDS(yql/essentials/udfs/language/yql)
 
 END()

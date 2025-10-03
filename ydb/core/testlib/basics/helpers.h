@@ -61,7 +61,7 @@ namespace NFake {
     void SetupQuoterService(TTestActorRuntime& runtime, ui32 nodeIndex);
     void SetupSysViewService(TTestActorRuntime& runtime, ui32 nodeIndex);
     void SetupIcb(TTestActorRuntime& runtime, ui32 nodeIndex, const NKikimrConfig::TImmediateControlsConfig& config,
-            const TIntrusivePtr<NKikimr::TControlBoard>& icb);
+            const TIntrusivePtr<NKikimr::TControlBoard>& icb, const TIntrusivePtr<NKikimr::TDynamicControlBoard>& dcb);
 
     // StateStorage, NodeWarden, TabletResolver, ResourceBroker, SharedPageCache
     void SetupBasicServices(TTestActorRuntime &runtime, TAppPrepare &app, bool mockDisk = false,

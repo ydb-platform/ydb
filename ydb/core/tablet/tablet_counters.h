@@ -507,6 +507,7 @@ public:
     //
     void OutputHtml(IOutputStream &os, const char* counterClass = "col-md-3") const;
     void OutputProto(NKikimrTabletBase::TTabletCountersBase& op) const;
+    TString OutputJson() const;
 
     //
     const char* SimpleCounterName(ui32 index) const {

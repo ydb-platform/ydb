@@ -25,12 +25,18 @@ TDqHashOperatorParams ParseCommonDqHashOperatorParams(TCallable& callable, const
 
     TDqHashOperatorParams result;
 
-    const auto inputType = AS_TYPE(TStreamType, callable.GetInput(NDqHashOperatorParams::Input).GetStaticType());
+    const TType* inputType = callable.GetInput(NDqHashOperatorParams::Input).GetStaticType();
+    const TType* outputType = callable.GetType()->GetReturnType();
+
+    result.IsStream = inputType->IsStream();
+
     const auto inputWidth = GetWideComponentsCount(inputType);
-    const auto outputWidth = GetWideComponentsCount(AS_TYPE(TStreamType, callable.GetType()->GetReturnType()));
+    const auto outputWidth = GetWideComponentsCount(outputType);
 
     const auto keysSize = AS_VALUE(TTupleLiteral, callable.GetInput(NDqHashOperatorParams::KeyArgs))->GetValuesCount();
     const auto stateSize = AS_VALUE(TTupleLiteral, callable.GetInput(NDqHashOperatorParams::StateArgs))->GetValuesCount();
+
+    MKQL_ENSURE(result.IsStream == outputType->IsStream(), "Both the input and output types must be of the same kind (stream or flow)");
 
     result.InputWidth = inputWidth;
     result.KeyTypes.reserve(keysSize);

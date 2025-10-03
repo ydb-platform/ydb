@@ -58,6 +58,7 @@ private:
     NThreading::TPromise<NYql::IKikimrGateway::TGenericResult> Promise;
     // For Statistics Aggregator
     std::optional<ui64> StatisticsAggregatorId;
+    TULIDGenerator UlidGen;
     TPathId PathId;
     TString OperationId;
 

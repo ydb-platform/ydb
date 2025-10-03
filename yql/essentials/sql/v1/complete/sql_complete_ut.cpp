@@ -1,6 +1,6 @@
 #include "sql_complete.h"
-
 #include <yql/essentials/sql/v1/complete/syntax/grammar.h>
+
 #include <yql/essentials/sql/v1/complete/name/cache/local/cache.h>
 #include <yql/essentials/sql/v1/complete/name/cluster/static/discovery.h>
 #include <yql/essentials/sql/v1/complete/name/object/simple/schema.h>
@@ -604,6 +604,7 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
                 {FunctionName, "FILTER()", 1},
                 {FunctionName, "FOLDER()", 1},
                 {FunctionName, "LIKE()", 1},
+                {FunctionName, "PARTITION_LIST()", 1},
                 {FunctionName, "RANGE()", 1},
                 {FunctionName, "REGEXP()", 1},
                 {FunctionName, "WalkFolders()", 1},
@@ -856,6 +857,8 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
 
         UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "$x = sel#"), expected);
         UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "$x = (sel#)"), expected);
+        UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "SELECT (sel#)"), expected);
+        UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "SELECT * FROM t WHERE (sel#)"), expected);
     }
 
     Y_UNIT_TEST(Upsert) {
@@ -1810,6 +1813,26 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         };
 
         UNIT_ASSERT_VALUES_EQUAL(CompleteTop(expected.size(), engine, query), expected);
+    }
+
+    Y_UNIT_TEST(ColumnAtSubqueryExpresson) {
+        auto engine = MakeSqlCompletionEngineUT();
+
+        TVector<TString> input = {
+            R"sql(SELECT (SELECT # FROM (SELECT 1 AS a));)sql",
+            R"sql(SELECT 1 + (SELECT # FROM (SELECT 1 AS a));)sql",
+            R"sql(SELECT * FROM t WHERE (SELECT # FROM (SELECT 1 AS a));)sql",
+            R"sql(SELECT * FROM t WHERE 1 < (SELECT # FROM (SELECT 1 AS a));)sql",
+        };
+
+        TVector<TCandidate> expected = {
+            {ColumnName, "a"},
+        };
+
+        UNIT_ASSERT_VALUES_EQUAL(CompleteTop(expected.size(), engine, input[0]), expected);
+        UNIT_ASSERT_VALUES_EQUAL(CompleteTop(expected.size(), engine, input[1]), expected);
+        UNIT_ASSERT_VALUES_EQUAL(CompleteTop(expected.size(), engine, input[2]), expected);
+        UNIT_ASSERT_VALUES_EQUAL(CompleteTop(expected.size(), engine, input[3]), expected);
     }
 
     Y_UNIT_TEST(NoBindingAtQuoted) {

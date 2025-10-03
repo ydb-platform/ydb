@@ -41,6 +41,7 @@ TTransaction::TTransaction(
     EDurability durability,
     TDuration timeout,
     bool pingAncestors,
+    std::optional<std::string> pingerAddress,
     std::optional<TDuration> pingPeriod,
     std::optional<TStickyTransactionParameters> stickyParameters,
     i64 sequenceNumberSourceId,
@@ -55,6 +56,7 @@ TTransaction::TTransaction(
     , Durability_(durability)
     , Timeout_(timeout)
     , PingAncestors_(pingAncestors)
+    , PingerAddress_(pingerAddress)
     , PingPeriod_(pingPeriod)
     , StickyProxyAddress_(stickyParameters ? std::optional(stickyParameters->ProxyAddress) : std::nullopt)
     , SequenceNumberSourceId_(sequenceNumberSourceId)
@@ -70,7 +72,7 @@ TTransaction::TTransaction(
     Proxy_.SetDefaultEnableLegacyRpcCodecs(config->EnableLegacyRpcCodecs);
 
     YT_LOG_DEBUG("%v (Type: %v, StartTimestamp: %v, Atomicity: %v, "
-        "Durability: %v, Timeout: %v, PingAncestors: %v, PingPeriod: %v, Sticky: %v, StickyProxyAddress: %v)",
+        "Durability: %v, Timeout: %v, PingAncestors: %v, PingerAddress: %v, PingPeriod: %v, Sticky: %v, StickyProxyAddress: %v)",
         capitalizedCreationReason,
         GetType(),
         GetStartTimestamp(),
@@ -78,6 +80,7 @@ TTransaction::TTransaction(
         GetDurability(),
         GetTimeout(),
         PingAncestors_,
+        PingerAddress_,
         PingPeriod_,
         /*sticky*/ stickyParameters.has_value(),
         StickyProxyAddress_);

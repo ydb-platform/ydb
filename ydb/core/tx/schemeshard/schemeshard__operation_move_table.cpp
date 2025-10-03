@@ -352,6 +352,7 @@ public:
             TEvDataShard::TEvProposeTransactionResult::EventType,
             TEvColumnShard::TEvProposeTransactionResult::EventType,
             TEvPrivate::TEvOperationPlan::EventType,
+            TEvPrivate::TEvCompletePublication::EventType,
         });
     }
 
@@ -445,6 +446,7 @@ public:
             TEvDataShard::TEvProposeTransactionResult::EventType,
             TEvColumnShard::TEvProposeTransactionResult::EventType,
             TEvPrivate::TEvOperationPlan::EventType,
+            TEvPrivate::TEvCompletePublication::EventType,
         });
     }
 

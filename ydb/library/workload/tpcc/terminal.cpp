@@ -4,6 +4,8 @@
 #include "util.h"
 #include "constants.h"
 
+#include <util/generic/scope.h>
+
 #include <array>
 
 //-----------------------------------------------------------------------------
@@ -100,6 +102,8 @@ void TTerminal::Start() {
 
 TTerminalTask TTerminal::Run() {
     auto& Log = Context.Log; // to make LOG_* macros working
+
+    Y_DEFER { Stopped = true; };
 
     LOG_D("Terminal " << Context.TerminalID << " has started");
 
@@ -214,11 +218,7 @@ bool TTerminal::IsDone() const {
         return true;
     }
 
-    if (!Task.Handle) {
-        return true;
-    }
-
-    return Task.Handle.done();
+    return Stopped;
 }
 
 } // namespace NYdb::NTPCC

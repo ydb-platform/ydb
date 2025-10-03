@@ -50,8 +50,8 @@ namespace NKikimr {
     }
     TDomainsInfo::TDomain::TStoragePoolKinds DefaultPoolKinds(ui32 count = 1);
 
-    i64 SetSplitMergePartCountLimit(TTestActorRuntime* runtime, i64 val);
-    bool SetAllowServerlessStorageBilling(TTestActorRuntime* runtime, bool isAllow);
+    void SetSplitMergePartCountLimit(TTestActorRuntime* runtime, i64 val);
+    void SetAllowServerlessStorageBilling(TTestActorRuntime* runtime, bool isAllow);
 
     const TString INITIAL_TEST_DISPATCH_NAME = "Trace";
 

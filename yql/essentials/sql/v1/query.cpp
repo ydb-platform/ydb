@@ -9,6 +9,7 @@
 #include <library/cpp/charset/ci_string.h>
 
 #include <util/digest/fnv.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 
 using namespace NYql;
 
@@ -150,6 +151,8 @@ static INode::TPtr CreateIndexType(TIndexDescription::EType type, const INode& n
             return node.Q("syncGlobalUnique");
         case TIndexDescription::EType::GlobalVectorKmeansTree:
             return node.Q("globalVectorKmeansTree");
+        case TIndexDescription::EType::GlobalFulltext:
+            return node.Q("globalFulltext");
     }
 }
 
@@ -288,7 +291,7 @@ static INode::TPtr CreateTableSettings(const TTableSettings& tableSettings, ETab
     return settings;
 }
 
-static INode::TPtr CreateVectorIndexSettings(const TVectorIndexSettings& vectorIndexSettings, const INode& node) {
+static INode::TPtr CreateIndexSettings(const TIndexDescription::TIndexSettings& indexSettings, const INode& node) {
     // short aliases for member function calls
     auto Y = [&node](auto&&... args) { return node.Y(std::forward<decltype(args)>(args)...); };
     auto Q = [&node](auto&&... args) { return node.Q(std::forward<decltype(args)>(args)...); };
@@ -296,23 +299,10 @@ static INode::TPtr CreateVectorIndexSettings(const TVectorIndexSettings& vectorI
 
     auto settings = Y();
 
-    if (vectorIndexSettings.Distance) {
-        settings = L(settings, Q(Y(Q("distance"), Q(ToString(*vectorIndexSettings.Distance)))));
-    }
-    if (vectorIndexSettings.Similarity) {
-        settings = L(settings, Q(Y(Q("similarity"), Q(ToString(*vectorIndexSettings.Similarity)))));
-    }
-    if (vectorIndexSettings.VectorType) {
-        settings = L(settings, Q(Y(Q("vector_type"), Q(ToString(*vectorIndexSettings.VectorType)))));
-    }
-    if (vectorIndexSettings.VectorDimension) {
-        settings = L(settings, Q(Y(Q("vector_dimension"), Q(ToString(*vectorIndexSettings.VectorDimension)))));
-    }
-    if (vectorIndexSettings.Clusters) {
-        settings = L(settings, Q(Y(Q("clusters"), Q(ToString(*vectorIndexSettings.Clusters)))));
-    }
-    if (vectorIndexSettings.Levels) {
-        settings = L(settings, Q(Y(Q("levels"), Q(ToString(*vectorIndexSettings.Levels)))));
+    for (const auto& [_, indexSetting] : indexSettings) {
+        settings = L(settings, Q(Y(
+            BuildQuotedAtom(indexSetting.NamePosition, indexSetting.Name),
+            BuildQuotedAtom(indexSetting.ValuePosition, indexSetting.Value))));
     }
 
     return settings;
@@ -342,10 +332,10 @@ static INode::TPtr CreateIndexDesc(const TIndexDescription& index, ETableSetting
         ));
         indexNode = node.L(indexNode, tableSettings);
     }
-    if (const auto* indexSettingsPtr = std::get_if<TVectorIndexSettings>(&index.IndexSettings)) {
+    if (index.IndexSettings) {
         const auto& indexSettings = node.Q(node.Y(
             node.Q("indexSettings"),
-            node.Q(CreateVectorIndexSettings(*indexSettingsPtr, node))));
+            node.Q(CreateIndexSettings(index.IndexSettings, node))));
         indexNode = node.L(indexNode, indexSettings);
     }
     return indexNode;
@@ -443,7 +433,13 @@ public:
             return nullptr;
         }
 
-        TCiString func(Func_);
+        TString func = Func_;
+        if (auto issue = NormalizeName(Pos_, func)) {
+            ctx.Error(Pos_) << issue->GetMessage();
+            ctx.IncrementMonCounter("sql_errors", "NormalizeTableFunctionError");
+            return nullptr;
+        }
+
         if (func != "object" && func != "walkfolders") {
             for (auto& arg: Args_) {
                 if (arg.Expr->GetLabel()) {
@@ -452,7 +448,7 @@ public:
                 }
             }
         }
-        if (func == "concat_strict") {
+        if (func == "concatstrict") {
             auto tuple = Y();
             for (auto& arg: Args_) {
                 ExtractTableName(ctx, arg);
@@ -502,8 +498,8 @@ public:
             return concat;
         }
 
-        else if (func == "range" || func == "range_strict" || func == "like" || func == "like_strict" ||
-            func == "regexp" || func == "regexp_strict" || func == "filter" || func == "filter_strict") {
+        else if (func == "range" || func == "rangestrict" || func == "like" || func == "likestrict" ||
+            func == "regexp" || func == "regexpstrict" || func == "filter" || func == "filterstrict") {
             bool isRange = func.StartsWith("range");
             bool isFilter = func.StartsWith("filter");
             size_t minArgs = isRange ? 1 : 2;
@@ -549,7 +545,7 @@ public:
             if (!path) {
                 return nullptr;
             }
-            auto range = Y(func.EndsWith("_strict") ? "MrTableRangeStrict" : "MrTableRange", path);
+            auto range = Y(func.EndsWith("strict") ? "MrTableRangeStrict" : "MrTableRange", path);
             TNodePtr predicate;
             TDeferredAtom suffix;
             if (func.StartsWith("range")) {
@@ -628,7 +624,7 @@ public:
             }
 
             return key;
-        } else if (func == "each" || func == "each_strict") {
+        } else if (func == "each" || func == "eachstrict") {
             auto each = Y(func == "each" ? "MrTableEach" : "MrTableEachStrict");
             for (auto& arg : Args_) {
                 if (arg.HasAt) {
@@ -843,6 +839,37 @@ public:
 
             result = L(result, Q(settings));
             return result;
+        }
+        else if (func == "partitionlist" || func == "partitionliststrict") {
+            auto requiredLangVer = MakeLangVersion(2025, 4);
+            if (!IsBackwardCompatibleFeatureAvailable(ctx.Settings.LangVer, requiredLangVer, ctx.Settings.BackportMode)) {
+                auto str = FormatLangVersion(requiredLangVer);
+                YQL_ENSURE(str);
+                ctx.Error(Pos_) << "PARTITION_LIST table function is not available before language version " << *str;
+                return nullptr;
+            }
+            if (Args_.size() != 1) {
+                ctx.Error(Pos_) << "Single argument required, but got " << Args_.size() << " arguments";
+                return nullptr;
+            }
+            const auto& arg = Args_.front();
+            if (arg.HasAt) {
+                ctx.Error(Pos_) << "Temporary tables are not supported here, expecting expression";
+                return nullptr;
+            }
+            if (!arg.View.empty()) {
+                ctx.Error(Pos_) << "Views are not supported here, expecting expression";
+                return nullptr;
+            }
+            if (!arg.Id.Empty()) {
+                ctx.Error(Pos_) << "Expecting expression as argument, but got identifier";
+                return nullptr;
+            }
+            if (!arg.Expr) {
+                ctx.Error(Pos_) << "Expecting expression as argument";
+                return nullptr;
+            }
+            return Y(func.EndsWith("strict") ? "MrPartitionListStrict" : "MrPartitionList", Y("EvaluateExpr", arg.Expr));
         }
 
         ctx.Error(Pos_) << "Unknown table name preprocessor: " << Func_;
@@ -3355,6 +3382,11 @@ public:
                 if (ctx.DebugPositions) {
                     Add(Y("let", "world", Y(TString(ConfigureName), "world", configSource,
                         BuildQuotedAtom(Pos_, "DebugPositions"))));
+                }
+
+                if (ctx.DirectRowDependsOn.Defined()) {
+                    const TString pragmaName = *ctx.DirectRowDependsOn ? "DirectRowDependsOn" : "DisableDirectRowDependsOn";
+                    currentWorlds->Add(Y("let", "world", Y(TString(ConfigureName), "world", configSource, BuildQuotedAtom(Pos_, pragmaName))));
                 }
             }
         }

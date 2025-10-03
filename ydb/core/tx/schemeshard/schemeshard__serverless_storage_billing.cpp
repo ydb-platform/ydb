@@ -76,6 +76,14 @@ struct TSchemeShard::TTxServerlessStorageBilling : public TTransactionBase<TSche
             return true;
         }
 
+        if (!spaceUsage.Tables.TotalSize) {
+            LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxServerlessStorageBilling: nothing to bill"
+                       << ", schemeshardId: " << Self->SelfTabletId()
+                       << ", domainId: " << Self->ParentDomainId
+                       << ", next retry at: " << TimeToNextBill);
+            return true;
+        }
+
         NIceDb::TNiceDb db(txc.DB);
 
         if (!Self->ServerlessStorageLastBillTime) {
@@ -164,6 +172,9 @@ struct TSchemeShard::TTxServerlessStorageBilling : public TTransactionBase<TSche
                  {"type", "delta"},
                  {"start", toBill.Start.Seconds()},
                  {"finish", toBill.End.Seconds()}
+             }},
+             {"labels", NJson::TJsonMap {
+                 {"Category", "Table"},
              }},
         };
 

@@ -86,6 +86,9 @@ public:
     }
 
     TString GetDomainId(TPathId pathId) {
+        if (RootSchemeShardId == pathId.OwnerId) {
+            return TStringBuilder() << pathId.LocalPathId;
+        }
         return TStringBuilder() << pathId.OwnerId << '-' << pathId.LocalPathId;
     }
 

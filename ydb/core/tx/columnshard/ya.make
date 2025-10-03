@@ -5,6 +5,7 @@ SRCS(
     blob.cpp
     blob_cache.cpp
     columnshard__init.cpp
+    columnshard__locks.cpp
     columnshard__notify_tx_completion.cpp
     columnshard__overload.cpp
     columnshard__plan_step.cpp
@@ -56,7 +57,7 @@ PEERDIR(
     ydb/core/tx/columnshard/export
     ydb/core/tx/columnshard/loading
     ydb/core/tx/columnshard/normalizer
-    ydb/core/tx/columnshard/overload
+    ydb/core/tx/columnshard/overload_manager
     ydb/core/tx/columnshard/operations
     ydb/core/tx/columnshard/resource_subscriber
     ydb/core/tx/columnshard/splitter

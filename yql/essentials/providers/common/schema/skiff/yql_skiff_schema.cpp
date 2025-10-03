@@ -143,6 +143,12 @@ struct TSkiffTypeLoader {
         return NYT::TNode()("wire_type", "string32");
     }
 
+    TMaybe<TType> LoadLinearType(TType /*itemType*/, ui32 /*level*/) {
+        ythrow yexception() << "Unsupported type: LinearType";
+    }
+    TMaybe<TType> LoadDynamicLinearType(TType /*itemType*/, ui32 /*level*/) {
+        ythrow yexception() << "Unsupported type: DynamicLinearType";
+    }
     TMaybe<TType> LoadResourceType(const TString& /*tag*/, ui32 /*level*/) {
         ythrow yexception() << "Unsupported type: Resource";
     }

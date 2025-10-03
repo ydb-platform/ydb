@@ -790,6 +790,20 @@
             "uri": "https://{canondata_backend}/1942671/f9fe8b5ff2967f43b60e0f5b3fa5c2c4eff69207/resource.tar.gz#test.test_expr-to_sorted_set_vartuple_key-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[file-pending_file_path--Debug]": [
+        {
+            "checksum": "61ef5c6a57845c4e94769d61ce3d9e3e",
+            "size": 333,
+            "uri": "https://{canondata_backend}/1781765/7c9d57e3c0d04d77a5f137b33790e22a6c3be009/resource.tar.gz#test.test_file-pending_file_path--Debug_/opt.yql"
+        }
+    ],
+    "test.test[file-pending_file_path--Results]": [
+        {
+            "checksum": "b48e12d7643de4fa20db189c7efc3763",
+            "size": 701,
+            "uri": "https://{canondata_backend}/1946324/8877615c2f2d06620f4a366cae6bb4ef84d04214/resource.tar.gz#test.test_file-pending_file_path--Results_/results.txt"
+        }
+    ],
     "test.test[flexible_types-basic-default.txt-Debug]": [
         {
             "checksum": "878f3dad3069225885db0d21a0dfe90e",
@@ -1060,6 +1074,62 @@
             "checksum": "dd138ef193cd346f118c86298b544918",
             "size": 2763,
             "uri": "https://{canondata_backend}/1931696/ea5c7a58e2d64730a365efbdc95cdd2474857fcb/resource.tar.gz#test.test_like-like_rewrite-default.txt-Results_/results.txt"
+        }
+    ],
+    "test.test[linear-mutdict_items-default.txt-Debug]": [
+        {
+            "checksum": "1521bd526b77a3306107812db7b08ad5",
+            "size": 539,
+            "uri": "https://{canondata_backend}/1814674/a3a783c9e327593f9198bb23db9fb5a8c03794f8/resource.tar.gz#test.test_linear-mutdict_items-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[linear-mutdict_items-default.txt-Results]": [
+        {
+            "checksum": "dd26637abc940ff79586b51230ee2eae",
+            "size": 3222,
+            "uri": "https://{canondata_backend}/1814674/a3a783c9e327593f9198bb23db9fb5a8c03794f8/resource.tar.gz#test.test_linear-mutdict_items-default.txt-Results_/results.txt"
+        }
+    ],
+    "test.test[linear-mutdict_length-default.txt-Debug]": [
+        {
+            "checksum": "706849d12e2468cd327055119e59a96d",
+            "size": 483,
+            "uri": "https://{canondata_backend}/1814674/a3a783c9e327593f9198bb23db9fb5a8c03794f8/resource.tar.gz#test.test_linear-mutdict_length-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[linear-mutdict_length-default.txt-Results]": [
+        {
+            "checksum": "42ea17d2ec8bd759693cad038b2907bc",
+            "size": 2213,
+            "uri": "https://{canondata_backend}/1814674/a3a783c9e327593f9198bb23db9fb5a8c03794f8/resource.tar.gz#test.test_linear-mutdict_length-default.txt-Results_/results.txt"
+        }
+    ],
+    "test.test[linear-mutdict_update-default.txt-Debug]": [
+        {
+            "checksum": "200265c90bf7038a8db9adb4e924a89b",
+            "size": 475,
+            "uri": "https://{canondata_backend}/1597364/e3cc9ef8f734283bf9fd496c14df715b3fd4bb26/resource.tar.gz#test.test_linear-mutdict_update-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[linear-mutdict_update-default.txt-Results]": [
+        {
+            "checksum": "f5e92a06bb839b8ba5adca4dfaf18d4d",
+            "size": 1573,
+            "uri": "https://{canondata_backend}/1597364/e3cc9ef8f734283bf9fd496c14df715b3fd4bb26/resource.tar.gz#test.test_linear-mutdict_update-default.txt-Results_/results.txt"
+        }
+    ],
+    "test.test[linear-opt_block1-default.txt-Debug]": [
+        {
+            "checksum": "51a43ad4718740e27a3362a64dec2ec5",
+            "size": 515,
+            "uri": "https://{canondata_backend}/1925821/da98b4c164e400e2df4da147a3e67f730e6ed331/resource.tar.gz#test.test_linear-opt_block1-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[linear-opt_block1-default.txt-Results]": [
+        {
+            "checksum": "56d2e17bb8e4a449febe10601f3dd3d0",
+            "size": 1573,
+            "uri": "https://{canondata_backend}/1925821/da98b4c164e400e2df4da147a3e67f730e6ed331/resource.tar.gz#test.test_linear-opt_block1-default.txt-Results_/results.txt"
         }
     ],
     "test.test[match_recognize-alerts_many_order-default.txt-Debug]": [

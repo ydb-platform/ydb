@@ -3,12 +3,12 @@ import platform
 import re
 import sys
 import warnings
+from collections.abc import Generator
+from collections.abc import Iterable
+from collections.abc import Iterator
 from contextlib import contextmanager
 from typing import Any
 from typing import Callable
-from typing import Generator
-from typing import Tuple
-from typing import Type
 from unittest.mock import AsyncMock
 from unittest.mock import MagicMock
 
@@ -100,15 +100,15 @@ def check_unix_fs_mocked(
     return check
 
 
-def mock_using_patch_object(mocker: MockerFixture) -> Tuple[MagicMock, MagicMock]:
+def mock_using_patch_object(mocker: MockerFixture) -> tuple[MagicMock, MagicMock]:
     return mocker.patch.object(os, "remove"), mocker.patch.object(os, "listdir")
 
 
-def mock_using_patch(mocker: MockerFixture) -> Tuple[MagicMock, MagicMock]:
+def mock_using_patch(mocker: MockerFixture) -> tuple[MagicMock, MagicMock]:
     return mocker.patch("os.remove"), mocker.patch("os.listdir")
 
 
-def mock_using_patch_multiple(mocker: MockerFixture) -> Tuple[MagicMock, MagicMock]:
+def mock_using_patch_multiple(mocker: MockerFixture) -> tuple[MagicMock, MagicMock]:
     r = mocker.patch.multiple("os", remove=mocker.DEFAULT, listdir=mocker.DEFAULT)
     return r["remove"], r["listdir"]
 
@@ -210,10 +210,7 @@ def test_mocker_resetall(mocker: MockerFixture) -> None:
     assert isinstance(listdir.return_value, mocker.Mock)
     assert open.side_effect is None
 
-    if sys.version_info >= (3, 9):
-        # The reset on child mocks have been implemented in 3.9
-        # https://bugs.python.org/issue38932
-        assert mocked_object.run.return_value != "mocked"
+    assert mocked_object.run.return_value != "mocked"
 
 
 class TestMockerStub:
@@ -265,12 +262,14 @@ def test_instance_method_spy(mocker: MockerFixture) -> None:
     assert other.bar(arg=10) == 20
     foo.bar.assert_called_once_with(arg=10)  # type:ignore[attr-defined]
     assert foo.bar.spy_return == 20  # type:ignore[attr-defined]
+    assert foo.bar.spy_return_iter is None  # type:ignore[attr-defined]
     assert foo.bar.spy_return_list == [20]  # type:ignore[attr-defined]
     spy.assert_called_once_with(arg=10)
     assert spy.spy_return == 20
     assert foo.bar(arg=11) == 22
     assert foo.bar(arg=12) == 24
     assert spy.spy_return == 24
+    assert spy.spy_return_iter is None
     assert spy.spy_return_list == [20, 22, 24]
 
 
@@ -287,7 +286,7 @@ def test_instance_method_spy(mocker: MockerFixture) -> None:
     ),
 )
 def test_instance_method_spy_exception(
-    exc_cls: Type[BaseException],
+    exc_cls: type[BaseException],
     mocker: MockerFixture,
 ) -> None:
     class Foo:
@@ -349,11 +348,13 @@ def test_spy_reset(mocker: MockerFixture) -> None:
 
     spy = mocker.spy(Foo, "bar")
     assert spy.spy_return is None
+    assert spy.spy_return_iter is None
     assert spy.spy_return_list == []
     assert spy.spy_exception is None
 
     Foo().bar(10)
     assert spy.spy_return == 30
+    assert spy.spy_return_iter is None
     assert spy.spy_return_list == [30]
     assert spy.spy_exception is None
 
@@ -363,11 +364,13 @@ def test_spy_reset(mocker: MockerFixture) -> None:
     with pytest.raises(ValueError):
         Foo().bar(0)
     assert spy.spy_return is None
+    assert spy.spy_return_iter is None
     assert spy.spy_return_list == []
     assert str(spy.spy_exception) == "invalid x"
 
     Foo().bar(15)
     assert spy.spy_return == 45
+    assert spy.spy_return_iter is None
     assert spy.spy_return_list == [45]
     assert spy.spy_exception is None
 
@@ -404,6 +407,7 @@ def test_instance_method_by_subclass_spy(mocker: MockerFixture) -> None:
     calls = [mocker.call(foo, arg=10), mocker.call(other, arg=10)]
     assert spy.call_args_list == calls
     assert spy.spy_return == 20
+    assert spy.spy_return_iter is None
     assert spy.spy_return_list == [20, 20]
 
 
@@ -418,9 +422,11 @@ def test_class_method_spy(mocker: MockerFixture) -> None:
     assert Foo.bar(arg=10) == 20
     Foo.bar.assert_called_once_with(arg=10)  # type:ignore[attr-defined]
     assert Foo.bar.spy_return == 20  # type:ignore[attr-defined]
+    assert Foo.bar.spy_return_iter is None  # type:ignore[attr-defined]
     assert Foo.bar.spy_return_list == [20]  # type:ignore[attr-defined]
     spy.assert_called_once_with(arg=10)
     assert spy.spy_return == 20
+    assert spy.spy_return_iter is None
     assert spy.spy_return_list == [20]
 
 
@@ -438,9 +444,11 @@ def test_class_method_subclass_spy(mocker: MockerFixture) -> None:
     assert Foo.bar(arg=10) == 20
     Foo.bar.assert_called_once_with(arg=10)  # type:ignore[attr-defined]
     assert Foo.bar.spy_return == 20  # type:ignore[attr-defined]
+    assert Foo.bar.spy_return_iter is None  # type:ignore[attr-defined]
     assert Foo.bar.spy_return_list == [20]  # type:ignore[attr-defined]
     spy.assert_called_once_with(arg=10)
     assert spy.spy_return == 20
+    assert spy.spy_return_iter is None
     assert spy.spy_return_list == [20]
 
 
@@ -460,9 +468,11 @@ def test_class_method_with_metaclass_spy(mocker: MockerFixture) -> None:
     assert Foo.bar(arg=10) == 20
     Foo.bar.assert_called_once_with(arg=10)  # type:ignore[attr-defined]
     assert Foo.bar.spy_return == 20  # type:ignore[attr-defined]
+    assert Foo.bar.spy_return_iter is None  # type:ignore[attr-defined]
     assert Foo.bar.spy_return_list == [20]  # type:ignore[attr-defined]
     spy.assert_called_once_with(arg=10)
     assert spy.spy_return == 20
+    assert spy.spy_return_iter is None
     assert spy.spy_return_list == [20]
 
 
@@ -477,9 +487,11 @@ def test_static_method_spy(mocker: MockerFixture) -> None:
     assert Foo.bar(arg=10) == 20
     Foo.bar.assert_called_once_with(arg=10)  # type:ignore[attr-defined]
     assert Foo.bar.spy_return == 20  # type:ignore[attr-defined]
+    assert Foo.bar.spy_return_iter is None  # type:ignore[attr-defined]
     assert Foo.bar.spy_return_list == [20]  # type:ignore[attr-defined]
     spy.assert_called_once_with(arg=10)
     assert spy.spy_return == 20
+    assert spy.spy_return_iter is None
     assert spy.spy_return_list == [20]
 
 
@@ -497,9 +509,11 @@ def test_static_method_subclass_spy(mocker: MockerFixture) -> None:
     assert Foo.bar(arg=10) == 20
     Foo.bar.assert_called_once_with(arg=10)  # type:ignore[attr-defined]
     assert Foo.bar.spy_return == 20  # type:ignore[attr-defined]
+    assert Foo.bar.spy_return_iter is None  # type:ignore[attr-defined]
     assert Foo.bar.spy_return_list == [20]  # type:ignore[attr-defined]
     spy.assert_called_once_with(arg=10)
     assert spy.spy_return == 20
+    assert spy.spy_return_iter is None
     assert spy.spy_return_list == [20]
 
 
@@ -522,9 +536,90 @@ def test_callable_like_spy(testdir: Any, mocker: MockerFixture) -> None:
     uut.call_like(10)
     spy.assert_called_once_with(10)
     assert spy.spy_return == 20
+    assert spy.spy_return_iter is None
     assert spy.spy_return_list == [20]
 
 
+@pytest.mark.parametrize("iterator", [(i for i in range(3)), iter([0, 1, 2])])
+def test_spy_return_iter_duplicates_iterator_when_enabled(
+    mocker: MockerFixture, iterator: Iterator[int]
+) -> None:
+    class Foo:
+        def bar(self) -> Iterator[int]:
+            return iterator
+
+    foo = Foo()
+    spy = mocker.spy(foo, "bar", duplicate_iterators=True)
+    result = list(foo.bar())
+
+    assert result == [0, 1, 2]
+    assert spy.spy_return is not None
+    assert spy.spy_return_iter is not None
+    assert list(spy.spy_return_iter) == result
+
+    [return_value] = spy.spy_return_list
+    assert isinstance(return_value, Iterator)
+
+
+@pytest.mark.parametrize("iterator", [(i for i in range(3)), iter([0, 1, 2])])
+def test_spy_return_iter_is_not_set_when_disabled(
+    mocker: MockerFixture, iterator: Iterator[int]
+) -> None:
+    class Foo:
+        def bar(self) -> Iterator[int]:
+            return iterator
+
+    foo = Foo()
+    spy = mocker.spy(foo, "bar", duplicate_iterators=False)
+    result = list(foo.bar())
+
+    assert result == [0, 1, 2]
+    assert spy.spy_return is not None
+    assert spy.spy_return_iter is None
+    [return_value] = spy.spy_return_list
+    assert isinstance(return_value, Iterator)
+
+
+@pytest.mark.parametrize("iterable", [(0, 1, 2), [0, 1, 2], range(3)])
+def test_spy_return_iter_ignores_plain_iterable(
+    mocker: MockerFixture, iterable: Iterable[int]
+) -> None:
+    class Foo:
+        def bar(self) -> Iterable[int]:
+            return iterable
+
+    foo = Foo()
+    spy = mocker.spy(foo, "bar", duplicate_iterators=True)
+    result = foo.bar()
+
+    assert result == iterable
+    assert spy.spy_return == result
+    assert spy.spy_return_iter is None
+    assert spy.spy_return_list == [result]
+
+
+def test_spy_return_iter_resets(mocker: MockerFixture) -> None:
+    class Foo:
+        iterables: Any = [
+            (i for i in range(3)),
+            99,
+        ]
+
+        def bar(self) -> Any:
+            return self.iterables.pop(0)
+
+    foo = Foo()
+    spy = mocker.spy(foo, "bar", duplicate_iterators=True)
+    result_iterator = list(foo.bar())
+
+    assert result_iterator == [0, 1, 2]
+    assert list(spy.spy_return_iter) == result_iterator
+
+    assert foo.bar() == 99
+    assert spy.spy_return_iter is None
+
+
+@pytest.mark.asyncio
 async def test_instance_async_method_spy(mocker: MockerFixture) -> None:
     class Foo:
         async def bar(self, arg):
@@ -570,7 +665,7 @@ def assert_argument_introspection(left: Any, right: Any) -> Generator[None, None
             expected = "\n  ".join(util._compare_eq_iterable(left, right, verbose))  # type:ignore[arg-type]
         else:
             expected = "\n  ".join(
-                util._compare_eq_iterable(left, right, lambda t, *_: t, verbose)
+                util._compare_eq_iterable(left, right, lambda t, *_, **__: t, verbose)  # type:ignore[arg-type]
             )
         assert expected in str(e)
     else:

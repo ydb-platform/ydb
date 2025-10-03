@@ -1702,6 +1702,15 @@ public:
             }
         } else {
             BLOG_D("TEvNavigateKeySetResult error: " << response.GetError());
+            if (response.GetError() == "PathErrorUnknown") {
+                auto result = MakeHolder<TEvSelfCheckResult>();
+                result->Result.set_self_check_result(Ydb::Monitoring::SelfCheck_Result::SelfCheck_Result_UNSPECIFIED);
+                auto* issue = result->Result.add_issue_log();
+                issue->set_id("0");
+                issue->set_status(Ydb::Monitoring::StatusFlag::GREY);
+                issue->set_message("Database does not exist");
+                return ReplyAndPassAway(std::move(result));
+            }
         }
         RequestDone("TEvNavigateKeySetResult");
     }
@@ -2229,7 +2238,7 @@ public:
             }
         }
         auto itMaxClockSkew = std::ranges::max_element(nodeClockSkewState, [](const auto& a, const auto& b) {
-            return a.second.NumberOfReporters > b.second.NumberOfReporters;
+            return a.second.NumberOfReporters < b.second.NumberOfReporters;
         });
         if (itMaxClockSkew != nodeClockSkewState.end()) {
             if (itMaxClockSkew->second.NumberOfReporters * 2 >= static_cast<int>(nodeClockSkewState.size())) { // at least 50% of reporters

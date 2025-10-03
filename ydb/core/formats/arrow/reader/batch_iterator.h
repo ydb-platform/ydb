@@ -64,6 +64,10 @@ public:
         return VersionColumns;
     }
 
+    ui64 GetPositionIndex() const {
+        return KeyColumns.GetPosition();
+    }
+
     TBatchIterator(TRWSortableBatchPosition&& keyColumns)
         : ControlPointFlag(true)
         , KeyColumns(std::move(keyColumns))

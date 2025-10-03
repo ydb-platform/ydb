@@ -662,7 +662,12 @@ public:
     TFuture<TGenericResult> SetConstraint(const TString& tablePath, TVector<TSetColumnConstraintSettings>&& settings) override {
         try {
             auto [dirname, tableName] = NSchemeHelpers::SplitPathByDirAndBaseNames(tablePath);
-            if (!dirname.empty() && !IsStartWithSlash(dirname)) {
+
+            if (tableName.empty()) {
+                return MakeFuture(ResultFromError<TGenericResult>("Empty basename for setting constraint"));
+            }
+
+            if (!IsStartWithSlash(tablePath)) {
                 dirname = JoinPath({GetDatabase(), dirname});
             }
 
@@ -695,6 +700,14 @@ public:
         }
 
         const auto [dirname, basename] = NSchemeHelpers::SplitPathByDirAndBaseNames(settings.DatabasePath);
+
+        if (basename.empty()) {
+            TGenericResult result;
+            result.SetStatus(TIssuesIds_EIssueCode_KIKIMR_BAD_REQUEST);
+            result.AddIssue(TIssue("Empty basename for ALTER DATABASE").SetCode(result.Status(), TSeverityIds_ESeverityId_S_ERROR));
+            return result;
+        }
+
         modifyScheme.SetWorkingDir(dirname);
 
         if (settings.Owner) {
@@ -798,8 +811,19 @@ public:
                             indexDesc->AddDataColumnNames(col);
                         }
 
-                        if (index.Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
-                            *indexDesc->MutableVectorIndexKmeansTreeDescription()->MutableSettings() = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(index.SpecializedIndexDescription).GetSettings();
+                        switch (index.Type) {
+                            case TIndexDescription::EType::GlobalSync:
+                            case TIndexDescription::EType::GlobalAsync:
+                            case TIndexDescription::EType::GlobalSyncUnique:
+                                // no specialized index description
+                                Y_ASSERT(std::holds_alternative<std::monostate>(index.SpecializedIndexDescription));
+                                break;
+                            case TIndexDescription::EType::GlobalSyncVectorKMeansTree:
+                                *indexDesc->MutableVectorIndexKmeansTreeDescription()->MutableSettings() = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(index.SpecializedIndexDescription).GetSettings();
+                                break;
+                            case TIndexDescription::EType::GlobalFulltext:
+                                *indexDesc->MutableFulltextIndexDescription()->MutableSettings() = std::get<NKikimrKqp::TFulltextIndexDescription>(index.SpecializedIndexDescription).GetSettings();
+                                break;
                         }
                     }
                     FillCreateTableColumnDesc(*tableDesc, pathPair.second, metadata);
@@ -1287,7 +1311,12 @@ public:
 
             for (const auto& currentPath : settings.Paths) {
                 auto [dirname, basename] = NSchemeHelpers::SplitPathByDirAndBaseNames(currentPath);
-                if (!dirname.empty() && !IsStartWithSlash(dirname)) {
+
+                if (basename.empty()) {
+                    return MakeFuture(ResultFromError<TGenericResult>("Empty basename for modify permissions"));
+                }
+
+                if (!IsStartWithSlash(currentPath)) {
                     dirname = JoinPath({GetDatabase(), dirname});
                 }
 
@@ -2548,6 +2577,9 @@ public:
             if (const auto& staticCreds = settings.Settings.StaticCredentials) {
                 staticCreds->Serialize(*params.MutableStaticCredentials());
             }
+            if (const auto& iamCreds = settings.Settings.IamCredentials) {
+                iamCreds->Serialize(*params.MutableIamCredentials());
+            }
             if (const auto& caCert = settings.Settings.CaCert) {
                 params.SetCaCert(*caCert);
             }
@@ -2623,6 +2655,7 @@ public:
                 || settings.Settings.Database
                 || settings.Settings.OAuthToken
                 || settings.Settings.StaticCredentials
+                || settings.Settings.IamCredentials
                 || settings.Settings.CaCert
             ) {
                 auto& config = *op.MutableConfig();
@@ -2644,6 +2677,9 @@ public:
                 }
                 if (const auto& staticCreds = settings.Settings.StaticCredentials) {
                     staticCreds->Serialize(*params.MutableStaticCredentials());
+                }
+                if (const auto& iamCreds = settings.Settings.IamCredentials) {
+                    iamCreds->Serialize(*params.MutableIamCredentials());
                 }
                 if (const auto& caCert = settings.Settings.CaCert) {
                     params.SetCaCert(*caCert);
@@ -2754,6 +2790,9 @@ public:
             if (const auto& staticCreds = settings.Settings.StaticCredentials) {
                 staticCreds->Serialize(*params.MutableStaticCredentials());
             }
+            if (const auto& iamCreds = settings.Settings.IamCredentials) {
+                iamCreds->Serialize(*params.MutableIamCredentials());
+            }
             if (const auto& caCert = settings.Settings.CaCert) {
                 params.SetCaCert(*caCert);
             }
@@ -2851,6 +2890,7 @@ public:
                 || settings.Settings.Database
                 || settings.Settings.OAuthToken
                 || settings.Settings.StaticCredentials
+                || settings.Settings.IamCredentials
                 || settings.Settings.CaCert
             ) {
                 auto& config = *op.MutableConfig();
@@ -2872,6 +2912,9 @@ public:
                 }
                 if (const auto& staticCreds = settings.Settings.StaticCredentials) {
                     staticCreds->Serialize(*params.MutableStaticCredentials());
+                }
+                if (const auto& iamCreds = settings.Settings.IamCredentials) {
+                    iamCreds->Serialize(*params.MutableIamCredentials());
                 }
                 if (const auto& caCert = settings.Settings.CaCert) {
                     params.SetCaCert(*caCert);

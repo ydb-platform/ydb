@@ -850,10 +850,35 @@ public:
         Config.SetDisplay();
         CalculateApproximateDataSize();
 
-        // TODO: detect number of threads
+        std::vector<TDriver> drivers;
+        drivers.reserve(10);
+        drivers.emplace_back(NConsoleClient::TYdbCommand::CreateDriver(ConnectionConfig));
+
         if (Config.LoadThreadCount == 0) {
-            LOG_W("Automatic calculation of loading threads is not implemented, falling back to the default");
-            Config.LoadThreadCount = DEFAULT_LOAD_THREAD_COUNT;
+            int32_t computeCores = 0;
+            std::string reason;
+            try {
+                computeCores = NumberOfComputeCpus(drivers[0]);
+            } catch (const std::exception& ex) {
+                reason = ex.what();
+            }
+
+            if (computeCores == 0) {
+                std::cerr << "Failed to autodetect max number of load threads";
+                if (!reason.empty()) {
+                    std::cerr << ": " << reason;
+                }
+
+                std::cerr << ". Please specify '--threads' manually." << std::endl;
+                std::exit(1);
+            }
+
+            const size_t clientCpuCount = NumberOfMyCpus();
+
+            const size_t optimalThreadCount =
+                (computeCores + COMPUTE_CORES_PER_IMPORT_THREAD - 1) / COMPUTE_CORES_PER_IMPORT_THREAD;
+
+            Config.LoadThreadCount = std::min(clientCpuCount, optimalThreadCount);
         }
 
         // TODO: detect number of threads
@@ -875,9 +900,9 @@ public:
                 threadCount << " threads and " << driverCount << " YDB drivers. Approximate data size: "
                 << GetFormattedSize(LoadState.ApproximateDataSize));
 
-        std::vector<TDriver> drivers;
+        // already have 1, add more if needed
         drivers.reserve(driverCount);
-        for (size_t i = 0; i < driverCount; ++i) {
+        for (size_t i = 1; i < driverCount; ++i) {
             drivers.emplace_back(NConsoleClient::TYdbCommand::CreateDriver(ConnectionConfig));
         }
 
@@ -1084,6 +1109,10 @@ private:
             displayData.StatusData.IsLoadingTablesAndBuildingIndices =
                 LoadState.State == TImportState::ELOAD_TABLES_BUILD_INDICES;
 
+        auto totalElapsed = std::chrono::duration<double>(now - StartTime).count();
+        displayData.StatusData.ElapsedMinutes = static_cast<int>(totalElapsed / 60);
+        displayData.StatusData.ElapsedSeconds = static_cast<int>(totalElapsed) % 60;
+
         if (!displayData.StatusData.IsWaitingForIndices) {
             displayData.StatusData.CurrentDataSizeLoaded = LoadState.DataSizeLoaded.load(std::memory_order_relaxed);
 
@@ -1096,12 +1125,8 @@ private:
                 static_cast<double>(
                     displayData.StatusData.CurrentDataSizeLoaded - PreviousDataSizeLoaded) / (1024 * 1024) / deltaSeconds : 0.0;
 
-            auto totalElapsed = std::chrono::duration<double>(now - StartTime).count();
             displayData.StatusData.AvgSpeedMiBs = totalElapsed > 0 ?
                 static_cast<double>(displayData.StatusData.CurrentDataSizeLoaded) / (1024 * 1024) / totalElapsed : 0.0;
-
-            displayData.StatusData.ElapsedMinutes = static_cast<int>(totalElapsed / 60);
-            displayData.StatusData.ElapsedSeconds = static_cast<int>(totalElapsed) % 60;
 
             if (displayData.StatusData.AvgSpeedMiBs > 0
                     && displayData.StatusData.CurrentDataSizeLoaded < LoadState.ApproximateDataSize) {
@@ -1112,6 +1137,18 @@ private:
             }
 
             PreviousDataSizeLoaded = displayData.StatusData.CurrentDataSizeLoaded;
+        } else {
+            // we still want to display that data is loaded while we are waiting for indices
+            displayData.StatusData.CurrentDataSizeLoaded = LoadState.DataSizeLoaded.load(std::memory_order_relaxed);
+            displayData.StatusData.PercentLoaded = 100;
+
+            double remainingSeconds = 0;
+            for (size_t i = 0; i < LoadState.IndexBuildStates.size(); ++i) {
+                const auto& indexState = LoadState.IndexBuildStates[i];
+                remainingSeconds = std::max(remainingSeconds, indexState.GetRemainingSeconds());
+            }
+            displayData.StatusData.EstimatedTimeLeftMinutes = static_cast<int>(remainingSeconds / 60);
+            displayData.StatusData.EstimatedTimeLeftSeconds = static_cast<int>(remainingSeconds) % 60;
         }
 
         switch (Config.DisplayMode) {

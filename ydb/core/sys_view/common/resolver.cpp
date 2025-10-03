@@ -40,10 +40,10 @@ public:
 
         } else if (MaybeSystemViewPath(path)) {
             auto maybeSystemViewName = path.back();
-            if (!DomainSystemViews.contains(maybeSystemViewName) &&
-                !SubDomainSystemViews.contains(maybeSystemViewName) &&
-                !OlapStoreSystemViews.contains(maybeSystemViewName) &&
-                !ColumnTableSystemViews.contains(maybeSystemViewName))
+            if (!DomainSystemViewsTypes.contains(maybeSystemViewName) &&
+                !SubDomainSystemViewsTypes.contains(maybeSystemViewName) &&
+                !OlapStoreSystemViewsTypes.contains(maybeSystemViewName) &&
+                !ColumnTableSystemViewsTypes.contains(maybeSystemViewName))
             {
                 return false;
             }
@@ -55,96 +55,59 @@ public:
         return false;
     }
 
-    TMaybe<TSchema> GetSystemViewSchema(const TStringBuf viewName, ESource sourceObjectType) const override final {
-        const TSchema* view = nullptr;
-        switch (sourceObjectType) {
-        case ESource::Domain:
-            view = DomainSystemViews.FindPtr(viewName);
-            break;
-        case ESource::SubDomain:
-            view = SubDomainSystemViews.FindPtr(viewName);
-            break;
-        case ESource::OlapStore:
-            view = OlapStoreSystemViews.FindPtr(viewName);
-            break;
-        case ESource::ColumnTable:
-            view = ColumnTableSystemViews.FindPtr(viewName);
-            break;
-        }
-        return view ? TMaybe<TSchema>(*view) : Nothing();
-    }
-
     TMaybe<TSchema> GetSystemViewSchema(ESysViewType viewType) const override final {
         const TSchema* view = SystemViews.FindPtr(viewType);
         return view ? TMaybe<TSchema>(*view) : Nothing();
     }
 
-    TVector<TString> GetSystemViewNames(ESource sourceObjectType) const override {
-        TVector<TString> result;
-        switch (sourceObjectType) {
+    TMaybe<NKikimrSysView::ESysViewType> GetSystemViewType(const TStringBuf viewName, TMaybe<ESource> sourceObjectType) const override final {
+        if (!sourceObjectType) {
+            return Nothing();
+        }
+
+        TMaybe<THashMap<TStringBuf, ESysViewType>> sysViewsTypes;
+        switch (*sourceObjectType) {
         case ESource::Domain:
-            result.reserve(DomainSystemViews.size());
-            for (const auto& [name, _] : DomainSystemViews) {
-                result.push_back(name);
-            }
+            sysViewsTypes = DomainSystemViewsTypes;
             break;
         case ESource::SubDomain:
-            result.reserve(SubDomainSystemViews.size());
-            for (const auto& [name, _] : SubDomainSystemViews) {
-                result.push_back(name);
-            }
+            sysViewsTypes = SubDomainSystemViewsTypes;
             break;
         case ESource::OlapStore:
-            result.reserve(OlapStoreSystemViews.size());
-            for (const auto& [name, _] : OlapStoreSystemViews) {
-                result.push_back(name);
-            }
+            sysViewsTypes = OlapStoreSystemViewsTypes;
             break;
         case ESource::ColumnTable:
-            result.reserve(ColumnTableSystemViews.size());
-            for (const auto& [name, _] : ColumnTableSystemViews) {
-                result.push_back(name);
-            }
+            sysViewsTypes = ColumnTableSystemViewsTypes;
             break;
         }
-        return result;
-    }
 
-    const THashMap<TString, ESysViewType>& GetSystemViewsTypes(ESource sourceObjectType) const override {
-        switch (sourceObjectType) {
-        case ESource::Domain:
-            return DomainSystemViewTypes;
-        case ESource::SubDomain:
-            return SubDomainSystemViewTypes;
-        case ESource::OlapStore:
-            return OlapStoreSystemViewTypes;
-        case ESource::ColumnTable:
-            return ColumnTableSystemViewTypes;
+        if (const auto it = sysViewsTypes->find(viewName); it != sysViewsTypes->end()) {
+            return it->second;
+        } else {
+            return Nothing();
         }
     }
 
-    bool IsSystemView(const TStringBuf viewName) const override final {
-        return DomainSystemViews.contains(viewName) ||
-            SubDomainSystemViews.contains(viewName) ||
-            OlapStoreSystemViews.contains(viewName) ||
-            ColumnTableSystemViews.contains(viewName);
+    const THashMap<TStringBuf, ESysViewType>& GetSystemViewsTypes(ESource sourceObjectType) const override final {
+        switch (sourceObjectType) {
+        case ESource::Domain:
+            return DomainSystemViewsTypes;
+        case ESource::SubDomain:
+            return SubDomainSystemViewsTypes;
+        case ESource::OlapStore:
+            return OlapStoreSystemViewsTypes;
+        case ESource::ColumnTable:
+            return ColumnTableSystemViewsTypes;
+        }
     }
 
 private:
     void RegisterPgTablesSystemViews() {
         auto registerView = [&](TStringBuf tableName, ESysViewType type, const TVector<Schema::PgColumn>& columns) {
-            auto& dsv  = DomainSystemViews[tableName];
-            DomainSystemViewTypes[tableName] = type;
-            auto& sdsv = SubDomainSystemViews[tableName];
-            SubDomainSystemViewTypes[tableName] = type;
+            DomainSystemViewsTypes[tableName] = type;
+            SubDomainSystemViewsTypes[tableName] = type;
             auto& sv = SystemViews[type];
             for (const auto& column : columns) {
-                dsv.Columns[column._ColumnId + 1] = TSysTables::TTableColumnInfo(
-                    column._ColumnName, column._ColumnId + 1, column._ColumnTypeInfo, "", -1
-                );
-                sdsv.Columns[column._ColumnId + 1] = TSysTables::TTableColumnInfo(
-                    column._ColumnName, column._ColumnId + 1, column._ColumnTypeInfo, "", -1
-                );
                 sv.Columns[column._ColumnId + 1] = TSysTables::TTableColumnInfo(
                     column._ColumnName, column._ColumnId + 1, column._ColumnTypeInfo, "", -1
                 );
@@ -167,69 +130,40 @@ private:
         );
     }
 
-    template <typename Table>
-    void RegisterOlapStoreSystemView(const TStringBuf& name) {
-        TSchemaFiller<Table>::Fill(OlapStoreSystemViews[name]);
-    }
-
-    template <typename Table>
-    void RegisterColumnTableSystemView(const TStringBuf& name) {
-        TSchemaFiller<Table>::Fill(ColumnTableSystemViews[name]);
-    }
-
     void RegisterSystemViews() {
         for (const auto& registryRecord : SysViewsRegistry::SysViews) {
-            TSchema schema;
-            registryRecord.FillSchemaFunc(schema);
-            SystemViews[registryRecord.Type] = schema;
+            registryRecord.FillSchemaFunc(SystemViews[registryRecord.Type]);
 
             for (const auto sourceObjectType : registryRecord.SourceObjectTypes) {
                 switch (sourceObjectType) {
                 case ESource::Domain: {
-                    DomainSystemViews[registryRecord.Name] = schema;
-                    DomainSystemViewTypes[registryRecord.Name] = registryRecord.Type;
+                    DomainSystemViewsTypes[registryRecord.Name] = registryRecord.Type;
                     break;
                 };
                 case ESource::SubDomain: {
-                    SubDomainSystemViews[registryRecord.Name] = schema;
-                    SubDomainSystemViewTypes[registryRecord.Name] = registryRecord.Type;
+                    SubDomainSystemViewsTypes[registryRecord.Name] = registryRecord.Type;
                     break;
                 };
                 case ESource::OlapStore: {
-                    OlapStoreSystemViews[registryRecord.Name] = schema;
+                    OlapStoreSystemViewsTypes[registryRecord.Name] = registryRecord.Type;
                     break;
                 };
                 case ESource::ColumnTable: {
-                    ColumnTableSystemViews[registryRecord.Name] = schema;
+                    ColumnTableSystemViewsTypes[registryRecord.Name] = registryRecord.Type;
                     break;
                 };
                 }
             }
         }
 
-        RegisterOlapStoreSystemView<Schema::PrimaryIndexStats>(StorePrimaryIndexStatsName);
-        RegisterOlapStoreSystemView<Schema::PrimaryIndexSchemaStats>(StorePrimaryIndexSchemaStatsName);
-        RegisterOlapStoreSystemView<Schema::PrimaryIndexPortionStats>(StorePrimaryIndexPortionStatsName);
-        RegisterOlapStoreSystemView<Schema::PrimaryIndexGranuleStats>(StorePrimaryIndexGranuleStatsName);
-        RegisterOlapStoreSystemView<Schema::PrimaryIndexOptimizerStats>(StorePrimaryIndexOptimizerStatsName);
-        RegisterColumnTableSystemView<Schema::PrimaryIndexStats>(TablePrimaryIndexStatsName);
-        RegisterColumnTableSystemView<Schema::PrimaryIndexSchemaStats>(TablePrimaryIndexSchemaStatsName);
-        RegisterColumnTableSystemView<Schema::PrimaryIndexPortionStats>(TablePrimaryIndexPortionStatsName);
-        RegisterColumnTableSystemView<Schema::PrimaryIndexGranuleStats>(TablePrimaryIndexGranuleStatsName);
-        RegisterColumnTableSystemView<Schema::PrimaryIndexOptimizerStats>(TablePrimaryIndexOptimizerStatsName);
-
         RegisterPgTablesSystemViews();
     }
 
 private:
-    THashMap<TString, TSchema> DomainSystemViews;
-    THashMap<TString, ESysViewType> DomainSystemViewTypes;
-    THashMap<TString, TSchema> SubDomainSystemViews;
-    THashMap<TString, ESysViewType> SubDomainSystemViewTypes;
-    THashMap<TString, TSchema> OlapStoreSystemViews;
-    THashMap<TString, ESysViewType> OlapStoreSystemViewTypes;
-    THashMap<TString, TSchema> ColumnTableSystemViews;
-    THashMap<TString, ESysViewType> ColumnTableSystemViewTypes;
+    THashMap<TStringBuf, ESysViewType> DomainSystemViewsTypes;
+    THashMap<TStringBuf, ESysViewType> SubDomainSystemViewsTypes;
+    THashMap<TStringBuf, ESysViewType> OlapStoreSystemViewsTypes;
+    THashMap<TStringBuf, ESysViewType> ColumnTableSystemViewsTypes;
     THashMap<ESysViewType, TSchema> SystemViews;
 };
 
@@ -238,17 +172,16 @@ public:
 
     TSystemViewRewrittenResolver() {
         for (const auto& registryRecord : SysViewsRegistry::RewrittenSysViews) {
-            TSchema schema;
-            registryRecord.FillSchemaFunc(schema);
-            SystemViews[registryRecord.Type] = std::move(schema);
-            SystemViewTypes[registryRecord.Name] = registryRecord.Type;
+            Y_ENSURE(registryRecord.SourceObjectTypes.empty());
+            registryRecord.FillSchemaFunc(SystemViews[registryRecord.Type]);
+            SystemViewsTypes[registryRecord.Name] = registryRecord.Type;
         }
     }
 
     bool IsSystemViewPath(const TVector<TString>& path, TSystemViewPath& sysViewPath) const override final {
         if (MaybeSystemViewPath(path)) {
             auto maybeSystemViewName = path.back();
-            if (!SystemViewTypes.contains(maybeSystemViewName)) {
+            if (!SystemViewsTypes.contains(maybeSystemViewName)) {
                 return false;
             }
             TVector<TString> realPath(path.begin(), path.end() - 2);
@@ -259,42 +192,38 @@ public:
         return false;
     }
 
-    TMaybe<TSchema> GetSystemViewSchema(const TStringBuf viewName, ESource sourceObjectType) const override final {
-        Y_UNUSED(viewName);
-        Y_UNUSED(sourceObjectType);
-        return Nothing();
-    }
-
     TMaybe<TSchema> GetSystemViewSchema(ESysViewType viewType) const override final {
         const TSchema* view = SystemViews.FindPtr(viewType);
         return view ? TMaybe<TSchema>(*view) : Nothing();
     }
 
-    TVector<TString> GetSystemViewNames(ESource sourceObjectType) const override {
-        Y_UNUSED(sourceObjectType);
-        return {};
+    TMaybe<NKikimrSysView::ESysViewType> GetSystemViewType(const TStringBuf viewName, TMaybe<ESource> sourceObjectType) const override final{
+        if (sourceObjectType) {
+            return Nothing();
+        }
+
+        if (const auto it = SystemViewsTypes.find(viewName); it != SystemViewsTypes.end()) {
+            return it->second;
+        } else {
+            return Nothing();
+        }
     }
 
-    const THashMap<TString, ESysViewType>& GetSystemViewsTypes(ESource sourceObjectType) const override {
-        Y_UNUSED(sourceObjectType);
-        return SystemViewTypes;
-    }
-
-    bool IsSystemView(const TStringBuf viewName) const override final {
-        return SystemViewTypes.contains(viewName);
+    const THashMap<TStringBuf, ESysViewType>& GetSystemViewsTypes(ESource) const override final {
+        return SystemViewsTypes;
     }
 
 private:
+    THashMap<TStringBuf, ESysViewType> SystemViewsTypes;
     THashMap<ESysViewType, TSchema> SystemViews;
-    THashMap<TString, ESysViewType> SystemViewTypes;
 };
 
-THolder<ISystemViewResolver> CreateSystemViewResolver() {
-    return MakeHolder<TSystemViewResolver>();
+const ISystemViewResolver& GetSystemViewResolver() {
+    return *Singleton<TSystemViewResolver>();
 }
 
-THolder<ISystemViewResolver> CreateSystemViewRewrittenResolver() {
-    return MakeHolder<TSystemViewRewrittenResolver>();
+const ISystemViewResolver& GetSystemViewRewrittenResolver() {
+    return *Singleton<TSystemViewRewrittenResolver>();
 }
 
 } // NSysView

@@ -794,6 +794,12 @@ public:
     TStateStorageRingGroupProxyRequest(TIntrusivePtr<TStateStorageInfo> info)
         : Info(info)
         , RingGroupPassAwayCounter(0)
+        , TabletID(0)
+        , Cookie(0)
+        , CurrentGeneration(0)
+        , CurrentStep(0)
+        , Locked(false)
+        , LockedFor(0)
     {
     }
 

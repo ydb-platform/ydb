@@ -72,6 +72,24 @@
                             "ydb.generic.manage"
                         ],
                         "subject": "DATABASE-ADMINS"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.generic.read"
+                        ],
+                        "subject": "database"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.generic.read"
+                        ],
+                        "subject": "viewer"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.generic.read"
+                        ],
+                        "subject": "monitoring"
                     }
                 ],
                 "name": "TestAsyncReplication",
@@ -226,10 +244,48 @@
                             "ydb.generic.manage"
                         ],
                         "subject": "DATABASE-ADMINS"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.generic.read"
+                        ],
+                        "subject": "database"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.generic.read"
+                        ],
+                        "subject": "viewer"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.generic.read"
+                        ],
+                        "subject": "monitoring"
                     }
                 ],
                 "name": "Root/dedicated_db",
                 "owner": "user1",
+                "permissions": [
+                    {
+                        "permission_names": [
+                            "ydb.generic.read"
+                        ],
+                        "subject": "database"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.generic.read"
+                        ],
+                        "subject": "viewer"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.generic.read"
+                        ],
+                        "subject": "monitoring"
+                    }
+                ],
                 "type": "DATABASE"
             }
         },
@@ -332,10 +388,48 @@
                             "ydb.generic.manage"
                         ],
                         "subject": "DATABASE-ADMINS"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.generic.read"
+                        ],
+                        "subject": "database"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.generic.read"
+                        ],
+                        "subject": "viewer"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.generic.read"
+                        ],
+                        "subject": "monitoring"
                     }
                 ],
                 "name": "Root/dedicated_db",
                 "owner": "user1",
+                "permissions": [
+                    {
+                        "permission_names": [
+                            "ydb.generic.read"
+                        ],
+                        "subject": "database"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.generic.read"
+                        ],
+                        "subject": "viewer"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.generic.read"
+                        ],
+                        "subject": "monitoring"
+                    }
+                ],
                 "type": "DATABASE"
             }
         },
@@ -429,10 +523,48 @@
                             "ydb.generic.manage"
                         ],
                         "subject": "DATABASE-ADMINS"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.generic.read"
+                        ],
+                        "subject": "database"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.generic.read"
+                        ],
+                        "subject": "viewer"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.generic.read"
+                        ],
+                        "subject": "monitoring"
                     }
                 ],
                 "name": "Root/dedicated_db",
                 "owner": "user1",
+                "permissions": [
+                    {
+                        "permission_names": [
+                            "ydb.generic.read"
+                        ],
+                        "subject": "database"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.generic.read"
+                        ],
+                        "subject": "viewer"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.generic.read"
+                        ],
+                        "subject": "monitoring"
+                    }
+                ],
                 "type": "DATABASE"
             }
         }
@@ -1445,6 +1577,24 @@
                             "ydb.generic.manage"
                         ],
                         "subject": "DATABASE-ADMINS"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.generic.read"
+                        ],
+                        "subject": "database"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.generic.read"
+                        ],
+                        "subject": "viewer"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.generic.read"
+                        ],
+                        "subject": "monitoring"
                     }
                 ],
                 "name": "TestTransfer",
@@ -1520,7 +1670,8 @@
                             "CreateTable",
                             "CreateQueue",
                             "RemoveSchema",
-                            "AlterSchema"
+                            "AlterSchema",
+                            "WriteUserAttributes"
                         ],
                         "AccessType": "Allow",
                         "InheritanceType": [
@@ -1600,7 +1751,8 @@
                             "CreateTable",
                             "CreateQueue",
                             "RemoveSchema",
-                            "AlterSchema"
+                            "AlterSchema",
+                            "WriteUserAttributes"
                         ],
                         "AccessType": "Allow",
                         "InheritanceType": [
@@ -1686,7 +1838,8 @@
                             "CreateTable",
                             "CreateQueue",
                             "RemoveSchema",
-                            "AlterSchema"
+                            "AlterSchema",
+                            "WriteUserAttributes"
                         ],
                         "AccessType": "Allow",
                         "InheritanceType": [
@@ -1766,7 +1919,8 @@
                             "CreateTable",
                             "CreateQueue",
                             "RemoveSchema",
-                            "AlterSchema"
+                            "AlterSchema",
+                            "WriteUserAttributes"
                         ],
                         "AccessType": "Allow",
                         "InheritanceType": [
@@ -1852,7 +2006,8 @@
                             "CreateTable",
                             "CreateQueue",
                             "RemoveSchema",
-                            "AlterSchema"
+                            "AlterSchema",
+                            "WriteUserAttributes"
                         ],
                         "AccessType": "Allow",
                         "InheritanceType": [
@@ -1932,7 +2087,8 @@
                             "CreateTable",
                             "CreateQueue",
                             "RemoveSchema",
-                            "AlterSchema"
+                            "AlterSchema",
+                            "WriteUserAttributes"
                         ],
                         "AccessType": "Allow",
                         "InheritanceType": [
@@ -2018,7 +2174,8 @@
                             "CreateTable",
                             "CreateQueue",
                             "RemoveSchema",
-                            "AlterSchema"
+                            "AlterSchema",
+                            "WriteUserAttributes"
                         ],
                         "AccessType": "Allow",
                         "InheritanceType": [
@@ -2098,7 +2255,8 @@
                             "CreateTable",
                             "CreateQueue",
                             "RemoveSchema",
-                            "AlterSchema"
+                            "AlterSchema",
+                            "WriteUserAttributes"
                         ],
                         "AccessType": "Allow",
                         "InheritanceType": [
@@ -2184,7 +2342,8 @@
                             "CreateTable",
                             "CreateQueue",
                             "RemoveSchema",
-                            "AlterSchema"
+                            "AlterSchema",
+                            "WriteUserAttributes"
                         ],
                         "AccessType": "Allow",
                         "InheritanceType": [
@@ -2264,7 +2423,8 @@
                             "CreateTable",
                             "CreateQueue",
                             "RemoveSchema",
-                            "AlterSchema"
+                            "AlterSchema",
+                            "WriteUserAttributes"
                         ],
                         "AccessType": "Allow",
                         "InheritanceType": [
@@ -2314,6 +2474,42 @@
                         "InheritanceType": [
                             "Inherit"
                         ],
+                        "Subject": "database"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "viewer"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "monitoring"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
                         "Subject": "user1"
                     }
                 ],
@@ -2367,7 +2563,8 @@
                             "CreateTable",
                             "CreateQueue",
                             "RemoveSchema",
-                            "AlterSchema"
+                            "AlterSchema",
+                            "WriteUserAttributes"
                         ],
                         "AccessType": "Allow",
                         "InheritanceType": [
@@ -2406,6 +2603,42 @@
                         "InheritanceType": [
                             "Inherit"
                         ],
+                        "Subject": "database"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "viewer"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "monitoring"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
                         "Subject": "user1"
                     }
                 ],
@@ -2416,6 +2649,44 @@
         {},
         {
             "Common": {
+                "ACL": [
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "database"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "viewer"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "monitoring"
+                    }
+                ],
                 "EffectiveACL": [
                     {
                         "AccessRights": [
@@ -2466,7 +2737,8 @@
                             "CreateTable",
                             "CreateQueue",
                             "RemoveSchema",
-                            "AlterSchema"
+                            "AlterSchema",
+                            "WriteUserAttributes"
                         ],
                         "AccessType": "Allow",
                         "InheritanceType": [
@@ -2494,6 +2766,42 @@
                             "Inherit"
                         ],
                         "Subject": "DATABASE-ADMINS"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "database"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "viewer"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "monitoring"
                     }
                 ],
                 "Owner": "root",
@@ -2503,6 +2811,44 @@
         {},
         {
             "Common": {
+                "ACL": [
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "database"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "viewer"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "monitoring"
+                    }
+                ],
                 "EffectiveACL": [
                     {
                         "AccessRights": [
@@ -2553,7 +2899,8 @@
                             "CreateTable",
                             "CreateQueue",
                             "RemoveSchema",
-                            "AlterSchema"
+                            "AlterSchema",
+                            "WriteUserAttributes"
                         ],
                         "AccessType": "Allow",
                         "InheritanceType": [
@@ -2581,6 +2928,42 @@
                             "Inherit"
                         ],
                         "Subject": "DATABASE-ADMINS"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "database"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "viewer"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "monitoring"
                     }
                 ],
                 "Owner": "user1",
@@ -3232,7 +3615,7 @@
                     ]
                 },
                 "Self": {
-                    "ACL": "",
+                    "ACL": "text",
                     "CreateFinished": true,
                     "CreateStep": "0",
                     "CreateTxId": "not-zero-number-text",
@@ -3244,7 +3627,7 @@
                     "PathState": 2,
                     "PathSubType": 0,
                     "PathType": 4,
-                    "PathVersion": "10",
+                    "PathVersion": "16",
                     "SchemeshardId": "72075186224037897"
                 }
             },
@@ -11059,7 +11442,7 @@
                 "CoresTotal": "not-zero-number",
                 "CoresUsed": "not-zero-number",
                 "CreateTime": "not-zero-number-text",
-                "Id": "72057594046678944-1",
+                "Id": "1",
                 "MemoryLimit": "not-zero-number-text",
                 "MemoryStats": {},
                 "Metrics": {},
@@ -11106,7 +11489,7 @@
                 "CoresTotal": "not-zero-number",
                 "CoresUsed": "not-zero-number",
                 "DatabaseQuotas": {},
-                "Id": "72057594046678944-6",
+                "Id": "6",
                 "MemoryLimit": "not-zero-number-text",
                 "MemoryStats": {},
                 "Metrics": "not-empty-object",
@@ -11173,12 +11556,12 @@
             {
                 "CoresUsed": "not-zero-number",
                 "DatabaseQuotas": {},
-                "Id": "72057594046678944-8",
+                "Id": "8",
                 "Metrics": "not-empty-object",
                 "Name": "/Root/serverless_db",
                 "Overall": "Green",
                 "Owner": "root",
-                "ResourceId": "72057594046678944-7",
+                "ResourceId": "7",
                 "State": "RUNNING",
                 "StateStats": [
                     {
@@ -11193,7 +11576,7 @@
                 "CoresTotal": "not-zero-number",
                 "CoresUsed": "not-zero-number",
                 "DatabaseQuotas": {},
-                "Id": "72057594046678944-7",
+                "Id": "7",
                 "MemoryLimit": "not-zero-number-text",
                 "MemoryStats": {},
                 "Metrics": "not-empty-object",
@@ -11260,7 +11643,7 @@
                     "CoresTotal": "not-zero-number",
                     "CoresUsed": "not-zero-number",
                     "CreateTime": "not-zero-number-text",
-                    "Id": "72057594046678944-1",
+                    "Id": "1",
                     "MemoryLimit": "not-zero-number-text",
                     "MemoryStats": {},
                     "Metrics": {},
@@ -11311,7 +11694,7 @@
                     "CoresTotal": "not-zero-number",
                     "CoresUsed": "not-zero-number",
                     "DatabaseQuotas": {},
-                    "Id": "72057594046678944-6",
+                    "Id": "6",
                     "MemoryLimit": "not-zero-number-text",
                     "MemoryStats": {},
                     "Metrics": "not-empty-object",
@@ -11382,11 +11765,11 @@
                 {
                     "CoresUsed": "not-zero-number",
                     "DatabaseQuotas": {},
-                    "Id": "72057594046678944-8",
+                    "Id": "8",
                     "Metrics": "not-empty-object",
                     "Name": "/Root/serverless_db",
                     "Owner": "root",
-                    "ResourceId": "72057594046678944-7",
+                    "ResourceId": "7",
                     "State": "RUNNING",
                     "StateStats": [
                         {
@@ -11405,7 +11788,7 @@
                     "CoresTotal": "not-zero-number",
                     "CoresUsed": "not-zero-number",
                     "DatabaseQuotas": {},
-                    "Id": "72057594046678944-7",
+                    "Id": "7",
                     "MemoryLimit": "not-zero-number-text",
                     "MemoryStats": {},
                     "Metrics": "not-empty-object",
@@ -11471,7 +11854,7 @@
                     "CoresTotal": "not-zero-number",
                     "CoresUsed": "not-zero-number",
                     "CreateTime": "not-zero-number-text",
-                    "Id": "72057594046678944-1",
+                    "Id": "1",
                     "MemoryLimit": "not-zero-number-text",
                     "MemoryStats": {},
                     "Metrics": {},
@@ -11518,7 +11901,7 @@
                     "CoresTotal": "not-zero-number",
                     "CoresUsed": "not-zero-number",
                     "DatabaseQuotas": {},
-                    "Id": "72057594046678944-6",
+                    "Id": "6",
                     "MemoryLimit": "not-zero-number-text",
                     "MemoryStats": {},
                     "Metrics": "not-empty-object",
@@ -11585,12 +11968,12 @@
                 {
                     "CoresUsed": "not-zero-number",
                     "DatabaseQuotas": {},
-                    "Id": "72057594046678944-8",
+                    "Id": "8",
                     "Metrics": "not-empty-object",
                     "Name": "/Root/serverless_db",
                     "Overall": "Green",
                     "Owner": "root",
-                    "ResourceId": "72057594046678944-7",
+                    "ResourceId": "7",
                     "State": "RUNNING",
                     "StateStats": [
                         {
@@ -11605,7 +11988,7 @@
                     "CoresTotal": "not-zero-number",
                     "CoresUsed": "not-zero-number",
                     "DatabaseQuotas": {},
-                    "Id": "72057594046678944-7",
+                    "Id": "7",
                     "MemoryLimit": "not-zero-number-text",
                     "MemoryStats": {},
                     "Metrics": "not-empty-object",

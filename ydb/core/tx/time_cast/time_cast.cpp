@@ -56,6 +56,12 @@ void TMediatorTimecastEntry::SetFrozenStep(ui64 step) noexcept {
     FrozenStep.store(step, std::memory_order_relaxed);
 }
 
+ui64 TMediatorTimecastEntry::GetLatestStep() const noexcept {
+    ui64 latest = LatestStep->Get();
+    ui64 safe = SafeStep->Get();
+    return Max(latest, safe);
+}
+
 class TMediatorTimecastProxy : public TActor<TMediatorTimecastProxy> {
     struct TEvPrivate {
         enum EEv {

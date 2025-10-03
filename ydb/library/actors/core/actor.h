@@ -357,6 +357,20 @@ namespace NActors {
 
     public:
         /**
+         * Handles std::exception_ptr which allows to catch any thrown object.
+         * By default ignores anything that is not an std::exception subclass.
+         */
+        virtual bool OnUnhandledException(const std::exception_ptr& excPtr) {
+            try {
+                std::rethrow_exception(excPtr);
+            } catch (const std::exception& exc) {
+                return OnUnhandledException(exc);
+            } catch (...) {
+                return false;
+            }
+        }
+
+        /**
          * Called when actor's event handler throws an std::exception subclass
          *
          * The implementation is supposed to return true for handled exceptions
@@ -784,7 +798,7 @@ namespace NActors {
         }
 
     private:
-        bool OnUnhandledExceptionSafe(const std::exception& exc);
+        bool OnUnhandledExceptionSafe(const std::exception_ptr& exc);
 
     protected:
         void SetEnoughCpu(bool isEnough);
@@ -952,7 +966,7 @@ namespace NActors {
 #define STFUNC_STRICT_UNHANDLED_MSG_HANDLER Y_DEBUG_ABORT_UNLESS(false, "%s: unexpected message type %s 0x%08" PRIx32, __func__, ev->GetTypeName().c_str(), etype);
 
 #define STFUNC_BODY(HANDLERS, UNHANDLED_MSG_HANDLER)                    \
-    switch (const ui32 etype = ev->GetTypeRewrite()) {                  \
+    switch ([[maybe_unused]] const ui32 etype = ev->GetTypeRewrite()) { \
         HANDLERS                                                        \
     default:                                                            \
         UNHANDLED_MSG_HANDLER                                           \

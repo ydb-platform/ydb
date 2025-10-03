@@ -75,7 +75,6 @@ class TPortionsSources: public NCommon::TSourcesConstructorWithAccessors<TSource
 private:
     using TBase = NCommon::TSourcesConstructorWithAccessors<TSourceConstructor>;
     ui32 CurrentSourceIdx = 0;
-    std::vector<TInsertWriteId> Uncommitted;    
 
     virtual void DoFillReadStats(TReadStats& stats) const override {
         ui64 compactedPortionsBytes = 0;
@@ -108,15 +107,14 @@ private:
     }
 
 public:
-    TPortionsSources(std::deque<TSourceConstructor>&& sources, const ERequestSorting sorting, std::vector<TInsertWriteId>&& uncommitted)
-        : TBase(sorting)
-        , Uncommitted(std::move(uncommitted))
-    {
+    TPortionsSources(std::deque<TSourceConstructor>&& sources, const ERequestSorting sorting)
+        : TBase(sorting) {
         InitializeConstructors(std::move(sources));
     }
 
     static std::unique_ptr<TPortionsSources> BuildEmpty() {
-        return std::make_unique<TPortionsSources>(std::deque<TSourceConstructor>{}, ERequestSorting::NONE, std::vector<TInsertWriteId>{});
+        std::deque<TSourceConstructor> sources;
+        return std::make_unique<TPortionsSources>(std::move(sources), ERequestSorting::NONE);
     }
 };
 

@@ -204,6 +204,10 @@ void TExecutor::PassAway() {
         CompactionLogic->Stop();
     }
 
+    if (CommitManager) {
+        CommitManager->Stop();
+    }
+
     if (Broker || Scans || Memory) {
         Send(NResourceBroker::MakeResourceBrokerID(), new NResourceBroker::TEvResourceBroker::TEvNotifyActorDied);
     }
@@ -4350,6 +4354,7 @@ STFUNC(TExecutor::StateWork) {
         hFunc(NMemory::TEvMemTableCompact, Handle);
         hFunc(TEvTablet::TEvGcForStepAckResponse, Handle);
         hFunc(NBackup::TEvSnapshotCompleted, Handle);
+        hFunc(NBackup::TEvChangelogFailed, Handle);
     default:
         break;
     }
@@ -5119,25 +5124,39 @@ void TExecutor::StartBackup() {
         return;
     }
 
+    if (!CommitManager) {
+        return;
+    }
+
     const auto& backupConfig = AppData()->SystemTabletBackupConfig;
     TTabletTypes::EType tabletType = Owner->TabletType();
     ui64 tabletId = Owner->TabletID();
     const auto& scheme = Database->GetScheme();
     const auto& tables = scheme.Tables;
 
-    if (auto* writer = NBackup::CreateSnapshotWriter(SelfId(), backupConfig, tables, tabletType, tabletId, Generation0, scheme.GetSnapshot())) {
-        auto writerActor = Register(writer, TMailboxType::HTSwap, AppData()->IOPoolId);
+    auto* snapshotWriter = NBackup::CreateSnapshotWriter(SelfId(), backupConfig, tables, tabletType,
+        tabletId, Generation0, scheme.GetSnapshot());
+    auto* changelogWriter = NBackup::CreateChangelogWriter(SelfId(), backupConfig, tabletType,
+        tabletId, Generation0, scheme);
 
+    if (snapshotWriter && changelogWriter) {
+        CommitManager->SetBackupWriter(Register(changelogWriter, TMailboxType::HTSwap, AppData()->IOPoolId));
+
+        auto snapshotWriterActor = Register(snapshotWriter, TMailboxType::HTSwap, AppData()->IOPoolId);
         for (const auto& [tableId, table] : tables) {
            auto opts = TScanOptions().SetResourceBroker("system_tablet_backup", 10);
-           QueueScan(tableId, NBackup::CreateSnapshotScan(writerActor, tableId, table.Columns), 0, opts);
+           QueueScan(tableId, NBackup::CreateSnapshotScan(snapshotWriterActor, tableId, table.Columns), 0, opts);
         }
     }
 }
 
 void TExecutor::Handle(NBackup::TEvSnapshotCompleted::TPtr& ev) {
-    Y_ENSURE(ev->Get()->Success, ev->Get()->Error);
+    Y_ENSURE(ev->Get()->Success, "Backup snapshot failed: " + ev->Get()->Error);
     Owner->BackupSnapshotComplete(OwnerCtx());
+}
+
+void TExecutor::Handle(NBackup::TEvChangelogFailed::TPtr& ev) {
+    Y_TABLET_ERROR("Backup changelog failed: " + ev->Get()->Error);
 }
 
 }

@@ -35,3 +35,7 @@ RUN_PROGRAM(
 )
 
 END()
+
+RECURSE(
+    codegen
+)

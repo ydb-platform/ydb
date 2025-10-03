@@ -49,10 +49,6 @@ private:
             , Message(msg)
         {}
 
-        TExTableStatsError(ECode code)
-            : TExTableStatsError(code, "")
-        {}
-
         ECode Code;
         TString Message;
     };
@@ -70,10 +66,8 @@ public:
             return; // coroutine terminated
         } catch (const TExTableStatsError& ex) {
             Send(ReplyTo, new TDataShard::TEvPrivate::TEvBuildTableStatsError(TableId, ex.Code, ex.Message));
-        } catch (...) {
-            Send(ReplyTo, new TDataShard::TEvPrivate::TEvBuildTableStatsError(TableId, ECode::UNKNOWN));
-
-            Y_DEBUG_ABORT("unhandled exception");
+        } catch (const std::exception& exc) {
+            Send(ReplyTo, new TDataShard::TEvPrivate::TEvBuildTableStatsError(TableId, std::current_exception(), exc.what()));
         }
 
         Send(MakeResourceBrokerID(), new TEvResourceBroker::TEvNotifyActorDied);
@@ -166,7 +160,7 @@ private:
             }
         }, TStringBuilder() << "Building stats at datashard " << TabletId << ", for tableId " << TableId << ": ");
 
-        Y_DEBUG_ABORT_UNLESS(IndexSize == ev->Stats.IndexSize.Size);
+        Y_ASSERT(IndexSize == ev->Stats.IndexSize.Size);
 
         LOG_INFO_S(GetActorContext(), NKikimrServices::TABLET_STATS_BUILDER, "Stats at datashard " << TabletId << ", for tableId " << TableId << ": "
             << ev->Stats.ToString()
@@ -201,12 +195,11 @@ private:
                 break;
 
             case TEvents::TSystem::Poison:
-                throw TExTableStatsError(ECode::ACTOR_DIED);
+                throw TExTableStatsError(ECode::ACTOR_DIED, "Poisoned");
 
-            default: {
-                const auto typeName = ev->GetTypeName();
-                Y_DEBUG_ABORT("unexpected event Type: %s", typeName.c_str());
-            }
+            default:
+                throw TExTableStatsError(ECode::UNHANDLED_EVENT, TStringBuilder() <<
+                    "Unhandled event type: " << ev->GetTypeRewrite() << " event: " << ev->ToString());
         }
     }
 
@@ -416,6 +409,10 @@ void TDataShard::Handle(TEvPrivate::TEvBuildTableStatsError::TPtr& ev, const TAc
     LOG_ERROR_S(ctx, NKikimrServices::TABLET_STATS_BUILDER, "Stats rebuilt error '" << msg->Message
         << "', code: " << ui32(msg->Code)
         << " at datashard " << TabletID() << ", for tableId " << msg->TableId);
+    
+    if (msg->Exception) {
+        std::rethrow_exception(msg->Exception);
+    }
 
     auto it = TableInfos.find(msg->TableId);
     if (it != TableInfos.end()) {

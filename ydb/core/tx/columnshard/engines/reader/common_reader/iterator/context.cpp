@@ -4,6 +4,7 @@
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/constructor/read_metadata.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/abstract.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
+#include <ydb/core/tx/columnshard/engines/portions/written.h>
 
 namespace NKikimr::NOlap::NReader::NCommon {
 
@@ -105,6 +106,19 @@ TString TSpecialReadContext::DebugString() const {
        << "ff=" << FFColumns->DebugString() << ";"
        << "program_input=" << ProgramInputColumns->DebugString() << ";";
     return sb;
+}
+
+EPortionCommitStatus TSpecialReadContext::GetPortionCommitStatus(const TPortionInfo& portionInfo) const {
+    if (portionInfo.IsCommitted()) {
+        return EPortionCommitStatus::Committed;
+    } else {
+        const auto& wPortionInfo = static_cast<const TWrittenPortionInfo&>(portionInfo);
+        if (GetReadMetadata()->IsMyUncommitted(wPortionInfo.GetInsertWriteId())) {
+            return EPortionCommitStatus::OwnUncommitted;
+        } else {
+            return EPortionCommitStatus::UncommittedByAnotherTx;
+        }
+    }
 }
 
 }   // namespace NKikimr::NOlap::NReader::NCommon

@@ -2,7 +2,7 @@
 
 `xmltodict` is a Python module that makes working with XML feel like you are working with [JSON](http://docs.python.org/library/json.html), as in this ["spec"](http://www.xml.com/pub/a/2006/05/31/converting-between-xml-and-json.html):
 
-[![Build Status](https://app.travis-ci.com/martinblech/xmltodict.svg?branch=master)](https://app.travis-ci.com/martinblech/xmltodict)
+[![Tests](https://github.com/martinblech/xmltodict/actions/workflows/test.yml/badge.svg)](https://github.com/martinblech/xmltodict/actions/workflows/test.yml)
 
 ```python
 >>> print(json.dumps(xmltodict.parse("""
@@ -214,7 +214,7 @@ Parse XML input into a Python dictionary.
 - `cdata_separator=''`: Separator string to join multiple text nodes. This joins adjacent text nodes. For example, set to a space to avoid concatenation.
 - `postprocessor=None`: Function to modify parsed items.
 - `dict_constructor=dict`: Constructor for dictionaries (e.g., dict).
-- `strip_whitespace=True`: Remove leading/trailing whitespace in text nodes. Default is True; this trims whitespace in text nodes. Set to False to preserve whitespace exactly.
+- `strip_whitespace=True`: Remove leading/trailing whitespace in text nodes. Default is True; this trims whitespace in text nodes. Set to False to preserve whitespace exactly. When `process_comments=True`, this same flag also trims comment text; disable `strip_whitespace` if you need to preserve comment indentation or padding.
 - `namespaces=None`: Mapping of namespaces to prefixes, or None to keep full URIs.
 - `force_list=None`: Force list values for specific elements. Can be a boolean (True/False), a tuple of element names to force lists for, or a callable function that receives (path, key, value) and returns True/False. Useful for elements that may appear once or multiple times to ensure consistent list output.
 - `item_depth=0`: Depth at which to call `item_callback`.
@@ -236,6 +236,11 @@ Convert a Python dictionary back into XML.
 - `indent='\t'`: Indentation string for pretty printing.
 - `newl='\n'`: Newline character for pretty printing.
 - `expand_iter=None`: Tag name to use for items in nested lists (breaks roundtripping).
+
+> **Note:** When building XML from dictionaries, keys whose values are empty
+> lists are skipped. For example, `{'a': []}` produces no `<a>` element. Add a
+> placeholder child (for example, `{'a': ['']}`) if an explicit empty container
+> element is required in the output.
 
 Note: xmltodict aims to cover the common 90% of cases. It does not preserve every XML nuance (attribute order, mixed content ordering, multiple top-level comments). For exact fidelity, use a full XML library such as lxml.
 

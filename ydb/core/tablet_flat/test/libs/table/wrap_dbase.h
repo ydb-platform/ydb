@@ -92,6 +92,10 @@ namespace NTest {
             return Iter->Row();
         }
 
+        TRowVersion GetRowVersion() const {
+            return Iter->GetRowVersion();
+        }
+
     public:
         const TIntrusiveConstPtr<TRowScheme> Scheme;
         TDatabase &Base;

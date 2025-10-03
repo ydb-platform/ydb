@@ -1008,7 +1008,15 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
         for (ui32 i = 0; i < PartitionCountersLabeled->GetCounters().Size(); ++i) {
             ac->AddValues(PartitionCountersLabeled->GetCounters()[i].Get());
         }
+        if (PartitionCompactionCounters) {
+            for (ui32 i = 0; i < PartitionCompactionCounters->GetCounters().Size(); ++i) {
+                ac->MutableCompactionCounters()->AddValues(PartitionCompactionCounters->GetCounters()[i].Get());
+            }
+        }
+
+
         for (auto&& userInfoPair : UsersInfoStorage->ViewAll()) {
+
             auto& userInfo = userInfoPair.second;
             if (!userInfo.LabeledCounters)
                 continue;
@@ -1752,6 +1760,9 @@ void TPartition::Handle(TEvPQ::TEvError::TPtr& ev, const TActorContext& ctx) {
         CompacterPartitionRequestInflight = false;
         if (Compacter) {
             Compacter->ProcessResponse(ev);
+            // auto compacterCounters = Compacter->GetCounters();
+            // KeyCompactionReadCyclesTotal.Set(compacterCounters.ReadCyclesCount);
+            // KeyCompactionWriteCyclesTotal.Set(compacterCounters.WriteCyclesCount);
         }
     }
     ReadingTimestamp = false;
@@ -2072,6 +2083,46 @@ bool TPartition::UpdateCounters(const TActorContext& ctx, bool force) {
             PartitionCountersLabeled->GetCounters()[METRIC_READ_QUOTA_PARTITION_TOTAL_USAGE].Set(quotaUsage);
         }
     }
+    if (PartitionCompactionCounters) {
+        Y_ENSURE(Compacter);
+        auto counters = Compacter->GetCounters();
+        if (counters.UncompactedSize != PartitionCompactionCounters->GetCounters()[METRIC_UNCOMPACTED_SIZE_MAX].Get()) {
+            PartitionCompactionCounters->GetCounters()[METRIC_UNCOMPACTED_SIZE_MAX].Set(counters.UncompactedSize);
+            haveChanges = true;
+        }
+        if (counters.UncompactedSize != PartitionCompactionCounters->GetCounters()[METRIC_UNCOMPACTED_SIZE_SUM].Get()) {
+            PartitionCompactionCounters->GetCounters()[METRIC_UNCOMPACTED_SIZE_SUM].Set(counters.UncompactedSize);
+            haveChanges = true;
+        }
+        if (counters.CompactedSize != PartitionCompactionCounters->GetCounters()[METRIC_COMPACTED_SIZE_MAX].Get()) {
+            PartitionCompactionCounters->GetCounters()[METRIC_COMPACTED_SIZE_MAX].Set(counters.CompactedSize);
+            haveChanges = true;
+        }
+        if (counters.CompactedSize != PartitionCompactionCounters->GetCounters()[METRIC_COMPACTED_SIZE_SUM].Get()) {
+            PartitionCompactionCounters->GetCounters()[METRIC_COMPACTED_SIZE_SUM].Set(counters.CompactedSize);
+            haveChanges = true;
+        }
+        if (counters.UncompactedCount != PartitionCompactionCounters->GetCounters()[METRIC_UNCOMPACTED_COUNT].Get()) {
+            PartitionCompactionCounters->GetCounters()[METRIC_UNCOMPACTED_COUNT].Set(counters.UncompactedCount);
+            haveChanges = true;
+        }
+        if (counters.CompactedCount != PartitionCompactionCounters->GetCounters()[METRIC_COMPACTED_COUNT].Get()) {
+            PartitionCompactionCounters->GetCounters()[METRIC_COMPACTED_COUNT].Set(counters.CompactedCount);
+            haveChanges = true;
+        }
+        // if (counters.GetUncompactedRatio() != PartitionCompactionCounters->GetCounters()[METRIC_UNCOMPACTED_RATIO].Get()) {
+        //     PartitionCompactionCounters->GetCounters()[METRIC_UNCOMPACTED_RATIO].Set(counters.GetUncompactedRatio());
+        //     haveChanges = true;
+        // }
+        if (counters.CurrReadCycleDuration.MilliSeconds() != PartitionCompactionCounters->GetCounters()[METRIC_CURR_CYCLE_DURATION].Get()) {
+            PartitionCompactionCounters->GetCounters()[METRIC_CURR_CYCLE_DURATION].Set(counters.CurrReadCycleDuration.MilliSeconds());
+            haveChanges = true;
+        }
+        if (counters.CurrentReadCycleKeys != PartitionCompactionCounters->GetCounters()[METRIC_CURR_READ_CYCLE_KEYS].Get()) {
+            PartitionCompactionCounters->GetCounters()[METRIC_CURR_READ_CYCLE_KEYS].Set(counters.CurrentReadCycleKeys);
+            haveChanges = true;
+        }
+    }
     return haveChanges;
 }
 
@@ -2105,6 +2156,9 @@ void TPartition::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext&
         Send(ReadQuotaTrackerActor, new TEvPQ::TEvReleaseExclusiveLock());
         if (Compacter) {
             Compacter->ProcessResponse(ev);
+            // auto compacterCounters = Compacter->GetCounters();
+            // KeyCompactionReadCyclesTotal.Set(compacterCounters.ReadCyclesCount);
+            // KeyCompactionWriteCyclesTotal.Set(compacterCounters.WriteCyclesCount);
         }
         return;
     }
@@ -4315,6 +4369,10 @@ bool TPartition::IsSupportive() const
     return Partition.IsSupportivePartition();
 }
 
+bool TPartition::IsKeyCompactionEnabled() const {
+    return Config.GetEnableCompactification() && AppData()->FeatureFlags.GetEnableTopicCompactificationByKey() && !IsSupportive();
+}
+
 void TPartition::AttachPersistRequestSpan(NWilson::TSpan& span)
 {
     if (span) {
@@ -4343,9 +4401,10 @@ void TPartition::Handle(TEvPQ::TEvExclusiveLockAcquired::TPtr&) {
 
 IActor* CreatePartitionActor(ui64 tabletId, const TPartitionId& partition, const TActorId& tablet, ui32 tabletGeneration,
     const TActorId& blobCache, const NPersQueue::TTopicConverterPtr& topicConverter, TString dcId, bool isServerless,
-               const NKikimrPQ::TPQTabletConfig& config, const std::shared_ptr<TTabletCountersBase>& counters, bool SubDomainOutOfSpace,
-               ui32 numChannels, const TActorId& writeQuoterActorId,
-               TIntrusivePtr<NJaegerTracing::TSamplingThrottlingControl> samplingControl, bool newPartition) {
+    const NKikimrPQ::TPQTabletConfig& config, const std::shared_ptr<TTabletCountersBase>& counters, bool SubDomainOutOfSpace,
+    ui32 numChannels, const TActorId& writeQuoterActorId,
+    TIntrusivePtr<NJaegerTracing::TSamplingThrottlingControl> samplingControl, bool newPartition
+) {
 
     return new TPartition(tabletId, partition, tablet, tabletGeneration, blobCache, topicConverter, dcId, isServerless,
         config, counters, SubDomainOutOfSpace, numChannels, writeQuoterActorId, samplingControl,

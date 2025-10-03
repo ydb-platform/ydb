@@ -1590,6 +1590,9 @@ TFuture<TListJobsResult> TClient::ListJobs(
     if (options.OperationIncarnation) {
         req->set_operation_incarnation(*options.OperationIncarnation);
     }
+    if (options.MonitoringDescriptor) {
+        req->set_monitoring_descriptor(*options.MonitoringDescriptor);
+    }
     if (options.FromTime) {
         req->set_from_time(NYT::ToProto(*options.FromTime));
     }

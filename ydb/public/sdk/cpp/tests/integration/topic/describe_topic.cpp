@@ -119,4 +119,78 @@ TEST_F(Describe, TEST_NAME(Location)) {
     }
 }
 
+TEST_F(Describe, TEST_NAME(MetricsLevel)) {
+    TTopicClient client(MakeDriver());
+
+    // const std::uint32_t MetricsLevelDisabled = 0;
+    // const std::uint32_t MetricsLevelDatabase = 1;
+    const std::uint32_t MetricsLevelObject = 2;
+    const std::uint32_t MetricsLevelDetailed = 3;
+
+    auto createTopic = [&](std::string topic, EMetricsLevel metricsLevel) {
+        auto res = client.CreateTopic(topic, TCreateTopicSettings().MetricsLevel(metricsLevel)).GetValueSync();
+        ASSERT_TRUE(res.IsSuccess());
+    };
+
+    auto setMetricsLevel = [&](std::string topic, EMetricsLevel metricsLevel) {
+        auto res = client.AlterTopic(topic, TAlterTopicSettings().SetMetricsLevel(metricsLevel)).GetValueSync();
+        ASSERT_TRUE(res.IsSuccess());
+    };
+
+    auto resetMetricsLevel = [&](std::string topic) {
+        auto res = client.AlterTopic(topic, TAlterTopicSettings().ResetMetricsLevel()).GetValueSync();
+        ASSERT_TRUE(res.IsSuccess());
+    };
+
+    auto checkFlag = [&](std::string topic, std::optional<EMetricsLevel> expectedMetricsLevel) {
+        auto res = client.DescribeTopic(topic, {}).GetValueSync();
+        Y_ENSURE(res.IsSuccess());
+        return res.GetTopicDescription().GetMetricsLevel() == expectedMetricsLevel;
+    };
+
+    {
+        const std::string topic("topic-with-counters");
+        createTopic(topic, MetricsLevelDetailed);
+        checkFlag(topic, MetricsLevelDetailed);
+        setMetricsLevel(topic, MetricsLevelObject);
+        Y_ENSURE(checkFlag(topic, MetricsLevelObject));
+
+        {
+            // Empty alter should change nothing.
+            auto res = client.AlterTopic(topic).GetValueSync();
+            ASSERT_TRUE(res.IsSuccess());
+            Y_ENSURE(checkFlag(topic, MetricsLevelObject));
+        }
+
+        {
+            resetMetricsLevel(topic);
+            Y_ENSURE(checkFlag(topic, {}));
+        }
+    }
+
+    {
+        const std::string topic("topic-without-counters-by-default");
+        auto res = client.CreateTopic(topic).GetValueSync();
+        ASSERT_TRUE(res.IsSuccess());
+        Y_ENSURE(checkFlag(topic, {}));
+        setMetricsLevel(topic, MetricsLevelDetailed);
+        Y_ENSURE(checkFlag(topic, MetricsLevelDetailed));
+
+        {
+            // Empty alter should change nothing.
+            auto res = client.AlterTopic(topic).GetValueSync();
+            ASSERT_TRUE(res.IsSuccess());
+            Y_ENSURE(checkFlag(topic, MetricsLevelDetailed));
+        }
+    }
+
+    {
+        const std::string topic("topic-without-counters");
+        createTopic(topic, MetricsLevelObject);
+        Y_ENSURE(checkFlag(topic, MetricsLevelObject));
+        setMetricsLevel(topic, MetricsLevelDetailed);
+        Y_ENSURE(checkFlag(topic, MetricsLevelDetailed));
+    }
+}
+
 }

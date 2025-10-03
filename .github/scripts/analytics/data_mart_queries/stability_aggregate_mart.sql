@@ -93,9 +93,9 @@ $all_possible_tests = SELECT
     CAST(JSON_VALUE(s.Stats, '$.nodes_with_issues') AS Int32) AS NodesWithIssues,
     
     -- Ошибки и диагностика
-    JSON_VALUE(s.Stats, '$.node_error_messages') AS NodeErrorMessages, -- JSON массив с подробностями ошибок нод
-    JSON_VALUE(s.Stats, '$.workload_error_messages') AS WorkloadErrorMessages, -- JSON массив с ошибками workload
-    JSON_VALUE(s.Stats, '$.workload_warning_messages') AS WorkloadWarningMessages, -- JSON массив с предупреждениями workload
+    JSON_QUERY(s.Stats, '$.node_error_messages') AS NodeErrorMessages, -- JSON массив с подробностями ошибок нод
+    JSON_QUERY(s.Stats, '$.workload_error_messages') AS WorkloadErrorMessages, -- JSON массив с ошибками workload
+    JSON_QUERY(s.Stats, '$.workload_warning_messages') AS WorkloadWarningMessages, -- JSON массив с предупреждениями workload
     
     -- Настройки теста
     CASE WHEN JSON_VALUE(s.Stats, '$.use_iterations') = 'true' THEN 1U ELSE 0U END AS UseIterations,
@@ -133,7 +133,7 @@ $all_possible_tests = SELECT
             ELSE NULL
         END AS ClusterMonitoring,
     CAST(JSON_VALUE(COALESCE(s.Info, v.VerificationInfo), '$.cluster.nodes_count') AS Int32) AS NodesCount,
-    JSON_VALUE(COALESCE(s.Info, v.VerificationInfo), '$.cluster.nodes_info') AS NodesInfo, -- JSON массив с информацией о нодах
+    JSON_QUERY(COALESCE(s.Info, v.VerificationInfo), '$.cluster.nodes_info') AS NodesInfo, -- JSON массив с информацией о нодах
     JSON_VALUE(COALESCE(s.Info, v.VerificationInfo), '$.ci_version') AS CiVersion,
     JSON_VALUE(COALESCE(s.Info, v.VerificationInfo), '$.test_tools_version') AS TestToolsVersion,
     JSON_VALUE(COALESCE(s.Info, v.VerificationInfo), '$.report_url') AS ReportUrl,
@@ -143,6 +143,8 @@ $all_possible_tests = SELECT
     JSON_VALUE(COALESCE(s.Info, v.VerificationInfo), '$.ci_job_title') AS CiJobTitle,
     JSON_VALUE(COALESCE(s.Info, v.VerificationInfo), '$.ci_cluster_name') AS CiClusterName,
     JSON_VALUE(COALESCE(s.Info, v.VerificationInfo), '$.ci_nemesis') AS CiNemesis,
+    JSON_VALUE(COALESCE(s.Info, v.VerificationInfo), '$.ci_build_type') AS CiBuildType,
+    JSON_VALUE(COALESCE(s.Info, v.VerificationInfo), '$.ci_sanitizer') AS CiSanitizer,
     
     -- Флаг того, что тест имел успешную верификацию 
     v.VerificationSuccess AS HadVerification,
@@ -228,6 +230,8 @@ SELECT
     agg.CiJobTitle,
     agg.CiClusterName,
     agg.CiNemesis,
+    agg.CiBuildType,
+    agg.CiSanitizer,
     agg.HadVerification,
     agg.OrderInRun,
     
@@ -251,6 +255,23 @@ SELECT
         WHEN agg.PlannedDuration > 0 THEN agg.ActualDuration / agg.PlannedDuration
         ELSE NULL
     END AS DurationRatio,
+    
+    -- Типы найденных ошибок нод (анализ node_error_messages)
+    CASE
+        WHEN agg.NodeErrorMessages IS NULL OR CAST(agg.NodeErrorMessages AS String) = '[]' OR CAST(agg.NodeErrorMessages AS String) = '' THEN NULL
+        ELSE
+            ListConcat(
+                ListUniq(
+                    ListNotNull(AsList(
+                        CASE WHEN CAST(agg.NodeErrorMessages AS String) LIKE '%coredump%' THEN 'Coredump' ELSE NULL END,
+                        CASE WHEN CAST(agg.NodeErrorMessages AS String) LIKE '%OOM%' OR CAST(agg.NodeErrorMessages AS String) LIKE '%experienced OOM%' THEN 'OOM' ELSE NULL END,
+                        CASE WHEN CAST(agg.NodeErrorMessages AS String) LIKE '%VERIFY%' OR CAST(agg.NodeErrorMessages AS String) LIKE '%verify%' THEN 'Verify' ELSE NULL END,
+                        CASE WHEN CAST(agg.NodeErrorMessages AS String) LIKE '%SAN%' OR CAST(agg.NodeErrorMessages AS String) LIKE '%sanitizer%' THEN 'SAN' ELSE NULL END
+                    ))
+                ),
+                ', '
+            )
+    END AS FacedNodeErrors,
     
     -- Общий статус выполнения
     CASE

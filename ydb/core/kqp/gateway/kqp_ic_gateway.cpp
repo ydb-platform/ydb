@@ -1297,7 +1297,7 @@ public:
                 }
 
                 auto [dirname, basename] = NSchemeHelpers::SplitPathByDirAndBaseNames(currentPath);
-                if (!dirname.empty() && !IsStartWithSlash(dirname)) {
+                if (!IsStartWithSlash(currentPath)) {
                     dirname = JoinPath({Database, dirname});
                 }
 

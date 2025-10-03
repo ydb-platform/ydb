@@ -40,6 +40,8 @@ TNodeWarden::TNodeWarden(const TIntrusivePtr<TNodeWardenConfig> &cfg)
     , FreshCompMaxInFlightReads(10, 1, 1000)
     , HullCompMaxInFlightWrites(10, 1, 1000)
     , HullCompMaxInFlightReads(20, 1, 1000)
+    , HullCompFullCompPeriodSec(0, 0, 7 * 24 * 60 * 60)
+    , HullCompThrottlerBytesRate(0, 0, 10'000'000'000) // 10 GB/s
     , ThrottlingDryRun(1, 0, 1)
     , ThrottlingMinLevel0SstCount(100, 1, 100000)
     , ThrottlingMaxLevel0SstCount(250, 1, 100000)
@@ -379,6 +381,12 @@ void TNodeWarden::Bootstrap() {
         TControlBoard::RegisterSharedControl(DefaultHugeGarbagePerMille, icb->VDiskControls.DefaultHugeGarbagePerMille);
         TControlBoard::RegisterSharedControl(HugeDefragFreeSpaceBorderPerMille, icb->VDiskControls.HugeDefragFreeSpaceBorderPerMille);
         TControlBoard::RegisterSharedControl(MaxChunksToDefragInflight, icb->VDiskControls.MaxChunksToDefragInflight);
+        TControlBoard::RegisterSharedControl(FreshCompMaxInFlightWrites, icb->VDiskControls.FreshCompMaxInFlightWrites);
+        TControlBoard::RegisterSharedControl(FreshCompMaxInFlightReads, icb->VDiskControls.FreshCompMaxInFlightReads);
+        TControlBoard::RegisterSharedControl(HullCompMaxInFlightWrites, icb->VDiskControls.HullCompMaxInFlightWrites);
+        TControlBoard::RegisterSharedControl(HullCompMaxInFlightReads, icb->VDiskControls.HullCompMaxInFlightReads);
+        TControlBoard::RegisterSharedControl(HullCompFullCompPeriodSec, icb->VDiskControls.HullCompFullCompPeriodSec);
+        TControlBoard::RegisterSharedControl(HullCompThrottlerBytesRate, icb->VDiskControls.HullCompThrottlerBytesRate);
 
         TControlBoard::RegisterSharedControl(ThrottlingDryRun, icb->VDiskControls.ThrottlingDryRun);
         TControlBoard::RegisterSharedControl(ThrottlingMinLevel0SstCount, icb->VDiskControls.ThrottlingMinLevel0SstCount);

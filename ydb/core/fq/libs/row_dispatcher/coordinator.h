@@ -15,6 +15,7 @@ std::unique_ptr<NActors::IActor> NewCoordinator(
     NActors::TActorId rowDispatcherId,
     const NKikimrConfig::TSharedReadingConfig_TCoordinatorConfig& config,
     const TString& tenant,
-    const ::NMonitoring::TDynamicCounterPtr& counters);
+    const ::NMonitoring::TDynamicCounterPtr& counters,
+    NActors::TActorId nodesManagerId);
 
 } // namespace NFq

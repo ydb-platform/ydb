@@ -215,6 +215,8 @@ namespace NKikimr::NStorage {
         TControlWrapper FreshCompMaxInFlightReads;
         TControlWrapper HullCompMaxInFlightWrites;
         TControlWrapper HullCompMaxInFlightReads;
+        TControlWrapper HullCompFullCompPeriodSec;
+        TControlWrapper HullCompThrottlerBytesRate;
 
         TControlWrapper ThrottlingDryRun;
         TControlWrapper ThrottlingMinLevel0SstCount;

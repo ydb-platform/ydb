@@ -206,9 +206,43 @@ TVector<NUdf::TUnboxedValue> ConvertListToVector(const NUdf::TUnboxedValue& list
     return items;
 }
 
-void CompareListsIgnoringOrder(const TType* type, const NUdf::TUnboxedValue& expected,
-        const NUdf::TUnboxedValue& got
-) {
+// Stream<Multi<...>> -> Stream<Tuple<...>>
+TRuntimeNode FromWideStreamToTupleStream(TProgramBuilder& pgmBuilder, TRuntimeNode stream) {
+    return pgmBuilder.FromFlow(
+        pgmBuilder.NarrowMap(pgmBuilder.ToFlow(stream),
+                             [&](TRuntimeNode::TList items) -> TRuntimeNode { return pgmBuilder.NewTuple(items); }));
+}
+
+
+TVector<NUdf::TUnboxedValue> ConvertStreamToVector(IComputationGraph& stream) {
+    NUdf::TUnboxedValue v;
+    TVector<NUdf::TUnboxedValue> vec;
+    auto it = stream.GetValue();
+    while (true) {
+        NYql::NUdf::EFetchStatus status;
+        status = it.Fetch(v);
+        switch (status) {
+
+        case NYql::NUdf::EFetchStatus::Ok: {
+            vec.push_back(v);
+            break;
+        }
+        case NYql::NUdf::EFetchStatus::Finish: {
+            return vec;
+        }
+        case NYql::NUdf::EFetchStatus::Yield: {
+            break;
+        }
+        default:
+            Y_ABORT("unreachable");
+        }
+    }
+}
+
+
+namespace {
+void CompareVectorsIgnoringOrder(const TType* type, TVector<NYql::NUdf::TUnboxedValue> expectedItems,
+                                 TVector<NYql::NUdf::TUnboxedValue> gotItems) {
     const auto itemType = AS_TYPE(TListType, type)->GetItemType();
     const NUdf::ICompare::TPtr compare = MakeCompareImpl(itemType);
     const NUdf::IEquate::TPtr equate = MakeEquateImpl(itemType);
@@ -219,14 +253,23 @@ void CompareListsIgnoringOrder(const TType* type, const NUdf::TUnboxedValue& exp
     const TValueLess valueLess(keyTypesStub, isTupleStub, compare.Get());
     const TValueEqual valueEqual(keyTypesStub, isTupleStub, equate.Get());
 
-    auto expectedItems = ConvertListToVector(expected);
-    auto gotItems = ConvertListToVector(got);
     UNIT_ASSERT_VALUES_EQUAL(expectedItems.size(), gotItems.size());
     Sort(expectedItems, valueLess);
     Sort(gotItems, valueLess);
     for (size_t i = 0; i < expectedItems.size(); i++) {
         UNIT_ASSERT(valueEqual(gotItems[i], expectedItems[i]));
     }
+}
+} // namespace
+
+void CompareListsIgnoringOrder(const TType* type, const NUdf::TUnboxedValue& expected,
+                               const NUdf::TUnboxedValue& gotList) {
+    CompareVectorsIgnoringOrder(type, ConvertListToVector(expected), ConvertListToVector(gotList));
+}
+
+void CompareListAndStreamIgnoringOrder(const TType* type, const NUdf::TUnboxedValue& expected,
+                                       IComputationGraph& gotStream) {
+    CompareVectorsIgnoringOrder(type, ConvertListToVector(expected), ConvertStreamToVector(gotStream));
 }
 
 } // namespace NKikimr::NMiniKQL

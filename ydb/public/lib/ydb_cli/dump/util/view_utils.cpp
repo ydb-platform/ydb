@@ -41,14 +41,11 @@ void ValidateViewQuery(const TString& query, const TString& dbPath, NYql::TIssue
 }
 
 bool RewriteTablePathPrefix(TString& query, TStringBuf backupRoot, TStringBuf restoreRoot,
-    bool restoreRootIsDatabase, NYql::TIssues& issues
+    bool restoreRootIsDatabase, TString& backupPathPrefix, TString& restorePathPrefix, NYql::TIssues& issues
 ) {
-    if (backupRoot == restoreRoot) {
-        return true;
-    }
+    restorePathPrefix = restoreRoot;
 
-    TString pathPrefix;
-    if (!re2::RE2::PartialMatch(query, R"(PRAGMA TablePathPrefix = '(\S+)';)", &pathPrefix)) {
+    if (!re2::RE2::PartialMatch(query, R"(PRAGMA TablePathPrefix = '(\S+)';)", &backupPathPrefix)) {
         if (!restoreRootIsDatabase) {
             // Initially, the view relied on the implicit table path prefix;
             // however, this approach is now incorrect because the requested restore root differs from the database root.
@@ -67,11 +64,15 @@ bool RewriteTablePathPrefix(TString& query, TStringBuf backupRoot, TStringBuf re
         return true;
     }
 
-    pathPrefix = RewriteAbsolutePath(pathPrefix, backupRoot, restoreRoot);
+    if (backupRoot == restoreRoot) {
+        return true;
+    }
+
+    restorePathPrefix = RewriteAbsolutePath(backupPathPrefix, backupRoot, restoreRoot);
 
     constexpr TStringBuf pattern = R"(PRAGMA TablePathPrefix = '\S+';)";
     if (!re2::RE2::Replace(&query, pattern,
-        std::format(R"(PRAGMA TablePathPrefix = '{}';)", pathPrefix.c_str())
+        std::format(R"(PRAGMA TablePathPrefix = '{}';)", restorePathPrefix.c_str())
     )) {
         issues.AddIssue(TStringBuilder() << "query: " << query.Quote()
             << " does not contain the pattern: \"" << pattern << "\""
@@ -100,16 +101,18 @@ TViewQuerySplit SplitViewQuery(TStringInput query) {
 }
 
 TString BuildCreateViewQuery(
-    const TString& name, const TString& dbPath, const TString& viewQuery, const TString& backupRoot,
+    const TString& name, const TString& dbPath, const TString& viewQuery, const TString& database, const TString& backupRoot,
     NYql::TIssues& issues
 ) {
     auto [contextRecreation, select] = SplitViewQuery(viewQuery);
 
     const TString creationQuery = std::format(
+        "-- database: \"{}\"\n"
         "-- backup root: \"{}\"\n"
         "{}\n"
         "CREATE VIEW IF NOT EXISTS `{}` WITH (security_invoker = TRUE) AS\n"
         "    {};\n",
+        database.data(),
         backupRoot.data(),
         contextRecreation.data(),
         name.data(),
@@ -130,11 +133,13 @@ bool RewriteCreateViewQuery(TString& query, const TString& restoreRoot, bool res
 ) {
     const auto backupRoot = GetBackupRoot(query);
 
-    if (!RewriteTablePathPrefix(query, backupRoot, restoreRoot, restoreRootIsDatabase, issues)) {
+    TString backupPathPrefix = GetDatabase(query);
+    TString restorePathPrefix;
+    if (!RewriteTablePathPrefix(query, backupRoot, restoreRoot, restoreRootIsDatabase, backupPathPrefix, restorePathPrefix, issues)) {
         return false;
     }
 
-    if (!RewriteTableRefs(query, backupRoot, restoreRoot, issues)) {
+    if (!RewriteTableRefs(query, backupRoot, restoreRoot, backupPathPrefix, restorePathPrefix, issues)) {
         return false;
     }
 

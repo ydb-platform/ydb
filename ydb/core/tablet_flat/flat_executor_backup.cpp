@@ -478,6 +478,11 @@ public:
         // ignore
     }
 
+    void DoLockRowTx(ui32, ELockMode, TKeys, ui64)
+    {
+        // ignore
+    }
+
     void Finalize()
     {
         if (HasChanges) {

@@ -123,7 +123,7 @@ TListMetricsResponse ProcessListMetricsResponse(NYql::IHTTPGateway::TResult&& re
     try {
         NJson::ReadJsonTree(response.Content.data(), &json, /*throwOnError*/ true);
     } catch (const std::exception& e) {
-        return TListMetricsResponse("Monitoring api response is invalid" );
+        return TListMetricsResponse("Monitoring api response is invalid");
     }
 
     if (!json.IsMap() || !json.Has("result") || !json.Has("page")) {

@@ -4,7 +4,6 @@
 #include <ydb/core/kafka_proxy/kafka_messages.h>
 #include <ydb/core/persqueue/public/pq_rl_helpers.h>
 #include <ydb/core/protos/config.pb.h>
-#include <ydb/core/tablet/tablet_pipe_client_cache.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/public/api/protos/persqueue_error_codes_v1.pb.h>
 #include <ydb/public/api/protos/draft/persqueue_error_codes.pb.h> // strange

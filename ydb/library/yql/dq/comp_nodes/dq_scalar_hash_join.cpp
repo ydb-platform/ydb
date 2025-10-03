@@ -26,9 +26,6 @@ struct Renames{
     std::vector<int> RightIndexes;
 };
 
-TUnboxedValueVector NullTuple(int size){
-    return TUnboxedValueVector(size, NYql::NUdf::TUnboxedValuePod{});
-}
 class TScalarHashJoinState : public TComputationValue<TScalarHashJoinState> {
     using TBase = TComputationValue<TScalarHashJoinState>;
     IComputationWideFlowNode* BuildSide() const {
@@ -90,7 +87,6 @@ public:
     ,   LogComponent_(logComponent)
     ,   KeyTypes_(KeyTypesFromColumns(leftColumnTypes, leftKeyColumns))
     ,   JoinKind_(joinKind)
-    ,   NullTuple_(NullTuple(joinKind == EJoinKind::Inner ? 0 : rightColumnTypes.size()))
     ,   Table_(
         std::ssize(rightColumnTypes)
         , TWideUnboxedEqual{KeyTypes_}
@@ -197,7 +193,6 @@ private:
     const NUdf::TLogComponentId LogComponent_;
     const TKeyTypes KeyTypes_;
     const EJoinKind JoinKind_;
-    const TUnboxedValueVector NullTuple_;
     bool LeftFinished_ = false;
     bool RightFinished_ = false;
     NJoinTable::TStdJoinTable Table_;

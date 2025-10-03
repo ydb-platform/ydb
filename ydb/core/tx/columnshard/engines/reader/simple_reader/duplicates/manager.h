@@ -8,6 +8,7 @@
 #include <ydb/core/tx/columnshard/blobs_reader/actor.h>
 #include <ydb/core/tx/columnshard/counters/duplicate_filtering.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
+#include <ydb/core/tx/columnshard/engines/portions/written.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/default_fetching.h>
 #include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/collections/constructors.h>
 
@@ -74,11 +75,11 @@ private:
     ui64 ExpectedIntersectionCount = 0;
 
 private:
-    static TPortionIntervalTree MakeIntervalTree(const std::deque<NSimple::TSourceConstructor>& portions) {
+    static TPortionIntervalTree MakeIntervalTree(const std::deque<std::shared_ptr<TPortionInfo>>& portions) {
         TPortionIntervalTree intervals;
         for (const auto& portion : portions) {
-            intervals.AddRange(TPortionIntervalTree::TOwnedRange(portion.GetPortion()->IndexKeyStart(), true,
-                                   portion.GetPortion()->IndexKeyEnd(), true), portion.GetPortion());
+            intervals.AddRange(TPortionIntervalTree::TOwnedRange(portion->IndexKeyStart(), true,
+                                   portion->IndexKeyEnd(), true), portion);
         }
         return intervals;
     }
@@ -155,7 +156,7 @@ private:
         THashSet<ui64>& portionIdsToFetch, std::vector<TIntervalInfo>& intervalsToBuild);
 
 public:
-    TDuplicateManager(const TSpecialReadContext& context, const std::deque<NSimple::TSourceConstructor>& portions);
+    TDuplicateManager(const TSpecialReadContext& context, const std::deque<std::shared_ptr<TPortionInfo>>& portions);
 };
 
 }   // namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering

@@ -42,113 +42,72 @@ Y_UNIT_TEST_SUITE(BlobTest) {
     }
 }
 
-static const ui8 HAS_PARTDATA = 1;
-static const ui8 HAS_TS = 2;
-static const ui8 HAS_TS2 = 4;
-static const ui8 HAS_US = 8;
-static const ui8 HAS_KINESIS = 16;
+bool operator ==(const TClientBlob &lhs, const TClientBlob &rhs) {
+    TPartData defaultPartData{0, 0, 0};
 
-TClientBlob Deserialize(const char *data, ui32 size) {
-    Y_ABORT_UNLESS(size > TClientBlob::OVERHEAD);
-    ui32 totalSize = ReadUnaligned<ui32>(data);
-    Cerr << "Deserialize: data of size: " << size
-         << ", got total size: " << totalSize << Endl;
-    Y_ABORT_UNLESS(size >= totalSize);
-    const char *end = data + totalSize;
-    data += sizeof(ui32);
-    ui64 seqNo = ReadUnaligned<ui64>(data);
-    data += sizeof(ui64);
-    TMaybe<TPartData> partData;
-    bool hasPartData = (data[0] & HAS_PARTDATA); // data[0] is mask
-    bool hasTS = (data[0] & HAS_TS);
-    bool hasTS2 = (data[0] & HAS_TS2);
-    bool hasUS = (data[0] & HAS_US);
-    bool hasKinesisData = (data[0] & HAS_KINESIS);
-
-    ++data;
-    TString partitionKey;
-    TString explicitHashKey;
-
-    if (hasPartData) {
-        ui16 partNo = ReadUnaligned<ui16>(data);
-        data += sizeof(ui16);
-        ui16 totalParts = ReadUnaligned<ui16>(data);
-        data += sizeof(ui16);
-        ui32 totalSize = ReadUnaligned<ui32>(data);
-        data += sizeof(ui32);
-        partData = TPartData{partNo, totalParts, totalSize};
-    }
-
-    if (hasKinesisData) {
-        ui8 keySize = ReadUnaligned<ui8>(data);
-        data += sizeof(ui8);
-        partitionKey = TString(data, keySize == 0 ? 256 : keySize);
-        data += partitionKey.size();
-        keySize = ReadUnaligned<ui8>(data);
-        data += sizeof(ui8);
-        explicitHashKey = TString(data, keySize);
-        data += explicitHashKey.size();
-    }
-
-    TInstant writeTimestamp;
-    TInstant createTimestamp;
-    ui32 us = 0;
-    if (hasTS) {
-        writeTimestamp = TInstant::MilliSeconds(ReadUnaligned<ui64>(data));
-        data += sizeof(ui64);
-    }
-    if (hasTS2) {
-        createTimestamp = TInstant::MilliSeconds(ReadUnaligned<ui64>(data));
-        data += sizeof(ui64);
-    }
-    if (hasUS) {
-        us = ReadUnaligned<ui32>(data);
-        data += sizeof(ui32);
-    }
-
-    Y_ABORT_UNLESS(data < end);
-    ui16 sz = ReadUnaligned<ui16>(data);
-    data += sizeof(ui16);
-    Y_ABORT_UNLESS(data + sz <= end);
-    TString sourceId(data, sz);
-    data += sz;
-
-    TString dt = (data != end) ? TString(data, end - data) : TString{};
-
-    return TClientBlob(std::move(sourceId), seqNo, std::move(dt),
-                       std::move(partData), writeTimestamp, createTimestamp, us,
-                       std::move(partitionKey), std::move(explicitHashKey));
+    return lhs.SourceId == rhs.SourceId &&
+        lhs.SeqNo == rhs.SeqNo &&
+        lhs.Data == rhs.Data &&
+        lhs.GetPartNo() == rhs.GetPartNo() &&
+        lhs.GetTotalParts() == rhs.GetTotalParts() &&
+        lhs.GetTotalSize() == rhs.GetTotalSize() &&
+        lhs.WriteTimestamp == rhs.WriteTimestamp &&
+        lhs.CreateTimestamp == rhs.CreateTimestamp &&
+        lhs.UncompressedSize == rhs.UncompressedSize &&
+        lhs.PartitionKey == rhs.PartitionKey &&
+        lhs.ExplicitHashKey == rhs.ExplicitHashKey;
 }
-Y_UNIT_TEST_SUITE(SerializationCompat) {
+
+Y_UNIT_TEST_SUITE(ClientBlobSerialization) {
+
     TClientBlob MakeClientBlob(ui64 size, ui64 seqNo, ui64 totalParts,
                                ui16 partNo, ui64 totalSize, ui64 partKeySize,
-                               ui64 explisitHashKeySize) {
-        TString data(size, 'a');
+                               ui64 explisitHashKeySize, TString sourceId) {
+        Cerr << "payloadSize " << size << " totalSize " << totalSize << " partsCount " << totalParts
+             << " partKeySize " << partKeySize << " hashSize " << explisitHashKeySize << " partNo " << partNo << "\n===\n";
+
+        TString data = NUnitTest::RandomString(size);
         TMaybe<TPartData> partData;
+        auto ts = TInstant::Now().Seconds();
         if (totalParts) {
           partData = TPartData{static_cast<ui16>(partNo),
                                static_cast<ui16>(totalParts),
                                static_cast<ui32>(totalSize)};
         }
-        return TClientBlob{"someSrcId",
+        return TClientBlob{std::move(sourceId),
                            seqNo,
                            std::move(data),
                            partData,
-                           TInstant::Now(),
-                           TInstant::Now(),
+                           TInstant::Seconds(ts),
+                           TInstant::Seconds(ts + 5),
                            size ? size * 2 : 0,
-                           partKeySize ? TString(partKeySize, 'a') : TString(),
+                           partKeySize ? NUnitTest::RandomString(partKeySize) : TString(),
                            explisitHashKeySize
-                               ? TString(explisitHashKeySize, 'a')
+                               ? NUnitTest::RandomString(explisitHashKeySize)
                                : TString()};
     }
-    Y_UNIT_TEST(SerializeAndDeserialize) {
+
+    Y_UNIT_TEST(EmptyPayload) {
+        TBuffer buffer;
+        buffer.Reserve(8_MB);
+
+        auto blob = MakeClientBlob(0, 1, 100, 1, 100, 0, 0, "SomeSrcId");
+
+        buffer.Clear();
+        Serialize(blob, buffer);
+
+        TClientBlob deserialized = DeserializeClientBlob(buffer.data(), buffer.size());
+        UNIT_ASSERT(blob == deserialized);
+    }
+
+    Y_UNIT_TEST(SerializeAndDeserializeAllScenarios) {
         TVector<ui64> payloadSizes = {10, 0, 100, 512_KB};
         TVector<ui64> partsCount = {0, 1, 10, 40};
         TVector<ui64> totalSizes = {1, 0, 100, 512_KB, 1_MB, 10_MB};
         TVector<ui64> partKeySizes = {0, 100, 256};
         TVector<ui64> hashSizes = {1, 0, 100, 255};
         TVector<ui16> partNos = {0, 1, 10};
+        TVector<TString> sourceIds = {"", "someSrcId"};
 
         ui64 seqNo = 1;
         TBuffer buffer;
@@ -172,25 +131,22 @@ Y_UNIT_TEST_SUITE(SerializationCompat) {
                                 if (hashSize && !partKeySize) {
                                     continue;
                                 }
+                                for (const auto& srcId : sourceIds) {
 
-                                auto blob =
-                                    MakeClientBlob(payloadSize, seqNo++, partsCount, partNo,
-                                                totalSize, partKeySize, hashSize);
+                                    auto blob = MakeClientBlob(payloadSize, seqNo++, partsCount, partNo, totalSize,
+                                                            partKeySize, hashSize, srcId);
 
-                                Cerr << "payloadSize " << payloadSize << " totalSize "
-                                    << totalSize << " partsCount " << partsCount << " partKeySize "
-                                    << partKeySize << " hashSize " << hashSize
-                                    << " partNo " << partNo << Endl;
+                                    buffer.Clear();
+                                    Serialize(blob, buffer);
 
-                                buffer.Clear();
-                                Serialize(blob, buffer);
-
-                                TClientBlob deserialized = Deserialize(buffer.data(), buffer.size());
-                  }
+                                    TClientBlob deserialized = DeserializeClientBlob(buffer.data(), buffer.size());
+                                    UNIT_ASSERT(blob == deserialized);
+                                }
+                            }
+                        }
+                    }
                 }
-              }
             }
-          }
         }
     }
 }

@@ -90,7 +90,7 @@ public:
             || joinKind == EJoinKind::Left 
             || joinKind == EJoinKind::Right 
             || joinKind == EJoinKind::Full
-            // || joinKind == EJoinKind::LeftOnly
+            || joinKind == EJoinKind::Exclusion
             , "Unsupported join kind");
         Pointers_.resize(LeftColumnTypes_.size());
         for (int index = 0; index < std::ssize(LeftKeyColumns_); ++index) {
@@ -159,7 +159,9 @@ public:
             case EFetchResult::One: {
                 bool found = false;
                 Table_.Lookup(Values_.data(), [this, &found](NJoinTable::TTuple matched) {
-                    AppendTuple(Values_.data(),matched,Output_);
+                    if ((static_cast<int>(JoinKind_) & static_cast<int>(EJoinKind::Inner)) != 0){
+                        AppendTuple(Values_.data(),matched,Output_);
+                    }
                     found = true;
                 });
                 if (!found && NJoinTable::NeedToTrackUnusedLeftTuples(JoinKind_)) {

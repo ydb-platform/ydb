@@ -404,6 +404,12 @@ public:
 
     void DoUpdate(ui32 tid, ERowOp rop, TKeys key, TOps ops, TRowVersion)
     {
+        if (!HasChanges) {
+            HasChanges = true;
+            Writer.WriteKey("data_changes");
+            Writer.BeginList();
+        }
+
         Writer.BeginObject();
 
         Writer.WriteKey("table");
@@ -469,12 +475,20 @@ public:
 
     void DoFlush(ui32, ui64, TEpoch)
     {
-        Y_TABLET_ERROR("Flush is unsupported");
+        // ignore
+    }
+
+    void Finalize()
+    {
+        if (HasChanges) {
+            Writer.EndList();
+        }
     }
 
 private:
     NJsonWriter::TBuf& Writer;
     TScheme& Schema;
+    bool HasChanges = false;
 };
 
 class TChangelogWriter : public TActorBootstrapped<TChangelogWriter> {
@@ -605,19 +619,15 @@ public:
         }
 
         if (dataUpdate) {
-            b.WriteKey("data_changes");
-            b.BeginList();
-
             try {
                 dataUpdate = NPageCollection::TSlicer::Lz4()->Decode(dataUpdate);
                 TChangelogSerializer serializer(b, Schema);
                 NRedo::TPlayer<TChangelogSerializer> redoPlayer(serializer);
                 redoPlayer.Replay(dataUpdate);
+                serializer.Finalize();
             } catch (const std::exception& e) {
                 return ReplyAndDie(TStringBuilder() << "Failed to serialize commit data: " << e.what());
             }
-
-            b.EndList();
         }
 
         b.EndObject();

@@ -142,11 +142,12 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
         return kikimr;
     }
 
-    class TStaticCredentialsProvider : public NYdb::ICredentialsProvider {
+    class TStaticCredentialsProvider: public NYdb::ICredentialsProvider {
     public:
         TStaticCredentialsProvider(const TString& yqlToken)
             : YqlToken_(yqlToken)
-        {}
+        {
+        }
 
         std::string GetAuthInfo() const override {
             return YqlToken_;
@@ -160,11 +161,12 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
         std::string YqlToken_;
     };
 
-    class TStaticCredentialsProviderFactory : public NYdb::ICredentialsProviderFactory {
+    class TStaticCredentialsProviderFactory: public NYdb::ICredentialsProviderFactory {
     public:
         TStaticCredentialsProviderFactory(const TString& yqlToken)
             : YqlToken_(yqlToken)
-        {}
+        {
+        }
 
         std::shared_ptr<NYdb::ICredentialsProvider> CreateProvider() const override {
             return std::make_shared<TStaticCredentialsProvider>(YqlToken_);
@@ -174,11 +176,12 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
         TString YqlToken_;
     };
 
-    class TStaticSecuredCredentialsFactory : public NYql::ISecuredServiceAccountCredentialsFactory {
+    class TStaticSecuredCredentialsFactory: public NYql::ISecuredServiceAccountCredentialsFactory {
     public:
         TStaticSecuredCredentialsFactory(const TString& yqlToken)
             : YqlToken_(yqlToken)
-        {}
+        {
+        }
 
         std::shared_ptr<NYdb::ICredentialsProviderFactory> Create(const TString&, const TString&) override {
             return std::make_shared<TStaticCredentialsProviderFactory>(YqlToken_);

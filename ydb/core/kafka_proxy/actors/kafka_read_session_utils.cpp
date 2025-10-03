@@ -19,7 +19,7 @@ std::optional<TConsumerProtocolSubscription> GetSubscriptions(const TJoinGroupRe
     }
 
     auto* p = FindIf(request.Protocols, [](const TJoinGroupRequestData::TJoinGroupRequestProtocol& p) {
-        return p.Name == ASSIGN_STRATEGY_ROUNDROBIN;
+        return p.Name == ASSIGN_STRATEGY_ROUNDROBIN || p.Name == ASSIGN_STRATEGY_SERVER;
     });
 
     if (!p) {

@@ -324,13 +324,16 @@ bool TKafkaReadSessionActor::CheckHeartbeatIsExpired() {
     return now - LastHeartbeatTime > MaxHeartbeatTimeoutMs;
 }
 
-bool TKafkaReadSessionActor::TryFillTopicsToRead(const TMessagePtr<TJoinGroupRequestData> joinGroupRequestData, THashSet<TString>& topics) {
-    auto mode = GetBalancingMode(*joinGroupRequestData);
-    if (mode == EBalancingMode::Native) {
+bool TKafkaReadSessionActor::TryFillTopicsToRead(const TMessagePtr<TJoinGroupRequestData> request, THashSet<TString>& topics) {
+    auto validProtocol = request->ProtocolType == SUPPORTED_JOIN_GROUP_PROTOCOL
+        && AnyOf(request->Protocols, [](const TJoinGroupRequestData::TJoinGroupRequestProtocol& p) {
+            return p.Name == ASSIGN_STRATEGY_ROUNDROBIN || p.Name == ASSIGN_STRATEGY_SERVER;
+        });
+    if (!validProtocol) {
         return false;
     }
 
-    auto result = GetSubscriptions(*joinGroupRequestData);
+    auto result = GetSubscriptions(*request);
     for (auto topic: result->Topics) {
         if (topic.has_value()) {
             KAFKA_LOG_D("JOIN_GROUP requested topic to read: " << topic);

@@ -219,7 +219,7 @@ struct TKqpTableWriterStatistics {
         tableStats->SetWriteBytes(tableStats->GetWriteBytes() + WriteBytes);
         tableStats->SetEraseRows(tableStats->GetEraseRows() + EraseRows);
         tableStats->SetEraseBytes(tableStats->GetEraseBytes() + EraseBytes);
-    
+
         ReadRows = 0;
         ReadBytes = 0;
         WriteRows = 0;
@@ -272,6 +272,7 @@ class TKqpTableWriteActor : public TActorBootstrapped<TKqpTableWriteActor> {
 public:
     TKqpTableWriteActor(
         IKqpTableWriterCallbacks* callbacks,
+        const TString& database,
         const TTableId& tableId,
         const TStringBuf tablePath,
         const ui64 lockTxId,
@@ -289,6 +290,7 @@ public:
         , Alloc(alloc)
         , MvccSnapshot(mvccSnapshot)
         , LockMode(lockMode)
+        , Database(database)
         , TableId(tableId)
         , TablePath(tablePath)
         , LockTxId(lockTxId)
@@ -526,6 +528,7 @@ public:
 
         CA_LOG_D("Resolve TableId=" << TableId);
         TAutoPtr<NSchemeCache::TSchemeCacheNavigate> request(new NSchemeCache::TSchemeCacheNavigate());
+        request->DatabaseName = Database;
         NSchemeCache::TSchemeCacheNavigate::TEntry entry;
         entry.TableId = TableId;
         entry.RequestType = NSchemeCache::TSchemeCacheNavigate::TEntry::ERequestType::ByTableId;
@@ -718,7 +721,7 @@ public:
                     << " Sink=" << this->SelfId() << "."
                     << getIssues().ToOneLineString());
             TxManager->SetError(ev->Get()->Record.GetOrigin());
-            
+
             if (InconsistentTx) {
                 ResetShardRetries(ev->Get()->Record.GetOrigin(), ev->Cookie);
                 RetryResolve();
@@ -778,7 +781,7 @@ public:
                     getIssues());
             }
             return;
-        }        
+        }
         case NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED: {
             CA_LOG_W("Got OVERLOADED for table `"
                 << TablePath << "`."
@@ -1396,6 +1399,7 @@ private:
     const std::optional<NKikimrDataEvents::TMvccSnapshot> MvccSnapshot;
     const NKikimrDataEvents::ELockMode LockMode;
 
+    const TString Database;
     const TTableId TableId;
     const TString TablePath;
 
@@ -1748,6 +1752,7 @@ public:
 
             WriteTableActor = new TKqpTableWriteActor(
                 this,
+                Settings.GetDatabase(),
                 TableId,
                 Settings.GetTable().GetPath(),
                 Settings.GetLockTxId(),
@@ -2044,6 +2049,7 @@ struct TTransactionSettings {
 };
 
 struct TWriteSettings {
+    TString Database;
     TTableId TableId;
     TString TablePath; // for error messages
     NKikimrDataEvents::TEvWrite::TOperation::EOperationType OperationType;
@@ -2243,6 +2249,7 @@ public:
                 }
                 TKqpTableWriteActor* ptr = new TKqpTableWriteActor(
                     this,
+                    settings.Database,
                     tableId,
                     tablePath,
                     LockTxId,
@@ -2275,7 +2282,7 @@ public:
                         {});
                     return false;
                 }
-                AFL_ENSURE(writeActor->GetTableId() == tableId);  
+                AFL_ENSURE(writeActor->GetTableId() == tableId);
                 return true;
             };
 
@@ -2398,7 +2405,7 @@ public:
         message.From = ev->Sender;
         message.Close = ev->Get()->Close;
         message.Data = ev->Get()->Data;
-        
+
         Process();
     }
 
@@ -2438,7 +2445,7 @@ public:
             if (isEmpty) {
                 OnFlushed();
             }
-        } 
+        }
         return true;
     }
 
@@ -2739,7 +2746,7 @@ public:
 
         for (auto& [tabletId, t] : topicTxs) {
             auto& transaction = t.tx;
-            
+
             if (!isImmediateCommit) {
                 FillTopicsCommit(transaction, TxManager);
             }
@@ -2916,7 +2923,7 @@ public:
     void HandlePrepare(TEvPersQueue::TEvProposeTransactionResult::TPtr& ev) {
         auto& event = ev->Get()->Record;
         const ui64 tabletId = event.GetOrigin();
-        
+
         CA_LOG_D("Got ProposeTransactionResult" <<
               ", PQ tablet: " << tabletId <<
               ", status: " << NKikimrPQ::TEvProposeTransactionResult_EStatus_Name(event.GetStatus()));
@@ -2933,7 +2940,7 @@ public:
     void HandleCommit(TEvPersQueue::TEvProposeTransactionResult::TPtr& ev) {
         auto& event = ev->Get()->Record;
         const ui64 tabletId = event.GetOrigin();
-        
+
         CA_LOG_D("Got ProposeTransactionResult" <<
               ", PQ tablet: " << tabletId <<
               ", status: " << NKikimrPQ::TEvProposeTransactionResult_EStatus_Name(event.GetStatus()));
@@ -3844,6 +3851,7 @@ private:
                 Settings.GetLookupColumns().end());
 
             ev->Settings = TWriteSettings{
+                .Database = Settings.GetDatabase(),
                 .TableId = TableId,
                 .TablePath = Settings.GetTable().GetPath(),
                 .OperationType = GetOperation(Settings.GetType()),

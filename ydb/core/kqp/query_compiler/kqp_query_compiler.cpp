@@ -599,9 +599,10 @@ TStringBuf RemoveJoinAliases(TStringBuf keyName) {
 
 class TKqpQueryCompiler : public IKqpQueryCompiler {
 public:
-    TKqpQueryCompiler(const TString& cluster, const TIntrusivePtr<TKikimrTablesData> tablesData,
+    TKqpQueryCompiler(const TString& cluster, const TString& database, const TIntrusivePtr<TKikimrTablesData> tablesData,
         const NMiniKQL::IFunctionRegistry& funcRegistry, TTypeAnnotationContext& typesCtx, NYql::TKikimrConfiguration::TPtr config)
         : Cluster(cluster)
+        , Database(database)
         , TablesData(tablesData)
         , FuncRegistry(funcRegistry)
         , Alloc(__LOCATION__, TAlignedPagePoolCounters(), funcRegistry.SupportsSizedAllocators())
@@ -1258,6 +1259,7 @@ private:
             NKqpProto::TKqpInternalSink& internalSinkProto = *protoSink->MutableInternalSink();
             internalSinkProto.SetType(TString(NYql::KqpTableSinkName));
             NKikimrKqp::TKqpTableSinkSettings settingsProto;
+            settingsProto.SetDatabase(Database);
 
             const auto& tupleType = stage.Ref().GetTypeAnn()->Cast<TTupleExprType>();
             YQL_ENSURE(tupleType);
@@ -1899,7 +1901,8 @@ private:
     }
 
 private:
-    TString Cluster;
+    const TString Cluster;
+    const TString Database;
     const TIntrusivePtr<TKikimrTablesData> TablesData;
     const IFunctionRegistry& FuncRegistry;
     NMiniKQL::TScopedAlloc Alloc;
@@ -1913,11 +1916,11 @@ private:
 
 } // namespace
 
-TIntrusivePtr<IKqpQueryCompiler> CreateKqpQueryCompiler(const TString& cluster,
+TIntrusivePtr<IKqpQueryCompiler> CreateKqpQueryCompiler(const TString& cluster, const TString& database,
     const TIntrusivePtr<TKikimrTablesData> tablesData, const IFunctionRegistry& funcRegistry,
     TTypeAnnotationContext& typesCtx, NYql::TKikimrConfiguration::TPtr config)
 {
-    return MakeIntrusive<TKqpQueryCompiler>(cluster, tablesData, funcRegistry, typesCtx, config);
+    return MakeIntrusive<TKqpQueryCompiler>(cluster, database, tablesData, funcRegistry, typesCtx, config);
 }
 
 } // namespace NKqp

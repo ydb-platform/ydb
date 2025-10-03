@@ -57,6 +57,8 @@ public:
 
         BLOG_D("ResolveDatabase " << Database);
         TAutoPtr<NSchemeCache::TSchemeCacheNavigate> request(new NSchemeCache::TSchemeCacheNavigate());
+        request->DatabaseName = Database;
+
         NSchemeCache::TSchemeCacheNavigate::TEntry entry;
         entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpList;
         entry.SyncVersion = false;

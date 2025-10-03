@@ -2380,6 +2380,14 @@ TStatus AnnotateOpJoin(const TExprNode::TPtr& input, TExprContext& ctx) {
     return TStatus::Ok;
 }
 
+TStatus AnnotateOpUnionAll(const TExprNode::TPtr& input, TExprContext& ctx) {
+    Y_UNUSED(ctx);
+    auto leftInputType = input->ChildPtr(TKqpOpJoin::idx_LeftInput)->GetTypeAnn();
+    // TODO: Add sanity checks.
+    input->SetTypeAnn(leftInputType);
+    return TStatus::Ok;
+}
+
 TStatus AnnotateOpLimit(const TExprNode::TPtr& input, TExprContext& ctx) {
     Y_UNUSED(ctx);
     const TTypeAnnotationNode* inputType = input->ChildPtr(TKqpOpRoot::idx_Input)->GetTypeAnn();
@@ -2606,6 +2614,10 @@ TAutoPtr<IGraphTransformer> CreateKqpTypeAnnotationTransformer(const TString& cl
 
             if (TKqpOpJoin::Match(input.Get())) {
                 return AnnotateOpJoin(input, ctx);
+            }
+
+            if (TKqpOpUnionAll::Match(input.Get())) {
+                return AnnotateOpUnionAll(input, ctx);
             }
 
             if (TKqpOpLimit::Match(input.Get())) {

@@ -1103,6 +1103,9 @@ private:
             }
             return done;
         }
+        case TIndexBuildInfo::ESubState::AlterSequence: {
+            Y_ENSURE(false, "Unreachable");
+        }
         }
     }
 
@@ -1119,7 +1122,8 @@ private:
             // Alter the sequence
             buildInfo.KMeans.AlterPrefixSequenceDone = true;
             NIceDb::TNiceDb db{txc.DB};
-            ChangeState(BuildId, TIndexBuildInfo::EState::AlterSequence);
+            buildInfo.SubState = TIndexBuildInfo::ESubState::AlterSequence;
+            Self->PersistBuildIndexState(db, buildInfo);
             Progress(BuildId);
             return false;
         }
@@ -1563,7 +1567,30 @@ public:
 
             break;
         case TIndexBuildInfo::EState::Filling: {
-            if (buildInfo.IsCancellationRequested() || FillIndex(txc, buildInfo)) {
+            if (buildInfo.SubState == TIndexBuildInfo::ESubState::AlterSequence) {
+                Y_ENSURE(buildInfo.IsBuildPrefixedVectorIndex());
+                Y_ENSURE(buildInfo.KMeans.Level == 2);
+                if (buildInfo.ApplyTxId == InvalidTxId) {
+                    AllocateTxId(BuildId);
+                } else if (buildInfo.ApplyTxStatus == NKikimrScheme::StatusSuccess) {
+                    Send(Self->SelfId(), AlterSequencePropose(Self, buildInfo), 0, ui64(BuildId));
+                } else if (!buildInfo.ApplyTxDone) {
+                    Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.ApplyTxId)));
+                } else {
+                    buildInfo.ApplyTxId = {};
+                    buildInfo.ApplyTxStatus = NKikimrScheme::StatusSuccess;
+                    buildInfo.ApplyTxDone = false;
+                    buildInfo.SubState = TIndexBuildInfo::ESubState::None;
+
+                    NIceDb::TNiceDb db(txc.DB);
+                    Self->PersistBuildIndexApplyTxId(db, buildInfo);
+                    Self->PersistBuildIndexApplyTxStatus(db, buildInfo);
+                    Self->PersistBuildIndexApplyTxDone(db, buildInfo);
+                    Self->PersistBuildIndexState(db, buildInfo);
+                    Progress(BuildId);
+                }
+                break;
+            } else if (buildInfo.IsCancellationRequested() || FillIndex(txc, buildInfo)) {
                 auto cancelState = buildInfo.IsBuildColumns()
                     ? TIndexBuildInfo::EState::Cancellation_DroppingColumns
                     : TIndexBuildInfo::EState::Cancellation_Applying;
@@ -1640,29 +1667,6 @@ public:
                 Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.ApplyTxId)));
             } else {
                 buildInfo.ApplyTxId = InvalidTxId;
-                buildInfo.ApplyTxStatus = NKikimrScheme::StatusSuccess;
-                buildInfo.ApplyTxDone = false;
-
-                NIceDb::TNiceDb db(txc.DB);
-                Self->PersistBuildIndexApplyTxId(db, buildInfo);
-                Self->PersistBuildIndexApplyTxStatus(db, buildInfo);
-                Self->PersistBuildIndexApplyTxDone(db, buildInfo);
-
-                ChangeState(BuildId, TIndexBuildInfo::EState::Filling);
-                Progress(BuildId);
-            }
-            break;
-        case TIndexBuildInfo::EState::AlterSequence:
-            Y_ENSURE(buildInfo.IsBuildPrefixedVectorIndex());
-            Y_ENSURE(buildInfo.KMeans.Level == 2);
-            if (buildInfo.ApplyTxId == InvalidTxId) {
-                AllocateTxId(BuildId);
-            } else if (buildInfo.ApplyTxStatus == NKikimrScheme::StatusSuccess) {
-                Send(Self->SelfId(), AlterSequencePropose(Self, buildInfo), 0, ui64(BuildId));
-            } else if (!buildInfo.ApplyTxDone) {
-                Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.ApplyTxId)));
-            } else {
-                buildInfo.ApplyTxId = {};
                 buildInfo.ApplyTxStatus = NKikimrScheme::StatusSuccess;
                 buildInfo.ApplyTxDone = false;
 
@@ -2508,10 +2512,12 @@ public:
             Self->PersistBuildIndexDropColumnsTxDone(db, buildInfo);
             break;
         }
+        case TIndexBuildInfo::EState::Filling:
+            Y_ENSURE(buildInfo.SubState == TIndexBuildInfo::ESubState::AlterSequence,
+                "TTxReplyCompleted: Filling state only allowed with AlterSequence sub-state");
         case TIndexBuildInfo::EState::DropBuild:
         case TIndexBuildInfo::EState::CreateBuild:
         case TIndexBuildInfo::EState::LockBuild:
-        case TIndexBuildInfo::EState::AlterSequence:
         case TIndexBuildInfo::EState::Applying:
         case TIndexBuildInfo::EState::Cancellation_Applying:
         case TIndexBuildInfo::EState::Rejection_Applying:
@@ -2534,7 +2540,6 @@ public:
         }
         case TIndexBuildInfo::EState::Invalid:
         case TIndexBuildInfo::EState::GatheringStatistics:
-        case TIndexBuildInfo::EState::Filling:
         case TIndexBuildInfo::EState::Done:
         case TIndexBuildInfo::EState::Cancelled:
         case TIndexBuildInfo::EState::Rejected:
@@ -2671,10 +2676,12 @@ public:
             ifErrorMoveTo(TIndexBuildInfo::EState::Rejection_Unlocking);
             break;
         }
+        case TIndexBuildInfo::EState::Filling:
+            Y_ENSURE(buildInfo.SubState == TIndexBuildInfo::ESubState::AlterSequence,
+                "TTxReplyModify: Filling state only allowed with AlterSequence sub-state");
         case TIndexBuildInfo::EState::DropBuild:
         case TIndexBuildInfo::EState::CreateBuild:
         case TIndexBuildInfo::EState::LockBuild:
-        case TIndexBuildInfo::EState::AlterSequence:
         case TIndexBuildInfo::EState::Applying:
         case TIndexBuildInfo::EState::Rejection_Applying:
         {
@@ -2739,7 +2746,6 @@ public:
         }
         case TIndexBuildInfo::EState::Invalid:
         case TIndexBuildInfo::EState::GatheringStatistics:
-        case TIndexBuildInfo::EState::Filling:
         case TIndexBuildInfo::EState::Done:
         case TIndexBuildInfo::EState::Cancelled:
         case TIndexBuildInfo::EState::Rejected:
@@ -2802,10 +2808,12 @@ public:
                 Self->PersistBuildIndexInitiateTxId(db, buildInfo);
             }
             break;
+        case TIndexBuildInfo::EState::Filling:
+            Y_ENSURE(buildInfo.SubState == TIndexBuildInfo::ESubState::AlterSequence,
+                "TTxReplyAllocate: Filling state only allowed with AlterSequence sub-state");
         case TIndexBuildInfo::EState::DropBuild:
         case TIndexBuildInfo::EState::CreateBuild:
         case TIndexBuildInfo::EState::LockBuild:
-        case TIndexBuildInfo::EState::AlterSequence:
         case TIndexBuildInfo::EState::Applying:
         case TIndexBuildInfo::EState::Cancellation_Applying:
         case TIndexBuildInfo::EState::Rejection_Applying:
@@ -2831,7 +2839,6 @@ public:
             break;
         case TIndexBuildInfo::EState::Invalid:
         case TIndexBuildInfo::EState::GatheringStatistics:
-        case TIndexBuildInfo::EState::Filling:
         case TIndexBuildInfo::EState::Done:
         case TIndexBuildInfo::EState::Cancelled:
         case TIndexBuildInfo::EState::Rejected:

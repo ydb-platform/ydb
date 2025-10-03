@@ -9,6 +9,7 @@
 
 #include <google/protobuf/port_def.inc>
 
+#include <util/stream/format.h>
 #include <util/string/join.h>
 
 namespace NYdb {
@@ -121,6 +122,16 @@ namespace {
             Cout << "none" << Endl;
         }
     }
+
+
+    TString PrettyHoursDuration(TDuration duration, TStringBuf zeroStr = ""sv, TStringBuf maxStr = "+inf"sv) {
+        if (duration == TDuration::Zero()) {
+            return ToString(zeroStr);
+        } else if (duration == TDuration::Max()) {
+            return ToString(maxStr);
+        }
+        return TStringBuilder() << Prec(duration.MillisecondsFloat() / 3'600'000.0, PREC_POINT_DIGITS_STRIP_ZEROES, 3) << " hours";
+    }
 }
 
 void PrintAllPermissions(
@@ -139,6 +150,9 @@ int PrintPrettyDescribeConsumerResult(const NYdb::NTopic::TConsumerDescription& 
     const NYdb::NTopic::TConsumer& consumer = description.GetConsumer();
     Cout << "Consumer " << consumer.GetConsumerName() << ": " << Endl;
     Cout << "Important: " << (consumer.GetImportant() ? "Yes" : "No") << Endl;
+    if (const auto availabilityPeriodStr = PrettyHoursDuration(consumer.GetAvailabilityPeriod())) {
+        Cout << "Availability period: " << availabilityPeriodStr << Endl;
+    }
     if (const TInstant& readFrom = consumer.GetReadFrom()) {
         Cout << "Read from: " << readFrom.ToRfc822StringLocal() << Endl;
     } else {
@@ -315,13 +329,14 @@ namespace {
         if (consumers.empty()) {
             return;
         }
-        TPrettyTable table({ "ConsumerName", "SupportedCodecs", "ReadFrom", "Important" });
+        TPrettyTable table({ "ConsumerName", "SupportedCodecs", "ReadFrom", "Important", "Availability period", });
         for (const auto& c: consumers) {
             table.AddRow()
                 .Column(0, c.GetConsumerName())
                 .Column(1, FormatCodecs(c.GetSupportedCodecs()))
                 .Column(2, c.GetReadFrom().ToRfc822StringLocal())
-                .Column(3, c.GetImportant() ? "Yes" : "No");
+                .Column(3, c.GetImportant() ? "Yes" : "No")
+                .Column(4, PrettyHoursDuration(c.GetAvailabilityPeriod()));
 //                .Column(4, rule.ServiceType())
 //                .Column(5, rule.Version());
         }

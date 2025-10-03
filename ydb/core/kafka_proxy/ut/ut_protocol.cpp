@@ -1,4 +1,3 @@
-
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/retry/retry.h>
 
@@ -998,7 +997,6 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
 
         withNewTopic([&](TProducerId id, TProducerEpoch epoch, NKafka::TMetadataResponseData::TMetadataResponseTopic topicMetadata) {
             // Send a message, kill the tablet, send the same message, it should be written only once:
-
             auto topic = *topicMetadata.Name;
 
             auto batch1 = makeBatch(id, epoch, { .BaseSequence = 5 });

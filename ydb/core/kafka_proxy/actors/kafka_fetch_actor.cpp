@@ -36,7 +36,18 @@ void TKafkaFetchActor::SendFetchRequests(const TActorContext& ctx) {
         TVector<NKikimr::NPQ::TPartitionFetchRequest> partPQRequests;
         PrepareFetchRequestData(topicIndex, partPQRequests);
         auto ruPerRequest = topicIndex == 0 && Context->Config.GetMeteringV2Enabled();
-        NKikimr::NPQ::TFetchRequestSettings request(Context->DatabasePath, partPQRequests, FetchRequestData->MaxWaitMs, FetchRequestData->MaxBytes, Context->RlContext, Context->UserToken, 0, ruPerRequest);
+        auto consumer = Context->GroupId.empty() ? NKikimr::NPQ::CLIENTID_WITHOUT_CONSUMER : Context->GroupId;
+        NKikimr::NPQ::TFetchRequestSettings request {
+            .Database = Context->DatabasePath,
+            .Consumer = consumer,
+            .Partitions = partPQRequests,
+            .MaxWaitTimeMs = FetchRequestData->MaxWaitMs < 0 ? 1000u : FetchRequestData->MaxWaitMs,
+            .TotalMaxBytes = FetchRequestData->MaxBytes < 0 ? 8_MB : FetchRequestData->MaxBytes,
+            .RuPerRequest = ruPerRequest,
+            .RequestId = 0,
+            .RlCtx = Context->RlContext,
+            .UserToken = Context->UserToken
+        };
         auto fetchActor = NKikimr::NPQ::CreatePQFetchRequestActor(request, NKikimr::MakeSchemeCacheID(), ctx.SelfID);
         auto actorId = ctx.Register(fetchActor);
         PendingResponses++;
@@ -60,7 +71,6 @@ void TKafkaFetchActor::PrepareFetchRequestData(const size_t topicIndex, TVector<
         partPQRequest.Partition = partKafkaRequest.Partition;
         partPQRequest.Offset = partKafkaRequest.FetchOffset;
         partPQRequest.MaxBytes = partKafkaRequest.PartitionMaxBytes;
-        partPQRequest.ClientId = Context->GroupId.empty() ? NKikimr::NPQ::CLIENTID_WITHOUT_CONSUMER : Context->GroupId;
     }
 }
 

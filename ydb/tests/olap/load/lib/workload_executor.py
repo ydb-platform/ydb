@@ -85,11 +85,11 @@ class WorkloadTestBase(LoadSuiteBase):
             result.iterations[0].time = time_module.time() - verification_start_time
 
             # Добавляем ошибку если есть проблема с кластером
-            if cluster_issue and cluster_issue.get("issue_type") is not None:
+            if cluster_issue.get("issue_type") is not None:
                 result.add_error(cluster_issue["issue_description"])
-                result.success = False
+                is_successful = False
             else:
-                result.success = True
+                is_successful = True
 
             # Устанавливаем start_time для _Verification
             try:
@@ -107,13 +107,12 @@ class WorkloadTestBase(LoadSuiteBase):
                 **cluster_issue  # Добавляем информацию о проблеме кластера
             })
 
-            # Подготавливаем данные для выгрузки ClusterCheck
             cluster_check_upload_data = {
                 "kind": 'ClusterCheck',
                 "suite": suite_name,
                 "test": workload_name,
                 "timestamp": time_module.time(),
-                "is_successful": result.success,
+                "is_successful": is_successful,
                 "statistics": stats
             }
 
@@ -127,7 +126,7 @@ class WorkloadTestBase(LoadSuiteBase):
             ResultsProcessor.upload_results(**cluster_check_upload_data)
 
             # Если проверка кластера не прошла успешно, поднимаем исключение
-            if cluster_issue and cluster_issue.get("issue_type") is not None:
+            if cluster_issue.get("issue_type") is not None:
                 raise Exception(f"Cluster verification failed: {cluster_issue['issue_description']}")
 
     @classmethod

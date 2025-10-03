@@ -23,6 +23,7 @@ struct TCmsSentinelConfig {
         bool PileupReplicas;
         ui32 OverrideReplicasInRingCount;
         ui32 OverrideRingsCount;
+        ui32 ReplicasDensity;
 
         void Serialize(NKikimrCms::TCmsConfig::TSentinelConfig::TStateStorageSelfHealConfig &config) const {
             config.SetEnable(Enable);
@@ -34,6 +35,7 @@ struct TCmsSentinelConfig {
             config.SetPileupReplicas(PileupReplicas);
             config.SetOverrideReplicasInRingCount(OverrideReplicasInRingCount);
             config.SetOverrideRingsCount(OverrideRingsCount);
+            config.SetReplicasDensity(ReplicasDensity);
         }
 
         void Deserialize(const NKikimrCms::TCmsConfig::TSentinelConfig::TStateStorageSelfHealConfig &config) {
@@ -46,6 +48,7 @@ struct TCmsSentinelConfig {
             PileupReplicas = config.GetPileupReplicas();
             OverrideReplicasInRingCount = config.GetOverrideReplicasInRingCount();
             OverrideRingsCount = config.GetOverrideRingsCount();
+            ReplicasDensity = config.GetReplicasDensity();
         }
     };
 

@@ -13,6 +13,7 @@
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
 #include <ydb/core/kqp/provider/yql_kikimr_gateway.h>
+#include <ydb/core/kqp/proxy_service/script_executions_utils/kqp_script_execution_utils.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/resource_pools/resource_pool_settings.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
@@ -195,23 +196,6 @@ struct TEvPrivate {
 
 //// Common
 
-NYql::TIssues AddRootIssue(const TString& message, const NYql::TIssues& issues, bool addEmptyRoot = true) {
-    if (!issues && !addEmptyRoot) {
-        return {};
-    }
-
-    NYql::TIssue rootIssue(message);
-    for (const auto& issue : issues) {
-        rootIssue.AddSubIssue(MakeIntrusive<NYql::TIssue>(issue));
-    }
-
-    return {rootIssue};
-}
-
-NOperationId::TOperationId OperationIdFromExecutionId(const TString& executionId) {
-    return NOperationId::TOperationId(ScriptExecutionOperationFromExecutionId(executionId));
-}
-
 TString LogQueryState(const NKikimrKqp::TStreamingQueryState& state) {
     return TStringBuilder()
         << "{Status: " << NKikimrKqp::TStreamingQueryState::EStatus_Name(state.GetStatus())
@@ -325,36 +309,6 @@ private:
 private:
     TProperties& Src;
     TProperties Dst;
-};
-
-// Used for properties parsing after describing streaming query
-class TStreamingQuerySettings {
-public:
-    TStreamingQuerySettings& FromProto(const NKikimrSchemeOp::TStreamingQueryProperties& info) {
-        for (const auto& [name, value] : info.GetProperties()) {
-            if (name == TStreamingQueryConfig::TSqlSettings::QUERY_TEXT_FEATURE) {
-                QueryText = value;
-            } else if (name == TStreamingQueryConfig::TProperties::Run) {
-                Run = value == "true";
-            } else if (name == TStreamingQueryConfig::TProperties::ResourcePool) {
-                ResourcePool = value;
-            } else {
-                LOG_E("Ignored unexpected property: " << name);
-            }
-        }
-
-        return *this;
-    }
-
-private:
-    static TString LogPrefix() {
-        return TStringBuilder() << "[TStreamingQuerySettings] ";
-    }
-
-public:
-    TString QueryText;
-    bool Run = false;
-    TString ResourcePool;
 };
 
 template <typename TDerived>
@@ -491,7 +445,7 @@ protected:
     bool ScheduleRetry(NYql::TIssues issues, bool longDelay = false) {
         if (!RetryState) {
             RetryState = TRetryPolicy::GetExponentialBackoffPolicy(
-                [](bool longDelay){
+                [](bool longDelay) {
                     return longDelay ? ERetryErrorClass::LongRetry : ERetryErrorClass::ShortRetry;
                 },
                 TDuration::MilliSeconds(100),

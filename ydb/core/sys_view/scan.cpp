@@ -24,6 +24,7 @@
 #include <ydb/core/sys_view/storage/storage_pools.h>
 #include <ydb/core/sys_view/storage/storage_stats.h>
 #include <ydb/core/sys_view/storage/vslots.h>
+#include <ydb/core/sys_view/streaming_queries/streaming_queries.h>
 #include <ydb/core/sys_view/tablets/tablets.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -274,6 +275,8 @@ THolder<NActors::IActor> CreateSystemViewScan(
                                             ownerId, scanId, sysViewDescription, tableRange, columns, std::move(userToken));
     case ESysViewType::EShowCreate:
         return CreateShowCreate(ownerId, scanId, sysViewDescription, tableRange, columns, database, std::move(userToken));
+    case ESysViewType::EStreamingQueries:
+        return CreateStreamingQueriesScan(ownerId, scanId, sysViewDescription, tableRange, columns, std::move(userToken), database, reverse);
     default:
         return {};
     }

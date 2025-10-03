@@ -89,16 +89,20 @@ protected:
     }
 
     void ReplyErrorAndDie(Ydb::StatusIds::StatusCode status, const TString& message) {
+        ReplyErrorAndDie(status, {NYql::TIssue(message)});
+    }
+
+    void ReplyErrorAndDie(Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues) {
         LOG_ERROR_S(TlsActivationContext->AsActorContext(), NKikimrServices::SYSTEM_VIEWS,
             "Scan error, actor: " << TBase::SelfId()
                 << ", owner: " << OwnerActorId
                 << ", scan id: " << ScanId
                 << ", sys view info: " << SysViewInfo.ShortDebugString()
-                << ", error: " << message);
+                << ", issues: " << issues.ToOneLineString());
 
         auto error = MakeHolder<NKqp::TEvKqpCompute::TEvScanError>();
         error->Record.SetStatus(status);
-        IssueToMessage(NYql::TIssue(message), error->Record.MutableIssues()->Add());
+        IssuesToMessage(issues, error->Record.MutableIssues());
 
         TBase::Send(OwnerActorId, error.Release());
 
@@ -227,7 +231,7 @@ private:
         ReplyErrorAndDie(Ydb::StatusIds::UNAVAILABLE, "System view: tenant nodes lookup failed");
     }
 
-    void HandleScanAck(NKqp::TEvKqpCompute::TEvScanDataAck::TPtr&) {
+    void HandleScanAck(NKqp::TEvKqpCompute::TEvScanDataAck::TPtr& ev) {
         switch (FailState) {
             case LIMITER_FAILED:
                 ReplyLimiterFailedAndDie();
@@ -237,6 +241,7 @@ private:
                 break;
             default:
                 AckReceived = true;
+                FreeSpace = ev->Get()->FreeSpace;
                 break;
         }
     }
@@ -328,6 +333,7 @@ private:
         switch (ev->GetTypeRewrite()) {
             hFunc(NKqp::TEvKqpCompute::TEvScanDataAck, HandleScanAck);
             hFunc(TEvSysView::TEvGetScanLimiterResult, HandleLimiter);
+            hFunc(NKqp::TEvKqp::TEvAbortExecution, HandleAbortExecution);
             cFunc(TEvents::TEvWakeup::EventType, HandleTimeout);
             cFunc(TEvents::TEvPoison::EventType, this->PassAway);
             default:
@@ -380,6 +386,7 @@ protected:
     ui64 SysViewProcessorId = 0;
 
     bool AckReceived = false;
+    ui64 FreeSpace = 0;
 
     bool BatchRequestInFlight = false;
     bool DoPipeCacheUnlink = false;

@@ -7,12 +7,13 @@
 #include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>
 #include <ydb/core/kqp/proxy_service/kqp_script_executions.h>
 #include <ydb/core/kqp/proxy_service/proto/result_set_meta.pb.h>
-#include <ydb/library/ydb_issue/issue_helpers.h>
-#include <ydb/library/ydb_issue/proto/issue_id.pb.h>
+#include <ydb/core/kqp/proxy_service/script_executions_utils/kqp_script_execution_utils.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/event_pb.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/ydb_issue/issue_helpers.h>
+#include <ydb/library/ydb_issue/proto/issue_id.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
 #include <library/cpp/protobuf/json/json2proto.h>
@@ -38,19 +39,6 @@ constexpr ui32 LEASE_UPDATE_FREQUENCY = 2;
 constexpr ui64 MIN_SAVE_RESULT_BATCH_SIZE = 5_MB;
 constexpr i32 MIN_SAVE_RESULT_BATCH_ROWS = 5000;
 constexpr ui64 RUN_SCRIPT_ACTOR_BUFFER_SIZE = 40_MB;
-
-NYql::TIssues AddRootIssue(const TString& message, const NYql::TIssues& issues, bool addEmptyRoot = false) {
-    if (!issues && !addEmptyRoot) {
-        return {};
-    }
-
-    NYql::TIssue rootIssue(message);
-    for (const auto& issue : issues) {
-        rootIssue.AddSubIssue(MakeIntrusive<NYql::TIssue>(issue));
-    }
-
-    return {rootIssue};
-}
 
 struct TProducerState {
     TMaybe<ui64> LastSeqNo;

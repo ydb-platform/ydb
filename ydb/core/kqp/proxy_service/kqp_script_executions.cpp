@@ -8,27 +8,30 @@
 #include <ydb/core/kqp/proxy_service/proto/result_set_meta.pb.h>
 #include <ydb/core/kqp/proxy_service/script_executions_utils/kqp_script_execution_compression.h>
 #include <ydb/core/kqp/proxy_service/script_executions_utils/kqp_script_execution_retries.h>
+#include <ydb/core/kqp/proxy_service/script_executions_utils/kqp_script_execution_utils.h>
 #include <ydb/core/kqp/run_script_actor/kqp_run_script_actor.h>
-#include <ydb/library/services/services.pb.h>
-#include <ydb/library/query_actor/query_actor.h>
-#include <ydb/library/table_creator/table_creator.h>
-#include <yql/essentials/public/issue/yql_issue_message.h>
-#include <ydb/public/api/protos/ydb_issue_message.pb.h>
-#include <ydb/public/api/protos/ydb_operation.pb.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/operation_id/operation_id.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/params/params.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
-
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/query_actor/query_actor.h>
+#include <ydb/library/services/services.pb.h>
+#include <ydb/library/table_creator/table_creator.h>
+#include <ydb/public/api/protos/ydb_issue_message.pb.h>
+#include <ydb/public/api/protos/ydb_operation.pb.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/params/params.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/operation_id/operation_id.h>
+
+#include <yql/essentials/public/issue/yql_issue_message.h>
+
+#include <google/protobuf/util/time_util.h>
+
 #include <library/cpp/protobuf/interop/cast.h>
 #include <library/cpp/protobuf/json/json2proto.h>
 #include <library/cpp/protobuf/json/proto2json.h>
 #include <library/cpp/retry/retry_policy.h>
 
-#include <google/protobuf/util/time_util.h>
 #include <util/generic/guid.h>
 #include <util/generic/utility.h>
 
@@ -50,18 +53,6 @@ constexpr TDuration LEASE_DURATION = TDuration::Seconds(30);
 constexpr TDuration DEADLINE_OFFSET = TDuration::Minutes(20);
 constexpr TDuration BRO_RUN_INTERVAL = TDuration::Minutes(60);
 constexpr ui64 MAX_TRANSIENT_ISSUES_COUNT = 10;
-
-TString SerializeIssues(const NYql::TIssues& issues) {
-    NYql::TIssue root;
-    for (const NYql::TIssue& issue : issues) {
-        root.AddSubIssue(MakeIntrusive<NYql::TIssue>(issue));
-    }
-    Ydb::Issue::IssueMessage rootMessage;
-    if (issues) {
-        NYql::IssueToMessage(root, &rootMessage);
-    }
-    return NProtobufJson::Proto2Json(rootMessage, NProtobufJson::TProto2JsonConfig());
-}
 
 NYql::TIssues DeserializeIssues(const std::string& issuesSerialized) {
     Ydb::Issue::IssueMessage rootMessage = NProtobufJson::Json2Proto<Ydb::Issue::IssueMessage>(issuesSerialized);
@@ -310,19 +301,6 @@ NKikimrKqp::EQueryAction GetActionFromExecMode(Ydb::Query::ExecMode execMode) {
     }
 }
 
-NYql::TIssues AddRootIssue(const TString& message, const NYql::TIssues& issues, bool force = false) {
-    if (!issues && !force) {
-        return {};
-    }
-
-    NYql::TIssue rootIssue(message);
-    for (const auto& issue : issues) {
-        rootIssue.AddSubIssue(MakeIntrusive<NYql::TIssue>(issue));
-    }
-
-    return {rootIssue};
-}
-
 class TCreateScriptOperationQuery : public TQueryBase {
 public:
     TCreateScriptOperationQuery(const TString& executionId, const TActorId& runScriptActorId,
@@ -432,7 +410,7 @@ public:
                 .Utf8(token.GetUserSID())
                 .Build()
             .AddParam("$user_group_sids")
-                .JsonDocument(SerializeGroupSids(token.GetGroupSIDs()))
+                .JsonDocument(SequenceToJsonString(token.GetGroupSIDs()))
                 .Build()
             .AddParam("$parameters")
                 .String(SerializeParameters())
@@ -466,22 +444,6 @@ public:
     }
 
 private:
-    static TString SerializeGroupSids(const TVector<NACLib::TSID>& groupSids) {
-        NJson::TJsonValue value;
-        value.SetType(NJson::EJsonValueType::JSON_ARRAY);
-
-        NJson::TJsonValue::TArray& jsonArray = value.GetArraySafe();
-        jsonArray.resize(groupSids.size());
-        for (size_t i = 0; i < groupSids.size(); ++i) {
-            jsonArray[i] = NJson::TJsonValue(groupSids[i]);
-        }
-
-        NJsonWriter::TBuf serializedGroupSids;
-        serializedGroupSids.WriteJsonValue(&value, false, PREC_NDIGITS, 17);
-
-        return serializedGroupSids.Str();
-    }
-
     TString SerializeParameters() const {
         NJson::TJsonValue value;
         value.SetType(NJson::EJsonValueType::JSON_MAP);
@@ -2134,7 +2096,8 @@ public:
                 ast,
                 ast_compressed,
                 ast_compression_method,
-                graph_compressed IS NOT NULL AS has_graph
+                graph_compressed IS NOT NULL AS has_graph,
+                retry_state
             FROM `.metadata/script_executions`
             WHERE database = $database AND execution_id = $execution_id AND
                   (expire_at > CurrentUtcTimestamp() OR expire_at IS NULL);
@@ -2245,6 +2208,16 @@ public:
                 ScriptExecutionRunnerActorIdFromString(*runScriptActorIdString, Response->RunScriptActorId);
             }
 
+            if (const auto& serializedRetryState = result.ColumnParser("retry_state").GetOptionalJsonDocument()) {
+                NJson::TJsonValue value;
+                if (!NJson::ReadJsonTree(*serializedRetryState, &value)) {
+                    Finish(Ydb::StatusIds::INTERNAL_ERROR, "Retry state is corrupted");
+                    return;
+                }
+
+                NProtobufJson::Json2Proto(value, Response->RetryState);
+            }
+
             Response->StateSaved = result.ColumnParser("has_graph").GetBool();
         }
 
@@ -2263,14 +2236,14 @@ public:
                     return;
                 }
 
+                Response->LeaseDeadline = *leaseDeadline;
                 Response->LeaseGeneration = *leaseGenerationInDatabase;
                 LeaseStatus = static_cast<ELeaseState>(result.ColumnParser("lease_state").GetOptionalInt32().value_or(static_cast<i32>(ELeaseState::ScriptRunning)));
+                Response->WaitRetry = *LeaseStatus == ELeaseState::WaitRetry;
 
                 if (*leaseDeadline < StartActorTime) {
                     Response->LeaseExpired = true;
-                    if (*LeaseStatus == ELeaseState::WaitRetry) {
-                        Response->RetryRequired = true;
-                    } else {
+                    if (*LeaseStatus != ELeaseState::WaitRetry) {
                         Response->FinalizationStatus = EFinalizationStatus::FS_ROLLBACK;
                     }
                 }
@@ -2391,16 +2364,23 @@ private:
             << ", Issues: " << Response->Get()->Issues.ToOneLineString()
             << ", Ready: " << Response->Get()->Ready
             << ", LeaseExpired: " << Response->Get()->LeaseExpired
-            << ", RetryRequired: " << Response->Get()->RetryRequired
+            << ", WaitRetry: " << Response->Get()->WaitRetry
             << (Response->Get()->FinalizationStatus ? (TStringBuilder() << ", FinalizationStatus: " << static_cast<ui64>(*Response->Get()->FinalizationStatus)) : TStringBuilder())
             << ", RunScriptActorId: " << Response->Get()->RunScriptActorId
             << ", LeaseGeneration: " << Response->Get()->LeaseGeneration);
 
+        if (!Request->Get()->CheckLeaseState) {
+            Reply();
+            return;
+        }
+
         const auto& event = *Response->Get();
-        if (event.RetryRequired) {
-            RestartScriptExecution(event.LeaseGeneration);
-        } else if (event.LeaseExpired) {
-            StartLeaseChecking(event.RunScriptActorId, event.LeaseGeneration);
+        if (event.LeaseExpired) {
+            if (event.WaitRetry) {
+                RestartScriptExecution(event.LeaseGeneration);
+            } else {
+                StartLeaseChecking(event.RunScriptActorId, event.LeaseGeneration);
+            }
         } else if (const auto finalizationStatus = event.FinalizationStatus) {
             TMaybe<Ydb::Query::ExecStatus> execStatus;
             if (Response->Get()->Ready) {
@@ -2419,11 +2399,16 @@ private:
         TMaybe<google::protobuf::Any> metadata;
         metadata.ConstructInPlace().PackFrom(event.Metadata);
 
+        const auto& retryState = event.RetryState;
+
         Send(Request->Sender, new TEvGetScriptExecutionOperationResponse(event.Status, {
             .Metadata = std::move(metadata),
             .Ready = event.Ready,
             .StateSaved = event.StateSaved,
-        }, event.Issues));
+            .RetryCount = retryState.GetRetryCounter(),
+            .LastFailAt = NProtoInterop::CastFromProto(retryState.GetRetryCounterUpdatedAt()),
+            .SuspendedUntil = event.WaitRetry ? event.LeaseDeadline : TInstant::Zero(),
+        }, event.Issues), 0, Request->Cookie);
         PassAway();
     }
 
@@ -3606,10 +3591,12 @@ public:
                 .Utf8(Request.CustomerSuppliedId)
                 .Build()
             .AddParam("$script_sinks")
-                .JsonDocument(SerializeSinks(Request.Sinks))
+                .JsonDocument(SequenceToJsonString(Request.Sinks.size(), [&](ui64 i, NJson::TJsonValue& value) {
+                    SerializeBinaryProto(Request.Sinks[i], value);
+                }))
                 .Build()
             .AddParam("$script_secret_names")
-                .JsonDocument(SerializeSecretNames(Request.SecretNames))
+                .JsonDocument(SequenceToJsonString(Request.SecretNames))
                 .Build()
             .AddParam("$lease_generation")
                 .Int64(LeaseGeneration)
@@ -3624,39 +3611,6 @@ public:
 
     void OnFinish(Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues) override {
         Send(Owner, new TEvSaveScriptExternalEffectResponse(status, std::move(issues)));
-    }
-
-private:
-    static TString SerializeSinks(const std::vector<NKqpProto::TKqpExternalSink>& sinks) {
-        NJson::TJsonValue value;
-        value.SetType(NJson::EJsonValueType::JSON_ARRAY);
-
-        NJson::TJsonValue::TArray& jsonArray = value.GetArraySafe();
-        jsonArray.resize(sinks.size());
-        for (size_t i = 0; i < sinks.size(); ++i) {
-            SerializeBinaryProto(sinks[i], jsonArray[i]);
-        }
-
-        NJsonWriter::TBuf serializedSinks;
-        serializedSinks.WriteJsonValue(&value, false, PREC_NDIGITS, 17);
-
-        return serializedSinks.Str();
-    }
-
-    static TString SerializeSecretNames(const std::vector<TString>& secretNames) {
-        NJson::TJsonValue value;
-        value.SetType(NJson::EJsonValueType::JSON_ARRAY);
-
-        NJson::TJsonValue::TArray& jsonArray = value.GetArraySafe();
-        jsonArray.resize(secretNames.size());
-        for (size_t i = 0; i < secretNames.size(); ++i) {
-            jsonArray[i] = NJson::TJsonValue(secretNames[i]);
-        }
-
-        NJsonWriter::TBuf serializedSecretNames;
-        serializedSecretNames.WriteJsonValue(&value, false, PREC_NDIGITS, 17);
-
-        return serializedSecretNames.Str();
     }
 
 private:

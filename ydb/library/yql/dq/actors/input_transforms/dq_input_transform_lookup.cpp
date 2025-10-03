@@ -44,7 +44,6 @@ public:
         const NMiniKQL::TStructType* lookupPayloadType,
         const NMiniKQL::TMultiType* outputRowType,
         TOutputRowColumnOrder&& outputRowColumnOrder,
-        const THashMap<TString, TString>& secureParams,
         size_t maxDelayedRows,
         size_t cacheLimit,
         std::chrono::seconds cacheTtl
@@ -59,7 +58,6 @@ public:
         , TaskCounters(taskCounters)
         , Factory(factory)
         , Settings(std::move(settings))
-        , SecureParams(secureParams)
         , LookupInputIndexes(std::move(lookupInputIndexes))
         , OtherInputIndexes(std::move(otherInputIndexes))
         , InputRowType(inputRowType)
@@ -650,57 +648,6 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateInputTransformStre
         lookupPayloadColumns,
         inputColumns
     );
-<<<<<<< HEAD
-=======
-    if (settings.GetIsMultiget()) {
-        auto actor = isWide ?
-            (TInputTransformStreamMultiLookupBase*)new TInputTransformStreamMultiLookupWide(
-                args.Alloc,
-                args.HolderFactory,
-                args.TypeEnv,
-                args.InputIndex,
-                args.TransformInput,
-                args.ComputeActorId,
-                args.TaskCounters,
-                factory,
-                std::move(settings),
-                std::move(lookupKeyInputIndexes),
-                std::move(otherInputIndexes),
-                inputRowType,
-                lookupKeyType,
-                lookupPayloadType,
-                outputRowType,
-                std::move(outputColumnsOrder),
-                args.SecureParams,
-                settings.GetMaxDelayedRows(),
-                settings.GetCacheLimit(),
-                std::chrono::seconds(settings.GetCacheTtlSeconds())
-            ) :
-            (TInputTransformStreamMultiLookupBase*)new TInputTransformStreamMultiLookupNarrow(
-                args.Alloc,
-                args.HolderFactory,
-                args.TypeEnv,
-                args.InputIndex,
-                args.TransformInput,
-                args.ComputeActorId,
-                args.TaskCounters,
-                factory,
-                std::move(settings),
-                std::move(lookupKeyInputIndexes),
-                std::move(otherInputIndexes),
-                inputRowType,
-                lookupKeyType,
-                lookupPayloadType,
-                outputRowType,
-                std::move(outputColumnsOrder),
-                args.SecureParams,
-                settings.GetMaxDelayedRows(),
-                settings.GetCacheLimit(),
-                std::chrono::seconds(settings.GetCacheTtlSeconds())
-            );
-        return {actor, actor};
-    }
->>>>>>> 41a87af8c28 (YDB FQ: refactoring work with tokens in YQL Generic Provider (#26015))
     auto actor = isWide ?
         (TInputTransformStreamLookupBase*)new TInputTransformStreamLookupWide(
             args.Alloc,
@@ -719,7 +666,6 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateInputTransformStre
             lookupPayloadType,
             outputRowType,
             std::move(outputColumnsOrder),
-            args.SecureParams,
             settings.GetMaxDelayedRows(),
             settings.GetCacheLimit(),
             std::chrono::seconds(settings.GetCacheTtlSeconds())
@@ -741,7 +687,6 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateInputTransformStre
             lookupPayloadType,
             outputRowType,
             std::move(outputColumnsOrder),
-            args.SecureParams,
             settings.GetMaxDelayedRows(),
             settings.GetCacheLimit(),
             std::chrono::seconds(settings.GetCacheTtlSeconds())

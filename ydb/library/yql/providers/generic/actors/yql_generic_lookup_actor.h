@@ -23,8 +23,7 @@ namespace NYql::NDq {
         const NKikimr::NMiniKQL::TStructType* payloadType,
         const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
         const NKikimr::NMiniKQL::THolderFactory& holderFactory,
-        const size_t maxKeysInRequest,
-        const THashMap<TString, TString>& secureParams
+        const size_t maxKeysInRequest
     );
 
 } // namespace NYql::NDq

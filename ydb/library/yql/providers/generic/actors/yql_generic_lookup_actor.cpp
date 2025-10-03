@@ -533,12 +533,11 @@ namespace NYql::NDq {
         const NKikimr::NMiniKQL::TStructType* payloadType,
         const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
         const NKikimr::NMiniKQL::THolderFactory& holderFactory,
-        const size_t maxKeysInRequest,
-        const THashMap<TString, TString>& secureParams
+        const size_t maxKeysInRequest
     )
     {
         auto credentialsProvider = NYql::NDq::CreateGenericCredentialsProvider(
-            secureParams.Value(lookupSource.GetTokenName(), TString()),
+            "",
             lookupSource.GetToken(),
             lookupSource.GetServiceAccountId(),
             lookupSource.GetServiceAccountIdSignature(),

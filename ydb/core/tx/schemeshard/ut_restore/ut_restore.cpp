@@ -2375,7 +2375,7 @@ value {
         env.TestWaitNotification(runtime, txId);
 
         const ui32 expected = data.Data.size() / batchSize + ui32(bool(data.Data.size() % batchSize));
-        UNIT_ASSERT(requests > expected);
+        UNIT_ASSERT_C(requests > expected, TStringBuilder() << "Expected to get more than " << expected << " requests, but got only " << requests);
         UNIT_ASSERT_VALUES_EQUAL(responses, expected);
 
         auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key"}, {"key", "value"});

@@ -111,7 +111,7 @@ namespace NYdb::NConsoleClient {
                 case ETopicMetadataField::Meta:
                     {
                         NJson::TJsonValue json;
-                        for (auto const& [k, v] : message.GetMeta()->Fields) {
+                        for (auto const& [k, v] : message.GetMessageMeta()->Fields) {
                             json[k] = v;
                         }
                         row.Column(idx, json);

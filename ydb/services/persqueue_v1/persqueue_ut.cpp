@@ -7570,7 +7570,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         UNIT_ASSERT_VALUES_EQUAL(messages.size(), 3);
         auto metadataSizeExpected = 2;
         for (const auto& msg : dataEv->GetMessages()) {
-            auto meta = msg.GetMessageMeta();
+            auto meta = msg.GetMeta();
             UNIT_ASSERT_VALUES_EQUAL(meta->Fields.size(), metadataSizeExpected);
             metadataSizeExpected--;
         }

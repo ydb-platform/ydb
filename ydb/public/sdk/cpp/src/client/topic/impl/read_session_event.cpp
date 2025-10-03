@@ -116,7 +116,7 @@ TInstant TMessageBase::GetWriteTime() const {
     return Information.WriteTime;
 }
 
-const TMessageMeta::TPtr& TMessageBase::GetMeta() const {
+const TMessageMeta::TPtr& TMessageBase::GetMessageMeta() const {
     return Information.MessageMeta;
 }
 

@@ -125,7 +125,7 @@ struct TReadSessionEvent {
             TInstant GetWriteTime() const;
 
             //! Metainfo.
-            const TMessageMeta::TPtr& GetMeta() const;
+            const TMessageMeta::TPtr& GetMessageMeta() const;
 
             //! Message level meta info.
             const TWriteSessionMeta::TPtr& GetSessionMeta() const;

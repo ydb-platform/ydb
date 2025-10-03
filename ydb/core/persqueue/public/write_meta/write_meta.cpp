@@ -44,7 +44,7 @@ TString GetSerializedData(const NYdb::NPersQueue::TReadSessionEvent::TDataReceiv
 
 TString GetSerializedData(const NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TCompressedMessage& message) {
     NKikimrPQClient::TDataChunk proto;
-    for (const auto& item : message.GetMeta()->Fields) {
+    for (const auto& item : message.GetMessageMeta()->Fields) {
         if (item.first == "_ip") {
             proto.SetIp(TString{item.second});
         } else if (item.first == "_encoded_producer_id") {
@@ -53,7 +53,7 @@ TString GetSerializedData(const NYdb::NTopic::TReadSessionEvent::TDataReceivedEv
             SetMetaField(proto, TString{item.first}, TString{item.second});
         }
     }
-    auto& fields = message.GetMeta()->Fields;
+    auto& fields = message.GetMessageMeta()->Fields;
     if (!fields.empty()) {
         for (const auto& item : fields) {
             auto& metaItem = *proto.AddMessageMeta();

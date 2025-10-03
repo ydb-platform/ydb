@@ -63,6 +63,10 @@ public:
     bool IsActive() const {
         return ActivityChecker->IsActive();
     }
+    
+    TString GetErrorMessage() const {
+        return ActivityChecker->GetErrorMessage();
+    }
 
     TWritingContext(const ui64 tabletId, const NActors::TActorId& tabletActorId, const std::shared_ptr<ISnapshotSchema>& actualSchema,
         const std::shared_ptr<IStoragesManager>& operators, const std::shared_ptr<NColumnShard::TSplitterCounters>& splitterCounters,

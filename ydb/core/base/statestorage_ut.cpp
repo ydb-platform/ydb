@@ -135,7 +135,7 @@ Y_UNIT_TEST_SUITE(TStateStorageConfig) {
         TStateStorageInfo info;
         FillStateStorageInfo(&info, 9, 5, 1, false);
         NKikimr::TStateStorageInfo::TSelection selection;
-        info.SelectReplicas(72075186224040026UL, &selection, 0);
+        info.SelectReplicas(72075186224040026UL, &selection);
         ui32 expected[] = {0, 2, 1, 3, 4};
         for (ui32 i : xrange(5)) {
             UNIT_ASSERT_EQUAL(selection.SelectedReplicas[i].NodeId(), expected[i]);

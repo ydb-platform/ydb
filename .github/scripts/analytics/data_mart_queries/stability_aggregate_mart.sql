@@ -1,9 +1,23 @@
 -- Stability Aggregate Data Mart
--- Разворачивание данных для записей с aggregation_level = "aggregate"
+-- Новая архитектура: TestInit -> ClusterCheck -> Stability
 
 $run_id_limit = CAST(CurrentUtcTimestamp() AS Uint64) - 30UL * 86400UL * 1000000UL;
 
--- Находим записи проверок кластера (ClusterCheck)
+-- Находим записи инициализации тестов (TestInit) - основа для JOIN
+$test_inits = SELECT
+    Db,
+    Suite,
+    Test,
+    RunId,
+    Timestamp AS InitTimestamp,
+    Stats AS InitStats,
+    Info AS InitInfo
+FROM `nemesis/tests_results`
+WHERE 
+    CAST(RunId AS Uint64) / 1000UL > $run_id_limit
+    AND Kind = 'TestInit';
+
+-- Находим последний ClusterCheck для каждого теста
 $cluster_checks = SELECT
     Db,
     Suite,
@@ -12,14 +26,31 @@ $cluster_checks = SELECT
     Timestamp AS CheckTimestamp,
     Success AS CheckSuccess,
     Stats AS CheckStats,
-    Info AS CheckInfo
+    Info AS CheckInfo,
+    JSON_VALUE(Stats, '$.verification_phase') AS VerificationPhase,
+    JSON_VALUE(Stats, '$.check_type') AS CheckType,
+    ROW_NUMBER() OVER (PARTITION BY Db, Suite, Test, RunId ORDER BY Timestamp DESC) AS rn
 FROM `nemesis/tests_results`
 WHERE 
     CAST(RunId AS Uint64) / 1000UL > $run_id_limit
     AND Kind = 'ClusterCheck';
 
+-- Берем только последний ClusterCheck для каждого теста с JSON данными
+$latest_cluster_checks = SELECT
+    Db,
+    Suite,
+    Test,
+    RunId,
+    CheckTimestamp,
+    CheckSuccess,
+    CheckStats,
+    VerificationPhase,
+    CheckType
+FROM $cluster_checks
+WHERE rn = 1;
+
 -- Находим Suite со Stability записями
-$stability_suites = SELECT
+$stability_results = SELECT
     Db,
     Suite,
     Test,
@@ -34,25 +65,30 @@ WHERE
     AND Kind = 'Stability'
     AND JSON_VALUE(Stats, '$.aggregation_level') = 'aggregate';
 
--- Объединяем ClusterCheck записи со Stability записями (LEFT JOIN от ClusterCheck к Stability)
+-- Объединяем все данные: TestInit (основа) + последний ClusterCheck + Stability
 $all_tests = SELECT
-    cc.Db AS Db,
-    cc.Suite AS Suite,
-    cc.Test AS Test,
-    cc.RunId AS RunId,
-    s.Timestamp AS StabilityTimestamp,  -- Может быть NULL если нет Stability записи
-    s.Success AS Success,               -- Может быть NULL если нет Stability записи
+    ti.Db AS Db,
+    ti.Suite AS Suite,
+    ti.Test AS Test,
+    ti.RunId AS RunId,
+    ti.InitTimestamp AS InitTimestamp,
+    s.Timestamp AS StabilityTimestamp,
+    s.Success AS Success,
     
-    -- Информация о проверке кластера (из ClusterCheck записи - всегда есть)
-    cc.CheckSuccess AS ClusterCheckSuccess,
-    cc.CheckTimestamp AS ClusterCheckTimestamp,
-    JSON_VALUE(cc.CheckStats, '$.issue_type') AS ClusterIssueType,
-    JSON_VALUE(cc.CheckStats, '$.issue_description') AS ClusterIssueDescription,
-    JSON_VALUE(cc.CheckStats, '$.verification_phase') AS ClusterIssuePhase,
-    JSON_VALUE(cc.CheckStats, '$.check_type') AS ClusterCheckType,
-    CASE WHEN JSON_VALUE(cc.CheckStats, '$.is_critical') = 'true' THEN 1U ELSE 0U END AS ClusterIssueCritical,
+    -- Информация о последней проверке кластера
+    cc.CheckTimestamp AS FirstClusterCheckTimestamp,
+    cc.CheckTimestamp AS LastClusterCheckTimestamp,
     
-    -- Извлекаем основные агрегированные метрики из Stats JSON (NULL для кластерных проблем)
+    -- Статус кластерной проверки
+    CAST(cc.CheckSuccess AS Uint32) AS OverallClusterCheckSuccess,
+    
+    -- Информация о проблемах кластера из последней проверки
+    JSON_VALUE(cc.CheckStats, '$.issue_type') AS ClusterIssueTypes,
+    JSON_VALUE(cc.CheckStats, '$.issue_description') AS ClusterIssueDescriptions,
+    cc.VerificationPhase AS VerificationPhases,
+    cc.CheckType AS CheckTypes,
+    
+    -- Извлекаем основные метрики из Stats JSON (NULL для кластерных проблем)
     CAST(JSON_VALUE(s.Stats, '$.total_runs') AS Int32) AS TotalRuns,
     CAST(JSON_VALUE(s.Stats, '$.successful_runs') AS Int32) AS SuccessfulRuns,
     CAST(JSON_VALUE(s.Stats, '$.failed_runs') AS Int32) AS FailedRuns,
@@ -93,13 +129,13 @@ $all_tests = SELECT
     s.Stats AS Stats,  -- Добавляем Stats для использования в финальном SELECT
     JSON_VALUE(s.Stats, '$.table_type') AS TableType,
     CAST(JSON_VALUE(s.Stats, '$.test_timestamp') AS Uint64) AS TestTimestamp,
-    CAST(s.RunId AS Uint64) AS StatsRunId,
+    CAST(ti.RunId AS Uint64) AS StatsRunId,
     
     -- Извлекаем информацию о кластере из Info JSON
-    JSON_VALUE(COALESCE(s.Info, cc.CheckInfo), '$.cluster.version') AS ClusterVersion,
+    JSON_VALUE(COALESCE(s.Info, ti.InitInfo), '$.cluster.version') AS ClusterVersion,
     CASE
-        WHEN JSON_VALUE(COALESCE(s.Info, cc.CheckInfo), '$.cluster.version') IS NOT NULL THEN
-            'https://github.com/ydb-platform/ydb/commit/' || String::SplitToList(JSON_VALUE(COALESCE(s.Info, cc.CheckInfo), '$.cluster.version'), '.')[1]
+        WHEN JSON_VALUE(COALESCE(s.Info, ti.InitInfo), '$.cluster.version') IS NOT NULL THEN
+            'https://github.com/ydb-platform/ydb/commit/' || String::SplitToList(JSON_VALUE(COALESCE(s.Info, ti.InitInfo), '$.cluster.version'), '.')[1]
         ELSE NULL
     END AS ClusterVersionLink,
     JSON_VALUE(s.Info, '$.cluster.endpoint') AS ClusterEndpoint,
@@ -119,20 +155,24 @@ $all_tests = SELECT
     JSON_VALUE(s.Info, '$.ci_launch_start_time') AS CiLaunchStartTime,
     JSON_VALUE(s.Info, '$.ci_job_title') AS CiJobTitle,
     JSON_VALUE(s.Info, '$.ci_cluster_name') AS CiClusterName,
-    JSON_VALUE(COALESCE(s.Info, cc.CheckInfo), '$.ci_nemesis') AS CiNemesis,
-    JSON_VALUE(COALESCE(s.Info, cc.CheckInfo), '$.ci_build_type') AS CiBuildType,
-    JSON_VALUE(COALESCE(s.Info, cc.CheckInfo), '$.ci_sanitizer') AS CiSanitizer,
+    JSON_VALUE(COALESCE(s.Info, ti.InitInfo), '$.ci_nemesis') AS CiNemesis,
+    JSON_VALUE(COALESCE(s.Info, ti.InitInfo), '$.ci_build_type') AS CiBuildType,
+    JSON_VALUE(COALESCE(s.Info, ti.InitInfo), '$.ci_sanitizer') AS CiSanitizer,
     
     -- Порядок выполнения
-    ROW_NUMBER() OVER (PARTITION BY cc.RunId ORDER BY COALESCE(s.Timestamp, cc.CheckTimestamp), cc.Suite, cc.Test) AS OrderInRun
+    ROW_NUMBER() OVER (PARTITION BY ti.RunId ORDER BY ti.InitTimestamp, ti.Suite, ti.Test) AS OrderInRun
     
-FROM $cluster_checks AS cc
-LEFT JOIN $stability_suites AS s
-    ON cc.Db = s.Db 
-    AND cc.RunId = s.RunId
-    AND cc.Suite = s.Suite
-    AND cc.Test = s.Test  -- Матчим по одинаковому Test имени!
-WHERE s.Stats IS NULL OR JSON_VALUE(s.Stats, '$.aggregation_level') = 'aggregate';
+FROM $test_inits AS ti
+LEFT JOIN $latest_cluster_checks AS cc
+    ON ti.Db = cc.Db 
+    AND ti.RunId = cc.RunId
+    AND ti.Suite = cc.Suite
+    AND ti.Test = cc.Test
+LEFT JOIN $stability_results AS s
+    ON ti.Db = s.Db 
+    AND ti.RunId = s.RunId
+    AND ti.Suite = s.Suite
+    AND ti.Test = s.Test;
 
 -- Вычисляем статус
 $test_status = SELECT
@@ -141,6 +181,7 @@ $test_status = SELECT
     Suite,
     Test,
     RunId,
+    InitTimestamp,
     StabilityTimestamp,
     Success,
     OrderInRun,
@@ -208,14 +249,14 @@ $test_status = SELECT
     CiBuildType,
     CiSanitizer,
     
-    -- ClusterCheck поля
-    ClusterCheckSuccess,
-    ClusterCheckTimestamp,
-    ClusterIssueType,
-    ClusterIssueDescription,
-    ClusterIssuePhase,
-    ClusterCheckType,
-    ClusterIssueCritical,
+    -- ClusterCheck поля (агрегированные)
+    OverallClusterCheckSuccess,
+    FirstClusterCheckTimestamp,
+    LastClusterCheckTimestamp,
+    ClusterIssueTypes,
+    ClusterIssueDescriptions,
+    VerificationPhases,
+    CheckTypes,
     
     -- Вычисляем FacedNodeErrors
     CASE
@@ -237,14 +278,13 @@ $test_status = SELECT
     -- Вычисляем OverallStatus
     CASE
         -- Приоритет 1: Проблемы с инфраструктурой (ClusterCheck failed)
-        WHEN ClusterCheckSuccess = 0U THEN 'infrastructure_error'
+        WHEN OverallClusterCheckSuccess = 0U THEN 'infrastructure_error'
         
         -- Приоритет 2: Кластер OK, но нет Stability записи (тест завис/не завершился)
-        WHEN ClusterCheckSuccess = 1U AND Success IS NULL THEN 
+        WHEN OverallClusterCheckSuccess = 1U AND Success IS NULL THEN 
             CASE 
-                -- Если прошло больше чем planned_duration * 3 от времени старта ClusterCheck, считаем timeout
-                -- Сравниваем время в микросекундах: текущее время - время старта > planned_duration * 3 * 1000000
-                WHEN CAST(CurrentUtcTimestamp() AS Uint64) - CAST(ClusterCheckTimestamp AS Uint64) > CAST(COALESCE(PlannedDuration, 1800) * 3 * 1000000 AS Uint64) THEN 'timeout'
+                -- Если прошло больше чем planned_duration * 3 от времени старта первой проверки кластера, считаем timeout
+                WHEN CAST(CurrentUtcTimestamp() AS Uint64) - CAST(FirstClusterCheckTimestamp AS Uint64) > CAST(COALESCE(PlannedDuration, 1800) * 3 * 1000000 AS Uint64) THEN 'timeout'
                 ELSE 'in_progress'
             END
         
@@ -266,18 +306,21 @@ SELECT
     agg.StabilityTimestamp AS Timestamp,
     
     -- Четкие поля времени старта и окончания
-    agg.ClusterCheckTimestamp AS StartTime,  -- Время старта проверки кластера
-    agg.StabilityTimestamp AS EndTime,       -- Время выгрузки результатов (окончание всего теста)
+    agg.InitTimestamp AS TestInitTime,                    -- Время инициализации теста
+    agg.InitTimestamp AS InitTimestamp,                   -- Время инициализации теста (для совместимости)
+    agg.FirstClusterCheckTimestamp AS FirstCheckTime,    -- Время первой проверки кластера
+    agg.LastClusterCheckTimestamp AS LastCheckTime,      -- Время последней проверки кластера
+    agg.StabilityTimestamp AS EndTime,                   -- Время выгрузки результатов (окончание всего теста)
     
     -- Времена workload из Stats
     CAST(JSON_VALUE(agg.Stats, '$.workload_start_time') AS Timestamp) AS WorkloadStartTime,
     CAST(JSON_VALUE(agg.Stats, '$.workload_end_time') AS Timestamp) AS WorkloadEndTime,
     CAST(JSON_VALUE(agg.Stats, '$.workload_duration') AS Float) AS WorkloadDurationSeconds,
     
-    -- Общая длительность теста (от ClusterCheck до выгрузки)
+    -- Общая длительность теста (от инициализации до выгрузки)
     CASE 
-        WHEN agg.StabilityTimestamp IS NOT NULL AND agg.ClusterCheckTimestamp IS NOT NULL THEN
-            CAST(agg.StabilityTimestamp - agg.ClusterCheckTimestamp AS Float) / 1000000.0  -- микросекунды в секунды
+        WHEN agg.StabilityTimestamp IS NOT NULL AND agg.InitTimestamp IS NOT NULL THEN
+            CAST(agg.StabilityTimestamp - agg.InitTimestamp AS Float) / 1000000.0  -- микросекунды в секунды
         ELSE NULL
     END AS TotalTestDurationSeconds,
     agg.Success,
@@ -324,13 +367,12 @@ SELECT
     agg.TestTimestamp,
     agg.StatsRunId,
     
-    -- Кластерные проверки и проблемы
-    agg.ClusterCheckSuccess,
-    agg.ClusterIssueType,
-    agg.ClusterIssueDescription,
-    agg.ClusterIssuePhase,
-    agg.ClusterCheckType,
-    agg.ClusterIssueCritical,
+    -- Информация о кластерных проверках
+    agg.OverallClusterCheckSuccess,
+    agg.ClusterIssueTypes,
+    agg.ClusterIssueDescriptions,
+    agg.VerificationPhases,
+    agg.CheckTypes,
     
     -- Информация о кластере
     agg.ClusterVersion,
@@ -385,17 +427,17 @@ SELECT
         -- Если есть FacedNodeErrors, добавляем их к OverallStatus
         WHEN agg.FacedNodeErrors IS NOT NULL AND agg.FacedNodeErrors != '' THEN 
             CASE
-                WHEN agg.ClusterCheckSuccess = 0U THEN 'infrastructure_error:' || agg.ClusterIssueType
+                WHEN agg.OverallClusterCheckSuccess = 0U THEN 'infrastructure_error:' || agg.ClusterIssueTypes
                 ELSE agg.OverallStatus || ':' || agg.FacedNodeErrors
             END
         
-        -- Если нет FacedNodeErrors, но есть ClusterIssueType, добавляем его
-        WHEN agg.ClusterIssueType IS NOT NULL THEN 
-            'infrastructure_error:' || agg.ClusterIssueType
+        -- Если нет FacedNodeErrors, но есть ClusterIssueTypes, добавляем их
+        WHEN agg.ClusterIssueTypes IS NOT NULL AND agg.ClusterIssueTypes != '' THEN 
+            'infrastructure_error:' || agg.ClusterIssueTypes
         
         -- Если нет дополнительной информации, используем обычный OverallStatus
         ELSE agg.OverallStatus
     END AS OverallStatusExtended
 
 FROM $test_status AS agg
---ORDER BY ClusterCheckTimestamp DESC;
+ORDER BY InitTimestamp DESC;

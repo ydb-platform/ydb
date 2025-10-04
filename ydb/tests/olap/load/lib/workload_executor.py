@@ -36,6 +36,7 @@ class WorkloadTestBase(LoadSuiteBase):
     )
     timeout: float = 1800.0  # Таймаут по умолчанию
     _nemesis_started: bool = False  # Флаг для отслеживания запуска nemesis
+    _current_workload_name: str = None  # Текущее имя workload для отчетов
     cluster_path: str = str(
         get_external_param(
             "cluster_path",
@@ -63,12 +64,9 @@ class WorkloadTestBase(LoadSuiteBase):
                     raise
 
     @classmethod
-    def perform_verification_with_cluster_check(cls, workload_name: str) -> None:
+    def perform_verification_with_cluster_check(cls) -> None:
         """
         Выполняет проверку кластера перед тестом и записывает результат.
-
-        Args:
-            workload_name: Имя workload теста для матчинга с основными результатами
         """
         suite_name = cls.suite()
 
@@ -87,9 +85,6 @@ class WorkloadTestBase(LoadSuiteBase):
             # Добавляем ошибку если есть проблема с кластером
             if cluster_issue.get("issue_type") is not None:
                 result.add_error(cluster_issue["issue_description"])
-                is_successful = False
-            else:
-                is_successful = True
 
             # Устанавливаем start_time для _Verification
             try:
@@ -99,31 +94,13 @@ class WorkloadTestBase(LoadSuiteBase):
             except Exception:
                 result.start_time = verification_start_time - 600
 
-            # Записываем результат проверки кластера
-            stats = {}
-            stats.update({
-                "verification_phase": "pre_test_verification",
-                "check_type": "cluster_availability",
-                **cluster_issue  # Добавляем информацию о проблеме кластера
-            })
-
-            cluster_check_upload_data = {
-                "kind": 'ClusterCheck',
-                "suite": suite_name,
-                "test": workload_name,
-                "timestamp": time_module.time(),
-                "is_successful": is_successful,
-                "statistics": stats
-            }
-
-            # Прикрепляем данные к Allure отчету
-            allure.attach(
-                json.dumps(cluster_check_upload_data, indent=2, default=str),
-                f"Cluster check results upload data for {workload_name}",
-                allure.attachment_type.JSON
+            # Записываем результат проверки кластера через универсальный метод
+            cls.test_event_report(
+                event_kind='ClusterCheck',
+                verification_phase="pre_test_verification",
+                check_type="cluster_availability",
+                cluster_issue=cluster_issue
             )
-
-            ResultsProcessor.upload_results(**cluster_check_upload_data)
 
             # Если проверка кластера не прошла успешно, поднимаем исключение
             if cluster_issue.get("issue_type") is not None:
@@ -144,7 +121,7 @@ class WorkloadTestBase(LoadSuiteBase):
                 return cls._create_cluster_issue("cluster_not_alive", f"Cluster functionality check failed: {wait_error}")
 
             # Проверяем наличие нод
-            nodes = YdbCluster.get_cluster_nodes()
+            nodes = YdbCluster.get_cluster_nodes(db_only=False)
             if not nodes:
                 return cls._create_cluster_issue("cluster_no_nodes", "No working cluster nodes found")
 
@@ -153,6 +130,75 @@ class WorkloadTestBase(LoadSuiteBase):
 
         except Exception as e:
             return cls._create_cluster_issue("cluster_check_exception", f"Exception during cluster check: {e}")
+
+    @classmethod
+    def test_event_report(cls, event_kind: str, 
+                          verification_phase: str = None, check_type: str = None,
+                          cluster_issue: dict = None) -> None:
+        """
+        Универсальный метод для создания записей о событиях теста в базе данных.
+
+        Args:
+            event_kind: Тип события ('TestInit', 'ClusterCheck')
+            verification_phase: Фаза проверки (для ClusterCheck)
+            check_type: Тип проверки (для ClusterCheck)
+            cluster_issue: Информация о проблеме кластера (для ClusterCheck)
+        """
+
+        suite_name = cls.suite()
+        workload_name = cls._current_workload_name or suite_name
+
+        if event_kind == 'TestInit':
+            # TestInit - инициализация теста
+            upload_data = {
+                "kind": 'TestInit',
+                "suite": suite_name,
+                "test": workload_name,
+                "timestamp": time_module.time(),
+                "is_successful": True,  # TestInit всегда успешен
+                "statistics": {
+                    "event_type": "test_initialization",
+                    "test_started": True
+                }
+            }
+
+            allure_title = f"Test initialization for {workload_name}"
+
+        elif event_kind == 'ClusterCheck':
+            # ClusterCheck - проверка кластера
+            if cluster_issue is None:
+                raise ValueError("cluster_issue is required for ClusterCheck events")
+
+            is_successful = cluster_issue.get("issue_type") is None
+
+            stats = {
+                "verification_phase": verification_phase,
+                "check_type": check_type,
+                **cluster_issue
+            }
+
+            upload_data = {
+                "kind": 'ClusterCheck',
+                "suite": suite_name,
+                "test": workload_name,
+                "timestamp": time_module.time(),
+                "is_successful": is_successful,
+                "statistics": stats
+            }
+
+            allure_title = f"Cluster check results for {verification_phase} - {workload_name}"
+
+        else:
+            raise ValueError(f"Unknown event_kind: {event_kind}")
+
+        # Прикрепляем данные к Allure отчету
+        allure.attach(
+            json.dumps(upload_data, indent=2, default=str),
+            allure_title,
+            allure.attachment_type.JSON
+        )
+
+        ResultsProcessor.upload_results(**upload_data)
 
     @classmethod
     def _create_cluster_issue(cls, issue_type: str, description: str, nodes_count: int = 0) -> dict:
@@ -291,7 +337,29 @@ class WorkloadTestBase(LoadSuiteBase):
 
         try:
             # Получаем все уникальные хосты кластера
-            nodes = YdbCluster.get_cluster_nodes()
+            nodes = YdbCluster.get_cluster_nodes(db_only=False)
+
+            if not nodes:
+                # Создаем информацию о проблеме и репортим
+                cluster_issue = cls._create_cluster_issue(
+                    "cluster_no_nodes",
+                    "No working cluster nodes found during nemesis management",
+                    0
+                )
+
+                cls.test_event_report(
+                    event_kind='ClusterCheck',
+                    verification_phase="nemesis_management",
+                    check_type="nemesis_cluster_check",
+                    cluster_issue=cluster_issue
+                )
+
+                # Есть проблемы с кластером - это критично для nemesis
+                error_msg = f"Cluster issue during nemesis management: {cluster_issue['issue_description']}"
+                logging.error(error_msg)
+                nemesis_log.append(error_msg)
+                raise Exception(f"Nemesis management failed: {cluster_issue['issue_description']}")
+
             unique_hosts = set(node.host for node in nodes)
 
             if enable_nemesis:
@@ -629,10 +697,33 @@ class WorkloadTestBase(LoadSuiteBase):
                 for error in errors:
                     nemesis_log.append(f"- {error}")
 
-            # Устанавливаем флаг запуска nemesis
+            # Проверяем успешность операции nemesis
             if enable_nemesis:
-                cls._nemesis_started = True
-                nemesis_log.append("Nemesis service started successfully")
+                if error_count == 0:
+                    # Полный успех
+                    cls._nemesis_started = True
+                    nemesis_log.append("Nemesis service started successfully on all hosts")
+                elif error_count < len(unique_hosts):
+                    # Частичный успех - создаем ClusterCheck запись с предупреждением
+                    cls._nemesis_started = True  # Считаем что nemesis работает частично
+                    nemesis_log.append(f"Nemesis service started partially: {success_count}/{len(unique_hosts)} hosts")
+
+                    cluster_issue = cls._create_cluster_issue(
+                        "nemesis_partial_failure",
+                        f"Nemesis started on {success_count}/{len(unique_hosts)} hosts. Failed hosts: {error_count}. Errors: {'; '.join(errors[:3])}{'...' if len(errors) > 3 else ''}",
+                        success_count
+                    )
+
+                    cls.test_event_report(
+                        event_kind='ClusterCheck',
+                        verification_phase="nemesis_management",
+                        check_type="nemesis_partial_failure",
+                        cluster_issue=cluster_issue
+                    )
+                else:
+                    # Полный провал - это уже обрабатывается в except блоке выше через raise Exception
+                    cls._nemesis_started = False
+                    nemesis_log.append("Nemesis service failed to start on all hosts")
             else:
                 cls._nemesis_started = False
                 nemesis_log.append("Nemesis service stopped successfully")
@@ -647,12 +738,26 @@ class WorkloadTestBase(LoadSuiteBase):
             return nemesis_log
 
         except Exception as e:
+            # Создаем информацию о проблеме и репортим
+            cluster_issue = cls._create_cluster_issue(
+                "cluster_check_exception",
+                f"Exception during nemesis management: {e}",
+                0
+            )
+
+            cls.test_event_report(
+                event_kind='ClusterCheck',
+                verification_phase="nemesis_management",
+                check_type="nemesis_cluster_check",
+                cluster_issue=cluster_issue
+            )
+
             error_msg = f"Error managing nemesis: {e}"
             logging.error(error_msg)
             allure.attach(
                 str(e), "Nemesis Error", attachment_type=allure.attachment_type.TEXT
             )
-            return nemesis_log + [error_msg]
+            raise Exception(f"Nemesis management failed with exception: {e}")
 
     @classmethod
     def _copy_cluster_config(cls, host: str, host_log: list) -> dict:
@@ -1003,9 +1108,16 @@ class WorkloadTestBase(LoadSuiteBase):
             nemesis: Запускать ли сервис nemesis через 15 секунд после начала выполнения workload
             nodes_percentage: Процент нод кластера для запуска workload (от 1 до 100)
         """
-        # СНАЧАЛА выполняем проверку кластера с правильным workload_name
+        # Сохраняем workload_name в классе для использования в других методах
+        self.__class__._current_workload_name = workload_name
+
+        # СНАЧАЛА создаем TestInit запись
+        with allure.step(f"Initialize test for {workload_name}"):
+            self.__class__.test_event_report('TestInit')
+
+        # ЗАТЕМ выполняем проверку кластера с правильным workload_name
         with allure.step(f"Pre-workload cluster verification for {workload_name}"):
-            self.__class__.perform_verification_with_cluster_check(workload_name)
+            self.__class__.perform_verification_with_cluster_check()
 
         # Для обратной совместимости переименовываем параметр use_chunks в
         # use_iterations
@@ -1546,10 +1658,25 @@ class WorkloadTestBase(LoadSuiteBase):
             # Получаем уникальные хосты кластера
             with allure.step("Select unique cluster hosts"):
                 nodes = YdbCluster.get_cluster_nodes()
+
                 if not nodes:
+                    # Создаем информацию о проблеме и репортим
+                    cluster_issue = self.__class__._create_cluster_issue(
+                        "cluster_no_nodes",
+                        "No working cluster nodes found during workload deployment",
+                        0
+                    )
+
+                    self.__class__.test_event_report(
+                        event_kind='ClusterCheck',
+                        verification_phase="workload_deployment",
+                        check_type="deployment_cluster_check",
+                        cluster_issue=cluster_issue
+                    )
+
                     # Кластер уже проверен в perform_verification_with_cluster_check()
                     # Если мы дошли сюда, значит что-то пошло не так между проверкой и деплоем
-                    raise Exception("No cluster nodes found - cluster state changed after verification")
+                    raise Exception(f"Cluster verification failed during deployment: {cluster_issue['issue_description']}")
 
                 # Собираем уникальные хосты и соответствующие им ноды
                 unique_hosts = {}
@@ -1663,6 +1790,21 @@ class WorkloadTestBase(LoadSuiteBase):
                         )
 
                     detailed_deploy_error = "\n".join(deploy_error_details)
+
+                    # Создаем ClusterCheck запись для ошибки деплоя
+                    cluster_issue = self.__class__._create_cluster_issue(
+                        "deployment_failed",
+                        f"Binary deployment failed on all {len(selected_nodes)} nodes: {detailed_deploy_error}",
+                        0
+                    )
+
+                    self.__class__.test_event_report(
+                        event_kind='ClusterCheck',
+                        verification_phase="workload_deployment",
+                        check_type="deployment_failure",
+                        cluster_issue=cluster_issue
+                    )
+
                     logging.error(detailed_deploy_error)
                     raise Exception(detailed_deploy_error)
 
@@ -2283,6 +2425,9 @@ class WorkloadTestBase(LoadSuiteBase):
                 use_iterations,
             )
 
+            # Проверяем статус nemesis если он должен был запуститься
+            self._check_nemesis_status(additional_stats)
+
             # Финальная обработка с диагностикой (подготавливает данные для выгрузки)
             overall_result.workload_start_time = execution_result["workload_start_time"]
             self.process_workload_result_with_diagnostics(
@@ -2302,6 +2447,54 @@ class WorkloadTestBase(LoadSuiteBase):
                     overall_result.success}, successful_runs={successful_runs}/{total_runs}"
             )
             return overall_result
+
+    def _check_nemesis_status(self, additional_stats: dict) -> None:
+        """
+        Проверяет статус nemesis после выполнения workload.
+        Создает ClusterCheck запись если nemesis должен был работать, но не запустился.
+
+        Args:
+            additional_stats: Дополнительная статистика с информацией о nemesis
+        """
+        # Проверяем, должен ли был запуститься nemesis
+        nemesis_enabled = additional_stats.get("nemesis_enabled", False) if additional_stats else False
+
+        if nemesis_enabled:
+            # Nemesis должен был запуститься - проверяем статус
+            nemesis_actually_started = getattr(self.__class__, "_nemesis_started", False)
+
+            if not nemesis_actually_started:
+                # Nemesis должен был запуститься, но не запустился
+                cluster_issue = self.__class__._create_cluster_issue(
+                    "nemesis_not_started",
+                    "Nemesis was enabled for test but failed to start. Check nemesis management logs for details.",
+                    0
+                )
+
+                self.__class__.test_event_report(
+                    event_kind='ClusterCheck',
+                    verification_phase="post_workload_verification",
+                    check_type="nemesis_status_check",
+                    cluster_issue=cluster_issue
+                )
+
+                logging.warning("Nemesis was enabled but not started for test")
+            else:
+                # Nemesis запустился успешно - создаем успешную ClusterCheck запись
+                cluster_issue = self.__class__._create_cluster_issue(
+                    None,
+                    "Nemesis was successfully running during workload execution",
+                    1
+                )
+
+                self.__class__.test_event_report(
+                    event_kind='ClusterCheck',
+                    verification_phase="post_workload_verification",
+                    check_type="nemesis_status_check",
+                    cluster_issue=cluster_issue
+                )
+
+                logging.info("Nemesis was successfully running for test")
 
     def process_workload_result_with_diagnostics(
         self,

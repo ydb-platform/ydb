@@ -9,8 +9,12 @@ from github.PullRequest import PullRequest
 
 def update_pr_comment_text(pr: PullRequest, build_preset: str, run_number: int, color: str, text: str, rewrite: bool):
     header = f"<!-- status pr={pr.number}, preset={build_preset}, run={run_number} -->"
+    # Pattern to match comments from the same PR and preset but different runs
+    header_prefix = f"<!-- status pr={pr.number}, preset={build_preset}, run="
 
     body = comment = None
+    old_comments = []
+    
     for c in pr.get_issue_comments():
         if c.body.startswith(header):
             print(f"found comment id={c.id}")
@@ -18,6 +22,20 @@ def update_pr_comment_text(pr: PullRequest, build_preset: str, run_number: int, 
             if not rewrite:
                 body = [c.body]
             break
+        elif rewrite and c.body.startswith(header_prefix):
+            # Collect old comments from previous runs with the same preset
+            print(f"found old comment id={c.id} to mark as outdated")
+            old_comments.append(c)
+
+    # Mark old comments as outdated when rewrite is True
+    if rewrite and old_comments:
+        print(f"marking {len(old_comments)} old comment(s) as outdated")
+        for old_comment in old_comments:
+            try:
+                old_comment.minimize(reason='OUTDATED')
+                print(f"marked comment id={old_comment.id} as outdated")
+            except Exception as e:
+                print(f"failed to minimize comment id={old_comment.id}: {e}")
 
     if body is None:
         body = [header]

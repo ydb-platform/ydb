@@ -141,6 +141,10 @@ public:
         bool enqueue = false;
         bool wasEnqueue = false;
         NJson::TJsonValue* current = &Result;
+        if (path.empty()) {
+            current->InsertValue(path, valueStr);
+            return;
+        }
         for (ui32 i = 0; i < path.size(); ++i) {
             if (path[i] == '\\') {
                 ++i;
@@ -194,7 +198,7 @@ public:
             TStringBuf key(path.data() + start + 1, (path.size() - 1) - start - 1);
             current->InsertValue(key, valueStr);
         } else {
-            AFL_VERIFY(path.size() > start);
+            AFL_VERIFY(path.size() > start)("path", path)("start", start);
             TStringBuf key(path.data() + start, (path.size()) - start);
             ui32 keyIndex;
             if (key.StartsWith("[") && key.EndsWith("]") && TryFromString<ui32>(key.data() + 1, key.size() - 2, keyIndex)) {

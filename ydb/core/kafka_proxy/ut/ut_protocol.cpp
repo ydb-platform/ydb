@@ -319,7 +319,7 @@ std::vector<NTopic::TReadSessionEvent::TDataReceivedEvent> Read(std::shared_ptr<
             lockEv->Confirm();
         } else if (auto* releaseEv = std::get_if<NTopic::TReadSessionEvent::TStopPartitionSessionEvent>(&*event)) {
             releaseEv->Confirm();
-        } else if (auto* closeSessionEvent = std::get_if<NTopic::TSessionClosedEvent>(&*event)) {
+        } else if (std::get_if<NTopic::TSessionClosedEvent>(&*event)) {
             break;
         }
     }
@@ -357,7 +357,7 @@ std::vector<NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage> ReadCommitW
             if (gotAllMessages && commitAck->GetCommittedOffset() == static_cast<ui64>(lastOffset + 1)) {
                 break;
             }
-        } else if (auto* closeSessionEvent = std::get_if<NTopic::TSessionClosedEvent>(&*event)) {
+        } else if (std::get_if<NTopic::TSessionClosedEvent>(&*event)) {
             break;
         }
     }

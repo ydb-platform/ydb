@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/log.h>
 #include <ydb/core/util/backoff.h>
 #include <ydb/core/wrappers/retry_policy.h>
 #include <util/system/mutex.h>
@@ -122,17 +123,13 @@ public:
         bool doBackoff = false;
         TDuration delay = TDuration::Zero();
 
-        if constexpr (requires(const TBaseEventObject* p) { p->IsSuccess(); }) {
-            const bool isSuccess = ev->IsSuccess();
-            if (isSuccess) {
-                if (Backoff) Backoff->Reset();
-            } else if constexpr (requires(const TBaseEventObject* p) { p->GetError(); }) {
-                const auto& err = ev->GetError();
-                if (NWrappers::ShouldBackoff(err)) {
-                    if (Backoff) delay = Backoff->Next();
-                    doBackoff = delay > TDuration::Zero();
-                }
-            }
+        if (ev->IsSuccess()) {
+            
+            Backoff->Reset();
+        } else if (NWrappers::ShouldBackoff(ev->GetError())) {
+            AFL_VERIFY(Backoff);
+            delay = Backoff->Next();
+            doBackoff = delay > TDuration::Zero();
         }
 
         std::unique_ptr<NActors::IEventBase> finalEvent;

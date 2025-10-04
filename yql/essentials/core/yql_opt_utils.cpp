@@ -497,6 +497,22 @@ template bool HaveFieldsSubset(const TExprNode::TPtr& start, const TExprNode& ar
 template bool HaveFieldsSubset(const TExprNode::TPtr& start, const TExprNode& arg, std::map<std::string_view, TExprNode::TPtr>& usedFields,
                             const TParentsMap& parentsMap, bool allowDependsOn);
 
+bool IsFieldSubset(const TStructExprType& structType, const TStructExprType& sourceStructType) {
+    for (auto& item : structType.GetItems()) {
+        auto name = item->GetName();
+        auto type = item->GetItemType();
+        if (auto idx = sourceStructType.FindItem(name)) {
+            if (sourceStructType.GetItems()[*idx]->GetItemType() == type) {
+                continue;
+            }
+        }
+
+        return false;
+    }
+
+    return true;
+}
+
 TExprNode::TPtr AddMembersUsedInside(const TExprNode::TPtr& start, const TExprNode& arg, TExprNode::TPtr&& members, const TParentsMap& parentsMap, TExprContext& ctx) {
     if (!members || !start || &arg == start.Get()) {
         return {};

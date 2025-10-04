@@ -306,9 +306,13 @@ private:
     const std::optional<ui64> PortionBlobsSizeLimit;
     virtual bool DoIsOverloaded(const TSimplePortionsGroupInfo& portionsData) const override {
         if (PortionsCountLimit && *PortionsCountLimit < (ui64)portionsData.GetCount()) {
+           AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_WRITE)
+                   ("error", "overload: portions count limit")("value", (ui64)portionsData.GetCount())("limit", *PortionsCountLimit);
             return true;
         }
         if (PortionBlobsSizeLimit && *PortionBlobsSizeLimit < (ui64)portionsData.GetBlobBytes()) {
+           AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_WRITE)
+                   ("error", "overload: portion blobs size limit")("value", (ui64)portionsData.GetBlobBytes())("limit", *PortionBlobsSizeLimit);
             return true;
         }
         return false;

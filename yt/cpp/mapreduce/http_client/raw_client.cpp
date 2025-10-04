@@ -425,7 +425,7 @@ void THttpRawClient::UpdateOperationParameters(
     TMutationId mutationId;
     THttpHeader header("POST", "update_op_parameters");
     header.MergeParameters(NRawClient::SerializeParamsForUpdateOperationParameters(operationId, options));
-    RequestWithoutRetry(Context_, mutationId, header);
+    RequestWithoutRetry(Context_, mutationId, header)->GetResponse();
 }
 
 NYson::TYsonString THttpRawClient::GetJob(

@@ -47,6 +47,16 @@ class WorkloadTestBase(LoadSuiteBase):
             ""))  # Путь к yaml конфигурации
 
     @classmethod
+    def get_workload_name(cls) -> str:
+        """Получает имя текущего workload"""
+        return getattr(cls, "_current_workload_name", None)
+
+    @classmethod
+    def is_nemesis_enabled(cls) -> bool:
+        """Проверяет, включен ли nemesis"""
+        return getattr(cls, "_nemesis_started", False)
+
+    @classmethod
     def setup_class(cls) -> None:
         """
         Общая инициализация для workload тестов.
@@ -146,20 +156,26 @@ class WorkloadTestBase(LoadSuiteBase):
         """
 
         suite_name = cls.suite()
-        workload_name = cls._current_workload_name or suite_name
+        workload_name = cls.get_workload_name() or suite_name
+        nemesis_enabled = cls.is_nemesis_enabled()
 
         if event_kind == 'TestInit':
             # TestInit - инициализация теста
+            statistics = {
+                "event_type": "test_initialization",
+                "test_started": True
+            }
+            
+            # Добавляем nemesis_enabled в статистику
+            statistics["nemesis_enabled"] = nemesis_enabled
+                
             upload_data = {
                 "kind": 'TestInit',
                 "suite": suite_name,
                 "test": workload_name,
                 "timestamp": time_module.time(),
                 "is_successful": True,  # TestInit всегда успешен
-                "statistics": {
-                    "event_type": "test_initialization",
-                    "test_started": True
-                }
+                "statistics": statistics
             }
 
             allure_title = f"Test initialization for {workload_name}"
@@ -176,6 +192,9 @@ class WorkloadTestBase(LoadSuiteBase):
                 "check_type": check_type,
                 **cluster_issue
             }
+            
+            # Добавляем nemesis_enabled в статистику
+            stats["nemesis_enabled"] = nemesis_enabled
 
             upload_data = {
                 "kind": 'ClusterCheck',

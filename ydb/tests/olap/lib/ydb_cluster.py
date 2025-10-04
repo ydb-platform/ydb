@@ -108,11 +108,10 @@ class YdbCluster:
     def get_cluster_nodes(cls, path: Optional[str] = None, db_only: bool = False,
                           role: Optional[YdbCluster.Node.Role] = None
                           ) -> list[YdbCluster.Node]:
-        import os
-        from time import time, sleep
+
         
         # Получаем таймаут из переменной окружения, как в wait_ydb_alive
-        timeout = int(os.getenv('WAIT_CLUSTER_ALIVE_TIMEOUT', 20 * 60))  # По умолчанию 20 минут
+        timeout = int(os.getenv('WAIT_CLUSTER_ALIVE_TIMEOUT', 2 * 60))  # По умолчанию 20 минут
         retry_interval = 2  # Интервал между попытками в секундах
         
         deadline = time() + timeout

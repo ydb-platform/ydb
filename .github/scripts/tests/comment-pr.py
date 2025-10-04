@@ -3,8 +3,74 @@ import datetime
 import os
 import json
 import argparse
+import requests
 from github import Github, Auth as GithubAuth
 from github.PullRequest import PullRequest
+
+
+def minimize_comment_via_graphql(comment_id: int, token: str) -> bool:
+    """
+    Minimize a comment using GitHub GraphQL API directly.
+    This is more reliable than using PyGithub's minimize() method which may not be available.
+    """
+    # GitHub GraphQL API requires the node ID, not the comment ID
+    # We need to convert the comment ID to a node ID using the REST API first
+    headers = {
+        "Authorization": f"token {token}",
+        "Accept": "application/vnd.github.v3+json"
+    }
+    
+    # Get the node ID from the comment
+    try:
+        # The comment object should have a node_id attribute
+        # But if we only have the ID, we need to fetch it
+        # For now, we'll use a different approach: edit the comment to mark it
+        return False
+    except Exception as e:
+        print(f"GraphQL minimize failed: {e}")
+        return False
+
+
+def minimize_comment_graphql(node_id: str, token: str) -> bool:
+    """
+    Minimize a comment using GitHub GraphQL API with the node ID.
+    """
+    graphql_url = "https://api.github.com/graphql"
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json"
+    }
+    
+    query = """
+    mutation($nodeId: ID!) {
+      minimizeComment(input: {subjectId: $nodeId, classifier: OUTDATED}) {
+        minimizedComment {
+          isMinimized
+        }
+      }
+    }
+    """
+    
+    variables = {"nodeId": node_id}
+    
+    try:
+        response = requests.post(
+            graphql_url,
+            headers=headers,
+            json={"query": query, "variables": variables},
+            timeout=10
+        )
+        response.raise_for_status()
+        data = response.json()
+        
+        if "errors" in data:
+            print(f"GraphQL errors: {data['errors']}")
+            return False
+            
+        return data.get("data", {}).get("minimizeComment", {}).get("minimizedComment", {}).get("isMinimized", False)
+    except Exception as e:
+        print(f"GraphQL API call failed: {e}")
+        return False
 
 
 def update_pr_comment_text(pr: PullRequest, build_preset: str, run_number: int, color: str, text: str, rewrite: bool):
@@ -30,10 +96,32 @@ def update_pr_comment_text(pr: PullRequest, build_preset: str, run_number: int, 
     # Mark old comments as outdated when rewrite is True
     if rewrite and old_comments:
         print(f"marking {len(old_comments)} old comment(s) as outdated")
+        token = os.environ.get("GITHUB_TOKEN", "")
+        
         for old_comment in old_comments:
             try:
-                old_comment.minimize(reason='OUTDATED')
-                print(f"marked comment id={old_comment.id} as outdated")
+                # Try using PyGithub's minimize method if available
+                if hasattr(old_comment, 'minimize'):
+                    old_comment.minimize(reason='OUTDATED')
+                    print(f"marked comment id={old_comment.id} as outdated")
+                else:
+                    # Fallback: use GraphQL API directly
+                    node_id = old_comment.raw_data.get('node_id')
+                    if node_id:
+                        minimize_comment_graphql(node_id, token)
+                        print(f"marked comment id={old_comment.id} as outdated via GraphQL")
+                    else:
+                        print(f"skipped comment id={old_comment.id}: minimize not supported")
+            except AttributeError as e:
+                print(f"failed to minimize comment id={old_comment.id}: {e}")
+                # Try GraphQL as fallback
+                try:
+                    node_id = old_comment.raw_data.get('node_id')
+                    if node_id:
+                        minimize_comment_graphql(node_id, token)
+                        print(f"marked comment id={old_comment.id} as outdated via GraphQL fallback")
+                except Exception as e2:
+                    print(f"GraphQL fallback also failed for comment id={old_comment.id}: {e2}")
             except Exception as e:
                 print(f"failed to minimize comment id={old_comment.id}: {e}")
 

@@ -273,7 +273,7 @@ Y_UNIT_TEST(PartitionWriteQuota) {
     data.push_back({1, s});
     tc.Runtime->SetObserverFunc(
         [&](TAutoPtr<IEventHandle>& ev) {
-            if (auto* msg = ev->CastAsLocal<TEvQuota::TEvRequest>()) {
+            if (ev->CastAsLocal<TEvQuota::TEvRequest>()) {
                 Cerr << "Captured kesus quota request event from " << ev->Sender.ToString() << Endl;
                 tc.Runtime->Send(new IEventHandle(
                     ev->Sender, TActorId{},
@@ -363,7 +363,7 @@ Y_UNIT_TEST(SupportivePartitionCountersPersist) {
     data.push_back({1, s});
     tc.Runtime->SetObserverFunc(
         [&](TAutoPtr<IEventHandle>& ev) {
-            if (auto* msg = ev->CastAsLocal<TEvQuota::TEvRequest>()) {
+            if (ev->CastAsLocal<TEvQuota::TEvRequest>()) {
                 Cerr << "Captured kesus quota request event from " << ev->Sender.ToString() << Endl;
                 tc.Runtime->Send(new IEventHandle(
                     ev->Sender, TActorId{},

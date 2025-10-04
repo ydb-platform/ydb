@@ -951,7 +951,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
 
             Connect(server);
             Server->GetRuntime()->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
-                if (auto *p = ev->CastAsLocal<TEvPQ::TEvForgetDirectRead>()) {
+                if (ev->CastAsLocal<TEvPQ::TEvForgetDirectRead>()) {
                     ForgetReadsDone.Inc();
                 }
                 return TTestActorRuntime::EEventAction::PROCESS;

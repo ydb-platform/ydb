@@ -299,7 +299,7 @@ Y_UNIT_TEST(TestAccountReadQuota) {
     tc.Prepare();
     tc.Runtime->SetObserverFunc(
         [&](TAutoPtr<IEventHandle>& ev) {
-            if (auto* msg = ev->CastAsLocal<TEvQuota::TEvRequest>()) {
+            if (ev->CastAsLocal<TEvQuota::TEvRequest>()) {
                 Cerr << "Captured kesus quota request event from " << ev->Sender.ToString() << Endl;
                 if (!AtomicGet(stop)) {
                     quoterRequests.Inc();
@@ -395,7 +395,7 @@ Y_UNIT_TEST(TestPartitionWriteQuota) {
 
         tc.Runtime->SetObserverFunc(
             [&](TAutoPtr<IEventHandle>& ev) {
-                if (auto* msg = ev->CastAsLocal<TEvQuota::TEvRequest>()) {
+                if (ev->CastAsLocal<TEvQuota::TEvRequest>()) {
                     Cerr << "Captured kesus quota request event from " << ev->Sender.ToString() << Endl;
                     tc.Runtime->Send(new IEventHandle(
                         ev->Sender, TActorId{},

@@ -1,3 +1,5 @@
+<!-- markdownlint-disable no-emphasis-as-heading -->
+
 # Загрузка Корпоративной СУБД Яндекса (Yandex Enterprise Database)
 
 [Корпоративная СУБД Яндекса](https://ydb.yandex.ru) — коммерческая СУБД на основе ядра {{ ydb-short-name }}.

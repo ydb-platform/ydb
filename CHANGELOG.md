@@ -2,8 +2,7 @@
 
 ### Functionality
 
-* Added support for creating unique indexes on existing tables. This feature is enabled by setting the `enable_add_unique_index` feature flag in the cluster configuration. ([Vasily Gerasimov](https://github.com/UgnineSirdis))
-* Added support for encrypted exports to S3, allowing secure storage of exported data. This feature is enabled by setting the `enable_encrypted_export` feature flag in the cluster configuration. ([Vasily Gerasimov](https://github.com/UgnineSirdis))
+* None:Added support for encrypted exports to S3, allowing secure storage of exported data. This feature is enabled by setting the `enable_encrypted_export` feature flag in the cluster configuration. ([Vasily Gerasimov](https://github.com/UgnineSirdis))
 * 15186:Increased [the query text limit size](../dev/system-views#query-metrics) in system views from 4 KB to 10 KB. [#15186](https://github.com/ydb-platform/ydb/pull/15186) ([spuchin](https://github.com/spuchin))
 * 15693:Added a health check configuration that administrators can customize: the number of node restarts, tablets, the time difference between database dynodes,
 and timeout (by default, the maximum response time from healthcheck). Documentation is under construction. [#15693](https://github.com/ydb-platform/ydb/pull/15693) ([Andrei Rykov](https://github.com/StekPerepolnen))
@@ -72,6 +71,8 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 20303:Add `--iam-token-file` argument to ydb-dstool. [#20303](https://github.com/ydb-platform/ydb/pull/20303) ([kruall](https://github.com/kruall))
 * 22511:Added the ICB control to change ReadRequestsInFlightLimit via changing dynconfig. [#22511](https://github.com/ydb-platform/ydb/pull/22511) ([kruall](https://github.com/kruall))
 * 21997:Enabled the new compute scheduler based on the HDRF model. [#21997](https://github.com/ydb-platform/ydb/pull/21997) ([Ivan](https://github.com/abyss7))
+* 26173:- Topics: add partition-level metrics [#26173](https://github.com/ydb-platform/ydb/pull/26173) ([qyryq](https://github.com/qyryq))
+* 26078:added support to read/write `Date32`, `Datetime64`, `Timestamp64` and `Decimal(n, m)` from/to external data sources with "ObjectStorage" source type and "parquet" format [#26078](https://github.com/ydb-platform/ydb/pull/26078) ([Ivan Sukhov](https://github.com/evanevanevanevannnn))
 
 ### Bug fixes
 
@@ -132,6 +133,11 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 20670:Resolved the issue with DDL errors for external sources and added more information to the `ALTER TABLE ... RENAME TO` error. [#20670](https://github.com/ydb-platform/ydb/pull/20670) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
 * 20519:Fixed an [issue](https://github.com/ydb-platform/ydb/issues/20520) that caused VDisk to freeze in infinite local recovery mode when a ChunkRead request failed. This change will allow loader actor to terminate properly on PDisk errors, and LocalRecovery to get notified about this error and to finish with proper status. [#20519](https://github.com/ydb-platform/ydb/pull/20519) ([Sergey Belyakov](https://github.com/serbel324))
 * 22298:Fixed an [issue](https://github.com/ydb-platform/ydb/issues/20812) where attach streams remained active after session shutdown, causing unexpected BadSession errors. [#22298](https://github.com/ydb-platform/ydb/pull/22298) ([Kirill Kurdyukov](https://github.com/KirillKurdyukov))
+* 26314:Removed wrong ensure at preparing batches for writing to ColumnShard (Fixed #25869). Excluded .tmp dir from backup/replication. Renamed temporary directory to random uuid. [#26314](https://github.com/ydb-platform/ydb/pull/26314) ([Nikita Vasilev](https://github.com/nikvas0))
+* 26260:Fixes missing data shard stats event handling that may lead to not splitting by size data shards [#26260](https://github.com/ydb-platform/ydb/pull/26260) ([kungurtsev](https://github.com/kunga))
+* 26247:Исправлен код ответа для чтения из партиции по кафка протоколу (fetch). Раньше в некоторых случаях могли отвечать UNKNOWN_SERVER_ERROR, в то время как обработка этих партиций завершилась успешно. [#26247](https://github.com/ydb-platform/ydb/pull/26247) ([Nikolay Shestakov](https://github.com/nshestakov))
+* 26231:Fixes https://github.com/ydb-platform/ydb/issues/26059 [#26231](https://github.com/ydb-platform/ydb/pull/26231) ([Sergey Belyakov](https://github.com/serbel324))
+* 26196:Fix blob deserialization to support empty payload [#26196](https://github.com/ydb-platform/ydb/pull/26196) ([FloatingCrowbar](https://github.com/FloatingCrowbar))
 
 ### YDB UI
 
@@ -157,3 +163,4 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 19687:Extracted the password verification logic into a dedicated actor, separating it from `TSchemeShard` local transactions for improved performance. [#19687](https://github.com/ydb-platform/ydb/pull/19687) ([Yury Kiselev](https://github.com/yurikiselev))
 * 20428:Improved parallel execution of queries to column-oriented tables. [#20428](https://github.com/ydb-platform/ydb/pull/20428) ([Oleg Doronin](https://github.com/dorooleg))
 * 21705:Introduced a new priority system for PDisks, addressing performance slowdowns caused by shared queue usage for realtime and compaction writes. [#21705](https://github.com/ydb-platform/ydb/pull/21705) ([Vlad Kuznetsov](https://github.com/va-kuznecov))
+

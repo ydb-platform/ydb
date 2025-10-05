@@ -444,7 +444,6 @@ public:
         , KeyTypes(keyTypes)
         , Hasher(TWideUnboxedHasher(KeyTypes))
         , Equals(TWideUnboxedEqual(KeyTypes))
-        , HasGenericAggregation(nodes.StateNodes.size() > 0)
         , KeyStateBuffer(nullptr)
         , Draining(false)
         , SourceEmpty(false)
@@ -595,7 +594,7 @@ protected:
     const TKeyTypes& KeyTypes;
     THashFunc const Hasher;
     TEqualsFunc const Equals;
-    const bool HasGenericAggregation;
+    constexpr static const bool HasGenericAggregation = true;
 
     using TStore = TStorageWrapper<char>;
     std::unique_ptr<TStore> Store;

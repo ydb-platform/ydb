@@ -157,20 +157,24 @@ class TestDML(TestBase):
                 and type not in uncomparable_types
             ):
                 rows_distinct = self.query(f"SELECT DISTINCT col_{cleanup_type_name(type)} from {table_name}")
+                rows_distinct = sorted(rows_distinct, key=lambda t: t[0])
                 for i in range(len(rows_distinct)):
                     dml.assert_type(all_types, type, i + 1, rows_distinct[i][0])
         for type in pk_types.keys():
             if type not in unsuppored_distinct_types:
                 rows_distinct = self.query(f"SELECT DISTINCT pk_{cleanup_type_name(type)} from {table_name}")
+                rows_distinct = sorted(rows_distinct, key=lambda t: t[0])
                 for i in range(len(rows_distinct)):
                     dml.assert_type(pk_types, type, i + 1, rows_distinct[i][0])
         for type in index.keys():
             if type not in unsuppored_distinct_types:
                 rows_distinct = self.query(f"SELECT DISTINCT col_index_{cleanup_type_name(type)} from {table_name}")
+                rows_distinct = sorted(rows_distinct, key=lambda t: t[0])
                 for i in range(len(rows_distinct)):
                     dml.assert_type(index, type, i + 1, rows_distinct[i][0])
         if ttl != "" and ttl != "DyNumber":
             rows_distinct = self.query(f"SELECT DISTINCT ttl_{cleanup_type_name(ttl)} from {table_name}")
+            rows_distinct = sorted(rows_distinct, key=lambda t: t[0])
             for i in range(len(rows_distinct)):
                 dml.assert_type(ttl_types, ttl, i + 1, rows_distinct[i][0])
 
@@ -210,19 +214,23 @@ class TestDML(TestBase):
                 type not in unsuppored_distinct_types
                 and type not in uncomparable_types
             ):
-                for line in range(len(rows)):
-                    dml.assert_type(all_types, type, line + 1, rows[line][f"col_{cleanup_type_name(type)}"])
+                sorted_rows = sorted(rows, key=lambda t: t[f"col_{cleanup_type_name(type)}"])
+                for line in range(len(sorted_rows)):
+                    dml.assert_type(all_types, type, line + 1, sorted_rows[line][f"col_{cleanup_type_name(type)}"])
         for type in pk_types.keys():
             if type not in unsuppored_distinct_types:
-                for line in range(len(rows)):
-                    dml.assert_type(pk_types, type, line + 1, rows[line][f"pk_{cleanup_type_name(type)}"])
+                sorted_rows = sorted(rows, key=lambda t: t[f"pk_{cleanup_type_name(type)}"])
+                for line in range(len(sorted_rows)):
+                    dml.assert_type(pk_types, type, line + 1, sorted_rows[line][f"pk_{cleanup_type_name(type)}"])
         for type in index.keys():
             if type not in unsuppored_distinct_types:
-                for line in range(len(rows)):
-                    dml.assert_type(index, type, line + 1, rows[line][f"col_index_{cleanup_type_name(type)}"])
+                sorted_rows = sorted(rows, key=lambda t: t[f"col_index_{cleanup_type_name(type)}"])
+                for line in range(len(sorted_rows)):
+                    dml.assert_type(index, type, line + 1, sorted_rows[line][f"col_index_{cleanup_type_name(type)}"])
         if ttl != "" and ttl != "DyNumber":
-            for line in range(len(rows)):
-                dml.assert_type(ttl_types, ttl, line + 1, rows[line][f"ttl_{cleanup_type_name(ttl)}"])
+            sorted_rows = sorted(rows, key=lambda t: t[f"ttl_{cleanup_type_name(ttl)}"])
+            for line in range(len(sorted_rows)):
+                dml.assert_type(ttl_types, ttl, line + 1, sorted_rows[line][f"ttl_{cleanup_type_name(ttl)}"])
 
     def select_with(
         self,
@@ -310,32 +318,20 @@ class TestDML(TestBase):
         count_rows = len(all_types) + len(pk_types) + len(index)
         if ttl != "":
             count_rows += 1
-        string_order = [(pk_types["String"](i), i) for i in range(1, count_rows + 1)]
-        string_order = sorted(string_order)
         selected_columns = self.create_types_for_all_select(all_types, pk_types, index, ttl)
         for statement in selected_columns:
             if "Json" not in statement and "JsonDocument" not in statement and "Yson" not in statement:
                 rows = self.query(f"select {", ".join(selected_columns)} from {table_name} ORDER BY {statement} ASC")
-                if "String" not in statement and "Utf8" not in statement:
-                    for i, row in enumerate(rows):
-                        self.assert_type_after_select(i + 1, row, all_types, pk_types, index, ttl, dml)
-                else:
-                    for i, row in enumerate(rows):
-                        self.assert_type_after_select(string_order[i][1], row, all_types, pk_types, index, ttl, dml)
+                for i, row in enumerate(rows):
+                    self.assert_type_after_select(i + 1, row, all_types, pk_types, index, ttl, dml)
 
                 rows = self.query(f"select {", ".join(selected_columns)} from {table_name} ORDER BY {statement} DESC")
-                string_order.reverse()
                 if "Bool" not in statement:
-                    if "String" not in statement and "Utf8" not in statement:
-                        for line, row in enumerate(rows):
-                            self.assert_type_after_select(len(rows) - line, row, all_types, pk_types, index, ttl, dml)
-                    else:
-                        for i, row in enumerate(rows):
-                            self.assert_type_after_select(string_order[i][1], row, all_types, pk_types, index, ttl, dml)
+                    for line, row in enumerate(rows):
+                        self.assert_type_after_select(len(rows) - line, row, all_types, pk_types, index, ttl, dml)
                 else:
                     for i, row in enumerate(rows):
                         self.assert_type_after_select(i + 1, row, all_types, pk_types, index, ttl, dml)
-                string_order.reverse()
 
     def get_number_of_columns(self, pk_types, all_types, index, ttl):
         number_of_columns = len(pk_types) + len(all_types) + len(index)

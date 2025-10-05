@@ -597,8 +597,8 @@ public:
         {
             TStringBuilder overloadDescriptor;
             overloadDescriptor << "unprocessed rows: " << UnprocessedRows.size()
-                << "pending left: " << PendingLeftRowsByKey.size()
-                << "result rows: " << ResultRowsBySeqNo.size();
+                << ", pending left: " << PendingLeftRowsByKey.size()
+                << ", result rows: " << ResultRowsBySeqNo.size();
 
             return TString(overloadDescriptor);
         }

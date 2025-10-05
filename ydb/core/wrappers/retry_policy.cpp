@@ -14,13 +14,30 @@ bool ShouldRetry(const Aws::S3::S3Error& error) {
     }
 
     const auto& exceptionName = error.GetExceptionName();
-    if ("TooManyRequests" == exceptionName) {
-        return true;
-    } else if ("OperationAborted" == exceptionName) {
+    if (exceptionName == "TooManyRequests" ||
+        exceptionName == "OperationAborted") {
         return true;
     }
 
     return false;
 }
 
+bool ShouldBackoff(const Aws::S3::S3Error& error) {
+    if (ShouldRetry(error)) {
+        return true;
+    }
+
+    const auto& exceptionName = error.GetExceptionName();
+    if (exceptionName == "AccessDenied" ||
+        exceptionName == "InvalidAccessKeyId" ||
+        exceptionName == "InvalidToken" ||
+        exceptionName == "ExpiredToken" ||
+        exceptionName == "AuthFailure" ||
+        exceptionName == "ServiceUnavailable")
+    {
+        return true;
+    }
+
+    return false;
+}
 }

@@ -50,7 +50,7 @@ http://<ydb-server-address>:<ydb-port>/counters/counters=<servicename>/prometheu
 
 1. Отредактируйте [файлы конфигурации](https://github.com/s-sabitova/ydb/tree/new-prometheus-config/ydb/deploy/prometheus) Prometheus:
 
-    1. В файле [`ydbd-storage.yml`](../../../../../deploy/prometheus/ydbd-storage.yml) в секции `targets` укажите адреса всех серверов кластера {{ ydb-short-name }} и порты узлов хранения, работающих на серверах.
+    1. В файле [`ydbd-storage.yml`](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/prometheus/ydbd-storage.yml) в секции `targets` укажите адреса всех серверов кластера {{ ydb-short-name }} и порты узлов хранения, работающих на серверах.
 
         ```json
         - labels:
@@ -70,7 +70,7 @@ http://<ydb-server-address>:<ydb-port>/counters/counters=<servicename>/prometheu
           - "localhost:8765"
         ```
         
-    1. В файле [`ydbd-database.yml`](../../../../../deploy/prometheus/ydbd-database.yml) в секции `targets` укажите адреса всех серверов кластера {{ ydb-short-name }} и порты узлов баз данных, работающих на серверах.
+    1. В файле [`ydbd-database.yml`](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/prometheus/ydbd-database.yml) в секции `targets` укажите адреса всех серверов кластера {{ ydb-short-name }} и порты узлов баз данных, работающих на серверах.
 
         ```json
         - labels:
@@ -96,7 +96,7 @@ http://<ydb-server-address>:<ydb-port>/counters/counters=<servicename>/prometheu
           - "localhost:8765"
         ```
 
-    1. В файле [`prometheus_ydb.yml`](../../../../../deploy/prometheus/prometheus_ydb.yml) при необходимости в секции `tls_config` укажите [сертификат центра регистрации](../deployment-options/manual/initial-deployment.md#tls-certificates) (Certification Authority, CA), которым подписаны остальные сертификаты TLS кластера {{ ydb-short-name }}:
+    1. В файле [`prometheus_ydb.yml`](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/prometheus/prometheus_ydb.yml) при необходимости в секции `tls_config` укажите [сертификат центра регистрации](../deployment-options/manual/initial-deployment.md#tls-certificates) (Certification Authority, CA), которым подписаны остальные сертификаты TLS кластера {{ ydb-short-name }}:
 
        ```json
        scheme: https

@@ -481,6 +481,12 @@ RewriteInputForConstraint(const TExprBase& inputRows, const THashSet<TStringBuf>
         YQL_ENSURE(condenseResult);
     }
 
+    // Deduplicate by primary key before checking unique constraints.
+    // For UPSERT, if we have multiple rows with the same PK, only the last one should be kept.
+    // This deduplication must happen before building unique index checks to ensure that
+    // duplicate unique index values in different PK rows are properly detected as constraint violations.
+    *condenseResult = DeduplicateInput(*condenseResult, table, ctx);
+
     auto helper = CreateUpsertUniqBuildHelper(table, inputColumns, usedIndexes, pos, ctx);
     if (helper->GetChecksNum() == 0) {
         // Return result of read stage only in case of uniq index
@@ -620,7 +626,8 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
         return {};
     }
 
-    auto condenseInputResult = DeduplicateInput(checkedInput->first, table, ctx);
+    // Note: The input is already deduplicated by PK inside RewriteInputForConstraint
+    auto condenseInputResult = checkedInput->first;
 
     // For UPSERT check that indexes is not empty
     YQL_ENSURE(mode == TKqpPhyUpsertIndexMode::UpdateOn || indexes);

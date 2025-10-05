@@ -5972,6 +5972,49 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
             );
         }
     }
+
+    Y_UNIT_TEST(UniqueIndexUpsertDuplicatesSameTx) {
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        // Create table with composite PK and unique index on one column
+        {
+            auto tableBuilder = db.GetTableBuilder();
+            tableBuilder
+                .AddNullableColumn("a", EPrimitiveType::Int32)
+                .AddNullableColumn("b", EPrimitiveType::Int32);
+            tableBuilder.SetPrimaryKeyColumns(std::vector<std::string>{"a", "b"});
+            tableBuilder.AddUniqueSecondaryIndex("ix_b", std::vector<std::string>{"b"});
+            auto result = session.CreateTable("/Root/t1", tableBuilder.Build()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+
+        // Try to upsert two rows with different PKs but same unique index value
+        // This should fail with PRECONDITION_FAILED
+        {
+            const TString query(Q_(R"(
+                $v=[<|a:10,b:20|>,<|a:30,b:20|>];
+                UPSERT INTO `/Root/t1` SELECT * FROM AS_TABLE($v);
+            )"));
+
+            auto result = session.ExecuteDataQuery(
+                    query,
+                    TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                .ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+        }
+
+        // Verify table is empty (transaction should have failed)
+        {
+            const auto& yson = ReadTablePartToYson(session, "/Root/t1");
+            const TString expected = R"([])";
+            UNIT_ASSERT_VALUES_EQUAL(yson, expected);
+        }
+    }
 }
 
 }

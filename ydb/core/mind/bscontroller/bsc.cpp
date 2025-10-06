@@ -163,11 +163,11 @@ void TBlobStorageController::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
     if (!std::exchange(StorageConfigObtained, true)) {
         if (HostRecords) {
             Execute(CreateTxInitScheme());
-        }
 
-        if (!SelfHealId) {
-            SelfHealSettings = ParseSelfHealSettings(StorageConfig);
-            SelfHealId = Register(CreateSelfHealActor());
+            if (!SelfHealId) {
+                SelfHealSettings = ParseSelfHealSettings(StorageConfig);
+                SelfHealId = Register(CreateSelfHealActor());
+            }
         }
 
         ClusterBalancingSettings = ParseClusterBalancingSettings(StorageConfig);

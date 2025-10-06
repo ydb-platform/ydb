@@ -11,7 +11,7 @@ namespace NKqp {
 
 using namespace NYql;
 
-enum EOperator : ui32 { EmptySource, Source, Map, Project, Filter, Join, Limit, Root };
+enum EOperator : ui32 { EmptySource, Source, Map, Project, Filter, Join, Limit, UnionAll, Root };
 
 /**
  * Info Unit is a reference to a column in the plan
@@ -311,6 +311,13 @@ class TOpJoin : public IBinaryOperator {
 
     TString JoinKind;
     TVector<std::pair<TInfoUnit, TInfoUnit>> JoinKeys;
+};
+
+class TOpUnionAll : public IBinaryOperator {
+  public:
+    TOpUnionAll(std::shared_ptr<IOperator> leftArg, std::shared_ptr<IOperator> rightArg);
+    virtual TVector<TInfoUnit> GetOutputIUs() override;
+    virtual TString ToString() override;
 };
 
 class TOpLimit : public IUnaryOperator {

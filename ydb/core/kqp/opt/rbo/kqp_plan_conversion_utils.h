@@ -24,6 +24,7 @@ class PlanConverter {
     std::shared_ptr<IOperator> ConvertTKqpOpJoin(TExprNode::TPtr node);
     std::shared_ptr<IOperator> ConvertTKqpOpLimit(TExprNode::TPtr node);
     std::shared_ptr<IOperator> ConvertTKqpOpProject(TExprNode::TPtr node);
+    std::shared_ptr<IOperator> ConvertTKqpOpUnionAll(TExprNode::TPtr node);
 
     THashMap<TExprNode *, std::shared_ptr<IOperator>> Converted;
 };
@@ -41,6 +42,7 @@ class ExprNodeRebuilder {
     TExprNode::TPtr RebuildFilter(std::shared_ptr<IOperator> op);
     TExprNode::TPtr RebuildJoin(std::shared_ptr<IOperator> op);
     TExprNode::TPtr RebuildLimit(std::shared_ptr<IOperator> op);
+    TExprNode::TPtr RebuildUnionAll(std::shared_ptr<IOperator> op);
 
     TExprContext &Ctx;
     TPositionHandle Pos;

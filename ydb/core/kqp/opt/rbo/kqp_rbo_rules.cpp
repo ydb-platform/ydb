@@ -138,7 +138,6 @@ namespace NKqp {
 bool TExtractJoinExpressionsRule::TestAndApply(std::shared_ptr<IOperator> &input, TExprContext &ctx,
                                                const TIntrusivePtr<TKqpOptimizeContext> &kqpCtx, TTypeAnnotationContext &typeCtx,
                                                const TKikimrConfiguration::TPtr &config, TPlanProps &props) {
-
     Y_UNUSED(kqpCtx);
     Y_UNUSED(config);
 
@@ -263,7 +262,6 @@ std::shared_ptr<IOperator> TPushMapRule::SimpleTestAndApply(const std::shared_pt
                                                             const TIntrusivePtr<TKqpOptimizeContext> &kqpCtx,
                                                             TTypeAnnotationContext &typeCtx, const TKikimrConfiguration::TPtr &config,
                                                             TPlanProps &props) {
-
     Y_UNUSED(ctx);
     Y_UNUSED(kqpCtx);
     Y_UNUSED(typeCtx);
@@ -469,7 +467,6 @@ std::shared_ptr<IOperator> TPushFilterRule::SimpleTestAndApply(const std::shared
 
 bool TAssignStagesRule::TestAndApply(std::shared_ptr<IOperator> &input, TExprContext &ctx, const TIntrusivePtr<TKqpOptimizeContext> &kqpCtx,
                                      TTypeAnnotationContext &typeCtx, const TKikimrConfiguration::TPtr &config, TPlanProps &props) {
-
     Y_UNUSED(ctx);
     Y_UNUSED(kqpCtx);
     Y_UNUSED(typeCtx);
@@ -477,7 +474,6 @@ bool TAssignStagesRule::TestAndApply(std::shared_ptr<IOperator> &input, TExprCon
     Y_UNUSED(props);
 
     auto nodeName = input->Node->Content();
-
     YQL_CLOG(TRACE, CoreDq) << "Assign stages: " << nodeName;
 
     if (input->Props.StageId.has_value()) {
@@ -485,15 +481,14 @@ bool TAssignStagesRule::TestAndApply(std::shared_ptr<IOperator> &input, TExprCon
         return false;
     }
 
-    for (auto &c : input->Children) {
-        if (!c->Props.StageId.has_value()) {
+    for (auto &child : input->Children) {
+        if (!child->Props.StageId.has_value()) {
             YQL_CLOG(TRACE, CoreDq) << "Assign stages: " << nodeName << " child with unassigned stage";
             return false;
         }
     }
 
     if (input->Kind == EOperator::EmptySource || input->Kind == EOperator::Source) {
-
         TString readName;
         if (input->Kind == EOperator::Source) {
             auto opRead = CastOperator<TOpRead>(input);
@@ -506,9 +501,7 @@ bool TAssignStagesRule::TestAndApply(std::shared_ptr<IOperator> &input, TExprCon
         }
         YQL_CLOG(TRACE, CoreDq) << "Assign stages source: " << readName;
 
-    }
-
-    else if (input->Kind == EOperator::Join) {
+    } else if (input->Kind == EOperator::Join) {
         auto join = CastOperator<TOpJoin>(input);
         auto leftStage = join->GetLeftInput()->Props.StageId;
         auto rightStage = join->GetRightInput()->Props.StageId;
@@ -530,9 +523,9 @@ bool TAssignStagesRule::TestAndApply(std::shared_ptr<IOperator> &input, TExprCon
         else {
             TVector<TInfoUnit> leftShuffleKeys;
             TVector<TInfoUnit> rightShuffleKeys;
-            for (auto k : join->JoinKeys) {
-                leftShuffleKeys.push_back(k.first);
-                rightShuffleKeys.push_back(k.second);
+            for (auto key : join->JoinKeys) {
+                leftShuffleKeys.push_back(key.first);
+                rightShuffleKeys.push_back(key.second);
             }
 
             props.StageGraph.Connect(*leftStage, newStageId, std::make_shared<TShuffleConnection>(leftShuffleKeys, isLeftSourceStage));
@@ -559,8 +552,24 @@ bool TAssignStagesRule::TestAndApply(std::shared_ptr<IOperator> &input, TExprCon
         auto prevStageId = *(input->Children[0]->Props.StageId);
         props.StageGraph.Connect(prevStageId, newStageId,
                                  std::make_shared<TUnionAllConnection>(props.StageGraph.IsSourceStage(prevStageId)));
+    } else if (input->Kind == EOperator::UnionAll) {
+        auto unionAll = CastOperator<TOpUnionAll>(input);
+
+        auto leftStage = unionAll->GetLeftInput()->Props.StageId;
+        auto rightStage = unionAll->GetRightInput()->Props.StageId;
+
+        bool isLeftSourceStage = props.StageGraph.IsSourceStage(*leftStage);
+        bool isRightSourceStage = props.StageGraph.IsSourceStage(*rightStage);
+
+        auto newStageId = props.StageGraph.AddStage();
+        unionAll->Props.StageId = newStageId;
+
+        props.StageGraph.Connect(*leftStage, newStageId, std::make_shared<TUnionAllConnection>(isLeftSourceStage));
+        props.StageGraph.Connect(*rightStage, newStageId, std::make_shared<TUnionAllConnection>(isRightSourceStage));
+
+        YQL_CLOG(TRACE, CoreDq) << "Assign stages union_all";
     } else {
-        Y_ENSURE(true, "Unknown operator encountered");
+        Y_ENSURE(false, "Unknown operator encountered");
     }
 
     return true;

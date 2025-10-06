@@ -7,7 +7,6 @@
 
 #include <errno.h>
 
-
 namespace NYql {
 
 bool IsProcessAlive(TProcessId pid) {
@@ -33,5 +32,4 @@ bool IsProcessAlive(TProcessId pid) {
 #endif
 }
 
-} // NYql
-
+} // namespace NYql

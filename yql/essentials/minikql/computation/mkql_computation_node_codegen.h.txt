@@ -1019,7 +1019,7 @@ public:
     {}
 
 protected:
-    NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override {
+    NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override Y_NO_SANITIZE("undefined") {
         return FetchFunc(Ctx, static_cast<const NUdf::TUnboxedValuePod&>(Stream), State, result);
     }
 

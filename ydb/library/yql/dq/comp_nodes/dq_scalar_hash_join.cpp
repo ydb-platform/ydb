@@ -143,7 +143,7 @@ public:
             Output_.resize(std::ssize(Output_) - outputTupleSize);
             return EFetchResult::One;
         }
-        if (auto* probeSide = ProbeSide()) {
+        if (ProbeSide()) {
             auto result = LeftFlow_->FetchValues(ctx, Pointers_.data());
             switch (result) {
             case EFetchResult::Finish: {

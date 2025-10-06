@@ -1,4 +1,5 @@
 #include "mkql_builtins_decimal.h" // Y_IGNORE
+#include "mkql_safe_ops.h"
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -9,7 +10,7 @@ template<typename TInput, typename TOutput>
 struct TIncrement : public TSimpleArithmeticUnary<TInput, TOutput, TIncrement<TInput, TOutput>> {
     static TOutput Do(TInput val)
     {
-        return ++val;
+        return SafeInc(val);
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
@@ -32,7 +33,7 @@ struct TDecimalInc {
         const auto& bounds = GetBounds<Precision, false, true>();
 
         if (v > bounds.first && v < bounds.second)
-            return NUdf::TUnboxedValuePod(++v);
+            return NUdf::TUnboxedValuePod(SafeInc(v));
 
         return NUdf::TUnboxedValuePod(IsNan(v) ? Nan() : (v > 0 ? +Inf() : -Inf()));
     }

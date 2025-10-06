@@ -59,7 +59,6 @@ class TScalarHashJoinState : public TComputationValue<TScalarHashJoinState> {
     void AppendTuple(NJoinTable::TTuple left, NJoinTable::TTuple right, std::vector<NUdf::TUnboxedValue>& output) {
         MKQL_ENSURE(left || right,"appending invalid tuple");
         auto outIt = std::back_inserter(output);
-        const static std::vector<NYql::NUdf::TUnboxedValuePod> NullTuples(std::max(std::ssize(LeftColumnTypes_), std::ssize(RightColumnTypes_)), NYql::NUdf::TUnboxedValuePod{});
         if (left) {
             std::copy_n(left,std::ssize(LeftColumnTypes_), outIt);
         } else {
@@ -220,6 +219,8 @@ private:
     const NUdf::TLogComponentId LogComponent_;
     const TKeyTypes KeyTypes_;
     const EJoinKind JoinKind_;
+    const std::vector<NYql::NUdf::TUnboxedValuePod> NullTuples{std::max(std::size(LeftColumnTypes_), std::size(RightColumnTypes_)), NYql::NUdf::TUnboxedValuePod{}};
+
     bool LeftFinished_ = false;
     bool RightFinished_ = false;
     NJoinTable::TStdJoinTable Table_;

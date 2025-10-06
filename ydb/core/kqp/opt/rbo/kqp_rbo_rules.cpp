@@ -542,7 +542,15 @@ bool TAssignStagesRule::TestAndApply(std::shared_ptr<IOperator> &input, TExprCon
             auto newStageId = props.StageGraph.AddStage();
             input->Props.StageId = newStageId;
             props.StageGraph.Connect(prevStageId, newStageId, std::make_shared<TSourceConnection>());
-        } else {
+        } 
+        // If the child operator is not single use, we also need to create a new stage
+        // for current operator with a map connection
+        else if (!childOp->IsSingleConsumer()) {
+            auto newStageId = props.StageGraph.AddStage();
+            input->Props.StageId = newStageId;
+            props.StageGraph.Connect(prevStageId, newStageId, std::make_shared<TMapConnection>(false));
+        }
+        else {
             input->Props.StageId = prevStageId;
         }
         YQL_CLOG(TRACE, CoreDq) << "Assign stages rest";

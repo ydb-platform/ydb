@@ -104,7 +104,7 @@ scrape_configs:
     metric_relabel_configs:
       - source_labels: ["__name__"]
         target_label: "__name__"
-        replacement: "datastreams_$1"
+        replacement: "ydb_$1"
     relabel_configs:
       - regex: ([^:]+)(:[0-9]+)?
         replacement: ${1}
@@ -426,7 +426,7 @@ scrape_configs:
     metric_relabel_configs:
       - source_labels: ["__name__"]
         target_label: "__name__"
-        replacement: "topics_$1"
+        replacement: "ydb_$1"
     relabel_configs:
       - regex: ([^:]+)(:[0-9]+)?
         replacement: ${1}

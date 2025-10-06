@@ -6,7 +6,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/system/env.h>
-
+#include <ydb/core/fq/libs/ydb/ydb_gateway.h>
 #include <deque>
 
 namespace NFq {
@@ -33,7 +33,8 @@ TCheckpointStoragePtr GetCheckpointStorage(const char* tablePrefix, IEntityIdGen
     auto credFactory = NKikimr::CreateYdbCredentialsProviderFactory;
     NYdb::TDriver driver(NYdb::TDriverConfig{});
     auto ydbConnectionPtr = NewYdbConnection(checkpointStorageConfig, credFactory, driver);
-    auto storage = NewYdbCheckpointStorage(checkpointStorageConfig, entityIdGenerator, ydbConnectionPtr);
+    auto gateway = MakeIntrusive<YdbSdkTableGateway>(ydbConnectionPtr->TableClient, ydbConnectionPtr->DB, ydbConnectionPtr->TablePathPrefix);
+    auto storage = NewYdbCheckpointStorage(checkpointStorageConfig, entityIdGenerator, ydbConnectionPtr, gateway);
     auto issues = storage->Init().GetValueSync();
     UNIT_ASSERT_C(issues.Empty(), issues.ToString());
     return storage;

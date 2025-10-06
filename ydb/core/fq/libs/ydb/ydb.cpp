@@ -21,7 +21,7 @@ namespace {
 
 TFuture<TDataQueryResult> SelectGeneration(const TGenerationContextPtr& context) {
     // TODO: use prepared queries
-
+    
     auto query = Sprintf(R"(
         --!syntax_v1
         PRAGMA TablePathPrefix("%s");
@@ -47,7 +47,9 @@ TFuture<TDataQueryResult> SelectGeneration(const TGenerationContextPtr& context)
         ttxControl.CommitTx();
     }
 
-    return context->Session.ExecuteDataQuery(query, ttxControl, params.Build(), context->ExecDataQuerySettings);
+    return context->YdbGateway->ExecuteDataQuery(context, query, &params, ttxControl);
+
+ //   return context->Session.ExecuteDataQuery(query, ttxControl, params.Build(), context->ExecDataQuerySettings);
 }
 
 TFuture<TStatus> CheckGeneration(
@@ -100,7 +102,7 @@ TFuture<TStatus> CheckGeneration(
            << ", pk: " << context->PrimaryKey
            << ", current generation: " << context->GenerationRead
            << ", expected/new generation: " << context->Generation
-           << ", operation: " << context->OperationType;
+           << ", operation: " << (int)context->OperationType;
 
         return MakeFuture(MakeErrorStatus(EStatus::ALREADY_EXISTS, ss.Str()));
     }
@@ -158,7 +160,10 @@ TFuture<TStatus> UpsertGeneration(const TGenerationContextPtr& context) {
         context->Transaction.reset();
     }
 
-    return context->Session.ExecuteDataQuery(query, ttxControl, params.Build(), context->ExecDataQuerySettings).Apply(
+    return context->YdbGateway->ExecuteDataQuery(context, query, &params, ttxControl/*context->ExecDataQuerySettings*/).Apply(
+
+
+   // return context->Session.ExecuteDataQuery(query, ttxControl, params.Build(), context->ExecDataQuerySettings).Apply(
         [] (const TFuture<TDataQueryResult>& future) {
             TStatus status = future.GetValue();
             return status;

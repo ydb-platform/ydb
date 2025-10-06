@@ -14,6 +14,8 @@
 #include <util/system/env.h>
 
 #include <ydb/core/protos/config.pb.h>
+//#include <ydb/core/fq/libs/ydb/ydb_gateway.h>
+#include <ydb/core/fq/libs/ydb/generation_context.h>
 
 namespace NFq {
 
@@ -43,75 +45,78 @@ using TYdbConnectionPtr = TIntrusivePtr<TYdbConnection>;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct TGenerationContext : public TThrRefBase {
-    enum EOperationType {
-        Register,
-        RegisterCheck,
-        Check,
-    };
+// struct TGenerationContext : public TThrRefBase {
+//     enum EOperationType {
+//         Register,
+//         RegisterCheck,
+//         Check,
+//     };
 
-    // set internally, do not touch it
-    EOperationType OperationType = Register;
+//     // set internally, do not touch it
+//     EOperationType OperationType = Register;
 
-    // within this session we execute transaction
-    NYdb::NTable::TSession Session;
+//     // within this session we execute transaction
+//     NYdb::NTable::TSession Session;
 
-    // - In Register and RegisterCheck operation - whether
-    // to commit or not after upserting new generation (usually true)
-    // - In Check operation - whether to commit or not
-    // after selecting generation (normally false)
-    //
-    // - When check succeeds, and flag is true, it's up to caller
-    // to finish transaction.
-    // - When check fails then transaction is aborted automatically
-    const bool CommitTx;
+//     // - In Register and RegisterCheck operation - whether
+//     // to commit or not after upserting new generation (usually true)
+//     // - In Check operation - whether to commit or not
+//     // after selecting generation (normally false)
+//     //
+//     // - When check succeeds, and flag is true, it's up to caller
+//     // to finish transaction.
+//     // - When check fails then transaction is aborted automatically
+//     const bool CommitTx;
 
-    const TString TablePathPrefix;
-    const TString Table;
-    const TString PrimaryKeyColumn;
-    const TString GenerationColumn;
+//     const TString TablePathPrefix;
+//     const TString Table;
+//     const TString PrimaryKeyColumn;
+//     const TString GenerationColumn;
 
-    const TString PrimaryKey;
+//     const TString PrimaryKey;
 
-    // - In Register operation - it is new generation to be registered,
-    // caller with higher generation wins
-    // - In RegisterCheck operation - it is new generation to be registered,
-    // if DB contains smaller generation, when generation is the same - operation
-    // equals to Check
-    // - In Check operation - expected generation, caller normally uses
-    // it with Transaction (must have CommitTx = false)
-    const ui64 Generation;
+//     // - In Register operation - it is new generation to be registered,
+//     // caller with higher generation wins
+//     // - In RegisterCheck operation - it is new generation to be registered,
+//     // if DB contains smaller generation, when generation is the same - operation
+//     // equals to Check
+//     // - In Check operation - expected generation, caller normally uses
+//     // it with Transaction (must have CommitTx = false)
+//     const ui64 Generation;
 
-    std::optional<NYdb::NTable::TTransaction> Transaction;
+//     std::optional<NYdb::NTable::TTransaction> Transaction;
 
-    // result of Select
-    ui64 GenerationRead = 0;
+//     // result of Select
+//     ui64 GenerationRead = 0;
 
-    NYdb::NTable::TExecDataQuerySettings ExecDataQuerySettings;
+//     IYdbTableGateway::TPtr YdbGateway;
+//     NYdb::NTable::TExecDataQuerySettings ExecDataQuerySettings;
 
-    TGenerationContext(NYdb::NTable::TSession session,
-                       bool commitTx,
-                       const TString& tablePathPrefix,
-                       const TString& table,
-                       const TString& primaryKeyColumn,
-                       const TString& generationColumn,
-                       const TString& primaryKey,
-                       ui64 generation,
-                       const NYdb::NTable::TExecDataQuerySettings& execDataQuerySettings = {})
-        : Session(session)
-        , CommitTx(commitTx)
-        , TablePathPrefix(tablePathPrefix)
-        , Table(table)
-        , PrimaryKeyColumn(primaryKeyColumn)
-        , GenerationColumn(generationColumn)
-        , PrimaryKey(primaryKey)
-        , Generation(generation)
-        , ExecDataQuerySettings(execDataQuerySettings)
-    {
-    }
-};
+//     TGenerationContext(NYdb::NTable::TSession session,
+//                        bool commitTx,
+//                        const TString& tablePathPrefix,
+//                        const TString& table,
+//                        const TString& primaryKeyColumn,
+//                        const TString& generationColumn,
+//                        const TString& primaryKey,
+//                        ui64 generation,
+//                        IYdbTableGateway::TPtr ydbGateway,
+//                        const NYdb::NTable::TExecDataQuerySettings& execDataQuerySettings = {})
+//         : Session(session)
+//         , CommitTx(commitTx)
+//         , TablePathPrefix(tablePathPrefix)
+//         , Table(table)
+//         , PrimaryKeyColumn(primaryKeyColumn)
+//         , GenerationColumn(generationColumn)
+//         , PrimaryKey(primaryKey)
+//         , Generation(generation)
+//         , YdbGateway(ydbGateway)
+//         , ExecDataQuerySettings(execDataQuerySettings)
+//     {
+//     }
+// };
 
-using TGenerationContextPtr = TIntrusivePtr<TGenerationContext>;
+// using TGenerationContextPtr = TIntrusivePtr<TGenerationContext>;
 
 ////////////////////////////////////////////////////////////////////////////////
 

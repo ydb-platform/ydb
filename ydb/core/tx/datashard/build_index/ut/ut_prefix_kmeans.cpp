@@ -84,7 +84,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
     static std::tuple<TString, TString, TString> DoPrefixKMeans(
         Tests::TServer::TPtr server, TActorId sender, NTableIndex::NKMeans::TClusterId parent, ui64 seed, ui64 k,
         NKikimrTxDataShard::EKMeansState upload, VectorIndexSettings::VectorType type,
-        VectorIndexSettings::Metric metric, ui32 maxBatchRows)
+        VectorIndexSettings::Metric metric, ui32 maxBatchRows, ui32 overlapClusters = 0)
     {
         auto id = sId.fetch_add(1, std::memory_order_relaxed);
         auto& runtime = *server->GetRuntime();
@@ -127,6 +127,10 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
                 rec.AddSourcePrimaryKeyColumns("key");
 
                 rec.SetDatabaseName(kDatabaseName);
+
+                rec.SetOverlapClusters(overlapClusters);
+                rec.SetOverlapRatio(2);
+
                 rec.SetPrefixName(kPrefixTable);
                 rec.SetLevelName(kLevelTable);
                 rec.SetOutputName(kPostingTable);
@@ -456,6 +460,135 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
             );
             recreate();
         }}
+    }
+
+    Y_UNIT_TEST (BuildToPostingWithOverlap) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root");
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto& runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        InitRoot(server, sender);
+
+        TShardedTableOptions options;
+        options.EnableOutOfOrder(true); // TODO(mbkkt) what is it?
+        options.Shards(1);
+
+        CreateBuildPrefixTable(server, sender, options, "table-main");
+        // Upsert some initial values
+        // Same data as in TTxDataShardLocalKMeansScan::MainToPostingWithOverlap but for 2 users
+        ExecSQL(server, sender, R"(UPSERT INTO `/Root/table-main` (user, key, embedding, data) VALUES
+            ("user-1", 1, "\x10\x80\x02", "one"),
+            ("user-1", 2, "\x80\x10\x02", "two"),
+            ("user-1", 3, "\x10\x10\x02", "three"),
+
+            ("user-1", 4, "\x11\x81\x02", "four"),
+            ("user-1", 5, "\x11\x80\x02", "five"),
+
+            ("user-1", 6, "\x81\x11\x02", "aaa"),
+            ("user-1", 7, "\x81\x10\x02", "bbbb"),
+
+            ("user-1", 8, "\x11\x10\x02", "ccccc"),
+            ("user-1", 9, "\x10\x11\x02", "dddd"),
+            ("user-1", 10, "\x11\x09\x02", "eee"),
+            ("user-1", 11, "\x09\x11\x02", "ffff"),
+            ("user-1", 12, "\x09\x09\x02", "ggggg"),
+            ("user-1", 13, "\x11\x11\x02", "hhhh"),
+
+            ("user-2", 21, "\x10\x80\x02", "one"),
+            ("user-2", 22, "\x80\x10\x02", "two"),
+            ("user-2", 23, "\x10\x10\x02", "three"),
+
+            ("user-2", 24, "\x11\x81\x02", "four"),
+            ("user-2", 25, "\x11\x80\x02", "five"),
+
+            ("user-2", 26, "\x81\x11\x02", "aaa"),
+            ("user-2", 27, "\x81\x10\x02", "bbbb"),
+
+            ("user-2", 28, "\x11\x10\x02", "ccccc"),
+            ("user-2", 29, "\x10\x11\x02", "dddd"),
+            ("user-2", 30, "\x11\x09\x02", "eee"),
+            ("user-2", 31, "\x09\x11\x02", "ffff"),
+            ("user-2", 32, "\x09\x09\x02", "ggggg"),
+            ("user-2", 33, "\x11\x11\x02", "hhhh");
+        )");
+
+        auto create = [&] {
+            CreatePrefixTable(server, sender, options);
+            CreateLevelTable(server, sender, options);
+            CreatePostingTable(server, sender, options);
+        };
+        create();
+        auto recreate = [&] {
+            DropTable(server, sender, "table-prefix");
+            DropTable(server, sender, "table-level");
+            DropTable(server, sender, "table-posting");
+            create();
+        };
+
+        ui64 seed = 100;
+        ui64 k = 3;
+        auto similarity = VectorIndexSettings::DISTANCE_COSINE;
+
+        for (ui32 maxBatchRows : {0, 1, 4, 5, 6, 50000}) {
+            auto [prefix, level, posting] = DoPrefixKMeans(server, sender, 40, seed, k,
+                NKikimrTxDataShard::EKMeansState::UPLOAD_BUILD_TO_POSTING,
+                VectorIndexSettings::VECTOR_TYPE_UINT8, similarity, maxBatchRows, 2);
+            UNIT_ASSERT_VALUES_EQUAL(prefix,
+                "user = user-1, __ydb_id = 40\n"
+
+                "user = user-2, __ydb_id = 44\n"
+            );
+            UNIT_ASSERT_VALUES_EQUAL(level,
+                "__ydb_parent = 40, __ydb_id = 9223372036854775849, __ydb_centroid = \x10\x80\x02\n"
+                "__ydb_parent = 40, __ydb_id = 9223372036854775850, __ydb_centroid = \x80\x10\x02\n"
+                "__ydb_parent = 40, __ydb_id = 9223372036854775851, __ydb_centroid = \x0E\x0E\x02\n"
+
+                "__ydb_parent = 44, __ydb_id = 9223372036854775853, __ydb_centroid = \x10\x80\x02\n"
+                "__ydb_parent = 44, __ydb_id = 9223372036854775854, __ydb_centroid = \x0E\x0E\x02\n"
+                "__ydb_parent = 44, __ydb_id = 9223372036854775855, __ydb_centroid = \x80\x10\x02\n"
+            );
+            UNIT_ASSERT_VALUES_EQUAL(posting,
+                "__ydb_parent = 9223372036854775849, key = 1, data = one\n"
+                "__ydb_parent = 9223372036854775849, key = 4, data = four\n"
+                "__ydb_parent = 9223372036854775849, key = 5, data = five\n"
+                "__ydb_parent = 9223372036854775849, key = 11, data = ffff\n"
+                "__ydb_parent = 9223372036854775850, key = 2, data = two\n"
+                "__ydb_parent = 9223372036854775850, key = 6, data = aaa\n"
+                "__ydb_parent = 9223372036854775850, key = 7, data = bbbb\n"
+                "__ydb_parent = 9223372036854775850, key = 10, data = eee\n"
+                "__ydb_parent = 9223372036854775851, key = 3, data = three\n"
+                "__ydb_parent = 9223372036854775851, key = 8, data = ccccc\n"
+                "__ydb_parent = 9223372036854775851, key = 9, data = dddd\n"
+                "__ydb_parent = 9223372036854775851, key = 10, data = eee\n"
+                "__ydb_parent = 9223372036854775851, key = 11, data = ffff\n"
+                "__ydb_parent = 9223372036854775851, key = 12, data = ggggg\n"
+                "__ydb_parent = 9223372036854775851, key = 13, data = hhhh\n"
+
+                "__ydb_parent = 9223372036854775853, key = 21, data = one\n"
+                "__ydb_parent = 9223372036854775853, key = 24, data = four\n"
+                "__ydb_parent = 9223372036854775853, key = 25, data = five\n"
+                "__ydb_parent = 9223372036854775853, key = 31, data = ffff\n"
+                "__ydb_parent = 9223372036854775854, key = 23, data = three\n"
+                "__ydb_parent = 9223372036854775854, key = 28, data = ccccc\n"
+                "__ydb_parent = 9223372036854775854, key = 29, data = dddd\n"
+                "__ydb_parent = 9223372036854775854, key = 30, data = eee\n"
+                "__ydb_parent = 9223372036854775854, key = 31, data = ffff\n"
+                "__ydb_parent = 9223372036854775854, key = 32, data = ggggg\n"
+                "__ydb_parent = 9223372036854775854, key = 33, data = hhhh\n"
+                "__ydb_parent = 9223372036854775855, key = 22, data = two\n"
+                "__ydb_parent = 9223372036854775855, key = 26, data = aaa\n"
+                "__ydb_parent = 9223372036854775855, key = 27, data = bbbb\n"
+                "__ydb_parent = 9223372036854775855, key = 30, data = eee\n"
+            );
+            recreate();
+        }
     }
 
     Y_UNIT_TEST (BuildToBuild) {

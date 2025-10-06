@@ -1622,6 +1622,9 @@ message TEvLocalKMeansRequest {
     optional NKikimrIndexBuilder.TIndexBuildScanSettings ScanSettings = 22;
 
     optional string DatabaseName = 23;
+
+    optional uint32 OverlapClusters = 24;
+    optional double OverlapRatio = 25;
 }
 
 message TEvLocalKMeansResponse {
@@ -1672,6 +1675,9 @@ message TEvReshuffleKMeansRequest {
     optional NKikimrIndexBuilder.TIndexBuildScanSettings ScanSettings = 16;
 
     optional string DatabaseName = 17;
+
+    optional uint32 OverlapClusters = 18;
+    optional double OverlapRatio = 19;
 }
 
 message TEvReshuffleKMeansResponse {
@@ -1785,6 +1791,9 @@ message TEvPrefixKMeansRequest {
     repeated string SourcePrimaryKeyColumns = 19;
 
     optional string DatabaseName = 20;
+
+    optional uint32 OverlapClusters = 21;
+    optional double OverlapRatio = 22;
 }
 
 message TEvPrefixKMeansResponse {

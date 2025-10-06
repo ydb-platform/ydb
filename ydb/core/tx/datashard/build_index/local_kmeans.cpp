@@ -80,6 +80,8 @@ protected:
     NTable::TPos EmbeddingPos = 0;
     NTable::TPos DataPos = 1;
     bool IsEmpty = false;
+    const ui32 OverlapClusters = 0;
+    const double OverlapRatio = 0;
 
     const TIndexBuildScanSettings ScanSettings;
 
@@ -104,6 +106,7 @@ protected:
     bool IsExhausted = false;
 
     std::unique_ptr<IClusters> Clusters;
+    std::vector<std::pair<ui32, double>> TmpClusters;
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType()
@@ -126,6 +129,8 @@ public:
         , Uploader(request.GetDatabaseName(), request.GetScanSettings())
         , Dimensions(request.GetSettings().vector_dimension())
         , K(request.GetK())
+        , OverlapClusters(request.GetOverlapClusters() ? request.GetOverlapClusters() : 1)
+        , OverlapRatio(request.GetOverlapRatio())
         , ScanSettings(request.GetScanSettings())
         , ResponseActorId{responseActorId}
         , Response{std::move(response)}
@@ -450,32 +455,33 @@ protected:
         }
     }
 
+    void FeedFinal(TArrayRef<const TCell> row, TArrayRef<const TCell> sourcePk,
+        TArrayRef<const TCell> dataColumns, TArrayRef<const TCell> origKey, bool isPostingLevel)
+    {
+        Clusters->FindClusters(row.at(EmbeddingPos).AsBuf(), TmpClusters, OverlapClusters, OverlapRatio);
+        for (auto& [pos, _]: TmpClusters) {
+            AddRowToData(*OutputBuf, Child + pos, sourcePk, dataColumns, origKey, isPostingLevel);
+        }
+    }
+
     void FeedMainToBuild(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
     {
-        if (auto pos = Clusters->FindCluster(row, EmbeddingPos); pos) {
-            AddRowToData(*OutputBuf, Child + *pos, key, row, key, false);
-        }
+        FeedFinal(row, key, row, key, false);
     }
 
     void FeedMainToPosting(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
     {
-        if (auto pos = Clusters->FindCluster(row, EmbeddingPos); pos) {
-            AddRowToData(*OutputBuf, Child + *pos, key, row.Slice(DataPos), key, true);
-        }
+        FeedFinal(row, key, row.Slice(DataPos), key, true);
     }
 
     void FeedBuildToBuild(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
     {
-        if (auto pos = Clusters->FindCluster(row, EmbeddingPos); pos) {
-            AddRowToData(*OutputBuf, Child + *pos, key.Slice(1), row, key, false);
-        }
+        FeedFinal(row, key.Slice(1), row, key, false);
     }
 
     void FeedBuildToPosting(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
     {
-        if (auto pos = Clusters->FindCluster(row, EmbeddingPos); pos) {
-            AddRowToData(*OutputBuf, Child + *pos, key.Slice(1), row.Slice(DataPos), key, true);
-        }
+        FeedFinal(row, key.Slice(1), row.Slice(DataPos), key, true);
     }
 
     void FormLevelRows()

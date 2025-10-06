@@ -82,7 +82,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardLocalKMeansScan) {
     static std::tuple<TString, TString> DoLocalKMeans(
         Tests::TServer::TPtr server, TActorId sender, NTableIndex::NKMeans::TClusterId parentFrom, NTableIndex::NKMeans::TClusterId parentTo, ui64 seed, ui64 k,
         NKikimrTxDataShard::EKMeansState upload, VectorIndexSettings::VectorType type,
-        VectorIndexSettings::Metric metric, ui32 maxBatchRows = 50000)
+        VectorIndexSettings::Metric metric, ui32 maxBatchRows = 50000, ui32 overlapClusters = 0)
     {
         auto id = sId.fetch_add(1, std::memory_order_relaxed);
         auto& runtime = *server->GetRuntime();
@@ -129,6 +129,10 @@ Y_UNIT_TEST_SUITE(TTxDataShardLocalKMeansScan) {
                 rec.AddDataColumns("data");
 
                 rec.SetDatabaseName(kDatabaseName);
+
+                rec.SetOverlapClusters(overlapClusters);
+                rec.SetOverlapRatio(2);
+
                 rec.SetLevelName(kLevelTable);
                 rec.SetOutputName(kPostingTable);
 
@@ -434,6 +438,79 @@ Y_UNIT_TEST_SUITE(TTxDataShardLocalKMeansScan) {
                                               "__ydb_parent = 9223372036854775809, key = 5, data = five\n");
             recreate();
         }
+    }
+
+    Y_UNIT_TEST (MainToPostingWithOverlap) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root");
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto& runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        InitRoot(server, sender);
+
+        TShardedTableOptions options;
+        options.EnableOutOfOrder(true); // TODO(mbkkt) what is it?
+        options.Shards(1);
+
+        CreateMainTable(server, sender, options);
+        // Upsert some initial values
+        ExecSQL(server, sender, R"(UPSERT INTO `/Root/table-main` (key, embedding, data) VALUES
+            (1, "\x10\x80\x02", "one"),
+            (2, "\x80\x10\x02", "two"),
+            (3, "\x10\x10\x02", "three"),
+
+            (4, "\x11\x81\x02", "four"),
+            (5, "\x11\x80\x02", "five"),
+
+            (6, "\x81\x11\x02", "aaa"),
+            (7, "\x81\x10\x02", "bbbb"),
+
+            (8, "\x11\x10\x02", "ccccc"),
+            (9, "\x10\x11\x02", "dddd"),
+            (10, "\x11\x09\x02", "eee"),
+            (11, "\x09\x11\x02", "ffff"),
+            (12, "\x09\x09\x02", "ggggg"),
+            (13, "\x11\x11\x02", "hhhh");)");
+
+        auto create = [&] {
+            CreateLevelTable(server, sender, options);
+            CreatePostingTable(server, sender, options);
+        };
+        create();
+
+        ui64 seed = 100;
+        ui64 k = 3; // 3 (clusters) > 2 (overlap)
+        auto similarity = VectorIndexSettings::DISTANCE_COSINE;
+        auto [level, posting] = DoLocalKMeans(server, sender, 0, 0, seed, k,
+            NKikimrTxDataShard::EKMeansState::UPLOAD_MAIN_TO_POSTING,
+            VectorIndexSettings::VECTOR_TYPE_UINT8, similarity, 50000, 2);
+
+        UNIT_ASSERT_VALUES_EQUAL(level,
+            "__ydb_parent = 0, __ydb_id = 9223372036854775809, __ydb_centroid = \x10\x80\x02\n"
+            "__ydb_parent = 0, __ydb_id = 9223372036854775810, __ydb_centroid = \x80\x10\x02\n"
+            "__ydb_parent = 0, __ydb_id = 9223372036854775811, __ydb_centroid = \x0E\x0E\x02\n");
+        UNIT_ASSERT_VALUES_EQUAL(posting,
+            "__ydb_parent = 9223372036854775809, key = 1, data = one\n"
+            "__ydb_parent = 9223372036854775809, key = 4, data = four\n"
+            "__ydb_parent = 9223372036854775809, key = 5, data = five\n"
+            "__ydb_parent = 9223372036854775809, key = 11, data = ffff\n"
+            "__ydb_parent = 9223372036854775810, key = 2, data = two\n"
+            "__ydb_parent = 9223372036854775810, key = 6, data = aaa\n"
+            "__ydb_parent = 9223372036854775810, key = 7, data = bbbb\n"
+            "__ydb_parent = 9223372036854775810, key = 10, data = eee\n"
+            "__ydb_parent = 9223372036854775811, key = 3, data = three\n"
+            "__ydb_parent = 9223372036854775811, key = 8, data = ccccc\n"
+            "__ydb_parent = 9223372036854775811, key = 9, data = dddd\n"
+            "__ydb_parent = 9223372036854775811, key = 10, data = eee\n"
+            "__ydb_parent = 9223372036854775811, key = 11, data = ffff\n"
+            "__ydb_parent = 9223372036854775811, key = 12, data = ggggg\n"
+            "__ydb_parent = 9223372036854775811, key = 13, data = hhhh\n");
     }
 
     Y_UNIT_TEST (MainToBuild) {

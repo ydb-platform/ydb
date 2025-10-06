@@ -74,9 +74,8 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
     }
 
     static TString DoReshuffleKMeans(Tests::TServer::TPtr server, TActorId sender, NTableIndex::NKMeans::TClusterId parent,
-                                     const std::vector<TString>& level,
-                                     NKikimrTxDataShard::EKMeansState upload,
-                                     VectorIndexSettings::VectorType type, VectorIndexSettings::Metric metric)
+        const std::vector<TString>& level, NKikimrTxDataShard::EKMeansState upload,
+        VectorIndexSettings::VectorType type, VectorIndexSettings::Metric metric, ui32 overlapClusters = 0)
     {
         auto id = sId.fetch_add(1, std::memory_order_relaxed);
         auto& runtime = *server->GetRuntime();
@@ -119,6 +118,10 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
                 rec.AddDataColumns("data");
 
                 rec.SetDatabaseName(kDatabaseName);
+
+                rec.SetOverlapClusters(overlapClusters);
+                rec.SetOverlapRatio(2);
+
                 rec.SetOutputName(kPostingTable);
             };
             fill(ev1);
@@ -339,6 +342,77 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
                                             "__ydb_parent = 9223372036854775809, key = 4, data = four\n"
                                             "__ydb_parent = 9223372036854775809, key = 5, data = five\n");
             recreate();
+        }
+    }
+
+    Y_UNIT_TEST(MainToPostingWithOverlap) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root");
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto& runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        InitRoot(server, sender);
+
+        TShardedTableOptions options;
+        options.EnableOutOfOrder(true); // TODO(mbkkt) what is it?
+        options.Shards(1);
+        CreateMainTable(server, sender, options);
+
+        // Upsert some initial values
+        // Same data as in TTxDataShardLocalKMeansScan::MainToPostingWithOverlap
+        ExecSQL(server, sender, R"(UPSERT INTO `/Root/table-main` (key, embedding, data) VALUES
+            (1, "\x10\x80\x02", "one"),
+            (2, "\x80\x10\x02", "two"),
+            (3, "\x10\x10\x02", "three"),
+
+            (4, "\x11\x81\x02", "four"),
+            (5, "\x11\x80\x02", "five"),
+
+            (6, "\x81\x11\x02", "aaa"),
+            (7, "\x81\x10\x02", "bbbb"),
+
+            (8, "\x11\x10\x02", "ccccc"),
+            (9, "\x10\x11\x02", "dddd"),
+            (10, "\x11\x09\x02", "eee"),
+            (11, "\x09\x11\x02", "ffff"),
+            (12, "\x09\x09\x02", "ggggg"),
+            (13, "\x11\x11\x02", "hhhh");)");
+
+        auto create = [&] { CreatePostingTable(server, sender, options); };
+        create();
+
+        auto similarity = VectorIndexSettings::DISTANCE_COSINE;
+        {
+            std::vector<TString> level = {
+                "\x10\x80\x02",
+                "\x80\x10\x02",
+                "\x0E\x0E\x02",
+            };
+            auto posting = DoReshuffleKMeans(server, sender, 0, level,
+                NKikimrTxDataShard::EKMeansState::UPLOAD_MAIN_TO_POSTING,
+                VectorIndexSettings::VECTOR_TYPE_UINT8, similarity, 2);
+            UNIT_ASSERT_VALUES_EQUAL(posting,
+                "__ydb_parent = 9223372036854775809, key = 1, data = one\n"
+                "__ydb_parent = 9223372036854775809, key = 4, data = four\n"
+                "__ydb_parent = 9223372036854775809, key = 5, data = five\n"
+                "__ydb_parent = 9223372036854775809, key = 11, data = ffff\n"
+                "__ydb_parent = 9223372036854775810, key = 2, data = two\n"
+                "__ydb_parent = 9223372036854775810, key = 6, data = aaa\n"
+                "__ydb_parent = 9223372036854775810, key = 7, data = bbbb\n"
+                "__ydb_parent = 9223372036854775810, key = 10, data = eee\n"
+                "__ydb_parent = 9223372036854775811, key = 3, data = three\n"
+                "__ydb_parent = 9223372036854775811, key = 8, data = ccccc\n"
+                "__ydb_parent = 9223372036854775811, key = 9, data = dddd\n"
+                "__ydb_parent = 9223372036854775811, key = 10, data = eee\n"
+                "__ydb_parent = 9223372036854775811, key = 11, data = ffff\n"
+                "__ydb_parent = 9223372036854775811, key = 12, data = ggggg\n"
+                "__ydb_parent = 9223372036854775811, key = 13, data = hhhh\n");
         }
     }
 

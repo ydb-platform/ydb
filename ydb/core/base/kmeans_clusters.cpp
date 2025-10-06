@@ -314,6 +314,35 @@ public:
         return false;
     }
 
+    void FindClusters(const TStringBuf embedding, std::vector<std::pair<ui32, double>>& clusters, size_t n, double skipRatio) override {
+        if (!IsExpectedFormat(embedding)) {
+            return;
+        }
+        clusters.clear();
+        for (ui32 i = 0; const auto& cluster : Clusters) {
+            auto cl = std::make_pair(i, (double)TMetric::Distance(cluster, embedding));
+            auto it = std::lower_bound(clusters.begin(), clusters.end(), cl, [](const std::pair<ui32, double>& a, const std::pair<ui32, double>& b) {
+                return a.second < b.second;
+            });
+            if (clusters.size() < n) {
+                clusters.insert(it, cl);
+            } else if (it != clusters.end()) {
+                clusters.insert(it, cl);
+                clusters.pop_back();
+            }
+            ++i;
+        }
+        if (skipRatio > 0 && clusters.size() > 1) {
+            double thresh = (clusters[0].second < 0 ? clusters[0].second/skipRatio : clusters[0].second*skipRatio);
+            for (ui32 i = 1; i < clusters.size(); i++) {
+                if (clusters[i].second > thresh) {
+                    clusters.resize(i);
+                    break;
+                }
+            }
+        }
+    }
+
     std::optional<ui32> FindCluster(const TStringBuf embedding) override {
         if (!IsExpectedFormat(embedding)) {
             return {};

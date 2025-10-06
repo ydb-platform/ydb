@@ -83,6 +83,8 @@ protected:
     const ui32 K = 0;
     NTable::TPos EmbeddingPos = 0;
     NTable::TPos DataPos = 1;
+    const ui32 OverlapClusters = 0;
+    const double OverlapRatio = 0;
 
     const TIndexBuildScanSettings ScanSettings;
 
@@ -105,6 +107,7 @@ protected:
     bool IsExhausted = false;
 
     std::unique_ptr<IClusters> Clusters;
+    std::vector<std::pair<ui32, double>> TmpClusters;
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType()
@@ -126,6 +129,8 @@ public:
         , Uploader(request.GetDatabaseName(), request.GetScanSettings())
         , Dimensions(request.GetSettings().vector_dimension())
         , K(request.GetK())
+        , OverlapClusters(request.GetOverlapClusters() ? request.GetOverlapClusters() : 1)
+        , OverlapRatio(request.GetOverlapRatio())
         , ScanSettings(request.GetScanSettings())
         , ResponseActorId{responseActorId}
         , Response{std::move(response)}
@@ -487,18 +492,23 @@ protected:
         }
     }
 
+    void FeedFinal(TArrayRef<const TCell> row, TArrayRef<const TCell> sourcePk,
+        TArrayRef<const TCell> dataColumns, TArrayRef<const TCell> origKey, bool isPostingLevel)
+    {
+        Clusters->FindClusters(row.at(EmbeddingPos).AsBuf(), TmpClusters, OverlapClusters, OverlapRatio);
+        for (auto& [pos, _]: TmpClusters) {
+            AddRowToData(*OutputBuf, Child + pos, sourcePk, dataColumns, origKey, isPostingLevel);
+        }
+    }
+
     void FeedBuildToBuild(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
     {
-        if (auto pos = Clusters->FindCluster(row, EmbeddingPos); pos) {
-            AddRowToData(*OutputBuf, Child + *pos, row.Slice(DataPos+DataColumnCount), row.Slice(0, DataPos+DataColumnCount), key, false);
-        }
+        FeedFinal(row, row.Slice(DataPos+DataColumnCount), row.Slice(0, DataPos+DataColumnCount), key, false);
     }
 
     void FeedBuildToPosting(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
     {
-        if (auto pos = Clusters->FindCluster(row, EmbeddingPos); pos) {
-            AddRowToData(*OutputBuf, Child + *pos, row.Slice(DataPos+DataColumnCount), row.Slice(DataPos, DataColumnCount), key, true);
-        }
+        FeedFinal(row, row.Slice(DataPos+DataColumnCount), row.Slice(DataPos, DataColumnCount), key, true);
     }
 
     void FormLevelRows()

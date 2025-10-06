@@ -10,7 +10,9 @@ namespace NYdb::NConsoleClient {
         MessageGroupID /* "message_group_id" */,
         Offset /* "offset" */,
         SeqNo /* "seq_no" */,
-        Meta /* "meta" */,
+        Meta /* all_meta */,
+        MessageMeta /* "meta" */,
+        SessionMeta  /* "session_meta" */
     };
 
     enum class ETransformBody {

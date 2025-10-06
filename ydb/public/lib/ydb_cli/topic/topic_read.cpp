@@ -109,11 +109,34 @@ namespace NYdb::NConsoleClient {
                     row.Column(idx, message.GetSeqNo());
                     break;
                 case ETopicMetadataField::Meta:
-                    NJson::TJsonValue json;
-                    for (auto const& [k, v] : message.GetMeta()->Fields) {
-                        json[k] = v;
+                    {
+                        NJson::TJsonValue json;
+                        for (auto const& [k, v] : message.GetMessageMeta()->Fields) {
+                            json[k] = v;
+                        }
+                        for (auto const& [k, v] : message.GetSessionMeta()->Fields) {
+                            json[k] = v;
+                        }
+                        row.Column(idx, json);
                     }
-                    row.Column(idx, json);
+                    break;
+                case ETopicMetadataField::MessageMeta:
+                    {
+                        NJson::TJsonValue json;
+                        for (auto const& [k, v] : message.GetMessageMeta()->Fields) {
+                            json[k] = v;
+                        }
+                        row.Column(idx, json);
+                    }
+                    break;
+                case ETopicMetadataField::SessionMeta:
+                    {
+                        NJson::TJsonValue json;
+                        for (auto const& [k, v] : message.GetSessionMeta()->Fields) {
+                            json[k] = v;
+                        }
+                        row.Column(idx, json);
+                    }
                     break;
             }
         }

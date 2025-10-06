@@ -75,7 +75,8 @@ namespace NYdb::NConsoleClient {
             {ETopicMetadataField::MessageGroupID, "Message group id. All messages with the same message group id are guaranteed to be read in FIFO order."},
             {ETopicMetadataField::Offset, "Message offset. Offset orders messages in each partition."},
             {ETopicMetadataField::SeqNo, "Message sequence number, used for message deduplication when publishing."},
-            {ETopicMetadataField::Meta, "Message additional metadata."},
+            {ETopicMetadataField::MessageMeta, "Message metadata"},
+            {ETopicMetadataField::SessionMeta, "Message additional session metadata."},
         };
 
         const TVector<ETopicMetadataField> AllTopicMetadataFields = {
@@ -85,7 +86,8 @@ namespace NYdb::NConsoleClient {
             ETopicMetadataField::MessageGroupID,
             ETopicMetadataField::Offset,
             ETopicMetadataField::SeqNo,
-            ETopicMetadataField::Meta,
+            ETopicMetadataField::MessageMeta,
+            ETopicMetadataField::SessionMeta,
         };
 
         const THashMap<TString, ETopicMetadataField> TopicMetadataFieldsMap = {
@@ -95,7 +97,8 @@ namespace NYdb::NConsoleClient {
             {"message_group_id", ETopicMetadataField::MessageGroupID},
             {"offset", ETopicMetadataField::Offset},
             {"seq_no", ETopicMetadataField::SeqNo},
-            {"meta", ETopicMetadataField::Meta},
+            {"meta", ETopicMetadataField::MessageMeta},
+            {"session_meta", ETopicMetadataField::SessionMeta},
         };
 
         THashMap<ETransformBody, TString> TransformBodyDescriptions = {

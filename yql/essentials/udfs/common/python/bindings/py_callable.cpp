@@ -82,7 +82,9 @@ PyObject* CallableCall(PyObject* self, PyObject* args, PyObject* kwargs)
 
 PyTypeObject PyCallableType = {
     PyVarObject_HEAD_INIT(&PyType_Type, 0)
-        INIT_MEMBER(tp_name, "yql.TCallable"),
+    // clang-format off
+    INIT_MEMBER(tp_name, "yql.TCallable"),
+    // clang-format on
     INIT_MEMBER(tp_basicsize, sizeof(TPyCallableObject)),
     INIT_MEMBER(tp_itemsize, 0),
     INIT_MEMBER(tp_dealloc, CallableDealloc),
@@ -298,7 +300,9 @@ PyObject* SecureParamCall(PyObject* self, PyObject* args, PyObject* kwargs)
 
 static PyTypeObject PySecureParamType = {
     PyVarObject_HEAD_INIT(&PyType_Type, 0)
-        INIT_MEMBER(tp_name, "yql.TSecureParam"),
+    // clang-format off
+    INIT_MEMBER(tp_name, "yql.TSecureParam"),
+    // clang-format on
     INIT_MEMBER(tp_basicsize, sizeof(TPySecureParam)),
     INIT_MEMBER(tp_itemsize, 0),
     INIT_MEMBER(tp_dealloc, SecureParamDealloc),

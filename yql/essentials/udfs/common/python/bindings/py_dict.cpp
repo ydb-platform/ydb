@@ -179,7 +179,9 @@ static PyMethodDef LazyDictMethods[] = {
 
 PyTypeObject PyLazyDictType = {
     PyVarObject_HEAD_INIT(&PyType_Type, 0)
-        INIT_MEMBER(tp_name, "yql.TDict"),
+    // clang-format off
+    INIT_MEMBER(tp_name, "yql.TDict"),
+    // clang-format on
     INIT_MEMBER(tp_basicsize, sizeof(TPyLazyDict)),
     INIT_MEMBER(tp_itemsize, 0),
     INIT_MEMBER(tp_dealloc, TPyLazyDict::Dealloc),
@@ -362,7 +364,9 @@ PyNumberMethods LazySetNumbering = {
 
 PyTypeObject PyLazySetType = {
     PyVarObject_HEAD_INIT(&PyType_Type, 0)
-        INIT_MEMBER(tp_name, "yql.TSet"),
+    // clang-format off
+    INIT_MEMBER(tp_name, "yql.TSet"),
+    // clang-format on
     INIT_MEMBER(tp_basicsize, sizeof(TPyLazySet)),
     INIT_MEMBER(tp_itemsize, 0),
     INIT_MEMBER(tp_dealloc, TPyLazySet::Dealloc),

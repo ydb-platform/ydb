@@ -169,7 +169,9 @@ static PyMethodDef TPyLazyListMethods[] = {
 
 PyTypeObject PyLazyListType = {
     PyVarObject_HEAD_INIT(&PyType_Type, 0)
-        INIT_MEMBER(tp_name, "yql.TList"),
+    // clang-format off
+    INIT_MEMBER(tp_name, "yql.TList"),
+    // clang-format on
     INIT_MEMBER(tp_basicsize, sizeof(TPyLazyList)),
     INIT_MEMBER(tp_itemsize, 0),
     INIT_MEMBER(tp_dealloc, TPyLazyList::Dealloc),
@@ -267,7 +269,9 @@ struct TPyLazyListIterator {
 
 PyTypeObject PyLazyListIteratorType = {
     PyVarObject_HEAD_INIT(&PyType_Type, 0)
-        INIT_MEMBER(tp_name, "yql.TListIterator"),
+    // clang-format off
+    INIT_MEMBER(tp_name, "yql.TListIterator"),
+    // clang-format on
     INIT_MEMBER(tp_basicsize, sizeof(TPyLazyListIterator)),
     INIT_MEMBER(tp_itemsize, 0),
     INIT_MEMBER(tp_dealloc, TPyLazyListIterator::Dealloc),
@@ -748,7 +752,9 @@ static PyMethodDef TPyThinListMethods[] = {
 
 PyTypeObject PyThinListType = {
     PyVarObject_HEAD_INIT(&PyType_Type, 0)
-        INIT_MEMBER(tp_name, "yql.TList"),
+    // clang-format off
+    INIT_MEMBER(tp_name, "yql.TList"),
+    // clang-format on
     INIT_MEMBER(tp_basicsize, sizeof(TPyThinList)),
     INIT_MEMBER(tp_itemsize, 0),
     INIT_MEMBER(tp_dealloc, TPyThinList::Dealloc),
@@ -841,7 +847,9 @@ struct TPyThinListIterator {
 
 PyTypeObject PyThinListIteratorType = {
     PyVarObject_HEAD_INIT(&PyType_Type, 0)
-        INIT_MEMBER(tp_name, "yql.TListIterator"),
+    // clang-format off
+    INIT_MEMBER(tp_name, "yql.TListIterator"),
+    // clang-format on
     INIT_MEMBER(tp_basicsize, sizeof(TPyThinListIterator)),
     INIT_MEMBER(tp_itemsize, 0),
     INIT_MEMBER(tp_dealloc, TPyThinListIterator::Dealloc),

@@ -1,4 +1,7 @@
 #pragma once
+
+#include "events.h"
+
 #include <ydb/core/keyvalue/defs.h>
 #include <ydb/core/tablet/tablet_counters.h>
 
@@ -16,7 +19,7 @@ namespace NKikimr {
 
 namespace TEvPersQueue {
     enum EEv {
-        EvRequest = EventSpaceBegin(TKikimrEvents::ES_PQ),
+        EvRequest = InternalEventSpaceBegin(NPQ::NEvents::EServices::GLOBAL),
         EvUpdateConfig, //change config for all partitions and count of partitions
         EvUpdateConfigResponse,
         EvOffsets, //get offsets from all partitions in order 0..n-1 - it's for scheemeshard to change (TabletId,PartId) to Partition

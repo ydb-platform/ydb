@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/core/persqueue/events/events.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/library/actors/core/actorsystem_fwd.h>
 #include <ydb/library/actors/core/event_local.h>
@@ -7,7 +8,8 @@
 namespace NKikimr::NPQ::NDescriber {
 
 enum EEv : ui32 {
-    EvDescribeTopicsResponse // TODO first element
+    EvDescribeTopicsResponse = InternalEventSpaceBegin(NPQ::NEvents::EServices::DESCRIBER_SERVICE),
+    EvEnd
 };
 
 struct TEvDescribeTopicsResponse : public NActors::TEventLocal<TEvDescribeTopicsResponse, EEv::EvDescribeTopicsResponse> {

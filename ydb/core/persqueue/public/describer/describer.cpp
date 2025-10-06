@@ -1,5 +1,11 @@
 #include "describer.h"
 
+#define LOG_PREFIX "[" << NActors::TlsActivationContext->AsActorContext().SelfID << "] "
+#define LOG_E(stream) LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::PQ_DESCRIBER, LOG_PREFIX << stream)
+#define LOG_W(stream) LOG_WARN_S(*NActors::TlsActivationContext, NKikimrServices::PQ_DESCRIBER, LOG_PREFIX << stream)
+#define LOG_I(stream) LOG_INFO_S(*NActors::TlsActivationContext, NKikimrServices::PQ_DESCRIBER, LOG_PREFIX << stream)
+#define LOG_D(stream) LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PQ_DESCRIBER, LOG_PREFIX << stream)
+
 
 namespace NKikimr::NPQ::NDescriber {
 
@@ -21,6 +27,8 @@ public:
     }
 
     void DoRequest(const std::vector<TString>& topicPath) {
+        LOG_D("Create request with SyncVersion=" << RetryWithSyncVersion);
+
         auto schemeRequest = std::make_unique<TSchemeCacheNavigate>(1);
         schemeRequest->DatabaseName = DatabasePath;
 
@@ -44,7 +52,7 @@ public:
     }
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-        //LOG_D("Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult");
+        LOG_D("Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult");
         auto& result = ev->Get()->Request;
 
         for (size_t i = 0; i < result->ResultSet.size(); ++i) {
@@ -58,11 +66,13 @@ public:
             auto path = CanonizePath(NKikimr::JoinPath(entry.Path));
             switch (entry.Status) {
                 case TSchemeCacheNavigate::EStatus::PathErrorUnknown:
-                case TSchemeCacheNavigate::EStatus::RootUnknown:
+                case TSchemeCacheNavigate::EStatus::RootUnknown: {
                     if (cdcVariant && Result[topicIndex].Status == TEvDescribeTopicsResponse::EStatus::SUCCESS) {
+                        LOG_D("Path '" << path << "' skip internal path");
                         continue;
                     }
                     if (RetryWithSyncVersion) {
+                        LOG_D("Path '" << path << "' not found");
                         Result[topicIndex] = TEvDescribeTopicsResponse::TTopicInfo{
                             .Status = TEvDescribeTopicsResponse::EStatus::NOT_FOUND,
                             .OriginalPath = topic
@@ -72,35 +82,42 @@ public:
                         RetryWithSyncVersion = true;
                         return DoRequest(TopicPaths);
                     }
-                case TSchemeCacheNavigate::EStatus::Ok:
-                    break;
-                default:
+                }
+                case TSchemeCacheNavigate::EStatus::Ok: {
+                    if (entry.Kind == NSchemeCache::TSchemeCacheNavigate::KindCdcStream) {
+                        if (topicVariant) {
+                            LOG_D("Path '" << path << "' skip CDC");
+                            continue;
+                        }
+                        LOG_D("Path '" << path << "' not topic: " << entry.Kind);
+                        Result[topicIndex] = TEvDescribeTopicsResponse::TTopicInfo{
+                            .Status = TEvDescribeTopicsResponse::EStatus::NOT_TOPIC,
+                            .OriginalPath = topic
+                        };
+                    } else if (entry.Kind == TSchemeCacheNavigate::EKind::KindTopic) {
+                        LOG_D("Path '" << path << "' SUCCESS");
+                        Result[topicIndex] = TEvDescribeTopicsResponse::TTopicInfo{
+                            .Status = TEvDescribeTopicsResponse::EStatus::SUCCESS,
+                            .OriginalPath = topic,
+                            .RealPath = CanonizePath(NKikimr::JoinPath(entry.Path)),
+                            .Info = entry.PQGroupInfo
+                        };
+                    } else {
+                        LOG_D("Path '" << path << "' not topic: " << entry.Kind);
+                        Result[topicIndex] = TEvDescribeTopicsResponse::TTopicInfo{
+                            .Status = TEvDescribeTopicsResponse::EStatus::NOT_TOPIC,
+                            .OriginalPath = topic
+                        };
+                    }
+                }
+                default: {
+                    LOG_D("Path '" << path << "' unknow error");
                     Result[topicIndex] = TEvDescribeTopicsResponse::TTopicInfo{
                         .Status = TEvDescribeTopicsResponse::EStatus::UNKNOWN_ERROR,
                         .OriginalPath = topic
                     };
                     continue;
-            }
-            if (entry.Kind == NSchemeCache::TSchemeCacheNavigate::KindCdcStream) {
-                if (topicVariant) {
-                    continue;
                 }
-                Result[topicIndex] = TEvDescribeTopicsResponse::TTopicInfo{
-                    .Status = TEvDescribeTopicsResponse::EStatus::NOT_TOPIC,
-                    .OriginalPath = topic
-                };
-            } else if (entry.Kind == TSchemeCacheNavigate::EKind::KindTopic) {
-                Result[topicIndex] = TEvDescribeTopicsResponse::TTopicInfo{
-                    .Status = TEvDescribeTopicsResponse::EStatus::SUCCESS,
-                    .OriginalPath = topic,
-                    .RealPath = CanonizePath(NKikimr::JoinPath(entry.Path)),
-                    .Info = entry.PQGroupInfo
-                };
-            } else {
-                Result[topicIndex] = TEvDescribeTopicsResponse::TTopicInfo{
-                    .Status = TEvDescribeTopicsResponse::EStatus::NOT_TOPIC,
-                    .OriginalPath = topic
-                };
             }
         }
 

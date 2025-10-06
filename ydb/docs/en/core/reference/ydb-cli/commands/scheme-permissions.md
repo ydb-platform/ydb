@@ -51,7 +51,7 @@ Additional parameters `[options...]`:
 Each right must be passed as a separate parameter, for example:
 
 ```bash
-{{ ydb-cli }} scheme permissions grant -p "ydb.access.grant" -p "ydb.generic.read" '/Root/db1/MyApp/Orders' testuser 
+{{ ydb-cli }} scheme permissions grant -p "ydb.access.grant" -p "ydb.generic.read" '/Root/db1/MyApp/Orders' testuser
 ```
 
 ## set
@@ -129,7 +129,7 @@ Parameters:
 For example, if you execute the command over the database state from the previous example [`list`](#list):
 
 ```bash
-{{ ydb-cli }} scheme permissions clear '/Root/db1/MyApp' 
+{{ ydb-cli }} scheme permissions clear '/Root/db1/MyApp'
 ```
 
 And then execute the `list` command again on the object `/Root/db1/MyApp`, you will get the following result:

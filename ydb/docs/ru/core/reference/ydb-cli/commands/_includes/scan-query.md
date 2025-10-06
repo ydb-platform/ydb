@@ -1,5 +1,7 @@
 # Выполнение скан запросов
 
+{% include notitle [warning](../../_includes/deprecated_command_warning.md) %}
+
 Запуск запроса через [Scan Queries](../../../../concepts/scan_query.md) посредством {{ ydb-short-name }} CLI осуществляется добавлением флага `-t scan` в команду `{{ ydb-cli }} table query execute`.
 
 Выполните запрос к данным:

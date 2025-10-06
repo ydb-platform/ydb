@@ -1,5 +1,7 @@
 UNITTEST_FOR(yql/essentials/udfs/common/stat/static)
 
+ENABLE(YQL_STYLE_CPP)
+
 SRCS(
     ../stat_udf_ut.cpp
 )

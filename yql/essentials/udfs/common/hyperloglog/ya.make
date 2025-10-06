@@ -6,6 +6,8 @@ YQL_UDF_CONTRIB(hyperloglog_udf)
         0
     )
 
+    ENABLE(YQL_STYLE_CPP)
+
     SRCS(
         hyperloglog_udf.cpp
     )
@@ -19,3 +21,4 @@ YQL_UDF_CONTRIB(hyperloglog_udf)
 RECURSE_FOR_TESTS(
     test
 )
+

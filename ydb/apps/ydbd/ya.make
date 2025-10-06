@@ -33,6 +33,7 @@ ENDIF()
 
 PEERDIR(
     ydb/apps/version
+    ydb/core/driver_lib/gwp_asan_init
     ydb/core/driver_lib/run
     ydb/core/protos
     ydb/core/security

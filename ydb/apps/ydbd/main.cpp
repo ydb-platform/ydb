@@ -1,5 +1,6 @@
 #include "export.h"
 #include <ydb/core/driver_lib/run/main.h>
+#include <ydb/core/driver_lib/gwp_asan_init/gwp_asan_init.h>
 #include <ydb/core/security/ticket_parser.h>
 #include <ydb/core/security/token_manager/token_manager.h>
 #include <ydb/core/transfer/transfer_writer.h>
@@ -12,6 +13,9 @@
 #include <ydb/library/yaml_config/yaml_config.h>
 
 int main(int argc, char **argv) {
+    // Initialize GWP-ASan early for memory error detection
+    NKikimr::InitializeGwpAsan();
+    
     SetupTerminateHandler();
 
     auto factories = std::make_shared<NKikimr::TModuleFactories>();

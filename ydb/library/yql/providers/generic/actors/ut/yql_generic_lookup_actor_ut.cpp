@@ -382,8 +382,7 @@ Y_UNIT_TEST_SUITE(GenericProviderLookupActor) {
             outputypeBuilder.Build(),
             typeEnv,
             holderFactory,
-            1'000'000,
-            {});
+            1'000'000);
         auto lookupActor = runtime.Register(actor);
 
         auto request = std::make_shared<NYql::NDq::IDqAsyncLookupSource::TUnboxedValueMap>(3, keyTypeHelper->GetValueHash(), keyTypeHelper->GetValueEqual());

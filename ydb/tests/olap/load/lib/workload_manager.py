@@ -112,7 +112,7 @@ class WorkloadManagerBase(LoadSuiteBase):
                 sessions_pool.execute_with_retries(f'DROP RESOURCE POOL {pool.name}')
 
             sessions_pool.execute_with_retries(pool.get_create_users_sql())
-            sessions_pool.execute_with_retries(pool.get_create_sql())
+            # sessions_pool.execute_with_retries(pool.get_create_sql())
 
     @classmethod
     def before_workload(cls, result: YdbCliHelper.WorkloadRunResult):

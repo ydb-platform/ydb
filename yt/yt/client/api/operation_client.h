@@ -108,7 +108,7 @@ struct TGetJobTraceOptions
     , public TMasterReadOptions
 {
     std::optional<NJobTrackerClient::TJobId> JobId;
-    std::optional<NScheduler::TJobTraceId> TraceId;
+    std::optional<NJobTrackerClient::TJobTraceId> TraceId;
     std::optional<i64> FromTime;
     std::optional<i64> ToTime;
     std::optional<i64> FromEventIndex;
@@ -444,9 +444,9 @@ struct TJobTraceEvent
 {
     NJobTrackerClient::TOperationId OperationId;
     NJobTrackerClient::TJobId JobId;
-    NScheduler::TJobTraceId TraceId;
+    NJobTrackerClient::TJobTraceId TraceId;
     i64 EventIndex;
-    TString Event;
+    std::string Event;
     TInstant EventTime;
 };
 

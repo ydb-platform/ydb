@@ -3221,8 +3221,8 @@ struct TJobTraceEvent
     i64 EventIndex = 0;
 
     ///
-    /// @brief Raw evenr in json format.
-    TString Event;
+    /// @brief Raw event in json format.
+    std::string Event;
 
     ///
     /// @brief Time of the event.

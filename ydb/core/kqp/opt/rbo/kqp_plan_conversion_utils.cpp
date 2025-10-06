@@ -1,9 +1,7 @@
 #include "kqp_plan_conversion_utils.h"
 
-namespace NKikimr
-{
-namespace NKqp
-{
+namespace NKikimr {
+namespace NKqp {
 
 using namespace NYql;
 using namespace NNodes;
@@ -23,36 +21,21 @@ std::shared_ptr<IOperator> PlanConverter::ExprNodeToOperator(TExprNode::TPtr nod
 
     std::shared_ptr<IOperator> result;
 
-    if (NYql::NNodes::TKqpOpEmptySource::Match(node.Get()))
-    {
+    if (NYql::NNodes::TKqpOpEmptySource::Match(node.Get())) {
         result = std::make_shared<TOpEmptySource>();
-    }
-    else if (NYql::NNodes::TKqpOpRead::Match(node.Get()))
-    {
+    } else if (NYql::NNodes::TKqpOpRead::Match(node.Get())) {
         result = std::make_shared<TOpRead>(node);
-    }
-    else if (NYql::NNodes::TKqpOpMap::Match(node.Get()))
-    {
+    } else if (NYql::NNodes::TKqpOpMap::Match(node.Get())) {
         result = ConvertTKqpOpMap(node);
-    }
-    else if (NYql::NNodes::TKqpOpFilter::Match(node.Get()))
-    {
+    } else if (NYql::NNodes::TKqpOpFilter::Match(node.Get())) {
         result = ConvertTKqpOpFilter(node);
-    }
-    else if (NYql::NNodes::TKqpOpJoin::Match(node.Get()))
-    {
+    } else if (NYql::NNodes::TKqpOpJoin::Match(node.Get())) {
         result = ConvertTKqpOpJoin(node);
-    }
-    else if (NYql::NNodes::TKqpOpLimit::Match(node.Get()))
-    {
+    } else if (NYql::NNodes::TKqpOpLimit::Match(node.Get())) {
         result = ConvertTKqpOpLimit(node);
-    }
-    else if (NYql::NNodes::TKqpOpProject::Match(node.Get()))
-    {
+    } else if (NYql::NNodes::TKqpOpProject::Match(node.Get())) {
         result = ConvertTKqpOpProject(node);
-    }
-    else
-    {
+    } else {
         YQL_ENSURE(false, "Unknown operator node");
     }
     Converted[node.Get()] = result;
@@ -65,23 +48,20 @@ std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpMap(TExprNode::TPtr node)
     auto project = opMap.Project().IsValid();
     TVector<std::pair<TInfoUnit, std::variant<TInfoUnit, TExprNode::TPtr>>> mapElements;
 
-    for (auto mapElement : opMap.MapElements())
-    {
+    for (auto mapElement : opMap.MapElements()) {
         auto iu = TInfoUnit(mapElement.Variable().StringValue());
         if (mapElement.Maybe<TKqpOpMapElementRename>()) {
             auto element = mapElement.Cast<TKqpOpMapElementRename>();
             auto fromIU = TInfoUnit(element.From().StringValue());
             mapElements.push_back(std::make_pair(iu, fromIU));
-        }
-        else {
+        } else {
             auto element = mapElement.Cast<TKqpOpMapElementLambda>();
             if (element.Lambda().Body().Maybe<TCoMember>().Name().Maybe<TCoAtom>()) {
                 auto member = element.Lambda().Body().Cast<TCoMember>();
                 auto name = member.Name().Cast<TCoAtom>();
                 auto fromIU = TInfoUnit(name.StringValue());
                 mapElements.push_back(std::make_pair(iu, fromIU));
-            }
-            else {
+            } else {
                 mapElements.push_back(std::make_pair(iu, element.Lambda().Ptr()));
             }
         }
@@ -103,8 +83,7 @@ std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpJoin(TExprNode::TPtr node
 
     auto joinKind = opJoin.JoinKind().StringValue();
     TVector<std::pair<TInfoUnit, TInfoUnit>> joinKeys;
-    for (auto k : opJoin.JoinKeys())
-    {
+    for (auto k : opJoin.JoinKeys()) {
         TInfoUnit leftKey(k.LeftLabel().StringValue(), k.LeftColumn().StringValue());
         TInfoUnit rightKey(k.RightLabel().StringValue(), k.RightColumn().StringValue());
 
@@ -125,14 +104,13 @@ std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpProject(TExprNode::TPtr n
 
     TVector<TInfoUnit> projectList;
 
-    for (auto p : opProject.ProjectList())
-    {
+    for (auto p : opProject.ProjectList()) {
         projectList.push_back(TInfoUnit(p.StringValue()));
     }
     return std::make_shared<TOpProject>(input, projectList);
 }
 
-void ExprNodeRebuilder::RebuildExprNodes(TOpRoot & root) {
+void ExprNodeRebuilder::RebuildExprNodes(TOpRoot &root) {
     for (auto it : root) {
         YQL_CLOG(TRACE, CoreDq) << "Rebuilding: " << it.Current->ToString();
         RebuildExprNode(it.Current);
@@ -154,30 +132,30 @@ void ExprNodeRebuilder::RebuildExprNode(std::shared_ptr<IOperator> op) {
 
     TExprNode::TPtr newNode;
 
-    switch(op->Kind) {
-        case EOperator::EmptySource:
-            newNode = RebuildEmptySource();
-            break;
-        case EOperator::Source:
-            newNode = op->Node;
-            break;
-        case EOperator::Map:
-            newNode = RebuildMap(op);
-            break;
-        case EOperator::Project:
-            newNode = RebuildProject(op);
-            break;
-        case EOperator::Filter:
-            newNode = RebuildFilter(op);
-            break;
-        case EOperator::Join:
-            newNode = RebuildJoin(op);
-            break;
-        case EOperator::Limit:
-            newNode = RebuildLimit(op);
-            break;
-        default:
-            YQL_ENSURE(false, "Unknown operator");
+    switch (op->Kind) {
+    case EOperator::EmptySource:
+        newNode = RebuildEmptySource();
+        break;
+    case EOperator::Source:
+        newNode = op->Node;
+        break;
+    case EOperator::Map:
+        newNode = RebuildMap(op);
+        break;
+    case EOperator::Project:
+        newNode = RebuildProject(op);
+        break;
+    case EOperator::Filter:
+        newNode = RebuildFilter(op);
+        break;
+    case EOperator::Join:
+        newNode = RebuildJoin(op);
+        break;
+    case EOperator::Limit:
+        newNode = RebuildLimit(op);
+        break;
+    default:
+        YQL_ENSURE(false, "Unknown operator");
     }
 
     op->Node = newNode;
@@ -196,10 +174,8 @@ TExprNode::TPtr ExprNodeRebuilder::RebuildMap(std::shared_ptr<IOperator> op) {
     TVector<TExprNode::TPtr> newMapElements;
     TExprNode::TPtr newInput = map->GetInput()->Node;
 
-    for (auto & [iu, body] : map->MapElements)
-    {
-        if (std::holds_alternative<TInfoUnit>(body))
-        {
+    for (auto &[iu, body] : map->MapElements) {
+        if (std::holds_alternative<TInfoUnit>(body)) {
             // clang-format off
             newMapElements.push_back(Build<TKqpOpMapElementRename>(Ctx, Pos)
                 .Input(newInput)
@@ -207,9 +183,7 @@ TExprNode::TPtr ExprNodeRebuilder::RebuildMap(std::shared_ptr<IOperator> op) {
                 .From().Build(std::get<TInfoUnit>(body).GetFullName())
             .Done().Ptr());
             // clang-format on
-        }
-        else
-        {
+        } else {
             // clang-format off
             newMapElements.push_back(Build<TKqpOpMapElementLambda>(Ctx, Pos)
                 .Input(newInput)
@@ -221,8 +195,7 @@ TExprNode::TPtr ExprNodeRebuilder::RebuildMap(std::shared_ptr<IOperator> op) {
     }
 
     TExprNode::TPtr result;
-    if (!map->Project)
-    {
+    if (!map->Project) {
         // clang-format off
         result = Build<TKqpOpMap>(Ctx, Pos)
             .Input(newInput)
@@ -231,9 +204,7 @@ TExprNode::TPtr ExprNodeRebuilder::RebuildMap(std::shared_ptr<IOperator> op) {
             .Build()
         .Done().Ptr();
         // clang-format on
-    }
-    else
-    {
+    } else {
         // clang-format off
         result = Build<TKqpOpMap>(Ctx, Pos)
             .Input(newInput)
@@ -278,8 +249,7 @@ TExprNode::TPtr ExprNodeRebuilder::RebuildJoin(std::shared_ptr<IOperator> op) {
     auto join = CastOperator<TOpJoin>(op);
 
     TVector<TDqJoinKeyTuple> keys;
-    for (auto k : join->JoinKeys)
-    {
+    for (auto k : join->JoinKeys) {
         // clang-format off
         keys.push_back(Build<TDqJoinKeyTuple>(Ctx, Pos)
             .LeftLabel()
@@ -321,5 +291,5 @@ TExprNode::TPtr ExprNodeRebuilder::RebuildLimit(std::shared_ptr<IOperator> op) {
     // clang-format on
 }
 
-}
-}
+} // namespace NKqp
+} // namespace NKikimr

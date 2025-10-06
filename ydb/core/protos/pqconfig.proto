@@ -1,7 +1,6 @@
 import "ydb/public/api/protos/draft/persqueue_error_codes.proto";
 
 import "ydb/public/api/protos/annotations/sensitive.proto";
-import "ydb/public/api/protos/ydb_common.proto";
 
 import "ydb/core/protos/base.proto";
 import "ydb/core/protos/msgbus_kv.proto";
@@ -448,7 +447,7 @@ message TPQTabletConfig {
 
     optional bool EnableCompactification = 39 [default = false];
 
-    optional Ydb.MetricsLevel MetricsLevel = 40;
+    optional uint32 MetricsLevel = 40;
 
     // The ID of the Monitoring project that will be used as the value of `project` label for detailed metrics level.
     optional string MonitoringProjectId = 41;
@@ -744,10 +743,14 @@ message TClientInfo {
 message TAggregatedCounters {
     repeated uint64 Values = 1;
     repeated TConsumerAggregatedCounters ConsumerAggregatedCounters = 2;
+    optional TCompactionCounters CompactionCounters = 3;
 
     message TConsumerAggregatedCounters {
         optional string Consumer = 1;
         repeated uint64 Values = 2;
+    }
+    message TCompactionCounters {
+        repeated uint64 Values = 1;
     }
 }
 

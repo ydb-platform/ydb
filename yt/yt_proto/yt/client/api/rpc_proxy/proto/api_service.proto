@@ -3652,7 +3652,7 @@ message TRspGetQueryTrackerInfo
 
 ////////////////////////////////////////////////////////////////////////////////
 
-message TReqGetDeclaredParametersInfo
+message TReqGetQueryDeclaredParametersInfo
 {
     required string query_tracker_stage = 1;
     required string query = 2;
@@ -3660,7 +3660,7 @@ message TReqGetDeclaredParametersInfo
     optional bytes settings = 4; // YSON
 }
 
-message TRspGetDeclaredParametersInfo
+message TRspGetQueryDeclaredParametersInfo
 {
     required bytes declared_parameters_info = 1; // YSON
 }

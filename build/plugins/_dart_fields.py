@@ -1,12 +1,10 @@
 import base64
 import functools
 import json
-import operator
 import os
 import re
 import shlex
 import sys
-from functools import reduce
 
 import ymake
 
@@ -29,15 +27,29 @@ class DartValueError(ValueError):
     pass
 
 
-def create_dart_record(fields, *args):
+# XXX: Sometimes it's not sensible to continue dart record construction if one of the crucial fields is missing.
+# Though it's not good to use exceptions for flow control
+class HaltDartConstruction(Exception):
+    pass
+
+
+def create_dart_record(fields, *args) -> dict[str, str] | None:
     try:
-        return reduce(operator.or_, (value for field in fields if (value := field(*args))), {})
+        rec = {}
+        for field in fields:
+            value = field(*args)
+            if not value:
+                if getattr(field.__self__, 'required', False):
+                    raise DartValueError(f'dart field {field.__self__.KEY} must not be empty')
+            else:
+                rec |= value
+        return rec
+    except HaltDartConstruction:
+        pass
+    except DartValueError as e:
+        ymake.report_configure_error(f'Invalid dart field value {e!r}')
     except Exception as e:
-        if str(e) != "":
-            ymake.report_configure_error("Exception: {}".format(e))
-        else:
-            raise (e)
-        return None
+        ymake.report_configure_error(f'Unexpected error while creating dart record {e!r}')
 
 
 def with_fields(fields):
@@ -281,8 +293,7 @@ def assert_file_exists(unit, path):
     path = unit.resolve(SOURCE_ROOT_SHORT + path)
     if not os.path.exists(path):
         message = 'File {} is not found'.format(path)
-        ymake.report_configure_error(message)
-        raise DartValueError()
+        raise DartValueError(message)
 
 
 class AndroidApkTestActivity:
@@ -332,6 +343,7 @@ class Blob:
 
 class BuildFolderPath:
     KEY = 'BUILD-FOLDER-PATH'
+    required = True
 
     @classmethod
     def normalized(cls, unit, flat_args, spec_args):
@@ -361,6 +373,7 @@ class Classpath:
 
 class ConfigPath:
     KEY = 'CONFIG-PATH'
+    required = True
 
     @classmethod
     def value(cls, unit, flat_args, spec_args):
@@ -422,12 +435,11 @@ class ParallelTestsInSingleNode:
         if value:
             value = value.lower()
             if value != 'all' and not (value.isnumeric() and int(value) > 0):
-                ymake.report_configure_error(
+                raise DartValueError(
                     'Incorrect value of PARALLEL_TESTS_ON_YT_WITHIN_NODE. Expected either "all" or a positive integer value, got: {}'.format(
                         value,
                     ),
                 )
-                raise DartValueError()
 
         return {cls.KEY: value}
 
@@ -513,18 +525,17 @@ class IgnoreClasspathClash:
 
 class JavaClasspathCmdType:
     KEY = 'JAVA_CLASSPATH_CMD_TYPE'
+    required = True
 
     @classmethod
     def value(cls, unit, flat_args, spec_args):
         java_cp_arg_type = unit.get('JAVA_CLASSPATH_CMD_TYPE_VALUE') or 'MANIFEST'
         if java_cp_arg_type not in ('MANIFEST', 'COMMAND_FILE', 'LIST'):
-            # TODO move error reporting out of field classes
-            ymake.report_configure_error(
+            raise DartValueError(
                 '{}: TEST_JAVA_CLASSPATH_CMD_TYPE({}) are invalid. Choose argument from MANIFEST, COMMAND_FILE or LIST)'.format(
                     unit.path(), java_cp_arg_type
                 )
             )
-            raise DartValueError()
         return {cls.KEY: java_cp_arg_type}
 
 
@@ -578,6 +589,7 @@ class KtlintRuleset:
 
 class KtlintBinary:
     KEY = 'KTLINT_BINARY'
+    required = True
 
     @classmethod
     def value(cls, unit, flat_args, spec_args):
@@ -587,14 +599,12 @@ class KtlintBinary:
 
 class LintWrapperScript:
     KEY = 'LINT-WRAPPER-SCRIPT'
+    required = True
 
     @classmethod
     def value(cls, unit, flat_args, spec_args):
         if spec_args.get('WRAPPER_SCRIPT'):
             return {cls.KEY: spec_args['WRAPPER_SCRIPT'][0]}
-        else:
-            ymake.report_configure_error('Lint wrapper script must be set')
-            raise DartValueError()
 
 
 class LintConfigs:
@@ -610,20 +620,17 @@ class LintConfigs:
             message = "Unknown {} linter config type: {}. Allowed types: {}".format(
                 linter_name, config_type, ', '.join(consts.LINTER_CONFIG_TYPES[linter_name])
             )
-            ymake.report_configure_error(message)
-            raise DartValueError()
+            raise DartValueError(message)
         if common_configs_dir := unit.get('MODULE_COMMON_CONFIGS_DIR'):
             config = os.path.join(common_configs_dir, config_type)
             path = unit.resolve(unit.resolve_arc_path(config))
             if os.path.exists(path):
                 return config
             message = "File not found: {}".format(path)
-            ymake.report_configure_error(message)
-            raise DartValueError()
+            raise DartValueError(message)
         else:
             message = "Config type specifier is only allowed with autoincludes"
-            ymake.report_configure_error(message)
-            raise DartValueError()
+            raise DartValueError(message)
 
     @classmethod
     def python_configs(cls, unit, flat_args, spec_args):
@@ -638,8 +645,7 @@ class LintConfigs:
         config = get_linter_configs(unit, default_configs_path).get(linter_name)
         if not config:
             message = f"Default config in {default_configs_path} can't be found for a linter {linter_name}"
-            ymake.report_configure_error(message)
-            raise DartValueError()
+            raise DartValueError(message)
         assert_file_exists(unit, config)
         configs = [config]
         if linter_name in ('flake8', 'py2_flake8'):
@@ -659,8 +665,7 @@ class LintConfigs:
         config = get_linter_configs(unit, default_configs_path).get(linter_name)
         if not config:
             message = f"Default config in {default_configs_path} can't be found for a linter {linter_name}"
-            ymake.report_configure_error(message)
-            raise DartValueError()
+            raise DartValueError(message)
         assert_file_exists(unit, config)
         return {cls.KEY: serialize_list([config])}
 
@@ -676,14 +681,12 @@ class LintExtraParams:
         for arg in extra_params:
             if '=' not in arg:
                 message = 'Wrong EXTRA_PARAMS value: "{}". Values must have format "name=value".'.format(arg)
-                ymake.report_configure_error(message)
-                raise DartValueError()
+                raise DartValueError(message)
             if 'custom_clang_format' in arg:
                 upath = unit.path()[3:]
                 if not upath.startswith(cls._CUSTOM_CLANG_FORMAT_ALLOWED_PATHS):
                     message = f'Custom clang-format is not allowed in upath: {upath}'
-                    ymake.report_configure_error(message)
-                    raise DartValueError()
+                    raise DartValueError(message)
         return {cls.KEY: serialize_list(extra_params)}
 
 
@@ -697,12 +700,13 @@ class LintFileProcessingTime:
 
 class LintName:
     KEY = 'LINT-NAME'
+    required = True
 
     @classmethod
     def value(cls, unit, flat_args, spec_args):
         lint_name = spec_args['NAME'][0]
         if lint_name in ('flake8', 'py2_flake8') and (unit.get('DISABLE_FLAKE8') or 'no') == 'yes':
-            raise DartValueError()
+            raise HaltDartConstruction()
         return {cls.KEY: lint_name}
 
 
@@ -814,6 +818,7 @@ class SbrUidExt:
 
 class ScriptRelPath:
     KEY = 'SCRIPT-REL-PATH'
+    required = True
 
     @classmethod
     def second_flat(cls, unit, flat_args, spec_args):
@@ -902,6 +907,7 @@ class Tag:
 
 class TestClasspath:
     KEY = 'TEST_CLASSPATH'
+    required = True
 
     @classmethod
     def value(cls, unit, flat_args, spec_args):
@@ -911,6 +917,7 @@ class TestClasspath:
 
 class TestClasspathDeps:
     KEY = 'TEST_CLASSPATH_DEPS'
+    required = True
 
     @classmethod
     def value(cls, unit, flat_args, spec_args):
@@ -1005,8 +1012,7 @@ class TestData:
 
         props, error_mgs = extract_java_system_properties(unit, get_values_list(unit, 'SYSTEM_PROPERTIES_VALUE'))
         if error_mgs:
-            ymake.report_configure_error(error_mgs)
-            raise DartValueError()
+            raise DartValueError(error_mgs)
         for prop in props:
             if prop['type'] == 'file':
                 test_data.append(prop['path'].replace('${ARCADIA_ROOT}', 'arcadia'))
@@ -1035,7 +1041,6 @@ class DockerImage:
             else:
                 msg = 'Invalid docker image: {}. Image should be provided in format <tag>=<link>'.format(img)
             if msg:
-                ymake.report_configure_error(msg)
                 raise DartValueError(msg)
 
     @staticmethod
@@ -1128,6 +1133,7 @@ class TestedProjectFilename:
 
 class TestedProjectName:
     KEY = 'TESTED-PROJECT-NAME'
+    required = True
 
     @classmethod
     def unit_name(cls, unit, flat_args, spec_args):
@@ -1225,6 +1231,8 @@ class TestFiles:
             if matched:
                 resources.append(matched.group(1))
         value = serialize_list(resources)
+        if not value:
+            raise HaltDartConstruction()
         return {cls.KEY: value, cls.KEY2: value}
 
     @classmethod
@@ -1292,7 +1300,7 @@ class TestFiles:
     def py_linter_files(cls, unit, flat_args, spec_args):
         files = unit.get('PY_LINTER_FILES')
         if not files:
-            raise DartValueError()
+            raise HaltDartConstruction()
         files = json.loads(files)
         test_files = []
         for path in files:
@@ -1318,14 +1326,14 @@ class TestFiles:
                 if os.path.commonpath([upath, path]) == path:
                     break
             else:
-                raise DartValueError()
+                raise HaltDartConstruction()
 
         if upath.startswith(cls._MAPS_B2BGEO_PREFIX):
             for path in cls._MAPS_B2BGEO_INCLUDE_LINTER_TEST_PATHS:
                 if os.path.commonpath([upath, path]) == path:
                     break
             else:
-                raise DartValueError()
+                raise HaltDartConstruction()
 
         files_dart = _reference_group_var("ALL_SRCS", consts.STYLE_CPP_ALL_EXTS)
         return {cls.KEY: files_dart, cls.KEY2: files_dart}
@@ -1357,6 +1365,7 @@ class TestIosRuntimeType:
 
 class TestJar:
     KEY = 'TEST_JAR'
+    required = True
 
     @classmethod
     def value(cls, unit, flat_args, spec_args):
@@ -1500,8 +1509,7 @@ class SystemProperties:
     def value(cls, unit, flat_args, spec_args):
         props, error_mgs = extract_java_system_properties(unit, get_values_list(unit, 'SYSTEM_PROPERTIES_VALUE'))
         if error_mgs:
-            ymake.report_configure_error(error_mgs)
-            raise DartValueError()
+            raise DartValueError(error_mgs)
 
         props = base64.b64encode(json.dumps(props).encode('utf-8'))
         return {cls.KEY: props}

@@ -189,7 +189,7 @@ bool TSecurityObject::CheckAccess(ui32 access, const TUserToken& user) const {
                 if (user.IsExist(ace.GetSID())) {
                     switch(static_cast<EAccessType>(ace.GetAccessType())) {
                     case EAccessType::Deny:
-                        if (access && ace.GetAccessRight() != 0)
+                        if (access & ace.GetAccessRight())
                             return false; // deny entries have precedence over allow entries
                         break;
                     case EAccessType::Allow:

@@ -61,13 +61,13 @@ private:
     YDB_READONLY_DEF(std::optional<ui32>, GranuleShardingVersionId);
     YDB_READONLY(NEvWrite::EModificationType, ModificationType, NEvWrite::EModificationType::Upsert);
     YDB_READONLY_FLAG(Bulk, false);
-    const std::shared_ptr<TAtomicCounter> Activity = std::make_shared<TAtomicCounter>(1);
+    const std::shared_ptr<NOlap::TActivityChecker> Activity = std::make_shared<NOlap::TActivityChecker>();
 
 public:
     using TPtr = std::shared_ptr<TWriteOperation>;
 
-    void StopWriting() const {
-        *Activity = 0;
+    void StopWriting(const TString& errorMessage) const {
+        Activity->StopWriting(errorMessage);
     }
 
     TWriteOperation(const TUnifiedPathId& pathId, const TOperationWriteId writeId, const ui64 lockId, const ui64 cookie, const EOperationStatus& status,
@@ -82,7 +82,7 @@ public:
     void AbortOnExecute(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) const;
     void AbortOnComplete(TColumnShard& owner) const;
 
-    std::shared_ptr<const TAtomicCounter> GetActivityChecker() const {
+    std::shared_ptr<NOlap::TActivityChecker> GetActivityChecker() const {
         return Activity;
     }
 

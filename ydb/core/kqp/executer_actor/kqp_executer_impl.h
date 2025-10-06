@@ -630,6 +630,10 @@ protected:
             Query = (co_await ActorWaitForEvent<NScheduler::TEvQueryResponse>(TxId))->Get()->Query; // TODO: Y_DEFER
         }
 
+        if (!ResponseEv) {
+            co_return;
+        }
+
         auto lockTxId = Request.AcquireLocksTxId;
         if (lockTxId.Defined() && *lockTxId == 0) {
             lockTxId = TxId;

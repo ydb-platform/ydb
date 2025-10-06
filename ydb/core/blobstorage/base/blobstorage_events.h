@@ -409,13 +409,16 @@ namespace NKikimr {
     struct TEvBlobStorage::TEvAskRestartVDisk : TEventLocal<TEvAskRestartVDisk, EvAskRestartVDisk> {
         const ui32 PDiskId;
         const TVDiskID VDiskId;
+        const bool AskToStop;
 
         TEvAskRestartVDisk(
             const ui32 pDiskId,
-            const TVDiskID& vDiskId
+            const TVDiskID& vDiskId,
+            const bool askToStop = false
         )
             : PDiskId(pDiskId)
             , VDiskId(vDiskId)
+            , AskToStop(askToStop)
         {}
     };
 

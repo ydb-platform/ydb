@@ -488,7 +488,7 @@ namespace NKikimr::NStorage {
         TIntrusiveList<TVDiskRecord, TUnreportedMetricTag> VDisksWithUnreportedMetrics;
 
         void DestroyLocalVDisk(TVDiskRecord& vdisk);
-        void PoisonLocalVDisk(TVDiskRecord& vdisk);
+        void PoisonLocalVDisk(TVDiskRecord& vdisk, bool restartAfterShutdown = true);
         void StartLocalVDiskActor(TVDiskRecord& vdisk);
         void HandleGone(STATEFN_SIG);
         void ApplyServiceSetVDisks(const NKikimrBlobStorage::TNodeWardenServiceSet& serviceSet);

@@ -363,7 +363,7 @@ Y_UNIT_TEST_SUITE(BlobScrubbing) {
                 const TActorId edge = runtime->AllocateEdgeActor(peerNodeId);
                 env.Runtime->WrapInActorContext(edge, [&]{
                     TActivationContext::Send(wardenId, std::unique_ptr<IEventBase>(
-                            new TEvBlobStorage::TEvAskRestartVDisk(peerPDiskId, peerVDiskId)));
+                            new TEvBlobStorage::TEvAskRestartVDisk(peerPDiskId, peerVDiskId, true)));
                 });
             }
 

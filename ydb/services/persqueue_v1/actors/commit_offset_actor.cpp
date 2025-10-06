@@ -28,6 +28,21 @@ TCommitOffsetActor::TCommitOffsetActor(
     Y_ASSERT(request);
 }
 
+TCommitOffsetActor::TCommitOffsetActor(
+        NKikimr::NGRpcService::IRequestOpCtx * ctx, const NPersQueue::TTopicsListController& topicsHandler,
+        const TActorId& schemeCache, const TActorId& newSchemeCache,
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> counters
+)
+    : TBase(ctx)
+    , SchemeCache(schemeCache)
+    , NewSchemeCache(newSchemeCache)
+    , AuthInitActor()
+    , Counters(counters)
+    , TopicsHandler(topicsHandler)
+{
+    Y_ASSERT(ctx);
+}
+
 
 TCommitOffsetActor::~TCommitOffsetActor() = default;
 

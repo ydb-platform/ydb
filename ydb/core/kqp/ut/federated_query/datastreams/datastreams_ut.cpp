@@ -79,10 +79,9 @@ public:
             queryServiceConfig.SetEnableMatchRecognize(true);
             queryServiceConfig.SetProgressStatsPeriodMs(1000);
 
-            Kikimr = MakeKikimrRunner(true, ConnectorClient, nullptr, AppConfig, NYql::NDq::CreateS3ActorsFactory(), {
+            Kikimr = MakeKikimrRunner(true, nullptr, nullptr, AppConfig, NYql::NDq::CreateS3ActorsFactory(), {
                 .CredentialsFactory = CreateCredentialsFactory(),
                 .PqGateway = PqGateway,
-                .CheckpointPeriod = CheckpointPeriod,
             });
         }
 

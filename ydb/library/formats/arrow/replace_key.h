@@ -67,6 +67,7 @@ public:
         }
         return result;
     }
+    TReplaceKeyTemplate() = default;
 
     TReplaceKeyTemplate(TArrayVecPtr columns, const ui64 position)
         : Columns(columns)
@@ -333,6 +334,8 @@ public:
             HashPrecalculated = CalcHash();
         }
     }
+
+    TReplaceKeyHashable() = default;
 
     TReplaceKeyHashable(
         const std::vector<std::shared_ptr<arrow::Array>>& columns, const ui64 position, const std::vector<arrow::Type::type>& types)

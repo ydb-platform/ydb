@@ -9,6 +9,7 @@
 #include "scan.h"
 #include "tablet_counters.h"
 #include "writes_monitor.h"
+#include "tx_interactions.h"
 
 #include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/protos/counters_columnshard.pb.h>

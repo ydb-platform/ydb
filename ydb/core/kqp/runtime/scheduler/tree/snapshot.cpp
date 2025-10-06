@@ -40,7 +40,7 @@ void TTreeElement::UpdateBottomUp(ui64 totalLimit) {
     Guarantee = Min<ui64>(GetGuarantee(), Demand);
 }
 
-void TTreeElement::UpdateTopDown() {
+void TTreeElement::UpdateTopDown(bool allowFairShareOverlimit) {
     if (IsRoot()) {
         FairShare = Demand;
     }
@@ -73,7 +73,7 @@ void TTreeElement::UpdateTopDown() {
                 child->FairShare = 0;
             }
 
-            child->UpdateTopDown();
+            child->UpdateTopDown(allowFairShareOverlimit);
         });
     }
     // FIFO variant (when children are queries)
@@ -84,13 +84,15 @@ void TTreeElement::UpdateTopDown() {
 
         // Give at least 1 fair-share for each demanding child
         ForEachChild<TTreeElement>([&](TTreeElement* child, size_t) -> bool {
-            if (leftFairShare == 0) {
+            if (!allowFairShareOverlimit && leftFairShare == 0) {
                 return true;
             }
 
             if (child->Demand > 0) {
                 child->FairShare = 1;
-                --leftFairShare;
+                if (!allowFairShareOverlimit || leftFairShare > 0) {
+                    --leftFairShare;
+                }
             }
 
             return false;

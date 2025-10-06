@@ -2,6 +2,8 @@ IF (NOT EXPORT_CMAKE OR NOT OPENSOURCE OR OPENSOURCE_PROJECT != "yt")
 
 PROGRAM(sql2yql)
 
+ENABLE(YQL_STYLE_CPP)
+
 PEERDIR(
     contrib/libs/antlr3_cpp_runtime
     library/cpp/getopt

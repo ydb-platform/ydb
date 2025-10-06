@@ -1,5 +1,7 @@
 PROGRAM()
 
+ENABLE(YQL_STYLE_CPP)
+
 SRCS(
     arrow_kernels_dump.cpp
 )

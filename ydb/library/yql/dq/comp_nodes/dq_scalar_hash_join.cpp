@@ -21,8 +21,8 @@ TKeyTypes KeyTypesFromColumns(const std::vector<TType*>& types, const std::vecto
     return kt;
 }
 
-bool SemiOrOnlyJoin(EJoinKind kind){
-    switch (kind){
+bool SemiOrOnlyJoin(EJoinKind kind) {
+    switch (kind) {
         using enum EJoinKind;
         case RightOnly:
         case RightSemi:
@@ -32,10 +32,10 @@ bool SemiOrOnlyJoin(EJoinKind kind){
         default:
         return false;
     }
-
 }
+
 bool IsInner(EJoinKind kind) {
-    switch (kind){
+    switch (kind) {
         using enum EJoinKind;
         case Inner:
         case Full:
@@ -46,18 +46,6 @@ bool IsInner(EJoinKind kind) {
         return false;
     }
 }
-
-// bool SwitchSides(EJoinKind kind){
-//     switch (kind){
-//         using enum EJoinKind;
-//         case RightOnly:
-//         case RightSemi:
-//         case Right:
-//         return true;
-//         default:
-//         return false;
-//     }
-// }
 
 class TScalarHashJoinState : public TComputationValue<TScalarHashJoinState> {
     using TBase = TComputationValue<TScalarHashJoinState>;
@@ -124,7 +112,7 @@ public:
                 valuesIndex++;
             }
         }
-        MKQL_ENSURE(std::ranges::is_permutation(Values_ | std::views::transform([](auto& value){return &value;}), Pointers_), "Pointers_ should be a permutation of Values_ addresses");
+        MKQL_ENSURE(std::ranges::is_permutation(Values_ | std::views::transform([](auto& value) {return &value;}), Pointers_), "Pointers_ should be a permutation of Values_ addresses");
 
         UDF_LOG(Logger_, LogComponent_, NUdf::ELogLevel::Debug, "TScalarHashJoinState created");
     }
@@ -174,7 +162,7 @@ public:
             case EFetchResult::Finish: {
                 LeftFinished_ = true;
                 if (Table_.UnusedTrackingOn()) {
-                    for (auto& v : Table_.MapView()){
+                    for (auto& v : Table_.MapView()) {
                         if (v.second.Used && JoinKind_ == EJoinKind::RightSemi ) {
                             for( NJoinTable::TTuple used: v.second.Tuples ) {
                                 std::copy_n(used, std::ssize(RightColumnTypes_), std::back_inserter(Output_));
@@ -182,10 +170,10 @@ public:
                         }
                     }
                     Table_.ForEachUnused([this](NJoinTable::TTuple unused) {
-                        if (JoinKind_ == EJoinKind::RightOnly){
+                        if (JoinKind_ == EJoinKind::RightOnly) {
                             std::copy_n(unused, std::ssize(RightColumnTypes_), std::back_inserter(Output_));
                         }
-                        if (JoinKind_ == EJoinKind::Exclusion || JoinKind_ == EJoinKind::Right || JoinKind_ == EJoinKind::Full){
+                        if (JoinKind_ == EJoinKind::Exclusion || JoinKind_ == EJoinKind::Right || JoinKind_ == EJoinKind::Full) {
                             AppendTuple(nullptr, unused, Output_);
                         }
                     });

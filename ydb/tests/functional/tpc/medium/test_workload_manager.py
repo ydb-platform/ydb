@@ -36,11 +36,11 @@ class TestTpchWMS0_1(wm.WorkloadManagerTpchBase, wm.WorkloadManagerConcurrentQue
         super().setup_class()
 
 
-# class TestClickbenchWMScheduler(wm.TestWorkloadMangerClickbenchComputeScheduler, FunctionalTestBase):
+# class TestClickbenchWMScheduler(wm.TestWorkloadManagerClickbenchComputeScheduler, FunctionalTestBase):
 #     iterations: int = 1
 #     verify_data: bool = False
 #     timeout = 100
-#
+
 #     @classmethod
 #     def setup_class(cls) -> None:
 #         cls.setup_cluster()

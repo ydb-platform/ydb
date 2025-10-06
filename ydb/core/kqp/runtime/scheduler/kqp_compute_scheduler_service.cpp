@@ -273,7 +273,9 @@ void TComputeScheduler::UpdateFairShare() {
     }
 
     snapshot->UpdateBottomUp(Root->TotalLimit);
-    snapshot->UpdateTopDown();
+    // We want to allow FairShare to be over Limit.
+    // If you need to change this behaviour change variable's default value
+    snapshot->UpdateTopDown(true);
 
     {
         TWriteGuard lock(Mutex);

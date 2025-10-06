@@ -111,7 +111,7 @@ void TestOneWrite(TString value, TVector<TString> &&expectedTraceVariants) {
         }
     );
 
-    UNIT_ASSERT(oneIsGood);
+    UNIT_ASSERT_C(oneIsGood, env.WilsonUploader->PrintTraces());
 }
 
 void TestOneRead(TString value, TString expectedTrace) {
@@ -134,7 +134,8 @@ void TestOneRead(TString value, TString expectedTrace) {
             return trace.ToString() == expectedTrace;
         }
     );
-    UNIT_ASSERT(oneIsGood);
+
+    UNIT_ASSERT_C(oneIsGood, env.WilsonUploader->PrintTraces());
 }
 
 Y_UNIT_TEST_SUITE(TKeyValueTracingTest) {

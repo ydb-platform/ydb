@@ -1,4 +1,6 @@
 #include "scan_throttler.h"
+
+#include <ydb/core/util/fast_lookup_unique_list.h>
  
 namespace NKikimr {
 
@@ -68,8 +70,7 @@ private:
     TMonotonic LastPlannedTimestamp;
     TDuration TimeWasted;
 
-    std::unordered_list<TGroupId> GroupsToScan;
-    std::unordered_map<TGroupId> GroupsToScanLookup;
+    TFastLookupUniqueList<TGroupId> GroupsAllowedToCheck;
     std::unordered_map<ui32, std::list<TGroupId>> LockedNodes;
 };
 

@@ -185,6 +185,20 @@ TVector<ISubOperation::TPtr> CreateBackupIncrementalBackupCollection(TOperationI
 
     TVector<TPathId> streams;
     for (const auto& item : bc->Description.GetExplicitEntryList().GetEntries()) {
+        const auto tablePath = TPath::Resolve(item.GetPath(), context.SS);
+        {
+            auto checks = tablePath.Check();
+            checks
+                .IsResolved()
+                .NotDeleted()
+                .IsTable();
+            
+            if (!checks) {
+                result = {CreateReject(opId, checks.GetStatus(), checks.GetError())};
+                return result;
+            }
+        }
+        
         std::pair<TString, TString> paths;
         TString err;
         if (!TrySplitPathByDb(item.GetPath(), bcPath.GetDomainPathString(), paths, err)) {

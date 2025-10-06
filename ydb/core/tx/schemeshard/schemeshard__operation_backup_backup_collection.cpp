@@ -90,6 +90,20 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
             streamDescription.SetFormat(NKikimrSchemeOp::ECdcStreamFormatProto);
 
             const auto sPath = TPath::Resolve(item.GetPath(), context.SS);
+            
+            {
+                auto checks = sPath.Check();
+                checks
+                    .IsResolved()
+                    .NotDeleted()
+                    .IsTable();
+                
+                if (!checks) {
+                    result = {CreateReject(opId, checks.GetStatus(), checks.GetError())};
+                    return result;
+                }
+            }
+            
             NCdc::DoCreateStreamImpl(result, createCdcStreamOp, opId, sPath, false, false);
 
             desc.MutableCreateSrcCdcStream()->CopyFrom(createCdcStreamOp);
@@ -110,6 +124,20 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
             streamDescription.SetFormat(NKikimrSchemeOp::ECdcStreamFormatProto);
 
             const auto sPath = TPath::Resolve(item.GetPath(), context.SS);
+            
+            {
+                auto checks = sPath.Check();
+                checks
+                    .IsResolved()
+                    .NotDeleted()
+                    .IsTable();
+                
+                if (!checks) {
+                    result = {CreateReject(opId, checks.GetStatus(), checks.GetError())};
+                    return result;
+                }
+            }
+            
             auto table = context.SS->Tables.at(sPath.Base()->PathId);
 
             TVector<TString> boundaries;

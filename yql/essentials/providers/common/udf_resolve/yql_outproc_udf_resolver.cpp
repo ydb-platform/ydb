@@ -221,24 +221,18 @@ public:
 
             udfRequest->SetLangVer(udf->LangVer);
         }
-        if (request.UdfsSize() && !request.ImportsSize()) {
-            ctx.AddError(ExceptionToIssue(yexception() << "Attempt to load udfs without any import"));
+
+        TResolveResult response;
+        try {
+            response = RunResolverAndParseResult(request, { }, *filesBox);
+            filesBox->Destroy();
+        } catch (const std::exception& e) {
+            ctx.AddError(ExceptionToIssue(e));
             return false;
         }
-        if (request.UdfsSize() && request.ImportsSize()) {
-            TResolveResult response;
-            try {
-                response = RunResolverAndParseResult(request, { }, *filesBox);
-                filesBox->Destroy();
-            } catch (const std::exception& e) {
-                ctx.AddError(ExceptionToIssue(e));
-                return false;
-            }
 
-            // extract regardless of hasErrors value
-            hasErrors = !ExtractMetadata(response, usedImports, externalFunctions, ctx) || hasErrors;
-        }
-
+        // extract regardless of hasErrors value
+        hasErrors = !ExtractMetadata(response, usedImports, externalFunctions, ctx) || hasErrors;
         hasErrors = !LoadFunctionsMetadata(loadedFunctions, *FunctionRegistry_, TypeInfoHelper_, ctx, logLevel) || hasErrors;
 
         if (!hasErrors) {

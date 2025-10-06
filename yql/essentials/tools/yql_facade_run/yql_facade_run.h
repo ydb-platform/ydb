@@ -92,6 +92,7 @@ public:
     bool TestSqlFormat = false;
     bool TestLexers = false;
     bool TestComplete = false;
+    bool TestSyntaxAmbiguities = false;
     THashMap<TString, NSQLTranslation::TTableBindingSettings> Bindings;
 
     bool PrintAst = false;

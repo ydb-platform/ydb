@@ -128,7 +128,7 @@ bool TestFormat(
     NYql::TAstParseResult frmParseRes = NSQLTranslation::SqlToYql(translators, frmQuery, settings);
     if (!frmParseRes.Issues.Empty()) {
         frmParseRes.Issues.PrintWithProgramTo(Cerr, queryFile, frmQuery);
-        if (AnyOf(frmParseRes.Issues, [](const auto& issue) { return issue.GetSeverity() == NYql::TSeverityIds::S_ERROR;})) {
+        if (AnyOf(frmParseRes.Issues, [](const auto& issue) { return issue.GetSeverity() <= NYql::TSeverityIds::S_ERROR;})) {
             return false;
         }
     }
@@ -273,6 +273,8 @@ int BuildAST(int argc, char* argv[]) {
     opts.AddLongOption("test-antlr4", "check antlr4 parser").NoArgument();
     opts.AddLongOption("test-lexers", "check other lexers").NoArgument();
     opts.AddLongOption("test-complete", "check completion engine").NoArgument();
+    opts.AddLongOption("test-syntax-ambiguity", "test syntax ambiguity").NoArgument();
+    opts.AddLongOption("debug-syntax-ambiguity", "debug syntax ambiguity").NoArgument();
     opts.AddLongOption("format-output", "Saves formatted query to it").RequiredArgument("format-output").StoreResult(&outFileNameFormat);
     opts.AddLongOption("langver", "Set current language version").Optional().RequiredArgument("VER").Handler1T<TString>(langVerHandler);
     opts.AddLongOption("mem-limit", "Set memory limit in megabytes").Handler1T<ui32>(0, NYql::SetAddressSpaceLimit);
@@ -321,8 +323,12 @@ int BuildAST(int argc, char* argv[]) {
     lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
     lexers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory();
     NSQLTranslationV1::TParsers parsers;
-    parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory();
-    parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory();
+    parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory(
+        res.Has("test-syntax-ambiguity"),
+        res.Has("debug-syntax-ambiguity"));
+    parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory(
+        res.Has("test-syntax-ambiguity"),
+        res.Has("debug-syntax-ambiguity"));
 
     NSQLTranslation::TTranslators translators(
         nullptr,
@@ -455,7 +461,7 @@ int BuildAST(int argc, char* argv[]) {
 
             bool hasError = false;
             if (!parseRes.Issues.Empty()) {
-                hasError = AnyOf(parseRes.Issues, [](const auto& issue) { return issue.GetSeverity() == NYql::TSeverityIds::S_ERROR;});
+                hasError = AnyOf(parseRes.Issues, [](const auto& issue) { return issue.GetSeverity() <= NYql::TSeverityIds::S_ERROR;});
 
                 if (hasError || !noDebug) {
                     parseRes.Issues.PrintWithProgramTo(Cerr, queryFile, query);

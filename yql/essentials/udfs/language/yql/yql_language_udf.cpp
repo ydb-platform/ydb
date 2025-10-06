@@ -306,7 +306,8 @@ bool GetParseTree(
     NYql::TIssues& issues,
     NSQLTranslationV1::TLexers& lexers,
     NSQLTranslationV1::TParsers& parsers,
-    google::protobuf::Message*& message)
+    google::protobuf::Message*& message,
+    bool isAmbiguityError = false)
 {
     if (!ParseTranslationSettings(query, settings, issues)) {
         return false;
@@ -323,8 +324,8 @@ bool GetParseTree(
         return false;
     }
 
-    parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory();
-    parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory();
+    parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory(isAmbiguityError);
+    parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory(isAmbiguityError);
     message = NSQLTranslationV1::SqlAST(
         parsers,
         query,
@@ -414,7 +415,7 @@ SIMPLE_UDF(TTestSyntax, TOptional<char*>(TAutoMap<char*>)) try {
     NSQLTranslationV1::TParsers parsers;
 
     google::protobuf::Message* tree;
-    if (!GetParseTree(query, settings, issues, lexers, parsers, tree)) {
+    if (!GetParseTree(query, settings, issues, lexers, parsers, tree, /*isAmbiguityError=*/true)) {
         return valueBuilder->NewString(issues.ToString());
     }
 

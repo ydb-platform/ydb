@@ -178,9 +178,8 @@ void TPartition::TryRunCompaction()
     const ui64 blobsKeyCountLimit = GetBodyKeysCountLimit();
     const ui64 compactedBlobSizeLowerBound = GetCompactedBlobSizeLowerBound();
 
-    if (BlobEncoder.DataKeysBody.size() >= blobsKeyCountLimit) {
-        CompactionInProgress = true;
-        Send(SelfId(), new TEvPQ::TEvRunCompaction(BlobEncoder.DataKeysBody.size()));
+    if ((BlobEncoder.DataKeysBody.size() < blobsKeyCountLimit) && (BlobEncoder.GetSize() < GetCumulativeSizeLimit())) {
+        LOG_D("No data for blobs compaction");
         return;
     }
 

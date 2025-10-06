@@ -3,6 +3,7 @@ LIBRARY()
 SRCS(
     account_read_quoter.cpp
     autopartitioning_manager.cpp
+    consumer_offset_tracker.cpp
     offload_actor.cpp
     ownerinfo.cpp
     partition.cpp
@@ -43,4 +44,5 @@ RECURSE(
 )
 
 RECURSE_FOR_TESTS(
+    ut
 )

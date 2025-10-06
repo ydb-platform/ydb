@@ -18,10 +18,6 @@ ydb/core/fq/libs/row_dispatcher/format_handler/ut TestFormatHandler.WatermarkWhe
 ydb/core/fq/libs/row_dispatcher/format_handler/ut TestFormatHandler.WatermarkWhereFalse
 ydb/core/kafka_proxy/ut KafkaProtocol.TopicsCompactionSwitchOnAndOff
 ydb/core/kafka_proxy/ut unittest.sole chunk
-ydb/core/keyvalue/ut_trace TKeyValueTracingTest.ReadHuge
-ydb/core/keyvalue/ut_trace TKeyValueTracingTest.ReadSmall
-ydb/core/keyvalue/ut_trace TKeyValueTracingTest.WriteHuge
-ydb/core/keyvalue/ut_trace TKeyValueTracingTest.WriteSmall
 ydb/core/kqp/ut/close_with_load KqpQueryService.CloseSessionsWithLoad
 ydb/core/kqp/ut/close_with_load KqpService.CloseSessionsWithLoad
 ydb/core/kqp/ut/close_with_load unittest.[*/*] chunk

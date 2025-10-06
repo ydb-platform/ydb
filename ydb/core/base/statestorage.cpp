@@ -45,22 +45,34 @@ static const ui32 Primes[128] = {
 constexpr ui64 MaxRingCount = 1024;
 constexpr ui64 MaxNodeCount = 1024;
 
-class TStateStorageRingWalker {
-    const ui32 Sz;
-    const ui32 Delta;
-    ui32 A;
-public:
-    TStateStorageRingWalker(ui32 hash, ui32 sz)
-        : Sz(sz)
-        , Delta(Primes[hash % 128])
-        , A(hash + Delta)
-    {
-        Y_DEBUG_ABORT_UNLESS(Delta > Sz);
-    }
-
-    ui32 Next() {
-        A += Delta;
-        return (A % Sz);
+struct TStateStorageRingWalker {
+    static auto Select(ui32 hash, ui32 sz, ui32 nToSelect) {
+        std::vector<ui32> rings;
+        rings.resize(nToSelect);
+        std::unordered_set<ui32> ringsUsed;
+        const ui32 delta = Primes[hash % 128];
+        ui32 a = hash + delta;
+        Y_DEBUG_ABORT_UNLESS(delta > sz);
+        for (ui32 i : xrange(nToSelect)) {
+            a += delta;
+            rings[i] = a % sz;
+            ringsUsed.insert(rings[i]);
+        }
+        if (ringsUsed.size() != nToSelect) {
+            std::unordered_set<ui32> duplicates;
+            for (ui32 i : xrange(nToSelect)) {
+                if (!duplicates.insert(rings[i]).second) {
+                    ui32 proposedRing = rings[i];
+                    while (ringsUsed.count(proposedRing) > 0) {
+                        proposedRing = (proposedRing + 1) % nToSelect;
+                    }
+                    rings[i] = proposedRing;
+                    ringsUsed.insert(proposedRing);
+                    duplicates.insert(proposedRing);
+                }
+            }
+        }
+        return rings;
     }
 };
 
@@ -84,9 +96,9 @@ void TStateStorageInfo::SelectReplicas(ui64 tabletId, TSelection *selection) con
             selection->SelectedReplicas[idx] = Rings[idx].SelectReplica(hash);
         }
     } else { // NToSelect < total, first - select rings with walker, then select concrete node
-        TStateStorageRingWalker walker(hash, total);
-        for (ui32 idx : xrange(NToSelect))
-            selection->SelectedReplicas[idx] = Rings[walker.Next()].SelectReplica(hash);
+        for (ui32 idx = 0; ui32 ringIdx : TStateStorageRingWalker::Select(hash, total, NToSelect)) {
+            selection->SelectedReplicas[idx++] = Rings[ringIdx].SelectReplica(hash);
+        }
     }
 }
 
@@ -278,12 +290,12 @@ TIntrusivePtr<TStateStorageInfo> BuildStateStorageInfo(char (&namePrefix)[TActor
     TIntrusivePtr<TStateStorageInfo> info = new TStateStorageInfo();
     Y_ABORT_UNLESS(config.GetSSId() == 1);
     info->StateStorageVersion = config.GetStateStorageVersion();
-    
+
     info->CompatibleVersions.reserve(config.CompatibleVersionsSize());
     for (ui32 version : config.GetCompatibleVersions()) {
             info->CompatibleVersions.push_back(version);
     }
-    
+
     const size_t offset = FindIndex(namePrefix, char());
     Y_ABORT_UNLESS(offset != NPOS && (offset + sizeof(ui32)) < TActorId::MaxServiceIDLength);
 

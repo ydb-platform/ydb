@@ -306,12 +306,8 @@ private:
         ReadRowsCount += replyResultStats.ReadRowsCount;
         ReadBytesCount += replyResultStats.ReadBytesCount;
 
-        auto overloaded = StreamLookupWorker->IsOverloaded();
-        if (!overloaded.has_value()) {
+        if (!StreamLookupWorker->IsOverloaded()) {
             FetchInputRows();
-        } else {
-            CA_LOG_N("Pausing stream lookup because it's overloaded by reason: "
-                << overloaded.value_or("empty"));
         }
 
         if (Partitioning) {
@@ -321,10 +317,9 @@ private:
         const bool inputRowsFinished = LastFetchStatus == NUdf::EFetchStatus::Finish;
         const bool allReadsFinished = AllReadsFinished();
         const bool allRowsProcessed = StreamLookupWorker->AllRowsProcessed();
-        const bool hasPendingResults = StreamLookupWorker->HasPendingResults();
 
-        if (hasPendingResults) {
-            // has more results
+        if (inputRowsFinished && allReadsFinished && !allRowsProcessed) {
+            // all reads are completed, but we have unprocessed rows
             Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
         }
 

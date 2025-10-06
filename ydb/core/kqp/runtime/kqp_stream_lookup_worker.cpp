@@ -303,10 +303,6 @@ public:
         return readRequests;
     }
 
-    bool HasPendingResults() final {
-        return !ReadResults.empty();
-    }
-
     void AddResult(TShardReadResult result) final {
         const auto& record = result.ReadResult->Get()->Record;
         YQL_ENSURE(record.GetStatus().GetCode() == Ydb::StatusIds::SUCCESS);
@@ -321,8 +317,8 @@ public:
         ReadResults.emplace_back(std::move(result));
     }
 
-    std::optional<TString> IsOverloaded() final {
-        return std::nullopt;
+    bool IsOverloaded() final {
+        return false;
     }
 
     TReadResultStats ReplyResult(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, i64 freeSpace) final {
@@ -589,20 +585,8 @@ public:
         YQL_ENSURE(false);
     }
 
-    std::optional<TString> IsOverloaded() final {
-        if (UnprocessedRows.size() >= MAX_IN_FLIGHT_LIMIT ||
-            PendingLeftRowsByKey.size() >= MAX_IN_FLIGHT_LIMIT ||
-            ResultRowsBySeqNo.size() >= MAX_IN_FLIGHT_LIMIT)
-        {
-            TStringBuilder overloadDescriptor;
-            overloadDescriptor << "unprocessed rows: " << UnprocessedRows.size()
-                << ", pending left: " << PendingLeftRowsByKey.size()
-                << ", result rows: " << ResultRowsBySeqNo.size();
-
-            return TString(overloadDescriptor);
-        }
-
-        return std::nullopt;
+    bool IsOverloaded() final {
+        return UnprocessedRows.size() >= MAX_IN_FLIGHT_LIMIT || PendingLeftRowsByKey.size() >= MAX_IN_FLIGHT_LIMIT || ResultRowsBySeqNo.size() >= MAX_IN_FLIGHT_LIMIT;
     }
 
     std::vector<THolder<TEvDataShard::TEvRead>> RebuildRequest(const ui64& prevReadId, ui64& newReadId) final {
@@ -794,16 +778,6 @@ public:
         return requests;
     }
 
-    bool HasPendingResults() final {
-        auto nextSeqNo = KeepRowsOrder() ? ResultRowsBySeqNo.find(CurrentResultSeqNo) : ResultRowsBySeqNo.begin();
-
-        if (nextSeqNo != ResultRowsBySeqNo.end() && !nextSeqNo->second.Rows.empty()) {
-            return true;
-        }
-
-        return false;
-    }
-
     void AddResult(TShardReadResult result) final {
         const auto& record = result.ReadResult->Get()->Record;
         YQL_ENSURE(record.GetStatus().GetCode() == Ydb::StatusIds::SUCCESS);
@@ -906,7 +880,7 @@ public:
         batch.clear();
 
         auto getNextResult = [&]() {
-            if (!KeepRowsOrder()) {
+            if (!ShoulKeepRowsOrder()) {
                 return ResultRowsBySeqNo.begin();
             }
 
@@ -1089,12 +1063,12 @@ private:
         }
     };
 
-    bool KeepRowsOrder() const {
+    bool ShoulKeepRowsOrder() const {
         return Settings.KeepRowsOrder;
     }
 
     bool IsRowSeqNoValid(const ui64& seqNo) const {
-        if (!KeepRowsOrder()) {
+        if (!ShoulKeepRowsOrder()) {
             return true;
         }
 

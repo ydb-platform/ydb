@@ -1,5 +1,5 @@
+#include "yql_generic_credentials_provider.h"
 #include "yql_generic_lookup_actor.h"
-#include "yql_generic_token_provider.h"
 #include "yql_generic_base_actor.h"
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -63,7 +63,7 @@ namespace NYql::NDq {
     public:
         TGenericLookupActor(
             NConnector::IClient::TPtr connectorClient,
-            TGenericTokenProvider::TPtr tokenProvider,
+            TGenericCredentialsProvider::TPtr credentialsProvider,
             NActors::TActorId&& parentId,
             ::NMonitoring::TDynamicCounterPtr taskCounters,
             std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
@@ -75,7 +75,7 @@ namespace NYql::NDq {
             const NKikimr::NMiniKQL::THolderFactory& holderFactory,
             const size_t maxKeysInRequest)
             : Connector(connectorClient)
-            , TokenProvider(std::move(tokenProvider))
+            , CredentialsProvider(std::move(credentialsProvider))
             , ParentId(std::move(parentId))
             , Alloc(alloc)
             , KeyTypeHelper(keyTypeHelper)
@@ -186,7 +186,7 @@ namespace NYql::NDq {
             NConnector::NApi::TReadSplitsRequest readRequest;
 
             *readRequest.mutable_data_source_instance() = LookupSource.data_source_instance();
-            auto error = TokenProvider->MaybeFillToken(*readRequest.mutable_data_source_instance());
+            auto error = CredentialsProvider->FillCredentials(*readRequest.mutable_data_source_instance());
             if (error) {
                 SendError(TActivationContext::ActorSystem(), SelfId(), std::move(error));
                 return;
@@ -464,7 +464,7 @@ namespace NYql::NDq {
 
         TString FillSelect(NConnector::NApi::TSelect& select) {
             auto dsi = LookupSource.data_source_instance();
-            auto error = TokenProvider->MaybeFillToken(dsi);
+            auto error = CredentialsProvider->FillCredentials(dsi);
             if (error) {
                 return error;
             }
@@ -495,7 +495,7 @@ namespace NYql::NDq {
 
     private:
         NConnector::IClient::TPtr Connector;
-        TGenericTokenProvider::TPtr TokenProvider;
+        TGenericCredentialsProvider::TPtr CredentialsProvider;
         const NActors::TActorId ParentId;
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
         std::shared_ptr<TKeyTypeHelper> KeyTypeHelper;
@@ -523,7 +523,7 @@ namespace NYql::NDq {
 
     std::pair<NYql::NDq::IDqAsyncLookupSource*, NActors::IActor*> CreateGenericLookupActor(
         NConnector::IClient::TPtr connectorClient,
-        ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
+        ISecuredServiceAccountCredentialsFactory::TPtr securedServiceAccountCredentialsFactory,
         NActors::TActorId parentId,
         ::NMonitoring::TDynamicCounterPtr taskCounters,
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
@@ -533,13 +533,19 @@ namespace NYql::NDq {
         const NKikimr::NMiniKQL::TStructType* payloadType,
         const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
         const NKikimr::NMiniKQL::THolderFactory& holderFactory,
-        const size_t maxKeysInRequest)
+        const size_t maxKeysInRequest
+    )
     {
-        auto tokenProvider = NYql::NDq::CreateGenericTokenProvider(lookupSource.GetToken(), lookupSource.GetServiceAccountId(), lookupSource.GetServiceAccountIdSignature(), credentialsFactory);
+        auto credentialsProvider = NYql::NDq::CreateGenericCredentialsProvider(
+            "",
+            lookupSource.GetToken(),
+            lookupSource.GetServiceAccountId(),
+            lookupSource.GetServiceAccountIdSignature(),
+            securedServiceAccountCredentialsFactory);
         auto guard = Guard(*alloc);
         const auto actor = new TGenericLookupActor(
             connectorClient,
-            std::move(tokenProvider),
+            std::move(credentialsProvider),
             std::move(parentId),
             taskCounters,
             alloc,

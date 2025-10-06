@@ -181,6 +181,19 @@ TString ComposeStructuredTokenJsonForServiceAccountWithSecret(const TString& ser
     return result.ToJson();
 }
 
+TString ComposeStructuredTokenJsonForBasicAuth(const TString& login, const TString& password) {
+    TStructuredTokenBuilder result;
+
+    // password is optional
+    if (login) {
+        result.SetBasicAuth(login, password);
+        return result.ToJson();
+    }
+
+    result.SetNoAuth();
+    return result.ToJson();
+}
+
 TString ComposeStructuredTokenJsonForBasicAuthWithSecret(const TString& login, const TString& passwordSecretName, const TString& password) {
     TStructuredTokenBuilder result;
     

@@ -222,13 +222,16 @@ Y_UNIT_TEST_SUITE(KqpRbo) {
                 SET TablePathPrefix = "/Root/";
                 SELECT f.id as "id2" FROM foo AS f, bar WHERE f.id = bar.id and name = '0_name';
             )",
-            /*
             R"(
                 --!syntax_pg
                 SET TablePathPrefix = "/Root/";
                 SELECT foo.id FROM foo, bar;
             )",
-            */
+            R"(
+                --!syntax_pg
+                SET TablePathPrefix = "/Root/";
+                SELECT foo.id, bar.id FROM foo, bar;
+            )",
         };
 
         // TODO: The order of result is not defined, we need order by to add more interesting tests.
@@ -236,7 +239,8 @@ Y_UNIT_TEST_SUITE(KqpRbo) {
             R"([["0"]])",
             R"([])",
             R"([["0"]])",
-            //R"()"
+            R"([["0"];["0"];["0"];["0"]])",
+            R"([["0";"0"];["0";"1"];["0";"2"];["0";"3"]])",
         };
 
         for (ui32 i = 0; i < queries.size(); ++i) {

@@ -1108,7 +1108,7 @@ namespace NKikimr::NGRpcProxy::V1 {
                         request.retention_period().DebugString();
                 return TYdbPqCodes(Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::VALIDATION_ERROR);
             }
-            partConfig->SetLifetimeSeconds(request.retention_period().seconds());
+            partConfig->SetLifetimeSeconds(Min<i64>(request.retention_period().seconds(), Max<i32>()));
         } else {
             partConfig->SetLifetimeSeconds(TDuration::Days(1).Seconds());
         }

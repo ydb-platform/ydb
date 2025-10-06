@@ -86,6 +86,14 @@ namespace {
         ValidateSettingInRange(name, result, minValue, maxValue, error);
         return result;
     }
+
+    double ParseDouble(const TString& name, const TString& value, TString& error) {
+        double result = 0;
+        if (!TryFromString(value, result)) {
+            error = TStringBuilder() << "Invalid " << name << ": " << value;
+        }
+        return result;
+    }
 }
 
 // TODO(mbkkt) maybe compute floating sum in double? Needs benchmark
@@ -650,6 +658,10 @@ bool FillSetting(Ydb::Table::KMeansTreeSettings& settings, const TString& name, 
         settings.set_clusters(ParseUInt32(name, value, MinClusters, MaxClusters, error));
     } else if (nameLower =="levels") {
         settings.set_levels(ParseUInt32(name, value, MinLevels, MaxLevels, error));
+    } else if (nameLower == "overlap_clusters") {
+        settings.set_overlap_clusters(ParseUInt32(name, value, MinClusters, MaxClusters, error));
+    } else if (nameLower == "overlap_ratio") {
+        settings.set_overlap_ratio(ParseDouble(name, value, error));
     } else {
         error = TStringBuilder() << "Unknown index setting: " << name;
         return false;

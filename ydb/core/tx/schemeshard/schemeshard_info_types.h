@@ -3387,6 +3387,8 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         ui32 K = 0;
         ui32 Levels = 0;
         ui32 Rounds = 0;
+        ui32 OverlapClusters = 0;
+        double OverlapRatio = 0;
 
         // progress
         enum EState : ui32 {
@@ -3853,6 +3855,12 @@ public:
                     indexInfo->KMeans.K = desc.settings().clusters();
                     indexInfo->KMeans.Levels = indexInfo->IsBuildPrefixedVectorIndex() + desc.settings().levels();
                     indexInfo->KMeans.Rounds = NTableIndex::NKMeans::DefaultKMeansRounds;
+                    indexInfo->KMeans.OverlapClusters = desc.settings().overlap_clusters()
+                        ? desc.settings().overlap_clusters()
+                        : NTableIndex::NKMeans::DefaultOverlapClusters;
+                    indexInfo->KMeans.OverlapRatio = desc.settings().has_overlap_ratio()
+                        ? desc.settings().overlap_ratio()
+                        : NTableIndex::NKMeans::DefaultOverlapRatio;
                     indexInfo->Clusters = NKikimr::NKMeans::CreateClusters(desc.settings().settings(), indexInfo->KMeans.Rounds, createError);
                     Y_ENSURE(indexInfo->Clusters, createError);
                     indexInfo->SpecializedIndexDescription = std::move(desc);

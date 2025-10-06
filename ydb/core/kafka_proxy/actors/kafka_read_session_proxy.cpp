@@ -251,7 +251,10 @@ THeartbeatResponseData::TPtr KafkaReadSessionProxyActor::CreateChangeResponse(TH
 
 TFetchResponseData::TPtr KafkaReadSessionProxyActor::CreateChangeResponse(TFetchRequestData& request) {
     TFetchResponseData::TPtr response = std::make_shared<TFetchResponseData>();
-    response->ErrorCode = EKafkaErrors::REBALANCE_IN_PROGRESS;
+    // Possible error code: OFFSET_OUT_OF_RANGE, TOPIC_AUTHORIZATION_FAILED, REPLICA_NOT_AVAILABLE, NOT_LEADER_OR_FOLLOWER,
+    // FENCED_LEADER_EPOCH, UNKNOWN_LEADER_EPOCH, UNKNOWN_TOPIC_OR_PARTITION, KAFKA_STORAGE_ERROR, UNSUPPORTED_COMPRESSION_TYPE,
+    // CORRUPT_MESSAGE, UNKNOWN_TOPIC_ID, FETCH_SESSION_TOPIC_ID_ERROR, INCONSISTENT_TOPIC_ID, UNKNOWN_SERVER_ERROR.
+    response->ErrorCode = EKafkaErrors::NONE_ERROR;
     response->Responses.resize(request.Topics.size());
     for (size_t i = 0; i < request.Topics.size(); ++i) {
         auto& sTopic = request.Topics[i];

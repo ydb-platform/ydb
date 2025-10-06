@@ -90,6 +90,8 @@ bool TTxInit::Execute(TTransactionContext& txc, const TActorContext& ctx) {
     } catch (const TSchemeErrorTabletException& ex) {
         Y_UNUSED(ex);
         Y_ABORT();
+    } catch (const std::exception& ex) {
+        AFL_VERIFY(false)("message", ex.what());   // there must be no leaked exceptions
     } catch (...) {
         Y_ABORT("there must be no leaked exceptions");
     }

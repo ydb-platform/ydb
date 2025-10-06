@@ -13,7 +13,7 @@ private:
 public:
     TTxInteractionCounters()
         : TBase("tx_interactions")
-        , TxLockRanges(TBase::GetHistogram("TxLockRanges", NMonitoring::ExponentialHistogram(18, 1, 4)))
+        , TxLockRanges(TBase::GetHistogram("TxLockRanges", NMonitoring::ExponentialHistogram(18, 2, 1)))
     {
     }
 

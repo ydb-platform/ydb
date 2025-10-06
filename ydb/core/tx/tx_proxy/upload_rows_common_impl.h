@@ -1262,11 +1262,7 @@ private:
                 }
             }
 
-            bool isRetryableError = shardResponse.GetStatus() == NKikimrTxDataShard::TError::WRONG_SHARD_STATE ||
-                shardResponse.GetStatus() == NKikimrTxDataShard::TError::SHARD_IS_BLOCKED ||
-                shardResponse.GetStatus() == NKikimrTxDataShard::TError::SCHEME_CHANGED;
-
-            if (!isRetryableError || !Backoff.HasMore()) {
+            if (!ev->Get()->IsRetriableError() || !Backoff.HasMore()) {
                 return ReplyWithError(
                     TUploadStatus(static_cast<NKikimrTxDataShard::TError::EKind>(shardResponse.GetStatus()),
                     shardResponse.GetErrorDescription()), ctx);

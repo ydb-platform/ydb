@@ -438,7 +438,8 @@ private:
     void InternalError(const TString message) {
         ALOG_ERROR(NKikimrServices::KQP_COMPILE_ACTOR, "Internal error"
             << ", self: " << SelfId()
-            << ", message: " << message);
+            << ", message: " << message
+            << ", query text: " << QueryId.Text);
 
 
         NYql::TIssue issue(NYql::TPosition(), "Internal error while compiling query.");

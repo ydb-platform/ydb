@@ -25,6 +25,9 @@ using NUdf::TUnboxedValuePod;
 
 namespace {
 
+bool HasMemoryForProcessing() {
+    return !TlsAllocState->IsMemoryYellowZoneEnabled();
+}
 
 using TEqualsPtr = bool(*)(const NUdf::TUnboxedValuePod*, const NUdf::TUnboxedValuePod*);
 using THashPtr = NUdf::THashType(*)(const NUdf::TUnboxedValuePod*);
@@ -411,7 +414,7 @@ protected:
         }
 
         if (isNew) {
-            if (Map->GetSize() >= MaxRowCount) {
+            if (Map->GetSize() >= MaxRowCount || (!HasMemoryForProcessing() && Map->GetSize() >= LowerFixedRowCount)) {
                 OpenDrain();
                 return EFillState::Drain;
             }
@@ -487,6 +490,7 @@ protected:
     size_t TryAllocMapForRowCount(size_t rowCount)
     {
         // Avoid reallocating the map
+        // TODO: although Clear()-ing might be actually more expensive than reallocation
         if (Map) {
             const size_t oldCapacity = Map->GetCapacity();
             size_t newCapacity = GetMapCapacity(rowCount);
@@ -501,6 +505,10 @@ protected:
             size_t newCapacity = GetMapCapacity(rows);
             try {
                 Map.Reset(new TMap(Hasher, Equals, newCapacity));
+                if (!HasMemoryForProcessing()) {
+                    Map.Reset(nullptr);
+                    return false;
+                }
                 return true;
             }
             catch (TMemoryLimitExceededException) {
@@ -515,6 +523,7 @@ protected:
             rowCount = rowCount / 2;
         }
 
+        // This can emit uncaught TMemoryLimitExceededException if we can't afford even a tiny map
         size_t smallCapacity = GetMapCapacity(LowerFixedRowCount);
         Map.Reset(new TMap(Hasher, Equals, smallCapacity));
         return LowerFixedRowCount;

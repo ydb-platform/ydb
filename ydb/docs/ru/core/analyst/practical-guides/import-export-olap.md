@@ -19,8 +19,7 @@
 
 ### Предварительные требования
 
-- Реквизиты доступа {{ ydb-short-name }} с правами на чтение/запись.
-- {{ objstorage-name }} и статический ключ доступа к нему, например [Yandex Object Storage](https://yandex.cloud/ru/docs/storage/).
+- {{ objstorage-name }} и статический ключ доступа к нему, например [{{ objstorage-full-name }}](https://yandex.cloud/ru/docs/storage/).
 
 ### Создайте секрет для доступа к {{ objstorage-name }}
 

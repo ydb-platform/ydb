@@ -124,7 +124,7 @@ static void WrongShardState(NKikimrTxDataShard::TEvUploadRowsResponse& response)
     response.SetStatus(NKikimrTxDataShard::TError::WRONG_SHARD_STATE);
 }
 
-static void ReadOnly(NKikimrTxDataShard::TEvUploadRowsResponse& response) {
+static void Replicated(NKikimrTxDataShard::TEvUploadRowsResponse& response) {
     response.SetStatus(NKikimrTxDataShard::TError::READONLY);
 }
 
@@ -132,26 +132,24 @@ static void Overloaded(NKikimrTxDataShard::TEvUploadRowsResponse& response) {
     response.SetStatus(NKikimrTxDataShard::TError::SHARD_IS_BLOCKED);
 }
 
-static void OutOfSpace(NKikimrTxDataShard::TEvEraseRowsResponse& response) {
-    // NOTE: this function is never called, because erase is allowed when out of space
-    response.SetStatus(NKikimrTxDataShard::TEvEraseRowsResponse::WRONG_SHARD_STATE);
-}
-
-static void DiskSpaceExhausted(NKikimrTxDataShard::TEvEraseRowsResponse& response) {
-    // NOTE: this function is never called, because erase is allowed when out of space
-    response.SetStatus(NKikimrTxDataShard::TEvEraseRowsResponse::WRONG_SHARD_STATE);
+ECumulativeCounters OverloadedCounter(TEvDataShard::TEvUploadRowsRequest::TPtr&) {
+    return COUNTER_BULK_UPSERT_OVERLOADED;
 }
 
 static void WrongShardState(NKikimrTxDataShard::TEvEraseRowsResponse& response) {
     response.SetStatus(NKikimrTxDataShard::TEvEraseRowsResponse::WRONG_SHARD_STATE);
 }
 
-static void ExecError(NKikimrTxDataShard::TEvEraseRowsResponse& response) {
+static void Replicated(NKikimrTxDataShard::TEvEraseRowsResponse& response) {
     response.SetStatus(NKikimrTxDataShard::TEvEraseRowsResponse::EXEC_ERROR);
 }
 
 static void Overloaded(NKikimrTxDataShard::TEvEraseRowsResponse& response) {
     response.SetStatus(NKikimrTxDataShard::TEvEraseRowsResponse::SHARD_OVERLOADED);
+}
+
+ECumulativeCounters OverloadedCounter(TEvDataShard::TEvEraseRowsRequest::TPtr&) {
+    return COUNTER_ERASE_ROWS_OVERLOADED;
 }
 
 template <typename TEvResponse>
@@ -178,24 +176,34 @@ static void Reject(TDataShard* self, TEvRequest& ev, const TString& txDesc,
     ctx.Send(ev->Sender, std::move(response));
 }
 
-template <typename TEvResponse, typename TEvRequest>
-static bool MaybeReject(TDataShard* self, TEvRequest& ev, const TActorContext& ctx, const TString& txDesc, bool isWrite, TDataShard::ELogThrottlerType logThrottlerType) {
-    NKikimrTxDataShard::TEvProposeTransactionResult::EStatus rejectStatus;
+template <typename TEvResponse, bool IsWrite, typename TEvRequest>
+static bool MaybeReject(TDataShard* self, TEvRequest& ev, const TActorContext& ctx, const TString& txDesc, TDataShard::ELogThrottlerType logThrottlerType) {
     ERejectReasons rejectReasons = ERejectReasons::None;
     TString rejectDescription;
+    
+    if (self->IsReplicated()) {
+        rejectReasons = ERejectReasons::WrongState;
+        rejectDescription = TStringBuilder() << "Can't execute " << txDesc << " at replicated table";
+        Reject<TEvResponse, TEvRequest>(self, ev, txDesc, rejectReasons, rejectDescription, &Replicated, ctx, logThrottlerType);
+        return true;
+    }
+    
+    NKikimrTxDataShard::TEvProposeTransactionResult::EStatus rejectStatus;
     if (self->CheckDataTxReject(txDesc, ctx, rejectStatus, rejectReasons, rejectDescription)) {
+        self->IncCounter(OverloadedCounter(ev));
         Reject<TEvResponse, TEvRequest>(self, ev, txDesc, rejectReasons, rejectDescription, &WrongShardState, ctx, logThrottlerType);
         return true;
     }
 
     if (self->CheckChangesQueueOverflow()) {
+        self->IncCounter(OverloadedCounter(ev));
         rejectReasons = ERejectReasons::ChangesQueueOverflow;
         rejectDescription = TStringBuilder() << "Change queue overflow at tablet " << self->TabletID();
         Reject<TEvResponse, TEvRequest>(self, ev, txDesc, rejectReasons, rejectDescription, &Overloaded, ctx, logThrottlerType);
         return true;
     }
 
-    if (isWrite) {
+    if constexpr (IsWrite) {
         if (self->IsAnyChannelYellowStop()) {
             self->IncCounter(COUNTER_PREPARE_OUT_OF_SPACE);
             rejectReasons = ERejectReasons::YellowChannels;
@@ -218,14 +226,9 @@ void TDataShard::Handle(TEvDataShard::TEvUploadRowsRequest::TPtr& ev, const TAct
     if (ShouldDelayOperation(ev)) {
         return;
     }
-    if (IsReplicated()) {
-        return Reject<TEvDataShard::TEvUploadRowsResponse>(this, ev, "bulk upsert",
-            ERejectReasons::WrongState, "Can't execute bulk upsert at replicated table", &ReadOnly, ctx, TDataShard::ELogThrottlerType::UploadRows_Reject);
-    }
-    if (!MaybeReject<TEvDataShard::TEvUploadRowsResponse>(this, ev, ctx, "bulk upsert", true, TDataShard::ELogThrottlerType::UploadRows_Reject)) {
+    
+    if (!MaybeReject<TEvDataShard::TEvUploadRowsResponse, true>(this, ev, ctx, "bulk upsert", TDataShard::ELogThrottlerType::UploadRows_Reject)) {
         Executor()->Execute(new TTxUploadRows(this, ev), ctx);
-    } else {
-        IncCounter(COUNTER_BULK_UPSERT_OVERLOADED);
     }
 }
 
@@ -233,14 +236,9 @@ void TDataShard::Handle(TEvDataShard::TEvEraseRowsRequest::TPtr& ev, const TActo
     if (ShouldDelayOperation(ev)) {
         return;
     }
-    if (IsReplicated()) {
-        return Reject<TEvDataShard::TEvEraseRowsResponse>(this, ev, "erase",
-            ERejectReasons::WrongState, "Can't execute erase at replicated table", &ExecError, ctx, TDataShard::ELogThrottlerType::EraseRows_Reject);
-    }
-    if (!MaybeReject<TEvDataShard::TEvEraseRowsResponse>(this, ev, ctx, "erase", false, TDataShard::ELogThrottlerType::EraseRows_Reject)) {
+    
+    if (!MaybeReject<TEvDataShard::TEvEraseRowsResponse, false>(this, ev, ctx, "erase", TDataShard::ELogThrottlerType::EraseRows_Reject)) {
         Executor()->Execute(new TTxEraseRows(this, ev), ctx);
-    } else {
-        IncCounter(COUNTER_ERASE_ROWS_OVERLOADED);
     }
 }
 

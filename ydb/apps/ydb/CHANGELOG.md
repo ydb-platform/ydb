@@ -1,3 +1,4 @@
+* Fixed a bug where the `ydb debug ping` command crashed in case of any error.
 
 ## 2.26.0 ##
 

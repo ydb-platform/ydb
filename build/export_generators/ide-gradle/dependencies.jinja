@@ -128,7 +128,7 @@ dependencies {
 
 {%- if proto_template -%}
 {%-     if target.proto_namespace %}
-    protobuf(files(mainProtosDir.dir("{{ target.proto_namespace }}")))
+    protobuf(files(mainProtosDir.map { it.dir("{{ target.proto_namespace }}") }))
 {%-     else %}
     protobuf(files(mainProtosDir))
 {%-     endif -%}

@@ -7,11 +7,6 @@ from xml.sax.xmlreader import AttributesImpl
 from io import StringIO
 from inspect import isgenerator
 
-__author__ = 'Martin Blech'
-__version__ = "1.0.0"  # x-release-please-version
-__license__ = 'MIT'
-
-
 class ParsingInterrupted(Exception):
     pass
 
@@ -306,8 +301,8 @@ def parse(xml_input, encoding=None, expat=expat, process_namespaces=False,
         a list should be forced is more complex.
 
 
-        If `process_comment` is `True` then comment will be added with comment_key
-        (default=`'#comment'`) to then tag which contains comment
+        If `process_comments` is `True`, comments will be added using `comment_key`
+        (default=`'#comment'`) to the tag that contains the comment.
 
             For example, given this input:
             <a>
@@ -321,7 +316,7 @@ def parse(xml_input, encoding=None, expat=expat, process_namespaces=False,
               </b>
             </a>
 
-            If called with process_comment=True, it will produce
+            If called with `process_comments=True`, it will produce
             this dictionary:
             'a': {
                 'b': {
@@ -334,6 +329,10 @@ def parse(xml_input, encoding=None, expat=expat, process_namespaces=False,
                     'd': '2',
                 },
             }
+        Comment text is subject to the `strip_whitespace` flag: when it is left
+        at the default `True`, comments will have leading and trailing
+        whitespace removed. Disable `strip_whitespace` to keep comment
+        indentation or padding intact.
     """
     handler = _DictSAXHandler(namespace_separator=namespace_separator,
                               **kwargs)
@@ -346,11 +345,7 @@ def parse(xml_input, encoding=None, expat=expat, process_namespaces=False,
         encoding,
         namespace_separator
     )
-    try:
-        parser.ordered_attributes = True
-    except AttributeError:
-        # Jython's expat does not support ordered_attributes
-        pass
+    parser.ordered_attributes = True
     parser.StartNamespaceDeclHandler = handler.startNamespaceDecl
     parser.StartElementHandler = handler.startElement
     parser.EndElementHandler = handler.endElement
@@ -359,16 +354,10 @@ def parse(xml_input, encoding=None, expat=expat, process_namespaces=False,
         parser.CommentHandler = handler.comments
     parser.buffer_text = True
     if disable_entities:
-        try:
-            # Attempt to disable DTD in Jython's expat parser (Xerces-J).
-            feature = "http://apache.org/xml/features/disallow-doctype-decl"
-            parser._reader.setFeature(feature, True)
-        except AttributeError:
-            # For CPython / expat parser.
-            # Anything not handled ends up here and entities aren't expanded.
-            parser.DefaultHandler = lambda x: None
-            # Expects an integer return; zero means failure -> expat.ExpatError.
-            parser.ExternalEntityRefHandler = lambda *x: 1
+        def _forbid_entities(*_args, **_kwargs):
+            raise ValueError("entities are disabled")
+
+        parser.EntityDeclHandler = _forbid_entities
     if hasattr(xml_input, 'read'):
         parser.ParseFile(xml_input)
     elif isgenerator(xml_input):
@@ -390,30 +379,6 @@ def _convert_value_to_string(value):
     if isinstance(value, bool):
         return "true" if value else "false"
     return str(value)
-
-
-def _has_angle_brackets(value):
-    """Return True if value (a str) contains '<' or '>'.
-
-    Non-string values return False. Uses fast substring checks implemented in C.
-    """
-    return isinstance(value, str) and ("<" in value or ">" in value)
-
-
-def _has_invalid_name_chars(value):
-    """Return True if value (a str) contains any disallowed name characters.
-
-    Disallowed: '<', '>', '/', or any whitespace character.
-    Non-string values return False.
-    """
-    if not isinstance(value, str):
-        return False
-    if "<" in value or ">" in value or "/" in value:
-        return True
-    # Check for any whitespace (spaces, tabs, newlines, etc.)
-    return any(ch.isspace() for ch in value)
-
-
 def _validate_name(value, kind):
     """Validate an element/attribute name for XML safety.
 
@@ -435,6 +400,21 @@ def _validate_name(value, kind):
         raise ValueError(f'Invalid {kind} name: "=" not allowed')
     if any(ch.isspace() for ch in value):
         raise ValueError(f"Invalid {kind} name: whitespace not allowed")
+
+
+def _validate_comment(value):
+    if isinstance(value, bytes):
+        try:
+            value = value.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise ValueError("Comment text must be valid UTF-8") from exc
+    if not isinstance(value, str):
+        raise ValueError("Comment text must be a string")
+    if "--" in value:
+        raise ValueError("Comment text cannot contain '--'")
+    if value.endswith("-"):
+        raise ValueError("Comment text cannot end with '-'")
+    return value
 
 
 def _process_namespace(name, namespaces, ns_sep=':', attr_prefix='@'):
@@ -475,7 +455,7 @@ def _emit(key, value, content_handler,
             if comment_text is None:
                 continue
             comment_text = _convert_value_to_string(comment_text)
-            if comment_text == "":
+            if not comment_text:
                 continue
             if pretty:
                 content_handler.ignorableWhitespace(depth * indent)
@@ -555,6 +535,7 @@ def _emit(key, value, content_handler,
 
 class _XMLGenerator(XMLGenerator):
     def comment(self, text):
+        text = _validate_comment(text)
         self._write(f"<!--{escape(text)}-->")
 
 
@@ -569,6 +550,10 @@ def unparse(input_dict, output=None, encoding='utf-8', full_document=True,
     Dictionary keys prefixed with `attr_prefix` (default=`'@'`) are interpreted
     as XML node attributes, whereas keys equal to `cdata_key`
     (default=`'#text'`) are treated as character data.
+
+    Empty lists are omitted entirely: ``{"a": []}`` produces no ``<a>`` element.
+    Provide a placeholder entry (for example ``{"a": [""]}``) when an explicit
+    empty container element must be emitted.
 
     The `pretty` parameter (default=`False`) enables pretty-printing. In this
     mode, lines are terminated with `'\n'` and indented with `'\t'`, but this

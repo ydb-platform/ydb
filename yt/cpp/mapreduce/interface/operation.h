@@ -2950,6 +2950,10 @@ struct TListJobsOptions
     FLUENT_FIELD_OPTION(TString, OperationIncarnation);
 
     ///
+    /// @brief Return only jobs with given monitoring descriptor.
+    FLUENT_FIELD_OPTION(TString, MonitoringDescriptor);
+
+    ///
     /// @brief Search for jobs with start time >= `FromTime`.
     FLUENT_FIELD_OPTION(TInstant, FromTime);
 
@@ -3217,8 +3221,8 @@ struct TJobTraceEvent
     i64 EventIndex = 0;
 
     ///
-    /// @brief Raw evenr in json format.
-    TString Event;
+    /// @brief Raw event in json format.
+    std::string Event;
 
     ///
     /// @brief Time of the event.

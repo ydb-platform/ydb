@@ -1590,6 +1590,9 @@ TFuture<TListJobsResult> TClient::ListJobs(
     if (options.OperationIncarnation) {
         req->set_operation_incarnation(*options.OperationIncarnation);
     }
+    if (options.MonitoringDescriptor) {
+        req->set_monitoring_descriptor(*options.MonitoringDescriptor);
+    }
     if (options.FromTime) {
         req->set_from_time(NYT::ToProto(*options.FromTime));
     }
@@ -2641,12 +2644,12 @@ TFuture<TGetQueryTrackerInfoResult> TClient::GetQueryTrackerInfo(
     }));
 }
 
-TFuture<TGetDeclaredParametersInfoResult> TClient::GetDeclaredParametersInfo(
-    const TGetDeclaredParametersInfoOptions& options)
+TFuture<TGetQueryDeclaredParametersInfoResult> TClient::GetQueryDeclaredParametersInfo(
+    const TGetQueryDeclaredParametersInfoOptions& options)
 {
     auto proxy = CreateApiServiceProxy();
 
-    auto req = proxy.GetDeclaredParametersInfo();
+    auto req = proxy.GetQueryDeclaredParametersInfo();
     SetTimeoutOptions(*req, options);
 
     req->set_query_tracker_stage(options.QueryTrackerStage);
@@ -2658,8 +2661,8 @@ TFuture<TGetDeclaredParametersInfoResult> TClient::GetDeclaredParametersInfo(
     req->set_query(options.Query);
     req->set_engine(NProto::ConvertQueryEngineToProto(options.Engine));
 
-    return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspGetDeclaredParametersInfoPtr& rsp) {
-        return TGetDeclaredParametersInfoResult{
+    return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspGetQueryDeclaredParametersInfoPtr& rsp) {
+        return TGetQueryDeclaredParametersInfoResult{
             .Parameters = TYsonString(rsp->declared_parameters_info()),
         };
     }));

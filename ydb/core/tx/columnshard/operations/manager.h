@@ -170,16 +170,7 @@ public:
     }
 };
 
-class IResolveWriteIdToLockId {
-protected:
-    virtual ~IResolveWriteIdToLockId() {
-    }
-
-public:
-    virtual std::optional<ui64> ResolveWriteIdToLockId(const TInsertWriteId& writeId) const = 0;
-};
-
-class TOperationsManager: public IResolveWriteIdToLockId {
+class TOperationsManager {
     NOlap::NTxInteractions::TInteractionsContext InteractionsContext;
 
     THashMap<ui64, ui64> Tx2Lock;
@@ -188,21 +179,11 @@ class TOperationsManager: public IResolveWriteIdToLockId {
     THashMap<TOperationWriteId, TWriteOperation::TPtr> Operations;
     TOperationWriteId LastWriteId = TOperationWriteId(0);
 
-public:   //IResolveWriteIdToLockId
-    virtual std::optional<ui64> ResolveWriteIdToLockId(const TInsertWriteId& writeId) const override {
-        if (const auto operationWriteId = InsertWriteIdToOpWriteId.FindPtr(writeId)) {
-            if (const auto* operation = Operations.FindPtr(*operationWriteId)) {
-                return (*operation)->GetLockId();
-            }
-        }
-        return std::nullopt;
-    }
-
 public:
 
-    void StopWriting() {
+    void StopWriting(const TString& errorMessage) {
         for (auto&& i : Operations) {
-            i.second->StopWriting();
+            i.second->StopWriting(errorMessage);
         }
     }
 

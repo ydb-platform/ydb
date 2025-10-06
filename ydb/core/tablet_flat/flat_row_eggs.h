@@ -39,6 +39,13 @@ namespace NTable {
         Reset   = 3,    /* Reset cell or row to default */
     };
 
+    enum class ELockMode : ui8 {
+        None = 0,
+        Shared = 1,
+        Exclusive = 2,
+        Multi = 3,
+    };
+
     enum class ECellOp : ui8 { /* cell operation code */
         Empty   = 0,    /* Cell has no any valid state  */
         Set     = 1,    /* Set cell to exact value      */
@@ -74,12 +81,14 @@ namespace NTable {
     struct TSelectRowVersionResult {
         EReady Ready;
         TRowVersion RowVersion;
+        ELockMode LockMode = ELockMode::None;
+        ui64 LockTxId = 0;
 
-        TSelectRowVersionResult(EReady ready)
+        explicit TSelectRowVersionResult(EReady ready)
             : Ready(ready)
         { }
 
-        TSelectRowVersionResult(const TRowVersion& rowVersion)
+        explicit TSelectRowVersionResult(const TRowVersion& rowVersion)
             : Ready(EReady::Data)
             , RowVersion(rowVersion)
         { }

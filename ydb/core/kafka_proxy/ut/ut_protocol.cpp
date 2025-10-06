@@ -1400,28 +1400,70 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         client0.AuthenticateToKafka();
         client1.AuthenticateToKafka();
 
+        TString memberId0;
+        i32 generationId0;
         {
             std::vector<TString> topics = { topicName };
-            auto msg = client0.JoinGroup(topics, group, "roundrobin", 1000);
+            auto msg = client0.JoinGroup(topics, group, "roundrobin", 5000);
             UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+            memberId0 = *msg->MemberId;
+            generationId0 = msg->GenerationId;
         }
 
+        TString memberId1;
+        i32 generationId1;
         {
             std::vector<TString> topics = { topicName };
-            auto msg = client1.JoinGroup(topics, group, "server", 1000);
+            auto msg = client1.JoinGroup(topics, group, "server", 5000);
             UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+
+            memberId1 = *msg->MemberId;
+            generationId1 = msg->GenerationId;
         }
 
         {
             // Check FETCH
             std::vector<std::pair<TString, std::vector<i32>>> topics {{topicName, {0}}};
             auto msg = client0.Fetch(topics);
-            UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+            UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR)); // From version 7
             UNIT_ASSERT_VALUES_EQUAL(msg->Responses.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].Partitions.size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].Partitions[0].Records.has_value(), true);
-            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].Partitions[0].Records->Records.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].Partitions[0].ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::REBALANCE_IN_PROGRESS));
+            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].Partitions[0].Records.has_value(), false);
         }
+
+        {
+            // Double check FETCH
+            std::vector<std::pair<TString, std::vector<i32>>> topics {{topicName, {0}}};
+            auto msg = client0.Fetch(topics);
+            UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR)); // From version 7
+            UNIT_ASSERT_VALUES_EQUAL(msg->Responses.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].Partitions.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].Partitions[0].ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::REBALANCE_IN_PROGRESS));
+            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].Partitions[0].Records.has_value(), false);
+        }
+
+        {
+            auto msg = client0.Heartbeat(memberId0, generationId0, group);
+            UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::REBALANCE_IN_PROGRESS));
+        }
+
+        {
+            TRequestHeaderData syncHeader = client0.Header(NKafka::EApiKey::SYNC_GROUP, 5);
+
+            TSyncGroupRequestData syncReq;
+            syncReq.GroupId = group;
+            syncReq.ProtocolType = "consumer";
+            syncReq.ProtocolName = "roundrobin";
+            syncReq.GenerationId = generationId0;
+            syncReq.MemberId = memberId0;
+
+            client0.WriteToSocket(syncHeader, syncReq);
+            auto msg = client0.ReadResponse<TSyncGroupResponseData>(syncHeader);
+
+            UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::ILLEGAL_GENERATION));
+        }
+
     } // Y_UNIT_TEST(SwitchToServerBalancingScenario)
 
     void RunBalanceScenarionTest(bool forFederation) {

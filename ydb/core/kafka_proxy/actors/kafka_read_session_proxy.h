@@ -25,8 +25,8 @@ public:
     void Handle(TEvKafka::TEvLeaveGroupRequest::TPtr&);
     void Handle(TEvKafka::TEvFetchRequest::TPtr&);
 
-    template<typename TRequest>
-    void DoHandle(TRequest&);
+    template<bool handlePending, typename TRequest>
+    void DoHandle(TRequest&, const TString& event);
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr&);
     void Handle(TEvPersQueue::TEvBalancingSubscribeNotify::TPtr&);
@@ -34,6 +34,10 @@ public:
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev);
 
     STFUNC(StateWork);
+
+    TSyncGroupResponseData::TPtr CreateChangeResponse(TSyncGroupRequestData&);
+    THeartbeatResponseData::TPtr CreateChangeResponse(THeartbeatRequestData&);
+    TFetchResponseData::TPtr CreateChangeResponse(TFetchRequestData&);
 
     void EnsureReadSessionActor();
     void ProcessPendingRequestIfPossible();

@@ -129,8 +129,8 @@ index_first_sync = {
 
 index_second_sync = {
     "DyNumber": lambda i: float(f"{i}e1"),
-    "String": lambda i: f"String {i:04d}",
-    "Utf8": lambda i: f"Utf8 {i:04d}",
+    "String": lambda i: f"String {i}",
+    "Utf8": lambda i: f"Utf8 {i}",
     "UUID": lambda i: UUID("3{:03}5678-e89b-12d3-a456-556642440000".format(i)),
     "Date": generate_date_value,
     "Datetime": generate_datetime_value,
@@ -193,8 +193,8 @@ index_first = {
 
 index_second = {
     "DyNumber": lambda i: float(f"{i}e1"),
-    "String": lambda i: f"String {i:04d}",
-    "Utf8": lambda i: f"Utf8 {i:04d}",
+    "String": lambda i: f"String {i}",
+    "Utf8": lambda i: f"Utf8 {i}",
     "UUID": lambda i: UUID("3{:03}5678-e89b-12d3-a456-556642440000".format(i)),
     "Date": generate_date_value,
     "Datetime": generate_datetime_value,
@@ -227,8 +227,8 @@ pk_types = {
     "Decimal(22,9)": lambda i: "{}.123".format(i),
     "Decimal(35,10)": lambda i: "{}.123456".format(i),
     "DyNumber": lambda i: float(f"{i}e1"),
-    "String": lambda i: f"String {i:04d}",
-    "Utf8": lambda i: f"Utf8 {i:04d}",
+    "String": lambda i: f"String {i}",
+    "Utf8": lambda i: f"Utf8 {i}",
     "UUID": lambda i: UUID("3{:03}5678-e89b-12d3-a456-556642440000".format(i)),
     "Date": generate_date_value,
     "Datetime": generate_datetime_value,

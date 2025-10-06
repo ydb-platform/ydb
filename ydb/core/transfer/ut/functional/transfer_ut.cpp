@@ -992,6 +992,46 @@ Y_UNIT_TEST_SUITE(Transfer)
         CreateTransferSourceNotExists(true);
     }
 
+    void CreateTransferSourceDirNotExists(bool localTopic)
+    {
+        MainTestCase testCase;
+        testCase.CreateTable(R"(
+                CREATE TABLE `%s` (
+                    Key Uint64 NOT NULL,
+                    Message Utf8 NOT NULL,
+                    PRIMARY KEY (Key)
+                )  WITH (
+                    STORE = ROW
+                );
+            )");
+
+        auto settings = MainTestCase::CreateTransferSettings::WithLocalTopic(localTopic);
+        settings.TopicName = "dir_not_exists/topic_name";
+        testCase.CreateTransfer(R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            Key:CAST($x._offset AS Uint64),
+                            Message:CAST($x._data AS Utf8)
+                        |>
+                    ];
+                };
+            )", settings);
+
+        testCase.CheckTransferStateError("Discovery error:");
+
+        testCase.DropTransfer();
+        testCase.DropTable();
+    }
+
+    Y_UNIT_TEST(CreateTransferSourceDirNotExists) {
+        CreateTransferSourceDirNotExists(false);
+    }
+
+    Y_UNIT_TEST(CreateTransferSourceDirNotExists_LocalTopic) {
+        CreateTransferSourceDirNotExists(true);
+    }
+
     void TransferSourceDropped(bool localTopic)
     {
         MainTestCase testCase;

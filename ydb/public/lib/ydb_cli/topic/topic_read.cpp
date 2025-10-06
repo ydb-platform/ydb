@@ -108,7 +108,7 @@ namespace NYdb::NConsoleClient {
                 case ETopicMetadataField::SeqNo:
                     row.Column(idx, message.GetSeqNo());
                     break;
-                case ETopicMetadataField::Meta:
+                case ETopicMetadataField::MessageMeta:
                     {
                         NJson::TJsonValue json;
                         for (auto const& [k, v] : message.GetMessageMeta()->Fields) {

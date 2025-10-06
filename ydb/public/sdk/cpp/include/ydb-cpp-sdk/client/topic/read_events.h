@@ -130,6 +130,9 @@ struct TReadSessionEvent {
             //! Message level meta info.
             const TWriteSessionMeta::TPtr& GetSessionMeta() const;
 
+            // deprecated method. Use GetSessionMeta() instead
+            const TWriteSessionMeta::TPtr& GetMeta() const;
+
         protected:
             std::string Data;
             TMessageInformation Information;

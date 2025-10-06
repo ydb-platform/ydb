@@ -124,6 +124,10 @@ const TWriteSessionMeta::TPtr& TMessageBase::GetSessionMeta() const {
     return Information.SessionMeta;
 }
 
+const TWriteSessionMeta::TPtr& TMessageBase::GetMeta() const { // deprecated method. Use GetSessionMeta() instead
+    return Information.SessionMeta;
+}
+
 template<>
 void TPrintable<TMessageBase>::DebugString(TStringBuilder& ret, bool printData) const {
     const auto* self = static_cast<const TMessageBase*>(this);

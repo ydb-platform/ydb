@@ -42,7 +42,9 @@ struct TPyIterator {
 
 PyTypeObject PyIteratorType = {
     PyVarObject_HEAD_INIT(&PyType_Type, 0)
-        INIT_MEMBER(tp_name, "yql.TIterator"),
+    // clang-format off
+    INIT_MEMBER(tp_name, "yql.TIterator"),
+    // clang-format on
     INIT_MEMBER(tp_basicsize, sizeof(TPyIterator)),
     INIT_MEMBER(tp_itemsize, 0),
     INIT_MEMBER(tp_dealloc, TPyIterator::Dealloc),
@@ -136,7 +138,9 @@ struct TPyPairIterator {
 
 PyTypeObject PyPairIteratorType = {
     PyVarObject_HEAD_INIT(&PyType_Type, 0)
-        INIT_MEMBER(tp_name, "yql.TDictIterator"),
+    // clang-format off
+    INIT_MEMBER(tp_name, "yql.TDictIterator"),
+    // clang-format on
     INIT_MEMBER(tp_basicsize, sizeof(TPyPairIterator)),
     INIT_MEMBER(tp_itemsize, 0),
     INIT_MEMBER(tp_dealloc, TPyPairIterator::Dealloc),

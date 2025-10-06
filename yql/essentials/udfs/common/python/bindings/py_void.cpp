@@ -21,7 +21,9 @@ static void VoidDealloc(PyObject*) {
 
 PyTypeObject PyVoidType = {
     PyVarObject_HEAD_INIT(&PyType_Type, 0)
-        INIT_MEMBER(tp_name, "yql.Void"),
+    // clang-format off
+    INIT_MEMBER(tp_name, "yql.Void"),
+    // clang-format on
     INIT_MEMBER(tp_basicsize, 0),
     INIT_MEMBER(tp_itemsize, 0),
     INIT_MEMBER(tp_dealloc, VoidDealloc),

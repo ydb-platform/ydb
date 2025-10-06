@@ -54,7 +54,9 @@ struct TPyStream {
 
 PyTypeObject PyStreamType = {
     PyVarObject_HEAD_INIT(&PyType_Type, 0)
-        INIT_MEMBER(tp_name, "yql.TStream"),
+    // clang-format off
+    INIT_MEMBER(tp_name, "yql.TStream"),
+    // clang-format on
     INIT_MEMBER(tp_basicsize, sizeof(TPyStream)),
     INIT_MEMBER(tp_itemsize, 0),
     INIT_MEMBER(tp_dealloc, TPyStream::Dealloc),

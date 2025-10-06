@@ -1099,7 +1099,7 @@ namespace NKikimr {
     /**
      * A special actor, which starts a tablet follower and restarts it, if needed.
      */
-    class TFollowerLauncher : public TActor<TFollowerLauncher> {
+    class TFollowerLauncher : public TActorBootstrapped<TFollowerLauncher> {
     private:
         ui64 TabletId;
         ui32 FollowerId;
@@ -1107,10 +1107,24 @@ namespace NKikimr {
 
     public:
         TFollowerLauncher(ui64 tabletId, ui32 follewerId)
-            : TActor(&TThis::StateWork)
-            , TabletId(tabletId)
+            : TabletId(tabletId)
             , FollowerId(follewerId)
         {
+        }
+
+        void Bootstrap(const TActorContext& ctx) {
+            CreateFollower();
+
+            LOG_INFO_S(
+                ctx,
+                NKikimrServices::HIVE,
+                "[Follower launcher " << SelfId()
+                    << "] Created follower ID " << FollowerId
+                    << " for tabletId " << TabletId
+                    << ": " << FollowerActorId
+            );
+
+            Become(&TThis::StateWork);
         }
 
         STFUNC(StateWork) {
@@ -1144,7 +1158,7 @@ namespace NKikimr {
 
             // The follower has died, start a new one
             FollowerActorId = {};
-            CreateFollower(ctx);
+            CreateFollower();
 
             LOG_INFO_S(
                 ctx,
@@ -1174,32 +1188,9 @@ namespace NKikimr {
             Die(ctx);
         }
 
-        /**
-         * Registers itself, starts a new follower and begins monitoring its life cycle.
-         *
-         * @param[in] ctx The actor context
-         *
-         * @return The actor ID for itself.
-         */
-        TActorId Start(const TActorContext& ctx) {
-            ctx.Register(this);
-            CreateFollower(ctx);
-
-            LOG_INFO_S(
-                ctx,
-                NKikimrServices::HIVE,
-                "[Follower launcher " << SelfId()
-                    << "] Created follower ID " << FollowerId
-                    << " for tabletId " << TabletId
-                    << ": " << FollowerActorId
-            );
-
-            return SelfId();
-        }
-
     private:
-        void CreateFollower(const TActorContext& ctx) {
-            FollowerActorId = ctx.Register(
+        void CreateFollower() {
+            FollowerActorId = Register(
                 CreateTabletFollower(
                     SelfId(),
                     CreateTestTabletInfo(
@@ -1389,9 +1380,10 @@ namespace NKikimr {
 
                             for (ui32 i = 0; i < followerCount; ++i) {
                                 const ui32 followerId = i + 1;
-                                const auto launcher = new TFollowerLauncher(tabletId, followerId);
 
-                                it->second.FollowerLaunchers[followerId] = launcher->Start(ctx);
+                                it->second.FollowerLaunchers[followerId] = ctx.Register(
+                                    new TFollowerLauncher(tabletId, followerId)
+                                );
                             }
                         }
                     }

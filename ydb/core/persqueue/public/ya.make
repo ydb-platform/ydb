@@ -19,6 +19,7 @@ RECURSE(
     cluster_tracker
     codecs
     counters
+    describer
     fetcher
     list_topics
     partition_index_generator

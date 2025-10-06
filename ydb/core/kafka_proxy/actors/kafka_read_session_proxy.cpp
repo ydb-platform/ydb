@@ -3,7 +3,6 @@
 #include "kafka_balancer_actor.h"
 
 #include <ydb/core/persqueue/events/global.h>
-#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
 namespace NKafka {
 
@@ -89,92 +88,47 @@ void KafkaReadSessionProxyActor::Handle(TEvKafka::TEvFetchRequest::TPtr& ev) {
     Y_VERIFY(!PendingRequest.has_value());
     PendingRequest = ev;
 
+    std::vector<TString> newTopics;
     for (auto& topic : GetTopics(*PendingRequest.value()->Get()->Request, Context)) {
         if (Topics.contains(topic)) {
             continue;
         }
 
-        NewTopics.push_back(topic);
+        newTopics.push_back(topic);
     }
 
-    if (NewTopics.empty()) {
+    if (newTopics.empty()) {
         return ProcessPendingRequestIfPossible();
     }
 
-    KAFKA_LOG_D("Describe topics: " << JoinRange(", ", NewTopics.begin(), NewTopics.end()));
-
-    auto schemeRequest = std::make_unique<TSchemeCacheNavigate>(1);
-    schemeRequest->DatabaseName = Context->DatabasePath;
-
-    auto addEntry = [&](const TString& topic) {
-        auto split = NKikimr::SplitPath(topic);
-
-        schemeRequest->ResultSet.emplace_back();
-        auto& entry = schemeRequest->ResultSet.back();
-        entry.Path.insert(entry.Path.end(), split.begin(), split.end());
-        entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpList;
-        entry.SyncVersion = true;
-        entry.ShowPrivatePath = true;
-    };
-
-    for (const auto& topic : NewTopics) {
-        addEntry(topic);
-        addEntry(TStringBuilder() << topic << "/streamImpl");
-    }
-
-    Send(NKikimr::MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(schemeRequest.release()));
+    KAFKA_LOG_D("Describe topics: " << JoinRange(", ", newTopics.begin(), newTopics.end()));
+    RegisterWithSameMailbox(NPQ::NDescriber::CreateDescriberActor(SelfId(), Context->DatabasePath, std::move(newTopics)));
 }
 
-void KafkaReadSessionProxyActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-    KAFKA_LOG_D("Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult");
-    auto& result = ev->Get()->Request;
+void KafkaReadSessionProxyActor::Handle(NPQ::NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
+    KAFKA_LOG_D("Handle NPQ::NDescriber::TEvDescribeTopicsResponse");
 
-    for (size_t i = 0; i < result->ResultSet.size(); ++i) {
-        const auto& entry = result->ResultSet[i];
-        const auto& topic = NewTopics[i / 2];
+    for (auto& result : ev->Get()->Topics) {
+        switch(result.Status) {
+            case NPQ::NDescriber::TEvDescribeTopicsResponse::EStatus::SUCCESS: {
+                ui64 readBalancerTabletId = result.Info->Description.GetBalancerTabletID();
+                ui64 cookie = 1;
+                Topics[result.OriginalPath] = {
+                    .ReadBalancerTabletId = readBalancerTabletId,
+                    .SubscribeCookie = cookie
+                };
 
-        auto path = CanonizePath(NKikimr::JoinPath(entry.Path));
-        switch (entry.Status) {
-            case TSchemeCacheNavigate::EStatus::PathErrorUnknown:
-            case TSchemeCacheNavigate::EStatus::RootUnknown:
-                if (i % 2 != 1) {
-                    // TODO ERROR
-                    continue;
-                }
-                continue;
-            case TSchemeCacheNavigate::EStatus::Ok:
+                Subscribe(result.OriginalPath, readBalancerTabletId, cookie);
+
                 break;
-            default:
-                // TODO ERROR
-                continue;
-        }
-        if (entry.Kind == NSchemeCache::TSchemeCacheNavigate::KindCdcStream) {
-            if (i % 2 != 0) {
-                // TODO ERROR
             }
-            continue;
+            case NPQ::NDescriber::TEvDescribeTopicsResponse::EStatus::NOT_FOUND:
+            case NPQ::NDescriber::TEvDescribeTopicsResponse::EStatus::NOT_TOPIC:
+            case NPQ::NDescriber::TEvDescribeTopicsResponse::EStatus::UNKNOWN_ERROR:
+                // TODO
+                break;
         }
-        if (entry.Kind != TSchemeCacheNavigate::EKind::KindTopic) {
-            // TODO ERROR
-        }
-        if (!entry.PQGroupInfo) {
-            // TODO ERROR
-        }
-        if (!entry.PQGroupInfo->Description.HasBalancerTabletID() || entry.PQGroupInfo->Description.GetBalancerTabletID() == 0) {
-            // TODO ERROR
-        }
-
-        ui64 readBalancerTabletId = entry.PQGroupInfo->Description.GetBalancerTabletID();
-        ui64 cookie = 1;
-        Topics[topic] = {
-            .ReadBalancerTabletId = readBalancerTabletId,
-            .SubscribeCookie = cookie
-        };
-
-        Subscribe(topic, readBalancerTabletId, cookie);
     }
-
-    NewTopics.clear();
 }
 
 void KafkaReadSessionProxyActor::Handle(TEvPersQueue::TEvBalancingSubscribeNotify::TPtr& ev) {
@@ -314,9 +268,10 @@ STFUNC(KafkaReadSessionProxyActor::StateWork) {
         hFunc(TEvKafka::TEvHeartbeatRequest, Handle);
         hFunc(TEvKafka::TEvLeaveGroupRequest, Handle);
         hFunc(TEvKafka::TEvFetchRequest, Handle);
-        hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
+        hFunc(NPQ::NDescriber::TEvDescribeTopicsResponse, Handle);
         hFunc(TEvPersQueue::TEvBalancingSubscribeNotify, Handle);
         hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
+        sFunc(TEvents::TEvPoison, PassAway);
     }
 }
 

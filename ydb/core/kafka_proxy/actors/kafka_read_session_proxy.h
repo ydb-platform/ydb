@@ -6,6 +6,7 @@
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/kafka_proxy/kafka_events.h>
 #include <ydb/core/persqueue/events/internal.h>
+#include <ydb/core/persqueue/public/describer/describer.h>
 
 namespace NKafka {
 
@@ -28,7 +29,7 @@ public:
     template<bool handlePending, typename TRequest>
     void DoHandle(TRequest&, const TString& event);
 
-    void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr&);
+    void Handle(NPQ::NDescriber::TEvDescribeTopicsResponse::TPtr&);
     void Handle(TEvPersQueue::TEvBalancingSubscribeNotify::TPtr&);
 
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev);
@@ -63,7 +64,6 @@ private:
         ui64 SubscribeCookie = 1;
     };
     std::unordered_map<TString, TTopicInfo> Topics;
-    std::vector<TString> NewTopics;
 
     std::optional<TEvKafka::TEvFetchRequest::TPtr> PendingRequest;
 };

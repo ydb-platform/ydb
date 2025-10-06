@@ -188,7 +188,6 @@ public:
                 bool found = false;
                 Table_.Lookup(Values_.data(), [this, &found](NJoinTable::TTuple matched) {
                     if (IsInner(JoinKind_)) { 
-                        // MKQL_ENSURE(JoinKind_ != NKikimrWhiteboard::TEvTabletStateReques, message)
                         AppendTuple(Values_.data(),matched,Output_);
                     } 
                     found = true;

@@ -355,9 +355,16 @@ Y_UNIT_TEST_SUITE(BlobScrubbing) {
 
             // terminate peer disks
             for (ui32 i = 1; i < info->GetTotalVDisksNum(); ++i) {
-                const TActorId& actorId = info->GetActorId(i);
-                Cerr << "*** terminating peer disk# " << actorId.ToString() << Endl;
-                runtime->Send(new IEventHandle(TEvents::TSystem::Poison, 0, actorId, {}, nullptr, 0), actorId.NodeId());
+                const TActorId& peerActorId = info->GetActorId(i);
+                const TVDiskID& peerVDiskId = info->GetVDiskId(i);
+                const auto& [peerNodeId, peerPDiskId, _] = DecomposeVDiskServiceId(peerActorId);
+                const TActorId wardenId = MakeBlobStorageNodeWardenID(peerNodeId);
+                Cerr << "*** terminating peer disk# " << peerActorId.ToString() << Endl;
+                const TActorId edge = runtime->AllocateEdgeActor(peerNodeId);
+                env.Runtime->WrapInActorContext(edge, [&]{
+                    TActivationContext::Send(wardenId, std::unique_ptr<IEventBase>(
+                            new TEvBlobStorage::TEvAskRestartVDisk(peerPDiskId, peerVDiskId)));
+                });
             }
 
             Cerr << "*** blobIdsToValidate.size# " << blobIdsToValidate.size() << Endl;

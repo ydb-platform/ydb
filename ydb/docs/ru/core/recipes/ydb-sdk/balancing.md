@@ -12,3 +12,4 @@
 - [Равномерный случайный выбор](balancing-random-choice.md)
 - [Предпочитать ближайший дата-центр](balancing-prefer-local.md)
 - [Предпочитать конкретную зону доступности](balancing-prefer-location.md)
+- [Предпочитать пайл c конкретным состоянием](balancing-prefer-pile.md)

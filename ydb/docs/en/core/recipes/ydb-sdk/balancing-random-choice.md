@@ -1,6 +1,6 @@
 # Random choice
 
-The {{ ydb-short-name }} SDK uses the `random_choice` algorithm by default.
+The {{ ydb-short-name }} SDK uses the `random_choice` algorithm by default, except for the C++ SDK, which uses the ["prefer the nearest data center"](./balancing-prefer-local.md) algorithm by default.
 
 Below are examples of the code for forced setting of the "random choice" balancing algorithm in different {{ ydb-short-name }} SDKs.
 
@@ -32,7 +32,7 @@ Below are examples of the code for forced setting of the "random choice" balanci
        panic(err)
      }
      defer db.Close(ctx)
-     ...
+     // ...
    }
    ```
 
@@ -75,8 +75,26 @@ Below are examples of the code for forced setting of the "random choice" balanci
 
      db := sql.OpenDB(connector)
      defer db.Close()
-     ...
+     // ...
    }
    ```
+
+- C++
+
+  ```cpp
+  #include <ydb-cpp-sdk/client/driver/driver.h>
+
+  int main() {
+    auto connectionString = std::string(std::getenv("YDB_CONNECTION_STRING"));
+
+    auto driverConfig = NYdb::TDriverConfig(connectionString)
+      .SetBalancingPolicy(NYdb::TBalancingPolicy::UseAllNodes());
+
+    NYdb::TDriver driver(driverConfig);
+    // ...
+    driver.Stop(true);
+    return 0;
+  }
+  ```
 
 {% endlist %}

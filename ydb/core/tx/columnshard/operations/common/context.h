@@ -5,6 +5,35 @@
 #include <ydb/core/tx/columnshard/engines/scheme/versions/abstract_scheme.h>
 
 namespace NKikimr::NOlap {
+    
+class TActivityChecker {
+private:
+    TAtomicCounter ActiveFlag;
+    TString ErrorMessage;
+    TMutex Mutex;
+    
+public:
+    TActivityChecker()
+        : ActiveFlag(1)
+    {}
+    
+    void StopWriting(const TString& errorMessage) {
+        {
+            TGuard<TMutex> guard(Mutex);
+            ErrorMessage = errorMessage;
+        }
+        ActiveFlag = 0;
+    }
+    
+    const TString GetErrorMessage() const {
+        TGuard<TMutex> guard(Mutex);
+        return ErrorMessage;
+    }
+
+    bool IsActive() const {
+        return ActiveFlag.Val();
+    }
+};
 
 class TWritingContext {
 private:
@@ -17,7 +46,7 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<NColumnShard::TWriteCounters>, WritingCounters);
     YDB_READONLY(TSnapshot, ApplyToSnapshot, TSnapshot::Zero());
     YDB_READONLY_DEF(std::optional<ui64>, LockId);
-    const std::shared_ptr<const TAtomicCounter> ActivityChecker;
+    const std::shared_ptr<TActivityChecker> ActivityChecker;
     YDB_READONLY(bool, NoTxWrite, false);
     YDB_READONLY(bool, IsBulk, false);
 
@@ -32,13 +61,17 @@ public:
     }
 
     bool IsActive() const {
-        return ActivityChecker->Val();
+        return ActivityChecker->IsActive();
+    }
+    
+    TString GetErrorMessage() const {
+        return ActivityChecker->GetErrorMessage();
     }
 
     TWritingContext(const ui64 tabletId, const NActors::TActorId& tabletActorId, const std::shared_ptr<ISnapshotSchema>& actualSchema,
         const std::shared_ptr<IStoragesManager>& operators, const std::shared_ptr<NColumnShard::TSplitterCounters>& splitterCounters,
         const std::shared_ptr<NColumnShard::TWriteCounters>& writingCounters, const TSnapshot& applyToSnapshot, const std::optional<ui64>& lockId,
-        const std::shared_ptr<const TAtomicCounter>& activityChecker, const bool noTxWrite, const NActors::TActorId& bufferizationPortionsActorId,
+        const std::shared_ptr<TActivityChecker>& activityChecker, const bool noTxWrite, const NActors::TActorId& bufferizationPortionsActorId,
         const bool isBulk)
         : TabletId(tabletId)
         , BufferizationPortionsActorId(bufferizationPortionsActorId)

@@ -2,10 +2,29 @@
 
 namespace NKikimr::NMiniKQL::NJoinTable {
 bool NeedToTrackUnusedRightTuples(EJoinKind kind) {
-    return (static_cast<int>(kind)&4) == 4;
+    switch (kind) {
+        using enum NKikimr::NMiniKQL::EJoinKind;
+        case Exclusion:
+        case Full:
+        case Right:
+        case RightOnly:
+        case RightSemi:
+        return true;
+        default:
+        return false;
+    }
 }
 bool NeedToTrackUnusedLeftTuples(EJoinKind kind) {
-    return static_cast<int>(kind)&1 == 1;
+    switch (kind) {
+        using enum NKikimr::NMiniKQL::EJoinKind;
+        case Exclusion:
+        case Full:
+        case Left:
+        case LeftOnly:
+        return true;
+        default:
+        return false;
+    }
 }
 
 }

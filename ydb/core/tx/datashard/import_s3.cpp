@@ -814,16 +814,13 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
         IMPORT_LOG_D("Handle " << ev->Get()->ToString());
 
         const auto& record = ev->Get()->Record;
-        switch (record.GetStatus()) {
-        case NKikimrTxDataShard::TError::OK:
+
+        if (record.GetStatus() == NKikimrTxDataShard::TError::OK) {
             return ProcessDownloadInfo(ev->Get()->Info, TStringBuf("UploadResponse"));
-
-        case NKikimrTxDataShard::TError::SCHEME_ERROR:
-        case NKikimrTxDataShard::TError::BAD_ARGUMENT:
-            return Finish(false, record.GetErrorDescription());
-
-        default:
+        } else if (ev->Get()->IsRetriableError()) {
             return RetryOrFinish(record.GetErrorDescription());
+        } else {
+            return Finish(false, record.GetErrorDescription());
         }
     }
 

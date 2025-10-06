@@ -21,14 +21,16 @@ TConclusionStatus TScanHead::Start() {
 
 TScanHead::TScanHead(std::unique_ptr<NCommon::ISourcesConstructor>&& sourcesConstructor, const std::shared_ptr<TSpecialReadContext>& context)
     : Context(context) {
+    auto ctxMeta = Context->GetReadMetadata();
+
     if (auto script = Context->GetSourcesAggregationScript()) {
         SourcesCollection =
-            std::make_shared<TNotSortedCollection>(Context, std::move(sourcesConstructor), Context->GetReadMetadata()->GetLimitRobustOptional());
+            std::make_shared<TNotSortedCollection>(Context, std::move(sourcesConstructor), ctxMeta->GetLimitRobustOptional());
         SyncPoints.emplace_back(std::make_shared<TSyncPointResult>(SyncPoints.size(), context, SourcesCollection));
         SyncPoints.emplace_back(std::make_shared<TSyncPointResultsAggregationControl>(
             SourcesCollection, Context->GetSourcesAggregationScript(), Context->GetRestoreResultScript(), SyncPoints.size(), context));
-    } else if (Context->GetReadMetadata()->IsSorted()) {
-        if (Context->GetReadMetadata()->HasLimit()) {
+    } else if (ctxMeta->IsSorted() && !ctxMeta->GetFakeSort()) {
+        if (ctxMeta->HasLimit()) {
             auto collection = std::make_shared<TScanWithLimitCollection>(Context, std::move(sourcesConstructor));
             SourcesCollection = collection;
             SyncPoints.emplace_back(std::make_shared<TSyncPointLimitControl>(
@@ -39,7 +41,7 @@ TScanHead::TScanHead(std::unique_ptr<NCommon::ISourcesConstructor>&& sourcesCons
         SyncPoints.emplace_back(std::make_shared<TSyncPointResult>(SyncPoints.size(), context, SourcesCollection));
     } else {
         SourcesCollection =
-            std::make_shared<TNotSortedCollection>(Context, std::move(sourcesConstructor), Context->GetReadMetadata()->GetLimitRobustOptional());
+            std::make_shared<TNotSortedCollection>(Context, std::move(sourcesConstructor), ctxMeta->GetLimitRobustOptional());
         SyncPoints.emplace_back(std::make_shared<TSyncPointResult>(SyncPoints.size(), context, SourcesCollection));
     }
     for (ui32 i = 0; i + 1 < SyncPoints.size(); ++i) {

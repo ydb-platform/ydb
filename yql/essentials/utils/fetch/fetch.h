@@ -24,4 +24,4 @@ IRetryPolicy<unsigned>::TPtr GetDefaultPolicy();
 ERetryErrorClass DefaultClassifyHttpCode(unsigned code);
 TFetchResultPtr Fetch(const THttpURL& url, const THttpHeaders& additionalHeaders = {}, const TDuration& timeout = TDuration::Max(), size_t redirects = 10, const IRetryPolicy<unsigned>::TPtr& policy = nullptr);
 
-} // NYql
+} // namespace NYql

@@ -5,4 +5,4 @@
 
 namespace NYql {
 std::unique_ptr<IAllocator> MakeLimitingAllocator(size_t limit, IAllocator* underlying);
-}
+} // namespace NYql

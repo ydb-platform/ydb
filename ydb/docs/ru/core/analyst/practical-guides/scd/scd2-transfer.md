@@ -19,6 +19,7 @@ CREATE TABLE source_customers (
     id Utf8 NOT NULL,
     attribute1 Utf8,
     attribute2 Utf8,
+    change_time Timestamp,
     PRIMARY KEY (id)
 );
 

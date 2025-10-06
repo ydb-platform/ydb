@@ -71,6 +71,25 @@ bool TOperationsManager::Load(NTabletFlatExecutor::TTransactionContext& txc) {
     return true;
 }
 
+void TOperationsManager::BreakConflictingTxs(const TLockFeatures& lock) {
+    for (auto&& i : lock.GetBrokeOnCommit()) {
+        if (auto lockNotify = GetLockOptional(i)) {
+            AFL_WARN(NKikimrServices::TX_COLUMNSHARD_TX)("broken_lock_id", i);
+            lockNotify->SetBroken();
+        }
+    }
+    for (auto&& i : lock.GetNotifyOnCommit()) {
+        if (auto lockNotify = GetLockOptional(i)) {
+            lockNotify->AddNotifyCommit(lock.GetLockId());
+        }
+    }
+}
+
+void TOperationsManager::BreakConflictingTxs(const ui64 txId) {
+    auto& lock = GetLockFeaturesForTxVerified(txId);
+    BreakConflictingTxs(lock);
+}
+
 void TOperationsManager::CommitTransactionOnExecute(
     TColumnShard& owner, const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc, const NOlap::TSnapshot& snapshot) {
     auto& lock = GetLockFeaturesForTxVerified(txId);
@@ -81,6 +100,9 @@ void TOperationsManager::CommitTransactionOnExecute(
         opPtr->CommitOnExecute(owner, txc, snapshot);
         commited.emplace_back(opPtr);
     }
+
+    BreakConflictingTxs(lock);
+
     OnTransactionFinishOnExecute(commited, lock, txId, txc);
 }
 
@@ -89,18 +111,6 @@ void TOperationsManager::CommitTransactionOnComplete(
     auto& lock = GetLockFeaturesForTxVerified(txId);
     TLogContextGuard gLogging(
         NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_TX)("commit_tx_id", txId)("commit_lock_id", lock.GetLockId()));
-    for (auto&& i : lock.GetBrokeOnCommit()) {
-        if (auto lockNotify = GetLockOptional(i)) {
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD_TX)("broken_lock_id", i);
-            lockNotify->SetBroken();
-        }
-    }
-
-    for (auto&& i : lock.GetNotifyOnCommit()) {
-        if (auto lockNotify = GetLockOptional(i)) {
-            lockNotify->AddNotifyCommit(lock.GetLockId());
-        }
-    }
 
     TVector<TWriteOperation::TPtr> commited;
     for (auto&& opPtr : lock.GetWriteOperations()) {
@@ -287,10 +297,12 @@ void TOperationsManager::AddEventForLock(
     NOlap::NTxInteractions::TTxConflicts txConflicts;
     auto& txLock = GetLockVerified(lockId);
     writer->CheckInteraction(lockId, InteractionsContext, txConflicts, txNotifications);
-    for (auto&& i : txConflicts) {
-        if (auto lock = GetLockOptional(i.first)) {
-            GetLockVerified(i.first).AddBrokeOnCommit(i.second);
-        } else if (txLock.IsCommitted(i.first)) {
+    for (auto& [commitLockId, breakLockIds] : txConflicts) {
+        if (GetLockOptional(commitLockId)) {
+            GetLockVerified(commitLockId).AddBrokeOnCommit(breakLockIds);
+        // if txId not found, it means the conflicting tx is already committed or aborted
+        } else if (txLock.IsCommitted(commitLockId)) {
+            // if the conflicting tx is already committed, we cannot commit the given tx, so break its lock
             txLock.SetBroken();
         }
     }

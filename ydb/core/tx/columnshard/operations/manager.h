@@ -185,6 +185,9 @@ public:
     void AbortTransactionOnExecute(TColumnShard& owner, const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc);
     void AbortTransactionOnComplete(TColumnShard& owner, const ui64 txId);
 
+    void BreakConflictingTxs(const TLockFeatures& lock);
+    void BreakConflictingTxs(const ui64 txId);
+
     std::optional<ui64> GetLockForTx(const ui64 txId) const;
     std::optional<ui64> GetLockForTxOptional(const ui64 txId) const {
         return GetLockForTx(txId);

@@ -1012,7 +1012,7 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
             }
         }
 
-        for (auto&& userInfoPair : UsersInfoStorage->ViewAll()) {
+        for (auto& userInfoPair : UsersInfoStorage->GetAll()) {
             auto& userInfo = userInfoPair.second;
             if (!userInfo.LabeledCounters)
                 continue;

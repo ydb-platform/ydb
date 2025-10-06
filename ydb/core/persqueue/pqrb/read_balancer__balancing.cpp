@@ -1681,8 +1681,8 @@ void TBalancer::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev, const TAc
             consumer->UnregisterReadingSession(session.get(), ctx);
 
             if (consumer->Sessions.empty()) {
-                Consumers.erase(consumer->ConsumerName);
                 Notify(consumer->ConsumerName, NKikimrPQ::TEvBalancingSubscribeNotify::FREE, ctx);
+                Consumers.erase(consumer->ConsumerName);
             } else {
                 consumer->ScheduleBalance(ctx);
             }

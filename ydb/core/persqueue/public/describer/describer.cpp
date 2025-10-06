@@ -69,7 +69,7 @@ public:
                 case TSchemeCacheNavigate::EStatus::RootUnknown: {
                     if (cdcVariant && Result[topicIndex].Status == TEvDescribeTopicsResponse::EStatus::SUCCESS) {
                         LOG_D("Path '" << path << "' skip internal path");
-                        continue;
+                        break;
                     }
                     if (RetryWithSyncVersion) {
                         LOG_D("Path '" << path << "' not found");
@@ -77,7 +77,7 @@ public:
                             .Status = TEvDescribeTopicsResponse::EStatus::NOT_FOUND,
                             .OriginalPath = topic
                         };
-                        continue;
+                        break;
                     } else {
                         RetryWithSyncVersion = true;
                         return DoRequest(TopicPaths);
@@ -87,7 +87,7 @@ public:
                     if (entry.Kind == NSchemeCache::TSchemeCacheNavigate::KindCdcStream) {
                         if (topicVariant) {
                             LOG_D("Path '" << path << "' skip CDC");
-                            continue;
+                            break;
                         }
                         LOG_D("Path '" << path << "' not topic: " << entry.Kind);
                         Result[topicIndex] = TEvDescribeTopicsResponse::TTopicInfo{
@@ -109,6 +109,7 @@ public:
                             .OriginalPath = topic
                         };
                     }
+                    break;
                 }
                 default: {
                     LOG_D("Path '" << path << "' unknow error");
@@ -116,7 +117,7 @@ public:
                         .Status = TEvDescribeTopicsResponse::EStatus::UNKNOWN_ERROR,
                         .OriginalPath = topic
                     };
-                    continue;
+                    break;
                 }
             }
         }

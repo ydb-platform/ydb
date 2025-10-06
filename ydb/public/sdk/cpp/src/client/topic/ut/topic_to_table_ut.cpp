@@ -3360,6 +3360,10 @@ Y_UNIT_TEST_F(Write_And_Read_Gigant_Messages_2, TFixtureNoClient)
 
 Y_UNIT_TEST_F(Write_50k_100times_50tx, TFixtureTable)
 {
+    // 100 transactions. Write 100 50KB messages in each folder. Call the commit at the same time.
+    // As a result, there will be a lot of small blobs in the FastWrite zone of the main batch,
+    // which will be picked up by a compact. The scenario is similar to the work of Ya.Metrika.
+
     const std::size_t PARTITIONS_COUNT = 2;
     const std::size_t TXS_COUNT = 50;
 

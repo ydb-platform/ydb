@@ -4847,5 +4847,64 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         }
     }
+
+    Y_UNIT_TEST(JsonValueWithSkipIndexesAndNoSubcolumns) {
+        auto settings = TKikimrSettings();
+        settings.AppConfig.MutableColumnShardConfig()->SetAlterObjectEnabled(true);
+        TKikimrRunner kikimr(settings);
+        auto client = kikimr.GetTableClient();
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+
+        {
+            auto result = kikimr.GetQueryClient()
+                                .ExecuteQuery(R"(
+                CREATE TABLE `/Root/olapTable` (
+                    id Uint64 NOT NULL,
+                    json_payload JsonDocument,
+                    PRIMARY KEY (id)
+                )
+                WITH (
+                    STORE = COLUMN,
+                    PARTITION_COUNT = 1
+                );
+
+                ALTER OBJECT `/Root/olapTable`
+                (TYPE TABLE)
+                SET (ACTION=UPSERT_INDEX, NAME=json_payload_category_bloom_index, TYPE=CATEGORY_BLOOM_FILTER,
+                    FEATURES=`{"column_name" : "json_payload", "false_positive_probability" : 0.05,
+                                "data_extractor" : {"class_name" : "DEFAULT"}, "bits_storage_type": "BITSET"}`);
+
+                )", NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToOneLineString());
+        }
+
+        auto query = Q1_(R"(
+            DECLARE $id as Uint64;
+            INSERT INTO `/Root/olapTable` (id, json_payload)
+            VALUES ($id, JsonDocument(@@{"some.val.with.dots": "value", "other": "value2"}@@));
+        )");
+
+        for (ui64 i = 0; i < 100; ++i) {
+            auto param = client.GetParamsBuilder().AddParam("$id").Uint64(i).Build().Build();
+
+            auto result = kikimr.GetQueryClient().ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), param).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToOneLineString());
+        }
+
+        std::this_thread::sleep_for(std::chrono::seconds(60));
+
+        {
+            auto status = kikimr.GetQueryClient()
+                              .ExecuteQuery(R"(
+                SELECT COUNT(*) FROM `/Root/olapTable` WHERE JSON_VALUE(json_payload, "$.\"some.val.with.dots\"") = "value";
+                )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToOneLineString());
+
+            TString result = FormatResultSetYson(status.GetResultSet(0));
+
+            CompareYson(result, R"([[100u]])");
+
+        }
+    }
 }
 }

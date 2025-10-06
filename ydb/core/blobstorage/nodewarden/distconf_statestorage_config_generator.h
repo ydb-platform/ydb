@@ -14,7 +14,8 @@ namespace NKikimr::NStorage {
             std::unordered_set<ui32>& usedNodes,
             const NKikimrConfig::TDomainsConfig::TStateStorage& oldConfig,
             ui32 overrideReplicasInRingCount,
-            ui32 overrideRingsCount
+            ui32 overrideRingsCount,
+            ui32 replicasSpecificVolume
         );
         bool IsGoodConfig() const;
         void AddRingGroup(NKikimrConfig::TDomainsConfig::TStateStorage *ss);
@@ -46,5 +47,6 @@ namespace NKikimr::NStorage {
         ui32 NToSelect = 1;
         ui32 OverrideReplicasInRingCount = 0;
         ui32 OverrideRingsCount = 0;
+        ui32 ReplicasSpecificVolume = 200;
     };
 }

@@ -21,6 +21,8 @@ public:
     ui64 GetChannelBufferSize() const override;
     TActorId RegisterActor(IActor* actor) const override;
 
+    void PassAway() override;
+
 private:
     void Handle(TEvYdbProxy::TEvAlterTopicRequest::TPtr& ev);
     void Handle(TEvYdbProxy::TEvCommitOffsetRequest::TPtr& ev);
@@ -31,10 +33,15 @@ private:
 
     STATEFN(StateWork);
 
-
 private:
     const TString Database;
     TString LogPrefix;
+
+    struct TLocker {
+        bool Active = true;
+        TSpinLock Lock;
+    };
+    std::shared_ptr<TLocker> Locker;
 };
 
 }

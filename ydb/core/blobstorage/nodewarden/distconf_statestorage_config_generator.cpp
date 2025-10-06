@@ -9,6 +9,7 @@
 #include <library/cpp/streams/zstd/zstd.h>
 
 namespace NKikimr::NStorage {
+    constexpr ui32 defaultReplicasSpecificVolume = 200;
 
     TStateStoragePerPileGenerator::TStateStoragePerPileGenerator(THashMap<TString, std::vector<std::tuple<ui32, TNodeLocation>>>& nodes
         , const std::unordered_map<ui32, ui32>& selfHealNodesState
@@ -17,6 +18,7 @@ namespace NKikimr::NStorage {
         , const NKikimrConfig::TDomainsConfig::TStateStorage& oldConfig
         , ui32 overrideReplicasInRingCount
         , ui32 overrideRingsCount
+        , ui32 replicasSpecificVolume
     )
         : PileId(pileId)
         , SelfHealNodesState(selfHealNodesState)
@@ -24,6 +26,7 @@ namespace NKikimr::NStorage {
         , OldConfig(oldConfig)
         , OverrideReplicasInRingCount(overrideReplicasInRingCount)
         , OverrideRingsCount(overrideRingsCount)
+        , ReplicasSpecificVolume(replicasSpecificVolume == 0 ? defaultReplicasSpecificVolume : replicasSpecificVolume)
     {
         FillNodeGroups(nodes);
         CalculateRingsParameters();
@@ -67,7 +70,7 @@ namespace NKikimr::NStorage {
                 RingsInGroupCount = minNodesInGroup;
             }
             NToSelect = RingsInGroupCount < 3 ? 1 : (RingsInGroupCount < 5 ? 3 : 5);
-            ReplicasInRingCount = OverrideReplicasInRingCount > 0 ? OverrideReplicasInRingCount : (1 + minNodesInGroup / 1000);
+            ReplicasInRingCount = OverrideReplicasInRingCount > 0 ? OverrideReplicasInRingCount : (1 + minNodesInGroup / ReplicasSpecificVolume);
         } else {
             if (OverrideRingsCount == 3 || OverrideRingsCount == 9) {
                 RingsInGroupCount = OverrideRingsCount / 3;
@@ -79,7 +82,7 @@ namespace NKikimr::NStorage {
             for (auto& n : NodeGroups) {
                 nodesCnt += n.Nodes.size();
             }
-            ReplicasInRingCount = OverrideReplicasInRingCount > 0 ? OverrideReplicasInRingCount : (1 + nodesCnt / 1000);
+            ReplicasInRingCount = OverrideReplicasInRingCount > 0 ? OverrideReplicasInRingCount : (1 + nodesCnt / ReplicasSpecificVolume);
         }
         if (ReplicasInRingCount * RingsInGroupCount > minNodesInGroup) {
             ReplicasInRingCount = 1;

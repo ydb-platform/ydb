@@ -7,7 +7,8 @@ namespace NKikimr::NPQ::NEvents {
 
 enum class EServices {
     GLOBAL = 0,
-    DESCRIBER_SERVICE
+    DESCRIBER_SERVICE,
+    END
 };
 
 constexpr unsigned int InternalEventSpaceBegin(EServices service) {
@@ -15,5 +16,6 @@ constexpr unsigned int InternalEventSpaceBegin(EServices service) {
 }
 
 static_assert(EventSpaceBegin(TKikimrEvents::ES_PQ) == InternalEventSpaceBegin(EServices::GLOBAL));
+static_assert(InternalEventSpaceBegin(EServices::END) <= EventSpaceEnd(TKikimrEvents::ES_PQ));
 
 }

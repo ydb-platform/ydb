@@ -1379,6 +1379,51 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         }
     } // Y_UNIT_TEST(FetchEmptyTopicScenario)
 
+    Y_UNIT_TEST(SwitchToServerBalancingScenario) {
+        TInsecureTestServer testServer("SwitchToServerBalancingScenario");
+
+        TString topicName = "/Root/topic-0-test";
+        TString shortTopicName = "topic-0-test";
+        TString group = "group-0-test";
+
+        TString key = "";
+        TString value = "value";
+
+        ui64 minActivePartitions = 10;
+
+        NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
+        CreateTopic(pqClient, topicName, minActivePartitions, { group });
+
+        TKafkaTestClient client0(testServer.Port);
+        TKafkaTestClient client1(testServer.Port);
+
+        client0.AuthenticateToKafka();
+        client1.AuthenticateToKafka();
+
+        {
+            std::vector<TString> topics = { topicName };
+            auto msg = client0.JoinGroup(topics, group, "roundrobin", 1000);
+            UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+        }
+
+        {
+            std::vector<TString> topics = { topicName };
+            auto msg = client1.JoinGroup(topics, group, "server", 1000);
+            UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+        }
+
+        {
+            // Check FETCH
+            std::vector<std::pair<TString, std::vector<i32>>> topics {{topicName, {0}}};
+            auto msg = client0.Fetch(topics);
+            UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+            UNIT_ASSERT_VALUES_EQUAL(msg->Responses.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].Partitions.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].Partitions[0].Records.has_value(), true);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].Partitions[0].Records->Records.size(), 1);
+        }
+    } // Y_UNIT_TEST(SwitchToServerBalancingScenario)
+
     void RunBalanceScenarionTest(bool forFederation) {
         TString protocolName = "roundrobin";
         TInsecureTestServer testServer("2", false, false);

@@ -57,7 +57,7 @@ class TestBasicReading(SolomonReadingTestBase):
                 program = @@{cluster="basic_reading", service="my_service", test_type="basic_reading_test"}@@,
 
                 from = "1970-01-01T00:00:00Z",
-                to = "1970-01-01T00:01:01Z"
+                to = "1970-01-01T00:01:00Z"
             )
         """
         succes, error = self.check_query_result(*self.execute_query(query), False)
@@ -74,7 +74,7 @@ class TestBasicReading(SolomonReadingTestBase):
                 `downsampling.grid_interval` = "15",
 
                 from = "1970-01-01T00:00:00Z",
-                to = "1970-01-01T00:01:01Z"
+                to = "1970-01-01T00:01:00Z"
             )
         """
         succes, error = self.check_query_result(*self.execute_query(query), False)
@@ -88,7 +88,7 @@ class TestBasicReading(SolomonReadingTestBase):
                 `downsampling.disabled` = "true",
 
                 from = "1970-01-01T00:00:00Z",
-                to = "1970-01-01T00:01:01Z"
+                to = "1970-01-01T00:01:00Z"
             )
         """
         succes, error = self.check_query_result(*self.execute_query(query), True)
@@ -105,7 +105,7 @@ class TestBasicReading(SolomonReadingTestBase):
                 `downsampling.grid_interval` = "15",
 
                 from = "1970-01-01T00:00:00Z",
-                to = "1970-01-01T00:01:01Z"
+                to = "1970-01-01T00:01:00Z"
             )
         """
         succes, error = self.check_query_result(*self.execute_query(query), False)
@@ -119,7 +119,7 @@ class TestBasicReading(SolomonReadingTestBase):
                 `downsampling.disabled` = "true",
 
                 from = "1970-01-01T00:00:00Z",
-                to = "1970-01-01T00:01:01Z"
+                to = "1970-01-01T00:01:00Z"
             )
         """
         succes, error = self.check_query_result(*self.execute_query(query), True)
@@ -133,7 +133,7 @@ class TestBasicReading(SolomonReadingTestBase):
                 labels = "test_type",
 
                 from = "1970-01-01T00:00:00Z",
-                to = "1970-01-01T00:01:01Z"
+                to = "1970-01-01T00:01:00Z"
             )
         """
         result, error = self.execute_query(query)
@@ -148,7 +148,7 @@ class TestBasicReading(SolomonReadingTestBase):
                 labels = "test_type as tt",
 
                 from = "1970-01-01T00:00:00Z",
-                to = "1970-01-01T00:01:01Z"
+                to = "1970-01-01T00:01:00Z"
             )
         """
         result, error = self.execute_query(query)
@@ -188,7 +188,7 @@ class TestBasicReading(SolomonReadingTestBase):
                 program = @@{folderId="basic_reading", service="my_service", test_type="basic_reading_test"}@@,
 
                 from = "1970-01-01T00:00:00Z",
-                to = "1970-01-01T00:01:01Z"
+                to = "1970-01-01T00:01:00Z"
             )
         """
         succes, error = self.check_query_result(*self.execute_query(query), False)
@@ -205,7 +205,7 @@ class TestBasicReading(SolomonReadingTestBase):
                 `downsampling.grid_interval` = "15",
 
                 from = "1970-01-01T00:00:00Z",
-                to = "1970-01-01T00:01:01Z"
+                to = "1970-01-01T00:01:00Z"
             )
         """
         succes, error = self.check_query_result(*self.execute_query(query), False)
@@ -219,7 +219,7 @@ class TestBasicReading(SolomonReadingTestBase):
                 `downsampling.disabled` = "true",
 
                 from = "1970-01-01T00:00:00Z",
-                to = "1970-01-01T00:01:01Z"
+                to = "1970-01-01T00:01:00Z"
             )
         """
         succes, error = self.check_query_result(*self.execute_query(query), True)
@@ -236,7 +236,7 @@ class TestBasicReading(SolomonReadingTestBase):
                 `downsampling.grid_interval` = "15",
 
                 from = "1970-01-01T00:00:00Z",
-                to = "1970-01-01T00:01:01Z"
+                to = "1970-01-01T00:01:00Z"
             )
         """
         succes, error = self.check_query_result(*self.execute_query(query), False)
@@ -250,7 +250,7 @@ class TestBasicReading(SolomonReadingTestBase):
                 `downsampling.disabled` = "true",
 
                 from = "1970-01-01T00:00:00Z",
-                to = "1970-01-01T00:01:01Z"
+                to = "1970-01-01T00:01:00Z"
             )
         """
         succes, error = self.check_query_result(*self.execute_query(query), True)
@@ -264,7 +264,7 @@ class TestBasicReading(SolomonReadingTestBase):
                 labels = "test_type",
 
                 from = "1970-01-01T00:00:00Z",
-                to = "1970-01-01T00:01:01Z"
+                to = "1970-01-01T00:01:00Z"
             )
         """
         result, error = self.execute_query(query)
@@ -279,7 +279,7 @@ class TestBasicReading(SolomonReadingTestBase):
                 labels = "test_type as tt",
 
                 from = "1970-01-01T00:00:00Z",
-                to = "1970-01-01T00:01:01Z"
+                to = "1970-01-01T00:01:00Z"
             )
         """
         result, error = self.execute_query(query)

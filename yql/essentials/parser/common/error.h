@@ -1,5 +1,7 @@
 #pragma once
 
+#include <yql/essentials/public/issue/yql_issue.h>
+
 #include <util/generic/yexception.h>
 #include <util/generic/fwd.h>
 
@@ -18,25 +20,19 @@ namespace NAST {
         // throws TTooManyErrors
         void Error(ui32 line, ui32 col, const TString& message);
 
+        // throws TTooManyErrors
+        void Report(NYql::TIssue&& issue);
+
     private:
+        void GuardTooManyErrors();
+
         virtual void AddError(ui32 line, ui32 col, const TString& message) = 0;
+
+        virtual void AddIssue(NYql::TIssue&& issue) = 0;
 
     protected:
         const size_t MaxErrors_;
         size_t NumErrors_;
-    };
-
-    class TErrorOutput: public IErrorCollector {
-    public:
-        TErrorOutput(IOutputStream& err, const TString& name, size_t maxErrors);
-        virtual ~TErrorOutput();
-
-    private:
-        void AddError(ui32 line, ui32 col, const TString& message) override;
-
-    public:
-        IOutputStream& Err;
-        TString Name;
     };
 
 } // namespace NAST

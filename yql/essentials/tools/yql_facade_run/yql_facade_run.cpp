@@ -441,6 +441,7 @@ void TFacadeRunOptions::Parse(int argc, const char *argv[]) {
         opts.AddLongOption("test-format", "Compare formatted query's AST with the original query's AST (only syntaxVersion=1 is supported)").NoArgument().SetFlag(&TestSqlFormat);
         opts.AddLongOption("test-lexers", "Compare lexers").NoArgument().SetFlag(&TestLexers);
         opts.AddLongOption("test-complete", "check completion engine").NoArgument().SetFlag(&TestComplete);
+        opts.AddLongOption("test-syntax-ambiguity", "check syntax ambiguities").NoArgument().SetFlag(&TestSyntaxAmbiguities);
         opts.AddLongOption("validate-result-format", "Check that result-format can parse Result").NoArgument().SetFlag(&ValidateResultFormat);
     }
 
@@ -586,8 +587,10 @@ int TFacadeRunner::DoMain(int argc, const char *argv[]) {
     lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
     lexers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory();
     NSQLTranslationV1::TParsers parsers;
-    parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory();
-    parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory();
+    parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory(
+        /*isAmbiguityError=*/ RunOptions_.TestSyntaxAmbiguities);
+    parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory(
+        /*isAmbiguityError=*/ RunOptions_.TestSyntaxAmbiguities);
 
     NSQLTranslation::TTranslators translators(
         nullptr,
@@ -601,11 +604,12 @@ int TFacadeRunner::DoMain(int argc, const char *argv[]) {
     }
     IModuleResolver::TPtr moduleResolver;
     TModuleResolver::TModuleChecker moduleChecker;
-    if (RunOptions_.TestLexers || RunOptions_.TestComplete) {
+    if (RunOptions_.TestLexers || RunOptions_.TestComplete || RunOptions_.TestSyntaxAmbiguities) {
         moduleChecker = [
             lexers, parsers,
             testLexers = RunOptions_.TestLexers,
             testComplete = RunOptions_.TestComplete,
+            testSyntaxAmbiguities = RunOptions_.TestSyntaxAmbiguities,
             clusters = ClusterMapping_](const TString& query, const TString& fileName, TExprContext& ctx) {
 
             if (testLexers) {
@@ -621,17 +625,24 @@ int TFacadeRunner::DoMain(int argc, const char *argv[]) {
                 }
             }
 
-            if (testComplete) {
+            if (testComplete || testSyntaxAmbiguities) {
                 google::protobuf::Arena arena;
 
                 NSQLTranslation::TTranslationSettings settings;
                 settings.Arena = &arena;
                 settings.ClusterMapping = clusters;
                 settings.SyntaxVersion = 1;
+                settings.AlwaysAllowExports = true;
 
                 auto ast = NSQLTranslationV1::SqlToYql(lexers, parsers, query, settings);
                 if (!ast.IsOk()) {
-                    return true;
+                    auto issue = TIssue(TPosition(0, 0, fileName), "Translation failed");
+                    for (const auto& i : ast.Issues) {
+                        issue.AddSubIssue(MakeIntrusive<TIssue>(i));
+                    }
+
+                    ctx.AddError(issue);
+                    return false;
                 }
 
                 TIssues issues;
@@ -757,7 +768,6 @@ int TFacadeRunner::DoMain(int argc, const char *argv[]) {
 }
 
 int TFacadeRunner::DoRun(TProgramFactory& factory) {
-
     TProgramPtr program = factory.Create(RunOptions_.ProgramFile, RunOptions_.ProgramText, RunOptions_.OperationId, EHiddenMode::Disable, RunOptions_.QPlayerContext, RunOptions_.GatewaysPatch);
     program->SetLanguageVersion(RunOptions_.LangVer);
     program->SetMaxLanguageVersion(RunOptions_.MaxLangVer);
@@ -848,6 +858,39 @@ int TFacadeRunner::DoRun(TProgramFactory& factory) {
                     program->ExprCtx(),
                     issues)) {
                 *RunOptions_.ErrStream << "Completion failed" << Endl;
+                issues.PrintTo(*RunOptions_.ErrStream);
+                return -1;
+            }
+        }
+        if (!fail && RunOptions_.TestSyntaxAmbiguities && 1 == RunOptions_.SyntaxVersion) {
+            NSQLTranslationV1::TLexers lexers = {
+                .Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory(),
+                .Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory(),
+            };
+
+            NSQLTranslationV1::TParsers parsers = {
+                .Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory(
+                    /*isAmbiguityError=*/ true),
+                .Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory(
+                    /*isAmbiguityError=*/ true),
+            };
+
+            NSQLTranslation::TTranslators translators(
+                /* v0 = */ nullptr,
+                NSQLTranslationV1::MakeTranslator(lexers, parsers),
+                /* pg = */ nullptr);
+
+            NYql::TIssues issues;
+            google::protobuf::Message* message = NSQLTranslation::SqlAST(
+                translators,
+                RunOptions_.ProgramText,
+                RunOptions_.ProgramFile,
+                issues,
+                NSQLTranslation::SQL_MAX_PARSER_ERRORS,
+                settings);
+
+            if (!message) {
+                *RunOptions_.ErrStream << "Syntax ambiguity was detected" << Endl;
                 issues.PrintTo(*RunOptions_.ErrStream);
                 return -1;
             }

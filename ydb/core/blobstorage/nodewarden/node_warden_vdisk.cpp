@@ -21,7 +21,7 @@ namespace NKikimr::NStorage {
         }
     }
 
-    void TNodeWarden::PoisonLocalVDisk(TVDiskRecord& vdisk, bool restartAfterShutdown) {
+    void TNodeWarden::PoisonLocalVDisk(TVDiskRecord& vdisk) {
         STLOG(PRI_INFO, BS_NODE, NW00, "PoisonLocalVDisk", (VDiskId, vdisk.GetVDiskId()), (VSlotId, vdisk.GetVSlotId()),
             (RuntimeData, vdisk.RuntimeData.has_value()));
 
@@ -53,7 +53,6 @@ namespace NKikimr::NStorage {
         vdisk.ScrubCookieForController = 0; // and from controller too
         vdisk.Status = NKikimrBlobStorage::EVDiskStatus::ERROR;
         vdisk.ShutdownPending = vdiskRunning; // Shutdown pending only if VDisk was running before poison
-        vdisk.RestartAfterShutdown = restartAfterShutdown;
         VDiskStatusChanged = true;
     }
 
@@ -392,17 +391,15 @@ namespace NKikimr::NStorage {
     }
 
     void TNodeWarden::Handle(TEvBlobStorage::TEvAskRestartVDisk::TPtr ev) {
-        const auto& [pDiskId, vDiskId, stop] = *ev->Get();
+        const auto& [pDiskId, vDiskId] = *ev->Get();
         const auto nodeId = SelfId().NodeId();  // Skeleton and NodeWarden are on the same node
         TVSlotId slotId(nodeId, pDiskId, 0);
 
         for (auto it = LocalVDisks.lower_bound(slotId); it != LocalVDisks.end() && it->first.NodeId == nodeId && it->first.PDiskId == pDiskId; ++it) {
             auto& record = it->second;
             if (record.GetVDiskId() == vDiskId) {
-                PoisonLocalVDisk(record, !stop);
-                if (!stop) {
-                    StartLocalVDiskActor(record);
-                }
+                PoisonLocalVDisk(record);
+                StartLocalVDiskActor(record);
                 break;
             }
         }

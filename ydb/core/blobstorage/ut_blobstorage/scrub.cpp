@@ -353,23 +353,29 @@ Y_UNIT_TEST_SUITE(BlobScrubbing) {
                 }
             }
 
+            env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+                if (ev->GetTypeRewrite() == TEvents::TEvGone::EventType) {
+                    if (ev->Recipient == MakeBlobStorageNodeWardenID(ev->Recipient.NodeId())) {
+                        return false;
+                    }
+                }
+                return true;
+            };
+
             // terminate peer disks
             for (ui32 i = 1; i < info->GetTotalVDisksNum(); ++i) {
-                const TActorId& peerActorId = info->GetActorId(i);
-                const TVDiskID& peerVDiskId = info->GetVDiskId(i);
-                const auto& [peerNodeId, peerPDiskId, _] = DecomposeVDiskServiceId(peerActorId);
-                const TActorId wardenId = MakeBlobStorageNodeWardenID(peerNodeId);
-                Cerr << "*** terminating peer disk# " << peerActorId.ToString() << Endl;
-                const TActorId edge = runtime->AllocateEdgeActor(peerNodeId);
-                env.Runtime->WrapInActorContext(edge, [&]{
-                    TActivationContext::Send(wardenId, std::unique_ptr<IEventBase>(
-                            new TEvBlobStorage::TEvAskRestartVDisk(peerPDiskId, peerVDiskId, true)));
-                });
+                const TActorId& actorId = info->GetActorId(i);
+                Cerr << "*** terminating peer disk# " << actorId.ToString() << Endl;
+                runtime->Send(new IEventHandle(TEvents::TSystem::Poison, 0, actorId, {}, nullptr, 0), actorId.NodeId());
             }
 
             Cerr << "*** blobIdsToValidate.size# " << blobIdsToValidate.size() << Endl;
 
             Validate(env, vdiskId, data, info->Type, blobIdsToValidate);
+
+            env.Sim(TDuration::Seconds(10));
+
+            env.Runtime->FilterFunction = {};
 
             env.Cleanup();
             env.Initialize();

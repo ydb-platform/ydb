@@ -123,14 +123,37 @@ namespace {
         }
     }
 
+    struct TPrettyDurationFormatParameters {
+        double EntitiesPerSecond;
+        TStringBuf EntityName;
+        TStringBuf ZeroString;
+        TStringBuf MaxString;
+        int MaxPrecision;
+    };
 
-    TString PrettyHoursDuration(TDuration duration, TStringBuf zeroStr = ""sv, TStringBuf maxStr = "+inf"sv) {
+    constexpr TPrettyDurationFormatParameters PRETTY_HOURS_DEFAULT{
+        .EntitiesPerSecond = 3600,
+        .EntityName = "hours",
+        .ZeroString = "0 hours",
+        .MaxString = "+infinity",
+        .MaxPrecision = 3,
+    };
+
+    constexpr TPrettyDurationFormatParameters PRETTY_HOURS_NON_ZERO{
+        .EntitiesPerSecond = 3600,
+        .EntityName = "hours",
+        .ZeroString = "",
+        .MaxString = "+infinity",
+        .MaxPrecision = 3,
+    };
+
+    TString PrettyDurationString(TDuration duration, const TPrettyDurationFormatParameters& paramerters) {
         if (duration == TDuration::Zero()) {
-            return ToString(zeroStr);
+            return ToString(paramerters.ZeroString);
         } else if (duration == TDuration::Max()) {
-            return ToString(maxStr);
+            return ToString(paramerters.MaxString);
         }
-        return TStringBuilder() << Prec(duration.MillisecondsFloat() / 3'600'000.0, PREC_POINT_DIGITS_STRIP_ZEROES, 3) << " hours";
+        return TStringBuilder() << Prec(duration.MillisecondsFloat() / (paramerters.EntitiesPerSecond * 1000.0), PREC_POINT_DIGITS_STRIP_ZEROES, paramerters.MaxPrecision) << " " << paramerters.EntityName;
     }
 }
 
@@ -150,7 +173,7 @@ int PrintPrettyDescribeConsumerResult(const NYdb::NTopic::TConsumerDescription& 
     const NYdb::NTopic::TConsumer& consumer = description.GetConsumer();
     Cout << "Consumer " << consumer.GetConsumerName() << ": " << Endl;
     Cout << "Important: " << (consumer.GetImportant() ? "Yes" : "No") << Endl;
-    if (const auto availabilityPeriodStr = PrettyHoursDuration(consumer.GetAvailabilityPeriod())) {
+    if (const auto availabilityPeriodStr = PrettyDurationString(consumer.GetAvailabilityPeriod(), PRETTY_HOURS_NON_ZERO)) {
         Cout << "Availability period: " << availabilityPeriodStr << Endl;
     }
     if (const TInstant& readFrom = consumer.GetReadFrom()) {
@@ -336,7 +359,7 @@ namespace {
                 .Column(1, FormatCodecs(c.GetSupportedCodecs()))
                 .Column(2, c.GetReadFrom().ToRfc822StringLocal())
                 .Column(3, c.GetImportant() ? "Yes" : "No")
-                .Column(4, PrettyHoursDuration(c.GetAvailabilityPeriod()));
+                .Column(4, PrettyDurationString(c.GetAvailabilityPeriod(), PRETTY_HOURS_NON_ZERO));
 //                .Column(4, rule.ServiceType())
 //                .Column(5, rule.Version());
         }
@@ -360,7 +383,7 @@ namespace {
 
     void PrintMain(const NTopic::TTopicDescription& topicDescription) {
         Cout << Endl << "Main:";
-        Cout << Endl << "RetentionPeriod: " << topicDescription.GetRetentionPeriod().Hours() << " hours";
+        Cout << Endl << "RetentionPeriod: " << PrettyDurationString(topicDescription.GetRetentionPeriod(), PRETTY_HOURS_DEFAULT);
         if (topicDescription.GetRetentionStorageMb().has_value()) {
             Cout << Endl << "StorageRetention: " << *topicDescription.GetRetentionStorageMb() << " MB";
         }

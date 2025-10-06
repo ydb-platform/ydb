@@ -158,6 +158,22 @@ namespace NYdb::NConsoleClient {
 
             return exists->second;
         }
+
+        void CheckHoursDuration(const TMaybe<double> hours, const TStringBuf optionName) {
+            if (!hours.Defined()) {
+                return;
+            }
+            if (*hours < 0) {
+                throw TMisuseException() << optionName << " must be non-negative";
+            }
+            if (!std::isfinite(*hours)) {
+                throw TMisuseException() <<  optionName << " must be finite";
+            }
+        }
+
+        TDuration DurationFromFractionalHours(const double hours) {
+            return TDuration::Seconds(hours * 3600.0); // using floating-point ctor with saturation
+        }
     }
 
     void TCommandWithSupportedCodecs::AddAllowedCodecs(TClientCommand::TConfig& config, const TVector<NYdb::NTopic::ECodec>& supportedCodecs) {
@@ -374,6 +390,7 @@ namespace NYdb::NConsoleClient {
         ParseCodecs();
         ParseMeteringMode();
         ParseAutoPartitioningStrategy();
+        CheckHoursDuration(RetentionPeriodHours_, "--retention-period-hours");
     }
 
     int TCommandTopicCreate::Run(TConfig& config) {
@@ -405,7 +422,7 @@ namespace NYdb::NConsoleClient {
             settings.MeteringMode(GetMeteringMode());
         }
 
-        settings.RetentionPeriod(TDuration::Hours(RetentionPeriodHours_));
+        settings.RetentionPeriod(DurationFromFractionalHours(RetentionPeriodHours_));
         settings.RetentionStorageMb(RetentionStorageMb_);
 
         if (PartitionsPerTablet_.Defined()) {
@@ -457,6 +474,7 @@ namespace NYdb::NConsoleClient {
         ParseCodecs();
         ParseMeteringMode();
         ParseAutoPartitioningStrategy();
+        CheckHoursDuration(RetentionPeriodHours_, "--retention-period-hours");
     }
 
     NYdb::NTopic::TAlterTopicSettings TCommandTopicAlter::PrepareAlterSettings(
@@ -497,8 +515,8 @@ namespace NYdb::NConsoleClient {
             settings.SetSupportedCodecs(codecs);
         }
 
-        if (RetentionPeriodHours_.Defined() && describeResult.GetTopicDescription().GetRetentionPeriod() != TDuration::Hours(*RetentionPeriodHours_)) {
-            settings.SetRetentionPeriod(TDuration::Hours(*RetentionPeriodHours_));
+        if (RetentionPeriodHours_.Defined() && describeResult.GetTopicDescription().GetRetentionPeriod() != DurationFromFractionalHours(*RetentionPeriodHours_)) {
+            settings.SetRetentionPeriod(DurationFromFractionalHours(*RetentionPeriodHours_));
         }
 
         if (PartitionWriteSpeedKbps_.Defined() && describeResult.GetTopicDescription().GetPartitionWriteSpeedBytesPerSecond() / 1_KB != *PartitionWriteSpeedKbps_) {
@@ -608,6 +626,7 @@ namespace NYdb::NConsoleClient {
         TYdbCommand::Parse(config);
         ParseCodecs();
         ParseTopicName(config, 0);
+        CheckHoursDuration(AvailabilityPeriodHours_, "--availability-period-hours");
     }
 
     int TCommandTopicConsumerAdd::Run(TConfig& config) {
@@ -630,7 +649,7 @@ namespace NYdb::NConsoleClient {
         }
         consumerSettings.SetImportant(IsImportant_);
         if (AvailabilityPeriodHours_.Defined()) {
-            consumerSettings.AvailabilityPeriod(TDuration::Hours(*AvailabilityPeriodHours_));
+            consumerSettings.AvailabilityPeriod(DurationFromFractionalHours(*AvailabilityPeriodHours_));
         }
 
         readRuleSettings.AppendAddConsumers(consumerSettings);

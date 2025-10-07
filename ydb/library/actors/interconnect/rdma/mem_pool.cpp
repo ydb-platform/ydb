@@ -19,7 +19,6 @@
 
 #include <sys/mman.h>
 
-static constexpr size_t CacheLineSz = 64;
 static constexpr size_t HPageSz = (1 << 21);
 
 using ::NMonitoring::TDynamicCounters;
@@ -29,16 +28,14 @@ namespace NInterconnect::NRdma {
     class TChunk: public NNonCopyable::TMoveOnly, public TAtomicRefCount<TChunk> {
     public:
 
-    TChunk(std::vector<ibv_mr*>&& mrs, IMemPool* pool, void* auxData) noexcept
+    TChunk(std::vector<ibv_mr*>&& mrs, IMemPool* pool) noexcept
         : MRs(std::move(mrs))
         , MemPool(pool)
-        , AuxData(auxData)
     {
     }
 
     ~TChunk() {
         MemPool->NotifyDealocated();
-        std::free(AuxData);
         if (Empty()) {
             return;
         }
@@ -65,14 +62,9 @@ namespace NInterconnect::NRdma {
         return MRs.empty();
     }
 
-    void* GetAuxData() noexcept {
-        return AuxData;
-    }
-
     private:
         std::vector<ibv_mr*> MRs;
         IMemPool* MemPool;
-        void* AuxData;
     };
 
     TMemRegion::TMemRegion(TChunkPtr chunk, uint32_t offset, uint32_t size) noexcept
@@ -246,10 +238,7 @@ namespace NInterconnect::NRdma {
             Y_ABORT_UNLESS((Alignment & Alignment - 1) == 0, "Alignment must be a power of two %zu", Alignment);
         }
     protected:
-        template<typename TAuxData>
         TChunkPtr AllocNewChunk(size_t size, bool hp) noexcept {
-            static_assert(sizeof(TAuxData) < CacheLineSz, "AuxData too big");
-
             const std::lock_guard<std::mutex> lock(Mutex);
             Y_ABORT_UNLESS(AllocatedChunks <= MaxChunk);
 
@@ -270,13 +259,10 @@ namespace NInterconnect::NRdma {
                 return nullptr;
             }
 
-            void* auxPtr = std::aligned_alloc(CacheLineSz, CacheLineSz);
-            auxPtr = new (auxPtr)TAuxData;
-
             AllocatedChunksCounter->Inc();
             AllocatedChunks++;
 
-            return MakeIntrusive<TChunk>(std::move(mrs), this, auxPtr);
+            return MakeIntrusive<TChunk>(std::move(mrs), this);
         }
 
         void NotifyDealocated() noexcept override {
@@ -301,8 +287,7 @@ namespace NInterconnect::NRdma {
         {}
 
         TMemRegion* AllocImpl(int size, ui32) noexcept override {
-            struct TDummy {};
-            auto chunk = AllocNewChunk<TDummy>(size, false);
+            auto chunk = AllocNewChunk(size, false);
             if (!chunk) {
                 return nullptr;
             }
@@ -451,8 +436,7 @@ namespace NInterconnect::NRdma {
                     return localChain.TryGetSlot();
                 }
                 // If no slots in global pool, allocate new chunk
-                struct TDummy {};
-                auto chunk = pool.AllocNewChunk<TDummy>(BatchSizeBytes, true);
+                auto chunk = pool.AllocNewChunk(BatchSizeBytes, true);
                 if (!chunk) {
                     return nullptr;
                 }
@@ -533,7 +517,8 @@ namespace NInterconnect::NRdma {
     }
 
     std::shared_ptr<IMemPool> CreateSlotMemPool(TDynamicCounters* counters) noexcept {
-        auto* pool = HugeSingleton<TSlotMemPool>(MakeCounters(counters));
-        return std::shared_ptr<TSlotMemPool>(pool, [](TSlotMemPool*) {});
+        //auto* pool = HugeSingleton<TSlotMemPool>(MakeCounters(counters));
+        static TSlotMemPool pool(MakeCounters(counters));
+        return std::shared_ptr<TSlotMemPool>(&pool, [](TSlotMemPool*) {});
     }
 }

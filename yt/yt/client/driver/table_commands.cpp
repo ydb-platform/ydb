@@ -909,6 +909,13 @@ void TSelectRowsCommand::Register(TRegistrar registrar)
         })
         .Optional(/*init*/ false);
 
+    registrar.ParameterWithUniversalAccessor<std::optional<EOptimizationLevel>>(
+        "optimization_level",
+        [] (TThis* command) -> auto& {
+            return command->Options.OptimizationLevel;
+        })
+        .Optional(/*init*/ false);
+
     registrar.ParameterWithUniversalAccessor<TVersionedReadOptions>(
         "versioned_read_options",
         [] (TThis* command) -> auto& {

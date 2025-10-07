@@ -26,6 +26,7 @@ struct TTopicInfo {
     TString RealPath;
 
     TIntrusiveConstPtr<NSchemeCache::TSchemeCacheNavigate::TPQGroupInfo> Info;
+    TIntrusivePtr<TSecurityObject> SecurityObject;
 };
 
 struct TEvDescribeTopicsResponse : public NActors::TEventLocal<TEvDescribeTopicsResponse, EEv::EvDescribeTopicsResponse> {

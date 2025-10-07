@@ -97,7 +97,8 @@ public:
                             Result[originalPath] = TTopicInfo{
                                 .Status = EStatus::SUCCESS,
                                 .RealPath = realPath,
-                                .Info = entry.PQGroupInfo
+                                .Info = entry.PQGroupInfo,
+                                .SecurityObject = entry.SecurityObject
                             };
                         }
                     } else {

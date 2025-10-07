@@ -55,6 +55,7 @@ private:
     TActorId ReadSessionActorId;
 
     struct TTopicInfo {
+        bool Initialized;
         ui64 ReadBalancerTabletId;
 
         ui64 ReadBalancerGeneration = 0;

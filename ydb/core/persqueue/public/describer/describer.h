@@ -19,16 +19,16 @@ enum class EStatus {
     UNKNOWN_ERROR
 };
 
+struct TTopicInfo {
+    EStatus Status = EStatus::NOT_FOUND;
+
+    // Real topic path. If original topic path is CDC than real path is different.
+    TString RealPath;
+
+    TIntrusiveConstPtr<NSchemeCache::TSchemeCacheNavigate::TPQGroupInfo> Info;
+};
+
 struct TEvDescribeTopicsResponse : public NActors::TEventLocal<TEvDescribeTopicsResponse, EEv::EvDescribeTopicsResponse> {
-
-    struct TTopicInfo {
-        EStatus Status = EStatus::NOT_FOUND;
-
-        // Real topic path. If original topic path is CDC than real path is different.
-        TString RealPath;
-
-        TIntrusiveConstPtr<NSchemeCache::TSchemeCacheNavigate::TPQGroupInfo> Info;
-    };
 
     TEvDescribeTopicsResponse(std::unordered_map<TString, TTopicInfo>&& topics)
         : Topics(std::move(topics))
@@ -39,7 +39,7 @@ struct TEvDescribeTopicsResponse : public NActors::TEventLocal<TEvDescribeTopics
     std::unordered_map<TString, TTopicInfo> Topics;
 };
 
-NActors::IActor* CreateDescriberActor(const NActors::TActorId& parent, const TString& databasePath, const std::vector<TString>&& topicPaths);
+NActors::IActor* CreateDescriberActor(const NActors::TActorId& parent, const TString& databasePath, const std::unordered_set<TString>&& topicPaths);
 TString Description(const EStatus status);
 
 }

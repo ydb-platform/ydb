@@ -13,7 +13,7 @@ using namespace NSchemeCache;
 
 class TDescribeActor : public TActorBootstrapped<TDescribeActor> {
 public:
-    TDescribeActor(const NActors::TActorId& parent, const TString& databasePath, const std::vector<TString>&& topicPaths)
+    TDescribeActor(const NActors::TActorId& parent, const TString& databasePath, const std::unordered_set<TString>&& topicPaths)
         : Parent(parent)
         , DatabasePath(databasePath)
         , TopicPaths(std::move(topicPaths))
@@ -25,7 +25,7 @@ public:
         DoRequest(TopicPaths);
     }
 
-    void DoRequest(const std::vector<TString>& topicPath) {
+    void DoRequest(const std::unordered_set<TString>& topicPath) {
         LOG_D("Create request [" << JoinRange(", ", topicPath.begin(), topicPath.end()) << "] with SyncVersion=" << RetryWithSyncVersion);
 
         auto schemeRequest = std::make_unique<TSchemeCacheNavigate>(1);
@@ -53,7 +53,7 @@ public:
         LOG_D("Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult");
         auto& result = ev->Get()->Request;
 
-        std::vector<TString> unknownPaths;
+        std::unordered_set<TString> unknownPaths;
 
         for (size_t i = 0; i < result->ResultSet.size(); ++i) {
             const auto& entry = result->ResultSet[i];
@@ -70,11 +70,11 @@ public:
                 case TSchemeCacheNavigate::EStatus::RootUnknown: {
                     if (RetryWithSyncVersion) {
                         LOG_D("Path '" << realPath << "' not found");
-                        Result[originalPath] = TEvDescribeTopicsResponse::TTopicInfo{
+                        Result[originalPath] = TTopicInfo{
                             .Status = EStatus::NOT_FOUND
                         };
                     } else {
-                        unknownPaths.push_back(realPath);
+                        unknownPaths.insert(realPath);
                     }
                     break;
                 }
@@ -83,15 +83,26 @@ public:
                         LOG_D("Path '" << realPath << "' is a CDC");
                         CDCPaths[TStringBuilder() << originalPath << "/streamImpl"] = originalPath;
                     } else if (entry.Kind == TSchemeCacheNavigate::EKind::KindTopic) {
-                        LOG_D("Path '" << realPath << "' SUCCESS");
-                        Result[originalPath] = TEvDescribeTopicsResponse::TTopicInfo{
-                            .Status = EStatus::SUCCESS,
-                            .RealPath = realPath,
-                            .Info = entry.PQGroupInfo
-                        };
+                        if (!entry.PQGroupInfo || entry.PQGroupInfo->Description.GetBalancerTabletID() == 0) {
+                            if (RetryWithSyncVersion) {
+                                LOG_D("Path '" << realPath << "' not found");
+                                Result[originalPath] = TTopicInfo{
+                                    .Status = EStatus::NOT_FOUND
+                                };
+                            } else {
+                                unknownPaths.insert(realPath);
+                            }
+                        } else {
+                            LOG_D("Path '" << realPath << "' SUCCESS");
+                            Result[originalPath] = TTopicInfo{
+                                .Status = EStatus::SUCCESS,
+                                .RealPath = realPath,
+                                .Info = entry.PQGroupInfo
+                            };
+                        }
                     } else {
                         LOG_D("Path '" << realPath << "' is not a topic: " << entry.Kind);
-                        Result[originalPath] = TEvDescribeTopicsResponse::TTopicInfo{
+                        Result[originalPath] = TTopicInfo{
                             .Status = EStatus::NOT_TOPIC,
                             .RealPath = realPath
                         };
@@ -100,7 +111,7 @@ public:
                 }
                 default: {
                     LOG_D("Path '" << realPath << "' unknown error");
-                    Result[originalPath] = TEvDescribeTopicsResponse::TTopicInfo{
+                    Result[originalPath] = TTopicInfo{
                         .Status = EStatus::UNKNOWN_ERROR,
                         .RealPath = realPath
                     };
@@ -118,10 +129,10 @@ public:
             RetryWithSyncVersion = false;
             RetryWithCDC = true;
 
-            std::vector<TString> newPath;
+            std::unordered_set<TString> newPath;
             newPath.reserve(CDCPaths.size());
             for (auto& [path, _] : CDCPaths) {
-                newPath.push_back(path);
+                newPath.insert(path);
             }
 
             return DoRequest(newPath);
@@ -141,17 +152,17 @@ public:
 private:
     const NActors::TActorId Parent;
     const TString DatabasePath;
-    const std::vector<TString> TopicPaths;
+    const std::unordered_set<TString> TopicPaths;
 
     bool RetryWithSyncVersion = false;
     bool RetryWithCDC = false;
     // CDC topic path -> original topic path
     std::unordered_map<TString, TString> CDCPaths;
-    std::unordered_map<TString, TEvDescribeTopicsResponse::TTopicInfo> Result;
+    std::unordered_map<TString, TTopicInfo> Result;
 };
 
 
-NActors::IActor* CreateDescriberActor(const NActors::TActorId& parent, const TString& databasePath, const std::vector<TString>&& topicPaths) {
+NActors::IActor* CreateDescriberActor(const NActors::TActorId& parent, const TString& databasePath, const std::unordered_set<TString>&& topicPaths) {
     return new TDescribeActor(parent, databasePath, std::move(topicPaths));
 }
 }

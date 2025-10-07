@@ -88,13 +88,13 @@ void KafkaReadSessionProxyActor::Handle(TEvKafka::TEvFetchRequest::TPtr& ev) {
     Y_VERIFY(!PendingRequest.has_value());
     PendingRequest = ev;
 
-    std::vector<TString> newTopics;
+    std::unordered_set<TString> newTopics;
     for (auto& topic : GetTopics(*PendingRequest.value()->Get()->Request, Context)) {
         if (Topics.contains(topic)) {
             continue;
         }
 
-        newTopics.push_back(topic);
+        newTopics.insert(topic);
     }
 
     if (newTopics.empty()) {
@@ -114,6 +114,7 @@ void KafkaReadSessionProxyActor::Handle(NPQ::NDescriber::TEvDescribeTopicsRespon
                 ui64 readBalancerTabletId = result.Info->Description.GetBalancerTabletID();
                 ui64 cookie = 1;
                 Topics[originalPath] = {
+                    .Initialized = false,
                     .ReadBalancerTabletId = readBalancerTabletId,
                     .SubscribeCookie = cookie
                 };
@@ -125,10 +126,15 @@ void KafkaReadSessionProxyActor::Handle(NPQ::NDescriber::TEvDescribeTopicsRespon
             case NPQ::NDescriber::EStatus::NOT_FOUND:
             case NPQ::NDescriber::EStatus::NOT_TOPIC:
             case NPQ::NDescriber::EStatus::UNKNOWN_ERROR:
-                // TODO
+                Topics[originalPath] = {
+                    .Initialized = true,
+                    .ReadBalancerTabletId = 0
+                };
                 break;
         }
     }
+
+    ProcessPendingRequestIfPossible();
 }
 
 void KafkaReadSessionProxyActor::Handle(TEvPersQueue::TEvBalancingSubscribeNotify::TPtr& ev) {
@@ -153,6 +159,7 @@ void KafkaReadSessionProxyActor::Handle(TEvPersQueue::TEvBalancingSubscribeNotif
         return;
     }
 
+    topicInfo.Initialized = true;
     topicInfo.UsedServerBalancing = record.GetStatus() == NKikimrPQ::TEvBalancingSubscribeNotify::BALANCING;
     topicInfo.ReadBalancerGeneration = record.GetGeneration();
     topicInfo.ReadBalancerNotifyCookie = record.GetCookie();
@@ -169,6 +176,13 @@ void KafkaReadSessionProxyActor::ProcessPendingRequestIfPossible() {
     if (!PendingRequest.has_value()) {
         KAFKA_LOG_D("Pending request is not set");
         Y_VERIFY_DEBUG(PendingRequest.has_value());
+        return;
+    }
+
+    bool initialized = AllOf(Topics, [](const auto& topicInfo) {
+        return topicInfo.second.Initialized;
+    });
+    if (!initialized) {
         return;
     }
 

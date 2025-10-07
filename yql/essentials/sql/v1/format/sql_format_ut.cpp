@@ -49,7 +49,6 @@ struct TSetup {
             UNIT_ASSERT_C(res2, issues.ToString());
             UNIT_ASSERT_NO_DIFF(formatted, formatted2);
 
-
             if (mode == NSQLFormat::EFormatMode::Pretty) {
                 NSQLTranslation::TTranslationSettings settings;
                 settings.Antlr4Parser = false;
@@ -64,8 +63,8 @@ struct TSetup {
     NSQLFormat::ISqlFormatter::TPtr Formatter;
 };
 
-}
+} // namespace
 
 Y_UNIT_TEST_SUITE(CheckSqlFormatter) {
-    #include "sql_format_ut.h"
-}
+#include "sql_format_ut.h"
+} // Y_UNIT_TEST_SUITE(CheckSqlFormatter)

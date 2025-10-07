@@ -13,4 +13,4 @@ inline ui32 UnifiedToken(bool useAntlr4, ui32 id) {
     return useAntlr4 + (id << 16);
 }
 
-}  // namespace NSQLTranslationV1
+} // namespace NSQLTranslationV1

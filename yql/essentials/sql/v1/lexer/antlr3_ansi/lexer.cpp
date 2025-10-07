@@ -5,8 +5,8 @@
 #include <yql/essentials/parser/proto_ast/antlr3/proto_ast_antlr3.h>
 
 namespace NALPAnsi {
-extern ANTLR_UINT8 *SQLv1ParserTokenNames[];
-}
+extern ANTLR_UINT8* SQLv1ParserTokenNames[];
+} // namespace NALPAnsi
 
 namespace NSQLTranslationV1 {
 
@@ -31,10 +31,10 @@ public:
     }
 };
 
-}
+} // namespace
 
 NSQLTranslation::TLexerFactoryPtr MakeAntlr3AnsiLexerFactory() {
     return MakeIntrusive<TFactory>();
 }
 
-}
+} // namespace NSQLTranslationV1

@@ -15,11 +15,12 @@ public:
     }
 
     TSourcePtr Build(const TRule_values_stmt& node, TPosition& valuesPos, const TVector<TString>& derivedColumns = {}, TPosition derivedColumnsPos = TPosition());
+
 protected:
     bool BuildRows(const TRule_values_source_row_list& node, TVector<TVector<TNodePtr>>& rows);
 
     TSourcePtr ValuesSource(const TRule_values_source& node, const TVector<TString>& columnsHint,
-        const TString& operationName);
+                            const TString& operationName);
 
 private:
     bool BuildRow(const TRule_values_source_row& inRow, TVector<TNodePtr>& outRow);

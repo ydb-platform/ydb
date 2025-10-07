@@ -10,7 +10,7 @@
 #include <util/generic/scope.h>
 
 #ifdef GetMessage
-#undef GetMessage
+    #undef GetMessage
 #endif
 
 using namespace NYql;
@@ -29,10 +29,10 @@ TNodePtr AddTablePathPrefix(TContext& ctx, TStringBuf prefixPath, const TDeferre
     }
 
     auto pathNode = path.Build();
-    pathNode = new TCallNodeImpl(pathNode->GetPos(), "String", { pathNode });
+    pathNode = new TCallNodeImpl(pathNode->GetPos(), "String", {pathNode});
     auto prefixNode = BuildLiteralRawString(pathNode->GetPos(), TString(prefixPath));
 
-    TNodePtr buildPathNode = new TCallNodeImpl(pathNode->GetPos(), "BuildTablePath", { prefixNode, pathNode });
+    TNodePtr buildPathNode = new TCallNodeImpl(pathNode->GetPos(), "BuildTablePath", {prefixNode, pathNode});
 
     TDeferredAtom result;
     MakeTableFromExpression(ctx.Pos(), ctx, buildPathNode, result);
@@ -135,7 +135,7 @@ TContext::TContext(const TLexers& lexers, const TParsers& parsers,
 
     Position_.File = settings.File;
 
-    for (auto& flag: settings.Flags) {
+    for (auto& flag : settings.Flags) {
         bool value = true;
         TStringBuf key = flag;
         auto ptr = CTX_PRAGMA_FIELDS.FindPtr(key);
@@ -156,7 +156,7 @@ TContext::TContext(const TLexers& lexers, const TParsers& parsers,
 
 TContext::~TContext()
 {
-    for (auto& x: AllScopes) {
+    for (auto& x : AllScopes) {
         x->Clear();
     }
 }
@@ -202,7 +202,7 @@ IOutputStream& TContext::Error(NYql::TPosition pos, NYql::TIssueCode code) {
 }
 
 bool TContext::Warning(NYql::TPosition pos, NYql::TIssueCode code, std::function<void(IOutputStream&)> message,
-    bool forceError) {
+                       bool forceError) {
     bool isError;
     IOutputStream& out = MakeIssue(TSeverityIds::S_WARNING, code, pos, forceError, isError);
     message(out);
@@ -250,7 +250,7 @@ bool TContext::WarnUnusedHints() {
 }
 
 IOutputStream& TContext::MakeIssue(ESeverity severity, TIssueCode code, NYql::TPosition pos,
-    bool forceError, bool& isError) {
+                                   bool forceError, bool& isError) {
     isError = (severity == TSeverityIds::S_ERROR);
 
     if (severity == TSeverityIds::S_WARNING) {
@@ -312,10 +312,7 @@ bool TContext::IsDynamicCluster(const TDeferredAtom& cluster) const {
 
 bool TContext::SetPathPrefix(const TString& value, TMaybe<TString> arg) {
     if (arg.Defined()) {
-        if (*arg == YtProviderName
-            || *arg == KikimrProviderName
-            || *arg == RtmrProviderName
-            )
+        if (*arg == YtProviderName || *arg == KikimrProviderName || *arg == RtmrProviderName)
         {
             ProviderPathPrefixes_[*arg] = value;
             return true;
@@ -349,8 +346,8 @@ TStringBuf TContext::GetPrefixPath(const TString& service, const TDeferredAtom& 
         return {};
     }
     auto* clusterPrefix = cluster.GetLiteral()
-                            ? ClusterPathPrefixes_.FindPtr(*cluster.GetLiteral())
-                            : nullptr;
+                              ? ClusterPathPrefixes_.FindPtr(*cluster.GetLiteral())
+                              : nullptr;
     if (clusterPrefix && !clusterPrefix->empty()) {
         return *clusterPrefix;
     } else {
@@ -471,7 +468,7 @@ TNodePtr TScopedState::WrapCluster(const TDeferredAtom& cluster, TContext& ctx) 
 }
 
 void TScopedState::Clear() {
-   *this = TScopedState();
+    *this = TScopedState();
 }
 
 TNodePtr TScopedState::LookupNode(const TString& name) {
@@ -489,13 +486,13 @@ bool TContext::HasNonYtProvider(const ISource& source) const {
     source.GetInputTables(tableList);
 
     TSet<TString> clusters;
-    for (auto& it: tableList) {
+    for (auto& it : tableList) {
         if (it.Service != YtProviderName) {
             return true;
         }
     }
 
-    for (auto& cl: Scoped->Local.UsedClusters) {
+    for (auto& cl : Scoped->Local.UsedClusters) {
         if (cl.first != YtProviderName) {
             return true;
         }
@@ -551,36 +548,36 @@ TMaybe<EColumnRefState> GetFunctionArgColumnStatus(TContext& ctx, const TString&
         "variantunderlyingtype",
     };
     static const TMap<std::pair<TStringBuf, size_t>, EColumnRefState> positionalArgsCustomStatus = {
-        { {"frombytes", 1},           EColumnRefState::Deny },
-        { {"enum", 0},                EColumnRefState::Deny },
-        { {"asenum", 0},              EColumnRefState::Deny },
-        { {"variant", 1},             EColumnRefState::Deny },
-        { {"variant", 2},             EColumnRefState::Deny },
-        { {"asvariant", 1},           EColumnRefState::Deny },
-        { {"astagged", 1},            EColumnRefState::Deny },
-        { {"ensuretype", 1},          EColumnRefState::Deny },
-        { {"ensuretype", 2},          EColumnRefState::Deny },
-        { {"ensureconvertibleto", 1}, EColumnRefState::Deny },
-        { {"ensureconvertibleto", 2}, EColumnRefState::Deny },
+        {{"frombytes", 1}, EColumnRefState::Deny},
+        {{"enum", 0}, EColumnRefState::Deny},
+        {{"asenum", 0}, EColumnRefState::Deny},
+        {{"variant", 1}, EColumnRefState::Deny},
+        {{"variant", 2}, EColumnRefState::Deny},
+        {{"asvariant", 1}, EColumnRefState::Deny},
+        {{"astagged", 1}, EColumnRefState::Deny},
+        {{"ensuretype", 1}, EColumnRefState::Deny},
+        {{"ensuretype", 2}, EColumnRefState::Deny},
+        {{"ensureconvertibleto", 1}, EColumnRefState::Deny},
+        {{"ensureconvertibleto", 2}, EColumnRefState::Deny},
 
-        { {"nothing", 0},             EColumnRefState::Deny },
-        { {"formattype", 0},          EColumnRefState::Deny },
-        { {"instanceof", 0},          EColumnRefState::Deny },
-        { {"pgtype", 0},              EColumnRefState::AsPgType },
-        { {"pgconst", 0},             EColumnRefState::Deny },
-        { {"pgconst", 1},             EColumnRefState::AsPgType },
-        { {"pgcast", 1},              EColumnRefState::AsPgType },
+        {{"nothing", 0}, EColumnRefState::Deny},
+        {{"formattype", 0}, EColumnRefState::Deny},
+        {{"instanceof", 0}, EColumnRefState::Deny},
+        {{"pgtype", 0}, EColumnRefState::AsPgType},
+        {{"pgconst", 0}, EColumnRefState::Deny},
+        {{"pgconst", 1}, EColumnRefState::AsPgType},
+        {{"pgcast", 1}, EColumnRefState::AsPgType},
 
-        { {"unpickle", 0},            EColumnRefState::Deny },
-        { {"typehandle", 0},          EColumnRefState::Deny },
+        {{"unpickle", 0}, EColumnRefState::Deny},
+        {{"typehandle", 0}, EColumnRefState::Deny},
 
-        { {"listcreate", 0},          EColumnRefState::Deny },
-        { {"setcreate", 0},           EColumnRefState::Deny },
-        { {"dictcreate", 0},          EColumnRefState::Deny },
-        { {"dictcreate", 1},          EColumnRefState::Deny },
-        { {"weakfield", 1},           EColumnRefState::Deny },
+        {{"listcreate", 0}, EColumnRefState::Deny},
+        {{"setcreate", 0}, EColumnRefState::Deny},
+        {{"dictcreate", 0}, EColumnRefState::Deny},
+        {{"dictcreate", 1}, EColumnRefState::Deny},
+        {{"weakfield", 1}, EColumnRefState::Deny},
 
-        { {"Yson::ConvertTo", 1},     EColumnRefState::Deny },
+        {{"Yson::ConvertTo", 1}, EColumnRefState::Deny},
     };
 
     TString normalized;
@@ -652,7 +649,7 @@ TString TTranslation::PushNamedNode(TPosition namePos, const TString& name, cons
     return resultName;
 }
 
-TString TTranslation::PushNamedNode(NYql::TPosition namePos, const TString &name, NSQLTranslationV1::TNodePtr node) {
+TString TTranslation::PushNamedNode(NYql::TPosition namePos, const TString& name, NSQLTranslationV1::TNodePtr node) {
     return PushNamedNode(namePos, name, [node](const TString&) { return node; });
 }
 
@@ -678,8 +675,8 @@ bool TTranslation::PopNamedNode(const TString& name) {
     auto& top = mapIt->second.front();
     if (!top->IsUsed && !Ctx_.HasPendingErrors && !name.StartsWith("$_")) {
         if (!Ctx_.Warning(top->NamePos, TIssuesIds::YQL_UNUSED_SYMBOL, [&](auto& out) {
-            out << "Symbol " << name << " is not used";
-        })) {
+                out << "Symbol " << name << " is not used";
+            })) {
             return false;
         }
     }
@@ -692,7 +689,7 @@ bool TTranslation::WarnUnusedNodes() const {
         return true;
     }
 
-    for (const auto& [name, items]: Ctx_.Scoped->NamedNodes) {
+    for (const auto& [name, items] : Ctx_.Scoped->NamedNodes) {
         if (name.StartsWith("$_")) {
             continue;
         }
@@ -700,8 +697,8 @@ bool TTranslation::WarnUnusedNodes() const {
         for (const auto& item : items) {
             if (!item->IsUsed && item->Level == Ctx_.ScopeLevel) {
                 if (!Ctx_.Warning(item->NamePos, TIssuesIds::YQL_UNUSED_SYMBOL, [&](auto& out) {
-                    out << "Symbol " << name << " is not used";
-                })) {
+                        out << "Symbol " << name << " is not used";
+                    })) {
                     return false;
                 }
             }

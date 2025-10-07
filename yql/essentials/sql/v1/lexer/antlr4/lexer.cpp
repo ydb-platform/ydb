@@ -29,10 +29,10 @@ public:
     }
 };
 
-}
+} // namespace
 
 NSQLTranslation::TLexerFactoryPtr MakeAntlr4LexerFactory() {
     return MakeIntrusive<TFactory>();
 }
 
-}
+} // namespace NSQLTranslationV1

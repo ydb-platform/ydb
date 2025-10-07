@@ -11,13 +11,13 @@
 
 namespace NSQLComplete {
 
-    using TNamedNode = std::variant<
-        SQLv1::ExprContext*,
-        NYT::TNode,
-        std::monostate>;
+using TNamedNode = std::variant<
+    SQLv1::ExprContext*,
+    NYT::TNode,
+    std::monostate>;
 
-    using TNamedNodes = THashMap<TString, TNamedNode>;
+using TNamedNodes = THashMap<TString, TNamedNode>;
 
-    TNamedNodes CollectNamedNodes(TParsedInput input, const TEnvironment& env);
+TNamedNodes CollectNamedNodes(TParsedInput input, const TEnvironment& env);
 
 } // namespace NSQLComplete

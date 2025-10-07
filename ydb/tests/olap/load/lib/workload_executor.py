@@ -142,7 +142,7 @@ class WorkloadTestBase(LoadSuiteBase):
             return cls._create_cluster_issue("cluster_check_exception", f"Exception during cluster check: {e}")
 
     @classmethod
-    def test_event_report(cls, event_kind: str, 
+    def test_event_report(cls, event_kind: str,
                           verification_phase: str = None, check_type: str = None,
                           cluster_issue: dict = None) -> None:
         """
@@ -165,10 +165,10 @@ class WorkloadTestBase(LoadSuiteBase):
                 "event_type": "test_initialization",
                 "test_started": True
             }
-            
+
             # Добавляем nemesis_enabled в статистику
             statistics["nemesis_enabled"] = nemesis_enabled
-                
+
             upload_data = {
                 "kind": 'TestInit',
                 "suite": suite_name,
@@ -192,7 +192,7 @@ class WorkloadTestBase(LoadSuiteBase):
                 "check_type": check_type,
                 **cluster_issue
             }
-            
+
             # Добавляем nemesis_enabled в статистику
             stats["nemesis_enabled"] = nemesis_enabled
 
@@ -361,7 +361,7 @@ class WorkloadTestBase(LoadSuiteBase):
             if not nodes:
                 # Создаем информацию о проблеме и репортим
                 cluster_issue = cls._create_cluster_issue(
-                    "cluster_no_nodes",
+                    "no_cluster_nodes_for_nemesis",
                     "No working cluster nodes found during nemesis management",
                     0
                 )
@@ -728,7 +728,7 @@ class WorkloadTestBase(LoadSuiteBase):
                     nemesis_log.append(f"Nemesis service started partially: {success_count}/{len(unique_hosts)} hosts")
 
                     cluster_issue = cls._create_cluster_issue(
-                        "nemesis_partial_failure",
+                        "nemesis_partial_startup",
                         f"Nemesis started on {success_count}/{len(unique_hosts)} hosts. Failed hosts: {error_count}. Errors: {'; '.join(errors[:3])}{'...' if len(errors) > 3 else ''}",
                         success_count
                     )
@@ -759,15 +759,15 @@ class WorkloadTestBase(LoadSuiteBase):
         except Exception as e:
             # Создаем информацию о проблеме и репортим
             cluster_issue = cls._create_cluster_issue(
-                "cluster_check_exception",
-                f"Exception during nemesis management: {e}",
+                f"nemesis_{action_name.lower()}_exception",
+                f"Exception during nemesis {action_name.lower()}: {e}",
                 0
             )
 
             cls.test_event_report(
                 event_kind='ClusterCheck',
                 verification_phase="nemesis_management",
-                check_type="nemesis_cluster_check",
+                check_type=f"nemesis_{action_name.lower()}_exception",
                 cluster_issue=cluster_issue
             )
 
@@ -2485,7 +2485,7 @@ class WorkloadTestBase(LoadSuiteBase):
             if not nemesis_actually_started:
                 # Nemesis должен был запуститься, но не запустился
                 cluster_issue = self.__class__._create_cluster_issue(
-                    "nemesis_not_started",
+                    "nemesis_startup_failed",
                     "Nemesis was enabled for test but failed to start. Check nemesis management logs for details.",
                     0
                 )

@@ -18,7 +18,11 @@ $last_test_status = SELECT
 FROM `nemesis/tests_results`
 WHERE 
     CAST(RunId AS Uint64) / 1000UL > $run_id_limit
-    AND Kind IN ('TestInit', 'ClusterCheck', 'Stability');
+    AND (
+        Kind = 'TestInit'
+        OR (Kind = 'ClusterCheck' AND Success = 0)  -- Только неуспешные проверки кластера
+        OR (Kind = 'Stability' AND JSON_VALUE(Stats, '$.aggregation_level') = 'aggregate')
+    );
 
 -- Берем только последний статус для каждого теста
 $latest_status = SELECT
@@ -58,16 +62,16 @@ $test_status = SELECT
                         ELSE 'in_progress'
                     END
                 -- Если нет planned_duration, используем дефолтное время (3 часа)
-                WHEN CAST(CurrentUtcTimestamp() AS Uint64) - CAST(LastTimestamp AS Uint64) > 3UL * 3600UL * 1000000UL THEN 'timeout'
+                WHEN CAST(CurrentUtcTimestamp() AS Uint64) - CAST(LastTimestamp AS Uint64) > 3UL * 3600UL * 1000000UL THEN 'broken'
                 ELSE 'in_progress'
             END
-        WHEN LastKind = 'ClusterCheck' THEN 'infrastructure_error'
+        WHEN LastKind = 'ClusterCheck' THEN 'infrastructure_error'  -- Проблема с кластером
         WHEN LastKind = 'Stability' THEN 
             CASE
                 WHEN LastSuccess = 1U AND (JSON_VALUE(LastStats, '$.node_errors') = 'true' OR JSON_VALUE(LastStats, '$.workload_errors') = 'true') THEN 'success_with_errors'
                 WHEN LastSuccess = 1U THEN 'success'
                 WHEN JSON_VALUE(LastStats, '$.node_errors') = 'true' THEN 'node_failure'
-                WHEN JSON_VALUE(LastStats, '$.workload_errors') = 'true' THEN 'workload_failure'
+                WHEN JSON_VALUE(LastStats, '$.workload_errors') = 'true' THEN 'success'--'workload_failure'
                 ELSE 'failure'
             END
         ELSE 'unknown'
@@ -148,7 +152,61 @@ FROM $latest_status;
 
 -- Вычисляем дополнительные метрики
 $final_metrics = SELECT
-    *,
+    Db,
+    Suite,
+    Test,
+    RunId,
+    LastKind,
+    LastTimestamp,
+    LastSuccess,
+    LastStats,
+    LastInfo,
+    OverallStatus,
+    TotalRuns,
+    SuccessfulRuns,
+    FailedRuns,
+    TotalIterations,
+    SuccessfulIterations,
+    FailedIterations,
+    PlannedDuration,
+    ActualDuration,
+    TotalExecutionTime,
+    SuccessRate,
+    AvgThreadsPerIteration,
+    TotalThreads,
+    NodesPercentage,
+    NodesWithIssues,
+    NodeErrorMessages,
+    WorkloadErrorMessages,
+    WorkloadWarningMessages,
+    UseIterations,
+    NemesisEnabled,
+    WorkloadType,
+    PathTemplate,
+    NodeErrors,
+    WorkloadErrors,
+    WorkloadWarnings,
+    TableType,
+    TestTimestamp,
+    ClusterVersion,
+    ClusterVersionLink,
+    ClusterEndpoint,
+    ClusterDatabase,
+    ClusterMonitoring,
+    NodesCount,
+    NodesInfo,
+    CiVersion,
+    TestToolsVersion,
+    ReportUrl,
+    CiLaunchId,
+    CiLaunchUrl,
+    CiLaunchStartTime,
+    CiJobTitle,
+    CiClusterName,
+    CiNemesis,
+    CiBuildType,
+    CiSanitizer,
+    OrderInRun,
     
     -- Вычисляем FacedNodeErrors
     CASE
@@ -233,6 +291,10 @@ SELECT
     TableType,
     TestTimestamp,
     
+    -- Информация об ошибках ClusterCheck
+    CASE WHEN LastKind = 'ClusterCheck' THEN JSON_VALUE(LastStats, '$.issue_type') ELSE NULL END AS ClusterIssueType,
+    CASE WHEN LastKind = 'ClusterCheck' THEN JSON_VALUE(LastStats, '$.issue_description') ELSE NULL END AS ClusterIssueDescription,
+    
     -- Информация о кластере
     ClusterVersion,
     ClusterVersionLink,
@@ -258,6 +320,21 @@ SELECT
     COALESCE(SubString(CAST(ClusterVersion AS String), 0U, FIND(CAST(ClusterVersion AS String), '.')), 'unknown') AS Branch,
     COALESCE(SubString(CAST(CiVersion AS String), 0U, FIND(CAST(CiVersion AS String), '.')), 'unknown') AS CiBranch,
     COALESCE(SubString(CAST(TestToolsVersion AS String), 0U, FIND(CAST(TestToolsVersion AS String), '.')), 'unknown') AS TestToolsBranch,
+    
+    -- Объединяем BUILD_TYPE и SANITIZER с преобразованием названий
+    CASE
+        WHEN CiBuildType IS NOT NULL AND CiSanitizer IS NOT NULL AND CiSanitizer != '' THEN
+            CiBuildType || '-' || 
+            CASE 
+                WHEN CiSanitizer = 'address' THEN 'asan'
+                WHEN CiSanitizer = 'thread' THEN 'tsan'
+                WHEN CiSanitizer = 'memory' THEN 'msan'
+                ELSE CiSanitizer
+            END
+        WHEN CiBuildType IS NOT NULL THEN
+            CiBuildType
+        ELSE 'unknown'
+    END AS BUILD_TYPE_AND_SAN,
     
     -- Вычисляемые метрики
     FailureRate,

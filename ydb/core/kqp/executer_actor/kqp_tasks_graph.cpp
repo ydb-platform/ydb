@@ -518,6 +518,47 @@ void TKqpTasksGraph::BuildVectorResolveChannels(const TStageInfo& stageInfo, ui3
         inputStageInfo, outputIndex, enableSpilling, logFunc);
 }
 
+void TKqpTasksGraph::BuildDqSourceStreamLookupChannels(const TStageInfo& stageInfo, ui32 inputIndex, const TStageInfo& inputStageInfo,
+    ui32 outputIndex, const NKqpProto::TKqpPhyCnDqSourceStreamLookup& dqSourceStreamLookup, const TChannelLogFunc& logFunc) {
+    YQL_ENSURE(stageInfo.Tasks.size() == 1);
+
+    auto* settings = GetMeta().Allocate<NDqProto::TDqInputTransformLookupSettings>();
+    settings->SetLeftLabel(dqSourceStreamLookup.GetLeftLabel());
+    settings->SetRightLabel(dqSourceStreamLookup.GetRightLabel());
+    settings->SetJoinType(dqSourceStreamLookup.GetJoinType());
+    settings->SetNarrowInputRowType(dqSourceStreamLookup.GetConnectionInputRowType());
+    settings->SetNarrowOutputRowType(dqSourceStreamLookup.GetConnectionOutputRowType());
+    settings->SetCacheLimit(dqSourceStreamLookup.GetCacheLimit());
+    settings->SetCacheTtlSeconds(dqSourceStreamLookup.GetCacheTtlSeconds());
+    settings->SetMaxDelayedRows(dqSourceStreamLookup.GetMaxDelayedRows());
+    settings->SetIsMultiget(dqSourceStreamLookup.GetIsMultiGet());
+
+    const auto& leftJointKeys = dqSourceStreamLookup.GetLeftJoinKeyNames();
+    settings->MutableLeftJoinKeyNames()->Assign(leftJointKeys.begin(), leftJointKeys.end());
+
+    const auto& rightJointKeys = dqSourceStreamLookup.GetRightJoinKeyNames();
+    settings->MutableRightJoinKeyNames()->Assign(rightJointKeys.begin(), rightJointKeys.end());
+
+    auto& streamLookupSource = *settings->MutableRightSource();
+    streamLookupSource.SetSerializedRowType(dqSourceStreamLookup.GetLookupRowType());
+    const auto& compiledSource = dqSourceStreamLookup.GetLookupSource();
+    streamLookupSource.SetProviderName(compiledSource.GetType());
+    *streamLookupSource.MutableLookupSource() = compiledSource.GetSettings();
+
+    TTransform dqSourceStreamLookupTransform = {
+        .Type = "StreamLookupInputTransform",
+        .InputType = dqSourceStreamLookup.GetInputStageRowType(),
+        .OutputType = dqSourceStreamLookup.GetOutputStageRowType(),
+    };
+    YQL_ENSURE(dqSourceStreamLookupTransform.Settings.PackFrom(*settings));
+
+    for (const auto taskId : stageInfo.Tasks) {
+        GetTask(taskId).Inputs[inputIndex].Transform = dqSourceStreamLookupTransform;
+    }
+
+    BuildUnionAllChannels(*this, stageInfo, inputIndex, inputStageInfo, outputIndex, /* enableSpilling */ false, logFunc);
+}
+
 void TKqpTasksGraph::BuildKqpStageChannels(TStageInfo& stageInfo, ui64 txId, bool enableSpilling, bool enableShuffleElimination) {
     auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
 
@@ -707,6 +748,12 @@ void TKqpTasksGraph::BuildKqpStageChannels(TStageInfo& stageInfo, ui64 txId, boo
 
             case NKqpProto::TKqpPhyConnection::kVectorResolve: {
                 BuildVectorResolveChannels(stageInfo, inputIdx, inputStageInfo, outputIdx, input.GetVectorResolve(), enableSpilling, log);
+                break;
+            }
+
+            case NKqpProto::TKqpPhyConnection::kDqSourceStreamLookup: {
+                BuildDqSourceStreamLookupChannels(stageInfo, inputIdx, inputStageInfo, outputIdx,
+                    input.GetDqSourceStreamLookup(), log);
                 break;
             }
 
@@ -1370,6 +1417,8 @@ void TKqpTasksGraph::FillInputDesc(NYql::NDqProto::TTaskInput& inputDesc, const 
             }
 
             transformProto->MutableSettings()->PackFrom(*input.Meta.VectorResolveSettings);
+        } else {
+            *transformProto->MutableSettings() = input.Transform->Settings;
         }
     }
 }
@@ -1725,6 +1774,7 @@ bool TKqpTasksGraph::BuildComputeTasks(TStageInfo& stageInfo, const ui32 nodesCo
                 case NKqpProto::TKqpPhyConnection::kMap:
                 case NKqpProto::TKqpPhyConnection::kParallelUnionAll:
                 case NKqpProto::TKqpPhyConnection::kVectorResolve:
+                case NKqpProto::TKqpPhyConnection::kDqSourceStreamLookup:
                     break;
                 default:
                     YQL_ENSURE(false, "Unexpected connection type: " << (ui32)input.GetTypeCase() << Endl);

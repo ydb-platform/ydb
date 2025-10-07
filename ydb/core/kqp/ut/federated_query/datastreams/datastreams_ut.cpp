@@ -35,6 +35,27 @@ struct TScriptQuerySettings {
     TDuration Timeout = TDuration::Seconds(30);
 };
 
+struct TColumn {
+    TString Name;
+    Ydb::Type::PrimitiveTypeId Type;
+};
+
+struct TMockConnectorTableDescriptionSettings {
+    TString TableName;
+    std::vector<TColumn> Columns;
+    ui64 DescribeCount = 1;
+    ui64 ListSplitsCount = 1;
+    bool ValidateListSplitsArgs = true;
+};
+
+struct TMockConnectorReadSplitsSettings {
+    TString TableName;
+    std::vector<TColumn> Columns;
+    ui64 NumberReadSplits;
+    bool ValidateReadSplitsArgs = true;
+    std::function<std::shared_ptr<arrow::RecordBatch>()> ResultFactory;
+};
+
 class TStreamingTestFixture : public NUnitTest::TBaseFixture {
     using TBase = NUnitTest::TBaseFixture;
 
@@ -349,6 +370,24 @@ public:
         ));
     }
 
+    void CreateYdbSource(const TString& ydbSourceName) {
+        ExecQuery(fmt::format(R"(
+            UPSERT OBJECT ydb_source_secret (TYPE SECRET) WITH (value = "{token}");
+            CREATE EXTERNAL DATA SOURCE `{ydb_source}` WITH (
+                SOURCE_TYPE = "Ydb",
+                LOCATION = "{ydb_location}",
+                DATABASE_NAME = "{ydb_database_name}",
+                AUTH_METHOD = "TOKEN",
+                TOKEN_SECRET_NAME = "ydb_source_secret",
+                USE_TLS = "FALSE"
+            );)",
+            "ydb_source"_a = ydbSourceName,
+            "ydb_location"_a = YDB_ENDPOINT,
+            "ydb_database_name"_a = YDB_DATABASE,
+            "token"_a = BUILTIN_ACL_ROOT
+        ));
+    }
+
     // Script executions (using query client SDK)
 
     TOperation::TOperationId ExecScript(const TString& query, std::optional<TExecuteScriptSettings> settings = std::nullopt, bool waitRunning = true) {
@@ -563,7 +602,7 @@ public:
         });
     }
 
-    // Utils
+    // Mock PQ utils
 
     static IMockPqReadSession::TPtr WaitMockPqReadSession(IMockPqGateway::TPtr gateway, const TString& topic) {
         return WaitForPqMockSession<IMockPqReadSession>(TEST_OPERATION_TIMEOUT, "read", [gateway, topic]() {
@@ -610,6 +649,93 @@ public:
     static void ReadMockPqMessage(IMockPqWriteSession::TPtr session, const TString& message) {
         ReadMockPqMessages(session, {message});
     }
+
+    // Mock Connector utils
+
+    static NYql::TGenericDataSourceInstance GetMockConnectorSourceInstance() {
+        NYql::TGenericDataSourceInstance dataSourceInstance;
+        dataSourceInstance.set_kind(NYql::YDB);
+        dataSourceInstance.set_database(YDB_DATABASE);
+        dataSourceInstance.set_use_tls(false);
+        dataSourceInstance.set_protocol(NYql::NATIVE);
+
+        auto& endpoint = *dataSourceInstance.mutable_endpoint();
+        TIpPort port;
+        NHttp::CrackAddress(YDB_ENDPOINT, *endpoint.mutable_host(), port);
+        endpoint.set_port(port);
+
+        auto& iamToken = *dataSourceInstance.mutable_credentials()->mutable_token();
+        iamToken.set_type("IAM");
+        iamToken.set_value(BUILTIN_ACL_ROOT);
+
+        return dataSourceInstance;
+    }
+
+    template <typename TRequestBuilder>
+    static void FillMockConnectorRequestColumns(TRequestBuilder& builder, const std::vector<TColumn>& columns) {
+        for (const auto& column : columns) {
+            builder.Column(column.Name, column.Type);
+        }
+    }
+
+    // Should be called at most once
+    static void SetupMockConnectorTableDescription(std::shared_ptr<TConnectorClientMock> mockClient, const TMockConnectorTableDescriptionSettings& settings) {
+        TTypeMappingSettings typeMappingSettings;
+        typeMappingSettings.set_date_time_format(STRING_FORMAT);
+
+        auto describeTableBuilder = mockClient->ExpectDescribeTable();
+        describeTableBuilder
+            .Table(settings.TableName)
+            .DataSourceInstance(GetMockConnectorSourceInstance())
+            .TypeMappingSettings(typeMappingSettings);
+
+        auto listSplitsBuilder = mockClient->ExpectListSplits();
+        listSplitsBuilder
+            .ValidateArgs(settings.ValidateListSplitsArgs)
+            .Select()
+                .DataSourceInstance(GetMockConnectorSourceInstance())
+                .Table(settings.TableName);
+
+        for (ui64 i = 0; i < settings.DescribeCount; ++i) {
+            auto responseBuilder = describeTableBuilder.Response();
+            FillMockConnectorRequestColumns(responseBuilder, settings.Columns);
+        }
+
+        for (ui64 i = 0; i < settings.ListSplitsCount; ++i) {
+            auto responseBuilder = listSplitsBuilder.Result()
+                .AddResponse(NYql::NConnector::NewSuccess())
+                    .Description("some binary description")
+                    .Select()
+                        .DataSourceInstance(GetMockConnectorSourceInstance())
+                        .What();
+            FillMockConnectorRequestColumns(responseBuilder, settings.Columns);
+        }
+    }
+
+    // Should be called at most once
+    static void SetupMockConnectorTableData(std::shared_ptr<TConnectorClientMock> mockClient, const TMockConnectorReadSplitsSettings& settings) {
+        auto readSplitsBuilder = mockClient->ExpectReadSplits();
+
+        {
+            auto columnsBuilder = readSplitsBuilder
+                .Filtering(TReadSplitsRequest::FILTERING_OPTIONAL)
+                .ValidateArgs(settings.ValidateReadSplitsArgs)
+                .Split()
+                    .Description("some binary description")
+                    .Select()
+                        .Table(settings.TableName)
+                        .DataSourceInstance(GetMockConnectorSourceInstance())
+                        .What();
+            FillMockConnectorRequestColumns(columnsBuilder, settings.Columns);
+        }
+
+        for (ui64 i = 0; i < settings.NumberReadSplits; ++i) {
+            readSplitsBuilder.Result()
+                .AddResponse(settings.ResultFactory(), NYql::NConnector::NewSuccess());
+        }
+    }
+
+    // Utils
 
     static void WaitFor(TDuration timeout, const TString& description, std::function<bool(TString&)> callback) {
         TInstant start = TInstant::Now();
@@ -1113,6 +1239,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         WaitCheckpointUpdate(executionId);
 
         auto readSession = WaitMockPqReadSession(pqGateway, inputTopicName);
+        auto writeSession = WaitMockPqWriteSession(pqGateway, outputTopicName);
         readSession->AddDataReceivedEvent(1, R"({"key": "key1", "value": "value1"})");
         readSession->AddDataReceivedEvent(2, R"({"key": "key2", "value": "value2"})");
         readSession->AddDataReceivedEvent(3, R"({"key": "key3", "value": "value3"})");
@@ -1123,7 +1250,8 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         WaitCheckpointUpdate(executionId);
 
         WaitMockPqReadSession(pqGateway, inputTopicName)->AddDataReceivedEvent(4, R"({"key": "key4", "value": "value4"})");
-        ReadMockPqMessage(WaitMockPqWriteSession(pqGateway, outputTopicName), "key4value4");
+        writeSession = WaitMockPqWriteSession(pqGateway, outputTopicName);
+        ReadMockPqMessage(writeSession, "key4value4");
 
         CancelScriptExecution(operationId);
     }
@@ -1782,24 +1910,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         CreateTopic(outputTopicName);
 
         constexpr char pqSourceName[] = "pqSourceName";
-        CreatePqSource(pqSourceName);
-
         constexpr char ydbSourceName[] = "ydbSourceName";
-        ExecQuery(fmt::format(R"(
-            CREATE OBJECT secret_name (TYPE SECRET) WITH (value = "{token}");
-            CREATE EXTERNAL DATA SOURCE `{ydb_source}` WITH (
-                SOURCE_TYPE = "Ydb",
-                LOCATION = "{ydb_location}",
-                DATABASE_NAME = "{ydb_database_name}",
-                AUTH_METHOD = "TOKEN",
-                TOKEN_SECRET_NAME = "secret_name",
-                USE_TLS = "FALSE"
-            );)",
-            "ydb_source"_a = ydbSourceName,
-            "ydb_location"_a = YDB_ENDPOINT,
-            "ydb_database_name"_a = YDB_DATABASE,
-            "token"_a = BUILTIN_ACL_ROOT
-        ));
+        CreatePqSource(pqSourceName);
+        CreateYdbSource(ydbSourceName);
 
         constexpr char ydbTable[] = "lookup";
         ExecExternalQuery(fmt::format(R"(
@@ -1812,75 +1925,30 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         ));
 
         {   // Prepare connector mock
-            NYql::TGenericDataSourceInstance dataSourceInstance;
-            dataSourceInstance.set_kind(NYql::YDB);
-            dataSourceInstance.set_database(YDB_DATABASE);
-            dataSourceInstance.set_use_tls(false);
-            dataSourceInstance.set_protocol(NYql::NATIVE);
-
-            auto& endpoint = *dataSourceInstance.mutable_endpoint();
-            TIpPort port;
-            NHttp::CrackAddress(YDB_ENDPOINT, *endpoint.mutable_host(), port);
-            endpoint.set_port(port);
-
-            auto& iamToken = *dataSourceInstance.mutable_credentials()->mutable_token();
-            iamToken.set_type("IAM");
-            iamToken.set_value(BUILTIN_ACL_ROOT);
-
-            TTypeMappingSettings typeMappingSettings;
-            typeMappingSettings.set_date_time_format(STRING_FORMAT);
-
-            auto describeTableBuilder = connectorClient->ExpectDescribeTable();
-            describeTableBuilder
-                .Table(ydbTable)
-                .DataSourceInstance(dataSourceInstance)
-                .TypeMappingSettings(typeMappingSettings);
-
-            auto listSplitsBuilder = connectorClient->ExpectListSplits();
-            listSplitsBuilder.Select()
-                .DataSourceInstance(dataSourceInstance)
-                .Table(ydbTable);
+            const std::vector<TColumn> columns = {
+                {"fqdn", Ydb::Type::STRING},
+                {"payload", Ydb::Type::STRING}
+            };
+            SetupMockConnectorTableDescription(connectorClient, {
+                .TableName = ydbTable,
+                .Columns = columns,
+                .DescribeCount = 2,
+                .ListSplitsCount = 2
+            });
 
             const std::vector<std::string> fqdnColumn = {"host1.example.com", "host2.example.com", "host3.example.com"};
             const std::vector<std::string> payloadColumn = {"P1", "P2", "P3"};
-            auto readSplitsBuilder = connectorClient->ExpectReadSplits();
-            readSplitsBuilder
-                .Filtering(TReadSplitsRequest::FILTERING_OPTIONAL)
-                .Split()
-                    .Description("some binary description")
-                    .Select()
-                        .Table(ydbTable)
-                        .DataSourceInstance(dataSourceInstance)
-                        .What()
-                            .Column("fqdn", Ydb::Type::STRING)
-                            .Column("payload", Ydb::Type::STRING);
-
-            const auto builtResults = [&]() {
-                describeTableBuilder.Response()
-                    .Column("fqdn", Ydb::Type::STRING)
-                    .Column("payload", Ydb::Type::STRING);
-
-                listSplitsBuilder.Result()
-                    .AddResponse(NYql::NConnector::NewSuccess())
-                        .Description("some binary description")
-                        .Select()
-                            .DataSourceInstance(dataSourceInstance)
-                            .What()
-                                .Column("fqdn", Ydb::Type::STRING)
-                                .Column("payload", Ydb::Type::STRING);
-
-                readSplitsBuilder.Result()
-                    .AddResponse(
-                        MakeRecordBatch(
-                            MakeArray<arrow::BinaryBuilder>("fqdn", fqdnColumn, arrow::binary()),
-                            MakeArray<arrow::BinaryBuilder>("payload", payloadColumn, arrow::binary())
-                        ),
-                        NYql::NConnector::NewSuccess()
+            SetupMockConnectorTableData(connectorClient, {
+                .TableName = ydbTable,
+                .Columns = columns,
+                .NumberReadSplits = 2,
+                .ResultFactory = [&]() {
+                    return MakeRecordBatch(
+                        MakeArray<arrow::BinaryBuilder>("fqdn", fqdnColumn, arrow::binary()),
+                        MakeArray<arrow::BinaryBuilder>("payload", payloadColumn, arrow::binary())
                     );
-            };
-
-            builtResults();
-            builtResults(); // Streaming queries compiled twice, also in test results requested twice due to retry
+                }
+            });
         }
 
         constexpr char queryName[] = "streamingQuery";
@@ -1932,6 +2000,131 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         WaitMockPqReadSession(pqGateway, inputTopicName)->AddDataReceivedEvent(sampleMessages);
         ReadMockPqMessages(WaitMockPqWriteSession(pqGateway, outputTopicName), sampleResult);
+    }
+
+    Y_UNIT_TEST_F(StreamingQueryWithStreamLookupJoin, TStreamingTestFixture) {
+        const auto connectorClient = SetupMockConnectorClient();
+        const auto pqGateway = SetupMockPqGateway();
+
+        constexpr char inputTopicName[] = "sljInputTopicName";
+        constexpr char outputTopicName[] = "sljOutputTopicName";
+        CreateTopic(inputTopicName);
+        CreateTopic(outputTopicName);
+
+        constexpr char pqSourceName[] = "pqSourceName";
+        constexpr char ydbSourceName[] = "ydbSourceName";
+        CreatePqSource(pqSourceName);
+        CreateYdbSource(ydbSourceName);
+
+        constexpr char ydbTable[] = "lookup";
+        ExecExternalQuery(fmt::format(R"(
+            CREATE TABLE `{table}` (
+                fqdn String,
+                payload String,
+                PRIMARY KEY (fqdn)
+            ))",
+            "table"_a = ydbTable
+        ));
+
+        {   // Prepare connector mock
+            const std::vector<TColumn> columns = {
+                {"fqdn", Ydb::Type::STRING},
+                {"payload", Ydb::Type::STRING}
+            };
+            SetupMockConnectorTableDescription(connectorClient, {
+                .TableName = ydbTable,
+                .Columns = columns,
+                .DescribeCount = 2,
+                .ListSplitsCount = 5,
+                .ValidateListSplitsArgs = false
+            });
+
+            ui64 readSplitsCount = 0;
+            const std::vector<std::string> fqdnColumn = {"host1.example.com", "host2.example.com", "host3.example.com"};
+            SetupMockConnectorTableData(connectorClient, {
+                .TableName = ydbTable,
+                .Columns = columns,
+                .NumberReadSplits = 3,
+                .ValidateReadSplitsArgs = false,
+                .ResultFactory = [&]() {
+                    readSplitsCount += 1;
+                    const auto payloadColumn = readSplitsCount < 3
+                        ? std::vector<std::string>{"P1", "P2", "P3"}
+                        : std::vector<std::string>{"P4", "P5", "P6"};
+
+                    return MakeRecordBatch(
+                        MakeArray<arrow::BinaryBuilder>("fqdn", fqdnColumn, arrow::binary()),
+                        MakeArray<arrow::BinaryBuilder>("payload", payloadColumn, arrow::binary())
+                    );
+                }
+            });
+        }
+
+        constexpr char queryName[] = "streamingQuery";
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                $ydb_lookup = SELECT * FROM `{ydb_source}`.`{ydb_table}`;
+
+                $pq_source = SELECT * FROM `{pq_source}`.`{input_topic}` WITH (
+                    FORMAT = "json_each_row",
+                    SCHEMA (
+                        time Int32 NOT NULL,
+                        event String,
+                        host String
+                    )
+                );
+
+                $joined = SELECT l.payload AS payload, p.* FROM $pq_source AS p
+                LEFT JOIN /*+ streamlookup(TTL 1) */ ANY $ydb_lookup AS l
+                ON (l.fqdn = p.host);
+
+                INSERT INTO `{pq_source}`.`{output_topic}`
+                SELECT Unwrap(event || "-" || payload) FROM $joined
+            END DO;)",
+            "query_name"_a = queryName,
+            "pq_source"_a = pqSourceName,
+            "ydb_source"_a = ydbSourceName,
+            "ydb_table"_a = ydbTable,
+            "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName
+        ));
+
+        CheckScriptExecutionsCount(1, 1);
+
+        auto readSession = WaitMockPqReadSession(pqGateway, inputTopicName);
+        const std::vector<IMockPqReadSession::TMessage> sampleMessages = {
+            {0, R"({"time": 0, "event": "A", "host": "host1.example.com"})"},
+            {1, R"({"time": 1, "event": "B", "host": "host3.example.com"})"},
+            {2, R"({"time": 2, "event": "A", "host": "host1.example.com"})"},
+        };
+        readSession->AddDataReceivedEvent(sampleMessages);
+
+        auto writeSession = WaitMockPqWriteSession(pqGateway, outputTopicName);
+        const std::vector<TString> sampleResult = {"A-P1", "B-P3", "A-P1"};
+        ReadMockPqMessages(writeSession, sampleResult);
+
+        readSession->AddCloseSessionEvent(EStatus::UNAVAILABLE, {NIssue::TIssue("Test pq session failure")});
+
+        readSession = WaitMockPqReadSession(pqGateway, inputTopicName);
+        readSession->AddDataReceivedEvent(sampleMessages);
+        writeSession = WaitMockPqWriteSession(pqGateway, outputTopicName);
+        ReadMockPqMessages(writeSession, sampleResult);
+
+        Sleep(TDuration::Seconds(2));
+        readSession->AddDataReceivedEvent(sampleMessages);
+        ReadMockPqMessages(writeSession, {"A-P4", "B-P6", "A-P4"});
+
+        CheckScriptExecutionsCount(1, 1);
+        const auto results = ExecQuery(
+            "SELECT ast_compressed FROM `.metadata/script_executions`;"
+        );
+        UNIT_ASSERT_VALUES_EQUAL(results.size(), 1);
+        CheckScriptResult(results[0], 1, 1, [](TResultSetParser& result) {
+            const auto& ast = result.ColumnParser(0).GetOptionalString();
+            UNIT_ASSERT(ast);
+            UNIT_ASSERT_STRING_CONTAINS(*ast, "DqCnStreamLookup");
+        });
     }
 }
 

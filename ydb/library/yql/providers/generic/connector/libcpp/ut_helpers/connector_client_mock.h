@@ -68,6 +68,11 @@ namespace NYql::NConnector::NTest {
         return google::protobuf::util::MessageDifferencer::Equals(arg, expected);
     }
 
+    MATCHER_P(RequestRelaxedMatcher, expected, "") {
+        Y_UNUSED(arg);
+        return true;
+    }
+
 #define MATCH_RESULT_WITH_INPUT(INPUT, RESULT_SET, GETTER)                      \
     {                                                                           \
         for (const auto& val : INPUT) {                                         \
@@ -689,13 +694,21 @@ namespace NYql::NConnector::NTest {
                 return *this;
             }
 
+            auto& ValidateArgs(bool validate) {
+                ValidateArgs_ = validate;
+                return *this;
+            }
+
         private:
             void SetExpectation() {
                 if (ResponseResults_.empty()) {
                     Result();
                 }
 
-                auto& expectBuilder = EXPECT_CALL(*Mock_, ListSplitsImpl(ProtobufRequestMatcher(*Result_)));
+                auto& expectBuilder = ValidateArgs_
+                    ? EXPECT_CALL(*Mock_, ListSplitsImpl(ProtobufRequestMatcher(*Result_)))
+                    : EXPECT_CALL(*Mock_, ListSplitsImpl(RequestRelaxedMatcher(*Result_)));
+
                 for (auto response : ResponseResults_) {
                     expectBuilder.WillOnce(Return(TIteratorResult<IListSplitsStreamIterator>{ResponseStatus_, response}));
                 }
@@ -705,6 +718,7 @@ namespace NYql::NConnector::NTest {
             TConnectorClientMock* Mock_ = nullptr;
             std::vector<TListSplitsStreamIteratorMock::TPtr> ResponseResults_;
             NYdbGrpc::TGrpcStatus ResponseStatus_ {};
+            bool ValidateArgs_ = true;
         };
 
         template <class TParent = void /* no parent by default */>
@@ -767,6 +781,11 @@ namespace NYql::NConnector::NTest {
                 return *this;
             }
 
+            auto& ValidateArgs(bool validate) {
+                ValidateArgs_ = validate;
+                return *this;
+            }
+
             void FillWithDefaults() {
                 Format(NApi::TReadSplitsRequest::ARROW_IPC_STREAMING);
             }
@@ -777,7 +796,10 @@ namespace NYql::NConnector::NTest {
                     Result();
                 }
 
-                auto& expectBuilder = EXPECT_CALL(*Mock_, ReadSplitsImpl(ProtobufRequestMatcher(*Result_)));
+                auto& expectBuilder = ValidateArgs_
+                    ? EXPECT_CALL(*Mock_, ReadSplitsImpl(ProtobufRequestMatcher(*Result_)))
+                    : EXPECT_CALL(*Mock_, ReadSplitsImpl(RequestRelaxedMatcher(*Result_)));
+
                 for (auto response : ResponseResults_) {
                     expectBuilder.WillOnce(Return(TIteratorResult<IReadSplitsStreamIterator>{ResponseStatus_, response}));
                 }
@@ -787,6 +809,7 @@ namespace NYql::NConnector::NTest {
             TConnectorClientMock* Mock_ = nullptr;
             std::vector<TReadSplitsStreamIteratorMock::TPtr> ResponseResults_;
             NYdbGrpc::TGrpcStatus ResponseStatus_ {};
+            bool ValidateArgs_ = true;
         };
 
         TDescribeTableExpectationBuilder ExpectDescribeTable() {

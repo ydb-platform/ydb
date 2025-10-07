@@ -10272,7 +10272,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 CREATE TRANSFER `/Root/transfer_fi`
                   FROM `/Root/topic` TO `/Root/table` USING ($x) -> { RETURN <| id:$x._offset |> }
                 WITH (
-                    CONNECTION_STRING = "%s",
+                    CONNECTION_STRING = "%s/?database=/Root",
                     FLUSH_INTERVAL = Interval('PT1S')
                 );
             )", kikimr.GetEndpoint().c_str());
@@ -10467,6 +10467,21 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 CREATE TRANSFER `/Root/transfer`
                   FROM `/Root/topic` TO `/Root/table` USING ($x) -> { RETURN <| id:$x._offset |> }
                 WITH (
+                    CONNECTION_STRING = "grpc://localhost:2135?database=/Root"
+                );
+            )";
+
+            const auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "Database is not specified");
+        }
+
+        {
+            auto query = R"(
+                --!syntax_v1
+                CREATE TRANSFER `/Root/transfer`
+                  FROM `/Root/topic` TO `/Root/table` USING ($x) -> { RETURN <| id:$x._offset |> }
+                WITH (
                     CONNECTION_STRING = "grpc://localhost:2135/?database=/Root",
                     CONSUMER = ''
                 );
@@ -10560,7 +10575,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 CREATE TRANSFER `/Root/transfer_fi`
                   FROM `/Root/topic` TO `/Root/table` USING ($x) -> { RETURN <| id:$x._offset |> }
                 WITH (
-                    CONNECTION_STRING = "%s",
+                    CONNECTION_STRING = "%s/?database=/Root",
                     FLUSH_INTERVAL = Interval('PT1S')
                 );
             )", kikimr.GetEndpoint().c_str());
@@ -10747,7 +10762,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 --!syntax_v1
                 ALTER TRANSFER `/Root/transfer`
                 SET (
-                    ENDPOINT = "localhost:2136"
+                    ENDPOINT = "localhost:2136",
+                    DATABASE = "/Root"
                 );
             )";
 
@@ -11133,7 +11149,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 --!syntax_v1
                 ALTER TRANSFER `/Root/transfer`
                 SET (
-                    ENDPOINT = "localhost:2136"
+                    ENDPOINT = "localhost:2136",
+                    DATABASE = "/Root"
                 );
             )";
 

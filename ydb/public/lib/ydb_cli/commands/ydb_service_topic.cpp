@@ -76,7 +76,7 @@ namespace NYdb::NConsoleClient {
             {ETopicMetadataField::Offset, "Message offset. Offset orders messages in each partition."},
             {ETopicMetadataField::SeqNo, "Message sequence number, used for message deduplication when publishing."},
             {ETopicMetadataField::MessageMeta, "Message metadata"},
-            {ETopicMetadataField::SessionMeta, "Message additional session metadata."},
+            {ETopicMetadataField::SessionMeta, "Message session metadata."},
         };
 
         const TVector<ETopicMetadataField> AllTopicMetadataFields = {
@@ -99,6 +99,7 @@ namespace NYdb::NConsoleClient {
             {"seq_no", ETopicMetadataField::SeqNo},
             {"message_meta", ETopicMetadataField::MessageMeta},
             {"session_meta", ETopicMetadataField::SessionMeta},
+            {"meta", ETopicMetadataField::Meta}
         };
 
         THashMap<ETransformBody, TString> TransformBodyDescriptions = {
@@ -882,7 +883,12 @@ namespace NYdb::NConsoleClient {
             if (f == TopicMetadataFieldsMap.end()) {
                 throw TMisuseException() << "Field " << field << " not found in available fields"; // TODO(shmel1k@): improve message.
             }
-            set.insert(f->second);
+            if (f->second == ETopicMetadataField::Meta) {
+                set.insert(ETopicMetadataField::MessageMeta);
+                set.insert(ETopicMetadataField::SessionMeta);
+            } else {
+                set.insert(f->second);
+            }
         }
 
         TVector<ETopicMetadataField> result;

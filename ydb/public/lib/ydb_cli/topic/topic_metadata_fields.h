@@ -10,8 +10,8 @@ namespace NYdb::NConsoleClient {
         MessageGroupID /* "message_group_id" */,
         Offset /* "offset" */,
         SeqNo /* "seq_no" */,
-        Meta /* all_meta */,
-        MessageMeta /* "meta" */,
+        Meta /* meta */,
+        MessageMeta /* "message_meta" */,
         SessionMeta  /* "session_meta" */
     };
 

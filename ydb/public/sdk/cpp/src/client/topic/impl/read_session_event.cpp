@@ -41,7 +41,7 @@ TMessageInformation::TMessageInformation(
     uint64_t seqNo,
     TInstant createTime,
     TInstant writeTime,
-    TWriteSessionMeta::TPtr sessionMeta,
+    TWriteSessionMeta::TPtr meta,
     TMessageMeta::TPtr messageMeta,
     uint64_t uncompressedSize,
     std::string messageGroupId
@@ -51,7 +51,7 @@ TMessageInformation::TMessageInformation(
     , SeqNo(seqNo)
     , CreateTime(createTime)
     , WriteTime(writeTime)
-    , SessionMeta(sessionMeta)
+    , Meta(meta)
     , MessageMeta(messageMeta)
     , UncompressedSize(uncompressedSize)
     , MessageGroupId(messageGroupId)
@@ -117,15 +117,11 @@ TInstant TMessageBase::GetWriteTime() const {
 }
 
 const TWriteSessionMeta::TPtr& TMessageBase::GetMeta() const {
-    return Information.SessionMeta;
+    return Information.Meta;
 }
 
 const TMessageMeta::TPtr& TMessageBase::GetMessageMeta() const {
     return Information.MessageMeta;
-}
-
-const TWriteSessionMeta::TPtr& TMessageBase::GetSessionMeta() const {
-    return Information.SessionMeta;
 }
 
 template<>

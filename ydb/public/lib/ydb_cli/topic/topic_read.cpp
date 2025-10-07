@@ -108,18 +108,6 @@ namespace NYdb::NConsoleClient {
                 case ETopicMetadataField::SeqNo:
                     row.Column(idx, message.GetSeqNo());
                     break;
-                case ETopicMetadataField::Meta:
-                    {
-                        NJson::TJsonValue json;
-                        for (auto const& [k, v] : message.GetMessageMeta()->Fields) {
-                            json[k] = v;
-                        }
-                        for (auto const& [k, v] : message.GetSessionMeta()->Fields) {
-                            json[k] = v;
-                        }
-                        row.Column(idx, json);
-                    }
-                    break;
                 case ETopicMetadataField::MessageMeta:
                     {
                         NJson::TJsonValue json;
@@ -132,11 +120,13 @@ namespace NYdb::NConsoleClient {
                 case ETopicMetadataField::SessionMeta:
                     {
                         NJson::TJsonValue json;
-                        for (auto const& [k, v] : message.GetSessionMeta()->Fields) {
+                        for (auto const& [k, v] : message.GetMeta()->Fields) {
                             json[k] = v;
                         }
                         row.Column(idx, json);
                     }
+                    break;
+                default:
                     break;
             }
         }

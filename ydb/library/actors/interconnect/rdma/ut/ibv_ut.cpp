@@ -35,6 +35,7 @@ Y_UNIT_TEST_SUITE(Ibv) {
 
             UNIT_ASSERT(ibv_close_device(ctx) == 0);
         }
+        UNIT_ASSERT_VALUES_EQUAL(numDevices, 0);
 
         ibv_free_device_list(deviceList);
     }

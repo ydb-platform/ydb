@@ -47,6 +47,7 @@ PY3TEST()
         test_workload_show_create.py
         test_workload_cdc.py
         test_workload_statistics.py
+        test_workload_parallel.py
     )
 
     PEERDIR (

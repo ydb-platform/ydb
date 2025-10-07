@@ -17,6 +17,7 @@ PEERDIR(
     ydb/core/persqueue/pqtablet/cache
     ydb/core/persqueue/pqtablet/partition
     ydb/core/persqueue/pqtablet/readproxy
+    ydb/library/dbgtrace
 )
 
 END()

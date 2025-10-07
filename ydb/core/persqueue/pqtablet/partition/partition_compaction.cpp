@@ -174,6 +174,7 @@ void TPartition::TryRunCompaction()
     }
 
     //DumpKeysForBlobsCompaction();
+    DumpZones(__FILE__, __LINE__);
 
     const ui64 blobsKeyCountLimit = GetBodyKeysCountLimit();
     const ui64 compactedBlobSizeLowerBound = GetCompactedBlobSizeLowerBound();
@@ -366,6 +367,8 @@ void TPartition::BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& 
 
     LOG_D("Continue blobs compaction");
 
+    DumpZones(__FILE__, __LINE__);
+
     AFL_ENSURE(CompactionInProgress);
     AFL_ENSURE(blobs.size() == CompactionBlobsCount);
 
@@ -392,6 +395,8 @@ void TPartition::BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& 
     AFL_ENSURE(CompactionBlobEncoder.NewHead.GetBatches().empty());
 
     TInstant blobCreationUnixTime = TInstant::Zero();
+
+    DumpZones(__FILE__, __LINE__);
 
     for (size_t i = 0; i < KeysForCompaction.size(); ++i) {
         auto& [k, pos] = KeysForCompaction[i];
@@ -435,6 +440,8 @@ void TPartition::BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& 
 
             WasTheLastBlobBig = false;
         }
+
+        DumpZones(__FILE__, __LINE__);
     }
 
     if (!CompactionBlobEncoder.IsLastBatchPacked()) {
@@ -445,8 +452,9 @@ void TPartition::BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& 
 
     EndProcessWritesForCompaction(compactionRequest.Get(), blobCreationUnixTime, ctx);
 
+    DumpZones(__FILE__, __LINE__);
     // for debugging purposes
-    //DumpKeyValueRequest(compactionRequest->Record);
+    DumpKeyValueRequest(compactionRequest->Record);
 
     ctx.Send(BlobCache, compactionRequest.Release(), 0, 0);
 }

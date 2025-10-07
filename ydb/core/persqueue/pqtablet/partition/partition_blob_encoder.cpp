@@ -1,5 +1,6 @@
 #include "partition_blob_encoder.h"
 #include "partition_util.h"
+#include <ydb/library/dbgtrace/debug_trace.h>
 
 namespace NKikimr::NPQ {
 
@@ -554,68 +555,68 @@ std::pair<TKey, ui32> TPartitionBlobEncoder::Compact(const TKey& key, bool headC
     return res;
 }
 
-//void TPartitionBlobEncoder::Dump() const
-//{
-//    auto dumpCompactedKeys = [this](const std::deque<std::pair<TKey, ui32>>& keys, const char* prefix) {
-//        Y_UNUSED(this);
-//        Y_UNUSED(prefix);
-//        for (size_t i = 0; i < keys.size(); ++i) {
-//            DBGTRACE_LOG(prefix << "[" << i << "]=" << keys[i].first.ToString() << " (" << keys[i].second << ")");
-//        }
-//    };
-//    auto dumpKeys = [this](const std::deque<TDataKey>& keys, const char* prefix) {
-//        Y_UNUSED(this);
-//        Y_UNUSED(prefix);
-//        if (keys.size() > 10) {
-//            auto dumpSubkeys = [this](const std::deque<TDataKey>& keys, size_t begin, size_t end, const char* prefix) {
-//                Y_UNUSED(this);
-//                Y_UNUSED(keys);
-//                Y_UNUSED(prefix);
-//                for (size_t i = begin; i < end; ++i) {
-//                    DBGTRACE_LOG(prefix << "[" << i << "]=" << keys[i].Key.ToString() <<
-//                                 ", Size=" << keys[i].Size << ", CumulativeSize=" << keys[i].CumulativeSize);
-//                }
-//            };
-//            dumpSubkeys(keys, 0, 3, prefix);
-//            DBGTRACE_LOG("...");
-//            dumpSubkeys(keys, keys.size() - 3, keys.size(), prefix);
-//            return;
-//        }
-//        for (size_t i = 0; i < keys.size(); ++i) {
-//            DBGTRACE_LOG(prefix << "[" << i << "]=" << keys[i].Key.ToString() <<
-//                         ", Size=" << keys[i].Size << ", CumulativeSize=" << keys[i].CumulativeSize);
-//        }
-//    };
-//    auto dumpHead = [this](const THead& head, const char* prefix) {
-//        Y_UNUSED(this);
-//        Y_UNUSED(head);
-//        Y_UNUSED(prefix);
-//        DBGTRACE_LOG(prefix <<
-//                     ": Offset=" << head.Offset << ", PartNo=" << head.PartNo <<
-//                     ", PackedSize=" << head.PackedSize <<
-//                     ", Batches.size=" << head.GetBatches().size());
-//    };
-//    auto dumpDataKeysHead = [this](const TVector<TKeyLevel>& levels, const char* prefix) {
-//        Y_UNUSED(this);
-//        Y_UNUSED(prefix);
-//        for (size_t i = 0; i < levels.size(); ++i) {
-//            const auto& level = levels[i];
-//            DBGTRACE_LOG(prefix << "[" << i << "] " << level.Sum() << " / " << level.Border());
-//            for (ui32 j = 0; j < level.KeysCount(); ++j) {
-//                DBGTRACE_LOG("    [" << j << "] " << level.GetKey(j).ToString() << " (" << level.GetSize(j) << ")");
-//            }
-//        }
-//    };
-//
-//    DBGTRACE_LOG("StartOffset=" << StartOffset << ", EndOffset=" << EndOffset);
-//    dumpCompactedKeys(CompactedKeys, "CompactedKeys");
-//    DBGTRACE_LOG("BodySize=" << BodySize);
-//    dumpKeys(DataKeysBody, "Body");
-//    dumpKeys(HeadKeys, "Head");
-//    dumpHead(Head, "Head");
-//    dumpDataKeysHead(DataKeysHead, "Levels");
-//    dumpHead(NewHead, "NewHead");
-//    DBGTRACE_LOG("NewHeadKey=" << NewHeadKey.Key.ToString() << " (" << NewHeadKey.Size << ")");
-//}
+void TPartitionBlobEncoder::Dump() const
+{
+    auto dumpCompactedKeys = [this](const std::deque<std::pair<TKey, ui32>>& keys, const char* prefix) {
+        Y_UNUSED(this);
+        Y_UNUSED(prefix);
+        for (size_t i = 0; i < keys.size(); ++i) {
+            DBGTRACE_LOG(prefix << "[" << i << "]=" << keys[i].first.ToString() << " (" << keys[i].second << ")");
+        }
+    };
+    auto dumpKeys = [this](const std::deque<TDataKey>& keys, const char* prefix) {
+        Y_UNUSED(this);
+        Y_UNUSED(prefix);
+        if (keys.size() > 100) {
+            auto dumpSubkeys = [this](const std::deque<TDataKey>& keys, size_t begin, size_t end, const char* prefix) {
+                Y_UNUSED(this);
+                Y_UNUSED(keys);
+                Y_UNUSED(prefix);
+                for (size_t i = begin; i < end; ++i) {
+                    DBGTRACE_LOG(prefix << "[" << i << "]=" << keys[i].Key.ToString() <<
+                                 ", Size=" << keys[i].Size << ", CumulativeSize=" << keys[i].CumulativeSize);
+                }
+            };
+            dumpSubkeys(keys, 0, 3, prefix);
+            DBGTRACE_LOG("...");
+            dumpSubkeys(keys, keys.size() - 3, keys.size(), prefix);
+            return;
+        }
+        for (size_t i = 0; i < keys.size(); ++i) {
+            DBGTRACE_LOG(prefix << "[" << i << "]=" << keys[i].Key.ToString() <<
+                         ", Size=" << keys[i].Size << ", CumulativeSize=" << keys[i].CumulativeSize);
+        }
+    };
+    auto dumpHead = [this](const THead& head, const char* prefix) {
+        Y_UNUSED(this);
+        Y_UNUSED(head);
+        Y_UNUSED(prefix);
+        DBGTRACE_LOG(prefix <<
+                     ": Offset=" << head.Offset << ", PartNo=" << head.PartNo <<
+                     ", PackedSize=" << head.PackedSize <<
+                     ", Batches.size=" << head.GetBatches().size());
+    };
+    auto dumpDataKeysHead = [this](const TVector<TKeyLevel>& levels, const char* prefix) {
+        Y_UNUSED(this);
+        Y_UNUSED(prefix);
+        for (size_t i = 0; i < levels.size(); ++i) {
+            const auto& level = levels[i];
+            DBGTRACE_LOG(prefix << "[" << i << "] " << level.Sum() << " / " << level.Border());
+            for (ui32 j = 0; j < level.KeysCount(); ++j) {
+                DBGTRACE_LOG("    [" << j << "] " << level.GetKey(j).ToString() << " (" << level.GetSize(j) << ")");
+            }
+        }
+    };
+
+    DBGTRACE_LOG("StartOffset=" << StartOffset << ", EndOffset=" << EndOffset);
+    dumpCompactedKeys(CompactedKeys, "CompactedKeys");
+    DBGTRACE_LOG("BodySize=" << BodySize);
+    dumpKeys(DataKeysBody, "Body");
+    dumpKeys(HeadKeys, "Head");
+    dumpHead(Head, "Head");
+    dumpDataKeysHead(DataKeysHead, "Levels");
+    dumpHead(NewHead, "NewHead");
+    DBGTRACE_LOG("NewHeadKey=" << NewHeadKey.Key.ToString() << " (" << NewHeadKey.Size << ")");
+}
 
 }

@@ -888,7 +888,7 @@ void TFixture::TTopicWriteSessionContext::WaitForEvent()
                 }
             }
         } else if ([[maybe_unused]] auto* e = std::get_if<NTopic::TSessionClosedEvent>(&event)) {
-            UNIT_FAIL("");
+            UNIT_FAIL(e->DebugString(true));
         }
     }
 }
@@ -3413,6 +3413,49 @@ Y_UNIT_TEST_F(Write_50k_100times_50tx, TFixtureTable)
         futures[i].Wait();
         const auto& result = futures[i].GetValueSync();
         UNIT_ASSERT_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+}
+
+Y_UNIT_TEST_F(Foo, TFixtureTable)
+{
+    const size_t COUNT = 10;
+    const size_t SMALL = 50'000;
+    const size_t SMALL_COUNT = 1;
+    const size_t BIG = 29'000'000;
+    const size_t BIG_COUNT = 1;
+
+    CreateTopic("topic_A", TEST_CONSUMER);
+    CreateTopic("topic_B", TEST_CONSUMER);
+
+    SetPartitionWriteSpeed("topic_A", 50'000'000);
+
+    auto session = CreateSession();
+    auto tx = session->BeginTx();
+
+    for (size_t j = 0; j < COUNT; ++j) {
+        for (size_t k = 0; k < SMALL_COUNT; ++k) {
+            WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, std::string(SMALL, 'x'), tx.get(), 0);
+        }
+        for (size_t k = 0; k < BIG_COUNT; ++k) {
+            WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, std::string(BIG, 'x'), tx.get(), 0);
+        }
+    }
+
+    WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID, std::string(50'000, 'x'), tx.get(), 0);
+
+    session->CommitTx(*tx, EStatus::SUCCESS);
+
+    RestartPQTablet("topic_A", 0);
+
+    auto messages = Read_Exactly_N_Messages_From_Topic("topic_A", TEST_CONSUMER, (SMALL_COUNT + BIG_COUNT) * COUNT);
+
+    for (size_t j = 0; j < messages.size(); ) {
+        for (size_t k = 0; k < SMALL_COUNT; ++k, ++j) {
+            UNIT_ASSERT_VALUES_EQUAL(messages[j].size(), SMALL);
+        }
+        for (size_t k = 0; k < BIG_COUNT; ++k, ++j) {
+            UNIT_ASSERT_VALUES_EQUAL(messages[j].size(), BIG);
+        }
     }
 }
 

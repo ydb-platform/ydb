@@ -348,7 +348,7 @@ public:
 
             for (size_t i = 0; i < timestamps.size(); ++i){
                 TInstant timestamp = TInstant::MilliSeconds(timestamps[i]);
-                if (timestamp < from || timestamp > to) {
+                if (timestamp < from || timestamp >= to) {
                     continue;
                 }
 

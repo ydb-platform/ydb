@@ -89,23 +89,34 @@ class WorkloadVectorIndex(WorkloadBase):
         logger.info(create_index_sql)
         self.client.query(create_index_sql, True)
 
-    def _upsert_values(self, table_path, vector_type, vector_dimension):
+    def _upsert_values(self, table_path, vector_type, vector_dimension, use_upsert, min_key, max_key):
         logger.info("Upsert values")
         converter = to_binary_string_converters[vector_type]
         values = []
 
-        for key in range(self.rows_count):
+        for key in range(min_key, max_key):
             vector = self._get_random_vector(vector_type, vector_dimension)
             name = converter.name
             vector_types = converter.vector_type
             user = 1 + (key % self.rows_per_user)
             values.append(f'({key}, {user}, Untag({name}([{vector}]), "{vector_types}"))')
 
+        if use_upsert:
+            insert = "UPSERT"
+        else:
+            insert = "INSERT"
         upsert_sql = f"""
-            UPSERT INTO `{table_path}` (pk, user, embedding)
+            {insert} INTO `{table_path}` (pk, user, embedding)
             VALUES {",".join(values)};
         """
         self.client.query(upsert_sql, False)
+
+    def _delete_rows(self, table_path, min_key, max_key):
+        logger.info("Delete rows")
+        delete_sql = f"""
+            DELETE FROM `{table_path}` WHERE pk >= {min_key} AND pk < {max_key};
+        """
+        self.client.query(delete_sql, False)
 
     def _select(self, index_name, table_path, vector_type, vector_dimension, distance, similarity, prefixed=False):
         if distance is not None:
@@ -206,6 +217,7 @@ class WorkloadVectorIndex(WorkloadBase):
             similarity=similarity,
             prefixed=prefixed,
         )
+        # select from index
         self._select_top(
             index_name=index_name,
             table_path=table_path,
@@ -215,6 +227,31 @@ class WorkloadVectorIndex(WorkloadBase):
             similarity=similarity,
             prefixed=prefixed,
         )
+        # insert into index
+        self._upsert_values(
+            table_path=table_path,
+            vector_type=vector_type,
+            vector_dimension=vector_dimension,
+            use_upsert=False,
+            min_key=self.rows_count,
+            max_key=self.rows_count+3,
+        )
+        # update the index using upsert
+        self._upsert_values(
+            table_path=table_path,
+            vector_type=vector_type,
+            vector_dimension=vector_dimension,
+            use_upsert=True,
+            min_key=self.rows_count,
+            max_key=self.rows_count+2,
+        )
+        # delete from index
+        self._delete_rows(
+            table_path=table_path,
+            min_key=self.rows_count,
+            max_key=self.rows_count+3,
+        )
+        # sometimes replace the index
         if random.randint(0, 1) == 0:
             self._create_index(
                 index_name=index_name+'Rename',
@@ -254,9 +291,13 @@ class WorkloadVectorIndex(WorkloadBase):
             distance_idx_data = next(distance_iter)
             try:
                 self._upsert_values(
-                    table_path=table_path, vector_type=distance_idx_data[0], vector_dimension=distance_idx_data[1]
+                    table_path=table_path,
+                    vector_type=distance_idx_data[0],
+                    vector_dimension=distance_idx_data[1],
+                    use_upsert=True,
+                    min_key=0,
+                    max_key=self.rows_count,
                 )
-
                 self._check_loop(
                     table_path=table_path,
                     vector_type=distance_idx_data[0],
@@ -268,7 +309,12 @@ class WorkloadVectorIndex(WorkloadBase):
                 similarity_idx_data = next(similarity_iter)
 
                 self._upsert_values(
-                    table_path=table_path, vector_type=similarity_idx_data[0], vector_dimension=similarity_idx_data[1]
+                    table_path=table_path,
+                    vector_type=similarity_idx_data[0],
+                    vector_dimension=similarity_idx_data[1],
+                    use_upsert=True,
+                    min_key=0,
+                    max_key=self.rows_count,
                 )
                 self._check_loop(
                     table_path=table_path,

@@ -5090,6 +5090,7 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
     EnableInitialUniqueIndex = appData->FeatureFlags.GetEnableUniqConstraint();
     EnableAddUniqueIndex = appData->FeatureFlags.GetEnableAddUniqueIndex();
     EnableFulltextIndex = appData->FeatureFlags.GetEnableFulltextIndex();
+    EnableSetColumnConstraints = appData->FeatureFlags.GetEnableSetColumnConstraints();
     EnableResourcePoolsOnServerless = appData->FeatureFlags.GetEnableResourcePoolsOnServerless();
     EnableExternalDataSourcesOnServerless = appData->FeatureFlags.GetEnableExternalDataSourcesOnServerless();
     EnableShred = appData->FeatureFlags.GetEnableDataErasure();

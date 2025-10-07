@@ -1425,8 +1425,14 @@ TVector<ISubOperation::TPtr> TDefaultOperationFactory::MakeOperationParts(
         return CreateBuildColumn(op.NextPartId(), tx, context);
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropColumnBuild:
         return {DropBuildColumn(op.NextPartId(), tx, context)};
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSetConstraintInitiate:
-        return CreateSetConstraintInitiate(op.NextPartId(), tx, context);
+
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSetColumnConstraintsInitiate:
+        return CreateSetColumnConstraintsInitiate(op.NextPartId(), tx, context);
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSetColumnConstraintsLock:
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSetColumnConstraintsCheck:
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSetColumnConstraintsFinalize:
+        Y_ABORT("multipart operations are handled before, also they require transaction details");
+
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateIndexBuild:
         return CreateBuildIndex(op.NextPartId(), tx, context);
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateLock:

@@ -225,7 +225,7 @@ message TFeatureFlags {
     optional bool EnableDataShardWriteAlwaysVolatile = 199 [default = true];
     optional bool EnableMirroredTopicSplitMerge = 200 [default = false];
     optional bool EnableFulltextIndex = 201 [default = false];
-    optional bool EnableSetColumnConstraint = 202 [default = false];
+    optional bool EnableSetColumnConstraints = 202 [default = false];
     optional bool EnableSchemaSecrets = 203 [default = false];
     optional bool EnableTableCacheModes = 204 [default = false];
     optional bool EnableSkipMessagesWithObsoleteTimestamp = 205 [default = false];

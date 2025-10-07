@@ -364,6 +364,7 @@ public:
     bool EnableShred = false;
     bool EnableExternalSourceSchemaInference = false;
     bool EnableMoveColumnTable = false;
+    bool EnableSetColumnConstraints = false;
 
     TShardDeleter ShardDeleter;
 

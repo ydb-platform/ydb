@@ -195,9 +195,6 @@ enum EOperationType {
     // Long Incremental Backup
     ESchemeOpCreateLongIncrementalBackupOp = 124;
 
-    // Alter Table Alter Column Set
-    ESchemeOpCreateSetColumnConstraintInitiate = 126;
-
     // Secret
     ESchemeOpCreateSecret = 127;
     ESchemeOpAlterSecret = 128;
@@ -207,6 +204,13 @@ enum EOperationType {
     ESchemeOpCreateStreamingQuery = 130;
     ESchemeOpDropStreamingQuery = 131;
     ESchemeOpAlterStreamingQuery = 132;
+
+
+    // Alter Table Alter Column Set
+    ESchemeOpCreateSetColumnConstraintsInitiate = 126;
+    ESchemeOpCreateSetColumnConstraintsLock = 133;
+    ESchemeOpCreateSetColumnConstraintsCheck = 134;
+    ESchemeOpCreateSetColumnConstraintsFinalize = 135;
 
     // Some entries are grouped by semantics, so are out of order
 }

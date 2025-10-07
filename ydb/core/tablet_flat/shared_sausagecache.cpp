@@ -60,6 +60,7 @@ struct TCollection {
     ui64 TotalSize;
     TMap<TPageId, TPendingRequests> PendingRequests;
     TDeque<TPageId> DroppedPages;
+    TIntrusiveConstPtr<NPageCollection::IPageCollection> PageCollection;
 
     ECacheMode GetCacheMode() {
         return InMemoryOwners ? ECacheMode::TryKeepInMemory : ECacheMode::Regular;
@@ -262,8 +263,8 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         PassAway();
     }
 
-    TCollection& AttachCollection(const TLogoBlobID &pageCollectionId, const NPageCollection::IPageCollection &pageCollection, const TActorId &owner) {
-        TCollection &collection = EnsureCollection(pageCollectionId, pageCollection, owner);
+    TCollection& AttachCollection(const TLogoBlobID &pageCollectionId, TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection, const TActorId &owner) {
+        TCollection &collection = EnsureCollection(pageCollectionId, std::move(pageCollection), owner);
 
         if (collection.Owners.insert(owner).second) {
             LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TABLET_SAUSAGECACHE, "Add page collection " << pageCollectionId
@@ -290,7 +291,8 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             << " owner " << ev->Sender
             << " cache mode " << msg->CacheMode);
 
-        TCollection& collection = AttachCollection(pageCollectionId, pageCollection, ev->Sender);
+        TCollection& collection = AttachCollection(pageCollectionId, msg->PageCollection, ev->Sender);
+        collection.PageCollection = msg->PageCollection; // update PageCollection pointer
         switch (msg->CacheMode) {
         case ECacheMode::Regular:
             TryMoveToRegularCache(collection, ev->Sender);
@@ -312,7 +314,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
         Y_ENSURE(pageCollectionId);
         Y_ENSURE(!Collections.contains(pageCollectionId), "Only new collections can save compacted pages");
-        auto& collection = EnsureCollection(pageCollectionId, pageCollection, ev->Sender);
+        auto& collection = EnsureCollection(pageCollectionId, msg->PageCollection, ev->Sender);
 
         for (auto &page : msg->Pages) {
             Y_ENSURE(page->PageId < collection.PageMap.size());
@@ -331,7 +333,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         const TLogoBlobID pageCollectionId = pageCollection.Label();
         const bool doTraceLog = DoTraceLog();
 
-        TCollection &collection = AttachCollection(pageCollectionId, pageCollection, ev->Sender);
+        TCollection &collection = AttachCollection(pageCollectionId, msg->PageCollection, ev->Sender);
         ECacheMode cacheMode = collection.GetCacheMode();
 
         TStackVec<std::pair<TPageId, ui32>> pendingPages; // pageId, reqIdx
@@ -800,21 +802,21 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         Evict(Cache.Insert(page));
     }
 
-    TCollection& EnsureCollection(const TLogoBlobID& pageCollectionId, const NPageCollection::IPageCollection& pageCollection, const TActorId& owner) {
+    TCollection& EnsureCollection(const TLogoBlobID& pageCollectionId, TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection, const TActorId& owner) {
         TCollection &collection = Collections[pageCollectionId];
         if (!collection.Id) {
             LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TABLET_SAUSAGECACHE, "Add page collection " << pageCollectionId);
             Counters.PageCollections->Inc();
             Y_ENSURE(pageCollectionId);
             collection.Id = pageCollectionId;
-            collection.PageMap.resize(pageCollection.Total());
-            collection.TotalSize = sizeof(TPage) * pageCollection.Total() + pageCollection.BackingSize();
+            collection.PageMap.resize(pageCollection->Total());
+            collection.TotalSize = sizeof(TPage) * pageCollection->Total() + pageCollection->BackingSize();
         } else {
             Y_DEBUG_ABORT_UNLESS(collection.Id == pageCollectionId);
-            Y_ENSURE(collection.PageMap.size() == pageCollection.Total(),
+            Y_ENSURE(collection.PageMap.size() == pageCollection->Total(),
                 "Page collection " << pageCollectionId
                 << " changed number of pages from " << collection.PageMap.size()
-                << " to " << pageCollection.Total() << " by " << owner);
+                << " to " << pageCollection->Total() << " by " << owner);
         }
         return collection;
     }
@@ -1175,15 +1177,9 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             case PageStateLoaded:
                 Cache.Erase(page);
                 page->EnsureNoCacheFlags();
+                RemoveActivePage(page);
                 page->CacheMode = targetMode;
-                switch (page->CacheMode) {
-                case ECacheMode::Regular:
-                    Counters.ActiveInMemoryBytes->Sub(TPageTraits::GetSize(page));
-                    break;
-                case ECacheMode::TryKeepInMemory:
-                    Counters.ActiveInMemoryBytes->Add(TPageTraits::GetSize(page));
-                    break;
-                }
+                AddActivePage(page);
                 Evict(Cache.Insert(page));
                 break;
             default:
@@ -1256,48 +1252,54 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     }
 
     inline void AddActivePage(const TPage* page) {
-        StatActiveBytes += sizeof(TPage) + page->Size;
+        auto pageSize = TPageTraits::GetSize(page);
+        StatActiveBytes += pageSize;
         Counters.ActivePages->Inc();
-        Counters.ActiveBytes->Add(sizeof(TPage) + page->Size);
+        Counters.ActiveBytes->Add(pageSize);
         if (page->CacheMode == ECacheMode::TryKeepInMemory) {
-            Counters.ActiveInMemoryBytes->Add(sizeof(TPage) + page->Size);
+            Counters.ActiveInMemoryBytes->Add(pageSize);
         }
     }
 
     inline void RemoveActivePage(const TPage* page) {
-        Y_DEBUG_ABORT_UNLESS(StatActiveBytes >= sizeof(TPage) + page->Size);
-        StatActiveBytes -= sizeof(TPage) + page->Size;
+        auto pageSize = TPageTraits::GetSize(page);
+        Y_DEBUG_ABORT_UNLESS(StatActiveBytes >= pageSize);
+        StatActiveBytes -= pageSize;
         Counters.ActivePages->Dec();
-        Counters.ActiveBytes->Sub(sizeof(TPage) + page->Size);
+        Counters.ActiveBytes->Sub(pageSize);
         if (page->CacheMode == ECacheMode::TryKeepInMemory) {
-            Counters.ActiveInMemoryBytes->Sub(sizeof(TPage) + page->Size);
+            Counters.ActiveInMemoryBytes->Sub(pageSize);
         }
     }
 
     inline void AddPassivePage(const TPage* page) {
-        StatPassiveBytes += sizeof(TPage) + page->Size;
+        auto pageSize = TPageTraits::GetSize(page);
+        StatPassiveBytes += pageSize;
         Counters.PassivePages->Inc();
-        Counters.PassiveBytes->Add(sizeof(TPage) + page->Size);
+        Counters.PassiveBytes->Add(pageSize);
     }
 
     inline void RemovePassivePage(const TPage* page) {
-        Y_DEBUG_ABORT_UNLESS(StatPassiveBytes >= sizeof(TPage) + page->Size);
-        StatPassiveBytes -= sizeof(TPage) + page->Size;
+        auto pageSize = TPageTraits::GetSize(page);
+        Y_DEBUG_ABORT_UNLESS(StatPassiveBytes >= pageSize);
+        StatPassiveBytes -= pageSize;
         Counters.PassivePages->Dec();
-        Counters.PassiveBytes->Sub(sizeof(TPage) + page->Size);
+        Counters.PassiveBytes->Sub(pageSize);
     }
 
     inline void AddInFlyPages(ui64 count, ui64 size) {
-        StatLoadInFlyBytes += size;
+        ui64 totalBytes = size + sizeof(TPage) * count;
+        StatLoadInFlyBytes += totalBytes;
         Counters.LoadInFlyPages->Add(count);
-        Counters.LoadInFlyBytes->Add(size);
+        Counters.LoadInFlyBytes->Add(totalBytes);
     }
 
     inline void RemoveInFlyPages(ui64 count, ui64 size) {
-        Y_ENSURE(StatLoadInFlyBytes >= size);
-        StatLoadInFlyBytes -= size;
+        ui64 totalBytes = size + sizeof(TPage) * count;
+        Y_ENSURE(StatLoadInFlyBytes >= totalBytes);
+        StatLoadInFlyBytes -= totalBytes;
         Counters.LoadInFlyPages->Sub(count);
-        Counters.LoadInFlyBytes->Sub(size);
+        Counters.LoadInFlyBytes->Sub(totalBytes);
     }
 
 public:

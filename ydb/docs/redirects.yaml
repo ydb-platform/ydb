@@ -503,8 +503,6 @@ en:
     to: /devops/system-requirements.md
   - from: /devops/observability/initial-deployment.md
     to: /devops/deployment-options/manual/initial-deployment.md
-  - from: /maintenance/manual/cluster_expansion.md
-    to: /devops/deployment-options/manual/cluster-expansion.md
   - from: /maintenance/manual/index.md
     to: /devops/deployment-options/manual/index.md
   - from: /reference/ydbops/scenarios.md

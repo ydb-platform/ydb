@@ -676,7 +676,7 @@ TCmsTestEnv::TCmsTestEnv(const TTestEnvOpts &options)
     TMallocInfo mallocInfo = MallocInfo();
     mallocInfo.SetParam("FillMemoryOnAllocation", "false");
     SetupLogging();
-    // TGuard<TMutex> guard(TFakeNodeWhiteboardService::Mutex);
+
     if (options.IsBridgeMode) {
         TVector<TStateStorageInfo::TRingGroup> ringGroups = {{.State = PRIMARY, .NToSelect = options.NToSelect}};
         std::fill_n(

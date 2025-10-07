@@ -507,7 +507,7 @@ private:
 // resolve database -> check tables -> fetch from queries table -> describe in SS -> resolve script executions
 
 class TStreamingQueriesScan final : public TScanActorBase<TStreamingQueriesScan> {
-    using TBase  = TScanActorBase<TStreamingQueriesScan>;
+    using TBase = TScanActorBase<TStreamingQueriesScan>;
     using TSchema = Schema::StreamingQueries;
 
     struct TQueryInfo {

@@ -116,6 +116,10 @@ protected:
     }
 
     void ContinueScan() {
+        if (IsNavigatePathInProgress) {
+            return;
+        }
+
         while (DeepFirstSearchStack) {
             auto& last = DeepFirstSearchStack.back();
 
@@ -197,6 +201,8 @@ protected:
     }
 
     void NavigatePath(TPath path) {
+        IsNavigatePathInProgress = true;
+
         auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
 
         auto& entry = request->ResultSet.emplace_back();
@@ -260,6 +266,7 @@ private:
     bool RequireUserAdministratorAccess;
     std::optional<TString> PathFrom, PathTo;
     TVector<TTraversingChildren> DeepFirstSearchStack;
+    bool IsNavigatePathInProgress = false;
 };
 
 }

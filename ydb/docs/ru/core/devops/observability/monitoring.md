@@ -48,7 +48,7 @@ http://<ydb-server-address>:<ydb-port>/counters/counters=<servicename>/prometheu
 
 1. [Установите](https://prometheus.io/docs/prometheus/latest/getting_started) Prometheus.
 
-1. Отредактируйте [файлы конфигурации](https://github.com/s-sabitova/ydb/tree/new-prometheus-config/ydb/deploy/prometheus) Prometheus:
+1. Отредактируйте [файлы конфигурации](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/prometheus) Prometheus:
 
     1. В файле [`ydbd-storage.yml`](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/prometheus/ydbd-storage.yml) в секции `targets` укажите адреса всех серверов кластера {{ ydb-short-name }} и порты узлов хранения, работающих на серверах.
 

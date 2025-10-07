@@ -76,7 +76,7 @@ class TestVectorIndex(RollingUpgradeAndDowngradeFixture):
         for key in range(self.rows_count):
             vector = self.get_vector(vector_type, key + 1)
             user = 1 + (key % self.rows_per_user)
-            values.append(f'({key}, {user}, Untag({name}([{vector}]), "{vector_type}"))')
+            values.append(f'({key}, {user}, Untag({name}([{vector}]), "{vector_type}Vector"))')
 
         sql_upsert = f"""
                 UPSERT INTO `{table_name}` (key, user, vec)
@@ -97,27 +97,58 @@ class TestVectorIndex(RollingUpgradeAndDowngradeFixture):
                         where = ""
                         if prefixed:
                             where = "WHERE user=1"
-                        queries.append(
-                            f"""
+                        queries.append([
+                            True, f"""
                             $Target = {self.vector_types[vector_type]}(Cast([{vector}] AS List<{vector_type}>));
                             SELECT key, vec, {self.targets[distance][distance_func]}(vec, $Target) as target
                             FROM `{table_name}`
                             VIEW `{self.index_name}`
                             {where}
                             ORDER BY {self.targets[distance][distance_func]}(vec, $Target) {order}
-                            LIMIT {self.rows_count};
-                        """
-                        )
+                            LIMIT {self.rows_count};"""
+                        ])
+                        # Insert, update, upsert, delete
+                        key = self.rows_count+1
+                        vector = self.get_vector(vector_type, key+1)
+                        queries.append([
+                            False, f"""
+                            INSERT INTO `{table_name}` (key, user, vec)
+                            VALUES ({key}, {1 + (key) % self.rows_per_user},
+                                Untag({self.vector_types[vector_type]}([{vector}]), "{vector_type}Vector"))
+                            """
+                        ])
+                        vector = self.get_vector(vector_type, key+2)
+                        queries.append([
+                            False, f"""
+                            UPDATE `{table_name}` SET user=user+1,
+                                vec=Untag({self.vector_types[vector_type]}([{vector}]), "{vector_type}Vector")
+                            WHERE key={key}
+                            """
+                        ])
+                        vector = self.get_vector(vector_type, key+3)
+                        queries.append([
+                            False, f"""
+                            UPSERT INTO `{table_name}` (key, user, vec)
+                            VALUES ({key}, {1 + (key) % self.rows_per_user},
+                                Untag({self.vector_types[vector_type]}([{vector}]), "{vector_type}Vector"))
+                            """
+                        ])
+                        queries.append([
+                            False, f"""
+                            DELETE FROM `{table_name}` WHERE key={key}
+                            """
+                        ])
         return queries
 
     def _do_queries(self, queries):
         with ydb.QuerySessionPool(self.driver) as session_pool:
-            for query in queries:
+            for [is_select, query] in queries:
                 result_sets = session_pool.execute_with_retries(query)
-                assert len(result_sets[0].rows) > 0, "Query returned an empty set"
-                rows = result_sets[0].rows
-                for row in rows:
-                    assert row['target'] is not None, "the distance is None"
+                if is_select:
+                    assert len(result_sets[0].rows) > 0, "Query returned an empty set"
+                    rows = result_sets[0].rows
+                    for row in rows:
+                        assert row['target'] is not None, "the distance is None"
 
     def select_from_index(self):
         queries = self._get_queries()
@@ -149,7 +180,7 @@ class TestVectorIndex(RollingUpgradeAndDowngradeFixture):
                         self.create_table(table_name)
                         self._write_data(
                             name=self.vector_types[vector_type],
-                            vector_type=f"{vector_type}Vector",
+                            vector_type=vector_type,
                             table_name=table_name,
                         )
                         self._create_index(

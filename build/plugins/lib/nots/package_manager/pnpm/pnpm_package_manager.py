@@ -9,7 +9,7 @@ from .constants import (
     LOCAL_PNPM_INSTALL_MUTEX_FILENAME,
     VIRTUAL_STORE_DIRNAME,
 )
-from .lockfile import PnpmLockfile
+from .pnpm_lockfile import PnpmLockfile
 from .utils import (
     build_lockfile_path,
     build_build_backup_lockfile_path,
@@ -17,7 +17,7 @@ from .utils import (
     build_ws_config_path,
     build_pnpm_store_path,
 )
-from .workspace import PnpmWorkspace
+from .pnpm_workspace import PnpmWorkspace
 from ..base import BasePackageManager, PackageManagerError
 from ..base.constants import (
     NODE_MODULES_WORKSPACE_BUNDLE_FILENAME,

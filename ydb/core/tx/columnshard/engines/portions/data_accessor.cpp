@@ -190,10 +190,6 @@ THashMap<TString, THashMap<TChunkAddress, std::shared_ptr<IPortionDataChunk>>> T
     NBlobOperations::NRead::TCompositeReadBlobs& blobs, const TIndexInfo& indexInfo) const {
     THashMap<TString, THashMap<TChunkAddress, std::shared_ptr<IPortionDataChunk>>> result;
     for (auto&& c : GetRecordsVerified()) {
-        if (!indexInfo.HasColumnId(c.GetColumnId())) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "missing_column_on_restore")("column_id", c.GetColumnId());
-            continue;
-        }
         const TString& storageId = PortionInfo->GetColumnStorageId(c.GetColumnId(), indexInfo);
         auto chunk = std::make_shared<NChunks::TChunkPreparation>(
             blobs.ExtractVerified(storageId, RestoreBlobRange(c.GetBlobRange())), c, indexInfo.GetColumnFeaturesVerified(c.GetColumnId()));
@@ -201,10 +197,6 @@ THashMap<TString, THashMap<TChunkAddress, std::shared_ptr<IPortionDataChunk>>> T
         AFL_VERIFY(result[storageId].emplace(c.GetAddress(), chunk).second);
     }
     for (auto&& c : GetIndexesVerified()) {
-        if (!indexInfo.HasIndexId(c.GetIndexId())) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "missing_index_on_restore")("index_id", c.GetIndexId());
-            continue;
-        }
         const TString& storageId = indexInfo.GetIndexStorageId(c.GetIndexId());
         const TString blobData = [&]() -> TString {
             if (auto bRange = c.GetBlobRangeOptional()) {

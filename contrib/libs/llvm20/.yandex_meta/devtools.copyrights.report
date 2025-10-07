@@ -1,0 +1,750 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 07668cb5215fea6ee1517de255c09e3e
+BELONGS lib/Support/ya.make
+    License text:
+        Copyright © 1991-2022 Unicode, Inc. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/Support/UnicodeNameToCodepointGenerated.cpp [32:32]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0b6aaa97daae741e03da41749ac1d155
+BELONGS lib/IR/ya.make
+    License text:
+            Type *I32Ty = Type::getInt32Ty(C);
+            Value *Elt0 = Builder.CreateExtractElement(CI->getArgOperand(0),
+                                                       ConstantInt::get(I32Ty, 0));
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/IR/AutoUpgrade.cpp [2591:2593]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 12c13673979d84c93fb3f9aed80709bd
+BELONGS lib/Support/ya.make
+    License text:
+         * Copyright (c) 1998 Todd C. Miller <Todd.Miller@courtesan.com>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/Support/regstrlcpy.c [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 159cf588a24d0f36e8515bc4d40c3cf2
+BELONGS lib/Transforms/Utils/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/Transforms/Utils/ModuleUtils.cpp [93:98]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 180d28ab6e9ba6bf6853dcf3ffe213c8
+BELONGS lib/Transforms/InstCombine/ya.make
+    License text:
+          if (C) {
+            SmallVector<Value *, 4> NewIncomingValues;
+            auto CanFoldIncomingValuePair = [&](std::tuple<Use &, Use &> T) {
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/Transforms/InstCombine/InstructionCombining.cpp [1966:1968]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1e686ce4ffe6d63b91a69c1b26712d33
+BELONGS lib/Support/ya.make
+    License text:
+         * Copyright (c) 1994
+         *	The Regents of the University of California.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/Support/COPYRIGHT.regex [26:27]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1f3b8fc41c43104142a25b573b859bec
+BELONGS lib/Transforms/Utils/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/Transforms/Utils/EntryExitInstrumenter.cpp [40:43]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 28368d51c5dcd8ee8080c84c4f8f192e
+BELONGS lib/Target/X86/ya.make
+    License text:
+            Trampoline->setComdat(C);
+          BasicBlock *EntryBB = BasicBlock::Create(Context, "entry", Trampoline);
+          IRBuilder<> Builder(EntryBB);
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/Target/X86/X86WinEHState.cpp [405:407]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 30978c73becf399db8f52c771e38e22d
+BELONGS lib/Transforms/InstCombine/ya.make
+    License text:
+          // The instruction has the form "(A op' B) op (C)".  Try to factorize common
+          // term.
+          if (Op0)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/Transforms/InstCombine/InstructionCombining.cpp [1108:1110]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3110a89ff9a82a822a3c1cadfce9ba6d
+BELONGS include/ya.make lib/Support/ya.make
+    License text:
+         * Copyright © 1991-2015 Unicode, Inc. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/llvm/Support/ConvertUTF.h [16:16]
+        lib/Support/ConvertUTF.cpp [9:9]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 318577927099d6e8a6d11b7f87ea7da3
+BELONGS lib/Analysis/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/Analysis/DependenceGraphBuilder.cpp [465:469]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 31d57cce810069c351faad3fe17598dc
+BELONGS lib/TargetParser/ya.make
+    License text:
+                  Arch, [](char C) { return isDigit(C) || isLower(C) || C == '_'; }))
+            return getError("string may only contain [a-z0-9_]");
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/TargetParser/RISCVISAInfo.cpp [484:485]
+        lib/TargetParser/RISCVISAInfo.cpp [561:562]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3c66eba3d4d54073170023408d41b2ab
+BELONGS lib/DebugInfo/BTF/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/DebugInfo/BTF/BTFParser.cpp [308:311]
+        lib/DebugInfo/BTF/BTFParser.cpp [351:354]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3e3009e9cc74d820b2d85abf2790f180
+BELONGS lib/DebugInfo/DWARF/ya.make
+    License text:
+            Value0 = Data.getULEB128(C);
+            Value1 = Data.getULEB128(C);
+            break;
+          case dwarf::DW_RLE_startx_length: {
+            Value0 = Data.getULEB128(C);
+            Value1 = Data.getULEB128(C);
+            break;
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/DebugInfo/DWARF/DWARFDebugRnglists.cpp [40:46]
+        lib/DebugInfo/DWARF/DWARFDebugRnglists.cpp [49:51]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 42ae7da0badf3b2f130af3a54173f220
+BELONGS lib/DebugInfo/DWARF/ya.make
+    License text:
+            : DebugLineData(Data), Context(C) {
+          LineToUnit = buildLineToUnitMap(Units);
+          if (!DebugLineData.isValidOffset(Offset))
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/DebugInfo/DWARF/DWARFDebugLine.cpp [1555:1557]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 48792ca6e267c7339e5b010e5dfcf7e8
+BELONGS lib/CodeGen/MIRParser/ya.make
+    License text:
+          return isalpha(C) || isdigit(C) || C == '_' || C == '-' || C == '.' ||
+                 C == '$';
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/CodeGen/MIRParser/MILexer.cpp [119:120]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 4b691eb3113e5169a7800b0b72363b30
+BELONGS lib/CodeGen/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/CodeGen/LowerEmuTLS.cpp [139:142]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 4e1da56fa44a8466e014da424592ebb6
+BELONGS lib/Support/ya.make
+    License text:
+         *  Copyright (C) 2012-2023, Yann Collet
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/Support/xxhash.cpp [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 54e2525236fb6c3cc97e13b6fb250b63
+BELONGS lib/DebugInfo/DWARF/ya.make
+    License text:
+              uint64_t BlockLength = Data.getULEB128(C);
+              StringRef Expression = Data.getBytes(C, BlockLength);
+              DataExtractor Extractor(Expression, Data.isLittleEndian(),
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/DebugInfo/DWARF/DWARFDebugFrame.cpp [375:377]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 5c85ca831b8809876c0790cfad2d8956
+BELONGS lib/Support/ya.make
+    License text:
+        Copyright 1992, 1993, 1994 Henry Spencer.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/Support/COPYRIGHT.regex [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 60b64b30a0fe8a6dd3cc3dd891a43d60
+BELONGS lib/Target/BPF/ya.make
+    License text:
+          Type *Int8Ty = Type::getInt8Ty(C);
+          Type *Int1Ty = Type::getInt1Ty(C);
+          // Implementation of Align guarantees that ShiftValue < 64
+          unsigned AlignShiftValue = Log2_64(Insn->getAlign().value());
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/Target/BPF/BPFPreserveStaticOffset.cpp [210:213]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 63572b23fe8322d08573c7ea9280b27f
+BELONGS lib/Transforms/Utils/ya.make
+    License text:
+          Type *DsoHandleTy = Type::getInt8Ty(C);
+          Constant *DsoHandle = M.getOrInsertGlobal("__dso_handle", DsoHandleTy, [&] {
+            auto *GV = new GlobalVariable(M, DsoHandleTy, /*isConstant=*/true,
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/Transforms/Utils/LowerGlobalDtors.cpp [156:158]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6889c51be687d2aa2ca198228ffada0d
+BELONGS ya.make
+    License text:
+        Copyright (c) 2003-2019 University of Illinois at Urbana-Champaign.
+        All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.TXT [242:243]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6c1074072381bc6362e1b37c9f1b2256
+BELONGS lib/DebugInfo/DWARF/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/DebugInfo/DWARF/DWARFAcceleratorTable.cpp [456:464]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6c41413cfb5767906448d3945dee5b1e
+BELONGS lib/CodeGen/GlobalISel/ya.make
+    License text:
+            auto *CI = cast<ConstantInt>(C);
+            APInt Divisor = CI->getValue();
+            unsigned Shift = Divisor.countr_zero();
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/CodeGen/GlobalISel/CombinerHelper.cpp [5272:5274]
+        lib/CodeGen/GlobalISel/CombinerHelper.cpp [5514:5516]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 71a5570b4ed12474c30d73d9c6d6af57
+BELONGS lib/Support/ya.make
+    License text:
+         * Copyright (c) 1992 Henry Spencer.
+         * Copyright (c) 1992, 1993
+         *	The Regents of the University of California.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/Support/regex_impl.h [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 71fa3625971f4a5adac98dfb795ee614
+BELONGS lib/CodeGen/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/CodeGen/LowerEmuTLS.cpp [139:142]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 729b0fb03d9f51f2d741dd6f8e10d012
+BELONGS lib/Transforms/Instrumentation/ya.make
+    License text:
+          GV->setComdat(C);
+          // COFF doesn't allow the comdat group leader to have private linkage, so
+          // upgrade private linkage to internal linkage to produce a symbol table
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/Transforms/Instrumentation/InstrProfiling.cpp [1470:1472]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7ab4b45edb7aa5542d2298596f7ac077
+BELONGS lib/Transforms/InstCombine/ya.make
+    License text:
+            Value *NotC = Builder.CreateNot(C);
+            Value *RHS = Builder.CreateAnd(B, NotC);
+            return BinaryOperator::CreateOr(LHS, RHS);
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/Transforms/InstCombine/InstCombineAndOrXor.cpp [4295:4297]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7ade3b3e64da0b5a8c95933670bd325e
+BELONGS lib/Analysis/ya.make
+    License text:
+              // |X| < |C| --> X > -abs(C) and X < abs(C)
+              Constant *PosDivisorC = ConstantInt::get(Ty, C->abs());
+              Constant *NegDivisorC = ConstantInt::get(Ty, -C->abs());
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/Analysis/InstructionSimplify.cpp [1014:1016]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 7e53573e64541341a91e201e6f51f486
+BELONGS include/ya.make
+    License text:
+           Copyright (C) 2012-2016, Yann Collet.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/llvm/Support/xxhash.h [11:11]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 86fd792ceb251fb3fcc341f66082f35f
+BELONGS lib/Analysis/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/Analysis/ValueTracking.cpp [9806:9810]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8a97f85e3d546ee687a70cc1eddc6fb9
+BELONGS lib/Transforms/Coroutines/ya.make
+    License text:
+          IRBuilder<> Builder(C);
+          StructType *FrameTy = Shape.FrameTy;
+          Value *FramePtr = Shape.FramePtr;
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/Transforms/Coroutines/CoroFrame.cpp [1007:1009]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8b4064d8567439548a359b7b1a7a28a1
+BELONGS lib/Analysis/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/Analysis/InstructionSimplify.cpp [995:1000]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 90576b7033efccaaffbad736f1a0d521
+BELONGS lib/IR/ya.make
+    License text:
+          LLVMContext &Context = *unwrap(C);
+          SmallVector<Metadata *, 8> MDs;
+          for (auto *OV : ArrayRef(Vals, Count)) {
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/IR/Core.cpp [1305:1307]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9834d5fa1f0986d34086e1d17571116a
+BELONGS lib/CodeGen/SelectionDAG/ya.make
+    License text:
+            Type *Ty = MemOps[0].getTypeForEVT(C);
+            Align NewAlign = DL.getABITypeAlign(Ty);
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/CodeGen/SelectionDAG/SelectionDAG.cpp [8174:8175]
+        lib/CodeGen/SelectionDAG/SelectionDAG.cpp [8369:8370]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9ae7967f03e7e2a04a2e21f088823a55
+BELONGS lib/DebugInfo/DWARF/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/DebugInfo/DWARF/DWARFAcceleratorTable.cpp [456:464]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9c879e80b33217edcdd9207481a44d94
+BELONGS lib/DebugInfo/DWARF/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/DebugInfo/DWARF/DWARFAcceleratorTable.cpp [456:464]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9d4ec4453cbd8bf6cc9370c38dd298ed
+BELONGS lib/Support/ya.make
+    License text:
+         * Copyright (c) 1992, 1993, 1994 Henry Spencer.
+         * Copyright (c) 1992, 1993, 1994
+         *	The Regents of the University of California.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/Support/regcomp.c [4:6]
+        lib/Support/regengine.inc [4:6]
+        lib/Support/regerror.c [4:6]
+        lib/Support/regex2.h [4:6]
+        lib/Support/regexec.c [4:6]
+        lib/Support/regfree.c [4:6]
+        lib/Support/regutils.h [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL aa55046ed38838026ba71159b2c09f09
+BELONGS lib/Transforms/InstCombine/ya.make
+    License text:
+          //   icmp <pred> iK %E, trunc(C)
+          Value *Vec;
+          ArrayRef<int> Mask;
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/Transforms/InstCombine/InstCombineCompares.cpp [3502:3504]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b3d9c252ff8f5a3a5d20c558a29e2e16
+BELONGS include/ya.make tools/llvm-cxxfilt/ya.make
+    License text:
+          static bool isChar6(char C) { return isAlnum(C) || C == '.' || C == '_'; }
+          static unsigned EncodeChar6(char C) {
+            if (C >= 'a' && C <= 'z') return C-'a';
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/llvm/Bitstream/BitCodes.h [89:91]
+        tools/llvm-cxxfilt/llvm-cxxfilt.cpp [139:140]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ba76fb602cdb427419e5298f61c13346
+BELONGS lib/Support/ya.make
+    License text:
+         * Copyright (c) 1992 Henry Spencer.
+         * Copyright (c) 1992, 1993
+         *	The Regents of the University of California.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/Support/regex_impl.h [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL bae2c8c0881abaf9a917b263650fe746
+BELONGS lib/Demangle/ya.make
+    License text:
+          return isDigit(C) || isLower(C) || isUpper(C) || C == '_';
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/Demangle/RustDemangle.cpp [182:182]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c8069f9f5455fa4a970af50594daf852
+BELONGS lib/Support/ya.make
+    License text:
+         * Copyright (c) 1992, 1993, 1994 Henry Spencer.
+         * Copyright (c) 1992, 1993, 1994
+         *	The Regents of the University of California.  All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/Support/regcomp.c [4:6]
+        lib/Support/regengine.inc [4:6]
+        lib/Support/regerror.c [4:6]
+        lib/Support/regex2.h [4:6]
+        lib/Support/regexec.c [4:6]
+        lib/Support/regfree.c [4:6]
+        lib/Support/regutils.h [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ca248aadf2ee691ae97d11398afe624b
+BELONGS lib/Transforms/Utils/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/Transforms/Utils/EntryExitInstrumenter.cpp [40:43]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d0ef211acd80f8c1a5c894ade7f87538
+BELONGS lib/Transforms/Utils/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/Transforms/Utils/LowerGlobalDtors.cpp [132:136]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d3bb08ad59b2467be5c0b1aa1f98f2fd
+BELONGS lib/IR/ya.make
+    License text:
+          MDBuilder MDB(C);
+          SmallVector<Metadata *, 3> Vals;
+          Vals.push_back(ProfileData->getOperand(0));
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/IR/ProfDataUtils.cpp [258:260]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d63318840fa3436facfeb24fd7638c0e
+BELONGS lib/AsmParser/ya.make
+    License text:
+            : CurBuf(StartBuf), ErrorInfo(Err), SM(SM), Context(C) {
+          CurPtr = CurBuf.begin();
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/AsmParser/LLLexer.cpp [173:174]
+
+KEEP     COPYRIGHT_SERVICE_LABEL deda618abf56343269e2c3dd9368f6b4
+BELONGS lib/Transforms/Utils/ya.make
+    License text:
+          if (C) {
+            ValueLatticeElement CV;
+            CV.markConstant(C);
+            mergeInValue(&I, CV);
+            return;
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/Transforms/Utils/SCCPSolver.cpp [1618:1622]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e0df4d49b106bd82efbad864a93ffce1
+BELONGS include/ya.make
+    License text:
+        // <copyright file="Program.cpp" company="Microsoft Corporation">
+        // Copyright (C) Microsoft Corporation. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/llvm/WindowsDriver/MSVCSetupApi.h [8:9]
+        include/llvm/WindowsDriver/MSVCSetupApi.h [15:15]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e10011579f8ed393a2b2f8c4c64b386e
+BELONGS lib/Target/WebAssembly/ya.make
+    License text:
+          IRBuilder<> IRB(C);
+          SmallVector<Instruction *, 64> ToErase;
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/Target/WebAssembly/WebAssemblyLowerEmscriptenEHSjLj.cpp [1265:1266]
+        lib/Target/WebAssembly/WebAssemblyLowerEmscriptenEHSjLj.cpp [1365:1366]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e7bd6251e104540a6ebba2803dc81206
+BELONGS lib/Support/ya.make
+    License text:
+           Copyright 2019 Jack O'Connor and Samuel Neves
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/Support/BLAKE3/LICENSE [318:318]
+
+KEEP     COPYRIGHT_SERVICE_LABEL eb7be45e1211bdf61ad67a5266a4d362
+BELONGS lib/DebugInfo/DWARF/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/DebugInfo/DWARF/DWARFAcceleratorTable.cpp [456:464]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ecb0e3c869f22cc8f0b923cd3df84147
+BELONGS include/ya.make lib/Transforms/Utils/ya.make
+    License text:
+        //   if (c)                   if (c)
+        //     X1 = ...                 X1 = ...
+        //   else                     else
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/llvm/Transforms/Utils/LCSSA.h [21:23]
+        lib/Transforms/Utils/LCSSA.cpp [14:16]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f2bff1d61453f018fe1397173f3dfa43
+BELONGS lib/Support/ya.make
+    License text:
+            : Code(C) {
+          ErrMsg = "Stream Error: ";
+          switch (C) {
+          case stream_error_code::unspecified:
+            ErrMsg += "An unspecified error has occurred.";
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/Support/BinaryStreamError.cpp [23:27]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f38404a02e69976b94505df0c691bed0
+BELONGS include/ya.make lib/Support/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/llvm/Support/MD5.h [20:25]
+        lib/Support/MD5.cpp [13:18]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f894c606faef3610df8e9cfcc3a19c2e
+BELONGS lib/CodeGen/ya.make
+    License text:
+            // Fix (C).
+            if (Restore && (MLI->getLoopFor(Save) || MLI->getLoopFor(Restore))) {
+              if (MLI->getLoopDepth(Save) > MLI->getLoopDepth(Restore)) {
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/CodeGen/ShrinkWrap.cpp [761:763]
+
+KEEP     COPYRIGHT_SERVICE_LABEL fb5e17767e7a12f5b9913e726533b21e
+BELONGS lib/Transforms/Instrumentation/ya.make
+    License text:
+            Value *Sc = getShadow(C);
+            Value *Sd = getShadow(D);
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/Transforms/Instrumentation/MemorySanitizer.cpp [5180:5181]

@@ -504,7 +504,7 @@ protected:
         const auto stateType = StructType::get(context, stateFields.GetFieldsArray());
         const auto statePtrType = PointerType::getUnqual(stateType);
 
-        const auto atTop = &ctx.Func->getEntryBlock().back();
+        const auto atTop = --ctx.Func->getEntryBlock().end();
 
         const auto getFunc = ConstantInt::get(Type::getInt64Ty(context), getStateMethodPtr);
         const auto getType = FunctionType::get(valueType, {statePtrType, indexType}, false);
@@ -991,7 +991,7 @@ protected:
         const auto stateType = StructType::get(context, stateFields.GetFieldsArray());
         const auto statePtrType = PointerType::getUnqual(stateType);
 
-        const auto atTop = &ctx.Func->getEntryBlock().back();
+        const auto atTop = --ctx.Func->getEntryBlock().end();
 
         const auto getFunc = ConstantInt::get(Type::getInt64Ty(context), getStateMethodPtr);
         const auto getType = FunctionType::get(valueType, {statePtrType, indexType, ctx.GetFactory()->getType(), indexType}, false);

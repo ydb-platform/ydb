@@ -161,7 +161,7 @@ public:
         const auto stateType = StructType::get(context, stateFields.GetFieldsArray());
         const auto statePtrType = PointerType::getUnqual(stateType);
 
-        const auto atTop = &ctx.Func->getEntryBlock().back();
+        const auto atTop = --ctx.Func->getEntryBlock().end();
 
         const auto addFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState::Add>());
         const auto addType = FunctionType::get(Type::getVoidTy(context), {statePtrType, valueType, indexType}, false);
@@ -924,9 +924,9 @@ public:
 
         const auto getFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState::Get>());
         const auto getType = FunctionType::get(valueType, {statePtrType, ctx.GetFactory()->getType(), indexType}, false);
-        const auto getPtr = CastInst::Create(Instruction::IntToPtr, getFunc, PointerType::getUnqual(getType), "get", &ctx.Func->getEntryBlock().back());
-        const auto stateOnStack = new AllocaInst(statePtrType, 0U, "state_on_stack", &ctx.Func->getEntryBlock().back());
-        new StoreInst(ConstantPointerNull::get(statePtrType), stateOnStack, &ctx.Func->getEntryBlock().back());
+        const auto getPtr = CastInst::Create(Instruction::IntToPtr, getFunc, PointerType::getUnqual(getType), "get", --ctx.Func->getEntryBlock().end());
+        const auto stateOnStack = new AllocaInst(statePtrType, 0U, "state_on_stack", --ctx.Func->getEntryBlock().end());
+        new StoreInst(ConstantPointerNull::get(statePtrType), stateOnStack, --ctx.Func->getEntryBlock().end());
 
         const auto name = "GetBlockCount";
         ctx.Codegen.AddGlobalMapping(name, reinterpret_cast<const void*>(&GetBlockCount));
@@ -1585,7 +1585,7 @@ public:
         const auto stateType = StructType::get(context, stateFields.GetFieldsArray());
         const auto statePtrType = PointerType::getUnqual(stateType);
 
-        const auto atTop = &ctx.Func->getEntryBlock().back();
+        const auto atTop = --ctx.Func->getEntryBlock().end();
 
         const auto getFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TBlockState::Get>());
         const auto getType = FunctionType::get(valueType, {statePtrType, indexType, ctx.GetFactory()->getType(), indexType}, false);

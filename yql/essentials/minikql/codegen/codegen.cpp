@@ -317,7 +317,7 @@ public:
         auto&& engineBuilder = llvm::EngineBuilder(std::move(module));
         engineBuilder
             .setEngineKind(llvm::EngineKind::JIT)
-            .setOptLevel(llvm::CodeGenOpt::Default)
+            .setOptLevel(llvm::CodeGenOptLevel::Default)
             .setErrorStr(&what)
             .setTargetOptions(targetOptions);
 
@@ -450,12 +450,13 @@ public:
             std::unique_ptr<llvm::legacy::FunctionPassManager> functionPassManager;
 
             modulePassManager = std::make_unique<llvm::legacy::PassManager>();
+/*
             modulePassManager->add(llvm::createInternalizePass([&](const llvm::GlobalValue& gv) -> bool {
                 auto name = TString(gv.getName().str());
                 return ExportedSymbols->contains(name);
             }));
-
             modulePassManager->add(llvm::createGlobalDCEPass());
+*/
             modulePassManager->run(*Module_);
         }
 
@@ -531,7 +532,7 @@ public:
         passBuilder.registerLoopAnalyses(lam);
         passBuilder.crossRegisterProxies(lam, fam, cgam, mam);
 
-        auto sanitizersCallback = [&](llvm::ModulePassManager& mpm, llvm::OptimizationLevel level) {
+        auto sanitizersCallback = [&](llvm::ModulePassManager& mpm, llvm::OptimizationLevel level, llvm::ThinOrFullLTOPhase) {
             Y_UNUSED(level);
             if (EffectiveSanitize_ == ESanitize::Asan) {
                 llvm::AddressSanitizerOptions options;
@@ -553,7 +554,7 @@ public:
 
         llvm::ModulePassManager modulePassManager;
         if (disableOpt) {
-            modulePassManager = passBuilder.buildO0DefaultPipeline(llvm::OptimizationLevel::O0, false);
+            modulePassManager = passBuilder.buildO0DefaultPipeline(llvm::OptimizationLevel::O0);
         } else {
             modulePassManager = passBuilder.buildPerModuleDefaultPipeline(llvm::OptimizationLevel::O2);
         }
@@ -745,8 +746,8 @@ private:
         info.print(printer);
     }
 
-    static void DiagnosticHandler(const llvm::DiagnosticInfo &info, void* context) {
-        return static_cast<TCodegen*>(context)->OnDiagnosticInfo(info);
+    static void DiagnosticHandler(const llvm::DiagnosticInfo *info, void* context) {
+        return static_cast<TCodegen*>(context)->OnDiagnosticInfo(*info);
     }
 
     struct TPatterns {

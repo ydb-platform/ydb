@@ -133,7 +133,7 @@ public:
 
         const auto statePtrType = PointerType::getUnqual(stateType);
 
-        const auto placeholder = new AllocaInst(pointerType, 0U, "paceholder", &ctx.Func->getEntryBlock().back());
+        const auto placeholder = new AllocaInst(pointerType, 0U, "paceholder", llvm::InsertPosition(--ctx.Func->getEntryBlock().end()));
 
         const auto finish = BasicBlock::Create(context, "finish", ctx.Func);
         const auto checkValid = BasicBlock::Create(context, "checkValid", ctx.Func);

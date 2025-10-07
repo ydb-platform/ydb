@@ -64,7 +64,7 @@ public:
 
         block = main;
 
-        const auto valuePtr = new AllocaInst(valueType, 0U, "value_ptr", &ctx.Func->getEntryBlock().back());
+        const auto valuePtr = new AllocaInst(valueType, 0U, "value_ptr", --ctx.Func->getEntryBlock().end());
         new StoreInst(ConstantInt::get(valueType, 0), valuePtr, block);
 
         const auto good = BasicBlock::Create(context, "good", ctx.Func);
@@ -320,7 +320,7 @@ public:
         auto& context = ctx.Codegen.GetContext();
         const auto valueType = Type::getInt128Ty(context);
         const auto indexType = Type::getInt32Ty(context);
-        const auto values = GetElementPtrInst::CreateInBounds(valueType, ctx.GetMutables(), {ConstantInt::get(indexType, TempStateIndex)}, "values", &ctx.Func->getEntryBlock().back());
+        const auto values = GetElementPtrInst::CreateInBounds(valueType, ctx.GetMutables(), {ConstantInt::get(indexType, TempStateIndex)}, "values", --ctx.Func->getEntryBlock().end());
 
         const auto init = BasicBlock::Create(context, "init", ctx.Func);
         const auto main = BasicBlock::Create(context, "main", ctx.Func);

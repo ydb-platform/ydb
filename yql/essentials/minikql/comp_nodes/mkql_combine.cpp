@@ -263,8 +263,8 @@ public:
 
         const auto statePtrType = PointerType::getUnqual(stateType);
 
-        const auto onePtr = new AllocaInst(valueType, 0U, "one_ptr", &ctx.Func->getEntryBlock().back());
-        const auto twoPtr = new AllocaInst(valueType, 0U, "two_ptr", &ctx.Func->getEntryBlock().back());
+        const auto onePtr = new AllocaInst(valueType, 0U, "one_ptr", --ctx.Func->getEntryBlock().end());
+        const auto twoPtr = new AllocaInst(valueType, 0U, "two_ptr", --ctx.Func->getEntryBlock().end());
         new StoreInst(ConstantInt::get(valueType, 0), onePtr, block);
         new StoreInst(ConstantInt::get(valueType, 0), twoPtr, block);
 
@@ -437,7 +437,7 @@ public:
 
         const auto statusType = Type::getInt32Ty(context);
         const auto valueType = Type::getInt128Ty(context);
-        const auto valuePtr = new AllocaInst(valueType, 0U, "value_ptr", &ctx.Func->getEntryBlock().back());
+        const auto valuePtr = new AllocaInst(valueType, 0U, "value_ptr", --ctx.Func->getEntryBlock().end());
         new StoreInst(ConstantInt::get(valueType, 0), valuePtr, block);
 
         const auto more = BasicBlock::Create(context, "more", ctx.Func);

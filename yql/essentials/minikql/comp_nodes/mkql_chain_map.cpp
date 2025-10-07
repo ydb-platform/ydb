@@ -410,7 +410,7 @@ public:
             codegenStateArg->CreateSetValue(ctx, block, init);
 
             const auto itemsPtr = *Stateless_ || ctx.AlwaysInline ?
-                new AllocaInst(elementsType, 0U, "items_ptr", &ctx.Func->getEntryBlock().back()):
+                new AllocaInst(elementsType, 0U, "items_ptr", --ctx.Func->getEntryBlock().end()):
                 new AllocaInst(elementsType, 0U, "items_ptr", block);
             const auto array = GenNewArray(ctx, size, itemsPtr, block);
             const auto items = new LoadInst(elementsType, itemsPtr, "items", block);

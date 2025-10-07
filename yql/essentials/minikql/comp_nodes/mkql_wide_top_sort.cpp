@@ -419,7 +419,7 @@ public:
 
         const auto outputType = ArrayType::get(valueType, Representations.size());
         const auto outputPtrType = PointerType::getUnqual(outputType);
-        const auto outs = annotate(new AllocaInst(outputPtrType, 0U, "outs", &ctx.Func->getEntryBlock().back()));
+        const auto outs = annotate(new AllocaInst(outputPtrType, 0U, "outs", --ctx.Func->getEntryBlock().end()));
 
         ICodegeneratorInlineWideNode::TGettersList getters(Representations.size());
 
@@ -947,7 +947,7 @@ public:
 
         const auto outputType = ArrayType::get(valueType, Representations.size());
         const auto outputPtrType = PointerType::getUnqual(outputType);
-        const auto outs = annotate(new AllocaInst(outputPtrType, 0U, "outs", &ctx.Func->getEntryBlock().back()));
+        const auto outs = annotate(new AllocaInst(outputPtrType, 0U, "outs", --ctx.Func->getEntryBlock().end()));
 
         ICodegeneratorInlineWideNode::TGettersList getters(Representations.size());
 

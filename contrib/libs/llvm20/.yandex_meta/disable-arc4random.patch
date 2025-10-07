@@ -1,0 +1,11 @@
+--- a/cmake/config-ix.cmake
++++ b/cmake/config-ix.cmake
+@@ -258,7 +258,7 @@
+ endif()
+
+ # function checks
+-check_symbol_exists(arc4random "stdlib.h" HAVE_DECL_ARC4RANDOM)
++set(HAVE_DECL_ARC4RANDOM 0)
+ find_package(Backtrace)
+ set(HAVE_BACKTRACE ${Backtrace_FOUND})
+ set(BACKTRACE_HEADER ${Backtrace_HEADER})

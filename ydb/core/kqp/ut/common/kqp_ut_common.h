@@ -44,7 +44,7 @@ struct TTestLogSettings {
     NLog::EPriority DefaultLogPriority = NLog::PRI_WARN;
     std::unordered_map<NKikimrServices::EServiceKikimr, NLog::EPriority> LogPriorities;
 
-    bool AddLogPriority(NKikimrServices::EServiceKikimr service, NLog::EPriority priority);
+    TTestLogSettings& AddLogPriority(NKikimrServices::EServiceKikimr service, NLog::EPriority priority);
 };
 
 struct TKikimrSettings: public TTestFeatureFlagsHolder<TKikimrSettings> {

@@ -115,9 +115,10 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
 
         auto logSettings = options.LogSettings;
         logSettings.DefaultLogPriority = std::max(NLog::PRI_NOTICE, logSettings.DefaultLogPriority);
-        logSettings.AddLogPriority(NKikimrServices::KQP_EXECUTER, NLog::PRI_INFO);
-        logSettings.AddLogPriority(NKikimrServices::KQP_PROXY, NLog::PRI_DEBUG);
-        logSettings.AddLogPriority(NKikimrServices::KQP_COMPUTE, NLog::PRI_INFO);
+        logSettings
+            .AddLogPriority(NKikimrServices::KQP_EXECUTER, NLog::PRI_INFO)
+            .AddLogPriority(NKikimrServices::KQP_PROXY, NLog::PRI_DEBUG)
+            .AddLogPriority(NKikimrServices::KQP_COMPUTE, NLog::PRI_INFO);
 
         const auto& kqpSettings = appConfig->GetKQPConfig().GetSettings();
         settings

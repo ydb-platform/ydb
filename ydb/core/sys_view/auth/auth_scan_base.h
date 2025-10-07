@@ -159,6 +159,7 @@ protected:
     }
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) {
+        IsNavigatePathInProgress = false;
         THolder<NSchemeCache::TSchemeCacheNavigate> request(ev->Get()->Request.Release());
 
         Y_ABORT_UNLESS(request->ResultSet.size() == 1);

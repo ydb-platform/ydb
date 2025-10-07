@@ -79,7 +79,7 @@ struct TNodeServiceState : public NKikimr::NKqp::NComputeActor::IKqpNodeState {
     const TActorSystem* ActorSystem = nullptr;
 
 public:
-    TNodeServiceState(const TActorSystem* actorSystem)
+    explicit TNodeServiceState(const TActorSystem* actorSystem)
         : ActorSystem(actorSystem)
     {}
 

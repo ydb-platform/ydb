@@ -513,7 +513,7 @@ class TStreamingQueriesScan final : public TScanActorBase<TStreamingQueriesScan>
     struct TQueryInfo {
         NKikimrKqp::TStreamingQueryState State;
 
-        // Sys view column value
+        // Sys view columns values
         TString Status;
         TString Issues = "{}";
         TString Plan = "{}";
@@ -640,7 +640,6 @@ public:
         if (const auto status = ev->Get()->Status; status != Ydb::StatusIds::SUCCESS) {
             const auto& issues = ev->Get()->Issues;
             LOG_E("Fetch database " << ev->Sender << " failed " << status << ", issues: " << issues.ToOneLineString());
-
             ReplyErrorAndDie(status, NKqp::AddRootIssue("Failed to fetch database info", issues));
             return;
         }
@@ -661,7 +660,6 @@ public:
         if (const auto status = ev->Get()->Status; status != Ydb::StatusIds::SUCCESS) {
             const auto& issues = ev->Get()->Issues;
             LOG_E("Check streaming queries tables " << ev->Sender << " failed " << status << ", issues: " << issues.ToOneLineString());
-
             ReplyErrorAndDie(status, NKqp::AddRootIssue("Failed to check streaming queries tables", issues));
             return;
         }
@@ -680,7 +678,6 @@ public:
         if (const auto status = ev->Get()->Status; status != Ydb::StatusIds::SUCCESS) {
             const auto& issues = ev->Get()->Issues;
             LOG_E("Fetch streaming queries " << ev->Sender << " failed " << status << ", issues: " << issues.ToOneLineString());
-
             ReplyErrorAndDie(status, NKqp::AddRootIssue("Failed to fetch streaming queries info", issues));
             return;
         }
@@ -702,7 +699,6 @@ public:
         if (const auto status = ev->Get()->Status; status != Ydb::StatusIds::SUCCESS) {
             const auto& issues = ev->Get()->Issues;
             LOG_E("Describe streaming queries " << ev->Sender << " failed " << status << ", issues: " << issues.ToOneLineString());
-
             ReplyErrorAndDie(status, NKqp::AddRootIssue("Failed to describe streaming queries", issues));
             return;
         }
@@ -757,7 +753,6 @@ public:
         if (!ready && status != Ydb::StatusIds::SUCCESS && status != Ydb::StatusIds::NOT_FOUND) {
             const auto& issues = event.Issues;
             LOG_E("Get script execution info " << ev->Sender << " failed " << status << ", issues: " << issues.ToOneLineString());
-
             ReplyErrorAndDie(status, NKqp::AddRootIssue(TStringBuilder() << "Failed to get last script execution info for query '" << path << "'", issues));
             return;
         }
@@ -850,6 +845,11 @@ private:
             return;
         }
 
+        if (!ReadyQueries.empty()) {
+            DrainReadyQueries();
+            return;
+        }
+
         if (FreeSpace <= 0) {
             LOG_D("Pause scan, no free space");
             return;
@@ -871,11 +871,6 @@ private:
 
         if (!PendingScriptExecutionInfo.empty() || InflightScriptExecutionInfoResolve) {
             ResolveScriptExecutionInfo();
-            return;
-        }
-
-        if (!ReadyQueries.empty()) {
-            DrainReadyQueries();
             return;
         }
 
@@ -915,8 +910,8 @@ private:
 
             auto event = std::make_unique<NKqp::TEvGetScriptExecutionOperation>(Database, NKqp::OperationIdFromExecutionId(executionId));
             event->CheckLeaseState = false;
-
             Send(kqpProxyId, std::move(event), 0, i);
+
             LOG_D("Resolving script execution info for query '" << path << "', execution id: " << executionId);
             InflightScriptExecutionInfoResolve++;
         }
@@ -941,7 +936,10 @@ private:
                 return;
             }
 
+            UsedSpace = UsedSpace >= it->second.GetSize() ? UsedSpace - it->second.GetSize() : 0;
+
             TVector<TCell> cells;
+            cells.reserve(Columns.size());
             for (const auto& column : Columns) {
                 const auto extractor = Extractors.find(column.Tag);
                 if (extractor == Extractors.end()) {

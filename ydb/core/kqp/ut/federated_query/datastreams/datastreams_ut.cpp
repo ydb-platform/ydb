@@ -115,8 +115,9 @@ public:
             queryServiceConfig.SetEnableMatchRecognize(true);
             queryServiceConfig.SetProgressStatsPeriodMs(1000);
 
-            LogSettings.AddLogPriority(NKikimrServices::STREAMS_STORAGE_SERVICE, NLog::PRI_DEBUG);
-            LogSettings.AddLogPriority(NKikimrServices::STREAMS_CHECKPOINT_COORDINATOR, NLog::PRI_DEBUG);
+            LogSettings
+                .AddLogPriority(NKikimrServices::STREAMS_STORAGE_SERVICE, NLog::PRI_DEBUG)
+                .AddLogPriority(NKikimrServices::STREAMS_CHECKPOINT_COORDINATOR, NLog::PRI_DEBUG);
 
             Kikimr = MakeKikimrRunner(true, ConnectorClient, nullptr, AppConfig, NYql::NDq::CreateS3ActorsFactory(), {
                 .CredentialsFactory = CreateCredentialsFactory(),
@@ -809,11 +810,9 @@ public:
 
         UNIT_ASSERT_C(!InputTopic, "Setup called twice");
         InputTopic = TStringBuilder() << INPUT_TOPIC_NAME << Name_;
-        CreateTopic(InputTopic);
-
         OutputTopic = TStringBuilder() << OUTPUT_TOPIC_NAME << Name_;
+        CreateTopic(InputTopic);
         CreateTopic(OutputTopic);
-
         CreatePqSource(PQ_SOURCE);
     }
 

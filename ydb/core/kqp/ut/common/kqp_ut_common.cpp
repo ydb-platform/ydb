@@ -129,8 +129,9 @@ TVector<NKikimrKqp::TKqpSetting> SyntaxV1Settings() {
     return {setting};
 }
 
-bool TTestLogSettings::AddLogPriority(NKikimrServices::EServiceKikimr service, NLog::EPriority priority) {
-    return LogPriorities.emplace(service, priority).second;
+TTestLogSettings& TTestLogSettings::AddLogPriority(NKikimrServices::EServiceKikimr service, NLog::EPriority priority) {
+    LogPriorities.emplace(service, priority);
+    return *this;
 }
 
 TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {

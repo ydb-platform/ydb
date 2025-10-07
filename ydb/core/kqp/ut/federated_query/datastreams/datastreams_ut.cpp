@@ -6,12 +6,12 @@
 #include <ydb/core/kqp/proxy_service/kqp_script_executions.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/ut/federated_query/common/common.h>
-
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_scripting.h>
-
 #include <ydb/library/testlib/pq_helpers/mock_pq_gateway.h>
 #include <ydb/library/testlib/s3_recipe_helper/s3_recipe_helper.h>
+#include <ydb/library/yql/providers/generic/connector/libcpp/error.h>
+#include <ydb/library/yql/providers/generic/connector/libcpp/ut_helpers/connector_client_mock.h>
 #include <ydb/library/yql/providers/s3/actors/yql_s3_actors_factory_impl.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_scripting.h>
 
 #include <fmt/format.h>
 
@@ -21,6 +21,8 @@ using namespace NYdb;
 using namespace NYdb::NQuery;
 using namespace NKikimr::NKqp::NFederatedQueryTest;
 using namespace fmt::literals;
+using namespace NYql::NConnector::NTest;
+using namespace NYql::NConnector::NApi;
 using namespace NTestUtils;
 
 namespace {
@@ -65,6 +67,16 @@ public:
         return mockPqGateway;
     }
 
+    std::shared_ptr<TConnectorClientMock> SetupMockConnectorClient() {
+        UNIT_ASSERT_C(!ConnectorClient, "ConnectorClient is already initialized");
+        EnsureNotInitialized("ConnectorClient");
+
+        auto mockConnectorClient = std::make_shared<TConnectorClientMock>();
+        ConnectorClient = mockConnectorClient;
+
+        return mockConnectorClient;
+    }
+
     // Local kikimr test cluster
 
     std::shared_ptr<TKikimrRunner> GetKikimrRunner() {
@@ -79,7 +91,8 @@ public:
             queryServiceConfig.SetEnableMatchRecognize(true);
             queryServiceConfig.SetProgressStatsPeriodMs(1000);
 
-            Kikimr = MakeKikimrRunner(true, nullptr, nullptr, AppConfig, NYql::NDq::CreateS3ActorsFactory(), {
+            Kikimr = MakeKikimrRunner(true, ConnectorClient, nullptr, AppConfig, NYql::NDq::CreateS3ActorsFactory(), {
+                .CredentialsFactory = CreateCredentialsFactory(),
                 .PqGateway = PqGateway,
                 .CheckpointPeriod = CheckpointPeriod,
             });
@@ -266,9 +279,14 @@ public:
 
     // Query client SDK
 
-    std::vector<TResultSet> ExecQuery(const TString& query, EStatus expectedStatus = EStatus::SUCCESS) {
+    std::vector<TResultSet> ExecQuery(const TString& query, EStatus expectedStatus = EStatus::SUCCESS, const TString& expectedError = "") {
         auto result = GetQueryClient()->ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), expectedStatus, result.GetIssues().ToOneLineString());
+
+        if (expectedError) {
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), expectedError);
+        }
+
         return result.GetResultSets();
     }
 
@@ -346,7 +364,7 @@ public:
         return operation;
     }
 
-    void WaitScriptExecution(const TOperation::TOperationId& operationId, EExecStatus finalStatus = EExecStatus::Completed, bool waitRetry = false) {
+    TScriptExecutionOperation WaitScriptExecution(const TOperation::TOperationId& operationId, EExecStatus finalStatus = EExecStatus::Completed, bool waitRetry = false) {
         const bool waitForFinalStatus = !waitRetry && IsIn({EExecStatus::Completed, EExecStatus::Failed}, finalStatus);
 
         std::optional<TScriptExecutionOperation> operation;
@@ -375,10 +393,11 @@ public:
         }
 
         UNIT_ASSERT_VALUES_EQUAL(operation->Ready(), waitForFinalStatus);
+        return *operation;
     }
 
-    void ExecAndWaitScript(const TString& query, EExecStatus finalStatus = EExecStatus::Completed, std::optional<TExecuteScriptSettings> settings = std::nullopt) {
-        WaitScriptExecution(ExecScript(query, settings, /* waitRunning */ false), finalStatus, false);
+    TScriptExecutionOperation ExecAndWaitScript(const TString& query, EExecStatus finalStatus = EExecStatus::Completed, std::optional<TExecuteScriptSettings> settings = std::nullopt) {
+        return WaitScriptExecution(ExecScript(query, settings, /* waitRunning */ false), finalStatus, false);
     }
 
     TResultSet FetchScriptResult(const TOperation::TOperationId& operationId, ui64 resultSetId = 0) {
@@ -557,18 +576,23 @@ public:
         return session;
     }
 
-    static void ReadMockPqMessage(IMockPqWriteSession::TPtr session, const TString& message) {
+    static void ReadMockPqMessages(IMockPqWriteSession::TPtr session, const std::vector<TString>& messages) {
+        ui64 receivedMessages = 0;
         WaitFor(TEST_OPERATION_TIMEOUT, "read message from mock pq gateway", [&](TString& errorString) {
             const auto data = session->ExtractData();
-            if (!data.empty()) {
-                UNIT_ASSERT_VALUES_EQUAL(data.size(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(data[0], message);
-                return true;
+            UNIT_ASSERT_GE(messages.size(), receivedMessages + data.size());
+
+            for (const auto& message : data) {
+                UNIT_ASSERT_VALUES_EQUAL(message, messages[receivedMessages++]);
             }
 
             errorString = "no messages found";
-            return false;
+            return receivedMessages == messages.size();
         });
+    }
+
+    static void ReadMockPqMessage(IMockPqWriteSession::TPtr session, const TString& message) {
+        ReadMockPqMessages(session, {message});
     }
 
     static void WaitFor(TDuration timeout, const TString& description, std::function<bool(TString&)> callback) {
@@ -602,6 +626,7 @@ protected:
 private:
     std::optional<NKikimrConfig::TAppConfig> AppConfig;
     TIntrusivePtr<NYql::IPqGateway> PqGateway;
+    NYql::NConnector::IClient::TPtr ConnectorClient;
     std::shared_ptr<TKikimrRunner> Kikimr;
 
     std::shared_ptr<TDriver> InternalDriver;
@@ -1170,6 +1195,34 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             WaitCheckpointUpdate(executionId);
         }
     }
+
+    Y_UNIT_TEST_F(S3RuntimeListingDisabledForStreamingQueries, TStreamingTestFixture) {
+        constexpr char sourceBucket[] = "test_bucket_disable_runtime_listing";
+        constexpr char objectPath[] = "test_bucket_object.json";
+        constexpr char objectContent[] = R"({"data": "x"})";
+        CreateBucketWithObject(sourceBucket, objectPath, objectContent);
+
+        constexpr char s3SourceName[] = "s3Source";
+        CreateS3Source(sourceBucket, s3SourceName);
+
+        const auto& [_, operationId] = ExecScriptNative(fmt::format(R"(
+            PRAGMA s3.UseRuntimeListing = "true";
+            INSERT INTO `{s3_source}`.`path/` WITH (
+                FORMAT = "json_each_row"
+            ) SELECT * FROM `{s3_source}`.`{object_path}` WITH (
+                FORMAT = "json_each_row",
+                SCHEMA (
+                    data String NOT NULL
+                )
+            )
+        )", "s3_source"_a = s3SourceName, "object_path"_a = objectPath), {
+            .SaveState = true
+        }, /* waitRunning */ false);
+
+        const auto& readyOp = WaitScriptExecution(operationId);
+        UNIT_ASSERT_STRING_CONTAINS(readyOp.Status().GetIssues().ToString(), "Runtime listing is not supported for streaming queries, pragma value was ignored");
+        UNIT_ASSERT_VALUES_EQUAL(GetAllObjects(sourceBucket), "{\"data\":\"x\"}\n{\"data\": \"x\"}");
+    }
 }
 
 Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
@@ -1450,6 +1503,309 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             R"({"key": 4, "value": "value4"})",
         });
         ReadTopicMessages(outputTopicName, {"1-4"});
+    }
+
+    Y_UNIT_TEST_F(StreamingQueryReplaceAfterError, TStreamingTestFixture) {
+        constexpr char inputTopicName[] = "createAndAlterStreamingQueryInputTopic";
+        constexpr char outputTopicName[] = "createAndAlterStreamingQueryOutputTopic";
+        CreateTopic(inputTopicName);
+        CreateTopic(outputTopicName);
+
+        constexpr char pqSourceName[] = "sourceName";
+        CreatePqSource(pqSourceName);
+
+        constexpr char queryName[] = "streamingQuery";
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                PRAGMA ydb.OverridePlanner = @@ [
+                    {{ "tx": 0, "stage": 1, "tasks": 32 }}
+                ] @@;
+                INSERT INTO `{pq_source}`.`{output_topic}`
+                SELECT * FROM `{pq_source}`.`{input_topic}`
+            END DO;)",
+            "query_name"_a = queryName,
+            "pq_source"_a = pqSourceName,
+            "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName
+        ), EStatus::GENERIC_ERROR, "Invalid override planner settings");
+
+        CheckScriptExecutionsCount(1, 0);
+
+        const auto streamingQueryDesc = Navigate(GetRuntime(), GetRuntime().AllocateEdgeActor(), JoinPath({"Root", queryName}), NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
+        const auto& streamingQuery = streamingQueryDesc->ResultSet.at(0);
+        UNIT_ASSERT_VALUES_EQUAL(streamingQuery.Kind, NSchemeCache::TSchemeCacheNavigate::EKind::KindStreamingQuery);
+        UNIT_ASSERT(streamingQuery.StreamingQueryInfo);
+        UNIT_ASSERT_VALUES_EQUAL(streamingQuery.StreamingQueryInfo->Description.GetName(), queryName);
+
+        ExecQuery(fmt::format(R"(
+            CREATE OR REPLACE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                PRAGMA ydb.OverridePlanner = @@ [
+                    {{ "tx": 0, "stage": 0, "tasks": 32 }}
+                ] @@;
+                INSERT INTO `{pq_source}`.`{output_topic}`
+                SELECT * FROM `{pq_source}`.`{input_topic}`
+            END DO;)",
+            "query_name"_a = queryName,
+            "pq_source"_a = pqSourceName,
+            "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName
+        ));
+
+        CheckScriptExecutionsCount(2, 1);
+        Sleep(TDuration::Seconds(1));
+
+        WriteTopicMessage(inputTopicName, "test message");
+        ReadTopicMessage(outputTopicName, "test message");
+    }
+
+    Y_UNIT_TEST_F(StreamingQueryWithS3Join, TStreamingTestFixture) {
+        // Test that defaults are overridden for streaming queries
+        auto& setting = *SetupAppConfig().MutableKQPConfig()->AddSettings();
+        setting.SetName("HashJoinMode");
+        setting.SetValue("grace");
+
+        const auto pqGateway = SetupMockPqGateway();
+
+        constexpr char sourceBucket[] = "test_streaming_query_with_s3_join";
+        constexpr char objectContent[] = R"(
+{"fqdn": "host1.example.com", "payload": "P1"}
+{"fqdn": "host2.example.com", "payload": "P2"}
+{"fqdn": "host3.example.com", "payload": "P3"})";
+        CreateBucketWithObject(sourceBucket, "path/test_object.json", objectContent);
+
+        constexpr char inputTopicName[] = "inputTopicName";
+        constexpr char outputTopicName[] = "outputTopicName";
+        CreateTopic(inputTopicName);
+        CreateTopic(outputTopicName);
+
+        constexpr char pqSourceName[] = "pqSourceName";
+        constexpr char s3SourceName[] = "s3Source";
+        CreatePqSource(pqSourceName);
+        CreateS3Source(sourceBucket, s3SourceName);
+
+        constexpr char queryName[] = "streamingQuery";
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                PRAGMA ydb.HashJoinMode = "map";
+                $s3_lookup = SELECT * FROM `{s3_source}`.`path/` WITH (
+                    FORMAT = "json_each_row",
+                    SCHEMA (
+                        fqdn String,
+                        payload String
+                    )
+                );
+
+                $pq_source = SELECT * FROM `{pq_source}`.`{input_topic}` WITH (
+                    FORMAT = "json_each_row",
+                    SCHEMA (
+                        time Int32 NOT NULL,
+                        event String,
+                        host String
+                    )
+                );
+
+                $joined = SELECT l.payload AS payload, p.* FROM $pq_source AS p
+                LEFT JOIN $s3_lookup AS l
+                ON (l.fqdn = p.host);
+
+                INSERT INTO `{pq_source}`.`{output_topic}`
+                SELECT Unwrap(event || "-" || payload) FROM $joined
+            END DO;)",
+            "query_name"_a = queryName,
+            "pq_source"_a = pqSourceName,
+            "s3_source"_a = s3SourceName,
+            "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName
+        ));
+
+        CheckScriptExecutionsCount(1, 1);
+
+        auto readSession = WaitMockPqReadSession(pqGateway, inputTopicName);
+        const std::vector<IMockPqReadSession::TMessage> sampleMessages = {
+            {0, R"({"time": 0, "event": "A", "host": "host1.example.com"})"},
+            {1, R"({"time": 1, "event": "B", "host": "host3.example.com"})"},
+            {2, R"({"time": 2, "event": "A", "host": "host1.example.com"})"},
+        };
+        readSession->AddDataReceivedEvent(sampleMessages);
+
+        auto writeSession = WaitMockPqWriteSession(pqGateway, outputTopicName);
+        const std::vector<TString> sampleResult = {"A-P1", "B-P3", "A-P1"};
+        ReadMockPqMessages(writeSession, sampleResult);
+
+        readSession->AddCloseSessionEvent(EStatus::UNAVAILABLE, {NIssue::TIssue("Test pq session failure")});
+
+        WaitMockPqReadSession(pqGateway, inputTopicName)->AddDataReceivedEvent(sampleMessages);
+        ReadMockPqMessages(WaitMockPqWriteSession(pqGateway, outputTopicName), sampleResult);
+    }
+
+    Y_UNIT_TEST_F(StreamingQueryWithYdbJoin, TStreamingTestFixture) {
+        // Test that defaults are overridden for streaming queries
+        auto& setting = *SetupAppConfig().MutableKQPConfig()->AddSettings();
+        setting.SetName("HashJoinMode");
+        setting.SetValue("grace");
+
+        const auto connectorClient = SetupMockConnectorClient();
+        const auto pqGateway = SetupMockPqGateway();
+
+        constexpr char inputTopicName[] = "inputTopicName";
+        constexpr char outputTopicName[] = "outputTopicName";
+        CreateTopic(inputTopicName);
+        CreateTopic(outputTopicName);
+
+        constexpr char pqSourceName[] = "pqSourceName";
+        CreatePqSource(pqSourceName);
+
+        constexpr char ydbSourceName[] = "ydbSourceName";
+        ExecQuery(fmt::format(R"(
+            CREATE OBJECT secret_name (TYPE SECRET) WITH (value = "{token}");
+            CREATE EXTERNAL DATA SOURCE `{ydb_source}` WITH (
+                SOURCE_TYPE = "Ydb",
+                LOCATION = "{ydb_location}",
+                DATABASE_NAME = "{ydb_database_name}",
+                AUTH_METHOD = "TOKEN",
+                TOKEN_SECRET_NAME = "secret_name",
+                USE_TLS = "FALSE"
+            );)",
+            "ydb_source"_a = ydbSourceName,
+            "ydb_location"_a = YDB_ENDPOINT,
+            "ydb_database_name"_a = YDB_DATABASE,
+            "token"_a = BUILTIN_ACL_ROOT
+        ));
+
+        constexpr char ydbTable[] = "lookup";
+        ExecExternalQuery(fmt::format(R"(
+            CREATE TABLE `{table}` (
+                fqdn String,
+                payload String,
+                PRIMARY KEY (fqdn)
+            ))",
+            "table"_a = ydbTable
+        ));
+
+        {   // Prepare connector mock
+            NYql::TGenericDataSourceInstance dataSourceInstance;
+            dataSourceInstance.set_kind(NYql::YDB);
+            dataSourceInstance.set_database(YDB_DATABASE);
+            dataSourceInstance.set_use_tls(false);
+            dataSourceInstance.set_protocol(NYql::NATIVE);
+
+            auto& endpoint = *dataSourceInstance.mutable_endpoint();
+            TIpPort port;
+            NHttp::CrackAddress(YDB_ENDPOINT, *endpoint.mutable_host(), port);
+            endpoint.set_port(port);
+
+            auto& iamToken = *dataSourceInstance.mutable_credentials()->mutable_token();
+            iamToken.set_type("IAM");
+            iamToken.set_value(BUILTIN_ACL_ROOT);
+
+            TTypeMappingSettings typeMappingSettings;
+            typeMappingSettings.set_date_time_format(STRING_FORMAT);
+
+            auto describeTableBuilder = connectorClient->ExpectDescribeTable();
+            describeTableBuilder
+                .Table(ydbTable)
+                .DataSourceInstance(dataSourceInstance)
+                .TypeMappingSettings(typeMappingSettings);
+
+            auto listSplitsBuilder = connectorClient->ExpectListSplits();
+            listSplitsBuilder.Select()
+                .DataSourceInstance(dataSourceInstance)
+                .Table(ydbTable);
+
+            const std::vector<std::string> fqdnColumn = {"host1.example.com", "host2.example.com", "host3.example.com"};
+            const std::vector<std::string> payloadColumn = {"P1", "P2", "P3"};
+            auto readSplitsBuilder = connectorClient->ExpectReadSplits();
+            readSplitsBuilder
+                .Filtering(TReadSplitsRequest::FILTERING_OPTIONAL)
+                .Split()
+                    .Description("some binary description")
+                    .Select()
+                        .Table(ydbTable)
+                        .DataSourceInstance(dataSourceInstance)
+                        .What()
+                            .Column("fqdn", Ydb::Type::STRING)
+                            .Column("payload", Ydb::Type::STRING);
+
+            const auto builtResults = [&]() {
+                describeTableBuilder.Response()
+                    .Column("fqdn", Ydb::Type::STRING)
+                    .Column("payload", Ydb::Type::STRING);
+
+                listSplitsBuilder.Result()
+                    .AddResponse(NYql::NConnector::NewSuccess())
+                        .Description("some binary description")
+                        .Select()
+                            .DataSourceInstance(dataSourceInstance)
+                            .What()
+                                .Column("fqdn", Ydb::Type::STRING)
+                                .Column("payload", Ydb::Type::STRING);
+
+                readSplitsBuilder.Result()
+                    .AddResponse(
+                        MakeRecordBatch(
+                            MakeArray<arrow::BinaryBuilder>("fqdn", fqdnColumn, arrow::binary()),
+                            MakeArray<arrow::BinaryBuilder>("payload", payloadColumn, arrow::binary())
+                        ),
+                        NYql::NConnector::NewSuccess()
+                    );
+            };
+
+            builtResults();
+            builtResults(); // Streaming queries compiled twice, also in test results requested twice due to retry
+        }
+
+        constexpr char queryName[] = "streamingQuery";
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                PRAGMA ydb.HashJoinMode = "map";
+                $ydb_lookup = SELECT * FROM `{ydb_source}`.`{ydb_table}`;
+
+                $pq_source = SELECT * FROM `{pq_source}`.`{input_topic}` WITH (
+                    FORMAT = "json_each_row",
+                    SCHEMA (
+                        time Int32 NOT NULL,
+                        event String,
+                        host String
+                    )
+                );
+
+                $joined = SELECT l.payload AS payload, p.* FROM $pq_source AS p
+                LEFT JOIN $ydb_lookup AS l
+                ON (l.fqdn = p.host);
+
+                INSERT INTO `{pq_source}`.`{output_topic}`
+                SELECT Unwrap(event || "-" || payload) FROM $joined
+            END DO;)",
+            "query_name"_a = queryName,
+            "pq_source"_a = pqSourceName,
+            "ydb_source"_a = ydbSourceName,
+            "ydb_table"_a = ydbTable,
+            "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName
+        ));
+
+        CheckScriptExecutionsCount(1, 1);
+
+        auto readSession = WaitMockPqReadSession(pqGateway, inputTopicName);
+        const std::vector<IMockPqReadSession::TMessage> sampleMessages = {
+            {0, R"({"time": 0, "event": "A", "host": "host1.example.com"})"},
+            {1, R"({"time": 1, "event": "B", "host": "host3.example.com"})"},
+            {2, R"({"time": 2, "event": "A", "host": "host1.example.com"})"},
+        };
+        readSession->AddDataReceivedEvent(sampleMessages);
+
+        auto writeSession = WaitMockPqWriteSession(pqGateway, outputTopicName);
+        const std::vector<TString> sampleResult = {"A-P1", "B-P3", "A-P1"};
+        ReadMockPqMessages(writeSession, sampleResult);
+
+        readSession->AddCloseSessionEvent(EStatus::UNAVAILABLE, {NIssue::TIssue("Test pq session failure")});
+
+        WaitMockPqReadSession(pqGateway, inputTopicName)->AddDataReceivedEvent(sampleMessages);
+        ReadMockPqMessages(WaitMockPqWriteSession(pqGateway, outputTopicName), sampleResult);
     }
 }
 

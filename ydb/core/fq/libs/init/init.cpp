@@ -304,7 +304,8 @@ void Init(
             pqGatewayFactory ? pqGatewayFactory->CreatePqGateway() : CreatePqNativeGateway(pqServices),
             yqSharedResources->UserSpaceYdbDriver,
             appData->Mon,
-            appData->Counters);
+            appData->Counters,
+            MakeNodesManagerId());
         actorRegistrator(NFq::RowDispatcherServiceActorId(), rowDispatcher.release());
     }
 

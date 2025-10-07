@@ -51,6 +51,7 @@ PEERDIR(
 END()
 
 RECURSE(
+    federated_queries
     s3_backups
     olap
 )

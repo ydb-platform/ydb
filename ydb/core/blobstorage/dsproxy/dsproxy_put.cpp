@@ -593,9 +593,13 @@ public:
         if (params.Common.Event->Orbit.HasShuttles()) {
             RootCauseTrack.IsOn = true;
         }
-        ReportBytes(PutImpl.Blobs[0].Buffer.capacity() + sizeof(*this));
 
-        RequestBytes = PutImpl.Blobs[0].Buffer.size();
+        RequestBytes = 0;
+        for (auto &item: PutImpl.Blobs) {
+            ReportBytes(item.Buffer.capacity());
+            RequestBytes += item.BufferSize;
+        }
+        ReportBytes(sizeof(*this));
         RequestHandleClass = HandleClassToHandleClass(HandleClass);
         MaxSaneRequests = Info->Type.TotalPartCount() * (1ull + Info->Type.Handoff()) * 2;
     }

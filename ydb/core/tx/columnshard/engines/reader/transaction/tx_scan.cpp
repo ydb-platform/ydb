@@ -147,6 +147,9 @@ void TTxScan::Complete(const TActorContext& ctx) {
             }
             auto newRange = scannerConstructor->BuildReadMetadata(Self, read);
             if (newRange.IsSuccess()) {
+                if (!request.HasReverse() && deduplicationEnabled) {
+                    (*newRange)->SetFakeSort(true);
+                }
                 readMetadataRange = TValidator::CheckNotNull(newRange.DetachResult());
             } else {
                 return SendError("cannot build metadata", newRange.GetErrorMessage(), ctx);

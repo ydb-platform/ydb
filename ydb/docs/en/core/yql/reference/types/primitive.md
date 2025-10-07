@@ -215,7 +215,7 @@ from -292277 years to +292277 years
 |
 8
 |
-Not supported in table columns
+Not available for column-oriented tables
 ||
 
 ||

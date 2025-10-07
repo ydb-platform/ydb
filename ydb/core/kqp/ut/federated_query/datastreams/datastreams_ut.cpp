@@ -2526,6 +2526,57 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {
             return true;
         });
     }
+
+    Y_UNIT_TEST_F(ReadPartOfSysViewColumns, TStreamingSysViewTestFixture) {
+        Setup();
+
+        StartQuery("A");
+
+        const auto& result = ExecQuery(R"(
+            SELECT
+                Path,
+                Text,
+                Run,
+                ResourcePool
+            FROM `.sys/streaming_queries`
+        )");
+        UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
+
+        std::vector<TSysViewResult> results;
+        CheckScriptResult(result[0], 4, 1, [&](TResultSetParser& resultSet) {
+            UNIT_ASSERT_VALUES_EQUAL(*resultSet.ColumnParser("Path").GetOptionalUtf8(), "/Root/A");
+            UNIT_ASSERT_VALUES_EQUAL(*resultSet.ColumnParser("Text").GetOptionalUtf8(), GetQueryText("A"));
+            UNIT_ASSERT_VALUES_EQUAL(*resultSet.ColumnParser("Run").GetOptionalBool(), true);
+            UNIT_ASSERT_VALUES_EQUAL(*resultSet.ColumnParser("ResourcePool").GetOptionalUtf8(), "default");
+        });
+    }
+
+    Y_UNIT_TEST_F(ReadSysViewWithBackPressure, TStreamingSysViewTestFixture) {
+        Setup();
+
+        std::vector<TSysViewRow> rows;
+        for (ui64 i = 0; i < 4000; ++i) {
+            const auto name = TStringBuilder() << "query-" << i;
+            ExecQuery(fmt::format(R"(
+                CREATE STREAMING QUERY `{name}` WITH (
+                    RUN = FALSE
+                ) AS DO BEGIN{text}END DO)",
+                "name"_a = name,
+                "text"_a = GetQueryText(name)
+            ));
+            rows.push_back({
+                .Name = name,
+                .Status = "CREATED",
+                .Run = false,
+            });
+        }
+
+        std::sort(rows.begin(), rows.end(), [](const auto& lhs, const auto& rhs) {
+            return lhs.Name < rhs.Name;
+        });
+
+        CheckSysView(rows);
+    }
 }
 
 } // namespace NKikimr::NKqp

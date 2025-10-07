@@ -89,6 +89,8 @@ struct IClient
     virtual const NTransactionClient::ITimestampProviderPtr& GetTimestampProvider() = 0;
 
     virtual TFuture<std::optional<std::string>> GetClusterName(bool fetchIfNull = true) = 0;
+
+    virtual const TClientOptions& GetOptions() = 0;
 };
 
 DEFINE_REFCOUNTED_TYPE(IClient)

@@ -72,6 +72,11 @@ public:
         return MakeFuture<std::optional<std::string>>({});
     }
 
+    const TClientOptions& GetOptions() override
+    {
+        return Executor_->GetClient(0)->GetOptions();
+    }
+
     RETRYABLE_METHOD(TFuture<TUnversionedLookupRowsResult>, LookupRows, (const TYPath&, NTableClient::TNameTablePtr, const TSharedRange<NTableClient::TUnversionedRow>&, const TLookupRowsOptions&));
     RETRYABLE_METHOD(TFuture<TVersionedLookupRowsResult>, VersionedLookupRows, (const TYPath&, NTableClient::TNameTablePtr, const TSharedRange<NTableClient::TUnversionedRow>&, const TVersionedLookupRowsOptions&));
     RETRYABLE_METHOD(TFuture<TSelectRowsResult>, SelectRows, (const std::string&, const TSelectRowsOptions&));

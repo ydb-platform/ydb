@@ -336,6 +336,8 @@ public:
 
     const NTransactionClient::ITimestampProviderPtr& GetTimestampProvider() override;
 
+    const TClientOptions& GetOptions() override;
+
     ITransactionPtr AttachTransaction(NTransactionClient::TTransactionId, const TTransactionAttachOptions&) override;
 
     IPrerequisitePtr AttachPrerequisite(NPrerequisiteClient::TPrerequisiteId, const TPrerequisiteAttachOptions&) override;
@@ -761,6 +763,12 @@ const NTransactionClient::ITimestampProviderPtr& TClient::GetTimestampProvider()
 {
     auto [client, _] = GetActiveClient();
     return client->GetTimestampProvider();
+}
+
+const TClientOptions& TClient::GetOptions()
+{
+    auto [client, _] = GetActiveClient();
+    return client->GetOptions();
 }
 
 ITransactionPtr TClient::AttachTransaction(

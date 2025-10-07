@@ -11,7 +11,6 @@ import ytest
 from _common import (
     rootrel_arc_src,
     sort_uniq,
-    strip_roots,
     to_yesno,
 )
 from _dart_fields import create_dart_record
@@ -129,11 +128,6 @@ class NotsUnitType(UnitType):
     def on_do_ts_yndexing(self) -> None:
         """
         Turn on code navigation indexing
-        """
-
-    def on_from_npm(self, args: UnitType.PluginArgs) -> None:
-        """
-        TODO remove after removing on_from_pnpm_lockfiles
         """
 
     def on_setup_install_node_modules_recipe(self) -> None:
@@ -368,7 +362,7 @@ def _create_erm_json(unit: NotsUnitType):
 def _get_pm_type(unit: NotsUnitType) -> 'PackageManagerType':
     resolved: PackageManagerType | None = unit.get("PM_TYPE")
     if not resolved:
-        raise Exception("PM_TYPE is not set yet. Macro _SET_PACKAGE_MANAGER() should be called before.")
+        raise Exception("PM_TYPE is not set yet.")
 
     return resolved
 
@@ -395,34 +389,6 @@ def _create_pm(unit: NotsUnitType) -> 'BasePackageManager':
         script_path=None,
         module_path=module_path,
     )
-
-
-@_with_report_configure_error
-def on_set_package_manager(unit: NotsUnitType) -> None:
-    pm_type = "pnpm"  # projects without any lockfile are processed by pnpm
-
-    source_path = _get_source_path(unit)
-
-    for pm_key, lockfile_name in [("pnpm", "pnpm-lock.yaml"), ("npm", "package-lock.json")]:
-        lf_path = os.path.join(source_path, lockfile_name)
-        lf_path_resolved = unit.resolve_arc_path(strip_roots(lf_path))
-
-        if lf_path_resolved:
-            pm_type = pm_key
-            break
-
-    if pm_type == 'npm' and "devtools/dummy_arcadia/typescript/npm" not in source_path:
-        ymake.report_configure_error(
-            "\n"
-            "Project is configured to use npm as a package manager. \n"
-            "Only pnpm is supported at the moment.\n"
-            "Please follow the instruction to migrate your project:\n"
-            "https://docs.yandex-team.ru/frontend-in-arcadia/tutorials/migrate#migrate-to-pnpm"
-        )
-
-    unit.on_peerdir_ts_resource(pm_type)
-    unit.set(["PM_TYPE", pm_type])
-    unit.set(["PM_SCRIPT", f"${pm_type.upper()}_SCRIPT"])
 
 
 @_with_report_configure_error

@@ -90,7 +90,8 @@ void KafkaReadSessionProxyActor::Handle(TEvKafka::TEvFetchRequest::TPtr& ev) {
 
     std::unordered_set<TString> newTopics;
     for (auto& topic : GetTopics(*PendingRequest.value()->Get()->Request, Context)) {
-        if (Topics.contains(topic)) {
+        auto it = Topics.find(topic);
+        if (it != Topics.end() && it->second.ReadBalancerTabletId > 0) {
             continue;
         }
 
@@ -123,9 +124,7 @@ void KafkaReadSessionProxyActor::Handle(NPQ::NDescriber::TEvDescribeTopicsRespon
 
                 break;
             }
-            case NPQ::NDescriber::EStatus::NOT_FOUND:
-            case NPQ::NDescriber::EStatus::NOT_TOPIC:
-            case NPQ::NDescriber::EStatus::UNKNOWN_ERROR:
+            default:
                 Topics[originalPath] = {
                     .Initialized = true,
                     .ReadBalancerTabletId = 0

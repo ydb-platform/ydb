@@ -1654,7 +1654,7 @@ void TBalancer::Handle(TEvTabletPipe::TEvServerConnected::TPtr& ev, const TActor
 }
 
 void TBalancer::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev, const TActorContext& ctx) {
-    PQ_LOG_ERROR("pipe " << ev->Get()->ClientId << " disconnected.");
+    PQ_LOG_D("pipe " << ev->Get()->ClientId << " disconnected.");
     Subscriptions.erase(ev->Get()->ClientId);
 
     auto it = Sessions.find(ev->Get()->ClientId);
@@ -1843,7 +1843,7 @@ void TBalancer::ProcessPendingStats(const TActorContext& ctx) {
 
 void TBalancer::Handle(TEvPersQueue::TEvBalancingSubscribe::TPtr& ev, const TActorContext& ctx) {
     auto& record = ev->Get()->Record;
-    PQ_LOG_ERROR("Handle TEvPersQueue::TEvBalancingSubscribe " << record.ShortDebugString());
+    PQ_LOG_D("Handle TEvPersQueue::TEvBalancingSubscribe " << record.ShortDebugString());
     
     auto sender = ActorIdFromProto(record.GetSourceActor());
     auto status = Consumers.contains(record.GetConsumer()) ?
@@ -1855,7 +1855,7 @@ void TBalancer::Handle(TEvPersQueue::TEvBalancingSubscribe::TPtr& ev, const TAct
 
 void TBalancer::Handle(TEvPersQueue::TEvBalancingUnsubscribe::TPtr& ev, const TActorContext&) {
     auto& record = ev->Get()->Record;
-    PQ_LOG_ERROR("Handle TEvPersQueue::TEvBalancingUnsubscribe " << record.ShortDebugString());
+    PQ_LOG_D("Handle TEvPersQueue::TEvBalancingUnsubscribe " << record.ShortDebugString());
 
     auto sender = ActorIdFromProto(record.GetSourceActor());
     auto& consumer = record.GetConsumer();

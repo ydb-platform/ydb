@@ -39,7 +39,7 @@ class ParallelWorkloadTestBase(LoadSuiteBase):
         get_external_param(
             "yaml-config",
             ""))  # Путь к yaml конфигурации
-    
+
     @classmethod
     def setup_class(cls) -> None:
         """
@@ -47,7 +47,6 @@ class ParallelWorkloadTestBase(LoadSuiteBase):
         """
         cls.base_executor = WorkloadTestBase()
         cls.base_executor.setup_class()
-
 
     def execute_parallel_workloads_test(
         self,
@@ -79,8 +78,7 @@ class ParallelWorkloadTestBase(LoadSuiteBase):
         additional_stats["nemesis_enabled"] = nemesis_enabled
         additional_stats["nodes_percentage"] = nodes_percentage
 
-        logging.info(
-            f"=== Starting env preparation ===")
+        logging.info("=== Starting env preparation ===")
 
         # ФАЗА 1: ПОДГОТОВКА
         preparation_result = self._prepare_stress_execution(workload_params, nodes_percentage)
@@ -106,7 +104,8 @@ class ParallelWorkloadTestBase(LoadSuiteBase):
             duration_value
         )
 
-        logging.info(f"=== Workload test completed ===")
+        logging.info("=== Workload test completed ===")
+        logging.debug(f"Execuion final result {final_result}")
         # return final_result
 
     def _prepare_stress_execution(
@@ -256,9 +255,6 @@ class ParallelWorkloadTestBase(LoadSuiteBase):
                 # Результаты выполнения для каждой ноды
                 node_results = []
 
-                # Блокировка для безопасного обновления общих данных из потоков
-                threading.Lock()
-
                 # Функция для выполнения workload на одной ноде
                 def execute_on_node(workload_config, stress_name, node):
                     node_host = node['node'].host
@@ -280,17 +276,17 @@ class ParallelWorkloadTestBase(LoadSuiteBase):
                     planned_end_time = start_time + duration_value
 
                     run_duration = duration_value
-                    current_iteraton = 0
+                    current_iteration = 0
                     # Выполняем план для этой ноды
                     while time_module.time() < planned_end_time:
 
                         # Используем формат iter_N без добавления префикса iter_ в _execute_single_workload_run
                         # так как он будет добавлен там
-                        run_name = f"{stress_name}_{node_host}_iter_{current_iteraton}"
+                        run_name = f"{stress_name}_{node_host}_iter_{current_iteration}"
 
                         # Устанавливаем флаг, что префикс iter_ уже добавлен
                         run_config_copy = {}
-                        run_config_copy["iteration_num"] = current_iteraton
+                        run_config_copy["iteration_num"] = current_iteration
                         run_config_copy["node_host"] = node_host
                         run_config_copy["duration"] = run_duration
                         run_config_copy["node_role"] = node['node'].role
@@ -311,12 +307,12 @@ class ParallelWorkloadTestBase(LoadSuiteBase):
 
                         # Сохраняем результат запуска
                         run_result = {
-                            "run_num": current_iteraton,
+                            "run_num": current_iteration,
                             "run_config": run_config_copy,
                             "success": success,
                             "execution_time": execution_time,
                             "stdout": stdout,
-                            "stderr": '',#stderr,
+                            "stderr": stderr,
                             "is_timeout": is_timeout,
                         }
                         node_result["runs"].append(run_result)
@@ -325,12 +321,12 @@ class ParallelWorkloadTestBase(LoadSuiteBase):
                         if success:
                             node_result["successful_runs"] += 1
                             logging.info(
-                                f"Run {current_iteraton} on {node_host} completed successfully"
+                                f"Run {current_iteration} on {node_host} completed successfully"
                             )
                         else:
                             logging.warning(
-                                f"Run {current_iteraton} on {node_host} failed")
-                        current_iteraton += 1
+                                f"Run {current_iteration} on {node_host} failed")
+                        current_iteration += 1
                         run_duration = planned_end_time - time_module.time()
                     node_result['total_runs'] = len(node_result["runs"])
                     logging.info(
@@ -347,7 +343,7 @@ class ParallelWorkloadTestBase(LoadSuiteBase):
                     future_to_node = {}
                     for name, stress_config in workload_params.items():
                         for node in deployed_nodes[name]:
-                            future_to_node[executor.submit(execute_on_node, stress_config, name, node)] = (name, node) 
+                            future_to_node[executor.submit(execute_on_node, stress_config, name, node)] = (name, node)
 
                     for future in as_completed(future_to_node):
                         try:
@@ -602,7 +598,7 @@ class ParallelWorkloadTestBase(LoadSuiteBase):
         command_args = self._substitute_variables_in_template(
             command_args_template, target_node, run_config
         )
-    
+
         command_args = (
             f"{command_args} --duration {run_config['duration']}"
         )
@@ -787,7 +783,7 @@ class ParallelWorkloadTestBase(LoadSuiteBase):
 
             # Анализируем результаты и добавляем ошибки/предупреждения
             self.__class__.base_executor._analyze_execution_results(
-                overall_result, successful_runs, total_runs
+                overall_result, successful_runs, total_runs, False
             )
 
             # Собираем и добавляем статистику
@@ -797,6 +793,7 @@ class ParallelWorkloadTestBase(LoadSuiteBase):
                 execution_result,
                 additional_stats,
                 duration_value,
+                False
             )
 
             # Финальная обработка с диагностикой (подготавливает данные для выгрузки)
@@ -820,8 +817,8 @@ class ParallelWorkloadTestBase(LoadSuiteBase):
         self,
         result: YdbCliHelper.WorkloadRunResult,
         workload_name: str,
-        execution_result = None
-        ):
+        execution_result=None
+    ):
         """
         Обрабатывает результат workload с добавлением диагностической информации
 
@@ -990,4 +987,3 @@ class ParallelWorkloadTestBase(LoadSuiteBase):
             result._node_errors = node_errors
 
             # Данные подготовлены, теперь можно выгружать результаты
-

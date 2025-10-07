@@ -47,14 +47,14 @@ class TestWorkloadParallel(ParallelWorkloadTestBase):
                 'args': ["--endpoint", "grpc://{node_host}:2135",
                          "--database", f"/{YdbCluster.ydb_database}",
                          "--store_type", "row",
-                         "--log_prefix log_{node_host}_iter_{iteration_num}_{uuid}"],
+                         "--log_prefix", "log_{node_host}_iter_{iteration_num}_{uuid}"],
                 'local_path': 'ydb/tests/stress/log/workload_log'
             },
             'workload_mixed': {
                 'args': ["--endpoint", "grpc://{node_host}:2135",
                          "--database", f"/{YdbCluster.ydb_database}",
                          "--store_type", "row",
-                         "--mixed_prefix", "mixed_mixed_{node_host}_iter_{iteration_num}_{uuid} "],
+                         "--mixed_prefix", "mixed_mixed_{node_host}_iter_{iteration_num}_{uuid}"],
                 'local_path': 'ydb/tests/stress/mixedpy/workload_mixed'
             },
             'workload_node_broker': {

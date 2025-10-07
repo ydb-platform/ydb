@@ -913,7 +913,7 @@ def parallel_allure_test_description(
     workload_result=None,
     workload_params: dict = None,
     addition_blocks: list[str] = [],
-    execution_result = None
+    execution_result=None
 ):
     if addition_table_strings is None:
         addition_table_strings = {}
@@ -985,13 +985,13 @@ def parallel_allure_test_description(
 
 
 def __create_parallel_test_table(result, node_errors, workload_params, execution_result):
-     # Создаем заголовок таблицы с подколонками для каждой ноды
-    table_html = f"""
+    # Создаем заголовок таблицы с подколонками для каждой ноды
+    table_html = """
     <table border='1' cellpadding='2px' style='border-collapse: collapse; font-size: 12px;'>
         <tr style='background-color: #f0f0f0;'>
             <th>Stress type</th>
     """
-     # Группируем ноды по хостам
+    # Группируем ноды по хостам
     all_cluster_nodes = YdbCluster.get_cluster_nodes(db_only=True)
     hosts_to_nodes = {}
     for node in all_cluster_nodes:
@@ -1013,8 +1013,7 @@ def __create_parallel_test_table(result, node_errors, workload_params, execution
         </tr>
     """
 
-
-    stress_grouped_results = defaultdict(lambda : [])
+    stress_grouped_results = defaultdict(lambda: [])
     for node_result in execution_result['node_results']:
         stress_grouped_results[node_result['stress_name']].append(node_result)
 

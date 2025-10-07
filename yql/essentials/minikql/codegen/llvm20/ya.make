@@ -18,7 +18,6 @@ IF (OS_LINUX)
     )
 ENDIF()
 
-
 INCLUDE(../ya.make.inc)
 
 END()

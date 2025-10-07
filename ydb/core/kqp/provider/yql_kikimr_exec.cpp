@@ -606,6 +606,9 @@ namespace {
                 );
                 YQL_ENSURE(result);
                 request->mutable_partitioning_settings()->mutable_auto_partitioning_settings()->set_strategy(strategy);
+            } else if (name == "setMetricsLevel") {
+                auto metricsLevel = FromString<i32>(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
+                request->set_metrics_level(metricsLevel);
             }
         }
     }
@@ -672,6 +675,11 @@ namespace {
                 );
                 YQL_ENSURE(result);
                 request->mutable_alter_partitioning_settings()->mutable_alter_auto_partitioning_settings()->set_set_strategy(strategy);
+            } else if (name == "setMetricsLevel") {
+                auto metricsLevel = FromString<i32>(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
+                request->set_set_metrics_level(metricsLevel);
+            } else if (name == "resetMetricsLevel") {
+                request->mutable_reset_metrics_level();
             }
         }
     }

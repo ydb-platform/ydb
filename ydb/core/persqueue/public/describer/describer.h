@@ -12,35 +12,34 @@ enum EEv : ui32 {
     EvEnd
 };
 
-struct TEvDescribeTopicsResponse : public NActors::TEventLocal<TEvDescribeTopicsResponse, EEv::EvDescribeTopicsResponse> {
+enum class EStatus {
+    SUCCESS,
+    NOT_FOUND,
+    NOT_TOPIC,
+    UNKNOWN_ERROR
+};
 
-    enum class EStatus {
-        SUCCESS,
-        NOT_FOUND,
-        NOT_TOPIC,
-        UNKNOWN_ERROR
-    };
+struct TEvDescribeTopicsResponse : public NActors::TEventLocal<TEvDescribeTopicsResponse, EEv::EvDescribeTopicsResponse> {
 
     struct TTopicInfo {
         EStatus Status = EStatus::NOT_FOUND;
 
-        // Topic path from request
-        TString OriginalPath;
         // Real topic path. If original topic path is CDC than real path is different.
         TString RealPath;
 
         TIntrusiveConstPtr<NSchemeCache::TSchemeCacheNavigate::TPQGroupInfo> Info;
     };
 
-    TEvDescribeTopicsResponse(std::vector<TTopicInfo>&& topics)
+    TEvDescribeTopicsResponse(std::unordered_map<TString, TTopicInfo>&& topics)
         : Topics(std::move(topics))
     {
     }
 
-    // The order is the same as in the request.
-    std::vector<TTopicInfo> Topics;
+    // The original topic path (from request) -> TopicInfo
+    std::unordered_map<TString, TTopicInfo> Topics;
 };
 
 NActors::IActor* CreateDescriberActor(const NActors::TActorId& parent, const TString& databasePath, const std::vector<TString>&& topicPaths);
+TString Description(const EStatus status);
 
 }

@@ -11,7 +11,6 @@ namespace NKikimr::NReplication {
 
 TLocalProxyActor::TLocalProxyActor(const TString& database)
     : Database(database)
-    , Locker(std::make_shared<TLocker>())
 {
 }
 
@@ -47,19 +46,15 @@ void TLocalProxyActor::Handle(TEvYdbProxy::TEvAlterTopicRequest::TPtr& ev) {
     }
 
     auto callback = [
+        actorSystem = TActivationContext::ActorSystem(),
         replyTo = ev->Sender,
         cookie = ev->Cookie,
-        path = path,
-        locker = Locker,
-        this
+        path = path
     ](Ydb::StatusIds::StatusCode statusCode, const google::protobuf::Message*) {
         NYdb::NIssue::TIssues issues;
         NYdb::TStatus status(static_cast<NYdb::EStatus>(statusCode), std::move(issues));
 
-        TGuard guard(locker->Lock);
-        if (locker->Active) {
-            Send(replyTo, new TEvYdbProxy::TEvAlterTopicResponse(std::move(status)), 0, cookie);
-        }
+        actorSystem->Send(replyTo, new TEvYdbProxy::TEvAlterTopicResponse(std::move(status)), 0, cookie);
     };
 
     NGRpcService::DoAlterTopicRequest(std::make_unique<TLocalProxyRequest>(path, Database, std::move(request), callback), *this);
@@ -77,11 +72,10 @@ void TLocalProxyActor::Handle(TEvYdbProxy::TEvDescribeTopicRequest::TPtr& ev) {
     request.get()->set_path(TStringBuilder() << "/" << Database << path);
 
     auto callback = [
+        actorSystem = TActivationContext::ActorSystem(),
         replyTo = ev->Sender,
         cookie = ev->Cookie,
-        path = path,
-        locker = Locker,
-        this
+        path = path
     ](Ydb::StatusIds::StatusCode statusCode, const google::protobuf::Message* result) {
         NYdb::NIssue::TIssues issues;
         Ydb::Topic::DescribeTopicResult describe;
@@ -98,10 +92,7 @@ void TLocalProxyActor::Handle(TEvYdbProxy::TEvDescribeTopicRequest::TPtr& ev) {
         NYdb::TStatus status(static_cast<NYdb::EStatus>(statusCode), std::move(issues));
         NYdb::NTopic::TDescribeTopicResult r(std::move(status), std::move(describe));
 
-        TGuard guard(locker->Lock);
-        if (locker->Active) {
-            Send(replyTo, new TEvYdbProxy::TEvDescribeTopicResponse(r), 0, cookie);
-        }
+        actorSystem->Send(replyTo, new TEvYdbProxy::TEvDescribeTopicResponse(r), 0, cookie);
     };
 
     NGRpcService::DoDescribeTopicRequest(std::make_unique<TLocalProxyRequest>(path, Database, std::move(request), callback), *this);
@@ -119,11 +110,10 @@ void TLocalProxyActor::Handle(TEvYdbProxy::TEvDescribePathRequest::TPtr& ev) {
     request.get()->set_path(TStringBuilder() << "/" << Database << path);
 
     auto callback = [
+        actorSystem = TActivationContext::ActorSystem(),
         replyTo = ev->Sender,
         cookie = ev->Cookie,
-        path = path,
-        locker = Locker,
-        this
+        path = path
     ](Ydb::StatusIds::StatusCode statusCode, const google::protobuf::Message* result) {
         NYdb::NIssue::TIssues issues;
         NYdb::NScheme::TSchemeEntry entry;
@@ -140,10 +130,7 @@ void TLocalProxyActor::Handle(TEvYdbProxy::TEvDescribePathRequest::TPtr& ev) {
         NYdb::TStatus status(static_cast<NYdb::EStatus>(statusCode), std::move(issues));
         NYdb::NScheme::TDescribePathResult r(std::move(status), std::move(entry));
 
-        TGuard guard(locker->Lock);
-        if (locker->Active) {
-            Send(replyTo, new TEvYdbProxy::TEvDescribePathResponse(r), 0, cookie);
-        }
+        actorSystem->Send(replyTo, new TEvYdbProxy::TEvDescribePathResponse(r), 0, cookie);
     };
 
     NGRpcService::DoDescribePathRequest(std::make_unique<TLocalProxyRequest>(path, Database, std::move(request), callback), *this);
@@ -174,15 +161,6 @@ STATEFN(TLocalProxyActor::StateWork) {
     default:
         Y_DEBUG_ABORT_S(TStringBuilder() << "Unhandled message " << ev->GetTypeName());
     }
-}
-
-void TLocalProxyActor::PassAway() {
-    {
-        TGuard guard(Locker->Lock);
-        Locker->Active = false;
-    }
-
-    TActor::PassAway();
 }
 
 IActor* CreateLocalYdbProxy(const TString& database) {

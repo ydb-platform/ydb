@@ -108,23 +108,23 @@ void KafkaReadSessionProxyActor::Handle(TEvKafka::TEvFetchRequest::TPtr& ev) {
 void KafkaReadSessionProxyActor::Handle(NPQ::NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
     KAFKA_LOG_D("Handle NPQ::NDescriber::TEvDescribeTopicsResponse");
 
-    for (auto& result : ev->Get()->Topics) {
+    for (auto& [originalPath, result] : ev->Get()->Topics) {
         switch(result.Status) {
-            case NPQ::NDescriber::TEvDescribeTopicsResponse::EStatus::SUCCESS: {
+            case NPQ::NDescriber::EStatus::SUCCESS: {
                 ui64 readBalancerTabletId = result.Info->Description.GetBalancerTabletID();
                 ui64 cookie = 1;
-                Topics[result.OriginalPath] = {
+                Topics[originalPath] = {
                     .ReadBalancerTabletId = readBalancerTabletId,
                     .SubscribeCookie = cookie
                 };
 
-                Subscribe(result.OriginalPath, readBalancerTabletId, cookie);
+                Subscribe(originalPath, readBalancerTabletId, cookie);
 
                 break;
             }
-            case NPQ::NDescriber::TEvDescribeTopicsResponse::EStatus::NOT_FOUND:
-            case NPQ::NDescriber::TEvDescribeTopicsResponse::EStatus::NOT_TOPIC:
-            case NPQ::NDescriber::TEvDescribeTopicsResponse::EStatus::UNKNOWN_ERROR:
+            case NPQ::NDescriber::EStatus::NOT_FOUND:
+            case NPQ::NDescriber::EStatus::NOT_TOPIC:
+            case NPQ::NDescriber::EStatus::UNKNOWN_ERROR:
                 // TODO
                 break;
         }

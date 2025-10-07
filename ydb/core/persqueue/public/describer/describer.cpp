@@ -80,7 +80,7 @@ public:
                 }
                 case TSchemeCacheNavigate::EStatus::Ok: {
                     if (entry.Kind == NSchemeCache::TSchemeCacheNavigate::KindCdcStream) {
-                        LOG_D("Path '" << realPath << "' is CDC");
+                        LOG_D("Path '" << realPath << "' is a CDC");
                         CDCPaths[TStringBuilder() << originalPath << "/streamImpl"] = originalPath;
                     } else if (entry.Kind == TSchemeCacheNavigate::EKind::KindTopic) {
                         LOG_D("Path '" << realPath << "' SUCCESS");
@@ -90,7 +90,7 @@ public:
                             .Info = entry.PQGroupInfo
                         };
                     } else {
-                        LOG_D("Path '" << realPath << "' not topic: " << entry.Kind);
+                        LOG_D("Path '" << realPath << "' is not a topic: " << entry.Kind);
                         Result[originalPath] = TEvDescribeTopicsResponse::TTopicInfo{
                             .Status = EStatus::NOT_TOPIC,
                             .RealPath = realPath
@@ -99,7 +99,7 @@ public:
                     break;
                 }
                 default: {
-                    LOG_D("Path '" << realPath << "' unknow error");
+                    LOG_D("Path '" << realPath << "' unknown error");
                     Result[originalPath] = TEvDescribeTopicsResponse::TTopicInfo{
                         .Status = EStatus::UNKNOWN_ERROR,
                         .RealPath = realPath
@@ -107,6 +107,24 @@ public:
                     break;
                 }
             }
+        }
+
+        if (!unknownPaths.empty()) {
+            RetryWithSyncVersion = true;
+            return DoRequest(unknownPaths);
+        }
+
+        if (!CDCPaths.empty() && !RetryWithCDC) {
+            RetryWithSyncVersion = false;
+            RetryWithCDC = true;
+
+            std::vector<TString> newPath;
+            newPath.reserve(CDCPaths.size());
+            for (auto& [path, _] : CDCPaths) {
+                newPath.push_back(path);
+            }
+
+            return DoRequest(newPath);
         }
 
         Send(Parent, new TEvDescribeTopicsResponse(std::move(Result)));
@@ -126,6 +144,7 @@ private:
     const std::vector<TString> TopicPaths;
 
     bool RetryWithSyncVersion = false;
+    bool RetryWithCDC = false;
     // CDC topic path -> original topic path
     std::unordered_map<TString, TString> CDCPaths;
     std::unordered_map<TString, TEvDescribeTopicsResponse::TTopicInfo> Result;

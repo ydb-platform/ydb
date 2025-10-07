@@ -1411,15 +1411,15 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             generationId0 = msg->GenerationId;
         }
 
-        TString memberId1;
-        i32 generationId1;
+        //TString memberId1;
+        //i32 generationId1;
         {
             std::vector<TString> topics = { topicName };
             auto msg = client1.JoinGroup(topics, group, "server", 5000);
             UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
 
-            memberId1 = *msg->MemberId;
-            generationId1 = msg->GenerationId;
+           // memberId1 = *msg->MemberId;
+            //generationId1 = msg->GenerationId;
         }
 
         {

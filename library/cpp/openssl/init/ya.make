@@ -5,7 +5,7 @@ PEERDIR(
 )
 
 SRCS(
-    init.cpp
+    GLOBAL init.cpp
 )
 
 END()

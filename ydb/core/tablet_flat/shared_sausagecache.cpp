@@ -54,13 +54,12 @@ using TPendingRequests = THashMap<TIntrusivePtr<TRequest>, ui32>;
 
 struct TCollection {
     TLogoBlobID Id;
-    TSet<TActorId> InMemoryOwners;
+    TMap<TActorId, TIntrusiveConstPtr<NPageCollection::IPageCollection>> InMemoryOwners;
     TSet<TActorId> Owners;
     TPageMap<TIntrusivePtr<TPage>> PageMap;
     ui64 TotalSize;
     TMap<TPageId, TPendingRequests> PendingRequests;
     TDeque<TPageId> DroppedPages;
-    TIntrusiveConstPtr<NPageCollection::IPageCollection> PageCollection;
 
     ECacheMode GetCacheMode() {
         return InMemoryOwners ? ECacheMode::TryKeepInMemory : ECacheMode::Regular;
@@ -263,8 +262,8 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         PassAway();
     }
 
-    TCollection& AttachCollection(const TLogoBlobID &pageCollectionId, TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection, const TActorId &owner) {
-        TCollection &collection = EnsureCollection(pageCollectionId, std::move(pageCollection), owner);
+    TCollection& AttachCollection(const TLogoBlobID &pageCollectionId, const NPageCollection::IPageCollection &pageCollection, const TActorId &owner) {
+        TCollection &collection = EnsureCollection(pageCollectionId, pageCollection, owner);
 
         if (collection.Owners.insert(owner).second) {
             LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TABLET_SAUSAGECACHE, "Add page collection " << pageCollectionId
@@ -291,8 +290,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             << " owner " << ev->Sender
             << " cache mode " << msg->CacheMode);
 
-        TCollection& collection = AttachCollection(pageCollectionId, msg->PageCollection, ev->Sender);
-        collection.PageCollection = msg->PageCollection; // update PageCollection pointer
+        TCollection& collection = AttachCollection(pageCollectionId, pageCollection, ev->Sender);
         switch (msg->CacheMode) {
         case ECacheMode::Regular:
             TryMoveToRegularCache(collection, ev->Sender);
@@ -314,7 +312,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
         Y_ENSURE(pageCollectionId);
         Y_ENSURE(!Collections.contains(pageCollectionId), "Only new collections can save compacted pages");
-        auto& collection = EnsureCollection(pageCollectionId, msg->PageCollection, ev->Sender);
+        auto& collection = EnsureCollection(pageCollectionId, pageCollection, ev->Sender);
 
         for (auto &page : msg->Pages) {
             Y_ENSURE(page->PageId < collection.PageMap.size());
@@ -333,7 +331,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         const TLogoBlobID pageCollectionId = pageCollection.Label();
         const bool doTraceLog = DoTraceLog();
 
-        TCollection &collection = AttachCollection(pageCollectionId, msg->PageCollection, ev->Sender);
+        TCollection &collection = AttachCollection(pageCollectionId, pageCollection, ev->Sender);
         ECacheMode cacheMode = collection.GetCacheMode();
 
         TStackVec<std::pair<TPageId, ui32>> pendingPages; // pageId, reqIdx
@@ -767,8 +765,8 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             }
 
             if (loadedPages) {
-                for (const auto& owner : collection->InMemoryOwners) {
-                    NotifyOwners(msg->PageCollection, loadedPages, owner);
+                for (const auto& [owner, pageCollection] : collection->InMemoryOwners) {
+                    NotifyOwners(pageCollection, loadedPages, owner);
                 }
             }
         }
@@ -802,21 +800,21 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         Evict(Cache.Insert(page));
     }
 
-    TCollection& EnsureCollection(const TLogoBlobID& pageCollectionId, TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection, const TActorId& owner) {
+    TCollection& EnsureCollection(const TLogoBlobID& pageCollectionId, const NPageCollection::IPageCollection& pageCollection, const TActorId& owner) {
         TCollection &collection = Collections[pageCollectionId];
         if (!collection.Id) {
             LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TABLET_SAUSAGECACHE, "Add page collection " << pageCollectionId);
             Counters.PageCollections->Inc();
             Y_ENSURE(pageCollectionId);
             collection.Id = pageCollectionId;
-            collection.PageMap.resize(pageCollection->Total());
-            collection.TotalSize = sizeof(TPage) * pageCollection->Total() + pageCollection->BackingSize();
+            collection.PageMap.resize(pageCollection.Total());
+            collection.TotalSize = sizeof(TPage) * pageCollection.Total() + pageCollection.BackingSize();
         } else {
             Y_DEBUG_ABORT_UNLESS(collection.Id == pageCollectionId);
-            Y_ENSURE(collection.PageMap.size() == pageCollection->Total(),
+            Y_ENSURE(collection.PageMap.size() == pageCollection.Total(),
                 "Page collection " << pageCollectionId
                 << " changed number of pages from " << collection.PageMap.size()
-                << " to " << pageCollection->Total() << " by " << owner);
+                << " to " << pageCollection.Total() << " by " << owner);
         }
         return collection;
     }
@@ -1103,7 +1101,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     }
 
     void TryMoveToTryKeepInMemoryCache(TCollection& collection, TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection, const TActorId& owner) {
-        if (!collection.InMemoryOwners.insert(owner).second) {
+        if (!collection.InMemoryOwners.emplace(owner, pageCollection).second) {
             return;
         }
 

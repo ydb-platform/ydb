@@ -1,47 +1,46 @@
 ydb/apps/ydb/ut YdbWorkloadTransferTopicToTable.Default_Run
-ydb/core/blobstorage/dsproxy/ut_fat TBlobStorageProxyTest.TestBatchedPutRequestDoesNotContainAHugeBlob
+ydb/core/blobstorage/ut_blobstorage GroupReconfiguration.BsControllerDoesNotDisableGroup
+ydb/core/blobstorage/ut_blobstorage GroupReconfiguration.BsControllerDoesNotDisableGroupNoRequestsToNodesWVDisks
+ydb/core/blobstorage/ut_blobstorage/ut_group_reconfiguration GroupReconfigurationRace.Test_block42
 ydb/core/blobstorage/ut_blobstorage/ut_group_reconfiguration [*/*] chunk chunk
 ydb/core/blobstorage/ut_blobstorage/ut_huge HugeBlobOnlineSizeChange.Compaction
 ydb/core/blobstorage/ut_blobstorage/ut_huge [*/*] chunk chunk
 ydb/core/blobstorage/ut_blobstorage/ut_scrub BlobScrubbing.block42
 ydb/core/blobstorage/ut_blobstorage/ut_scrub BlobScrubbing.mirror3dc
 ydb/core/blobstorage/ut_blobstorage/ut_scrub BlobScrubbing.mirror3of4
-ydb/core/blobstorage/ut_vdisk TBsVDiskGC.GCPutKeepBarrierSync
-ydb/core/blobstorage/ut_vdisk TBsVDiskGC.TGCManyVPutsCompactGCAllTest
 ydb/core/blobstorage/ut_vdisk TBsVDiskManyPutGet.ManyPutRangeGetCompactionIndexOnly
 ydb/core/blobstorage/ut_vdisk [*/*] chunk chunk
-ydb/core/client/ut TObjectStorageListingTest.TestSkipShards
 ydb/core/cms/ut_sentinel_unstable TSentinelUnstableTests.BSControllerCantChangeStatus
+ydb/core/fq/libs/row_dispatcher/format_handler/ut TestFormatHandler.ManyJsonClients
+ydb/core/fq/libs/row_dispatcher/format_handler/ut sole chunk chunk
 ydb/core/fq/libs/row_dispatcher/ut sole chunk chunk
 ydb/core/keyvalue/ut_trace TKeyValueTracingTest.ReadHuge
 ydb/core/keyvalue/ut_trace TKeyValueTracingTest.ReadSmall
 ydb/core/keyvalue/ut_trace TKeyValueTracingTest.WriteHuge
 ydb/core/keyvalue/ut_trace TKeyValueTracingTest.WriteSmall
+ydb/core/kqp/ut/data_integrity KqpDataIntegrityTrails.UpsertEvWriteQueryService-isOlap-useOltpSink
 ydb/core/kqp/ut/federated_query/s3 KqpFederatedQuery.TestReadLargeParquetFile
 ydb/core/kqp/ut/federated_query/s3 sole chunk chunk
 ydb/core/kqp/ut/join KqpIndexLookupJoin.LeftJoinRightNullFilter+StreamLookup
 ydb/core/kqp/ut/join KqpIndexLookupJoin.LeftJoinRightNullFilter-StreamLookup
 ydb/core/kqp/ut/olap KqpOlapAggregations.BlockGenericWithDistinct
-ydb/core/kqp/ut/olap KqpOlapJson.BloomMixIndexesVariants[false,true,0,0,1000,0.5,CATEGORY_BLOOM_FILTER]
-ydb/core/kqp/ut/olap KqpOlapJson.BloomNGrammIndexesVariants[false,true,0,0,1000,0]
-ydb/core/kqp/ut/olap KqpOlapJson.BloomNGrammIndexesVariants[true,false,1,10,0,0]
-ydb/core/kqp/ut/olap KqpOlapJson.BloomNGrammIndexesVariants[true,true,0,10,0,0.5]
-ydb/core/kqp/ut/olap KqpOlapJson.BloomNGrammIndexesVariants[true,true,1,0,0,0.5]
-ydb/core/kqp/ut/olap KqpOlapJson.BloomNGrammIndexesVariants[true,true,1,10,1000,0]
-ydb/core/kqp/ut/olap KqpOlapJson.FilterVariants[10,true,1,0,1000000,0]
-ydb/core/kqp/ut/olap KqpOlapJson.OrFilterVariants[2,false,1,10,100,0]
-ydb/core/kqp/ut/olap KqpOlapJson.QuotedFilterVariants[10,true,1,0,1000000,0]
-ydb/core/kqp/ut/olap KqpOlapLocks.DeleteAbsentMultipleShards+Reboot
+ydb/core/kqp/ut/olap KqpOlapJson.BloomMixIndexesVariants[false,false,0,10,0,0,CATEGORY_BLOOM_FILTER]
+ydb/core/kqp/ut/olap KqpOlapJson.BloomMixIndexesVariants[false,true,0,0,0,0.5,CATEGORY_BLOOM_FILTER]
+ydb/core/kqp/ut/olap KqpOlapJson.BloomMixIndexesVariants[false,true,0,0,1000,0,CATEGORY_BLOOM_FILTER]
+ydb/core/kqp/ut/olap KqpOlapJson.BloomMixIndexesVariants[true,true,0,0,0,0.5,BLOOM_FILTER]
+ydb/core/kqp/ut/olap KqpOlapJson.BloomNGrammIndexesVariants[false,true,1024,0,1000,0]
+ydb/core/kqp/ut/olap KqpOlapJson.DoubleFilterReduceScopeWithPredicateVariantsWithSeparatedColumnAtFirst[10,false,0,1000,0,0]
+ydb/core/kqp/ut/olap KqpOlapJson.DoubleFilterVariants[1,true,1024,10,1000000,0]
+ydb/core/kqp/ut/olap KqpOlapOptimizer.OptimizationAfterDeletion
 ydb/core/kqp/ut/olap KqpOlapSysView.StatsSysViewTable
-ydb/core/kqp/ut/olap KqpOlapTiering.TtlBorders
 ydb/core/kqp/ut/olap KqpOlapWrite.TierDraftsGCWithRestart
 ydb/core/kqp/ut/olap [*/*] chunk chunk
 ydb/core/kqp/ut/query KqpAnalyze.AnalyzeTable+ColumnStore
 ydb/core/kqp/ut/query KqpAnalyze.AnalyzeTable-ColumnStore
+ydb/core/kqp/ut/query KqpLimits.StreamWrite+Allowed
 ydb/core/kqp/ut/query KqpStats.SysViewClientLost
 ydb/core/kqp/ut/scheme KqpOlapScheme.AddPgColumnWithStore
 ydb/core/kqp/ut/scheme KqpOlapScheme.TenThousandColumns
-ydb/core/kqp/ut/service KqpQueryService.LargeUpsert-UseSink
 ydb/core/kqp/ut/tx KqpSnapshotIsolation.TConflictReadWriteOlap
 ydb/core/kqp/ut/tx KqpSnapshotIsolation.TConflictReadWriteOltp
 ydb/core/kqp/ut/tx KqpSnapshotIsolation.TConflictReadWriteOltpNoSink
@@ -54,35 +53,35 @@ ydb/core/kqp/ut/tx KqpSnapshotIsolation.TReadOnlyOltpNoSink
 ydb/core/kqp/ut/tx KqpSnapshotIsolation.TSimpleOlap
 ydb/core/kqp/ut/tx KqpSnapshotIsolation.TSimpleOltp
 ydb/core/kqp/ut/tx KqpSnapshotIsolation.TSimpleOltpNoSink
+ydb/core/kqp/ut/yql KqpScripting.StreamExecuteYqlScriptScanOperationTmeoutBruteForce
 ydb/core/persqueue/ut TPQTest.TestComactificationWithRebootsMediumMsg
 ydb/core/persqueue/ut [*/*] chunk chunk
 ydb/core/quoter/ut QuoterWithKesusTest.PrefetchCoefficient
 ydb/core/statistics/aggregator/ut AnalyzeColumnshard.AnalyzeRebootColumnShard
+ydb/core/transfer/ut/functional Transfer.LocalTopic_BigMessage
 ydb/core/tx/datashard/ut_incremental_backup IncrementalBackup.ComplexRestoreBackupCollection+WithIncremental
-ydb/core/tx/replication/controller/ut_assign_tx_id AssignTxId.Basic
-ydb/core/tx/schemeshard/ut_cdc_stream_reboots TCdcStreamWithRebootsTests.CreateDropRecreate[TabletReboots]
 ydb/core/tx/schemeshard/ut_cdc_stream_reboots [*/*] chunk chunk
+ydb/core/tx/schemeshard/ut_export_reboots_s3 [*/*] chunk chunk
 ydb/core/tx/schemeshard/ut_index [*/*] chunk chunk
 ydb/core/tx/schemeshard/ut_index_build_reboots [*/*] chunk chunk
 ydb/core/tx/schemeshard/ut_login_large TSchemeShardLoginLargeTest.RemoveLogin_Many
 ydb/core/tx/schemeshard/ut_pq_reboots TPqGroupTestReboots.AlterWithReboots-PQConfigTransactionsAtSchemeShard-false
 ydb/core/tx/schemeshard/ut_pq_reboots TPqGroupTestReboots.AlterWithReboots-PQConfigTransactionsAtSchemeShard-true
-ydb/core/tx/schemeshard/ut_reboots TConsistentOpsWithReboots.DropIndexedTableAndForceDropSimultaneously
+ydb/core/tx/schemeshard/ut_reboots TConsistentOpsWithReboots.DropIndexedTableWithReboots
 ydb/core/tx/schemeshard/ut_reboots [*/*] chunk chunk
-ydb/core/tx/schemeshard/ut_sequence_reboots TSequenceReboots.CreateSequencesWithIndexedTable
-ydb/core/tx/schemeshard/ut_sequence_reboots [*/*] chunk chunk
-ydb/core/tx/tx_proxy/ut_ext_tenant TExtSubDomainTest.CreateTableInsideAndAlterDomainAndTable-AlterDatabaseCreateHiveFirst-false
-ydb/core/viewer/tests test.py.test_async_replication_describe
 ydb/core/viewer/tests test.py.test_topic_data_cdc
 ydb/core/viewer/tests test.py.test_viewer_query_long
 ydb/core/viewer/tests test.py.test_viewer_query_long_multipart
+ydb/library/actors/interconnect/ut_huge_cluster HugeCluster.AllToAll
+ydb/library/actors/interconnect/ut_huge_cluster sole chunk chunk
 ydb/library/yql/providers/generic/connector/tests/join test.py.test_join[join_ch_ch-kqprun]
 ydb/library/yql/providers/generic/connector/tests/join test.py.test_join[join_pg_pg-kqprun]
 ydb/public/sdk/cpp/src/client/topic/ut TxUsage.Sinks_Olap_WriteToTopicAndTable_4_Query
 ydb/public/sdk/cpp/src/client/topic/ut TxUsage.Sinks_Olap_WriteToTopicAndTable_4_Table
 ydb/public/sdk/cpp/src/client/topic/ut TxUsage.Sinks_Oltp_WriteToTopicAndTable_6_Query
 ydb/public/sdk/cpp/src/client/topic/ut TxUsage.Sinks_Oltp_WriteToTopicAndTable_6_Table
-ydb/services/keyvalue/ut KeyValueGRPCService.SimpleAcquireLock
+ydb/services/datastreams/ut DataStreams.TestReservedResourcesMetering
+ydb/services/persqueue_v1/ut TPersQueueTest.Delete
 ydb/services/ydb/sdk_sessions_pool_ut YdbSdkSessionsPool.StressTestSync1
 ydb/services/ydb/sdk_sessions_pool_ut YdbSdkSessionsPool.StressTestSync10
 ydb/services/ydb/sdk_sessions_ut YdbSdkSessions.TestSdkFreeSessionAfterBadSessionQueryService
@@ -104,7 +103,6 @@ ydb/tests/fq/generic/streaming test_join.py.TestJoinStreaming.test_streamlookup[
 ydb/tests/fq/generic/streaming test_join.py.TestJoinStreaming.test_streamlookup[v1-9-True-3-fq_client0-mvp_external_ydb_endpoint0]
 ydb/tests/fq/mem_alloc test_scheduling.py.TestSchedule.test_skip_busy[kikimr0]
 ydb/tests/fq/s3 [test_format_setting.py] chunk chunk
-ydb/tests/fq/s3 test_inflight.py.TestS3.test_inflight[v1-client0-kikimr_params1]
 ydb/tests/fq/yds test_2_selects_limit.py.TestSelectLimit.test_select_same[v1]
 ydb/tests/fq/yds test_2_selects_limit.py.TestSelectLimit.test_select_sequence[v1]
 ydb/tests/fq/yds test_mem_alloc.py.TestMemAlloc.test_hop_alloc[v1]
@@ -112,6 +110,7 @@ ydb/tests/fq/yds test_mem_alloc.py.TestMemAlloc.test_join_alloc[v1]
 ydb/tests/fq/yds test_recovery.py.TestRecovery.test_ic_disconnection
 ydb/tests/fq/yds test_select_limit_db_id.py.TestSelectLimitWithDbId.test_select_same_with_id[v1-mvp_external_ydb_endpoint0]
 ydb/tests/fq/yds test_yds_bindings.py.TestBindings.test_yds_insert[v1]
+ydb/tests/functional/audit test_auditlog.py.test_create_and_remove_tenant
 ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_export[current_to_current]
 ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_export[current_to_stable_24_4]
 ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_export[current_to_stable_25_1]
@@ -153,12 +152,11 @@ ydb/tests/functional/compatibility test_stress.py.TestStress.test_tpch1[last_sta
 ydb/tests/functional/compatibility test_stress.py.TestStress.test_tpch1[mixed-row]
 ydb/tests/functional/hive test_drain.py.TestHive.test_drain_on_stop
 ydb/tests/functional/rename [test_rename.py */*] chunk chunk
-ydb/tests/functional/serverless test_serverless.py.test_database_with_disk_quotas[enable_alter_database_create_hive_first--false]
+ydb/tests/functional/serializable sole chunk chunk
 ydb/tests/functional/serverless test_serverless.py.test_database_with_disk_quotas[enable_alter_database_create_hive_first--true]
 ydb/tests/functional/sqs/cloud test_yandex_cloud_mode.py.TestSqsYandexCloudMode.test_dlq_mechanics_in_cloud[tables_format_v0-tables_format_v0-fifo]
 ydb/tests/functional/sqs/cloud test_yandex_cloud_mode.py.TestSqsYandexCloudMode.test_dlq_mechanics_in_cloud[tables_format_v1-tables_format_v0-fifo]
-ydb/tests/functional/sqs/cloud test_yandex_cloud_mode.py.TestSqsYandexCloudMode.test_dlq_mechanics_in_cloud[tables_format_v1-tables_format_v0-std]
-ydb/tests/functional/sqs/multinode test_multinode_cluster.py.TestSqsMultinodeCluster.test_has_messages_counters[stop_node-std]
+ydb/tests/functional/sqs/cloud test_yandex_cloud_mode.py.TestSqsYandexCloudMode.test_dlq_mechanics_in_cloud[tables_format_v1-tables_format_v1-std]
 ydb/tests/functional/suite_tests test_postgres.py.TestPGSQL.test_sql_suite[plan-jointest/coalesce-and-join.test]
 ydb/tests/functional/suite_tests test_postgres.py.TestPGSQL.test_sql_suite[plan-jointest/join-group-by-with-null.test]
 ydb/tests/functional/suite_tests test_postgres.py.TestPGSQL.test_sql_suite[plan-jointest/join0.test]
@@ -180,6 +178,9 @@ ydb/tests/functional/ydb_cli [test_ydb_backup.py] chunk chunk
 ydb/tests/functional/ydb_cli test_ydb_backup.py.TestClusterBackupRestore.test_cluster_backup_restore
 ydb/tests/functional/ydb_cli test_ydb_backup.py.TestDatabaseBackup.test_database_backup
 ydb/tests/functional/ydb_cli test_ydb_backup.py.TestDatabaseBackupRestore.test_database_backup_restore
+ydb/tests/functional/ydb_cli test_ydb_impex.py.TestImpex.test_big_dataset[csv-additional_args0-row]
+ydb/tests/functional/ydb_cli test_ydb_impex.py.TestImpex.test_big_dataset[tsv-additional_args2-row]
+ydb/tests/functional/ydb_cli test_ydb_impex.py.TestImpex.test_big_dataset[tsv-additional_args3-column]
 ydb/tests/olap sole chunk chunk
 ydb/tests/olap test_quota_exhaustion.py.TestYdbWorkload.test
 ydb/tests/olap/scenario sole chunk chunk
@@ -207,4 +208,3 @@ ydb/tests/sql/large test_workload_manager.py.TestWorkloadManager.test_resource_p
 ydb/tests/sql/large test_workload_manager.py.TestWorkloadManager.test_resource_pool_queue_resource_weight[1-True]
 ydb/tests/sql/large test_workload_manager.py.TestWorkloadManager.test_resource_pool_queue_size_limit
 ydb/tests/stress/log/tests test_workload.py.TestYdbLogWorkload.test[column]
-ydb/tools/stress_tool/ut TDeviceTestTool.PDiskTestLogWrite

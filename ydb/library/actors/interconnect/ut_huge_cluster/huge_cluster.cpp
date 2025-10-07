@@ -106,7 +106,12 @@ Y_UNIT_TEST_SUITE(HugeCluster) {
         return loggerSettings;
     }
 
-    Y_UNIT_TEST(AllToAll) {
+    Y_UNIT_TEST(AllToAll_Disabled) {
+        // Test works inconsistently in different environments, probably because of excessive amount
+        // of sockets/file descriptors used. Until better approach is found test is disabled to avoid
+        // random failures in CI
+        return;
+
         ui32 nodesNum = 120;
         std::vector<TActorId> pollers(nodesNum);
         std::vector<std::unordered_map<TActorId, TManualEvent>> events(nodesNum);

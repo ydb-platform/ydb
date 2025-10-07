@@ -12,6 +12,7 @@
 #include <ydb/core/kqp/runtime/kqp_vector_actor.h>
 #include <ydb/core/kqp/runtime/kqp_write_actor.h>
 #include <ydb/library/formats/arrow/protos/ssa.pb.h>
+#include <ydb/library/yql/dq/actors/input_transforms/dq_input_transform_lookup_factory.h>
 #include <ydb/library/yql/dq/comp_nodes/dq_block_hash_join.h>
 #include <ydb/library/yql/dq/comp_nodes/dq_hash_combine.h>
 #include <ydb/library/yql/dq/proto/dq_tasks.pb.h>
@@ -91,6 +92,7 @@ NYql::NDq::IDqAsyncIoFactory::TPtr CreateKqpAsyncIoFactory(
     RegisterKqpWriteActor(*factory, counters);
     RegisterSequencerActorFactory(*factory, counters);
     RegisterKqpVectorResolveActor(*factory, counters);
+    NYql::NDq::RegisterDqInputTransformLookupActorFactory(*factory);
 
     if (federatedQuerySetup) {
         auto s3HttpRetryPolicy = NYql::GetHTTPDefaultRetryPolicy(NYql::THttpRetryPolicyOptions{.RetriedCurlCodes = NYql::FqRetriedCurlCodes()});

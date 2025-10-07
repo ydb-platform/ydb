@@ -1944,6 +1944,7 @@ private:
             if (FederatedQuerySetup->PqGateway) {
                 InitPqProvider();
             }
+            TypesCtx->StreamLookupJoin = true;
         }
 
         InitPgProvider();

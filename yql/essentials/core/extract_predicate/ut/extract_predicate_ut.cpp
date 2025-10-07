@@ -62,8 +62,8 @@ Y_UNIT_TEST_SUITE(TYqlExtractPredicate) {
         lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
         lexers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory();
         NSQLTranslationV1::TParsers parsers;
-        parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory();
-        parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory();
+        parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory(/*isAmbiguityError=*/ true);
+        parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory(/*isAmbiguityError=*/ true);
 
         NSQLTranslation::TTranslators translators(
             nullptr,

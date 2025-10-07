@@ -10,7 +10,7 @@ SIMPLE_UDF(TProducer, TLinear<i32>(i32)) {
     return TUnboxedValuePod(args[0].Get<i32>());
 }
 
-using TExchangeRet = TTuple<TLinear<i32>,i32>;
+using TExchangeRet = TTuple<TLinear<i32>, i32>;
 SIMPLE_UDF(TExchange, TExchangeRet(TLinear<i32>, i32)) {
     TUnboxedValue* items;
     TUnboxedValue ret = valueBuilder->NewArray(2, items);
@@ -19,7 +19,7 @@ SIMPLE_UDF(TExchange, TExchangeRet(TLinear<i32>, i32)) {
     return ret;
 }
 
-class TUnsafeConsumer : public TBoxedValue {
+class TUnsafeConsumer: public TBoxedValue {
 public:
     typedef bool TTypeAwareMarker;
 
@@ -78,8 +78,7 @@ public:
             }
 
             return true;
-        }
-        else {
+        } else {
             return false;
         }
     }
@@ -87,6 +86,6 @@ public:
 
 SIMPLE_MODULE(TLinearModule, TProducer, TUnsafeConsumer, TExchange)
 
-}
+} // namespace
 
 REGISTER_MODULES(TLinearModule)

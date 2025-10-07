@@ -1,4 +1,5 @@
 #include "mkql_builtins_decimal.h" // Y_IGNORE
+#include "mkql_safe_ops.h"
 
 #include <cmath>
 
@@ -18,7 +19,8 @@ inline T Abs(T v) {
 
 template <typename T, std::enable_if_t<std::is_signed<T>::value && std::is_integral<T>::value>* = nullptr>
 inline T Abs(T v) {
-    return std::abs(v);
+    // Use SafeNeg to avoid UB on INT_MIN
+    return v < 0 ? SafeNeg(v) : v;
 }
 
 template<typename TInput, typename TOutput>
@@ -57,7 +59,7 @@ struct TAbs : public TSimpleArithmeticUnary<TInput, TOutput, TAbs<TInput, TOutpu
 struct TDecimalAbs : public TDecimalUnary<TDecimalAbs> {
     static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& arg) {
         const auto a = arg.GetInt128();
-        return a < 0 ? NUdf::TUnboxedValuePod(-a) : arg;
+        return a < 0 ? NUdf::TUnboxedValuePod(SafeNeg(a)) : arg;
     }
 
 #ifndef MKQL_DISABLE_CODEGEN

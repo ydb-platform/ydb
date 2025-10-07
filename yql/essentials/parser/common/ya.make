@@ -2,6 +2,7 @@ LIBRARY()
 
 PEERDIR(
     yql/essentials/public/issue
+    yql/essentials/core/issue
 )
 
 SRCS(

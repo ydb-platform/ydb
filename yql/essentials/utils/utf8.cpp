@@ -12,6 +12,7 @@ namespace {
 unsigned char GetRange(unsigned char c) {
     // Referring to DFA of http://bjoern.hoehrmann.de/utf-8/decoder/dfa/
     // With new mapping 1 -> 0x10, 7 -> 0x20, 9 -> 0x40, such that AND operation can test multiple types.
+    // clang-format off
     static const unsigned char type[] = {
         0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
         0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
@@ -24,6 +25,7 @@ unsigned char GetRange(unsigned char c) {
         8,8,2,2,2,2,2,2,2,2,2,2,2,2,2,2,  2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,
         10,3,3,3,3,3,3,3,3,3,3,3,3,4,3,3, 11,6,6,6,5,8,8,8,8,8,8,8,8,8,8,8,
     };
+    // clang-format on
     return type[c];
 }
 
@@ -38,6 +40,7 @@ struct TUtf8Ranges {
 };
 
 // see https://lemire.me/blog/2018/05/09/how-quickly-can-you-check-that-a-string-is-valid-unicode-utf-8
+// clang-format off
 inline static const std::vector<TUtf8Ranges> Utf8Ranges = {
     { 1, { {0x00, 0x7f}, {0x00, 0x00}, {0x00, 0x00}, {0x00, 0x00}, } },
     { 2, { {0xc2, 0xdf}, {0x80, 0xbf}, {0x00, 0x00}, {0x00, 0x00}, } },
@@ -49,9 +52,10 @@ inline static const std::vector<TUtf8Ranges> Utf8Ranges = {
     { 4, { {0xf1, 0xf3}, {0x80, 0xbf}, {0x80, 0xbf}, {0x80, 0xbf}, } },
     { 4, { {0xf4, 0xf4}, {0x80, 0x8f}, {0x80, 0xbf}, {0x80, 0xbf}, } },
 };
+// clang-format on
 
 std::optional<std::string> RoundBadUtf8(size_t range, std::string_view inputString, size_t pos,
-    bool roundDown)
+                                        bool roundDown)
 {
     Y_ENSURE(range > 0);
     Y_ENSURE(range < Utf8Ranges.size());
@@ -119,35 +123,72 @@ std::optional<std::string> RoundBadUtf8(size_t range, std::string_view inputStri
                 }
             }
         }
-
     }
     return prefix + newSuffix;
 }
 
-}
+} // namespace
 
 bool IsUtf8(const std::string_view& str) {
     for (auto it = str.cbegin(); str.cend() != it;) {
-#define COPY() if (str.cend() != it) { c = *it++; } else { return false; }
+#define COPY()              \
+    if (str.cend() != it) { \
+        c = *it++;          \
+    } else {                \
+        return false;       \
+    }
 #define TRANS(mask) result &= ((GetRange(static_cast<unsigned char>(c)) & mask) != 0)
-#define TAIL() COPY(); TRANS(0x70)
+#define TAIL() \
+    COPY();    \
+    TRANS(0x70)
         auto c = *it++;
-        if (!(c & 0x80))
+        if (!(c & 0x80)) {
             continue;
+        }
 
         bool result = true;
         switch (GetRange(static_cast<unsigned char>(c))) {
-        case 2: TAIL(); break;
-        case 3: TAIL(); TAIL(); break;
-        case 4: COPY(); TRANS(0x50); TAIL(); break;
-        case 5: COPY(); TRANS(0x10); TAIL(); TAIL(); break;
-        case 6: TAIL(); TAIL(); TAIL(); break;
-        case 10: COPY(); TRANS(0x20); TAIL(); break;
-        case 11: COPY(); TRANS(0x60); TAIL(); TAIL(); break;
-        default: return false;
+            case 2:
+                TAIL();
+                break;
+            case 3:
+                TAIL();
+                TAIL();
+                break;
+            case 4:
+                COPY();
+                TRANS(0x50);
+                TAIL();
+                break;
+            case 5:
+                COPY();
+                TRANS(0x10);
+                TAIL();
+                TAIL();
+                break;
+            case 6:
+                TAIL();
+                TAIL();
+                TAIL();
+                break;
+            case 10:
+                COPY();
+                TRANS(0x20);
+                TAIL();
+                break;
+            case 11:
+                COPY();
+                TRANS(0x60);
+                TAIL();
+                TAIL();
+                break;
+            default:
+                return false;
         }
 
-        if (!result) return false;
+        if (!result) {
+            return false;
+        }
 #undef COPY
 #undef TRANS
 #undef TAIL
@@ -157,21 +198,30 @@ bool IsUtf8(const std::string_view& str) {
 
 unsigned char WideCharSize(char head) {
     switch (GetRange(static_cast<unsigned char>(head))) {
-        case 0: return 1;
-        case 2: return 2;
-        case 3: return 3;
-        case 4: return 3;
-        case 5: return 4;
-        case 6: return 4;
-        case 10: return 3;
-        case 11: return 4;
-        default: return 0;
+        case 0:
+            return 1;
+        case 2:
+            return 2;
+        case 3:
+            return 3;
+        case 4:
+            return 3;
+        case 5:
+            return 4;
+        case 6:
+            return 4;
+        case 10:
+            return 3;
+        case 11:
+            return 4;
+        default:
+            return 0;
     }
 }
 
 std::optional<std::string> RoundToNearestValidUtf8(const std::string_view& str, bool roundDown) {
     const size_t ss = str.size();
-    for (size_t pos = 0; pos < ss; ) {
+    for (size_t pos = 0; pos < ss;) {
         ui8 c = str[pos];
 
         for (size_t i = 0; i < Utf8Ranges.size(); ++i) {
@@ -197,7 +247,7 @@ std::optional<std::string> RoundToNearestValidUtf8(const std::string_view& str, 
                 break;
             } else if (i + 1 == Utf8Ranges.size()) {
                 if (!roundDown) {
-                    return NextValidUtf8(str.substr(0,  pos));
+                    return NextValidUtf8(str.substr(0, pos));
                 }
                 return RoundBadUtf8(i, str, pos, roundDown);
             }
@@ -257,4 +307,4 @@ std::optional<std::string> NextLexicographicString(const std::string_view& str) 
     return result;
 }
 
-}
+} // namespace NYql

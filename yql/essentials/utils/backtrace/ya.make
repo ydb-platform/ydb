@@ -1,5 +1,7 @@
 LIBRARY()
 
+ENABLE(YQL_STYLE_CPP)
+
 SRCS(
     backtrace.cpp
     backtrace_lib.cpp
@@ -32,3 +34,4 @@ ENDIF()
 END()
 
 RECURSE_FOR_TESTS(ut)
+

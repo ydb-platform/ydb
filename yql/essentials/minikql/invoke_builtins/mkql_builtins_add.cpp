@@ -1,6 +1,7 @@
 #include "mkql_builtins_impl.h"  // Y_IGNORE
 #include "mkql_builtins_datetime.h"
 #include "mkql_builtins_decimal.h" // Y_IGNORE
+#include "mkql_safe_ops.h"
 
 #include <yql/essentials/minikql/mkql_type_ops.h>
 
@@ -15,7 +16,7 @@ struct TAdd : public TSimpleArithmeticBinary<TLeft, TRight, TOutput, TAdd<TLeft,
 
     static TOutput Do(TOutput left, TOutput right)
     {
-        return left + right;
+        return SafeAdd(left, right);
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
@@ -34,7 +35,7 @@ struct TDecimalAdd {
     static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& left, const NUdf::TUnboxedValuePod& right) {
         const auto l = left.GetInt128();
         const auto r = right.GetInt128();
-        const auto a = l + r;
+        const auto a = SafeAdd(l, r);
 
         using namespace NYql::NDecimal;
 
@@ -108,7 +109,7 @@ struct TDateTimeAddT {
     {
         const auto lv = ToScaledDate<TLeft>(left.template Get<typename TLeft::TLayout>());
         const auto rv = ToScaledDate<TRight>(right.template Get<typename TRight::TLayout>());
-        const auto ret = lv + rv;
+        const auto ret = SafeAdd(lv, rv);
         if (IsBadScaledDate<TOutput>(ret)) {
             return NUdf::TUnboxedValuePod();
         }
@@ -168,7 +169,7 @@ struct TBigIntervalAdd {
             return NUdf::TUnboxedValuePod();
         }
 
-        i64 ret = lv + rv;
+        i64 ret = SafeAdd(lv, rv);
         if (IsBadInterval<NUdf::TDataType<NUdf::TInterval64>>(ret)) {
             return NUdf::TUnboxedValuePod();
         }

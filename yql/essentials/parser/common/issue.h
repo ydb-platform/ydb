@@ -22,6 +22,12 @@ namespace NSQLTranslation {
             Issues_.AddIssue(NYql::TPosition(col, line, File_), message);
         }
 
+        void AddIssue(NYql::TIssue&& issue) override {
+            issue.Position.File = File_;
+            issue.EndPosition.File = File_;
+            Issues_.AddIssue(std::forward<NYql::TIssue>(issue));
+        }
+
     private:
         NYql::TIssues& Issues_;
         const TString File_;

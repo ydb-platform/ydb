@@ -1,5 +1,7 @@
 PROGRAM()
 
+ENABLE(YQL_STYLE_CPP)
+
 SRCS(
     sql_functions_dump.cpp
 )

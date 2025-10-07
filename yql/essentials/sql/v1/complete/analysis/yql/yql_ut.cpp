@@ -25,7 +25,7 @@ public:
         Settings_.SyntaxVersion = 1;
 
         Lexers_.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
-        Parsers_.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory();
+        Parsers_.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory(/*isAmbiguityError=*/ true);
     }
 
     NYql::TAstParseResult Parse(const TString& query) {

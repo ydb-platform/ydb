@@ -52,7 +52,7 @@ Y_UNIT_TEST_SUITE(KqpHashCombineReplacement) {
             TString hints = R"(
                 PRAGMA TablePathPrefix = "/Root";
             )";
-            TString dqHashPragma = UseDqHashCombine ? "PRAGMA ydb.UseDqHashCombine = \"true\";\n\n" : "";
+            TString dqHashPragma = Sprintf("PRAGMA ydb.UseDqHashCombine = \"%s\";\n\n", UseDqHashCombine ? "true" : "false");
             TString select = R"(
                 PRAGMA ydb.OptUseFinalizeByKey = "true";
                 PRAGMA ydb.OptEnableOlapPushdown = "false"; -- need this to force intermediate/final combiner pair over the sample table

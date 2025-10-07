@@ -4,6 +4,6 @@
 
 namespace NSQLHighlight {
 
-    IGenerator::TPtr MakeHighlightJSGenerator();
+IGenerator::TPtr MakeHighlightJSGenerator();
 
 } // namespace NSQLHighlight

@@ -43,7 +43,6 @@ TAstNode* SqlASTsToYqls(const std::vector<::NSQLv1Generated::TRule_sql_stmt_core
 
 void SqlASTToYqlImpl(NYql::TAstParseResult& res, const google::protobuf::Message& protoAst,
         TContext& ctx) {
-    YQL_ENSURE(!ctx.Issues.Size());
     res.Root = SqlASTToYql(protoAst, ctx);
     res.Pool = std::move(ctx.Pool);
     if (!res.Root) {

@@ -14,6 +14,8 @@ YQL_UDF_CONTRIB(hyperscan_udf)
         0
     )
 
+    ENABLE(YQL_STYLE_CPP)
+
     SRCS(
         hyperscan_udf.cpp
     )
@@ -28,3 +30,4 @@ YQL_UDF_CONTRIB(hyperscan_udf)
 RECURSE_FOR_TESTS(
     test
 )
+

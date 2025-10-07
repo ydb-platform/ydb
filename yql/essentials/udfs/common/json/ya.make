@@ -6,6 +6,8 @@ YQL_UDF_CONTRIB(json_udf)
         0
     )
 
+    ENABLE(YQL_STYLE_CPP)
+
     SRCS(
         json_udf.cpp
     )

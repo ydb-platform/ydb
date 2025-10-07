@@ -584,6 +584,8 @@ Y_UNIT_TEST(CreateTopic) {
             "CREATE TOPIC topic1 (\n\tCONSUMER c1,\n\tCONSUMER c2 WITH (important = TRUE)\n);\n"},
         {"create topic topic1 (consumer c1) with (partition_count_limit = 5)",
             "CREATE TOPIC topic1 (\n\tCONSUMER c1\n) WITH (\n\tpartition_count_limit = 5\n);\n"},
+        {"create topic topic1 (consumer c1) with (availability_period=Interval('PT9H'))",
+            "CREATE TOPIC topic1 (\n\tCONSUMER c1\n) WITH (\n\tavailability_period = Interval('PT9H')\n);\n"},
     };
 
     TSetup setup;
@@ -600,7 +602,8 @@ Y_UNIT_TEST(AlterTopic) {
             "ALTER TOPIC topic1\n\tADD CONSUMER c1,\n\tDROP CONSUMER c2\n;\n"},
         {"alter topic topic1 set (supported_codecs = 'RAW'), RESET (retention_period)",
             "ALTER TOPIC topic1\n\tSET (supported_codecs = 'RAW'),\n\tRESET (retention_period)\n;\n"},
-
+        {"alter topic topic1 alter consumer c1 set (availability_period=Interval('PT9H')), alter consumer c2 reset (availability_period)",
+            "ALTER TOPIC topic1\n\tALTER CONSUMER c1 SET (availability_period = Interval('PT9H')),\n\tALTER CONSUMER c2 RESET (availability_period)\n;\n"},
     };
 
     TSetup setup;

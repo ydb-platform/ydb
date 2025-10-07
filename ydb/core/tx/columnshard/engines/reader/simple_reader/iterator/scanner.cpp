@@ -22,7 +22,6 @@ TConclusionStatus TScanHead::Start() {
 TScanHead::TScanHead(std::unique_ptr<NCommon::ISourcesConstructor>&& sourcesConstructor, const std::shared_ptr<TSpecialReadContext>& context)
     : Context(context) {
     auto readMetadataContext = Context->GetReadMetadata();
-
     if (auto script = Context->GetSourcesAggregationScript()) {
         SourcesCollection =
             std::make_shared<TNotSortedCollection>(Context, std::move(sourcesConstructor), readMetadataContext->GetLimitRobustOptional());

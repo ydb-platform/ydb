@@ -34,10 +34,11 @@ using namespace NYql::NPureCalc;
 using namespace NKikimr::NMiniKQL;
 using namespace NYql::NUdf;
 
-struct TPickleInputSpec : public TInputSpecBase {
+struct TPickleInputSpec: public TInputSpecBase {
     TPickleInputSpec(const TVector<NYT::TNode>& schemas)
         : Schemas(schemas)
-    {}
+    {
+    }
 
     const TVector<NYT::TNode>& GetSchemas() const final {
         return Schemas;
@@ -53,13 +54,12 @@ public:
         const TPickleInputSpec& /* inputSpec */,
         ui32 index,
         IInputStream* underlying,
-        IWorker* worker
-    )
-      : TCustomListValue(memInfo)
-      , Underlying_(underlying)
-      , Worker_(worker)
-      , ScopedAlloc_(Worker_->GetScopedAlloc())
-      , Packer_(false, Worker_->GetInputType(index))
+        IWorker* worker)
+        : TCustomListValue(memInfo)
+        , Underlying_(underlying)
+        , Worker_(worker)
+        , ScopedAlloc_(Worker_->GetScopedAlloc())
+        , Packer_(false, Worker_->GetInputType(index))
     {
     }
 
@@ -78,7 +78,7 @@ public:
 
         YQL_ENSURE(read == sizeof(len));
         if (len > RecordBuffer_.size()) {
-            RecordBuffer_.resize(Max<size_t>(2*RecordBuffer_.size(), len));
+            RecordBuffer_.resize(Max<size_t>(2 * RecordBuffer_.size(), len));
         }
 
         Underlying_->LoadOrFail(RecordBuffer_.data(), len);
@@ -109,9 +109,9 @@ struct TInputSpecTraits<TPickleInputSpec> {
 
     static void PreparePullListWorker(const TPickleInputSpec& spec, IPullListWorker* worker, const TVector<IInputStream*>& streams) {
         YQL_ENSURE(worker->GetInputsCount() == streams.size(),
-            "number of input streams should match number of inputs provided by spec");
+                   "number of input streams should match number of inputs provided by spec");
 
-        with_lock(worker->GetScopedAlloc()) {
+        with_lock (worker->GetScopedAlloc()) {
             auto& holderFactory = worker->GetGraph().GetHolderFactory();
             for (ui32 i = 0; i < streams.size(); i++) {
                 auto input = holderFactory.template Create<TPickleListValue>(
@@ -122,10 +122,11 @@ struct TInputSpecTraits<TPickleInputSpec> {
     }
 };
 
-struct TPickleOutputSpec : public TOutputSpecBase {
+struct TPickleOutputSpec: public TOutputSpecBase {
     TPickleOutputSpec(const NYT::TNode& schema)
         : Schema(schema)
-    {}
+    {
+    }
 
     const NYT::TNode& GetSchema() const final {
         return Schema;
@@ -146,7 +147,8 @@ public:
     TPickleOutputHandle(TWorkerHolder<IPullListWorker> worker)
         : Worker_(std::move(worker))
         , Packer_(false, Worker_->GetOutputType())
-    {}
+    {
+    }
 
     NKikimr::NMiniKQL::TType* GetOutputType() const final {
         return const_cast<NKikimr::NMiniKQL::TType*>(Worker_->GetOutputType());
@@ -159,7 +161,7 @@ public:
 
         TBindTerminator bind(Worker_->GetGraph().GetTerminator());
 
-        with_lock(Worker_->GetScopedAlloc()) {
+        with_lock (Worker_->GetScopedAlloc()) {
             const auto outputIterator = Worker_->GetOutputIterator();
 
             TUnboxedValue value;
@@ -192,10 +194,11 @@ struct TOutputSpecTraits<TPickleOutputSpec> {
     }
 };
 
-struct TPrintOutputSpec : public TOutputSpecBase {
+struct TPrintOutputSpec: public TOutputSpecBase {
     TPrintOutputSpec(const NYT::TNode& schema)
         : Schema(schema)
-    {}
+    {
+    }
 
     const NYT::TNode& GetSchema() const final {
         return Schema;
@@ -208,7 +211,8 @@ class TPrintOutputHandle final: public TStreamOutputHandle {
 public:
     TPrintOutputHandle(TWorkerHolder<IPullListWorker> worker)
         : Worker_(std::move(worker))
-    {}
+    {
+    }
 
     NKikimr::NMiniKQL::TType* GetOutputType() const final {
         return const_cast<NKikimr::NMiniKQL::TType*>(Worker_->GetOutputType());
@@ -221,7 +225,7 @@ public:
 
         TBindTerminator bind(Worker_->GetGraph().GetTerminator());
 
-        with_lock(Worker_->GetScopedAlloc()) {
+        with_lock (Worker_->GetScopedAlloc()) {
             const auto outputIterator = Worker_->GetOutputIterator();
 
             TUnboxedValue value;
@@ -278,7 +282,7 @@ TStringStream MakeGenInput(ui64 count) {
 }
 
 template <typename TInputSpec, typename TOutputSpec>
-using TRunCallable = std::function<void (const THolder<TPullListProgram<TInputSpec, TOutputSpec>>&)>;
+using TRunCallable = std::function<void(const THolder<TPullListProgram<TInputSpec, TOutputSpec>>&)>;
 
 template <typename TOutputSpec>
 NYT::TNode RunGenSql(
@@ -286,8 +290,7 @@ NYT::TNode RunGenSql(
     const TVector<NYT::TNode>& inputSchema,
     const TString& sql,
     ETranslationMode isPg,
-    TRunCallable<TPickleInputSpec, TOutputSpec> runCallable
-) {
+    TRunCallable<TPickleInputSpec, TOutputSpec> runCallable) {
     auto inputSpec = TPickleInputSpec(inputSchema);
     auto outputSpec = TOutputSpec({NYT::TNode::CreateEntity()});
     auto program = factory->MakePullListProgram(inputSpec, outputSpec, sql, isPg);
@@ -303,8 +306,7 @@ void ShowResults(
     const TVector<NYT::TNode>& inputSchema,
     const TString& sql,
     ETranslationMode isPg,
-    TStream* input
-) {
+    TStream* input) {
     auto inputSpec = TInputSpec(inputSchema);
     auto outputSpec = TPrintOutputSpec({NYT::TNode::CreateEntity()});
     auto program = factory->MakePullListProgram(inputSpec, outputSpec, sql, isPg);
@@ -327,8 +329,7 @@ double RunBenchmarks(
     const TString& sql,
     ETranslationMode isPg,
     ui32 repeats,
-    TRunCallable<TInputSpec, TOutputSpec> runCallable
-) {
+    TRunCallable<TInputSpec, TOutputSpec> runCallable) {
     auto inputSpec = TInputSpec(inputSchema);
     auto outputSpec = TOutputSpec({NYT::TNode::CreateEntity()});
     auto program = factory->MakePullListProgram(inputSpec, outputSpec, sql, isPg);
@@ -353,12 +354,12 @@ double RunBenchmarks(
     times.erase(times.end() - times.size() / 3, times.end());
 
     double sum = std::transform_reduce(times.cbegin(), times.cend(),
-        .0, std::plus{}, [](auto t) { return std::log(t.MicroSeconds()); });
+                                       .0, std::plus{}, [](auto t) { return std::log(t.MicroSeconds()); });
 
     return std::exp(sum / times.size());
 }
 
-int Main(int argc, const char *argv[])
+int Main(int argc, const char* argv[])
 {
     Y_UNUSED(NUdf::GetStaticSymbols());
     using namespace NLastGetopt;
@@ -489,7 +490,8 @@ int Main(int argc, const char *argv[])
             factory, {outputGenSchema}, testSql, isPgTest, repeats,
             [&](const auto& program) {
                 auto handle = program->Apply(StreamFromVector(outputGenStream));
-                while (/* arrow::compute::ExecBatch* batch = */ handle->Fetch()) {}
+                while (/* arrow::compute::ExecBatch* batch = */ handle->Fetch()) {
+                }
             });
     }
 
@@ -499,7 +501,7 @@ int Main(int argc, const char *argv[])
     return 0;
 }
 
-int main(int argc, const char *argv[]) {
+int main(int argc, const char* argv[]) {
     if (argc > 1 && TString(argv[1]) != TStringBuf("--ndebug")) {
         Cerr << "purebench ABI version: " << NKikimr::NUdf::CurrentAbiVersionStr() << Endl;
     }
@@ -510,7 +512,8 @@ int main(int argc, const char *argv[]) {
     try {
         return Main(argc, argv);
     } catch (const TCompileError& e) {
-        Cerr << e.what() << "\n" << e.GetIssues();
+        Cerr << e.what() << "\n"
+             << e.GetIssues();
     } catch (...) {
         Cerr << CurrentExceptionMessage() << Endl;
         return 1;

@@ -1838,6 +1838,7 @@ public:
     void ScanComplete(NTable::EStatus status, TAutoPtr<IDestructable> prod, ui64 cookie, const TActorContext &ctx) override;
     bool ReassignChannelsEnabled() const override;
     void OnYellowChannelsChanged() override;
+    void DelayS3UploadRows(TEvDataShard::TEvS3UploadRowsRequest::TPtr& ev);
     void OnRejectProbabilityRelaxed() override;
     void OnFollowersCountChanged() override;
     ui64 GetMemoryUsage() const override;
@@ -2189,6 +2190,7 @@ public:
         FinishProposeUnit_UpdateCounters,
         UploadRows_Reject,
         EraseRows_Reject,
+        S3UploadRows_Reject,
 
         LAST
     };

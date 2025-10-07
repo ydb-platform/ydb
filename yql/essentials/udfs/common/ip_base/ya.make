@@ -6,6 +6,8 @@ YQL_UDF_CONTRIB(ip_udf)
         0
     )
 
+    ENABLE(YQL_STYLE_CPP)
+
     SRCS(
         ip_base.cpp
     )

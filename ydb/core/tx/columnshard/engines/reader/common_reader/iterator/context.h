@@ -11,6 +11,13 @@ namespace NKikimr::NOlap::NReader::NCommon {
 class TFetchingScript;
 class IDataSource;
 
+enum class EPortionCommitStatus {
+    Unknown,
+    Committed,
+    OwnUncommitted,
+    UncommittedByAnotherTx
+};
+
 class TSpecialReadContext {
 private:
     YDB_READONLY_DEF(std::shared_ptr<TReadContext>, CommonContext);
@@ -53,6 +60,8 @@ public:
     const TReadMetadata::TConstPtr& GetReadMetadata() const {
         return ReadMetadata;
     }
+
+    EPortionCommitStatus GetPortionCommitStatus(const TPortionInfo& portionInfo) const;
 
     template <class T>
     std::shared_ptr<T> GetReadMetadataVerifiedAs() const {

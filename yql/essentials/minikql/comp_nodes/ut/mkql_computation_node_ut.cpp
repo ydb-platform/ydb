@@ -18,6 +18,15 @@ namespace {
 
 constexpr auto TotalSambles = 222222U;
 
+template <typename T>
+void AssertNumericValuesEqual(T actual, T expected) {
+    if constexpr (std::is_floating_point_v<T>) {
+        UNIT_ASSERT(std::abs(actual - expected) < 0.0003);
+    } else {
+        UNIT_ASSERT_VALUES_EQUAL(actual, expected);
+    }
+}
+
 }
 
 std::vector<std::pair<i8, double>> MakeSamples() {
@@ -5012,6 +5021,183 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
 
         const auto t2 = TInstant::Now();
         Cout << t2 - t1 << Endl;
+    }
+
+    Y_UNIT_TEST_LLVM(TestBuiltinsAdd) {
+        TSetup<LLVM> setup;
+        TProgramBuilder& pb = *setup.PgmBuilder;
+
+        auto testAdd = [&](auto val1, auto val2, auto expected) {
+            using T = decltype(val1);
+            const auto data1 = pb.NewDataLiteral<T>(val1);
+            const auto data2 = pb.NewDataLiteral<T>(val2);
+            const auto result = pb.Add(data1, data2);
+            const auto graph = setup.BuildGraph(result);
+
+            AssertNumericValuesEqual(graph->GetValue().template Get<T>(), expected);
+        };
+
+        testAdd(std::numeric_limits<i8>::max(), i8(1), std::numeric_limits<i8>::min());
+        testAdd(std::numeric_limits<ui8>::max(), ui8(1), ui8(0));
+        testAdd(std::numeric_limits<i16>::max(), i16(1), std::numeric_limits<i16>::min());
+        testAdd(std::numeric_limits<ui16>::max(), ui16(1), ui16(0));
+        testAdd(std::numeric_limits<i32>::max(), i32(1), std::numeric_limits<i32>::min());
+        testAdd(std::numeric_limits<ui32>::max(), ui32(1), ui32(0));
+        testAdd(std::numeric_limits<i64>::max(), i64(1), std::numeric_limits<i64>::min());
+        testAdd(std::numeric_limits<ui64>::max(), ui64(1), ui64(0));
+
+        testAdd(3.14f, 2.71f, 5.85f);
+        testAdd(1.5, 2.5, 4.0);
+    }
+
+    Y_UNIT_TEST_LLVM(TestBuiltinsSub) {
+        TSetup<LLVM> setup;
+        TProgramBuilder& pb = *setup.PgmBuilder;
+
+        auto testSub = [&](auto val1, auto val2, auto expected) {
+            using T = decltype(val1);
+            const auto data1 = pb.NewDataLiteral<T>(val1);
+            const auto data2 = pb.NewDataLiteral<T>(val2);
+            const auto result = pb.Sub(data1, data2);
+            const auto graph = setup.BuildGraph(result);
+            AssertNumericValuesEqual(graph->GetValue().template Get<T>(), expected);
+        };
+
+        testSub(std::numeric_limits<i8>::min(), i8(1), std::numeric_limits<i8>::max());
+        testSub(ui8(0), ui8(1), std::numeric_limits<ui8>::max());
+        testSub(std::numeric_limits<i16>::min(), i16(1), std::numeric_limits<i16>::max());
+        testSub(ui16(0), ui16(1), std::numeric_limits<ui16>::max());
+        testSub(std::numeric_limits<i32>::min(), i32(1), std::numeric_limits<i32>::max());
+        testSub(ui32(0), ui32(1), std::numeric_limits<ui32>::max());
+        testSub(std::numeric_limits<i64>::min(), i64(1), std::numeric_limits<i64>::max());
+        testSub(ui64(0), ui64(1), std::numeric_limits<ui64>::max());
+
+        testSub(5.5f, 2.3f, 3.2f);
+        testSub(10.0, 3.5, 6.5);
+    }
+
+    Y_UNIT_TEST_LLVM(TestBuiltinsMul) {
+        TSetup<LLVM> setup;
+        TProgramBuilder& pb = *setup.PgmBuilder;
+
+        auto testMul = [&](auto val1, auto val2, auto expected) {
+            using T = decltype(val1);
+            const auto data1 = pb.NewDataLiteral<T>(val1);
+            const auto data2 = pb.NewDataLiteral<T>(val2);
+            const auto result = pb.Mul(data1, data2);
+            const auto graph = setup.BuildGraph(result);
+            AssertNumericValuesEqual(graph->GetValue().template Get<T>(), expected);
+        };
+
+        testMul(std::numeric_limits<i8>::max(), i8(2), i8(-2));
+        testMul(std::numeric_limits<ui8>::max(), ui8(2), ui8(254));
+        testMul(std::numeric_limits<i16>::max(), i16(2), i16(-2));
+        testMul(std::numeric_limits<ui16>::max(), ui16(2), ui16(65534));
+        testMul(std::numeric_limits<i32>::max(), i32(2), i32(-2));
+        testMul(std::numeric_limits<ui32>::max(), ui32(2), ui32(4294967294));
+        testMul(std::numeric_limits<i64>::max(), i64(2), i64(-2));
+        testMul(std::numeric_limits<ui64>::max(), ui64(2), ui64(18446744073709551614ULL));
+
+        testMul(2.5f, 4.0f, 10.0f);
+        testMul(3.0, 7.0, 21.0);
+    }
+
+    Y_UNIT_TEST_LLVM(TestBuiltinsInc) {
+        TSetup<LLVM> setup;
+        TProgramBuilder& pb = *setup.PgmBuilder;
+
+        auto testInc = [&](auto val, auto expected) {
+            using T = decltype(val);
+            const auto data = pb.NewDataLiteral<T>(val);
+            const auto result = pb.Increment(data);
+            const auto graph = setup.BuildGraph(result);
+            AssertNumericValuesEqual(graph->GetValue().template Get<T>(), expected);
+        };
+
+        testInc(std::numeric_limits<i8>::max(), std::numeric_limits<i8>::min());
+        testInc(std::numeric_limits<ui8>::max(), ui8(0));
+        testInc(std::numeric_limits<i16>::max(), std::numeric_limits<i16>::min());
+        testInc(std::numeric_limits<ui16>::max(), ui16(0));
+        testInc(std::numeric_limits<i32>::max(), std::numeric_limits<i32>::min());
+        testInc(std::numeric_limits<ui32>::max(), ui32(0));
+        testInc(std::numeric_limits<i64>::max(), std::numeric_limits<i64>::min());
+        testInc(std::numeric_limits<ui64>::max(), ui64(0));
+
+        testInc(5.5f, 6.5f);
+        testInc(10.0, 11.0);
+    }
+
+    Y_UNIT_TEST_LLVM(TestBuiltinsDec) {
+        TSetup<LLVM> setup;
+        TProgramBuilder& pb = *setup.PgmBuilder;
+
+        auto testDec = [&](auto val, auto expected) {
+            using T = decltype(val);
+            const auto data = pb.NewDataLiteral<T>(val);
+            const auto result = pb.Decrement(data);
+            const auto graph = setup.BuildGraph(result);
+            AssertNumericValuesEqual(graph->GetValue().template Get<T>(), expected);
+        };
+
+        testDec(std::numeric_limits<i8>::min(), std::numeric_limits<i8>::max());
+        testDec(ui8(0), std::numeric_limits<ui8>::max());
+        testDec(std::numeric_limits<i16>::min(), std::numeric_limits<i16>::max());
+        testDec(ui16(0), std::numeric_limits<ui16>::max());
+        testDec(std::numeric_limits<i32>::min(), std::numeric_limits<i32>::max());
+        testDec(ui32(0), std::numeric_limits<ui32>::max());
+        testDec(std::numeric_limits<i64>::min(), std::numeric_limits<i64>::max());
+        testDec(ui64(0), std::numeric_limits<ui64>::max());
+
+        testDec(7.5f, 6.5f);
+        testDec(20.0, 19.0);
+    }
+
+    Y_UNIT_TEST_LLVM(TestBuiltinsMinus) {
+        TSetup<LLVM> setup;
+        TProgramBuilder& pb = *setup.PgmBuilder;
+
+        auto testMinus = [&](auto val, auto expected) {
+            using T = decltype(val);
+            const auto data = pb.NewDataLiteral<T>(val);
+            const auto result = pb.Minus(data);
+            const auto graph = setup.BuildGraph(result);
+            AssertNumericValuesEqual(graph->GetValue().template Get<T>(), expected);
+        };
+
+        testMinus(std::numeric_limits<i8>::min(), std::numeric_limits<i8>::min());
+        testMinus(std::numeric_limits<ui8>::max(), ui8(1));
+        testMinus(std::numeric_limits<i16>::min(), std::numeric_limits<i16>::min());
+        testMinus(std::numeric_limits<ui16>::max(), ui16(1));
+        testMinus(std::numeric_limits<i32>::min(), std::numeric_limits<i32>::min());
+        testMinus(std::numeric_limits<ui32>::max(), ui32(1));
+        testMinus(std::numeric_limits<i64>::min(), std::numeric_limits<i64>::min());
+        testMinus(std::numeric_limits<ui64>::max(), ui64(1));
+
+        testMinus(3.14f, -3.14f);
+        testMinus(2.5, -2.5);
+    }
+
+    Y_UNIT_TEST_LLVM(TestBuiltinsAbs) {
+        TSetup<LLVM> setup;
+        TProgramBuilder& pb = *setup.PgmBuilder;
+
+        auto testAbs = [&](auto val, auto expected) {
+            using T = decltype(val);
+            const auto data = pb.NewDataLiteral<T>(val);
+            const auto result = pb.Abs(data);
+            const auto graph = setup.BuildGraph(result);
+            AssertNumericValuesEqual(graph->GetValue().template Get<T>(), expected);
+        };
+
+        // Test INT_MIN cases - this is UB in abs() but we're not fixing it per user request
+        // These tests document the current behavior (wraps to INT_MIN)
+        testAbs(std::numeric_limits<i8>::min(), std::numeric_limits<i8>::min());
+        testAbs(std::numeric_limits<i16>::min(), std::numeric_limits<i16>::min());
+        testAbs(std::numeric_limits<i32>::min(), std::numeric_limits<i32>::min());
+        testAbs(std::numeric_limits<i64>::min(), std::numeric_limits<i64>::min());
+
+        testAbs(-3.14f, 3.14f);
+        testAbs(-2.5, 2.5);
     }
 }
 

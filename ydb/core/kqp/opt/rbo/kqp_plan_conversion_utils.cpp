@@ -20,7 +20,6 @@ std::shared_ptr<IOperator> PlanConverter::ExprNodeToOperator(TExprNode::TPtr nod
     }
 
     std::shared_ptr<IOperator> result;
-
     if (NYql::NNodes::TKqpOpEmptySource::Match(node.Get())) {
         result = std::make_shared<TOpEmptySource>();
     } else if (NYql::NNodes::TKqpOpRead::Match(node.Get())) {
@@ -35,6 +34,8 @@ std::shared_ptr<IOperator> PlanConverter::ExprNodeToOperator(TExprNode::TPtr nod
         result = ConvertTKqpOpLimit(node);
     } else if (NYql::NNodes::TKqpOpProject::Match(node.Get())) {
         result = ConvertTKqpOpProject(node);
+    } else if (NYql::NNodes::TKqpOpUnionAll::Match(node.Get())) {
+        result = ConvertTKqpOpUnionAll(node);
     } else {
         YQL_ENSURE(false, "Unknown operator node");
     }
@@ -92,6 +93,14 @@ std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpJoin(TExprNode::TPtr node
     return std::make_shared<TOpJoin>(leftInput, rightInput, joinKind, joinKeys);
 }
 
+std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpUnionAll(TExprNode::TPtr node) {
+    auto opUnionAll = TKqpOpUnionAll(node);
+    auto leftInput = ExprNodeToOperator(opUnionAll.LeftInput().Ptr());
+    auto rightInput = ExprNodeToOperator(opUnionAll.RightInput().Ptr());
+
+    return std::make_shared<TOpUnionAll>(leftInput, rightInput);
+}
+
 std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpLimit(TExprNode::TPtr node) {
     auto opLimit = TKqpOpLimit(node);
     auto input = ExprNodeToOperator(opLimit.Input().Ptr());
@@ -131,7 +140,6 @@ void ExprNodeRebuilder::RebuildExprNode(std::shared_ptr<IOperator> op) {
     }
 
     TExprNode::TPtr newNode;
-
     switch (op->Kind) {
     case EOperator::EmptySource:
         newNode = RebuildEmptySource();
@@ -153,6 +161,9 @@ void ExprNodeRebuilder::RebuildExprNode(std::shared_ptr<IOperator> op) {
         break;
     case EOperator::Limit:
         newNode = RebuildLimit(op);
+        break;
+    case EOperator::UnionAll:
+        newNode = RebuildUnionAll(op);
         break;
     default:
         YQL_ENSURE(false, "Unknown operator");
@@ -287,6 +298,17 @@ TExprNode::TPtr ExprNodeRebuilder::RebuildLimit(std::shared_ptr<IOperator> op) {
     return Build<TKqpOpLimit>(Ctx, Pos)
         .Input(limit->GetInput()->Node)
         .Count(limit->LimitCond)
+    .Done().Ptr();
+    // clang-format on
+}
+
+TExprNode::TPtr ExprNodeRebuilder::RebuildUnionAll(std::shared_ptr<IOperator> op) {
+    auto unionAll = CastOperator<TOpUnionAll>(op);
+
+    // clang-format off
+    return Build<TKqpOpUnionAll>(Ctx, Pos)
+        .LeftInput(unionAll->GetLeftInput()->Node)
+        .RightInput(unionAll->GetRightInput()->Node)
     .Done().Ptr();
     // clang-format on
 }

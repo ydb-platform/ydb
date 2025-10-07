@@ -7,23 +7,23 @@
 
 namespace NYql::NDocs {
 
-    struct TLinkTarget {
-        TString RelativePath;
-        TMaybe<TString> Anchor;
+struct TLinkTarget {
+    TString RelativePath;
+    TMaybe<TString> Anchor;
 
-        static TLinkTarget Parse(TStringBuf string);
-    };
+    static TLinkTarget Parse(TStringBuf string);
+};
 
-    using TLinkKey = TString;
+using TLinkKey = TString;
 
-    using TLinks = THashMap<TLinkKey, TLinkTarget>;
+using TLinks = THashMap<TLinkKey, TLinkTarget>;
 
-    TMaybe<TLinkTarget> Lookup(const TLinks& links, TStringBuf name);
+TMaybe<TLinkTarget> Lookup(const TLinks& links, TStringBuf name);
 
-    TLinkKey ParseLinkKey(TStringBuf string);
+TLinkKey ParseLinkKey(TStringBuf string);
 
-    TLinks ParseLinks(const NJson::TJsonValue& json);
+TLinks ParseLinks(const NJson::TJsonValue& json);
 
-    TLinks Merge(TLinks&& lhs, TLinks&& rhs);
+TLinks Merge(TLinks&& lhs, TLinks&& rhs);
 
 } // namespace NYql::NDocs

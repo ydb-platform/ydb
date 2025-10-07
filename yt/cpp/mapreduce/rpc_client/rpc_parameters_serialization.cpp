@@ -786,7 +786,7 @@ NApi::TGetJobTraceOptions SerializeOptionsForGetJobTrace(const TGetJobTraceOptio
         result.JobId = NJobTrackerClient::TJobId(YtGuidFromUtilGuid(*options.JobId_));
     }
     if (options.TraceId_) {
-        result.TraceId = NScheduler::TJobTraceId(YtGuidFromUtilGuid(*options.TraceId_));
+        result.TraceId = NJobTrackerClient::TJobTraceId(YtGuidFromUtilGuid(*options.TraceId_));
     }
     if (options.FromTime_) {
         result.FromTime = *options.FromTime_;

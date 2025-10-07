@@ -263,6 +263,7 @@ bool TCommandPing::PingKqpSelect1(NQuery::TQueryClient& client, const TString& q
     );
 
     auto result = asyncResult.GetValueSync();
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
     while (!IsInterrupted()) {
         auto streamPart = result.ReadNext().GetValueSync();
         if (!streamPart.IsSuccess()) {

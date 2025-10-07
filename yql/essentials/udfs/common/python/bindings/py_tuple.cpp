@@ -58,4 +58,4 @@ NUdf::TUnboxedValue FromPyTuple(const TPyCastContext::TPtr& ctx, const NUdf::TTy
     throw yexception() << "Expected Tuple or Sequence but got: " << PyObjectRepr(value);
 }
 
-}
+} // namespace NPython

@@ -170,16 +170,7 @@ public:
     }
 };
 
-class IResolveWriteIdToLockId {
-protected:
-    virtual ~IResolveWriteIdToLockId() {
-    }
-
-public:
-    virtual std::optional<ui64> ResolveWriteIdToLockId(const TInsertWriteId& writeId) const = 0;
-};
-
-class TOperationsManager: public IResolveWriteIdToLockId {
+class TOperationsManager {
     NOlap::NTxInteractions::TInteractionsContext InteractionsContext;
 
     THashMap<ui64, ui64> Tx2Lock;
@@ -188,21 +179,11 @@ class TOperationsManager: public IResolveWriteIdToLockId {
     THashMap<TOperationWriteId, TWriteOperation::TPtr> Operations;
     TOperationWriteId LastWriteId = TOperationWriteId(0);
 
-public:   //IResolveWriteIdToLockId
-    virtual std::optional<ui64> ResolveWriteIdToLockId(const TInsertWriteId& writeId) const override {
-        if (const auto operationWriteId = InsertWriteIdToOpWriteId.FindPtr(writeId)) {
-            if (const auto* operation = Operations.FindPtr(*operationWriteId)) {
-                return (*operation)->GetLockId();
-            }
-        }
-        return std::nullopt;
-    }
-
 public:
 
-    void StopWriting() {
+    void StopWriting(const TString& errorMessage) {
         for (auto&& i : Operations) {
-            i.second->StopWriting();
+            i.second->StopWriting(errorMessage);
         }
     }
 
@@ -254,6 +235,9 @@ public:
     void AbortTransactionOnComplete(TColumnShard& owner, const ui64 txId);
     void AbortLockOnExecute(TColumnShard& owner, const ui64 lockId, NTabletFlatExecutor::TTransactionContext& txc);
     void AbortLockOnComplete(TColumnShard& owner, const ui64 lockId);
+
+    void BreakConflictingTxs(const TLockFeatures& lock);
+    void BreakConflictingTxs(const ui64 txId);
 
     std::optional<ui64> GetLockForTx(const ui64 txId) const;
     std::optional<ui64> GetLockForTxOptional(const ui64 txId) const {

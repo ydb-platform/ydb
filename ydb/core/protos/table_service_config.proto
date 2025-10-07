@@ -430,4 +430,6 @@ message TTableServiceConfig {
     optional uint64 ExtractPredicateParameterListSizeLimit = 103 [default = 9999];
 
     optional bool EnableSimpleProgramsSinglePartitionOptimizationBroadPrograms = 104 [default = true];
+
+    optional bool EnableDqHashCombineByDefault = 105 [default = true];
 };

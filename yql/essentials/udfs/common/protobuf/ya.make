@@ -6,6 +6,8 @@ YQL_ABI_VERSION(
     0
 )
 
+ENABLE(YQL_STYLE_CPP)
+
 SRCS(
     protobuf_udf.cpp
 )

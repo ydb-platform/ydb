@@ -10,14 +10,13 @@
 #include <util/system/getpid.h>
 
 #ifdef _linux_
-#   include <sys/prctl.h>
+    #include <sys/prctl.h>
 #endif
 
 #include <string.h>
 #include <signal.h>
 #include <errno.h>
 #include <stdlib.h>
-
 
 namespace NYql {
 
@@ -38,41 +37,41 @@ namespace {
 void SignalHandler(int signo)
 {
     switch (signo) {
-    case SIGTERM:
-        NeedTerminate = 1;
-        break;
+        case SIGTERM:
+            NeedTerminate = 1;
+            break;
 
-    case SIGQUIT:
-        NeedQuit = 1;
-        break;
+        case SIGQUIT:
+            NeedQuit = 1;
+            break;
 
 #ifdef _unix_
-    case SIGHUP:
-        NeedReconfigure = 1;
-        break;
+        case SIGHUP:
+            NeedReconfigure = 1;
+            break;
 
-    case SIGUSR1:
-        NeedReopenLog = 1;
-        break;
+        case SIGUSR1:
+            NeedReopenLog = 1;
+            break;
 
-    case SIGCHLD:
-        NeedReapZombies = 1;
-        break;
+        case SIGCHLD:
+            NeedReapZombies = 1;
+            break;
 #endif
 
-    case SIGINT:
-        if (CatchInterrupt) {
-            NeedInterrupt = 1;
-        } else {
-            fprintf(stderr, "%s (pid=%d) captured SIGINT\n",
-                    GetProcTitle(), getpid());
-            signal(signo, SIG_DFL);
-            raise(signo);
-        }
-        break;
+        case SIGINT:
+            if (CatchInterrupt) {
+                NeedInterrupt = 1;
+            } else {
+                fprintf(stderr, "%s (pid=%d) captured SIGINT\n",
+                        GetProcTitle(), getpid());
+                signal(signo, SIG_DFL);
+                raise(signo);
+            }
+            break;
 
-    default:
-        break;
+        default:
+            break;
     }
 }
 
@@ -84,7 +83,7 @@ void SignalHandlerWithSelfPipe(int signo)
     if (write(SignalPipeW.GetHandle(), "x", 1) == -1 && errno != EAGAIN) {
         static TStringBuf msg("cannot write to signal pipe");
 #ifndef STDERR_FILENO
-#define STDERR_FILENO 2
+    #define STDERR_FILENO 2
 #endif
         write(STDERR_FILENO, msg.data(), msg.size());
         abort();
@@ -92,20 +91,21 @@ void SignalHandlerWithSelfPipe(int signo)
     errno = savedErrno;
 }
 
-
 #ifndef _unix_
 const char* strsignal(int signo)
 {
     switch (signo) {
-    case SIGTERM: return "SIGTERM";
-    case SIGINT: return "SIGINT";
-    case SIGQUIT: return "SIGQUIT";
-    default:
-        return "UNKNOWN";
+        case SIGTERM:
+            return "SIGTERM";
+        case SIGINT:
+            return "SIGINT";
+        case SIGQUIT:
+            return "SIGQUIT";
+        default:
+            return "UNKNOWN";
     }
 }
 #endif
-
 
 #ifdef _unix_
 int SetSignalHandler(int signo, void (*handler)(int))
@@ -126,8 +126,7 @@ int SetSignalHandler(int signo, void (*handler)(int))
 
 #endif
 
-struct TSignalHandlerDesc
-{
+struct TSignalHandlerDesc {
     int Signo;
     void (*Handler)(int);
 };
@@ -156,21 +155,19 @@ void SetSignalHandlers(const TSignalHandlerDesc* handlerDescs)
 
 } // namespace
 
-
 void InitSignals()
 {
     TSignalHandlerDesc handlerDescs[] = {
-        { SIGTERM, SignalHandler },
-        { SIGINT, SignalHandler },
-        { SIGQUIT, SignalHandler },
+        {SIGTERM, SignalHandler},
+        {SIGINT, SignalHandler},
+        {SIGQUIT, SignalHandler},
 #ifdef _unix_
-        { SIGPIPE, SIG_IGN },
-        { SIGHUP, SignalHandler },
-        { SIGUSR1, SignalHandler },
-        { SIGCHLD, SignalHandler },
+        {SIGPIPE, SIG_IGN},
+        {SIGHUP, SignalHandler},
+        {SIGUSR1, SignalHandler},
+        {SIGCHLD, SignalHandler},
 #endif
-        { -1, nullptr }
-    };
+        {-1, nullptr}};
 
     SetSignalHandlers(handlerDescs);
 }
@@ -178,17 +175,16 @@ void InitSignals()
 void InitSignalsWithSelfPipe()
 {
     TSignalHandlerDesc handlerDescs[] = {
-        { SIGTERM, SignalHandlerWithSelfPipe },
-        { SIGINT, SignalHandlerWithSelfPipe },
-        { SIGQUIT, SignalHandlerWithSelfPipe },
+        {SIGTERM, SignalHandlerWithSelfPipe},
+        {SIGINT, SignalHandlerWithSelfPipe},
+        {SIGQUIT, SignalHandlerWithSelfPipe},
 #ifdef _unix_
-        { SIGPIPE, SIG_IGN },
-        { SIGHUP, SignalHandlerWithSelfPipe },
-        { SIGUSR1, SignalHandlerWithSelfPipe },
-        { SIGCHLD, SignalHandlerWithSelfPipe },
+        {SIGPIPE, SIG_IGN},
+        {SIGHUP, SignalHandlerWithSelfPipe},
+        {SIGUSR1, SignalHandlerWithSelfPipe},
+        {SIGCHLD, SignalHandlerWithSelfPipe},
 #endif
-        { -1, nullptr }
-    };
+        {-1, nullptr}};
 
     TPipe::Pipe(SignalPipeR, SignalPipeW);
     SetNonBlock(SignalPipeR.GetHandle());

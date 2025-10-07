@@ -8,7 +8,7 @@
 
 namespace NYql::NUdf {
 class TUnboxedValue;
-};
+}; // namespace NYql::NUdf
 
 namespace NKikimr::NBinaryJson {
 
@@ -21,5 +21,4 @@ std::variant<TBinaryJson, TString> SerializeToBinaryJson(const TStringBuf json, 
  * @brief Translates DOM layout from `yql/library/dom` library into BinaryJson
  */
 TBinaryJson SerializeToBinaryJson(const NYql::NUdf::TUnboxedValue& value);
-}
-
+} // namespace NKikimr::NBinaryJson

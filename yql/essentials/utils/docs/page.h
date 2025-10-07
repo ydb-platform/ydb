@@ -5,12 +5,12 @@
 
 namespace NYql::NDocs {
 
-    using TPages = THashMap<TString, TMarkdownPage>;
+using TPages = THashMap<TString, TMarkdownPage>;
 
-    TPages ParsePages(TResourcesByRelativePath resources);
+TPages ParsePages(TResourcesByRelativePath resources);
 
-    TPages Resolved(TPages pages, TStringBuf baseURL);
+TPages Resolved(TPages pages, TStringBuf baseURL);
 
-    TPages ExtendedSyntaxRemoved(TPages pages);
+TPages ExtendedSyntaxRemoved(TPages pages);
 
 } // namespace NYql::NDocs

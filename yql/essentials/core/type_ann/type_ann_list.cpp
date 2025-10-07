@@ -26,22 +26,6 @@ namespace {
         return x->GetTypeAnn() && x->GetTypeAnn()->GetKind() == ETypeAnnotationKind::EmptyList;
     };
 
-    bool IsFieldSubset(const TStructExprType& structType, const TStructExprType& sourceStructType) {
-        for (auto& item : structType.GetItems()) {
-            auto name = item->GetName();
-            auto type = item->GetItemType();
-            if (auto idx = sourceStructType.FindItem(name)) {
-                if (sourceStructType.GetItems()[*idx]->GetItemType() == type) {
-                    continue;
-                }
-            }
-
-            return false;
-        }
-
-        return true;
-    }
-
     TExprNode::TPtr RewriteMultiAggregate(const TExprNode& node, TExprContext& ctx) {
         auto exprLambda = node.Child(1);
         const TStructExprType* structType = nullptr;

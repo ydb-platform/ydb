@@ -2,6 +2,8 @@ PY23_NATIVE_LIBRARY()
 
 YQL_ABI_VERSION(2 27 0)
 
+ENABLE(YQL_STYLE_CPP)
+
 SRCS(
     py_callable.cpp
     py_cast.cpp

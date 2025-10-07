@@ -162,6 +162,14 @@ namespace NWilson {
 
     public:
         std::unordered_map<TString, Trace> Traces;
+
+        TString PrintTraces() const {
+            TStringStream str;
+            for (const auto& [_, trace] : Traces) {
+                str << "{ " << trace.ToString() << " } ";
+            }
+            return str.Str();
+        }
     };
 
 } // NWilson

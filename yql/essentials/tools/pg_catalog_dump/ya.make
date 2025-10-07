@@ -1,5 +1,7 @@
 PROGRAM(pg_catalog_dump)
 
+ENABLE(YQL_STYLE_CPP)
+
 SRCS(
     pg_catalog_dump.cpp
 )

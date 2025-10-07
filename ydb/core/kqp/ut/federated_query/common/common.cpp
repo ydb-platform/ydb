@@ -86,24 +86,27 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
         auto settings = TKikimrSettings(*appConfig);
 
         NYql::IHTTPGateway::TPtr httpGateway;
+        const auto& queryServiceConfig = appConfig->GetQueryServiceConfig();
         if (initializeHttpGateway) {
-            httpGateway = MakeHttpGateway(appConfig->GetQueryServiceConfig().GetHttpGateway(), settings.CountersRoot);
+            httpGateway = MakeHttpGateway(queryServiceConfig.GetHttpGateway(), settings.CountersRoot);
         }
         auto driver = std::make_shared<NYdb::TDriver>(NYdb::TDriverConfig());
 
+        const auto& s3Config = queryServiceConfig.GetS3();
+        const auto& solomonConfig = queryServiceConfig.GetSolomon();
         auto federatedQuerySetupFactory = std::make_shared<TKqpFederatedQuerySetupFactoryMock>(
             httpGateway,
             connectorClient,
             options.CredentialsFactory,
             databaseAsyncResolver,
-            appConfig->GetQueryServiceConfig().GetS3(),
-            appConfig->GetQueryServiceConfig().GetGeneric(),
-            appConfig->GetQueryServiceConfig().GetYt(),
+            s3Config,
+            queryServiceConfig.GetGeneric(),
+            queryServiceConfig.GetYt(),
             nullptr,
-            appConfig->GetQueryServiceConfig().GetSolomon(),
+            solomonConfig,
+            NYql::CreateSolomonGateway(solomonConfig),
             nullptr,
-            nullptr,
-            NYql::NDq::CreateReadActorFactoryConfig(appConfig->GetQueryServiceConfig().GetS3()),
+            NYql::NDq::CreateReadActorFactoryConfig(s3Config),
             nullptr,
             NYql::TPqGatewayConfig{},
             options.PqGateway ? options.PqGateway : NKqp::MakePqGateway(driver, NYql::TPqGatewayConfig{}),
@@ -140,6 +143,59 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
         }
 
         return kikimr;
+    }
+
+    class TStaticCredentialsProvider: public NYdb::ICredentialsProvider {
+    public:
+        TStaticCredentialsProvider(const TString& yqlToken)
+            : YqlToken_(yqlToken)
+        {
+        }
+
+        std::string GetAuthInfo() const override {
+            return YqlToken_;
+        }
+
+        bool IsValid() const override {
+            return true;
+        }
+
+    private:
+        std::string YqlToken_;
+    };
+
+    class TStaticCredentialsProviderFactory: public NYdb::ICredentialsProviderFactory {
+    public:
+        TStaticCredentialsProviderFactory(const TString& yqlToken)
+            : YqlToken_(yqlToken)
+        {
+        }
+
+        std::shared_ptr<NYdb::ICredentialsProvider> CreateProvider() const override {
+            return std::make_shared<TStaticCredentialsProvider>(YqlToken_);
+        }
+
+    private:
+        TString YqlToken_;
+    };
+
+    class TStaticSecuredCredentialsFactory: public NYql::ISecuredServiceAccountCredentialsFactory {
+    public:
+        TStaticSecuredCredentialsFactory(const TString& yqlToken)
+            : YqlToken_(yqlToken)
+        {
+        }
+
+        std::shared_ptr<NYdb::ICredentialsProviderFactory> Create(const TString&, const TString&) override {
+            return std::make_shared<TStaticCredentialsProviderFactory>(YqlToken_);
+        }
+
+    private:
+        TString YqlToken_;
+    };
+
+    std::shared_ptr<NYql::ISecuredServiceAccountCredentialsFactory> CreateCredentialsFactory(const TString& token) {
+        return std::make_shared<TStaticSecuredCredentialsFactory>(token);
     }
 
 } // namespace NKikimr::NKqp::NFederatedQueryTest

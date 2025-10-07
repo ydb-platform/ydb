@@ -75,6 +75,24 @@ namespace NPage {
             }
         } Y_PACKED;
 
+        struct TLocked {
+            ELockMode LockMode_;
+            ui64 LockTxId_;
+
+            ELockMode GetLockMode() const noexcept {
+                return LockMode_;
+            }
+
+            ui64 GetLockTxId() const noexcept {
+                return LockTxId_;
+            }
+
+            void Set(ELockMode mode, ui64 txId) noexcept {
+                LockMode_ = mode;
+                LockTxId_ = txId;
+            }
+        } Y_PACKED;
+
         struct TRecord : public TDataPageRecord<TRecord, TItem> {
             ui8 Fields_;
 
@@ -94,17 +112,21 @@ namespace NPage {
                 return Fields_ & 0x20;
             }
 
+            bool IsLocked() const noexcept {
+                return Fields_ & 0x10;
+            }
+
             bool IsDelta() const noexcept {
-                /* HasHistory without other bits set */
-                return (Fields_ & 0xF0) == 0x20;
+                /* HasHistory without mvcc bits set */
+                return (Fields_ & 0xE0) == 0x20;
             }
 
             void SetZero() noexcept {
                 Fields_ = 0;
             }
 
-            void SetFields(ERowOp rop, bool erased, bool versioned, bool delta) noexcept {
-                Fields_ = ui8(rop) | (delta ? 0x20 : ((erased ? 0x80 : 0) | (versioned ? 0x40 : 0)));
+            void SetFields(ERowOp rop, bool erased, bool versioned, bool delta, bool locked) noexcept {
+                Fields_ = ui8(rop) | (locked ? 0x10 : 0) | (delta ? 0x20 : ((erased ? 0x80 : 0) | (versioned ? 0x40 : 0)));
             }
 
             void MarkHasHistory() noexcept {
@@ -133,6 +155,26 @@ namespace NPage {
                 return GetTail<TDelta>(group)->GetTxId();
             }
 
+            static size_t GetLockInfoOffset(ui8 fields) {
+                static constexpr size_t offset[] = {
+                    /* 000xyyyy = 0x00 */ 0,
+                    /* 001xyyyy = 0x20 */ sizeof(TDelta),
+                    /* 010xyyyy = 0x40 */ sizeof(TVersion),
+                    /* 011xyyyy = 0x60 */ sizeof(TVersion),
+                    /* 100xyyyy = 0x80 */ sizeof(TVersion),
+                    /* 101xyyyy = 0xa0 */ sizeof(TVersion),
+                    /* 110xyyyy = 0xc0 */ sizeof(TVersion) * 2,
+                    /* 111xyyyy = 0xd0 */ sizeof(TVersion) * 2,
+                };
+                return offset[fields >> 5];
+            }
+
+            std::tuple<ELockMode, ui64> GetLockInfo(const TPartScheme::TGroupInfo& group) const {
+                Y_DEBUG_ABORT_UNLESS(IsLocked());
+                auto* l = GetTail<TLocked>(group, GetLockInfoOffset(Fields_));
+                return { l->GetLockMode(), l->GetLockTxId() };
+            }
+
             const TRecord* GetAltRecord(size_t index) const {
                 if (index == 0) {
                     return this;
@@ -149,8 +191,8 @@ namespace NPage {
         private:
             // returns pointer to the data right after all column entries
             template <class T>
-            const T* GetTail(const TPartScheme::TGroupInfo& group) const {
-                return TDeref<T>::At(Base(), group.FixedSize);
+            const T* GetTail(const TPartScheme::TGroupInfo& group, size_t off = 0) const {
+                return TDeref<T>::At(Base(), group.FixedSize + off);
             }
         } Y_PACKED;
 
@@ -162,6 +204,8 @@ namespace NPage {
 
         static_assert(sizeof(TItem) == 1, "Invalid TDataPage TItem size");
         static_assert(sizeof(TVersion) == 16, "Invalid TDataPage TVersion size");
+        static_assert(sizeof(TDelta) == 8, "Invalid TDataPage TDelta size");
+        static_assert(sizeof(TLocked) == 9, "Invalid TDataPage TLocked size");
         static_assert(sizeof(TRecord) == 1, "Invalid TDataPage TRecord size");
         static_assert(sizeof(TExtra) == 8, "Invalid TDataPage page extra chunk");
 

@@ -1,5 +1,6 @@
 #include "mkql_builtins_impl.h"  // Y_IGNORE
 #include "mkql_builtins_datetime.h"
+#include "mkql_safe_ops.h"
 
 #include <yql/essentials/minikql/mkql_type_ops.h>
 
@@ -14,7 +15,7 @@ struct TMul : public TSimpleArithmeticBinary<TLeft, TRight, TOutput, TMul<TLeft,
 
     static TOutput Do(TOutput left, TOutput right)
     {
-        return left * right;
+        return SafeMul(left, right);
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
@@ -39,7 +40,7 @@ struct TNumMulInterval {
     {
         const auto lv = static_cast<typename TOutput::TLayout>(left.template Get<typename TLeft::TLayout>());
         const auto rv = static_cast<typename TOutput::TLayout>(right.template Get<typename TRight::TLayout>());
-        const auto ret = lv * rv;
+        const auto ret = SafeMul(lv, rv);
         if (rv == 0 || lv == 0) {
             return NUdf::TUnboxedValuePod(ret);
         }

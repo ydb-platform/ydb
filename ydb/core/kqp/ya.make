@@ -81,4 +81,5 @@ RECURSE_FOR_TESTS(
     ut
     tools/combiner_perf/bin
     tools/join_perf
+    common/result_set_format/ut
 )

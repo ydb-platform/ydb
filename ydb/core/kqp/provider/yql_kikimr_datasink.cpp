@@ -200,9 +200,8 @@ private:
     }
 
     TStatus HandleModifyPermissions(TKiModifyPermissions node, TExprContext& ctx) override {
-        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
-            << "ModifyPermissions is not yet implemented for intent determination transformer"));
-        return TStatus::Error;
+        Y_UNUSED(ctx, node);
+        return TStatus::Ok;
     }
 
     TStatus HandleCreateBackupCollection(TKiCreateBackupCollection node, TExprContext& ctx) override {
@@ -242,27 +241,23 @@ private:
     }
 
     TStatus HandleCreateUser(TKiCreateUser node, TExprContext& ctx) override {
-        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
-            << "CreateUser is not yet implemented for intent determination transformer"));
-        return TStatus::Error;
+        Y_UNUSED(ctx, node);
+        return TStatus::Ok;
     }
 
     TStatus HandleAlterUser(TKiAlterUser node, TExprContext& ctx) override {
-        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
-            << "AlterUser is not yet implemented for intent determination transformer"));
-        return TStatus::Error;
+        Y_UNUSED(ctx, node);
+        return TStatus::Ok;
     }
 
     TStatus HandleDropUser(TKiDropUser node, TExprContext& ctx) override {
-        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
-            << "DropUser is not yet implemented for intent determination transformer"));
-        return TStatus::Error;
+        Y_UNUSED(ctx, node);
+        return TStatus::Ok;
     }
 
     TStatus HandleUpsertObject(TKiUpsertObject node, TExprContext& ctx) override {
-        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
-            << "UpsertObject is not yet implemented for intent determination transformer"));
-        return TStatus::Error;
+        Y_UNUSED(ctx, node);
+        return TStatus::Ok;
     }
 
     TStatus HandleCreateObject(TKiCreateObject node, TExprContext& ctx) override {
@@ -284,50 +279,42 @@ private:
     }
 
     TStatus HandleCreateGroup(TKiCreateGroup node, TExprContext& ctx) override {
-        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
-            << "CreateGroup is not yet implemented for intent determination transformer"));
-        return TStatus::Error;
+        Y_UNUSED(ctx, node);
+        return TStatus::Ok;
     }
 
     TStatus HandleAlterGroup(TKiAlterGroup node, TExprContext& ctx) override {
-        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
-            << "AlterGroup is not yet implemented for intent determination transformer"));
-        return TStatus::Error;
+        Y_UNUSED(ctx, node);
+        return TStatus::Ok;
     }
 
     TStatus HandleRenameGroup(TKiRenameGroup node, TExprContext& ctx) override {
-        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
-            << "RenameGroup is not yet implemented for intent determination transformer"));
-        return TStatus::Error;
+        Y_UNUSED(ctx, node);
+        return TStatus::Ok;
     }
 
     TStatus HandleDropGroup(TKiDropGroup node, TExprContext& ctx) override {
-        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
-            << "DropGroup is not yet implemented for intent determination transformer"));
-        return TStatus::Error;
+        Y_UNUSED(ctx, node);
+        return TStatus::Ok;
     }
 
     TStatus HandlePgDropObject(TPgDropObject node, TExprContext& ctx) override {
-        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
-                << "PgDropObject is not yet implemented for intent determination transformer"));
-        return TStatus::Error;
+        Y_UNUSED(ctx, node);
+        return TStatus::Ok;
     }
 
     TStatus HandleCreateSecret(TKiCreateSecret node, TExprContext& ctx) override {
-        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
-                << "CreateSecret is not yet implemented for intent determination transformer"));
+        Y_UNUSED(ctx, node);
         return TStatus::Ok;
     }
 
     TStatus HandleAlterSecret(TKiAlterSecret node, TExprContext& ctx) override {
-        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
-                << "AlterSecret is not yet implemented for intent determination transformer"));
+        Y_UNUSED(ctx, node);
         return TStatus::Ok;
     }
 
     TStatus HandleDropSecret(TKiDropSecret node, TExprContext& ctx) override {
-        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
-                << "DropSecret is not yet implemented for intent determination transformer"));
+        Y_UNUSED(ctx, node);
         return TStatus::Ok;
     }
 

@@ -1,8 +1,8 @@
 #include "streaming_queries.h"
 
 #include <ydb/core/kqp/common/events/script_executions.h>
+#include <ydb/core/kqp/common/kqp_script_executions.h>
 #include <ydb/core/kqp/gateway/behaviour/streaming_query/common/utils.h>
-#include <ydb/core/kqp/proxy_service/script_executions_utils/kqp_script_execution_utils.h>
 #include <ydb/core/kqp/workload_service/actors/actors.h>
 #include <ydb/core/sys_view/common/registry.h>
 #include <ydb/core/sys_view/common/scan_actor_base_impl.h>
@@ -297,6 +297,7 @@ public:
             entry.ShowPrivatePath = true;
             entry.Path = SplitPath(path);
             entry.SyncVersion = true;
+            entry.Access = NACLib::DescribeSchema;
         }
 
         TBase::Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.release()), IEventHandle::FlagTrackDelivery);
@@ -774,8 +775,11 @@ public:
             auto& info = it->second;
             info.Issues = NKqp::SerializeIssues(event.Issues);
             info.RetryCount = event.RetryCount;
-            info.LastFailAt = event.LastFailAt;
-            info.SuspendedUntil = event.SuspendedUntil;
+
+            if (!ready || status != Ydb::StatusIds::SUCCESS) {
+                info.LastFailAt = event.LastFailAt;
+                info.SuspendedUntil = event.SuspendedUntil;
+            }
 
             if (const auto& metadata = event.Metadata) {
                 Ydb::Query::ExecuteScriptMetadata deserializedMeta;
@@ -804,7 +808,7 @@ public:
         if (!InflightScriptExecutionInfoResolve) {
             for (; ResolvedQueriesCount; --ResolvedQueriesCount) {
                 ReadyQueries.emplace_back(PendingScriptExecutionInfo.front());
-                PendingScriptExecutionInfo.pop_back();
+                PendingScriptExecutionInfo.pop_front();
             }
 
             if (!ReadyQueries.empty() && UsedSpace >= FreeSpace) {
@@ -898,10 +902,15 @@ private:
                 return;
             }
 
-            const auto& executionId = it->second.LastExecutionId;
+            const auto& info = it->second;
+            auto executionId = info.LastExecutionId;
             if (!executionId) {
-                UsedSpace += it->second.GetSize();
-                continue;
+                if (const auto& previousExecutionId = info.State.GetPreviousExecutionIds(); !previousExecutionId.empty()) {
+                    executionId = *previousExecutionId.rbegin();
+                } else {
+                    UsedSpace += it->second.GetSize();
+                    continue;
+                }
             }
 
             auto event = std::make_unique<NKqp::TEvGetScriptExecutionOperation>(Database, NKqp::OperationIdFromExecutionId(executionId));
@@ -910,6 +919,11 @@ private:
             Send(kqpProxyId, std::move(event), 0, i);
             LOG_D("Resolving script execution info for query '" << path << "', execution id: " << executionId);
             InflightScriptExecutionInfoResolve++;
+        }
+
+        if (!InflightScriptExecutionInfoResolve) {
+            ReadyQueries.insert(ReadyQueries.end(), PendingScriptExecutionInfo.begin(), PendingScriptExecutionInfo.end());
+            PendingScriptExecutionInfo.clear();
         }
 
         ContinueScan();

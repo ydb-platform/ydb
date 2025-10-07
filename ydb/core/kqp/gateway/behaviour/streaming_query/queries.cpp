@@ -13,7 +13,6 @@
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
 #include <ydb/core/kqp/provider/yql_kikimr_gateway.h>
-#include <ydb/core/kqp/proxy_service/script_executions_utils/kqp_script_execution_utils.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/resource_pools/resource_pool_settings.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
@@ -839,7 +838,7 @@ protected:
         ExecuteQuery(__func__, sql, &params, txControl);
     }
 
-    void PersistQueryInfo(NKikimrKqp::TStreamingQueryState state, const TTxControl& txControl) {
+    void PersistQueryInfo(const NKikimrKqp::TStreamingQueryState& state, const TTxControl& txControl) {
         const TString sql = fmt::format(R"(
                 DECLARE $database_id AS Text;
                 DECLARE $query_path AS Text;

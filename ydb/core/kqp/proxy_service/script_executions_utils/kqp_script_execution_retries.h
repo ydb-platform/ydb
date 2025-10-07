@@ -14,7 +14,7 @@ public:
 
     TRetryPolicyItem(ui64 retryCount, ui64 retryLimit, TDuration retryPeriod, TDuration backoffPeriod);
 
-    static TRetryPolicyItem FromProto(Ydb::StatusIds::StatusCode status, const NKikimrKqp::TScriptExecutionRetryState& mapping);
+    static std::optional<TRetryPolicyItem> FromProto(Ydb::StatusIds::StatusCode status, const NKikimrKqp::TScriptExecutionRetryState& mapping);
 
     ui64 RetryCount = 0;
     ui64 RetryLimit = 0;

@@ -8,7 +8,6 @@
 #include <ydb/core/kqp/proxy_service/proto/result_set_meta.pb.h>
 #include <ydb/core/kqp/proxy_service/script_executions_utils/kqp_script_execution_compression.h>
 #include <ydb/core/kqp/proxy_service/script_executions_utils/kqp_script_execution_retries.h>
-#include <ydb/core/kqp/proxy_service/script_executions_utils/kqp_script_execution_utils.h>
 #include <ydb/core/kqp/run_script_actor/kqp_run_script_actor.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -2748,8 +2747,15 @@ public:
 
         // Script execution info
         if (NYdb::TResultSetParser result(ResultSets[0]); result.TryNextRow()) {
-            if (result.ColumnParser("retry_state").GetOptionalJsonDocument()) {
-                ResetRetryState = true;
+            if (const auto& serializedRetryState = result.ColumnParser("retry_state").GetOptionalJsonDocument()) {
+                NJson::TJsonValue value;
+                if (!NJson::ReadJsonTree(*serializedRetryState, &value)) {
+                    Finish(Ydb::StatusIds::INTERNAL_ERROR, "Retry state is corrupted");
+                    return;
+                }
+
+                NProtobufJson::Json2Proto(value, RetryState.emplace());
+                RetryState->ClearRetryPolicyMapping();
             }
         }
 
@@ -2760,7 +2766,7 @@ public:
             }
         }
 
-        if (ResetRetryState || DropLease) {
+        if (RetryState || DropLease) {
             DropRetryState();
         } else {
             Finish();
@@ -2772,14 +2778,15 @@ public:
             -- TResetScriptExecutionRetriesQueryActor::DropRetryState
             DECLARE $database AS Text;
             DECLARE $execution_id AS Text;
+            DECLARE $retry_state AS Optional<JsonDocument>;
         )";
 
-        if (ResetRetryState) {
+        if (RetryState) {
             sql += R"(
                 UPSERT INTO `.metadata/script_executions` (
                     database, execution_id, retry_state
                 ) VALUES (
-                    $database, $execution_id, NULL
+                    $database, $execution_id, $retry_state
                 );
             )";
         }
@@ -2798,6 +2805,9 @@ public:
                 .Build()
             .AddParam("$execution_id")
                 .Utf8(ExecutionId)
+                .Build()
+            .AddParam("$retry_state")
+                .OptionalJsonDocument(RetryState ? std::optional<std::string>(NProtobufJson::Proto2Json(*RetryState, NProtobufJson::TProto2JsonConfig())) : std::nullopt)
                 .Build();
 
         SetQueryResultHandler(&TResetScriptExecutionRetriesQueryActor::OnQueryResult, "Drop retry state");
@@ -2815,7 +2825,7 @@ public:
 private:
     const TString Database;
     const TString ExecutionId;
-    bool ResetRetryState = false;
+    std::optional<NKikimrKqp::TScriptExecutionRetryState> RetryState;
     bool DropLease = false;
 };
 
@@ -3632,7 +3642,7 @@ LeaseFinalizationInfo GetLeaseFinalizationSql(TInstant now, Ydb::StatusIds::Stat
         retryState.GetRetryRate()
     );
 
-    const bool retry = retryLimiter.UpdateOnRetry(TInstant::Now(), policy);
+    bool retry = policy ? retryLimiter.UpdateOnRetry(TInstant::Now(), *policy) : false;
     retryState.SetRetryCounter(retryLimiter.RetryCount);
     *retryState.MutableRetryCounterUpdatedAt() = NProtoInterop::CastToProto(now);
     retryState.SetRetryRate(retryLimiter.RetryRate);
@@ -3655,10 +3665,10 @@ LeaseFinalizationInfo GetLeaseFinalizationSql(TInstant now, Ydb::StatusIds::Stat
             .NewLeaseState = ELeaseState::WaitRetry
         };
     } else {
-        if (retryState.RetryPolicyMappingSize()) {
+        if (policy) {
             TStringBuilder finalIssue;
             finalIssue << "Script execution operation failed with code " << Ydb::StatusIds::StatusCode_Name(status);
-            if (policy.RetryCount) {
+            if (policy->RetryCount) {
                 finalIssue << " (" << retryLimiter.LastError << ")";
             }
             issues = AddRootIssue(finalIssue << " at " << now, issues);

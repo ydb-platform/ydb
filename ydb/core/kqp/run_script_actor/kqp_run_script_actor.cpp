@@ -2,12 +2,12 @@
 
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/kqp.h>
+#include <ydb/core/kqp/common/kqp_script_executions.h>
 #include <ydb/core/kqp/common/kqp_timeouts.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>
 #include <ydb/core/kqp/proxy_service/kqp_script_executions.h>
 #include <ydb/core/kqp/proxy_service/proto/result_set_meta.pb.h>
-#include <ydb/core/kqp/proxy_service/script_executions_utils/kqp_script_execution_utils.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/event_pb.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -569,6 +569,8 @@ private:
     void Handle(TEvKqpExecuter::TEvExecuterProgress::TPtr& ev) {
         LOG_T("Got script progress from " << ev->Sender);
         const auto& record = ev->Get()->Record;
+        QueryPlan = record.GetQueryPlan();
+        QueryAst = record.GetQueryAst();
         UpdateScriptProgress(record.GetQueryPlan(), record.GetQueryAst());
     }
 

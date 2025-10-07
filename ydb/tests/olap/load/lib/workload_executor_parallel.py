@@ -17,6 +17,7 @@ from ydb.tests.olap.lib.ydb_cli import YdbCliHelper
 from ydb.tests.olap.lib.utils import get_external_param
 # Импортируем LoadSuiteBase чтобы наследоваться от него
 from ydb.tests.olap.load.lib.conftest import LoadSuiteBase
+from ydb.tests.olap.load.lib.workload_executor import WorkloadTestBase
 
 
 class ParallelWorkloadTestBase(LoadSuiteBase):
@@ -38,349 +39,15 @@ class ParallelWorkloadTestBase(LoadSuiteBase):
         get_external_param(
             "yaml-config",
             ""))  # Путь к yaml конфигурации
-
+    
     @classmethod
     def setup_class(cls) -> None:
         """
         Общая инициализация для workload тестов.
         """
-        with allure.step("Workload test setup: initialize"):
-            cls._setup_start_time = time_module.time()
+        cls.base_executor = WorkloadTestBase()
+        cls.base_executor.setup_class()
 
-            # Наследуемся от LoadSuiteBase
-            super().setup_class()
-
-    @classmethod
-    def do_teardown_class(cls):
-        """
-        Общая очистка для workload тестов.
-        Останавливает процессы workload на всех нодах кластера.
-        Останавливает nemesis, если он был запущен.
-        """
-        with allure.step("Workload test teardown: cleanup processes and nemesis"):
-            if not cls.workload_binary_names:
-                logging.warning(
-                    f"workload_binary_names not set for {
-                        cls.__name__}, skipping process cleanup"
-                )
-                allure.attach(
-                    f"workload_binary_names not set for {
-                        cls.__name__}, skipping process cleanup",
-                    "Teardown - Skip Cleanup",
-                    attachment_type=allure.attachment_type.TEXT,
-                )
-                return
-
-            logging.info(
-                f"Starting {
-                    cls.__name__} teardown: stopping workload processes"
-            )
-
-            try:
-                # Используем метод из LoadSuiteBase напрямую через наследование
-                for workload_binary_name in cls.workload_binary_names:
-                    cls.kill_workload_processes(
-                        process_names=[
-                            cls.binaries_deploy_path +
-                            workload_binary_name],
-                        target_dir=cls.binaries_deploy_path,
-                    )
-
-                # Останавливаем nemesis, если он был запущен
-                if getattr(cls, "_nemesis_started", False):
-                    logging.info("Stopping nemesis service (flag was set)")
-                    cls._stop_nemesis()
-                else:
-                    # Дополнительная проверка - если nemesis был запущен в тесте,
-                    # но флаг не установлен (например, поток был прерван)
-                    logging.info("Nemesis flag not set, but checking if nemesis was started in test")
-                    # Останавливаем nemesis в любом случае для безопасности
-                    cls._stop_nemesis()
-
-            except Exception as e:
-                error_msg = f"Error during teardown: {e}"
-                logging.error(error_msg)
-                allure.attach(
-                    error_msg,
-                    "Teardown Error",
-                    attachment_type=allure.attachment_type.TEXT,
-                )
-
-    @classmethod
-    def _stop_nemesis(cls):
-        """Останавливает сервис nemesis на всех нодах кластера"""
-        with allure.step("Stop nemesis service on all cluster nodes"):
-            try:
-                # Используем общий метод управления nemesis
-                nemesis_log = []
-                current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                nemesis_log.append(
-                    f"Stopping nemesis service at {current_time}")
-
-                cls._manage_nemesis(
-                    False, "Stopping nemesis during teardown", nemesis_log
-                )
-                cls._nemesis_started = False
-                YdbCluster.wait_ydb_alive(120)
-
-            except Exception as e:
-                error_msg = f"Error stopping nemesis: {e}"
-                logging.error(error_msg)
-                try:
-                    allure.attach(
-                        error_msg,
-                        "Nemesis Stop Error",
-                        attachment_type=allure.attachment_type.TEXT,
-                    )
-                except Exception:
-                    pass
-
-
-    def create_workload_result(
-        self,
-        workload_name: str,
-        stdout: str,
-        stderr: str,
-        success: bool,
-        additional_stats: dict = None,
-        is_timeout: bool = False,
-        iteration_number: int = 0,
-        actual_execution_time: float = None,
-    ) -> YdbCliHelper.WorkloadRunResult:
-        """
-        Создает и заполняет WorkloadRunResult с общей логикой
-
-        Args:
-            workload_name: Имя workload для статистики
-            stdout: Вывод workload
-            stderr: Ошибки workload
-            success: Успешность выполнения
-            additional_stats: Дополнительная статистика
-            is_timeout: Флаг таймаута
-            iteration_number: Номер итерации
-            actual_execution_time: Фактическое время выполнения
-
-        Returns:
-            Заполненный WorkloadRunResult
-        """
-        result = YdbCliHelper.WorkloadRunResult()
-        result.start_time = self.__class__._setup_start_time
-        result.stdout = str(stdout)
-        result.stderr = str(stderr)
-
-        # Добавляем диагностическую информацию о входных данных
-        logging.info(f"Creating workload result for {workload_name}")
-        logging.info(
-            f"Input parameters - success: {success}, stdout length: {
-                len(
-                    str(stdout))}, stderr length: {
-                len(
-                    str(stderr))}"
-        )
-        if stdout:
-            logging.info(
-                f"Stdout preview(first 200 chars): {
-                    str(stdout)[
-                        :200]}")
-        if stderr:
-            logging.info(
-                f"Stderr preview(first 200 chars): {
-                    str(stderr)[
-                        :200]}")
-
-        # Анализируем результаты выполнения
-        error_found = False
-
-        # Проверяем на timeout сначала (это warning, не error)
-        if is_timeout:
-            result.add_warning(
-                f"Workload execution timed out. stdout: {stdout}, stderr: {stderr}"
-            )
-        else:
-            # Проверяем явные ошибки (только если не timeout)
-            if not success:
-                result.add_error(
-                    f"Workload execution failed. stderr: {stderr}")
-                error_found = True
-            elif "error" in str(stderr).lower():
-                result.add_error(f"Error detected in stderr: {stderr}")
-                error_found = True
-            elif self._has_real_error_in_stdout(str(stdout)):
-                result.add_warning(f"Error detected in stdout: {stdout}")
-                error_found = True
-
-        # Проверяем предупреждения
-        if (
-            "warning: permanently added" not in str(stderr).lower()
-            and "warning" in str(stderr).lower()
-        ):
-            result.add_warning(f"Warning in stderr: {stderr}")
-
-        # Добавляем информацию о выполнении в iterations
-        iteration = YdbCliHelper.Iteration()
-        # Используем фактическое время выполнения, если оно указано, иначе
-        # плановое время
-        execution_time = (
-            actual_execution_time if actual_execution_time is not None else self.timeout
-        )
-        iteration.time = execution_time
-
-        # Добавляем имя итерации для лучшей идентификации
-        if additional_stats:
-            node_host = additional_stats.get("node_host", "")
-            iteration_num = additional_stats.get(
-                "iteration_num", iteration_number)
-
-            # Проверяем, был ли уже добавлен префикс iter_ в имя
-            iter_prefix_added = additional_stats.get(
-                "iter_prefix_added", False)
-
-            # Формируем имя итерации
-            if iter_prefix_added:
-                # Если префикс уже добавлен, просто используем имя workload
-                iteration.name = f"{workload_name}_{node_host}"
-            else:
-                # Если префикс еще не добавлен, добавляем его
-                iteration.name = f"{workload_name}_{node_host}_iter_{iteration_num}"
-
-            # Добавляем статистику об итерации и потоке в итерацию
-            if not hasattr(iteration, "stats"):
-                iteration.stats = {}
-
-            iteration_stats = {
-                "iteration_info": {
-                    "iteration_num": iteration_num,
-                    "node_host": node_host,
-                    "thread_id": node_host,  # Идентификатор потока - хост ноды
-                    # Добавляем фактическое время выполнения
-                    "actual_execution_time": execution_time,
-                }
-            }
-
-            # Добавляем статистику в итерацию
-            iteration.stats.update(iteration_stats)
-
-        if is_timeout:
-            # Для timeout используем более конкретное сообщение
-            iteration.error_message = "Workload execution timed out"
-        elif error_found:
-            # Устанавливаем ошибку в iteration для consistency
-            iteration.error_message = result.error_message
-
-        result.iterations[iteration_number] = iteration
-
-        # Добавляем базовую статистику
-        result.add_stat(
-            workload_name, "execution_time", execution_time
-        )  # Используем фактическое время
-        result.add_stat(
-            workload_name, "planned_duration", self.timeout
-        )  # Добавляем плановую длительность отдельно
-        # Timeout не считается неуспешным выполнением, это warning
-        result.add_stat(
-            workload_name,
-            "workload_success",
-            (success and not error_found) or is_timeout,
-        )
-        result.add_stat(
-            workload_name,
-            "success_flag",
-            success)  # Исходный флаг успеха
-
-        # Добавляем дополнительную статистику если есть
-        if additional_stats:
-            for key, value in additional_stats.items():
-                result.add_stat(workload_name, key, value)
-
-        logging.info(
-            f"Workload result created - final success: {
-                result.success}, error_message: {
-                result.error_message}"
-        )
-
-        return result
-
-    def _has_real_error_in_stdout(self, stdout: str) -> bool:
-        """
-        Проверяет, есть ли в stdout настоящие ошибки, исключая статистику workload
-
-        Args:
-            stdout: Вывод stdout для анализа
-
-        Returns:
-            bool: True если найдены настоящие ошибки
-        """
-        if not stdout:
-            return False
-
-        stdout_lower = stdout.lower()
-
-        # Список паттернов, которые НЕ являются ошибками (статистика workload)
-        false_positive_patterns = [
-            "error responses count:",  # статистика ответов
-            "_error responses count:",  # например scheme_error responses count
-            "error_responses_count:",  # альтернативный формат
-            "errorresponsescount:",  # без разделителей
-            "errors encountered:",  # может быть частью статистики
-            "total errors:",  # общая статистика
-            "error rate:",  # метрика частоты ошибок
-            "error percentage:",  # процент ошибок
-            "error count:",  # счетчик ошибок в статистике
-            "scheme_error responses count:",  # конкретный пример из статистики
-            "aborted responses count:",  # другие типы ответов из статистики
-            "precondition_failed responses count:",  # еще один тип из статистики
-            "error responses:",  # краткий формат
-            "eventkind:",  # статистика по событиям
-            "success responses count:",  # для контекста успешных ответов
-            "responses count:",  # общий паттерн счетчиков ответов
-        ]
-
-        # Проверяем, есть ли слово "error" в контексте, который НЕ является
-        # ложным срабатыванием
-        error_positions = []
-        start_pos = 0
-        while True:
-            pos = stdout_lower.find("error", start_pos)
-            if pos == -1:
-                break
-            error_positions.append(pos)
-            start_pos = pos + 1
-
-        # Для каждого найденного "error" проверяем контекст
-        for pos in error_positions:
-            # Берем контекст вокруг найденного "error" (50 символов до и после)
-            context_start = max(0, pos - 50)
-            context_end = min(len(stdout), pos + 50)
-            context = stdout[context_start:context_end].lower()
-
-            # Проверяем, является ли это ложным срабатыванием
-            is_false_positive = any(
-                pattern in context for pattern in false_positive_patterns
-            )
-
-            if not is_false_positive:
-                # Дополнительные проверки на реальные ошибочные сообщения
-                real_error_indicators = [
-                    "fatal:",  # "Fatal: something went wrong"
-                    "error:",  # "Error: something went wrong"
-                    "error occurred",  # "An error occurred"
-                    "error while",  # "Error while processing"
-                    "error during",  # "Error during execution"
-                    "fatal error",  # "Fatal error"
-                    "runtime error",  # "Runtime error"
-                    "execution error",  # "Execution error"
-                    "internal error",  # "Internal error"
-                    "connection error",  # "Connection error"
-                    "timeout error",  # "Timeout error"
-                    "failed with error",  # "Operation failed with error"
-                    "exceptions must derive from baseexception",  # Python exception error
-                ]
-
-                # Если найден реальный индикатор ошибки, возвращаем True
-                if any(indicator in context for indicator in real_error_indicators):
-                    return True
-
-        return False
 
     def execute_parallel_workloads_test(
         self,
@@ -475,7 +142,7 @@ class ParallelWorkloadTestBase(LoadSuiteBase):
                 nemesis_log = [f"Workload preparation started at {prep_time}"]
 
                 # Останавливаем nemesis через общий метод
-                self.__class__._manage_nemesis(
+                self.__class__.base_executor._manage_nemesis(
                     False, "Stopping nemesis before workload execution", nemesis_log)
 
                 logging.info("Nemesis stopped successfully before workload execution")
@@ -575,11 +242,11 @@ class ParallelWorkloadTestBase(LoadSuiteBase):
                 # workload
                 if nemesis:
                     # Устанавливаем флаг сразу при запуске nemesis потока
-                    self.__class__._nemesis_started = True
+                    self.__class__.base_executor._nemesis_started = True
                     logging.info("Nemesis flag set to True - will start in 15 seconds")
 
                     nemesis_thread = threading.Thread(
-                        target=self._delayed_nemesis_start,
+                        target=self.__class__.base_executor._delayed_nemesis_start,
                         args=(15,),  # 15 секунд задержки
                         daemon=False,  # Убираем daemon=True чтобы поток не прерывался
                     )
@@ -730,7 +397,7 @@ class ParallelWorkloadTestBase(LoadSuiteBase):
                         )
 
                         # Обрабатываем результат запуска
-                        self._process_single_run_result(
+                        self.__class__.base_executor._process_single_run_result(
                             overall_result,
                             node_result["stress_name"],
                             global_run_num,
@@ -1092,319 +759,6 @@ class ParallelWorkloadTestBase(LoadSuiteBase):
 
         return result
 
-    def _process_single_run_result(
-        self,
-        overall_result,
-        workload_name: str,
-        run_num: int,
-        run_config: dict,
-        success: bool,
-        execution_time: float,
-        stdout: str,
-        stderr: str,
-        is_timeout: bool,
-    ):
-        """
-        Обрабатывает результат одного запуска
-
-        Args:
-            overall_result: Общий результат для добавления информации
-            workload_name: Имя workload
-            run_num: Номер запуска
-            run_config: Конфигурация запуска
-            success: Успешность выполнения
-            execution_time: Время выполнения
-            stdout: Вывод workload
-            stderr: Ошибки workload
-            is_timeout: Флаг таймаута
-        """
-        # Создаем результат для run'а
-        run_result = self.create_workload_result(
-            workload_name=f"{workload_name}_run_{run_num}",
-            stdout=stdout,
-            stderr=stderr,
-            success=success,
-            additional_stats={
-                "run_number": run_num,
-                "run_duration": run_config.get("duration"),
-                "run_execution_time": execution_time,
-                # Номер итерации
-                "iteration_num": run_config.get("iteration_num", 1),
-                # Идентификатор потока
-                "thread_id": run_config.get("thread_id", ""),
-                "iter_prefix_added": run_config.get(
-                    "iter_prefix_added", False
-                ),  # Флаг, что префикс iter_ уже добавлен
-                **run_config,
-            },
-            is_timeout=is_timeout,
-            iteration_number=run_num,
-            actual_execution_time=execution_time,
-        )
-
-        # Добавляем iteration в общий результат
-        overall_result.iterations[run_num] = run_result.iterations[run_num]
-
-        # Накапливаем stdout/stderr
-        if overall_result.stdout is None:
-            overall_result.stdout = ""
-        if overall_result.stderr is None:
-            overall_result.stderr = ""
-
-        overall_result.stdout += f"\n=== Run {run_num} ===\n{stdout or ''}"
-        overall_result.stderr += f"\n == = Run {run_num} stderr == =\n{
-            stderr or ''}"
-
-    def _analyze_execution_results(
-        self,
-        overall_result,
-        successful_runs: int,
-        total_runs: int,
-    ):
-        """
-        Анализирует результаты выполнения и добавляет ошибки/предупреждения
-
-        Args:
-            overall_result: Общий результат для добавления информации
-            successful_runs: Количество успешных запусков
-            total_runs: Общее количество запусков
-            use_iterations: Использовались ли итерации
-        """
-        # Группируем итерации по их номеру, чтобы определить реальное
-        # количество итераций
-        iterations_by_number = {}
-        threads_by_iteration = {}
-
-        # Анализируем все итерации и группируем их по номеру итерации
-        for iter_num, iteration in overall_result.iterations.items():
-            # Получаем номер итерации из статистики или из имени
-            real_iter_num = None
-            node_host = None
-
-            # Проверяем статистику
-            if hasattr(iteration, "stats") and iteration.stats:
-                for stat_key, stat_value in iteration.stats.items():
-                    if isinstance(stat_value, dict):
-                        if stat_key == "iteration_info":
-                            if "iteration_num" in stat_value:
-                                real_iter_num = stat_value["iteration_num"]
-                            if "node_host" in stat_value:
-                                node_host = stat_value["node_host"]
-                        elif "iteration_num" in stat_value:
-                            real_iter_num = stat_value["iteration_num"]
-
-            # Если не нашли в статистике, пробуем извлечь из имени
-            if real_iter_num is None and hasattr(
-                    iteration, "name") and iteration.name:
-                name_parts = iteration.name.split("_")
-                for i, part in enumerate(name_parts):
-                    if part == "iter" and i + 1 < len(name_parts):
-                        try:
-                            real_iter_num = int(name_parts[i + 1])
-                            break
-                        except (ValueError, IndexError):
-                            pass
-
-            # Если все еще не определили, используем номер итерации
-            if real_iter_num is None:
-                real_iter_num = iter_num
-
-            # Добавляем итерацию в группу по её номеру
-            if real_iter_num not in iterations_by_number:
-                iterations_by_number[real_iter_num] = []
-                threads_by_iteration[real_iter_num] = set()
-
-            iterations_by_number[real_iter_num].append(iteration)
-            if node_host:
-                threads_by_iteration[real_iter_num].add(node_host)
-
-        # Определяем реальное количество итераций и потоков
-        real_iteration_count = len(iterations_by_number)
-        failed_iterations = 0
-
-        # Проверяем каждую итерацию на наличие ошибок
-        for iter_num, iterations in iterations_by_number.items():
-            # Если хотя бы один поток в итерации завершился успешно, считаем
-            # итерацию успешной
-            iteration_success = any(
-                not hasattr(
-                    iter_obj, "error_message") or not iter_obj.error_message
-                for iter_obj in iterations
-            )
-
-            if not iteration_success:
-                failed_iterations += 1
-
-        # Формируем сообщение об ошибке или предупреждение
-        if failed_iterations == real_iteration_count and real_iteration_count > 0:
-            # Все итерации завершились с ошибкой
-            threads_info = ""
-            if (
-                real_iteration_count == 1
-                and sum(len(threads) for threads in threads_by_iteration.values()) > 1
-            ):
-                # Если была только одна итерация с несколькими потоками,
-                # указываем это
-                thread_count = sum(
-                    len(threads) for threads in threads_by_iteration.values()
-                )
-                threads_info = f" with {thread_count} parallel threads"
-
-            overall_result.add_error(
-                f"All {real_iteration_count} iterations{threads_info} failed to execute successfully"
-            )
-        elif failed_iterations > 0:
-            # Некоторые итерации завершились с ошибкой
-            overall_result.add_warning(
-                f"{failed_iterations} out of {real_iteration_count} iterations failed to execute successfully"
-            )
-
-    def _add_execution_statistics(
-        self,
-        overall_result,
-        workload_name: str,
-        execution_result: dict,
-        additional_stats: dict,
-        duration_value: float,
-    ):
-        """
-        Собирает и добавляет статистику выполнения
-
-        Args:
-            overall_result: Общий результат для добавления статистики
-            workload_name: Имя workload
-            execution_result: Результаты выполнения
-            additional_stats: Дополнительная статистика
-            duration_value: Время выполнения в секундах
-        """
-        successful_runs = execution_result["successful_runs"]
-        total_runs = execution_result["total_runs"]
-        total_execution_time = execution_result["total_execution_time"]
-
-        # Группируем итерации по их номеру для определения реального количества
-        # итераций и потоков
-        iterations_by_number = {}
-        threads_by_iteration = {}
-
-        # Анализируем все итерации и группируем их по номеру итерации
-        for iter_num, iteration in overall_result.iterations.items():
-            # Получаем номер итерации из статистики или из имени
-            real_iter_num = None
-            node_host = None
-            # actual_time = None
-
-            # Проверяем статистику
-            if hasattr(iteration, "stats") and iteration.stats:
-                for stat_key, stat_value in iteration.stats.items():
-                    if isinstance(stat_value, dict):
-                        if stat_key == "iteration_info":
-                            if "iteration_num" in stat_value:
-                                real_iter_num = stat_value["iteration_num"]
-                            if "node_host" in stat_value:
-                                node_host = stat_value["node_host"]
-                            # if "actual_execution_time" in stat_value:
-                                # actual_time = stat_value["actual_execution_time"]
-                        elif "iteration_num" in stat_value:
-                            real_iter_num = stat_value["iteration_num"]
-                        elif "chunk_num" in stat_value:  # Для обратной совместимости
-                            real_iter_num = stat_value["chunk_num"]
-
-            # Если не нашли в статистике, пробуем извлечь из имени
-            if real_iter_num is None and hasattr(
-                    iteration, "name") and iteration.name:
-                name_parts = iteration.name.split("_")
-                for i, part in enumerate(name_parts):
-                    if part == "iter" and i + 1 < len(name_parts):
-                        try:
-                            real_iter_num = int(name_parts[i + 1])
-                            break
-                        except (ValueError, IndexError):
-                            pass
-
-            # Если все еще не определили, используем номер итерации
-            if real_iter_num is None:
-                real_iter_num = iter_num
-
-            # Добавляем итерацию в группу по её номеру
-            if real_iter_num not in iterations_by_number:
-                iterations_by_number[real_iter_num] = []
-                threads_by_iteration[real_iter_num] = set()
-
-            iterations_by_number[real_iter_num].append(iteration)
-            if node_host:
-                threads_by_iteration[real_iter_num].add(node_host)
-
-        # Определяем реальное количество итераций и потоков
-        real_iteration_count = len(iterations_by_number)
-        total_thread_count = sum(
-            len(threads) for threads in threads_by_iteration.values()
-        )
-
-        # Считаем успешные итерации
-        successful_iterations = 0
-        for iter_num, iterations in iterations_by_number.items():
-            # Если хотя бы один поток в итерации завершился успешно, считаем
-            # итерацию успешной
-            iteration_success = any(
-                not hasattr(
-                    iter_obj, "error_message") or not iter_obj.error_message
-                for iter_obj in iterations
-            )
-
-            if iteration_success:
-                successful_iterations += 1
-
-        # Вычисляем фактическое время выполнения как среднее по всем итерациям
-        actual_execution_times = []
-        for iter_list in iterations_by_number.values():
-            for iteration in iter_list:
-                if hasattr(iteration, "time") and iteration.time is not None:
-                    actual_execution_times.append(iteration.time)
-                elif hasattr(iteration, "stats") and iteration.stats:
-                    for stat_key, stat_value in iteration.stats.items():
-                        if (
-                            isinstance(stat_value, dict)
-                            and "actual_execution_time" in stat_value
-                        ):
-                            actual_execution_times.append(
-                                stat_value["actual_execution_time"]
-                            )
-
-        # Вычисляем среднее фактическое время выполнения
-        avg_actual_time = (
-            sum(actual_execution_times) / len(actual_execution_times)
-            if actual_execution_times
-            else duration_value
-        )
-
-        # Базовая статистика
-        stats = {
-            "total_runs": total_runs,
-            "successful_runs": successful_runs,
-            "failed_runs": total_runs - successful_runs,
-            "total_execution_time": total_execution_time,
-            "planned_duration": duration_value,
-            "actual_duration": avg_actual_time,  # Добавляем фактическое время выполнения
-            "success_rate": successful_runs / total_runs if total_runs > 0 else 0,
-            "total_iterations": real_iteration_count,
-            "successful_iterations": successful_iterations,
-            "failed_iterations": real_iteration_count - successful_iterations,
-            "total_threads": total_thread_count,
-            "avg_threads_per_iteration": (
-                total_thread_count / real_iteration_count
-                if real_iteration_count > 0
-                else 0
-            ),
-        }
-
-        # Добавляем дополнительную статистику
-        if additional_stats:
-            stats.update(additional_stats)
-
-        # Добавляем всю статистику в результат
-        for key, value in stats.items():
-            overall_result.add_stat(workload_name, key, value)
-
     def _finalize_workload_results(
         self,
         workload_params: dict,
@@ -1432,12 +786,12 @@ class ParallelWorkloadTestBase(LoadSuiteBase):
             total_runs = execution_result["total_runs"]
 
             # Анализируем результаты и добавляем ошибки/предупреждения
-            self._analyze_execution_results(
+            self.__class__.base_executor._analyze_execution_results(
                 overall_result, successful_runs, total_runs
             )
 
             # Собираем и добавляем статистику
-            self._add_execution_statistics(
+            self.__class__.base_executor._add_execution_statistics(
                 overall_result,
                 'parallel_run',
                 execution_result,
@@ -1448,7 +802,7 @@ class ParallelWorkloadTestBase(LoadSuiteBase):
             # Финальная обработка с диагностикой (подготавливает данные для выгрузки)
             overall_result.workload_start_time = execution_result["workload_start_time"]
             self.process_workload_result_with_diagnostics(
-                overall_result, 'parallel_run', False, execution_result
+                overall_result, 'parallel_run', execution_result
             )
 
             # Финальная обработка статуса (может выбросить исключение, но результаты уже выгружены)
@@ -1466,7 +820,6 @@ class ParallelWorkloadTestBase(LoadSuiteBase):
         self,
         result: YdbCliHelper.WorkloadRunResult,
         workload_name: str,
-        check_scheme: bool = True,
         execution_result = None
         ):
         """
@@ -1539,7 +892,6 @@ class ParallelWorkloadTestBase(LoadSuiteBase):
 
             # Вычисляем время выполнения
             end_time = time_module.time()
-            start_time = result.start_time if result.start_time else end_time - 1
 
             # Добавляем дополнительную информацию для отчета
             additional_table_strings = {}
@@ -1600,6 +952,10 @@ class ParallelWorkloadTestBase(LoadSuiteBase):
                             node_error_messages.append(f"Node {node_error.node.slot} coredump {core_id}")
                     if node_error.was_oom:
                         node_error_messages.append(f"Node {node_error.node.slot} experienced OOM")
+                    if hasattr(node_error, 'verifies') and node_error.verifies > 0:
+                        node_error_messages.append(f"Node {node_error.node.host} had {node_error.verifies} VERIFY fails")
+                    if hasattr(node_error, 'sanitizer_errors') and node_error.sanitizer_errors > 0:
+                        node_error_messages.append(f"Node {node_error.node.host} has {node_error.sanitizer_errors} SAN errors")
 
                 # Собираем workload ошибки (не связанные с нодами)
                 if result.errors:

@@ -1,4 +1,5 @@
 #include "arrow_parser.h"
+#include "arrow_metadata_constants.h"
 
 #include <yt/yt/client/formats/parser.h>
 
@@ -635,6 +636,31 @@ i64 CheckAndTransformTimestamp(i64 arrowValue, arrow20::TimeUnit::type timeUnit,
 
 ////////////////////////////////////////////////////////////////////////////////
 
+std::optional<std::string> GetYtTypeFromMetadata(const std::shared_ptr<arrow20::Field>& schemaField)
+{
+    auto columnMetadata = schemaField->metadata();
+    if (!columnMetadata) {
+        return std::nullopt;
+    }
+    auto valueResult = columnMetadata->Get(YtTypeMetadataKey);
+    if (valueResult.ok()) {
+        return *valueResult;
+    }
+    return std::nullopt;
+}
+
+bool HasEmptyStructTypeInMetadata(const std::shared_ptr<arrow20::Field>& schemaField)
+{
+    return GetYtTypeFromMetadata(schemaField) == YtTypeMetadataValueEmptyStruct;
+}
+
+bool HasNestedOptionalTypeInMetadata(const std::shared_ptr<arrow20::Field>& schemaField)
+{
+    return GetYtTypeFromMetadata(schemaField) == YtTypeMetadataValueNestedOptional;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 class TArraySimpleVisitor
     : public arrow20::TypeVisitor
 {
@@ -1076,11 +1102,13 @@ public:
     TArrayCompositeVisitor(
         TLogicalTypePtr ytType,
         const std::shared_ptr<arrow20::Array>& array,
+        const std::shared_ptr<arrow20::Field>& schemaField,
         NYson::TCheckedInDebugYsonTokenWriter* writer,
         int rowIndex)
         : YTType_(DenullifyLogicalType(ytType))
         , RowIndex_(rowIndex)
         , Array_(array)
+        , SchemaField_(schemaField)
         , Writer_(writer)
     {
         YT_VERIFY(writer != nullptr);
@@ -1098,6 +1126,7 @@ public:
             TArrayCompositeVisitor visitor(
                 YTType_,
                 dictionary,
+                SchemaField_,
                 Writer_,
                 dictionaryArrayColumn->GetValueIndex(RowIndex_));
             ThrowOnError(dictionary->type()->Accept(&visitor));
@@ -1293,6 +1322,7 @@ private:
     const int RowIndex_;
 
     std::shared_ptr<arrow20::Array> Array_;
+    std::shared_ptr<arrow20::Field> SchemaField_;
     NYson::TCheckedInDebugYsonTokenWriter* Writer_ = nullptr;
 
     template <typename ArrayType>
@@ -1513,7 +1543,7 @@ private:
 
             auto listValue = array->value_slice(RowIndex_);
             for (int offset = 0; offset < listValue->length(); ++offset) {
-                TArrayCompositeVisitor visitor(YTType_->AsListTypeRef().GetElement(), listValue, Writer_, offset);
+                TArrayCompositeVisitor visitor(YTType_->AsListTypeRef().GetElement(), listValue, array->type()->field(0), Writer_, offset);
                 try {
                     ThrowOnError(listValue->type()->Accept(&visitor));
                 } catch (const std::exception& ex) {
@@ -1548,12 +1578,15 @@ private:
             auto keyList = allKeys->Slice(offset, length);
             auto valueList = allValues->Slice(offset, length);
 
+            // Map is represented as list of pairs.
+            auto pairType = array->type()->field(0)->type();
+
             Writer_->WriteBeginList();
 
             for (int offset = 0; offset < keyList->length(); ++offset) {
                 Writer_->WriteBeginList();
 
-                TArrayCompositeVisitor keyVisitor(YTType_->AsDictTypeRef().GetKey(), keyList, Writer_, offset);
+                TArrayCompositeVisitor keyVisitor(YTType_->AsDictTypeRef().GetKey(), keyList, pairType->field(0), Writer_, offset);
                 try {
                     ThrowOnError(keyList->type()->Accept(&keyVisitor));
                 } catch (const std::exception& ex) {
@@ -1564,7 +1597,7 @@ private:
 
                 Writer_->WriteItemSeparator();
 
-                TArrayCompositeVisitor valueVisitor(YTType_->AsDictTypeRef().GetValue(), valueList, Writer_, offset);
+                TArrayCompositeVisitor valueVisitor(YTType_->AsDictTypeRef().GetValue(), valueList, pairType->field(1), Writer_, offset);
                 try {
                     ThrowOnError(valueList->type()->Accept(&valueVisitor));
                 } catch (const std::exception& ex) {
@@ -1584,29 +1617,41 @@ private:
         return arrow20::Status::OK();
     }
 
-    arrow20::Status ParseStruct()
+    void ParseStructForStruct()
     {
-        if (YTType_->GetMetatype() != ELogicalMetatype::Struct) {
-            THROW_ERROR_EXCEPTION("Unexpected arrow type \"struct\" for YT metatype %Qlv",
-                YTType_->GetMetatype());
-        }
         auto array = std::static_pointer_cast<arrow20::StructArray>(Array_);
         if (array->IsNull(RowIndex_)) {
             Writer_->WriteEntity();
         } else {
             Writer_->WriteBeginList();
-            auto structFields = YTType_->AsStructTypeRef().GetFields();
-            if (std::ssize(structFields) != array->num_fields()) {
-                THROW_ERROR_EXCEPTION("The number of fields in the Arrow \"struct\" type does not match the number of fields in the YT \"struct\" type")
-                    << TErrorAttribute("arrow_field_count", array->num_fields())
-                    << TErrorAttribute("yt_field_count", std::ssize(structFields));
+
+            const auto& structFields = YTType_->AsStructTypeRef().GetFields();
+
+            if (structFields.empty()) {
+                if (!HasEmptyStructTypeInMetadata(SchemaField_)) {
+                    THROW_ERROR_EXCEPTION(
+                        "YT \"struct\" type has no fields, but no metadata found with the key \'%v\' and the value \'%v\'",
+                        YtTypeMetadataKey,
+                        YtTypeMetadataValueEmptyStruct);
+                }
+                if (array->num_fields() != 1 && array->field(0)->type()->Equals(arrow20::null())) {
+                    THROW_ERROR_EXCEPTION("YT \"struct\" type has no fields, but Arrow \"struct\" type does not have a single dummy null field");
+                }
+            } else {
+                if (std::ssize(structFields) != array->num_fields()) {
+                    THROW_ERROR_EXCEPTION("The number of fields in the Arrow \"struct\" type does not match the number of fields in the YT \"struct\" type")
+                        << TErrorAttribute("arrow_field_count", array->num_fields())
+                        << TErrorAttribute("yt_field_count", std::ssize(structFields));
+                }
             }
+
+            const auto& structType = std::static_pointer_cast<arrow20::StructType>(array->type());
             for (const auto& field : structFields) {
                 auto arrowField = array->GetFieldByName(field.Name);
                 if (!arrowField) {
                     THROW_ERROR_EXCEPTION("Field %Qv is not found in arrow type \"struct\"", field.Name);
                 }
-                TArrayCompositeVisitor visitor(field.Type, arrowField, Writer_, RowIndex_);
+                TArrayCompositeVisitor visitor(field.Type, arrowField, structType->GetFieldByName(field.Name), Writer_, RowIndex_);
                 try {
                     ThrowOnError(arrowField->type()->Accept(&visitor));
                 } catch (const std::exception& ex) {
@@ -1618,6 +1663,53 @@ private:
             }
 
             Writer_->WriteEndList();
+        }
+    }
+
+    void ParseStructForOptional()
+    {
+        auto array = std::static_pointer_cast<arrow20::StructArray>(Array_);
+        if (array->IsNull(RowIndex_)) {
+            Writer_->WriteEntity();
+        } else {
+            Writer_->WriteBeginList();
+            if (!HasNestedOptionalTypeInMetadata(SchemaField_)) {
+                THROW_ERROR_EXCEPTION(
+                    "The element of YT \"optional\" type is nullable, but no metadata found with the key \'%v\' and the value \'%v\'",
+                    YtTypeMetadataKey,
+                    YtTypeMetadataValueNestedOptional);
+            }
+            if (array->num_fields() != 1) {
+                THROW_ERROR_EXCEPTION("The number of fields in the Arrow \"struct\" type is not equal to 1 for the YT \"optional\" type")
+                    << TErrorAttribute("arrow_field_count", array->num_fields());
+            }
+
+            auto arrowField = array->field(0);
+            TArrayCompositeVisitor visitor(YTType_->GetElement(), arrowField, array->type()->field(0), Writer_, RowIndex_);
+            try {
+                ThrowOnError(arrowField->type()->Accept(&visitor));
+            } catch (const std::exception& ex) {
+                THROW_ERROR_EXCEPTION("Failed to parse arrow struct field for the YT \"optional\" type")
+                    << ex;
+            }
+
+            Writer_->WriteItemSeparator();
+            Writer_->WriteEndList();
+        }
+    }
+
+    arrow20::Status ParseStruct()
+    {
+        switch (YTType_->GetMetatype()) {
+            case ELogicalMetatype::Struct:
+                ParseStructForStruct();
+                break;
+            case ELogicalMetatype::Optional:
+                ParseStructForOptional();
+                break;
+            default:
+                THROW_ERROR_EXCEPTION("Unexpected arrow type \"struct\" for YT metatype %Qlv",
+                    YTType_->GetMetatype());
         }
         return arrow20::Status::OK();
     }
@@ -1650,6 +1742,7 @@ void PrepareArrayForComplexType(
     const TLogicalTypePtr& denullifiedLogicalType,
     const std::shared_ptr<TChunkedOutputStream>& bufferForStringLikeValues,
     const std::shared_ptr<arrow20::Array>& column,
+    const std::shared_ptr<arrow20::Field>& schemaField,
     TUnversionedRowValues& rowValues,
     int columnId)
 {
@@ -1699,6 +1792,16 @@ void PrepareArrayForComplexType(
             break;
 
         case ELogicalMetatype::Optional:
+            CheckArrowType(
+                metatype,
+                {
+                    arrow20::Type::STRUCT,
+                    arrow20::Type::BINARY
+                },
+                column->type()->name(),
+                column->type_id());
+            break;
+
         case ELogicalMetatype::Tuple:
         case ELogicalMetatype::VariantTuple:
         case ELogicalMetatype::VariantStruct:
@@ -1735,7 +1838,7 @@ void PrepareArrayForComplexType(
                 TBufferOutput out(valueBuffer);
                 NYson::TCheckedInDebugYsonTokenWriter writer(&out);
 
-                TArrayCompositeVisitor visitor(denullifiedLogicalType, column, &writer, rowIndex);
+                TArrayCompositeVisitor visitor(denullifiedLogicalType, column, schemaField, &writer, rowIndex);
 
                 ThrowOnError(column->type()->Accept(&visitor));
 
@@ -1760,6 +1863,7 @@ void PrepareArray(
     const TLogicalTypePtr& denullifiedLogicalType,
     const std::shared_ptr<TChunkedOutputStream>& bufferForStringLikeValues,
     const std::shared_ptr<arrow20::Array>& column,
+    const std::shared_ptr<arrow20::Field>& schemaField,
     TUnversionedRowValues& rowValues,
     int columnId)
 {
@@ -1767,7 +1871,7 @@ void PrepareArray(
         auto dictionaryArrayColumn = std::static_pointer_cast<arrow20::DictionaryArray>(column);
         auto dictionary = dictionaryArrayColumn->dictionary();
         TUnversionedRowValues dictionaryValues(dictionary->length());
-        PrepareArray(denullifiedLogicalType, bufferForStringLikeValues, dictionary, dictionaryValues, columnId);
+        PrepareArray(denullifiedLogicalType, bufferForStringLikeValues, dictionary, schemaField, dictionaryValues, columnId);
 
         for (int offset = 0; offset < std::ssize(rowValues); ++offset) {
             if (dictionaryArrayColumn->IsNull(offset)) {
@@ -1802,6 +1906,7 @@ void PrepareArray(
                     denullifiedLogicalType,
                     bufferForStringLikeValues,
                     column,
+                    schemaField,
                     rowValues,
                     columnId);
 
@@ -1869,6 +1974,7 @@ public:
                     denullifiedColumnType,
                     bufferForStringLikeValues,
                     batch->column(columnIndex),
+                    batch->schema()->field(columnIndex),
                     rowsValues[columnIndex],
                     columnId);
             } catch (const std::exception& ex) {

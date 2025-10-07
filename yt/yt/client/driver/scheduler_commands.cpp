@@ -552,6 +552,11 @@ void TListJobsCommand::Register(TRegistrar registrar)
         .Optional(/*init*/ false);
 
     registrar.ParameterWithUniversalAccessor<TJobId>(
+        "main_job_id",
+        [] (TThis* command) -> auto& { return command->Options.MainJobId; })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<TJobId>(
         "job_competition_id",
         [] (TThis* command) -> auto& { return command->Options.JobCompetitionId; })
         .Optional(/*init*/ false);

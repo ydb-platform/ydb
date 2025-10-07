@@ -40,6 +40,7 @@ struct TTopicInfo {
     THashMap<ui32, ui64> PartitionToTablet;
 
     TIntrusiveConstPtr<TSchemeCacheNavigate::TPQGroupInfo> PQInfo;
+    TString RealPath;
     THashSet<ui32> PartitionsToRequest;
 
     //fetchRequest part
@@ -194,6 +195,7 @@ public:
 
                     auto& topicInfo = TopicInfo[topicPath];
                     topicInfo.PQInfo = info.Info;
+                    topicInfo.RealPath = std::move(info.RealPath);
                     break;
                 }
                 default:
@@ -547,16 +549,10 @@ public:
     }
 
     std::pair<const TString&, TTopicInfo&> GetTopicInfo(const TString& topicPath) {
-        auto* topic = &topicPath;
-        auto cdcTopicNameIt = CdcPathToPrivateTopicPath.find(*topic);
-        if (cdcTopicNameIt != CdcPathToPrivateTopicPath.end()) {
-            topic = &cdcTopicNameIt->second;
-        }
+        auto it = TopicInfo.find(CanonizePath(topicPath));
+        AFL_ENSURE(it != TopicInfo.end())("topic", topicPath);
 
-        auto it = TopicInfo.find(CanonizePath(*topic));
-        AFL_ENSURE(it != TopicInfo.end())("topic", *topic);
-
-        return {*topic, it->second};
+        return {it->second.RealPath, it->second};
     }
 
     std::unique_ptr<TEvPersQueue::TEvRequest> CreateReadRequest(const TString& topic, const TPartitionFetchRequest& fetchRequest) {

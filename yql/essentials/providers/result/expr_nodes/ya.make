@@ -1,5 +1,7 @@
 LIBRARY()
 
+ENABLE(YQL_STYLE_CPP)
+
 SRCS(
     yql_res_expr_nodes.cpp
 )

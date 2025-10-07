@@ -1,5 +1,7 @@
 LIBRARY()
 
+ENABLE(YQL_STYLE_CPP)
+
 SRCS(
     yql_structured_token.cpp
     yql_structured_token.h

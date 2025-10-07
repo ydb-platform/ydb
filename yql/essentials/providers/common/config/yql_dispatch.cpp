@@ -16,22 +16,22 @@ namespace NPrivate {
 
 template <>
 TParser<TString> GetDefaultParser<TString>() {
-    return [] (const TString& str) {
+    return [](const TString& str) {
         return str;
     };
 }
 
-template<>
+template <>
 TParser<bool> GetDefaultParser<bool>() {
     // Special handle of empty value to properly set setting for empty pragmas like yt.UseFeautre;
-    return [] (const TString& str) {
+    return [](const TString& str) {
         return str ? FromString<bool>(str) : true;
     };
 }
 
 template <>
 TParser<TGUID> GetDefaultParser<TGUID>() {
-    return [] (const TString& str) {
+    return [](const TString& str) {
         TGUID guid;
         if (!GetGuid(str, guid)) {
             throw yexception() << "Bad GUID format";
@@ -40,53 +40,49 @@ TParser<TGUID> GetDefaultParser<TGUID>() {
     };
 }
 
-template<>
+template <>
 TParser<NSize::TSize> GetDefaultParser<NSize::TSize>() {
-    return [] (const TString& str) -> NSize::TSize {
+    return [](const TString& str) -> NSize::TSize {
         return NSize::ParseSize(str); // Support suffixes k, m, g, ...
     };
 }
 
-template<>
+template <>
 TParser<TInstant> GetDefaultParser<TInstant>() {
-    return [] (const TString& str) {
+    return [](const TString& str) {
         TInstant val;
-        if (!TInstant::TryParseIso8601(str, val)
-            && !TInstant::TryParseRfc822(str, val)
-            && !TInstant::TryParseHttp(str, val)
-            && !TInstant::TryParseX509(str, val)
-        ) {
+        if (!TInstant::TryParseIso8601(str, val) && !TInstant::TryParseRfc822(str, val) && !TInstant::TryParseHttp(str, val) && !TInstant::TryParseX509(str, val)) {
             throw yexception() << "Bad date/time format";
         }
         return val;
     };
 }
 
-#define YQL_DEFINE_PRIMITIVE_SETTING_PARSER(type)                       \
-    template<>                                                          \
-    TParser<type> GetDefaultParser<type>() {                            \
-        return [] (const TString& s) { return FromString<type>(s); };   \
+#define YQL_DEFINE_PRIMITIVE_SETTING_PARSER(type)                    \
+    template <>                                                      \
+    TParser<type> GetDefaultParser<type>() {                         \
+        return [](const TString& s) { return FromString<type>(s); }; \
     }
 
-#define YQL_DEFINE_CONTAINER_SETTING_PARSER(type)                       \
-    template <>                                                         \
-    TParser<type> GetDefaultParser<type>() {                            \
-        return [] (const TString& str) {                                \
-            type res;                                                   \
-            StringSplitter(str).SplitBySet(",;| ").AddTo(&res);         \
-            for (auto& s: res) {                                        \
-                if (s.empty()) {                                        \
-                    throw yexception() << "Empty value item";           \
-                }                                                       \
-            }                                                           \
-            return res;                                                 \
-        };                                                              \
+#define YQL_DEFINE_CONTAINER_SETTING_PARSER(type)               \
+    template <>                                                 \
+    TParser<type> GetDefaultParser<type>() {                    \
+        return [](const TString& str) {                         \
+            type res;                                           \
+            StringSplitter(str).SplitBySet(",;| ").AddTo(&res); \
+            for (auto& s : res) {                               \
+                if (s.empty()) {                                \
+                    throw yexception() << "Empty value item";   \
+                }                                               \
+            }                                                   \
+            return res;                                         \
+        };                                                      \
     }
 
 YQL_PRIMITIVE_SETTING_PARSER_TYPES(YQL_DEFINE_PRIMITIVE_SETTING_PARSER)
 YQL_CONTAINER_SETTING_PARSER_TYPES(YQL_DEFINE_CONTAINER_SETTING_PARSER)
 
-} // NPrivate
+} // namespace NPrivate
 
 namespace NCommon {
 
@@ -107,14 +103,14 @@ bool TSettingDispatcher::Dispatch(const TString& cluster, const TString& name, c
             }
             if (!ValidClusters.contains(cluster)) {
                 TStringBuilder nearClusterMsg;
-                for (auto& item: ValidClusters) {
+                for (auto& item : ValidClusters) {
                     if (NLevenshtein::Distance(cluster, item) < DefaultMistypeDistance) {
                         nearClusterMsg << ", did you mean " << item.Quote() << '?';
                         break;
                     }
                 }
                 return errorCallback(TStringBuilder() << "Unknown cluster name " << cluster.Quote()
-                    << " for setting " << name.Quote() << nearClusterMsg, true);
+                                                      << " for setting " << name.Quote() << nearClusterMsg, true);
             }
         }
         if (!value && !handler->IsRuntime()) {
@@ -123,15 +119,15 @@ bool TSettingDispatcher::Dispatch(const TString& cluster, const TString& name, c
 
         bool validateOnly = true;
         switch (stage) {
-        case EStage::RUNTIME:
-            validateOnly = !handler->IsRuntime();
-            break;
-        case EStage::STATIC:
-            validateOnly = handler->IsRuntime();
-            break;
-        case EStage::CONFIG:
-            validateOnly = false;
-            break;
+            case EStage::RUNTIME:
+                validateOnly = !handler->IsRuntime();
+                break;
+            case EStage::STATIC:
+                validateOnly = handler->IsRuntime();
+                break;
+            case EStage::CONFIG:
+                validateOnly = false;
+                break;
         }
 
         return handler->Handle(cluster, value, validateOnly, errorCallback);
@@ -142,7 +138,7 @@ bool TSettingDispatcher::Dispatch(const TString& cluster, const TString& name, c
         }
 
         TStringBuilder nearHandlerMsg;
-        for (auto& item: Handlers_) {
+        for (auto& item : Handlers_) {
             if (NLevenshtein::Distance(normalizedName, item.first) < DefaultMistypeDistance) {
                 nearHandlerMsg << ", did you mean " << item.second->GetDisplayName().Quote() << '?';
                 break;
@@ -153,13 +149,13 @@ bool TSettingDispatcher::Dispatch(const TString& cluster, const TString& name, c
 }
 
 void TSettingDispatcher::FreezeDefaults() {
-    for (auto& item: Handlers_) {
+    for (auto& item : Handlers_) {
         item.second->FreezeDefault();
     }
 }
 
 void TSettingDispatcher::Restore() {
-    for (auto& item: Handlers_) {
+    for (auto& item : Handlers_) {
         item.second->Restore(ALL_CLUSTERS);
     }
 }
@@ -177,7 +173,7 @@ const THashSet<TString>& TSettingDispatcher::GetValidClusters() const {
 }
 
 TSettingDispatcher::TErrorCallback TSettingDispatcher::GetDefaultErrorCallback() {
-    return [] (const TString& msg, bool isError) -> bool {
+    return [](const TString& msg, bool isError) -> bool {
         if (isError) {
             YQL_LOG(ERROR) << msg;
             throw yexception() << msg;
@@ -198,6 +194,5 @@ TSettingDispatcher::TErrorCallback TSettingDispatcher::GetErrorCallback(TPositio
     };
 }
 
-
-} // NCommon
-} // NYql
+} // namespace NCommon
+} // namespace NYql

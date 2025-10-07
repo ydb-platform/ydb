@@ -1,5 +1,7 @@
 LIBRARY()
 
+ENABLE(YQL_STYLE_CPP)
+
 SRCS(
     yql_pure_provider.cpp
     yql_pure_provider.h

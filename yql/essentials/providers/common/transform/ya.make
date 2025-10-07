@@ -1,5 +1,7 @@
 LIBRARY()
 
+ENABLE(YQL_STYLE_CPP)
+
 SRCS(
     yql_exec.cpp
     yql_lazy_init.cpp

@@ -22,7 +22,6 @@
 #include <util/generic/maybe.h>
 #include <util/generic/algorithm.h>
 
-
 namespace NYql {
 
 namespace NPrivate {
@@ -32,67 +31,66 @@ using TParser = std::function<TType(const TString&)>;
 
 template <typename TType>
 TParser<TType> GetDefaultParser() {
-    return [] (const TString&) -> TType { throw yexception() << "Unsupported parser"; };
+    return [](const TString&) -> TType { throw yexception() << "Unsupported parser"; };
 }
 
 template <>
 TParser<TString> GetDefaultParser<TString>();
 
-template<>
+template <>
 TParser<bool> GetDefaultParser<bool>();
 
 template <>
 TParser<TGUID> GetDefaultParser<TGUID>();
 
-template<>
+template <>
 TParser<NSize::TSize> GetDefaultParser<NSize::TSize>();
 
-template<>
+template <>
 TParser<TInstant> GetDefaultParser<TInstant>();
 
-
-#define YQL_PRIMITIVE_SETTING_PARSER_TYPES(XX)  \
-    XX(ui8)                                     \
-    XX(ui16)                                    \
-    XX(ui32)                                    \
-    XX(ui64)                                    \
-    XX(i8)                                      \
-    XX(i16)                                     \
-    XX(i32)                                     \
-    XX(i64)                                     \
-    XX(float)                                   \
-    XX(double)                                  \
+#define YQL_PRIMITIVE_SETTING_PARSER_TYPES(XX) \
+    XX(ui8)                                    \
+    XX(ui16)                                   \
+    XX(ui32)                                   \
+    XX(ui64)                                   \
+    XX(i8)                                     \
+    XX(i16)                                    \
+    XX(i32)                                    \
+    XX(i64)                                    \
+    XX(float)                                  \
+    XX(double)                                 \
     XX(TDuration)
 
-#define YQL_CONTAINER_SETTING_PARSER_TYPES(XX)  \
-    XX(TVector<TString>)                        \
-    XX(TSet<TString>)                           \
+#define YQL_CONTAINER_SETTING_PARSER_TYPES(XX) \
+    XX(TVector<TString>)                       \
+    XX(TSet<TString>)                          \
     XX(THashSet<TString>)
 
-#define YQL_DECLARE_SETTING_PARSER(type)    \
-    template<>                              \
+#define YQL_DECLARE_SETTING_PARSER(type) \
+    template <>                          \
     TParser<type> GetDefaultParser<type>();
 
 YQL_PRIMITIVE_SETTING_PARSER_TYPES(YQL_DECLARE_SETTING_PARSER)
 YQL_CONTAINER_SETTING_PARSER_TYPES(YQL_DECLARE_SETTING_PARSER)
 
-template<typename TType>
+template <typename TType>
 TMaybe<TType> GetValue(const NCommon::TConfSetting<TType, NCommon::EConfSettingType::StaticPerCluster>& setting, const TString& cluster) {
     return setting.Get(cluster);
 }
 
-template<typename TType>
+template <typename TType>
 TMaybe<TType> GetValue(const NCommon::TConfSetting<TType, NCommon::EConfSettingType::Dynamic>& setting, const TString& cluster) {
     return setting.Get(cluster);
 }
 
-template<typename TType>
+template <typename TType>
 TMaybe<TType> GetValue(const NCommon::TConfSetting<TType, NCommon::EConfSettingType::Static>& setting, const TString& cluster) {
     Y_UNUSED(cluster);
     return setting.Get();
 }
 
-}
+} // namespace NPrivate
 
 namespace NCommon {
 
@@ -118,7 +116,7 @@ public:
         }
 
         const TString& GetDisplayName() const {
-            return Name_ ;
+            return Name_;
         }
 
         virtual bool Handle(const TString& cluster, const TMaybe<TString>& value, bool validateOnly, const TErrorCallback& errorCallback) = 0;
@@ -133,7 +131,7 @@ public:
     };
 
     template <typename TType, EConfSettingType SettingType>
-    class TSettingHandlerImpl : public TSettingHandler {
+    class TSettingHandlerImpl: public TSettingHandler {
     public:
         using TValueCallback = std::function<void(const TString&, TType)>;
 
@@ -155,7 +153,7 @@ public:
                 try {
                     TType v = Parser_(*value);
 
-                    for (auto& validate: Validators_) {
+                    for (auto& validate : Validators_) {
                         validate(cluster, v);
                     }
                     if (!validateOnly) {
@@ -258,7 +256,7 @@ public:
         }
 
         TSettingHandlerImpl& GlobalOnly() {
-            Validators_.push_back([] (const TString& cluster, TType) {
+            Validators_.push_back([](const TString& cluster, TType) {
                 if (cluster != NCommon::ALL_CLUSTERS) {
                     throw yexception() << "Option cannot be used with specific cluster";
                 }
@@ -297,7 +295,7 @@ public:
         }
 
         TSettingHandlerImpl& ValueSetterWithRestore(TValueCallback&& hook) {
-            ValueSetter_ = [this, hook = std::move(hook)] (const TString& cluster, TType value) {
+            ValueSetter_ = [this, hook = std::move(hook)](const TString& cluster, TType value) {
                 if (Default_) {
                     Restore(cluster);
                 }
@@ -307,7 +305,7 @@ public:
         }
 
         TSettingHandlerImpl& ValueSetterWithRestore(const TValueCallback& hook) {
-            ValueSetter_ = [this, hook] (const TString& cluster, TType value) {
+            ValueSetter_ = [this, hook](const TString& cluster, TType value) {
                 if (Default_) {
                     Restore(cluster);
                 }
@@ -377,7 +375,7 @@ public:
     template <class TContainer, typename TFilter>
     void Dispatch(const TString& cluster, const TContainer& clusterValues, const TFilter& filter) {
         auto errorCallback = GetDefaultErrorCallback();
-        for (auto& v: clusterValues) {
+        for (auto& v : clusterValues) {
             if (filter(v)) {
                 Dispatch(cluster, v.GetName(), v.GetValue(), EStage::CONFIG, errorCallback);
             }
@@ -387,7 +385,7 @@ public:
     template <class TContainer>
     void Dispatch(const TString& cluster, const TContainer& clusterValues) {
         auto errorCallback = GetDefaultErrorCallback();
-        for (auto& v: clusterValues) {
+        for (auto& v : clusterValues) {
             Dispatch(cluster, v.GetName(), v.GetValue(), EStage::CONFIG, errorCallback);
         }
     }

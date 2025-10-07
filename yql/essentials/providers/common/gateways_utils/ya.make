@@ -1,5 +1,7 @@
 LIBRARY()
 
+ENABLE(YQL_STYLE_CPP)
+
     SRCS(
         gateways_utils.cpp
     )

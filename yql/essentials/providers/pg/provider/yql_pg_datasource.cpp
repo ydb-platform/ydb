@@ -12,13 +12,14 @@ namespace NYql {
 
 using namespace NNodes;
 
-class TPgDataSourceImpl : public TDataProviderBase {
+class TPgDataSourceImpl: public TDataProviderBase {
 public:
     TPgDataSourceImpl(TPgState::TPtr state)
         : State_(state)
         , TypeAnnotationTransformer_(CreatePgDataSourceTypeAnnotationTransformer(state))
         , DqIntegration_(CreatePgDqIntegration(State_))
-    {}
+    {
+    }
 
     TStringBuf GetName() const override {
         return PgProviderName;
@@ -70,8 +71,7 @@ public:
         }
 
         const auto& keyArg = maybeKey.Cast().Ref().Head();
-        if (!keyArg.IsList() || keyArg.ChildrenSize() != 2U
-            || !keyArg.Head().IsAtom("table") || !keyArg.Tail().IsCallable(TCoString::CallableName())) {
+        if (!keyArg.IsList() || keyArg.ChildrenSize() != 2U || !keyArg.Head().IsAtom("table") || !keyArg.Tail().IsCallable(TCoString::CallableName())) {
             ctx.AddError(TIssue(ctx.GetPosition(keyArg.Pos()), TStringBuilder() << "Expected single table name"));
             return nullptr;
         }
@@ -83,7 +83,8 @@ public:
 
         return Build<TCoRight>(ctx, read.Pos())
             .Input(newRead)
-            .Done().Ptr();
+            .Done()
+            .Ptr();
     }
 
     bool ValidateParameters(TExprNode& node, TExprContext& ctx, TMaybe<TString>& cluster) override {
@@ -125,4 +126,4 @@ TIntrusivePtr<IDataProvider> CreatePgDataSource(TPgState::TPtr state) {
     return MakeIntrusive<TPgDataSourceImpl>(state);
 }
 
-}
+} // namespace NYql

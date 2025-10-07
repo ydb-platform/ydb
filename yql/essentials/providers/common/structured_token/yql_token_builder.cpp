@@ -2,7 +2,6 @@
 
 namespace NYql {
 TStructuredTokenBuilder::TStructuredTokenBuilder() {
-
 }
 
 TStructuredTokenBuilder::TStructuredTokenBuilder(const TStructuredToken& data)
@@ -92,7 +91,7 @@ bool TStructuredTokenParser::HasServiceAccountIdAuth() const {
     return Data_.HasField("sa_id");
 }
 
-bool TStructuredTokenParser::GetServiceAccountIdAuth(TString& accountId, TString& accountIdSignature) const  {
+bool TStructuredTokenParser::GetServiceAccountIdAuth(TString& accountId, TString& accountIdSignature) const {
     TString accountIdSignatureReference;
     return GetServiceAccountIdAuth(accountId, accountIdSignature, accountIdSignatureReference);
 }
@@ -218,4 +217,4 @@ TString ComposeStructuredTokenJsonForTokenAuthWithSecret(const TString& tokenSec
     return result.ToJson();
 }
 
-}
+} // namespace NYql

@@ -9,13 +9,14 @@ namespace NYql {
 
 using namespace NNodes;
 
-class TPgDataSinkImpl : public TDataProviderBase {
+class TPgDataSinkImpl: public TDataProviderBase {
 public:
     TPgDataSinkImpl(TPgState::TPtr state)
         : State_(state)
         , TypeAnnotationTransformer_(CreatePgDataSinkTypeAnnotationTransformer(state))
         , ExecutionTransformer_(CreatePgDataSinkExecTransformer(state))
-    {}
+    {
+    }
 
     TStringBuf GetName() const override {
         return PgProviderName;
@@ -73,4 +74,4 @@ TIntrusivePtr<IDataProvider> CreatePgDataSink(TPgState::TPtr state) {
     return MakeIntrusive<TPgDataSinkImpl>(state);
 }
 
-}
+} // namespace NYql

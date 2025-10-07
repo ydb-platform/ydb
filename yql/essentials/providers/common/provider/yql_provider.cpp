@@ -16,86 +16,80 @@
 #include <util/generic/utility.h>
 #include <util/string/join.h>
 
-
 namespace NYql {
 namespace NCommon {
 
 using namespace NNodes;
 
 namespace {
-    constexpr std::array<std::string_view, 8> FormatsForInput = {
-        "csv_with_names"sv,
-        "tsv_with_names"sv,
-        "json_list"sv,
-        "json"sv,
-        "raw"sv,
-        "json_as_string"sv,
-        "json_each_row"sv,
-        "parquet"sv
-    };
-    constexpr std::array<std::string_view, 7> FormatsForOutput = {
-        "csv_with_names"sv,
-        "tsv_with_names"sv,
-        "json_list"sv,
-        "json"sv,
-        "raw"sv,
-        "json_each_row"sv,
-        "parquet"sv
-    };
-    constexpr std::array<std::string_view, 6> Compressions = {
-        "gzip"sv,
-        "zstd"sv,
-        "lz4"sv,
-        "brotli"sv,
-        "bzip2"sv,
-        "xz"sv
-    };
-    constexpr std::array<std::string_view, 7> IntervalUnits = {
-        "MICROSECONDS"sv,
-        "MILLISECONDS"sv,
-        "SECONDS"sv,
-        "MINUTES"sv,
-        "HOURS"sv,
-        "DAYS"sv,
-        "WEEKS"sv
-    };
-    constexpr std::array<std::string_view, 2> DateTimeFormatNames = {
-        "POSIX"sv,
-        "ISO"sv
-    };
+constexpr std::array<std::string_view, 8> FormatsForInput = {
+    "csv_with_names"sv,
+    "tsv_with_names"sv,
+    "json_list"sv,
+    "json"sv,
+    "raw"sv,
+    "json_as_string"sv,
+    "json_each_row"sv,
+    "parquet"sv};
+constexpr std::array<std::string_view, 7> FormatsForOutput = {
+    "csv_with_names"sv,
+    "tsv_with_names"sv,
+    "json_list"sv,
+    "json"sv,
+    "raw"sv,
+    "json_each_row"sv,
+    "parquet"sv};
+constexpr std::array<std::string_view, 6> Compressions = {
+    "gzip"sv,
+    "zstd"sv,
+    "lz4"sv,
+    "brotli"sv,
+    "bzip2"sv,
+    "xz"sv};
+constexpr std::array<std::string_view, 7> IntervalUnits = {
+    "MICROSECONDS"sv,
+    "MILLISECONDS"sv,
+    "SECONDS"sv,
+    "MINUTES"sv,
+    "HOURS"sv,
+    "DAYS"sv,
+    "WEEKS"sv};
+constexpr std::array<std::string_view, 2> DateTimeFormatNames = {
+    "POSIX"sv,
+    "ISO"sv};
 
-    constexpr std::array<std::string_view, 5> TimestampFormatNames = {
-        "POSIX"sv,
-        "ISO"sv,
-        "UNIX_TIME_MILLISECONDS"sv,
-        "UNIX_TIME_SECONDS"sv,
-        "UNIX_TIME_MICROSECONDS"sv
-    };
+constexpr std::array<std::string_view, 5> TimestampFormatNames = {
+    "POSIX"sv,
+    "ISO"sv,
+    "UNIX_TIME_MILLISECONDS"sv,
+    "UNIX_TIME_SECONDS"sv,
+    "UNIX_TIME_MICROSECONDS"sv};
 
-    TCoAtom InferIndexName(TCoAtomList key, TExprContext& ctx) {
-        static const TString end = "_idx";
-        static const TString delimiter = "_";
+TCoAtom InferIndexName(TCoAtomList key, TExprContext& ctx) {
+    static const TString end = "_idx";
+    static const TString delimiter = "_";
 
-        size_t sz = end.size();
-        for (const auto& n: key)
-            sz += n.Value().size() + delimiter.size();
-
-        TString name(Reserve(sz));
-        for (const auto& n: key) {
-            name += n.Value() + delimiter;
-        }
-        name += end;
-
-        return Build<TCoAtom>(ctx, key.Pos())
-            .Value(name)
-            .Done();
+    size_t sz = end.size();
+    for (const auto& n : key) {
+        sz += n.Value().size() + delimiter.size();
     }
+
+    TString name(Reserve(sz));
+    for (const auto& n : key) {
+        name += n.Value() + delimiter;
+    }
+    name += end;
+
+    return Build<TCoAtom>(ctx, key.Pos())
+        .Value(name)
+        .Done();
+}
 } // namespace
 
 bool TCommitSettings::EnsureModeEmpty(TExprContext& ctx) {
     if (Mode) {
         ctx.AddError(TIssue(ctx.GetPosition(Pos), TStringBuilder()
-            << "Unsupported mode:" << Mode.Cast().Value()));
+                                                      << "Unsupported mode:" << Mode.Cast().Value()));
         return false;
     }
 
@@ -105,7 +99,7 @@ bool TCommitSettings::EnsureModeEmpty(TExprContext& ctx) {
 bool TCommitSettings::EnsureEpochEmpty(TExprContext& ctx) {
     if (Epoch) {
         ctx.AddError(TIssue(ctx.GetPosition(Pos), TStringBuilder()
-            << "Epochs are unsupported."));
+                                                      << "Epochs are unsupported."));
         return false;
     }
 
@@ -115,7 +109,7 @@ bool TCommitSettings::EnsureEpochEmpty(TExprContext& ctx) {
 bool TCommitSettings::EnsureOtherEmpty(TExprContext& ctx) {
     if (!Other.Empty()) {
         ctx.AddError(TIssue(ctx.GetPosition(Pos), TStringBuilder()
-            << "Unsupported setting:" << Other.Item(0).Name().Value()));
+                                                      << "Unsupported setting:" << Other.Item(0).Name().Value()));
         return false;
     }
 
@@ -125,16 +119,15 @@ bool TCommitSettings::EnsureOtherEmpty(TExprContext& ctx) {
 TCoNameValueTupleList TCommitSettings::BuildNode(TExprContext& ctx) const {
     TVector<TExprBase> settings;
 
-    auto addSettings = [this, &settings, &ctx] (const TString& name, TMaybeNode<TExprBase> value) {
+    auto addSettings = [this, &settings, &ctx](const TString& name, TMaybeNode<TExprBase> value) {
         if (value) {
-
             auto node = Build<TCoNameValueTuple>(ctx, Pos)
-                .Name().Build(name)
-                .Value(value.Cast())
-                .Done();
+                            .Name()
+                            .Build(name)
+                            .Value(value.Cast())
+                            .Done();
 
             settings.push_back(node);
-
         }
     };
 
@@ -146,8 +139,8 @@ TCoNameValueTupleList TCommitSettings::BuildNode(TExprContext& ctx) const {
     }
 
     auto ret = Build<TCoNameValueTupleList>(ctx, Pos)
-        .Add(settings)
-        .Done();
+                   .Add(settings)
+                   .Done();
 
     return ret;
 }
@@ -188,8 +181,8 @@ TVector<TString> GetResOrPullColumnHints(const TExprNode& node) {
         if (type->GetKind() != ETypeAnnotationKind::EmptyList) {
             auto structType = type->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
             for (ui32 i = 0; i < structType->GetSize(); ++i) {
-               auto field = setting->Child(1)->Child(i);
-               columns.push_back(TString(field->Content()));
+                auto field = setting->Child(1)->Child(i);
+                columns.push_back(TString(field->Content()));
             }
         }
     }
@@ -203,12 +196,12 @@ TString FullTableName(const TStringBuf& cluster, const TStringBuf& table) {
 IDataProvider::TFillSettings GetFillSettings(const TExprNode& node) {
     IDataProvider::TFillSettings fillSettings;
     fillSettings.AllResultsBytesLimit = node.Child(1)->Content().empty()
-        ? Nothing()
-        : TMaybe<ui64>(FromString<ui64>(node.Child(1)->Content()));
+                                            ? Nothing()
+                                            : TMaybe<ui64>(FromString<ui64>(node.Child(1)->Content()));
 
     fillSettings.RowsLimitPerWrite = node.Child(2)->Content().empty()
-        ? Nothing()
-        : TMaybe<ui64>(FromString<ui64>(node.Child(2)->Content()));
+                                         ? Nothing()
+                                         : TMaybe<ui64>(FromString<ui64>(node.Child(2)->Content()));
 
     fillSettings.Format = (IDataProvider::EResultFormat)FromString<ui32>(node.Child(5)->Content());
     fillSettings.FormatDetails = node.Child(3)->Content();
@@ -249,16 +242,16 @@ TWriteTableSettings ParseWriteTableSettings(TExprList node, TExprContext& ctx) {
             if (name == "mode") {
                 YQL_ENSURE(tuple.Value().Maybe<TCoAtom>());
                 mode = tuple.Value().Cast<TCoAtom>();
-            } else if (name == "columns")  {
+            } else if (name == "columns") {
                 YQL_ENSURE(tuple.Value().Maybe<TExprList>());
                 columns = tuple.Value().Cast<TExprList>();
-            } else if (name == "primarykey")  {
+            } else if (name == "primarykey") {
                 YQL_ENSURE(tuple.Value().Maybe<TCoAtomList>());
                 primaryKey = tuple.Value().Cast<TCoAtomList>();
-            } else if (name == "partitionby")  {
+            } else if (name == "partitionby") {
                 YQL_ENSURE(tuple.Value().Maybe<TCoAtomList>());
                 partitionBy = tuple.Value().Cast<TCoAtomList>();
-            } else if (name == "orderby")  {
+            } else if (name == "orderby") {
                 YQL_ENSURE(tuple.Value().Maybe<TCoNameValueTupleList>());
                 orderBy = tuple.Value().Cast<TCoNameValueTupleList>();
             } else if (name == "filter") {
@@ -357,24 +350,24 @@ TWriteTableSettings ParseWriteTableSettings(TExprList node, TExprContext& ctx) {
     }
 
     const auto& otherSettings = Build<TCoNameValueTupleList>(ctx, node.Pos())
-        .Add(other)
-        .Done();
+                                    .Add(other)
+                                    .Done();
 
     const auto& idx = Build<TCoIndexList>(ctx, node.Pos())
-        .Add(indexes)
-        .Done();
+                          .Add(indexes)
+                          .Done();
 
     const auto& cfs = Build<TCoChangefeedList>(ctx, node.Pos())
-        .Add(changefeeds)
-        .Done();
+                          .Add(changefeeds)
+                          .Done();
 
     const auto& tableProfileSettings = Build<TCoNameValueTupleList>(ctx, node.Pos())
-        .Add(tableSettings)
-        .Done();
+                                           .Add(tableSettings)
+                                           .Done();
 
     const auto& alterTableActions = Build<TCoNameValueTupleList>(ctx, node.Pos())
-        .Add(alterActions)
-        .Done();
+                                        .Add(alterActions)
+                                        .Done();
 
     if (!columnFamilies.IsValid()) {
         columnFamilies = Build<TExprList>(ctx, node.Pos()).Done();
@@ -425,7 +418,7 @@ TWriteSequenceSettings ParseSequenceSettings(NNodes::TExprList node, TExprContex
             } else if (name == "as") {
                 YQL_ENSURE(tuple.Value().Maybe<TCoAtom>());
                 valueType = tuple.Value().Cast<TCoAtom>();
-            } else if (name == "temporary")  {
+            } else if (name == "temporary") {
                 temporary = Build<TCoAtom>(ctx, node.Pos()).Value("true").Done();
             } else if (sequenceSettingNames.contains(TString(name))) {
                 sequenceSettings.push_back(tuple);
@@ -436,12 +429,12 @@ TWriteSequenceSettings ParseSequenceSettings(NNodes::TExprList node, TExprContex
     }
 
     const auto& sequenceSettingsList = Build<TCoNameValueTupleList>(ctx, node.Pos())
-        .Add(sequenceSettings)
-        .Done();
+                                           .Add(sequenceSettings)
+                                           .Done();
 
     const auto& otherSettings = Build<TCoNameValueTupleList>(ctx, node.Pos())
-        .Add(other)
-        .Done();
+                                    .Add(other)
+                                    .Done();
 
     TWriteSequenceSettings ret(otherSettings);
     ret.Mode = mode;
@@ -485,7 +478,7 @@ TWriteTopicSettings ParseWriteTopicSettings(TExprList node, TExprContext& ctx) {
             if (name == "mode") {
                 YQL_ENSURE(tuple.Value().Maybe<TCoAtom>());
                 mode = tuple.Value().Cast<TCoAtom>();
-            }  else if (name == "consumer") {
+            } else if (name == "consumer") {
                 parseNewConsumer(node, tuple, consumers);
             } else if (name == "addConsumer") {
                 parseNewConsumer(node, tuple, addConsumers);
@@ -504,30 +497,29 @@ TWriteTopicSettings ParseWriteTopicSettings(TExprList node, TExprContext& ctx) {
     }
 
     const auto& builtCons = Build<TCoTopicConsumerList>(ctx, node.Pos())
-            .Add(consumers)
-            .Done();
+                                .Add(consumers)
+                                .Done();
 
     const auto& builtAddCons = Build<TCoTopicConsumerList>(ctx, node.Pos())
-            .Add(addConsumers)
-            .Done();
+                                   .Add(addConsumers)
+                                   .Done();
 
     const auto& builtAlterCons = Build<TCoTopicConsumerList>(ctx, node.Pos())
-            .Add(alterConsumers)
-            .Done();
+                                     .Add(alterConsumers)
+                                     .Done();
 
     const auto& builtDropCons = Build<TCoAtomList>(ctx, node.Pos())
-            .Add(dropConsumers)
-            .Done();
-
+                                    .Add(dropConsumers)
+                                    .Done();
 
     const auto& builtSettings = Build<TCoNameValueTupleList>(ctx, node.Pos())
-            .Add(topicSettings)
-            .Done();
+                                    .Add(topicSettings)
+                                    .Done();
 
     TVector<TCoNameValueTuple> other;
     const auto& otherSettings = Build<TCoNameValueTupleList>(ctx, node.Pos())
-            .Add(other)
-            .Done();
+                                    .Add(other)
+                                    .Done();
 
     TWriteTopicSettings ret(otherSettings);
     ret.Mode = mode;
@@ -585,16 +577,16 @@ TWriteReplicationSettings ParseWriteReplicationSettings(TExprList node, TExprCon
     }
 
     const auto& builtTargets = Build<TCoReplicationTargetList>(ctx, node.Pos())
-        .Add(targets)
-        .Done();
+                                   .Add(targets)
+                                   .Done();
 
     const auto& builtSettings = Build<TCoNameValueTupleList>(ctx, node.Pos())
-        .Add(settings)
-        .Done();
+                                    .Add(settings)
+                                    .Done();
 
     const auto& builtOther = Build<TCoNameValueTupleList>(ctx, node.Pos())
-        .Add(other)
-        .Done();
+                                 .Add(other)
+                                 .Done();
 
     TWriteReplicationSettings ret(builtOther);
     ret.Mode = mode;
@@ -622,8 +614,8 @@ TDatabaseSettings ParseDatabaseSettings(TExprList node, TExprContext& ctx) {
     }
 
     const auto& otherSettings = Build<TCoNameValueTupleList>(ctx, node.Pos())
-        .Add(other)
-        .Done();
+                                    .Add(other)
+                                    .Done();
 
     TDatabaseSettings ret(otherSettings);
     ret.Mode = mode;
@@ -668,12 +660,12 @@ TWriteTransferSettings ParseWriteTransferSettings(TExprList node, TExprContext& 
     }
 
     const auto& builtSettings = Build<TCoNameValueTupleList>(ctx, node.Pos())
-        .Add(settings)
-        .Done();
+                                    .Add(settings)
+                                    .Done();
 
     const auto& builtOther = Build<TCoNameValueTupleList>(ctx, node.Pos())
-        .Add(other)
-        .Done();
+                                 .Add(other)
+                                 .Done();
 
     TWriteTransferSettings ret(builtOther);
     ret.Mode = mode;
@@ -713,15 +705,16 @@ TWriteRoleSettings ParseWriteRoleSettings(TExprList node, TExprContext& ctx) {
     }
 
     const auto& builtRoles = Build<TCoAtomList>(ctx, node.Pos())
-        .Add(roles)
-        .Done();
+                                 .Add(roles)
+                                 .Done();
 
     const auto& otherSettings = Build<TCoNameValueTupleList>(ctx, node.Pos())
-        .Add(other)
-        .Done();
+                                    .Add(other)
+                                    .Done();
 
     TWriteRoleSettings ret(otherSettings);
-    ret.Roles = builtRoles;;
+    ret.Roles = builtRoles;
+    ;
     ret.NewName = newName;
     ret.Mode = mode;
 
@@ -739,7 +732,8 @@ TWritePermissionSettings ParseWritePermissionsSettings(TExprList node, TExprCont
 
             if (name == "permissions") {
                 YQL_ENSURE(tuple.Value().Maybe<TCoAtomList>());
-                permissions = tuple.Value().Cast<TCoAtomList>();;
+                permissions = tuple.Value().Cast<TCoAtomList>();
+                ;
             } else if (name == "roles") {
                 YQL_ENSURE(tuple.Value().Maybe<TCoAtomList>());
                 roleNames = tuple.Value().Cast<TCoAtomList>();
@@ -812,8 +806,8 @@ TCommitSettings ParseCommitSettings(TCoCommit node, TExprContext& ctx) {
     }
 
     auto otherSettings = Build<TCoNameValueTupleList>(ctx, node.Pos())
-        .Add(other)
-        .Done();
+                             .Add(other)
+                             .Done();
 
     TCommitSettings ret(otherSettings);
     ret.Pos = node.Pos();
@@ -845,7 +839,6 @@ TPgObjectSettings ParsePgObjectSettings(TExprList node, TExprContext&) {
     return ret;
 }
 
-
 TVector<TString> GetStructFields(const TTypeAnnotationNode* type) {
     TVector<TString> fields;
     if (type->GetKind() == ETypeAnnotationKind::List) {
@@ -860,9 +853,8 @@ TVector<TString> GetStructFields(const TTypeAnnotationNode* type) {
     return fields;
 }
 
-
 void TransformerStatsToYson(const TString& name, const IGraphTransformer::TStatistics& stats,
-    NYson::TYsonWriter& writer)
+                            NYson::TYsonWriter& writer)
 {
     writer.OnBeginMap();
 
@@ -970,9 +962,8 @@ bool FillUsedFilesImpl(
         if (!block) {
             ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "File not found: " << name));
             return false;
-        }
-        else {
-            auto iter = files.insert({ TUserDataStorage::ComposeUserDataKey(name), *block }).first;
+        } else {
+            auto iter = files.insert({TUserDataStorage::ComposeUserDataKey(name), *block}).first;
             iter->second.Usage.Set(node.IsCallable("FilePath") ? EUserDataBlockUsage::Path : EUserDataBlockUsage::Content);
         }
     }
@@ -985,7 +976,7 @@ bool FillUsedFilesImpl(
             return false;
         } else {
             for (const auto& x : *blocks) {
-                auto iter = files.insert({ x.first, *x.second }).first;
+                auto iter = files.insert({x.first, *x.second}).first;
                 iter->second.Usage.Set(EUserDataBlockUsage::Path);
             }
         }
@@ -1078,7 +1069,8 @@ bool FillUsedFilesImpl(
     bool childrenOk = true;
     for (auto& child : node.Children()) {
         childrenOk = FillUsedFilesImpl(*child, files, types, ctx, crutches, visited,
-            usedPgExtensions, needFullPgCatalog) && childrenOk;
+                                       usedPgExtensions, needFullPgCatalog) &&
+                     childrenOk;
     }
 
     return childrenOk;
@@ -1139,7 +1131,6 @@ void FillSecureParams(
     const TExprNode::TPtr& root,
     const TTypeAnnotationContext& types,
     THashMap<TString, TString>& secureParams) {
-
     NYql::VisitExpr(root, [&secureParams](const TExprNode::TPtr& node) {
         if (auto maybeSecureParam = TMaybeNode<TCoSecureParam>(node)) {
             const auto& secureParamName = TString(maybeSecureParam.Cast().Name().Value());
@@ -1154,8 +1145,7 @@ void FillSecureParams(
 }
 
 bool AddPgFile(bool isPath, const TString& pathOrContent, const TString& md5, const TString& alias, TUserDataTable& files,
-    const TTypeAnnotationContext& types, TPositionHandle pos, TExprContext& ctx) {
-
+               const TTypeAnnotationContext& types, TPositionHandle pos, TExprContext& ctx) {
     TUserDataBlock block;
     block.Data = pathOrContent;
     if (isPath) {
@@ -1250,35 +1240,33 @@ std::pair<IGraphTransformer::TStatus, TAsyncTransformCallbackFuture> FreezeUsedF
         return SyncOk();
     } else {
         return std::make_pair(IGraphTransformer::TStatus::Async, future.Apply(
-            [](const NThreading::TFuture<std::function<TUserDataTable()>>& completedFuture) {
-                return TAsyncTransformCallback([completedFuture](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
-                    output = input;
-                    try {
-                        completedFuture.GetValue()();
-                    }
-                    catch (const std::exception& e) {
-                        auto inputPos = ctx.GetPosition(input->Pos());
-                        TIssueScopeGuard issueScope(ctx.IssueManager, [&]() {
-                            return MakeIntrusive<TIssue>(YqlIssue(inputPos, TIssuesIds::UNEXPECTED));
-                        });
-                        ctx.AddError(ExceptionToIssue(e, inputPos));
-                        input->SetState(TExprNode::EState::Error);
-                        return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Error);
-                    }
-                    catch (...) {
-                        auto inputPos = ctx.GetPosition(input->Pos());
-                        TIssueScopeGuard issueScope(ctx.IssueManager, [&]() {
-                            return MakeIntrusive<TIssue>(YqlIssue(inputPos, TIssuesIds::UNEXPECTED));
-                        });
-                        ctx.AddError(YqlIssue(inputPos, TIssuesIds::UNEXPECTED, CurrentExceptionMessage()));
-                        input->SetState(TExprNode::EState::Error);
-                        return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Error);
-                    }
+                                                                     [](const NThreading::TFuture<std::function<TUserDataTable()>>& completedFuture) {
+                                                                         return TAsyncTransformCallback([completedFuture](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
+                                                                             output = input;
+                                                                             try {
+                                                                                 completedFuture.GetValue()();
+                                                                             } catch (const std::exception& e) {
+                                                                                 auto inputPos = ctx.GetPosition(input->Pos());
+                                                                                 TIssueScopeGuard issueScope(ctx.IssueManager, [&]() {
+                                                                                     return MakeIntrusive<TIssue>(YqlIssue(inputPos, TIssuesIds::UNEXPECTED));
+                                                                                 });
+                                                                                 ctx.AddError(ExceptionToIssue(e, inputPos));
+                                                                                 input->SetState(TExprNode::EState::Error);
+                                                                                 return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Error);
+                                                                             } catch (...) {
+                                                                                 auto inputPos = ctx.GetPosition(input->Pos());
+                                                                                 TIssueScopeGuard issueScope(ctx.IssueManager, [&]() {
+                                                                                     return MakeIntrusive<TIssue>(YqlIssue(inputPos, TIssuesIds::UNEXPECTED));
+                                                                                 });
+                                                                                 ctx.AddError(YqlIssue(inputPos, TIssuesIds::UNEXPECTED, CurrentExceptionMessage()));
+                                                                                 input->SetState(TExprNode::EState::Error);
+                                                                                 return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Error);
+                                                                             }
 
-                    input->SetState(TExprNode::EState::ExecutionRequired);
-                    return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat);
-                });
-            }));
+                                                                             input->SetState(TExprNode::EState::ExecutionRequired);
+                                                                             return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat);
+                                                                         });
+                                                                     }));
     }
 }
 
@@ -1360,12 +1348,12 @@ void WriteStream(NYson::TYsonWriter& writer, const TExprNode* node, const TExprN
     TVector<const TExprNode*> applyStreamChildren;
     if (TCoApply::Match(node)) {
         switch (node->GetTypeAnn()->GetKind()) {
-        case ETypeAnnotationKind::Stream:
-        case ETypeAnnotationKind::Flow:
-        case ETypeAnnotationKind::List:
-            break;
-        default:
-            return;
+            case ETypeAnnotationKind::Stream:
+            case ETypeAnnotationKind::Flow:
+            case ETypeAnnotationKind::List:
+                break;
+            default:
+                return;
         }
 
         for (size_t i = 1; i < node->ChildrenSize(); ++i) {
@@ -1382,8 +1370,7 @@ void WriteStream(NYson::TYsonWriter& writer, const TExprNode* node, const TExprN
         if (applyStreamChildren.size() == 1) {
             WriteStream(writer, applyStreamChildren.front(), source);
         }
-    }
-    else if (!TCoExtendBase::Match(node) && node->ChildrenSize() > 0) {
+    } else if (!TCoExtendBase::Match(node) && node->ChildrenSize() > 0) {
         WriteStream(writer, node->Child(0), source);
     }
 
@@ -1440,7 +1427,7 @@ void WriteStream(NYson::TYsonWriter& writer, const TExprNode* node, const TExprN
     if (TCoApply::Match(node) && applyStreamChildren.size() > 1) {
         writer.OnKeyedItem("Children");
         writer.OnBeginList();
-        for (auto child: applyStreamChildren) {
+        for (auto child : applyStreamChildren) {
             writer.OnListItem();
             writer.OnBeginList();
             WriteStream(writer, child, source);
@@ -1470,26 +1457,26 @@ double GetDataReplicationFactor(double factor, const TExprNode* node, const TExp
 
     if (TCoApply::Match(node)) {
         switch (node->GetTypeAnn()->GetKind()) {
-        case ETypeAnnotationKind::Stream:
-        case ETypeAnnotationKind::Flow:
-        case ETypeAnnotationKind::List: {
-            double applyFactor = 0.0;
-            for (size_t i = 1; i < node->ChildrenSize(); ++i) {
-                if (IsFlowOrStream(*node->Child(i))) {
-                    applyFactor += GetDataReplicationFactor(factor, node->Child(i), stream, ctx);
-                } else if (node->Child(i)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::List) {
-                    if (node->Child(i)->IsCallable("ForwardList")) {
-                        applyFactor += GetDataReplicationFactor(factor, node->Child(i)->Child(0), stream, ctx);
-                    } else if (node->Child(i)->IsCallable("Collect") && IsFlowOrStream(node->Child(i)->Head())) {
-                        applyFactor += GetDataReplicationFactor(factor, node->Child(i)->Child(0), stream, ctx);
+            case ETypeAnnotationKind::Stream:
+            case ETypeAnnotationKind::Flow:
+            case ETypeAnnotationKind::List: {
+                double applyFactor = 0.0;
+                for (size_t i = 1; i < node->ChildrenSize(); ++i) {
+                    if (IsFlowOrStream(*node->Child(i))) {
+                        applyFactor += GetDataReplicationFactor(factor, node->Child(i), stream, ctx);
+                    } else if (node->Child(i)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::List) {
+                        if (node->Child(i)->IsCallable("ForwardList")) {
+                            applyFactor += GetDataReplicationFactor(factor, node->Child(i)->Child(0), stream, ctx);
+                        } else if (node->Child(i)->IsCallable("Collect") && IsFlowOrStream(node->Child(i)->Head())) {
+                            applyFactor += GetDataReplicationFactor(factor, node->Child(i)->Child(0), stream, ctx);
+                        }
                     }
                 }
+                factor = 2.0 * Max(1.0, applyFactor);
+                break;
             }
-            factor = 2.0 * Max(1.0, applyFactor);
-            break;
-        }
-        default:
-            break;
+            default:
+                break;
         }
         return factor;
     }
@@ -1511,22 +1498,20 @@ double GetDataReplicationFactor(double factor, const TExprNode* node, const TExp
             }
         } else {
             switch (lambda.GetTypeAnn()->GetKind()) {
-            case ETypeAnnotationKind::Stream:
-            case ETypeAnnotationKind::Flow:
-                factor = GetDataReplicationFactor(factor, &lambda.Tail(), &lambda.Head().Head(), ctx);
-                break;
-            case ETypeAnnotationKind::List:
-                factor *= 2.0;
-                break;
-            default:
-                break;
+                case ETypeAnnotationKind::Stream:
+                case ETypeAnnotationKind::Flow:
+                    factor = GetDataReplicationFactor(factor, &lambda.Tail(), &lambda.Head().Head(), ctx);
+                    break;
+                case ETypeAnnotationKind::List:
+                    factor *= 2.0;
+                    break;
+                default:
+                    break;
             }
         }
-    }
-    else if (node->IsCallable("CommonJoinCore")) {
+    } else if (node->IsCallable("CommonJoinCore")) {
         factor *= 5.0;
-    }
-    else if (node->IsCallable("MapJoinCore")) {
+    } else if (node->IsCallable("MapJoinCore")) {
         // TODO: check MapJoinCore input unique using constraints
         if (node->Child(1)->IsCallable("ToDict")) {
             TMaybe<bool> isMany;
@@ -1538,22 +1523,19 @@ double GetDataReplicationFactor(double factor, const TExprNode* node, const TExp
                 factor *= 5.0;
             }
         }
-    }
-    else if (TCoSwitch::Match(node)) {
+    } else if (TCoSwitch::Match(node)) {
         double switchFactor = 0.0;
         for (size_t i = 3; i < node->ChildrenSize(); i += 2) {
             switchFactor += GetDataReplicationFactor(factor, node->Child(i)->Child(1), node->Child(i)->Head().Child(0), ctx);
         }
         factor = Max(1.0, switchFactor);
-    }
-    else if (TCoExtendBase::Match(node) && node->ChildrenSize() > 0) {
+    } else if (TCoExtendBase::Match(node) && node->ChildrenSize() > 0) {
         double extendFactor = 0.0;
         for (size_t i = 0; i < node->ChildrenSize(); ++i) {
             extendFactor += GetDataReplicationFactor(factor, node->Child(i), stream, ctx);
         }
         factor = Max(1.0, extendFactor);
-    }
-    else if (TCoChopper::Match(node) || node->IsCallable("WideChopper")) {
+    } else if (TCoChopper::Match(node) || node->IsCallable("WideChopper")) {
         factor = GetDataReplicationFactor(factor, &node->Child(TCoChopper::idx_Handler)->Tail(), &node->Child(TCoChopper::idx_Handler)->Head().Tail(), ctx);
     }
 
@@ -1648,7 +1630,7 @@ void WriteStatistics(NYson::TYsonWriter& writer, bool totalOnly, const THashMap<
         writer.OnKeyedItem("total");
         writer.OnBeginMap();
     }
-    for (auto& key: statKeys) {
+    for (auto& key : statKeys) {
         auto& totalEntry = total[key];
         writer.OnKeyedItem(key);
         writer.OnBeginMap();
@@ -1690,7 +1672,7 @@ bool ValidateCompressionForInput(std::string_view format, std::string_view compr
         return true;
     }
     ctx.AddError(TIssue(TStringBuilder() << "Unknown compression: " << compression
-        << ". Use one of: " << JoinSeq(", ", Compressions)));
+                                         << ". Use one of: " << JoinSeq(", ", Compressions)));
     return false;
 }
 
@@ -1706,7 +1688,7 @@ bool ValidateCompressionForOutput(std::string_view format, std::string_view comp
         return true;
     }
     ctx.AddError(TIssue(TStringBuilder() << "Unknown compression: " << compression
-        << ". Use one of: " << JoinSeq(", ", Compressions)));
+                                         << ". Use one of: " << JoinSeq(", ", Compressions)));
     return false;
 }
 
@@ -1721,7 +1703,7 @@ bool ValidateFormatForInput(
 
     if (!IsIn(FormatsForInput, format)) {
         ctx.AddError(TIssue(TStringBuilder() << "Unknown format: " << format
-            << ". Use one of: " << JoinSeq(", ", FormatsForInput)));
+                                             << ". Use one of: " << JoinSeq(", ", FormatsForInput)));
         return false;
     }
 
@@ -1737,10 +1719,9 @@ bool ValidateFormatForInput(
                 rowType = rowType->Cast<TOptionalExprType>()->GetItemType();
             }
 
-            if (rowType->GetKind() != ETypeAnnotationKind::Data
-                || !IsDataTypeString(rowType->Cast<TDataExprType>()->GetSlot())) {
+            if (rowType->GetKind() != ETypeAnnotationKind::Data || !IsDataTypeString(rowType->Cast<TDataExprType>()->GetSlot())) {
                 ctx.AddError(TIssue(TStringBuilder() << "Only string type column in schema supported in raw format (you have '"
-                    << item->GetName() << " " << FormatType(rowType) << "' field)"));
+                                                     << item->GetName() << " " << FormatType(rowType) << "' field)"));
                 return false;
             }
             ++realSchemaColumnsCount;
@@ -1748,11 +1729,10 @@ bool ValidateFormatForInput(
 
         if (realSchemaColumnsCount != 1) {
             ctx.AddError(TIssue(TStringBuilder() << "Only one column in schema supported in raw format (you have "
-                << realSchemaColumnsCount << " fields)"));
+                                                 << realSchemaColumnsCount << " fields)"));
             return false;
         }
-    }
-    else if (schemaStructRowType && format == TStringBuf("json_list")) {
+    } else if (schemaStructRowType && format == TStringBuf("json_list")) {
         bool failedSchemaColumns = false;
 
         for (const TItemExprType* item : schemaStructRowType->GetItems()) {
@@ -1764,10 +1744,9 @@ bool ValidateFormatForInput(
                 rowType = rowType->Cast<TOptionalExprType>()->GetItemType();
             }
 
-            if (rowType->GetKind() == ETypeAnnotationKind::Data
-                && IsDataTypeDateOrTzDateOrInterval(rowType->Cast<TDataExprType>()->GetSlot())) {
+            if (rowType->GetKind() == ETypeAnnotationKind::Data && IsDataTypeDateOrTzDateOrInterval(rowType->Cast<TDataExprType>()->GetSlot())) {
                 ctx.AddError(TIssue(TStringBuilder() << "Date, Timestamp and Interval types are not allowed in json_list format (you have '"
-                    << item->GetName() << " " << FormatType(rowType) << "' field)"));
+                                                     << item->GetName() << " " << FormatType(rowType) << "' field)"));
                 failedSchemaColumns = true;
             }
         }
@@ -1784,17 +1763,17 @@ bool ValidateFormatForOutput(std::string_view format, TExprContext& ctx) {
         return true;
     }
     ctx.AddError(TIssue(TStringBuilder() << "Unknown format: " << format
-        << ". Use one of: " << JoinSeq(", ", FormatsForOutput)));
+                                         << ". Use one of: " << JoinSeq(", ", FormatsForOutput)));
     return false;
 }
 
-template<typename T>
+template <typename T>
 bool ValidateValueInDictionary(std::string_view value, TExprContext& ctx, const T& dictionary) {
     if (value.empty() || IsIn(dictionary, value)) {
         return true;
     }
     ctx.AddError(TIssue(TStringBuilder() << "Unknown format: " << value
-        << ". Use one of: " << JoinSeq(", ", dictionary)));
+                                         << ". Use one of: " << JoinSeq(", ", dictionary)));
     return false;
 }
 
@@ -1811,21 +1790,20 @@ bool ValidateTimestampFormatName(std::string_view formatName, TExprContext& ctx)
 }
 
 namespace {
-    bool MatchesSetItemOption(const TExprBase& setItemOption, TStringBuf name) {
-        if (setItemOption.Ref().IsList() && setItemOption.Ref().ChildrenSize() > 0) {
-            if (setItemOption.Ref().ChildPtr(0)->Content() == name) {
-                return true;
-            }
+bool MatchesSetItemOption(const TExprBase& setItemOption, TStringBuf name) {
+    if (setItemOption.Ref().IsList() && setItemOption.Ref().ChildrenSize() > 0) {
+        if (setItemOption.Ref().ChildPtr(0)->Content() == name) {
+            return true;
         }
-        return false;
     }
-} //namespace
+    return false;
+}
+} // namespace
 
 bool TransformPgSetItemOption(
     const TCoPgSelect& pgSelect,
     TStringBuf optionName,
-    std::function<void(const TExprBase&)> lambda
-) {
+    std::function<void(const TExprBase&)> lambda) {
     bool applied = false;
     for (const auto& option : pgSelect.SelectOptions()) {
         if (option.Name() == "set_items") {
@@ -1870,7 +1848,6 @@ bool RenamePgSelectColumns(
     const TMaybe<TColumnOrder>& tableColumnOrder,
     TExprContext& ctx,
     TTypeAnnotationContext& types) {
-
     bool hasValues = (bool)GetSetItemOption(node, "values");
     bool hasProjectionOrder = (bool)GetSetItemOption(node, "projection_order");
     Y_ENSURE(hasValues ^ hasProjectionOrder, "Only one of values and projection_order should be present");
@@ -1890,11 +1867,10 @@ bool RenamePgSelectColumns(
     YQL_ENSURE(selectorColumnOrder);
     if (selectorColumnOrder->Size() > insertColumnOrder.Size()) {
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << Sprintf(
-            "%s have %zu columns, INSERT INTO expects: %zu",
-            optionName.data(),
-            selectorColumnOrder->Size(),
-            insertColumnOrder.Size()
-        )));
+                                                             "%s have %zu columns, INSERT INTO expects: %zu",
+                                                             optionName.data(),
+                                                             selectorColumnOrder->Size(),
+                                                             insertColumnOrder.Size())));
         return false;
     }
 
@@ -1917,37 +1893,39 @@ bool RenamePgSelectColumns(
     YQL_ENSURE(inputType->GetKind() == ETypeAnnotationKind::Struct);
 
     const auto rowArg = Build<TCoArgument>(ctx, node.Pos())
-        .Name("row")
-        .Done();
+                            .Name("row")
+                            .Done();
     auto structBuilder = Build<TCoAsStruct>(ctx, node.Pos());
 
     for (size_t i = 0; i < selectorColumnOrder->Size(); i++) {
         const auto& columnName = selectorColumnOrder->at(i);
         structBuilder.Add<TCoNameValueTuple>()
-            .Name().Build(insertColumnOrder.at(i).PhysicalName)
+            .Name()
+            .Build(insertColumnOrder.at(i).PhysicalName)
             .Value<TCoMember>()
-                .Struct(rowArg)
-                .Name().Build(columnName.PhysicalName)
+            .Struct(rowArg)
+            .Name()
+            .Build(columnName.PhysicalName)
             .Build()
-        .Build();
+            .Build();
     }
 
     auto fill = GetSetItemOption(node, "fill_target_columns");
 
     output = Build<TCoMap>(ctx, node.Pos())
-        .Input(node)
-        .Lambda<TCoLambda>()
-            .Args({rowArg})
-            .Body(structBuilder.Done().Ptr())
-        .Build()
-    .Done().Ptr();
+                 .Input(node)
+                 .Lambda<TCoLambda>()
+                 .Args({rowArg})
+                 .Body(structBuilder.Done().Ptr())
+                 .Build()
+                 .Done()
+                 .Ptr();
 
-    fill->ChangeChildrenInplace({
-        fill->Child(0),
-        Build<TCoAtom>(ctx, node.Pos())
-            .Value("done")
-        .Done().Ptr()
-    });
+    fill->ChangeChildrenInplace({fill->Child(0),
+                                 Build<TCoAtom>(ctx, node.Pos())
+                                     .Value("done")
+                                     .Done()
+                                     .Ptr()});
     fill->ChildPtr(1)->SetTypeAnn(ctx.MakeType<TUnitExprType>());
 
     return true;

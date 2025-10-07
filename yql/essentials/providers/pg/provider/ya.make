@@ -1,5 +1,7 @@
 LIBRARY()
 
+ENABLE(YQL_STYLE_CPP)
+
 SRCS(
     yql_pg_datasink.cpp
     yql_pg_datasink_execution.cpp

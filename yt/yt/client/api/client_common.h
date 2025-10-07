@@ -182,6 +182,8 @@ struct TSelectRowsOptions
     NYson::TYsonString PlaceholderValues;
     //! Native or WebAssembly execution backend.
     std::optional<NCodegen::EExecutionBackend> ExecutionBackend;
+    //! JIT optimization level hint.
+    std::optional<NCodegen::EOptimizationLevel> OptimizationLevel;
     //! Explicitly allow or forbid the usage of row cache.
     std::optional<bool> UseLookupCache;
     //! Tune batch sizes for row processing.

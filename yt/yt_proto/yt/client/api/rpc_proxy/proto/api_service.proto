@@ -712,6 +712,7 @@ message TReqSelectRows
     optional int64 max_join_batch_size = 31;
     optional bool use_order_by_in_join_subqueries = 32;
     optional int32 statistics_aggregation = 33; // EStatisticsAggregation
+    optional int32 optimization_level = 35; // EOptimizationLevel
 
     optional TSuppressableAccessTrackingOptions suppressable_access_tracking_options = 104;
 

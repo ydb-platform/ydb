@@ -97,7 +97,7 @@ namespace NYdb::NConsoleClient {
             {"message_group_id", ETopicMetadataField::MessageGroupID},
             {"offset", ETopicMetadataField::Offset},
             {"seq_no", ETopicMetadataField::SeqNo},
-            {"meta", ETopicMetadataField::MessageMeta},
+            {"message_meta", ETopicMetadataField::MessageMeta},
             {"session_meta", ETopicMetadataField::SessionMeta},
         };
 

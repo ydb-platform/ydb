@@ -28,13 +28,22 @@ void CreateTexts(NQuery::TQueryClient& db) {
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 }
 
-void FillTexts(NQuery::TQueryClient& db) {
+void UpsertTexts(NQuery::TQueryClient& db) {
     TString query = R"sql(
-        INSERT INTO `/Root/Texts` (Key, Text, Data) VALUES
+        UPSERT INTO `/Root/Texts` (Key, Text, Data) VALUES
             (100, "Cats chase small animals.", "cats data"),
             (200, "Dogs chase small cats.", "dogs data"),
             (300, "Cats love cats.", "cats cats data"),
-            (400, "Fox love dogs.", "fox data")
+            (400, "Foxes love dogs.", "fox data")
+    )sql";
+    auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+}
+
+void UpsertRow(NQuery::TQueryClient& db) {
+    TString query = R"sql(
+        UPSERT INTO `/Root/Texts` (Key, Text, Data) VALUES
+            (250, "Dogs are big animals.", "new dogs data")
     )sql";
     auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -76,7 +85,7 @@ Y_UNIT_TEST(AddIndex) {
     auto db = kikimr.GetQueryClient();
     
     CreateTexts(db);
-    FillTexts(db);
+    UpsertTexts(db);
     AddIndex(db);
 
     auto index = ReadIndex(db);
@@ -89,7 +98,7 @@ Y_UNIT_TEST(AddIndex) {
         [[200u];"chase"];
         [[200u];"dogs"];
         [[400u];"dogs"];
-        [[400u];"fox"];
+        [[400u];"foxes"];
         [[300u];"love"];
         [[400u];"love"];
         [[100u];"small"];
@@ -102,7 +111,7 @@ Y_UNIT_TEST(AddIndexCovered) {
     auto db = kikimr.GetQueryClient();
     
     CreateTexts(db);
-    FillTexts(db);
+    UpsertTexts(db);
     AddIndexCovered(db);
 
     auto index = ReadIndex(db);
@@ -115,12 +124,198 @@ Y_UNIT_TEST(AddIndexCovered) {
         [["dogs data"];[200u];"chase"];
         [["dogs data"];[200u];"dogs"];
         [["fox data"];[400u];"dogs"];
-        [["fox data"];[400u];"fox"];
+        [["fox data"];[400u];"foxes"];
         [["cats cats data"];[300u];"love"];
         [["fox data"];[400u];"love"];
         [["cats data"];[100u];"small"];
         [["dogs data"];[200u];"small"]
     ])", NYdb::FormatResultSetYson(index));
+}
+
+Y_UNIT_TEST(UpsertRow) {
+    auto kikimr = Kikimr();
+    auto db = kikimr.GetQueryClient();
+    
+    CreateTexts(db);
+    UpsertTexts(db);
+    AddIndex(db);
+    return; // TODO: upserts are not implemented
+    UpsertRow(db);
+
+    auto index = ReadIndex(db);
+    CompareYson(R"([
+        
+    ])", NYdb::FormatResultSetYson(index));
+}
+
+Y_UNIT_TEST(UpsertRowCovered) {
+    auto kikimr = Kikimr();
+    auto db = kikimr.GetQueryClient();
+    
+    CreateTexts(db);
+    UpsertTexts(db);
+    AddIndexCovered(db);
+    return; // TODO: upserts are not implemented
+    UpsertRow(db);
+
+    auto index = ReadIndex(db);
+    CompareYson(R"([
+        
+    ])", NYdb::FormatResultSetYson(index));
+}
+
+Y_UNIT_TEST(InsertRow) {
+    // TODO: inserts are not implemented
+}
+
+Y_UNIT_TEST(InsertRowCovered) {
+    // TODO: inserts are not implemented
+}
+
+Y_UNIT_TEST(DeleteRow) {
+    // TODO: deletes are not implemented
+
+    // TODO: test delete by key and filter
+}
+
+Y_UNIT_TEST(DeleteRowCovered) {
+    // TODO: deletes are not implemented
+
+    // TODO: test delete by key and filter
+}
+
+Y_UNIT_TEST(UpdateRow) {
+    // TODO: deletes are not implemented
+
+    // TODO: test update of key, text, data
+}
+
+Y_UNIT_TEST(UpdateRowCovered) {
+    // TODO: deletes are not implemented
+
+    // TODO: test update of key, text, data
+}
+
+Y_UNIT_TEST(CreateTable) {
+    auto kikimr = Kikimr();
+    auto db = kikimr.GetQueryClient();
+    
+    { // CreateTexts
+        TString query = R"sql(
+            CREATE TABLE `/Root/Texts` (
+                Key Uint64,
+                Text String,
+                Data String,
+                PRIMARY KEY (Key),
+                INDEX fulltext_idx
+                    GLOBAL USING fulltext
+                    ON (Text)
+                    WITH (layout=flat, tokenizer=standard, use_filter_lowercase=true)
+            );
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+    return; // TODO: upserts are not implemented
+    UpsertTexts(db);
+
+    auto index = ReadIndex(db);
+    CompareYson(R"([
+        [[100u];"animals"];
+        [[100u];"cats"];
+        [[200u];"cats"];
+        [[300u];"cats"];
+        [[100u];"chase"];
+        [[200u];"chase"];
+        [[200u];"dogs"];
+        [[400u];"dogs"];
+        [[400u];"foxes"];
+        [[300u];"love"];
+        [[400u];"love"];
+        [[100u];"small"];
+        [[200u];"small"]
+    ])", NYdb::FormatResultSetYson(index));
+}
+
+Y_UNIT_TEST(CreateTableCovered) {
+    auto kikimr = Kikimr();
+    auto db = kikimr.GetQueryClient();
+    
+    { // CreateTexts
+        TString query = R"sql(
+            CREATE TABLE `/Root/Texts` (
+                Key Uint64,
+                Text String,
+                Data String,
+                PRIMARY KEY (Key),
+                INDEX fulltext_idx
+                    GLOBAL USING fulltext
+                    ON (Text) COVER (Data)
+                    WITH (layout=flat, tokenizer=standard, use_filter_lowercase=true)
+            );
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+    return; // TODO: upserts are not implemented
+    UpsertTexts(db);
+
+    auto index = ReadIndex(db);
+    CompareYson(R"([
+        [["cats data"];[100u];"animals"];
+        [["cats data"];[100u];"cats"];
+        [["dogs data"];[200u];"cats"];
+        [["cats cats data"];[300u];"cats"];
+        [["cats data"];[100u];"chase"];
+        [["dogs data"];[200u];"chase"];
+        [["dogs data"];[200u];"dogs"];
+        [["fox data"];[400u];"dogs"];
+        [["fox data"];[400u];"foxes"];
+        [["cats cats data"];[300u];"love"];
+        [["fox data"];[400u];"love"];
+        [["cats data"];[100u];"small"];
+        [["dogs data"];[200u];"small"]
+    ])", NYdb::FormatResultSetYson(index));
+}
+
+Y_UNIT_TEST(NoBulkUpsert) {
+    // NKikimrConfig::TFeatureFlags featureFlags;
+    // featureFlags.SetEnableVectorIndex(true);
+    // auto setting = NKikimrKqp::TKqpSetting();
+    // auto serverSettings = TKikimrSettings()
+    //     .SetFeatureFlags(featureFlags)
+    //     .SetKqpSettings({setting});
+
+    // TKikimrRunner kikimr(serverSettings);
+    // kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+
+    // auto db = kikimr.GetTableClient();
+    // auto session = DoCreateTableAndVectorIndex(db, true);
+
+    // const TString originalPostingTable = ReadTablePartToYson(session, "/Root/TestTable/index1/indexImplPostingTable");
+
+    // // BulkUpsert to the table with index should fail
+    // {
+    //     NYdb::TValueBuilder rows;
+    //     rows.BeginList();
+    //     rows.AddListItem()
+    //         .BeginStruct()
+    //         .AddMember("pk").Int64(11)
+    //         .AddMember("emb").String("\x77\x77\x03")
+    //         .AddMember("data").String("43")
+    //         .EndStruct();
+    //     rows.EndList();
+    //     auto result = db.BulkUpsert("/Root/TestTable", rows.Build()).GetValueSync();
+    //     auto issues = result.GetIssues().ToString();
+    //     UNIT_ASSERT_C(result.GetStatus() == EStatus::SCHEME_ERROR, result.GetStatus());
+    //     UNIT_ASSERT_C(issues.contains("Only async-indexed tables are supported by BulkUpsert"), issues);
+    // }
+
+    // const TString postingTable1_bulk = ReadTablePartToYson(session, "/Root/TestTable/index1/indexImplPostingTable");
+    // UNIT_ASSERT_STRINGS_EQUAL(originalPostingTable, postingTable1_bulk);
+}
+
+Y_UNIT_TEST(NoIndexImplTableUpdates) {
 }
     
 }

@@ -69,14 +69,20 @@ public:
 
                 TInstant from;
                 if (auto time = ExtractSetting(settings, "from")) {
-                    from = TInstant::ParseIso8601(*time);
+                    if (!TInstant::TryParseIso8601(*time, from)) {
+                        ctx.AddError(TIssue(ctx.GetPosition(n->Pos()), "couldn't parse `from`, use ISO8601 format, e.g. 2025-03-12T14:40:39Z"));
+                        return TStatus::Error;
+                    }
                 } else {
-                    from = TInstant::Now() - TDuration::Days(7);
+                    from = TInstant::Zero();
                 }
                 
                 TInstant to;
                 if (auto time = ExtractSetting(settings, "to")) {
-                    to = TInstant::ParseIso8601(*time);
+                    if (!TInstant::TryParseIso8601(*time, to)) {
+                        ctx.AddError(TIssue(ctx.GetPosition(n->Pos()), "couldn't parse `to`, use ISO8601 format, e.g. 2025-03-12T14:40:39Z"));
+                        return TStatus::Error;
+                    }
                 } else {
                     to = TInstant::Now();
                 }

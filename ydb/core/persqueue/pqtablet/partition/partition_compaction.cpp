@@ -178,41 +178,28 @@ void TPartition::TryRunCompaction()
     const ui64 blobsKeyCountLimit = GetBodyKeysCountLimit();
     const ui64 compactedBlobSizeLowerBound = GetCompactedBlobSizeLowerBound();
 
-    if (BlobEncoder.DataKeysBody.size() >= blobsKeyCountLimit) {
-        CompactionInProgress = true;
-        Send(SelfId(), new TEvPQ::TEvRunCompaction(BlobEncoder.DataKeysBody.size()));
+    if ((BlobEncoder.DataKeysBody.size() < blobsKeyCountLimit) && (BlobEncoder.GetSize() < GetCumulativeSizeLimit())) {
+        LOG_D("No data for blobs compaction");
         return;
     }
 
-    size_t blobsCount = 0, blobsSize = 0, totalSize = 0;
+    size_t blobsCount = 0, blobsSize = 0;
     for (; blobsCount < BlobEncoder.DataKeysBody.size(); ++blobsCount) {
         const auto& k = BlobEncoder.DataKeysBody[blobsCount];
         if (k.Size < compactedBlobSizeLowerBound) {
             // неполный блоб. можно дописать
             blobsSize += k.Size;
-            totalSize += k.Size;
             if (blobsSize > 2 * MaxBlobSize) {
                 // KV не может отдать много
                 blobsSize -= k.Size;
-                totalSize -= k.Size;
                 break;
             }
             LOG_D("Blob key for append " << k.Key.ToString());
         } else {
-            totalSize += k.Size;
             LOG_D("Blob key for rename " << k.Key.ToString());
         }
     }
-    LOG_D(blobsCount << " keys were taken away. Let's read " << blobsSize << " bytes (" << totalSize << ")");
-
-    if (totalSize < GetCumulativeSizeLimit()) {
-        LOG_D("Need more data for compaction. " <<
-                 "Blobs " << BlobEncoder.DataKeysBody.size() <<
-                 ", size " << totalSize << " (" << GetCumulativeSizeLimit() << ")");
-        return;
-    }
-
-    LOG_D("Run compaction for " << blobsCount << " blobs");
+    LOG_D(blobsCount << " keys were taken away. Let's read " << blobsSize << " bytes");
 
     CompactionInProgress = true;
 

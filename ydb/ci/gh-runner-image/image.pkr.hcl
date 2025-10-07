@@ -78,7 +78,6 @@ apt-get install -y nodejs
 
 printf '%s\n' '#!/bin/bash' 'rdma link add rxe_lo type rxe netdev lo' 'ibv_devinfo -vvv' 'exit 0' | tee -a /etc/rc.local
 chmod +x /etc/rc.local
-systemctl enable rc-local
 
 npm install -g @testmo/testmo-cli
 EOF

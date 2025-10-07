@@ -46,7 +46,7 @@ public:
     void CommitToDatabase(IDbWrapper& wrapper);
 
     virtual NSplitter::TEntityGroups GetEntityGroupsByStorageId(
-        const TString& /*specialTier*/, const IStoragesManager& storages, const TIndexInfo& /*indexInfo*/) const override {
+        const TString& /*specialTier*/, const bool /*tieredIndedes*/, const IStoragesManager& storages, const TIndexInfo& /*indexInfo*/) const override {
         NSplitter::TEntityGroups groups(storages.GetDefaultOperator()->GetBlobSplitSettings(), IStoragesManager::DefaultStorageId);
         return groups;
     }

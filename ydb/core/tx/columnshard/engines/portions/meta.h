@@ -100,6 +100,7 @@ private:
     NArrow::TSimpleRowContent FirstPKRow;
     NArrow::TSimpleRowContent LastPKRow;
     YDB_READONLY_DEF(TString, TierName);
+    YDB_READONLY(bool, TieredIndexes, false);
     YDB_READONLY(ui32, DeletionsCount, 0);
     YDB_READONLY(ui32, CompactionLevel, 0);
     YDB_READONLY(ui32, RecordsCount, 0);
@@ -142,6 +143,8 @@ public:
     }
 
     std::optional<TString> GetTierNameOptional() const;
+    
+    std::optional<bool> GetTieredIndexesOptional() const;
 
     ui64 GetMetadataMemorySize() const {
         return GetMemorySize();

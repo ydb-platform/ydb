@@ -36,6 +36,7 @@ TPortionMetaConstructor::TPortionMetaConstructor(const TPortionMeta& meta) {
     CompactionLevel = meta.GetCompactionLevel();
     DeletionsCount = meta.GetDeletionsCount();
     TierName = meta.GetTierNameOptional();
+    TieredIndexes = meta.GetTieredIndexesOptional();
 }
 
 TPortionMeta TPortionMetaConstructor::Build() {
@@ -53,6 +54,9 @@ TPortionMeta TPortionMetaConstructor::Build() {
     TPortionMeta result(*FirstAndLastPK, *RecordSnapshotMin, *RecordSnapshotMax);
     if (TierName) {
         result.TierName = *TierName;
+    }
+    if (TieredIndexes) {
+        result.TieredIndexes = *TieredIndexes;
     }
     result.CompactionLevel = *TValidator::CheckNotNull(CompactionLevel);
     result.DeletionsCount = *TValidator::CheckNotNull(DeletionsCount);
@@ -72,6 +76,9 @@ bool TPortionMetaConstructor::LoadMetadata(
     const NKikimrTxColumnShard::TIndexPortionMeta& portionMeta, const TIndexInfo& indexInfo, const IBlobGroupSelector& /*groupSelector*/) {
     if (portionMeta.GetTierName()) {
         TierName = portionMeta.GetTierName();
+    }
+    if (portionMeta.HasTieredIndexes()) {
+        TieredIndexes = portionMeta.GetTieredIndexes();
     }
     if (portionMeta.HasDeletionsCount()) {
         DeletionsCount = portionMeta.GetDeletionsCount();
@@ -103,8 +110,10 @@ void TPortionMetaConstructor::SetTierName(const TString& tierName) {
     AFL_VERIFY(!TierName);
     if (!tierName || tierName == NBlobOperations::TGlobal::DefaultStorageId) {
         TierName.reset();
+        TieredIndexes.reset();
     } else {
         TierName = tierName;
+        TieredIndexes = true;
     }
 }
 

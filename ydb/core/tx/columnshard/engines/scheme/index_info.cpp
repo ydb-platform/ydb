@@ -416,10 +416,10 @@ void TIndexInfo::InitializeCaches(const std::shared_ptr<IStoragesManager>& opera
     }
 }
 
-NSplitter::TEntityGroups TIndexInfo::GetEntityGroupsByStorageId(const TString& specialTier, const IStoragesManager& storages) const {
+NSplitter::TEntityGroups TIndexInfo::GetEntityGroupsByStorageId(const TString& specialTier, const bool tieredIndexes, const IStoragesManager& storages) const {
     NSplitter::TEntityGroups groups(storages.GetDefaultOperator()->GetBlobSplitSettings(), IStoragesManager::DefaultStorageId);
     for (auto&& i : GetEntityIds()) {
-        auto storageId = GetEntityStorageId(i, specialTier);
+        auto storageId = GetEntityStorageId(i, specialTier, tieredIndexes);
         auto* group = groups.GetGroupOptional(storageId);
         if (!group) {
             group = &groups.RegisterGroup(storageId, storages.GetOperatorVerified(storageId)->GetBlobSplitSettings());

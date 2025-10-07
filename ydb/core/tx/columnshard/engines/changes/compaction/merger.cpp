@@ -327,7 +327,7 @@ std::vector<TWritePortionInfoWithBlobsResult> TMerger::Execute(const std::shared
     }
 
     const auto groups =
-        resultFiltered->GetIndexInfo().GetEntityGroupsByStorageId(IStoragesManager::DefaultStorageId, *SaverContext.GetStoragesManager());
+        resultFiltered->GetIndexInfo().GetEntityGroupsByStorageId(IStoragesManager::DefaultStorageId, true, *SaverContext.GetStoragesManager());
     std::vector<TWritePortionInfoWithBlobsResult> result;
     for (auto&& columnChunks : splitInfo.GetSplittedBatches()) {
         auto batchResult = columnChunks.GetRemapper();

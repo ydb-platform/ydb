@@ -1884,6 +1884,8 @@ private:
 
         auto solomonState = MakeIntrusive<TSolomonState>();
 
+        solomonState->SupportRtmrMode = false;
+        solomonState->WriteThroughDqIntegration = true;
         solomonState->Types = TypesCtx.Get();
         solomonState->Gateway = FederatedQuerySetup->SolomonGateway;
         solomonState->CredentialsFactory = FederatedQuerySetup->CredentialsFactory;

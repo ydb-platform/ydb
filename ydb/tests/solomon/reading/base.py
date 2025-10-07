@@ -13,8 +13,8 @@ from ydb.issues import GenericError
 class SolomonReadingTestBase(object):
     @classmethod
     def setup_class(cls):
-        cls.basic_reading_timestamps = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60]
-        cls.basic_reading_values = [0, 1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12]
+        cls.basic_reading_timestamps = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55]
+        cls.basic_reading_values = [0, 1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11]
 
         cls.listing_paging_metrics_size = 1000
 
@@ -96,7 +96,7 @@ class SolomonReadingTestBase(object):
 
     @staticmethod
     def _generate_listing_paging_test_metrics(size):
-        return [
+        listing_paging_metrics = [
             {
                 "labels"        : {"test_type": "listing_paging_test", "test_label": str(i)},
                 "type"          : "DGAUGE",
@@ -105,6 +105,15 @@ class SolomonReadingTestBase(object):
             }
             for i in range(size)
         ]
+
+        listing_paging_metrics.append({
+            "labels"        : {"test_type": "listing_paging_test"},
+            "type"          : "DGAUGE",
+            "timestamps"    : [0],
+            "values"        : [0]
+        })
+
+        return listing_paging_metrics
 
     @staticmethod
     def _generate_data_paging_timeseries(size):

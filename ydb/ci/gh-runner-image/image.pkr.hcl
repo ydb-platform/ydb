@@ -77,9 +77,9 @@ pip3 install conan==2.4.1 pytest==7.1.3 pytest-timeout pytest-xdist==3.3.1 setpr
 curl -fsSL https://deb.nodesource.com/setup_20.x | bash
 apt-get install -y nodejs
 
-printf '%s\n' '#!/bin/bash' 'rdma link add rxe_lo type rxe netdev lo' 'ibv_devinfo -vvv' 'exit 0' | sudo tee -a /etc/rc.local
-sudo chmod +x /etc/rc.local
-sudo systemctl enable rc-local
+printf '%s\n' '#!/bin/bash' 'rdma link add rxe_lo type rxe netdev lo' 'ibv_devinfo -vvv' 'exit 0' | tee -a /etc/rc.local
+chmod +x /etc/rc.local
+systemctl enable rc-local
 
 npm install -g @testmo/testmo-cli
 EOF

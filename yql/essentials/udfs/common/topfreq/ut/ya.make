@@ -1,5 +1,7 @@
 UNITTEST_FOR(yql/essentials/udfs/common/topfreq/static)
 
+ENABLE(YQL_STYLE_CPP)
+
 SRCS(
     ../topfreq_udf_ut.cpp
 )

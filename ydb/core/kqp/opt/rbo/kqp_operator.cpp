@@ -86,14 +86,14 @@ TExprNode::TPtr RenameMembers(TExprNode::TPtr input, const THashMap<TInfoUnit, T
         if (renameMap.contains(TInfoUnit(memberName.StringValue()))) {
             auto renamed = renameMap.at(TInfoUnit(memberName.StringValue()));
             // clang-format off
-                memberName = Build<TCoAtom>(ctx, input->Pos()).Value(renamed.GetFullName()).Done();
+             memberName = Build<TCoAtom>(ctx, input->Pos()).Value(renamed.GetFullName()).Done();
             // clang-format on
         }
         // clang-format off
-            return Build<TCoMember>(ctx, input->Pos())
-                .Struct(member.Struct())
-                .Name(memberName)
-            .Done().Ptr();
+        return Build<TCoMember>(ctx, input->Pos())
+            .Struct(member.Struct())
+            .Name(memberName)
+        .Done().Ptr();
         // clang-format on
     } else if (input->IsCallable()) {
         TVector<TExprNode::TPtr> newChildren;
@@ -496,6 +496,19 @@ void TOpJoin::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFun
 }
 
 TString TOpJoin::ToString() { return "Join"; }
+
+TOpUnionAll::TOpUnionAll(std::shared_ptr<IOperator> leftInput, std::shared_ptr<IOperator> rightInput)
+    : IBinaryOperator(EOperator::UnionAll, leftInput, rightInput) {}
+
+TVector<TInfoUnit> TOpUnionAll::GetOutputIUs() {
+    auto res = GetLeftInput()->GetOutputIUs();
+    auto rightInputIUs = GetRightInput()->GetOutputIUs();
+
+    res.insert(res.end(), rightInputIUs.begin(), rightInputIUs.end());
+    return res;
+}
+
+TString TOpUnionAll::ToString() { return "UnionAll"; }
 
 TOpLimit::TOpLimit(std::shared_ptr<IOperator> input, TExprNode::TPtr limitCond)
     : IUnaryOperator(EOperator::Limit, input), LimitCond(limitCond) {}

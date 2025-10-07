@@ -27,5 +27,5 @@ struct TLogRow {
 TLogRow ParseLegacyLogRow(TStringBuf str);
 TLogRow ParseJsonLogRow(TStringBuf str);
 
-} // namspace NLog
-} // namspace NYql
+} // namespace NLog
+} // namespace NYql

@@ -5,6 +5,8 @@ YQL_UDF_CONTRIB(re2_udf)
         43
         0
     )
+
+    ENABLE(YQL_STYLE_CPP)
     
     SRCS(
         re2_udf.cpp

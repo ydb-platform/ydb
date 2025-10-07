@@ -111,4 +111,4 @@ TMaybe<T> TryFromDyNumber(TStringBuf buffer) {
     return result;
 }
 
-}
+} // namespace NKikimr::NDyNumber

@@ -6,6 +6,8 @@ YQL_ABI_VERSION(
     0
 )
 
+ENABLE(YQL_STYLE_CPP)
+
 SRCS(
     url_base_udf.cpp
     url_parse.cpp

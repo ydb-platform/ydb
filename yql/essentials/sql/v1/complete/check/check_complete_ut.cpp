@@ -24,8 +24,8 @@ Y_UNIT_TEST_SUITE(CheckTests) {
         };
 
         NSQLTranslationV1::TParsers parsers = {
-            .Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory(),
-            .Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory(),
+            .Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory(/*isAmbiguityError=*/ true),
+            .Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory(/*isAmbiguityError=*/ true),
         };
 
         NSQLTranslation::TTranslators translators(

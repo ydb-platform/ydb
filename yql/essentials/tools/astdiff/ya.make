@@ -1,5 +1,7 @@
 PROGRAM(astdiff)
 
+ENABLE(YQL_STYLE_CPP)
+
 SRCS(
     astdiff.cpp
 )

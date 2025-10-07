@@ -1453,7 +1453,7 @@ namespace Tests {
         {
             if (Settings->PQConfig.GetEnabled() == true) {
                 IActor *pqMetaCache = NMsgBusProxy::NPqMetaCacheV2::CreatePQMetaCache(
-                        new ::NMonitoring::TDynamicCounters(), TDuration::Seconds(1)
+                        new ::NMonitoring::TDynamicCounters()
                 );
 
                 TActorId pqMetaCacheId = Runtime->Register(pqMetaCache, nodeIdx, userPoolId);

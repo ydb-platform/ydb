@@ -606,6 +606,9 @@ namespace {
                 );
                 YQL_ENSURE(result);
                 request->mutable_partitioning_settings()->mutable_auto_partitioning_settings()->set_strategy(strategy);
+            } else if (name == "setMetricsLevel") {
+                auto metricsLevel = FromString<i32>(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
+                request->set_metrics_level(metricsLevel);
             }
         }
     }
@@ -1716,7 +1719,7 @@ public:
                                     return SyncError();
                                 } else if (constraint.Name().Value() == "default") {
                                     if (table.Metadata->Kind == EKikimrTableKind::Olap) {
-                                        ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()), 
+                                        ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()),
                                             "Default values are not supported in column tables"));
                                         return SyncError();
                                     }
@@ -2046,10 +2049,10 @@ public:
                             }
                         } else if (name == "indexSettings") {
                             YQL_ENSURE(add_index->type_case() == Ydb::Table::TableIndex::kGlobalVectorKmeansTreeIndex);
-                            
+
                             Ydb::Table::KMeansTreeSettings& settings = *add_index->mutable_global_vector_kmeans_tree_index()->mutable_vector_settings();
                             TString error;
-                            
+
                             auto indexSettings = columnTuple.Item(1).Cast<TCoAtomList>();
                             for (const auto& indexSetting : indexSettings.Cast<TCoNameValueTupleList>()) {
                                 YQL_ENSURE(indexSetting.Value().Maybe<TCoAtom>());

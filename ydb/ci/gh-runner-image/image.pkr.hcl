@@ -60,7 +60,7 @@ apt-get -y install --no-install-recommends \
   python-is-python3 python3-pip s3cmd s3cmd zlib1g linux-tools-common linux-tools-generic \
   ibverbs-providers rdma-core libibverbs1 ibverbs-utils
 
-apt-get -y install "linux-modules-extra-$(ls -1 /lib/modules | sort -V | tail -1)
+apt-get -y install linux-modules-extra-$(ls -1 /lib/modules | sort -V | tail -1)
 
 apt-get -y purge lxd-agent-loader snapd modemmanager
 apt-get -y autoremove

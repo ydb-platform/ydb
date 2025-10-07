@@ -49,5 +49,7 @@ bool DqCollectJoinRelationsWithStats(
     const NNodes::TCoEquiJoin& equiJoin,
     const std::function<void(TVector<std::shared_ptr<TRelOptimizerNode>>&, TStringBuf, const TExprNode::TPtr, const std::shared_ptr<TOptimizerStatistics>&)>& collector);
 
+NNodes::TExprBase DqRewriteStreamEquiJoinWithLookup(const NNodes::TExprBase& node, TExprContext& ctx, TTypeAnnotationContext& typeCtx);
+
 } // namespace NDq
 } // namespace NYql

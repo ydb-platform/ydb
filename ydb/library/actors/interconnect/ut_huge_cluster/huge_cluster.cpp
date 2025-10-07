@@ -22,14 +22,14 @@ Y_UNIT_TEST_SUITE(HugeCluster) {
 
         void Handle(TEvTestStartPolling::TPtr /*ev*/, const TActorContext& ctx) {
             for (ui32 i = 0; i < Targets.size(); ++i) {
-                ctx.Send(Targets[i], new TEvTest(), IEventHandle::FlagTrackDelivery, i);
+                ctx.Send(Targets[i], new TEvTest(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagGenerateUnsureUndelivered, i);
             }
         }
 
         void Handle(TEvents::TEvUndelivered::TPtr ev, const TActorContext& ctx) {
             const ui32 cookie = ev->Cookie;
             // Cerr << "TEvUndelivered ping from node# " << SelfId().NodeId() << " to node# " << cookie + 1 << Endl;
-            ctx.Send(Targets[cookie], new TEvTest(), IEventHandle::FlagTrackDelivery, cookie);
+            ctx.Send(Targets[cookie], new TEvTest(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagGenerateUnsureUndelivered, cookie);
         }
 
         void Handle(TEvTest::TPtr ev, const TActorContext& /*ctx*/) {
@@ -106,12 +106,7 @@ Y_UNIT_TEST_SUITE(HugeCluster) {
         return loggerSettings;
     }
 
-    Y_UNIT_TEST(AllToAll_Disabled) {
-        // Test works inconsistently in different environments, probably because of excessive amount
-        // of sockets/file descriptors used. Until better approach is found test is disabled to avoid
-        // random failures in CI
-        return;
-
+    Y_UNIT_TEST(AllToAll) {
         ui32 nodesNum = 120;
         std::vector<TActorId> pollers(nodesNum);
         std::vector<std::unordered_map<TActorId, TManualEvent>> events(nodesNum);

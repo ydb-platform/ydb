@@ -654,6 +654,15 @@ namespace NKikimr::NGRpcProxy::V1 {
         return std::nullopt;
     }
 
+    static std::expected<i32, TString> CheckRetentionPeriod(auto seconds) {
+        if (std::cmp_greater(seconds, Max<i32>())) {
+            return std::unexpected{"retention_period must be less than " + ToString(ui64(Max<i32>()) + 1)};
+        } else if (std::cmp_less_equal(seconds, 0)) {
+            return std::unexpected{"retention_period must be positive"};
+        }
+        return seconds;
+    }
+
     Ydb::StatusIds::StatusCode FillProposeRequestImpl( // create and alter
             const TString& name, const Ydb::PersQueue::V1::TopicSettings& settings,
             NKikimrSchemeOp::TModifyScheme& modifyScheme, const TActorContext& ctx,
@@ -672,7 +681,12 @@ namespace NKikimr::NGRpcProxy::V1 {
 
         switch (settings.retention_case()) {
             case Ydb::PersQueue::V1::TopicSettings::kRetentionPeriodMs: {
-                partConfig->SetLifetimeSeconds(Max(settings.retention_period_ms() / 1000ll, 1ll));
+                if (auto retentionPeriodSeconds = CheckRetentionPeriod(Max(settings.retention_period_ms() / 1000ll, 1ll))) {
+                    partConfig->SetLifetimeSeconds(retentionPeriodSeconds.value());
+                } else {
+                    error = TStringBuilder() << retentionPeriodSeconds.error() << ", provided " << settings.retention_period_ms() << " ms";
+                    return Ydb::StatusIds::BAD_REQUEST;
+                }
             }
             break;
 
@@ -1103,12 +1117,13 @@ namespace NKikimr::NGRpcProxy::V1 {
             partConfig->MutableExplicitChannelProfiles()->CopyFrom(channelProfiles);
         }
         if (request.has_retention_period()) {
-            if (request.retention_period().seconds() <= 0) {
-                error = TStringBuilder() << "retention_period must be not negative, provided " <<
+            if (auto retentionPeriodSeconds = CheckRetentionPeriod(request.retention_period().seconds())) {
+                partConfig->SetLifetimeSeconds(retentionPeriodSeconds.value());
+            } else {
+                error = TStringBuilder() << retentionPeriodSeconds.error() << ", provided " <<
                         request.retention_period().DebugString();
                 return TYdbPqCodes(Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::VALIDATION_ERROR);
             }
-            partConfig->SetLifetimeSeconds(request.retention_period().seconds());
         } else {
             partConfig->SetLifetimeSeconds(TDuration::Days(1).Seconds());
         }
@@ -1283,7 +1298,12 @@ namespace NKikimr::NGRpcProxy::V1 {
         }
 
         if (request.has_set_retention_period()) {
-            partConfig->SetLifetimeSeconds(request.set_retention_period().seconds());
+            if (auto retentionPeriodSeconds = CheckRetentionPeriod(request.set_retention_period().seconds())) {
+                partConfig->SetLifetimeSeconds(retentionPeriodSeconds.value());
+            } else {
+                error = TStringBuilder() << retentionPeriodSeconds.error() << ", provided " << request.set_retention_period().ShortDebugString();
+                return Ydb::StatusIds::BAD_REQUEST;
+            }
         }
 
         bool local = true; //todo: check locality

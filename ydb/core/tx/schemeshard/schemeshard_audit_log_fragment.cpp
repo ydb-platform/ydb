@@ -292,8 +292,16 @@ TString DefineUserOperationName(const NKikimrSchemeOp::TModifyScheme& tx) {
         return "CHANGE PATH STATE";
     case NKikimrSchemeOp::EOperationType::ESchemeOpIncrementalRestoreFinalize:
         return "RESTORE INCREMENTAL FINALIZE";
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSetConstraintInitiate:
-        return "SET CONSTRAINT";
+
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSetColumnConstraintsInitiate:
+        return "SET CONSTRAINT INITIATE";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSetColumnConstraintsLock:
+        return "SET CONSTRAINT LOCK";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSetColumnConstraintsCheck:
+        return "SET CONSTRAINT CHECK";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSetColumnConstraintsFinalize:
+        return "SET CONSTRAINT FINALIZE";
+
     // secret
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSecret:
         return "CREATE SECRET";
@@ -685,8 +693,17 @@ TVector<TString> ExtractChangingPaths(const NKikimrSchemeOp::TModifyScheme& tx) 
         // For incremental restore finalization, we don't have a specific path in the message
         // since it operates on paths determined at runtime
         break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSetConstraintInitiate:
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSetColumnConstraintsInitiate:
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetSetColumnConstraintsInitiate().GetTableName()}));
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSetColumnConstraintsLock:
+        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetSetColumnConstraintsLock().GetTableName()}));
+        break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSetColumnConstraintsCheck:
+        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetSetColumnConstraintsCheck().GetTableName()}));
+        break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSetColumnConstraintsFinalize:
+        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetSetColumnConstraintsFinalize().GetTableName()}));
+        break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSecret:
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetCreateSecret().GetName()}));
         break;

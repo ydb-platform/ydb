@@ -5480,7 +5480,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
     // TODO: flown4qqqq
     Y_UNIT_TEST(AlterTable_SetNotNull_Invalid) {
         NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableSetColumnConstraint(true);
+        featureFlags.SetEnableSetColumnConstraints(true);
         auto settings = TKikimrSettings().SetFeatureFlags(featureFlags).SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 
@@ -5522,7 +5522,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_C(!setNotNull.IsSuccess(), setNotNull.GetIssues().ToString());
             UNIT_ASSERT_VALUES_EQUAL_C(setNotNull.GetStatus(), EStatus::PRECONDITION_FAILED, setNotNull.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(setNotNull.GetIssues().ToString(), "CreateSetConstraintInitiate is not implemented. TablePath = '/Root/test/alterNotNull'");
+            UNIT_ASSERT_STRING_CONTAINS(setNotNull.GetIssues().ToString(), "CreateSetColumnConstraintsLock is not implemented");
         }
 
         // {
@@ -5549,7 +5549,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
     // TODO: flown4qqqq
     Y_UNIT_TEST(AlterTable_SetNotNull_Valid) {
         NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableSetColumnConstraint(true);
+        featureFlags.SetEnableSetColumnConstraints(true);
         auto settings = TKikimrSettings().SetFeatureFlags(featureFlags).SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 
@@ -5591,7 +5591,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_C(!setNotNull.IsSuccess(), setNotNull.GetIssues().ToString());
             UNIT_ASSERT_VALUES_EQUAL_C(setNotNull.GetStatus(), EStatus::PRECONDITION_FAILED, setNotNull.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(setNotNull.GetIssues().ToString(), "CreateSetConstraintInitiate is not implemented. TablePath = '/Root/test/alterNotNull'");
+            UNIT_ASSERT_STRING_CONTAINS(setNotNull.GetIssues().ToString(), "CreateSetColumnConstraintsLock is not implemented");
         }
 
         // {

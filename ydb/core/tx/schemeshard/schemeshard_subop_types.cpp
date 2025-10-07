@@ -581,7 +581,10 @@ ETxType ConvertToTxType(NKikimrSchemeOp::EOperationType opType) {
         case NKikimrSchemeOp::ESchemeOpRestoreMultipleIncrementalBackups:
         case NKikimrSchemeOp::ESchemeOpCreateColumnBuild:
         case NKikimrSchemeOp::ESchemeOpDropColumnBuild:
-        case NKikimrSchemeOp::ESchemeOpCreateSetConstraintInitiate: // TODO flown4qqqq
+        case NKikimrSchemeOp::ESchemeOpCreateSetColumnConstraintsInitiate: // TODO flown4qqqq
+        case NKikimrSchemeOp::ESchemeOpCreateSetColumnConstraintsLock: // TODO flown4qqqq
+        case NKikimrSchemeOp::ESchemeOpCreateSetColumnConstraintsCheck: // TODO flown4qqqq
+        case NKikimrSchemeOp::ESchemeOpCreateSetColumnConstraintsFinalize: // TODO flown4qqqq
             return TxInvalid;
 
         //NOTE: intentionally no default: case

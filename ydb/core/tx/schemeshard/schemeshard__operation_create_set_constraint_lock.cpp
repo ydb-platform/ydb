@@ -8,11 +8,10 @@
 
 namespace NKikimr::NSchemeShard {
 
-ISubOperation::TPtr CreateSetConstraintLock(TOperationId opId, const TTxTransaction& tx) {
-    // Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpCreateSetConstraint);
-    Y_UNUSED(opId);
-    Y_UNUSED(tx);
-    return {};
+ISubOperation::TPtr CreateSetColumnConstraintsLock(TOperationId opId, const TTxTransaction& tx) {
+    Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpCreateSetColumnConstraintsLock);
+    TString error = "CreateSetColumnConstraintsLock is not implemented";
+    return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, std::move(error))};
 }
 
 } // namespace NKikimr::NSchemeShard

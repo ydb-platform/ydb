@@ -1781,14 +1781,8 @@ message TSetColumnConstraintsCheck {
 }
 
 message TSetColumnConstraintsFinalize {
-    enum EStatus {
-        SUCCESS = 0;
-        COLUMN_CONSTRAINT_VIOLATION = 1;
-    }
-
     optional string TableName = 1;
     repeated TSetColumnConstraintSettings ConstraintSettings = 2;
-    optional EStatus Status = 3;
 }
 
 // End Set Column Constraints
@@ -1909,13 +1903,16 @@ message TModifyScheme {
 
     optional TCreateLongIncrementalBackupOp CreateLongIncrementalBackupOp = 85;
 
-    optional TSetColumnConstraintsInitiate SetColumnConstraintsInitiate = 87;
-
     // Secret
     optional TSecretSchemaOp CreateSecret = 88;
     optional TSecretSchemaOp AlterSecret = 89;
 
     optional TStreamingQueryDescription CreateStreamingQuery = 90;
+
+    optional TSetColumnConstraintsInitiate SetColumnConstraintsInitiate = 87;
+    optional TSetColumnConstraintsLock SetColumnConstraintsLock = 92;
+    optional TSetColumnConstraintsCheck SetColumnConstraintsCheck = 93;
+    optional TSetColumnConstraintsFinalize SetColumnConstraintsFinalize = 94;
 
     // Some entries are grouped by semantics, so are out of order
 }

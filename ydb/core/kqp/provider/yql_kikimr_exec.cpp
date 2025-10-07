@@ -1843,7 +1843,7 @@ public:
                             if (value == "drop_not_null") {
                                 alter_columns->set_not_null(false);
                             } else if (value == "set_not_null") {
-                                if (!SessionCtx->Config().FeatureFlags.GetEnableSetColumnConstraint()) {
+                                if (!SessionCtx->Config().FeatureFlags.GetEnableSetColumnConstraints()) {
                                     ctx.AddError(TIssue(ctx.GetPosition(constraintsList.Pos()), TStringBuilder()
                                         << "SET NOT NULL is currently not supported."));
                                     return SyncError();
@@ -2393,10 +2393,10 @@ public:
             NThreading::TFuture<IKikimrGateway::TGenericResult> future;
             bool isTableStore = (table.Metadata->TableType == ETableType::TableStore);  // Doesn't set, so always false
             bool isColumn = (table.Metadata->StoreType == EStoreType::Column);
-            bool isSetConstraint = (!constraintSetObjects.empty());
+            bool isSetColumnConstraints = (!constraintSetObjects.empty());
 
-            if (isSetConstraint) {
-                future = Gateway->SetConstraint(table.Metadata->Name, std::move(constraintSetObjects));
+            if (isSetColumnConstraints) {
+                future = Gateway->SetColumnConstraints(table.Metadata->Name, std::move(constraintSetObjects));
             } else if (isTableStore) {
                 AFL_VERIFY(false);
                 if (!isColumn) {

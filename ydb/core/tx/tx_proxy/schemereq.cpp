@@ -234,8 +234,17 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpUpgradeSubDomainDecision:
             return *modifyScheme.MutableUpgradeSubDomain()->MutableName();
 
-        case NKikimrSchemeOp::ESchemeOpCreateSetConstraintInitiate:
+        case NKikimrSchemeOp::ESchemeOpCreateSetColumnConstraintsInitiate:
             return *modifyScheme.MutableSetColumnConstraintsInitiate()->MutableTableName();
+
+        case NKikimrSchemeOp::ESchemeOpCreateSetColumnConstraintsLock:
+            Y_ABORT("no implementation for ESchemeOpCreateSetColumnConstraintsLock");
+
+        case NKikimrSchemeOp::ESchemeOpCreateSetColumnConstraintsCheck:
+            Y_ABORT("no implementation for ESchemeOpCreateSetColumnConstraintsCheck");
+
+        case NKikimrSchemeOp::ESchemeOpCreateSetColumnConstraintsFinalize:
+            Y_ABORT("no implementation for ESchemeOpCreateSetColumnConstraintsFinalize");
 
         case NKikimrSchemeOp::ESchemeOpCreateColumnBuild:
             Y_ABORT("no implementation for ESchemeOpCreateColumnBuild");
@@ -1076,13 +1085,16 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpDropSysView:
             return false;
         case NKikimrSchemeOp::ESchemeOpChangePathState: {
-        case NKikimrSchemeOp::ESchemeOpCreateSetConstraintInitiate:
+        case NKikimrSchemeOp::ESchemeOpCreateSetColumnConstraintsInitiate:
             auto toResolve = TPathToResolve(pbModifyScheme);
             toResolve.Path = Merge(workingDir, SplitPath(GetPathNameForScheme(pbModifyScheme)));
             toResolve.RequireAccess = NACLib::EAccessRights::AlterSchema | accessToUserAttrs;
             ResolveForACL.push_back(toResolve);
             break;
         }
+        case NKikimrSchemeOp::ESchemeOpCreateSetColumnConstraintsLock:
+        case NKikimrSchemeOp::ESchemeOpCreateSetColumnConstraintsCheck:
+        case NKikimrSchemeOp::ESchemeOpCreateSetColumnConstraintsFinalize:
         case NKikimrSchemeOp::ESchemeOpCreateTableIndex:
         case NKikimrSchemeOp::ESchemeOpDropTableIndex:
         case NKikimrSchemeOp::ESchemeOp_DEPRECATED_35:

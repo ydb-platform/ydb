@@ -7,7 +7,7 @@
 
 namespace NYql {
 
-class TPlanFormatterBase : public IPlanFormatter {
+class TPlanFormatterBase: public IPlanFormatter {
 public:
     TPlanFormatterBase() = default;
     ~TPlanFormatterBase() = default;
@@ -27,7 +27,7 @@ public:
     void WriteTypeDetails(NYson::TYsonWriter& writer, const TTypeAnnotationNode& type) override;
 };
 
-class TTrackableNodeProcessorBase : public ITrackableNodeProcessor {
+class TTrackableNodeProcessorBase: public ITrackableNodeProcessor {
 public:
     TTrackableNodeProcessorBase() = default;
 
@@ -39,7 +39,7 @@ protected:
     TNullTransformer NullTransformer_;
 };
 
-class TDataProviderBase : public IDataProvider, public TPlanFormatterBase {
+class TDataProviderBase: public IDataProvider, public TPlanFormatterBase {
 public:
     TDataProviderBase() = default;
     ~TDataProviderBase() = default;
@@ -77,7 +77,7 @@ public:
     void LeaveEvaluation(ui64 id) override;
     TExprNode::TPtr CleanupWorld(const TExprNode::TPtr& node, TExprContext& ctx) override;
     TExprNode::TPtr OptimizePull(const TExprNode::TPtr& source, const TFillSettings& fillSettings, TExprContext& ctx,
-        IOptimizationContext& optCtx) override;
+                                 IOptimizationContext& optCtx) override;
     void RegisterWorldArg(const TExprNode::TPtr& arg, const TExprNode::TPtr& world) override;
     bool CanExecute(const TExprNode& node) override;
     bool ValidateExecution(const TExprNode& node, TExprContext& ctx) override;

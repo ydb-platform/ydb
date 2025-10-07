@@ -272,7 +272,7 @@ TExprNode::TPtr TDataProviderBase::CleanupWorld(const TExprNode::TPtr& node, TEx
 }
 
 TExprNode::TPtr TDataProviderBase::OptimizePull(const TExprNode::TPtr& source, const TFillSettings& fillSettings,
-    TExprContext& ctx, IOptimizationContext& optCtx)
+                                                TExprContext& ctx, IOptimizationContext& optCtx)
 {
     Y_UNUSED(fillSettings);
     Y_UNUSED(ctx);
@@ -371,10 +371,10 @@ TExprNode::TPtr DefaultCleanupWorld(const TExprNode::TPtr& node, TExprContext& c
                 const auto& read = right.Cast().Input().Ref();
                 return ctx.Builder(node->Pos())
                     .Callable("PgTableContent")
-                        .Add(0, read.Child(1)->TailPtr())
-                        .Add(1, read.ChildPtr(2))
-                        .Add(2, read.ChildPtr(3))
-                        .Add(3, read.ChildPtr(4))
+                    .Add(0, read.Child(1)->TailPtr())
+                    .Add(1, read.ChildPtr(2))
+                    .Add(2, read.ChildPtr(3))
+                    .Add(3, read.ChildPtr(4))
                     .Seal()
                     .Build();
             }

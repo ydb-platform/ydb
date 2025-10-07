@@ -6,7 +6,7 @@ namespace NYql {
 
 struct TTypeAnnotationContext;
 
-struct TPureState : public TThrRefBase {
+struct TPureState: public TThrRefBase {
     using TPtr = TIntrusivePtr<TPureState>;
 
     TTypeAnnotationContext* Types;
@@ -17,4 +17,4 @@ TIntrusivePtr<IDataProvider> CreatePureProvider(const TPureState::TPtr& state);
 
 TDataProviderInitializer GetPureDataProviderInitializer();
 
-}
+} // namespace NYql

@@ -54,4 +54,4 @@ TString ComposeStructuredTokenJsonForServiceAccountWithSecret(const TString& ser
 TString ComposeStructuredTokenJsonForBasicAuth(const TString& login, const TString& password);
 TString ComposeStructuredTokenJsonForBasicAuthWithSecret(const TString& login, const TString& passwordSecretName, const TString& password);
 TString ComposeStructuredTokenJsonForTokenAuthWithSecret(const TString& tokenSecretName, const TString& token);
-}
+} // namespace NYql

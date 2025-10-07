@@ -200,7 +200,7 @@ public:
                     return SendReplyAndDie(
                         CreateErrorReply(
                             Ydb::StatusIds::SCHEME_ERROR,
-                            TStringBuilder() << "Topic not found: " << topicPath
+                            NDescriber::Description(topicPath, info.Status)
                         ),
                         ctx
                     );

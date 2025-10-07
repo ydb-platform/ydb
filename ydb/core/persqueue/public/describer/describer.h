@@ -41,6 +41,6 @@ struct TEvDescribeTopicsResponse : public NActors::TEventLocal<TEvDescribeTopics
 };
 
 NActors::IActor* CreateDescriberActor(const NActors::TActorId& parent, const TString& databasePath, const std::unordered_set<TString>&& topicPaths);
-TString Description(const EStatus status);
+TString Description(const TString& topicPath, const EStatus status);
 
 }

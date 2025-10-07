@@ -166,4 +166,18 @@ private:
 NActors::IActor* CreateDescriberActor(const NActors::TActorId& parent, const TString& databasePath, const std::unordered_set<TString>&& topicPaths) {
     return new TDescribeActor(parent, databasePath, std::move(topicPaths));
 }
+
+TString Description(const TString& topicPath, const EStatus status) {
+    switch (status) {
+        case EStatus::SUCCESS:
+            return TStringBuilder() << "The topic '" << topicPath << "' has been successfully described";
+        case EStatus::NOT_FOUND:
+            return TStringBuilder() << "The '" << topicPath << "' topic was not found";
+        case EStatus::NOT_TOPIC:
+            return TStringBuilder() << "The '" << topicPath << "' path is not a topic";
+        case EStatus::UNKNOWN_ERROR:
+            return TStringBuilder() << "Error describing the path '" << topicPath << "'";
+    }
+}
+
 }

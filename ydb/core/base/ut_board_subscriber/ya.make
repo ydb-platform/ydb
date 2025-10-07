@@ -11,7 +11,7 @@ PEERDIR(
     ydb/core/testlib/basics
     ydb/core/base
     ydb/core/testlib/basics/default
-    yql/essentials/minikql/comp_nodes/llvm16
+    yql/essentials/minikql/comp_nodes/llvm20
 )
 
 YQL_LAST_ABI_VERSION()

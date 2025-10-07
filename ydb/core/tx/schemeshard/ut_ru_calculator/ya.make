@@ -9,7 +9,7 @@ PEERDIR(
 
     ydb/services/kesus
     ydb/services/persqueue_cluster_discovery
-    yql/essentials/minikql/comp_nodes/llvm16
+    yql/essentials/minikql/comp_nodes/llvm20
 
 )
 

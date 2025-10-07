@@ -25,10 +25,10 @@ IF (NOT OS_WINDOWS)
         ydb/library/yql/tools/dqrun/lib
 
         yt/yql/providers/yt/codec/codegen
-        yt/yql/providers/yt/comp_nodes/llvm16
-        yt/yql/providers/yt/comp_nodes/dq/llvm16
-        yql/essentials/minikql/invoke_builtins/llvm16
-        yql/essentials/minikql/comp_nodes/llvm16
+        yt/yql/providers/yt/comp_nodes/llvm20
+        yt/yql/providers/yt/comp_nodes/dq/llvm20
+        yql/essentials/minikql/invoke_builtins/llvm20
+        yql/essentials/minikql/comp_nodes/llvm20
         yql/essentials/parser/pg_wrapper
         yql/essentials/public/udf/service/exception_policy
         yql/essentials/sql/pg
@@ -36,7 +36,7 @@ IF (NOT OS_WINDOWS)
         library/cpp/lfalloc/alloc_profiler
 
         ydb/library/yql/udfs/common/clickhouse/client
-        ydb/library/yql/dq/comp_nodes/llvm16
+        ydb/library/yql/dq/comp_nodes/llvm20
         ydb/public/sdk/cpp/src/client/persqueue_public/codecs
     )
 

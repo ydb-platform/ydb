@@ -13,8 +13,8 @@ PEERDIR(
     ydb/core/testlib/basics
     ydb/library/testlib/solomon_helpers
     ydb/library/yql/providers/common/ut_helpers
-    yql/essentials/minikql/computation/llvm16
-    yql/essentials/minikql/comp_nodes/llvm16
+    yql/essentials/minikql/computation/llvm20
+    yql/essentials/minikql/comp_nodes/llvm20
     yql/essentials/providers/common/comp_nodes
     yql/essentials/public/udf/service/exception_policy
     yql/essentials/sql

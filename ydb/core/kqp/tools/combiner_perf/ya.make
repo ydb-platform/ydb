@@ -15,9 +15,9 @@ PEERDIR(
     yql/essentials/sql/pg_dummy
 
     yql/essentials/minikql/comp_nodes
-    yql/essentials/minikql/comp_nodes/llvm16
-    yql/essentials/minikql/codegen/llvm16
-    yql/essentials/minikql/invoke_builtins/llvm16
+    yql/essentials/minikql/comp_nodes/llvm20
+    yql/essentials/minikql/codegen/llvm20
+    yql/essentials/minikql/invoke_builtins/llvm20
 
     library/cpp/testing/unittest
 
@@ -26,15 +26,15 @@ PEERDIR(
     ydb/library/yql/dq/comp_nodes
     ydb/library/yql/dq/comp_nodes/ut/utils
 
-    contrib/libs/llvm16/lib/IR
-    contrib/libs/llvm16/lib/ExecutionEngine/MCJIT
-    contrib/libs/llvm16/lib/Linker
-    contrib/libs/llvm16/lib/Passes
-    contrib/libs/llvm16/lib/Target/X86
-    contrib/libs/llvm16/lib/Target/X86/AsmParser
-    contrib/libs/llvm16/lib/Target/X86/Disassembler
-    contrib/libs/llvm16/lib/Transforms/IPO
-    contrib/libs/llvm16/lib/Transforms/ObjCARC
+    contrib/libs/llvm20/lib/IR
+    contrib/libs/llvm20/lib/ExecutionEngine/MCJIT
+    contrib/libs/llvm20/lib/Linker
+    contrib/libs/llvm20/lib/Passes
+    contrib/libs/llvm20/lib/Target/X86
+    contrib/libs/llvm20/lib/Target/X86/AsmParser
+    contrib/libs/llvm20/lib/Target/X86/Disassembler
+    contrib/libs/llvm20/lib/Transforms/IPO
+    contrib/libs/llvm20/lib/Transforms/ObjCARC
 )
 
 IF (ARCH_X86_64)

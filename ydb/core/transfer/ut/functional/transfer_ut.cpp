@@ -92,7 +92,7 @@ Y_UNIT_TEST_SUITE(Transfer)
                 CREATE TRANSFER %s
                 FROM %s TO %s USING $l
                 WITH (
-                    CONNECTION_STRING = "grp§c://localhost:2135"
+                    CONNECTION_STRING = "grp§c://localhost:2135/?database=/Root"
                 )
             )", testCase.TransferName.data(), testCase.TopicName.data(), testCase.TableName.data()));
 
@@ -130,7 +130,7 @@ Y_UNIT_TEST_SUITE(Transfer)
                 CREATE TRANSFER %s
                 FROM %s TO %s USING $l
                 WITH (
-                    CONNECTION_STRING = "grpc://domain-not-exists-localhost.com.moc:2135"
+                    CONNECTION_STRING = "grpc://domain-not-exists-localhost.com.moc:2135/?database=/Root"
                 )
             )", testCase.TransferName.data(), testCase.TopicName.data(), testCase.TableName.data()));
 

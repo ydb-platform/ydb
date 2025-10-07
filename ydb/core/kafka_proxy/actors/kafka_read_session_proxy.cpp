@@ -280,7 +280,8 @@ STFUNC(KafkaReadSessionProxyActor::StateWork) {
         hFunc(TEvKafka::TEvSyncGroupRequest, Handle);
         hFunc(TEvKafka::TEvHeartbeatRequest, Handle);
         hFunc(TEvKafka::TEvLeaveGroupRequest, Handle);
-        hFunc(TEvKafka::TEvFetchRequest, Handle);
+        hFunc(TEvKafka::TEvFetchRequest, Handle); ../describer/ut/
+
         hFunc(NPQ::NDescriber::TEvDescribeTopicsResponse, Handle);
         hFunc(TEvPersQueue::TEvBalancingSubscribeNotify, Handle);
         hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
@@ -306,15 +307,6 @@ void KafkaReadSessionProxyActor::PassAway() {
     TBase::PassAway();
 }
 
-TActorId KafkaReadSessionProxyActor::CreatePipe(ui64 tabletId) {
-    auto retryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
-    retryPolicy.RetryLimitCount = 5;
-    NTabletPipe::TClientConfig clientConfig(retryPolicy);
-
-    return RegisterWithSameMailbox(
-            NTabletPipe::CreateClient(TlsActivationContext->AsActorContext().SelfID, tabletId, clientConfig)
-        );
-}
 
 IActor* CreateKafkaReadSessionProxyActor(const TContext::TPtr context, ui64 cookie) {
     return new KafkaReadSessionProxyActor(context, cookie);

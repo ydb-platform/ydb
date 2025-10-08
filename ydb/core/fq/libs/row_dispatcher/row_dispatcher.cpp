@@ -681,7 +681,6 @@ void TRowDispatcher::UpdateMetrics() {
     for (const auto& key : toDelete) {
          AggrStats.LastQueryStats.erase(key);
     }
-    PrintStateToLog();
 }
 
 TString TRowDispatcher::GetInternalState() {

@@ -1,5 +1,7 @@
 UNITTEST_FOR(yql/essentials/parser/pg_catalog)
 
+ENABLE(YQL_STYLE_CPP)
+
 SRCS(
     catalog_ut.cpp
     catalog_consts_ut.cpp

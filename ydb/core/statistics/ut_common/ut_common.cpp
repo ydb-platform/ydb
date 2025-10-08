@@ -268,7 +268,7 @@ void CreateUniformTable(TTestEnv& env, const TString& databaseName, const TStrin
     ExecuteYqlScript(env, replace);
 }
 
-void PrepareColumnTable(TTestEnv& env, const TString& databaseName, const TString& tableName,
+void CreateColumnTable(TTestEnv& env, const TString& databaseName, const TString& tableName,
     int shardCount)
 {
     auto fullTableName = Sprintf("Root/%s/%s", databaseName.c_str(), tableName.c_str());
@@ -287,6 +287,15 @@ void PrepareColumnTable(TTestEnv& env, const TString& databaseName, const TStrin
         );
     )", fullTableName.c_str(), shardCount));
     runtime.SimulateSleep(TDuration::Seconds(1));
+}
+
+void PrepareColumnTable(TTestEnv& env, const TString& databaseName, const TString& tableName,
+    int shardCount)
+{
+    CreateColumnTable(env, databaseName, tableName, shardCount);
+
+    auto fullTableName = Sprintf("Root/%s/%s", databaseName.c_str(), tableName.c_str());
+    auto& runtime = *env.GetServer().GetRuntime();
 
     ExecuteYqlScript(env, Sprintf(R"(
         ALTER OBJECT `%s` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=cms_key, TYPE=COUNT_MIN_SKETCH,

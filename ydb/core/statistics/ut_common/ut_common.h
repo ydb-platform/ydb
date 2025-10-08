@@ -71,7 +71,9 @@ TString CreateDatabase(TTestEnv& env, const TString& databaseName,
 
 TString CreateServerlessDatabase(TTestEnv& env, const TString& databaseName, const TString& sharedName, size_t nodeCount = 0);
 
-// Create a column store table, enable count-min-sketch column statistics,
+// Create empty column table with the requested number of shards.
+void CreateColumnTable(TTestEnv& env, const TString& databaseName, const TString& tableName, int shardCount);
+// Create a column table, enable count-min-sketch column statistics,
 // and insert ColumnTableRowsNumber rows.
 void PrepareColumnTable(TTestEnv& env, const TString& databaseName, const TString& tableName, int shardCount);
 

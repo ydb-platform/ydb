@@ -28,6 +28,18 @@ Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
         Analyze(runtime, tableInfo.SaTabletId, {tableInfo.PathId});
     }
 
+    Y_UNIT_TEST(AnalyzeEmptyTable) {
+        TTestEnv env(1, 1);
+        auto& runtime = *env.GetServer().GetRuntime();
+        CreateDatabase(env, "Database");
+        CreateColumnTable(env, "Database", "Table", 4);
+
+        ui64 saTabletId = 0;
+        auto pathId = ResolvePathId(runtime, "/Root/Database/Table", nullptr, &saTabletId);
+
+        Analyze(runtime, saTabletId, {pathId});
+    }
+
     Y_UNIT_TEST(AnalyzeServerless) {
         TTestEnv env(1, 1);
         auto& runtime = *env.GetServer().GetRuntime();

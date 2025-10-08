@@ -4125,7 +4125,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             } else {
                 query = Sprintf(R"(
                     --!syntax_v1
-                    ALTER TABLE `/Root/TestTable` ADD INDEX vector_idx%d 
+                    ALTER TABLE `/Root/TestTable` ADD INDEX vector_idx%d
                         GLOBAL USING vector_kmeans_tree
                         ON (Embedding)
                         WITH (%s);
@@ -4149,18 +4149,18 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         // valid settings:
         check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=3, clusters=10", "");
 
-        // unknown index setting: 
+        // unknown index setting:
         check("XxX=YyY, similarity=inner_product, vector_type=float, vector_dimension=1024, levels=3, clusters=10",
             "Unknown index setting: xxx");
         check("XxX=42, similarity=inner_product, vector_type=float, vector_dimension=1024, levels=3, clusters=10",
             "Unknown index setting: xxx");
-        
+
         // distance:
         check("distance=XxX, vector_type=float, vector_dimension=1024, levels=3, clusters=10",
             "Invalid distance: xxx");
         check("distance=42, vector_type=float, vector_dimension=1024, levels=3, clusters=10",
             "Invalid distance: 42");
-        
+
         // similarity
         check("similarity=XxX, vector_type=float, vector_dimension=1024, levels=3, clusters=10",
             "Invalid similarity: xxx");
@@ -4182,7 +4182,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             "Invalid vector_type: 42");
         check("similarity=inner_product, vector_dimension=1024, levels=3, clusters=10",
             "vector_type should be set");
-        
+
         // vector_dimension
         check("similarity=inner_product, vector_type=float, vector_dimension=XxX, levels=3, clusters=10",
             "Invalid vector_dimension: xxx");
@@ -4199,7 +4199,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             "Invalid vector_dimension: 99999999999999999999");
         check("similarity=inner_product, vector_type=float, levels=3, clusters=10",
             "vector_dimension should be set");
-            
+
         // levels
         check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=XxX, clusters=2",
             "Invalid levels: xxx");
@@ -4235,13 +4235,13 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             "Invalid clusters: 99999999999999999999");
         check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=1",
             "clusters should be set");
-        
+
         // clusters^levels
         check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=10, clusters=10",
             "Invalid clusters^levels: 10^10 should be less than 1073741824");
         check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=16, clusters=1024",
             "Invalid clusters^levels: 1024^16 should be less than 1073741824");
-        
+
         // vector_dimension*clusters
         check("similarity=inner_product, vector_type=float, vector_dimension=2048, levels=1, clusters=2048", "");
         check("similarity=inner_product, vector_type=float, vector_dimension=2049, levels=1, clusters=2048",
@@ -11497,6 +11497,77 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             auto describe = tableSession.DescribeTable("/Root/transfer").GetValueSync();
             UNIT_ASSERT_EQUAL_C(describe.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+        }
+    }
+
+     Y_UNIT_TEST_TWIN(CreateAndAlterTopicAvailabilityPeriod, UseQueryService) {
+        TKikimrRunner kikimr;
+        auto queryClient = kikimr.GetQueryClient();
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto executeQuery = [&queryClient, &session](const TString& query) {
+            return ExecuteGeneric<UseQueryService>(queryClient, session, query);
+        };
+
+        // ok
+        {
+            const auto query = R"(
+                --!syntax_v1
+                CREATE TOPIC `/Root/topic` (
+                    CONSUMER cons1 WITH (availability_period = Interval('PT1H'))
+                )
+            )";
+            const auto result = executeQuery(query);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            const auto query = R"(
+                --!syntax_v1
+                ALTER TOPIC `/Root/topic`
+                    ALTER CONSUMER cons1 SET (availability_period = Interval('PT9H'))
+            )";
+            const auto result = executeQuery(query);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            const auto query = R"(
+                --!syntax_v1
+                ALTER TOPIC `/Root/topic`
+                    DROP CONSUMER cons1,
+                    ADD CONSUMER cons2 WITH (availability_period = Interval('PT8H'))
+            )";
+            const auto result = executeQuery(query);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            const auto query = R"(
+                --!syntax_v1
+                ALTER TOPIC `/Root/topic`
+                    ALTER CONSUMER cons2 RESET (availability_period)
+            )";
+            const auto result = executeQuery(query);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        // bad
+        {
+            const auto query = R"(
+                --!syntax_v1
+                ALTER TOPIC `/Root/topic`
+                    ALTER CONSUMER cons2 SET (availability_period = 0)
+            )";
+            const auto result = executeQuery(query);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Interval type is expected", result.GetIssues().ToString());
+        }
+        {
+            const auto query = R"(
+                --!syntax_v1
+                ALTER TOPIC `/Root/topic`
+                     ADD CONSUMER cons_neg WITH (availability_period = Interval('-PT8H'))
+            )";
+            const auto result = executeQuery(query);
+            UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
     }
 

@@ -204,6 +204,9 @@ public:
             IsConfirmedMetricsQueueFinish = true;
         }
 
+        IngressStats.Bytes += batch.GetDownloadedBytes();
+        IngressStats.Chunks++;
+        IngressStats.Resume();
         auto& listedMetrics = batch.GetMetrics();
 
         SOURCE_LOG_D("HandleMetricsBatch batch of size " << listedMetrics.size());
@@ -248,6 +251,10 @@ public:
             Send(ComputeActorId, new TEvAsyncInputError(InputIndex, issues, NYql::NDqProto::StatusIds::EXTERNAL_ERROR));
             return;
         }
+
+        IngressStats.Bytes += batch.Response.DownloadedBytes;
+        IngressStats.Chunks++;
+        IngressStats.Resume();
 
         auto& metric = batch.Metric;
         auto& pointsCount = batch.Response.Result.PointsCount;
@@ -388,6 +395,10 @@ public:
         }
 
         finished = LastMetricProcessed();
+        if (MetricsData.empty()) {
+            IngressStats.TryPause();
+        }
+
         MetricsData.clear();
         return 0;
     }
@@ -552,6 +563,10 @@ private:
             }
         }
 
+        IngressStats.Bytes += batch.Response.DownloadedBytes;
+        IngressStats.Rows += batch.Response.Result.Timeseries.size();
+        IngressStats.Chunks++;
+        IngressStats.Resume();
         PendingDataRequests_.erase(request);
         CurrentInflight--;
         

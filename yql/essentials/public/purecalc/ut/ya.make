@@ -1,5 +1,7 @@
 UNITTEST()
 
+ENABLE(YQL_STYLE_CPP)
+
 SRCS(
     empty_stream.h
     fake_spec.cpp

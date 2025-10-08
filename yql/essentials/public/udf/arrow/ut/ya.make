@@ -1,5 +1,7 @@
 UNITTEST()
 
+ENABLE(YQL_STYLE_CPP)
+
 SRCS(
     array_builder_ut.cpp
     bit_util_ut.cpp

@@ -189,5 +189,5 @@ const TType* SkipTaggedType(const ITypeInfoHelper& typeInfoHelper, const TType* 
 
     return type;
 }
-}
-}
+} // namespace NUdf
+} // namespace NYql

@@ -1,5 +1,7 @@
 LIBRARY()
 
+ENABLE(YQL_STYLE_CPP)
+
 PROVIDES(YqlServicePolicy)
 
 SRCS(

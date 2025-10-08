@@ -11,7 +11,8 @@ class TInputBuffer {
 public:
     TInputBuffer(TStringBuf buf)
         : Buf_(buf)
-    {}
+    {
+    }
 
     char PopChar() {
         Ensure(1);
@@ -109,7 +110,5 @@ private:
     TVector<char> Vec_;
 };
 
-
-
-}
-}
+} // namespace NUdf
+} // namespace NYql

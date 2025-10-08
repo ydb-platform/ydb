@@ -55,7 +55,7 @@ ui64 GetSizeOfArrayDataInBytes(const arrow::ArrayData& data);
 ui64 GetSizeOfArrowBatchInBytes(const arrow::RecordBatch& batch);
 ui64 GetSizeOfArrowExecBatchInBytes(const arrow::compute::ExecBatch& batch);
 
-class TResizeableBuffer : public arrow::ResizableBuffer {
+class TResizeableBuffer: public arrow::ResizableBuffer {
 public:
     explicit TResizeableBuffer(arrow::MemoryPool* pool)
         : ResizableBuffer(nullptr, 0, arrow::CPUDevice::memory_manager(pool))
@@ -111,7 +111,7 @@ private:
     arrow::MemoryPool* Pool_;
 };
 
-template<typename TBuffer = TResizeableBuffer>
+template <typename TBuffer = TResizeableBuffer>
 std::unique_ptr<arrow::ResizableBuffer> AllocateResizableBuffer(size_t capacity, arrow::MemoryPool* pool, bool zeroPad = false) {
     std::unique_ptr<TBuffer> result = std::make_unique<TBuffer>(pool);
     ARROW_OK(result->Reserve(capacity));
@@ -122,12 +122,15 @@ std::unique_ptr<arrow::ResizableBuffer> AllocateResizableBuffer(size_t capacity,
 }
 
 /// \brief owning buffer that calls destructors
-template<typename T>
-class TResizableManagedBuffer final : public TResizeableBuffer {
+template <typename T>
+class TResizableManagedBuffer final: public TResizeableBuffer {
     static_assert(!std::is_trivially_destructible_v<T>);
+
 public:
     explicit TResizableManagedBuffer(arrow::MemoryPool* pool)
-        : TResizeableBuffer(pool) {}
+        : TResizeableBuffer(pool)
+    {
+    }
 
     ~TResizableManagedBuffer() override {
         for (int64_t i = 0; i < size_; i += sizeof(T)) {
@@ -141,11 +144,12 @@ public:
 // 1) with UnsafeAdvance() method
 // 2) shrinkToFit = false
 // 3) doesn't zero pad buffer
-template<typename T>
+template <typename T>
 class TTypedBufferBuilder {
     static_assert(!std::is_same_v<T, bool>);
 
     using TArrowBuffer = std::conditional_t<std::is_trivially_destructible_v<T>, TResizeableBuffer, TResizableManagedBuffer<T>>;
+
 public:
     explicit TTypedBufferBuilder(arrow::MemoryPool* pool, TMaybe<ui8> minFillPercentage = {})
         : MinFillPercentage_(minFillPercentage)
@@ -215,14 +219,15 @@ public:
     inline std::shared_ptr<arrow::Buffer> Finish() {
         int64_t newSize = Len_ * sizeof(T);
         bool shrinkToFit = MinFillPercentage_
-            ? newSize <= Buffer_->capacity() * *MinFillPercentage_ / 100
-            : false;
+                               ? newSize <= Buffer_->capacity() * *MinFillPercentage_ / 100
+                               : false;
         ARROW_OK(Buffer_->Resize(newSize, shrinkToFit));
         std::shared_ptr<arrow::ResizableBuffer> result;
         std::swap(result, Buffer_);
         Len_ = 0;
         return result;
     }
+
 private:
     const TMaybe<ui8> MinFillPercentage_;
     arrow::MemoryPool* const Pool_;
@@ -262,7 +267,7 @@ inline bool NeedWrapWithExternalOptional(const ITypeInfoHelper& typeInfoHelper, 
     TOptionalTypeInspector typeOptOpt(typeInfoHelper, type);
     if (typeOptOpt) {
         return true;
-    } else if (TPgTypeInspector(typeInfoHelper, type) ||  IsSingularType(typeInfoHelper, type)) {
+    } else if (TPgTypeInspector(typeInfoHelper, type) || IsSingularType(typeInfoHelper, type)) {
         return true;
     }
     return false;

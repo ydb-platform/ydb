@@ -673,6 +673,19 @@ class LintConfigs:
         assert_file_exists(unit, config)
         return serialize_list([config])
 
+    @classmethod
+    def custom_explicit_configs(cls, unit, flat_args, spec_args):
+        # default global config only
+        linter_name = spec_args['NAME'][0]
+        default_configs_path = spec_args.get('CONFIGS')[0]
+        assert_file_exists(unit, default_configs_path)
+        config = get_linter_configs(unit, default_configs_path).get(linter_name)
+        if not config:
+            message = f"Default config in {default_configs_path} can't be found for a linter {linter_name}"
+            raise DartValueError(message)
+        assert_file_exists(unit, config)
+        return serialize_list([config])
+
 
 class LintExtraParams:
     KEY = 'LINT-EXTRA-PARAMS'
@@ -1222,6 +1235,9 @@ class TestFiles:
         'maps/b2bgeo/mvrp_solver/aws_docker',
     )
 
+    # XXX: this is a temporarty fence allowing only taxi to use STYLE_JSON macro
+    _TAXI_JSON_PREFIX = 'taxi'
+
     @classmethod
     def value(cls, unit, flat_args, spec_args):
         data_re = re.compile(r"sbr:/?/?(\d+)=?.*")
@@ -1338,6 +1354,31 @@ class TestFiles:
 
         files_dart = _reference_group_var("ALL_SRCS", consts.STYLE_CPP_ALL_EXTS)
         return files_dart
+
+    @classmethod
+    def from_macro_args(cls, unit, flat_args, spec_args):
+        files = spec_args.get('FILES', [])
+        if not files:
+            raise HaltDartConstruction()
+        else:
+            upath = unit.path()[3:]
+            lint_name = spec_args['NAME'][0]
+
+            if lint_name == 'clang_format_json' and not upath.startswith(cls._TAXI_JSON_PREFIX):
+                raise DartValueError("Presently only projects in taxi/ are allowed with STYLE_JSON")
+            resolved_files = []
+            for path in files:
+                if path.endswith('ya.make'):
+                    raise DartValueError("Can't have ya.make in collected files")
+                resolved = _common.resolve_common_const(path)  # files can come from glob
+                if resolved.startswith(SOURCE_ROOT_SHORT):
+                    resolved_files.append(resolved)
+                else:
+                    resolved = unit.resolve_arc_path([path])
+                    if resolved.startswith(SOURCE_ROOT_SHORT):
+                        resolved_files.append(resolved)
+            test_files = serialize_list(resolved_files)
+            return test_files
 
 
 class TestEnv:

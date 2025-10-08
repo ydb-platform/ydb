@@ -1,5 +1,7 @@
 LIBRARY()
 
+ENABLE(YQL_STYLE_CPP)
+
 PEERDIR(
     contrib/libs/apache/arrow
     library/cpp/yson

@@ -1,5 +1,7 @@
 LIBRARY()
 
+ENABLE(YQL_STYLE_CPP)
+
 SRCS(
     args_dechunker.cpp
     udf_arrow_helpers.cpp

@@ -2,6 +2,8 @@ IF (NOT SANITIZER_TYPE)
 
 UNITTEST()
 
+ENABLE(YQL_STYLE_CPP)
+
 PEERDIR(
     library/cpp/protobuf/util
     yql/essentials/public/udf/service/exception_policy

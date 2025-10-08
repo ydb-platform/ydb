@@ -1,7 +1,6 @@
 #include "collection.h"
 
 #include <yql/essentials/core/yql_expr_type_annotation.h>
-#include <yql/essentials/utils/log/log.h>
 
 #include <vector>
 
@@ -72,6 +71,7 @@ public:
         } else {
             predicateTree.CanBePushed = false;
         }
+
     }
 
     void CollectChildrenPredicates(const TExprBase& node, TPredicateNode& predicateTree) {
@@ -209,6 +209,9 @@ private:
             return true;
         }
         if (Settings.IsEnabled(EFlag::StringTypes) && (node.Maybe<TCoUtf8>() || node.Maybe<TCoString>())) {
+            return true;
+        }
+        if (Settings.IsEnabled(EFlag::DecimalCtor) && node.Maybe<TCoDecimal>()) {
             return true;
         }
         return false;
@@ -517,7 +520,6 @@ private:
             case ETypeAnnotationKind::Struct:
                 break;
             default:
-                // We do not know how process input that is not a sequence of elements
                 return false;
         }
         YQL_ENSURE(inputType->GetKind() == ETypeAnnotationKind::Struct, "Unexpected predicate input type " << ui64(inputType->GetKind()));

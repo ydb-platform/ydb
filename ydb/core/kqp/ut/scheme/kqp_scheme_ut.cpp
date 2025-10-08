@@ -11537,11 +11537,20 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             const auto query = R"(
                 --!syntax_v1
                 ALTER TOPIC `/Root/topic`
-                    ALTER CONSUMER cons1 SET (availability_period = 0)
+                    ALTER CONSUMER cons2 SET (availability_period = 0)
             )";
             const auto result = executeQuery(query);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
             UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Interval type is expected", result.GetIssues().ToString());
+        }
+        {
+            const auto query = R"(
+                --!syntax_v1
+                ALTER TOPIC `/Root/topic`
+                     ADD CONSUMER cons_neg WITH (availability_period = Interval('-PT8H'))
+            )";
+            const auto result = executeQuery(query);
+            UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
     }
 

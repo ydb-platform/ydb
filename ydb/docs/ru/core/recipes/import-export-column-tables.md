@@ -156,7 +156,7 @@ S3_BUCKET_NAME = ""
 
 spark = (SparkSession.builder
     .appName("ydb-export-lineitem-to-parquet")
-    .config("spark.jars.packages", "tech.ydb.spark:ydb-spark-connector-shaded:2.0.1,org.apache.hadoop:hadoop-aws:3.3.6")
+    .config("spark.jars.packages", "tech.ydb.spark:ydb-spark-connector-shaded:2.0.1,org.apache.hadoop:hadoop-aws:3.3.6,com.amazonaws:aws-java-sdk-bundle:1.12.662")
     # Конфигурация S3-коннектора
     .config("spark.hadoop.fs.s3a.endpoint", S3_ENDPOINT)
     .config("spark.hadoop.fs.s3a.access.key", S3_ACCESS_KEY)

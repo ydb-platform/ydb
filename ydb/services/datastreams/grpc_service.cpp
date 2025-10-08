@@ -8,6 +8,7 @@
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/tx/scheme_board/cache.h>
 #include <ydb/core/tx/scheme_board/events.h>
+#include <ydb/library/cloud_permissions/cloud_permissions.h>
 
 namespace {
 
@@ -15,13 +16,6 @@ using namespace NKikimr;
 
 void YdsProcessAttr(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData, NGRpcService::ICheckerIface* checker) {
     static const std::vector<TString> allowedAttributes = {"folder_id", "service_account_id", "database_id"};
-    //full list of permissions for compatibility. remove old permissions later.
-    static const TVector<TString> permissions = {
-        "ydb.streams.write",
-        "ydb.databases.list",
-        "ydb.databases.create",
-        "ydb.databases.connect"
-    };
     TVector<std::pair<TString, TString>> attributes;
     attributes.reserve(schemeData.GetPathDescription().UserAttributesSize());
     for (const auto& attr : schemeData.GetPathDescription().GetUserAttributes()) {
@@ -30,7 +24,8 @@ void YdsProcessAttr(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData,
         }
     }
     if (!attributes.empty()) {
-        checker->SetEntries({{permissions, attributes}});
+        //full list of permissions for compatibility. remove old permissions later.
+        checker->SetEntries({{NCloudPermissions::TCloudPermissions<NCloudPermissions::EType::DEFAULT>::Get(), attributes}});
     }
 }
 

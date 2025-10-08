@@ -303,17 +303,17 @@ private:
             return !(*this == other);
         }
 
+        const TRcBuf& GetChunk() const {
+            CheckValid();
+            return *Iter;
+        }
+
     private:
         friend class TRope;
 
         typename TTraits::TListIterator operator ->() const {
             CheckValid();
             return Iter;
-        }
-
-        const TRcBuf& GetChunk() const {
-            CheckValid();
-            return *Iter;
         }
 
         template<bool Mut = !IsConst, std::enable_if_t<Mut, bool> = true>

@@ -7,19 +7,15 @@
 1. [Экспорт и импорт через федеративные запросы](#objstorage) к объектным хранилищам (например, {{ objstorage-name }} или другим S3-совместимым).
 2. [Экспорт и импорт через Apache Spark™](#spark) — гибкий способ для работы с большими объемами данных.
 
-{% note info %}
-
-В руководстве в качестве примера используются данные, созданные с помощью нагрузочного теста TPC-H. Загрузить данные в базу вы можете, следуя [инструкции](../../reference/ydb-cli/workload-tpch.md).
-
-{% endnote %}
-
 ## Экспорт и импорт через федеративные запросы к {{ objstorage-name }} {#objstorage}
 
 [Федеративные запросы](../../concepts/federated_query/index.md) позволяют {{ ydb-short-name }} напрямую читать и записывать данные в файлах форматов Parquet или CSV. Этот метод удобен для выполнения операций экспорта и импорта непосредственно средствами SQL без использования внешних инструментов.
 
 ### Предварительные требования
 
-- {{ objstorage-name }} и статический ключ доступа к нему, например [{{ objstorage-full-name }}](https://yandex.cloud/ru/docs/storage/).
+- {{ objstorage-name }} и статический ключ доступа к нему, например [{{ objstorage-full-name }}](https://yandex.cloud/ru/docs/storage/) и созданный в нём [бакет](https://yandex.cloud/ru/docs/storage/concepts/bucket) с именем `your-bucket`.
+- Сетевой доступ от узлов кластера {{ ydb-short-name }} до {{ objstorage-name }}. В примере используется endpoint storage.yandexcloud.net к которму неоходим доступ по порту 443
+- В руководстве в качестве примера используются данные, созданные с помощью нагрузочного теста TPC-H. Загрузить эти тестовые данные в базу можно по [инструкции](../../reference/ydb-cli/workload-tpch.md).
 
 ### Создайте секрет для доступа к {{ objstorage-name }}
 
@@ -36,6 +32,8 @@ CREATE OBJECT aws_access_key (TYPE SECRET) WITH (value='<секретный_кл
 - `<ID_ключа>` — идентификатор статического ключа доступа.
 - `aws_access_key` — имя секрета, содержащего секретный ключ.
 - `<секретный_ключ>` — секретная часть ключа доступа.
+- LOCATION - endpoint выбранного {{ objstorage-name }}
+- AWS_REGION - регион выбранного {{ objstorage-name }}
 
 ### Настройка подключения
 
@@ -116,36 +114,53 @@ SELECT * FROM `external/backup/lineitem_sql`;
 
 ## Экспорт и импорт с помощью Apache Spark™ {#spark}
 
-Использование коннектора {{ ydb-short-name }} для Apache Spark™ является гибким и масштабируемым решением для экспорта и импорта больших объемов данных.
+Использование [коннектора]('../../../../integrations/ingestion/spark.md') {{ ydb-short-name }} для Apache Spark™ является гибким и масштабируемым решением для экспорта и импорта больших объемов данных.
 
 ### Предварительные требования
 
-- Установленный драйвер {{ ydb-short-name }} для Spark.
-- Наличие gRPC-эндпоинта для подключения к базе данных {{ ydb-short-name }}.
-- Реквизиты доступа {{ ydb-short-name }} с правами на чтение/запись.
-- {{ objstorage-name }} и статический ключ доступа к нему, например [Yandex Object Storage](https://yandex.cloud/ru/docs/storage/).
-
-
-### Подтоговка
-
-Установите `PySpark`
-
-```shell
-pip3 install pyspark
-```
+- Установленный PySpark версии 4.0.1, установить можно по [инструкции] (https://spark.apache.org/docs/latest/api/python/getting_started/install.html).
+- Наличие [gRPC-эндпоинта](../../concepts/connect.md#эндпоинт-endpoint) для подключения к базе данных {{ ydb-short-name }}.
+- [Реквизиты доступа](../../reference/ydb-cli/connect.md#command-line-pars) {{ ydb-short-name }} с правами на чтение/запись.
+- {{ objstorage-name }} и статический ключ доступа к нему, например [{{ objstorage-full-name }}](https://yandex.cloud/ru/docs/storage/) и созданный в нём [бакет](https://yandex.cloud/ru/docs/storage/concepts/bucket) с именем `your-bucket`.
+- В руководстве в качестве примера используются данные, созданные с помощью нагрузочного теста TPC-H. Загрузить эти тестовые данные в базу можно по [инструкции](../../reference/ydb-cli/workload-tpch.md).
 
 ### Экспорт данных из {{ ydb-short-name }} в Parquet
+
+Используемые параметры:
+
+- `spark.jars.packages` — конфигурационный параметр Maven, который загрузит коннектор {{ ydb-short-name }} для Spark, а также другие необходимые компоненты.
+- `S3_ENDPOINT` — эндпоинт S3-совместимого хранилища (для {{ objstorage-full-name }} используйте `https://storage.yandexcloud.net`).
+- `S3_ACCESS_KEY` — ID статического ключа для доступа к S3.
+- `S3_SECRET_KEY` — секретная часть ключа для доступа к S3.
+- `YDB_HOSTNAME` — хост gRPC-эндпоинта (например, `ydb.serverless.yandexcloud.net`).
+- `YDB_PORT` — порт gRPC-эндпоинта (например, `2135`).
+- `YDB_DATABASE_NAME>` — путь к вашей базе данных (например, `/ru-central1/b1g.../etn...`).
+- `YDB_AUTH_TYPE` — параметры для аутентификации в {{ ydb-short-name }}, поддерживаемые [драйвером Apache Spark](https://github.com/ydb-platform/ydb-spark-connector?tab=readme-ov-file#connector-usage).
+- `YDB_SOURCE_TABLE` — Путь к исходной таблице в базе источнике (например, `tpch/s1/lineitem`).
 
 ```python
 from pyspark.sql import SparkSession
 
+#Настройки источника
+YDB_HOSTNAME = ""
+YDB_PORT = ""
+YDB_DATABASE_NAME = ""
+YDB_AUTH_TYPE = ""
+YDB_SOURCE_TABLE = ""
+
+#Настройки назначения
+S3_ENDPOINT = ""
+S3_ACCESS_KEY = ""
+S3_SECRET_KEY = ""
+S3_BUCKET_NAME = ""
+
 spark = (SparkSession.builder
     .appName("ydb-export-lineitem-to-parquet")
-    .config("spark.jars.packages", "tech.ydb.spark:ydb-spark-connector-shaded:2.0.1,org.apache.hadoop:hadoop-aws:3.3.6,com.amazonaws:aws-java-sdk-bundle:1.12.662")
+    .config("spark.jars.packages", "tech.ydb.spark:ydb-spark-connector-shaded:2.0.1,org.apache.hadoop:hadoop-aws:3.3.6")
     # Конфигурация S3-коннектора
-    .config("spark.hadoop.fs.s3a.endpoint", "https://storage.yandexcloud.net")
-    .config("spark.hadoop.fs.s3a.access.key", "<ID_ключа_S3>")
-    .config("spark.hadoop.fs.s3a.secret.key", "<секретный_ключ_S3>")
+    .config("spark.hadoop.fs.s3a.endpoint", S3_ENDPOINT)
+    .config("spark.hadoop.fs.s3a.access.key", S3_ACCESS_KEY)
+    .config("spark.hadoop.fs.s3a.secret.key", S3_SECRET_KEY)
     .config("spark.hadoop.fs.s3a.threads.keepalivetime", "60000")
     .config("spark.hadoop.fs.s3a.aws.credentials.provider", "org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider")
     .config("spark.hadoop.fs.s3a.connection.establish.timeout", "30000")   # 30s
@@ -160,43 +175,53 @@ spark = (SparkSession.builder
 
 # Чтение данных из таблицы lineitem
 df = (spark.read.format("ydb")
-    .option("url", "grpcs://<endpoint>/<database>?<auth_info>")
-    .load("tpch/s10/lineitem"))
+    .option("url", f"grpcs://{YDB_HOSTNAME}:{YDB_PORT}{YDB_DATABASE_NAME}?{YDB_AUTH_TYPE}")
+    .load(YDB_SOURCE_TABLE))
 
 # Запись данных в Parquet-файлы в S3
 (df.repartition(64)
     .write.mode("overwrite")
     .option("compression", "snappy")
-    .parquet("s3a://your-bucket/ydb-dumps-spark/lineitem/"))
+    .parquet(f"s3a://{S3_BUCKET_NAME}/ydb-dumps-spark/lineitem/"))
 
 spark.stop()
 ```
 
-Где:
-
-- `spark.jars.packages` — зависимость Maven, которая загрузит коннектор {{ ydb-short-name }} для Spark, а также другие необходимые компоненты.
-- `spark.hadoop.fs.s3a.endpoint` — эндпоинт S3-совместимого хранилища.
-- `spark.hadoop.fs.s3a.access.key` (`<ID_ключа_S3>`) — ID статического ключа для доступа к S3.
-- `spark.hadoop.fs.s3a.secret.key` (`<секретный_ключ_S3>`) — секретная часть ключа для доступа к S3.
-- `url` — строка подключения к базе данных {{ ydb-short-name }}:
-  - `<endpoint>` — хост и порт gRPC-эндпоинта (например, `ydb.serverless.yandexcloud.net:2135`).
-  - `<database>` — путь к вашей базе данных (например, `/ru-central1/b1g.../etn...`).
-  - `<auth_info>` — параметры для аутентификации в {{ ydb-short-name }}, поддерживаемые [драйвером Apache Spark](https://github.com/ydb-platform/ydb-spark-connector?tab=readme-ov-file#connector-usage).
-- `load(...)` — путь к исходной таблице `tpch/s10/lineitem`.
-- `parquet(...)` — полный путь в S3-хранилище (`s3a://...`), куда будут сохранены данные.
-
 ### Импорт данных из Parquet в {{ ydb-short-name }}
+- `spark.jars.packages` — конфигурационный параметр Maven, который загрузит коннектор {{ ydb-short-name }} для Spark, а также другие необходимые компоненты.
+- `S3_ENDPOINT` — эндпоинт S3-совместимого хранилища (для {{ objstorage-full-name }} используйте `https://storage.yandexcloud.net`).
+- `S3_ACCESS_KEY` — ID статического ключа для доступа к S3.
+- `S3_SECRET_KEY` — секретная часть ключа для доступа к S3.
+- `YDB_HOSTNAME` — хост gRPC-эндпоинта (например, `ydb.serverless.yandexcloud.net`).
+- `YDB_PORT` — порт gRPC-эндпоинта (например, `2135`).
+- `YDB_DATABASE_NAME>` — путь к вашей базе данных (например, `/ru-central1/b1g.../etn...`).
+- `YDB_AUTH_TYPE` — параметры для аутентификации в {{ ydb-short-name }}, поддерживаемые [драйвером Apache Spark](https://github.com/ydb-platform/ydb-spark-connector?tab=readme-ov-file#connector-usage).
+- `YDB_TARGET_TABLE` — Путь к таблице в базе назначения (например, `tpch/s1/lineitem`).
 
 ```python
 from pyspark.sql import SparkSession
 
+#Настройки источника
+S3_ENDPOINT = "https://storage.yandexcloud.net"
+S3_ACCESS_KEY = ""
+S3_SECRET_KEY = ""
+S3_BUCKET_NAME = ""
+S3_FOLDER_PATH = ""
+
+#Настройки назначения
+YDB_HOSTNAME = ""
+YDB_PORT = ""
+YDB_DATABASE_NAME = ""
+YDB_AUTH_TYPE = ""
+YDB_TARGET_TABLE = ""
+
 spark = (SparkSession.builder
     .appName("ydb-import-lineitem-from-parquet")
-    .config("spark.jars.packages", "tech.ydb.spark:ydb-spark-connector-shaded:2.0.1")
+    .config("spark.jars.packages", "tech.ydb.spark:ydb-spark-connector-shaded:2.0.1,org.apache.hadoop:hadoop-aws:3.3.6,com.amazonaws:aws-java-sdk-bundle:1.12.662")
     # Конфигурация S3-коннектора (аналогично экспорту)
-    .config("spark.hadoop.fs.s3a.endpoint", "https://storage.yandexcloud.net")
-    .config("spark.hadoop.fs.s3a.access.key", "<ID_ключа_S3>")
-    .config("spark.hadoop.fs.s3a.secret.key", "<секретный_ключ_S3>")
+    .config("spark.hadoop.fs.s3a.endpoint", S3_ENDPOINT)
+    .config("spark.hadoop.fs.s3a.access.key", S3_ACCESS_KEY)
+    .config("spark.hadoop.fs.s3a.secret.key", S3_SECRET_KEY)
     .config("spark.hadoop.fs.s3a.threads.keepalivetime", "60000")
     .config("spark.hadoop.fs.s3a.aws.credentials.provider", "org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider")
     .config("spark.hadoop.fs.s3a.connection.establish.timeout", "30000")   # 30s
@@ -210,19 +235,13 @@ spark = (SparkSession.builder
     .getOrCreate())
 
 # Чтение данных из Parquet-файлов в S3, созданных на шаге экспорта
-df = spark.read.parquet("s3a://your-bucket/ydb-dumps-spark/lineitem/")
+df = spark.read.parquet(f"s3a://{S3_BUCKET_NAME}/{S3_FOLDER_PATH}")
 
 # Запись данных в принимающую таблицу
 (df.write.format("ydb")
-    .option("url", "grpcs://<endpoint>/<database>?<!!!!auth_info>")
+    .option("url", f"grpcs://{YDB_HOSTNAME}:{YDB_PORT}{YDB_DATABASE_NAME}?{YDB_AUTH_TYPE}")
     .mode("append")
-    .save("tpch/s10/lineitem"))
+    .save(YDB_TARGET_TABLE))
 
 spark.stop()
 ```
-
-Где:
-
-- Параметры `spark.hadoop.*` и `url` настраиваются аналогично примеру с экспортом.
-- `parquet(...)` — путь в S3, откуда будут читаться данные (тот же, что использовался для экспорта).
-- `save(...)` — путь к целевой таблице `tpch/s10/lineitem`, в которую будут импортированы данные.

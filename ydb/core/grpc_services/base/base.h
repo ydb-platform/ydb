@@ -396,11 +396,11 @@ class IRequestProxyCtx
     friend class TGrpcRequestCheckActor;
     friend class TGRpcRequestProxySimple;
     friend class TGRpcRequestProxyHandleMethods;
-// private:
-//     virtual void ReplyWithYdbStatus(Ydb::StatusIds::StatusCode status) = 0;
+private:
+    virtual void ReplyWithYdbStatus(Ydb::StatusIds::StatusCode status) = 0;
 public:
     virtual ~IRequestProxyCtx() = default;
-    virtual void ReplyWithYdbStatus(Ydb::StatusIds::StatusCode status) = 0;
+    // virtual void ReplyWithYdbStatus(Ydb::StatusIds::StatusCode status) = 0;
 
     // auth
     virtual const TMaybe<TString> GetYdbToken() const = 0;

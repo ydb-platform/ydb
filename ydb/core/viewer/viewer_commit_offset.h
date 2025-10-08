@@ -9,7 +9,7 @@ using TCommitOffsetRpc = TJsonLocalRpc<Ydb::Topic::CommitOffsetRequest,
                                         Ydb::Topic::CommitOffsetResponse,
                                         Ydb::Topic::CommitOffsetResult,
                                         Ydb::Topic::V1::TopicService,
-                                        NKikimr::NGRpcService::TEvCommitOffsetTopicRequest>;
+                                        NKikimr::NGRpcService::TEvCommitOffsetRequest>;
 
 class TJsonCommitOffset : public TCommitOffsetRpc {
 public:

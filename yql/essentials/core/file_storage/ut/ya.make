@@ -1,5 +1,7 @@
 UNITTEST_FOR(yql/essentials/core/file_storage)
 
+ENABLE(YQL_STYLE_CPP)
+
 SRCS(
     file_storage_ut.cpp
     sized_cache_ut.cpp

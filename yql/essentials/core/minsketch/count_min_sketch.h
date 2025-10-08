@@ -64,4 +64,4 @@ public:
 
 static_assert(sizeof(TCountMinSketch) == 24);
 
-} // NKikimr
+} // namespace NKikimr

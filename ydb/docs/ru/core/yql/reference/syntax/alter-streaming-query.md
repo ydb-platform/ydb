@@ -23,7 +23,7 @@ END DO];
 Статус запроса (запущен или остановлен) не изменяется, если явно не указывать настройку `RUN`.
 Если `RUN = TRUE`, то можно указать STREAMING_DISPOSITION для запуска запроса.
 - `FORCE = (TRUE|FALSE)`  нужно ли разрешать изменение запроса приводящее к невозможности его загрузки из чекпоинта, по умолчанию FALSE.
-
+- `STREAMING_DISPOSITION=...` - см. [CREATE STREAMING QUERY](create-streaming-query.md).
 Примеры:
 
 ```sql

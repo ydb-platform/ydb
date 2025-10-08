@@ -28,6 +28,7 @@ SRCS(
     nonblocking_queue_ut.cpp
     parallel_runner_ut.cpp
     periodic_ut.cpp
+    periodic_yielder_ut.cpp
     profiled_fair_share_invoker_pool_ut.cpp
     propagating_storage_ut.cpp
     quantized_executor_ut.cpp
@@ -35,8 +36,8 @@ SRCS(
     scheduler_ut.cpp
     suspendable_action_queue_ut.cpp
     thread_affinity_ut.cpp
-    thread_pool_ut.cpp
     thread_pool_poller_ut.cpp
+    thread_pool_ut.cpp
     throughput_throttler_ut.cpp
     two_level_fair_share_thread_pool_ut.cpp
 )

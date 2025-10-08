@@ -414,12 +414,19 @@ protected:
 
     void HandleAck() {
         TBase::AckReceived = true;
-        ProceedToScan();
+        DoScan();
     }
 
     void ProceedToScan() final {
         TBase::Become(&TDerived::StateScan);
-        if (TBase::AckReceived && !ScanStarted) {
+        if (TBase::AckReceived) {
+            DoScan();
+        }
+    }
+
+private:
+    void DoScan() {
+        if (!ScanStarted) {
             ScanStarted = true;
             StartScan();
         }

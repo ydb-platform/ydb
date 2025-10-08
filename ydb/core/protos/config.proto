@@ -423,6 +423,11 @@ message TInterconnectConfig {
         REQUIRED = 2;
     };
 
+    enum ESocketSendOptimization {
+        IC_SO_DISABLED = 0;
+        IC_SO_MSG_ZEROCOPY = 1;
+    };
+
     repeated TChannel Channel = 1;
     optional bool FirstTryBeforePoll = 2; // DEPRECATED
     optional bool StartTcp = 3 [default = false];
@@ -453,9 +458,10 @@ message TInterconnectConfig {
     optional bool SuppressConnectivityCheck = 39 [default = false];
     optional uint32 PreallocatedBufferSize = 40;
     optional uint32 NumPreallocatedBuffers = 41;
-    optional bool EnableExternalDataChannel = 42;
+    optional bool EnableExternalDataChannel = 42 [default = false];
     optional bool ValidateIncomingPeerViaDirectLookup = 44;
     optional uint32 SocketBacklogSize = 45; // SOMAXCONN if not set or zero
+    optional ESocketSendOptimization SocketSendOptimization = 51 [default = IC_SO_DISABLED];
 
     // ballast is added to IC handshake frames to ensure correctness of jumbo frames transmission over network
     optional uint32 HandshakeBallastSize = 14;

@@ -387,12 +387,12 @@ static THashMap<TString, TEnumType> MakeEnumMapping(
 }
 
 static const THashMap<TString, Ydb::Topic::Codec>& GetCodecsMapping() {
-    const static THashMap<TString, Ydb::Topic::Codec> codecsMapping = MakeEnumMapping<Ydb::Topic::Codec>(Ydb::Topic::Codec_descriptor(), "codec_");
+    static const THashMap<TString, Ydb::Topic::Codec> codecsMapping = MakeEnumMapping<Ydb::Topic::Codec>(Ydb::Topic::Codec_descriptor(), "codec_");
     return codecsMapping;
 }
 
 static const THashMap<TString, Ydb::Topic::AutoPartitioningStrategy>& GetAutoPartitioningStrategiesMapping() {
-    const static THashMap<TString, Ydb::Topic::AutoPartitioningStrategy> strategiesMapping = []() {
+    static const THashMap<TString, Ydb::Topic::AutoPartitioningStrategy> strategiesMapping = []() {
         auto strategiesMapping = MakeEnumMapping<Ydb::Topic::AutoPartitioningStrategy>(
             Ydb::Topic::AutoPartitioningStrategy_descriptor(), "auto_partitioning_strategy_");
 
@@ -412,7 +412,7 @@ static const THashMap<TString, Ydb::Topic::AutoPartitioningStrategy>& GetAutoPar
 }
 
 static const THashMap<TString, Ydb::Topic::MeteringMode>& GetMeteringModesMapping() {
-    const static THashMap<TString, Ydb::Topic::MeteringMode> metModesMapping = MakeEnumMapping<Ydb::Topic::MeteringMode>(
+    static const THashMap<TString, Ydb::Topic::MeteringMode> metModesMapping = MakeEnumMapping<Ydb::Topic::MeteringMode>(
         Ydb::Topic::MeteringMode_descriptor(), "metering_mode_");
 
     return metModesMapping;

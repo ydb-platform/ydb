@@ -541,7 +541,7 @@ void TStatisticsAggregator::InitializeStatisticsTable() {
 }
 
 void TStatisticsAggregator::Navigate() {
-    Y_ABORT_UNLESS(NavigateType == ENavigateType::Traversal  && !NavigateAnalyzeOperationId
+    Y_ABORT_UNLESS(NavigateType == ENavigateType::Traversal && !NavigateAnalyzeOperationId
                 || NavigateType == ENavigateType::Analyze && NavigateAnalyzeOperationId);
     Y_ABORT_UNLESS(NavigatePathId);
 
@@ -552,6 +552,7 @@ void TStatisticsAggregator::Navigate() {
     entry.Operation = TNavigate::OpTable;
 
     auto request = std::make_unique<TNavigate>();
+    request->DatabaseName = Database;
     request->ResultSet.emplace_back(entry);
 
     Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.release()));

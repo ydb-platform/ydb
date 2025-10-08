@@ -59,7 +59,6 @@ void ProbeTest(bool isServerless) {
     runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeResponse>(sender);
 
     runtime.Register(new THttpRequest(THttpRequest::ERequestType::PROBE_COUNT_MIN_SKETCH, {
-            { THttpRequest::EParamType::DATABASE, databaseInfo.FullDatabaseName},
             { THttpRequest::EParamType::PATH, tableInfo.Path },
             { THttpRequest::EParamType::COLUMN_NAME, columnName },
             { THttpRequest::EParamType::CELL_VALUE, "1" }

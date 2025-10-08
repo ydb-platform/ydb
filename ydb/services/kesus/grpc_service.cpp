@@ -150,9 +150,10 @@ private:
             PingPeriod = MinPingPeriod;
         }
 
+        const TString database = RequestEvent->GetDatabaseName().GetOrElse("");
         KesusPath = StartRequest->Record.session_start().path();
 
-        auto resolve = MakeHolder<TEvKesusProxy::TEvResolveKesusProxy>(KesusPath);
+        auto resolve = MakeHolder<TEvKesusProxy::TEvResolveKesusProxy>(database, KesusPath);
         if (!Send(MakeKesusProxyServiceId(), resolve.Release())) {
             RequestEvent->Finish(Ydb::StatusIds::UNSUPPORTED, grpc::Status(grpc::StatusCode::UNIMPLEMENTED,
                 "Coordination service not implemented on this server"));

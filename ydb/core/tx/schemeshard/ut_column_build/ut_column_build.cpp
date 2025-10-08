@@ -133,6 +133,97 @@ Y_UNIT_TEST_SUITE(ColumnBuildTest) {
                             NLs::CheckColumns("Table", {"key", "index", "value", columnName}, {}, {"key"})});
     }
 
+    Y_UNIT_TEST(BuildDefaultColumnAndWrite) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableAddColumsWithDefaults(true));
+        ui64 txId = 100;
+        ui64 tenantSchemeShard = 0;
+
+        TestCreateServerLessDb(runtime, env, txId, tenantSchemeShard);
+
+        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB", R"(
+              Name: "Table"
+              Columns { Name: "key"     Type: "Uint32" }
+              Columns { Name: "index"   Type: "Uint32" }
+              Columns { Name: "value"   Type: "Utf8"   }
+              KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
+
+        auto fnWriteRow = [&] (ui64 tabletId, ui32 key, ui32 index, TString value, const char* table) {
+            TString writeQuery = Sprintf(R"(
+                (
+                    (let key   '( '('key   (Uint32 '%u ) ) ) )
+                    (let row   '( '('index (Uint32 '%u ) )  '('value (Utf8 '%s) ) ) )
+                    (return (AsList (UpdateRow '__user__%s key row) ))
+                )
+            )", key, index, value.c_str(), table);
+            NKikimrMiniKQL::TResult result;
+            TString err;
+            NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, writeQuery, result, err);
+            UNIT_ASSERT_VALUES_EQUAL(err, "");
+            UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK);
+        };
+        for (ui32 delta = 0; delta < 101; ++delta) {
+            fnWriteRow(TTestTxConfig::FakeHiveTablets + 6, 1 + delta, 1000 + delta, "aaaa", "Table");
+        }
+
+        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table"),
+                           {NLs::PathExist,
+                            NLs::IndexesCount(0),
+                            NLs::PathVersionEqual(3),
+                            NLs::CheckColumns("Table", {"key", "index", "value"}, {}, {"key"})});
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        const TString columnName = "ColumnValue";
+        Ydb::TypedValue columnDefaultValue;
+        columnDefaultValue.mutable_type()->set_type_id(Ydb::Type::UINT64);
+        columnDefaultValue.mutable_value()->set_uint64_value(1111);
+
+        TestBuildColumn(runtime, ++txId, tenantSchemeShard, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", columnName, columnDefaultValue, Ydb::StatusIds::SUCCESS);
+
+        auto listing = TestListBuildIndex(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB");
+        Y_ASSERT(listing.EntriesSize() == 1);
+
+        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
+
+        auto descr = TestGetBuildIndex(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB", txId);
+        Y_ASSERT(descr.GetIndexBuild().GetState() == Ydb::Table::IndexBuildState::STATE_DONE);
+
+        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table"),
+                           {NLs::PathExist,
+                            NLs::IndexesCount(0),
+                            NLs::PathVersionEqual(6),
+                            NLs::CheckColumns("Table", {"key", "index", "value", columnName}, {}, {"key"})});
+
+        // Try to write without the default column
+        for (ui32 delta = 101; delta < 201; ++delta) {
+            fnWriteRow(TTestTxConfig::FakeHiveTablets + 6, 1 + delta, 1000 + delta, "bbbb", "Table");
+        }
+
+        auto fnWriteRowWithDefaultColumn = [&] (ui64 tabletId, ui32 key, ui32 index, TString value, ui64 columnValue, const char* table) {
+            TString writeQuery = Sprintf(R"(
+                (
+                    (let key   '( '('key   (Uint32 '%u ) ) ) )
+                    (let row   '( '('index (Uint32 '%u ) )  '('value (Utf8 '%s) )  '('ColumnValue (Uint64 '%u ) ) ) )
+                    (return (AsList (UpdateRow '__user__%s key row) ))
+                )
+            )", key, index, value.c_str(), columnValue, table);
+            NKikimrMiniKQL::TResult result;
+            TString err;
+            NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, writeQuery, result, err);
+            UNIT_ASSERT_VALUES_EQUAL(err, "");
+            UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK);
+        };
+
+        // Try to write with the default column
+        for (ui32 delta = 201; delta < 301; ++delta) {
+            fnWriteRowWithDefaultColumn(TTestTxConfig::FakeHiveTablets + 6, 1 + delta, 1000 + delta, "cccc", 1234, "Table");
+        }
+    }
+
     Y_UNIT_TEST(BuildColumnDoesnotRestoreDeletedRows) {
         TTestBasicRuntime runtime(1, false);
         TTestEnv env(runtime, TTestEnvOptions().EnableAddColumsWithDefaults(true));

@@ -200,9 +200,9 @@ class TestDataType(RestartToAnotherVersionFixture):
 
             for row in range(1, self.count_rows + 1):
                 parameters = {}
-                for idx, (type_name, lamb) in enumerate(self.pk_types[i].items()):
+                for type_name, lamb in self.pk_types[i].items():
                     parameters[f"$pk_{cleanup_type_name(type_name)}"] = self.create_typed_value(type_name, lamb(row))
-                for idx, (type_name, lamb) in enumerate(self.all_types.items()):
+                for type_name, lamb in self.all_types.items():
                     parameters[f"$col_{cleanup_type_name(type_name)}"] = self.create_typed_value(type_name, lamb(row))
                 queries_with_parameters.append((query, parameters))
 
@@ -221,15 +221,15 @@ class TestDataType(RestartToAnotherVersionFixture):
 
                 SELECT * FROM {self.table_names[i]} WHERE 
                 {" AND ".join([f"pk_{cleanup_type_name(name)} = $pk_{cleanup_type_name(name)}" for name in self.pk_types[i].keys()])}
-                {" AND " if len(comparable_types) != 0 else ""}
+                {" AND " if len(comparable_types) > 0 else ""}
                 {" AND ".join([f"col_{cleanup_type_name(name)} = $col_{cleanup_type_name(name)}" for name, _ in comparable_types])}
             """
 
             for row in range(1, self.count_rows + 1):
                 parameters = {}
-                for idx, (type_name, lamb) in enumerate(self.pk_types[i].items()):
+                for type_name, lamb in self.pk_types[i].items():
                     parameters[f"$pk_{cleanup_type_name(type_name)}"] = self.create_typed_value(type_name, lamb(row))
-                for idx, (type_name, lamb) in enumerate(comparable_types):
+                for type_name, lamb in comparable_types:
                     parameters[f"$col_{cleanup_type_name(type_name)}"] = self.create_typed_value(type_name, lamb(row))
                 queries_with_parameters.append((query, parameters))
 

@@ -57,10 +57,10 @@ void TAsyncExpiringCache<TKey, TValue>::EnsureStarted()
 {
     auto config = GetConfig();
     if (config->BatchUpdate) {
-        if (config->RefreshTime && *config->RefreshTime) {
+        if (!Started_.load(std::memory_order::relaxed) && config->RefreshTime && *config->RefreshTime) {
             RefreshExecutor_->Start();
         }
-        if (config->ExpirationPeriod && *config->ExpirationPeriod) {
+        if (!Started_.exchange(true) && config->ExpirationPeriod && *config->ExpirationPeriod) {
             ExpirationExecutor_->Start();
         }
     }

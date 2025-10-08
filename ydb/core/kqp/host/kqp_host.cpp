@@ -1772,12 +1772,18 @@ private:
         }
 
         auto state = MakeIntrusive<NYql::TS3State>();
+
+        auto& configuration = *state->Configuration;
+        if (const auto requestContext = SessionCtx->GetUserRequestContext(); requestContext && requestContext->IsStreamingQuery) {
+            configuration.DisablePragma(configuration.UseRuntimeListing, false, "Runtime listing is not supported for streaming queries, pragma value was ignored");
+        }
+        configuration.WriteThroughDqIntegration = true;
+        configuration.AllowAtomicUploadCommit = queryType == EKikimrQueryType::Script;
+        configuration.Init(FederatedQuerySetup->S3GatewayConfig, TypesCtx);
+
         state->Types = TypesCtx.Get();
         state->FunctionRegistry = FuncRegistry;
         state->CredentialsFactory = FederatedQuerySetup->CredentialsFactory;
-        state->Configuration->WriteThroughDqIntegration = true;
-        state->Configuration->AllowAtomicUploadCommit = queryType == EKikimrQueryType::Script;
-        state->Configuration->Init(FederatedQuerySetup->S3GatewayConfig, TypesCtx);
         state->Gateway = FederatedQuerySetup->HttpGateway;
         state->GatewayRetryPolicy = NYql::GetHTTPDefaultRetryPolicy(NYql::THttpRetryPolicyOptions{.RetriedCurlCodes = NYql::FqRetriedCurlCodes()});
         state->ExecutorPoolId = AppData()->UserPoolId;

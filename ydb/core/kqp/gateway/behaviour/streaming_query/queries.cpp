@@ -885,11 +885,11 @@ protected:
         ExecuteQuery(__func__, sql, &params, txControl);
     }
 
-    void PersistQueryInfo(const NKikimrKqp::TStreamingQueryState& state, const TTxControl& txControl) {
+    void PersistQueryInfo(NKikimrKqp::TStreamingQueryState state, const TTxControl& txControl) {
         const TString sql = fmt::format(R"(
                 DECLARE $database_id AS Text;
                 DECLARE $query_path AS Text;
-                DECLARE $state AS JsonDocument;
+                DECLARE $state AS Json;
 
                 UPSERT INTO `{table}` (
                     database_id, query_path, state
@@ -914,7 +914,7 @@ protected:
                 .Utf8(QueryPath)
                 .Build()
             .AddParam("$state")
-                .JsonDocument(stateWriter.Str())
+                .Json(stateWriter.Str())
                 .Build();
 
         ExecuteQuery(__func__, sql, &params, txControl);
@@ -939,7 +939,7 @@ protected:
             return TStatus::Fail(Ydb::StatusIds::NOT_FOUND, "No such steaming query");
         }
 
-        const std::optional<TString>& stateJsonString = result.ColumnParser(TStreamingQueryConfig::TColumns::State).GetOptionalJsonDocument();
+        const std::optional<TString>& stateJsonString = result.ColumnParser(TStreamingQueryConfig::TColumns::State).GetOptionalJson();
         if (!stateJsonString) {
             return TStatus::Fail(Ydb::StatusIds::INTERNAL_ERROR, "Streaming query state not found");
         }

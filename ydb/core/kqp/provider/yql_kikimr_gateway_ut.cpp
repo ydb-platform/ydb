@@ -404,7 +404,8 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
             );)";
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
-        auto responseFuture = GetIcGateway(kikimr.GetTestServer())->LoadTableMetadata(TestCluster, externalTableName, IKikimrGateway::TLoadTableMetadataSettings());
+        auto gateway = GetIcGateway(kikimr.GetTestServer());
+        auto responseFuture = gateway->LoadTableMetadata(TestCluster, externalTableName, IKikimrGateway::TLoadTableMetadataSettings());
         responseFuture.Wait();
         auto response = responseFuture.GetValue();
         response.Issues().PrintTo(Cerr);
@@ -469,7 +470,8 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
 
-        auto responseFuture = GetIcGateway(kikimr.GetTestServer())->LoadTableMetadata(TestCluster, externalTableName, IKikimrGateway::TLoadTableMetadataSettings());
+        auto gateway = GetIcGateway(kikimr.GetTestServer());
+        auto responseFuture = gateway->LoadTableMetadata(TestCluster, externalTableName, IKikimrGateway::TLoadTableMetadataSettings());
         responseFuture.Wait();
 
         auto response = responseFuture.GetValue();
@@ -511,7 +513,8 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
 
-        auto responseFuture = GetIcGateway(kikimr.GetTestServer())->LoadTableMetadata(TestCluster, externalDataSourceName, IKikimrGateway::TLoadTableMetadataSettings());
+        auto gateway = GetIcGateway(kikimr.GetTestServer());
+        auto responseFuture = gateway->LoadTableMetadata(TestCluster, externalDataSourceName, IKikimrGateway::TLoadTableMetadataSettings());
         responseFuture.Wait();
 
         auto response = responseFuture.GetValue();
@@ -549,8 +552,8 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
             );)";
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
-
-        auto responseFuture = GetIcGateway(kikimr.GetTestServer())->LoadTableMetadata(TestCluster, externalDataSourceName, IKikimrGateway::TLoadTableMetadataSettings());
+        auto gateway = GetIcGateway(kikimr.GetTestServer());
+        auto responseFuture = gateway->LoadTableMetadata(TestCluster, externalDataSourceName, IKikimrGateway::TLoadTableMetadataSettings());
         responseFuture.Wait();
 
         auto response = responseFuture.GetValue();
@@ -588,7 +591,8 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
 
-        auto responseFuture = GetIcGateway(kikimr.GetTestServer())->LoadTableMetadata(TestCluster, externalDataSourceName, IKikimrGateway::TLoadTableMetadataSettings());
+        auto gateway = GetIcGateway(kikimr.GetTestServer());
+        auto responseFuture = gateway->LoadTableMetadata(TestCluster, externalDataSourceName, IKikimrGateway::TLoadTableMetadataSettings());
         responseFuture.Wait();
 
         auto response = responseFuture.GetValue();
@@ -633,7 +637,8 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
 
-        auto responseFuture = GetIcGateway(kikimr.GetTestServer())->LoadTableMetadata(TestCluster, externalDataSourceName, IKikimrGateway::TLoadTableMetadataSettings());
+        auto gateway = GetIcGateway(kikimr.GetTestServer());
+        auto responseFuture = gateway->LoadTableMetadata(TestCluster, externalDataSourceName, IKikimrGateway::TLoadTableMetadataSettings());
         responseFuture.Wait();
 
         auto response = responseFuture.GetValue();
@@ -680,7 +685,8 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
 
-        auto responseFuture = GetIcGateway(kikimr.GetTestServer())->LoadTableMetadata(TestCluster, externalDataSourceName, IKikimrGateway::TLoadTableMetadataSettings());
+        auto gateway = GetIcGateway(kikimr.GetTestServer());
+        auto responseFuture = gateway->LoadTableMetadata(TestCluster, externalDataSourceName, IKikimrGateway::TLoadTableMetadataSettings());
         responseFuture.Wait();
 
         auto response = responseFuture.GetValue();

@@ -29,7 +29,168 @@ enum class EQueryMode {
     EXECUTE_QUERY
 };
 
+enum class ETableKind {
+    COLUMN_SHARD,
+    DATA_SHARD
+};
+
+enum class ELoadKind {
+    ARROW,
+    YDB_VALUE,
+    CSV
+};
+
 Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
+    namespace {
+    struct TRow {
+        i32 Id;
+        i64 IntVal;
+        std::optional<bool> B;
+    };
+
+    void CreateDataShardTable(TTestHelper& helper, const TString& name) {
+        auto& session = helper.GetSession();
+        auto res = session
+                       .ExecuteSchemeQuery(TStringBuilder() << R"(
+                CREATE TABLE `)" << name << R"(` (
+                    id Int32 NOT NULL,
+                    int Int64,
+                    b Bool,
+                    PRIMARY KEY (id)
+                );
+            )")
+                       .ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), NYdb::EStatus::SUCCESS);
+    }
+
+    void BulkUpsertRowTableYdbValue(TTestHelper& helper, const TString& name, const TVector<TRow>& rows) {
+        TValueBuilder builder;
+        builder.BeginList();
+        for (auto&& r : rows) {
+            builder.AddListItem().BeginStruct().AddMember("id").Int32(r.Id).AddMember("int").Int64(r.IntVal).AddMember("b");
+            if (r.B.has_value()) {
+                builder.Bool(*r.B);
+            } else {
+                builder.EmptyOptional(EPrimitiveType::Bool);
+            }
+
+            builder.EndStruct();
+        }
+
+        builder.EndList();
+        auto result = helper.GetKikimr().GetTableClient().BulkUpsert(name, builder.Build()).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    }
+
+    void BulkUpsertRowTableCSV(TTestHelper& helper, const TString& name, const TVector<TRow>& rows) {
+        TStringBuilder builder;
+        for (auto&& r : rows) {
+            builder << r.Id << ", " << r.IntVal << ", ";
+            if (r.B.has_value()) {
+                builder << (*r.B ? "true" : "false");
+            } else {
+                builder << "";
+            }
+
+            builder << '\n';
+        }
+
+        auto result = helper.GetKikimr().GetTableClient().BulkUpsert(name, EDataFormat::CSV, builder).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    }
+
+    std::shared_ptr<arrow::RecordBatch> MakeArrowBatch(const TVector<TRow>& rows) {
+        arrow::Int32Builder idBuilder;
+        arrow::Int64Builder intBuilder;
+        arrow::BooleanBuilder boolBuilder;
+        for (auto&& r : rows) {
+            Y_ABORT_UNLESS(idBuilder.Append(r.Id).ok());
+            Y_ABORT_UNLESS(intBuilder.Append(r.IntVal).ok());
+            if (r.B.has_value()) {
+                Y_ABORT_UNLESS(boolBuilder.Append(*r.B).ok());
+            } else {
+                Y_ABORT_UNLESS(boolBuilder.AppendNull().ok());
+            }
+        }
+
+        std::shared_ptr<arrow::Array> idArr;
+        Y_ABORT_UNLESS(idBuilder.Finish(&idArr).ok());
+        std::shared_ptr<arrow::Array> intArr;
+        Y_ABORT_UNLESS(intBuilder.Finish(&intArr).ok());
+        std::shared_ptr<arrow::Array> boolArr;
+        Y_ABORT_UNLESS(boolBuilder.Finish(&boolArr).ok());
+        auto schema = arrow::schema({ arrow::field("id", arrow::int32(), /*nullable*/ false), arrow::field("int", arrow::int64()),
+            arrow::field("b", arrow::boolean()) });
+        return arrow::RecordBatch::Make(schema, rows.size(), { idArr, intArr, boolArr });
+    }
+
+    void BulkUpsertRowTableArrow(TTestHelper& helper, const TString& name, const TVector<TRow>& rows) {
+        auto batch = MakeArrowBatch(rows);
+        TString strBatch = NArrow::SerializeBatchNoCompression(batch);
+        TString strSchema = NArrow::SerializeSchema(*batch->schema());
+        auto result =
+            helper.GetKikimr().GetTableClient().BulkUpsert(name, NYdb::NTable::EDataFormat::ApacheArrow, strBatch, strSchema).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    }
+
+    void LoadData(TTestHelper& helper, ETableKind table, ELoadKind load, const TString& name, const TVector<TRow>& rows,
+        TTestHelper::TColumnTable* col = nullptr, const TVector<TTestHelper::TColumnSchema>* schema = nullptr) {
+        switch (table) {
+            case ETableKind::COLUMN_SHARD: {
+                Y_ABORT_UNLESS(col && schema);
+                if (load == ELoadKind::ARROW) {
+                    auto batch = MakeArrowBatch(rows);
+                    helper.BulkUpsert(*col, batch);
+                } else if (load == ELoadKind::YDB_VALUE) {
+                    BulkUpsertRowTableYdbValue(helper, name, rows);
+                } else {
+                    BulkUpsertRowTableCSV(helper, name, rows);
+                }
+
+                break;
+            }
+            case ETableKind::DATA_SHARD: {
+                if (load == ELoadKind::ARROW) {
+                    BulkUpsertRowTableArrow(helper, name, rows);
+                } else if (load == ELoadKind::YDB_VALUE) {
+                    BulkUpsertRowTableYdbValue(helper, name, rows);
+                } else {
+                    BulkUpsertRowTableCSV(helper, name, rows);
+                }
+
+                break;
+            }
+        }
+    }
+
+    void CheckOrExec(TTestHelper& helper, const TString& query, const TString& expected, EQueryMode scanMode) {
+        if (scanMode == EQueryMode::SCAN_QUERY) {
+            helper.ReadData(query, expected);
+        } else {
+            helper.ExecuteQuery(query);
+        }
+    }
+
+    void PrepareBase(TTestHelper& helper, ETableKind tableKind, const TString& tableName, TTestHelper::TColumnTable* colTableOut,
+        TVector<TTestHelper::TColumnSchema>* schemaOut) {
+        if (tableKind == ETableKind::COLUMN_SHARD) {
+            TVector<TTestHelper::TColumnSchema> schema = {
+                TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
+                TTestHelper::TColumnSchema().SetName("int").SetType(NScheme::NTypeIds::Int64),
+                TTestHelper::TColumnSchema().SetName("b").SetType(NScheme::NTypeIds::Bool),
+            };
+
+            *schemaOut = schema;
+            TTestHelper::TColumnTable col;
+            col.SetName(tableName).SetPrimaryKey({ "id" }).SetSharding({ "id" }).SetSchema(schema);
+            helper.CreateTable(col);
+            *colTableOut = col;
+        } else {
+            CreateDataShardTable(helper, tableName);
+        }
+    }
+    }   // namespace
+
     class TBoolTestCase {
     public:
         TBoolTestCase()
@@ -91,6 +252,7 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
                 TTestHelper::TColumnSchema().SetName("table1_id").SetType(NScheme::NTypeIds::Int64),
                 TTestHelper::TColumnSchema().SetName("b").SetType(NScheme::NTypeIds::Bool),
             };
+
             TestTable.SetName("/Root/Table2").SetPrimaryKey({ "id" }).SetSharding({ "id" }).SetSchema(Schema);
             TestHelper.CreateTable(TestTable);
 
@@ -106,174 +268,206 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
 
     private:
         TTestHelper TestHelper;
-
         TVector<TTestHelper::TColumnSchema> Schema;
         TTestHelper::TColumnTable TestTable;
     };
 
-    Y_UNIT_TEST_DUO(TestSimpleQueries, UseScanQuery) {
+    static void RunTestSimpleQueries(EQueryMode Scan, ETableKind Table, ELoadKind Load);
+    static void RunTestFilterEqual(EQueryMode Scan, ETableKind Table, ELoadKind Load);
+    static void RunTestFilterNulls(EQueryMode Scan, ETableKind Table, ELoadKind Load);
+    static void RunTestFilterCompare(EQueryMode Scan, ETableKind Table, ELoadKind Load);
+    static void RunTestOrderByBool(EQueryMode Scan, ETableKind Table, ELoadKind Load);
+    static void RunTestGroupByBool(EQueryMode Scan, ETableKind Table, ELoadKind Load);
+    static void RunTestAggregation(EQueryMode Scan, ETableKind Table, ELoadKind Load);
+    static void RunTestJoinById(EQueryMode Scan, ETableKind Table, ELoadKind Load);
+    static void RunTestJoinByBool(EQueryMode Scan, ETableKind Table, ELoadKind Load);
+
+    static void RunTestSimpleQueries(EQueryMode Scan, ETableKind Table, ELoadKind Load) {
         return;
-        TBoolTestCase tester;
-        tester.PrepareTable1();
-
-        EQueryMode mode = UseScanQuery ? EQueryMode::SCAN_QUERY : EQueryMode::EXECUTE_QUERY;
-
-        auto check = [mode](const TBoolTestCase& t) {
-            t.CheckQuery("SELECT * FROM `/Root/Table1` WHERE id=1", "[[[%true];1;[4]]]", mode);
-
-            t.CheckQuery("SELECT * FROM `/Root/Table1` order by id", "[[[%true];1;[4]];[[%false];2;[3]];[[%true];3;[2]];[[%true];4;[1]]]", mode);
-        };
-
-        check(tester);
+        const TString tableName = "/Root/Table1";
+        TTestHelper helper(TKikimrSettings().SetWithSampleTables(false));
+        TTestHelper::TColumnTable col;
+        TVector<TTestHelper::TColumnSchema> schema;
+        PrepareBase(helper, Table, tableName, &col, &schema);
+        LoadData(helper, Table, Load, tableName, { { 1, 4, true }, { 2, 3, false }, { 4, 1, true }, { 3, 2, true } }, &col, &schema);
+        CheckOrExec(helper, "SELECT * FROM `/Root/Table1` WHERE id=1", "[[[%true];1;[4]]]", Scan);
+        CheckOrExec(
+            helper, "SELECT * FROM `/Root/Table1` order by id", "[[[%true];1;[4]];[[%false];2;[3]];[[%true];3;[2]];[[%true];4;[1]]]", Scan);
     }
 
-    Y_UNIT_TEST_DUO(TestFilterEqual, UseScanQuery) {
+    static void RunTestFilterEqual(EQueryMode Scan, ETableKind Table, ELoadKind Load) {
         return;
-        TBoolTestCase tester;
-        tester.PrepareTable1();
-
-        EQueryMode mode = UseScanQuery ? EQueryMode::SCAN_QUERY : EQueryMode::EXECUTE_QUERY;
-
-        auto check = [mode](const TBoolTestCase& t) {
-            t.CheckQuery("SELECT * FROM `/Root/Table1` WHERE b == true", "[[[%true];1;[4]];[[%true];3;[2]];[[%true];4;[1]]]", mode);
-
-            t.CheckQuery("SELECT * FROM `/Root/Table1` WHERE b != true order by id", "[[[%false];2;[3]]]", mode);
-        };
-
-        check(tester);
+        const TString tableName = "/Root/Table1";
+        TTestHelper helper(TKikimrSettings().SetWithSampleTables(false));
+        TTestHelper::TColumnTable col;
+        TVector<TTestHelper::TColumnSchema> schema;
+        PrepareBase(helper, Table, tableName, &col, &schema);
+        LoadData(helper, Table, Load, tableName, { { 1, 4, true }, { 2, 3, false }, { 4, 1, true }, { 3, 2, true } }, &col, &schema);
+        CheckOrExec(helper, "SELECT * FROM `/Root/Table1` WHERE b == true", "[[[%true];1;[4]];[[%true];3;[2]];[[%true];4;[1]]]", Scan);
+        CheckOrExec(helper, "SELECT * FROM `/Root/Table1` WHERE b != true order by id", "[[[%false];2;[3]]]", Scan);
     }
 
-    Y_UNIT_TEST_DUO(TestFilterNulls, UseScanQuery) {
+    static void RunTestFilterNulls(EQueryMode Scan, ETableKind Table, ELoadKind Load) {
         return;
-        TBoolTestCase tester;
-        tester.PrepareTable1();
-
-        auto insert = [](TBoolTestCase& t) {
-            TTestHelper::TUpdatesBuilder inserter = t.Inserter();
-            inserter.AddRow().Add(5).Add(5).AddNull();
-            inserter.AddRow().Add(6).Add(6).AddNull();
-            t.Upsert(inserter);
-        };
-
-        EQueryMode mode = UseScanQuery ? EQueryMode::SCAN_QUERY : EQueryMode::EXECUTE_QUERY;
-
-        auto check = [mode](const TBoolTestCase& t) {
-            t.CheckQuery("SELECT * FROM `/Root/Table1` WHERE b is NULL order by id", "[[[#];5;[5]];[[#];6;[6]]]", mode);
-
-            t.CheckQuery("SELECT * FROM `/Root/Table1` WHERE b is not NULL order by id",
-                "[[[%true];1;[4]];[[%false];2;[3]];[[%true];3;[2]];[[%true];4;[1]]]", mode);
-        };
-
-        insert(tester);
-        check(tester);
+        const TString tableName = "/Root/Table1";
+        TTestHelper helper(TKikimrSettings().SetWithSampleTables(false));
+        TTestHelper::TColumnTable col;
+        TVector<TTestHelper::TColumnSchema> schema;
+        PrepareBase(helper, Table, tableName, &col, &schema);
+        LoadData(helper, Table, Load, tableName,
+            { { 1, 4, true }, { 2, 3, false }, { 3, 2, true }, { 4, 1, true }, { 5, 5, std::nullopt }, { 6, 6, std::nullopt } }, &col, &schema);
+        CheckOrExec(helper, "SELECT * FROM `/Root/Table1` WHERE b is NULL order by id", "[[[#];5;[5]];[[#];6;[6]]]", Scan);
+        CheckOrExec(helper, "SELECT * FROM `/Root/Table1` WHERE b is not NULL order by id",
+            "[[[%true];1;[4]];[[%false];2;[3]];[[%true];3;[2]];[[%true];4;[1]]]", Scan);
     }
 
-    Y_UNIT_TEST_DUO(TestFilterCompare, UseScanQuery) {
+    static void RunTestFilterCompare(EQueryMode Scan, ETableKind Table, ELoadKind Load) {
         return;
-        TBoolTestCase tester;
-        tester.PrepareTable1();
-
-        EQueryMode mode = UseScanQuery ? EQueryMode::SCAN_QUERY : EQueryMode::EXECUTE_QUERY;
-
-        auto check = [mode](const TBoolTestCase& t) {
-            t.CheckQuery("SELECT * FROM `/Root/Table1` WHERE b < true order by id", "[[[%false];2;[3]]]", mode);
-
-            t.CheckQuery("SELECT * FROM `/Root/Table1` WHERE b > false order by id", "[[[%true];1;[4]];[[%true];3;[2]];[[%true];4;[1]]]", mode);
-
-            t.CheckQuery("SELECT * FROM `/Root/Table1` WHERE b <= true order by id",
-                "[[[%true];1;[4]];[[%false];2;[3]];[[%true];3;[2]];[[%true];4;[1]]]", mode);
-
-            t.CheckQuery("SELECT * FROM `/Root/Table1` WHERE b >= true order by id", "[[[%true];1;[4]];[[%true];3;[2]];[[%true];4;[1]]]", mode);
-        };
-
-        check(tester);
+        const TString tableName = "/Root/Table1";
+        TTestHelper helper(TKikimrSettings().SetWithSampleTables(false));
+        TTestHelper::TColumnTable col;
+        TVector<TTestHelper::TColumnSchema> schema;
+        PrepareBase(helper, Table, tableName, &col, &schema);
+        LoadData(helper, Table, Load, tableName, { { 1, 4, true }, { 2, 3, false }, { 3, 2, true }, { 4, 1, true } }, &col, &schema);
+        CheckOrExec(helper, "SELECT * FROM `/Root/Table1` WHERE b < true order by id", "[[[%false];2;[3]]]", Scan);
+        CheckOrExec(
+            helper, "SELECT * FROM `/Root/Table1` WHERE b > false order by id", "[[[%true];1;[4]];[[%true];3;[2]];[[%true];4;[1]]]", Scan);
+        CheckOrExec(helper, "SELECT * FROM `/Root/Table1` WHERE b <= true order by id",
+            "[[[%true];1;[4]];[[%false];2;[3]];[[%true];3;[2]];[[%true];4;[1]]]", Scan);
+        CheckOrExec(
+            helper, "SELECT * FROM `/Root/Table1` WHERE b >= true order by id", "[[[%true];1;[4]];[[%true];3;[2]];[[%true];4;[1]]]", Scan);
     }
 
-    Y_UNIT_TEST_DUO(TestOrderByBool, UseScanQuery) {
+    static void RunTestOrderByBool(EQueryMode Scan, ETableKind Table, ELoadKind Load) {
         return;
-        TBoolTestCase tester;
-        tester.PrepareTable1();
-
-        EQueryMode mode = UseScanQuery ? EQueryMode::SCAN_QUERY : EQueryMode::EXECUTE_QUERY;
-
-        auto check = [mode](const TBoolTestCase& t) {
-            t.CheckQuery("SELECT * FROM `/Root/Table1` order by b", "[[[%false];2;[3]];[[%true];1;[4]];[[%true];3;[2]];[[%true];4;[1]]]", mode);
-        };
-
-        check(tester);
+        const TString tableName = "/Root/Table1";
+        TTestHelper helper(TKikimrSettings().SetWithSampleTables(false));
+        TTestHelper::TColumnTable col;
+        TVector<TTestHelper::TColumnSchema> schema;
+        PrepareBase(helper, Table, tableName, &col, &schema);
+        LoadData(helper, Table, Load, tableName, { { 1, 4, true }, { 2, 3, false }, { 3, 2, true }, { 4, 1, true } }, &col, &schema);
+        CheckOrExec(
+            helper, "SELECT * FROM `/Root/Table1` order by b", "[[[%false];2;[3]];[[%true];1;[4]];[[%true];3;[2]];[[%true];4;[1]]]", Scan);
     }
 
-    Y_UNIT_TEST_DUO(TestGroupByBool, UseScanQuery) {
+    static void RunTestGroupByBool(EQueryMode Scan, ETableKind Table, ELoadKind Load) {
         return;
-        TBoolTestCase tester;
-        tester.PrepareTable1();
-
-        auto insert = [](TBoolTestCase& t) {
-            TTestHelper::TUpdatesBuilder inserter = t.Inserter();
-            inserter.AddRow().Add(5).Add(12).Add(true);
-            inserter.AddRow().Add(6).Add(30).Add(false);
-            t.Upsert(inserter);
-        };
-
-        EQueryMode mode = UseScanQuery ? EQueryMode::SCAN_QUERY : EQueryMode::EXECUTE_QUERY;
-
-        auto check = [mode](const TBoolTestCase& t) {
-            t.CheckQuery("SELECT b, count(*) FROM `/Root/Table1` group by b order by b", "[[[%false];2u];[[%true];4u]]", mode);
-        };
-
-        insert(tester);
-        check(tester);
+        const TString tableName = "/Root/Table1";
+        TTestHelper helper(TKikimrSettings().SetWithSampleTables(false));
+        TTestHelper::TColumnTable col;
+        TVector<TTestHelper::TColumnSchema> schema;
+        PrepareBase(helper, Table, tableName, &col, &schema);
+        LoadData(helper, Table, Load, tableName,
+            { { 1, 4, true }, { 2, 3, false }, { 3, 2, true }, { 4, 1, true }, { 5, 12, true }, { 6, 30, false } }, &col, &schema);
+        CheckOrExec(helper, "SELECT b, count(*) FROM `/Root/Table1` group by b order by b", "[[[%false];2u];[[%true];4u]]", Scan);
     }
 
-    Y_UNIT_TEST_DUO(TestAggregation, UseScanQuery) {
+    static void RunTestAggregation(EQueryMode Scan, ETableKind Table, ELoadKind Load) {
         return;
-        TBoolTestCase tester;
-        tester.PrepareTable1();
-
-        EQueryMode mode = UseScanQuery ? EQueryMode::SCAN_QUERY : EQueryMode::EXECUTE_QUERY;
-
-        auto check = [mode](const TBoolTestCase& t) {
-            t.CheckQuery("SELECT min(b) FROM `/Root/Table1`", "[[[%false]]]", mode);
-            t.CheckQuery("SELECT max(b) FROM `/Root/Table1`", "[[[%true]]]", mode);
-        };
-
-        check(tester);
+        const TString tableName = "/Root/Table1";
+        TTestHelper helper(TKikimrSettings().SetWithSampleTables(false));
+        TTestHelper::TColumnTable col;
+        TVector<TTestHelper::TColumnSchema> schema;
+        PrepareBase(helper, Table, tableName, &col, &schema);
+        LoadData(helper, Table, Load, tableName, { { 1, 4, true }, { 2, 3, false }, { 3, 2, true }, { 4, 1, true } }, &col, &schema);
+        CheckOrExec(helper, "SELECT min(b) FROM `/Root/Table1`", "[[[%false]]]", Scan);
+        CheckOrExec(helper, "SELECT max(b) FROM `/Root/Table1`", "[[[%true]]]", Scan);
     }
 
-    Y_UNIT_TEST_DUO(TestJoinById, UseScanQuery) {
+    static void RunTestJoinById(EQueryMode Scan, ETableKind Table, ELoadKind Load) {
         return;
-        TBoolTestCase tester;
-        tester.PrepareTable1();
-        tester.PrepareTable2();
+        const TString t1 = "/Root/Table1";
+        const TString t2 = "/Root/Table2";
+        TTestHelper helper(TKikimrSettings().SetWithSampleTables(false));
+        TTestHelper::TColumnTable col1, col2;
+        TVector<TTestHelper::TColumnSchema> s1, s2;
+        if (Table == ETableKind::COLUMN_SHARD) {
+            s1 = {
+                TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
+                TTestHelper::TColumnSchema().SetName("int").SetType(NScheme::NTypeIds::Int64),
+                TTestHelper::TColumnSchema().SetName("b").SetType(NScheme::NTypeIds::Bool),
+            };
 
-        EQueryMode mode = UseScanQuery ? EQueryMode::SCAN_QUERY : EQueryMode::EXECUTE_QUERY;
+            col1.SetName(t1).SetPrimaryKey({ "id" }).SetSharding({ "id" }).SetSchema(s1);
+            helper.CreateTable(col1);
+            s2 = {
+                TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
+                TTestHelper::TColumnSchema().SetName("table1_id").SetType(NScheme::NTypeIds::Int64),
+                TTestHelper::TColumnSchema().SetName("b").SetType(NScheme::NTypeIds::Bool),
+            };
 
-        auto check = [mode](const TBoolTestCase& t) {
-            t.CheckQuery(
-                "SELECT t1.id, t1.b, t2.b FROM `/Root/Table1` as t1 join `/Root/Table2` as t2 on t1.id = t2.table1_id order by t1.id, t1.b, "
-                "t2.b",
-                R"([[1;[%true];[%false]];[1;[%true];[%true]];[2;[%false];[%false]];[2;[%false];[%true]]])", mode);
-        };
+            col2.SetName(t2).SetPrimaryKey({ "id" }).SetSharding({ "id" }).SetSchema(s2);
+            helper.CreateTable(col2);
+        } else {
+            CreateDataShardTable(helper, t1);
+            CreateDataShardTable(helper, t2);
+        }
 
-        check(tester);
+        LoadData(helper, Table, Load, t1, { { 1, 4, true }, { 2, 3, true } }, &col1, &s1);
+        LoadData(helper, Table, Load, t2, { { 1, 1, true }, { 2, 1, false }, { 3, 2, true }, { 4, 2, false } }, &col2, &s2);
+        CheckOrExec(helper,
+            "SELECT t1.id, t1.b, t2.b FROM `/Root/Table1` as t1 join `/Root/Table2` as t2 on t1.id = t2.table1_id order by t1.id, t1.b, t2.b",
+            R"([[1;[%true];[%false]];[1;[%true];[%true]];[2;[%true];[%false]];[2;[%true];[%true]]])", Scan);
     }
 
-    Y_UNIT_TEST_DUO(TestJoinByBool, UseScanQuery) {
+    static void RunTestJoinByBool(EQueryMode Scan, ETableKind Table, ELoadKind Load) {
         return;
-        TBoolTestCase tester;
-        tester.PrepareTable1();
-        tester.PrepareTable2();
+        const TString t1 = "/Root/Table1";
+        const TString t2 = "/Root/Table2";
+        TTestHelper helper(TKikimrSettings().SetWithSampleTables(false));
+        TTestHelper::TColumnTable col1, col2;
+        TVector<TTestHelper::TColumnSchema> s1, s2;
+        if (Table == ETableKind::COLUMN_SHARD) {
+            s1 = {
+                TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
+                TTestHelper::TColumnSchema().SetName("int").SetType(NScheme::NTypeIds::Int64),
+                TTestHelper::TColumnSchema().SetName("b").SetType(NScheme::NTypeIds::Bool),
+            };
+            col1.SetName(t1).SetPrimaryKey({ "id" }).SetSharding({ "id" }).SetSchema(s1);
+            helper.CreateTable(col1);
+            s2 = {
+                TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
+                TTestHelper::TColumnSchema().SetName("table1_id").SetType(NScheme::NTypeIds::Int64),
+                TTestHelper::TColumnSchema().SetName("b").SetType(NScheme::NTypeIds::Bool),
+            };
+            col2.SetName(t2).SetPrimaryKey({ "id" }).SetSharding({ "id" }).SetSchema(s2);
+            helper.CreateTable(col2);
+        } else {
+            CreateDataShardTable(helper, t1);
+            CreateDataShardTable(helper, t2);
+        }
 
-        EQueryMode mode = UseScanQuery ? EQueryMode::SCAN_QUERY : EQueryMode::EXECUTE_QUERY;
-
-        auto check = [mode](const TBoolTestCase& t) {
-            t.CheckQuery(
-                "SELECT t1.id, t2.id, t1.b FROM `/Root/Table1` as t1 join `/Root/Table2` as t2 on t1.b = t2.b order by t1.id, t2.id, t1.b",
-                R"([[1;1;[%true]];[1;3;[%true]];[2;2;[%false]];[2;4;[%false]];[3;1;[%true]];[3;3;[%true]];[4;1;[%true]];[4;3;[%true]]])", mode);
-        };
-
-        check(tester);
+        LoadData(helper, Table, Load, t1, { { 2, 3, true }, { 4, 1, true } }, &col1, &s1);
+        LoadData(helper, Table, Load, t2, { { 2, 2, false }, { 4, 4, false }, { 1, 1, true }, { 3, 3, true } }, &col2, &s2);
+        CheckOrExec(helper,
+            "SELECT t1.id, t2.id, t1.b FROM `/Root/Table1` as t1 join `/Root/Table2` as t2 on t1.b = t2.b order by t1.id, t2.id, t1.b",
+            R"([[2;1;[%true]];[2;3;[%true]];[4;1;[%true]];[4;3;[%true]];[2;2;[%false]];[4;4;[%false]]])", Scan);
     }
+
+#define GEN(TestBase, ScanTag, ScanConst, TableTag, TableConst, LoadTag, LoadConst)         \
+    Y_UNIT_TEST(TestBase##_##ScanTag##_##TableTag##_##LoadTag) {                            \
+        Run##TestBase(EQueryMode::ScanConst, ETableKind::TableConst, ELoadKind::LoadConst); \
+    }
+#define GEN_LOADS(TestBase, ScanTag, ScanConst, TableTag, TableConst)            \
+    GEN(TestBase, ScanTag, ScanConst, TableTag, TableConst, Arrow, ARROW)        \
+    GEN(TestBase, ScanTag, ScanConst, TableTag, TableConst, YdbValue, YDB_VALUE) \
+    GEN(TestBase, ScanTag, ScanConst, TableTag, TableConst, Csv, CSV)
+#define GEN_TABLES(TestBase, ScanTag, ScanConst)                       \
+    GEN_LOADS(TestBase, ScanTag, ScanConst, ColumnShard, COLUMN_SHARD) \
+    GEN_LOADS(TestBase, ScanTag, ScanConst, DataShard, DATA_SHARD)
+#define GEN_SCANS(TestBase)                \
+    GEN_TABLES(TestBase, Scan, SCAN_QUERY) \
+    GEN_TABLES(TestBase, Exec, EXECUTE_QUERY)
+
+    GEN_SCANS(TestSimpleQueries)
+    GEN_SCANS(TestFilterEqual)
+    GEN_SCANS(TestFilterNulls)
+    GEN_SCANS(TestFilterCompare)
+    GEN_SCANS(TestOrderByBool)
+    GEN_SCANS(TestGroupByBool)
+    GEN_SCANS(TestAggregation)
+    GEN_SCANS(TestJoinById)
+    GEN_SCANS(TestJoinByBool)
 }
 
 }   // namespace NKqp

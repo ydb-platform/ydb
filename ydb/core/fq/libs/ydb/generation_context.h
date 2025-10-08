@@ -1,5 +1,7 @@
 #pragma once
 
+#include <memory>
+#include <mutex>
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
 #include <yql/essentials/public/issue/yql_issue.h>
 #include <ydb/core/fq/libs/config/protos/storage.pb.h>
@@ -15,16 +17,20 @@
 
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/fq/libs/ydb/ydb_gateway.h>
+#include <functional>
+#include <ydb/core/fq/libs/ydb/query_actor.h>
+#include <ydb/core/fq/libs/ydb/session.h>
+#include <ydb/core/fq/libs/ydb/table_client.h>
 
 namespace NFq {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct IYdbTableGateway;
+//struct IYdbTableGateway;
 //struct TYdbTableGatewayPtr;
 
 //struct IYdbTableGateway : public TThrRefBase {
-using TYdbTableGatewayPtr = TIntrusivePtr<IYdbTableGateway>;
+//using TYdbTableGatewayPtr = TIntrusivePtr<IYdbTableGateway>;
 
 struct TGenerationContext : public TThrRefBase {
     enum EOperationType {
@@ -37,7 +43,7 @@ struct TGenerationContext : public TThrRefBase {
     EOperationType OperationType = Register;
 
     // within this session we execute transaction
-    NYdb::NTable::TSession Session;
+    ISession::TPtr Session;
 
     // - In Register and RegisterCheck operation - whether
     // to commit or not after upserting new generation (usually true)
@@ -70,10 +76,10 @@ struct TGenerationContext : public TThrRefBase {
     // result of Select
     ui64 GenerationRead = 0;
 
-    TYdbTableGatewayPtr YdbGateway;
+    //TYdbTableGatewayPtr YdbGateway;
     NYdb::NTable::TExecDataQuerySettings ExecDataQuerySettings;
 
-    TGenerationContext(NYdb::NTable::TSession session,
+    TGenerationContext(ISession::TPtr session,
                        bool commitTx,
                        const TString& tablePathPrefix,
                        const TString& table,
@@ -81,9 +87,8 @@ struct TGenerationContext : public TThrRefBase {
                        const TString& generationColumn,
                        const TString& primaryKey,
                        ui64 generation,
-                       TYdbTableGatewayPtr ydbGateway,
                        const NYdb::NTable::TExecDataQuerySettings& execDataQuerySettings = {})
-        : Session(session)
+        : Session(std::move(session))
         , CommitTx(commitTx)
         , TablePathPrefix(tablePathPrefix)
         , Table(table)
@@ -91,7 +96,6 @@ struct TGenerationContext : public TThrRefBase {
         , GenerationColumn(generationColumn)
         , PrimaryKey(primaryKey)
         , Generation(generation)
-        , YdbGateway(ydbGateway)
         , ExecDataQuerySettings(execDataQuerySettings)
     {
     }
@@ -99,58 +103,114 @@ struct TGenerationContext : public TThrRefBase {
 
 using TGenerationContextPtr = TIntrusivePtr<TGenerationContext>;
 
+// struct TRetryContext {
+//     TMaybe<NYdb::NTable::TSession> Session;
+//     NYdb::NTable::TSession GetSession() {
+//         return *Session;
+//     }
+// };
 
 
-struct IYdbTableGateway : public TThrRefBase {
-    using TPtr = TIntrusivePtr<IYdbTableGateway>;
 
-    virtual NYdb::TAsyncStatus RetryOperation(NYdb::NTable::TTableClient::TOperationFunc&& operation, const NYdb::NRetry::TRetryOperationSettings& settings = NYdb::NRetry::TRetryOperationSettings()) = 0;
-    //virtual NThreading::TFuture<NYdb::TStatus> RegisterCheckGeneration(const TGenerationContextPtr& context);
-    virtual NThreading::TFuture<NYdb::NTable::TDataQueryResult> ExecuteDataQuery(const TGenerationContextPtr& context, const TString& sql, NYdb::TParamsBuilder* params, NYdb::NTable::TTxControl txControl, const NYdb::NTable::TExecDataQuerySettings& execDataQuerySettings = {}) = 0;
-    virtual TString GetDb() const = 0;
-    virtual TString GetTablePathPrefix() const = 0;
-};
+// struct IYdbTableGateway : public TThrRefBase {
+//     using TPtr = TIntrusivePtr<IYdbTableGateway>;
 
-using TYdbTableGatewayPtr = IYdbTableGateway::TPtr;
+//     virtual NYdb::TAsyncStatus RetryOperation(TOperationFunc&& operation, const NYdb::NRetry::TRetryOperationSettings& settings = NYdb::NRetry::TRetryOperationSettings()) = 0;
+//     //virtual NThreading::TFuture<NYdb::TStatus> RegisterCheckGeneration(const TGenerationContextPtr& context);
+//     virtual NThreading::TFuture<NYdb::NTable::TDataQueryResult> ExecuteDataQuery(
+//         const TGenerationContextPtr& context,
+//         const TString& sql,
+//         std::shared_ptr<NYdb::TParamsBuilder> params,
+//         NYdb::NTable::TTxControl txControl,
+//         const NYdb::NTable::TExecDataQuerySettings& execDataQuerySettings = {}) = 0;
 
 
-struct YdbSdkTableGateway : public IYdbTableGateway {
+//     virtual TString GetDb() const = 0;
+//     virtual TString GetTablePathPrefix() const = 0;
+// };
 
-    NYdb::NTable::TTableClient TableClient;
-    const TString DB;
-    const TString TablePathPrefix;
+// using TYdbTableGatewayPtr = IYdbTableGateway::TPtr;
 
-   // YdbSdkTableGateway() {}
 
-    YdbSdkTableGateway(NYdb::NTable::TTableClient tableClient, const TString& db, const TString& tablePathPrefix)
-        : TableClient(tableClient)
-        , DB(db)
-        , TablePathPrefix(tablePathPrefix) {
+// struct YdbSdkTableGateway : public IYdbTableGateway {
 
-    }
+//     NYdb::NTable::TTableClient TableClient;
+//     const TString DB;
+//     const TString TablePathPrefix;
 
-    NYdb::TAsyncStatus RetryOperation(NYdb::NTable::TTableClient::TOperationFunc&& operation, const NYdb::NRetry::TRetryOperationSettings& settings = NYdb::NRetry::TRetryOperationSettings())  override {
-       
-        auto future = TableClient.RetryOperation(
-            operation, settings);
+//    // YdbSdkTableGateway() {}
 
-        return future;
-      //  return StatusToIssues(future);
-    }
+//     YdbSdkTableGateway(NYdb::NTable::TTableClient tableClient, const TString& db, const TString& tablePathPrefix)
+//         : TableClient(tableClient)
+//         , DB(db)
+//         , TablePathPrefix(tablePathPrefix) {
 
-    NThreading::TFuture<NYdb::NTable::TDataQueryResult> ExecuteDataQuery(const TGenerationContextPtr& context, const TString& sql, NYdb::TParamsBuilder* params, NYdb::NTable::TTxControl txControl, const NYdb::NTable::TExecDataQuerySettings& execDataQuerySettings = {}) override {
-        return context->Session.ExecuteDataQuery(sql, txControl, params->Build(), execDataQuerySettings);
-    }
+//     }
 
-    TString GetDb() const override {
-        return DB;
-    };
+//     NYdb::TAsyncStatus RetryOperation(TOperationFunc&& operation, const NYdb::NRetry::TRetryOperationSettings& settings = NYdb::NRetry::TRetryOperationSettings())  override {
+//         auto future = TableClient.RetryOperation([op = std::move(operation)](NYdb::NTable::TSession session) {
+//             return op(TRetryContext{session});
+//         }, settings);
 
-    TString GetTablePathPrefix() const override {
-        return TablePathPrefix;
-    };
+//         return future;
+//     }
 
-};
+//     NThreading::TFuture<NYdb::NTable::TDataQueryResult> ExecuteDataQuery(
+//         const TGenerationContextPtr& context,
+//         const TString& sql,
+//         std::shared_ptr<NYdb::TParamsBuilder> params,
+//         NYdb::NTable::TTxControl txControl,
+//         const NYdb::NTable::TExecDataQuerySettings& execDataQuerySettings = {}) override {
+//         return context->Session->ExecuteDataQuery(sql, txControl, params->Build(), execDataQuerySettings);
+//     }
+
+//     TString GetDb() const override {
+//         return DB;
+//     };
+
+//     TString GetTablePathPrefix() const override {
+//         return TablePathPrefix;
+//     };
+// };
+
+// struct YdbLocalTableGateway : public IYdbTableGateway {
+//     const TString DB;
+//     const TString TablePathPrefix;
+
+//     YdbLocalTableGateway(const TString& db, const TString& tablePathPrefix)
+//         : DB(db)
+//         , TablePathPrefix(tablePathPrefix) {
+//     }
+
+//     NYdb::TAsyncStatus RetryOperation(TOperationFunc&& operation, const NYdb::NRetry::TRetryOperationSettings& /*settings*/ = NYdb::NRetry::TRetryOperationSettings())  override {
+        
+//         Cerr << "RetryOperation" << Endl;
+//         return operation(TRetryContext{});
+//     }
+
+//     NThreading::TFuture<NYdb::NTable::TDataQueryResult> ExecuteDataQuery(
+//         const TGenerationContextPtr& /*context*/,
+//         const TString& sql,
+//         std::shared_ptr<NYdb::TParamsBuilder> params,
+//         NYdb::NTable::TTxControl txControl,
+//         const NYdb::NTable::TExecDataQuerySettings& /*execDataQuerySettings*/ = {}) override {
+//         Cerr << "ExecuteDataQuery" << Endl;
+
+//         auto* session = MakeSession();
+//         return session->ExecuteDataQuery(sql, params, txControl);
+//         //NThreading::TPromise<NYdb::NTable::TDataQueryResult> promise = NThreading::NewPromise<NYdb::NTable::TDataQueryResult>();
+//         //NActors::TActivationContext::AsActorContext().Register(NewDataQuery(promise, sql, params, txControl).release());
+//         //return promise.GetFuture();
+//     }
+
+//     TString GetDb() const override {
+//         return DB;
+//     };
+
+//     TString GetTablePathPrefix() const override {
+//         return TablePathPrefix;
+//     };
+// };
 
 
 } // namespace NFq

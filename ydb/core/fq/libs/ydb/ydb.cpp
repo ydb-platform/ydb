@@ -36,9 +36,10 @@ TFuture<TDataQueryResult> SelectGeneration(const TGenerationContextPtr& context)
         context->Table.c_str(),
         context->PrimaryKeyColumn.c_str());
 
-    NYdb::TParamsBuilder params;
-    params
-        .AddParam("$pk")
+  //  NYdb::TParamsBuilder params;
+    auto params = std::make_unique<NYdb::TParamsBuilder>();
+    params.get()->
+         AddParam("$pk")
         .String(context->PrimaryKey)
         .Build();
 
@@ -47,7 +48,7 @@ TFuture<TDataQueryResult> SelectGeneration(const TGenerationContextPtr& context)
         ttxControl.CommitTx();
     }
 
-    return context->YdbGateway->ExecuteDataQuery(context, query, &params, ttxControl);
+    return context->Session->ExecuteDataQuery(query, std::move(params), ttxControl);
 
  //   return context->Session.ExecuteDataQuery(query, ttxControl, params.Build(), context->ExecDataQuerySettings);
 }
@@ -145,9 +146,10 @@ TFuture<TStatus> UpsertGeneration(const TGenerationContextPtr& context) {
         context->PrimaryKeyColumn.c_str(),
         context->GenerationColumn.c_str());
 
-    NYdb::TParamsBuilder params;
-    params
-        .AddParam("$pk")
+    //NYdb::TParamsBuilder params;
+    auto params = std::make_unique<NYdb::TParamsBuilder>();
+    params.get()->
+         AddParam("$pk")
         .String(context->PrimaryKey)
         .Build()
         .AddParam("$generation")
@@ -160,7 +162,7 @@ TFuture<TStatus> UpsertGeneration(const TGenerationContextPtr& context) {
         context->Transaction.reset();
     }
 
-    return context->YdbGateway->ExecuteDataQuery(context, query, &params, ttxControl/*context->ExecDataQuerySettings*/).Apply(
+    return context->Session->ExecuteDataQuery(query, std::move(params), ttxControl, context->ExecDataQuerySettings).Apply(
 
 
    // return context->Session.ExecuteDataQuery(query, ttxControl, params.Build(), context->ExecDataQuerySettings).Apply(

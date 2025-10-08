@@ -26,6 +26,8 @@
 
 #include <ydb/core/fq/libs/ydb/ydb_gateway.h>
 
+#include <ydb/core/fq/libs/ydb/ydb_local_connection.h>
+
 namespace NFq {
 
 using namespace NActors;
@@ -90,11 +92,14 @@ struct TTestRuntime {
         storageConfig.SetToken("");
         storageConfig.SetTablePrefix(TablePrefix);
 
-        auto credFactory = NKikimr::CreateYdbCredentialsProviderFactory;
+       // auto credFactory = NKikimr::CreateYdbCredentialsProviderFactory;
         NYdb::TDriver driver(NYdb::TDriverConfig{});
-        auto ydbConnectionPtr = NewYdbConnection(config.GetExternalStorage(), credFactory, driver);
-        auto gateway = MakeIntrusive<YdbSdkTableGateway>(ydbConnectionPtr->TableClient, ydbConnectionPtr->DB, ydbConnectionPtr->TablePathPrefix);
-        CheckpointStorage = NewYdbCheckpointStorage(storageConfig, CreateEntityIdGenerator("id"), ydbConnectionPtr, gateway);
+        auto ydbConnectionPtr = CreateLocalYdbConnection(""); //NewYdbConnection(config.GetExternalStorage(), credFactory, driver);
+      //  auto gateway = MakeIntrusive<YdbSdkTableGateway>(ydbConnectionPtr->TableClient, ydbConnectionPtr->DB, ydbConnectionPtr->TablePathPrefix);
+        // auto [storage, actor] = NewYdbCheckpointStorage(storageConfig, CreateEntityIdGenerator("id"), ydbConnectionPtr, gateway);
+        // CheckpointStorage = storage
+        CheckpointStorage = NewYdbCheckpointStorage(storageConfig, CreateEntityIdGenerator("id"), ydbConnectionPtr);
+
         auto issues = CheckpointStorage->Init().GetValueSync();
         UNIT_ASSERT_C(issues.Empty(), issues.ToString());
 

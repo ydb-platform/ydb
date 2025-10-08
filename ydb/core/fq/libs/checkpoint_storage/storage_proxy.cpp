@@ -23,6 +23,8 @@
 #include <util/string/join.h>
 #include <util/string/strip.h>
 
+#include <ydb/core/fq/libs/ydb/ydb_local_connection.h>
+
 namespace NFq {
 
 using namespace NActors;
@@ -89,6 +91,9 @@ public:
     void Bootstrap();
     void Initialize();
 
+    ~TStorageProxy() {
+        Cerr << "~TStorageProxy" << Endl;
+    }
     static constexpr char ActorName[] = "YQ_STORAGE_PROXY";
 
 private:
@@ -156,17 +161,25 @@ TStorageProxy::TStorageProxy(
 }
 
 void TStorageProxy::Bootstrap() {
+    Become(&TStorageProxy::StateFunc);
+    
     LOG_STREAMS_STORAGE_SERVICE_INFO("Bootstrap");
-    auto ydbConnectionPtr = NewYdbConnection(Config.GetExternalStorage(), CredentialsProviderFactory, Driver);
-    auto gateway = MakeIntrusive<YdbSdkTableGateway>(ydbConnectionPtr->TableClient, ydbConnectionPtr->DB, ydbConnectionPtr->TablePathPrefix);
-    CheckpointStorage = NewYdbCheckpointStorage(StorageConfig, CreateEntityIdGenerator(IdsPrefix), ydbConnectionPtr, gateway);
+    auto ydbConnectionPtr = CreateLocalYdbConnection("/dc-1/.metadata/checkpoints"); //NewYdbConnection(Config.GetExternalStorage(), CredentialsProviderFactory, Driver);
+   // auto gateway = MakeIntrusive<YdbSdkTableGateway>(ydbConnectionPtr->TableClient, ydbConnectionPtr->DB, ydbConnectionPtr->TablePathPrefix);
+  // auto gateway = MakeIntrusive<YdbLocalTableGateway>(ydbConnectionPtr->DB, /*ydbConnectionPtr->TablePathPrefix*/ "/dc-1/.metadata/checkpoints");
+    
+   // auto [storage, actor] = NewYdbCheckpointStorage(StorageConfig, CreateEntityIdGenerator(IdsPrefix), ydbConnectionPtr, gateway);
+    // CheckpointStorage = storage;
+
+    CheckpointStorage = NewYdbCheckpointStorage(StorageConfig, CreateEntityIdGenerator(IdsPrefix), ydbConnectionPtr);
+
     StateStorage = NewYdbStateStorage(Config, ydbConnectionPtr);
     if (Config.GetCheckpointGarbageConfig().GetEnabled()) {
         const auto& gcConfig = Config.GetCheckpointGarbageConfig();
         ActorGC = Register(NewGC(gcConfig, CheckpointStorage, StateStorage).release());
     }
     Initialize();
-    Become(&TStorageProxy::StateFunc);
+    
 
     LOG_STREAMS_STORAGE_SERVICE_INFO("Successfully bootstrapped TStorageProxy " << SelfId() << " with connection to "
         << StorageConfig.GetEndpoint().data()
@@ -179,21 +192,23 @@ void TStorageProxy::Initialize() {
     }
     LOG_STREAMS_STORAGE_SERVICE_INFO("Initialize");
     Initialized = true;
-    
+
+    // TODO
     auto issues = CheckpointStorage->Init().GetValueSync();
     if (!issues.Empty()) {
         LOG_STREAMS_STORAGE_SERVICE_ERROR("Failed to init checkpoint storage: " << issues.ToOneLineString());
         Initialized = false;
     }
     
-    issues = StateStorage->Init().GetValueSync();
-    if (!issues.Empty()) {
-        LOG_STREAMS_STORAGE_SERVICE_ERROR("Failed to init checkpoint state storage: " << issues.ToOneLineString());
-        Initialized = false;
-    }
+    // issues = StateStorage->Init().GetValueSync();
+    // if (!issues.Empty()) {
+    //     LOG_STREAMS_STORAGE_SERVICE_ERROR("Failed to init checkpoint state storage: " << issues.ToOneLineString());
+    //     Initialized = false;
+    // }
 }
 
 void TStorageProxy::Handle(TEvCheckpointStorage::TEvRegisterCoordinatorRequest::TPtr& ev) {
+    Cerr << "TEvRegisterCoordinatorRequest" << Endl;
     Initialize();
     auto context = MakeIntrusive<TRequestContext>(Metrics);
 

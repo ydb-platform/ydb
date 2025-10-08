@@ -12,12 +12,13 @@ PEERDIR(
     ydb/core/testlib/default
     ydb/library/security
     ydb/public/sdk/cpp/src/client/table
+    ydb/core/testlib
 )
 
-INCLUDE(${ARCADIA_ROOT}/ydb/public/tools/ydb_recipe/recipe.inc)
+#INCLUDE(${ARCADIA_ROOT}/ydb/public/tools/ydb_recipe/recipe.inc)
 
 YQL_LAST_ABI_VERSION()
-
+TIMEOUT(30  )
 SRCS(
     gc_ut.cpp
     storage_service_ydb_ut.cpp

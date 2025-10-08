@@ -4,6 +4,8 @@ SRCS(
     schema.cpp
     util.cpp
     ydb.cpp
+    query_actor.cpp
+    ydb_local_connection.cpp
 )
 
 PEERDIR(
@@ -18,6 +20,9 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/rate_limiter
     ydb/public/sdk/cpp/src/client/scheme
     ydb/public/sdk/cpp/src/client/table
+    ydb/library/query_actor
+    ydb/core/base/generated
+    ydb/library/aclib/protos
 )
 
 GENERATE_ENUM_SERIALIZATION(ydb.h)

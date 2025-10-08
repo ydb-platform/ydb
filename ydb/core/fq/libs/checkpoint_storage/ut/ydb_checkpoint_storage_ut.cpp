@@ -8,7 +8,9 @@
 #include <util/system/env.h>
 #include <ydb/core/fq/libs/ydb/ydb_gateway.h>
 #include <deque>
-
+#include <ydb/core/testlib/actors/test_runtime.h>
+#include <ydb/core/testlib/basics/appdata.h>
+#include <ydb/core/fq/libs/ydb/ydb_local_connection.h>
 namespace NFq {
 
 namespace {
@@ -22,70 +24,93 @@ const TCheckpointId CheckpointId4(13, 2);
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TCheckpointStoragePtr GetCheckpointStorage(const char* tablePrefix, IEntityIdGenerator::TPtr entityIdGenerator = CreateEntityIdGenerator("id")) {
-    NKikimrConfig::TExternalStorage checkpointStorageConfig;
-    checkpointStorageConfig.SetEndpoint(GetEnv("YDB_ENDPOINT"));
-    checkpointStorageConfig.SetDatabase(GetEnv("YDB_DATABASE"));
-    checkpointStorageConfig.SetToken("");
-    checkpointStorageConfig.SetTablePrefix(tablePrefix);
-    checkpointStorageConfig.SetTableClientMaxActiveSessions(20);
+template<bool UseSdk>
+class TFixture : public NUnitTest::TBaseFixture, public NActors::TTestActorRuntime {
+public:
+    TFixture() {
+        TAutoPtr<NKikimr::TAppPrepare> app = new NKikimr::TAppPrepare();
+        Initialize(app->Unwrap());
+    }
 
-    auto credFactory = NKikimr::CreateYdbCredentialsProviderFactory;
-    NYdb::TDriver driver(NYdb::TDriverConfig{});
-    auto ydbConnectionPtr = NewYdbConnection(checkpointStorageConfig, credFactory, driver);
-    auto gateway = MakeIntrusive<YdbSdkTableGateway>(ydbConnectionPtr->TableClient, ydbConnectionPtr->DB, ydbConnectionPtr->TablePathPrefix);
-    auto storage = NewYdbCheckpointStorage(checkpointStorageConfig, entityIdGenerator, ydbConnectionPtr, gateway);
-    auto issues = storage->Init().GetValueSync();
-    UNIT_ASSERT_C(issues.Empty(), issues.ToString());
-    return storage;
-}
+    TCheckpointStoragePtr GetCheckpointStorage(const char* tablePrefix, IEntityIdGenerator::TPtr entityIdGenerator = CreateEntityIdGenerator("id")) {
+        NKikimrConfig::TExternalStorage checkpointStorageConfig;
+        checkpointStorageConfig.SetEndpoint(GetEnv("YDB_ENDPOINT"));
+        checkpointStorageConfig.SetDatabase(GetEnv("YDB_DATABASE"));
+        checkpointStorageConfig.SetToken("");
+        checkpointStorageConfig.SetTablePrefix(tablePrefix);
+        checkpointStorageConfig.SetTableClientMaxActiveSessions(20);
 
-void CreateSome(const TCheckpointStoragePtr& storage) {
-    // coordinator1 registers and performs some work
+        //auto credFactory = NKikimr::CreateYdbCredentialsProviderFactory;
+        NYdb::TDriver driver(NYdb::TDriverConfig{});
+        auto ydbConnectionPtr = CreateLocalYdbConnection("");
+        //NewYdbConnection(checkpointStorageConfig, credFactory, driver);
+       // IYdbTableGateway::TPtr ydbGateway;
+        // if (UseSdk) {
+        //     ydbGateway = MakeIntrusive<YdbSdkTableGateway>(ydbConnectionPtr->TableClient, ydbConnectionPtr->DB, ydbConnectionPtr->TablePathPrefix);
+        // } else {
+        //     ydbGateway = MakeIntrusive<YdbLocalTableGateway>(ydbConnectionPtr->DB, ydbConnectionPtr->TablePathPrefix);
+        // }
 
-    TCoordinatorId coordinator1("graph1", 11);
-    auto issues = storage->RegisterGraphCoordinator(coordinator1).GetValueSync();
-    UNIT_ASSERT_C(issues.Empty(), issues.ToString());
+      //  auto [storage, actor] = NewYdbCheckpointStorage(checkpointStorageConfig, entityIdGenerator, ydbConnectionPtr, ydbGateway);
+       // Register(actor);
+        auto storage = NewYdbCheckpointStorage(checkpointStorageConfig, entityIdGenerator, ydbConnectionPtr);
 
-    NProto::TCheckpointGraphDescription desc;
-    desc.MutableGraph()->SetGraphId("graph1");
-    auto createCheckpointResult = storage->CreateCheckpoint(coordinator1, CheckpointId1, desc, ECheckpointStatus::Pending).GetValueSync();
-    UNIT_ASSERT_C(createCheckpointResult.second.Empty(), createCheckpointResult.second.ToString());
-    const TString checkpoint1GraphDescId = createCheckpointResult.first;
+        auto issues = storage->Init().GetValueSync();
+        UNIT_ASSERT_C(issues.Empty(), issues.ToString());
+        return storage;
+    }
 
-    createCheckpointResult = storage->CreateCheckpoint(coordinator1, CheckpointId2, createCheckpointResult.first, ECheckpointStatus::Pending).GetValueSync();
-    UNIT_ASSERT_C(createCheckpointResult.second.Empty(), createCheckpointResult.second.ToString());
-    UNIT_ASSERT_VALUES_EQUAL(checkpoint1GraphDescId, createCheckpointResult.first);
+    void CreateSome(const TCheckpointStoragePtr& storage) {
+        // coordinator1 registers and performs some work
 
-    createCheckpointResult = storage->CreateCheckpoint(coordinator1, CheckpointId3, createCheckpointResult.first, ECheckpointStatus::Pending).GetValueSync();
-    UNIT_ASSERT_C(createCheckpointResult.second.Empty(), createCheckpointResult.second.ToString());
-    UNIT_ASSERT_VALUES_EQUAL(checkpoint1GraphDescId, createCheckpointResult.first);
+        TCoordinatorId coordinator1("graph1", 11);
+        auto issues = storage->RegisterGraphCoordinator(coordinator1).GetValueSync();
+        UNIT_ASSERT_C(issues.Empty(), issues.ToString());
 
-    // coordinator2
+        NProto::TCheckpointGraphDescription desc;
+        desc.MutableGraph()->SetGraphId("graph1");
+        auto createCheckpointResult = storage->CreateCheckpoint(coordinator1, CheckpointId1, desc, ECheckpointStatus::Pending).GetValueSync();
+        UNIT_ASSERT_C(createCheckpointResult.second.Empty(), createCheckpointResult.second.ToString());
+        const TString checkpoint1GraphDescId = createCheckpointResult.first;
 
-    TCoordinatorId coordinator2("graph2", 17);
-    issues = storage->RegisterGraphCoordinator(coordinator2).GetValueSync();
-    UNIT_ASSERT_C(issues.Empty(), issues.ToString());
+        createCheckpointResult = storage->CreateCheckpoint(coordinator1, CheckpointId2, createCheckpointResult.first, ECheckpointStatus::Pending).GetValueSync();
+        UNIT_ASSERT_C(createCheckpointResult.second.Empty(), createCheckpointResult.second.ToString());
+        UNIT_ASSERT_VALUES_EQUAL(checkpoint1GraphDescId, createCheckpointResult.first);
 
-    desc.MutableGraph()->SetGraphId("graph2");
-    createCheckpointResult = storage->CreateCheckpoint(coordinator2, CheckpointId1, desc, ECheckpointStatus::Pending).GetValueSync();
-    UNIT_ASSERT_C(createCheckpointResult.second.Empty(), createCheckpointResult.second.ToString());
-    const TString checkpoint2GraphDescId = createCheckpointResult.first;
-    UNIT_ASSERT_UNEQUAL(checkpoint1GraphDescId, checkpoint2GraphDescId);
+        createCheckpointResult = storage->CreateCheckpoint(coordinator1, CheckpointId3, createCheckpointResult.first, ECheckpointStatus::Pending).GetValueSync();
+        UNIT_ASSERT_C(createCheckpointResult.second.Empty(), createCheckpointResult.second.ToString());
+        UNIT_ASSERT_VALUES_EQUAL(checkpoint1GraphDescId, createCheckpointResult.first);
 
-    // new coordinator for graph1
+        // coordinator2
 
-    TCoordinatorId coordinator1v2("graph1", 18);
-    issues = storage->RegisterGraphCoordinator(coordinator1v2).GetValueSync();
-    UNIT_ASSERT_C(issues.Empty(), issues.ToString());
+        TCoordinatorId coordinator2("graph2", 17);
+        issues = storage->RegisterGraphCoordinator(coordinator2).GetValueSync();
+        UNIT_ASSERT_C(issues.Empty(), issues.ToString());
 
-    desc.MutableGraph()->SetGraphId("graph1");
-    createCheckpointResult = storage->CreateCheckpoint(coordinator1v2, CheckpointId4, desc, ECheckpointStatus::Pending).GetValueSync();
-    UNIT_ASSERT_C(createCheckpointResult.second.Empty(), createCheckpointResult.second.ToString());
-    const TString checkpoint3GraphDescId = createCheckpointResult.first;
-    UNIT_ASSERT_UNEQUAL(checkpoint1GraphDescId, checkpoint3GraphDescId);
-    UNIT_ASSERT_UNEQUAL(checkpoint2GraphDescId, checkpoint3GraphDescId);
-}
+        desc.MutableGraph()->SetGraphId("graph2");
+        createCheckpointResult = storage->CreateCheckpoint(coordinator2, CheckpointId1, desc, ECheckpointStatus::Pending).GetValueSync();
+        UNIT_ASSERT_C(createCheckpointResult.second.Empty(), createCheckpointResult.second.ToString());
+        const TString checkpoint2GraphDescId = createCheckpointResult.first;
+        UNIT_ASSERT_UNEQUAL(checkpoint1GraphDescId, checkpoint2GraphDescId);
+
+        // new coordinator for graph1
+
+        TCoordinatorId coordinator1v2("graph1", 18);
+        issues = storage->RegisterGraphCoordinator(coordinator1v2).GetValueSync();
+        UNIT_ASSERT_C(issues.Empty(), issues.ToString());
+
+        desc.MutableGraph()->SetGraphId("graph1");
+        createCheckpointResult = storage->CreateCheckpoint(coordinator1v2, CheckpointId4, desc, ECheckpointStatus::Pending).GetValueSync();
+        UNIT_ASSERT_C(createCheckpointResult.second.Empty(), createCheckpointResult.second.ToString());
+        const TString checkpoint3GraphDescId = createCheckpointResult.first;
+        UNIT_ASSERT_UNEQUAL(checkpoint1GraphDescId, checkpoint3GraphDescId);
+        UNIT_ASSERT_UNEQUAL(checkpoint2GraphDescId, checkpoint3GraphDescId);
+    }
+};
+
+
+using TSdkCheckpoints = TFixture<true>;
+using TLocalCheckpoints = TFixture<false>;
 
 } // namespace
 
@@ -94,7 +119,7 @@ void CreateSome(const TCheckpointStoragePtr& storage) {
 // Note that many scenarious are tested in storage_service_ydb_ut.cpp
 
 Y_UNIT_TEST_SUITE(TCheckpointStorageTest) {
-    Y_UNIT_TEST(ShouldRegisterCoordinator)
+    Y_UNIT_TEST_F(ShouldRegisterCoordinator, TSdkCheckpoints)
     {
         auto storage = GetCheckpointStorage("TCheckpointStorageTestShouldRegisterCoordinator");
 
@@ -103,7 +128,32 @@ Y_UNIT_TEST_SUITE(TCheckpointStorageTest) {
         UNIT_ASSERT(issues.Empty());
     }
 
-    Y_UNIT_TEST(ShouldGetCoordinators)
+    Y_UNIT_TEST_F(ShouldGetCoordinators1, TSdkCheckpoints)
+    {
+        auto storage = GetCheckpointStorage("TCheckpointStorageTestShouldRegisterGraph");
+
+        TCoordinatorId coordinator1("graph1", 11);
+        auto issues = storage->RegisterGraphCoordinator(coordinator1).GetValueSync();
+
+        TCoordinatorId coordinator2("graph2", 17);
+        issues = storage->RegisterGraphCoordinator(coordinator2).GetValueSync();
+
+        auto getResult = storage->GetCoordinators().GetValueSync();
+        UNIT_ASSERT(getResult.second.Empty());
+        UNIT_ASSERT_VALUES_EQUAL(getResult.first.size(), 2UL);
+
+        for (const auto& coordinator: getResult.first) {
+            if (coordinator.GraphId == "graph1") {
+                UNIT_ASSERT_VALUES_EQUAL(coordinator.Generation, 11);
+            } else if (coordinator.GraphId == "graph2") {
+                UNIT_ASSERT_VALUES_EQUAL(coordinator.Generation, 17);
+            } else {
+                UNIT_ASSERT(false);
+            }
+        }
+    }
+
+    Y_UNIT_TEST_F(ShouldGetCoordinators2, TLocalCheckpoints)
     {
         auto storage = GetCheckpointStorage("TCheckpointStorageTestShouldRegisterGraph");
 
@@ -130,7 +180,7 @@ Y_UNIT_TEST_SUITE(TCheckpointStorageTest) {
 
     // TODO: add various tests on graph registration
 
-    Y_UNIT_TEST(ShouldCreateCheckpoint)
+    Y_UNIT_TEST_F(ShouldCreateCheckpoint, TSdkCheckpoints)
     {
         auto storage = GetCheckpointStorage("TCheckpointStorageTestShouldCreateCheckpoint");
 
@@ -144,7 +194,7 @@ Y_UNIT_TEST_SUITE(TCheckpointStorageTest) {
 
     // TODO: add more tests on checkpoints manipulations
 
-    Y_UNIT_TEST(ShouldCreateGetCheckpoints)
+    Y_UNIT_TEST_F(ShouldCreateGetCheckpoints, TSdkCheckpoints)
     {
         auto storage = GetCheckpointStorage("TCheckpointStorageTestShouldCreateGetCheckpoints");
         CreateSome(storage);
@@ -170,7 +220,7 @@ Y_UNIT_TEST_SUITE(TCheckpointStorageTest) {
         UNIT_ASSERT(!getResult.first[0].Graph);
     }
 
-    Y_UNIT_TEST(ShouldGetCheckpointsEmpty)
+    Y_UNIT_TEST_F(ShouldGetCheckpointsEmpty, TSdkCheckpoints)
     {
         auto storage = GetCheckpointStorage("TCheckpointStorageTestShouldGetCheckpointsEmpty");
         auto getResult = storage->GetCheckpoints("no-such-graph").GetValueSync();
@@ -178,7 +228,7 @@ Y_UNIT_TEST_SUITE(TCheckpointStorageTest) {
         UNIT_ASSERT(getResult.first.empty());
     }
 
-    Y_UNIT_TEST(ShouldDeleteGraph)
+    Y_UNIT_TEST_F(ShouldDeleteGraph, TSdkCheckpoints)
     {
         auto storage = GetCheckpointStorage("TCheckpointStorageTestShouldDeleteGraph");
         CreateSome(storage);
@@ -210,7 +260,7 @@ Y_UNIT_TEST_SUITE(TCheckpointStorageTest) {
         UNIT_ASSERT_VALUES_EQUAL(getCheckpointsResult.first.size(), 1UL);
     }
 
-    Y_UNIT_TEST(ShouldMarkCheckpointsGc)
+    Y_UNIT_TEST_F(ShouldMarkCheckpointsGc, TSdkCheckpoints)
     {
         auto storage = GetCheckpointStorage("TCheckpointStorageTestShouldMarkCheckpointsGc");
         CreateSome(storage);
@@ -237,7 +287,7 @@ Y_UNIT_TEST_SUITE(TCheckpointStorageTest) {
         UNIT_ASSERT_VALUES_EQUAL(graph2Checkpoint1.Status, ECheckpointStatus::Pending);
     }
 
-    Y_UNIT_TEST(ShouldDeleteMarkedCheckpoints)
+    Y_UNIT_TEST_F(ShouldDeleteMarkedCheckpoints, TSdkCheckpoints)
     {
         auto storage = GetCheckpointStorage("TCheckpointStorageTestShouldDeleteMarkedCheckpoints");
         CreateSome(storage);
@@ -262,7 +312,7 @@ Y_UNIT_TEST_SUITE(TCheckpointStorageTest) {
         UNIT_ASSERT_VALUES_EQUAL(graph2Checkpoint1.Status, ECheckpointStatus::Pending);
     }
 
-    Y_UNIT_TEST(ShouldNotDeleteUnmarkedCheckpoints)
+    Y_UNIT_TEST_F(ShouldNotDeleteUnmarkedCheckpoints, TSdkCheckpoints)
     {
         auto storage = GetCheckpointStorage("TCheckpointStorageTestShouldDeleteCheckpoints");
         CreateSome(storage);
@@ -285,7 +335,7 @@ Y_UNIT_TEST_SUITE(TCheckpointStorageTest) {
         UNIT_ASSERT_VALUES_EQUAL(graph2Checkpoint1.Status, ECheckpointStatus::Pending);
     }
 
-    Y_UNIT_TEST(ShouldUpdateCheckpointStatusForCheckpointsWithTheSameGenAndNo)
+    Y_UNIT_TEST_F(ShouldUpdateCheckpointStatusForCheckpointsWithTheSameGenAndNo, TSdkCheckpoints)
     {
         auto storage = GetCheckpointStorage("ShouldUpdateCheckpointStatus");
         TCoordinatorId coordinator1("graph1", 42);
@@ -319,7 +369,7 @@ Y_UNIT_TEST_SUITE(TCheckpointStorageTest) {
         size_t CallsCount = 0;
     };
 
-    Y_UNIT_TEST(ShouldRetryOnExistingGraphDescId)
+    Y_UNIT_TEST_F(ShouldRetryOnExistingGraphDescId, TSdkCheckpoints)
     {
         auto idGenerator = new TTestEntityIdGenerator({"id1", "id1", "id1", "id2"});
         auto storage = GetCheckpointStorage("ShouldRetryOnExistingGraphDescId", idGenerator);

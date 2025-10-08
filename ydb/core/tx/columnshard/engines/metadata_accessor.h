@@ -48,7 +48,6 @@ public:
     const std::shared_ptr<arrow::Schema>& GetPrimaryKeyScheme(const TVersionedPresetSchemas& vSchemas) const;
 
     TString GetTableName() const;
-
     virtual std::shared_ptr<ISnapshotSchema> GetSnapshotSchemaOptional(
         const TVersionedPresetSchemas& vSchemas, const TSnapshot& snapshot) const = 0;
     std::shared_ptr<ISnapshotSchema> GetSnapshotSchemaVerified(const TVersionedPresetSchemas& vSchemas, const TSnapshot& snapshot) const {

@@ -5,6 +5,7 @@
 namespace NKikimr::NMiniKQL::NJoinTable {
 
 using TTuple = const NYql::NUdf::TUnboxedValue*;
+using TSizedTuple = std::span<const NYql::NUdf::TUnboxedValue>;
 
 bool NeedToTrackUnusedRightTuples(EJoinKind kind);
 
@@ -15,14 +16,16 @@ class TStdJoinTable {
         std::vector<TTuple> Tuples;
         bool Used;
     };
+
   public:
-    TStdJoinTable(int tupleSize, NKikimr::NMiniKQL::TWideUnboxedEqual eq, NKikimr::NMiniKQL::TWideUnboxedHasher hash, bool trackUnusedTuples)
+    TStdJoinTable(int tupleSize, NKikimr::NMiniKQL::TWideUnboxedEqual eq, NKikimr::NMiniKQL::TWideUnboxedHasher hash,
+                  bool trackUnusedTuples)
         : TupleSize(tupleSize)
         , TrackUnusedTuples(trackUnusedTuples)
         , BuiltTable(1, hash, eq)
     {}
 
-    void Add(std::span<NYql::NUdf::TUnboxedValue> tuple) {
+    void Add(TSizedTuple tuple) {
         MKQL_ENSURE(BuiltTable.empty(), "JoinTable is built already");
         MKQL_ENSURE(std::ssize(tuple) == TupleSize, "tuple size promise vs actual mismatch");
         for (int idx = 0; idx < TupleSize; ++idx) {
@@ -34,7 +37,8 @@ class TStdJoinTable {
         MKQL_ENSURE(BuiltTable.empty(), "JoinTable is built already");
         for (int index = 0; index < std::ssize(Tuples); index += TupleSize) {
             TTuple thisTuple = &Tuples[index];
-            auto [it, ok] = BuiltTable.emplace(thisTuple, TuplesWithSameJoinKey{.Tuples = std::vector{thisTuple}, .Used = !TrackUnusedTuples});
+            auto [it, ok] = BuiltTable.emplace(
+                thisTuple, TuplesWithSameJoinKey{.Tuples = std::vector{thisTuple}, .Used = !TrackUnusedTuples});
             if (!ok) {
                 it->second.Tuples.emplace_back(thisTuple);
             }
@@ -49,16 +53,17 @@ class TStdJoinTable {
         }
     }
 
-    bool UnusedTrackingOn() const { 
+    bool UnusedTrackingOn() const {
         return TrackUnusedTuples;
     }
 
     const auto& MapView() const {
         return BuiltTable;
     }
+
     void ForEachUnused(std::function<void(TTuple)> produce) {
         MKQL_ENSURE(TrackUnusedTuples, "wasn't tracking tuples at all");
-        for(auto& tuplesSameKey: BuiltTable) {
+        for (auto& tuplesSameKey : BuiltTable) {
             if (!tuplesSameKey.second.Used) {
                 std::ranges::for_each(tuplesSameKey.second.Tuples, produce);
                 tuplesSameKey.second.Used = true;

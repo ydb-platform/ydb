@@ -1027,7 +1027,7 @@ struct TLoadAndSplitSimulator {
                             << ", datashard " << msg->Record.GetSplitDescription().GetSourceRanges(0).GetTabletID()
                             << " split into datashard " << i.GetTabletID()
                             << " (start="  << start
-                            << ", end=" << ((!end) ? end : 1000000)
+                            << ", end=" << ((end != 0) ? end : 1000000)
                             << ")"
                             << Endl;
                     }
@@ -1257,6 +1257,12 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitByLoad) {
         const ui32 cpuLoadThreshold = 1;    // percents
         const ui64 cpuLoadSimulated = 100;  // percents
 
+        // NOTE: The main table for the index should start with the expected number
+        //       of partitions (see UniformPartitionsCount below) to make sure
+        //       the index table splits up to this limit. The overall limit
+        //       on the number of partitions (see MaxPartitionsCount below)
+        //       is irrelevant, because the main table is not going to be split
+        //       by this test (only the index table will be).
         const auto mainTableScheme = Sprintf(
             R"(
                 TableDescription {

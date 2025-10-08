@@ -61,7 +61,9 @@ struct TStatisticsAggregator::TTxAnalyze : public TTxBase {
 
         for (const auto& table : Record.GetTables()) {
             const TPathId pathId = TPathId::FromProto(table.GetPathId());
-            const TString columnTags = JoinVectorIntoString(TVector<ui32>{table.GetColumnTags().begin(),table.GetColumnTags().end()},",");
+            auto columnTags = TVector<ui32>(
+                table.GetColumnTags().begin(),table.GetColumnTags().end());
+            const TString columnTagsStr = JoinVectorIntoString(columnTags, ",");
             const auto status = TForceTraversalTable::EStatus::None;
 
             SA_LOG_D("[" << Self->TabletID() << "] TTxAnalyze::Execute. Create new force traversal table, OperationId=" << operationId << " , PathId " << pathId);
@@ -69,7 +71,7 @@ struct TStatisticsAggregator::TTxAnalyze : public TTxBase {
             // create new force traversal
             TForceTraversalTable operationTable {
                 .PathId = pathId,
-                .ColumnTags = columnTags,
+                .ColumnTags = std::move(columnTags),
                 .Status = status
             };
             operation.Tables.emplace_back(operationTable);
@@ -78,7 +80,7 @@ struct TStatisticsAggregator::TTxAnalyze : public TTxBase {
                 NIceDb::TUpdate<Schema::ForceTraversalTables::OperationId>(operationId),
                 NIceDb::TUpdate<Schema::ForceTraversalTables::OwnerId>(pathId.OwnerId),
                 NIceDb::TUpdate<Schema::ForceTraversalTables::LocalPathId>(pathId.LocalPathId),
-                NIceDb::TUpdate<Schema::ForceTraversalTables::ColumnTags>(columnTags),
+                NIceDb::TUpdate<Schema::ForceTraversalTables::ColumnTags>(columnTagsStr),
                 NIceDb::TUpdate<Schema::ForceTraversalTables::Status>((ui64)status)
             );
         }

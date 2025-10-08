@@ -390,7 +390,7 @@ private: // stored in local db
 
     struct TForceTraversalTable {
         TPathId PathId;
-        TString ColumnTags;
+        TVector<ui32> ColumnTags;
         std::vector<TAnalyzedShard> AnalyzedShards;
 
         enum class EStatus : ui8 {

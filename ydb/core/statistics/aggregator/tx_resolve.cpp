@@ -3,8 +3,6 @@
 #include <ydb/core/base/hive.h>
 #include <ydb/core/tx/datashard/datashard.h>
 
-#include <util/string/vector.h>
-
 namespace NKikimr::NStat {
 
 struct TStatisticsAggregator::TTxResolve : public TTxBase {

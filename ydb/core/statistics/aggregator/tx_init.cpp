@@ -238,7 +238,7 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                 TString operationId = rowset.GetValue<Schema::ForceTraversalTables::OperationId>();
                 ui64 ownerId = rowset.GetValue<Schema::ForceTraversalTables::OwnerId>();
                 ui64 localPathId = rowset.GetValue<Schema::ForceTraversalTables::LocalPathId>();
-                TString columnTags = rowset.GetValue<Schema::ForceTraversalTables::ColumnTags>();
+                TString columnTagsStr = rowset.GetValue<Schema::ForceTraversalTables::ColumnTags>();
                 TForceTraversalTable::EStatus status = (TForceTraversalTable::EStatus)rowset.GetValue<Schema::ForceTraversalTables::Status>();
 
                 if (status == TForceTraversalTable::EStatus::AnalyzeStarted) {
@@ -250,10 +250,11 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                 }
 
                 auto pathId = TPathId(ownerId, localPathId);
+                auto columnTags = Scan<ui32>(SplitString(columnTagsStr, ","));
 
                 TForceTraversalTable operationTable {
                     .PathId = pathId,
-                    .ColumnTags = columnTags,
+                    .ColumnTags = std::move(columnTags),
                     .Status = status,
                 };
                 auto forceTraversalOperation = Self->ForceTraversalOperation(operationId);

@@ -1070,7 +1070,7 @@ bool TStatisticsAggregator::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev
                     str << "    Table[" << i << "] PathId: " << table.PathId << Endl;
                     str << "        Status: " << table.GetStatusString() << Endl;
                     str << "        AnalyzedShards size: " << table.AnalyzedShards.size() << Endl;
-                    str << "        ColumnTags: " << table.ColumnTags << Endl;
+                    str << "        ColumnTags: " << JoinVectorIntoString(table.ColumnTags, ",") << Endl;
                 }
             }
 

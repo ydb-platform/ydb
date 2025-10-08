@@ -880,10 +880,13 @@ public:
                     resourcesSnapshot = std::move((co_await ActorWaitForEvent<TEvResourcesSnapshot>(0))->Get()->Snapshot);
                 }
 
-                tasksGraph.BuildAllTasks({}, resourcesSnapshot, nullptr, nullptr);
-
-                // TODO: fill tasks count into result
-                // Cerr << tasksGraph.DumpToString();
+                try {
+                    tasksGraph.BuildAllTasks({}, resourcesSnapshot, nullptr, nullptr);
+                    // TODO: fill tasks count into result
+                    // Cerr << tasksGraph.DumpToString();
+                } catch (const yexception&) {
+                    // TODO: send warning to user that we failed to estimate number of tasks.
+                }
             }
 
             co_return ReplyPrepareResult();

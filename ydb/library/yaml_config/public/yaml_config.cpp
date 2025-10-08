@@ -774,14 +774,16 @@ bool TIncompatibilityRules::IsCompatible(const TMap<TString, TString>& labels) c
                 // Label has a non-empty value
                 baseMatch = valueSet.contains(it->second);
             }
-        }            bool matches = pattern.Negated ? !baseMatch : baseMatch;
-            
-            if (!matches) {
-                allPatternsMatch = false;
-                break;
-            }
         }
         
+        bool matches = pattern.Negated ? !baseMatch : baseMatch;
+        
+        if (!matches) {
+            allPatternsMatch = false;
+            break;
+        }
+    }
+    
         if (allPatternsMatch) {
             return false;
         }

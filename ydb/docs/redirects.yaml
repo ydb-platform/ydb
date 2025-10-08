@@ -152,7 +152,9 @@ common:
     to: /devops/concepts/versioning.md
   - from: /devops/manual/maintenance-without-downtime.md
     to: /devops/concepts/maintenance-without-downtime.md
-
+  - from: /maintenance/manual/cluster_expansion.md
+    to: /devops/configuration-management/configuration-v1/cluster-expansion.md
+    
   # Redirect for backup-and-recovery
   - from: /devops/manual/backup-and-recovery.md
     to: /devops/backup-and-recovery.md
@@ -494,8 +496,6 @@ ru:
     to: /devops/configuration-management/configuration-v1/dynamic-config-selectors.md
   - from: /maintenance/manual/dynamic-config-volatile-config.md
     to: /devops/configuration-management/configuration-v1/dynamic-config-volatile-config.md
-  - from: /maintenance/manual/cluster_expansion.md
-    to: /devops/configuration-management/configuration-v1/cluster-expansion.md
 
 
 en:
@@ -503,8 +503,6 @@ en:
     to: /devops/system-requirements.md
   - from: /devops/observability/initial-deployment.md
     to: /devops/deployment-options/manual/initial-deployment.md
-  - from: /maintenance/manual/cluster_expansion.md
-    to: /devops/deployment-options/manual/cluster-expansion.md
   - from: /maintenance/manual/index.md
     to: /devops/deployment-options/manual/index.md
   - from: /reference/ydbops/scenarios.md

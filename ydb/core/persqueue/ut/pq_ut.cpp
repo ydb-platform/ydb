@@ -90,8 +90,17 @@ Y_UNIT_TEST(TestCompaction) {
 
         //cmdCompaction();
 
-        cmdWrite("sourceid1", {2_MB});
-        cmdWrite("sourceid2", {5700_KB, 7_MB});
+        cmdWrite("sourceid1", {990_KB});
+        cmdWrite("sourceid2", {990_KB});
+        cmdWrite("sourceid3", {990_KB});
+        cmdWrite("sourceid4", {990_KB});
+        cmdWrite("sourceid5", {990_KB});
+        cmdWrite("sourceid6", {990_KB});
+        cmdWrite("sourceid7", {990_KB});
+        cmdWrite("sourceid8", {990_KB});
+        //cmdWrite("sourceid9", {200_KB});
+        //cmdCompaction();
+        cmdWrite("sourceidq", {7000_KB});
         cmdCompaction();
 
         //cmdWrite("sourceid1", {1_MB, 1_MB, 1_MB, 1_MB, 1_MB, 1_MB, 1_MB, 1_MB, 1_MB, 1_MB, 1_MB, 1_MB, 1_MB, 1_MB, 1_MB});

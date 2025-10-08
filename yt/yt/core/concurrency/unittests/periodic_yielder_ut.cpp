@@ -4,7 +4,6 @@
 
 #include <library/cpp/testing/gtest/gtest.h>
 
-
 namespace NYT::NConcurrency {
 namespace {
 

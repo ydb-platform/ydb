@@ -185,7 +185,12 @@ namespace NKikimr::NBsController {
                 }
 
                 const auto& hostRecords = EnforceHostRecords ? *EnforceHostRecords : Self->HostRecords;
-                State.emplace(*Self, hostRecords, TActivationContext::Now(), TActivationContext::Monotonic());
+                std::optional<NKikimrBlobStorage::TStorageConfig> storageConfig;
+                if (Cmd.HasStorageConfig() && Self->SelfManagementEnabled) {
+                    Cmd.GetStorageConfig().UnpackTo(&storageConfig.emplace());
+                }
+                State.emplace(*Self, hostRecords, TActivationContext::Now(), TActivationContext::Monotonic(),
+                    storageConfig ? &storageConfig.value() : nullptr);
                 State->CheckConsistency();
 
                 TString m;

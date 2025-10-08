@@ -1,6 +1,7 @@
 GTEST()
 
 SRCS(
+    allocator_ut.cpp
     ibv_ut.cpp
     utils.cpp
 )

@@ -3860,7 +3860,7 @@ ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_OPTIONS,
             UNIT_ASSERT_VALUES_EQUAL(entry.Type, ESchemeEntryType::Directory);
 
             auto children = result.GetChildren();
-            UNIT_ASSERT_VALUES_EQUAL(children.size(), 34);
+            UNIT_ASSERT_VALUES_EQUAL(children.size(), 35);
 
             THashSet<TString> names;
             for (const auto& child : children) {
@@ -3883,7 +3883,7 @@ ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_OPTIONS,
 
             auto children = result.GetChildren();
 
-            UNIT_ASSERT_VALUES_EQUAL(children.size(), 28);
+            UNIT_ASSERT_VALUES_EQUAL(children.size(), 29);
 
             THashSet<TString> names;
             for (const auto& child : children) {
@@ -5643,6 +5643,7 @@ ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_OPTIONS,
                     [["/Root/.sys/query_sessions"];["metadata@system"]];
                     [["/Root/.sys/resource_pool_classifiers"];["metadata@system"]];
                     [["/Root/.sys/resource_pools"];["metadata@system"]];
+                    [["/Root/.sys/streaming_queries"];["metadata@system"]];
                     [["/Root/.sys/tables"];["metadata@system"]];
                     [["/Root/.sys/top_partitions_by_tli_one_hour"];["metadata@system"]];
                     [["/Root/.sys/top_partitions_by_tli_one_minute"];["metadata@system"]];
@@ -5701,6 +5702,7 @@ ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_OPTIONS,
                     [["/Root/Tenant1/.sys/query_sessions"];["metadata@system"]];
                     [["/Root/Tenant1/.sys/resource_pool_classifiers"];["metadata@system"]];
                     [["/Root/Tenant1/.sys/resource_pools"];["metadata@system"]];
+                    [["/Root/Tenant1/.sys/streaming_queries"];["metadata@system"]];
                     [["/Root/Tenant1/.sys/tables"];["metadata@system"]];
                     [["/Root/Tenant1/.sys/top_partitions_by_tli_one_hour"];["metadata@system"]];
                     [["/Root/Tenant1/.sys/top_partitions_by_tli_one_minute"];["metadata@system"]];
@@ -5755,6 +5757,7 @@ ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_OPTIONS,
                     [["/Root/Tenant2/.sys/query_sessions"];["metadata@system"]];
                     [["/Root/Tenant2/.sys/resource_pool_classifiers"];["metadata@system"]];
                     [["/Root/Tenant2/.sys/resource_pools"];["metadata@system"]];
+                    [["/Root/Tenant2/.sys/streaming_queries"];["metadata@system"]];
                     [["/Root/Tenant2/.sys/tables"];["metadata@system"]];
                     [["/Root/Tenant2/.sys/top_partitions_by_tli_one_hour"];["metadata@system"]];
                     [["/Root/Tenant2/.sys/top_partitions_by_tli_one_minute"];["metadata@system"]];
@@ -6010,6 +6013,7 @@ ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_OPTIONS,
                     [["/Root/.sys/query_sessions"];["metadata@system"]];
                     [["/Root/.sys/resource_pool_classifiers"];["metadata@system"]];
                     [["/Root/.sys/resource_pools"];["metadata@system"]];
+                    [["/Root/.sys/streaming_queries"];["metadata@system"]];
                     [["/Root/.sys/tables"];["metadata@system"]];
                     [["/Root/.sys/top_partitions_by_tli_one_hour"];["metadata@system"]];
                     [["/Root/.sys/top_partitions_by_tli_one_minute"];["metadata@system"]];
@@ -6682,6 +6686,7 @@ ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_OPTIONS,
                     [["/Root/.sys/query_sessions"];["ydb.generic.use"];["user1"]];
                     [["/Root/.sys/resource_pool_classifiers"];["ydb.generic.use"];["user1"]];
                     [["/Root/.sys/resource_pools"];["ydb.generic.use"];["user1"]];
+                    [["/Root/.sys/streaming_queries"];["ydb.generic.use"];["user1"]];
                     [["/Root/.sys/tables"];["ydb.generic.use"];["user1"]];
                     [["/Root/.sys/top_partitions_by_tli_one_hour"];["ydb.generic.use"];["user1"]];
                     [["/Root/.sys/top_partitions_by_tli_one_minute"];["ydb.generic.use"];["user1"]];
@@ -6743,6 +6748,7 @@ ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_OPTIONS,
                     [["/Root/Tenant1/.sys/query_sessions"];["ydb.generic.use"];["user1"]];
                     [["/Root/Tenant1/.sys/resource_pool_classifiers"];["ydb.generic.use"];["user1"]];
                     [["/Root/Tenant1/.sys/resource_pools"];["ydb.generic.use"];["user1"]];
+                    [["/Root/Tenant1/.sys/streaming_queries"];["ydb.generic.use"];["user1"]];
                     [["/Root/Tenant1/.sys/tables"];["ydb.generic.use"];["user1"]];
                     [["/Root/Tenant1/.sys/top_partitions_by_tli_one_hour"];["ydb.generic.use"];["user1"]];
                     [["/Root/Tenant1/.sys/top_partitions_by_tli_one_minute"];["ydb.generic.use"];["user1"]];

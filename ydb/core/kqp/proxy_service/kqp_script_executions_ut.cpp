@@ -648,15 +648,19 @@ Y_UNIT_TEST_SUITE(TestScriptExecutionsUtils) {
             mapping.MutableBackoffPolicy()->SetRetryRateLimit(84);
         }
 
-        const auto checkStatus = [&](Ydb::StatusIds::StatusCode status, ui64 expectedRateLimit) {
+        const auto checkStatus = [&](Ydb::StatusIds::StatusCode status, std::optional<ui64> expectedRateLimit) {
             const auto policy = TRetryPolicyItem::FromProto(status, retryState);
-            UNIT_ASSERT_VALUES_EQUAL(policy.RetryCount, expectedRateLimit);
+            if (expectedRateLimit) {
+                UNIT_ASSERT_VALUES_EQUAL(policy->RetryCount, *expectedRateLimit);
+            } else {
+                UNIT_ASSERT(!policy);
+            }
         };
 
         checkStatus(Ydb::StatusIds::SCHEME_ERROR, 42);
         checkStatus(Ydb::StatusIds::UNAVAILABLE, 84);
         checkStatus(Ydb::StatusIds::INTERNAL_ERROR, 84);
-        checkStatus(Ydb::StatusIds::BAD_REQUEST, 0);
+        checkStatus(Ydb::StatusIds::BAD_REQUEST, std::nullopt);
     }
 
     Y_UNIT_TEST(TestRetryLimiter) {

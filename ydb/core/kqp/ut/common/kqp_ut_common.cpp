@@ -129,6 +129,11 @@ TVector<NKikimrKqp::TKqpSetting> SyntaxV1Settings() {
     return {setting};
 }
 
+TTestLogSettings& TTestLogSettings::AddLogPriority(NKikimrServices::EServiceKikimr service, NLog::EPriority priority) {
+    LogPriorities.emplace(service, priority);
+    return *this;
+}
+
 TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
     EnableYDBBacktraceFormat();
 
@@ -651,18 +656,22 @@ static TMaybe<NActors::NLog::EPriority> ParseLogLevel(const TString& level) {
     }
 }
 
-void TKikimrRunner::SetupLogLevelFromTestParam(NKikimrServices::EServiceKikimr service) {
+bool TKikimrRunner::SetupLogLevelFromTestParam(NKikimrServices::EServiceKikimr service) {
     if (const TString paramForService = GetTestParam(TStringBuilder() << "KQP_LOG_" << NKikimrServices::EServiceKikimr_Name(service))) {
         if (const TMaybe<NActors::NLog::EPriority> level = ParseLogLevel(paramForService)) {
             Server->GetRuntime()->SetLogPriority(service, *level);
-            return;
+            return true;
         }
     }
+
     if (const TString commonParam = GetTestParam("KQP_LOG")) {
         if (const TMaybe<NActors::NLog::EPriority> level = ParseLogLevel(commonParam)) {
             Server->GetRuntime()->SetLogPriority(service, *level);
+            return true;
         }
     }
+
+    return false;
 }
 
 void TKikimrRunner::Initialize(const TKikimrSettings& settings) {
@@ -672,39 +681,21 @@ void TKikimrRunner::Initialize(const TKikimrSettings& settings) {
     // For example:
     // --test-param KQP_LOG=TRACE
     // --test-param KQP_LOG_FLAT_TX_SCHEMESHARD=debug
-    SetupLogLevelFromTestParam(NKikimrServices::FLAT_TX_SCHEMESHARD);
-    SetupLogLevelFromTestParam(NKikimrServices::KQP_YQL);
-    SetupLogLevelFromTestParam(NKikimrServices::TX_DATASHARD);
-    SetupLogLevelFromTestParam(NKikimrServices::TX_COORDINATOR);
-    SetupLogLevelFromTestParam(NKikimrServices::KQP_COMPUTE);
-    SetupLogLevelFromTestParam(NKikimrServices::KQP_TASKS_RUNNER);
-    SetupLogLevelFromTestParam(NKikimrServices::KQP_EXECUTER);
-    SetupLogLevelFromTestParam(NKikimrServices::TX_PROXY_SCHEME_CACHE);
-    SetupLogLevelFromTestParam(NKikimrServices::TX_PROXY);
-    SetupLogLevelFromTestParam(NKikimrServices::SCHEME_BOARD_REPLICA);
-    SetupLogLevelFromTestParam(NKikimrServices::KQP_WORKER);
-    SetupLogLevelFromTestParam(NKikimrServices::KQP_SESSION);
-    SetupLogLevelFromTestParam(NKikimrServices::TABLET_EXECUTOR);
-    SetupLogLevelFromTestParam(NKikimrServices::KQP_SLOW_LOG);
-    SetupLogLevelFromTestParam(NKikimrServices::KQP_PROXY);
-    SetupLogLevelFromTestParam(NKikimrServices::KQP_COMPILE_SERVICE);
-    SetupLogLevelFromTestParam(NKikimrServices::KQP_COMPILE_ACTOR);
-    SetupLogLevelFromTestParam(NKikimrServices::KQP_COMPILE_REQUEST);
-    SetupLogLevelFromTestParam(NKikimrServices::KQP_GATEWAY);
-    SetupLogLevelFromTestParam(NKikimrServices::RPC_REQUEST);
-    SetupLogLevelFromTestParam(NKikimrServices::KQP_RESOURCE_MANAGER);
-    SetupLogLevelFromTestParam(NKikimrServices::KQP_NODE);
-    SetupLogLevelFromTestParam(NKikimrServices::KQP_BLOBS_STORAGE);
-    SetupLogLevelFromTestParam(NKikimrServices::KQP_WORKLOAD_SERVICE);
-    SetupLogLevelFromTestParam(NKikimrServices::TX_COLUMNSHARD);
-    SetupLogLevelFromTestParam(NKikimrServices::TX_COLUMNSHARD_SCAN);
-    SetupLogLevelFromTestParam(NKikimrServices::LOCAL_PGWIRE);
-    SetupLogLevelFromTestParam(NKikimrServices::SSA_GRAPH_EXECUTION);
-    SetupLogLevelFromTestParam(NKikimrServices::STREAMS_CHECKPOINT_COORDINATOR);
-    SetupLogLevelFromTestParam(NKikimrServices::STREAMS_STORAGE_SERVICE);
-    SetupLogLevelFromTestParam(NKikimrServices::YDB_SDK);
-    SetupLogLevelFromTestParam(NKikimrServices::DISCOVERY);
-    SetupLogLevelFromTestParam(NKikimrServices::DISCOVERY_CACHE);
+    auto descriptor = NKikimrServices::EServiceKikimr_descriptor();
+    for (i32 i = 0; i < descriptor->value_count(); ++i) {
+        const auto service = static_cast<NKikimrServices::EServiceKikimr>(descriptor->value(i)->number());
+        if (SetupLogLevelFromTestParam(service)) {
+            continue;
+        }
+
+        if (const auto& logSettings = settings.LogSettings) {
+            if (const auto it = logSettings->LogPriorities.find(service); it != logSettings->LogPriorities.end()) {
+                Server->GetRuntime()->SetLogPriority(service, it->second);
+            } else {
+                Server->GetRuntime()->SetLogPriority(service, settings.LogSettings->DefaultLogPriority);
+            }
+        }
+    }
 
     RunCall([this, domain = settings.DomainRoot]{
         this->Client->InitRootScheme(domain);

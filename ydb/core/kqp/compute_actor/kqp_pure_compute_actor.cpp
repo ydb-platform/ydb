@@ -181,6 +181,24 @@ void TKqpComputeActor::CheckRunStatus() {
     TBase::CheckRunStatus();
 }
 
+ui64 TKqpComputeActor::GetSourcesState() {
+    return ScanData ? CalculateFreeSpace() : 0;
+}
+
+void TKqpComputeActor::PollSources(ui64 prevFreeSpace) {
+    if (!ScanData || ScanData->IsFinished()) {
+        return;
+    }
+
+    const auto freeSpace = CalculateFreeSpace();
+    if (freeSpace <= prevFreeSpace && ScanData->GetStoredBytes()) {
+        return;
+    }
+
+    CA_LOG_D("Pool sources, free space: " << freeSpace);
+    Send(SysViewActorId, new TEvKqpCompute::TEvScanDataAck(freeSpace));
+}
+
 void TKqpComputeActor::FillExtraStats(NDqProto::TDqComputeActorStats* dst, bool last) {
     if (last && SysViewActorId && ScanData && dst->TasksSize() > 0) {
         YQL_ENSURE(dst->TasksSize() == 1);
@@ -278,11 +296,7 @@ void TKqpComputeActor::HandleExecute(TEvKqpCompute::TEvScanData::TPtr& ev) {
         }
     }
 
-    ui64 freeSpace = GetMemoryLimits().ChannelBufferSize > ScanData->GetStoredBytes()
-        ? GetMemoryLimits().ChannelBufferSize - ScanData->GetStoredBytes()
-        : 0;
-
-    if (freeSpace > 0) {
+    if (const auto freeSpace = CalculateFreeSpace(); freeSpace > 0) {
         CA_LOG_D("Send scan data ack, freeSpace: " << freeSpace);
 
         Send(SysViewActorId, new TEvKqpCompute::TEvScanDataAck(freeSpace));
@@ -300,6 +314,13 @@ void TKqpComputeActor::HandleExecute(TEvKqpCompute::TEvScanError::TPtr& ev) {
 
     State = NDqProto::COMPUTE_STATE_FAILURE;
     ReportStateAndMaybeDie(YdbStatusToDqStatus(status, EStatusCompatibilityLevel::WithUnauthorized), issues);
+}
+
+ui64 TKqpComputeActor::CalculateFreeSpace() const {
+    YQL_ENSURE(ScanData);
+    const auto storedBytes = ScanData->GetStoredBytes();
+    const auto channelBufferSize = GetMemoryLimits().ChannelBufferSize;
+    return channelBufferSize > storedBytes ? channelBufferSize - storedBytes : 0;
 }
 
 IActor* CreateKqpComputeActor(const TActorId& executerId, ui64 txId, NDqProto::TDqTask* task,

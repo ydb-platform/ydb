@@ -63,7 +63,6 @@ public:
 
 class TPortionInfoConstructor;
 class TGranuleShardingInfo;
-class TPortionDataAccessor;
 class TCompactedPortionInfo;
 class TWrittenPortionInfo;
 
@@ -195,12 +194,6 @@ public:
     }
 
     bool NeedShardingFilter(const TGranuleShardingInfo& shardingInfo) const;
-
-    virtual NSplitter::TEntityGroups GetEntityGroupsByStorageId(
-        const TString& specialTier, const IStoragesManager& storages, const TIndexInfo& indexInfo) const = 0;
-    virtual const TString& GetColumnStorageId(const ui32 columnId, const TIndexInfo& indexInfo) const = 0;
-    virtual const TString& GetEntityStorageId(const ui32 columnId, const TIndexInfo& indexInfo) const = 0;
-    virtual const TString& GetIndexStorageId(const ui32 indexId, const TIndexInfo& indexInfo) const = 0;
 
     const std::optional<ui64>& GetShardingVersionOptional() const {
         return ShardingVersion;

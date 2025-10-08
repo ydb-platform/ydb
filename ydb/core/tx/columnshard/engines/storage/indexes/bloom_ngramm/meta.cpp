@@ -331,7 +331,8 @@ std::vector<std::shared_ptr<IPortionDataChunk>> TIndexMeta::DoBuildIndexImpl(TCh
         doFillFilter(inserter);
         indexData = GetBitsStorageConstructor()->Build(inserter.ExtractBits())->SerializeToString();
     }
-    return { std::make_shared<NChunks::TPortionIndexChunk>(TChunkAddress(GetIndexId(), 0), recordsCount, indexData.size(), indexData) };
+    return { std::make_shared<NChunks::TPortionIndexChunk>(
+        TChunkAddress(GetIndexId(), 0), recordsCount, indexData.size(), GetInheritPortionStorage(), indexData) };
 }
 
 bool TIndexMeta::DoCheckValueImpl(const IBitsStorage& data, const std::optional<ui64> category, const std::shared_ptr<arrow::Scalar>& value,

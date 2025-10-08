@@ -151,8 +151,8 @@ std::vector<std::shared_ptr<IPortionDataChunk>> TIndexMeta::DoBuildIndexImpl(TCh
                 so.Write(i.data(), i.size());
             }
         }
-        result.emplace_back(std::make_shared<NChunks::TPortionIndexChunk>(
-            TChunkAddress(GetIndexId(), chunkIdx++), reader.begin()->GetCurrentChunk()->GetRecordsCount(), indexData.size(), indexData));
+        result.emplace_back(std::make_shared<NChunks::TPortionIndexChunk>(TChunkAddress(GetIndexId(), chunkIdx++),
+            reader.begin()->GetCurrentChunk()->GetRecordsCount(), indexData.size(), GetInheritPortionStorage(), indexData));
     }
     return result;
 }

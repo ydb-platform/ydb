@@ -416,10 +416,10 @@ void TIndexInfo::InitializeCaches(const std::shared_ptr<IStoragesManager>& opera
     }
 }
 
-NSplitter::TEntityGroups TIndexInfo::GetEntityGroupsByStorageId(const TString& specialTier, const IStoragesManager& storages) const {
+NSplitter::TEntityGroups TIndexInfo::GetEntityGroupsByStorageId(const TString& specialTier, const IStoragesManager& storages, const IColumnIndexAccessor& indexAccessor) const {
     NSplitter::TEntityGroups groups(storages.GetDefaultOperator()->GetBlobSplitSettings(), IStoragesManager::DefaultStorageId);
     for (auto&& i : GetEntityIds()) {
-        auto storageId = GetEntityStorageId(i, specialTier);
+        auto storageId = GetEntityStorageId(i, specialTier, indexAccessor);
         auto* group = groups.GetGroupOptional(storageId);
         if (!group) {
             group = &groups.RegisterGroup(storageId, storages.GetOperatorVerified(storageId)->GetBlobSplitSettings());
@@ -444,7 +444,8 @@ std::shared_ptr<arrow::Scalar> TIndexInfo::GetColumnExternalDefaultValueVerified
 }
 
 NKikimr::TConclusionStatus TIndexInfo::AppendIndex(const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& originalData,
-    const ui32 indexId, const std::shared_ptr<IStoragesManager>& operators, const ui32 recordsCount, TSecondaryData& result) const {
+    const ui32 indexId, const std::shared_ptr<IStoragesManager>& operators, const ui32 recordsCount, const std::optional<TString>& storageId,
+    TSecondaryData& result) const {
     auto it = Indexes.find(indexId);
     AFL_VERIFY(it != Indexes.end());
     auto& index = it->second;
@@ -457,7 +458,8 @@ NKikimr::TConclusionStatus TIndexInfo::AppendIndex(const THashMap<ui32, std::vec
         return TConclusionStatus::Success();
     }
     auto chunks = indexChunkConclusion.DetachResult();
-    auto opStorage = operators->GetOperatorVerified(index->GetStorageId());
+    const TString indexStorageId = storageId.value_or(index->GetStorageId());
+    auto opStorage = operators->GetOperatorVerified(indexStorageId);
     for (auto&& chunk : chunks) {
         if ((i64)chunk->GetPackedSize() > opStorage->GetBlobSplitSettings().GetMaxBlobSize()) {
             return TConclusionStatus::Fail("blob size for secondary data (" + ::ToString(indexId) + ":" + ::ToString(chunk->GetPackedSize()) +
@@ -465,7 +467,7 @@ NKikimr::TConclusionStatus TIndexInfo::AppendIndex(const THashMap<ui32, std::vec
                                            ::ToString(opStorage->GetBlobSplitSettings().GetMaxBlobSize()) + ")");
         }
     }
-    if (index->GetStorageId() == IStoragesManager::LocalMetadataStorageId) {
+    if (indexStorageId == IStoragesManager::LocalMetadataStorageId) {
         AFL_VERIFY(chunks.size() == 1);
         AFL_VERIFY(result.MutableSecondaryInplaceData().emplace(indexId, chunks.front()).second);
     } else {

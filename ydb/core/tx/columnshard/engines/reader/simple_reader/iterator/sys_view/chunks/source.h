@@ -17,7 +17,7 @@ private:
     std::shared_ptr<NArrow::NAccessor::TAccessorsCollection> OriginalData;
 
     virtual TString GetColumnStorageId(const ui32 columnId) const override {
-        return GetPortionAccessor().GetPortionInfo().GetColumnStorageId(columnId, Schema->GetIndexInfo());
+        return GetPortionAccessor().GetEntityStorageId(columnId, Schema->GetIndexInfo());
     }
 
     virtual ui64 GetColumnRawBytes(const std::set<ui32>& /*columnsIds*/) const override {

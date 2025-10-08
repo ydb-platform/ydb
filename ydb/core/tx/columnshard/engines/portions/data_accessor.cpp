@@ -94,7 +94,7 @@ void TPortionDataAccessor::FillBlobRangesByStorage(
         if (!entityIds.contains(i.GetEntityId())) {
             continue;
         }
-        const TString& storageId = PortionInfo->GetColumnStorageId(i.GetColumnId(), indexInfo);
+        const TString& storageId = GetEntityStorageId(i.GetColumnId(), indexInfo);
         AFL_VERIFY(result[i.GetEntityId()][storageId].emplace(RestoreBlobRange(i.GetBlobRange())).second)(
             "blob_id", RestoreBlobRange(i.GetBlobRange()).ToString());
     }
@@ -102,7 +102,7 @@ void TPortionDataAccessor::FillBlobRangesByStorage(
         if (!entityIds.contains(i.GetEntityId())) {
             continue;
         }
-        const TString& storageId = PortionInfo->GetIndexStorageId(i.GetIndexId(), indexInfo);
+        const TString& storageId = GetEntityStorageId(i.GetIndexId(), indexInfo);
         auto bRange = i.GetBlobRangeVerified();
         AFL_VERIFY(result[i.GetEntityId()][storageId].emplace(RestoreBlobRange(bRange)).second)("blob_id", RestoreBlobRange(bRange).ToString());
     }
@@ -119,7 +119,7 @@ void TPortionDataAccessor::FillBlobRangesByStorage(
         if (entityIds && !entityIds->contains(i.GetColumnId())) {
             continue;
         }
-        const TString& storageId = PortionInfo->GetColumnStorageId(i.GetColumnId(), indexInfo);
+        const TString& storageId = GetEntityStorageId(i.GetColumnId(), indexInfo);
         AFL_VERIFY(result[storageId].emplace(RestoreBlobRange(i.GetBlobRange())).second)(
             "blob_id", RestoreBlobRange(i.GetBlobRange()).ToString());
     }
@@ -127,7 +127,7 @@ void TPortionDataAccessor::FillBlobRangesByStorage(
         if (entityIds && !entityIds->contains(i.GetIndexId())) {
             continue;
         }
-        const TString& storageId = PortionInfo->GetIndexStorageId(i.GetIndexId(), indexInfo);
+        const TString& storageId = GetEntityStorageId(i.GetIndexId(), indexInfo);
         if (auto bRange = i.GetBlobRangeOptional()) {
             AFL_VERIFY(result[storageId].emplace(RestoreBlobRange(*bRange)).second)("blob_id", RestoreBlobRange(*bRange).ToString());
         }
@@ -143,7 +143,7 @@ void TPortionDataAccessor::FillBlobIdsByStorage(THashMap<TString, THashSet<TUnif
     ui32 lastBlobIdx = GetBlobIdsCount();
     for (auto&& i : GetRecordsVerified()) {
         if (!lastEntityId || *lastEntityId != i.GetEntityId()) {
-            const TString& storageId = PortionInfo->GetColumnStorageId(i.GetEntityId(), indexInfo);
+            const TString& storageId = GetEntityStorageId(i.GetEntityId(), indexInfo);
             lastEntityId = i.GetEntityId();
             if (storageId != lastStorageId) {
                 currentHashResult = &result[storageId];
@@ -161,7 +161,7 @@ void TPortionDataAccessor::FillBlobIdsByStorage(THashMap<TString, THashSet<TUnif
     }
     for (auto&& i : GetIndexesVerified()) {
         if (!lastEntityId || *lastEntityId != i.GetEntityId()) {
-            const TString& storageId = PortionInfo->GetIndexStorageId(i.GetEntityId(), indexInfo);
+            const TString& storageId = GetEntityStorageId(i.GetEntityId(), indexInfo);
             lastEntityId = i.GetEntityId();
             if (storageId != lastStorageId) {
                 currentHashResult = &result[storageId];
@@ -190,14 +190,14 @@ THashMap<TString, THashMap<TChunkAddress, std::shared_ptr<IPortionDataChunk>>> T
     NBlobOperations::NRead::TCompositeReadBlobs& blobs, const TIndexInfo& indexInfo) const {
     THashMap<TString, THashMap<TChunkAddress, std::shared_ptr<IPortionDataChunk>>> result;
     for (auto&& c : GetRecordsVerified()) {
-        const TString& storageId = PortionInfo->GetColumnStorageId(c.GetColumnId(), indexInfo);
+        const TString& storageId = GetEntityStorageId(c.GetColumnId(), indexInfo);
         auto chunk = std::make_shared<NChunks::TChunkPreparation>(
             blobs.ExtractVerified(storageId, RestoreBlobRange(c.GetBlobRange())), c, indexInfo.GetColumnFeaturesVerified(c.GetColumnId()));
         chunk->SetChunkIdx(c.GetChunkIdx());
         AFL_VERIFY(result[storageId].emplace(c.GetAddress(), chunk).second);
     }
     for (auto&& c : GetIndexesVerified()) {
-        const TString& storageId = indexInfo.GetIndexStorageId(c.GetIndexId());
+        const TString& storageId = GetEntityStorageId(c.GetIndexId(), indexInfo);
         const TString blobData = [&]() -> TString {
             if (auto bRange = c.GetBlobRangeOptional()) {
                 return blobs.ExtractVerified(storageId, RestoreBlobRange(*bRange));
@@ -208,7 +208,8 @@ THashMap<TString, THashMap<TChunkAddress, std::shared_ptr<IPortionDataChunk>>> T
                 Y_UNREACHABLE();
             }
         }();
-        auto chunk = std::make_shared<NChunks::TPortionIndexChunk>(c.GetAddress(), c.GetRecordsCount(), c.GetRawBytes(), blobData);
+        auto chunk = std::make_shared<NChunks::TPortionIndexChunk>(
+            c.GetAddress(), c.GetRecordsCount(), c.GetRawBytes(), c.GetInheritPortionStorage(), blobData);
         chunk->SetChunkIdx(c.GetChunkIdx());
 
         AFL_VERIFY(result[storageId].emplace(c.GetAddress(), chunk).second);
@@ -227,7 +228,7 @@ THashMap<TChunkAddress, TString> TPortionDataAccessor::DecodeBlobAddressesImpl(
             if (record.GetColumnId() != columnId) {
                 AFL_VERIFY(record.GetColumnId() > columnId);
                 columnId = record.GetColumnId();
-                storageId = PortionInfo->GetColumnStorageId(columnId, indexInfo);
+                storageId = GetEntityStorageId(columnId, indexInfo);
             }
             std::optional<TString> blob = blobs.ExtractOptional(storageId, RestoreBlobRange(record.GetBlobRange()));
             if (blob) {
@@ -241,13 +242,26 @@ THashMap<TChunkAddress, TString> TPortionDataAccessor::DecodeBlobAddressesImpl(
             continue;
         }
         std::optional<TString> blob =
-            blobs.ExtractOptional(indexInfo.GetIndexStorageId(record.GetIndexId()), RestoreBlobRange(record.GetBlobRangeVerified()));
+            blobs.ExtractOptional(GetEntityStorageId(record.GetIndexId(), indexInfo), RestoreBlobRange(record.GetBlobRangeVerified()));
         if (blob) {
             result.emplace(record.GetAddress(), std::move(*blob));
         }
     }
 
     return result;
+}
+
+void TPortionDataAccessor::InitIndexProperties() {
+    AFL_VERIFY(IndexProperties.empty());
+    AFL_VERIFY(!!Indexes);
+    for (const auto& chunk : *Indexes) {
+        TColumnIndexProperties properties(chunk);
+        if (auto findIndex = IndexProperties.FindPtr(chunk.GetIndexId())) {
+            AFL_VERIFY(*findIndex == properties);
+        } else {
+            IndexProperties.emplace(chunk.GetIndexId(), std::move(properties));
+        }
+    }
 }
 
 THashMap<TChunkAddress, TString> TPortionDataAccessor::DecodeBlobAddresses(
@@ -709,6 +723,7 @@ TConclusionStatus TPortionDataAccessor::DeserializeFromProto(const NKikimrColumn
         }
         Indexes->emplace_back(std::move(parse.DetachResult()));
     }
+    InitIndexProperties();
     return TConclusionStatus::Success();
 }
 
@@ -815,6 +830,10 @@ TConclusion<std::shared_ptr<NArrow::TGeneralContainer>> TPortionDataAccessor::TP
     }
 
     return std::make_shared<NArrow::TGeneralContainer>(fields, std::move(columns));
+}
+
+TString TPortionDataAccessor::GetEntityStorageId(const ui64 entityId, const TIndexInfo& indexInfo) const {
+    return indexInfo.GetEntityStorageId(entityId, PortionInfo->GetTierNameDef(IStoragesManager::DefaultStorageId), *this);
 }
 
 }   // namespace NKikimr::NOlap

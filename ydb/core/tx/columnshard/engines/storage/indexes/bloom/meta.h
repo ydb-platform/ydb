@@ -37,10 +37,12 @@ protected:
 
 public:
     TBloomIndexMeta() = default;
-    TBloomIndexMeta(const ui32 indexId, const TString& indexName, const TString& storageId, const ui32 columnId, const double fpProbability,
-        const TReadDataExtractorContainer& dataExtractor, const std::shared_ptr<IBitsStorageConstructor>& bitsStorageConstructor)
-        : TBase(indexId, indexName, columnId, storageId, dataExtractor, bitsStorageConstructor)
-        , FalsePositiveProbability(fpProbability) {
+    TBloomIndexMeta(const ui32 indexId, const TString& indexName, const TString& storageId, const bool inheritPortionStorage,
+        const ui32 columnId, const double fpProbability, const TReadDataExtractorContainer& dataExtractor,
+        const std::shared_ptr<IBitsStorageConstructor>& bitsStorageConstructor)
+        : TBase(indexId, indexName, columnId, storageId, inheritPortionStorage, dataExtractor, bitsStorageConstructor)
+        , FalsePositiveProbability(fpProbability)
+    {
         Initialize();
     }
 

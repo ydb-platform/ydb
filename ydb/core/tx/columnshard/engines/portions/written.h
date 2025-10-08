@@ -45,24 +45,6 @@ public:
 
     void CommitToDatabase(IDbWrapper& wrapper);
 
-    virtual NSplitter::TEntityGroups GetEntityGroupsByStorageId(
-        const TString& /*specialTier*/, const IStoragesManager& storages, const TIndexInfo& /*indexInfo*/) const override {
-        NSplitter::TEntityGroups groups(storages.GetDefaultOperator()->GetBlobSplitSettings(), IStoragesManager::DefaultStorageId);
-        return groups;
-    }
-
-    virtual const TString& GetColumnStorageId(const ui32 /*columnId*/, const TIndexInfo& /*indexInfo*/) const override {
-        return { NBlobOperations::TGlobal::DefaultStorageId };
-    }
-
-    virtual const TString& GetEntityStorageId(const ui32 /*columnId*/, const TIndexInfo& /*indexInfo*/) const override {
-        return { NBlobOperations::TGlobal::DefaultStorageId };
-    }
-
-    virtual const TString& GetIndexStorageId(const ui32 /*indexId*/, const TIndexInfo& /*indexInfo*/) const override {
-        return { NBlobOperations::TGlobal::DefaultStorageId };
-    }
-
     virtual std::unique_ptr<TPortionInfoConstructor> BuildConstructor(const bool withMetadata) const override;
 
     TWrittenPortionInfo(TPortionMeta&& meta)

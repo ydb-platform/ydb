@@ -29,6 +29,7 @@ private:
     YDB_READONLY(ui32, ChunkIdx, 0);
     YDB_READONLY(ui32, RecordsCount, 0);
     YDB_READONLY(ui32, RawBytes, 0);
+    YDB_READONLY(bool, InheritPortionStorage, false);
     std::variant<TBlobRangeLink16, TString> Data;
 
     TIndexChunk() = default;
@@ -72,20 +73,22 @@ public:
         return IndexId;
     }
 
-    TIndexChunk(const ui32 indexId, const ui32 chunkIdx, const ui32 recordsCount, const ui64 rawBytes, const TBlobRangeLink16& blobRange)
+    TIndexChunk(const ui32 indexId, const ui32 chunkIdx, const ui32 recordsCount, const ui64 rawBytes, const bool inheritPortionStorage, const TBlobRangeLink16& blobRange)
         : IndexId(indexId)
         , ChunkIdx(chunkIdx)
         , RecordsCount(recordsCount)
         , RawBytes(rawBytes)
+        , InheritPortionStorage(inheritPortionStorage)
         , Data(blobRange) {
 
     }
 
-    TIndexChunk(const ui32 indexId, const ui32 chunkIdx, const ui32 recordsCount, const ui64 rawBytes, const TString& blobData)
+    TIndexChunk(const ui32 indexId, const ui32 chunkIdx, const ui32 recordsCount, const ui64 rawBytes, const bool inheritPortionStorage, const TString& blobData)
         : IndexId(indexId)
         , ChunkIdx(chunkIdx)
         , RecordsCount(recordsCount)
         , RawBytes(rawBytes)
+        , InheritPortionStorage(inheritPortionStorage)
         , Data(blobData) {
     }
 

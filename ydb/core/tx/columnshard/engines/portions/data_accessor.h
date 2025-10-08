@@ -2,6 +2,8 @@
 #include "portion_info.h"
 
 #include <ydb/core/formats/arrow/accessor/composite_serial/accessor.h>
+#include <ydb/core/tx/columnshard/engines/scheme/column_index_accessor.h>
+#include <ydb/core/tx/columnshard/engines/scheme/indexes/abstract/accessor.h>
 
 #include <ydb/library/accessor/accessor.h>
 
@@ -205,12 +207,13 @@ public:
 
 }   // namespace NAssembling
 
-class TPortionDataAccessor: public TPortionMetaBase {
+class TPortionDataAccessor: public TPortionMetaBase, public IColumnIndexAccessor {
 private:
     using TBase = TPortionMetaBase;
     TPortionInfo::TConstPtr PortionInfo;
     std::optional<std::vector<TColumnRecord>> Records;
     std::optional<std::vector<TIndexChunk>> Indexes;
+    THashMap<ui32, TColumnIndexProperties> IndexProperties;
 
     template <class TChunkInfo>
     static void CheckChunksOrder(const std::vector<TChunkInfo>& chunks) {
@@ -236,6 +239,8 @@ private:
     THashMap<TChunkAddress, TString> DecodeBlobAddressesImpl(
         NBlobOperations::NRead::TCompositeReadBlobs& blobs, const TIndexInfo& indexInfo) const;
 
+    void InitIndexProperties();
+
 public:
     using TColumnAssemblingInfo = NAssembling::TColumnAssemblingInfo;
     using TAssembleBlobInfo = NAssembling::TAssembleBlobInfo;
@@ -244,7 +249,8 @@ public:
 
     ui64 GetMetadataSize() const {
         return (Records ? (Records->size() * sizeof(TColumnRecord)) : 0) + (Indexes ? (Indexes->size() * sizeof(TIndexChunk)) : 0) +
-               sizeof(TPortionInfo::TConstPtr) + TBase::GetMetadataMemorySize();
+               IndexProperties.size() * (sizeof(ui32) + sizeof(TColumnIndexProperties)) + sizeof(TPortionInfo::TConstPtr) +
+               TBase::GetMetadataMemorySize();
     }
 
     class TExtractContext {
@@ -355,6 +361,7 @@ public:
         , Records(std::move(records))
         , Indexes(std::move(indexes)) {
         AFL_VERIFY(BlobIds.size());
+        InitIndexProperties();
         if (validate) {
             FullValidation();
         }
@@ -366,6 +373,7 @@ public:
         , PortionInfo(portionInfo)
         , Records(records)
         , Indexes(indexes) {
+        InitIndexProperties();
         if (validate) {
             FullValidation();
         }
@@ -560,6 +568,13 @@ public:
     };
 
     std::vector<TReadPage> BuildReadPages(const ui64 memoryLimit, const std::set<ui32>& entityIds) const;
+
+    bool IsIndexInheritPortionStorage(const ui64 indexId) const override {
+        auto* findProperties = IndexProperties.FindPtr(indexId);
+        AFL_VERIFY(findProperties)("index", indexId);
+        return findProperties->GetInheritPortionStorage();
+    }
+    TString GetEntityStorageId(const ui64 entityId, const TIndexInfo& indexInfo) const;
 };
 
 }   // namespace NKikimr::NOlap

@@ -15,8 +15,9 @@ std::shared_ptr<IIndexMeta> TIndexConstructor::DoCreateIndexMeta(
         return nullptr;
     }
     const ui32 columnId = columnInfo->GetId();
-    return std::make_shared<TIndexMeta>(indexId, indexName, GetStorageId().value_or(NBlobOperations::TGlobal::DefaultStorageId), columnId,
-        GetDataExtractor(), HashesCount, FilterSizeBytes, NGrammSize, RecordsCount, TBase::GetBitsStorageConstructor(), CaseSensitive);
+    return std::make_shared<TIndexMeta>(indexId, indexName, GetStorageId().value_or(NBlobOperations::TGlobal::DefaultStorageId),
+        currentSchema.GetIndexes().GetById(indexId)->GetIndexMeta()->GetInheritPortionStorage(), columnId, GetDataExtractor(), HashesCount,
+        FilterSizeBytes, NGrammSize, RecordsCount, TBase::GetBitsStorageConstructor(), CaseSensitive);
 }
 
 TConclusionStatus TIndexConstructor::DoDeserializeFromJson(const NJson::TJsonValue& jsonInfo) {

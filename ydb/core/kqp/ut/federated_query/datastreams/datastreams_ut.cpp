@@ -107,23 +107,25 @@ public:
                 AppConfig.emplace();
             }
 
-            AppConfig->MutableFeatureFlags()->SetEnableStreamingQueries(true);
+            auto& featureFlags = *AppConfig->MutableFeatureFlags();
+            featureFlags.SetEnableStreamingQueries(true);
+            featureFlags.SetEnableSchemaSecrets(UseSchemaSecrets());
 
             auto& queryServiceConfig = *AppConfig->MutableQueryServiceConfig();
             queryServiceConfig.SetEnableMatchRecognize(true);
             queryServiceConfig.SetProgressStatsPeriodMs(1000);
 
+            LogSettings
+                .AddLogPriority(NKikimrServices::STREAMS_STORAGE_SERVICE, NLog::PRI_DEBUG)
+                .AddLogPriority(NKikimrServices::STREAMS_CHECKPOINT_COORDINATOR, NLog::PRI_DEBUG);
+
             Kikimr = MakeKikimrRunner(true, ConnectorClient, nullptr, AppConfig, NYql::NDq::CreateS3ActorsFactory(), {
                 .CredentialsFactory = CreateCredentialsFactory(),
                 .PqGateway = PqGateway,
                 .CheckpointPeriod = CheckpointPeriod,
+                .LogSettings = LogSettings,
             });
 
-            if (GetTestParam("DEFAULT_LOG", "enabled") == "enabled") {
-                auto& runtime = *Kikimr->GetTestServer().GetRuntime();
-                runtime.SetLogPriority(NKikimrServices::STREAMS_STORAGE_SERVICE, NLog::PRI_DEBUG);
-                runtime.SetLogPriority(NKikimrServices::STREAMS_CHECKPOINT_COORDINATOR, NLog::PRI_DEBUG);
-            }
             Kikimr->GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableSchemaSecrets(UseSchemaSecrets());
         }
 
@@ -768,6 +770,7 @@ private:
 
 protected:
     TDuration CheckpointPeriod = TDuration::MilliSeconds(200);
+    TTestLogSettings LogSettings;
 
 private:
     std::optional<NKikimrConfig::TAppConfig> AppConfig;

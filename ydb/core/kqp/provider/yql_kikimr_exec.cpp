@@ -470,6 +470,10 @@ namespace {
                 protoConsumer->set_important(FromString<bool>(
                         setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
                 ));
+            } else if (name == "setAvailabilityPeriod"sv) {
+                auto period = TDuration::MicroSeconds(FromString<ui64>(setting.Value().Cast<TCoInterval>().Literal().Value()));
+                protoConsumer->mutable_availability_period()->set_seconds(period.Seconds());
+                protoConsumer->mutable_availability_period()->set_nanos(period.NanoSecondsOfSecond());
             } else if (name == "setReadFromTs") {
                 ui64 tsValue = 0;
                 if(setting.Value().Maybe<TCoDatetime>()) {
@@ -515,6 +519,12 @@ namespace {
                 protoConsumer->set_set_important(FromString<bool>(
                         setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
                 ));
+            } else if (name == "setAvailabilityPeriod"sv) {
+                auto period = TDuration::MicroSeconds(FromString<ui64>(setting.Value().Cast<TCoInterval>().Literal().Value()));
+                protoConsumer->mutable_set_availability_period()->set_seconds(period.Seconds());
+                protoConsumer->mutable_set_availability_period()->set_nanos(period.NanoSecondsOfSecond());
+            } else if (name == "resetAvailabilityPeriod"sv) {
+                protoConsumer->mutable_reset_availability_period();
             } else if (name == "setReadFromTs") {
                 ui64 tsValue = 0;
                 if(setting.Value().Maybe<TCoDatetime>()) {

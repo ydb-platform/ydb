@@ -11,11 +11,13 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
 #include <util/generic/set.h>
+#include <util/stream/format.h>
 #include <util/stream/str.h>
 #include <util/string/cast.h>
 #include <util/string/hex.h>
 #include <util/string/vector.h>
 #include <util/string/join.h>
+#include <util/string/strip.h>
 
 #define TIMESTAMP_FORMAT_OPTION_DESCRIPTION "Timestamp may be specified in unix time format (seconds from 1970.01.01) or in ISO-8601 format (like 2020-07-10T15:00:00Z)"
 
@@ -159,20 +161,26 @@ namespace NYdb::NConsoleClient {
             return exists->second;
         }
 
-        void CheckHoursDuration(const TMaybe<double> hours, const TStringBuf optionName) {
-            if (!hours.Defined()) {
-                return;
+        TDuration ParseDurationHours(const TStringBuf str) {
+            double hours = 0;
+            if (!TryFromString(str, hours)) {
+                throw TMisuseException() << "Invalid hours duration '" << str << "'";
             }
-            if (*hours < 0) {
-                throw TMisuseException() << optionName << " must be non-negative";
+            if (hours < 0) {
+                throw TMisuseException() << "Duration must be non-negative";
             }
-            if (!std::isfinite(*hours)) {
-                throw TMisuseException() <<  optionName << " must be finite";
+            if (!std::isfinite(hours)) {
+                throw TMisuseException() << "Duration must be finite";
             }
+            return TDuration::Seconds(hours * 3600); // using floating-point ctor with saturation
         }
 
-        TDuration DurationFromFractionalHours(const double hours) {
-            return TDuration::Seconds(hours * 3600.0); // using floating-point ctor with saturation
+        TDuration ParseDuration(TStringBuf str) {
+            StripInPlace(str);
+            if (!str.empty() && !IsAsciiAlpha(str.back())) {
+                throw TMisuseException() << "Duration must ends with a unit name (ex. 'h' for hours, 's' for seconds)";
+            }
+            return TDuration::Parse(str);
         }
     }
 
@@ -355,10 +363,18 @@ namespace NYdb::NConsoleClient {
             .Optional()
             .StoreResult(&MinActivePartitions_)
             .DefaultValue(1);
-        config.Opts->AddLongOption("retention-period-hours", "Duration in hours for which data in topic is stored")
-            .DefaultValue(24)
+        config.Opts->AddLongOption("retention-period-hours", TStringBuilder()
+                << "Duration in hours for which data in topic is stored "
+                << "(default: " << NColorizer::StdOut().CyanColor() << RetentionPeriod_.Hours() << NColorizer::StdOut().OldColor() << ")")
             .Optional()
-            .StoreResult(&RetentionPeriodHours_);
+            .RequiredArgument("HOURS")
+            .StoreMappedResult(&RetentionPeriod_, ParseDurationHours);
+        config.Opts->AddLongOption("retention-period", TStringBuilder()
+                << "Duration for which data in topic is stored (ex. '72h', '1440m') "
+                << "(default: " << NColorizer::StdOut().CyanColor() << HumanReadable(RetentionPeriod_) << NColorizer::StdOut().OldColor() << ")")
+            .Hidden()
+            .Optional()
+            .StoreMappedResult(&RetentionPeriod_, ParseDuration);
         config.Opts->AddLongOption("partition-write-speed-kbps", "Partition write speed in kilobytes per second")
             .DefaultValue(1024)
             .Optional()
@@ -382,6 +398,8 @@ namespace NYdb::NConsoleClient {
             .Optional()
             .Hidden()
             .StoreResult(&PartitionsPerTablet_);
+
+        config.Opts->MutuallyExclusive("retention-period-hours", "retention-period");
     }
 
     void TCommandTopicCreate::Parse(TConfig& config) {
@@ -390,7 +408,6 @@ namespace NYdb::NConsoleClient {
         ParseCodecs();
         ParseMeteringMode();
         ParseAutoPartitioningStrategy();
-        CheckHoursDuration(RetentionPeriodHours_, "--retention-period-hours");
     }
 
     int TCommandTopicCreate::Run(TConfig& config) {
@@ -422,7 +439,7 @@ namespace NYdb::NConsoleClient {
             settings.MeteringMode(GetMeteringMode());
         }
 
-        settings.RetentionPeriod(DurationFromFractionalHours(RetentionPeriodHours_));
+        settings.RetentionPeriod(RetentionPeriod_);
         settings.RetentionStorageMb(RetentionStorageMb_);
 
         if (PartitionsPerTablet_.Defined()) {
@@ -447,9 +464,14 @@ namespace NYdb::NConsoleClient {
         config.Opts->AddLongOption("partitions-count", "Initial and minimum number of partitions for topic")
             .Optional()
             .StoreResult(&MinActivePartitions_);
-        config.Opts->AddLongOption("retention-period-hours", "Duration for which data in topic is stored")
+        config.Opts->AddLongOption("retention-period-hours", "Duration in hours for which data in topic is stored")
             .Optional()
-            .StoreResult(&RetentionPeriodHours_);
+            .RequiredArgument("HOURS")
+            .StoreMappedResult(&RetentionPeriod_, ParseDurationHours);
+        config.Opts->AddLongOption("retention-period", "Duration for which data in topic is stored (ex. '72h', '1440m')")
+            .Optional()
+            .Hidden()
+            .StoreMappedResult(&RetentionPeriod_, ParseDuration);
         config.Opts->AddLongOption("partition-write-speed-kbps", "Partition write speed in kilobytes per second")
             .Optional()
             .StoreResult(&PartitionWriteSpeedKbps_);
@@ -466,6 +488,8 @@ namespace NYdb::NConsoleClient {
             .Optional()
             .StoreResult(&MaxActivePartitions_);
         AddAutoPartitioning(config, true);
+
+        config.Opts->MutuallyExclusive("retention-period-hours", "retention-period");
     }
 
     void TCommandTopicAlter::Parse(TConfig& config) {
@@ -474,7 +498,6 @@ namespace NYdb::NConsoleClient {
         ParseCodecs();
         ParseMeteringMode();
         ParseAutoPartitioningStrategy();
-        CheckHoursDuration(RetentionPeriodHours_, "--retention-period-hours");
     }
 
     NYdb::NTopic::TAlterTopicSettings TCommandTopicAlter::PrepareAlterSettings(
@@ -515,8 +538,8 @@ namespace NYdb::NConsoleClient {
             settings.SetSupportedCodecs(codecs);
         }
 
-        if (RetentionPeriodHours_.Defined() && describeResult.GetTopicDescription().GetRetentionPeriod() != DurationFromFractionalHours(*RetentionPeriodHours_)) {
-            settings.SetRetentionPeriod(DurationFromFractionalHours(*RetentionPeriodHours_));
+        if (RetentionPeriod_.Defined() && describeResult.GetTopicDescription().GetRetentionPeriod() != RetentionPeriod_) {
+            settings.SetRetentionPeriod(*RetentionPeriod_);
         }
 
         if (PartitionWriteSpeedKbps_.Defined() && describeResult.GetTopicDescription().GetPartitionWriteSpeedBytesPerSecond() / 1_KB != *PartitionWriteSpeedKbps_) {
@@ -614,9 +637,9 @@ namespace NYdb::NConsoleClient {
             .Optional()
             .DefaultValue(false)
             .StoreResult(&IsImportant_);
-        config.Opts->AddLongOption("availability-period-hours", "Duration in hours for which uncommited data in topic is retained")
+        config.Opts->AddLongOption("availability-period", "Duration for which uncommited data in topic is retained (ex. '72h', '1440m')")
             .Optional()
-            .StoreResult(&AvailabilityPeriodHours_);
+            .StoreMappedResult(&AvailabilityPeriod_, ParseDuration);
         config.Opts->SetFreeArgsNum(1);
         SetFreeArgTitle(0, "<topic-path>", "Topic path");
         AddAllowedCodecs(config, AllowedCodecs);
@@ -626,7 +649,6 @@ namespace NYdb::NConsoleClient {
         TYdbCommand::Parse(config);
         ParseCodecs();
         ParseTopicName(config, 0);
-        CheckHoursDuration(AvailabilityPeriodHours_, "--availability-period-hours");
     }
 
     int TCommandTopicConsumerAdd::Run(TConfig& config) {
@@ -648,8 +670,8 @@ namespace NYdb::NConsoleClient {
             consumerSettings.SetSupportedCodecs(codecs);
         }
         consumerSettings.SetImportant(IsImportant_);
-        if (AvailabilityPeriodHours_.Defined()) {
-            consumerSettings.AvailabilityPeriod(DurationFromFractionalHours(*AvailabilityPeriodHours_));
+        if (AvailabilityPeriod_.Defined()) {
+            consumerSettings.AvailabilityPeriod(*AvailabilityPeriod_);
         }
 
         readRuleSettings.AppendAddConsumers(consumerSettings);

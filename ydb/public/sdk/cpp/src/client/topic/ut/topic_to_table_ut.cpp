@@ -25,6 +25,7 @@
 #include <ydb/public/api/protos/ydb_query.pb.h>
 
 #include <thread>
+#include <ydb/library/dbgtrace/debug_trace.h>
 
 
 using namespace std::chrono_literals;
@@ -3416,7 +3417,7 @@ Y_UNIT_TEST_F(Write_50k_100times_50tx, TFixtureTable)
     }
 }
 
-Y_UNIT_TEST_F(Foo, TFixtureTable)
+Y_UNIT_TEST_F(Foo_1, TFixtureTable)
 {
     const size_t COUNT = 10;
     const size_t SMALL = 50'000;
@@ -3456,6 +3457,118 @@ Y_UNIT_TEST_F(Foo, TFixtureTable)
         for (size_t k = 0; k < BIG_COUNT; ++k, ++j) {
             UNIT_ASSERT_VALUES_EQUAL(messages[j].size(), BIG);
         }
+    }
+}
+
+Y_UNIT_TEST_F(Foo_2, TFixtureTable)
+{
+    DBGTRACE("Foo_2");
+
+    CreateTopic("topic_A", TEST_CONSUMER, 0);
+    CreateTopic("topic_B", TEST_CONSUMER, 2);
+
+    SetPartitionWriteSpeed("topic_A", 50'000'000);
+
+    DBGTRACE_LOG("transaction");
+    auto session = CreateSession();
+    auto tx = session->BeginTx();
+
+    // D0000252569_00000000000000000000_00000_0000000005_00001
+    // D0000252569_00000000000000000005_00000_0000000014_00012
+    // D0000252569_00000000000000000019_00000_0000000019_00008
+    // D0000252569_00000000000000000019_00001_0000000005_00002
+    // D0000252569_00000000000000000043_00000_0000000006_00003
+    auto write = [&](size_t count, size_t size) {
+        for (size_t i = 0; i < count; ++i) {
+            WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, std::string(size, 'x'), tx.get(), 0);
+        }
+    };
+
+    write(1, 1'000'000);
+    write(4, 400'000);
+    write(1, 6'000'000);
+    write(13, 400'000);
+    write(1, 900'000);
+    write(2, 1'000'000);
+    write(2, 400'000);
+    write(4, 1'000'000);
+    write(15, 400'000);
+    write(3, 1'000'000);
+    write(3, 400'000);
+
+    WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID, std::string(50'000, 'x'), tx.get(), 1);
+
+    DBGTRACE_LOG("commit");
+    session->CommitTx(*tx, EStatus::SUCCESS);
+
+    DBGTRACE_LOG("restart");
+    RestartPQTablet("topic_A", 0);
+
+    DBGTRACE_LOG("read");
+    auto messages = Read_Exactly_N_Messages_From_Topic("topic_A", TEST_CONSUMER, 49);
+
+    DBGTRACE_LOG("checks");
+}
+
+Y_UNIT_TEST_F(Foo_3, TFixtureTable)
+{
+    DBGTRACE("Foo_3");
+
+    DBGTRACE_LOG("=== prepare data");
+    std::vector<size_t> sizes;
+    sizes.push_back(65'000);
+    sizes.push_back(900'000);
+    sizes.push_back(9'500'000);
+    //sizes.push_back(61'000'000);
+
+    std::vector<size_t> permutations;
+
+    std::sort(sizes.begin(), sizes.end());
+    do {
+        for (auto size : sizes) {
+            permutations.push_back(size);
+        }
+    } while (std::next_permutation(sizes.begin(), sizes.end()));
+
+    std::vector<size_t> messages;
+
+    DBGTRACE_LOG("=== transaction");
+
+    CreateTopic("topic_A", TEST_CONSUMER);
+    CreateTopic("topic_B", TEST_CONSUMER);
+
+    SetPartitionWriteSpeed("topic_A", 50'000'000);
+
+    auto session = CreateSession();
+    auto tx = session->BeginTx();
+
+    DBGTRACE_LOG("=== writing");
+    for (auto size : permutations) {
+        const auto count = RandomNumber<size_t>(5) + 1;
+        for (size_t i = 0; i < count; ++i) {
+            WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, std::string(size, 'x'), tx.get(), 0);
+            if (RandomNumber<size_t>(2)) {
+                DBGTRACE_LOG("=== local restarting");
+                RestartPQTablet("topic_A", 0);
+            }
+            messages.push_back(size);
+        }
+    }
+
+    WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID, std::string(50'000, 'x'), tx.get(), 0);
+
+    DBGTRACE_LOG("=== commiting");
+    session->CommitTx(*tx, EStatus::SUCCESS);
+
+    DBGTRACE_LOG("=== restarting");
+    RestartPQTablet("topic_A", 0);
+
+    DBGTRACE_LOG("=== reading");
+    auto m = Read_Exactly_N_Messages_From_Topic("topic_A", TEST_CONSUMER, messages.size());
+
+    DBGTRACE_LOG("=== checking");
+    for (size_t i = 0; i < messages.size(); ++i) {
+        UNIT_ASSERT_VALUES_EQUAL(m[i].size(), messages[i]);
     }
 }
 

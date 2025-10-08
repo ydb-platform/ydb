@@ -12,6 +12,8 @@
 
 #include <util/system/sanitizers.h>
 #include <util/system/valgrind.h>
+#include <util/random/random.h>
+#include <ydb/library/dbgtrace/debug_trace.h>
 
 namespace NKikimr::NPQ {
 
@@ -50,6 +52,82 @@ TMaybe<ui64> PQGetStartOffset(TTestContext& tc)
     }
 
     return Nothing();
+}
+
+Y_UNIT_TEST(TestCompaction) {
+    DBGTRACE("TestCompaction");
+    TTestContext tc;
+    tc.EnableDetailedPQLog = true;
+    RunTestWithReboots(tc.TabletIds, [&]() {
+        return tc.InitialEventsFilter.Prepare();
+    }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
+        DBGTRACE("=== " << dispatchName << " ===");
+        activeZone = false;
+        TFinalizer finalizer(tc);
+        tc.Prepare(dispatchName, setup, activeZone);
+        activeZone = false;
+        tc.Runtime->SetScheduledLimit(1000);
+
+        auto cmdWrite = [&](const TString& sourceId, const TVector<size_t>& sizes) {
+            TVector<std::pair<ui64, TString>> data;
+            for (size_t k = 1; k <= sizes.size(); ++k) {
+                data.emplace_back(k, TString(sizes[k - 1], 'x'));
+            }
+            CmdWrite(0, sourceId, data, tc, false, {}, false, "", -1, -1, false, false, true);
+        };
+        auto cmdCompaction = [&]() {
+            CmdRunCompaction(0, tc);
+        };
+
+        PQTabletPrepare({.partitions = 1, .writeSpeed = 50_MB}, {{"user1", true}}, tc);
+
+        //for (size_t i = 0; i < 1'000; ++i) {
+        //    auto size = RandomNumber<size_t>(180) + 1;
+        //    size *= 100_KB;
+
+        //    cmdWrite(TStringBuilder() << "sourceid" << i, {size});
+        //}
+
+        //cmdCompaction();
+
+        cmdWrite("sourceid1", {2_MB});
+        cmdWrite("sourceid2", {5700_KB, 7_MB});
+        cmdCompaction();
+
+        //cmdWrite("sourceid1", {1_MB, 1_MB, 1_MB, 1_MB, 1_MB, 1_MB, 1_MB, 1_MB, 1_MB, 1_MB, 1_MB, 1_MB, 1_MB, 1_MB, 1_MB});
+        //cmdWrite("sourceid2", {10_MB});
+        //cmdCompaction();
+
+        //cmdWrite("sourceid1", {25_KB, 25_KB, 25_KB});
+        //cmdCompaction();
+
+        //cmdWrite("sourceid2", {7_MB});
+        //cmdWrite("sourceid3", {7_MB});
+        //cmdWrite("sourceid4", {7_MB});
+        //cmdCompaction();
+
+        //cmdWrite("sourceid3", {1_MB, 1_MB, 1_MB, 1_MB, 1_MB, 1_MB, 1_MB});
+        //cmdWrite("sourceid3", {1_MB});
+        //cmdCompaction();
+
+        //cmdWrite("sourceid1", {500_KB, 500_KB, 500_KB, 500_KB, 500_KB, 500_KB, 500_KB, 500_KB});
+        //cmdCompaction();
+
+        //cmdWrite("sourceid2", {1_MB});
+        //cmdCompaction();
+
+        //cmdWrite("sourceid3", {300_KB, 300_KB, 300_KB, 300_KB, 300_KB, 300_KB, 300_KB, 300_KB, 300_KB, 300_KB, 300_KB, 300_KB, 300_KB, 300_KB, 300_KB, 300_KB, 300_KB, 300_KB, 300_KB, 300_KB, 300_KB, 300_KB, 300_KB, 300_KB, 300_KB, 300_KB, 300_KB, 300_KB, 300_KB, 300_KB, 100_KB, 100_KB});
+        //cmdCompaction();
+
+        //cmdWrite("sourceid1", {1_MB, 400_KB, 400_KB, 400_KB, 400_KB});
+        //cmdCompaction();
+
+        cmdWrite("sourceidX", {1_KB});
+
+        //cmdWrite("sourceid2", {100_KB, 100_KB, 100_KB, 100_KB, 100_KB, 100_KB, 100_KB, 100_KB, 100_KB, 100_KB, 100_KB, 100_KB, 100_KB, 100_KB, 7000_KB});
+        //cmdWrite("sourceid3", {1MB, 100_KB, 100_KB, 100_KB});
+        //cmdCompaction();
+    });
 }
 
 Y_UNIT_TEST(TestCmdReadWithLastOffset) {

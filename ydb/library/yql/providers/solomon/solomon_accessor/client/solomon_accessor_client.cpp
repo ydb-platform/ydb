@@ -334,7 +334,7 @@ public:
             TGetPointsCountResult result;
             result.PointsCount = downsampledPointsCount;
 
-            resultPromise.SetValue(TGetPointsCountResponse(std::move(result)));
+            resultPromise.SetValue(TGetPointsCountResponse(std::move(result), 0));
         }
 
         return resultPromise.GetFuture();

@@ -37,24 +37,7 @@ public:
         }
     }
 
-    TThreadSafeOptional& operator=(const TThreadSafeOptional& other) {
-        if (this == &other) {
-            return *this;
-        }
-
-        const bool has = other.Defined.load(std::memory_order_acquire);
-        if (Has()) {
-            Ptr()->~T();
-            Defined.store(false, std::memory_order_release);
-        }
-
-        if (has) {
-            ::new (Ptr()) T(*other.Ptr());
-            Defined.store(true, std::memory_order_release);
-        }
-
-        return *this;
-    }
+    TThreadSafeOptional& operator=(const TThreadSafeOptional& other) = delete;
 
     TThreadSafeOptional(TThreadSafeOptional&& other) noexcept {
         const bool has = other.Defined.load(std::memory_order_acquire);
@@ -69,12 +52,8 @@ public:
             return *this;
         }
 
+        AFL_VERIFY(!Has());
         const bool has = other.Defined.load(std::memory_order_acquire);
-        if (Has()) {
-            Ptr()->~T();
-            Defined.store(false, std::memory_order_release);
-        }
-
         if (has) {
             ::new (Ptr()) T(std::move(*other.Ptr()));
             Defined.store(true, std::memory_order_release);
@@ -83,29 +62,16 @@ public:
         return *this;
     }
 
-    void Reset() {
-        if (Has()) {
-            Ptr()->~T();
-            Defined.store(false, std::memory_order_release);
-        }
-    }
+    void Reset() = delete;
 
     void Set(const T& value) {
-        if (Has()) {
-            Ptr()->~T();
-            Defined.store(false, std::memory_order_release);
-        }
-
+        AFL_VERIFY(!Has());
         ::new (Ptr()) T(value);
         Defined.store(true, std::memory_order_release);
     }
 
     void Set(T&& value) {
-        if (Has()) {
-            Ptr()->~T();
-            Defined.store(false, std::memory_order_release);
-        }
-
+        AFL_VERIFY(!Has());
         ::new (Ptr()) T(std::move(value));
         Defined.store(true, std::memory_order_release);
     }

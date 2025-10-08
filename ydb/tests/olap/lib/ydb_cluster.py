@@ -109,14 +109,13 @@ class YdbCluster:
                           role: Optional[YdbCluster.Node.Role] = None
                           ) -> list[YdbCluster.Node]:
 
-        
         # Получаем таймаут из переменной окружения, как в wait_ydb_alive
         timeout = int(os.getenv('WAIT_CLUSTER_ALIVE_TIMEOUT', 2 * 60))  # По умолчанию 20 минут
         retry_interval = 2  # Интервал между попытками в секундах
-        
+
         deadline = time() + timeout
         last_error = None
-        
+
         while time() < deadline:
             try:
                 url = f'{cls._get_service_url()}/viewer/json/nodes?'
@@ -124,17 +123,17 @@ class YdbCluster:
                     url += f'database=/{cls.ydb_database}'
                 if path is not None:
                     url += f'&path={path}&tablets=true'
-                
+
                 headers = {}
                 # Добавляем таймаут для каждого запроса
                 request_timeout = min(10, deadline - time())
                 if request_timeout <= 0:
                     break
-                    
+
                 response = requests.get(url, headers=headers, timeout=request_timeout)
                 response.raise_for_status()
                 data = response.json()
-                
+
                 if not isinstance(data, dict):
                     raise Exception(f'Incorrect response type: {data}')
 
@@ -146,17 +145,17 @@ class YdbCluster:
                     nodes = [node for node in nodes if node.role == role]
 
                 return nodes
-                
+
             except Exception as e:
                 last_error = e
                 LOGGER.debug(f'Failed to get cluster nodes: {e}. Retrying in {retry_interval}s...')
-                
+
                 # Проверяем, есть ли время для следующей попытки
                 if time() + retry_interval >= deadline:
                     break
-                    
+
                 sleep(retry_interval)
-        
+
         # Если все попытки неудачны, логируем ошибку и возвращаем пустой список
         LOGGER.error(f'Failed to get cluster nodes after {timeout}s timeout. Last error: {last_error}')
         return []

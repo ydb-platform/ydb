@@ -268,7 +268,7 @@ void CreateUniformTable(TTestEnv& env, const TString& databaseName, const TStrin
     ExecuteYqlScript(env, replace);
 }
 
-void CreateColumnStoreTable(TTestEnv& env, const TString& databaseName, const TString& tableName,
+void PrepareColumnTable(TTestEnv& env, const TString& databaseName, const TString& tableName,
     int shardCount)
 {
     auto fullTableName = Sprintf("Root/%s/%s", databaseName.c_str(), tableName.c_str());
@@ -358,11 +358,11 @@ std::vector<TTableInfo> GatherColumnTablesInfo(TTestEnv& env, const TString& ful
     return ret;
 }
 
-TDatabaseInfo CreateDatabaseColumnTables(TTestEnv& env, ui8 tableCount, ui8 shardCount) {
+TDatabaseInfo PrepareDatabaseColumnTables(TTestEnv& env, ui8 tableCount, ui8 shardCount) {
     auto fullDbName = CreateDatabase(env, "Database");
 
     for (ui8 tableId = 1; tableId <= tableCount; tableId++) {
-        CreateColumnStoreTable(env, "Database", Sprintf("Table%u", tableId), shardCount);
+        PrepareColumnTable(env, "Database", Sprintf("Table%u", tableId), shardCount);
     }
 
     return {
@@ -371,12 +371,12 @@ TDatabaseInfo CreateDatabaseColumnTables(TTestEnv& env, ui8 tableCount, ui8 shar
     };
 }
 
-TDatabaseInfo CreateServerlessDatabaseColumnTables(TTestEnv& env, ui8 tableCount, ui8 shardCount) {
+TDatabaseInfo PrepareServerlessDatabaseColumnTables(TTestEnv& env, ui8 tableCount, ui8 shardCount) {
     auto fullServerlessDbName = CreateDatabase(env, "Shared", 1, true);
     auto fullDbName = CreateServerlessDatabase(env, "Database", "/Root/Shared");
 
     for (ui8 tableId = 1; tableId <= tableCount; tableId++) {
-        CreateColumnStoreTable(env, "Database", Sprintf("Table%u", tableId), shardCount);
+        PrepareColumnTable(env, "Database", Sprintf("Table%u", tableId), shardCount);
     }
 
     return {

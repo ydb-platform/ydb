@@ -72,7 +72,7 @@ Y_UNIT_TEST_SUITE(ColumnStatistics) {
             saveStatisticsQueryResponse.emplace(ev->Get()->PathId.OwnerId);
         });
 
-        CreateColumnStoreTable(env, "Database", "Table1", 1);
+        PrepareColumnTable(env, "Database", "Table1", 1);
 
         runtime.DispatchEvents(TDispatchOptions{
             .CustomFinalCondition = [&]() {
@@ -104,8 +104,8 @@ Y_UNIT_TEST_SUITE(ColumnStatistics) {
             saveStatisticsQueryResponse.emplace(ev->Get()->PathId.OwnerId);
         });
 
-        CreateColumnStoreTable(env, "Serverless1", "Table1", 1);
-        CreateColumnStoreTable(env, "Serverless2", "Table2", 1);
+        PrepareColumnTable(env, "Serverless1", "Table1", 1);
+        PrepareColumnTable(env, "Serverless2", "Table2", 1);
 
         runtime.DispatchEvents(TDispatchOptions{
             .CustomFinalCondition = [&]() {

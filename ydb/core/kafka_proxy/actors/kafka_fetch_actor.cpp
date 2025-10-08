@@ -30,10 +30,10 @@ void TKafkaFetchActor::Bootstrap(const NActors::TActorContext& ctx) {
 
 void TKafkaFetchActor::SendFetchRequests(const TActorContext& ctx) {
     Response->Responses.resize(FetchRequestData->Topics.size());
-    KAFKA_LOG_D(TStringBuilder() << "Fetch actor: New request. DatabasePath: " << Context->DatabasePath << " MaxWaitMs: " << FetchRequestData->MaxWaitMs << " MaxBytes: " << FetchRequestData->MaxBytes);
+    KAFKA_LOG_D(TStringBuilder() << "Fetch actor: New request. DatabasePath: " << Context->DatabasePath 
+        << " MaxWaitMs: " << FetchRequestData->MaxWaitMs << " MaxBytes: " << FetchRequestData->MaxBytes);
     for (size_t topicIndex = 0; topicIndex <  Response->Responses.size(); topicIndex++) {
-        TVector<NKikimr::NPQ::TPartitionFetchRequest> partPQRequests;
-        PrepareFetchRequestData(topicIndex, partPQRequests);
+        auto partPQRequests = PrepareFetchRequestData(topicIndex);
         auto ruPerRequest = topicIndex == 0 && Context->Config.GetMeteringV2Enabled();
         auto consumer = Context->GroupId.empty() ? NKikimr::NPQ::CLIENTID_WITHOUT_CONSUMER : Context->GroupId;
         NKikimr::NPQ::TFetchRequestSettings request {
@@ -55,11 +55,13 @@ void TKafkaFetchActor::SendFetchRequests(const TActorContext& ctx) {
     }
 }
 
-void TKafkaFetchActor::PrepareFetchRequestData(const size_t topicIndex, TVector<NKikimr::NPQ::TPartitionFetchRequest>& partPQRequests) {
+TVector<NKikimr::NPQ::TPartitionFetchRequest> TKafkaFetchActor::PrepareFetchRequestData(const size_t topicIndex) {
     auto& topicKafkaRequest = FetchRequestData->Topics[topicIndex];
     TFetchResponseData::TFetchableTopicResponse& topicKafkaResponse = Response->Responses[topicIndex];
+
     topicKafkaResponse.Topic = topicKafkaRequest.Topic;
 
+    TVector<NKikimr::NPQ::TPartitionFetchRequest> partPQRequests;
     partPQRequests.resize(topicKafkaRequest.Partitions.size());
     topicKafkaResponse.Partitions.resize(topicKafkaRequest.Partitions.size());
     for (size_t partIndex = 0; partIndex < topicKafkaRequest.Partitions.size(); partIndex++) {
@@ -74,6 +76,7 @@ void TKafkaFetchActor::PrepareFetchRequestData(const size_t topicIndex, TVector<
         partPQRequest.Offset = partKafkaRequest.FetchOffset;
         partPQRequest.MaxBytes = partKafkaRequest.PartitionMaxBytes;
     }
+    return partPQRequests;
 }
 
 void TKafkaFetchActor::Handle(NKikimr::TEvPQ::TEvFetchResponse::TPtr& ev, const TActorContext& ctx) {

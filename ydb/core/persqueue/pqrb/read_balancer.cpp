@@ -1004,6 +1004,23 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvGetReadSessionsInfo::TPtr& 
 }
 
 
+
+//
+// Kafka integration
+//
+
+void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvBalancingSubscribe::TPtr& ev, const TActorContext& ctx)
+{
+    Balancer->Handle(ev, ctx);
+}
+
+void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvBalancingUnsubscribe::TPtr& ev, const TActorContext& ctx)
+{
+    Balancer->Handle(ev, ctx);
+}
+
+
+
 //
 // Autoscaling
 //

@@ -1131,10 +1131,6 @@ public:
         if (CommonAppOptions.IsStaticNode()) {
             InitStaticNode();
         } else {
-            // Инициализация main-конфига из seed-nodes для динамических нод (в память)
-            if (CommonAppOptions.SeedNodesFile) {
-                InitMainConfigFromSeedNodesDynamic();
-            }
             InitDynamicNode();
         }
 
@@ -1412,6 +1408,10 @@ public:
             AddLabelToAppConfig("node_name", Labels["node_name"]);
         }
 
+        if (CommonAppOptions.SeedNodesFile) {
+            return InitConfigFromSeedNodesDynamic();
+        }
+
         TVector<TString> addrs;
         CommonAppOptions.FillClusterEndpoints(AppConfig, addrs);
 
@@ -1578,28 +1578,28 @@ public:
             Logger.Out() << "No configs received from seed nodes" << Endl;
         }
     }
-
-    // Fetch only main YAML config from seed nodes for dynamic node startup (in-memory)
-    void InitMainConfigFromSeedNodesDynamic() {
+    void InitConfigFromSeedNodesDynamic() {
         if (CommonAppOptions.SeedNodes.empty()) {
             ythrow yexception() << "No seed nodes provided";
         }
 
-        auto result = ConfigClient.FetchConfig(CommonAppOptions.GrpcSslSettings, CommonAppOptions.SeedNodes, Env, Logger);
-        if (!result) {
+        auto cfgResult = ConfigClient.FetchConfig(CommonAppOptions.GrpcSslSettings, CommonAppOptions.SeedNodes, Env, Logger);
+        if (!cfgResult) {
             Logger.Out() << "Failed to fetch config from seed nodes" << Endl;
             return;
         }
 
-        const TString& mainYaml = result->GetMainYamlConfig();
+        const TString& mainYaml = cfgResult->GetMainYamlConfig();
         if (mainYaml.empty()) {
             Logger.Out() << "No main config received from seed nodes" << Endl;
             return;
         }
 
-        // Сохраняем в AppConfig для последующего парсинга
-        AppConfig.SetStartupConfigYaml(mainYaml);
-        Logger.Out() << "Initialized main config from seed nodes (dynamic)" << Endl;
+        NKikimrConfig::TAppConfig yamlConfig;
+        NYamlConfig::ResolveAndParseYamlConfig(mainYaml, {}, Labels, yamlConfig);
+
+        InitDebug.YamlConfig.CopyFrom(yamlConfig);
+        return ApplyConfigForNode(yamlConfig);
     }
 };
 

@@ -280,7 +280,7 @@ STFUNC(KafkaReadSessionProxyActor::StateWork) {
         hFunc(TEvKafka::TEvSyncGroupRequest, Handle);
         hFunc(TEvKafka::TEvHeartbeatRequest, Handle);
         hFunc(TEvKafka::TEvLeaveGroupRequest, Handle);
-        hFunc(TEvKafka::TEvFetchRequest, Handle); ../describer/ut/
+        hFunc(TEvKafka::TEvFetchRequest, Handle);
 
         hFunc(NPQ::NDescriber::TEvDescribeTopicsResponse, Handle);
         hFunc(TEvPersQueue::TEvBalancingSubscribeNotify, Handle);

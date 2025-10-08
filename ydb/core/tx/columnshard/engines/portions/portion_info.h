@@ -13,6 +13,7 @@
 #include <ydb/library/formats/arrow/replace_key.h>
 
 #include <util/generic/hash_set.h>
+#include <atomic>
 
 namespace NKikimrColumnShardDataSharingProto {
 class TPortionInfo;
@@ -84,12 +85,37 @@ private:
     friend class TCompactedPortionInfo;
     friend class TWrittenPortionInfo;
 
-    TPortionInfo(const TPortionInfo&) = default;
-    TPortionInfo& operator=(const TPortionInfo&) = default;
+    TPortionInfo(const TPortionInfo& other)
+        : PathId(other.PathId)
+        , PortionId(other.PortionId)
+        , RemoveSnapshot(other.RemoveSnapshot)
+        , RemoveSnapshotDefined(other.RemoveSnapshotDefined.load(std::memory_order_acquire))
+        , SchemaVersion(other.SchemaVersion)
+        , ShardingVersion(other.ShardingVersion)
+        , Meta(other.Meta)
+        , RuntimeFeatures(other.RuntimeFeatures) {
+    }
+
+    TPortionInfo& operator=(const TPortionInfo& other) {
+        if (this == &other) {
+            return *this;
+        }
+
+        PathId = other.PathId;
+        PortionId = other.PortionId;
+        RemoveSnapshot = other.RemoveSnapshot;
+        RemoveSnapshotDefined.store(other.RemoveSnapshotDefined.load(std::memory_order_acquire), std::memory_order_release);
+        SchemaVersion = other.SchemaVersion;
+        ShardingVersion = other.ShardingVersion;
+        Meta = other.Meta;
+        RuntimeFeatures = other.RuntimeFeatures;
+        return *this;
+    }
 
     TInternalPathId PathId;
     ui64 PortionId = 0;   // Id of independent (overlayed by PK) portion of data in pathId
     TSnapshot RemoveSnapshot = TSnapshot::Zero();
+    std::atomic<bool> RemoveSnapshotDefined = false;
     ui64 SchemaVersion = 0;
     std::optional<ui64> ShardingVersion;
 
@@ -167,8 +193,33 @@ public:
     TPortionInfo(TPortionMeta&& meta)
         : Meta(std::move(meta)) {
     }
-    TPortionInfo(TPortionInfo&&) = default;
-    TPortionInfo& operator=(TPortionInfo&&) = default;
+
+    TPortionInfo(TPortionInfo&& other) noexcept
+        : PathId(std::move(other.PathId))
+        , PortionId(other.PortionId)
+        , RemoveSnapshot(std::move(other.RemoveSnapshot))
+        , RemoveSnapshotDefined(other.RemoveSnapshotDefined.load(std::memory_order_acquire))
+        , SchemaVersion(other.SchemaVersion)
+        , ShardingVersion(std::move(other.ShardingVersion))
+        , Meta(std::move(other.Meta))
+        , RuntimeFeatures(other.RuntimeFeatures) {
+    }
+
+    TPortionInfo& operator=(TPortionInfo&& other) noexcept {
+        if (this == &other) {
+            return *this;
+        }
+
+        PathId = std::move(other.PathId);
+        PortionId = other.PortionId;
+        RemoveSnapshot = std::move(other.RemoveSnapshot);
+        RemoveSnapshotDefined.store(other.RemoveSnapshotDefined.load(std::memory_order_acquire), std::memory_order_release);
+        SchemaVersion = other.SchemaVersion;
+        ShardingVersion = std::move(other.ShardingVersion);
+        Meta = std::move(other.Meta);
+        RuntimeFeatures = other.RuntimeFeatures;
+        return *this;
+    }
 
     virtual void FillDefaultColumn(NAssembling::TColumnAssemblingInfo& column, const std::optional<TSnapshot>& defaultSnapshot) const = 0;
 
@@ -213,8 +264,9 @@ public:
     }
 
     void SetRemoveSnapshot(const TSnapshot& snap) {
-        AFL_VERIFY(!RemoveSnapshot.Valid());
+        AFL_VERIFY(!RemoveSnapshotDefined.load());
         RemoveSnapshot = snap;
+        RemoveSnapshotDefined.store(true, std::memory_order_release);
     }
 
     void SetRemoveSnapshot(const ui64 planStep, const ui64 txId) {
@@ -339,7 +391,7 @@ public:
     TString DebugString(const bool withDetails = false) const;
 
     bool HasRemoveSnapshot() const {
-        return RemoveSnapshot.Valid();
+        return RemoveSnapshotDefined.load(std::memory_order_acquire);
     }
 
     bool IsRemovedFor(const TSnapshot& snapshot) const {
@@ -375,12 +427,12 @@ public:
     }
 
     const TSnapshot& GetRemoveSnapshotVerified() const {
-        AFL_VERIFY(HasRemoveSnapshot());
+        AFL_VERIFY(RemoveSnapshotDefined.load(std::memory_order_acquire));
         return RemoveSnapshot;
     }
 
     std::optional<TSnapshot> GetRemoveSnapshotOptional() const {
-        if (RemoveSnapshot.Valid()) {
+        if (RemoveSnapshotDefined.load(std::memory_order_acquire)) {
             return RemoveSnapshot;
         } else {
             return {};
@@ -393,7 +445,7 @@ public:
     }
 
     bool IsVisible(const TSnapshot& snapshot, const bool checkCommitSnapshot = true) const {
-        const bool visible = (!RemoveSnapshot.Valid() || snapshot < RemoveSnapshot) && DoIsVisible(snapshot, checkCommitSnapshot);
+        const bool visible = (!RemoveSnapshotDefined.load(std::memory_order_acquire) || snapshot < GetRemoveSnapshotVerified()) && DoIsVisible(snapshot, checkCommitSnapshot);
 
         AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "IsVisible")("analyze_portion", DebugString())("visible", visible)(
             "snapshot", snapshot.DebugString());

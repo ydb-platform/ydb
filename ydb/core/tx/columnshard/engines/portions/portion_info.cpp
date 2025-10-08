@@ -38,7 +38,7 @@ TString TPortionInfo::DebugString(const bool withDetails) const {
     sb << "column_size:" << GetColumnBlobBytes() << ";"
        << "index_size:" << GetIndexBlobBytes() << ";"
        << "meta:(" << Meta.DebugString() << ");";
-    if (RemoveSnapshot.Valid()) {
+    if (HasRemoveSnapshot()) {
         sb << "remove_snapshot:(" << RemoveSnapshot.DebugString() << ");";
     }
     return sb << ")";
@@ -56,7 +56,7 @@ void TPortionInfo::SerializeToProto(const std::vector<TUnifiedBlobId>& blobIds, 
     PathId.ToProto(proto);
     proto.SetPortionId(PortionId);
     proto.SetSchemaVersion(GetSchemaVersionVerified());
-    if (!RemoveSnapshot.IsZero()) {
+    if (HasRemoveSnapshot()) {
         *proto.MutableRemoveSnapshot() = RemoveSnapshot.SerializeToProto();
     }
 
@@ -75,6 +75,7 @@ TConclusionStatus TPortionInfo::DeserializeFromProto(const NKikimrColumnShardDat
         if (!parse) {
             return parse;
         }
+        RemoveSnapshotDefined.store(true, std::memory_order_release);
     }
     return TConclusionStatus::Success();
 }

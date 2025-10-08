@@ -25,6 +25,7 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
         bool EnableScriptExecutionBackgroundChecks = true;
         TIntrusivePtr<NYql::IPqGateway> PqGateway;
         TDuration CheckpointPeriod = TDuration::MilliSeconds(200);
+        TTestLogSettings LogSettings;
     };
 
     std::shared_ptr<TKikimrRunner> MakeKikimrRunner(

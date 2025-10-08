@@ -83,7 +83,7 @@ namespace NYdb::NConsoleClient {
         int Run(TConfig& config) override;
 
     private:
-        ui64 RetentionPeriodHours_;
+        TDuration RetentionPeriod_ = TDuration::Hours(24);
         ui64 RetentionStorageMb_;
         ui32 MinActivePartitions_;
         TMaybe<ui32> MaxActivePartitions_;
@@ -105,7 +105,7 @@ namespace NYdb::NConsoleClient {
         int Run(TConfig& config) override;
 
     private:
-        TMaybe<ui64> RetentionPeriodHours_;
+        TMaybe<TDuration> RetentionPeriod_;
         TMaybe<ui64> RetentionStorageMb_;
         TMaybe<ui32> MinActivePartitions_;
         TMaybe<ui32> MaxActivePartitions_;
@@ -145,6 +145,7 @@ namespace NYdb::NConsoleClient {
     private:
         TString ConsumerName_;
         bool IsImportant_;
+        TMaybe<TDuration> AvailabilityPeriod_;
         TMaybe<TInstant> StartingMessageTimestamp_;
     };
 

@@ -144,6 +144,12 @@ private:
             return;
         }
 
+        // if feature flag is not set -- return only for self node
+        if (!AppData()->FeatureFlags.GetEnableCompileCacheView()) {
+            PendingNodesInitialized = true;
+            PendingNodes.emplace_back(SelfId().NodeId());
+        }
+
         if (AckReceived) {
             StartScan();
         }
@@ -154,13 +160,9 @@ private:
             ReplyEmptyAndDie();
             return;
         }
-        // if feature flag is not set -- return only for self node
-        if (!AppData()->FeatureFlags.GetEnableCompileCacheView()) {
-            PendingNodesInitialized = true;
-            PendingNodes.emplace_back(SelfId().NodeId());
-        }
 
-        if (!PendingNodesInitialized) {
+        if (!PendingNodesInitialized && !PendingRequest) {
+            PendingRequest = true;
             Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), new NKikimr::NKqp::TEvKqp::TEvListProxyNodesRequest());
             return;
         }
@@ -196,6 +198,7 @@ private:
     }
 
     void Handle(NKqp::TEvKqp::TEvListProxyNodesResponse::TPtr& ev) {
+        PendingRequest = false;
         if (AppData()->FeatureFlags.GetEnableCompileCacheView()) {
             auto& proxies = ev->Get()->ProxyNodes;
             std::sort(proxies.begin(), proxies.end());

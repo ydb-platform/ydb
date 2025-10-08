@@ -699,11 +699,14 @@ public:
             .TypeMappingSettings(typeMappingSettings);
 
         auto listSplitsBuilder = mockClient->ExpectListSplits();
-        listSplitsBuilder
+        auto fillListSplitExpectation = listSplitsBuilder
             .ValidateArgs(settings.ValidateListSplitsArgs)
             .Select()
                 .DataSourceInstance(GetMockConnectorSourceInstance())
-                .Table(settings.TableName);
+                .Table(settings.TableName)
+                .What();
+
+        FillMockConnectorRequestColumns(fillListSplitExpectation, settings.Columns);
 
         for (ui64 i = 0; i < settings.DescribeCount; ++i) {
             auto responseBuilder = describeTableBuilder.Response();
@@ -1944,6 +1947,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         ));
 
         {   // Prepare connector mock
+
             const std::vector<TColumn> columns = {
                 {"fqdn", Ydb::Type::STRING},
                 {"payload", Ydb::Type::STRING}
@@ -1952,7 +1956,11 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                 .TableName = ydbTable,
                 .Columns = columns,
                 .DescribeCount = 2,
-                .ListSplitsCount = 2
+                // Now List Split is smart enough to remove duplicated list split requests.
+                // It happens when query contains mutiple equal subqueries. Equal means that
+                // select has the same columns, table and where clause. In this case for all
+                // equal subqueries only one list split request is done.
+                .ListSplitsCount = 1
             });
 
             const std::vector<std::string> fqdnColumn = {"host1.example.com", "host2.example.com", "host3.example.com"};
@@ -2054,7 +2062,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                 .TableName = ydbTable,
                 .Columns = columns,
                 .DescribeCount = 2,
-                .ListSplitsCount = 5,
+                // Now List Split is smart enough to remove duplicated list split requests.
+                .ListSplitsCount = 4,
                 .ValidateListSplitsArgs = false
             });
 

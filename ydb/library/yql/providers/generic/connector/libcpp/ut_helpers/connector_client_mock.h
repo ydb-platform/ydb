@@ -65,7 +65,18 @@ namespace NYql::NConnector::NTest {
     MATCHER_P(ProtobufRequestMatcher, expected, "request does not match") {
         Cerr << "CRAB Expected: " << expected.DebugString() << Endl;
         Cerr << "CRAB Actual: " << arg.DebugString() << Endl;
-        return google::protobuf::util::MessageDifferencer::Equals(arg, expected);
+
+        google::protobuf::util::MessageDifferencer differencer;
+        TString differences;
+        differencer.ReportDifferencesToString(&differences);
+
+        bool result = differencer.Compare(arg, expected);
+
+        if (!result) {
+            Cerr << "CRAB Differences:" << Endl<< differences << Endl;
+        }
+
+        return result;
     }
 
     MATCHER_P(RequestRelaxedMatcher, expected, "") {

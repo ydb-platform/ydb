@@ -168,7 +168,7 @@ namespace NKikimr::NKqp {
                 databaseAsyncResolverMock,
                 appConfig,
                 s3ActorsFactory,
-                {.CredentialsFactory = NTestUtils::CreateCredentialProvider()}
+                {.CredentialsFactory = CreateCredentialsFactory()}
             );
 
             CreateExternalDataSource(providerType, Kikimr);

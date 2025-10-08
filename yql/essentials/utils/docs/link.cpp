@@ -11,102 +11,102 @@
 
 namespace NYql::NDocs {
 
-    TLinkTarget TLinkTarget::Parse(TStringBuf string) {
-        static const RE2 Regex(R"re(([^#?()]*)(#[^?()]*)?)re");
+TLinkTarget TLinkTarget::Parse(TStringBuf string) {
+    static const RE2 Regex(R"re(([^#?()]*)(#[^?()]*)?)re");
 
-        TString path;
-        TString anchor;
-        if (RE2::FullMatch(string, Regex, &path, &anchor)) {
-            if (!anchor.empty()) {
-                YQL_ENSURE(anchor.StartsWith('#'));
-                anchor.erase(0, 1);
-            }
-
-            return {
-                .RelativePath = path,
-                .Anchor = !anchor.empty() ? TMaybe<TString>(anchor) : Nothing(),
-            };
+    TString path;
+    TString anchor;
+    if (RE2::FullMatch(string, Regex, &path, &anchor)) {
+        if (!anchor.empty()) {
+            YQL_ENSURE(anchor.StartsWith('#'));
+            anchor.erase(0, 1);
         }
 
-        throw yexception()
-            << "invalid link target '" << string << "': "
-            << "does not match regex '" << Regex.pattern() << "'";
+        return {
+            .RelativePath = path,
+            .Anchor = !anchor.empty() ? TMaybe<TString>(anchor) : Nothing(),
+        };
     }
 
-    TMaybe<TLinkTarget> LookupUDF(const TLinks& links, TStringBuf name) {
-        const auto udf = SplitUDF(TString(name));
-        YQL_ENSURE(udf, "Invalid UDF: " << name);
+    throw yexception()
+        << "invalid link target '" << string << "': "
+        << "does not match regex '" << Regex.pattern() << "'";
+}
 
-        const auto [module, function] = *udf;
+TMaybe<TLinkTarget> LookupUDF(const TLinks& links, TStringBuf name) {
+    const auto udf = SplitUDF(TString(name));
+    YQL_ENSURE(udf, "Invalid UDF: " << name);
 
-        if (const TLinkTarget* target = nullptr;
-            (target = links.FindPtr(module + "::" + function)) ||
-            (target = links.FindPtr(module + "::" + "*"))) {
-            return *target;
-        }
+    const auto [module, function] = *udf;
 
+    if (const TLinkTarget* target = nullptr;
+        (target = links.FindPtr(module + "::" + function)) ||
+        (target = links.FindPtr(module + "::" + "*"))) {
+        return *target;
+    }
+
+    return Nothing();
+}
+
+TMaybe<TLinkTarget> LookupBasic(const TLinks& links, TStringBuf name) {
+    TMaybe<TLinkKey> key = NormalizedName(TString(name));
+    if (!key) {
         return Nothing();
     }
 
-    TMaybe<TLinkTarget> LookupBasic(const TLinks& links, TStringBuf name) {
-        TMaybe<TLinkKey> key = NormalizedName(TString(name));
-        if (!key) {
-            return Nothing();
-        }
-
-        if (const TLinkTarget* target = links.FindPtr(*key)) {
-            return *target;
-        }
-
-        return Nothing();
+    if (const TLinkTarget* target = links.FindPtr(*key)) {
+        return *target;
     }
 
-    TMaybe<TLinkTarget> Lookup(const TLinks& links, TStringBuf name) {
-        if (IsUDF(name)) {
-            return LookupUDF(links, name);
-        }
+    return Nothing();
+}
 
-        return LookupBasic(links, name);
+TMaybe<TLinkTarget> Lookup(const TLinks& links, TStringBuf name) {
+    if (IsUDF(name)) {
+        return LookupUDF(links, name);
     }
 
-    TLinkKey ParseLinkKey(TStringBuf string) {
-        static RE2 UDFRegex(TStringBuilder()
-                            << "(" << NormalizedNameRegex.pattern() << ")\\:\\:("
-                            << "\\*|" << NormalizedNameRegex.pattern() << ")");
+    return LookupBasic(links, name);
+}
 
-        if (IsNormalizedName(string)) {
-            return TString(string);
-        }
+TLinkKey ParseLinkKey(TStringBuf string) {
+    static RE2 UDFRegex(TStringBuilder()
+                        << "(" << NormalizedNameRegex.pattern() << ")\\:\\:("
+                        << "\\*|" << NormalizedNameRegex.pattern() << ")");
 
-        if (RE2::FullMatch(string, UDFRegex)) {
-            return TString(string);
-        }
-
-        ythrow yexception()
-            << "invalid link key '" << string << "': "
-            << "does not match any regex";
+    if (IsNormalizedName(string)) {
+        return TString(string);
     }
 
-    TLinks ParseLinks(const NJson::TJsonValue& json) {
-        TLinks links;
-        for (const auto& [keyString, value] : json.GetMapSafe()) {
-            TLinkKey key = ParseLinkKey(keyString);
-            TLinkTarget target = TLinkTarget::Parse(value.GetStringSafe());
-            links[std::move(key)] = std::move(target);
-        }
-        return links;
+    if (RE2::FullMatch(string, UDFRegex)) {
+        return TString(string);
     }
 
-    TLinks Merge(TLinks&& lhs, TLinks&& rhs) {
-        for (auto& [k, v] : rhs) {
-            YQL_ENSURE(
-                !lhs.contains(k),
-                "Duplicate '" << k << "', old '" << lhs[k] << "', new '" << v << "'");
+    ythrow yexception()
+        << "invalid link key '" << string << "': "
+        << "does not match any regex";
+}
 
-            lhs[k] = std::move(v);
-        }
-        return lhs;
+TLinks ParseLinks(const NJson::TJsonValue& json) {
+    TLinks links;
+    for (const auto& [keyString, value] : json.GetMapSafe()) {
+        TLinkKey key = ParseLinkKey(keyString);
+        TLinkTarget target = TLinkTarget::Parse(value.GetStringSafe());
+        links[std::move(key)] = std::move(target);
     }
+    return links;
+}
+
+TLinks Merge(TLinks&& lhs, TLinks&& rhs) {
+    for (auto& [k, v] : rhs) {
+        YQL_ENSURE(
+            !lhs.contains(k),
+            "Duplicate '" << k << "', old '" << lhs[k] << "', new '" << v << "'");
+
+        lhs[k] = std::move(v);
+    }
+    return lhs;
+}
 
 } // namespace NYql::NDocs
 

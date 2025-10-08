@@ -1,4 +1,5 @@
 #include "mkql_builtins_decimal.h" // Y_IGNORE
+#include "mkql_safe_ops.h"
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -11,7 +12,7 @@ struct TMinus : public TSimpleArithmeticUnary<TInput, TOutput, TMinus<TInput, TO
 
     static TOutput Do(TInput val)
     {
-        return -val;
+        return SafeNeg(val);
     }
 
 #ifndef MKQL_DISABLE_CODEGEN

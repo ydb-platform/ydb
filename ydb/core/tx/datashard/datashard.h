@@ -920,6 +920,15 @@ namespace TEvDataShard {
             Record.SetTabletID(tabletId);
             Record.SetStatus(status);
         }
+
+        bool IsRetriableError() const {
+            Y_ASSERT(Record.GetStatus() != NKikimrTxDataShard::TError::OK);
+            return
+                Record.GetStatus() == NKikimrTxDataShard::TError::WRONG_SHARD_STATE // = Ydb::StatusIds::OVERLOADED
+                || Record.GetStatus() == NKikimrTxDataShard::TError::SHARD_IS_BLOCKED // = Ydb::StatusIds::OVERLOADED
+                || Record.GetStatus() == NKikimrTxDataShard::TError::SCHEME_CHANGED // Ydb::StatusIds::GENERIC_ERROR
+            ;
+        }
     };
 
     struct TEvOverloadReady
@@ -1432,6 +1441,13 @@ namespace TEvDataShard {
         explicit TEvS3UploadRowsResponse(ui64 tabletId, ui32 status = NKikimrTxDataShard::TError::OK) {
             Record.SetTabletID(tabletId);
             Record.SetStatus(status);
+        }
+
+        TEvS3UploadRowsResponse() {}
+
+        bool IsRetriableError() const {
+            return TEvUploadRowsResponse(Record.GetTabletID(), Record.GetStatus())
+                .IsRetriableError();
         }
 
         TString ToString() const override {

@@ -844,6 +844,15 @@
             ]
         },
         {
+            "Name": "TKqpOpUnionAll",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KqpOpUnionAll"},
+            "Children": [
+                {"Index": 0, "Name": "LeftInput", "Type": "TExprBase"},
+                {"Index": 1, "Name": "RightInput", "Type": "TExprBase"}
+            ]
+        },
+        {
             "Name": "TKqpOpLimit",
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "KqpOpLimit"},

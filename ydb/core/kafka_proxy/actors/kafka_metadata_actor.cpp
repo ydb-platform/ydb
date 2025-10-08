@@ -296,7 +296,7 @@ void TKafkaMetadataActor::SendCreateTopicsRequest(const TString& topicName, ui32
     topicToCreate.NumPartitions = Context->Config.GetTopicCreationDefaultPartitions();
     message->Topics.push_back(topicToCreate);
     TContext::TPtr ContextForTopicCreation;
-    ContextForTopicCreation = std::make_shared<TContext>(TContext(Context->Config));
+    ContextForTopicCreation = std::make_shared<TContext>(TContext(*Context));
     ContextForTopicCreation->ConnectionId = ctx.SelfID;
     ContextForTopicCreation->UserToken = Context->UserToken;
     ContextForTopicCreation->DatabasePath = Context->DatabasePath;

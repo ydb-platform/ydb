@@ -4,6 +4,6 @@
 
 namespace NSQLHighlight {
 
-    void Print(IOutputStream& out, const NJson::TJsonValue& json);
+void Print(IOutputStream& out, const NJson::TJsonValue& json);
 
 } // namespace NSQLHighlight

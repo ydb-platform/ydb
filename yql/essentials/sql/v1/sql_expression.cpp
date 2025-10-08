@@ -18,22 +18,22 @@ using NALPDefaultAntlr4::SQLv1Antlr4Lexer;
 using namespace NSQLv1Generated;
 
 TNodePtr TSqlExpression::BuildSourceOrNode(const TRule_expr& node) {
-        // expr:
-        //     or_subexpr (OR or_subexpr)*
-        //   | type_name_composite
-        switch (node.Alt_case()) {
-            case TRule_expr::kAltExpr1: {
-                auto getNode = [](const TRule_expr_TAlt1_TBlock2& b) -> const TRule_or_subexpr& { return b.GetRule_or_subexpr2(); };
-                return BinOper("Or", node.GetAlt_expr1().GetRule_or_subexpr1(), getNode,
-                    node.GetAlt_expr1().GetBlock2().begin(), node.GetAlt_expr1().GetBlock2().end(), {});
-            }
-            case TRule_expr::kAltExpr2: {
-                return TypeNode(node.GetAlt_expr2().GetRule_type_name_composite1());
-            }
-            case TRule_expr::ALT_NOT_SET:
-                Y_ABORT("You should change implementation according to grammar changes");
+    // expr:
+    //     or_subexpr (OR or_subexpr)*
+    //   | type_name_composite
+    switch (node.Alt_case()) {
+        case TRule_expr::kAltExpr1: {
+            auto getNode = [](const TRule_expr_TAlt1_TBlock2& b) -> const TRule_or_subexpr& { return b.GetRule_or_subexpr2(); };
+            return BinOper("Or", node.GetAlt_expr1().GetRule_or_subexpr1(), getNode,
+                           node.GetAlt_expr1().GetBlock2().begin(), node.GetAlt_expr1().GetBlock2().end(), {});
         }
+        case TRule_expr::kAltExpr2: {
+            return TypeNode(node.GetAlt_expr2().GetRule_type_name_composite1());
+        }
+        case TRule_expr::ALT_NOT_SET:
+            Y_ABORT("You should change implementation according to grammar changes");
     }
+}
 
 TNodePtr TSqlExpression::Build(const TRule_expr& node) {
     const bool prevIsSourceAllowed = IsSourceAllowed_;
@@ -46,29 +46,29 @@ TNodePtr TSqlExpression::Build(const TRule_expr& node) {
 }
 
 TNodePtr TSqlExpression::Build(const TRule_lambda_or_parameter& node) {
-        // lambda_or_parameter:
-        //    lambda
-        //  | bind_parameter
-        switch (node.Alt_case()) {
-            case TRule_lambda_or_parameter::kAltLambdaOrParameter1: {
-                return LambdaRule(node.alt_lambda_or_parameter1().GetRule_lambda1());
-            }
-            case TRule_lambda_or_parameter::kAltLambdaOrParameter2: {
-                TString named;
-                if (!NamedNodeImpl(node.GetAlt_lambda_or_parameter2().GetRule_bind_parameter1(), named, *this)) {
-                    return nullptr;
-                }
-                auto namedNode = GetNamedNode(named);
-                if (!namedNode) {
-                    return nullptr;
-                }
-
-                return namedNode;
-            }
-            case TRule_lambda_or_parameter::ALT_NOT_SET:
-                Y_ABORT("You should change implementation according to grammar changes");
+    // lambda_or_parameter:
+    //    lambda
+    //  | bind_parameter
+    switch (node.Alt_case()) {
+        case TRule_lambda_or_parameter::kAltLambdaOrParameter1: {
+            return LambdaRule(node.alt_lambda_or_parameter1().GetRule_lambda1());
         }
+        case TRule_lambda_or_parameter::kAltLambdaOrParameter2: {
+            TString named;
+            if (!NamedNodeImpl(node.GetAlt_lambda_or_parameter2().GetRule_bind_parameter1(), named, *this)) {
+                return nullptr;
+            }
+            auto namedNode = GetNamedNode(named);
+            if (!namedNode) {
+                return nullptr;
+            }
+
+            return namedNode;
+        }
+        case TRule_lambda_or_parameter::ALT_NOT_SET:
+            Y_ABORT("You should change implementation according to grammar changes");
     }
+}
 
 TSourcePtr TSqlExpression::BuildSource(const TRule_select_or_expr& node) {
     TNodePtr result = SelectOrExpr(node);
@@ -89,76 +89,75 @@ TNodePtr TSqlExpression::BuildSourceOrNode(const TRule_smart_parenthesis& node) 
 }
 
 TNodePtr TSqlExpression::SubExpr(const TRule_mul_subexpr& node, const TTrailingQuestions& tail) {
-        // mul_subexpr: con_subexpr (DOUBLE_PIPE con_subexpr)*;
-        auto getNode = [](const TRule_mul_subexpr::TBlock2& b) -> const TRule_con_subexpr& { return b.GetRule_con_subexpr2(); };
-        return BinOper("Concat", node.GetRule_con_subexpr1(), getNode, node.GetBlock2().begin(), node.GetBlock2().end(), tail);
+    // mul_subexpr: con_subexpr (DOUBLE_PIPE con_subexpr)*;
+    auto getNode = [](const TRule_mul_subexpr::TBlock2& b) -> const TRule_con_subexpr& { return b.GetRule_con_subexpr2(); };
+    return BinOper("Concat", node.GetRule_con_subexpr1(), getNode, node.GetBlock2().begin(), node.GetBlock2().end(), tail);
 }
 
 TNodePtr TSqlExpression::SubExpr(const TRule_add_subexpr& node, const TTrailingQuestions& tail) {
-        // add_subexpr: mul_subexpr ((ASTERISK | SLASH | PERCENT) mul_subexpr)*;
-        auto getNode = [](const TRule_add_subexpr::TBlock2& b) -> const TRule_mul_subexpr& { return b.GetRule_mul_subexpr2(); };
-        return BinOpList(node.GetRule_mul_subexpr1(), getNode, node.GetBlock2().begin(), node.GetBlock2().end(), tail);
+    // add_subexpr: mul_subexpr ((ASTERISK | SLASH | PERCENT) mul_subexpr)*;
+    auto getNode = [](const TRule_add_subexpr::TBlock2& b) -> const TRule_mul_subexpr& { return b.GetRule_mul_subexpr2(); };
+    return BinOpList(node.GetRule_mul_subexpr1(), getNode, node.GetBlock2().begin(), node.GetBlock2().end(), tail);
 }
 
 TNodePtr TSqlExpression::SubExpr(const TRule_bit_subexpr& node, const TTrailingQuestions& tail) {
-        // bit_subexpr: add_subexpr ((PLUS | MINUS) add_subexpr)*;
-        auto getNode = [](const TRule_bit_subexpr::TBlock2& b) -> const TRule_add_subexpr& { return b.GetRule_add_subexpr2(); };
-        return BinOpList(node.GetRule_add_subexpr1(), getNode, node.GetBlock2().begin(), node.GetBlock2().end(), tail);
-    }
+    // bit_subexpr: add_subexpr ((PLUS | MINUS) add_subexpr)*;
+    auto getNode = [](const TRule_bit_subexpr::TBlock2& b) -> const TRule_add_subexpr& { return b.GetRule_add_subexpr2(); };
+    return BinOpList(node.GetRule_add_subexpr1(), getNode, node.GetBlock2().begin(), node.GetBlock2().end(), tail);
+}
 
 TNodePtr TSqlExpression::SubExpr(const TRule_neq_subexpr& node, const TTrailingQuestions& tailExternal) {
-        //neq_subexpr: bit_subexpr ((SHIFT_LEFT | shift_right | ROT_LEFT | rot_right | AMPERSAND | PIPE | CARET) bit_subexpr)*
-        //  // trailing QUESTIONS are used in optional simple types (String?) and optional lambda args: ($x, $y?) -> ($x)
-        //  ((double_question neq_subexpr) => double_question neq_subexpr | QUESTION+)?;
-        YQL_ENSURE(tailExternal.Count == 0);
-        MaybeUnnamedSmartParenOnTop_ = MaybeUnnamedSmartParenOnTop_ && !node.HasBlock3();
-        TTrailingQuestions tail;
-        if (node.HasBlock3() && node.GetBlock3().Alt_case() == TRule_neq_subexpr::TBlock3::kAlt2) {
-            auto& questions = node.GetBlock3().GetAlt2();
-            tail.Count = questions.GetBlock1().size();
-            tail.Pos = Ctx_.TokenPosition(questions.GetBlock1().begin()->GetToken1());
-            YQL_ENSURE(tail.Count > 0);
-        }
+    // neq_subexpr: bit_subexpr ((SHIFT_LEFT | shift_right | ROT_LEFT | rot_right | AMPERSAND | PIPE | CARET) bit_subexpr)*
+    //   // trailing QUESTIONS are used in optional simple types (String?) and optional lambda args: ($x, $y?) -> ($x)
+    //   ((double_question neq_subexpr) => double_question neq_subexpr | QUESTION+)?;
+    YQL_ENSURE(tailExternal.Count == 0);
+    MaybeUnnamedSmartParenOnTop_ = MaybeUnnamedSmartParenOnTop_ && !node.HasBlock3();
+    TTrailingQuestions tail;
+    if (node.HasBlock3() && node.GetBlock3().Alt_case() == TRule_neq_subexpr::TBlock3::kAlt2) {
+        auto& questions = node.GetBlock3().GetAlt2();
+        tail.Count = questions.GetBlock1().size();
+        tail.Pos = Ctx_.TokenPosition(questions.GetBlock1().begin()->GetToken1());
+        YQL_ENSURE(tail.Count > 0);
+    }
 
-        auto getNode = [](const TRule_neq_subexpr::TBlock2& b) -> const TRule_bit_subexpr& { return b.GetRule_bit_subexpr2(); };
-        auto result = BinOpList(node.GetRule_bit_subexpr1(), getNode, node.GetBlock2().begin(), node.GetBlock2().end(), tail);
-        if (!result) {
-            return {};
-        }
-        if (node.HasBlock3()) {
-            auto& block = node.GetBlock3();
-            if (block.Alt_case() == TRule_neq_subexpr::TBlock3::kAlt1) {
-                TSqlExpression altExpr(Ctx_, Mode_);
-                auto altResult = SubExpr(block.GetAlt1().GetRule_neq_subexpr2(), {});
-                if (!altResult) {
-                    return {};
-                }
-                const TVector<TNodePtr> args({result, altResult});
-                Token(block.GetAlt1().GetRule_double_question1().GetToken1());
-                result = BuildBuiltinFunc(Ctx_, Ctx_.Pos(), "Coalesce", args);
+    auto getNode = [](const TRule_neq_subexpr::TBlock2& b) -> const TRule_bit_subexpr& { return b.GetRule_bit_subexpr2(); };
+    auto result = BinOpList(node.GetRule_bit_subexpr1(), getNode, node.GetBlock2().begin(), node.GetBlock2().end(), tail);
+    if (!result) {
+        return {};
+    }
+    if (node.HasBlock3()) {
+        auto& block = node.GetBlock3();
+        if (block.Alt_case() == TRule_neq_subexpr::TBlock3::kAlt1) {
+            TSqlExpression altExpr(Ctx_, Mode_);
+            auto altResult = SubExpr(block.GetAlt1().GetRule_neq_subexpr2(), {});
+            if (!altResult) {
+                return {};
             }
+            const TVector<TNodePtr> args({result, altResult});
+            Token(block.GetAlt1().GetRule_double_question1().GetToken1());
+            result = BuildBuiltinFunc(Ctx_, Ctx_.Pos(), "Coalesce", args);
         }
-        return result;
     }
+    return result;
+}
 
-    TNodePtr TSqlExpression::SubExpr(const TRule_eq_subexpr& node, const TTrailingQuestions& tail) {
-        // eq_subexpr: neq_subexpr ((LESS | LESS_OR_EQ | GREATER | GREATER_OR_EQ) neq_subexpr)*;
-        auto getNode = [](const TRule_eq_subexpr::TBlock2& b) -> const TRule_neq_subexpr& { return b.GetRule_neq_subexpr2(); };
-        return BinOpList(node.GetRule_neq_subexpr1(), getNode, node.GetBlock2().begin(), node.GetBlock2().end(), tail);
-    }
+TNodePtr TSqlExpression::SubExpr(const TRule_eq_subexpr& node, const TTrailingQuestions& tail) {
+    // eq_subexpr: neq_subexpr ((LESS | LESS_OR_EQ | GREATER | GREATER_OR_EQ) neq_subexpr)*;
+    auto getNode = [](const TRule_eq_subexpr::TBlock2& b) -> const TRule_neq_subexpr& { return b.GetRule_neq_subexpr2(); };
+    return BinOpList(node.GetRule_neq_subexpr1(), getNode, node.GetBlock2().begin(), node.GetBlock2().end(), tail);
+}
 
-    TNodePtr TSqlExpression::SubExpr(const TRule_or_subexpr& node, const TTrailingQuestions& tail) {
-        // or_subexpr: and_subexpr (AND and_subexpr)*;
-        auto getNode = [](const TRule_or_subexpr::TBlock2& b) -> const TRule_and_subexpr& { return b.GetRule_and_subexpr2(); };
-        return BinOper("And", node.GetRule_and_subexpr1(), getNode, node.GetBlock2().begin(), node.GetBlock2().end(), tail);
+TNodePtr TSqlExpression::SubExpr(const TRule_or_subexpr& node, const TTrailingQuestions& tail) {
+    // or_subexpr: and_subexpr (AND and_subexpr)*;
+    auto getNode = [](const TRule_or_subexpr::TBlock2& b) -> const TRule_and_subexpr& { return b.GetRule_and_subexpr2(); };
+    return BinOper("And", node.GetRule_and_subexpr1(), getNode, node.GetBlock2().begin(), node.GetBlock2().end(), tail);
 }
 
 TNodePtr TSqlExpression::SubExpr(const TRule_and_subexpr& node, const TTrailingQuestions& tail) {
-        // and_subexpr: xor_subexpr (XOR xor_subexpr)*;
-        auto getNode = [](const TRule_and_subexpr::TBlock2& b) -> const TRule_xor_subexpr& { return b.GetRule_xor_subexpr2(); };
-        return BinOper("Xor", node.GetRule_xor_subexpr1(), getNode, node.GetBlock2().begin(), node.GetBlock2().end(), tail);
+    // and_subexpr: xor_subexpr (XOR xor_subexpr)*;
+    auto getNode = [](const TRule_and_subexpr::TBlock2& b) -> const TRule_xor_subexpr& { return b.GetRule_xor_subexpr2(); };
+    return BinOper("Xor", node.GetRule_xor_subexpr1(), getNode, node.GetBlock2().begin(), node.GetBlock2().end(), tail);
 }
-
 
 bool ChangefeedSettingsEntry(const TRule_changefeed_settings_entry& node, TSqlExpression& ctx, TChangefeedSettings& settings, bool alter) {
     const auto id = IdEx(node.GetRule_an_id1(), ctx);
@@ -288,11 +287,10 @@ bool CreateChangefeed(const TRule_changefeed& node, TSqlExpression& ctx, TVector
 }
 
 namespace {
-    bool WithoutAlpha(const std::string_view &literal) {
-        return literal.cend() == std::find_if(literal.cbegin(), literal.cend(), [](char c) { return std::isalpha(c) || (c & '\x80'); });
-    }
+bool WithoutAlpha(const std::string_view& literal) {
+    return literal.cend() == std::find_if(literal.cbegin(), literal.cend(), [](char c) { return std::isalpha(c) || (c & '\x80'); });
 }
-
+} // namespace
 
 bool Expr(TSqlExpression& sqlExpr, TVector<TNodePtr>& exprNodes, const TRule_expr& node) {
     TNodePtr exprNode = sqlExpr.Build(node);
@@ -307,7 +305,7 @@ bool ExprList(TSqlExpression& sqlExpr, TVector<TNodePtr>& exprNodes, const TRule
     if (!Expr(sqlExpr, exprNodes, node.GetRule_expr1())) {
         return false;
     }
-    for (auto b: node.GetBlock2()) {
+    for (auto b : node.GetBlock2()) {
         sqlExpr.Token(b.GetToken1());
         if (!Expr(sqlExpr, exprNodes, b.GetRule_expr2())) {
             return false;
@@ -331,7 +329,7 @@ bool ParseNumbers(TContext& ctx, const TString& strOrig, ui64& value, TString& s
     }
     if (strLen > 1) {
         auto iter = str.cend() - 1;
-        if (*iter == 'l' || *iter == 's' || *iter == 't' || *iter == 's' || *iter == 'i' ||  *iter == 'b' || *iter == 'n') {
+        if (*iter == 'l' || *iter == 's' || *iter == 't' || *iter == 's' || *iter == 'i' || *iter == 'b' || *iter == 'n') {
             --iter;
         }
         if (*iter == 'u' || *iter == 'p') {
@@ -341,11 +339,10 @@ bool ParseNumbers(TContext& ctx, const TString& strOrig, ui64& value, TString& s
     }
     value = 0;
     const TString digString(str.begin() + (base == 10 ? 0 : 2), str.end() - suffix.size());
-    for (const char& cur: digString) {
+    for (const char& cur : digString) {
         const ui64 curDigit = Char2DigitTable[static_cast<int>(cur)];
         if (curDigit >= base) {
-            ctx.Error(ctx.Pos()) << "Failed to parse number from string: " << strOrig << ", char: '" << cur <<
-                "' is out of base: " << base;
+            ctx.Error(ctx.Pos()) << "Failed to parse number from string: " << strOrig << ", char: '" << cur << "' is out of base: " << base;
             return false;
         }
 
@@ -381,7 +378,7 @@ TNodePtr LiteralNumber(TContext& ctx, const TRule_integer& node) {
 
     const bool noSpaceForInt32 = value >> 31;
     const bool noSpaceForInt64 = value >> 63;
-    if (suffix ==  "") {
+    if (suffix == "") {
         bool implicitType = true;
         if (noSpaceForInt64) {
             return new TLiteralNumberNode<ui64>(ctx.Pos(), "Uint64", ToString(value), implicitType);
@@ -429,15 +426,15 @@ TNodePtr LiteralReal(TContext& ctx, const TRule_real& node) {
     YQL_ENSURE(!value.empty());
     auto lower = to_lower(value);
     if (lower.EndsWith("f")) {
-        return new TLiteralNumberNode<float>(ctx.Pos(), "Float", value.substr(0, value.size()-1));
+        return new TLiteralNumberNode<float>(ctx.Pos(), "Float", value.substr(0, value.size() - 1));
     } else if (lower.EndsWith("p")) {
-        return new TLiteralNumberNode<float>(ctx.Pos(), "PgFloat8", value.substr(0, value.size()-1));
+        return new TLiteralNumberNode<float>(ctx.Pos(), "PgFloat8", value.substr(0, value.size() - 1));
     } else if (lower.EndsWith("pf4")) {
-        return new TLiteralNumberNode<float>(ctx.Pos(), "PgFloat4", value.substr(0, value.size()-3));
+        return new TLiteralNumberNode<float>(ctx.Pos(), "PgFloat4", value.substr(0, value.size() - 3));
     } else if (lower.EndsWith("pf8")) {
-        return new TLiteralNumberNode<float>(ctx.Pos(), "PgFloat8", value.substr(0, value.size()-3));
+        return new TLiteralNumberNode<float>(ctx.Pos(), "PgFloat8", value.substr(0, value.size() - 3));
     } else if (lower.EndsWith("pn")) {
-        return new TLiteralNode(ctx.Pos(), "PgNumeric", value.substr(0, value.size()-2));
+        return new TLiteralNode(ctx.Pos(), "PgNumeric", value.substr(0, value.size() - 2));
     } else {
         return new TLiteralNumberNode<double>(ctx.Pos(), "Double", value);
     }
@@ -501,7 +498,7 @@ TMaybe<TExprOrIdent> TSqlExpression::LiteralExpr(const TRule_literal_value& node
     return result;
 }
 
-template<typename TUnarySubExprType>
+template <typename TUnarySubExprType>
 TNodePtr TSqlExpression::UnaryExpr(const TUnarySubExprType& node, const TTrailingQuestions& tail) {
     if constexpr (std::is_same_v<TUnarySubExprType, TRule_unary_subexpr>) {
         if (node.Alt_case() == TRule_unary_subexpr::kAltUnarySubexpr1) {
@@ -553,9 +550,7 @@ TNodePtr TSqlExpression::JsonInputArg(const TRule_json_common_args& node) {
     */
     TNodePtr jsonExpr = Build(node.GetRule_expr1());
     if (!jsonExpr || jsonExpr->IsNull()) {
-        jsonExpr = new TCallNodeImpl(Ctx_.Pos(), "Nothing", {
-            new TCallNodeImpl(Ctx_.Pos(), "OptionalType", {BuildDataType(Ctx_.Pos(), "Json")})
-        });
+        jsonExpr = new TCallNodeImpl(Ctx_.Pos(), "Nothing", {new TCallNodeImpl(Ctx_.Pos(), "OptionalType", {BuildDataType(Ctx_.Pos(), "Json")})});
     }
 
     return jsonExpr;
@@ -602,7 +597,7 @@ void TSqlExpression::AddJsonVariables(const TRule_json_variables& node, TVector<
     */
     AddJsonVariable(node.GetRule_json_variable1(), children);
     for (size_t i = 0; i < node.Block2Size(); i++) {
-            AddJsonVariable(node.GetBlock2(i).GetRule_json_variable2(), children);
+        AddJsonVariable(node.GetBlock2(i).GetRule_json_variable2(), children);
     }
 }
 
@@ -763,9 +758,7 @@ void TSqlExpression::AddJsonExistsHandler(const TRule_json_exists& node, TVector
     const auto pos = GetPos(token);
     const auto mode = to_lower(token.GetValue());
     if (mode == "unknown") {
-        const auto nothingNode = new TCallNodeImpl(pos, "Nothing", {
-            new TCallNodeImpl(pos, "OptionalType", {BuildDataType(pos, "Bool")})
-        });
+        const auto nothingNode = new TCallNodeImpl(pos, "Nothing", {new TCallNodeImpl(pos, "OptionalType", {BuildDataType(pos, "Bool")})});
         children.push_back(nothingNode);
     } else if (mode != "error") {
         children.push_back(buildJustBool(pos, FromString<bool>(mode)));
@@ -920,8 +913,8 @@ TNodePtr TSqlExpression::RowPatternVarAccess(TString var, const TRule_unary_sube
         case TRule_unary_subexpr_suffix_TBlock1_TBlock1_TAlt3_TBlock2::kAlt3:
             switch (block.GetAlt3().GetRule_an_id_or_type1().GetAltCase()) {
                 case TRule_an_id_or_type::kAltAnIdOrType1: {
-                    const auto &idOrType = block.GetAlt3().GetRule_an_id_or_type1().GetAlt_an_id_or_type1().GetRule_id_or_type1();
-                    switch(idOrType.GetAltCase()) {
+                    const auto& idOrType = block.GetAlt3().GetRule_an_id_or_type1().GetAlt_an_id_or_type1().GetRule_id_or_type1();
+                    switch (idOrType.GetAltCase()) {
                         case TRule_id_or_type::kAltIdOrType1: {
                             const auto column = Id(idOrType.GetAlt_id_or_type1().GetRule_id1(), *this);
                             return BuildMatchRecognizeColumnAccess(Ctx_.Pos(), std::move(var), std::move(column));
@@ -945,7 +938,7 @@ TNodePtr TSqlExpression::RowPatternVarAccess(TString var, const TRule_unary_sube
     return {};
 }
 
-template<typename TUnaryCasualExprRule>
+template <typename TUnaryCasualExprRule>
 TNodePtr TSqlExpression::UnaryCasualExpr(const TUnaryCasualExprRule& node, const TTrailingQuestions& tail) {
     // unary_casual_subexpr: (id_expr | atom_expr) unary_subexpr_suffix;
     // OR
@@ -1005,39 +998,37 @@ TNodePtr TSqlExpression::UnaryCasualExpr(const TUnaryCasualExprRule& node, const
     for (auto& _b : suffix.GetBlock1()) {
         auto& b = _b.GetBlock1();
         switch (b.Alt_case()) {
-        case TRule_unary_subexpr_suffix::TBlock1::TBlock1::kAlt1: {
-            // key_expr
-            // onlyDots = false;
-            break;
-        }
-        case TRule_unary_subexpr_suffix::TBlock1::TBlock1::kAlt2: {
-            // invoke_expr - cannot be a column, function name
-            if (isFirstElem) {
-                isColumnRef = false;
+            case TRule_unary_subexpr_suffix::TBlock1::TBlock1::kAlt1: {
+                // key_expr
+                // onlyDots = false;
+                break;
             }
-
-            // onlyDots = false;
-            break;
-        }
-        case TRule_unary_subexpr_suffix::TBlock1::TBlock1::kAlt3: {
-            // In case of MATCH_RECOGNIZE lambdas
-            // X.Y is treated as Var.Column access
-            if (isColumnRef && (
-                EColumnRefState::MatchRecognizeMeasures == Ctx_.GetColumnReferenceState() ||
-                EColumnRefState::MatchRecognizeDefine == Ctx_.GetColumnReferenceState() ||
-                EColumnRefState::MatchRecognizeDefineAggregate == Ctx_.GetColumnReferenceState()
-            )) {
-                if (suffix.GetBlock1().size() != 1) {
-                    Ctx_.Error() << "Expected Var.Column, but got chain of " << suffix.GetBlock1().size() << " column accesses";
-                    return nullptr;
+            case TRule_unary_subexpr_suffix::TBlock1::TBlock1::kAlt2: {
+                // invoke_expr - cannot be a column, function name
+                if (isFirstElem) {
+                    isColumnRef = false;
                 }
-                return RowPatternVarAccess(std::move(name), b.GetAlt3().GetBlock2());
+
+                // onlyDots = false;
+                break;
             }
-            break;
-        }
-        case TRule_unary_subexpr_suffix::TBlock1::TBlock1::ALT_NOT_SET:
-            AltNotImplemented("unary_subexpr_suffix", b);
-            return nullptr;
+            case TRule_unary_subexpr_suffix::TBlock1::TBlock1::kAlt3: {
+                // In case of MATCH_RECOGNIZE lambdas
+                // X.Y is treated as Var.Column access
+                if (isColumnRef && (EColumnRefState::MatchRecognizeMeasures == Ctx_.GetColumnReferenceState() ||
+                                    EColumnRefState::MatchRecognizeDefine == Ctx_.GetColumnReferenceState() ||
+                                    EColumnRefState::MatchRecognizeDefineAggregate == Ctx_.GetColumnReferenceState())) {
+                    if (suffix.GetBlock1().size() != 1) {
+                        Ctx_.Error() << "Expected Var.Column, but got chain of " << suffix.GetBlock1().size() << " column accesses";
+                        return nullptr;
+                    }
+                    return RowPatternVarAccess(std::move(name), b.GetAlt3().GetBlock2());
+                }
+                break;
+            }
+            case TRule_unary_subexpr_suffix::TBlock1::TBlock1::ALT_NOT_SET:
+                AltNotImplemented("unary_subexpr_suffix", b);
+                return nullptr;
         }
 
         isFirstElem = false;
@@ -1085,96 +1076,96 @@ TNodePtr TSqlExpression::UnaryCasualExpr(const TUnaryCasualExprRule& node, const
     for (auto& _b : suffix.GetBlock1()) {
         auto& b = _b.GetBlock1();
         switch (b.Alt_case()) {
-        case TRule_unary_subexpr_suffix::TBlock1::TBlock1::kAlt1: {
-            // key_expr
-            auto keyExpr = KeyExpr(b.GetAlt1().GetRule_key_expr1());
-            if (!keyExpr) {
-                Ctx_.IncrementMonCounter("sql_errors", "BadKeyExpr");
-                return nullptr;
-            }
+            case TRule_unary_subexpr_suffix::TBlock1::TBlock1::kAlt1: {
+                // key_expr
+                auto keyExpr = KeyExpr(b.GetAlt1().GetRule_key_expr1());
+                if (!keyExpr) {
+                    Ctx_.IncrementMonCounter("sql_errors", "BadKeyExpr");
+                    return nullptr;
+                }
 
-            if (!lastExpr) {
-                lastExpr = BuildAccess(pos, ids, false);
-                ids.clear();
-            }
+                if (!lastExpr) {
+                    lastExpr = BuildAccess(pos, ids, false);
+                    ids.clear();
+                }
 
-            ids.push_back(lastExpr);
-            ids.push_back(keyExpr);
-            lastExpr = BuildAccess(pos, ids, true);
-            ids.clear();
-            break;
-        }
-        case TRule_unary_subexpr_suffix::TBlock1::TBlock1::kAlt2: {
-            // invoke_expr - cannot be a column, function name
-            TSqlCallExpr call(Ctx_, Mode_);
-            if (isFirstElem && !name.empty()) {
-                call.AllowDistinct();
-                call.InitName(name);
-            } else {
-                call.InitExpr(lastExpr);
-            }
-
-            bool initRet = call.Init(b.GetAlt2().GetRule_invoke_expr1());
-            if (initRet) {
-                call.IncCounters();
-            }
-
-            if (!initRet) {
-                return nullptr;
-            }
-
-            lastExpr = call.BuildCall();
-            if (!lastExpr) {
-                return nullptr;
-            }
-
-            break;
-        }
-        case TRule_unary_subexpr_suffix::TBlock1::TBlock1::kAlt3: {
-            // dot
-            if (lastExpr) {
                 ids.push_back(lastExpr);
-            }
-
-            auto bb = b.GetAlt3().GetBlock2();
-            switch (bb.Alt_case()) {
-                case TRule_unary_subexpr_suffix_TBlock1_TBlock1_TAlt3_TBlock2::kAlt1: {
-                    TString named;
-                    if (!NamedNodeImpl(bb.GetAlt1().GetRule_bind_parameter1(), named, *this)) {
-                        return nullptr;
-                    }
-                    auto namedNode = GetNamedNode(named);
-                    if (!namedNode) {
-                        return nullptr;
-                    }
-
-                    ids.push_back(named);
-                    ids.back().Expr = namedNode;
-                    break;
-                }
-                case TRule_unary_subexpr_suffix_TBlock1_TBlock1_TAlt3_TBlock2::kAlt2: {
-                    const TString str(Token(bb.GetAlt2().GetToken1()));
-                    ids.push_back(str);
-                    break;
-                }
-                case TRule_unary_subexpr_suffix_TBlock1_TBlock1_TAlt3_TBlock2::kAlt3: {
-                    ids.push_back(Id(bb.GetAlt3().GetRule_an_id_or_type1(), *this));
-                    break;
-                }
-                case TRule_unary_subexpr_suffix_TBlock1_TBlock1_TAlt3_TBlock2::ALT_NOT_SET:
-                    Y_ABORT("You should change implementation according to grammar changes");
-            }
-
-            if (lastExpr) {
-                lastExpr = BuildAccess(pos, ids, false);
+                ids.push_back(keyExpr);
+                lastExpr = BuildAccess(pos, ids, true);
                 ids.clear();
+                break;
             }
+            case TRule_unary_subexpr_suffix::TBlock1::TBlock1::kAlt2: {
+                // invoke_expr - cannot be a column, function name
+                TSqlCallExpr call(Ctx_, Mode_);
+                if (isFirstElem && !name.empty()) {
+                    call.AllowDistinct();
+                    call.InitName(name);
+                } else {
+                    call.InitExpr(lastExpr);
+                }
 
-            break;
-        }
-        case TRule_unary_subexpr_suffix::TBlock1::TBlock1::ALT_NOT_SET:
-            AltNotImplemented("unary_subexpr_suffix", b);
-            return nullptr;
+                bool initRet = call.Init(b.GetAlt2().GetRule_invoke_expr1());
+                if (initRet) {
+                    call.IncCounters();
+                }
+
+                if (!initRet) {
+                    return nullptr;
+                }
+
+                lastExpr = call.BuildCall();
+                if (!lastExpr) {
+                    return nullptr;
+                }
+
+                break;
+            }
+            case TRule_unary_subexpr_suffix::TBlock1::TBlock1::kAlt3: {
+                // dot
+                if (lastExpr) {
+                    ids.push_back(lastExpr);
+                }
+
+                auto bb = b.GetAlt3().GetBlock2();
+                switch (bb.Alt_case()) {
+                    case TRule_unary_subexpr_suffix_TBlock1_TBlock1_TAlt3_TBlock2::kAlt1: {
+                        TString named;
+                        if (!NamedNodeImpl(bb.GetAlt1().GetRule_bind_parameter1(), named, *this)) {
+                            return nullptr;
+                        }
+                        auto namedNode = GetNamedNode(named);
+                        if (!namedNode) {
+                            return nullptr;
+                        }
+
+                        ids.push_back(named);
+                        ids.back().Expr = namedNode;
+                        break;
+                    }
+                    case TRule_unary_subexpr_suffix_TBlock1_TBlock1_TAlt3_TBlock2::kAlt2: {
+                        const TString str(Token(bb.GetAlt2().GetToken1()));
+                        ids.push_back(str);
+                        break;
+                    }
+                    case TRule_unary_subexpr_suffix_TBlock1_TBlock1_TAlt3_TBlock2::kAlt3: {
+                        ids.push_back(Id(bb.GetAlt3().GetRule_an_id_or_type1(), *this));
+                        break;
+                    }
+                    case TRule_unary_subexpr_suffix_TBlock1_TBlock1_TAlt3_TBlock2::ALT_NOT_SET:
+                        Y_ABORT("You should change implementation according to grammar changes");
+                }
+
+                if (lastExpr) {
+                    lastExpr = BuildAccess(pos, ids, false);
+                    ids.clear();
+                }
+
+                break;
+            }
+            case TRule_unary_subexpr_suffix::TBlock1::TBlock1::ALT_NOT_SET:
+                AltNotImplemented("unary_subexpr_suffix", b);
+                return nullptr;
         }
 
         isFirstElem = false;
@@ -1248,7 +1239,7 @@ TNodePtr TSqlExpression::LambdaRule(const TRule_lambda& rule) {
     Token(bodyBlock.GetToken1());
     TPosition pos(Ctx_.Pos());
     TVector<TNodePtr> exprSeq;
-    for (auto& arg: args) {
+    for (auto& arg : args) {
         arg.Name = PushNamedAtom(arg.Pos, arg.Name);
     }
     bool ret = false;
@@ -1273,10 +1264,8 @@ TNodePtr TSqlExpression::LambdaRule(const TRule_lambda& rule) {
 
     auto lambdaNode = BuildSqlLambda(pos, std::move(argNames), std::move(exprSeq));
     if (optionalArgumentsCount > 0) {
-        lambdaNode = new TCallNodeImpl(pos, "WithOptionalArgs", {
-            lambdaNode,
-            BuildQuotedAtom(pos, ToString(optionalArgumentsCount), TNodeFlags::Default)
-            });
+        lambdaNode = new TCallNodeImpl(pos, "WithOptionalArgs", {lambdaNode,
+                                                                 BuildQuotedAtom(pos, ToString(optionalArgumentsCount), TNodeFlags::Default)});
     }
 
     return lambdaNode;
@@ -1395,7 +1384,7 @@ TNodePtr TSqlExpression::CaseRule(const TRule_case_expr& rule) {
         }
     }
     auto final = ReduceCaseBranches(branches.begin(), branches.end());
-    return BuildBuiltinFunc(Ctx_, Ctx_.Pos(), "If", { final.Pred, final.Value, elseExpr });
+    return BuildBuiltinFunc(Ctx_, Ctx_.Pos(), "If", {final.Pred, final.Value, elseExpr});
 }
 
 TMaybe<TExprOrIdent> TSqlExpression::AtomExpr(const TRule_atom_expr& node, const TTrailingQuestions& tail) {
@@ -1530,21 +1519,21 @@ TMaybe<TExprOrIdent> TSqlExpression::InAtomExpr(const TRule_in_atom_expr& node, 
             TPosition pos(Ctx_.Pos());
             TString name;
             switch (alt.GetBlock3().Alt_case()) {
-            case TRule_in_atom_expr::TAlt6::TBlock3::kAlt1:
-                name = Id(alt.GetBlock3().GetAlt1().GetRule_id_or_type1(), *this);
-                break;
-            case TRule_in_atom_expr::TAlt6::TBlock3::kAlt2: {
-                name = Token(alt.GetBlock3().GetAlt2().GetToken1());
-                if (Ctx_.AnsiQuotedIdentifiers && name.StartsWith('"')) {
-                    // same as previous case
-                    name = IdContentFromString(Ctx_, name);
-                } else {
-                    module = "@" + module;
+                case TRule_in_atom_expr::TAlt6::TBlock3::kAlt1:
+                    name = Id(alt.GetBlock3().GetAlt1().GetRule_id_or_type1(), *this);
+                    break;
+                case TRule_in_atom_expr::TAlt6::TBlock3::kAlt2: {
+                    name = Token(alt.GetBlock3().GetAlt2().GetToken1());
+                    if (Ctx_.AnsiQuotedIdentifiers && name.StartsWith('"')) {
+                        // same as previous case
+                        name = IdContentFromString(Ctx_, name);
+                    } else {
+                        module = "@" + module;
+                    }
+                    break;
                 }
-                break;
-            }
-            case TRule_in_atom_expr::TAlt6::TBlock3::ALT_NOT_SET:
-                Y_ABORT("You should change implementation according to grammar changes");
+                case TRule_in_atom_expr::TAlt6::TBlock3::ALT_NOT_SET:
+                    Y_ABORT("You should change implementation according to grammar changes");
             }
             result.Expr = BuildCallable(pos, module, name, {});
             break;
@@ -1578,13 +1567,14 @@ bool TSqlExpression::SqlLambdaParams(const TNodePtr& node, TVector<TSymbolNameWi
     args.clear();
     optionalArgumentsCount = 0;
     auto errMsg = TStringBuf("Invalid lambda arguments syntax. Lambda arguments should start with '$' as named value.");
-    auto tupleNodePtr = node->GetTupleNode();;
+    auto tupleNodePtr = node->GetTupleNode();
+
     if (!tupleNodePtr) {
         Ctx_.Error(node->GetPos()) << errMsg;
         return false;
     }
     THashSet<TString> dupArgsChecker;
-    for (const auto& argPtr: tupleNodePtr->Elements()) {
+    for (const auto& argPtr : tupleNodePtr->Elements()) {
         auto contentPtr = argPtr->GetAtomContent();
         if (!contentPtr || !contentPtr->StartsWith("$")) {
             Ctx_.Error(argPtr->GetPos()) << errMsg;
@@ -1620,7 +1610,7 @@ bool TSqlExpression::SqlLambdaExprBody(TContext& ctx, const TRule_lambda_body& n
     TSqlExpression expr(ctx, ctx.Settings.Mode);
     TVector<TString> localNames;
     bool hasError = false;
-    for (auto& block: node.GetBlock2()) {
+    for (auto& block : node.GetBlock2()) {
         const auto& rule = block.GetRule_lambda_stmt1();
         switch (rule.Alt_case()) {
             case TRule_lambda_stmt::kAltLambdaStmt1: {
@@ -1743,7 +1733,7 @@ TNodePtr TSqlExpression::SubExpr(const TRule_xor_subexpr& node, const TTrailingQ
                     const TString* escapeLiteral = nullptr;
                     TNodePtr escapeNode;
                     const auto& escaper = BuildUdf(Ctx_, pos, "Re2", "PatternFromLike", {});
-                    TVector<TNodePtr> escaperArgs({ escaper, pattern });
+                    TVector<TNodePtr> escaperArgs({escaper, pattern});
 
                     if (matchOp.HasBlock4()) {
                         const auto& escapeBlock = matchOp.GetBlock4();
@@ -1786,15 +1776,15 @@ TNodePtr TSqlExpression::SubExpr(const TRule_xor_subexpr& node, const TTrailingQ
                     }
                     auto csModeLiteral = BuildLiteralBool(pos, opName != "ilike");
                     csModeLiteral->SetLabel("CaseSensitive");
-                    auto csOption = BuildStructure(pos, { csModeLiteral });
-                    auto optionsApply = new TCallNodeImpl(pos, "NamedApply", { re2options, BuildTuple(pos, {}), csOption });
+                    auto csOption = BuildStructure(pos, {csModeLiteral});
+                    auto optionsApply = new TCallNodeImpl(pos, "NamedApply", {re2options, BuildTuple(pos, {}), csOption});
 
-                    const TNodePtr escapedPattern = new TCallNodeImpl(pos, "Apply", { escaperArgs });
-                    auto list = new TAstListNodeImpl(pos, { escapedPattern, optionsApply });
-                    auto runConfig = new TAstListNodeImpl(pos, { new TAstAtomNodeImpl(pos, "quote", 0), list });
+                    const TNodePtr escapedPattern = new TCallNodeImpl(pos, "Apply", {escaperArgs});
+                    auto list = new TAstListNodeImpl(pos, {escapedPattern, optionsApply});
+                    auto runConfig = new TAstListNodeImpl(pos, {new TAstAtomNodeImpl(pos, "quote", 0), list});
 
-                    const TNodePtr matcher = new TCallNodeImpl(pos, "AssumeStrict", { BuildUdf(Ctx_, pos, "Re2", "Match", { runConfig }) });
-                    isMatch = new TCallNodeImpl(pos, "Apply", { matcher, res });
+                    const TNodePtr matcher = new TCallNodeImpl(pos, "AssumeStrict", {BuildUdf(Ctx_, pos, "Re2", "Match", {runConfig})});
+                    isMatch = new TCallNodeImpl(pos, "Apply", {matcher, res});
 
                     bool isUtf8 = false;
                     const TString* literalPattern = pattern->GetLiteral("String");
@@ -1861,8 +1851,7 @@ TNodePtr TSqlExpression::SubExpr(const TRule_xor_subexpr& node, const TTrailingQ
                                             pos,
                                             "And",
                                             prefixMatch,
-                                            BuildBinaryOp(Ctx_, pos, "<", res, BuildLiteralRawString(pos, TString(*upperBound), isUtf8))
-                                        );
+                                            BuildBinaryOp(Ctx_, pos, "<", res, BuildLiteralRawString(pos, TString(*upperBound), isUtf8)));
                                     }
                                 }
 
@@ -1874,14 +1863,12 @@ TNodePtr TSqlExpression::SubExpr(const TRule_xor_subexpr& node, const TTrailingQ
                                     } else {
                                         // len(str) >= len(prefix) + len(suffix) && StartsWith(str, prefix) && EndsWith(str, suffix)
                                         TNodePtr sizePred = BuildBinaryOp(Ctx_, pos, ">=",
-                                            TNodePtr(new TCallNodeImpl(pos, "Size", { res })),
-                                            TNodePtr(new TLiteralNumberNode<ui32>(pos, "Uint32", ToString(prefix.size() + suffix.size()))));
+                                                                          TNodePtr(new TCallNodeImpl(pos, "Size", {res})),
+                                                                          TNodePtr(new TLiteralNumberNode<ui32>(pos, "Uint32", ToString(prefix.size() + suffix.size()))));
                                         TNodePtr suffixMatch = BuildBinaryOp(Ctx_, pos, endsWithOp, res, BuildLiteralRawString(pos, suffix, isUtf8));
-                                        isMatch = new TCallNodeImpl(pos, "And", {
-                                            sizePred,
-                                            prefixMatch,
-                                            suffixMatch
-                                        });
+                                        isMatch = new TCallNodeImpl(pos, "And", {sizePred,
+                                                                                 prefixMatch,
+                                                                                 suffixMatch});
                                     }
                                 } else {
                                     isMatch = BuildBinaryOp(Ctx_, pos, "And", prefixMatch, isMatch);
@@ -1918,17 +1905,15 @@ TNodePtr TSqlExpression::SubExpr(const TRule_xor_subexpr& node, const TTrailingQ
 
                     if (!Ctx_.PragmaRegexUseRe2) {
                         if (!Ctx_.Warning(pos, TIssuesIds::CORE_LEGACY_REGEX_ENGINE, [](auto& out) {
-                            out << "Legacy regex engine works incorrectly with unicode. "
-                                << "Use PRAGMA RegexUseRe2='true';";
-                        })) {
+                                out << "Legacy regex engine works incorrectly with unicode. "
+                                    << "Use PRAGMA RegexUseRe2='true';";
+                            })) {
                             return nullptr;
                         }
                     }
 
-                    const auto& matcher = Ctx_.PragmaRegexUseRe2 ?
-                        BuildUdf(Ctx_, pos, "Re2", opName == "match" ? "Match" : "Grep", {BuildTuple(pos, {pattern, BuildLiteralNull(pos)})}):
-                        BuildUdf(Ctx_, pos, "Pcre", opName == "match" ? "BacktrackingMatch" : "BacktrackingGrep", { pattern });
-                    isMatch = new TCallNodeImpl(pos, "Apply", { matcher, res });
+                    const auto& matcher = Ctx_.PragmaRegexUseRe2 ? BuildUdf(Ctx_, pos, "Re2", opName == "match" ? "Match" : "Grep", {BuildTuple(pos, {pattern, BuildLiteralNull(pos)})}) : BuildUdf(Ctx_, pos, "Pcre", opName == "match" ? "BacktrackingMatch" : "BacktrackingGrep", {pattern});
+                    isMatch = new TCallNodeImpl(pos, "Apply", {matcher, res});
                     if (opName != "match") {
                         Ctx_.IncrementMonCounter("sql_features", notMatch ? "NotRegexp" : "Regexp");
                     } else {
@@ -1942,7 +1927,7 @@ TNodePtr TSqlExpression::SubExpr(const TRule_xor_subexpr& node, const TTrailingQ
                 return (notMatch && isMatch) ? isMatch->ApplyUnaryOp(Ctx_, pos, "Not") : isMatch;
             }
             case TRule_cond_expr::kAltCondExpr2: {
-                //   | NOT? IN COMPACT? in_expr
+                // | NOT? IN COMPACT? in_expr
                 auto altInExpr = cond.GetAlt_cond_expr2();
                 const bool notIn = altInExpr.HasBlock1();
                 auto hints = BuildTuple(pos, {});
@@ -1953,8 +1938,8 @@ TNodePtr TSqlExpression::SubExpr(const TRule_xor_subexpr& node, const TTrailingQ
                 }
                 if (isCompact) {
                     Ctx_.IncrementMonCounter("sql_features", "IsCompactHint");
-                    auto sizeHint = BuildTuple(pos, { BuildQuotedAtom(pos, "isCompact", NYql::TNodeFlags::Default) });
-                    hints = BuildTuple(pos, { sizeHint });
+                    auto sizeHint = BuildTuple(pos, {BuildQuotedAtom(pos, "isCompact", NYql::TNodeFlags::Default)});
+                    hints = BuildTuple(pos, {sizeHint});
                 }
                 TSqlExpression inSubexpr(Ctx_, Mode_);
                 auto inRight = inSubexpr.SqlInExpr(altInExpr.GetRule_in_expr4(), tail);
@@ -1970,15 +1955,14 @@ TNodePtr TSqlExpression::SubExpr(const TRule_xor_subexpr& node, const TTrailingQ
                 auto altCase = cond.GetAlt_cond_expr3().GetBlock1().Alt_case();
                 const bool notNoll =
                     altCase == TRule_cond_expr::TAlt3::TBlock1::kAlt2 ||
-                    altCase == TRule_cond_expr::TAlt3::TBlock1::kAlt4
-                ;
+                    altCase == TRule_cond_expr::TAlt3::TBlock1::kAlt4;
 
                 if (altCase == TRule_cond_expr::TAlt3::TBlock1::kAlt4 &&
                     !cond.GetAlt_cond_expr3().GetBlock1().GetAlt4().HasBlock1())
                 {
                     if (!Ctx_.Warning(Ctx_.Pos(), TIssuesIds::YQL_MISSING_IS_BEFORE_NOT_NULL, [](auto& out) {
-                        out << "Missing IS keyword before NOT NULL";
-                    }, Ctx_.DisableLegacyNotNull)) {
+                            out << "Missing IS keyword before NOT NULL";
+                        }, Ctx_.DisableLegacyNotNull)) {
                         return {};
                     }
                 }
@@ -1998,12 +1982,12 @@ TNodePtr TSqlExpression::SubExpr(const TRule_xor_subexpr& node, const TTrailingQ
                 }
 
                 const bool bothArgNull = left->IsNull() && right->IsNull();
-                const bool oneArgNull  = left->IsNull() || right->IsNull();
+                const bool oneArgNull = left->IsNull() || right->IsNull();
 
                 if (res->IsNull() || bothArgNull || (symmetric && oneArgNull)) {
                     if (!Ctx_.Warning(pos, TIssuesIds::YQL_OPERATION_WILL_RETURN_NULL, [](auto& out) {
-                        out << "BETWEEN operation will return NULL here";
-                    })) {
+                            out << "BETWEEN operation will return NULL here";
+                        })) {
                         return {};
                     }
                 }
@@ -2014,28 +1998,25 @@ TNodePtr TSqlExpression::SubExpr(const TRule_xor_subexpr& node, const TTrailingQ
                             pos,
                             "Or",
                             BuildBinaryOpRaw(pos, "<", res, left),
-                            BuildBinaryOpRaw(pos, ">", res, right)
-                        );
+                            BuildBinaryOpRaw(pos, ">", res, right));
                     } else {
                         return BuildBinaryOpRaw(
                             pos,
                             "And",
                             BuildBinaryOpRaw(pos, ">=", res, left),
-                            BuildBinaryOpRaw(pos, "<=", res, right)
-                        );
+                            BuildBinaryOpRaw(pos, "<=", res, right));
                     }
                 };
 
                 if (symmetric) {
-                    Ctx_.IncrementMonCounter("sql_features", negation? "NotBetweenSymmetric" : "BetweenSymmetric");
+                    Ctx_.IncrementMonCounter("sql_features", negation ? "NotBetweenSymmetric" : "BetweenSymmetric");
                     return BuildBinaryOpRaw(
                         pos,
-                        negation? "And" : "Or",
+                        negation ? "And" : "Or",
                         buildSubexpr(left, right),
-                        buildSubexpr(right, left)
-                    );
+                        buildSubexpr(right, left));
                 } else {
-                    Ctx_.IncrementMonCounter("sql_features", negation? "NotBetween" : "Between");
+                    Ctx_.IncrementMonCounter("sql_features", negation ? "NotBetween" : "Between");
                     return buildSubexpr(left, right);
                 }
             }
@@ -2058,9 +2039,10 @@ TNodePtr TSqlExpression::BinOperList(const TString& opName, TVector<TNodePtr>::c
     const size_t opCount = end - begin;
     Y_DEBUG_ABORT_UNLESS(opCount >= 2);
     if (opCount == 2) {
-        return BuildBinaryOp(Ctx_, pos, opName, *begin, *(begin+1));
-    } if (opCount == 3) {
-        return BuildBinaryOp(Ctx_, pos, opName, BuildBinaryOp(Ctx_, pos, opName, *begin, *(begin+1)), *(begin+2));
+        return BuildBinaryOp(Ctx_, pos, opName, *begin, *(begin + 1));
+    }
+    if (opCount == 3) {
+        return BuildBinaryOp(Ctx_, pos, opName, BuildBinaryOp(Ctx_, pos, opName, *begin, *(begin + 1)), *(begin + 2));
     } else {
         auto mid = begin + opCount / 2;
         return BuildBinaryOp(Ctx_, pos, opName, BinOperList(opName, begin, mid), BinOperList(opName, mid, end));
@@ -2086,7 +2068,7 @@ TSqlExpression::TCaseBranch TSqlExpression::ReduceCaseBranches(TVector<TCaseBran
 
     TCaseBranch result;
     result.Pred = new TCallNodeImpl(Ctx_.Pos(), "Or", CloneContainer(preds));
-    result.Value = BuildBuiltinFunc(Ctx_, Ctx_.Pos(), "If", { left.Pred, left.Value, right.Value });
+    result.Value = BuildBuiltinFunc(Ctx_, Ctx_.Pos(), "If", {left.Pred, left.Value, right.Value});
     return result;
 }
 
@@ -2387,15 +2369,15 @@ TNodePtr TSqlExpression::SelectSubExpr(const TRule_select_subexpr& node) {
 
 TNodePtr TSqlExpression::SelectOrExpr(const TRule_select_or_expr& node) {
     switch (node.Alt_case()) {
-    case NSQLv1Generated::TRule_select_or_expr::kAltSelectOrExpr1: {
-        const auto& select_kind = node.GetAlt_select_or_expr1().GetRule_select_kind_partial1();
-        TSourcePtr source = TSqlSelect(Ctx_, Mode_).BuildSubSelect(select_kind);
-        return LangVersionedSubSelect(std::move(source));
-    }
-    case NSQLv1Generated::TRule_select_or_expr::kAltSelectOrExpr2:
-        return TupleOrExpr(node.GetAlt_select_or_expr2().GetRule_tuple_or_expr1());
-    case NSQLv1Generated::TRule_select_or_expr::ALT_NOT_SET:
-        Y_ABORT("You should change implementation according to grammar changes");
+        case NSQLv1Generated::TRule_select_or_expr::kAltSelectOrExpr1: {
+            const auto& select_kind = node.GetAlt_select_or_expr1().GetRule_select_kind_partial1();
+            TSourcePtr source = TSqlSelect(Ctx_, Mode_).BuildSubSelect(select_kind);
+            return LangVersionedSubSelect(std::move(source));
+        }
+        case NSQLv1Generated::TRule_select_or_expr::kAltSelectOrExpr2:
+            return TupleOrExpr(node.GetAlt_select_or_expr2().GetRule_tuple_or_expr1());
+        case NSQLv1Generated::TRule_select_or_expr::ALT_NOT_SET:
+            Y_ABORT("You should change implementation according to grammar changes");
     }
 }
 
@@ -2436,7 +2418,7 @@ TNodePtr TSqlExpression::TupleOrExpr(const TRule_tuple_or_expr& node) {
 
     bool hasAliases = false;
     bool hasUnnamed = false;
-    for (const auto& expr: exprs) {
+    for (const auto& expr : exprs) {
         if (expr->GetLabel()) {
             hasAliases = true;
         } else {
@@ -2473,12 +2455,12 @@ TNodePtr TSqlExpression::EmptyTuple() {
 TNodePtr TSqlExpression::SmartParenthesis(const TRule_smart_parenthesis& node) {
     Token(node.GetToken1());
     switch (node.GetBlock2().GetAltCase()) {
-    case NSQLv1Generated::TRule_smart_parenthesis_TBlock2::kAlt1:
-        return SelectSubExpr(node.GetBlock2().GetAlt1().GetRule_select_subexpr1());
-    case NSQLv1Generated::TRule_smart_parenthesis_TBlock2::kAlt2:
-        return EmptyTuple();
-    case NSQLv1Generated::TRule_smart_parenthesis_TBlock2::ALT_NOT_SET:
-        Y_ABORT("You should change implementation according to grammar changes");
+        case NSQLv1Generated::TRule_smart_parenthesis_TBlock2::kAlt1:
+            return SelectSubExpr(node.GetBlock2().GetAlt1().GetRule_select_subexpr1());
+        case NSQLv1Generated::TRule_smart_parenthesis_TBlock2::kAlt2:
+            return EmptyTuple();
+        case NSQLv1Generated::TRule_smart_parenthesis_TBlock2::ALT_NOT_SET:
+            Y_ABORT("You should change implementation according to grammar changes");
     }
 }
 

@@ -14,84 +14,84 @@
 namespace NPython {
 
 static PyMethodDef ModuleMethods[] = {
-    { nullptr, nullptr, 0, nullptr }      /* sentinel */
+    {nullptr, nullptr, 0, nullptr} /* sentinel */
 };
 
 #define MODULE_NAME "yql"
 
 #if PY_MAJOR_VERSION >= 3
-#define MODULE_NAME_TYPING "yql.typing"
+    #define MODULE_NAME_TYPING "yql.typing"
 #endif
 
 #define MODULE_INITIALIZED_ATTRIBUTE "_initialized"
 
 PyDoc_STRVAR(ModuleDoc,
-    "This module provides YQL specific types for Python.");
+             "This module provides YQL specific types for Python.");
 
 #if PY_MAJOR_VERSION >= 3
 PyDoc_STRVAR(ModuleDocTyping,
-    "This module provides annotations for YQL types for Python.");
+             "This module provides annotations for YQL types for Python.");
 #endif
 
 PyDoc_STRVAR(StopIterationException_doc,
-    "Can be throwed to yield stream iteration.");
+             "Can be throwed to yield stream iteration.");
 
-#define PREPARE_TYPE(Name, Type) \
-    do { \
-        if (PyType_Ready(Type) < 0) { \
+#define PREPARE_TYPE(Name, Type)                                    \
+    do {                                                            \
+        if (PyType_Ready(Type) < 0) {                               \
             throw yexception() << "Can't prepare type: " << (Name); \
-        } \
+        }                                                           \
     } while (0)
 
-#define REGISTER_TYPE(Name, Type) \
-    do { \
-        PREPARE_TYPE(Name, Type); \
-        Py_INCREF(Type); \
-        if (PyModule_AddObject(module, (Name), (PyObject*) Type) < 0) { \
-            throw yexception() << "Can't add type: " << (Name); \
-        } \
+#define REGISTER_TYPE(Name, Type)                                      \
+    do {                                                               \
+        PREPARE_TYPE(Name, Type);                                      \
+        Py_INCREF(Type);                                               \
+        if (PyModule_AddObject(module, (Name), (PyObject*)Type) < 0) { \
+            throw yexception() << "Can't add type: " << (Name);        \
+        }                                                              \
     } while (0)
 
-#define REGISTER_OBJECT(Name, Object) \
-    do { \
-        if (PyDict_SetItemString(dict, (Name), (PyObject *) (Object)) < 0) \
-            throw yexception() << "Can't register object: " << (Name); \
+#define REGISTER_OBJECT(Name, Object)                                    \
+    do {                                                                 \
+        if (PyDict_SetItemString(dict, (Name), (PyObject*)(Object)) < 0) \
+            throw yexception() << "Can't register object: " << (Name);   \
     } while (0)
 
-#define REGISTER_EXCEPTION(Name, Object, Doc) \
-    do { \
-        if (!Object) { \
-            Object = PyErr_NewExceptionWithDoc((char*) MODULE_NAME "." Name, Doc, nullptr, nullptr); \
-            if (!Object) { \
-                throw yexception() << "Can't register exception: " << (Name); \
-            } \
-            REGISTER_OBJECT(Name, Object); \
-        } \
+#define REGISTER_EXCEPTION(Name, Object, Doc)                                                       \
+    do {                                                                                            \
+        if (!Object) {                                                                              \
+            Object = PyErr_NewExceptionWithDoc((char*)MODULE_NAME "." Name, Doc, nullptr, nullptr); \
+            if (!Object) {                                                                          \
+                throw yexception() << "Can't register exception: " << (Name);                       \
+            }                                                                                       \
+            REGISTER_OBJECT(Name, Object);                                                          \
+        }                                                                                           \
     } while (0)
 
 #if PY_MAJOR_VERSION >= 3
 static PyModuleDef ModuleDefinition = {
-        PyModuleDef_HEAD_INIT,
-        INIT_MEMBER(m_name, MODULE_NAME),
-        INIT_MEMBER(m_doc, ModuleDoc),
-        INIT_MEMBER(m_size, -1),
-        INIT_MEMBER(m_methods, ModuleMethods),
-        INIT_MEMBER(m_slots, nullptr),
-        INIT_MEMBER(m_traverse, nullptr),
-        INIT_MEMBER(m_clear, nullptr),
-        INIT_MEMBER(m_free, nullptr),
+    PyModuleDef_HEAD_INIT,
+    INIT_MEMBER(m_name, MODULE_NAME),
+    INIT_MEMBER(m_doc, ModuleDoc),
+    INIT_MEMBER(m_size, -1),
+    INIT_MEMBER(m_methods, ModuleMethods),
+    INIT_MEMBER(m_slots, nullptr),
+    INIT_MEMBER(m_traverse, nullptr),
+    INIT_MEMBER(m_clear, nullptr),
+    INIT_MEMBER(m_free, nullptr),
 };
 
 static PyModuleDef ModuleDefinitionTyping = {
-        PyModuleDef_HEAD_INIT,
-        INIT_MEMBER(m_name, MODULE_NAME_TYPING),
-        INIT_MEMBER(m_doc, ModuleDocTyping),
-        INIT_MEMBER(m_size, -1),
-        INIT_MEMBER(m_methods, nullptr),
-        INIT_MEMBER(m_slots, nullptr),
-        INIT_MEMBER(m_traverse, nullptr),
-        INIT_MEMBER(m_clear, nullptr),
-        INIT_MEMBER(m_free, nullptr),
+    PyModuleDef_HEAD_INIT,
+    INIT_MEMBER(m_name, MODULE_NAME_TYPING),
+    INIT_MEMBER(m_doc, ModuleDocTyping),
+    INIT_MEMBER(m_size, -1),
+    INIT_MEMBER(m_methods, nullptr),
+    INIT_MEMBER(m_slots, nullptr),
+    INIT_MEMBER(m_traverse, nullptr),
+    INIT_MEMBER(m_clear, nullptr),
+    INIT_MEMBER(m_free, nullptr),
 };
 
 PyMODINIT_FUNC PyInit_YQL(void) // NOLINT(readability-identifier-naming)
@@ -207,7 +207,7 @@ void InitYqlModule(NYql::NUdf::EPythonFlavor pythonFlavor, bool standalone) {
             ythrow yexception() << "Can't parse YQL type annotations module";
         }
 
-        auto processError = [&] (PyObject* obj, TStringBuf message) {
+        auto processError = [&](PyObject* obj, TStringBuf message) {
             if (obj) {
                 return;
             }
@@ -248,4 +248,4 @@ void TermYqlModule() {
     PyYieldIterationException = nullptr;
 }
 
-} // namspace NPython
+} // namespace NPython

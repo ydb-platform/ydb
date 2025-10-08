@@ -6,14 +6,14 @@
 
 namespace NSQLComplete {
 
-    using TClusterList = TVector<TString>;
+using TClusterList = TVector<TString>;
 
-    class IClusterDiscovery: public TThrRefBase {
-    public:
-        using TPtr = TIntrusivePtr<IClusterDiscovery>;
+class IClusterDiscovery: public TThrRefBase {
+public:
+    using TPtr = TIntrusivePtr<IClusterDiscovery>;
 
-        ~IClusterDiscovery() override = default;
-        virtual NThreading::TFuture<TClusterList> Query() const = 0;
-    };
+    ~IClusterDiscovery() override = default;
+    virtual NThreading::TFuture<TClusterList> Query() const = 0;
+};
 
 } // namespace NSQLComplete

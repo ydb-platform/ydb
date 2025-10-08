@@ -36,6 +36,7 @@ public:
     }
 
     TMaybe<TExprOrIdent> LiteralExpr(const TRule_literal_value& node);
+
 private:
     struct TTrailingQuestions {
         size_t Count = 0;
@@ -69,10 +70,10 @@ private:
     TNodePtr JsonQueryExpr(const TRule_json_query& node);
     TNodePtr JsonApiExpr(const TRule_json_api_expr& node);
 
-    template<typename TUnaryCasualExprRule>
+    template <typename TUnaryCasualExprRule>
     TNodePtr UnaryCasualExpr(const TUnaryCasualExprRule& node, const TTrailingQuestions& tail);
 
-    template<typename TUnarySubExprRule>
+    template <typename TUnarySubExprRule>
     TNodePtr UnaryExpr(const TUnarySubExprRule& node, const TTrailingQuestions& tail);
 
     bool SqlLambdaParams(const TNodePtr& node, TVector<TSymbolNameWithPos>& args, ui32& optionalArgumentsCount);

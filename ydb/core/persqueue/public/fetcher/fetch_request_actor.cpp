@@ -5,6 +5,7 @@
 #include <ydb/core/client/server/msgbus_server_pq_metacache.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/events/internal.h>
+#include <ydb/core/persqueue/public/describer/describer.h>
 #include <ydb/core/persqueue/public/pq_rl_helpers.h>
 #include <ydb/core/persqueue/public/write_meta/write_meta.h>
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
@@ -39,6 +40,7 @@ struct TTopicInfo {
     THashMap<ui32, ui64> PartitionToTablet;
 
     TIntrusiveConstPtr<TSchemeCacheNavigate::TPQGroupInfo> PQInfo;
+    TString RealPath;
     THashSet<ui32> PartitionsToRequest;
 
     //fetchRequest part
@@ -68,7 +70,6 @@ private:
 
     TActorId RequesterId;
     ui64 PendingQuotaAmount;
-    bool AnyCdcTopicInRequest = false;
 
     TActorId YdbProxy;
     TActorId LongTimer;
@@ -162,122 +163,57 @@ public:
         LongTimer = CreateLongTimer(Min<TDuration>(MaxTimeout, TDuration::MilliSeconds(Settings.MaxWaitTimeMs)),
             new IEventHandle(ctx.SelfID, ctx.SelfID, new TEvents::TEvWakeup(TimeoutWakeupTag)));
 
-        SendSchemeCacheRequest(ctx);
+        DescribeTopics(ctx);
         Become(&TPQFetchRequestActor::StateDescribe);
     }
 
-    void SendSchemeCacheRequest(const TActorContext& ctx) {
-        LOG_D("SendSchemeCacheRequest");
+    void DescribeTopics(const TActorContext&) {
+        LOG_D("DescribeTopics");
 
-        auto schemeCacheRequest = std::make_unique<TSchemeCacheNavigate>(1);
-        schemeCacheRequest->DatabaseName = Settings.Database;
-
-        THashSet<TString> topicsRequested;
-        if (CdcPathToPrivateTopicPath.empty()) {
-            for (const auto& part : Settings.Partitions) {
-                topicsRequested.insert(part.Topic);
-            }
-        } else {
-            for (const auto& [_, topicPath] : CdcPathToPrivateTopicPath) {
-                topicsRequested.insert(topicPath);
-            }
+        std::unordered_set<TString> topics;
+        for (const auto& part : Settings.Partitions) {
+            topics.insert(part.Topic);
         }
 
-        for (const auto& topicName : topicsRequested) {
-            auto split = NKikimr::SplitPath(topicName);
-            TSchemeCacheNavigate::TEntry entry;
-            entry.Path.insert(entry.Path.end(), split.begin(), split.end());
-
-            entry.SyncVersion = true;
-            entry.ShowPrivatePath = true;
-            entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpList;
-
-            schemeCacheRequest->ResultSet.emplace_back(std::move(entry));
-        }
-
-        ctx.Send(SchemeCache, new TEvTxProxySchemeCache::TEvNavigateKeySet(schemeCacheRequest.release()));
+        RegisterWithSameMailbox(NDescriber::CreateDescriberActor(SelfId(), Settings.Database, std::move(topics)));
     }
 
-    void HandleSchemeCacheResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) {
-        LOG_D("Handle SchemeCache response");
-        auto& result = ev->Get()->Request;
-        AnyCdcTopicInRequest = false;
-        for (const auto& entry : result->ResultSet) {
-            auto path = CanonizePath(NKikimr::JoinPath(entry.Path));
-            switch (entry.Status) {
-                case TSchemeCacheNavigate::EStatus::PathErrorUnknown:
-                case TSchemeCacheNavigate::EStatus::RootUnknown:
-                    return SendReplyAndDie(
-                            CreateErrorReply(
-                                Ydb::StatusIds::SCHEME_ERROR,
-                                TStringBuilder() << "Topic not found: " << path
-                            ),
-                            ctx
-                    );
-                case TSchemeCacheNavigate::EStatus::Ok:
+    void Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev, const TActorContext& ctx) {
+        LOG_D("Handle NDescriber::TEvDescribeTopicsResponse");
+
+        for (auto& [topicPath, info] : ev->Get()->Topics) {
+            switch (info.Status) {
+                case NDescriber::EStatus::SUCCESS: {
+                    if (!CheckAccess(*info.SecurityObject)) {
+                        return SendReplyAndDie(
+                                CreateErrorReply(
+                                    Ydb::StatusIds::UNAUTHORIZED,
+                                    TStringBuilder() << "Access denied for topic: " << topicPath
+                                ), ctx
+                        );
+                    }
+
+                    auto& topicInfo = TopicInfo[topicPath];
+                    topicInfo.PQInfo = info.Info;
+                    topicInfo.RealPath = std::move(info.RealPath);
                     break;
+                }
                 default:
                     return SendReplyAndDie(
-                            CreateErrorReply(
-                                Ydb::StatusIds::SCHEME_ERROR,
-                                TStringBuilder() << "Got error: " << ToString(entry.Status) << " trying to find topic: " << path
-                            ), ctx
+                        CreateErrorReply(
+                            Ydb::StatusIds::SCHEME_ERROR,
+                            NDescriber::Description(topicPath, info.Status)
+                        ),
+                        ctx
                     );
             }
-            if (entry.Kind == NSchemeCache::TSchemeCacheNavigate::KindCdcStream) {
-                AnyCdcTopicInRequest = true;
-                AFL_ENSURE(entry.ListNodeEntry->Children.size() == 1);
-                auto privateTopicPath = CanonizePath(JoinPath(ChildPath(NKikimr::SplitPath(path), entry.ListNodeEntry->Children.at(0).Name)));
-                CdcPathToPrivateTopicPath[path] = privateTopicPath;
-                TopicInfo[privateTopicPath] = std::move(TopicInfo[path]);
-                TopicInfo.erase(path);
-                continue;
-            }
-            if (entry.Kind != TSchemeCacheNavigate::EKind::KindTopic) {
-                return SendReplyAndDie(
-                        CreateErrorReply(
-                            Ydb::StatusIds::SCHEME_ERROR, TStringBuilder() << "No such topic: " << path
-                        ), ctx
-                );
-            }
-            if (!entry.PQGroupInfo) {
-                return SendReplyAndDie(
-                        CreateErrorReply(
-                            Ydb::StatusIds::SCHEME_ERROR,
-                            TStringBuilder() << "Could not get valid description for topic: " << path
-                        ), ctx
-                );
-            }
-            if (!entry.PQGroupInfo->Description.HasBalancerTabletID() || entry.PQGroupInfo->Description.GetBalancerTabletID() == 0) {
-                return SendReplyAndDie(
-                        CreateErrorReply(
-                            Ydb::StatusIds::SCHEME_ERROR,
-                            TStringBuilder() << "Topic not created: " << path
-                        ), ctx
-                );
-            }
-            if (!CheckAccess(*entry.SecurityObject)) {
-                return SendReplyAndDie(
-                        CreateErrorReply(
-                            Ydb::StatusIds::UNAUTHORIZED,
-                            TStringBuilder() << "Access denied for topic: " << path
-                        ), ctx
-                );;
-            }
-
-            auto& topicInfo = TopicInfo[path];
-            topicInfo.PQInfo = entry.PQGroupInfo;
-        }
-
-        if (AnyCdcTopicInRequest) {
-            return SendSchemeCacheRequest(ctx);
         }
 
         OnMetadataReceived(ctx);
     }
 
     STRICT_STFUNC(StateDescribe,
-        HFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleSchemeCacheResponse);
+        HFunc(NDescriber::TEvDescribeTopicsResponse, Handle);
         HFunc(TEvents::TEvWakeup, Handle);
         CFunc(NActors::TEvents::TSystem::Poison, Die);
     )
@@ -613,16 +549,10 @@ public:
     }
 
     std::pair<const TString&, TTopicInfo&> GetTopicInfo(const TString& topicPath) {
-        auto* topic = &topicPath;
-        auto cdcTopicNameIt = CdcPathToPrivateTopicPath.find(*topic);
-        if (cdcTopicNameIt != CdcPathToPrivateTopicPath.end()) {
-            topic = &cdcTopicNameIt->second;
-        }
+        auto it = TopicInfo.find(CanonizePath(topicPath));
+        AFL_ENSURE(it != TopicInfo.end())("topic", topicPath);
 
-        auto it = TopicInfo.find(CanonizePath(*topic));
-        AFL_ENSURE(it != TopicInfo.end())("topic", *topic);
-
-        return {*topic, it->second};
+        return {it->second.RealPath, it->second};
     }
 
     std::unique_ptr<TEvPersQueue::TEvRequest> CreateReadRequest(const TString& topic, const TPartitionFetchRequest& fetchRequest) {

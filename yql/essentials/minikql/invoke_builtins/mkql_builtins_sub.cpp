@@ -1,6 +1,7 @@
 #include "mkql_builtins_impl.h"  // Y_IGNORE
 #include "mkql_builtins_datetime.h"
 #include "mkql_builtins_decimal.h" // Y_IGNORE
+#include "mkql_safe_ops.h"
 
 #include <yql/essentials/minikql/mkql_type_ops.h>
 
@@ -15,7 +16,7 @@ struct TSub : public TSimpleArithmeticBinary<TLeft, TRight, TOutput, TSub<TLeft,
 
     static TOutput Do(TOutput left, TOutput right)
     {
-        return left - right;
+        return SafeSub(left, right);
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
@@ -31,7 +32,7 @@ struct TDecimalSub {
     static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& left, const NUdf::TUnboxedValuePod& right) {
         const auto l = left.GetInt128();
         const auto r = right.GetInt128();
-        const auto s = l - r;
+        const auto s = SafeSub(l, r);
 
         using namespace NYql::NDecimal;
 
@@ -102,7 +103,7 @@ struct TDateTimeSub : public TSimpleArithmeticBinary<typename TLeft::TLayout, ty
 
     static typename TOutput::TLayout Do(typename TLeft::TLayout left, typename TRight::TLayout right)
     {
-        return ToScaledDate<TLeft>(left) - ToScaledDate<TRight>(right);
+        return SafeSub(ToScaledDate<TLeft>(left), ToScaledDate<TRight>(right));
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
@@ -129,7 +130,7 @@ struct TIntervalSubInterval {
     {
         const auto lv = left.template Get<typename TLeft::TLayout>();
         const auto rv = right.template Get<typename TRight::TLayout>();
-        const auto ret = lv - rv;
+        const auto ret = SafeSub(lv, rv);
         return IsBadInterval<TOutput>(ret) ? NUdf::TUnboxedValuePod() : NUdf::TUnboxedValuePod(ret);
     }
 
@@ -169,7 +170,7 @@ struct TBigIntervalSub {
             return NUdf::TUnboxedValuePod();
         }
 
-        i64 ret = lv - rv;
+        i64 ret = SafeSub(lv, rv);
         if (IsBadInterval<NUdf::TDataType<NUdf::TInterval64>>(ret)) {
             return NUdf::TUnboxedValuePod();
         }
@@ -217,7 +218,7 @@ struct TAnyDateTimeSubIntervalT {
     {
         const auto lv = ToScaledDate<TLeft>(left.template Get<typename TLeft::TLayout>());
         const auto rv = ToScaledDate<TRight>(right.template Get<typename TRight::TLayout>());
-        const auto ret = lv - rv;
+        const auto ret = SafeSub(lv, rv);
         if (IsBadDateTime<TOutput>(ret)) {
             return NUdf::TUnboxedValuePod();
         }

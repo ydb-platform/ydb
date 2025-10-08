@@ -12,7 +12,7 @@ namespace {
 SIMPLE_UDF(TCrash, ui64(char*)) {
     Y_UNUSED(valueBuilder);
     Y_UNUSED(args);
-    int *ptr = nullptr;
+    int* ptr = nullptr;
     *ptr = 1;
     return TUnboxedValuePod(0);
 }
@@ -59,15 +59,17 @@ SIMPLE_UDF(TEcho, char*(TOptional<char*>)) {
     }
 }
 
-SIMPLE_UDF_WITH_OPTIONAL_ARGS(TEchoWithPrefix, char*(char*,TOptional<char*>), 1) {
-    if (!args[1])
+SIMPLE_UDF_WITH_OPTIONAL_ARGS(TEchoWithPrefix, char*(char*, TOptional<char*>), 1) {
+    if (!args[1]) {
         return TUnboxedValuePod(args[0]);
+    }
     return valueBuilder->ConcatStrings(args[1], args[0]);
 }
 
 SIMPLE_UDF_RUN(TEchoWithRunPrefix, char*(char*), TOptional<char*>) {
-    if (!RunConfig)
+    if (!RunConfig) {
         return TUnboxedValuePod(args[0]);
+    }
 
     return valueBuilder->PrependString(RunConfig.AsStringRef(), args[0]);
 }
@@ -102,11 +104,11 @@ using TComplexReturnTypeSignature = TDict<char*, ui32>(char*);
 SIMPLE_UDF(TComplexReturnType, TComplexReturnTypeSignature) {
     const TStringBuf s = args[0].AsStringRef();
     THashMap<TString, ui32> stat;
-    for(auto c: s) {
-       ++stat[TString{c}];
+    for (auto c : s) {
+        ++stat[TString{c}];
     }
     auto dictBuilder = valueBuilder->NewDict(ReturnType_, 0);
-    for(const auto& [k, v]: stat) {
+    for (const auto& [k, v] : stat) {
         dictBuilder->Add(valueBuilder->NewString(k), TUnboxedValuePod{v});
     }
     return dictBuilder->Build();
@@ -127,50 +129,40 @@ SIMPLE_UDF_WITH_OPTIONAL_ARGS(TNamedArgs, char*(ui32, TOptional<ui32>, TNamedC, 
     return valueBuilder->NewString(res);
 }
 
-UDF(TIncrement, builder.Args(2)->
-    Add<ui32>().Name("Arg1").Flags(ICallablePayload::TArgumentFlags::AutoMap)
-    .Add(builder.SimpleType<TOptional<ui32>>()).Name("Arg2")
-    .Done().Returns<ui32>().OptionalArgs(1);) {
+UDF(TIncrement, builder.Args(2)->Add<ui32>().Name("Arg1").Flags(ICallablePayload::TArgumentFlags::AutoMap).Add(builder.SimpleType<TOptional<ui32>>()).Name("Arg2").Done().Returns<ui32>().OptionalArgs(1);) {
     Y_UNUSED(valueBuilder);
     return TUnboxedValuePod(args[0].Get<ui32>() + args[1].GetOrDefault<ui32>(1));
 }
 
-UDF(TIncrementOpt, builder.Args(2)->
-    Add<ui32>().Name("Arg1").Flags(ICallablePayload::TArgumentFlags::AutoMap)
-    .Add(builder.SimpleType<TOptional<ui32>>()).Name("Arg2")
-    .Done().Returns(builder.SimpleType<TOptional<ui32>>()).OptionalArgs(1);) {
+UDF(TIncrementOpt, builder.Args(2)->Add<ui32>().Name("Arg1").Flags(ICallablePayload::TArgumentFlags::AutoMap).Add(builder.SimpleType<TOptional<ui32>>()).Name("Arg2").Done().Returns(builder.SimpleType<TOptional<ui32>>()).OptionalArgs(1);) {
     Y_UNUSED(valueBuilder);
     if (const ui32 by = args[1].GetOrDefault<ui32>(0)) {
         return TUnboxedValuePod(args[0].Get<ui32>() + by);
-    }
-    else {
+    } else {
         return TUnboxedValuePod();
     }
 }
 
 UDF_IMPL(TIncrementWithCounters,
-    builder.Args(1)->Add<ui32>().Done().Returns<ui32>();
-    ,
-    mutable ::NKikimr::NUdf::TCounter Counter_;
-    mutable ::NKikimr::NUdf::TScopedProbe Scope_;
-    ,
-    Counter_ = builder.GetCounter("IncrementWithCounters_Calls", true);
-    Scope_ = builder.GetScopedProbe("IncrementWithCounters_Time");
-    ,
-    ""
-    ,
-    ""
-    ,
-    void
-) {
+         builder.Args(1)->Add<ui32>().Done().Returns<ui32>();
+         ,
+         mutable ::NKikimr::NUdf::TCounter Counter_;
+         mutable ::NKikimr::NUdf::TScopedProbe Scope_;
+         ,
+         Counter_ = builder.GetCounter("IncrementWithCounters_Calls", true);
+         Scope_ = builder.GetScopedProbe("IncrementWithCounters_Time");
+         ,
+         "",
+         "",
+         void) {
     Y_UNUSED(valueBuilder);
     Counter_.Inc();
-    with_lock(Scope_) {
+    with_lock (Scope_) {
         return TUnboxedValuePod(args[0].Get<ui32>() + 1);
     }
 }
 
-class TGenericAsStruct : public TBoxedValue {
+class TGenericAsStruct: public TBoxedValue {
 public:
     typedef bool TTypeAwareMarker;
 
@@ -190,7 +182,8 @@ public:
 
     TGenericAsStruct(size_t argc)
         : Argc_(argc)
-    {}
+    {
+    }
 
     static bool DeclareSignature(const TStringRef& name, TType* userType, IFunctionTypeInfoBuilder& builder, bool typesOnly) {
         if (Name() == name) {
@@ -230,25 +223,26 @@ public:
                 builder.Implementation(new TGenericAsStruct(argsCount));
             }
             return true;
-        }
-        else {
+        } else {
             return false;
         }
     }
+
 private:
     const size_t Argc_;
 };
 
-class TLogging : public TBoxedValue {
+class TLogging: public TBoxedValue {
 public:
     TLogging(TLoggerPtr logger, TLogComponentId component)
         : Logger_(logger)
         , Component_(component)
-    {}
+    {
+    }
 
     TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const final {
         Y_UNUSED(valueBuilder);
-        auto level = Min(args[0].Get<ui32>(),static_cast<ui32>(ELogLevel::Trace));
+        auto level = Min(args[0].Get<ui32>(), static_cast<ui32>(ELogLevel::Trace));
         Logger_->Log(Component_, (ELogLevel)level, args[1].AsStringRef());
         return TUnboxedValue::Void();
     }
@@ -273,8 +267,7 @@ public:
                 builder.Implementation(new TLogging(logger, component));
             }
             return true;
-        }
-        else {
+        } else {
             return false;
         }
     }
@@ -285,27 +278,26 @@ private:
 };
 
 SIMPLE_MODULE(TSimpleUdfModule,
-                TCrash,
-                TException,
-                TReturnNull,
-                TReturnVoid,
-                TReturnEmpty,
-                TReturnBrokenInt,
-                TEcho,
-                TEchoWithPrefix,
-                TEchoWithRunPrefix,
-                TConst,
-                TConcat,
-                TRepeat,
-                TSleep,
-                TComplexReturnType,
-                TNamedArgs,
-                TIncrement,
-                TIncrementOpt,
-                TIncrementWithCounters,
-                TGenericAsStruct,
-                TLogging
-              )
+              TCrash,
+              TException,
+              TReturnNull,
+              TReturnVoid,
+              TReturnEmpty,
+              TReturnBrokenInt,
+              TEcho,
+              TEchoWithPrefix,
+              TEchoWithRunPrefix,
+              TConst,
+              TConcat,
+              TRepeat,
+              TSleep,
+              TComplexReturnType,
+              TNamedArgs,
+              TIncrement,
+              TIncrementOpt,
+              TIncrementWithCounters,
+              TGenericAsStruct,
+              TLogging)
 
 } // namespace
 

@@ -6,6 +6,8 @@ YQL_UDF_CONTRIB(histogram_udf)
         0
     )
 
+    ENABLE(YQL_STYLE_CPP)
+
     SRCS(
         histogram_udf.cpp
     )
@@ -19,3 +21,4 @@ YQL_UDF_CONTRIB(histogram_udf)
 RECURSE_FOR_TESTS(
     test
 )
+

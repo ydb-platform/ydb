@@ -159,6 +159,8 @@ public:
 
             if (endpoint.empty()) {
                 ydbProxy.Reset(CreateLocalYdbProxy(Database));
+            } else if (database.empty()) {
+                ErrorState("Database is not specified.");
             } else {
                 switch (params.GetCredentialsCase()) {
                 case NKikimrReplication::TConnectionParams::kStaticCredentials:

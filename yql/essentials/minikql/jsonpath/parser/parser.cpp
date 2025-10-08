@@ -39,6 +39,10 @@ private:
         Issues_.back().SetCode(TIssuesIds::JSONPATH_PARSE_ERROR, TSeverityIds::S_ERROR);
     }
 
+    void AddIssue(NYql::TIssue&& issue) override {
+        Issues_.AddIssue(std::forward<NYql::TIssue>(issue));
+    }
+
     TIssues& Issues_;
 };
 

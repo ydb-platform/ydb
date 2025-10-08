@@ -99,6 +99,11 @@ const ITimestampProviderPtr& TClient::GetTimestampProvider()
     return TimestampProvider_.Value();
 }
 
+const TClientOptions& TClient::GetOptions()
+{
+    return ClientOptions_;
+}
+
 void TClient::Terminate()
 { }
 

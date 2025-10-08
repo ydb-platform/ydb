@@ -53,6 +53,9 @@ class TStdJoinTable {
         return TrackUnusedTuples;
     }
 
+    const auto& MapView() const {
+        return BuiltTable;
+    }
     void ForEachUnused(std::function<void(TTuple)> produce) {
         MKQL_ENSURE(TrackUnusedTuples, "wasn't tracking tuples at all");
         for(auto& tuplesSameKey: BuiltTable) {

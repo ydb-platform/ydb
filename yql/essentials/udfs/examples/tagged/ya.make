@@ -1,6 +1,8 @@
 YQL_UDF_CONTRIB(tagged_udf)
 YQL_ABI_VERSION(2 21 0)
 
+ENABLE(YQL_STYLE_CPP)
+
 SRCS(
     tagged_udf.cpp
 )

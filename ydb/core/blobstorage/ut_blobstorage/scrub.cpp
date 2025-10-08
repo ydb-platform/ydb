@@ -353,6 +353,15 @@ Y_UNIT_TEST_SUITE(BlobScrubbing) {
                 }
             }
 
+            env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+                if (ev->GetTypeRewrite() == TEvents::TEvGone::EventType) {
+                    if (ev->Recipient == MakeBlobStorageNodeWardenID(ev->Recipient.NodeId())) {
+                        return false;
+                    }
+                }
+                return true;
+            };
+
             // terminate peer disks
             for (ui32 i = 1; i < info->GetTotalVDisksNum(); ++i) {
                 const TActorId& actorId = info->GetActorId(i);
@@ -363,6 +372,10 @@ Y_UNIT_TEST_SUITE(BlobScrubbing) {
             Cerr << "*** blobIdsToValidate.size# " << blobIdsToValidate.size() << Endl;
 
             Validate(env, vdiskId, data, info->Type, blobIdsToValidate);
+
+            env.Sim(TDuration::Seconds(10));
+
+            env.Runtime->FilterFunction = {};
 
             env.Cleanup();
             env.Initialize();

@@ -30,7 +30,7 @@ THashMap<TString, TFailureInjector::TFailureSpec> TFailureInjector::GetCurrentSt
 
 THashMap<TString, TFailureInjector::TFailureSpec> TFailureInjector::GetCurrentStateImpl() {
     THashMap<TString, TFailureInjector::TFailureSpec> copy;
-    with_lock(Lock_) {
+    with_lock (Lock_) {
         copy = FailureSpecs_;
     }
     return copy;
@@ -40,7 +40,7 @@ void TFailureInjector::ReachImpl(std::string_view name, std::function<void()> ac
     if (!Enabled_.load()) {
         return;
     }
-    with_lock(Lock_) {
+    with_lock (Lock_) {
         if (auto failureSpec = FailureSpecs_.FindPtr(name)) {
             YQL_LOG(DEBUG) << "TFailureInjector::Reach: " << name << ", Skip=" << failureSpec->Skip << ", Fails=" << failureSpec->CountOfFails;
             if (failureSpec->Skip > 0) {
@@ -55,10 +55,10 @@ void TFailureInjector::ReachImpl(std::string_view name, std::function<void()> ac
 }
 
 void TFailureInjector::SetImpl(std::string_view name, ui64 skip, ui64 countOfFails) {
-    with_lock(Lock_) {
+    with_lock (Lock_) {
         YQL_ENSURE(countOfFails > 0, "failure " << name << ", 'countOfFails' must be positive");
         FailureSpecs_[TString{name}] = TFailureSpec{skip, countOfFails};
     }
 }
 
-} // NYql
+} // namespace NYql

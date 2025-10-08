@@ -268,6 +268,8 @@ namespace NYql {
         return true;                                                                                 \
     }
 
+        bool SerializeDecimal(const TCoDecimal& decimal, TExpression* proto, TSerializationContext& /*ctx*/, ui64 /*depth*/);
+
         bool SerializeSqlIfExpression(const TCoIf& sqlIf, TExpression* proto, TSerializationContext& ctx, ui64 depth);
 
         bool SerializeCoalesceExpression(const TCoCoalesce& coalesce, TExpression* proto, TSerializationContext& ctx, ui64 depth);
@@ -299,6 +301,9 @@ namespace NYql {
             }
             if (auto dependsOn = expression.Maybe<TCoDependsOn>()) {
                 return SerializeExpression(dependsOn.Cast().Input(), proto, ctx, depth + 1);
+            }
+            if (auto decimal = expression.Maybe<TCoDecimal>()) {
+                return SerializeDecimal(decimal.Cast(), proto, ctx, depth);
             }
 
             // data
@@ -623,6 +628,23 @@ namespace NYql {
             default:
                 throw yexception() << "Failed to format ydb value, value case " << static_cast<ui64>(value.value_case()) << " is not supported";
         }
+    }
+
+    bool SerializeDecimal(const TCoDecimal& decimal, TExpression* proto, TSerializationContext& /*ctx*/, ui64 /*depth*/) {
+        auto* typedValue = proto->mutable_typed_value();
+        auto* decimalType = typedValue->mutable_type()->mutable_decimal_type();
+
+        auto precision = FromString<ui32>(decimal.Precision().StringValue());
+        auto scale = FromString<ui32>(decimal.Scale().StringValue());
+        
+        decimalType->set_precision(precision);
+        decimalType->set_scale(scale);
+        
+        // Set the decimal value
+        auto* v = typedValue->mutable_value();
+        v->set_bytes_value(decimal.Literal());
+        
+        return true;
     }
 
     TString FormatPrimitiveType(const Ydb::Type::PrimitiveTypeId& typeId) {

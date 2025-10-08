@@ -597,7 +597,7 @@ def _setup_eslint(unit: NotsUnitType) -> None:
     if unit.get("_NO_LINT_VALUE") == "none":
         return
 
-    test_files = df.TestFiles.ts_lint_srcs(unit, (), {})[df.TestFiles.KEY]
+    test_files = df.TestFiles.ts_lint_srcs(unit, (), {})
     if not test_files:
         return
 
@@ -610,7 +610,7 @@ def _setup_eslint(unit: NotsUnitType) -> None:
     from lib.nots.package_manager import constants
 
     peers = _create_pm(unit).get_local_peers_from_package_json()
-    deps = df.CustomDependencies.nots_with_recipies(unit, (peers,), {})[df.CustomDependencies.KEY].split()
+    deps = df.CustomDependencies.nots_with_recipies(unit, (peers,), {}).split()
 
     if deps:
         unit.ondepends(deps)
@@ -626,7 +626,7 @@ def _setup_eslint(unit: NotsUnitType) -> None:
     dart_record[df.TestFiles.KEY] = test_files
     dart_record[df.NodeModulesBundleFilename.KEY] = constants.NODE_MODULES_WORKSPACE_BUNDLE_FILENAME
 
-    extra_deps = df.CustomDependencies.test_depends_only(unit, (), {})[df.CustomDependencies.KEY].split()
+    extra_deps = df.CustomDependencies.test_depends_only(unit, (), {}).split()
     dart_record[df.CustomDependencies.KEY] = " ".join(sort_uniq(deps + extra_deps))
 
     if unit.get("TS_LOCAL_CLI") != "yes":
@@ -647,7 +647,7 @@ def _setup_tsc_typecheck(unit: NotsUnitType) -> None:
     if unit.get("_TS_TYPECHECK_VALUE") == "none":
         return
 
-    test_files = df.TestFiles.tsc_typecheck_input_files(unit, (), {})[df.TestFiles.KEY]
+    test_files = df.TestFiles.tsc_typecheck_input_files(unit, (), {})
     if not test_files:
         return
 
@@ -680,7 +680,7 @@ def _setup_tsc_typecheck(unit: NotsUnitType) -> None:
     from lib.nots.package_manager import constants
 
     peers = _create_pm(unit).get_local_peers_from_package_json()
-    deps = df.CustomDependencies.nots_with_recipies(unit, (peers,), {})[df.CustomDependencies.KEY].split()
+    deps = df.CustomDependencies.nots_with_recipies(unit, (peers,), {}).split()
 
     if deps:
         unit.ondepends(deps)
@@ -696,7 +696,7 @@ def _setup_tsc_typecheck(unit: NotsUnitType) -> None:
     dart_record[df.TestFiles.KEY] = test_files
     dart_record[df.NodeModulesBundleFilename.KEY] = constants.NODE_MODULES_WORKSPACE_BUNDLE_FILENAME
 
-    extra_deps = df.CustomDependencies.test_depends_only(unit, (), {})[df.CustomDependencies.KEY].split()
+    extra_deps = df.CustomDependencies.test_depends_only(unit, (), {}).split()
     dart_record[df.CustomDependencies.KEY] = " ".join(sort_uniq(deps + extra_deps))
     dart_record[df.TsConfigPath.KEY] = tsconfig_path
 
@@ -714,7 +714,7 @@ def _setup_stylelint(unit: NotsUnitType) -> None:
     if unit.get("_TS_STYLELINT_VALUE") == "no":
         return
 
-    test_files = df.TestFiles.stylesheets(unit, (), {})[df.TestFiles.KEY]
+    test_files = df.TestFiles.stylesheets(unit, (), {})
     if not test_files:
         return
 
@@ -729,7 +729,7 @@ def _setup_stylelint(unit: NotsUnitType) -> None:
 
     peers = _create_pm(unit).get_local_peers_from_package_json()
 
-    deps = df.CustomDependencies.nots_with_recipies(unit, (peers,), {})[df.CustomDependencies.KEY].split()
+    deps = df.CustomDependencies.nots_with_recipies(unit, (peers,), {}).split()
     if deps:
         unit.ondepends(deps)
 
@@ -740,7 +740,7 @@ def _setup_stylelint(unit: NotsUnitType) -> None:
         TS_TEST_FIELDS_BASE + TS_TEST_SPECIFIC_FIELDS[test_type], unit, flat_args, spec_args
     )
 
-    extra_deps = df.CustomDependencies.test_depends_only(unit, (), {})[df.CustomDependencies.KEY].split()
+    extra_deps = df.CustomDependencies.test_depends_only(unit, (), {}).split()
     dart_record[df.CustomDependencies.KEY] = " ".join(sort_uniq(deps + extra_deps))
 
     data = ytest.dump_test(unit, dart_record)
@@ -923,7 +923,7 @@ def on_ts_test_for_configure(
     if unit.enabled('TS_COVERAGE'):
         unit.on_peerdir_ts_resource("nyc")
 
-    for_mod_path = df.TsTestForPath.value(unit, (), {})[df.TsTestForPath.KEY]
+    for_mod_path = df.TsTestForPath.value(unit, (), {})
     unit.onpeerdir([for_mod_path])
 
     # user-defined recipes should be in the end
@@ -941,7 +941,7 @@ def on_ts_test_for_configure(
         config_path = os.path.join(for_mod_path, default_config)
         unit.set(["TS_TEST_CONFIG_PATH", config_path])
 
-    test_files = df.TestFiles.ts_test_srcs(unit, (), {})[df.TestFiles.KEY]
+    test_files = df.TestFiles.ts_test_srcs(unit, (), {})
     if not test_files:
         ymake.report_configure_error(f"No tests found for {test_runner}")
         return
@@ -949,7 +949,7 @@ def on_ts_test_for_configure(
     from lib.nots.package_manager import constants
 
     peers = _create_pm(unit).get_local_peers_from_package_json()
-    deps = df.CustomDependencies.nots_with_recipies(unit, (peers,), {})[df.CustomDependencies.KEY].split()
+    deps = df.CustomDependencies.nots_with_recipies(unit, (peers,), {}).split()
 
     if deps:
         unit.ondepends(deps)
@@ -966,7 +966,7 @@ def on_ts_test_for_configure(
     dart_record[df.TestFiles.KEY] = test_files
     dart_record[df.NodeModulesBundleFilename.KEY] = constants.NODE_MODULES_WORKSPACE_BUNDLE_FILENAME
 
-    extra_deps = df.CustomDependencies.test_depends_only(unit, (), {})[df.CustomDependencies.KEY].split()
+    extra_deps = df.CustomDependencies.test_depends_only(unit, (), {}).split()
     dart_record[df.CustomDependencies.KEY] = " ".join(sort_uniq(deps + extra_deps))
     if test_runner in [TsTestType.HERMIONE, TsTestType.PLAYWRIGHT_LARGE]:
         dart_record[df.Size.KEY] = "LARGE"

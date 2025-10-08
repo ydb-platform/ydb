@@ -3642,7 +3642,7 @@ LeaseFinalizationInfo GetLeaseFinalizationSql(TInstant now, Ydb::StatusIds::Stat
         retryState.GetRetryRate()
     );
 
-    bool retry = policy ? retryLimiter.UpdateOnRetry(TInstant::Now(), *policy) : false;
+    const bool retry = policy && retryLimiter.UpdateOnRetry(TInstant::Now(), *policy);
     retryState.SetRetryCounter(retryLimiter.RetryCount);
     *retryState.MutableRetryCounterUpdatedAt() = NProtoInterop::CastToProto(now);
     retryState.SetRetryRate(retryLimiter.RetryRate);

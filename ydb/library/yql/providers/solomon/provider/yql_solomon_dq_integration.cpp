@@ -136,10 +136,12 @@ public:
                     if (!ExtractSettingValue(settingsRef.Child(i)->Tail(), settingsRef.Child(i)->Head().Content(), ctx, value)) {
                         return {};
                     }
-                    if (!TInstant::TryParseIso8601(value, from)) {
+                    TInstant userFrom;
+                    if (!TInstant::TryParseIso8601(value, userFrom)) {
                         ctx.AddError(TIssue(ctx.GetPosition(settingsRef.Child(i)->Head().Pos()), "couldn't parse `from`, use ISO8601 format, e.g. 2025-03-12T14:40:39Z"));
                         return {};
                     }
+                    from = std::min(TInstant::Now(), userFrom);
                     continue;
                 }
                 if (settingsRef.Child(i)->Head().IsAtom("to"sv)) {
@@ -147,10 +149,12 @@ public:
                     if (!ExtractSettingValue(settingsRef.Child(i)->Tail(), settingsRef.Child(i)->Head().Content(), ctx, value)) {
                         return {};
                     }
-                    if (!TInstant::TryParseIso8601(value, to)) {
+                    TInstant userTo;
+                    if (!TInstant::TryParseIso8601(value, userTo)) {
                         ctx.AddError(TIssue(ctx.GetPosition(settingsRef.Child(i)->Head().Pos()), "couldn't parse `to`, use ISO8601 format, e.g. 2025-03-12T14:40:39Z"));
                         return {};
                     }
+                    to = std::min(TInstant::Now(), userTo);
                     continue;
                 }
                 if (settingsRef.Child(i)->Head().IsAtom("program"sv)) {

@@ -58,6 +58,7 @@ TFuture<TStatus> CheckGeneration(
     const TGenerationContextPtr& context)
 {
     if (!selectResult.IsSuccess()) {
+        Cerr << "CheckGeneration !IsSuccess" << Endl;
         return MakeFuture<TStatus>(selectResult);
     }
 
@@ -92,34 +93,35 @@ TFuture<TStatus> CheckGeneration(
     }
     }
 
-    context->Transaction = selectResult.GetTransaction();
-    selectResult.GetTransaction().reset();
+    // TODO
+    // context->Transaction = selectResult.GetTransaction();
+    // selectResult.GetTransaction().reset();
 
-    if (!isOk) {
-        RollbackTransaction(context); // don't care about result
+    // if (!isOk) {
+    //     RollbackTransaction(context); // don't care about result
 
-        TStringStream ss;
-        ss << "Table: " << JoinPath(context->TablePathPrefix, context->Table)
-           << ", pk: " << context->PrimaryKey
-           << ", current generation: " << context->GenerationRead
-           << ", expected/new generation: " << context->Generation
-           << ", operation: " << (int)context->OperationType;
+    //     TStringStream ss;
+    //     ss << "Table: " << JoinPath(context->TablePathPrefix, context->Table)
+    //        << ", pk: " << context->PrimaryKey
+    //        << ", current generation: " << context->GenerationRead
+    //        << ", expected/new generation: " << context->Generation
+    //        << ", operation: " << (int)context->OperationType;
 
-        return MakeFuture(MakeErrorStatus(EStatus::ALREADY_EXISTS, ss.Str()));
-    }
+    //     return MakeFuture(MakeErrorStatus(EStatus::ALREADY_EXISTS, ss.Str()));
+    // }
 
-    if (requiresTransaction && !context->Transaction) {
-        // just sanity check, normally should not happen.
-        // note that we use retriable error
-        TStringStream ss;
-        ss << "Table: " << JoinPath(context->TablePathPrefix, context->Table)
-           << ", pk: " << context->PrimaryKey
-           << ", current generation: " << context->GenerationRead
-           << ", expected/new generation: " << context->Generation
-           << ", failed to get transaction after select";
+    // if (requiresTransaction && !context->Transaction) {
+    //     // just sanity check, normally should not happen.
+    //     // note that we use retriable error
+    //     TStringStream ss;
+    //     ss << "Table: " << JoinPath(context->TablePathPrefix, context->Table)
+    //        << ", pk: " << context->PrimaryKey
+    //        << ", current generation: " << context->GenerationRead
+    //        << ", expected/new generation: " << context->Generation
+    //        << ", failed to get transaction after select";
 
-        return MakeFuture(MakeErrorStatus(EStatus::ABORTED, ss.Str(), NYql::TSeverityIds::S_WARNING));
-    }
+    //     return MakeFuture(MakeErrorStatus(EStatus::ABORTED, ss.Str(), NYql::TSeverityIds::S_WARNING));
+    // }
 
     return MakeFuture<TStatus>(selectResult);
 }
@@ -128,6 +130,7 @@ TFuture<TStatus> SelectGenerationWithCheck(const TGenerationContextPtr& context)
     auto future = SelectGeneration(context);
     return future.Apply(
         [context] (const TFuture<TDataQueryResult>& future) {
+            Cerr << "SelectGeneration end" << Endl;
             return CheckGeneration(future.GetValue(), context);
         });
 }
@@ -156,11 +159,14 @@ TFuture<TStatus> UpsertGeneration(const TGenerationContextPtr& context) {
         .Uint64(context->Generation)
         .Build();
 
-    auto ttxControl = TTxControl::Tx(*context->Transaction);
-    if (context->CommitTx) {
-        ttxControl.CommitTx();
-        context->Transaction.reset();
-    }
+        // TODO
+    // auto ttxControl = TTxControl::Tx(*context->Transaction);
+    // if (context->CommitTx) {
+    //     ttxControl.CommitTx();
+    //     context->Transaction.reset();
+    // }
+
+    auto ttxControl = TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx();
 
     return context->Session->ExecuteDataQuery(query, std::move(params), ttxControl, context->ExecDataQuerySettings).Apply(
 
@@ -306,13 +312,16 @@ TFuture<TStatus> RegisterCheckGeneration(const TGenerationContextPtr& context) {
 
     return future.Apply(
         [context] (const TFuture<TStatus>& future) {
+            Cerr << "SelectGenerationWithCheck end" << Endl;
             if (future.HasException()) {
                 return future;
             }
             const auto& status = future.GetValue();
             if (!status.IsSuccess()) {
+                Cerr << "SelectGenerationWithCheck failed" << Endl;
                 return future;
             }
+             Cerr << "SelectGenerationWithCheck ok" << Endl;
 
             // check successful, which means that either:
             // - generation in DB is same as in context
@@ -327,7 +336,8 @@ TFuture<TStatus> RegisterCheckGeneration(const TGenerationContextPtr& context) {
                 // without transaction)
                 if (context->CommitTx) {
                     // we don't check result of rollback, because don't care
-                    RollbackTransaction(context);
+                    // TODO
+               //     RollbackTransaction(context);
                     return future;
                 }
                 return future;

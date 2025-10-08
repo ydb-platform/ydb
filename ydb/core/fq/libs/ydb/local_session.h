@@ -23,8 +23,15 @@ struct TLocalSession : public ISession {
         return QueryActor->ExecuteDataQuery(sql, params,txControl);
     }
 
+    ~TLocalSession() {
+        if (QueryActor) {
+            Cerr << "call finish" << Endl;
+            QueryActor->Finish222();
+        }
+    }
+
 private: 
-    TQueryActor* QueryActor;
+    TQueryActor* QueryActor = nullptr;
 };
 
 } // namespace NFq

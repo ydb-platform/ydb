@@ -161,6 +161,180 @@ public:
         RegisterCoordinator(coordinatorId);
     }
 
+    template <class TResponse>
+    void CheckCheckpointResponse(
+        const TCheckpointId& checkpointId,
+        bool expectFailure = false)
+    {
+        TAutoPtr<IEventHandle> handle;
+        auto* event = Server->GetRuntime()->GrabEdgeEvent<TResponse>(handle);
+        UNIT_ASSERT(event);
+
+        if (expectFailure) {
+            UNIT_ASSERT(!event->Issues.Empty());
+        } else {
+            UNIT_ASSERT(event->Issues.Empty());
+            UNIT_ASSERT_VALUES_EQUAL(event->CheckpointId, checkpointId);
+        }
+    }
+
+    void CreateCheckpoint(
+        const TString& graphId,
+        ui64 generation,
+        const TCheckpointId& checkpointId,
+        bool expectFailure = false)
+    {
+        TActorId sender = Server->GetRuntime()->AllocateEdgeActor();
+
+        TCoordinatorId coordinatorId(graphId, generation);
+        auto request = std::make_unique<TEvCheckpointStorage::TEvCreateCheckpointRequest>(coordinatorId, checkpointId, 0, NProto::TCheckpointGraphDescription());
+        Server->GetRuntime()->Send(new IEventHandle(
+            NYql::NDq::MakeCheckpointStorageID(), sender, request.release()));
+
+        CheckCheckpointResponse<TEvCheckpointStorage::TEvCreateCheckpointResponse>(
+            checkpointId,
+            expectFailure);
+    }
+
+    void AbortCheckpoint(
+        const TString& graphId,
+        ui64 generation,
+        const TCheckpointId& checkpointId,
+        bool expectFailure = false)
+    {
+        TActorId sender = Server->GetRuntime()->AllocateEdgeActor();
+
+        TCoordinatorId coordinatorId(graphId, generation);
+        auto request = std::make_unique<TEvCheckpointStorage::TEvAbortCheckpointRequest>(coordinatorId, checkpointId, "test reason");
+        Server->GetRuntime()->Send(new IEventHandle(
+            NYql::NDq::MakeCheckpointStorageID(), sender, request.release()));
+
+        CheckCheckpointResponse<TEvCheckpointStorage::TEvAbortCheckpointResponse>(
+            checkpointId,
+            expectFailure);
+    }
+
+    template <class TRequest, class TResponse>
+    void CheckpointOperation(
+        const TString& graphId,
+        ui64 generation,
+        const TCheckpointId& checkpointId,
+        bool expectFailure = false)
+    {
+        TActorId sender = Server->GetRuntime()->AllocateEdgeActor();
+
+        TCoordinatorId coordinatorId(graphId, generation);
+        std::unique_ptr<TRequest> request;
+
+        if constexpr (std::is_same_v<TRequest, TEvCheckpointStorage::TEvCompleteCheckpointRequest>)
+            request = std::make_unique<TRequest>(coordinatorId, checkpointId, 100, NYql::NDqProto::CHECKPOINT_TYPE_SNAPSHOT);
+        else
+            request = std::make_unique<TRequest>(coordinatorId, checkpointId, 100);
+        Server->GetRuntime()->Send(new IEventHandle(
+            NYql::NDq::MakeCheckpointStorageID(), sender, request.release()));
+
+        CheckCheckpointResponse<TResponse>(
+            checkpointId,
+            expectFailure);
+    }
+
+    void PendingCommitCheckpoint(
+        const TString& graphId,
+        ui64 generation,
+        const TCheckpointId& checkpointId,
+        bool expectFailure = false) {
+        CheckpointOperation<TEvCheckpointStorage::TEvSetCheckpointPendingCommitStatusRequest, TEvCheckpointStorage::TEvSetCheckpointPendingCommitStatusResponse>(
+            graphId, generation, checkpointId, expectFailure);
+    }
+    void CompleteCheckpoint(
+        const TString& graphId,
+        ui64 generation,
+        const TCheckpointId& checkpointId,
+        bool expectFailure = false) {
+        CheckpointOperation<TEvCheckpointStorage::TEvCompleteCheckpointRequest, TEvCheckpointStorage::TEvCompleteCheckpointResponse>(
+            graphId, generation, checkpointId, expectFailure);
+    }
+
+    TCheckpoints GetCheckpoints(
+        const TString& graphId)
+    {
+        TActorId sender = Server->GetRuntime()->AllocateEdgeActor();
+
+        auto request = std::make_unique<TEvCheckpointStorage::TEvGetCheckpointsMetadataRequest>(graphId);
+        Server->GetRuntime()->Send(new IEventHandle(
+            NYql::NDq::MakeCheckpointStorageID(), sender, request.release()));
+
+        TAutoPtr<IEventHandle> handle;
+        auto* event = Server->GetRuntime()->GrabEdgeEvent<TEvCheckpointStorage::TEvGetCheckpointsMetadataResponse>(handle);
+        UNIT_ASSERT(event);
+        UNIT_ASSERT(event->Issues.Empty());
+
+        return event->Checkpoints;
+    }
+
+    void SaveState(
+        ui64 taskId,
+        const TCheckpointId& checkpointId,
+        const TString& blob)
+    {
+        TActorId sender = Server->GetRuntime()->AllocateEdgeActor();
+
+        TCoordinatorId coordinatorId(GraphId, Generation);
+
+        // XXX use proper checkpointId
+        auto checkpoint = NYql::NDqProto::TCheckpoint();
+        checkpoint.SetGeneration(checkpointId.CoordinatorGeneration);
+        checkpoint.SetId(checkpointId.SeqNo);
+        auto request = std::make_unique<NYql::NDq::TEvDqCompute::TEvSaveTaskState>(GraphId, taskId, checkpoint);
+        request->State.MiniKqlProgram.ConstructInPlace().Data.Blob = blob;
+        Server->GetRuntime()->Send(new IEventHandle(NYql::NDq::MakeCheckpointStorageID(), sender, request.release()));
+
+        TAutoPtr<IEventHandle> handle;
+        auto* event = Server->GetRuntime()->GrabEdgeEvent<NYql::NDq::TEvDqCompute::TEvSaveTaskStateResult>(handle);
+        UNIT_ASSERT(event);
+        UNIT_ASSERT_C(event->Record.GetStatus() == NYql::NDqProto::TEvSaveTaskStateResult::OK, event->Record.DebugString());
+    }
+
+    TString GetState(
+        ui64 taskId,
+        const TString& graphId,
+        const TCheckpointId& checkpointId)
+    {
+        TActorId sender = Server->GetRuntime()->AllocateEdgeActor();
+
+        auto checkpoint = NYql::NDqProto::TCheckpoint();
+        checkpoint.SetGeneration(checkpointId.CoordinatorGeneration);
+        checkpoint.SetId(checkpointId.SeqNo);
+        auto request = std::make_unique<NYql::NDq::TEvDqCompute::TEvGetTaskState>(graphId, std::vector{taskId}, checkpoint, Generation);
+        Server->GetRuntime()->Send(new IEventHandle(
+            NYql::NDq::MakeCheckpointStorageID(), sender, request.release()));
+
+        TAutoPtr<IEventHandle> handle;
+        auto* event = Server->GetRuntime()->GrabEdgeEvent<NYql::NDq::TEvDqCompute::TEvGetTaskStateResult>(handle);
+        UNIT_ASSERT(event);
+        UNIT_ASSERT(event->Issues.Empty());
+        UNIT_ASSERT(!event->States.empty());
+
+        return event->States[0].MiniKqlProgram->Data.Blob;
+    }
+
+    void CreateCompletedCheckpoint(
+        const TString& graphId,
+        ui64 generation,
+        const TCheckpointId& checkpointId)
+    {
+        CreateCheckpoint(graphId, generation, checkpointId, false);
+        PendingCommitCheckpoint(graphId, generation, checkpointId, false);
+        CompleteCheckpoint(graphId, generation, checkpointId, false);
+    }
+
+    TString MakeState(const TString& value) {
+        TString nodesState;
+        auto mkqlState = NKikimr::NMiniKQL::TOutputSerializer::MakeSimpleBlobState(value, 0);
+        NKikimr::NMiniKQL::TNodeStateHelper::AddNodeState(nodesState, mkqlState.AsStringRef());
+        return nodesState;
+    }
+
 private:
   //  TScriptExecutionsYdbSetup Ydb;
     public:
@@ -176,178 +350,6 @@ private:
 
     TRuntimePtr Runtime;
 };
-
-
-template <class TResponse>
-void CheckCheckpointResponse(
-    const TRuntimePtr& runtime,
-    const TCheckpointId& checkpointId,
-    bool expectFailure = false)
-{
-    TAutoPtr<IEventHandle> handle;
-    auto* event = runtime->GrabEdgeEvent<TResponse>(handle);
-    UNIT_ASSERT(event);
-
-    if (expectFailure) {
-        UNIT_ASSERT(!event->Issues.Empty());
-    } else {
-        UNIT_ASSERT(event->Issues.Empty());
-        UNIT_ASSERT_VALUES_EQUAL(event->CheckpointId, checkpointId);
-    }
-}
-
-// void CreateCheckpoint(
-//     const TRuntimePtr& runtime,
-//     const TString& graphId,
-//     ui64 generation,
-//     const TCheckpointId& checkpointId,
-//     bool expectFailure = false)
-// {
-//     TActorId sender = runtime->AllocateEdgeActor();
-
-//     TCoordinatorId coordinatorId(graphId, generation);
-//     auto request = std::make_unique<TEvCheckpointStorage::TEvCreateCheckpointRequest>(coordinatorId, checkpointId, 0, NProto::TCheckpointGraphDescription());
-//     runtime->Send(new IEventHandle(
-//         NYql::NDq::MakeCheckpointStorageID(), sender, request.release()));
-
-//     CheckCheckpointResponse<TEvCheckpointStorage::TEvCreateCheckpointResponse>(
-//         runtime,
-//         checkpointId,
-//         expectFailure);
-// }
-
-// void AbortCheckpoint(
-//     const TRuntimePtr& runtime,
-//     const TString& graphId,
-//     ui64 generation,
-//     const TCheckpointId& checkpointId,
-//     bool expectFailure = false)
-// {
-//     TActorId sender = runtime->AllocateEdgeActor();
-
-//     TCoordinatorId coordinatorId(graphId, generation);
-//     auto request = std::make_unique<TEvCheckpointStorage::TEvAbortCheckpointRequest>(coordinatorId, checkpointId, "test reason");
-//     runtime->Send(new IEventHandle(
-//         NYql::NDq::MakeCheckpointStorageID(), sender, request.release()));
-
-//     CheckCheckpointResponse<TEvCheckpointStorage::TEvAbortCheckpointResponse>(
-//         runtime,
-//         checkpointId,
-//         expectFailure);
-// }
-
-// template <class TRequest, class TResponse>
-// void CheckpointOperation(
-//     const TRuntimePtr& runtime,
-//     const TString& graphId,
-//     ui64 generation,
-//     const TCheckpointId& checkpointId,
-//     bool expectFailure = false)
-// {
-//     TActorId sender = runtime->AllocateEdgeActor();
-
-//     TCoordinatorId coordinatorId(graphId, generation);
-//     std::unique_ptr<TRequest> request;
-
-//     if constexpr (std::is_same_v<TRequest, TEvCheckpointStorage::TEvCompleteCheckpointRequest>)
-//         request = std::make_unique<TRequest>(coordinatorId, checkpointId, 100, NYql::NDqProto::CHECKPOINT_TYPE_SNAPSHOT);
-//     else
-//         request = std::make_unique<TRequest>(coordinatorId, checkpointId, 100);
-//     runtime->Send(new IEventHandle(
-//         NYql::NDq::MakeCheckpointStorageID(), sender, request.release()));
-
-//     CheckCheckpointResponse<TResponse>(
-//         runtime,
-//         checkpointId,
-//         expectFailure);
-// }
-
-// auto PendingCommitCheckpoint = CheckpointOperation<TEvCheckpointStorage::TEvSetCheckpointPendingCommitStatusRequest, TEvCheckpointStorage::TEvSetCheckpointPendingCommitStatusResponse>;
-// auto CompleteCheckpoint = CheckpointOperation<TEvCheckpointStorage::TEvCompleteCheckpointRequest, TEvCheckpointStorage::TEvCompleteCheckpointResponse>;
-
-// TCheckpoints GetCheckpoints(
-//     const TRuntimePtr& runtime,
-//     const TString& graphId)
-// {
-//     TActorId sender = runtime->AllocateEdgeActor();
-
-//     auto request = std::make_unique<TEvCheckpointStorage::TEvGetCheckpointsMetadataRequest>(graphId);
-//     runtime->Send(new IEventHandle(
-//         NYql::NDq::MakeCheckpointStorageID(), sender, request.release()));
-
-//     TAutoPtr<IEventHandle> handle;
-//     auto* event = runtime->GrabEdgeEvent<TEvCheckpointStorage::TEvGetCheckpointsMetadataResponse>(handle);
-//     UNIT_ASSERT(event);
-//     UNIT_ASSERT(event->Issues.Empty());
-
-//     return event->Checkpoints;
-// }
-
-// void SaveState(
-//     const TRuntimePtr& runtime,
-//     ui64 taskId,
-//     const TCheckpointId& checkpointId,
-//     const TString& blob)
-// {
-//     TActorId sender = runtime->AllocateEdgeActor();
-
-//     TCoordinatorId coordinatorId(GraphId, Generation);
-
-//     // XXX use proper checkpointId
-//     auto checkpoint = NYql::NDqProto::TCheckpoint();
-//     checkpoint.SetGeneration(checkpointId.CoordinatorGeneration);
-//     checkpoint.SetId(checkpointId.SeqNo);
-//     auto request = std::make_unique<NYql::NDq::TEvDqCompute::TEvSaveTaskState>(GraphId, taskId, checkpoint);
-//     request->State.MiniKqlProgram.ConstructInPlace().Data.Blob = blob;
-//     runtime->Send(new IEventHandle(NYql::NDq::MakeCheckpointStorageID(), sender, request.release()));
-
-//     TAutoPtr<IEventHandle> handle;
-//     auto* event = runtime->GrabEdgeEvent<NYql::NDq::TEvDqCompute::TEvSaveTaskStateResult>(handle);
-//     UNIT_ASSERT(event);
-//     UNIT_ASSERT_C(event->Record.GetStatus() == NYql::NDqProto::TEvSaveTaskStateResult::OK, event->Record.DebugString());
-// }
-
-// TString GetState(
-//     const TRuntimePtr& runtime,
-//     ui64 taskId,
-//     const TString& graphId,
-//     const TCheckpointId& checkpointId)
-// {
-//     TActorId sender = runtime->AllocateEdgeActor();
-
-//     auto checkpoint = NYql::NDqProto::TCheckpoint();
-//     checkpoint.SetGeneration(checkpointId.CoordinatorGeneration);
-//     checkpoint.SetId(checkpointId.SeqNo);
-//     auto request = std::make_unique<NYql::NDq::TEvDqCompute::TEvGetTaskState>(graphId, std::vector{taskId}, checkpoint, Generation);
-//     runtime->Send(new IEventHandle(
-//         NYql::NDq::MakeCheckpointStorageID(), sender, request.release()));
-
-//     TAutoPtr<IEventHandle> handle;
-//     auto* event = runtime->GrabEdgeEvent<NYql::NDq::TEvDqCompute::TEvGetTaskStateResult>(handle);
-//     UNIT_ASSERT(event);
-//     UNIT_ASSERT(event->Issues.Empty());
-//     UNIT_ASSERT(!event->States.empty());
-
-//     return event->States[0].MiniKqlProgram->Data.Blob;
-// }
-
-// void CreateCompletedCheckpoint(
-//     const TRuntimePtr& runtime,
-//     const TString& graphId,
-//     ui64 generation,
-//     const TCheckpointId& checkpointId)
-// {
-//     CreateCheckpoint(runtime, graphId, generation, checkpointId, false);
-//     PendingCommitCheckpoint(runtime, graphId, generation, checkpointId, false);
-//     CompleteCheckpoint(runtime, graphId, generation, checkpointId, false);
-// }
-
-// TString MakeState(const TString& value) {
-//     TString nodesState;
-//     auto mkqlState = NKikimr::NMiniKQL::TOutputSerializer::MakeSimpleBlobState(value, 0);
-//     NKikimr::NMiniKQL::TNodeStateHelper::AddNodeState(nodesState, mkqlState.AsStringRef());
-//     return nodesState;
-// }
 
 } // namespace
 
@@ -373,257 +375,223 @@ Y_UNIT_TEST_SUITE(TStorageServiceTest) {
         RegisterCoordinator(runtime, coordinator1, true);
     }
 */
-    // Y_UNIT_TEST(ShouldNotRegisterPrevGeneration)
-    // {
-    //     auto runtime = PrepareTestActorRuntime("TStorageServiceTestShouldNotRegisterPrevGeneration");
+    Y_UNIT_TEST_F(ShouldNotRegisterPrevGeneration, TFixture)
+    {
+        TCoordinatorId coordinator1(GraphId, Generation);
+        RegisterCoordinator(coordinator1);
 
-    //     TCoordinatorId coordinator1(GraphId, Generation);
-    //     RegisterCoordinator(runtime, coordinator1);
+        TCoordinatorId coordinator2(GraphId, Generation - 1);
+        RegisterCoordinator(coordinator2, true);
+    }
 
-    //     TCoordinatorId coordinator2(GraphId, Generation - 1);
-    //     RegisterCoordinator(runtime, coordinator2, true);
-    // }
+    Y_UNIT_TEST_F(ShouldRegisterNextGeneration, TFixture)
+    {
+        TCoordinatorId coordinator1(GraphId, Generation);
+        RegisterCoordinator(coordinator1);
 
-    // Y_UNIT_TEST(ShouldRegisterNextGeneration)
-    // {
-    //     auto runtime = PrepareTestActorRuntime("TStorageServiceTestShouldRegisterNextGeneration");
+        TCoordinatorId coordinator2(GraphId, Generation + 1);
+        RegisterCoordinator(coordinator2);
 
-    //     TCoordinatorId coordinator1(GraphId, Generation);
-    //     RegisterCoordinator(runtime, coordinator1);
+        // try register prev generation again
+        RegisterCoordinator(coordinator1, true);
+    }
 
-    //     TCoordinatorId coordinator2(GraphId, Generation + 1);
-    //     RegisterCoordinator(runtime, coordinator2);
+    Y_UNIT_TEST_F(ShouldCreateCheckpoint, TFixture)
+    {
+        RegisterDefaultCoordinator();
+        CreateCheckpoint(GraphId, Generation, CheckpointId1, false);
+    }
 
-    //     // try register prev generation again
-    //     RegisterCoordinator(runtime, coordinator1, true);
-    // }
+    Y_UNIT_TEST_F(ShouldNotCreateCheckpointWhenUnregistered, TFixture)
+    {
+        CreateCheckpoint(GraphId, Generation, CheckpointId1, true);
+    }
 
-    // Y_UNIT_TEST(ShouldCreateCheckpoint)
-    // {
-    //     auto runtime = PrepareTestActorRuntime("TStorageServiceTestShouldCreateCheckpoint");
+    Y_UNIT_TEST_F(ShouldNotCreateCheckpointTwice, TFixture)
+    {
+        RegisterDefaultCoordinator();
+        CreateCheckpoint(GraphId, Generation, CheckpointId1, false);
+        CreateCheckpoint(GraphId, Generation, CheckpointId1, true);
+    }
 
-    //     RegisterDefaultCoordinator(runtime);
-    //     CreateCheckpoint(runtime, GraphId, Generation, CheckpointId1, false);
-    // }
+    Y_UNIT_TEST_F(ShouldNotCreateCheckpointAfterGenerationChanged, TFixture)
+    {
+        TCoordinatorId coordinator1(GraphId, Generation);
+        RegisterCoordinator(coordinator1);
+        CreateCheckpoint(GraphId, Generation, CheckpointId1, false);
 
-    // Y_UNIT_TEST(ShouldNotCreateCheckpointWhenUnregistered)
-    // {
-    //     auto runtime = PrepareTestActorRuntime("TStorageServiceTestShouldNotCreateCheckpointWhenUnregistered");
+        TCoordinatorId coordinator2(GraphId, Generation + 1);
+        RegisterCoordinator(coordinator2);
 
-    //     CreateCheckpoint(runtime, GraphId, Generation, CheckpointId1, true);
-    // }
+        // second checkpoint, but with previous generation
+        CreateCheckpoint(GraphId, Generation, CheckpointId2, true);
+    }
 
-    // Y_UNIT_TEST(ShouldNotCreateCheckpointTwice)
-    // {
-    //     auto runtime = PrepareTestActorRuntime("TStorageServiceTestShouldNotCreateCheckpointTwice");
+    Y_UNIT_TEST_F(ShouldGetCheckpoints, TFixture)
+    {
+        RegisterDefaultCoordinator();
+        CreateCheckpoint(GraphId, Generation, CheckpointId1, false);
+        CreateCheckpoint(GraphId, Generation, CheckpointId2, false);
+        CreateCheckpoint(GraphId, Generation, CheckpointId3, false);
 
-    //     RegisterDefaultCoordinator(runtime);
-    //     CreateCheckpoint(runtime, GraphId, Generation, CheckpointId1, false);
-    //     CreateCheckpoint(runtime, GraphId, Generation, CheckpointId1, true);
-    // }
+        auto checkpoints = GetCheckpoints(GraphId);
+        UNIT_ASSERT_VALUES_EQUAL(checkpoints.size(), 3UL);
 
-    // Y_UNIT_TEST(ShouldNotCreateCheckpointAfterGenerationChanged)
-    // {
-    //     auto runtime = PrepareTestActorRuntime("TStorageServiceTestShouldNotCreateCheckpointAfterGenerationChanged");
+        THashSet<TCheckpointId, TCheckpointIdHash> checkpoinIds;
+        for (const auto& checkpoint: checkpoints) {
+            UNIT_ASSERT(checkpoint.Status == ECheckpointStatus::Pending);
+            checkpoinIds.insert(checkpoint.CheckpointId);
+        }
 
-    //     TCoordinatorId coordinator1(GraphId, Generation);
-    //     RegisterCoordinator(runtime, coordinator1);
-    //     CreateCheckpoint(runtime, GraphId, Generation, CheckpointId1, false);
+        UNIT_ASSERT(checkpoinIds.contains(CheckpointId1));
+        UNIT_ASSERT(checkpoinIds.contains(CheckpointId2));
+        UNIT_ASSERT(checkpoinIds.contains(CheckpointId3));
+    }
 
-    //     TCoordinatorId coordinator2(GraphId, Generation + 1);
-    //     RegisterCoordinator(runtime, coordinator2);
+    Y_UNIT_TEST_F(ShouldPendingAndCompleteCheckpoint, TFixture)
+    {
+        RegisterDefaultCoordinator();
+        CreateCheckpoint(GraphId, Generation, CheckpointId1, false);
+        PendingCommitCheckpoint(GraphId, Generation, CheckpointId1, false);
 
-    //     // second checkpoint, but with previous generation
-    //     CreateCheckpoint(runtime, GraphId, Generation, CheckpointId2, true);
-    // }
+        CreateCheckpoint(GraphId, Generation, CheckpointId2, false);
+        PendingCommitCheckpoint(GraphId, Generation, CheckpointId2, false);
+        CompleteCheckpoint(GraphId, Generation, CheckpointId2, false);
 
-    // Y_UNIT_TEST(ShouldGetCheckpoints)
-    // {
-    //     auto runtime = PrepareTestActorRuntime("TStorageServiceTestShouldGetCheckpoints");
+        auto checkpoints = GetCheckpoints(GraphId);
+        UNIT_ASSERT_VALUES_EQUAL(checkpoints.size(), 2UL);
 
-    //     RegisterDefaultCoordinator(runtime);
-    //     CreateCheckpoint(runtime, GraphId, Generation, CheckpointId1, false);
-    //     CreateCheckpoint(runtime, GraphId, Generation, CheckpointId2, false);
-    //     CreateCheckpoint(runtime, GraphId, Generation, CheckpointId3, false);
+        for (const auto& checkpoint: checkpoints) {
+            if (checkpoint.CheckpointId == CheckpointId1) {
+                UNIT_ASSERT(checkpoint.Status == ECheckpointStatus::PendingCommit);
+            } else if (checkpoint.CheckpointId == CheckpointId2) {
+                UNIT_ASSERT(checkpoint.Status == ECheckpointStatus::Completed);
+            } else {
+                UNIT_ASSERT(false);
+            }
+        }
+    }
 
-    //     auto checkpoints = GetCheckpoints(runtime, GraphId);
-    //     UNIT_ASSERT_VALUES_EQUAL(checkpoints.size(), 3UL);
+    Y_UNIT_TEST_F(ShouldAbortCheckpoint, TFixture)
+    {
+        RegisterDefaultCoordinator();
+        CreateCheckpoint(GraphId, Generation, CheckpointId1, false);
+        PendingCommitCheckpoint(GraphId, Generation, CheckpointId1, false);
 
-    //     THashSet<TCheckpointId, TCheckpointIdHash> checkpoinIds;
-    //     for (const auto& checkpoint: checkpoints) {
-    //         UNIT_ASSERT(checkpoint.Status == ECheckpointStatus::Pending);
-    //         checkpoinIds.insert(checkpoint.CheckpointId);
-    //     }
+        CreateCheckpoint(GraphId, Generation, CheckpointId2, false);
+        PendingCommitCheckpoint(GraphId, Generation, CheckpointId2, false);
+        CompleteCheckpoint(GraphId, Generation, CheckpointId2, false);
 
-    //     UNIT_ASSERT(checkpoinIds.contains(CheckpointId1));
-    //     UNIT_ASSERT(checkpoinIds.contains(CheckpointId2));
-    //     UNIT_ASSERT(checkpoinIds.contains(CheckpointId3));
-    // }
+        AbortCheckpoint(GraphId, Generation, CheckpointId1, false);
+        AbortCheckpoint(GraphId, Generation, CheckpointId2, false);
 
-    // Y_UNIT_TEST(ShouldPendingAndCompleteCheckpoint)
-    // {
-    //     auto runtime = PrepareTestActorRuntime("TStorageServiceTestShouldPendingAndCompleteCheckpoint");
+        auto checkpoints = GetCheckpoints(GraphId);
+        UNIT_ASSERT_VALUES_EQUAL(checkpoints.size(), 2UL);
 
-    //     RegisterDefaultCoordinator(runtime);
-    //     CreateCheckpoint(runtime, GraphId, Generation, CheckpointId1, false);
-    //     PendingCommitCheckpoint(runtime, GraphId, Generation, CheckpointId1, false);
+        for (const auto& checkpoint: checkpoints) {
+            UNIT_ASSERT(checkpoint.Status == ECheckpointStatus::Aborted);
+        }
+    }
 
-    //     CreateCheckpoint(runtime, GraphId, Generation, CheckpointId2, false);
-    //     PendingCommitCheckpoint(runtime, GraphId, Generation, CheckpointId2, false);
-    //     CompleteCheckpoint(runtime, GraphId, Generation, CheckpointId2, false);
+    Y_UNIT_TEST_F(ShouldNotPendingCheckpointWithoutCreation, TFixture)
+    {
+        TCoordinatorId coordinator1(GraphId, Generation);
+        RegisterCoordinator(coordinator1);
 
-    //     auto checkpoints = GetCheckpoints(runtime, GraphId);
-    //     UNIT_ASSERT_VALUES_EQUAL(checkpoints.size(), 2UL);
+        PendingCommitCheckpoint(GraphId, Generation, CheckpointId1, true);
+    }
 
-    //     for (const auto& checkpoint: checkpoints) {
-    //         if (checkpoint.CheckpointId == CheckpointId1) {
-    //             UNIT_ASSERT(checkpoint.Status == ECheckpointStatus::PendingCommit);
-    //         } else if (checkpoint.CheckpointId == CheckpointId2) {
-    //             UNIT_ASSERT(checkpoint.Status == ECheckpointStatus::Completed);
-    //         } else {
-    //             UNIT_ASSERT(false);
-    //         }
-    //     }
-    // }
+    Y_UNIT_TEST_F(ShouldNotCompleteCheckpointWithoutCreation, TFixture)
+    {
+        TCoordinatorId coordinator1(GraphId, Generation);
+        RegisterCoordinator(coordinator1);
 
-    // Y_UNIT_TEST(ShouldAbortCheckpoint)
-    // {
-    //     auto runtime = PrepareTestActorRuntime("TStorageServiceTestShouldPendingAndCompleteCheckpoint");
+        CompleteCheckpoint(GraphId, Generation, CheckpointId1, true);
+    }
 
-    //     RegisterDefaultCoordinator(runtime);
-    //     CreateCheckpoint(runtime, GraphId, Generation, CheckpointId1, false);
-    //     PendingCommitCheckpoint(runtime, GraphId, Generation, CheckpointId1, false);
+    Y_UNIT_TEST_F(ShouldNotAbortCheckpointWithoutCreation, TFixture)
+    {
+        TCoordinatorId coordinator1(GraphId, Generation);
+        RegisterCoordinator(coordinator1);
 
-    //     CreateCheckpoint(runtime, GraphId, Generation, CheckpointId2, false);
-    //     PendingCommitCheckpoint(runtime, GraphId, Generation, CheckpointId2, false);
-    //     CompleteCheckpoint(runtime, GraphId, Generation, CheckpointId2, false);
+        AbortCheckpoint(GraphId, Generation, CheckpointId1, true);
+    }
 
-    //     AbortCheckpoint(runtime, GraphId, Generation, CheckpointId1, false);
-    //     AbortCheckpoint(runtime, GraphId, Generation, CheckpointId2, false);
+    Y_UNIT_TEST_F(ShouldNotCompleteCheckpointWithoutPending, TFixture)
+    {
+        TCoordinatorId coordinator1(GraphId, Generation);
+        RegisterCoordinator(coordinator1);
+        CreateCheckpoint(GraphId, Generation, CheckpointId1, false);
 
-    //     auto checkpoints = GetCheckpoints(runtime, GraphId);
-    //     UNIT_ASSERT_VALUES_EQUAL(checkpoints.size(), 2UL);
+        CompleteCheckpoint(GraphId, Generation, CheckpointId1, true);
+    }
 
-    //     for (const auto& checkpoint: checkpoints) {
-    //         UNIT_ASSERT(checkpoint.Status == ECheckpointStatus::Aborted);
-    //     }
-    // }
+    Y_UNIT_TEST_F(ShouldNotPendingCheckpointGenerationChanged, TFixture)
+    {
+        TCoordinatorId coordinator1(GraphId, Generation);
+        RegisterCoordinator(coordinator1);
+        CreateCheckpoint(GraphId, Generation, CheckpointId1, false);
 
-    // Y_UNIT_TEST(ShouldNotPendingCheckpointWithoutCreation)
-    // {
-    //     auto runtime = PrepareTestActorRuntime("TStorageServiceTestShouldNotPendingCheckpointWithoutCreation");
+        auto nextGen = Generation + 1;
+        TCoordinatorId coordinator2(GraphId, nextGen);
+        RegisterCoordinator(coordinator2);
 
-    //     TCoordinatorId coordinator1(GraphId, Generation);
-    //     RegisterCoordinator(runtime, coordinator1);
+        PendingCommitCheckpoint(GraphId, Generation, CheckpointId1, true);
+    }
 
-    //     PendingCommitCheckpoint(runtime, GraphId, Generation, CheckpointId1, true);
-    // }
+    Y_UNIT_TEST_F(ShouldNotCompleteCheckpointGenerationChanged, TFixture)
+    {
+        TCoordinatorId coordinator1(GraphId, Generation);
+        RegisterCoordinator(coordinator1);
+        CreateCheckpoint(GraphId, Generation, CheckpointId1, false);
+        PendingCommitCheckpoint(GraphId, Generation, CheckpointId1, false);
 
-    // Y_UNIT_TEST(ShouldNotCompleteCheckpointWithoutCreation)
-    // {
-    //     auto runtime = PrepareTestActorRuntime("TStorageServiceTestShouldNotCompleteCheckpointWithoutCreation");
+        auto nextGen = Generation + 1;
+        TCoordinatorId coordinator2(GraphId, nextGen);
+        RegisterCoordinator(coordinator2);
 
-    //     TCoordinatorId coordinator1(GraphId, Generation);
-    //     RegisterCoordinator(runtime, coordinator1);
+        CompleteCheckpoint(GraphId, Generation, CheckpointId1, true);
+    }
 
-    //     CompleteCheckpoint(runtime, GraphId, Generation, CheckpointId1, true);
-    // }
+    Y_UNIT_TEST_F(ShouldSaveState, TFixture)
+    {
+        NKikimr::NMiniKQL::TScopedAlloc Alloc(__LOCATION__);
 
-    // Y_UNIT_TEST(ShouldNotAbortCheckpointWithoutCreation)
-    // {
-    //     auto runtime = PrepareTestActorRuntime("TStorageServiceTestShouldNotPendingCheckpointWithoutCreation");
+        RegisterDefaultCoordinator();
+        CreateCheckpoint(GraphId, Generation, CheckpointId1, false);
 
-    //     TCoordinatorId coordinator1(GraphId, Generation);
-    //     RegisterCoordinator(runtime, coordinator1);
+        SaveState(1317, CheckpointId1, MakeState("some random state"));
+    }
 
-    //     AbortCheckpoint(runtime, GraphId, Generation, CheckpointId1, true);
-    // }
+    Y_UNIT_TEST_F(ShouldGetState, TFixture)
+    {
+        NKikimr::NMiniKQL::TScopedAlloc Alloc(__LOCATION__);
 
-    // Y_UNIT_TEST(ShouldNotCompleteCheckpointWithoutPending)
-    // {
-    //     auto runtime = PrepareTestActorRuntime("TStorageServiceTestShouldNotCompleteCheckpointWithoutPending");
+        RegisterDefaultCoordinator();
+        CreateCheckpoint(GraphId, Generation, CheckpointId1, false);
+        auto state = MakeState("some random state");
+        SaveState(1317, CheckpointId1, state);
 
-    //     TCoordinatorId coordinator1(GraphId, Generation);
-    //     RegisterCoordinator(runtime, coordinator1);
-    //     CreateCheckpoint(runtime, GraphId, Generation, CheckpointId1, false);
+        auto actual = GetState(1317, GraphId, CheckpointId1);
+        UNIT_ASSERT_VALUES_EQUAL(state, actual);
+    }
 
-    //     CompleteCheckpoint(runtime, GraphId, Generation, CheckpointId1, true);
-    // }
+    Y_UNIT_TEST_F(ShouldUseGc, TFixture)
+    {
+        RegisterDefaultCoordinator();
+        CreateCompletedCheckpoint(GraphId, Generation, CheckpointId1);
+        CreateCompletedCheckpoint(GraphId, Generation, CheckpointId2);
+        CreateCompletedCheckpoint(GraphId, Generation, CheckpointId3);
 
-    // Y_UNIT_TEST(ShouldNotPendingCheckpointGenerationChanged)
-    // {
-    //     auto runtime = PrepareTestActorRuntime("TStorageServiceTestShouldNotPendingCheckpointGenerationChanged");
+        TCheckpoints checkpoints;
 
-    //     TCoordinatorId coordinator1(GraphId, Generation);
-    //     RegisterCoordinator(runtime, coordinator1);
-    //     CreateCheckpoint(runtime, GraphId, Generation, CheckpointId1, false);
-
-    //     auto nextGen = Generation + 1;
-    //     TCoordinatorId coordinator2(GraphId, nextGen);
-    //     RegisterCoordinator(runtime, coordinator2);
-
-    //     PendingCommitCheckpoint(runtime, GraphId, Generation, CheckpointId1, true);
-    // }
-
-    // Y_UNIT_TEST(ShouldNotCompleteCheckpointGenerationChanged)
-    // {
-    //     auto runtime = PrepareTestActorRuntime("TStorageServiceTestShouldNotPendingCheckpointGenerationChanged");
-
-    //     TCoordinatorId coordinator1(GraphId, Generation);
-    //     RegisterCoordinator(runtime, coordinator1);
-    //     CreateCheckpoint(runtime, GraphId, Generation, CheckpointId1, false);
-    //     PendingCommitCheckpoint(runtime, GraphId, Generation, CheckpointId1, false);
-
-    //     auto nextGen = Generation + 1;
-    //     TCoordinatorId coordinator2(GraphId, nextGen);
-    //     RegisterCoordinator(runtime, coordinator2);
-
-    //     CompleteCheckpoint(runtime, GraphId, Generation, CheckpointId1, true);
-    // }
-
-    // Y_UNIT_TEST(ShouldSaveState)
-    // {
-    //     NKikimr::NMiniKQL::TScopedAlloc Alloc(__LOCATION__);
-    //     auto runtime = PrepareTestActorRuntime("TStorageServiceTestShouldSaveState");
-
-    //     RegisterDefaultCoordinator(runtime);
-    //     CreateCheckpoint(runtime, GraphId, Generation, CheckpointId1, false);
-
-    //     SaveState(runtime, 1317, CheckpointId1, MakeState("some random state"));
-    // }
-
-    // Y_UNIT_TEST(ShouldGetState)
-    // {
-    //     NKikimr::NMiniKQL::TScopedAlloc Alloc(__LOCATION__);
-    //     auto runtime = PrepareTestActorRuntime("TStorageServiceTestShouldGetState");
-
-    //     RegisterDefaultCoordinator(runtime);
-    //     CreateCheckpoint(runtime, GraphId, Generation, CheckpointId1, false);
-    //     auto state = MakeState("some random state");
-    //     SaveState(runtime, 1317, CheckpointId1, state);
-
-    //     auto actual = GetState(runtime, 1317, GraphId, CheckpointId1);
-    //     UNIT_ASSERT_VALUES_EQUAL(state, actual);
-    // }
-
-    // Y_UNIT_TEST(ShouldUseGc)
-    // {
-    //     auto runtime = PrepareTestActorRuntime("TStorageServiceTestShouldUseGc", true);
-
-    //     RegisterDefaultCoordinator(runtime);
-    //     CreateCompletedCheckpoint(runtime, GraphId, Generation, CheckpointId1);
-    //     CreateCompletedCheckpoint(runtime, GraphId, Generation, CheckpointId2);
-    //     CreateCompletedCheckpoint(runtime, GraphId, Generation, CheckpointId3);
-
-    //     TCheckpoints checkpoints;
-
-    //     DoWithRetry<yexception>([&]() {
-    //         checkpoints = GetCheckpoints(runtime, GraphId);
-    //         if (checkpoints.size() != 1) {
-    //             throw yexception() << "gc not finished yet";
-    //         }
-    //     }, TRetryOptions(100, TDuration::MilliSeconds(100)), true);
-    // }
+        DoWithRetry<yexception>([&]() {
+            checkpoints = GetCheckpoints(GraphId);
+            if (checkpoints.size() != 1) {
+                throw yexception() << "gc not finished yet";
+            }
+        }, TRetryOptions(100, TDuration::MilliSeconds(100)), true);
+    }
 };
 
 } // namespace NFq

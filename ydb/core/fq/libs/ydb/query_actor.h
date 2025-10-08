@@ -13,8 +13,10 @@ class TQueryActor final : public NKikimr::TQueryBase {
 public:
     //using TRetry = NKikimr::TQueryRetryActor<TExecuteDataQuery, TEvPrivate::TEvExecuteDataQueryResult, TString, TString, TString, std::shared_ptr<NYdb::TParamsBuilder>, NYdb::NTable::TTxControl>;
 
+    //using NKikimr::TQueryBase::Finish; 
+
     struct TDataQuery{
-        const TString Sql;
+        TString Sql;
         std::shared_ptr<NYdb::TParamsBuilder> Params;
         NYdb::NTable::TTxControl TxControl;
         NThreading::TPromise<NYdb::NTable::TDataQueryResult> Promise;
@@ -34,8 +36,20 @@ public:
     }
 
     void OnQueryResult() final {
+        Y_ABORT_UNLESS(IsExecuting);
+
         Cerr << "OnQueryResult" << Endl;
-        Finish();
+        auto promise = DataQuery->Promise;
+        DataQuery = std::nullopt;
+        auto status = NYdb::TStatus(NYdb::EStatus::SUCCESS, NYdb::NIssue::TIssues());
+        
+        IsExecuting = false;
+        
+        if (IsFinishing) {
+            Cerr << "Call finish" << Endl;
+            Finish();
+        }
+        promise.SetValue(NYdb::NTable::TDataQueryResult(std::move(status), std::move(ResultSets), std::nullopt, std::nullopt, false, std::nullopt));
     }
 
     void OnFinish(Ydb::StatusIds::StatusCode status, NYql::TIssues&& /*issues*/) final {
@@ -44,35 +58,51 @@ public:
     }
 
 
+
     NThreading::TFuture<NYdb::NTable::TDataQueryResult> ExecuteDataQuery(
         const TString& sql,
         std::shared_ptr<NYdb::TParamsBuilder> params,
         NYdb::NTable::TTxControl txControl) {
+        Y_ABORT_UNLESS(!IsExecuting);
 
-            Cerr << "TQueryActor::ExecuteDataQuery "  << Endl;
-        
-        TDataQuery query{sql, params, txControl, NThreading::NewPromise<NYdb::NTable::TDataQueryResult>()};
-        DataQueries.push_back(std::move(query));
+        Cerr << "TQueryActor::ExecuteDataQuery "  << Endl; 
+        TDataQuery q{sql, params, txControl, NThreading::NewPromise<NYdb::NTable::TDataQueryResult>()};
+        DataQuery = std::move(q);
         ProcessQueries();
-        return DataQueries.back().Promise.GetFuture();
+        auto p = NThreading::NewPromise<NYdb::NTable::TDataQueryResult>();
+        return DataQuery->Promise.GetFuture();
+       // return p.GetFuture();
     }
+
+
+     void Finish222() {
+        Cerr << "Finish222 "  << Endl;
+        IsFinishing = true;
+        if (IsExecuting) {
+            Cerr << "Finish222 IsExecuting"  << Endl;
+            return;
+        }
+        Finish();
+     }
 
     void ProcessQueries() {
         Cerr << "TQueryActor::ProcessQueries "  << Endl;
 
-        if (IsExecuting || !ReadyToExecute || DataQueries.empty()) {
+        if (IsExecuting || !ReadyToExecute || !DataQuery) {
             return;
         }
-        auto& next = DataQueries.front();
+       // auto& next = DataQueries.front();
         Cerr << "TQueryActor::RunDataQuery "  << Endl;
-        RunDataQuery(next.Sql, next.Params.get()/*TxContro NKikimr::TQueryBase::TTxControl::BeginAndCommitTx*/);
+        IsExecuting = true;
+        RunDataQuery(DataQuery->Sql, DataQuery->Params.get()/*TxContro NKikimr::TQueryBase::TTxControl::BeginAndCommitTx*/);
     }
 
 private:
 
-    std::list<TDataQuery> DataQueries;
+    std::optional<TDataQuery> DataQuery;
     bool IsExecuting = false;
     bool ReadyToExecute = false;
+    bool IsFinishing = false;
 };
 
 // std::unique_ptr<NActors::IActor> NewDataQuery(

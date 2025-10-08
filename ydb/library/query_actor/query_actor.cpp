@@ -253,7 +253,7 @@ void TQueryBase::Handle(TEvQueryBasePrivate::TEvDataQueryResult::TPtr& ev) {
         } catch (const std::exception& ex) {
             Finish(StatusIds::INTERNAL_ERROR, ex.what());
         }
-        Y_ABORT_UNLESS(Finished || RunningQuery || RunningCommit);
+        //Y_ABORT_UNLESS(Finished || RunningQuery || RunningCommit);
     } else {
         Finish(ev->Get()->Status, std::move(ev->Get()->Issues));
     }

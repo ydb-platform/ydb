@@ -16,8 +16,11 @@ struct TLocalYdbTableClient : public IYdbTableClient {
 
             auto session = MakeIntrusive<TLocalSession>();
             auto future = operation(session);
-
-            return future;//NThreading::MakeFuture<NYdb::TStatus>(NYdb::EStatus::SUCCESS, NYdb::NIssue::TIssues());
+            return future.Apply([](const NYdb::TAsyncStatus& f){
+                Cerr << "operation end" << Endl;
+                return f;
+            });
+            //return future;//NThreading::MakeFuture<NYdb::TStatus>(NYdb::EStatus::SUCCESS, NYdb::NIssue::TIssues());
     }
 };
 

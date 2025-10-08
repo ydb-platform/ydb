@@ -21,6 +21,11 @@ ui32 GetMonthLength(ui32 month, bool isLeap);
 
 bool IsValidStringValue(NUdf::EDataSlot type, NUdf::TStringRef buf);
 
+enum class ERegexFlavor {
+    RE2,
+};
+TMaybe<TString> RegexMatchingValidStringValues(NUdf::EDataSlot type, ERegexFlavor flavor);
+
 NUdf::TUnboxedValuePod ValueFromString(NUdf::EDataSlot type, NUdf::TStringRef buf);
 NUdf::TUnboxedValuePod SimpleValueFromYson(NUdf::EDataSlot type, NUdf::TStringRef buf);
 

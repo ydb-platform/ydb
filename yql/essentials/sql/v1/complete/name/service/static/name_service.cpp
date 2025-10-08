@@ -189,6 +189,7 @@ public:
                   "WalkFolders",
                   "EACH",
                   "PARTITION_LIST",
+                  "PARTITIONS",
               }, NormalizeName))
     {
     }

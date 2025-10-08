@@ -55,6 +55,8 @@ const TStringBuf MrWalkFoldersImplName = "MrWalkFoldersImpl";
 const TStringBuf MrRangeInputListInternal = "MrRangeInputListInternal";
 const TStringBuf MrPartitionListName = "MrPartitionList";
 const TStringBuf MrPartitionListStrictName = "MrPartitionListStrict";
+const TStringBuf MrPartitionsName = "MrPartitions";
+const TStringBuf MrPartitionsStrictName = "MrPartitionsStrict";
 
 // YT related names
 const TStringBuf READ_SCHEMA_ATTR_NAME = "_read_schema";

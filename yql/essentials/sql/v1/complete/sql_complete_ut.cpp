@@ -604,6 +604,7 @@ Y_UNIT_TEST(SelectFrom) {
             {FunctionName, "FILTER()", 1},
             {FunctionName, "FOLDER()", 1},
             {FunctionName, "LIKE()", 1},
+            {FunctionName, "PARTITIONS()", 1},
             {FunctionName, "PARTITION_LIST()", 1},
             {FunctionName, "RANGE()", 1},
             {FunctionName, "REGEXP()", 1},

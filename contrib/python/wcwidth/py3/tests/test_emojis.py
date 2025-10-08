@@ -1,22 +1,14 @@
 # std imports
 import os
-import codecs
 
 # 3rd party
 import pytest
-
-try:
-    # python 2
-    _ = unichr
-except NameError:
-    # python 3
-    unichr = chr
 
 # some tests cannot be done on some builds of python, where the internal
 # unicode structure is limited to 0x10000 for memory conservation,
 # "ValueError: unichr() arg not in range(0x10000) (narrow Python build)"
 try:
-    unichr(0x2fffe)
+    chr(0x2fffe)
     NARROW_ONLY = False
 except ValueError:
     NARROW_ONLY = True
@@ -27,18 +19,18 @@ import wcwidth
 
 def make_sequence_from_line(line):
     # convert '002A FE0F  ; ..' -> (0x2a, 0xfe0f) -> chr(0x2a) + chr(0xfe0f)
-    return ''.join(unichr(int(cp, 16)) for cp in line.split(';', 1)[0].strip().split())
+    return ''.join(chr(int(cp, 16)) for cp in line.split(';', 1)[0].strip().split())
 
 
 @pytest.mark.skipif(NARROW_ONLY, reason="Test cannot verify on python 'narrow' builds")
 def emoji_zwj_sequence():
-    u"""
+    """
     Emoji zwj sequence of four codepoints is just 2 cells.
     """
-    phrase = (u"\U0001f469"   # Base, Category So, East Asian Width property 'W' -- WOMAN
-              u"\U0001f3fb"   # Modifier, Category Sk, East Asian Width property 'W' -- EMOJI MODIFIER FITZPATRICK TYPE-1-2
-              u"\u200d"       # Joiner, Category Cf, East Asian Width property 'N'  -- ZERO WIDTH JOINER
-              u"\U0001f4bb")  # Fused, Category So, East Asian Width peroperty 'W' -- PERSONAL COMPUTER
+    phrase = ("\U0001f469"   # Base, Category So, East Asian Width property 'W' -- WOMAN
+              "\U0001f3fb"   # Modifier, Category Sk, East Asian Width property 'W' -- EMOJI MODIFIER FITZPATRICK TYPE-1-2
+              "\u200d"       # Joiner, Category Cf, East Asian Width property 'N'  -- ZERO WIDTH JOINER
+              "\U0001f4bb")  # Fused, Category So, East Asian Width peroperty 'W' -- PERSONAL COMPUTER
     # This test adapted from https://www.unicode.org/L2/L2023/23107-terminal-suppt.pdf
     expect_length_each = (2, 0, 0, 2)
     expect_length_phrase = 2
@@ -54,12 +46,12 @@ def emoji_zwj_sequence():
 
 @pytest.mark.skipif(NARROW_ONLY, reason="Test cannot verify on python 'narrow' builds")
 def test_unfinished_zwj_sequence():
-    u"""
+    """
     Ensure index-out-of-bounds does not occur for zero-width joiner without any following character
     """
-    phrase = (u"\U0001f469"   # Base, Category So, East Asian Width property 'W' -- WOMAN
-              u"\U0001f3fb"   # Modifier, Category Sk, East Asian Width property 'W' -- EMOJI MODIFIER FITZPATRICK TYPE-1-2
-              u"\u200d")      # Joiner, Category Cf, East Asian Width property 'N'  -- ZERO WIDTH JOINER
+    phrase = ("\U0001f469"   # Base, Category So, East Asian Width property 'W' -- WOMAN
+              "\U0001f3fb"   # Modifier, Category Sk, East Asian Width property 'W' -- EMOJI MODIFIER FITZPATRICK TYPE-1-2
+              "\u200d")      # Joiner, Category Cf, East Asian Width property 'N'  -- ZERO WIDTH JOINER
     expect_length_each = (2, 0, 0)
     expect_length_phrase = 2
 
@@ -77,9 +69,9 @@ def test_non_recommended_zwj_sequence():
     """
     Verify ZWJ is measured as though successful with characters that cannot be joined, wcwidth does not verify
     """
-    phrase = (u"\U0001f469"   # Base, Category So, East Asian Width property 'W' -- WOMAN
-              u"\U0001f3fb"   # Modifier, Category Sk, East Asian Width property 'W' -- EMOJI MODIFIER FITZPATRICK TYPE-1-2
-              u"\u200d")      # Joiner, Category Cf, East Asian Width property 'N'  -- ZERO WIDTH JOINER
+    phrase = ("\U0001f469"   # Base, Category So, East Asian Width property 'W' -- WOMAN
+              "\U0001f3fb"   # Modifier, Category Sk, East Asian Width property 'W' -- EMOJI MODIFIER FITZPATRICK TYPE-1-2
+              "\u200d")      # Joiner, Category Cf, East Asian Width property 'N'  -- ZERO WIDTH JOINER
     expect_length_each = (2, 0, 0)
     expect_length_phrase = 2
 
@@ -95,11 +87,11 @@ def test_non_recommended_zwj_sequence():
 @pytest.mark.skipif(NARROW_ONLY, reason="Test cannot verify on python 'narrow' builds")
 def test_another_emoji_zwj_sequence():
     phrase = (
-        u"\u26F9"        # PERSON WITH BALL
-        u"\U0001F3FB"    # EMOJI MODIFIER FITZPATRICK TYPE-1-2
-        u"\u200D"        # ZERO WIDTH JOINER
-        u"\u2640"        # FEMALE SIGN
-        u"\uFE0F")       # VARIATION SELECTOR-16
+        "\u26F9"        # PERSON WITH BALL
+        "\U0001F3FB"    # EMOJI MODIFIER FITZPATRICK TYPE-1-2
+        "\u200D"        # ZERO WIDTH JOINER
+        "\u2640"        # FEMALE SIGN
+        "\uFE0F")       # VARIATION SELECTOR-16
     expect_length_each = (1, 0, 0, 1, 0)
     expect_length_phrase = 2
 
@@ -121,17 +113,17 @@ def test_longer_emoji_zwj_sequence():
     in a single function call.
     """
     # 'Category Code', 'East Asian Width property' -- 'description'
-    phrase = (u"\U0001F9D1"   # 'So', 'W' -- ADULT
-              u"\U0001F3FB"   # 'Sk', 'W' -- EMOJI MODIFIER FITZPATRICK TYPE-1-2
-              u"\u200d"       # 'Cf', 'N' -- ZERO WIDTH JOINER
-              u"\u2764"       # 'So', 'N' -- HEAVY BLACK HEART
-              u"\uFE0F"       # 'Mn', 'A' -- VARIATION SELECTOR-16
-              u"\u200d"       # 'Cf', 'N' -- ZERO WIDTH JOINER
-              u"\U0001F48B"   # 'So', 'W' -- KISS MARK
-              u"\u200d"       # 'Cf', 'N' -- ZERO WIDTH JOINER
-              u"\U0001F9D1"   # 'So', 'W' -- ADULT
-              u"\U0001F3FD"   # 'Sk', 'W' -- EMOJI MODIFIER FITZPATRICK TYPE-4
-    ) * 2
+    phrase = ("\U0001F9D1"   # 'So', 'W' -- ADULT
+              "\U0001F3FB"   # 'Sk', 'W' -- EMOJI MODIFIER FITZPATRICK TYPE-1-2
+              "\u200d"       # 'Cf', 'N' -- ZERO WIDTH JOINER
+              "\u2764"       # 'So', 'N' -- HEAVY BLACK HEART
+              "\uFE0F"       # 'Mn', 'A' -- VARIATION SELECTOR-16
+              "\u200d"       # 'Cf', 'N' -- ZERO WIDTH JOINER
+              "\U0001F48B"   # 'So', 'W' -- KISS MARK
+              "\u200d"       # 'Cf', 'N' -- ZERO WIDTH JOINER
+              "\U0001F9D1"   # 'So', 'W' -- ADULT
+              "\U0001F3FD"   # 'Sk', 'W' -- EMOJI MODIFIER FITZPATRICK TYPE-4
+              ) * 2
     # This test adapted from https://www.unicode.org/L2/L2023/23107-terminal-suppt.pdf
     expect_length_each = (2, 0, 0, 1, 0, 0, 2, 0, 2, 0) * 2
     expect_length_phrase = 4
@@ -146,10 +138,10 @@ def test_longer_emoji_zwj_sequence():
 
 
 def read_sequences_from_file(filename):
-    fp = codecs.open(os.path.join(os.path.dirname(__file__), filename), 'r', encoding='utf-8')
+    fp = open(os.path.join(os.path.dirname(__file__), filename), 'r', encoding='utf-8')
     lines = [line.strip()
-                for line in fp.readlines()
-                if not line.startswith('#') and line.strip()]
+             for line in fp.readlines()
+             if not line.startswith('#') and line.strip()]
     fp.close()
     sequences = [make_sequence_from_line(line) for line in lines]
     return lines, sequences
@@ -212,8 +204,8 @@ def test_recommended_variation_16_sequences():
 
 def test_unicode_9_vs16():
     """Verify effect of VS-16 on unicode_version 9.0 and later"""
-    phrase = (u"\u2640"        # FEMALE SIGN
-              u"\uFE0F")       # VARIATION SELECTOR-16
+    phrase = ("\u2640"        # FEMALE SIGN
+              "\uFE0F")       # VARIATION SELECTOR-16
 
     expect_length_each = (1, 0)
     expect_length_phrase = 2
@@ -226,10 +218,11 @@ def test_unicode_9_vs16():
     assert length_each == expect_length_each
     assert length_phrase == expect_length_phrase
 
+
 def test_unicode_8_vs16():
     """Verify that VS-16 has no effect on unicode_version 8.0 and earler"""
-    phrase = (u"\u2640"        # FEMALE SIGN
-              u"\uFE0F")       # VARIATION SELECTOR-16
+    phrase = ("\u2640"        # FEMALE SIGN
+              "\uFE0F")       # VARIATION SELECTOR-16
 
     expect_length_each = (1, 0)
     expect_length_phrase = 1

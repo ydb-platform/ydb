@@ -195,7 +195,7 @@ void TKqpComputeActor::PollSources(ui64 prevFreeSpace) {
         return;
     }
 
-    CA_LOG_D("Pool sources, free space: " << freeSpace);
+    CA_LOG_D("Poll sources, free space: " << freeSpace);
     Send(SysViewActorId, new TEvKqpCompute::TEvScanDataAck(freeSpace));
 }
 

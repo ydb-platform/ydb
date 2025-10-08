@@ -138,4 +138,13 @@ public:
     IActor* CreateService() override;
 };
 
+NThreading::TFuture<TEvDescribeSecretsResponse::TDescription> DescribeSecret(
+    const TVector<TString>& secretNames,
+    const TIntrusiveConstPtr<NACLib::TUserToken> userToken,
+    const TString& database,
+    TActorSystem* actorSystem
+);
+
+bool UseSchemaSecrets(const NKikimr::TFeatureFlags& flags, const TVector<TString>& secretNames);
+
 }  // namespace NKikimr::NKqp

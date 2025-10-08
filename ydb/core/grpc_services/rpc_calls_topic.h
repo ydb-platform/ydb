@@ -13,7 +13,7 @@ using TEvAlterTopicRequest = TGrpcRequestOperationCall<Ydb::Topic::AlterTopicReq
 using TEvDescribeTopicRequest = TGrpcRequestOperationCall<Ydb::Topic::DescribeTopicRequest, Ydb::Topic::DescribeTopicResponse>;
 using TEvDescribeConsumerRequest = TGrpcRequestOperationCall<Ydb::Topic::DescribeConsumerRequest, Ydb::Topic::DescribeConsumerResponse>;
 using TEvDescribePartitionRequest = TGrpcRequestOperationCall<Ydb::Topic::DescribePartitionRequest, Ydb::Topic::DescribePartitionResponse>;
-using TEvCommitOffsetTopicRequest = TGrpcRequestOperationCall<Ydb::Topic::CommitOffsetRequest, Ydb::Topic::CommitOffsetResponse>;
+using TEvCommitOffsetRequest = TGrpcRequestOperationCall<Ydb::Topic::CommitOffsetRequest, Ydb::Topic::CommitOffsetResponse>;
 
 using TEvPQDropTopicRequest = TGrpcRequestOperationCall<Ydb::PersQueue::V1::DropTopicRequest, Ydb::PersQueue::V1::DropTopicResponse>;
 using TEvPQCreateTopicRequest = TGrpcRequestOperationCall<Ydb::PersQueue::V1::CreateTopicRequest, Ydb::PersQueue::V1::CreateTopicResponse>;

@@ -279,43 +279,48 @@ Y_UNIT_TEST(CreateTableCovered) {
 }
 
 Y_UNIT_TEST(NoBulkUpsert) {
-    // NKikimrConfig::TFeatureFlags featureFlags;
-    // featureFlags.SetEnableVectorIndex(true);
-    // auto setting = NKikimrKqp::TKqpSetting();
-    // auto serverSettings = TKikimrSettings()
-    //     .SetFeatureFlags(featureFlags)
-    //     .SetKqpSettings({setting});
+    auto kikimr = Kikimr();
+    auto db = kikimr.GetQueryClient();
+    
+    CreateTexts(db);
+    AddIndex(db);
 
-    // TKikimrRunner kikimr(serverSettings);
-    // kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+    { // BulkUpsert
+        NYdb::TValueBuilder rows;
+        rows.BeginList();
+        rows.AddListItem()
+            .BeginStruct()
+            .AddMember("Key").Uint64(900)
+            .EndStruct();
+        rows.EndList();
+        auto result = kikimr.GetTableClient().BulkUpsert("/Root/Texts", rows.Build()).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Only async-indexed tables are supported by BulkUpsert");
+    }
 
-    // auto db = kikimr.GetTableClient();
-    // auto session = DoCreateTableAndVectorIndex(db, true);
-
-    // const TString originalPostingTable = ReadTablePartToYson(session, "/Root/TestTable/index1/indexImplPostingTable");
-
-    // // BulkUpsert to the table with index should fail
-    // {
-    //     NYdb::TValueBuilder rows;
-    //     rows.BeginList();
-    //     rows.AddListItem()
-    //         .BeginStruct()
-    //         .AddMember("pk").Int64(11)
-    //         .AddMember("emb").String("\x77\x77\x03")
-    //         .AddMember("data").String("43")
-    //         .EndStruct();
-    //     rows.EndList();
-    //     auto result = db.BulkUpsert("/Root/TestTable", rows.Build()).GetValueSync();
-    //     auto issues = result.GetIssues().ToString();
-    //     UNIT_ASSERT_C(result.GetStatus() == EStatus::SCHEME_ERROR, result.GetStatus());
-    //     UNIT_ASSERT_C(issues.contains("Only async-indexed tables are supported by BulkUpsert"), issues);
-    // }
-
-    // const TString postingTable1_bulk = ReadTablePartToYson(session, "/Root/TestTable/index1/indexImplPostingTable");
-    // UNIT_ASSERT_STRINGS_EQUAL(originalPostingTable, postingTable1_bulk);
+    auto index = ReadIndex(db);
+    CompareYson(R"([])", NYdb::FormatResultSetYson(index));
 }
 
 Y_UNIT_TEST(NoIndexImplTableUpdates) {
+    auto kikimr = Kikimr();
+    auto db = kikimr.GetQueryClient();
+    
+    CreateTexts(db);
+    AddIndex(db);
+
+    { // UpsertRow
+        TString query = R"sql(
+            UPSERT INTO `/Root/Texts/fulltext_idx/indexImplTable` (__ydb_token, Key) VALUES
+                ("dogs", 901)
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Writing to index implementation tables is not allowed");
+    }
+
+    auto index = ReadIndex(db);
+    CompareYson(R"([])", NYdb::FormatResultSetYson(index));
 }
     
 }

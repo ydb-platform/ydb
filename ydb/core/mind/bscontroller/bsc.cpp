@@ -163,6 +163,11 @@ void TBlobStorageController::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
     if (!std::exchange(StorageConfigObtained, true)) {
         if (HostRecords) {
             Execute(CreateTxInitScheme());
+
+            if (!SelfHealId) {
+                SelfHealSettings = ParseSelfHealSettings(StorageConfig);
+                SelfHealId = Register(CreateSelfHealActor());
+            }
         }
 
         ClusterBalancingSettings = ParseClusterBalancingSettings(StorageConfig);
@@ -306,18 +311,28 @@ void TBlobStorageController::Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev) {
                     "BlobStorageControllerControls.EnableSelfHealWithDegraded");
             }
         }
-        SelfHealId = Register(CreateSelfHealActor());
-        PushStaticGroupsToSelfHeal();
         if (StorageConfigObtained) {
             Execute(CreateTxInitScheme());
 
-            ClusterBalancingSettings = ParseClusterBalancingSettings(StorageConfig);
-            if (ClusterBalancingSettings.Enable) {
-                ClusterBalanceActorId = Register(CreateClusterBalancingActor(SelfId(), ClusterBalancingSettings));
+            if (!SelfHealId) {
+                SelfHealSettings = ParseSelfHealSettings(StorageConfig);
+                SelfHealId = Register(CreateSelfHealActor());
+            }
+
+            if (!ClusterBalanceActorId) {
+                ClusterBalancingSettings = ParseClusterBalancingSettings(StorageConfig);
+                if (ClusterBalancingSettings.Enable) {
+                    ClusterBalanceActorId = Register(CreateClusterBalancingActor(SelfId(), ClusterBalancingSettings));
+                }
             }
         }
     }
-    Send(SelfHealId, new TEvPrivate::TEvUpdateHostRecords(HostRecords));
+
+    PushStaticGroupsToSelfHeal();
+
+    if (SelfHealId) {
+        Send(SelfHealId, new TEvPrivate::TEvUpdateHostRecords(HostRecords));
+    }
 }
 
 void TBlobStorageController::IssueInitialGroupContent() {

@@ -106,7 +106,7 @@ TGetLabelsResponse ProcessGetLabelsResponse(NYql::IHTTPGateway::TResult&& respon
         result.Labels.push_back(key);
     }
 
-    return TGetLabelsResponse(std::move(result));
+    return TGetLabelsResponse(std::move(result), response.Content.size() + response.Content.Headers.size());
 }
 
 TListMetricsResponse ProcessListMetricsResponse(NYql::IHTTPGateway::TResult&& response) {
@@ -156,7 +156,7 @@ TListMetricsResponse ProcessListMetricsResponse(NYql::IHTTPGateway::TResult&& re
         result.Metrics.emplace_back(std::move(selectors), metricObj["type"].GetString());
     }
 
-    return TListMetricsResponse(std::move(result));
+    return TListMetricsResponse(std::move(result), response.Content.size() + response.Content.Headers.size());
 }
 
 TGetPointsCountResponse ProcessGetPointsCountResponse(NYql::IHTTPGateway::TResult&& response, ui64 downsampledPointsCount) {
@@ -172,7 +172,7 @@ TGetPointsCountResponse ProcessGetPointsCountResponse(NYql::IHTTPGateway::TResul
         for (const auto& whitelistIssue : whitelistIssues) {
             if (issues.find(whitelistIssue) != issues.npos) {
                 result.PointsCount = 0;
-                return TGetPointsCountResponse(std::move(result));
+                return TGetPointsCountResponse(std::move(result), 0);
             }
         }
 
@@ -198,7 +198,7 @@ TGetPointsCountResponse ProcessGetPointsCountResponse(NYql::IHTTPGateway::TResul
 
     result.PointsCount = json["scalar"].GetInteger() + downsampledPointsCount;
 
-    return TGetPointsCountResponse(std::move(result));
+    return TGetPointsCountResponse(std::move(result), response.Content.size() + response.Content.Headers.size());
 }
 
 TGetDataResponse ProcessGetDataResponse(NYdbGrpc::TGrpcStatus&& status, ReadResponse&& response) {
@@ -240,7 +240,7 @@ TGetDataResponse ProcessGetDataResponse(NYdbGrpc::TGrpcStatus&& status, ReadResp
         result.Timeseries.emplace_back(std::move(metric), std::move(timestamps), std::move(values));
     }
 
-    return TGetDataResponse(std::move(result));
+    return TGetDataResponse(std::move(result), response.ByteSize());
 }
 
 class TSolomonAccessorClient : public ISolomonAccessorClient, public std::enable_shared_from_this<TSolomonAccessorClient> {
@@ -334,7 +334,7 @@ public:
             TGetPointsCountResult result;
             result.PointsCount = downsampledPointsCount;
 
-            resultPromise.SetValue(TGetPointsCountResponse(std::move(result)));
+            resultPromise.SetValue(TGetPointsCountResponse(std::move(result), 0));
         }
 
         return resultPromise.GetFuture();

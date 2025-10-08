@@ -21,12 +21,7 @@ TConclusion<std::shared_ptr<NArrow::TGeneralContainer>> TReadPortionInfoWithBlob
     NActors::TLogContextGuard gLogging =
         NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("portion_id", PortionInfo.GetPortionInfo().GetPortionId());
     for (auto&& i : PortionInfo.GetRecordsVerified()) {
-        auto it = Chunks.find(i.GetAddress());
-        if (it == Chunks.end()) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "missing_chunk_for_record")("column_id", i.ColumnId)("chunk_idx", i.Chunk);
-            continue;
-        }
-        blobs[i.GetAddress()] = it->second->GetData();
+        blobs[i.GetAddress()] = GetBlobByAddressVerified(i.ColumnId, i.Chunk);
         Y_ABORT_UNLESS(blobs[i.GetAddress()].size() == i.BlobRange.Size);
     }
     return PortionInfo.PrepareForAssemble(data, resultSchema, blobs, {}, restoreAbsent).AssembleToGeneralContainer(seqColumns);

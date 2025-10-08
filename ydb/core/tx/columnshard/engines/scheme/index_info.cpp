@@ -173,30 +173,18 @@ std::shared_ptr<arrow::Field> TIndexInfo::GetColumnFieldOptional(const ui32 colu
 
 std::shared_ptr<arrow::Field> TIndexInfo::GetColumnFieldVerified(const ui32 columnId) const {
     auto result = GetColumnFieldOptional(columnId);
-    if (!result) {
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "missing_column_id")("column_id", columnId);
-        return IIndexInfo::GetColumnFieldOptional(columnId);
-    }
+    AFL_VERIFY(!!result)("column_id", columnId);
 
     return result;
 }
 
 std::shared_ptr<arrow::Schema> TIndexInfo::GetColumnsSchema(const std::set<ui32>& columnIds) const {
-    if (!columnIds.size()) {
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "empty_columns_set_for_schema");
-        return std::make_shared<arrow::Schema>(std::vector<std::shared_ptr<arrow::Field>>{});
-    }
+    AFL_VERIFY(columnIds.size());
 
     std::vector<std::shared_ptr<arrow::Field>> fields;
     fields.reserve(columnIds.size());
     for (auto&& i : columnIds) {
-        auto f = GetColumnFieldOptional(i);
-        if (!f) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "skip_missing_column_in_schema")("column_id", i);
-            continue;
-        }
-
-        fields.emplace_back(std::move(f));
+        fields.emplace_back(GetColumnFieldVerified(i));
     }
 
     return std::make_shared<arrow::Schema>(fields);
@@ -697,24 +685,8 @@ TConclusion<std::shared_ptr<arrow::Array>> TIndexInfo::BuildDefaultColumn(const 
 
 ui32 TIndexInfo::GetColumnIndexVerified(const ui32 id) const {
     auto result = GetColumnIndexOptional(id);
-    if (result) {
-        return *result;
-    }
-
-    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "missing_column_index")("id", id)("indexes", JoinSeq(",", SchemaColumnIdsWithSpecials));
-    if (IIndexInfo::IsSpecialColumn(id)) {
-        auto specialField = IIndexInfo::GetColumnFieldOptional(id);
-        if (specialField) {
-            const auto& schema = ArrowSchemaWithSpecials();
-            for (ui32 idx = 0; idx < (ui32)schema->num_fields(); ++idx) {
-                if (schema->field(idx)->name() == specialField->name()) {
-                    return idx;
-                }
-            }
-        }
-    }
-
-    return 0;
+    AFL_VERIFY(result)("id", id)("indexes", JoinSeq(",", SchemaColumnIdsWithSpecials));
+    return *result;
 }
 
 std::vector<std::shared_ptr<NIndexes::TSkipIndex>> TIndexInfo::FindSkipIndexes(

@@ -62,6 +62,26 @@ TConclusionStatus TGeneralCompactColumnEngineChanges::DoConstructBlobs(TConstruc
             stats->Merge(accessor.GetSerializationStat(*resultFiltered, true));
         }
 
+        // Validate that all portion columns/indexes exist in the target schema before restoring; fail fast instead of VERIFY
+        {
+            const auto& idxInfo = resultFiltered->GetIndexInfo();
+            for (auto&& accessor : accessors) {
+                for (auto&& rec : accessor.GetRecordsVerified()) {
+                    if (!idxInfo.HasColumnId(rec.GetColumnId())) {
+                        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "compaction_missing_column")
+                            ("portion_id", accessor.GetPortionInfo().GetPortionId())("column_id", rec.GetColumnId());
+                        return TConclusionStatus::Fail(TStringBuilder() << "missing column id " << rec.GetColumnId() << " in compaction schema");
+                    }
+                }
+                for (auto&& idxChunk : accessor.GetIndexesVerified()) {
+                    if (!idxInfo.HasIndexId(idxChunk.GetIndexId())) {
+                        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "compaction_missing_index")
+                            ("portion_id", accessor.GetPortionInfo().GetPortionId())("index_id", idxChunk.GetIndexId());
+                        return TConclusionStatus::Fail(TStringBuilder() << "missing index id " << idxChunk.GetIndexId() << " in compaction schema");
+                    }
+                }
+            }
+        }
         std::vector<TReadPortionInfoWithBlobs> portions = TReadPortionInfoWithBlobs::RestorePortions(accessors, Blobs, context.SchemaVersions);
         THashSet<ui64> usedPortionIds;
         std::vector<std::shared_ptr<ISubsetToMerge>> currentToMerge;

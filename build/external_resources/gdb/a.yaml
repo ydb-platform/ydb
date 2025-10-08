@@ -1,4 +1,4 @@
-title: gdb14
+title: gdb
 service: buildroot
 
 arcanum:
@@ -48,8 +48,21 @@ arcanum:
 shared:
   mapping_path: &mapping-path "build/external_resources/gdb/resources.json"
   input: &base-input
-    package: gdb/14
-    toolchain_name: gdb14
+    package: ${flow-vars.ix_package}
+    toolchain_name: ${flow-vars.toolchain_name}
+
+  shared-flow-vars-ui: &ui-vars
+    required: [revision]
+    type: object
+    properties:
+      revision:
+        title: Repository revision (github.com/yandex/toolchains)
+        type: string
+        default: HEAD
+      platforms:
+        title: Build only for particular platforms (comma separated)
+        type: string
+        default: "linux-x86_64, linux-aarch64"
 
 ci:
   secret: sec-01hnfbz3r6xqfacy9t3he0rzvf
@@ -66,28 +79,40 @@ ci:
     release-gdb:
       title: "Release gdb14"
       flow: build-and-release-gdb
+      flow-vars:
+        ix_package: gdb/14
+        toolchain_name: gdb14
+        mapping_path: build/external_resources/gdb/resources.json
       flow-vars-ui:
         schema:
-          required: [revision]
-          type: object
-          properties:
-            revision:
-              title: Repository revision (github.com/yandex/toolchains)
-              type: string
-              default: HEAD
-            platforms:
-              title: Build only for particular platforms (comma separated)
-              type: string
-              default: "linux-x86_64, linux-aarch64"
+          <<: *ui-vars
       filters:
         - discovery: dir
           abs-paths:
             - devtools/gdb/**
+            - toolchains/ynd/bin/gdb/**
+            - toolchains/ynd/gdb/**
+
+    release-gdb-16:
+      title: "Release gdb16"
+      flow: build-and-release-gdb
+      flow-vars:
+        ix_package: bin/gdb/16
+        toolchain_name: gdb16
+        mapping_path: build/external_resources/gdb/resources.json
+      flow-vars-ui:
+        schema:
+          <<: *ui-vars
+      filters:
+        - discovery: dir
+          abs-paths:
+            - devtools/gdb/**
+            - toolchains/ynd/bin/gdb/**
             - toolchains/ynd/gdb/**
 
   flows:
     build-and-release-gdb:
-      title: "Build and Release gdb14"
+      title: "Build and Release gdb"
       jobs:
         build:
           title: Build

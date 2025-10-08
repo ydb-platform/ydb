@@ -366,13 +366,13 @@ namespace NYdb::NConsoleClient {
         config.Opts->AddLongOption("retention-period-hours", TStringBuilder()
                 << "Duration in hours for which data in topic is stored "
                 << "(default: " << NColorizer::StdOut().CyanColor() << RetentionPeriod_.Hours() << NColorizer::StdOut().OldColor() << ")")
+            .Hidden()
             .Optional()
             .RequiredArgument("HOURS")
             .StoreMappedResult(&RetentionPeriod_, ParseDurationHours);
         config.Opts->AddLongOption("retention-period", TStringBuilder()
                 << "Duration for which data in topic is stored (ex. '72h', '1440m') "
                 << "(default: " << NColorizer::StdOut().CyanColor() << HumanReadable(RetentionPeriod_) << NColorizer::StdOut().OldColor() << ")")
-            .Hidden()
             .Optional()
             .StoreMappedResult(&RetentionPeriod_, ParseDuration);
         config.Opts->AddLongOption("partition-write-speed-kbps", "Partition write speed in kilobytes per second")
@@ -465,12 +465,12 @@ namespace NYdb::NConsoleClient {
             .Optional()
             .StoreResult(&MinActivePartitions_);
         config.Opts->AddLongOption("retention-period-hours", "Duration in hours for which data in topic is stored")
+            .Hidden()
             .Optional()
             .RequiredArgument("HOURS")
             .StoreMappedResult(&RetentionPeriod_, ParseDurationHours);
         config.Opts->AddLongOption("retention-period", "Duration for which data in topic is stored (ex. '72h', '1440m')")
             .Optional()
-            .Hidden()
             .StoreMappedResult(&RetentionPeriod_, ParseDuration);
         config.Opts->AddLongOption("partition-write-speed-kbps", "Partition write speed in kilobytes per second")
             .Optional()

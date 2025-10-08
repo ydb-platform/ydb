@@ -3,14 +3,12 @@ import allure
 import logging
 import os
 import time as time_module
-import uuid
 import yatest.common
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from ydb.tests.olap.lib.remote_execution import (
-    execute_command,
     deploy_binaries_to_hosts,
 )
 from ydb.tests.olap.lib.ydb_cli import YdbCliHelper
@@ -105,7 +103,7 @@ class ParallelWorkloadTestBase(LoadSuiteBase):
         )
 
         logging.info("=== Workload test completed ===")
-        logging.debug(f"Execuion final result {final_result}")
+        logging.debug(f"Execution final result {final_result}")
         # return final_result
 
     def _prepare_stress_execution(
@@ -176,7 +174,7 @@ class ParallelWorkloadTestBase(LoadSuiteBase):
             total_hosts = []
             for deploy_future, future_workload_name in deploy_futures:
                 deployed_nodes[future_workload_name] = deploy_future.result()
-                total_hosts += map(lambda node: node['node'].host, deployed_nodes[future_workload_name])
+                total_hosts += list(map(lambda node: node['node'].host, deployed_nodes[future_workload_name]))
 
             # Инициализируем результат
             overall_result = YdbCliHelper.WorkloadRunResult()
@@ -196,7 +194,7 @@ class ParallelWorkloadTestBase(LoadSuiteBase):
     def _execute_stress_runs(
         self,
         workload_params: dict,
-        duration_value: str,
+        duration_value: float,
         node_percentage: int,
         preparation_result: dict,
         nemesis: bool = False,
@@ -296,11 +294,12 @@ class ParallelWorkloadTestBase(LoadSuiteBase):
 
                         # Выполняем один run
                         success, execution_time, stdout, stderr, is_timeout = (
-                            self._execute_single_workload_run(
+                            self.__class__.base_executor._execute_single_workload_run(
                                 deployed_binary_path,
-                                node_host,
+                                node['node'],
                                 run_name,
                                 ' '.join(workload_config['args']),
+                                '--duration',
                                 run_config_copy,
                             )
                         )
@@ -571,189 +570,6 @@ class ParallelWorkloadTestBase(LoadSuiteBase):
                         len(deployed_nodes)} unique hosts"
                 )
                 return deployed_nodes
-
-    def _execute_single_workload_run(
-        self,
-        deployed_binary_path: str,
-        target_node,
-        run_name: str,
-        command_args_template: str,
-        run_config: dict,
-    ):
-        """
-        Выполняет один запуск workload
-
-        Args:
-            deployed_binary_path: Путь к бинарному файлу workload
-            target_node: Нода для выполнения
-            run_name: Базовое имя запуска
-            command_args_template: Шаблон аргументов командной строки
-            duration_param: Параметр для передачи времени выполнения
-            run_config: Конфигурация запуска с информацией об итерации
-
-        Returns:
-            Кортеж (успех, время выполнения, stdout, stderr, флаг таймаута)
-        """
-        # Подставляем переменные в command_args_template для уникальности путей
-        command_args = self._substitute_variables_in_template(
-            command_args_template, target_node, run_config
-        )
-
-        command_args = (
-            f"{command_args} --duration {run_config['duration']}"
-        )
-
-        # Добавляем информацию об итерации в имя запуска только если префикс
-        # еще не добавлен
-
-        run_start_time = time_module.time()
-
-        try:
-            with allure.step(f"Execute {run_name}"):
-                allure.attach(
-                    f"Run config: {run_config}",
-                    "Run Info",
-                    attachment_type=allure.attachment_type.TEXT,
-                )
-                allure.attach(
-                    command_args,
-                    "Command Arguments",
-                    attachment_type=allure.attachment_type.TEXT,
-                )
-                allure.attach(
-                    f"Target host: {target_node}",
-                    "Execution Target",
-                    attachment_type=allure.attachment_type.TEXT,
-                )
-
-                # Формируем и выполняем команду
-                with allure.step("Execute workload command"):
-                    # Отключаем буферизацию для гарантии захвата вывода
-                    cmd = f"stdbuf -o0 -e0 {deployed_binary_path} {command_args}"
-
-                    run_timeout = (
-                        run_config["duration"] + 150
-                    )  # Добавляем буфер для завершения
-
-                    allure.attach(
-                        cmd, "Full Command", attachment_type=allure.attachment_type.TEXT
-                    )
-                    allure.attach(
-                        f"Timeout: {int(run_timeout)}s",
-                        "Execution Timeout",
-                        attachment_type=allure.attachment_type.TEXT,
-                    )
-
-                    execution_result = execute_command(
-                        target_node,
-                        cmd,
-                        raise_on_error=False,
-                        timeout=int(run_timeout),
-                        raise_on_timeout=False,
-                    )
-
-                    stdout = execution_result.stdout
-                    stderr = execution_result.stderr
-                    is_timeout = execution_result.is_timeout
-
-                    # Прикрепляем результаты выполнения команды
-                    if stdout:
-                        allure.attach(
-                            stdout,
-                            "Command Stdout",
-                            attachment_type=allure.attachment_type.TEXT,
-                        )
-                    else:
-                        allure.attach(
-                            "(empty)",
-                            "Command Stdout",
-                            attachment_type=allure.attachment_type.TEXT,
-                        )
-
-                    if stderr:
-                        allure.attach(
-                            stderr,
-                            "Command Stderr",
-                            attachment_type=allure.attachment_type.TEXT,
-                        )
-                    else:
-                        allure.attach(
-                            "(empty)",
-                            "Command Stderr",
-                            attachment_type=allure.attachment_type.TEXT,
-                        )
-
-                    # success=True только если stderr пустой (исключая SSH
-                    # warnings) И нет timeout
-                    success = not bool(stderr.strip()) and not is_timeout
-
-                    execution_time = time_module.time() - run_start_time
-
-                    logging.info(
-                        f"{run_name} completed in {
-                            execution_time: .1f}s, success: {success}, timeout: {is_timeout}"
-                    )
-
-                    return success, execution_time, stdout, stderr, is_timeout
-
-        except Exception as e:
-            execution_time = time_module.time() - run_start_time
-            error_msg = f"Exception in {run_name}: {e}"
-            logging.error(error_msg)
-            return False, execution_time, "", error_msg, False
-
-    def _substitute_variables_in_template(
-        self,
-        command_args_template: str,
-        target_node,
-        run_config: dict
-    ) -> str:
-        """
-        Подставляет переменные в шаблон command_args
-
-        Поддерживаемые переменные:
-        - {node_host} - хост ноды
-        - {iteration_num} - номер итерации
-        - {thread_id} - ID потока (обычно хост ноды)
-        - {run_id} - уникальный ID запуска
-        - {timestamp} - timestamp запуска
-        - {uuid} - короткий UUID
-
-        Args:
-            command_args_template: Шаблон аргументов командной строки
-            target_node: Нода для выполнения
-            run_config: Конфигурация запуска
-
-        Returns:
-            Строка с подставленными переменными
-        """
-
-        # Получаем значения переменных
-        node_host = target_node
-        iteration_num = run_config.get("iteration_num", 1)
-        thread_id = run_config.get("thread_id", node_host)
-        timestamp = int(time_module.time())
-        short_uuid = uuid.uuid4().hex[:8]
-
-        # Создаем уникальный run_id
-        run_id = f"{node_host}_{iteration_num}_{timestamp}"
-
-        # Словарь подстановок
-        substitutions = {
-            "{node_host}": node_host,
-            "{iteration_num}": str(iteration_num),
-            "{thread_id}": str(thread_id),
-            "{run_id}": run_id,
-            "{timestamp}": str(timestamp),
-            "{uuid}": short_uuid,
-        }
-
-        # Выполняем подстановки
-        result = command_args_template
-        for placeholder, value in substitutions.items():
-            result = result.replace(placeholder, value)
-
-        return result
 
     def _finalize_workload_results(
         self,

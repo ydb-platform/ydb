@@ -1382,7 +1382,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
 }
 
 Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
-    Y_UNIT_TEST_F(CreateAndAlterStreamingQuery, TStreamingTestFixture) {
+    Y_UNIT_TEST_F(CreateAndAlterStreamingQuery, TStreamingWithSchemaSecretsTestFixture) {
         constexpr char inputTopicName[] = "createAndAlterStreamingQueryInputTopic";
         constexpr char outputTopicName[] = "createAndAlterStreamingQueryOutputTopic";
         CreateTopic(inputTopicName);

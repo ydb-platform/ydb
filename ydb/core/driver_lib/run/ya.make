@@ -14,6 +14,7 @@ SRCS(
     driver.h
     factories.h
     factories.cpp
+    grpc_servers_manager.h
     kikimr_services_initializers.cpp
     kikimr_services_initializers.h
     main.h

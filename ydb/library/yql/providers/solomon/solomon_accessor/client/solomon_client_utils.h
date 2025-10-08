@@ -26,7 +26,7 @@ public:
     EStatus Status;
     TString Error;
     T Result;
-    ui64 DownloadedBytes;
+    ui64 DownloadedBytes = 0;
 };
 
 struct TGetLabelsResult {

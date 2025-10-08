@@ -1,5 +1,6 @@
 LIBRARY()
 
+ENABLE(YQL_STYLE_CPP)
 
 SRCS(
     sql_format.cpp

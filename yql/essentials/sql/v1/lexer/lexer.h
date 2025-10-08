@@ -34,4 +34,4 @@ bool SplitQueryToStatements(
     const TString& query, NSQLTranslation::ILexer::TPtr& lexer,
     TVector<TString>& statements, NYql::TIssues& issues, const TString& file = "",
     bool areBlankSkipped = true);
-}
+} // namespace NSQLTranslationV1

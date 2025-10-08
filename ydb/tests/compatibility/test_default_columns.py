@@ -16,8 +16,8 @@ class TestDefaultColumns(RestartToAnotherVersionFixture):
         self.rows_per_partition = 10
         self.all_types = {**pk_types, **non_pk_types}
 
-        if min(self.versions) < (24, 1):
-            pytest.skip("Only available since 24-1")
+        if min(self.versions) < (25, 3):
+            pytest.skip("Only available since 25-3")
 
         yield from self.setup_cluster(
             extra_feature_flags={

@@ -788,25 +788,25 @@ public:
 
     void OnSuccessCompileRequest() {
         if (QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_EXPLAIN) {
-            // TODO: properly initialize transaction(s)
             TVector<IKqpGateway::TPhysicalTxData> txs;
-            auto tx = QueryState->PreparedQuery->GetTransactions().back();
+            bool isValidParams = true;
             auto txAlloc = std::make_shared<TTxAllocatorState>(AppData()->FunctionRegistry, AppData()->TimeProvider, AppData()->RandomProvider);
             const auto& parameters = QueryState->GetYdbParameters();
             QueryState->QueryData = std::make_shared<TQueryData>(txAlloc);
             QueryState->QueryData->ParseParameters(parameters);
-            txs.emplace_back(tx, QueryState->QueryData);
 
-            bool isValidParams = true;
-            try {
-                QueryState->QueryData->PrepareParameters(tx, QueryState->PreparedQuery, txAlloc->TypeEnv);
-            } catch (const yexception& ex) {
-                // TODO: throw exception instead of silent ignore?
-                // ythrow TRequestFail(Ydb::StatusIds::BAD_REQUEST) << ex.what();
-                isValidParams = false;
+            for (const auto& tx : QueryState->PreparedQuery->GetTransactions()) {
+                txs.emplace_back(tx, QueryState->QueryData);
+                try {
+                    QueryState->QueryData->PrepareParameters(tx, QueryState->PreparedQuery, txAlloc->TypeEnv);
+                } catch (const yexception& ex) {
+                    // TODO: throw exception instead of silent ignore?
+                    // ythrow TRequestFail(Ydb::StatusIds::BAD_REQUEST) << ex.what();
+                    isValidParams = false;
+                }
             }
 
-            if (txs.front().Body->GetType() != NKqpProto::TKqpPhyTx::TYPE_SCHEME && isValidParams) {
+            if (!txs.empty() && txs.front().Body->GetType() != NKqpProto::TKqpPhyTx::TYPE_SCHEME && isValidParams) {
                 auto tasksGraph = TKqpTasksGraph(Settings.Database, txs, txAlloc, {}, Settings.TableService.GetAggregationConfig(), RequestCounters, {});
                 tasksGraph.GetMeta().AllowOlapDataQuery = Settings.TableService.GetAllowOlapDataQuery();
 

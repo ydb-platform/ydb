@@ -2788,4 +2788,140 @@ attributes {
             )",
         }, request, Ydb::StatusIds::SUCCESS, "/MyRoot", false, "", "", {}, true);
     }
+
+    Y_UNIT_TEST(DecimalOutOfRange) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+                Name: "Table1"
+                Columns { Name: "key" Type: "Uint64" }
+                Columns { Name: "value" Type: "Decimal" }
+                KeyColumnNames: ["key"]
+            )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Write a normal decimal value
+        // 10.0^13-1 (scale 9) = 0x21e19e0c9ba76a53600
+        {
+            ui64 key = 1u;
+            std::pair<ui64, i64> value = { 0x19e0c9ba76a53600ULL, 0x21eULL };
+            UploadRow(runtime, "/MyRoot/Table1", 0, {1}, {2}, {TCell::Make(key)}, {TCell::Make(value)});
+        }
+        // Write a decimal value that is out of range for precision 22
+        // 10.0^13 (scale 9) = 10^22 = 0x21e19e0c9bab2400000
+        {
+            ui64 key = 2u;
+            std::pair<ui64, i64> value = { 0x19e0c9bab2400000ULL, 0x21eULL };
+            UploadRow(runtime, "/MyRoot/Table1", 0, {1}, {2}, {TCell::Make(key)}, {TCell::Make(value)});
+        }
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TestExport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/Table1"
+                destination_prefix: "Backup1"
+              }
+            }
+        )", port));
+        env.TestWaitNotification(runtime, txId);
+
+        TestGetExport(runtime, txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+
+        {
+            auto it = s3Mock.GetData().find("/Backup1/data_00.csv");
+            UNIT_ASSERT(it != s3Mock.GetData().end());
+            UNIT_ASSERT_STRINGS_EQUAL(it->second,
+                "1,9999999999999\n"
+                "2,10000000000000\n");
+        }
+
+        TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_prefix: "Backup1"
+                destination_path: "/MyRoot/Table2"
+              }
+            }
+        )", port));
+        env.TestWaitNotification(runtime, txId);
+
+        TestGetImport(runtime, txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+
+        TestExport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/Table2"
+                destination_prefix: "Backup2"
+              }
+            }
+        )", port));
+        env.TestWaitNotification(runtime, txId);
+
+        TestGetExport(runtime, txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+
+        // Note: out-of-range values are restored as inf
+        {
+            auto it = s3Mock.GetData().find("/Backup2/data_00.csv");
+            UNIT_ASSERT(it != s3Mock.GetData().end());
+            UNIT_ASSERT_STRINGS_EQUAL(it->second,
+                "1,9999999999999\n"
+                "2,inf\n");
+        }
+    }
+
+    Y_UNIT_TEST(CorruptedDecimalValue) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+                Name: "Table1"
+                Columns { Name: "key" Type: "Uint64" }
+                Columns { Name: "value" Type: "Decimal" }
+                KeyColumnNames: ["key"]
+            )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Write a decimal value that is way out of range for max precision 35
+        // 10^38 = 0x4b3b4ca85a86c47a098a224000000000
+        {
+            ui64 key = 1u;
+            std::pair<ui64, i64> value = { 0x098a224000000000ULL, 0x4b3b4ca85a86c47aULL };
+            UploadRow(runtime, "/MyRoot/Table1", 0, {1}, {2}, {TCell::Make(key)}, {TCell::Make(value)});
+        }
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TestExport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/Table1"
+                destination_prefix: "Backup1"
+              }
+            }
+        )", port));
+        env.TestWaitNotification(runtime, txId);
+
+        TestGetExport(runtime, txId, "/MyRoot", Ydb::StatusIds::CANCELLED);
+    }
 }

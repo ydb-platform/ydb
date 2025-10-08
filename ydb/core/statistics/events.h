@@ -191,6 +191,16 @@ struct TEvStatistics {
         TEvSaveStatisticsQueryResponse,
         EvSaveStatisticsQueryResponse>
     {
+        TEvSaveStatisticsQueryResponse(
+                Ydb::StatusIds::StatusCode status,
+                NYql::TIssues issues,
+                TPathId pathId)
+            : Status(status)
+            , Issues(std::move(issues))
+            , PathId(std::move(pathId))
+            , Success(Status == Ydb::StatusIds::SUCCESS)
+        {}
+
         Ydb::StatusIds::StatusCode Status;
         NYql::TIssues Issues;
         TPathId PathId;

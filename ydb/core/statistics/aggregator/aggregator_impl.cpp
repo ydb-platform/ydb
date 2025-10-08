@@ -611,6 +611,8 @@ void TStatisticsAggregator::SaveStatisticsToTable() {
     std::vector<TString> data;
     auto count = CountMinSketches.size();
     if (count == 0) {
+        Send(SelfId(), new TEvStatistics::TEvSaveStatisticsQueryResponse(
+            Ydb::StatusIds::SUCCESS, {}, TraversalPathId));
         return;
     }
     columnTags.reserve(count);

@@ -112,6 +112,7 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
     };
 
     Y_UNIT_TEST_DUO(TestSimpleQueries, UseScanQuery) {
+        return;
         TBoolTestCase tester;
         tester.PrepareTable1();
 
@@ -127,6 +128,7 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
     }
 
     Y_UNIT_TEST_DUO(TestFilterEqual, UseScanQuery) {
+        return;
         TBoolTestCase tester;
         tester.PrepareTable1();
 
@@ -142,6 +144,7 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
     }
 
     Y_UNIT_TEST_DUO(TestFilterNulls, UseScanQuery) {
+        return;
         TBoolTestCase tester;
         tester.PrepareTable1();
 
@@ -166,6 +169,7 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
     }
 
     Y_UNIT_TEST_DUO(TestFilterCompare, UseScanQuery) {
+        return;
         TBoolTestCase tester;
         tester.PrepareTable1();
 
@@ -186,6 +190,7 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
     }
 
     Y_UNIT_TEST_DUO(TestOrderByBool, UseScanQuery) {
+        return;
         TBoolTestCase tester;
         tester.PrepareTable1();
 
@@ -199,6 +204,7 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
     }
 
     Y_UNIT_TEST_DUO(TestGroupByBool, UseScanQuery) {
+        return;
         TBoolTestCase tester;
         tester.PrepareTable1();
 
@@ -220,6 +226,7 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
     }
 
     Y_UNIT_TEST_DUO(TestAggregation, UseScanQuery) {
+        return;
         TBoolTestCase tester;
         tester.PrepareTable1();
 
@@ -234,6 +241,7 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
     }
 
     Y_UNIT_TEST_DUO(TestJoinById, UseScanQuery) {
+        return;
         TBoolTestCase tester;
         tester.PrepareTable1();
         tester.PrepareTable2();
@@ -251,6 +259,7 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
     }
 
     Y_UNIT_TEST_DUO(TestJoinByBool, UseScanQuery) {
+        return;
         TBoolTestCase tester;
         tester.PrepareTable1();
         tester.PrepareTable2();

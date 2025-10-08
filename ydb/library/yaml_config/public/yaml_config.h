@@ -106,7 +106,8 @@ struct TLabel {
 struct TIncompatibilityRule {
     struct TLabelPattern {
         TString Name;
-        std::variant<TString, std::monostate> Value;
+        std::variant<std::monostate, THashSet<TString>> Values;
+        bool Negated = false;
         
         bool Matches(const TLabel& label, const TString& actualLabelName) const;
     };

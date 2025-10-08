@@ -7,13 +7,14 @@
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
 #include <ydb/core/tx/columnshard/common/blob.h>
 #include <ydb/core/tx/columnshard/common/path_id.h>
+#include <ydb/core/tx/columnshard/common/thread_safe_optional.h>
 #include <ydb/core/tx/columnshard/engines/scheme/versions/abstract_scheme.h>
 
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/formats/arrow/replace_key.h>
 
 #include <util/generic/hash_set.h>
-#include <atomic>
+
 
 namespace NKikimrColumnShardDataSharingProto {
 class TPortionInfo;
@@ -85,37 +86,12 @@ private:
     friend class TCompactedPortionInfo;
     friend class TWrittenPortionInfo;
 
-    TPortionInfo(const TPortionInfo& other)
-        : PathId(other.PathId)
-        , PortionId(other.PortionId)
-        , RemoveSnapshot(other.RemoveSnapshot)
-        , RemoveSnapshotDefined(other.RemoveSnapshotDefined.load(std::memory_order_acquire))
-        , SchemaVersion(other.SchemaVersion)
-        , ShardingVersion(other.ShardingVersion)
-        , Meta(other.Meta)
-        , RuntimeFeatures(other.RuntimeFeatures) {
-    }
-
-    TPortionInfo& operator=(const TPortionInfo& other) {
-        if (this == &other) {
-            return *this;
-        }
-
-        PathId = other.PathId;
-        PortionId = other.PortionId;
-        RemoveSnapshot = other.RemoveSnapshot;
-        RemoveSnapshotDefined.store(other.RemoveSnapshotDefined.load(std::memory_order_acquire), std::memory_order_release);
-        SchemaVersion = other.SchemaVersion;
-        ShardingVersion = other.ShardingVersion;
-        Meta = other.Meta;
-        RuntimeFeatures = other.RuntimeFeatures;
-        return *this;
-    }
+    TPortionInfo(const TPortionInfo&) = default;
+    TPortionInfo& operator=(const TPortionInfo&) = default;
 
     TInternalPathId PathId;
     ui64 PortionId = 0;   // Id of independent (overlayed by PK) portion of data in pathId
-    TSnapshot RemoveSnapshot = TSnapshot::Zero();
-    std::atomic<bool> RemoveSnapshotDefined = false;
+    TThreadSafeOptional<TSnapshot> RemoveSnapshot;
     ui64 SchemaVersion = 0;
     std::optional<ui64> ShardingVersion;
 
@@ -193,33 +169,8 @@ public:
     TPortionInfo(TPortionMeta&& meta)
         : Meta(std::move(meta)) {
     }
-
-    TPortionInfo(TPortionInfo&& other) noexcept
-        : PathId(std::move(other.PathId))
-        , PortionId(other.PortionId)
-        , RemoveSnapshot(std::move(other.RemoveSnapshot))
-        , RemoveSnapshotDefined(other.RemoveSnapshotDefined.load(std::memory_order_acquire))
-        , SchemaVersion(other.SchemaVersion)
-        , ShardingVersion(std::move(other.ShardingVersion))
-        , Meta(std::move(other.Meta))
-        , RuntimeFeatures(other.RuntimeFeatures) {
-    }
-
-    TPortionInfo& operator=(TPortionInfo&& other) noexcept {
-        if (this == &other) {
-            return *this;
-        }
-
-        PathId = std::move(other.PathId);
-        PortionId = other.PortionId;
-        RemoveSnapshot = std::move(other.RemoveSnapshot);
-        RemoveSnapshotDefined.store(other.RemoveSnapshotDefined.load(std::memory_order_acquire), std::memory_order_release);
-        SchemaVersion = other.SchemaVersion;
-        ShardingVersion = std::move(other.ShardingVersion);
-        Meta = std::move(other.Meta);
-        RuntimeFeatures = other.RuntimeFeatures;
-        return *this;
-    }
+    TPortionInfo(TPortionInfo&&) = default;
+    TPortionInfo& operator=(TPortionInfo&&) = default;
 
     virtual void FillDefaultColumn(NAssembling::TColumnAssemblingInfo& column, const std::optional<TSnapshot>& defaultSnapshot) const = 0;
 
@@ -264,9 +215,8 @@ public:
     }
 
     void SetRemoveSnapshot(const TSnapshot& snap) {
-        AFL_VERIFY(!RemoveSnapshotDefined.load());
-        RemoveSnapshot = snap;
-        RemoveSnapshotDefined.store(true, std::memory_order_release);
+        AFL_VERIFY(!HasRemoveSnapshot());
+        RemoveSnapshot.Set(snap);
     }
 
     void SetRemoveSnapshot(const ui64 planStep, const ui64 txId) {
@@ -391,7 +341,7 @@ public:
     TString DebugString(const bool withDetails = false) const;
 
     bool HasRemoveSnapshot() const {
-        return RemoveSnapshotDefined.load(std::memory_order_acquire);
+        return RemoveSnapshot.Has();
     }
 
     bool IsRemovedFor(const TSnapshot& snapshot) const {
@@ -427,13 +377,13 @@ public:
     }
 
     const TSnapshot& GetRemoveSnapshotVerified() const {
-        AFL_VERIFY(RemoveSnapshotDefined.load(std::memory_order_acquire));
-        return RemoveSnapshot;
+        AFL_VERIFY(HasRemoveSnapshot());
+        return RemoveSnapshot.Get();
     }
 
     std::optional<TSnapshot> GetRemoveSnapshotOptional() const {
-        if (RemoveSnapshotDefined.load(std::memory_order_acquire)) {
-            return RemoveSnapshot;
+        if (HasRemoveSnapshot()) {
+            return RemoveSnapshot.Get();
         } else {
             return {};
         }
@@ -445,7 +395,7 @@ public:
     }
 
     bool IsVisible(const TSnapshot& snapshot, const bool checkCommitSnapshot = true) const {
-        const bool visible = (!RemoveSnapshotDefined.load(std::memory_order_acquire) || snapshot < GetRemoveSnapshotVerified()) && DoIsVisible(snapshot, checkCommitSnapshot);
+        const bool visible = (!HasRemoveSnapshot() || snapshot < GetRemoveSnapshotVerified()) && DoIsVisible(snapshot, checkCommitSnapshot);
 
         AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "IsVisible")("analyze_portion", DebugString())("visible", visible)(
             "snapshot", snapshot.DebugString());

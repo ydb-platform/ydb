@@ -34,11 +34,6 @@ std::vector<TString> TPredicate::ColumnNames() const {
     return out;
 }
 
-std::string TPredicate::ToString() const {
-    return Empty() ? "()" : Batch->schema()->ToString();
-}
-
-
 std::vector<NScheme::TTypeInfo> ExtractTypes(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& columns) {
     std::vector<NScheme::TTypeInfo> types;
     types.reserve(columns.size());
@@ -128,9 +123,7 @@ std::pair<NKikimr::NOlap::TPredicate, NKikimr::NOlap::TPredicate> TPredicate::De
     TString leftBorder = FromCells(leftCells, leftColumns, leftFields);
     TString rightBorder = FromCells(rightCells, rightColumns, rightFields);
     auto leftSchema = std::make_shared<arrow::Schema>(leftFields);
-    Y_ASSERT(leftSchema);
     auto rightSchema = std::make_shared<arrow::Schema>(rightFields);
-    Y_ASSERT(rightSchema);
     return std::make_pair(
         TPredicate(fromInclusive ? NKernels::EOperation::GreaterEqual : NKernels::EOperation::Greater, leftBorder, leftSchema),
         TPredicate(toInclusive ? NKernels::EOperation::LessEqual : NKernels::EOperation::Less, rightBorder, rightSchema));
@@ -188,20 +181,6 @@ bool TPredicate::IsEqualTo(const TPredicate& item) const {
     return true;
 }
 
-NArrow::ECompareType TPredicate::GetCompareType() const {
-    if (Operation == EOperation::GreaterEqual) {
-        return NArrow::ECompareType::GREATER_OR_EQUAL;
-    } else if (Operation == EOperation::Greater) {
-        return NArrow::ECompareType::GREATER;
-    } else if (Operation == EOperation::LessEqual) {
-        return NArrow::ECompareType::LESS_OR_EQUAL;
-    } else if (Operation == EOperation::Less) {
-        return NArrow::ECompareType::LESS;
-    } else {
-        Y_ABORT_UNLESS(false);
-    }
-}
-
 IOutputStream& operator<<(IOutputStream& out, const TPredicate& pred) {
     out << NArrow::NSSA::TSimpleFunction::GetFunctionName(pred.Operation) << " ";
 
@@ -230,10 +209,6 @@ IOutputStream& operator<<(IOutputStream& out, const TPredicate& pred) {
     }
 
     return out;
-}
-
-bool TPredicate::Good() const {
-    return !Empty() && Batch->num_columns() && Batch->num_rows() == 1;
 }
 
 } // namespace NKikimr::NOlap

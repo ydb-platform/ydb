@@ -20,12 +20,13 @@ class TSolomonClientResponse {
 public:
     TSolomonClientResponse();
     explicit TSolomonClientResponse(const TString& error, EStatus status = STATUS_FATAL_ERROR);
-    explicit TSolomonClientResponse(T&& result);
+    explicit TSolomonClientResponse(T&& result, ui64 downloadedBytes);
 
 public:
     EStatus Status;
     TString Error;
     T Result;
+    ui64 DownloadedBytes = 0;
 };
 
 struct TGetLabelsResult {

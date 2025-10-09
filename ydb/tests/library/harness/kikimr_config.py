@@ -125,7 +125,7 @@ class KikimrConfigGenerator(object):
             pdisk_store_path=None,
             enable_sqs=False,
             domain_name='Root',
-            suppress_version_check=False,
+            suppress_version_check=True,
             static_pdisk_size=PDISK_SIZE,
             dynamic_pdisk_size=PDISK_SIZE,
             dynamic_pdisks=[],

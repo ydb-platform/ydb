@@ -71,7 +71,6 @@ public:
         } else {
             predicateTree.CanBePushed = false;
         }
-
     }
 
     void CollectChildrenPredicates(const TExprBase& node, TPredicateNode& predicateTree) {

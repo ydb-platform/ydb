@@ -97,7 +97,7 @@ ci:
       title: "Release gdb16"
       flow: build-and-release-gdb
       flow-vars:
-        ix_package: bin/gdb/16
+        ix_package: ynd/bin/gdb/16
         toolchain_name: gdb16
         mapping_path: build/external_resources/gdb/resources.json
       flow-vars-ui:

@@ -1385,7 +1385,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
 }
 
 Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
-    Y_UNIT_TEST_F(CreateAndAlterStreamingQuery, TStreamingTestFixture) {
+    Y_UNIT_TEST_F(CreateAndAlterStreamingQuery, TStreamingWithSchemaSecretsTestFixture) {
         constexpr char inputTopicName[] = "createAndAlterStreamingQueryInputTopic";
         constexpr char outputTopicName[] = "createAndAlterStreamingQueryOutputTopic";
         CreateTopic(inputTopicName);
@@ -1396,7 +1396,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         constexpr char queryName[] = "streamingQuery";
         ExecQuery(fmt::format(R"(
+            CREATE SECRET test_secret WITH (value = "1234");
             CREATE TABLE test_table1 (Key Int32 NOT NULL, PRIMARY KEY (Key));
+            GRANT ALL ON `/Root/test_table1` TO `test@builtin`;
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
                 INSERT INTO `{pq_source}`.`{output_topic}`
@@ -1414,6 +1416,13 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             "input_topic"_a = inputTopicName,
             "output_topic"_a = outputTopicName
         ));
+
+        {
+            const auto tableDesc = Navigate(GetRuntime(), GetRuntime().AllocateEdgeActor(), "/Root/test_table1", NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
+            const auto& table = tableDesc->ResultSet.at(0);
+            UNIT_ASSERT_VALUES_EQUAL(table.Kind, NSchemeCache::TSchemeCacheNavigate::EKind::KindTable);
+            UNIT_ASSERT(table.SecurityObject->CheckAccess(NACLib::GenericFull, NACLib::TUserToken("test@builtin", {})));
+        }
 
         CheckScriptExecutionsCount(1, 1);
         Sleep(TDuration::Seconds(1));

@@ -65,7 +65,7 @@ private:
     const EBlockTrackingMode BlockTrackingMode;
 
 public:
-    ~TKqpScanComputeActor() {
+    ~TKqpScanComputeActor() override {
         DoTerminateImpl();
     }
 

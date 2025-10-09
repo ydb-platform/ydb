@@ -175,7 +175,7 @@ class TClusters: public IClusters {
 
     const ui32 Dimensions = 0;
     const ui32 MaxRounds = 0;
-    const ui8 TypeByte = 0;
+    const ui8 FormatByte = 0;
 
     TVector<TString> Clusters;
     TVector<ui64> ClusterSizes;
@@ -185,10 +185,10 @@ class TClusters: public IClusters {
     ui32 Round = 0;
 
 public:
-    TClusters(ui32 dimensions, ui32 maxRounds, ui8 typeByte)
+    TClusters(ui32 dimensions, ui32 maxRounds, ui8 formatByte)
         : Dimensions(dimensions)
         , MaxRounds(maxRounds)
-        , TypeByte(typeByte)
+        , FormatByte(formatByte)
     {
     }
 
@@ -356,7 +356,7 @@ public:
     }
 
     bool IsExpectedFormat(const TArrayRef<const char>& data) override {
-        if (TypeByte != data.back()) {
+        if (FormatByte != data.back()) {
             return false;
         }
 
@@ -371,7 +371,7 @@ public:
         TString str;
         const size_t bufferSize = NKnnVectorSerialization::GetBufferSize<TCoord>(Dimensions);
         str.resize(bufferSize);
-        str[bufferSize - HeaderLen] = TypeByte;
+        str[bufferSize - HeaderLen] = FormatByte;
         if (IsBitQuantized()) {
             str[bufferSize - HeaderLen - 1] = 8 - Dimensions % 8;
         }
@@ -421,22 +421,22 @@ std::unique_ptr<IClusters> CreateClusters(const Ydb::Table::VectorIndexSettings&
         return nullptr;
     }
 
-    const ui8 typeVal = (ui8)settings.vector_type();
     const ui32 dim = settings.vector_dimension();
 
     auto handleMetric = [&]<typename T>() -> std::unique_ptr<IClusters> {
+        constexpr ui8 formatByte = Format<T>;
         switch (settings.metric()) {
             case Ydb::Table::VectorIndexSettings::SIMILARITY_INNER_PRODUCT:
-                return std::make_unique<TClusters<TMaxInnerProductSimilarity<T>>>(dim, maxRounds, typeVal);
+                return std::make_unique<TClusters<TMaxInnerProductSimilarity<T>>>(dim, maxRounds, formatByte);
             case Ydb::Table::VectorIndexSettings::SIMILARITY_COSINE:
             case Ydb::Table::VectorIndexSettings::DISTANCE_COSINE:
                 // We don't need to have separate implementation for distance,
                 // because clusters will be same as for similarity
-                return std::make_unique<TClusters<TCosineSimilarity<T>>>(dim, maxRounds, typeVal);
+                return std::make_unique<TClusters<TCosineSimilarity<T>>>(dim, maxRounds, formatByte);
             case Ydb::Table::VectorIndexSettings::DISTANCE_MANHATTAN:
-                return std::make_unique<TClusters<TL1Distance<T>>>(dim, maxRounds, typeVal);
+                return std::make_unique<TClusters<TL1Distance<T>>>(dim, maxRounds, formatByte);
             case Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN:
-                return std::make_unique<TClusters<TL2Distance<T>>>(dim, maxRounds, typeVal);
+                return std::make_unique<TClusters<TL2Distance<T>>>(dim, maxRounds, formatByte);
             default:
                 error = TStringBuilder() << "Invalid metric: " << static_cast<int>(settings.metric());
                 return nullptr;

@@ -531,6 +531,10 @@ IPlanBuilder& TProgram::GetPlanBuilder() {
     return *PlanBuilder_;
 }
 
+TString TProgram::GetSourceCode() const {
+    return SourceCode_;
+}
+
 void TProgram::SetParametersYson(const TString& parameters) {
     Y_ENSURE(!TypeCtx_, "TypeCtx_ already created");
     NYT::TNode node;
@@ -694,13 +698,13 @@ void TProgram::AddUserDataTable(const TUserDataTable& userDataTable) {
     }
 }
 
-void TProgram::HandleSourceCode(TString& sourceCode) {
+void TProgram::HandleSourceCode() {
     if (QContext_.CanWrite()) {
-        QContext_.GetWriter()->Put({FacadeComponent, SourceCodeLabel}, sourceCode).GetValueSync();
+        QContext_.GetWriter()->Put({FacadeComponent, SourceCodeLabel}, SourceCode_).GetValueSync();
     } else if (QContext_.CanRead()) {
         auto loaded = QContext_.GetReader()->Get({FacadeComponent, SourceCodeLabel}).GetValueSync();
         Y_ENSURE(loaded.Defined(), "No source code");
-        sourceCode = loaded->Value;
+        SourceCode_ = loaded->Value;
     }
 }
 
@@ -839,9 +843,8 @@ bool TProgram::ParseYql() {
     YQL_ENSURE(SourceSyntax_ == ESourceSyntax::Unknown);
     SourceSyntax_ = ESourceSyntax::Yql;
     SyntaxVersion_ = 1;
-    auto sourceCode = SourceCode_;
-    HandleSourceCode(sourceCode);
-    return FillParseResult(ParseAst(sourceCode));
+    HandleSourceCode();
+    return FillParseResult(ParseAst(SourceCode_));
 }
 
 bool TProgram::ParseSql() {
@@ -870,8 +873,7 @@ bool TProgram::ParseSql(const NSQLTranslation::TTranslationSettings& settings)
     SourceSyntax_ = ESourceSyntax::Sql;
     SyntaxVersion_ = settings.SyntaxVersion;
     NYql::TWarningRules warningRules;
-    auto sourceCode = SourceCode_;
-    HandleSourceCode(sourceCode);
+    HandleSourceCode();
     NSQLTranslation::TTranslationSettings outerSettings = settings;
     NSQLTranslation::TTranslationSettings* currentSettings = &outerSettings;
     NSQLTranslation::TTranslationSettings loadedSettings;
@@ -895,7 +897,7 @@ bool TProgram::ParseSql(const NSQLTranslation::TTranslationSettings& settings)
         NSQLTranslationV1::MakeTranslator(lexers, parsers),
         NSQLTranslationPG::MakeTranslator());
 
-    return FillParseResult(SqlToYql(translators, sourceCode, *currentSettings, &warningRules), &warningRules);
+    return FillParseResult(SqlToYql(translators, SourceCode_, *currentSettings, &warningRules), &warningRules);
 }
 
 bool TProgram::Compile(const TString& username, bool skipLibraries) {

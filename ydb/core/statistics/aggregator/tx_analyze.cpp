@@ -44,9 +44,13 @@ struct TStatisticsAggregator::TTxAnalyze : public TTxBase {
             }
         }
 
-        SA_LOG_D("[" << Self->TabletID() << "] TTxAnalyze::Execute. Create new force traversal operation, OperationId=" << operationId);
         const TString types = JoinVectorIntoString(TVector<ui32>(Record.GetTypes().begin(), Record.GetTypes().end()), ",");
         const TString& databaseName = Record.GetDatabase();
+
+        SA_LOG_D("[" << Self->TabletID() << "] TTxAnalyze::Execute. Create new force traversal operation"
+            << ", OperationId: `" << operationId << "'"
+            << ", DatabaseName: `" << databaseName << "'"
+            << ", Types: " << types);
 
         // create new force traversal
         auto createdAt = ctx.Now();
@@ -66,7 +70,10 @@ struct TStatisticsAggregator::TTxAnalyze : public TTxBase {
             const TString columnTagsStr = JoinVectorIntoString(columnTags, ",");
             const auto status = TForceTraversalTable::EStatus::None;
 
-            SA_LOG_D("[" << Self->TabletID() << "] TTxAnalyze::Execute. Create new force traversal table, OperationId=" << operationId << " , PathId " << pathId);
+            SA_LOG_D("[" << Self->TabletID() << "] TTxAnalyze::Execute. Create new force traversal table"
+                << ", OperationId: `" << operationId << "'"
+                << ", PathId: " << pathId
+                << ", ColumnTags: " << columnTagsStr);
 
             // create new force traversal
             TForceTraversalTable operationTable {

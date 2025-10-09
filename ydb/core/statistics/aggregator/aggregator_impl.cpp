@@ -707,7 +707,8 @@ void TStatisticsAggregator::ScheduleNextTraversal(NIceDb::TNiceDb& db) {
                 }
 
                 if (!pathId) {
-                    SA_LOG_D("[" << TabletID() << "] ScheduleNextTraversal. All the force traversal tables sent the requests. OperationId=" << operation.OperationId);
+                    SA_LOG_D("[" << TabletID() << "] ScheduleNextTraversal. "
+                        << "No force traversal request to send for OperationId: " << operation.OperationId);
                     continue;
                 }
 
@@ -716,7 +717,7 @@ void TStatisticsAggregator::ScheduleNextTraversal(NIceDb::TNiceDb& db) {
             }
 
             if (!pathId) {
-                SA_LOG_D("[" << TabletID() << "] ScheduleNextTraversal. All the force traversal operations sent the requests.");
+                SA_LOG_D("[" << TabletID() << "] ScheduleNextTraversal. No force traversal request to send.");
             }
         }
     }
@@ -726,7 +727,7 @@ void TStatisticsAggregator::ScheduleNextTraversal(NIceDb::TNiceDb& db) {
 
         auto* oldestTable = ScheduleTraversalsByTime.Top();
         if (TInstant::Now() < oldestTable->LastUpdateTime + ScheduleTraversalPeriod) {
-            SA_LOG_T("[" << TabletID() << "] A schedule traversal is skiped. "
+            SA_LOG_T("[" << TabletID() << "] Background traversal is skipped. "
                 << "The oldest table " << oldestTable->PathId << " update time " << oldestTable->LastUpdateTime << " is too fresh.");
             return;
         }
@@ -736,7 +737,7 @@ void TStatisticsAggregator::ScheduleNextTraversal(NIceDb::TNiceDb& db) {
     }
 
     if (!pathId) {
-        SA_LOG_E("[" << TabletID() << "] No traversal from schemeshard.");
+        SA_LOG_E("[" << TabletID() << "] No traversal request to send.");
         return;
     }
 
@@ -809,7 +810,7 @@ void TStatisticsAggregator::FinishTraversal(NIceDb::TNiceDb& db) {
 }
 
 TString TStatisticsAggregator::LastTraversalWasForceString() const {
-    return LastTraversalWasForce ? "force" : "schedule";
+    return LastTraversalWasForce ? "force" : "background";
 }
 
 TStatisticsAggregator::TForceTraversalOperation* TStatisticsAggregator::CurrentForceTraversalOperation() {
@@ -832,7 +833,7 @@ std::optional<bool> TStatisticsAggregator::IsColumnTable(const TPathId& pathId) 
     if (itPath != ScheduleTraversals.end()) {
         bool ret = itPath->second.IsColumnTable;
         SA_LOG_D("[" << TabletID() << "] IsColumnTable. Path " << pathId << " is "
-            << (ret ? "column" : "data") << " table.");
+            << (ret ? "column" : "datashard") << " table.");
         return ret;
     } else {
         SA_LOG_E("[" << TabletID() << "] IsColumnTable. traversal path " << pathId << " is not known to schemeshard");

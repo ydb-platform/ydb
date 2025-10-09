@@ -1080,6 +1080,12 @@ private:
                 return false;
             }
             Types_.DirectRowDependsOn = ("DirectRowDependsOn" == name);
+        } else if (name == "EnableLineage" || name == "DisableLineage") {
+            if (args.size() != 0) {
+                ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
+                return false;
+            }
+            Types_.EnableLineage = ("EnableLineage" == name);
         } else {
             ctx.AddError(TIssue(pos, TStringBuilder() << "Unsupported command: " << name));
             return false;

@@ -18,23 +18,31 @@ public:
     TJsonCommitOffset(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
         : TBase(viewer, ev)
     {
-        AllowedMethods = {HTTP_METHOD_GET, HTTP_METHOD_PUT};
+        AllowedMethods = {HTTP_METHOD_POST};
     }
 
     void Bootstrap() override {
         const auto& params(Event->Get()->Request.GetParams());
-        if (params.Has("database_path")) {
-            Database = params.Get("database_path");
+        if (params.Has("database")) {
+            Database = params.Get("database");
+        }
+        if (Params.Get("mode")) {
+            Mode = std::stoul(Params.Get("mode"));
+        }
+        if (Mode == 1) {
+            TString topicPath = Params.Get("path");
+            InflyDescribeRequests++;
+            Cerr << topicPath << Endl;
         }
         TBase::Bootstrap();
     }
 
     static YAML::Node GetSwagger() {
         TSimpleYamlBuilder yaml({
-            .Method = "get",
+            .Method = "post",
             .Tag = "viewer",
-            .Summary = "Topic schema detailed information",
-            .Description = "Returns detailed information about topic",
+            .Summary = "Commit offset handler",
+            .Description = "Commiting offsets for specific topic partition and consumer",
         });
         yaml.AddParameter({
             .Name = "database",
@@ -44,7 +52,7 @@ public:
         });
         yaml.AddParameter({
             .Name = "path",
-            .Description = "schema path",
+            .Description = "topic path",
             .Type = "string",
             .Required = true,
         });
@@ -52,16 +60,19 @@ public:
             .Name = "consumer",
             .Description = "consumer name",
             .Type = "string",
+            .Required = true,
         });
         yaml.AddParameter({
             .Name = "partition_id",
             .Description = "partition id",
             .Type = "integer",
+            .Required = true,
         });
         yaml.AddParameter({
             .Name = "offset",
             .Description = "offset",
             .Type = "integer",
+            .Required = true,
         });
         yaml.AddParameter({
             .Name = "read_session_id",
@@ -69,13 +80,18 @@ public:
             .Type = "string", // optional?
         });
         yaml.AddParameter({
-            .Name = "timeout",
-            .Description = "timeout in ms",
+            .Name = "mode",
+            .Description = "If mode = 0 (default), than offset for only one partition is commited; if mode = 1, that offset for all partitions are updated",
             .Type = "integer",
+            .Default = 0,
         });
         yaml.SetResponseSchema(TProtoToYaml::ProtoToYamlSchema<Ydb::Topic::CommitOffsetResult>());
         return yaml;
     }
+
+private:
+    ui32 Mode = 0;
+    ui32 InflyDescribeRequests = 0;
 };
 
 }

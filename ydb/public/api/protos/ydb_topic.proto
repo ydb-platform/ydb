@@ -764,6 +764,7 @@ message CommitOffsetRequest {
     int64 offset = 5;
     // Read session identifier from StreamRead RPC.
     string read_session_id = 6;
+    // можно тут добавить поле mode (?)
 }
 
 // Commit offset response sent from server to client.

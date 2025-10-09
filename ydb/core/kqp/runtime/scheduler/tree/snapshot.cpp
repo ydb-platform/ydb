@@ -137,7 +137,11 @@ TPool::TPool(const TPoolId& id, const std::optional<TPoolCounters>& counters, co
 void TPool::AccountSnapshotDuration(const TDuration& period) {
     if (Counters) {
         Counters->FairShare->Add(FairShare * period.MicroSeconds());
-        Counters->Satisfaction->Set(Satisfaction.value_or(0) * 1'000'000);
+        if (Satisfaction) {
+            Counters->Satisfaction->Set(Satisfaction.value_or(0) * 1'000'000);
+        } else {
+            Counters->Satisfaction->Set(-1);
+        }
         // TODO: calculate satisfaction as burst-usage increment / fair-share increment - for better precision
     }
     TTreeElement::AccountSnapshotDuration(period);

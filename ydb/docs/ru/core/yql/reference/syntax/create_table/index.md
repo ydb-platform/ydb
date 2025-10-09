@@ -14,12 +14,12 @@
 
 {% endif %}
 
+```yql
     CREATE [TEMP | TEMPORARY] TABLE table_name (
         column1 type1,
-{% if feature_not_null == true %}        column2 type2 NOT NULL,{% else %}        column2 type2,{% endif %}
+        column2 type2 column_option_list
         ...
         columnN typeN,
-{% if feature_secondary_index == true %}
         INDEX `<index_name>`
           [GLOBAL|LOCAL]
           [UNIQUE]
@@ -29,18 +29,73 @@
           [COVER ( <cover_columns> )]
           [WITH ( <parameter_name> = <parameter_value>[, ...])]
         ...
-{% endif %}
-{% if feature_map_tables %}
         PRIMARY KEY ( column, ... ),
         FAMILY column_family ( family_options, ... )
-{% else %}
         ...
-{% endif %}
     )
-{% if feature_map_tables %}
     WITH ( key = value, ... )
     [AS SELECT ...]
-{% endif %}
+```
+
+<details>
+    <summary> Про `column_option_list` </summary>
+
+    ```
+        column_option_list - список опций для колонки. Она может иметь два разных синтаксиса:
+
+        column_option_list_first: column_option*;
+        column_option_list_second: (column_option, column_option*);
+    ```
+    , где
+    ```
+        column_option: [NOT] NULL | FAMILY column_family | DEFAULT value
+    ```
+
+<details>
+    <summary> Почему два разных синтаксиса? </summary>
+
+    Дело в том, что в качестве DEFAULT на уровне парсера технически поддерживается возможность указать произвольное выражение.
+    Это может производить к неожиданным последствиям, когда хочется использовать одновременно и DEFAULT, и NOT NULL: создание колонки через
+
+    ```yql
+        column_name bool DEFAULT false NOT NULL,
+    ```
+
+    будет означать, что нужно создать колонку, у которой значение по умолчанию равно "false NOT NULL", что эквивалентно "false IS NOT NULL", что есть "true".
+
+    На уровне вычислительного слоя никогда не было поддержки произвольного выражения, поэтому такой возможности не существовало, однако парсер не умеет отличать намерение "создать NOT NULL колонку с значением по умолчанию равным false" от "создать колонку с значением по умолчанию равным выражению false NOT NULL".
+    Чтобы была возможность поддержать создание колонки с опциями в произвольном порядке, потребовалось создать второй синтаксис со скобками.
+</details>
+
+    Примеры:
+
+    ```yql
+        CREATE TABLE tbl (
+            k Uint64,
+            v Bool (DEFAULT false, NOT NULL),
+            PRIMARY KEY (k)
+        );
+    ```
+    
+    ```yql
+        CREATE TABLE tbl (
+            k Uint64,
+            v Bool NOT NULL, DEFAULT false,
+            PRIMARY KEY (k)
+        );
+    ```
+
+    Но нельзя:
+
+    ```yql
+        CREATE TABLE tbl (
+            k Uint64,
+            v Bool DEFAULT false NOT NULL,
+            PRIMARY KEY (k)
+        );
+    ```
+</details>
+
 
 {% if oss == true and backend_name == "YDB" %}
 

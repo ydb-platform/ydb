@@ -408,13 +408,13 @@ message TTableServiceConfig {
         HASH_V2 = 1;
     }
 
-    optional EHashKind DefaultHashShuffleFuncType = 93 [ default = HASH_V1 ];
+    optional EHashKind DefaultHashShuffleFuncType = 93 [ default = HASH_V2 ];
 
-    optional bool EnableParallelUnionAllConnectionsForExtend = 94  [ default = false ];
+    optional bool EnableParallelUnionAllConnectionsForExtend = 94  [ default = true ];
 
     optional bool EnableTempTablesForUser = 95 [default = false];
 
-    optional bool EnableSimpleProgramsSinglePartitionOptimization = 96 [default = false];
+    optional bool EnableSimpleProgramsSinglePartitionOptimization = 96 [default = true];
 
     optional bool EnableKqpScanQueryUseLlvm = 97 [default = true];
 
@@ -422,8 +422,8 @@ message TTableServiceConfig {
 
     optional bool EnableOrderOptimizaionFSM = 99 [ default = false ];
 
-    optional bool EnableTopSortSelectIndex = 100 [ default = false ];
-    optional bool EnablePointPredicateSortAutoSelectIndex = 101 [ default = false ];
+    optional bool EnableTopSortSelectIndex = 100 [ default = true ];
+    optional bool EnablePointPredicateSortAutoSelectIndex = 101 [ default = true ];
 
-    optional bool EnableDataShardCreateTableAs = 102 [default = false];
+    optional bool EnableDataShardCreateTableAs = 102 [default = true];
 };

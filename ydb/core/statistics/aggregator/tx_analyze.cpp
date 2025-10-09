@@ -7,19 +7,21 @@
 namespace NKikimr::NStat {
 
 struct TStatisticsAggregator::TTxAnalyze : public TTxBase {
-    const NKikimrStat::TEvAnalyze& Record;
+    TEvStatistics::TEvAnalyze::TPtr Event;
     TActorId ReplyToActorId;
 
-    TTxAnalyze(TSelf* self, const NKikimrStat::TEvAnalyze& record, TActorId replyToActorId)
+    TTxAnalyze(TSelf* self, TEvStatistics::TEvAnalyze::TPtr ev)
         : TTxBase(self)
-        , Record(record)
-        , ReplyToActorId(replyToActorId)
+        , Event(std::move(ev))
+        , ReplyToActorId(Event->Sender)
     {}
+
+    const NKikimrStat::TEvAnalyze& Record() const { return Event->Get()->Record; }
 
     TTxType GetTxType() const override { return TXTYPE_ANALYZE_TABLE; }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        SA_LOG_D("[" << Self->TabletID() << "] TTxAnalyze::Execute. ReplyToActorId " << ReplyToActorId << " , Record " << Record);
+        SA_LOG_D("[" << Self->TabletID() << "] TTxAnalyze::Execute. ReplyToActorId " << ReplyToActorId << " , Record " << Record());
 
         if (!Self->EnableColumnStatistics) {
             return true;
@@ -27,14 +29,14 @@ struct TStatisticsAggregator::TTxAnalyze : public TTxBase {
 
         NIceDb::TNiceDb db(txc.DB);
 
-        const TString operationId = Record.GetOperationId();
+        const TString operationId = Record().GetOperationId();
 
         // check existing force traversal with the same OperationId
         const auto existingOperation = Self->ForceTraversalOperation(operationId);
 
         // update existing force traversal
         if (existingOperation) {
-            if (existingOperation->Tables.size() == Record.TablesSize()) {
+            if (existingOperation->Tables.size() == Record().TablesSize()) {
                 SA_LOG_D("[" << Self->TabletID() << "] TTxAnalyze::Execute. Update existing force traversal. OperationId " << operationId << " , ReplyToActorId " << ReplyToActorId);
                 existingOperation->ReplyToActorId = ReplyToActorId;
                 return true;
@@ -44,8 +46,8 @@ struct TStatisticsAggregator::TTxAnalyze : public TTxBase {
             }
         }
 
-        const TString types = JoinVectorIntoString(TVector<ui32>(Record.GetTypes().begin(), Record.GetTypes().end()), ",");
-        const TString& databaseName = Record.GetDatabase();
+        const TString types = JoinVectorIntoString(TVector<ui32>(Record().GetTypes().begin(), Record().GetTypes().end()), ",");
+        const TString& databaseName = Record().GetDatabase();
 
         SA_LOG_D("[" << Self->TabletID() << "] TTxAnalyze::Execute. Create new force traversal operation"
             << ", OperationId: `" << operationId << "'"
@@ -63,7 +65,7 @@ struct TStatisticsAggregator::TTxAnalyze : public TTxBase {
             .CreatedAt = createdAt
         };
 
-        for (const auto& table : Record.GetTables()) {
+        for (const auto& table : Record().GetTables()) {
             const TPathId pathId = TPathId::FromProto(table.GetPathId());
             auto columnTags = TVector<ui32>(
                 table.GetColumnTags().begin(),table.GetColumnTags().end());
@@ -111,7 +113,7 @@ struct TStatisticsAggregator::TTxAnalyze : public TTxBase {
 };
 
 void TStatisticsAggregator::Handle(TEvStatistics::TEvAnalyze::TPtr& ev) {
-    Execute(new TTxAnalyze(this, ev->Get()->Record, ev->Sender), TActivationContext::AsActorContext());
+    Execute(new TTxAnalyze(this, std::move(ev)), TActivationContext::AsActorContext());
 }
 
 } // NKikimr::NStat

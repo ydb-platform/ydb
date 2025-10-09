@@ -183,28 +183,27 @@ EValidationResult ValidateStateStorageConfig(const NKikimrConfig::TAppConfig& pr
         return EValidationResult::Error;
     }
     const auto& domains = proposed.GetDomainsConfig();
-    if (domains.DomainSize() < 1) {
-        msg.push_back(TStringBuilder() << "Domains is not defined in DomainsConfig");
-        return EValidationResult::Error;
-    }
-    const auto& domain = domains.GetDomain(0);
-    bool found = false;
-    for (const auto& ss : domains.GetStateStorage()) {
-        if (domain.SSIdSize() == 0 || (domain.SSIdSize() == 1 && ss.GetSSId() == domain.GetSSId(0))) {
-            found = true;
-            if (auto res = ValidateStateStorageConfig("StateStorage", {}, ss); !res.empty()) {
-                msg.push_back(res);
-                return EValidationResult::Error;
+    bool isExplicit = domains.HasExplicitStateStorageConfig() && domains.HasExplicitStateStorageBoardConfig() && domains.HasExplicitSchemeBoardConfig();
+    if (!isExplicit) {
+        if (domains.DomainSize() < 1) {
+            msg.push_back(TStringBuilder() << "Domains is not defined in DomainsConfig");
+            return EValidationResult::Error;
+        }
+        const auto& domain = domains.GetDomain(0);
+        bool found = false;
+        for (const auto& ss : domains.GetStateStorage()) {
+            if (domain.SSIdSize() == 0 || (domain.SSIdSize() == 1 && ss.GetSSId() == domain.GetSSId(0))) {
+                found = true;
+                if (auto res = ValidateStateStorageConfig("StateStorage", {}, ss); !res.empty()) {
+                    msg.push_back(res);
+                    return EValidationResult::Error;
+                }
             }
         }
-    }
-    if (!found && !(
-        domains.HasExplicitStateStorageConfig()
-        && domains.HasExplicitStateStorageBoardConfig()
-        && domains.HasExplicitSchemeBoardConfig())
-        ) {
-        msg.push_back(TStringBuilder() << "State storage config is not defined in DomainsConfig section");
-        return EValidationResult::Error;
+        if (!found) {
+            msg.push_back(TStringBuilder() << "State storage config is not defined in DomainsConfig section");
+            return EValidationResult::Error;
+        }
     }
 #define VALIDATE_EXPLICIT(NAME) \
         if (domains.HasExplicit##NAME##Config()) { \
@@ -213,9 +212,9 @@ EValidationResult ValidateStateStorageConfig(const NKikimrConfig::TAppConfig& pr
                 return EValidationResult::Error; \
             } \
         }
-        VALIDATE_EXPLICIT(StateStorage)
-        VALIDATE_EXPLICIT(StateStorageBoard)
-        VALIDATE_EXPLICIT(SchemeBoard)
+    VALIDATE_EXPLICIT(StateStorage)
+    VALIDATE_EXPLICIT(StateStorageBoard)
+    VALIDATE_EXPLICIT(SchemeBoard)
 
     return EValidationResult::Ok;
 }

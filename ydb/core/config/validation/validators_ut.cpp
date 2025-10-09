@@ -435,11 +435,6 @@ Y_UNIT_TEST_SUITE(DatabaseConfigValidation) {
 }
 
 Y_UNIT_TEST_SUITE(StateStorageConfigValidation) {
-    std::pair<NKikimrConfig::TAppConfig, NKikimrConfig::TAppConfig> PrepareStateStorageConfigs() {
-        NKikimrConfig::TAppConfig cur;
-        NKikimrConfig::TAppConfig proposed;
-        return {cur, proposed};
-    }
 
     void FillRing(NKikimrConfig::TDomainsConfig::TStateStorage::TRing* ring, ui32 ringsCnt = 8) {
         ring->SetNToSelect(5);
@@ -531,5 +526,112 @@ Y_UNIT_TEST_SUITE(StateStorageConfigValidation) {
         proposed.MutableRing()->MutableRing(0)->AddNode(100);
         auto res = ValidateStateStorageConfig("StateStorage", cur, proposed);
         UNIT_ASSERT(res.StartsWith("StateStorage ring #0differs from# Ring"));
+    }
+
+    Y_UNIT_TEST(ValidateConfigSelfManagement) {
+        NKikimrConfig::TAppConfig proposed;
+        proposed.MutableSelfManagementConfig()->SetEnabled(true);
+        std::vector<TString> err;
+        auto res = ValidateConfig(proposed, err);
+        UNIT_ASSERT_EQUAL(err.size(), 0);
+        UNIT_ASSERT_EQUAL(res, EValidationResult::Ok);
+    }
+
+    Y_UNIT_TEST(ValidateConfigDomainsConfigUndef) {
+        NKikimrConfig::TAppConfig proposed;
+        std::vector<TString> err;
+        auto res = ValidateConfig(proposed, err);
+        UNIT_ASSERT_EQUAL(err.size(), 1);
+        UNIT_ASSERT_EQUAL(err[0], "DomainsConfig is not defined");
+        UNIT_ASSERT_EQUAL(res, EValidationResult::Error);
+    }
+
+    Y_UNIT_TEST(ValidateConfigDomainEmpty) {
+        NKikimrConfig::TAppConfig proposed;
+        auto* domains = proposed.MutableDomainsConfig();
+        domains->AddStateStorage();
+        std::vector<TString> err;
+        auto res = ValidateConfig(proposed, err);
+        UNIT_ASSERT_EQUAL(err.size(), 1);
+        UNIT_ASSERT_EQUAL(err[0], "Domains is not defined in DomainsConfig");
+        UNIT_ASSERT_EQUAL(res, EValidationResult::Error);
+    }
+
+    Y_UNIT_TEST(ValidateConfigSSId) {
+        NKikimrConfig::TAppConfig proposed;
+        auto* domains = proposed.MutableDomainsConfig();
+        domains->AddDomain()->AddSSId(10);
+        auto* ss = domains->AddStateStorage();
+        ss->SetSSId(1);
+        std::vector<TString> err;
+        auto res = ValidateConfig(proposed, err);
+        UNIT_ASSERT_EQUAL(err.size(), 1);
+        UNIT_ASSERT_EQUAL(err[0], "State storage config is not defined in DomainsConfig section");
+        UNIT_ASSERT_EQUAL(res, EValidationResult::Error);
+    }
+
+    Y_UNIT_TEST(ValidateConfigBad) {
+        NKikimrConfig::TAppConfig proposed;
+        auto* domains = proposed.MutableDomainsConfig();
+        domains->AddDomain()->AddSSId(1);
+        auto* ss = domains->AddStateStorage();
+        ss->SetSSId(1);
+        std::vector<TString> err;
+        auto res = ValidateConfig(proposed, err);
+        UNIT_ASSERT_EQUAL(err.size(), 1);
+        UNIT_ASSERT_EQUAL(err[0], "New StateStorage configuration is not filled in");
+        UNIT_ASSERT_EQUAL(res, EValidationResult::Error);
+    }
+
+    Y_UNIT_TEST(ValidateConfigValidatesStateStorage) {
+        NKikimrConfig::TAppConfig proposed;
+        auto* domains = proposed.MutableDomainsConfig();
+        domains->AddDomain()->AddSSId(1);
+        auto* ss = domains->AddStateStorage();
+        ss->SetSSId(1);
+        FillRing(ss->MutableRing());
+        ss->MutableRing()->SetNToSelect(10);
+        std::vector<TString> err;
+        auto res = ValidateConfig(proposed, err);
+        UNIT_ASSERT_EQUAL(err.size(), 1);
+        UNIT_ASSERT_EQUAL(err[0], "New StateStorage configuration NToSelect has invalid value");
+        UNIT_ASSERT_EQUAL(res, EValidationResult::Error);
+    }
+
+    Y_UNIT_TEST(ValidateConfigGood) {
+        NKikimrConfig::TAppConfig proposed;
+        auto* domains = proposed.MutableDomainsConfig();
+        domains->AddDomain()->AddSSId(1);
+        auto* ss = domains->AddStateStorage();
+        ss->SetSSId(1);
+        FillRing(ss->MutableRing());
+        std::vector<TString> err;
+        auto res = ValidateConfig(proposed, err);
+        UNIT_ASSERT_VALUES_EQUAL(err.size(), 0);
+        UNIT_ASSERT_EQUAL(res, EValidationResult::Ok);
+    }
+
+    Y_UNIT_TEST(ValidateConfigExplicitGood) {
+        NKikimrConfig::TAppConfig proposed;
+        auto* domains = proposed.MutableDomainsConfig();
+        FillRing(domains->MutableExplicitStateStorageConfig()->MutableRing());
+        FillRing(domains->MutableExplicitStateStorageBoardConfig()->MutableRing());
+        FillRing(domains->MutableExplicitSchemeBoardConfig()->MutableRing());
+        std::vector<TString> err;
+        auto res = ValidateConfig(proposed, err);
+        UNIT_ASSERT_VALUES_EQUAL(err.size(), 0);
+        UNIT_ASSERT_EQUAL(res, EValidationResult::Ok);
+    }
+
+    Y_UNIT_TEST(ValidateConfigExplicitBad) {
+        NKikimrConfig::TAppConfig proposed;
+        auto* domains = proposed.MutableDomainsConfig();
+        FillRing(domains->MutableExplicitStateStorageConfig()->MutableRing());
+        FillRing(domains->MutableExplicitSchemeBoardConfig()->MutableRing());
+        std::vector<TString> err;
+        auto res = ValidateConfig(proposed, err);
+        UNIT_ASSERT_EQUAL(err.size(), 1);
+        UNIT_ASSERT_EQUAL(err[0], "Domains is not defined in DomainsConfig");
+        UNIT_ASSERT_EQUAL(res, EValidationResult::Error);
     }
 }

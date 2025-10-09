@@ -4,7 +4,7 @@ namespace NKikimr {
 namespace NKqp {
 
 using namespace NYdb;
-using namespace NYdb::NTable;
+using namespace NYdb::NQuery;
 
 Y_UNIT_TEST_SUITE(KqpSelect) {
     Y_UNIT_TEST(NoPKAndLimit) {
@@ -15,10 +15,10 @@ Y_UNIT_TEST_SUITE(KqpSelect) {
         sts.SetColumnShardReaderClassName("SIMPLE");
         sts.AppConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);        
         TKikimrRunner kikimr(sts);
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
 
-        AssertSuccessResult(session.ExecuteSchemeQuery(R"(
+        auto result = session.ExecuteQuery(R"(
             CREATE TABLE `/Root/KV` (
                 id Uint64 NOT NULL,
                 vn Int32,
@@ -27,22 +27,21 @@ Y_UNIT_TEST_SUITE(KqpSelect) {
             WITH (
                 STORE = COLUMN
             );
-        )").GetValueSync());
+        )", TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());        
 
-        auto result = session.ExecuteDataQuery(Q_(R"(
+        result = session.ExecuteQuery(Q_(R"(
             INSERT INTO `/Root/KV` (id, vn) VALUES (1, 11);
-        )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-        result.GetIssues().PrintTo(Cerr);
-        UNIT_ASSERT(result.IsSuccess());
+        )"), TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
         // When
-        result = session.ExecuteDataQuery(Q_(R"(
+        result = session.ExecuteQuery(Q_(R"(
             SELECT vn FROM `/Root/KV` LIMIT 1;
-        )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        )"), TTxControl::BeginTx().CommitTx()).GetValueSync();
 
         // Then
-        result.GetIssues().PrintTo(Cerr);
-        UNIT_ASSERT(result.IsSuccess());
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
     }
 }
 

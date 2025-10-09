@@ -170,12 +170,13 @@ private:
             return;
         }
 
-        if (!PendingNodesInitialized) {
+        if (!PendingNodesInitialized && !PendingRequest) {
+            PendingRequest = true;
             Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), new NKikimr::NKqp::TEvKqp::TEvListProxyNodesRequest());
             return;
         }
 
-        if (!PendingNodes.empty() && !PendingRequest)  {
+        if (!PendingNodes.empty() && !PendingRequest) {
             const auto& nodeId = PendingNodes.front();
             auto kqpProxyId = NKqp::MakeKqpProxyID(nodeId);
             auto req = std::make_unique<NKikimr::NKqp::TEvKqp::TEvListSessionsRequest>();
@@ -206,6 +207,7 @@ private:
     }
 
     void Handle(NKqp::TEvKqp::TEvListProxyNodesResponse::TPtr& ev) {
+        PendingRequest = false;
         auto& proxies = ev->Get()->ProxyNodes;
         std::sort(proxies.begin(), proxies.end());
         PendingNodes = std::deque<ui32>(proxies.begin(), proxies.end());

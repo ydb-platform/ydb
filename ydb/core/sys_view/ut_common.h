@@ -28,6 +28,7 @@ struct TTestEnvSettings {
     bool EnableOlapCompression = false;
     TMaybe<bool> EnableRealSystemViewPaths;
     NKikimrProto::TAuthConfig AuthConfig = {};
+    NKikimrConfig::TTableServiceConfig TableServiceConfig;
 };
 
 class TTestEnv {

@@ -329,6 +329,14 @@ public:
         return type == NCommon::IDataSource::EType::SimplePortion;
     }
 
+    virtual TString GetEntityStorageId(const ui32 entityId) const override {
+        return GetPortionAccessor().GetEntityStorageId(entityId, Schema->GetIndexInfo());
+    }
+
+    virtual TString GetColumnStorageId(const ui32 columnId) const override {
+        return GetPortionAccessor().GetEntityStorageId(columnId, Schema->GetIndexInfo());
+    }
+
     virtual TBlobRange RestoreBlobRange(const TBlobRangeLink16& rangeLink) const override {
         return GetPortionAccessor().RestoreBlobRange(rangeLink);
     }

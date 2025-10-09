@@ -90,7 +90,8 @@ public:
     }
 
     bool IsInplaceData(const TString& specialTier) const {
-        return DefaultStorageId == NBlobOperations::TGlobal::LocalMetadataStorageId && !(InheritPortionStorage && specialTier && specialTier !=NBlobOperations::TGlobal::LocalMetadataStorageId);
+        return DefaultStorageId == NBlobOperations::TGlobal::LocalMetadataStorageId &&
+               !(InheritPortionStorage && specialTier && specialTier != NBlobOperations::TGlobal::DefaultStorageId);
     }
 
     IIndexMeta() = default;

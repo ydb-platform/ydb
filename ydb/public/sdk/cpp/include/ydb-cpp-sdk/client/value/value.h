@@ -68,7 +68,9 @@ enum class EPrimitiveType {
     TzDatetime   = 0x0035,
     TzTimestamp  = 0x0036,
     String       = 0x1001,
+    Bytes        = 0x1001,
     Utf8         = 0x1200,
+    Text         = 0x1200,
     Yson         = 0x1201,
     Json         = 0x1202,
     Uuid         = 0x1203,
@@ -338,7 +340,9 @@ public:
     const std::string& GetTzDatetime() const;
     const std::string& GetTzTimestamp() const;
     const std::string& GetString() const;
+    const std::string& GetBytes() const;
     const std::string& GetUtf8() const;
+    const std::string& GetText() const;
     const std::string& GetYson() const;
     const std::string& GetJson() const;
     TDecimalValue GetDecimal() const;
@@ -370,7 +374,9 @@ public:
     std::optional<std::string> GetOptionalTzDatetime() const;
     std::optional<std::string> GetOptionalTzTimestamp() const;
     std::optional<std::string> GetOptionalString() const;
+    std::optional<std::string> GetOptionalBytes() const;
     std::optional<std::string> GetOptionalUtf8() const;
+    std::optional<std::string> GetOptionalText() const;
     std::optional<std::string> GetOptionalYson() const;
     std::optional<std::string> GetOptionalJson() const;
     std::optional<TDecimalValue> GetOptionalDecimal() const;
@@ -448,7 +454,9 @@ public:
     TDerived& TzDatetime(const std::string& value);
     TDerived& TzTimestamp(const std::string& value);
     TDerived& String(const std::string& value);
+    TDerived& Bytes(const std::string& value);
     TDerived& Utf8(const std::string& value);
+    TDerived& Text(const std::string& value);
     TDerived& Yson(const std::string& value);
     TDerived& Json(const std::string& value);
     TDerived& Decimal(const TDecimalValue& value);
@@ -480,7 +488,9 @@ public:
     TDerived& OptionalTzDatetime(const std::optional<std::string>& value);
     TDerived& OptionalTzTimestamp(const std::optional<std::string>& value);
     TDerived& OptionalString(const std::optional<std::string>& value);
+    TDerived& OptionalBytes(const std::optional<std::string>& value);
     TDerived& OptionalUtf8(const std::optional<std::string>& value);
+    TDerived& OptionalText(const std::optional<std::string>& value);
     TDerived& OptionalYson(const std::optional<std::string>& value);
     TDerived& OptionalJson(const std::optional<std::string>& value);
     TDerived& OptionalUuid(const std::optional<TUuidValue>& value);

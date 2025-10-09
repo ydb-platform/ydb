@@ -812,6 +812,66 @@ TEST(TSolomonRegistry, TestRemoteTransfer)
     ASSERT_TRUE(sensors.Counters.empty());
 }
 
+TEST(TSolomonRegistry, TestRemoteTransferWithDistinctTags)
+{
+    auto impl = New<TSolomonRegistry>();
+    impl->SetWindowSize(12);
+
+    TRemoteRegistry remoteRegistry(impl.Get());
+    const auto& tagRegistry = impl->GetTagRegistry();
+
+    auto buildSensorDump = [] (const std::string& tagsPrefix, int tagsCount, const std::string& sensor, i64 value) {
+        NProto::TSensorDump dump;
+
+        dump.add_tags();
+        for (TTagId tagId = 1; tagId <= tagsCount; ++tagId) {
+            auto value = std::to_string(tagId);
+
+            auto* tag = dump.add_tags();
+            tag->set_key(tagsPrefix + value);
+            tag->set_value(value);
+        }
+
+        auto* cube = dump.add_cubes();
+        cube->set_name(sensor);
+
+        auto* projection = cube->add_projections();
+        for (TTagId tagId = 1; tagId <= tagsCount; ++tagId) {
+            projection->add_tag_ids(tagId);
+        }
+        projection->set_has_value(true);
+        projection->set_counter(value);
+
+        return dump;
+    };
+
+    auto transferAndCollect = [&] (const std::string& tagsPrefix, int tagsCount, const std::string& sensor, i64 value) {
+        auto dump = buildSensorDump(tagsPrefix, tagsCount, sensor, value);
+        remoteRegistry.Transfer(dump);
+
+        impl->Collect();
+        return ReadSensors(impl);
+    };
+
+    // First collect to prepare registry for subsequent transfers.
+    impl->Collect();
+
+    auto sensors = transferAndCollect("a", 3, "s1", 1);
+    ASSERT_EQ(1, std::ssize(sensors.Counters));
+    ASSERT_EQ(1, sensors.Counters["s1{a1=1;a2=2;a3=3}"]);
+    ASSERT_EQ(3, tagRegistry.GetSize());
+
+    sensors = transferAndCollect("b", 2, "s2", 2);
+    ASSERT_EQ(1, std::ssize(sensors.Counters));
+    ASSERT_EQ(2, sensors.Counters["s2{b1=1;b2=2}"]);
+    ASSERT_EQ(5, tagRegistry.GetSize());
+
+    sensors = transferAndCollect("b", 4, "s2", 3);
+    ASSERT_EQ(1, std::ssize(sensors.Counters));
+    ASSERT_EQ(3, sensors.Counters["s2{b1=1;b2=2;b3=3;b4=4}"]);
+    ASSERT_EQ(7, tagRegistry.GetSize());
+}
+
 TEST(TSolomonRegistry, ExtensionTag)
 {
     auto impl = New<TSolomonRegistry>();

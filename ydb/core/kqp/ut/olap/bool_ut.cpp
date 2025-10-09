@@ -11,12 +11,28 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
+#include <util/generic/serialized_enum.h>
 
 #include <library/cpp/threading/local_executor/local_executor.h>
-#include <util/generic/serialized_enum.h>
 #include <util/string/printf.h>
 #include <yql/essentials/types/binary_json/write.h>
 #include <yql/essentials/types/uuid/uuid.h>
+
+#include "bool_test_enums.h"
+
+#define Y_UNIT_TEST_ALL_ENUM_VALUES(TestName, EQueryMode, ETableKind, ELoadKind) \
+    Y_UNIT_TEST(TestName##_Scan_ColumnShard_Arrow) { Run##TestName(SCAN_QUERY, COLUMN_SHARD, ARROW); } \
+    Y_UNIT_TEST(TestName##_Scan_ColumnShard_YdbValue) { Run##TestName(SCAN_QUERY, COLUMN_SHARD, YDB_VALUE); } \
+    Y_UNIT_TEST(TestName##_Scan_ColumnShard_Csv) { Run##TestName(SCAN_QUERY, COLUMN_SHARD, CSV); } \
+    Y_UNIT_TEST(TestName##_Scan_DataShard_Arrow) { Run##TestName(SCAN_QUERY, DATA_SHARD, ARROW); } \
+    Y_UNIT_TEST(TestName##_Scan_DataShard_YdbValue) { Run##TestName(SCAN_QUERY, DATA_SHARD, YDB_VALUE); } \
+    Y_UNIT_TEST(TestName##_Scan_DataShard_Csv) { Run##TestName(SCAN_QUERY, DATA_SHARD, CSV); } \
+    Y_UNIT_TEST(TestName##_Execute_ColumnShard_Arrow) { Run##TestName(EXECUTE_QUERY, COLUMN_SHARD, ARROW); } \
+    Y_UNIT_TEST(TestName##_Execute_ColumnShard_YdbValue) { Run##TestName(EXECUTE_QUERY, COLUMN_SHARD, YDB_VALUE); } \
+    Y_UNIT_TEST(TestName##_Execute_ColumnShard_Csv) { Run##TestName(EXECUTE_QUERY, COLUMN_SHARD, CSV); } \
+    Y_UNIT_TEST(TestName##_Execute_DataShard_Arrow) { Run##TestName(EXECUTE_QUERY, DATA_SHARD, ARROW); } \
+    Y_UNIT_TEST(TestName##_Execute_DataShard_YdbValue) { Run##TestName(EXECUTE_QUERY, DATA_SHARD, YDB_VALUE); } \
+    Y_UNIT_TEST(TestName##_Execute_DataShard_Csv) { Run##TestName(EXECUTE_QUERY, DATA_SHARD, CSV); }
 
 namespace NKikimr {
 namespace NKqp {
@@ -24,21 +40,6 @@ namespace NKqp {
 using namespace NYdb;
 using namespace NYdb::NTable;
 
-enum class EQueryMode {
-    SCAN_QUERY,
-    EXECUTE_QUERY
-};
-
-enum class ETableKind {
-    COLUMN_SHARD,
-    DATA_SHARD
-};
-
-enum class ELoadKind {
-    ARROW,
-    YDB_VALUE,
-    CSV
-};
 
 Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
     namespace {
@@ -444,30 +445,15 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
             R"([[2;1;[%true]];[2;3;[%true]];[4;1;[%true]];[4;3;[%true]];[2;2;[%false]];[4;4;[%false]]])", Scan);
     }
 
-#define GEN(TestBase, ScanTag, ScanConst, TableTag, TableConst, LoadTag, LoadConst)         \
-    Y_UNIT_TEST(TestBase##_##ScanTag##_##TableTag##_##LoadTag) {                            \
-        Run##TestBase(EQueryMode::ScanConst, ETableKind::TableConst, ELoadKind::LoadConst); \
-    }
-#define GEN_LOADS(TestBase, ScanTag, ScanConst, TableTag, TableConst)            \
-    GEN(TestBase, ScanTag, ScanConst, TableTag, TableConst, Arrow, ARROW)        \
-    GEN(TestBase, ScanTag, ScanConst, TableTag, TableConst, YdbValue, YDB_VALUE) \
-    GEN(TestBase, ScanTag, ScanConst, TableTag, TableConst, Csv, CSV)
-#define GEN_TABLES(TestBase, ScanTag, ScanConst)                       \
-    GEN_LOADS(TestBase, ScanTag, ScanConst, ColumnShard, COLUMN_SHARD) \
-    GEN_LOADS(TestBase, ScanTag, ScanConst, DataShard, DATA_SHARD)
-#define GEN_SCANS(TestBase)                \
-    GEN_TABLES(TestBase, Scan, SCAN_QUERY) \
-    GEN_TABLES(TestBase, Exec, EXECUTE_QUERY)
-
-    GEN_SCANS(TestSimpleQueries)
-    GEN_SCANS(TestFilterEqual)
-    GEN_SCANS(TestFilterNulls)
-    GEN_SCANS(TestFilterCompare)
-    GEN_SCANS(TestOrderByBool)
-    GEN_SCANS(TestGroupByBool)
-    GEN_SCANS(TestAggregation)
-    GEN_SCANS(TestJoinById)
-    GEN_SCANS(TestJoinByBool)
+    Y_UNIT_TEST_ALL_ENUM_VALUES(TestSimpleQueries, EQueryMode, ETableKind, ELoadKind)
+    Y_UNIT_TEST_ALL_ENUM_VALUES(TestFilterEqual, EQueryMode, ETableKind, ELoadKind)
+    Y_UNIT_TEST_ALL_ENUM_VALUES(TestFilterNulls, EQueryMode, ETableKind, ELoadKind)
+    Y_UNIT_TEST_ALL_ENUM_VALUES(TestFilterCompare, EQueryMode, ETableKind, ELoadKind)
+    Y_UNIT_TEST_ALL_ENUM_VALUES(TestOrderByBool, EQueryMode, ETableKind, ELoadKind)
+    Y_UNIT_TEST_ALL_ENUM_VALUES(TestGroupByBool, EQueryMode, ETableKind, ELoadKind)
+    Y_UNIT_TEST_ALL_ENUM_VALUES(TestAggregation, EQueryMode, ETableKind, ELoadKind)
+    Y_UNIT_TEST_ALL_ENUM_VALUES(TestJoinById, EQueryMode, ETableKind, ELoadKind)
+    Y_UNIT_TEST_ALL_ENUM_VALUES(TestJoinByBool, EQueryMode, ETableKind, ELoadKind)
 }
 
 }   // namespace NKqp

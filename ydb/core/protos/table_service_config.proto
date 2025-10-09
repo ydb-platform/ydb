@@ -295,7 +295,7 @@ message TTableServiceConfig {
     optional uint64 IdxLookupJoinPointsLimit = 58 [default = 3];
     reserved 59; //optional bool OldLookupJoinBehaviour = 59 [default = false];
 
-    optional bool EnableOltpSink = 60 [default = false];
+    optional bool EnableOltpSink = 60 [default = true];
 
     enum EBlockChannelsMode {
         BLOCK_CHANNELS_SCALAR = 0;
@@ -333,7 +333,7 @@ message TTableServiceConfig {
 
     optional bool EnableRowsDuplicationCheck = 69 [ default = false ];
 
-    optional bool EnableHtapTx = 71 [default = false];
+    optional bool EnableHtapTx = 71 [default = true];
 
     message TWriteActorSettings {
         optional uint64 InFlightMemoryLimitPerActorBytes = 1 [ default = 67108864 ];

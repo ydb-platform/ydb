@@ -38,6 +38,8 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic {
         std::atomic<ui64> BurstUsageExtra = 0;
         std::atomic<ui64> BurstThrottle = 0;
 
+        std::atomic<ui64> ActualDemand = 0;
+
         explicit TTreeElement(const TId& id, const TStaticAttributes& attrs = {}) : TTreeElementBase(id, attrs) {}
 
         TPool* GetParent() const;
@@ -55,6 +57,8 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic {
         TSchedulableTaskList::iterator AddTask(const TSchedulableTaskPtr& task);
         void RemoveTask(const TSchedulableTaskList::iterator& it);
         ui32 ResumeTasks(ui32 count);
+
+        void UpdateActualDemand();
 
     public:
         std::atomic<ui64> CurrentTasksTime = 0; // sum of average execution time for all active tasks

@@ -20,43 +20,43 @@
 #include <yql/essentials/types/binary_json/write.h>
 #include <yql/essentials/types/uuid/uuid.h>
 
-#define Y_UNIT_TEST_ALL_ENUM_VALUES(TestName, ...)                                                                                              \
-    static void TestName##_Body(EQueryMode Scan, ETableKind Table, ELoadKind Load) __VA_ARGS__ Y_UNIT_TEST(TestName##_Scan_ColumnShard_Arrow) { \
-        TestName##_Body(SCAN_QUERY, COLUMN_SHARD, ARROW);                                                                                       \
-    }                                                                                                                                           \
-    Y_UNIT_TEST(TestName##_Scan_ColumnShard_YdbValue) {                                                                                         \
-        TestName##_Body(SCAN_QUERY, COLUMN_SHARD, YDB_VALUE);                                                                                   \
-    }                                                                                                                                           \
-    Y_UNIT_TEST(TestName##_Scan_ColumnShard_Csv) {                                                                                              \
-        TestName##_Body(SCAN_QUERY, COLUMN_SHARD, CSV);                                                                                         \
-    }                                                                                                                                           \
-    Y_UNIT_TEST(TestName##_Scan_DataShard_Arrow) {                                                                                              \
-        TestName##_Body(SCAN_QUERY, DATA_SHARD, ARROW);                                                                                         \
-    }                                                                                                                                           \
-    Y_UNIT_TEST(TestName##_Scan_DataShard_YdbValue) {                                                                                           \
-        TestName##_Body(SCAN_QUERY, DATA_SHARD, YDB_VALUE);                                                                                     \
-    }                                                                                                                                           \
-    Y_UNIT_TEST(TestName##_Scan_DataShard_Csv) {                                                                                                \
-        TestName##_Body(SCAN_QUERY, DATA_SHARD, CSV);                                                                                           \
-    }                                                                                                                                           \
-    Y_UNIT_TEST(TestName##_Execute_ColumnShard_Arrow) {                                                                                         \
-        TestName##_Body(EXECUTE_QUERY, COLUMN_SHARD, ARROW);                                                                                    \
-    }                                                                                                                                           \
-    Y_UNIT_TEST(TestName##_Execute_ColumnShard_YdbValue) {                                                                                      \
-        TestName##_Body(EXECUTE_QUERY, COLUMN_SHARD, YDB_VALUE);                                                                                \
-    }                                                                                                                                           \
-    Y_UNIT_TEST(TestName##_Execute_ColumnShard_Csv) {                                                                                           \
-        TestName##_Body(EXECUTE_QUERY, COLUMN_SHARD, CSV);                                                                                      \
-    }                                                                                                                                           \
-    Y_UNIT_TEST(TestName##_Execute_DataShard_Arrow) {                                                                                           \
-        TestName##_Body(EXECUTE_QUERY, DATA_SHARD, ARROW);                                                                                      \
-    }                                                                                                                                           \
-    Y_UNIT_TEST(TestName##_Execute_DataShard_YdbValue) {                                                                                        \
-        TestName##_Body(EXECUTE_QUERY, DATA_SHARD, YDB_VALUE);                                                                                  \
-    }                                                                                                                                           \
-    Y_UNIT_TEST(TestName##_Execute_DataShard_Csv) {                                                                                             \
-        TestName##_Body(EXECUTE_QUERY, DATA_SHARD, CSV);                                                                                        \
-    }
+#define Y_UNIT_TEST_ALL_ENUM_VALUES(N, ENUM_TYPE1, ENUM_TYPE2, ENUM_TYPE3) \
+    struct TTestCase##N: public TCurrentTestCase { \
+        ENUM_TYPE1 Arg0; \
+        ENUM_TYPE2 Arg1; \
+        ENUM_TYPE3 Arg2; \
+        TString ParametrizedTestName; \
+        TTestCase##N(ENUM_TYPE1 arg0, ENUM_TYPE2 arg1, ENUM_TYPE3 arg2) \
+            : TCurrentTestCase() \
+            , Arg0(arg0) \
+            , Arg1(arg1) \
+            , Arg2(arg2) \
+            , ParametrizedTestName(#N "-" + ToString(Arg0) + "-" + ToString(Arg1) + "-" + ToString(Arg2)) { \
+            Name_ = ParametrizedTestName.c_str(); \
+        } \
+        static THolder<NUnitTest::TBaseTestCase> Create(ENUM_TYPE1 arg0, ENUM_TYPE2 arg1, ENUM_TYPE3 arg2) { \
+            return ::MakeHolder<TTestCase##N>(arg0, arg1, arg2); \
+        } \
+        void Execute_(NUnitTest::TTestContext&) override; \
+    }; \
+    struct TTestRegistration##N { \
+        TTestRegistration##N() { \
+            const auto enumItems1 = GetEnumAllValues<ENUM_TYPE1>(); \
+            const auto enumItems2 = GetEnumAllValues<ENUM_TYPE2>(); \
+            const auto enumItems3 = GetEnumAllValues<ENUM_TYPE3>(); \
+            for (auto&& item1 : enumItems1) { \
+                for (auto&& item2 : enumItems2) { \
+                    for (auto&& item3 : enumItems3) { \
+                        TCurrentTest::AddTest([item1, item2, item3] { \
+                            return TTestCase##N::Create(item1, item2, item3); \
+                        }); \
+                    } \
+                } \
+            } \
+        } \
+    }; \
+    static TTestRegistration##N testRegistration##N; \
+    void TTestCase##N::Execute_(NUnitTest::TTestContext& ut_context Y_DECLARE_UNUSED)
 
 namespace NKikimr {
 namespace NKqp {
@@ -362,7 +362,10 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
         TTestHelper::TColumnTable TestTable;
     };
 
-    Y_UNIT_TEST_ALL_ENUM_VALUES(TestSimpleQueries, {
+    Y_UNIT_TEST_ALL_ENUM_VALUES(TestSimpleQueries, EQueryMode, ETableKind, ELoadKind) {
+        const auto Scan = Arg0;
+        const auto Table = Arg1;
+        const auto Load = Arg2;
         if (Table == ETableKind::COLUMN_SHARD) {
             return;   // skip until bool is supported in columnshard
         }
@@ -376,9 +379,12 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
         CheckOrExec(helper, "SELECT * FROM `/Root/Table1` WHERE id=1", "[[[%true];1;[4]]]", Scan);
         CheckOrExec(
             helper, "SELECT * FROM `/Root/Table1` order by id", "[[[%true];1;[4]];[[%false];2;[3]];[[%true];3;[2]];[[%true];4;[1]]]", Scan);
-    })
+    }
 
-    Y_UNIT_TEST_ALL_ENUM_VALUES(TestFilterEqual, {
+    Y_UNIT_TEST_ALL_ENUM_VALUES(TestFilterEqual, EQueryMode, ETableKind, ELoadKind) {
+        const auto Scan = Arg0;
+        const auto Table = Arg1;
+        const auto Load = Arg2;
         if (Table == ETableKind::COLUMN_SHARD) {
             return;   // skip until bool is supported in columnshard
         }
@@ -391,9 +397,12 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
         LoadData(helper, Table, Load, tableName, { { 1, 4, true }, { 2, 3, false }, { 4, 1, true }, { 3, 2, true } }, &col, &schema);
         CheckOrExec(helper, "SELECT * FROM `/Root/Table1` WHERE b == true", "[[[%true];1;[4]];[[%true];3;[2]];[[%true];4;[1]]]", Scan);
         CheckOrExec(helper, "SELECT * FROM `/Root/Table1` WHERE b != true order by id", "[[[%false];2;[3]]]", Scan);
-    })
+    }
 
-    Y_UNIT_TEST_ALL_ENUM_VALUES(TestFilterNulls, {
+    Y_UNIT_TEST_ALL_ENUM_VALUES(TestFilterNulls, EQueryMode, ETableKind, ELoadKind) {
+        const auto Scan = Arg0;
+        const auto Table = Arg1;
+        const auto Load = Arg2;
         if (Table == ETableKind::COLUMN_SHARD) {
             return;   // skip until bool is supported in columnshard
         }
@@ -409,9 +418,12 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
         CheckOrExec(helper, "SELECT * FROM `/Root/Table1` WHERE b is NULL order by id", expectedNulls, Scan);
         CheckOrExec(helper, "SELECT * FROM `/Root/Table1` WHERE b is not NULL order by id",
             "[[[%true];1;[4]];[[%false];2;[3]];[[%true];3;[2]];[[%true];4;[1]]]", Scan);
-    })
+    }
 
-    Y_UNIT_TEST_ALL_ENUM_VALUES(TestFilterCompare, {
+    Y_UNIT_TEST_ALL_ENUM_VALUES(TestFilterCompare, EQueryMode, ETableKind, ELoadKind) {
+        const auto Scan = Arg0;
+        const auto Table = Arg1;
+        const auto Load = Arg2;
         if (Table == ETableKind::COLUMN_SHARD) {
             return;   // skip until bool is supported in columnshard
         }
@@ -429,9 +441,12 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
             "[[[%true];1;[4]];[[%false];2;[3]];[[%true];3;[2]];[[%true];4;[1]]]", Scan);
         CheckOrExec(
             helper, "SELECT * FROM `/Root/Table1` WHERE b >= true order by id", "[[[%true];1;[4]];[[%true];3;[2]];[[%true];4;[1]]]", Scan);
-    })
+    }
 
-    Y_UNIT_TEST_ALL_ENUM_VALUES(TestOrderByBool, {
+    Y_UNIT_TEST_ALL_ENUM_VALUES(TestOrderByBool, EQueryMode, ETableKind, ELoadKind) {
+        const auto Scan = Arg0;
+        const auto Table = Arg1;
+        const auto Load = Arg2;
         if (Table == ETableKind::COLUMN_SHARD) {
             return;   // skip until bool is supported in columnshard
         }
@@ -444,9 +459,12 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
         LoadData(helper, Table, Load, tableName, { { 1, 4, true }, { 2, 3, false }, { 3, 2, true }, { 4, 1, true } }, &col, &schema);
         CheckOrExec(
             helper, "SELECT * FROM `/Root/Table1` order by b, id", "[[[%false];2;[3]];[[%true];1;[4]];[[%true];3;[2]];[[%true];4;[1]]]", Scan);
-    })
+    }
 
-    Y_UNIT_TEST_ALL_ENUM_VALUES(TestGroupByBool, {
+    Y_UNIT_TEST_ALL_ENUM_VALUES(TestGroupByBool, EQueryMode, ETableKind, ELoadKind) {
+        const auto Scan = Arg0;
+        const auto Table = Arg1;
+        const auto Load = Arg2;
         if (Table == ETableKind::COLUMN_SHARD) {
             return;   // skip until bool is supported in columnshard
         }
@@ -459,9 +477,12 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
         LoadData(helper, Table, Load, tableName,
             { { 1, 4, true }, { 2, 3, false }, { 3, 2, true }, { 4, 1, true }, { 5, 12, true }, { 6, 30, false } }, &col, &schema);
         CheckOrExec(helper, "SELECT b, count(*) FROM `/Root/Table1` group by b order by b", "[[[%false];2u];[[%true];4u]]", Scan);
-    })
+    }
 
-    Y_UNIT_TEST_ALL_ENUM_VALUES(TestAggregation, {
+    Y_UNIT_TEST_ALL_ENUM_VALUES(TestAggregation, EQueryMode, ETableKind, ELoadKind) {
+        const auto Scan = Arg0;
+        const auto Table = Arg1;
+        const auto Load = Arg2;
         if (Table == ETableKind::COLUMN_SHARD) {
             return;   // skip until bool is supported in columnshard
         }
@@ -474,9 +495,12 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
         LoadData(helper, Table, Load, tableName, { { 1, 4, true }, { 2, 3, false }, { 3, 2, true }, { 4, 1, true } }, &col, &schema);
         CheckOrExec(helper, "SELECT min(b) FROM `/Root/Table1`", "[[[%false]]]", Scan);
         CheckOrExec(helper, "SELECT max(b) FROM `/Root/Table1`", "[[[%true]]]", Scan);
-    })
+    }
 
-    Y_UNIT_TEST_ALL_ENUM_VALUES(TestJoinById, {
+    Y_UNIT_TEST_ALL_ENUM_VALUES(TestJoinById, EQueryMode, ETableKind, ELoadKind) {
+        const auto Scan = Arg0;
+        const auto Table = Arg1;
+        const auto Load = Arg2;
         if (Table == ETableKind::COLUMN_SHARD) {
             return;   // skip until bool is supported in columnshard
         }
@@ -529,9 +553,12 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
         CheckOrExec(helper,
             "SELECT t1.id, t1.b, t2.b FROM `/Root/Table1` as t1 join `/Root/Table2` as t2 on t1.id = t2.table1_id order by t1.id, t1.b, t2.b",
             R"([[1;[%true];[%false]];[1;[%true];[%true]];[2;[%true];[%false]];[2;[%true];[%true]]])", Scan);
-    })
+    }
 
-    Y_UNIT_TEST_ALL_ENUM_VALUES(TestJoinByBool, {
+    Y_UNIT_TEST_ALL_ENUM_VALUES(TestJoinByBool, EQueryMode, ETableKind, ELoadKind) {
+        const auto Scan = Arg0;
+        const auto Table = Arg1;
+        const auto Load = Arg2;
         if (Table == ETableKind::COLUMN_SHARD) {
             return;   // skip until bool is supported in columnshard
         }
@@ -566,7 +593,7 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
         CheckOrExec(helper,
             "SELECT t1.id, t2.id, t1.b FROM `/Root/Table1` as t1 join `/Root/Table2` as t2 on t1.b = t2.b order by t1.id, t2.id, t1.b",
             R"([[2;1;[%true]];[2;3;[%true]];[4;1;[%true]];[4;3;[%true]]])", Scan);
-    })
+    }
 }
 
 }   // namespace NKqp

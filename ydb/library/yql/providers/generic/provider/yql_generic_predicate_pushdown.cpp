@@ -239,9 +239,16 @@ namespace NYql {
 
             // extract decimal value itself and convert it into bytes
             auto decimal = NDecimal::FromString(coDecimal.Cast<TCoDecimal>().Literal().Value(), precision, scale);
-            Y_ENSURE(sizeof(decimal) == 16, "wrong TInt128 size");
-            char* buf = reinterpret_cast<char*>(&decimal);
-            protoTypedValue->mutable_value()->set_bytes_value(buf);
+            static_assert(sizeof(decimal) == 16, "wrong TInt128 size");
+            
+            // Create a fixed-size buffer of 16 bytes initialized with zeros
+            char buffer[16] = {0};
+            
+            // Copy the decimal value into the buffer
+            std::memcpy(buffer, &decimal, sizeof(decimal));
+            
+            // Set the bytes value with the fixed-size buffer
+            protoTypedValue->mutable_value()->set_bytes_value(buffer, 16);
             
             return true;
         }

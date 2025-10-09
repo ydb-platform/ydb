@@ -1,6 +1,6 @@
 #include "mkql_prepend.h"
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
-#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
+#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
 #include <yql/essentials/minikql/mkql_node_cast.h>
 
 namespace NKikimr {
@@ -8,9 +8,10 @@ namespace NMiniKQL {
 
 namespace {
 
-template<bool IsVoid>
-class TPrependWrapper : public TMutableCodegeneratorNode<TPrependWrapper<IsVoid>> {
+template <bool IsVoid>
+class TPrependWrapper: public TMutableCodegeneratorNode<TPrependWrapper<IsVoid>> {
     typedef TMutableCodegeneratorNode<TPrependWrapper<IsVoid>> TBaseComputation;
+
 public:
     TPrependWrapper(TComputationMutables& mutables, IComputationNode* left, IComputationNode* right)
         : TBaseComputation(mutables, right->GetRepresentation())
@@ -23,8 +24,9 @@ public:
         auto left = Left->GetValue(ctx);
         auto right = Right->GetValue(ctx);
 
-        if (IsVoid && !left.IsBoxed())
+        if (IsVoid && !left.IsBoxed()) {
             return right.Release();
+        }
 
         return ctx.HolderFactory.Prepend(left.Release(), right.Release());
     }
@@ -48,7 +50,7 @@ public:
 
             const uint64_t init[] = {0x0ULL, 0x300000000000000ULL};
             const auto mask = ConstantInt::get(left->getType(), APInt(128, 2, init));
-            const auto boxed = BinaryOperator::CreateAnd(left, mask, "boxed",  block);
+            const auto boxed = BinaryOperator::CreateAnd(left, mask, "boxed", block);
             const auto check = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, boxed, mask, "check", block);
             BranchInst::Create(work, done, check, block);
             block = work;
@@ -80,7 +82,7 @@ private:
     IComputationNode* const Right;
 };
 
-}
+} // namespace
 
 IComputationNode* WrapPrepend(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 2, "Expected 2 args");
@@ -92,11 +94,12 @@ IComputationNode* WrapPrepend(TCallable& callable, const TComputationNodeFactory
 
     const auto left = LocateNode(ctx.NodeLocator, callable, 0);
     const auto right = LocateNode(ctx.NodeLocator, callable, 1);
-    if (leftType->IsVoid())
+    if (leftType->IsVoid()) {
         return new TPrependWrapper<true>(ctx.Mutables, left, right);
-    else
+    } else {
         return new TPrependWrapper<false>(ctx.Mutables, left, right);
+    }
 }
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

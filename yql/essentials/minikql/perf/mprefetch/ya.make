@@ -1,7 +1,9 @@
 PROGRAM()
 
+ENABLE(YQL_STYLE_CPP)
+
 PEERDIR(
-	library/cpp/getopt
+    library/cpp/getopt
 )
 
 SRCS(

@@ -58,8 +58,8 @@ template <typename T>
 
 template <typename T>
 [[nodiscard]] constexpr T SafeMul(T u, T v)
-    requires (std::is_integral_v<T> || std::is_same_v<T, NYql::NDecimal::TInt128>) &&
-             (!std::is_same_v<T, i16>) && (!std::is_same_v<T, ui16>)
+    requires(std::is_integral_v<T> || std::is_same_v<T, NYql::NDecimal::TInt128>) &&
+            (!std::is_same_v<T, i16>) && (!std::is_same_v<T, ui16>)
 {
     using TUnsigned = TMakeUnsigned_t<T>;
     return static_cast<T>(static_cast<TUnsigned>(u) *
@@ -103,7 +103,6 @@ template <typename T>
 {
     return -u;
 }
-
 
 } // namespace NMiniKQL
 } // namespace NKikimr

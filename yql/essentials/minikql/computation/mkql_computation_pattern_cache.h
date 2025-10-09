@@ -27,7 +27,7 @@ struct TPatternCacheEntry {
 
     TStructType* ParamsStruct;
     IComputationPattern::TPtr Pattern;
-    size_t SizeForCache = 0; // set only by cache to lock the size, which can slightly vary when pattern is used
+    size_t SizeForCache = 0;             // set only by cache to lock the size, which can slightly vary when pattern is used
     std::atomic<size_t> AccessTimes = 0; // set only by cache
     std::atomic<bool> IsInCache = false; // set only by cache
 
@@ -63,29 +63,32 @@ public:
         Config(size_t maxSizeBytes, size_t maxCompiledSizeBytes)
             : MaxSizeBytes(maxSizeBytes)
             , MaxCompiledSizeBytes(maxCompiledSizeBytes)
-        {}
+        {
+        }
 
         Config(size_t maxSizeBytes, size_t maxCompiledSizeBytes, size_t patternAccessTimesBeforeTryToCompile)
             : MaxSizeBytes(maxSizeBytes)
             , MaxCompiledSizeBytes(maxCompiledSizeBytes)
             , PatternAccessTimesBeforeTryToCompile(patternAccessTimesBeforeTryToCompile)
-        {}
+        {
+        }
 
         const size_t MaxSizeBytes;
         const size_t MaxCompiledSizeBytes;
         const std::optional<size_t> PatternAccessTimesBeforeTryToCompile;
 
-        bool operator==(const Config & rhs) {
+        bool operator==(const Config& rhs) {
             return std::tie(MaxSizeBytes, MaxCompiledSizeBytes, PatternAccessTimesBeforeTryToCompile) ==
-                std::tie(rhs.MaxSizeBytes, rhs.MaxCompiledSizeBytes, rhs.PatternAccessTimesBeforeTryToCompile);
+                   std::tie(rhs.MaxSizeBytes, rhs.MaxCompiledSizeBytes, rhs.PatternAccessTimesBeforeTryToCompile);
         }
 
-        bool operator!=(const Config & rhs) {
+        bool operator!=(const Config& rhs) {
             return !(*this == rhs);
         }
     };
 
-    TComputationPatternLRUCache(const Config& configuration, NMonitoring::TDynamicCounterPtr counters = MakeIntrusive<NMonitoring::TDynamicCounters>());
+    TComputationPatternLRUCache(const Config& configuration,
+                                NMonitoring::TDynamicCounterPtr counters = MakeIntrusive<NMonitoring::TDynamicCounters>());
     ~TComputationPatternLRUCache();
 
     static TPatternCacheEntryPtr CreateCacheEntry(bool useAlloc = true) {
@@ -127,7 +130,7 @@ public:
         return PatternsToCompile_.size();
     }
 
-    void GetPatternsToCompile(THashMap<TString, TPatternCacheEntryPtr> & result) {
+    void GetPatternsToCompile(THashMap<TString, TPatternCacheEntryPtr>& result) {
         std::lock_guard lock(Mutex_);
         result.swap(PatternsToCompile_);
     }

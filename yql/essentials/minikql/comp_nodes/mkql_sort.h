@@ -14,5 +14,5 @@ IComputationNode* WrapTopSort(TCallable& callable, const TComputationNodeFactory
 
 IComputationNode* WrapKeepTop(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

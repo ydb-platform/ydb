@@ -39,7 +39,7 @@ int main(int argc, char** argv) {
         ui32 index = 0;
         if (nPrefetch == 0) {
             for (ui32 i = 0; i < nIters; ++i) {
-                data[v[index++]]+=1;
+                data[v[index++]] += 1;
                 if (index == nRows) {
                     index = 0;
                 }
@@ -56,7 +56,7 @@ int main(int argc, char** argv) {
                     queueBegin = 0;
                 }
 
-                data[prevJ]+=1;
+                data[prevJ] += 1;
 
                 for (ui32 j = 0; j < nSpin; ++j) {
                     ++tmp;
@@ -87,7 +87,7 @@ int main(int argc, char** argv) {
         }
 
         auto duration = timer.Get();
-        durations.push_back(1e-6*duration.MicroSeconds());
+        durations.push_back(1e-6 * duration.MicroSeconds());
     }
 
     // remove 1/3 of worst measurements
@@ -102,7 +102,7 @@ int main(int argc, char** argv) {
 
     double avgDuration = sumDurations / nRepeats;
     double dispDuration = sqrt(sumDurationsQ / nRepeats - avgDuration * avgDuration);
-    Cerr << "Elapsed: " << avgDuration << ", noise: " << 100*dispDuration/avgDuration << "%\n";
+    Cerr << "Elapsed: " << avgDuration << ", noise: " << 100 * dispDuration / avgDuration << "%\n";
     Cerr << "Speed: " << 1e-6 * (ui64(nIters) / avgDuration) << " M iters/sec\n";
     return 0;
 }

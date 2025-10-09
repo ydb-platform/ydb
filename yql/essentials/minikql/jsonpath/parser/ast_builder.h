@@ -49,4 +49,4 @@ private:
     TIssues& Issues_;
 };
 
-}
+} // namespace NYql::NJsonPath

@@ -453,6 +453,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
     TFileStoragePtr FileStorage;
     TQContext QContext;
     ECostBasedOptimizerType CostBasedOptimizer = ECostBasedOptimizerType::Disable;
+    ui32 CostBasedOptimizerVersion = 0;
     bool MatchRecognize = false;
     EMatchRecognizeStreamingMode MatchRecognizeStreaming = EMatchRecognizeStreamingMode::Force;
     i64 TimeOrderRecoverDelay = -10'000'000; //microseconds

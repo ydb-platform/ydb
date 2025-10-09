@@ -874,6 +874,21 @@ private:
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Expected `disable|pg|native', but got: " << args[0]));
                 return false;
             }
+        } else if (name == "CostBasedOptimizerVersion") {
+            if (args.size() != 1) {
+                ctx.AddError(TIssue(pos, TStringBuilder() << "Expected at most 1 argument, but got " << args.size()));
+                return false;
+            }
+            ui32 version;
+            if (!TryFromString(args[0], version)) {
+                ctx.AddError(TIssue(pos, TStringBuilder() << "Expected integer, but got: " << args[0]));
+                return false;
+            }
+            const ui32 maxCBOVersion = 1;
+            if (version > maxCBOVersion) {
+                ctx.AddError(TIssue(pos, TStringBuilder() << "Expected value <= " << maxCBOVersion << ", but got: " << args[0]));
+            }
+            Types_.CostBasedOptimizerVersion = version;
         } else if (name == "_EnableMatchRecognize" || name == "DisableMatchRecognize") {
             if (args.size() != 0) {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));

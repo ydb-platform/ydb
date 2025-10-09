@@ -3388,6 +3388,22 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
         }
         return TNodePtr{};
     }),
+    TableElemExt("CostBasedOptimizerVersion", [](CB_SIG) -> TMaybe<TNodePtr> {
+        auto& ctx = query.Context();
+        if (values.size() == 1 && values[0].GetLiteral()) {
+            ui32 version;
+            if (!TryFromString(*values[0].GetLiteral(), version)) {
+                query.Error() << "Expected integer argument for: " << pragma;
+                return {};
+            }
+            const ui32 maxCBOVersion = 1;
+            if (version > maxCBOVersion) {
+                query.Error() << "Expected value <= " << maxCBOVersion << " for: " << pragma;
+            }
+            ctx.CostBasedOptimizerVersion = version;
+        }
+        return TNodePtr{};
+    }),
     TableElemExt("DisableCompactNamedExprs", [](CB_SIG) -> TMaybe<TNodePtr> {
         auto& ctx = query.Context();
         if (!ctx.Warning(ctx.Pos(), TIssuesIds::YQL_DEPRECATED_PRAGMA, [](auto& out) {

@@ -247,7 +247,7 @@ private:
 
         if (IncRequest()) {
             if (Counters) {
-                Counters->StartProcessing(0);
+                Counters->StartProcessing(0, TInstant::Max());
             }
             Flags |= FlagStarted;
 

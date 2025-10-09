@@ -49,7 +49,7 @@ public:
         auto& context = ctx.Codegen.GetContext();
 
         const auto flagType = Type::getInt1Ty(context);
-        const auto flagPtr = new AllocaInst(flagType, 0U, "flag_ptr", &ctx.Func->getEntryBlock().back());
+        const auto flagPtr = new AllocaInst(flagType, 0U, "flag_ptr", --ctx.Func->getEntryBlock().end());
 
         const auto good = BasicBlock::Create(context, "good", ctx.Func);
         const auto done = BasicBlock::Create(context, "done", ctx.Func);

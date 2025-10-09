@@ -1281,7 +1281,7 @@ public:
         [[maybe_unused]] const auto outputWidth = ConstantInt::get(sizeType, OutputTypes.size());
 
         // generated program (LLVM function) start
-        const auto atFuncTop = &ctx.Func->getEntryBlock().back();
+        const auto atFuncTop = --ctx.Func->getEntryBlock().end();
 
         // our node's GetNodeValues generated code starts here
         const auto dqHashGetValues = BasicBlock::Create(context, "dq_hash_get_values", ctx.Func);

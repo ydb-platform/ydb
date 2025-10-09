@@ -244,7 +244,7 @@ public:
         const auto ptrType = PointerType::getUnqual(type);
         /// TODO: how to get computation context or other workaround
         const auto itms = *Stateless_ || ctx.AlwaysInline ?
-            new AllocaInst(ptrType, 0U, "itms", &ctx.Func->getEntryBlock().back()):
+            new AllocaInst(ptrType, 0U, "itms", --ctx.Func->getEntryBlock().end()):
             new AllocaInst(ptrType, 0U, "itms", block);
         const auto result = Cache.GenNewArray(ValueNodes.size(), itms, ctx, block);
         const auto itemsPtr = new LoadInst(ptrType, itms, "items", block);

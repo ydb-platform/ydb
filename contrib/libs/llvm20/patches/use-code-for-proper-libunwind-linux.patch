@@ -1,0 +1,14 @@
+[PATCH] YT-6108: Use code for proper libunwind
+previous patch version is https://a.yandex-team.ru/arcadia/devtools/yamaker/projects/llvm/llvm/patches/r2691619-Use-code-for-proper-libunwind.patch?rev=r9248774
+
+--- a/include/llvm/Config/config-linux.h
++++ b/include/llvm/Config/config-linux.h
+@@ -71,7 +71,7 @@
+ #define HAVE_DEREGISTER_FRAME 1
+ 
+ /* Define if __unw_add_dynamic_fde() is available on this platform. */
+-/* #undef HAVE_UNW_ADD_DYNAMIC_FDE */
++#define HAVE_UNW_ADD_DYNAMIC_FDE 1
+ 
+ /* Define if libffi is available on this platform. */
+ #define HAVE_FFI_CALL 1

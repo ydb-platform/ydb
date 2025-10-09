@@ -34,7 +34,7 @@ public:
         const auto ptrValueType = PointerType::getUnqual(valueType);
         const auto statusType = Type::getInt32Ty(context);
 
-        const auto atTop = &ctx.Func->getEntryBlock().back();
+        const auto atTop = --ctx.Func->getEntryBlock().end();
 
         const auto values0Ptr = GetElementPtrInst::CreateInBounds(valueType, ctx.GetMutables(), {ConstantInt::get(Type::getInt32Ty(context), static_cast<const IComputationNode*>(this)->GetIndex() + 1U)}, "values_0_ptr", atTop);
         const auto values1Ptr = GetElementPtrInst::CreateInBounds(valueType, ctx.GetMutables(), {ConstantInt::get(Type::getInt32Ty(context), static_cast<const IComputationNode*>(this)->GetIndex() + 2U)}, "values_1_ptr", atTop);

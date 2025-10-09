@@ -46,9 +46,9 @@ SET(YDB_REPLAY_PEERDIRS
     ydb/core/tx/time_cast
     ydb/core/tx/tx_proxy
     yql/essentials/core/services/mounts
-    yql/essentials/minikql/comp_nodes/llvm16
+    yql/essentials/minikql/comp_nodes/llvm20
     yt/yql/providers/yt/codec/codegen
-    yt/yql/providers/yt/comp_nodes/llvm16
+    yt/yql/providers/yt/comp_nodes/llvm20
     yql/essentials/public/udf/service/exception_policy
     ydb/public/api/protos
     ydb/public/lib/base
@@ -62,7 +62,7 @@ SET(YDB_REPLAY_PEERDIRS
     ydb/services/persqueue_v1
     ydb/services/rate_limiter
     ydb/services/ydb
-    ydb/library/yql/dq/comp_nodes/llvm16
+    ydb/library/yql/dq/comp_nodes/llvm20
     ydb/library/yql/udfs/common/clickhouse/client
     yql/essentials/udfs/common/datetime2
     yql/essentials/udfs/common/digest

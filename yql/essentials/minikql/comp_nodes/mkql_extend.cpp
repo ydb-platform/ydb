@@ -119,7 +119,7 @@ public:
         const auto statusType = Type::getInt32Ty(context);
         const auto arrayType = ArrayType::get(valueType, Width_);
 
-        const auto arrayPtr = new AllocaInst(arrayType, 0, "array_ptr", &ctx.Func->getEntryBlock().back());
+        const auto arrayPtr = new AllocaInst(arrayType, 0, "array_ptr", --ctx.Func->getEntryBlock().end());
 
         TLLVMFieldsStructureState stateFields(context);
 
@@ -415,7 +415,7 @@ public:
         const auto statusType = Type::getInt32Ty(context);
         const auto arrayType = ArrayType::get(valueType, Width_);
 
-        const auto arrayPtr = new AllocaInst(arrayType, 0, "array_ptr", &ctx.Func->getEntryBlock().back());
+        const auto arrayPtr = new AllocaInst(arrayType, 0, "array_ptr", --ctx.Func->getEntryBlock().end());
 
         TLLVMFieldsStructureState stateFields(context);
 
@@ -600,7 +600,7 @@ public:
 
         const auto arrayType = ArrayType::get(valueType, Lists.size());
         const auto array = *this->Stateless_ || ctx.AlwaysInline ?
-            new AllocaInst(arrayType, 0U, "array", &ctx.Func->getEntryBlock().back()):
+            new AllocaInst(arrayType, 0U, "array", --ctx.Func->getEntryBlock().end()):
             new AllocaInst(arrayType, 0U, "array", block);
 
         for (size_t i = 0U; i < Lists.size(); ++i) {

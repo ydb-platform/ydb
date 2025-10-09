@@ -57,6 +57,7 @@
 #   define _LIBCPP_HAS_MUSL_LIBC
 #endif
 
+/*
 #if defined(__has_feature) && (__has_feature(address_sanitizer) || \
                                __has_feature(leak_sanitizer) || \
                                __has_feature(thread_sanitizer) || \
@@ -68,6 +69,8 @@
 #else
 #   define _LIBCPP_HARDENING_MODE_DEFAULT _LIBCPP_HARDENING_MODE_FAST
 #endif
+*/
+#define _LIBCPP_HARDENING_MODE_DEFAULT _LIBCPP_HARDENING_MODE_DEBUG
 
 #if defined(_WIN32) && defined(_MSC_VER)
 #	define _WCHAR_H_CPLUSPLUS_98_CONFORMANCE_ 1

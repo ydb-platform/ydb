@@ -2,15 +2,16 @@ LIBRARY()
 
 SRCS()
 
-# TODO: Migrate all dependents to explicit llvm16/no_llvm and remove this peerdir
+# TODO: Migrate all dependents to explicit llvm20/no_llvm and remove this peerdir
 PEERDIR(
-    ydb/library/yql/dq/comp_nodes/llvm16
+    ydb/library/yql/dq/comp_nodes/llvm20
 )
 
 END()
 
 RECURSE(
     llvm16
+    llvm20
     no_llvm
 )
 

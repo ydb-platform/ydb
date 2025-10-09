@@ -29,7 +29,7 @@ PEERDIR(
     ydb/core/tx/scheme_board
     ydb/core/tx/schemeshard
     ydb/core/util
-    yql/essentials/minikql/invoke_builtins/llvm16
+    yql/essentials/minikql/invoke_builtins/llvm20
     yql/essentials/public/udf/service/exception_policy
     ydb/library/keys
     ydb/services/kesus

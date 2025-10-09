@@ -1133,7 +1133,7 @@ class TGraceJoinWrapper : public TStatefulWideFlowCodegeneratorNode<TGraceJoinWr
         const auto arrayType = ArrayType::get(valueType, OutputRepresentations.size());
         const auto fieldsType = ArrayType::get(PointerType::getUnqual(valueType), OutputRepresentations.size());
 
-        const auto atTop = &ctx.Func->getEntryBlock().back();
+        const auto atTop = --ctx.Func->getEntryBlock().end();
 
         const auto values = new AllocaInst(arrayType, 0U, "values", atTop);
         const auto fields = new AllocaInst(fieldsType, 0U, "fields", atTop);

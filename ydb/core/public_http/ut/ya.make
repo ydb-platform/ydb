@@ -11,7 +11,7 @@ PEERDIR(
     yql/essentials/sql/pg_dummy
     ydb/services/kesus
     ydb/services/persqueue_cluster_discovery
-    yql/essentials/minikql/comp_nodes/llvm16
+    yql/essentials/minikql/comp_nodes/llvm20
 )
 
 YQL_LAST_ABI_VERSION()

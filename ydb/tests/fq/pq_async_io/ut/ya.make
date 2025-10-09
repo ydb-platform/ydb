@@ -18,8 +18,8 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/datastreams
     ydb/public/sdk/cpp/src/client/persqueue_public
     ydb/tests/fq/pq_async_io
-    yql/essentials/minikql/comp_nodes/llvm16
-    yql/essentials/minikql/computation/llvm16
+    yql/essentials/minikql/comp_nodes/llvm20
+    yql/essentials/minikql/computation/llvm20
     yql/essentials/providers/common/comp_nodes
     yql/essentials/public/udf/service/exception_policy
     yql/essentials/sql

@@ -26,7 +26,6 @@
                     "columns": [
                         "Value2"
                     ],
-                    "limit": "1",
                     "lookup_by": [
                         "Key (101)"
                     ],

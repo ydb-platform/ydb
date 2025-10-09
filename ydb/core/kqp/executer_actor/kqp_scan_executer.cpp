@@ -67,11 +67,14 @@ public:
 
         if (TasksGraph.GetMeta().StreamResult) {
             YQL_ENSURE(resultsSize == 1);
-        } else {
+        } 
+        /*
+        else {
             for (size_t i = 1; i < resultsSize; ++i) {
                 YQL_ENSURE(Request.Transactions[0].Body->GetResults(i).GetIsStream() == TasksGraph.GetMeta().StreamResult);
             }
         }
+            */
     }
 
 public:

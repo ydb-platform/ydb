@@ -113,6 +113,10 @@ class TRangeGet : public TActorBootstrapped<TRangeGet> {
         LOG_NOTICE(ctx, NActorsServices::TEST,
                    "  RANGE READ: from=%s to=%s\n", ReadFrom.ToString().data(), ReadTo.ToString().data());
 
+        SendRequest();
+    }
+
+    void SendRequest() {
         auto req = TEvBlobStorage::TEvVGet::CreateRangeIndexQuery(VDiskInfo.VDiskID,
                                                                   TInstant::Max(),
                                                                   NKikimrBlobStorage::EGetHandleClass::FastRead,
@@ -122,7 +126,7 @@ class TRangeGet : public TActorBootstrapped<TRangeGet> {
                                                                   ReadTo,
                                                                   MaxResults);
 
-        ctx.Send(VDiskInfo.ActorID, req.release());
+        Send(VDiskInfo.ActorID, req.release(), IEventHandle::FlagTrackDelivery);
     }
 
     void CheckOrder(const NKikimrBlobStorage::TEvVGetResult &rec,
@@ -163,6 +167,7 @@ class TRangeGet : public TActorBootstrapped<TRangeGet> {
     STRICT_STFUNC(StateFunc,
         HFunc(TEvBlobStorage::TEvVGetResult, Handle);
         IgnoreFunc(TEvBlobStorage::TEvVWindowChange);
+        cFunc(TEvents::TEvUndelivered::EventType, SendRequest);
     )
 
 public:
@@ -581,6 +586,10 @@ class TManyGets : public TActorBootstrapped<TManyGets> {
         // get logo blob
         if (Step % 100 == 0)
             LOG_NOTICE(ctx, NActorsServices::TEST, "GET Step=%u", Step);
+        SendRequest();
+    }
+
+    void SendRequest() {
         TLogoBlobID logoBlobID(TabletId, Gen, Step, Channel, MsgData.size(), 0, 1);
         auto req = TEvBlobStorage::TEvVGet::CreateExtremeDataQuery(VDiskInfo.VDiskID,
                                                                    TInstant::Max(),
@@ -588,7 +597,7 @@ class TManyGets : public TActorBootstrapped<TManyGets> {
                                                                    TEvBlobStorage::TEvVGet::EFlags::None,
                                                                    {},
                                                                    {logoBlobID});
-        ctx.Send(VDiskInfo.ActorID, req.release());
+        Send(VDiskInfo.ActorID, req.release(), IEventHandle::FlagTrackDelivery);
     }
 
     void Check(const TActorContext &ctx, const NKikimrBlobStorage::TEvVGetResult &rec, const TEvBlobStorage::TEvVGetResult& ev) {
@@ -626,6 +635,7 @@ class TManyGets : public TActorBootstrapped<TManyGets> {
     STRICT_STFUNC(StateReadFunc,
         HFunc(TEvBlobStorage::TEvVGetResult, Handle);
         IgnoreFunc(TEvBlobStorage::TEvVWindowChange);
+        cFunc(TEvents::TEvUndelivered::EventType, SendRequest);
     )
 
 public:
@@ -816,12 +826,9 @@ class TPutGC : public TActorBootstrapped<TPutGC> {
 
     friend class TActorBootstrapped<TPutGC>;
 
-    void Bootstrap(const TActorContext &ctx) {
+    void Bootstrap(const TActorContext&) {
         TThis::Become(&TThis::StateFunc);
-        ctx.Send(VDiskInfo.ActorID,
-                 new TEvBlobStorage::TEvVCollectGarbage(TabletID, RecGen, RecGenCounter, Channel, Collect, CollectGen,
-                                                        CollectStep, false, Keep.Get(), DoNotKeep.Get(), VDiskInfo.VDiskID,
-                                                        TInstant::Max()));
+        SendRequest();
     }
 
     void Handle(TEvBlobStorage::TEvVCollectGarbageResult::TPtr &ev, const TActorContext &ctx) {
@@ -831,9 +838,18 @@ class TPutGC : public TActorBootstrapped<TPutGC> {
         TThis::Die(ctx);
     }
 
+    void SendRequest() {
+        Send(VDiskInfo.ActorID,
+             new TEvBlobStorage::TEvVCollectGarbage(TabletID, RecGen, RecGenCounter, Channel, Collect, CollectGen,
+                                                    CollectStep, false, Keep.Get(), DoNotKeep.Get(), VDiskInfo.VDiskID,
+                                                    TInstant::Max()),
+             IEventHandle::FlagTrackDelivery);
+    }
+
     STRICT_STFUNC(StateFunc,
         HFunc(TEvBlobStorage::TEvVCollectGarbageResult, Handle);
         IgnoreFunc(TEvBlobStorage::TEvVWindowChange);
+        cFunc(TEvents::TEvUndelivered::EventType, SendRequest);
     )
 
 public:
@@ -872,23 +888,30 @@ class TWaitForCompactionOneDisk : public TActorBootstrapped<TWaitForCompactionOn
 
     friend class TActorBootstrapped<TWaitForCompactionOneDisk>;
 
-    void Bootstrap(const TActorContext &ctx) {
+    void Bootstrap(const TActorContext&) {
         Become(&TThis::StateSchedule);
-        ctx.Send(VDiskInfo.ActorID,
-            new TEvBlobStorage::TEvVCompact(VDiskInfo.VDiskID, NKikimrBlobStorage::TEvVCompact::ASYNC));
+        SendVCompact();
     }
 
-    void Handle(TEvBlobStorage::TEvVCompactResult::TPtr &ev, const TActorContext &ctx) {
+    void Handle(TEvBlobStorage::TEvVCompactResult::TPtr &ev) {
         if (ev->Get()->Record.GetStatus() == NKikimrProto::OK) {
             Become(&TThis::StateWait);
-            ctx.Send(VDiskInfo.ActorID, new TEvBlobStorage::TEvVStatus(VDiskInfo.VDiskID));
+            SendVStatus();
         } else {
-            ctx.Send(VDiskInfo.ActorID,
-                new TEvBlobStorage::TEvVCompact(VDiskInfo.VDiskID, NKikimrBlobStorage::TEvVCompact::ASYNC));
+            SendVCompact();
         }
     }
 
-    void Handle(TEvBlobStorage::TEvVStatusResult::TPtr &ev, const TActorContext &ctx) {
+    void SendVCompact() {
+        Send(VDiskInfo.ActorID, new TEvBlobStorage::TEvVCompact(VDiskInfo.VDiskID,
+                NKikimrBlobStorage::TEvVCompact::ASYNC), IEventHandle::FlagTrackDelivery);
+    }
+
+    void SendVStatus() {
+        Send(VDiskInfo.ActorID, new TEvBlobStorage::TEvVStatus(VDiskInfo.VDiskID), IEventHandle::FlagTrackDelivery);
+    }
+
+    void Handle(TEvBlobStorage::TEvVStatusResult::TPtr &ev) {
         Y_ABORT_UNLESS(ev->Get()->Record.GetStatus() == NKikimrProto::OK);
         const NKikimrBlobStorage::TEvVStatusResult &record = ev->Get()->Record;
 
@@ -898,21 +921,22 @@ class TWaitForCompactionOneDisk : public TActorBootstrapped<TWaitForCompactionOn
 
         if (logoBlobsCompacted && blocksCompacted && barriersCompacted) {
             // Finished
-            ctx.Send(NotifyID, new TEvents::TEvCompleted());
-            Die(ctx);
+            Send(NotifyID, new TEvents::TEvCompleted());
+            PassAway();
         } else {
             Become(&TThis::StateSchedule);
-            ctx.Send(VDiskInfo.ActorID,
-                new TEvBlobStorage::TEvVCompact(VDiskInfo.VDiskID, NKikimrBlobStorage::TEvVCompact::ASYNC));
+            SendVCompact();
         }
     }
 
     STRICT_STFUNC(StateSchedule,
-        HFunc(TEvBlobStorage::TEvVCompactResult, Handle);
+        hFunc(TEvBlobStorage::TEvVCompactResult, Handle);
+        cFunc(TEvents::TEvUndelivered::EventType, SendVCompact)
     )
 
     STRICT_STFUNC(StateWait,
-        HFunc(TEvBlobStorage::TEvVStatusResult, Handle);
+        hFunc(TEvBlobStorage::TEvVStatusResult, Handle);
+        cFunc(TEvents::TEvUndelivered::EventType, SendVStatus);
     )
 
 public:
@@ -981,9 +1005,14 @@ class TWaitForDefragOneDisk : public TActorBootstrapped<TWaitForDefragOneDisk> {
 
     friend class TActorBootstrapped<TWaitForDefragOneDisk>;
 
-    void Bootstrap(const TActorContext &ctx) {
+    void Bootstrap(const TActorContext&) {
         Become(&TThis::StateFunc);
-        ctx.Send(VDiskInfo.ActorID, new TEvBlobStorage::TEvVDefrag(VDiskInfo.VDiskID, Full));
+        SendRequest();
+    }
+
+    void SendRequest() {
+        Send(VDiskInfo.ActorID, new TEvBlobStorage::TEvVDefrag(VDiskInfo.VDiskID, Full),
+                IEventHandle::FlagTrackDelivery);
     }
 
     void Handle(TEvBlobStorage::TEvVDefragResult::TPtr &ev, const TActorContext &ctx) {
@@ -993,12 +1022,13 @@ class TWaitForDefragOneDisk : public TActorBootstrapped<TWaitForDefragOneDisk> {
             ctx.Send(NotifyID, new TEvents::TEvCompleted());
             Die(ctx);
         } else {
-            ctx.Send(VDiskInfo.ActorID, new TEvBlobStorage::TEvVDefrag(VDiskInfo.VDiskID, Full));
+            SendRequest();
         }
     }
 
     STRICT_STFUNC(StateFunc,
         HFunc(TEvBlobStorage::TEvVDefragResult, Handle);
+        cFunc(TEvents::TEvUndelivered::EventType, SendRequest);
     )
 
 public:
@@ -1198,21 +1228,30 @@ class TWaitForSync : public TActorBootstrapped<TWaitForSync> {
     TActorId NotifyID;
     ui32 Counter = 0;
     TMutualSyncState MutualSyncState;
+    std::vector<std::pair<TActorId, TVDiskID>> VStatusSent;
 
     friend class TActorBootstrapped<TWaitForSync>;
 
-    void Bootstrap(const TActorContext &ctx) {
+    void Bootstrap(const TActorContext&) {
         Become(&TThis::StateFunc);
-        GetStatuses(ctx);
+        GetStatuses();
     }
 
-    void GetStatuses(const TActorContext &ctx) {
+    void GetStatuses() {
         // send TEvVStatus to all working VDisks
-        auto sendFunc = [&ctx] (const TInfo &info) {
-            ctx.Send(info.ActorId, new TEvBlobStorage::TEvVStatus(info.VDiskId));
+        VStatusSent.clear();
+        auto sendFunc = [this] (const TInfo &info) {
+            ui32 idx = VStatusSent.size();
+            VStatusSent.emplace_back(info.ActorId, info.VDiskId);
+            SendVStatus(idx);
         };
         MutualSyncState.ForEach(sendFunc);
         Counter = MutualSyncState.InfoVecSize();
+    }
+
+    void SendVStatus(ui32 idx) {
+        const auto& [actorId, vdiskId] = VStatusSent[idx];
+        Send(actorId, new TEvBlobStorage::TEvVStatus(vdiskId), IEventHandle::FlagTrackDelivery, idx);
     }
 
     void Handle(TEvBlobStorage::TEvVStatusResult::TPtr &ev, const TActorContext &ctx) {
@@ -1230,13 +1269,18 @@ class TWaitForSync : public TActorBootstrapped<TWaitForSync> {
             } else {
                 // Retry
                 MutualSyncState.Clear();
-                GetStatuses(ctx);
+                GetStatuses();
             }
         }
     }
 
+    void Handle(const TEvents::TEvUndelivered::TPtr& ev) {
+        SendVStatus(ev->Cookie);
+    }
+
     STRICT_STFUNC(StateFunc,
         HFunc(TEvBlobStorage::TEvVStatusResult, Handle);
+        hFunc(TEvents::TEvUndelivered, Handle);
     )
 
 public:
@@ -1262,10 +1306,9 @@ class TCheckDbEmptynessActor : public TActorBootstrapped<TCheckDbEmptynessActor>
 
     friend class TActorBootstrapped<TCheckDbEmptynessActor>;
 
-    void Bootstrap(const TActorContext &ctx) {
+    void Bootstrap(const TActorContext&) {
         Become(&TThis::StateFunc);
-        ctx.Send(VDiskInfo.ActorID,
-                 new TEvBlobStorage::TEvVStatus(VDiskInfo.VDiskID));
+        SendVStatus();
     }
 
     void Handle(TEvBlobStorage::TEvVStatusResult::TPtr &ev, const TActorContext &ctx) {
@@ -1280,8 +1323,14 @@ class TCheckDbEmptynessActor : public TActorBootstrapped<TCheckDbEmptynessActor>
         TThis::Die(ctx);
     }
 
+    void SendVStatus() {
+        Send(VDiskInfo.ActorID, new TEvBlobStorage::TEvVStatus(VDiskInfo.VDiskID),
+                IEventHandle::FlagTrackDelivery);
+    }
+
     STRICT_STFUNC(StateFunc,
         HFunc(TEvBlobStorage::TEvVStatusResult, Handle);
+        cFunc(TEvents::TEvUndelivered::EventType, SendVStatus);
     )
 
 public:
@@ -1318,20 +1367,27 @@ class TPutGCToCorrespondingVDisksActor : public TActorBootstrapped<TPutGCToCorre
 
     friend class TActorBootstrapped<TPutGCToCorrespondingVDisksActor>;
 
-    void Bootstrap(const TActorContext &ctx) {
+    void Bootstrap(const TActorContext&) {
         TThis::Become(&TThis::StateFunc);
 
         ui32 total = Conf->GroupInfo->GetTotalVDisksNum();
         for (ui32 i = 0; i < total; i++) {
             TAllVDisks::TVDiskInstance &instance = Conf->VDisks->Get(i);
             if (instance.Initialized) {
-                ctx.Send(instance.ActorID,
-                         new TEvBlobStorage::TEvVCollectGarbage(TabletID, RecGen, RecGenCounter, Channel, Collect,
-                                                                CollectGen, CollectStep, false, Keep.Get(),
-                                                                DoNotKeep.Get(), instance.VDiskID, TInstant::Max()));
+                SendRequest(i);
                 Counter++;
             }
         }
+    }
+
+    void SendRequest(ui32 idx) {
+        TAllVDisks::TVDiskInstance &instance = Conf->VDisks->Get(idx);
+        Send(instance.ActorID,
+             new TEvBlobStorage::TEvVCollectGarbage(TabletID, RecGen, RecGenCounter, Channel, Collect,
+                                                    CollectGen, CollectStep, false, Keep.Get(),
+                                                    DoNotKeep.Get(), instance.VDiskID, TInstant::Max()),
+             IEventHandle::FlagTrackDelivery,
+             /*cookie=*/idx);
     }
 
     void Handle(TEvBlobStorage::TEvVCollectGarbageResult::TPtr &ev, const TActorContext &ctx) {
@@ -1346,9 +1402,14 @@ class TPutGCToCorrespondingVDisksActor : public TActorBootstrapped<TPutGCToCorre
         }
     }
 
+    void Handle(const TEvents::TEvUndelivered::TPtr& ev) {
+        SendRequest(ev->Cookie);
+    }
+
     STRICT_STFUNC(StateFunc,
         HFunc(TEvBlobStorage::TEvVCollectGarbageResult, Handle);
         IgnoreFunc(TEvBlobStorage::TEvVWindowChange);
+        hFunc(TEvents::TEvUndelivered, Handle);
     )
 
 public:
@@ -1605,14 +1666,18 @@ class TCheckDataSnapshotActor : public TActorBootstrapped<TCheckDataSnapshotActo
             TThis::Die(ctx);
         } else {
             // send read
-            auto req = TEvBlobStorage::TEvVGet::CreateExtremeDataQuery(Cur->VDiskID,
-                                                                       TInstant::Max(),
-                                                                       NKikimrBlobStorage::EGetHandleClass::AsyncRead,
-                                                                       TEvBlobStorage::TEvVGet::EFlags::ShowInternals,
-                                                                       {},
-                                                                       {TLogoBlobID(Cur->Id, 0)});
-            ctx.Send(Cur->ServiceID, req.release());
+            SendRequest();
         }
+    }
+
+    void SendRequest() {
+        auto req = TEvBlobStorage::TEvVGet::CreateExtremeDataQuery(Cur->VDiskID,
+                                                                   TInstant::Max(),
+                                                                   NKikimrBlobStorage::EGetHandleClass::AsyncRead,
+                                                                   TEvBlobStorage::TEvVGet::EFlags::ShowInternals,
+                                                                   {},
+                                                                   {TLogoBlobID(Cur->Id, 0)});
+        Send(Cur->ServiceID, req.release(), IEventHandle::FlagTrackDelivery);
     }
 
     void Handle(TEvBlobStorage::TEvVGetResult::TPtr &ev, const TActorContext &ctx) {
@@ -1665,6 +1730,7 @@ class TCheckDataSnapshotActor : public TActorBootstrapped<TCheckDataSnapshotActo
     STRICT_STFUNC(StateFunc,
         HFunc(TEvBlobStorage::TEvVGetResult, Handle);
         IgnoreFunc(TEvBlobStorage::TEvVWindowChange);
+        cFunc(TEvents::TEvUndelivered::EventType, SendRequest);
     )
 
 public:
@@ -1925,10 +1991,14 @@ class TManyPutsToOneVDiskActor : public TActorBootstrapped<TManyPutsToOneVDiskAc
 
     void SendRequest(const TActorContext &ctx) {
         Y_ASSERT(Counter == 0);
-        PutLogoBlobToVDisk(ctx, VDiskInfo.ActorID, VDiskInfo.VDiskID, TLogoBlobID(Cur->Get()->Id, PartId),
-                           Cur->Get()->Data, HandleClass);
+        SendPut(ctx);
         Counter = 1;
         Cur->Next();
+    }
+
+    void SendPut(const TActorContext& ctx) {
+        PutLogoBlobToVDisk(ctx, VDiskInfo.ActorID, VDiskInfo.VDiskID, TLogoBlobID(Cur->Get()->Id, PartId),
+                Cur->Get()->Data, HandleClass);
     }
 
     void Handle(TEvBlobStorage::TEvVPutResult::TPtr &ev, const TActorContext &ctx) {
@@ -1950,6 +2020,7 @@ class TManyPutsToOneVDiskActor : public TActorBootstrapped<TManyPutsToOneVDiskAc
     STRICT_STFUNC(StateFunc,
         HFunc(TEvBlobStorage::TEvVPutResult, Handle);
         IgnoreFunc(TEvBlobStorage::TEvVWindowChange);
+        CFunc(TEvents::TEvUndelivered::EventType, SendPut);
     )
 
 public:

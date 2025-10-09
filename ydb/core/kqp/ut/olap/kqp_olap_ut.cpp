@@ -4767,5 +4767,50 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             CompareYson(result, R"([[2u]])");
         }
     }
+
+    Y_UNIT_TEST(PredicateWithTimestampParameter) {
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
+        auto client = kikimr.GetQueryClient();
+
+        {
+            const TString query = R"(
+                CREATE TABLE `/Root/tmp_olap` (
+                    Key Uint32 NOT NULL,
+                    Value Timestamp NOT NULL,
+                    PRIMARY KEY (Key)
+                ) WITH (
+                    STORE = COLUMN
+                );
+            )";
+
+            auto result = client.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            const TString query = R"(
+                INSERT INTO `/Root/tmp_olap` (Key, Value) VALUES
+                (1, Timestamp('2021-01-01T00:00:00Z'))
+            )";
+
+            auto result = client.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            const TString query = R"(
+                DECLARE $flag1 AS Timestamp;
+                SELECT * FROM tmp_olap WHERE Value >= $flag1;
+            )";
+
+            auto params = TParamsBuilder()
+                .AddParam("$flag1")
+                    .Timestamp(TInstant::ParseIso8601("2021-01-01T00:00:00Z"))
+                    .Build()
+                .Build();
+
+            auto result = client.ExecuteQuery(query, NQuery::TTxControl::BeginTx().CommitTx(), params).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_C(result.GetResultSet(0).RowsCount() == 1, result.GetIssues().ToString());
+        }
+    }
 }
 }

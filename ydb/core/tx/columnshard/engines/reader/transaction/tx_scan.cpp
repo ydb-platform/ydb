@@ -136,14 +136,14 @@ void TTxScan::Complete(const TActorContext& ctx) {
         }
         {
             if (request.RangesSize()) {
-                auto ydbKey = read.TableMetadataAccessor->GetPrimaryKeyScheme(*vIndex);
-                {
-                    auto filterConclusion = NOlap::TPKRangesFilter::BuildFromProto(request, ydbKey);
-                    if (filterConclusion.IsFail()) {
-                        return SendError("cannot build ranges filter", filterConclusion.GetErrorMessage(), ctx);
-                    }
-                    read.PKRangesFilter = std::make_shared<NOlap::TPKRangesFilter>(filterConclusion.DetachResult());
+                // TODO: deduplicate
+                auto ydbKey = read.TableMetadataAccessor->GetPrimaryKeyInfo(*vIndex);
+                auto arrowKey = read.TableMetadataAccessor->GetPrimaryKeyScheme(*vIndex);
+                auto filterConclusion = NOlap::TPKRangesFilter::BuildFromProto(request, ydbKey, arrowKey);
+                if (filterConclusion.IsFail()) {
+                    return SendError("cannot build ranges filter", filterConclusion.GetErrorMessage(), ctx);
                 }
+                read.PKRangesFilter = std::make_shared<NOlap::TPKRangesFilter>(filterConclusion.DetachResult());
             }
             auto newRange = scannerConstructor->BuildReadMetadata(Self, read);
             if (newRange.IsSuccess()) {

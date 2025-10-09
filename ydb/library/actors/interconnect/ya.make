@@ -99,9 +99,11 @@ PEERDIR(
 
 END()
 
-RECURSE(
-    rdma
-)
+IF (OS_LINUX)
+    RECURSE(
+        rdma
+    )
+ENDIF()
 
 RECURSE_FOR_TESTS(
     ut

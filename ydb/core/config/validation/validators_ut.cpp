@@ -7,6 +7,7 @@
 #include <ydb/core/protos/table_service_config.pb.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <util/generic/xrange.h>
 
 using namespace NKikimr::NConfig;
 
@@ -430,5 +431,73 @@ Y_UNIT_TEST_SUITE(DatabaseConfigValidation) {
         UNIT_ASSERT_VALUES_EQUAL(err.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(err[0], "'blob_storage_config' is not allowed to be used in the database configuration");
         UNIT_ASSERT_EQUAL(res, EValidationResult::Error);
+    }
+}
+
+Y_UNIT_TEST_SUITE(StateStorageConfigValidation) {
+    std::pair<NKikimrConfig::TAppConfig, NKikimrConfig::TAppConfig> PrepareStateStorageConfigs() {
+        NKikimrConfig::TAppConfig cur;
+        NKikimrConfig::TAppConfig proposed;
+        return {cur, proposed};
+    }
+
+    void FillRing(NKikimrConfig::TDomainsConfig::TStateStorage::TRing* ring, ui32 ringsCnt = 8) {
+        ring->SetNToSelect(5);
+        ui32 nodeId = 0;
+        for(ui32 _ : xrange(ringsCnt)) {
+            auto* r = ring->AddRing();
+            for (ui32 _ : xrange(5, 13)) {
+                r->AddNode(nodeId++);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(Empty) {
+        auto res = ValidateStateStorageConfig("StateStorage", {}, {});
+        UNIT_ASSERT_EQUAL(res, "New StateStorage configuration is not filled in");
+    }
+
+    Y_UNIT_TEST(Good) {
+        NKikimrConfig::TDomainsConfig::TStateStorage proposed;
+        FillRing(proposed.MutableRing());
+        auto res = ValidateStateStorageConfig("StateStorage", {}, proposed);
+        UNIT_ASSERT(res.empty());
+    }
+
+    Y_UNIT_TEST(NToSelect) {
+        NKikimrConfig::TDomainsConfig::TStateStorage proposed;
+        FillRing(proposed.MutableRing());
+        proposed.MutableRing()->SetNToSelect(0);
+        auto res = ValidateStateStorageConfig("StateStorage", {}, proposed);
+        UNIT_ASSERT_EQUAL(res, "New StateStorage configuration NToSelect has invalid value");
+        proposed.MutableRing()->SetNToSelect(10);
+        res = ValidateStateStorageConfig("StateStorage", {}, proposed);
+        UNIT_ASSERT_EQUAL(res, "New StateStorage configuration NToSelect has invalid value");
+    }
+
+    Y_UNIT_TEST(WriteOnly) {
+        NKikimrConfig::TDomainsConfig::TStateStorage proposed;
+        FillRing(proposed.AddRingGroups());
+        FillRing(proposed.AddRingGroups());
+        proposed.MutableRingGroups(0)->SetWriteOnly(true);
+        auto res = ValidateStateStorageConfig("StateStorage", {}, proposed);
+        UNIT_ASSERT_EQUAL(res, "New StateStorage configuration first ring group is WriteOnly");
+    }
+
+    Y_UNIT_TEST(Disabled) {
+        NKikimrConfig::TDomainsConfig::TStateStorage proposed;
+        FillRing(proposed.MutableRing(), 5);
+        proposed.MutableRing()->MutableRing(0)->SetIsDisabled(true);
+        proposed.MutableRing()->MutableRing(1)->SetIsDisabled(true);
+        auto res = ValidateStateStorageConfig("StateStorage", {}, proposed);
+        UNIT_ASSERT_EQUAL(res, "New StateStorage configuration disabled too many rings");
+    }
+
+    Y_UNIT_TEST(DisabledGood) {
+        NKikimrConfig::TDomainsConfig::TStateStorage proposed;
+        FillRing(proposed.MutableRing());
+        proposed.MutableRing()->MutableRing(0)->SetIsDisabled(true);
+        auto res = ValidateStateStorageConfig("StateStorage", {}, proposed);
+        UNIT_ASSERT(res.empty());
     }
 }

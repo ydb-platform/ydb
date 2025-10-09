@@ -94,7 +94,7 @@ Y_UNIT_TEST_F(TestLogicalDataSize, TBlockReaderFixture) {
         TBlockItem tzDate(i);
         tzDate.SetTimezoneId(i % 100);
         arrayHelpers[3]->Builder->Add(tzDate);
-        arrayHelpers[4]->Builder->Add(TBlockItem::Zero());
+        arrayHelpers[4]->Builder->Add(TBlockItem());
     }
 
     std::vector<std::shared_ptr<arrow::ArrayData>> arrays;

@@ -5,6 +5,7 @@
 #include <yql/essentials/minikql/mkql_node_cast.h>
 
 #include <yql/essentials/public/udf/udf_type_inspection.h>
+#include <yql/essentials/public/udf/udf_value_utils.h>
 
 #include <arrow/array/array_binary.h>
 #include <arrow/chunked_array.h>
@@ -162,16 +163,17 @@ private:
     i32 TypeLen_ = 0;
 };
 
+template <bool IsNull>
 class TSingularTypeItemConverter: public IBlockItemConverter {
 public:
     NUdf::TUnboxedValuePod MakeValue(TBlockItem item, const THolderFactory& holderFactory) const final {
         Y_UNUSED(item, holderFactory);
-        return NUdf::TUnboxedValuePod::Zero();
+        return NYql::NUdf::CreateSingularUnboxedValuePod<IsNull>();
     }
 
     TBlockItem MakeItem(const NUdf::TUnboxedValuePod& value) const final {
         Y_UNUSED(value);
-        return TBlockItem::Zero();
+        return NYql::NUdf::CreateSingularBlockItem<IsNull>();
     }
 };
 
@@ -303,7 +305,8 @@ struct TConverterTraits {
     using TExtOptional = TExternalOptionalBlockItemConverter;
     template <typename TTzDate, bool Nullable>
     using TTzDateConverter = TTzDateBlockItemConverter<TTzDate, Nullable>;
-    using TSingularType = TSingularTypeItemConverter;
+    template <bool IsNull>
+    using TSingularType = TSingularTypeItemConverter<IsNull>;
 
     constexpr static bool PassType = false;
 
@@ -345,8 +348,9 @@ struct TConverterTraits {
         }
     }
 
+    template <bool IsNull>
     static std::unique_ptr<TResult> MakeSingular() {
-        return std::make_unique<TSingularType>();
+        return std::make_unique<TSingularType<IsNull>>();
     }
 };
 

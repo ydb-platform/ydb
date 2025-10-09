@@ -586,6 +586,7 @@ private:
     const std::unique_ptr<TBlockDeserializerBase> Inner_;
 };
 
+template <bool IsNull>
 class TSingularTypeBlockSerializer final: public TBlockSerializerBase {
     using TBase = TBlockSerializerBase;
 
@@ -608,6 +609,7 @@ private:
     }
 };
 
+template <bool IsNull>
 class TSingularTypeBlockDeserializer final: public TBlockDeserializerBase {
     using TBase = TBlockDeserializerBase;
 
@@ -627,7 +629,7 @@ private:
         Y_UNUSED(offset);
         Y_ENSURE(nullsCount == 0);
         Y_ENSURE(!nulls || nulls->size() == 0);
-        return arrow::NullArray(blockLen).data();
+        return NYql::NUdf::MakeSingularArray(IsNull, blockLen);
     }
 
     std::shared_ptr<arrow::ArrayData> DoLoadArray(
@@ -639,7 +641,7 @@ private:
         Y_UNUSED(offset, src);
         Y_ENSURE(nullsCount == 0);
         Y_ENSURE(!nulls || nulls->size() == 0);
-        return arrow::NullArray(blockLen).data();
+        return NYql::NUdf::MakeSingularArray(IsNull, blockLen);
     }
 
     bool IsNullable() const final {
@@ -906,7 +908,8 @@ struct TSerializerTraits {
     using TExtOptional = TExtOptionalBlockSerializer;
     template <typename TTzDateType, bool Nullable>
     using TTzDate = TTzDateBlockSerializer<TTzDateType, Nullable>;
-    using TSingularType = TSingularTypeBlockSerializer;
+    template <bool IsNull>
+    using TSingularType = TSingularTypeBlockSerializer<IsNull>;
     constexpr static bool PassType = false;
 
     static std::unique_ptr<TResult> MakePg(
@@ -925,8 +928,9 @@ struct TSerializerTraits {
         ythrow yexception() << "Serializer not implemented for block resources";
     }
 
+    template <bool IsNull>
     static std::unique_ptr<TResult> MakeSingular(const TBlockSerializerParams& params) {
-        return std::make_unique<TSingularType>(params);
+        return std::make_unique<TSingularType<IsNull>>(params);
     }
 
     template <typename TTzDateType>
@@ -950,7 +954,8 @@ struct TDeserializerTraits {
     using TExtOptional = TExtOptionalBlockDeserializer;
     template <typename TTzDateType, bool Nullable>
     using TTzDate = TTzDateBlockDeserializer<TTzDateType, Nullable>;
-    using TSingularType = TSingularTypeBlockDeserializer;
+    template <bool IsNull>
+    using TSingularType = TSingularTypeBlockDeserializer<IsNull>;
 
     constexpr static bool PassType = false;
 
@@ -970,8 +975,9 @@ struct TDeserializerTraits {
         ythrow yexception() << "Deserializer not implemented for block resources";
     }
 
+    template <bool IsNull>
     static std::unique_ptr<TResult> MakeSingular(const TBlockSerializerParams& params) {
-        return std::make_unique<TSingularType>(params);
+        return std::make_unique<TSingularType<IsNull>>(params);
     }
 
     template <typename TTzDateType>

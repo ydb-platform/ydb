@@ -212,8 +212,10 @@ struct TFuzzerTraits {
         }
     }
 
+    template <bool IsNull>
     static std::unique_ptr<TResult> MakeSingular(const NYql::NUdf::TType* type,
                                                  const TTypeEnvironment& env) {
+        Y_UNUSED(IsNull);
         return std::make_unique<TLeafOffsetFuzzer</*IsOptional=*/false>>(type, env);
     }
 };

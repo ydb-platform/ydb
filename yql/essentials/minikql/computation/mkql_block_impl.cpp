@@ -190,7 +190,7 @@ arrow::Datum DoConvertScalar(TType* type, const T& value, arrow::MemoryPool& poo
     }
 
     if (IsSingularType(type)) {
-        return arrow::MakeNullScalar(arrowType);
+        return NYql::NUdf::MakeSingularScalar(type->IsNull());
     }
 
     MKQL_ENSURE(false, "Unsupported type " << *type);
@@ -267,7 +267,9 @@ TBlockFuncNode::TBlockFuncNode(TComputationMutables& mutables,
     , StateIndex_(mutables.CurValueIndex++)
     , ArgsNodes_(std::move(argsNodes))
     , ArgsValuesDescr_(ToValueDescr(argsTypes))
+    , ArgTypes_(argsTypes)
     , OutValueDescr_(ToValueDescr(outputType))
+    , OutputType_(outputType)
     , Kernel_(kernel)
     , KernelHolder_(std::move(kernelHolder))
     , Options_(functionOptions)
@@ -283,7 +285,7 @@ NUdf::TUnboxedValuePod TBlockFuncNode::DoCalculate(TComputationContext& ctx) con
     for (ui32 i = 0; i < ArgsNodes_.size(); ++i) {
         const auto& value = ArgsNodes_[i]->GetValue(ctx);
         argDatums.emplace_back(TArrowBlock::From(value).GetDatum());
-        ValidateDatum(argDatums.back(), ArgsValuesDescr_[i], ValidateDatumMode_);
+        ValidateDatum(argDatums.back(), ArgsValuesDescr_[i], ArgTypes_[i], ValidateDatumMode_);
     }
 
     if (ScalarOutput_) {
@@ -311,7 +313,7 @@ NUdf::TUnboxedValuePod TBlockFuncNode::DoCalculate(TComputationContext& ctx) con
         ForEachArrayData(output, [&](const auto& arr) { arrays.push_back(arr); });
     }
     auto resultArray = MakeArray(arrays);
-    ValidateDatum(resultArray, OutValueDescr_, ValidateDatumMode_);
+    ValidateDatum(resultArray, OutValueDescr_, OutputType_, ValidateDatumMode_);
     return ctx.HolderFactory.CreateArrowBlock(std::move(resultArray));
 }
 

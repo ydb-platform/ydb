@@ -235,10 +235,19 @@ std::unique_ptr<typename TTraits::TResult> DispatchByArrowTraits(const ITypeInfo
 
     if (IsSingularType(typeInfoHelper, type)) {
         Y_ENSURE(!isOptional, "Optional data types are not supported directly for singular type. Please use TExternalOptional wrapper.");
+        bool isNull = typeInfoHelper.GetTypeKind(type) == ETypeKind::Null;
         if constexpr (TTraits::PassType) {
-            return TTraits::MakeSingular(type, std::forward<TArgs>(args)...);
+            if (isNull) {
+                return TTraits::template MakeSingular<true>(type, std::forward<TArgs>(args)...);
+            } else {
+                return TTraits::template MakeSingular<false>(type, std::forward<TArgs>(args)...);
+            }
         } else {
-            return TTraits::MakeSingular(std::forward<TArgs>(args)...);
+            if (isNull) {
+                return TTraits::template MakeSingular<true>(std::forward<TArgs>(args)...);
+            } else {
+                return TTraits::template MakeSingular<false>(std::forward<TArgs>(args)...);
+            }
         }
     }
 

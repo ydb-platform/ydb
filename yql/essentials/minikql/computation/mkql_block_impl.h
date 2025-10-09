@@ -90,7 +90,9 @@ private:
     const ui32 StateIndex_;
     const TComputationNodePtrVector ArgsNodes_;
     const std::vector<arrow::ValueDescr> ArgsValuesDescr_;
+    const TVector<TType*> ArgTypes_;
     arrow::ValueDescr OutValueDescr_;
+    const TType* const OutputType_ = nullptr;
     const arrow::compute::ScalarKernel& Kernel_;
     const std::shared_ptr<arrow::compute::ScalarKernel> KernelHolder_;
     const arrow::compute::FunctionOptions* const Options_;

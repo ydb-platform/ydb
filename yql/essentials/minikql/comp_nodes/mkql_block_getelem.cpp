@@ -156,7 +156,7 @@ public:
                 return arrow::Status::OK();
             }
             case EOptionalityHandlerStrategy::ReturnNull:
-                *res = arrow::NullArray(tuple->length);
+                *res = NYql::NUdf::MakeSingularArray(/*isNull=*/true, tuple->length);
                 return arrow::Status::OK();
         }
 
@@ -187,7 +187,7 @@ public:
                 return arrow::Status::OK();
             }
             case EOptionalityHandlerStrategy::ReturnNull:
-                *res = arrow::MakeNullScalar(ReturnArrowType);
+                *res = NYql::NUdf::MakeSingularScalar(/*IsNull=*/true);
                 return arrow::Status::OK();
         }
 

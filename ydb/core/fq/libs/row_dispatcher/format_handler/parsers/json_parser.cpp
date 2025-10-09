@@ -30,6 +30,28 @@ struct TJsonParserBuffer {
     bool Finished = false;
     TInstant CreationStartTime = TInstant::Now();
     TVector<ui64> Offsets = {};
+    struct TRecovery {
+         ui32 BufferOffset;
+         ui32 Index;
+         TVector<ui64> Offsets { 0 };
+         TRecovery() {
+             Deactivate();
+         }
+         bool IsActive() const {
+             return BufferOffset != UINT32_MAX;
+         }
+         void Activate(ui64 offset) {
+             BufferOffset = 0;
+             Index = 0;
+             Offsets.clear();
+             Offsets.push_back(offset);
+         }
+         void Deactivate() {
+             BufferOffset = UINT32_MAX;
+             Index = UINT32_MAX;
+         }
+    };
+    TRecovery Recovery;
 
     bool IsReady() const {
         return !Finished && NumberValues > 0;
@@ -41,6 +63,7 @@ struct TJsonParserBuffer {
 
     void Reserve(size_t size, size_t numberValues) {
         Values.reserve(size + simdjson::SIMDJSON_PADDING);
+        MessageSizes.reserve(numberValues);
         Offsets.reserve(numberValues);
     }
 
@@ -54,10 +77,15 @@ struct TJsonParserBuffer {
 
         NumberValues++;
         Values << message.GetData();
+        MessageSizes.emplace_back(message.GetData().size());
         Offsets.emplace_back(offset);
     }
 
     std::pair<const char*, size_t> Finish() {
+        if (Recovery.IsActive()) {
+            Y_ENSURE(Finished);
+            return {Values.data() + Recovery.BufferOffset, MessageSizes[Recovery.Index] + simdjson::SIMDJSON_PADDING};
+        }
         Y_ENSURE(!Finished, "Cannot finish buffer twice");
         Finished = true;
         Values << TString(simdjson::SIMDJSON_PADDING, ' ');
@@ -66,15 +94,38 @@ struct TJsonParserBuffer {
 
     void Clear() {
         Y_ENSURE(Finished, "Cannot clear not finished buffer");
+        if (Recovery.IsActive()) {
+            Recovery.BufferOffset += MessageSizes[Recovery.Index++];
+            if (Recovery.Index < MessageSizes.size()) {
+                Recovery.Offsets.clear();
+                Recovery.Offsets.emplace_back(Offsets[Recovery.Index]);
+                return;
+            }
+            Recovery.Deactivate();
+        }
         NumberValues = 0;
         Finished = false;
         CreationStartTime = TInstant::Now();
         Values.clear();
         Offsets.clear();
+        MessageSizes.clear();
+    }
+
+    const TVector<ui64>& GetOffsets() const {
+        return Recovery.IsActive() ? Recovery.Offsets : Offsets;
+    }
+
+    void StartRecovery() {
+        Y_ENSURE(Finished);
+        Y_ENSURE(!Recovery.IsActive());
+        Y_ENSURE(!Offsets.empty());
+        NumberValues = 1;
+        Recovery.Activate(Offsets[0]);
     }
 
 private:
     TStringBuilder Values = {};
+    TVector<ui32> MessageSizes;
     const TString LogPrefix = "TJsonParser: Buffer: ";
 };
 
@@ -338,6 +389,7 @@ public:
         , Config(config)
         , MaxNumberRows(CalculateMaxNumberRows())
         , LogPrefix("TJsonParser: ")
+        , Counters(counters.CountersSubgroup)
     {
         FillColumnsBuffers();
         Buffer.Reserve(Config.BatchSize, MaxNumberRows);
@@ -377,13 +429,17 @@ public:
         for (const auto& message : messages) {
             Buffer.AddMessage(message);
             if (Buffer.IsReady() && (Buffer.NumberValues >= MaxNumberRows || Buffer.GetSize() >= Config.BatchSize)) {
-                ParseBuffer();
+                do {
+                    ParseBuffer();
+                } while(Buffer.IsReady());
             }
         }
 
         if (Buffer.IsReady()) {
             if (!Config.LatencyLimit) {
-                ParseBuffer();
+                do {
+                    ParseBuffer();
+                } while(Buffer.IsReady());
             } else {
                 LOG_ROW_DISPATCHER_TRACE("Collecting data to parse, skip parsing, current buffer size: " << Buffer.GetSize());
             }
@@ -399,7 +455,9 @@ public:
 
         const auto creationDuration = TInstant::Now() - Buffer.CreationStartTime;
         if (force || creationDuration > Config.LatencyLimit) {
-            ParseBuffer();
+            do {
+                ParseBuffer();
+            } while(Buffer.IsReady());
         } else {
             LOG_ROW_DISPATCHER_TRACE("Refresh, skip parsing, buffer creation duration: " << creationDuration);
         }
@@ -420,7 +478,7 @@ public:
     }
 
     const TVector<ui64>& GetOffsets() const override {
-        return Buffer.Offsets;
+        return Buffer.GetOffsets();
     }
 
     TValueStatus<std::span<NYql::NUdf::TUnboxedValue>> GetParsedColumn(ui64 columnId) override {
@@ -431,12 +489,33 @@ public:
     }
 
 protected:
+#define HANDLE_ERROR(status) \
+    do { \
+        if (Buffer.Recovery.IsActive()) { \
+            Counters->GetCounter("DocumentErrors")->Inc(); \
+            /* TODO */ \
+            /* if (DoRecovery) { */ \
+            /*     DoRecovery(); */ \
+            /* } */ \
+            Buffer.Clear(); \
+            if (!Buffer.IsReady()) { \
+                return TStatus::Success(); \
+            } \
+            return status; \
+        } else { \
+            Buffer.StartRecovery(); \
+            Counters->GetCounter("ReparseOnError")->Inc(); \
+        } \
+        goto retry; \
+    } while(0)
+
     TStatus DoParsing() override {
+retry:
         Y_ENSURE(Buffer.IsReady(), "Nothing to parse");
         Y_ENSURE(Buffer.NumberValues <= MaxNumberRows, "Too many values to parse");
 
         const auto [values, size] = Buffer.Finish();
-        LOG_ROW_DISPATCHER_TRACE("Do parsing, first offset: " << Buffer.Offsets.front() << ", values:\n" << values);
+        LOG_ROW_DISPATCHER_TRACE("Do parsing, first offset: " << Buffer.GetOffsets().front() << ", values:\n" << values);
 
         /*
            Batch size must be at least maximum of document size.
@@ -452,23 +531,27 @@ protected:
         */
         simdjson::ondemand::document_stream documents;
         CHECK_JSON_ERROR(Parser.iterate_many(values, size, size).get(documents)) {
-            return TStatus::Fail(EStatusId::BAD_REQUEST, TStringBuilder() << "Failed to parse message batch from offset " << Buffer.Offsets.front() << ", json documents was corrupted: " << simdjson::error_message(error) << " Current data batch: " << TruncateString(std::string_view(values, size)) << ", buffered offsets: " << JoinSeq(' ', GetOffsets()));
+            auto status = TStatus::Fail(EStatusId::BAD_REQUEST, TStringBuilder() << "Failed to parse message batch from offset " << Buffer.Offsets.front() << ", json documents was corrupted: " << simdjson::error_message(error) << " Current data batch: " << TruncateString(std::string_view(values, size)) << ", buffered offsets: " << JoinSeq(' ', GetOffsets()));
+            HANDLE_ERROR(status);
         }
 
         ui16 rowId = 0;
         for (auto document : documents) {
             if (Y_UNLIKELY(rowId >= Buffer.NumberValues)) {
-                return TStatus::Fail(EStatusId::INTERNAL_ERROR, TStringBuilder() << "Failed to parse json messages, expected " << Buffer.NumberValues << " json rows from offset " << Buffer.Offsets.front() << " but got " << rowId + 1 << " (expected one json row for each offset from topic API in json each row format, maybe initial data was corrupted or messages is not in json format), current data batch: " << TruncateString(std::string_view(values, size)) << ", buffered offsets: " << JoinSeq(' ', GetOffsets()));
+                auto status = TStatus::Fail(EStatusId::INTERNAL_ERROR, TStringBuilder() << "Failed to parse json messages, expected " << Buffer.NumberValues << " json rows from offset " << Buffer.Offsets.front() << " but got " << rowId + 1 << " (expected one json row for each offset from topic API in json each row format, maybe initial data was corrupted or messages is not in json format), current data batch: " << TruncateString(std::string_view(values, size)) << ", buffered offsets: " << JoinSeq(' ', GetOffsets()));
+                HANDLE_ERROR(status);
             }
 
             const ui64 offset = Buffer.Offsets[rowId];
             CHECK_JSON_ERROR(document.error()) {
-                return TStatus::Fail(EStatusId::BAD_REQUEST, TStringBuilder() << "Failed to parse json message for offset " << offset << ", json document was corrupted: " << simdjson::error_message(error) << " Current data batch: " << TruncateString(std::string_view(values, size)) << ", buffered offsets: " << JoinSeq(' ', GetOffsets()));
+                auto status = TStatus::Fail(EStatusId::BAD_REQUEST, TStringBuilder() << "Failed to parse json message for offset " << offset << ", json document was corrupted: " << simdjson::error_message(error) << " Current data batch: " << TruncateString(std::string_view(values, size)) << ", buffered offsets: " << JoinSeq(' ', GetOffsets()));
+                HANDLE_ERROR(status);
             }
 
             for (auto item : document.get_object()) {
                 CHECK_JSON_ERROR(item.error()) {
-                    return TStatus::Fail(EStatusId::BAD_REQUEST, TStringBuilder() << "Failed to parse json message for offset " << offset << ", json item was corrupted: " << simdjson::error_message(error) << " Current data batch: " << TruncateString(std::string_view(values, size)) << ", buffered offsets: " << JoinSeq(' ', GetOffsets()));
+                    auto status = TStatus::Fail(EStatusId::BAD_REQUEST, TStringBuilder() << "Failed to parse json message for offset " << offset << ", json item was corrupted: " << simdjson::error_message(error) << " Current data batch: " << TruncateString(std::string_view(values, size)) << ", buffered offsets: " << JoinSeq(' ', GetOffsets()));
+                    HANDLE_ERROR(status);
                 }
 
                 const auto it = ColumnsIndex.find(item.escaped_key().value());
@@ -483,11 +566,23 @@ protected:
         }
 
         if (Y_UNLIKELY(rowId != Buffer.NumberValues)) {
-            return TStatus::Fail(EStatusId::INTERNAL_ERROR, TStringBuilder() << "Failed to parse json messages, expected " << Buffer.NumberValues << " json rows from offset " << Buffer.Offsets.front() << " but got " << rowId << " (expected one json row for each offset from topic API in json each row format, maybe initial data was corrupted or messages is not in json format), current data batch: " << TruncateString(std::string_view(values, size)) << ", buffered offsets: " << JoinSeq(' ', GetOffsets()));
+            auto status = TStatus::Fail(EStatusId::INTERNAL_ERROR, TStringBuilder() << "Failed to parse json messages, expected " << Buffer.NumberValues << " json rows from offset " << Buffer.Offsets.front() << " but got " << rowId << " (expected one json row for each offset from topic API in json each row format, maybe initial data was corrupted or messages is not in json format), current data batch: " << TruncateString(std::string_view(values, size)) << ", buffered offsets: " << JoinSeq(' ', GetOffsets()));
+            HANDLE_ERROR(status);
         }
 
         for (auto& column : Columns) {
             column.ValidateNumberValues(rowId, GetOffsets());
+            if (column.GetStatus().IsFail()) {
+                if (!Buffer.Recovery.IsActive()) {
+                    Counters->GetCounter("ReparseOnError")->Inc();
+                    Buffer.StartRecovery();
+                    if (!Buffer.IsReady()) {
+                        return TStatus::Success();
+                    }
+                    goto retry;
+                }
+                Counters->GetCounter("ColumnErrors")->Inc();
+            }
         }
 
         return TStatus::Success();
@@ -549,6 +644,7 @@ private:
     simdjson::ondemand::parser Parser;
     TVector<NYql::NUdf::TUnboxedValue> ParsedValuesBuffer;
     TVector<std::span<NYql::NUdf::TUnboxedValue>> ParsedValues;
+    NMonitoring::TDynamicCounterPtr Counters;
 };
 
 }  // anonymous namespace

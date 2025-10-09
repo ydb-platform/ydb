@@ -20,6 +20,14 @@ ITableMetadataAccessor::ITableMetadataAccessor(const TString& tablePath)
     AFL_VERIFY(!!TablePath);
 }
 
+std::vector<TNameTypeInfo> ITableMetadataAccessor::GetPrimaryKeyInfo(const TVersionedPresetSchemas& vSchemas) const {
+    return GetSnapshotSchemaVerified(vSchemas, TSnapshot::Max())->GetIndexInfo().GetPrimaryKeyColumns();
+}
+
+const std::shared_ptr<arrow::Schema>& ITableMetadataAccessor::GetPrimaryKeyScheme(const TVersionedPresetSchemas& vSchemas) const {
+    return GetSnapshotSchemaVerified(vSchemas, TSnapshot::Max())->GetIndexInfo().GetPrimaryKey();
+}
+
 TString ITableMetadataAccessor::GetTableName() const {
     return TFsPath(TablePath).Fix().GetName();
 }

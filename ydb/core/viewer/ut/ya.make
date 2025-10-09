@@ -12,6 +12,7 @@ YQL_LAST_ABI_VERSION()
 SRCS(
     viewer_ut.cpp
     topic_data_ut.cpp
+    commit_offset_ut.cpp
     ut/ut_utils.cpp
 )
 

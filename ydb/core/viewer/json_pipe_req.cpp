@@ -964,6 +964,10 @@ void TViewerPipeClient::InitConfig(const TCgiParameters& params) {
     if (!Database) {
         Database = params.Get("tenant");
     }
+     if (params.Has("mode")) {
+            ui32 Mode = std::stoul(params.Get("mode"));
+            Cerr << "Mode: " << Mode << Endl;
+        }
     Direct = FromStringWithDefault<bool>(params.Get("direct"), Direct);
     JsonSettings.EnumAsNumbers = !FromStringWithDefault<bool>(params.Get("enums"), true);
     JsonSettings.UI64AsString = !FromStringWithDefault<bool>(params.Get("ui64"), false);

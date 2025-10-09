@@ -45,8 +45,8 @@ TCommitOffsetActor::TCommitOffsetActor(
 
 TCommitOffsetActor::TCommitOffsetActor(NKikimr::NGRpcService::IRequestOpCtx * ctx)
     : TBase(ctx)
-    , SchemeCache(MakeSchemeCacheID())
-    , NewSchemeCache(NMsgBusProxy::CreatePersQueueMetaCacheV2Id())
+    , SchemeCache(NMsgBusProxy::CreatePersQueueMetaCacheV2Id())
+    , NewSchemeCache(MakeSchemeCacheID())
     , AuthInitActor()
     , Counters(nullptr)
 {
@@ -56,8 +56,8 @@ TCommitOffsetActor::TCommitOffsetActor(NKikimr::NGRpcService::IRequestOpCtx * ct
 
 TCommitOffsetActor::TCommitOffsetActor(NGRpcService::TEvCommitOffsetRequest* request)
     : TBase(request)
-    , SchemeCache(MakeSchemeCacheID())
-    , NewSchemeCache(NMsgBusProxy::CreatePersQueueMetaCacheV2Id())
+    , SchemeCache(NMsgBusProxy::CreatePersQueueMetaCacheV2Id())
+    , NewSchemeCache(MakeSchemeCacheID())
     , AuthInitActor()
     , Counters(nullptr)
 {

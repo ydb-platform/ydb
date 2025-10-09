@@ -1,5 +1,7 @@
 LIBRARY()
 
+ENABLE(YQL_STYLE_CPP)
+
 PEERDIR(
     contrib/libs/llvm16/lib/IR
     contrib/libs/llvm16/lib/ExecutionEngine/MCJIT

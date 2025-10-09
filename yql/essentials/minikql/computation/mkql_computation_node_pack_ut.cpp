@@ -39,26 +39,28 @@ constexpr static size_t PERFORMANCE_COUNT = NSan::PlainOrUnderSanitizer(0x400000
 constexpr static size_t PERFORMANCE_COUNT = NSan::PlainOrUnderSanitizer(0x1000000, 0x1000);
 #endif
 
-template<bool Fast, bool Transport>
+template <bool Fast, bool Transport>
 struct TPackerTraits;
 
-template<bool Fast>
+template <bool Fast>
 struct TPackerTraits<Fast, false> {
     using TPackerType = TValuePackerGeneric<Fast>;
 };
 
-template<bool Fast>
+template <bool Fast>
 struct TPackerTraits<Fast, true> {
     using TPackerType = TValuePackerTransport<Fast>;
 };
 
 using NDetails::TChunkedInputBuffer;
 
-template<bool Fast, bool Transport>
+template <bool Fast, bool Transport>
 class TMiniKQLComputationNodePackTest: public TTestBase {
     using TValuePackerType = typename TPackerTraits<Fast, Transport>::TPackerType;
 
-    TValuePackerType MakeValuePacker(bool stable, const TType* type, EValuePackerVersion valuePackerVersion, TMaybe<size_t> bufferPageAllocSize = Nothing(), arrow::MemoryPool* pool = nullptr, TMaybe<ui8> minFillPercentage = Nothing()) {
+    TValuePackerType MakeValuePacker(bool stable, const TType* type,
+                                     EValuePackerVersion valuePackerVersion, TMaybe<size_t> bufferPageAllocSize = Nothing(),
+                                     arrow::MemoryPool* pool = nullptr, TMaybe<ui8> minFillPercentage = Nothing()) {
         if constexpr (Transport) {
             return TValuePackerType(stable, type, valuePackerVersion, bufferPageAllocSize, pool, minFillPercentage);
         } else {
@@ -118,7 +120,7 @@ protected:
 
     void TestListType() {
         TDefaultListRepresentation listValues;
-        for (ui32 val: xrange(0, 10)) {
+        for (ui32 val : xrange(0, 10)) {
             listValues = listValues.Append(NUdf::TUnboxedValuePod(val));
         }
         TType* listType = PgmBuilder_.NewListType(PgmBuilder_.NewDataType(NUdf::TDataType<ui32>::Id));
@@ -136,7 +138,7 @@ protected:
 
     void TestListOfOptionalsType() {
         TDefaultListRepresentation listValues;
-        for (ui32 i: xrange(0, 10)) {
+        for (ui32 i : xrange(0, 10)) {
             NUdf::TUnboxedValue uVal = NUdf::TUnboxedValuePod();
             if (i % 2) {
                 uVal = MakeString(TString(i * 2, '0' + i));
@@ -217,8 +219,7 @@ protected:
             {"c", PgmBuilder_.NewDataType(NUdf::TDataType<NUdf::TUtf8>::Id, true)},
             {"d", PgmBuilder_.NewDataType(NUdf::TDataType<ui64>::Id)},
             {"e", PgmBuilder_.NewDataType(NUdf::TDataType<ui64>::Id, true)},
-            {"f", PgmBuilder_.NewDataType(NUdf::TDataType<ui64>::Id, true)}
-        };
+            {"f", PgmBuilder_.NewDataType(NUdf::TDataType<ui64>::Id, true)}};
         TType* structType = PgmBuilder_.NewStructType(structElemenTypes);
 
         TUnboxedValueVector structElemens;
@@ -313,8 +314,7 @@ protected:
         const std::vector<std::pair<std::string_view, TType*>> structElemenTypes = {
             {"a", PgmBuilder_.NewDataType(NUdf::TDataType<NUdf::TUtf8>::Id)},
             {"b", PgmBuilder_.NewDataType(NUdf::TDataType<NUdf::TUtf8>::Id, true)},
-            {"d", PgmBuilder_.NewDataType(NUdf::TDataType<ui64>::Id)}
-        };
+            {"d", PgmBuilder_.NewDataType(NUdf::TDataType<ui64>::Id)}};
         TType* structType = PgmBuilder_.NewStructType(structElemenTypes);
         TestVariantTypeImpl(PgmBuilder_.NewVariantType(structType));
     }
@@ -355,13 +355,14 @@ protected:
     {
         auto packer = MakeValuePacker(false, type, EValuePackerVersion::V0);
         const THPTimer timer;
-        for (size_t i = 0U; i < PERFORMANCE_COUNT; ++i)
+        for (size_t i = 0U; i < PERFORMANCE_COUNT; ++i) {
             packer.Pack(uValue);
+        }
         Cerr << timer.Passed() << Endl;
     }
 
     NUdf::TUnboxedValue TestPackUnpack(TValuePackerType& packer, const NUdf::TUnboxedValuePod& uValue,
-        const TString& additionalMsg, const std::optional<ui32>& expectedLength = {})
+                                       const TString& additionalMsg, const std::optional<ui32>& expectedLength = {})
     {
         auto packedValue = packer.Pack(uValue);
         if constexpr (Transport) {
@@ -380,7 +381,7 @@ protected:
     }
 
     NUdf::TUnboxedValue TestPackUnpack(TType* type, const NUdf::TUnboxedValuePod& uValue, const TString& additionalMsg,
-        const std::optional<ui32>& expectedLength = {})
+                                       const std::optional<ui32>& expectedLength = {})
     {
         auto packer = MakeValuePacker(false, type, EValuePackerVersion::V0);
         return TestPackUnpack(packer, uValue, additionalMsg, expectedLength);
@@ -406,7 +407,7 @@ protected:
 
     template <typename T>
     void TestOptionalNumericValue(std::optional<T> value, TValuePackerType& packer, const TString& typeDesc,
-        const std::optional<ui32>& expectedLength = {})
+                                  const std::optional<ui32>& expectedLength = {})
     {
         TString additionalMsg = TStringBuilder() << typeDesc << "), Value:" << (value ? ToString(*value) : TString("null"));
         const auto v = value ? NUdf::TUnboxedValuePod(*value) : NUdf::TUnboxedValuePod();
@@ -480,7 +481,7 @@ protected:
 
     void TestVariantTypeImpl(TType* variantType) {
         TString descr = TStringBuilder() << "Type:Variant("
-            << static_cast<TVariantType*>(variantType)->GetUnderlyingType()->GetKindAsStr() << ')';
+                                         << static_cast<TVariantType*>(variantType)->GetUnderlyingType()->GetKindAsStr() << ')';
         {
             const NUdf::TUnboxedValue value = HolderFactory_.CreateVariantHolder(MakeString("01234567890123456789"), 0);
             const auto uValue = TestPackUnpack(variantType, value, descr);
@@ -633,7 +634,7 @@ protected:
 
     void TestIncrementalPacking() {
         if constexpr (Transport) {
-            auto itemType = PgmBuilder_.NewDataType(NUdf::TDataType<char *>::Id);
+            auto itemType = PgmBuilder_.NewDataType(NUdf::TDataType<char*>::Id);
             auto listType = PgmBuilder_.NewListType(itemType);
             auto packer = MakeValuePacker(false, itemType, EValuePackerVersion::V0);
             auto listPacker = MakeValuePacker(false, listType, EValuePackerVersion::V0);
@@ -686,7 +687,7 @@ protected:
         }
     };
 
-    class IArgsDispatcher : public TThrRefBase {
+    class IArgsDispatcher: public TThrRefBase {
     public:
         using TPtr = TIntrusivePtr<IArgsDispatcher>;
 
@@ -695,7 +696,7 @@ protected:
     };
 
     template <typename TValue>
-    class TArgsDispatcher : public IArgsDispatcher {
+    class TArgsDispatcher: public IArgsDispatcher {
     public:
         TArgsDispatcher(TValue& dst, const std::vector<TValue>& choices)
             : Dst_(dst)
@@ -966,17 +967,14 @@ protected:
 
     void TestBlockPacking() {
         TBlockTestArgs args;
-        TestBlockPackingCases(args, {
-            MakeIntrusive<TArgsDispatcher<TBlockTestArgs>>(args, std::vector<TBlockTestArgs>{
-                {.Offset = 0, .Len = 3},
-                {.Offset = 0, .Len = 1000},
-                {.Offset = 19, .Len = 623}
-            }),
-            MakeIntrusive<TArgsDispatcher<bool>>(args.LegacyStruct, std::vector<bool>{false, true}),
-            MakeIntrusive<TArgsDispatcher<bool>>(args.TrimBlock, std::vector<bool>{false, true}),
-            MakeIntrusive<TArgsDispatcher<TMaybe<ui8>>>(args.MinFillPercentage, std::vector<TMaybe<ui8>>{Nothing(), 90}),
-            MakeIntrusive<TArgsDispatcher<EValuePackerVersion>>(args.PackerVersion, std::vector<EValuePackerVersion>{EValuePackerVersion::V0, EValuePackerVersion::V1})
-        });
+        TestBlockPackingCases(args, {MakeIntrusive<TArgsDispatcher<TBlockTestArgs>>(args, std::vector<TBlockTestArgs>{
+                                                                                              {.Offset = 0, .Len = 3},
+                                                                                              {.Offset = 0, .Len = 1000},
+                                                                                              {.Offset = 19, .Len = 623}}),
+                                     MakeIntrusive<TArgsDispatcher<bool>>(args.LegacyStruct, std::vector<bool>{false, true}),
+                                     MakeIntrusive<TArgsDispatcher<bool>>(args.TrimBlock, std::vector<bool>{false, true}),
+                                     MakeIntrusive<TArgsDispatcher<TMaybe<ui8>>>(args.MinFillPercentage, std::vector<TMaybe<ui8>>{Nothing(), 90}),
+                                     MakeIntrusive<TArgsDispatcher<EValuePackerVersion>>(args.PackerVersion, std::vector<EValuePackerVersion>{EValuePackerVersion::V0, EValuePackerVersion::V1})});
     }
 
     void TestBlockPackingSerializeUi32Impl(EValuePackerVersion valuePackerVersion, size_t expectedHash) {
@@ -1402,121 +1400,121 @@ private:
 
 class TMiniKQLComputationNodeGenericPackTest: public TMiniKQLComputationNodePackTest<false, false> {
     UNIT_TEST_SUITE(TMiniKQLComputationNodeGenericPackTest);
-        UNIT_TEST(TestNumericTypes);
-        UNIT_TEST(TestOptionalNumericTypes);
-        UNIT_TEST(TestStringTypes);
-        UNIT_TEST(TestUuidType);
-        UNIT_TEST(TestOptionalStringTypes);
-        UNIT_TEST(TestListType);
-        UNIT_TEST(TestListOfOptionalsType);
-        UNIT_TEST(TestTupleType);
-        UNIT_TEST(TestStructType);
-        UNIT_TEST(TestOptionalType);
-        UNIT_TEST(TestDictType);
-        UNIT_TEST(TestVariantTypeOverStruct);
-        UNIT_TEST(TestVariantTypeOverTuple);
-        UNIT_TEST(TestIntegerPackPerformance);
-        UNIT_TEST(TestShortStringPackPerformance);
-        UNIT_TEST(TestPairPackPerformance);
-        UNIT_TEST(TestTuplePackPerformance);
+    UNIT_TEST(TestNumericTypes);
+    UNIT_TEST(TestOptionalNumericTypes);
+    UNIT_TEST(TestStringTypes);
+    UNIT_TEST(TestUuidType);
+    UNIT_TEST(TestOptionalStringTypes);
+    UNIT_TEST(TestListType);
+    UNIT_TEST(TestListOfOptionalsType);
+    UNIT_TEST(TestTupleType);
+    UNIT_TEST(TestStructType);
+    UNIT_TEST(TestOptionalType);
+    UNIT_TEST(TestDictType);
+    UNIT_TEST(TestVariantTypeOverStruct);
+    UNIT_TEST(TestVariantTypeOverTuple);
+    UNIT_TEST(TestIntegerPackPerformance);
+    UNIT_TEST(TestShortStringPackPerformance);
+    UNIT_TEST(TestPairPackPerformance);
+    UNIT_TEST(TestTuplePackPerformance);
     UNIT_TEST_SUITE_END();
 };
 
 class TMiniKQLComputationNodeGenericFastPackTest: public TMiniKQLComputationNodePackTest<true, false> {
     UNIT_TEST_SUITE(TMiniKQLComputationNodeGenericFastPackTest);
-        UNIT_TEST(TestNumericTypes);
-        UNIT_TEST(TestOptionalNumericTypes);
-        UNIT_TEST(TestStringTypes);
-        UNIT_TEST(TestUuidType);
-        UNIT_TEST(TestOptionalStringTypes);
-        UNIT_TEST(TestListType);
-        UNIT_TEST(TestListOfOptionalsType);
-        UNIT_TEST(TestTupleType);
-        UNIT_TEST(TestStructType);
-        UNIT_TEST(TestOptionalType);
-        UNIT_TEST(TestDictType);
-        UNIT_TEST(TestVariantTypeOverStruct);
-        UNIT_TEST(TestVariantTypeOverTuple);
-        UNIT_TEST(TestIntegerPackPerformance);
-        UNIT_TEST(TestShortStringPackPerformance);
-        UNIT_TEST(TestPairPackPerformance);
-        UNIT_TEST(TestTuplePackPerformance);
+    UNIT_TEST(TestNumericTypes);
+    UNIT_TEST(TestOptionalNumericTypes);
+    UNIT_TEST(TestStringTypes);
+    UNIT_TEST(TestUuidType);
+    UNIT_TEST(TestOptionalStringTypes);
+    UNIT_TEST(TestListType);
+    UNIT_TEST(TestListOfOptionalsType);
+    UNIT_TEST(TestTupleType);
+    UNIT_TEST(TestStructType);
+    UNIT_TEST(TestOptionalType);
+    UNIT_TEST(TestDictType);
+    UNIT_TEST(TestVariantTypeOverStruct);
+    UNIT_TEST(TestVariantTypeOverTuple);
+    UNIT_TEST(TestIntegerPackPerformance);
+    UNIT_TEST(TestShortStringPackPerformance);
+    UNIT_TEST(TestPairPackPerformance);
+    UNIT_TEST(TestTuplePackPerformance);
     UNIT_TEST_SUITE_END();
 };
 
 class TMiniKQLComputationNodeTransportPackTest: public TMiniKQLComputationNodePackTest<false, true> {
     UNIT_TEST_SUITE(TMiniKQLComputationNodeTransportPackTest);
-        UNIT_TEST(TestNumericTypes);
-        UNIT_TEST(TestOptionalNumericTypes);
-        UNIT_TEST(TestStringTypes);
-        UNIT_TEST(TestUuidType);
-        UNIT_TEST(TestOptionalStringTypes);
-        UNIT_TEST(TestListType);
-        UNIT_TEST(TestListOfOptionalsType);
-        UNIT_TEST(TestTupleType);
-        UNIT_TEST(TestStructType);
-        UNIT_TEST(TestOptionalType);
-        UNIT_TEST(TestDictType);
-        UNIT_TEST(TestVariantTypeOverStruct);
-        UNIT_TEST(TestVariantTypeOverTuple);
-        UNIT_TEST(TestIntegerPackPerformance);
-        UNIT_TEST(TestShortStringPackPerformance);
-        UNIT_TEST(TestPairPackPerformance);
-        UNIT_TEST(TestTuplePackPerformance);
-        UNIT_TEST(TestRopeSplit);
-        UNIT_TEST(TestIncrementalPacking);
-        UNIT_TEST(TestBlockPacking);
+    UNIT_TEST(TestNumericTypes);
+    UNIT_TEST(TestOptionalNumericTypes);
+    UNIT_TEST(TestStringTypes);
+    UNIT_TEST(TestUuidType);
+    UNIT_TEST(TestOptionalStringTypes);
+    UNIT_TEST(TestListType);
+    UNIT_TEST(TestListOfOptionalsType);
+    UNIT_TEST(TestTupleType);
+    UNIT_TEST(TestStructType);
+    UNIT_TEST(TestOptionalType);
+    UNIT_TEST(TestDictType);
+    UNIT_TEST(TestVariantTypeOverStruct);
+    UNIT_TEST(TestVariantTypeOverTuple);
+    UNIT_TEST(TestIntegerPackPerformance);
+    UNIT_TEST(TestShortStringPackPerformance);
+    UNIT_TEST(TestPairPackPerformance);
+    UNIT_TEST(TestTuplePackPerformance);
+    UNIT_TEST(TestRopeSplit);
+    UNIT_TEST(TestIncrementalPacking);
+    UNIT_TEST(TestBlockPacking);
 
-        UNIT_TEST(TestBlockPackingSerializeUi32);
-        UNIT_TEST(TestBlockPackingSerializeOptionalUi32);
-        UNIT_TEST(TestBlockPackingSerializeString);
-        UNIT_TEST(TestBlockPackingSerializeOptionalString);
-        UNIT_TEST(TestBlockPackingSerializeOptionalOptionalUi32);
-        UNIT_TEST(TestBlockPackingSerializeSingularType);
-        UNIT_TEST(TestBlockPackingSerializeOptionalSingularType);
-        UNIT_TEST(TestBlockPackingSerializeTTzDate);
-        UNIT_TEST(TestBlockPackingSerializeOptionalTTzDate);
-        UNIT_TEST(TestBlockPackingSerializeTupleInt32String);
-        UNIT_TEST(TestBlockPackingSerializeOptionalTupleInt32String);
-        UNIT_TEST(TestBlockPackingSerializeTupleShiftedOffset);
+    UNIT_TEST(TestBlockPackingSerializeUi32);
+    UNIT_TEST(TestBlockPackingSerializeOptionalUi32);
+    UNIT_TEST(TestBlockPackingSerializeString);
+    UNIT_TEST(TestBlockPackingSerializeOptionalString);
+    UNIT_TEST(TestBlockPackingSerializeOptionalOptionalUi32);
+    UNIT_TEST(TestBlockPackingSerializeSingularType);
+    UNIT_TEST(TestBlockPackingSerializeOptionalSingularType);
+    UNIT_TEST(TestBlockPackingSerializeTTzDate);
+    UNIT_TEST(TestBlockPackingSerializeOptionalTTzDate);
+    UNIT_TEST(TestBlockPackingSerializeTupleInt32String);
+    UNIT_TEST(TestBlockPackingSerializeOptionalTupleInt32String);
+    UNIT_TEST(TestBlockPackingSerializeTupleShiftedOffset);
     UNIT_TEST_SUITE_END();
 };
 
 class TMiniKQLComputationNodeTransportFastPackTest: public TMiniKQLComputationNodePackTest<true, true> {
     UNIT_TEST_SUITE(TMiniKQLComputationNodeTransportFastPackTest);
-        UNIT_TEST(TestNumericTypes);
-        UNIT_TEST(TestOptionalNumericTypes);
-        UNIT_TEST(TestStringTypes);
-        UNIT_TEST(TestUuidType);
-        UNIT_TEST(TestOptionalStringTypes);
-        UNIT_TEST(TestListType);
-        UNIT_TEST(TestListOfOptionalsType);
-        UNIT_TEST(TestTupleType);
-        UNIT_TEST(TestStructType);
-        UNIT_TEST(TestOptionalType);
-        UNIT_TEST(TestDictType);
-        UNIT_TEST(TestVariantTypeOverStruct);
-        UNIT_TEST(TestVariantTypeOverTuple);
-        UNIT_TEST(TestIntegerPackPerformance);
-        UNIT_TEST(TestShortStringPackPerformance);
-        UNIT_TEST(TestPairPackPerformance);
-        UNIT_TEST(TestTuplePackPerformance);
-        UNIT_TEST(TestRopeSplit);
-        UNIT_TEST(TestIncrementalPacking);
-        UNIT_TEST(TestBlockPacking);
+    UNIT_TEST(TestNumericTypes);
+    UNIT_TEST(TestOptionalNumericTypes);
+    UNIT_TEST(TestStringTypes);
+    UNIT_TEST(TestUuidType);
+    UNIT_TEST(TestOptionalStringTypes);
+    UNIT_TEST(TestListType);
+    UNIT_TEST(TestListOfOptionalsType);
+    UNIT_TEST(TestTupleType);
+    UNIT_TEST(TestStructType);
+    UNIT_TEST(TestOptionalType);
+    UNIT_TEST(TestDictType);
+    UNIT_TEST(TestVariantTypeOverStruct);
+    UNIT_TEST(TestVariantTypeOverTuple);
+    UNIT_TEST(TestIntegerPackPerformance);
+    UNIT_TEST(TestShortStringPackPerformance);
+    UNIT_TEST(TestPairPackPerformance);
+    UNIT_TEST(TestTuplePackPerformance);
+    UNIT_TEST(TestRopeSplit);
+    UNIT_TEST(TestIncrementalPacking);
+    UNIT_TEST(TestBlockPacking);
 
-        UNIT_TEST(TestBlockPackingSerializeUi32);
-        UNIT_TEST(TestBlockPackingSerializeOptionalUi32);
-        UNIT_TEST(TestBlockPackingSerializeString);
-        UNIT_TEST(TestBlockPackingSerializeOptionalString);
-        UNIT_TEST(TestBlockPackingSerializeOptionalOptionalUi32);
-        UNIT_TEST(TestBlockPackingSerializeSingularType);
-        UNIT_TEST(TestBlockPackingSerializeOptionalSingularType);
-        UNIT_TEST(TestBlockPackingSerializeTTzDate);
-        UNIT_TEST(TestBlockPackingSerializeOptionalTTzDate);
-        UNIT_TEST(TestBlockPackingSerializeTupleInt32String);
-        UNIT_TEST(TestBlockPackingSerializeOptionalTupleInt32String);
-        UNIT_TEST(TestBlockPackingSerializeTupleShiftedOffset);
+    UNIT_TEST(TestBlockPackingSerializeUi32);
+    UNIT_TEST(TestBlockPackingSerializeOptionalUi32);
+    UNIT_TEST(TestBlockPackingSerializeString);
+    UNIT_TEST(TestBlockPackingSerializeOptionalString);
+    UNIT_TEST(TestBlockPackingSerializeOptionalOptionalUi32);
+    UNIT_TEST(TestBlockPackingSerializeSingularType);
+    UNIT_TEST(TestBlockPackingSerializeOptionalSingularType);
+    UNIT_TEST(TestBlockPackingSerializeTTzDate);
+    UNIT_TEST(TestBlockPackingSerializeOptionalTTzDate);
+    UNIT_TEST(TestBlockPackingSerializeTupleInt32String);
+    UNIT_TEST(TestBlockPackingSerializeOptionalTupleInt32String);
+    UNIT_TEST(TestBlockPackingSerializeTupleShiftedOffset);
     UNIT_TEST_SUITE_END();
 };
 
@@ -1524,5 +1522,5 @@ UNIT_TEST_SUITE_REGISTRATION(TMiniKQLComputationNodeGenericPackTest);
 UNIT_TEST_SUITE_REGISTRATION(TMiniKQLComputationNodeGenericFastPackTest);
 UNIT_TEST_SUITE_REGISTRATION(TMiniKQLComputationNodeTransportPackTest);
 UNIT_TEST_SUITE_REGISTRATION(TMiniKQLComputationNodeTransportFastPackTest);
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

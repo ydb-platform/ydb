@@ -1,3 +1,5 @@
+ENABLE(YQL_STYLE_CPP)
+
 INCLUDE(header.ya.make.inc)
 
 SET(ORIG_SRC_DIR yql/essentials/minikql/invoke_builtins)

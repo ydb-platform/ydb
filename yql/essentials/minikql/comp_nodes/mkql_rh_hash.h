@@ -40,12 +40,13 @@ struct TRobinHoodBatchRequestItem {
 
 constexpr ui32 PrefetchBatchSize = 64;
 
-//TODO: only POD key & payloads are now supported
+// TODO: only POD key & payloads are now supported
 template <typename TKey, typename TEqual, typename THash, typename TAllocator, typename TDeriv, bool CacheHash>
 class TRobinHoodHashBase {
 public:
     using iterator = char*;
     using const_iterator = const char*;
+
 protected:
     THash HashLocal_;
     TEqual EqualLocal_;
@@ -59,8 +60,8 @@ protected:
         TPSLStorageImpl() = default;
         TPSLStorageImpl(const ui64 hash)
             : Distance(0)
-            , Hash(hash) {
-
+            , Hash(hash)
+        {
         }
     };
 
@@ -69,8 +70,8 @@ protected:
         i32 Distance = -1;
         TPSLStorageImpl() = default;
         TPSLStorageImpl(const ui64 /*hash*/)
-            : Distance(0) {
-
+            : Distance(0)
+        {
         }
     };
 
@@ -235,7 +236,7 @@ public:
     }
 
 private:
-    struct TInternalBatchRequestItem : TRobinHoodBatchRequestItem<TKey> {
+    struct TInternalBatchRequestItem: TRobinHoodBatchRequestItem<TKey> {
         char* OriginalIterator;
     };
 
@@ -430,7 +431,7 @@ private:
 };
 
 template <typename TKey, typename TEqual = std::equal_to<TKey>, typename THash = std::hash<TKey>, typename TAllocator = std::allocator<char>, typename TSettings = TRobinHoodDefaultSettings<TKey>>
-class TRobinHoodHashMap : public TRobinHoodHashBase<TKey, TEqual, THash, TAllocator, TRobinHoodHashMap<TKey, TEqual, THash, TAllocator, TSettings>, TSettings::CacheHash> {
+class TRobinHoodHashMap: public TRobinHoodHashBase<TKey, TEqual, THash, TAllocator, TRobinHoodHashMap<TKey, TEqual, THash, TAllocator, TSettings>, TSettings::CacheHash> {
 public:
     using TSelf = TRobinHoodHashMap<TKey, TEqual, THash, TAllocator, TSettings>;
     using TBase = TRobinHoodHashBase<TKey, TEqual, THash, TAllocator, TSelf, TSettings::CacheHash>;
@@ -497,7 +498,7 @@ private:
 };
 
 template <typename TKey, typename TPayload, typename TEqual = std::equal_to<TKey>, typename THash = std::hash<TKey>, typename TAllocator = std::allocator<char>, typename TSettings = TRobinHoodDefaultSettings<TKey>>
-class TRobinHoodHashFixedMap : public TRobinHoodHashBase<TKey, TEqual, THash, TAllocator, TRobinHoodHashFixedMap<TKey, TPayload, TEqual, THash, TAllocator, TSettings>, TSettings::CacheHash> {
+class TRobinHoodHashFixedMap: public TRobinHoodHashBase<TKey, TEqual, THash, TAllocator, TRobinHoodHashFixedMap<TKey, TPayload, TEqual, THash, TAllocator, TSettings>, TSettings::CacheHash> {
 public:
     using TSelf = TRobinHoodHashFixedMap<TKey, TPayload, TEqual, THash, TAllocator, TSettings>;
     using TBase = TRobinHoodHashBase<TKey, TEqual, THash, TAllocator, TSelf, TSettings::CacheHash>;
@@ -545,19 +546,21 @@ public:
 };
 
 template <typename TKey, typename TEqual = std::equal_to<TKey>, typename THash = std::hash<TKey>, typename TAllocator = std::allocator<char>, typename TSettings = TRobinHoodDefaultSettings<TKey>>
-class TRobinHoodHashSet : public TRobinHoodHashBase<TKey, TEqual, THash, TAllocator, TRobinHoodHashSet<TKey, TEqual, THash, TAllocator, TSettings>, TSettings::CacheHash> {
+class TRobinHoodHashSet: public TRobinHoodHashBase<TKey, TEqual, THash, TAllocator, TRobinHoodHashSet<TKey, TEqual, THash, TAllocator, TSettings>, TSettings::CacheHash> {
 public:
     using TSelf = TRobinHoodHashSet<TKey, TEqual, THash, TAllocator, TSettings>;
     using TBase = TRobinHoodHashBase<TKey, TEqual, THash, TAllocator, TSelf, TSettings::CacheHash>;
     using TPayloadStore = int;
 
     explicit TRobinHoodHashSet(THash hash, TEqual equal, ui64 initialCapacity = 1u << 8)
-        : TBase(initialCapacity, hash, equal) {
+        : TBase(initialCapacity, hash, equal)
+    {
         TBase::Init();
     }
 
     explicit TRobinHoodHashSet(ui64 initialCapacity = 1u << 8)
-        : TBase(initialCapacity, THash(), TEqual()) {
+        : TBase(initialCapacity, THash(), TEqual())
+    {
         TBase::Init();
     }
 
@@ -596,5 +599,5 @@ public:
     }
 };
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

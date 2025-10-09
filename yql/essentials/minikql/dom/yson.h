@@ -15,4 +15,4 @@ TString SerializeYsonDomToText(const NUdf::TUnboxedValue& dom);
 
 TString SerializeYsonDomToPrettyText(const NUdf::TUnboxedValue& dom);
 
-}
+} // namespace NYql::NDom

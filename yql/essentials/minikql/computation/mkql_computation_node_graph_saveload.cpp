@@ -45,7 +45,7 @@ void TraverseGraph(const NUdf::TUnboxedValue* roots, ui32 rootCount, TVector<NUd
     }
 }
 
-}
+} // namespace
 
 void SaveGraphState(const NUdf::TUnboxedValue* roots, ui32 rootCount, ui64 hash, TString& out) {
     out.clear();
@@ -63,8 +63,7 @@ void SaveGraphState(const NUdf::TUnboxedValue* roots, ui32 rootCount, ui64 hash,
             if (size) {
                 out.AppendNoAlias(strRef.Data(), size);
             }
-        }
-        else if (state.IsBoxed()) {
+        } else if (state.IsBoxed()) {
             TString taskState;
             auto listIt = state.GetListIterator();
             NUdf::TUnboxedValue str;

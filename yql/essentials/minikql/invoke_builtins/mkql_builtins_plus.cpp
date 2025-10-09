@@ -5,8 +5,8 @@ namespace NMiniKQL {
 
 namespace {
 
-template<typename TInput, typename TOutput>
-struct TPlus : public TSimpleArithmeticUnary<TInput, TOutput, TPlus<TInput, TOutput>> {
+template <typename TInput, typename TOutput>
+struct TPlus: public TSimpleArithmeticUnary<TInput, TOutput, TPlus<TInput, TOutput>> {
     static TOutput Do(TInput val)
     {
         return +val;
@@ -32,7 +32,7 @@ struct TDecimalPlus {
     }
 #endif
 };
-}
+} // namespace
 
 void RegisterPlus(IBuiltinFunctionRegistry& registry) {
     RegisterUnaryNumericFunctionOpt<TPlus, TUnaryArgsOpt>(registry, "Plus");

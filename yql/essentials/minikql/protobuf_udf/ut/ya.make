@@ -2,6 +2,8 @@ IF (NOT OPENSOURCE)
 
 UNITTEST_FOR(yql/essentials/minikql/protobuf_udf)
 
+ENABLE(YQL_STYLE_CPP)
+
 SRCS(
     type_builder_ut.cpp
     value_builder_ut.cpp

@@ -20,5 +20,5 @@ IComputationNode* WrapMutDictKeys(TCallable& callable, const TComputationNodeFac
 IComputationNode* WrapMutDictPayloads(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 IComputationNode* WrapFromMutDict(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

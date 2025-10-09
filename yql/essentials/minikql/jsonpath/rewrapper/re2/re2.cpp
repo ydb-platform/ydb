@@ -18,13 +18,12 @@ RE2::Options CreateOptions(const TStringBuf& regex, unsigned int flags) {
     options.set_encoding(
         needUtf8
             ? RE2::Options::Encoding::EncodingUTF8
-            : RE2::Options::Encoding::EncodingLatin1
-    );
+            : RE2::Options::Encoding::EncodingLatin1);
     options.set_case_sensitive(!(flags & FLAGS_CASELESS));
     return options;
 }
 
-class TRe2 : public IRe {
+class TRe2: public IRe {
 public:
     TRe2(const TStringBuf& regex, unsigned int flags)
         : Regexp_(StringPiece(regex.data(), regex.size()), CreateOptions(regex, flags))
@@ -36,9 +35,10 @@ public:
 
     TRe2(const TSerialization& proto)
         : Regexp_(StringPiece(proto.GetRe2().GetRegexp().data(), proto.GetRe2().GetRegexp().size()),
-            CreateOptions(proto.GetRe2().GetRegexp(), proto.GetRe2().GetFlags()))
+                  CreateOptions(proto.GetRe2().GetRegexp(), proto.GetRe2().GetFlags()))
         , RawRegexp_(proto)
-    { }
+    {
+    }
 
     bool Matches(const TStringBuf& text) const override {
         const StringPiece piece(text.data(), text.size());
@@ -62,12 +62,13 @@ public:
             return false;
         }
     }
+
 private:
     RE2 Regexp_;
     TSerialization RawRegexp_;
 };
 
-}
+} // namespace
 
 IRePtr Compile(const TStringBuf& regex, unsigned int flags) {
     auto ptr = std::make_unique<TRe2>(regex, flags);
@@ -84,6 +85,6 @@ IRePtr Deserialize(const TSerialization& p) {
 
 REGISTER_RE_LIB(TSerialization::kRe2, Compile, Deserialize)
 
-}
+} // namespace NRe2
 
-}
+} // namespace NReWrapper

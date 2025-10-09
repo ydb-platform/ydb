@@ -23,15 +23,15 @@ namespace NMatchRecognize {
 
 struct TMatchRecognizeProcessorParameters {
     IComputationExternalNode* InputDataArg;
-    TRowPattern               Pattern;
-    TUnboxedValueVector       VarNames;
+    TRowPattern Pattern;
+    TUnboxedValueVector VarNames;
     THashMap<TString, size_t> VarNamesLookup;
     IComputationExternalNode* MatchedVarsArg;
     IComputationExternalNode* CurrentRowIndexArg;
     TComputationNodePtrVector Defines;
     IComputationExternalNode* MeasureInputDataArg;
-    TMeasureInputColumnOrder  MeasureInputColumnOrder;
-    TAfterMatchSkipTo         SkipTo;
+    TMeasureInputColumnOrder MeasureInputColumnOrder;
+    TAfterMatchSkipTo SkipTo;
 };
 
 class TStreamingMatchRecognize {
@@ -41,11 +41,12 @@ public:
         const TMatchRecognizeProcessorParameters& parameters,
         const IRowsFormatter::TState& rowsFormatterState,
         TNfaTransitionGraph::TPtr nfaTransitions)
-    : PartitionKey(std::move(partitionKey))
-    , Parameters(parameters)
-    , RowsFormatter_(IRowsFormatter::Create(rowsFormatterState))
-    , Nfa(nfaTransitions, parameters.MatchedVarsArg, parameters.Defines, parameters.SkipTo)
-    {}
+        : PartitionKey(std::move(partitionKey))
+        , Parameters(parameters)
+        , RowsFormatter_(IRowsFormatter::Create(rowsFormatterState))
+        , Nfa(nfaTransitions, parameters.MatchedVarsArg, parameters.Defines, parameters.SkipTo)
+    {
+    }
 
     bool ProcessInputRow(NUdf::TUnboxedValue&& row, TComputationContext& ctx) {
         Parameters.InputDataArg->SetValue(ctx, ctx.HolderFactory.Create<TListValue>(Rows));
@@ -68,12 +69,11 @@ public:
         }
         Parameters.MatchedVarsArg->SetValue(ctx, ctx.HolderFactory.Create<TMatchedVarsValue<TSparseList::TRange>>(ctx.HolderFactory, match->Vars));
         Parameters.MeasureInputDataArg->SetValue(ctx, ctx.HolderFactory.Create<TMeasureInputDataValue>(
-            ctx.HolderFactory.Create<TListValue>(Rows),
-            Parameters.MeasureInputColumnOrder,
-            Parameters.MatchedVarsArg->GetValue(ctx),
-            Parameters.VarNames,
-            MatchNumber
-        ));
+                                                          ctx.HolderFactory.Create<TListValue>(Rows),
+                                                          Parameters.MeasureInputColumnOrder,
+                                                          Parameters.MatchedVarsArg->GetValue(ctx),
+                                                          Parameters.VarNames,
+                                                          MatchNumber));
         auto result = RowsFormatter_->GetFirstMatchRow(ctx, Rows, PartitionKey, Nfa.GetTransitionGraph(), *match);
         Nfa.AfterMatchSkip(*match);
         return result;
@@ -111,8 +111,7 @@ private:
 };
 
 class TStateForNonInterleavedPartitions
-    : public TComputationValue<TStateForNonInterleavedPartitions>
-{
+    : public TComputationValue<TStateForNonInterleavedPartitions> {
 public:
     TStateForNonInterleavedPartitions(
         TMemoryUsageInfo* memInfo,
@@ -121,21 +120,21 @@ public:
         TType* partitionKeyType,
         const TMatchRecognizeProcessorParameters& parameters,
         const IRowsFormatter::TState& rowsFormatterState,
-        TComputationContext &ctx,
+        TComputationContext& ctx,
         TType* rowType,
-        const TMutableObjectOverBoxedValue<TValuePackerBoxed>& rowPacker
-    )
-    : TComputationValue<TStateForNonInterleavedPartitions>(memInfo)
-    , InputRowArg(inputRowArg)
-    , PartitionKey(partitionKey)
-    , PartitionKeyPacker(true, partitionKeyType)
-    , Parameters(parameters)
-    , RowsFormatterState(rowsFormatterState)
-    , RowPatternConfiguration(TNfaTransitionGraphBuilder::Create(parameters.Pattern, parameters.VarNamesLookup))
-    , Terminating(false)
-    , SerializerContext(ctx, rowType, rowPacker)
-    , Ctx(ctx)
-    {}
+        const TMutableObjectOverBoxedValue<TValuePackerBoxed>& rowPacker)
+        : TComputationValue<TStateForNonInterleavedPartitions>(memInfo)
+        , InputRowArg(inputRowArg)
+        , PartitionKey(partitionKey)
+        , PartitionKeyPacker(true, partitionKeyType)
+        , Parameters(parameters)
+        , RowsFormatterState(rowsFormatterState)
+        , RowPatternConfiguration(TNfaTransitionGraphBuilder::Create(parameters.Pattern, parameters.VarNamesLookup))
+        , Terminating(false)
+        , SerializerContext(ctx, rowType, rowPacker)
+        , Ctx(ctx)
+    {
+    }
 
     NUdf::TUnboxedValue Save() const override {
         TMrOutputSerializer out(SerializerContext, EMkqlStateType::SIMPLE_BLOB, StateVersion, Ctx);
@@ -164,8 +163,7 @@ public:
                 std::move(key),
                 Parameters,
                 RowsFormatterState,
-                RowPatternConfiguration
-            ));
+                RowPatternConfiguration));
             PartitionHandler->Load(in);
         }
         bool validDelayedRow = in.Read<bool>();
@@ -186,26 +184,27 @@ public:
     }
 
     bool ProcessInputRow(NUdf::TUnboxedValue&& row, TComputationContext& ctx) {
-        MKQL_ENSURE(not DelayedRow, "Internal logic error"); //we're finalizing previous partition
+        MKQL_ENSURE(not DelayedRow, "Internal logic error"); // we're finalizing previous partition
         InputRowArg->SetValue(ctx, NUdf::TUnboxedValue(row));
         auto partitionKey = PartitionKey->GetValue(ctx);
         const auto packedKey = PartitionKeyPacker.Pack(partitionKey);
-        //TODO switch to tuple compare for comparable types
-        if (packedKey == CurPartitionPackedKey) { //continue in the same partition
+        // TODO switch to tuple compare for comparable types
+        if (packedKey == CurPartitionPackedKey) { // continue in the same partition
             MKQL_ENSURE(PartitionHandler, "Internal logic error");
             return PartitionHandler->ProcessInputRow(std::move(row), ctx);
         }
-        //either the first or next partition
+        // either the first or next partition
         DelayedRow = std::move(row);
         if (PartitionHandler) {
             return PartitionHandler->ProcessEndOfData(ctx);
         }
-        //be aware that the very first partition is created in the same manner as subsequent
+        // be aware that the very first partition is created in the same manner as subsequent
         return false;
     }
     bool ProcessEndOfData(TComputationContext& ctx) {
-        if (Terminating)
+        if (Terminating) {
             return false;
+        }
         Terminating = true;
         if (PartitionHandler) {
             return PartitionHandler->ProcessEndOfData(ctx);
@@ -221,19 +220,18 @@ public:
             }
         }
         if (DelayedRow) {
-            //either the first partition or
-            //we're finalizing a partition and expect no more output from this partition
+            // either the first partition or
+            // we're finalizing a partition and expect no more output from this partition
             NUdf::TUnboxedValue temp;
             std::swap(temp, DelayedRow);
             InputRowArg->SetValue(ctx, NUdf::TUnboxedValue(temp));
             auto partitionKey = PartitionKey->GetValue(ctx);
             CurPartitionPackedKey = PartitionKeyPacker.Pack(partitionKey);
             PartitionHandler.reset(new TStreamingMatchRecognize(
-                    std::move(partitionKey),
-                    Parameters,
-                    RowsFormatterState,
-                    RowPatternConfiguration
-            ));
+                std::move(partitionKey),
+                Parameters,
+                RowsFormatterState,
+                RowPatternConfiguration));
             PartitionHandler->ProcessInputRow(std::move(temp), ctx);
         }
         if (Terminating) {
@@ -241,6 +239,7 @@ public:
         }
         return NUdf::TUnboxedValue{};
     }
+
 private:
     TString CurPartitionPackedKey;
     std::unique_ptr<TStreamingMatchRecognize> PartitionHandler;
@@ -257,10 +256,10 @@ private:
 };
 
 class TStateForInterleavedPartitions
-    : public TComputationValue<TStateForInterleavedPartitions>
-{
+    : public TComputationValue<TStateForInterleavedPartitions> {
     using TPartitionMapValue = std::unique_ptr<TStreamingMatchRecognize>;
-    using TPartitionMap = std::unordered_map<TString, TPartitionMapValue, std::hash<TString>, std:: equal_to<TString>, TMKQLAllocator<std::pair<const TString, TPartitionMapValue>>>;
+    using TPartitionMap = std::unordered_map<TString, TPartitionMapValue, std::hash<TString>, std::equal_to<TString>, TMKQLAllocator<std::pair<const TString, TPartitionMapValue>>>;
+
 public:
     TStateForInterleavedPartitions(
         TMemoryUsageInfo* memInfo,
@@ -269,20 +268,20 @@ public:
         TType* partitionKeyType,
         const TMatchRecognizeProcessorParameters& parameters,
         const IRowsFormatter::TState& rowsFormatterState,
-        TComputationContext &ctx,
+        TComputationContext& ctx,
         TType* rowType,
-        const TMutableObjectOverBoxedValue<TValuePackerBoxed>& rowPacker
-    )
-    : TComputationValue<TStateForInterleavedPartitions>(memInfo)
-    , InputRowArg(inputRowArg)
-    , PartitionKey(partitionKey)
-    , PartitionKeyPacker(true, partitionKeyType)
-    , Parameters(parameters)
-    , RowsFormatterState(rowsFormatterState)
-    , NfaTransitionGraph(TNfaTransitionGraphBuilder::Create(parameters.Pattern, parameters.VarNamesLookup))
-    , SerializerContext(ctx, rowType, rowPacker)
-    , Ctx(ctx)
-    {}
+        const TMutableObjectOverBoxedValue<TValuePackerBoxed>& rowPacker)
+        : TComputationValue<TStateForInterleavedPartitions>(memInfo)
+        , InputRowArg(inputRowArg)
+        , PartitionKey(partitionKey)
+        , PartitionKeyPacker(true, partitionKeyType)
+        , Parameters(parameters)
+        , RowsFormatterState(rowsFormatterState)
+        , NfaTransitionGraph(TNfaTransitionGraphBuilder::Create(parameters.Pattern, parameters.VarNamesLookup))
+        , SerializerContext(ctx, rowType, rowPacker)
+        , Ctx(ctx)
+    {
+    }
 
     NUdf::TUnboxedValue Save() const override {
         TMrOutputSerializer serializer(SerializerContext, EMkqlStateType::SIMPLE_BLOB, StateVersion, Ctx);
@@ -312,9 +311,7 @@ public:
                     std::move(key),
                     Parameters,
                     RowsFormatterState,
-                    NfaTransitionGraph
-                )
-            );
+                    NfaTransitionGraph));
             pair.first->second->Load(in);
         }
 
@@ -361,7 +358,7 @@ public:
         while (!HasReadyOutput.empty()) {
             auto r = HasReadyOutput.top()->second->GetOutputIfReady(ctx);
             if (not r) {
-                //dried up
+                // dried up
                 HasReadyOutput.pop();
                 continue;
             } else {
@@ -372,19 +369,17 @@ public:
     }
 
 private:
-    TPartitionMap::iterator GetPartitionHandler(const NUdf::TUnboxedValue& row, TComputationContext &ctx) {
+    TPartitionMap::iterator GetPartitionHandler(const NUdf::TUnboxedValue& row, TComputationContext& ctx) {
         InputRowArg->SetValue(ctx, NUdf::TUnboxedValue(row));
         auto partitionKey = PartitionKey->GetValue(ctx);
         const auto packedKey = PartitionKeyPacker.Pack(partitionKey);
         if (const auto it = Partitions.find(TString(packedKey)); it != Partitions.end()) {
             return it;
         } else {
-            return Partitions.emplace_hint(it, TString(packedKey), std::make_unique<TStreamingMatchRecognize>(
-                    std::move(partitionKey),
-                    Parameters,
-                    RowsFormatterState,
-                    NfaTransitionGraph
-            ));
+            return Partitions.emplace_hint(it, TString(packedKey), std::make_unique<TStreamingMatchRecognize>(std::move(partitionKey),
+                                                                                                              Parameters,
+                                                                                                              RowsFormatterState,
+                                                                                                              NfaTransitionGraph));
         }
     }
 
@@ -395,7 +390,7 @@ private:
 
     IComputationExternalNode* InputRowArg;
     IComputationNode* PartitionKey;
-    //TODO switch to tuple compare
+    // TODO switch to tuple compare
     TValuePackerGeneric<false> PartitionKeyPacker;
     const TMatchRecognizeProcessorParameters& Parameters;
     const IRowsFormatter::TState& RowsFormatterState;
@@ -404,32 +399,34 @@ private:
     TComputationContext& Ctx;
 };
 
-template<class State>
-class TMatchRecognizeWrapper : public TStatefulFlowComputationNode<TMatchRecognizeWrapper<State>, true> {
+template <class State>
+class TMatchRecognizeWrapper: public TStatefulFlowComputationNode<TMatchRecognizeWrapper<State>, true> {
     using TBaseComputation = TStatefulFlowComputationNode<TMatchRecognizeWrapper<State>, true>;
+
 public:
     TMatchRecognizeWrapper(
         TComputationMutables& mutables,
         EValueRepresentation kind,
-        IComputationNode *inputFlow,
-        IComputationExternalNode *inputRowArg,
-        IComputationNode *partitionKey,
+        IComputationNode* inputFlow,
+        IComputationExternalNode* inputRowArg,
+        IComputationNode* partitionKey,
         TType* partitionKeyType,
         TMatchRecognizeProcessorParameters&& parameters,
         IRowsFormatter::TState&& rowsFormatterState,
         TType* rowType)
-    : TBaseComputation(mutables, inputFlow, kind, EValueRepresentation::Embedded)
-    , InputFlow(inputFlow)
-    , InputRowArg(inputRowArg)
-    , PartitionKey(partitionKey)
-    , PartitionKeyType(partitionKeyType)
-    , Parameters(std::move(parameters))
-    , RowsFormatterState(std::move(rowsFormatterState))
-    , RowType(rowType)
-    , RowPacker(mutables)
-    {}
+        : TBaseComputation(mutables, inputFlow, kind, EValueRepresentation::Embedded)
+        , InputFlow(inputFlow)
+        , InputRowArg(inputRowArg)
+        , PartitionKey(partitionKey)
+        , PartitionKeyType(partitionKeyType)
+        , Parameters(std::move(parameters))
+        , RowsFormatterState(std::move(rowsFormatterState))
+        , RowType(rowType)
+        , RowPacker(mutables)
+    {
+    }
 
-    NUdf::TUnboxedValue DoCalculate(NUdf::TUnboxedValue &stateValue, TComputationContext &ctx) const {
+    NUdf::TUnboxedValue DoCalculate(NUdf::TUnboxedValue& stateValue, TComputationContext& ctx) const {
         if (stateValue.IsInvalid()) {
             stateValue = ctx.HolderFactory.Create<State>(
                 InputRowArg,
@@ -439,8 +436,7 @@ public:
                 RowsFormatterState,
                 ctx,
                 RowType,
-                RowPacker
-            );
+                RowPacker);
         } else if (stateValue.HasValue()) {
             MKQL_ENSURE(stateValue.IsBoxed(), "Expected boxed value");
             bool isStateToLoad = stateValue.HasListItems();
@@ -454,8 +450,7 @@ public:
                     RowsFormatterState,
                     ctx,
                     RowType,
-                    RowPacker
-                );
+                    RowPacker);
                 state.Load2(stateValue);
                 stateValue = state;
             }
@@ -475,9 +470,10 @@ public:
             state->ProcessInputRow(std::move(item), ctx);
         }
     }
+
 private:
-    using TBaseComputation::Own;
     using TBaseComputation::DependsOn;
+    using TBaseComputation::Own;
     void RegisterDependencies() const final {
         if (const auto flow = TBaseComputation::FlowDependsOn(InputFlow)) {
             Own(flow, InputRowArg);
@@ -486,10 +482,10 @@ private:
             Own(flow, Parameters.CurrentRowIndexArg);
             Own(flow, Parameters.MeasureInputDataArg);
             DependsOn(flow, PartitionKey);
-            for (auto& m: RowsFormatterState.Measures) {
+            for (auto& m : RowsFormatterState.Measures) {
                 DependsOn(flow, m);
             }
-            for (auto& d: Parameters.Defines) {
+            for (auto& d : Parameters.Defines) {
                 DependsOn(flow, d);
             }
         }
@@ -521,11 +517,12 @@ TOutputColumnOrder GetOutputColumnOrder(TRuntimeNode partitionKyeColumnsIndexes,
             temp[index] = {i, EOutputColumnSource::Measure};
         }
     }
-    if (temp.empty())
+    if (temp.empty()) {
         return {};
+    }
     auto outputSize = std::ranges::max_element(temp, {}, &std::pair<const size_t, TOutputColumnEntry>::first)->first + 1;
     TOutputColumnOrder result(outputSize);
-    for (const auto& [i, v]: temp) {
+    for (const auto& [i, v] : temp) {
         result[i] = v;
     }
     return result;
@@ -538,19 +535,16 @@ TRowPattern ConvertPattern(const TRuntimeNode& pattern) {
         const auto& inputTerm = AS_VALUE(TTupleLiteral, inputPattern->GetValue(i));
         TVector<TRowPatternFactor> term;
         for (ui32 j = 0; j != inputTerm->GetValuesCount(); ++j) {
-            const auto& inputFactor = AS_VALUE(TTupleLiteral,  inputTerm->GetValue(j));
+            const auto& inputFactor = AS_VALUE(TTupleLiteral, inputTerm->GetValue(j));
             MKQL_ENSURE(inputFactor->GetValuesCount() == 6, "Internal logic error");
             const auto& primary = inputFactor->GetValue(0);
             term.push_back(TRowPatternFactor{
-                    primary.GetRuntimeType()->IsData() ?
-                    TRowPatternPrimary(TString(AS_VALUE(TDataLiteral, primary)->AsValue().AsStringRef())) :
-                        ConvertPattern(primary),
-                    AS_VALUE(TDataLiteral, inputFactor->GetValue(1))->AsValue().Get<ui64>(),
-                    AS_VALUE(TDataLiteral, inputFactor->GetValue(2))->AsValue().Get<ui64>(),
-                    AS_VALUE(TDataLiteral, inputFactor->GetValue(3))->AsValue().Get<bool>(),
-                    AS_VALUE(TDataLiteral, inputFactor->GetValue(4))->AsValue().Get<bool>(),
-                    AS_VALUE(TDataLiteral, inputFactor->GetValue(5))->AsValue().Get<bool>()
-            });
+                primary.GetRuntimeType()->IsData() ? TRowPatternPrimary(TString(AS_VALUE(TDataLiteral, primary)->AsValue().AsStringRef())) : ConvertPattern(primary),
+                AS_VALUE(TDataLiteral, inputFactor->GetValue(1))->AsValue().Get<ui64>(),
+                AS_VALUE(TDataLiteral, inputFactor->GetValue(2))->AsValue().Get<ui64>(),
+                AS_VALUE(TDataLiteral, inputFactor->GetValue(3))->AsValue().Get<bool>(),
+                AS_VALUE(TDataLiteral, inputFactor->GetValue(4))->AsValue().Get<bool>(),
+                AS_VALUE(TDataLiteral, inputFactor->GetValue(5))->AsValue().Get<bool>()});
         }
         result.push_back(std::move(term));
     }
@@ -558,7 +552,7 @@ TRowPattern ConvertPattern(const TRuntimeNode& pattern) {
 }
 
 TMeasureInputColumnOrder GetMeasureColumnOrder(const TListLiteral& specialColumnIndexes, ui32 inputRowColumnCount) {
-    //Use Last enum value to denote that c colum comes from the input table
+    // Use Last enum value to denote that c colum comes from the input table
     TMeasureInputColumnOrder result(inputRowColumnCount + specialColumnIndexes.GetItemsCount(), std::make_pair(EMeasureInputDataSpecialColumns::Last, 0));
     if (specialColumnIndexes.GetItemsCount() != 0) {
         MKQL_ENSURE(specialColumnIndexes.GetItemsCount() == static_cast<size_t>(EMeasureInputDataSpecialColumns::Last),
@@ -568,9 +562,9 @@ TMeasureInputColumnOrder GetMeasureColumnOrder(const TListLiteral& specialColumn
             result[ind] = std::make_pair(static_cast<EMeasureInputDataSpecialColumns>(i), 0);
         }
     }
-    //update indexes for input table columns
+    // update indexes for input table columns
     ui32 inputIdx = 0;
-    for (auto& [t, i]: result) {
+    for (auto& [t, i] : result) {
         if (EMeasureInputDataSpecialColumns::Last == t) {
             i = inputIdx++;
         }
@@ -581,7 +575,7 @@ TMeasureInputColumnOrder GetMeasureColumnOrder(const TListLiteral& specialColumn
 TComputationNodePtrVector ConvertVectorOfCallables(const TRuntimeNode::TList& v, const TComputationNodeFactoryContext& ctx) {
     TComputationNodePtrVector result;
     result.reserve(v.size());
-    for (auto& c: v) {
+    for (auto& c : v) {
         result.push_back(LocateNode(ctx.NodeLocator, *c.GetNode()));
     }
     return result;
@@ -600,7 +594,7 @@ std::pair<TUnboxedValueVector, THashMap<TString, size_t>> ConvertListOfStrings(c
     return {vec, lookup};
 }
 
-} //namespace NMatchRecognize
+} // namespace NMatchRecognize
 
 IComputationNode* WrapMatchRecognizeCore(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     using namespace NMatchRecognize;
@@ -645,7 +639,7 @@ IComputationNode* WrapMatchRecognizeCore(TCallable& callable, const TComputation
     const auto& [varNames, varNamesLookup] = ConvertListOfStrings(defineNames);
     auto* rowType = AS_TYPE(TStructType, AS_TYPE(TFlowType, inputFlow.GetStaticType())->GetItemType());
 
-    auto parameters = TMatchRecognizeProcessorParameters {
+    auto parameters = TMatchRecognizeProcessorParameters{
         static_cast<IComputationExternalNode*>(LocateNode(ctx.NodeLocator, *inputDataArg.GetNode())),
         ConvertPattern(pattern),
         varNames,
@@ -655,11 +649,9 @@ IComputationNode* WrapMatchRecognizeCore(TCallable& callable, const TComputation
         ConvertVectorOfCallables(defines, ctx),
         static_cast<IComputationExternalNode*>(LocateNode(ctx.NodeLocator, *measureInputDataArg.GetNode())),
         GetMeasureColumnOrder(
-                *AS_VALUE(TListLiteral, measureSpecialColumnIndexes),
-                AS_VALUE(TDataLiteral, inputRowColumnCount)->AsValue().Get<ui32>()
-        ),
-        skipTo
-    };
+            *AS_VALUE(TListLiteral, measureSpecialColumnIndexes),
+            AS_VALUE(TDataLiteral, inputRowColumnCount)->AsValue().Get<ui32>()),
+        skipTo};
     IRowsFormatter::TState rowsFormatterState(ctx, outputColumnOrder, ConvertVectorOfCallables(measures, ctx), rowsPerMatch);
     if (AS_VALUE(TDataLiteral, streamingMode)->AsValue().Get<bool>()) {
         return new TMatchRecognizeWrapper<TStateForInterleavedPartitions>(
@@ -671,8 +663,7 @@ IComputationNode* WrapMatchRecognizeCore(TCallable& callable, const TComputation
             partitionKeySelector.GetStaticType(),
             std::move(parameters),
             std::move(rowsFormatterState),
-            rowType
-        );
+            rowType);
     } else {
         return new TMatchRecognizeWrapper<TStateForNonInterleavedPartitions>(
             ctx.Mutables,
@@ -683,9 +674,8 @@ IComputationNode* WrapMatchRecognizeCore(TCallable& callable, const TComputation
             partitionKeySelector.GetStaticType(),
             std::move(parameters),
             std::move(rowsFormatterState),
-            rowType
-        );
+            rowType);
     }
 }
 
-} //namespace NKikimr::NMiniKQL
+} // namespace NKikimr::NMiniKQL

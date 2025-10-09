@@ -1,5 +1,5 @@
 #include "mkql_ensure.h"
-#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
+#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
 #include <yql/essentials/public/udf/udf_terminator.h>
@@ -10,11 +10,12 @@ namespace NMiniKQL {
 
 namespace {
 
-class TEnsureWrapper : public TMutableCodegeneratorNode<TEnsureWrapper> {
+class TEnsureWrapper: public TMutableCodegeneratorNode<TEnsureWrapper> {
     typedef TMutableCodegeneratorNode<TEnsureWrapper> TBaseComputation;
+
 public:
     TEnsureWrapper(TComputationMutables& mutables, IComputationNode* value, IComputationNode* predicate,
-        IComputationNode* message, const NUdf::TSourcePosition& pos)
+                   IComputationNode* message, const NUdf::TSourcePosition& pos)
         : TBaseComputation(mutables, value->GetRepresentation())
         , Arg(value)
         , Predicate(predicate)
@@ -47,13 +48,14 @@ public:
         block = kill;
         const auto doFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TEnsureWrapper::Throw>());
         const auto doFuncArg = ConstantInt::get(Type::getInt64Ty(context), (ui64)this);
-        const auto doFuncType = FunctionType::get(Type::getVoidTy(context), { Type::getInt64Ty(context), ctx.Ctx->getType() }, false);
+        const auto doFuncType = FunctionType::get(Type::getVoidTy(context), {Type::getInt64Ty(context), ctx.Ctx->getType()}, false);
         const auto doFuncPtr = CastInst::Create(Instruction::IntToPtr, doFunc, PointerType::getUnqual(doFuncType), "thrower", block);
-        CallInst::Create(doFuncType, doFuncPtr, { doFuncArg, ctx.Ctx }, "", block)->setTailCall();
+        CallInst::Create(doFuncType, doFuncPtr, {doFuncArg, ctx.Ctx}, "", block)->setTailCall();
         new UnreachableInst(context, block);
 
         block = good;
-        return GetNodeValue(Arg, ctx, block);;
+        return GetNodeValue(Arg, ctx, block);
+        ;
     }
 #endif
 
@@ -64,7 +66,8 @@ private:
         TStringBuilder res;
         res << thisPtr->Pos << " Condition violated";
         if (messageStr.Size() > 0) {
-            res << ":\n\n" << TStringBuf(messageStr) << "\n\n";
+            res << ":\n\n"
+                << TStringBuf(messageStr) << "\n\n";
         }
 
         UdfTerminate(res.data());
@@ -81,7 +84,7 @@ private:
     const NUdf::TSourcePosition Pos;
 };
 
-}
+} // namespace
 
 IComputationNode* WrapEnsure(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 6, "Expected 6 args");
@@ -98,5 +101,5 @@ IComputationNode* WrapEnsure(TCallable& callable, const TComputationNodeFactoryC
     return new TEnsureWrapper(ctx.Mutables, value, predicate, message, NUdf::TSourcePosition(row, column, file));
 }
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

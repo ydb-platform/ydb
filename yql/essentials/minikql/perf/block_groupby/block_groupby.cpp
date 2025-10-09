@@ -31,33 +31,33 @@ arrow::Datum MakeIntColumn(ui32 len, EDistribution dist, EShape shape, ui32 buck
     for (ui32 i = 0; i < len; ++i) {
         ui32 val;
         switch (shape) {
-        case EShape::Default:
-            val = i;
-            break;
-        case EShape::Sqrt:
-            val = (ui32)sqrt(i);
-            break;
-        case EShape::Log:
-            val = (ui32)log(1 + i);
-            break;
+            case EShape::Default:
+                val = i;
+                break;
+            case EShape::Sqrt:
+                val = (ui32)sqrt(i);
+                break;
+            case EShape::Log:
+                val = (ui32)log(1 + i);
+                break;
         }
 
         switch (dist) {
-        case EDistribution::Const:
-            builder.UnsafeAppend(0);
-            break;
-        case EDistribution::Few:
-            builder.UnsafeAppend(val % buckets);
-            break;
-        case EDistribution::Linear:
-            builder.UnsafeAppend(val);
-            break;
-        case EDistribution::Random:
-            builder.UnsafeAppend(IntHash(val));
-            break;
-        case EDistribution::RandomFew:
-            builder.UnsafeAppend(IntHash(val) % buckets);
-            break;
+            case EDistribution::Const:
+                builder.UnsafeAppend(0);
+                break;
+            case EDistribution::Few:
+                builder.UnsafeAppend(val % buckets);
+                break;
+            case EDistribution::Linear:
+                builder.UnsafeAppend(val);
+                break;
+            case EDistribution::Random:
+                builder.UnsafeAppend(IntHash(val));
+                break;
+            case EDistribution::RandomFew:
+                builder.UnsafeAppend(IntHash(val) % buckets);
+                break;
         }
     }
 
@@ -73,7 +73,7 @@ public:
     virtual void Update(i64* state, i32 payload) = 0;
 };
 
-class TSumAggregator : public IAggregator {
+class TSumAggregator: public IAggregator {
 public:
     void Init(i64* state, i32 payload) final {
         *state = payload;
@@ -198,10 +198,10 @@ public:
     }
 
     static ui64 MakeHash(i32 key) {
-        //auto hash = FnvHash<ui64>(&key, sizeof(key));
-        //auto hash = MurmurHash<ui64>(&key, sizeof(key));
+        // auto hash = FnvHash<ui64>(&key, sizeof(key));
+        // auto hash = MurmurHash<ui64>(&key, sizeof(key));
         auto hash = CityHash64(TStringBuf((char*)&key, sizeof(key)));
-        //auto hash = key;
+        // auto hash = key;
         return hash;
     }
 
@@ -311,7 +311,7 @@ public:
     }
 
     double GetAverageHashChainLen() {
-        return 1.0*HashProbes_/HashSearches_;
+        return 1.0 * HashProbes_ / HashSearches_;
     }
 
     ui32 GetMaxHashChainLen() {
@@ -367,7 +367,7 @@ public:
 
             if constexpr (CalculateHashStats) {
                 Cerr << "maxPSL = " << maxPSL << "\n";
-                Cerr << "avgPSL = " << 1.0*sumPSL/size << "\n";
+                Cerr << "avgPSL = " << 1.0 * sumPSL / size << "\n";
             }
         }
 
@@ -398,7 +398,7 @@ private:
 int main(int argc, char** argv) {
     NLastGetopt::TOpts opts = NLastGetopt::TOpts::Default();
     TString keysDistributionStr;
-    TString shapeStr="default";
+    TString shapeStr = "default";
     ui32 nIters = 100;
     ui32 nRows = 1000000;
     ui32 nBuckets = 16;
@@ -479,7 +479,7 @@ int main(int argc, char** argv) {
         }
 
         auto duration = timer.Get();
-        durations.push_back(1e-6*duration.MicroSeconds());
+        durations.push_back(1e-6 * duration.MicroSeconds());
     }
 
     double sumDurations = 0.0, sumDurationsQ = 0.0;
@@ -490,7 +490,7 @@ int main(int argc, char** argv) {
 
     double avgDuration = sumDurations / nRepeats;
     double dispDuration = sqrt(sumDurationsQ / nRepeats - avgDuration * avgDuration);
-    Cerr << "Elapsed: " << avgDuration << ", noise: " << 100*dispDuration/avgDuration << "%\n";
+    Cerr << "Elapsed: " << avgDuration << ", noise: " << 100 * dispDuration / avgDuration << "%\n";
     Cerr << "Speed: " << 1e-6 * (ui64(nIters) * nRows / avgDuration) << " M rows/sec\n";
     Cerr << "Speed: " << 1e-6 * (2 * sizeof(i32) * ui64(nIters) * nRows / avgDuration) << " M bytes/sec\n";
     return 0;

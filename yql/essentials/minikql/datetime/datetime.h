@@ -161,7 +161,7 @@ struct TTMStorage {
 
 static_assert(sizeof(TTMStorage) == 16, "TTMStorage size must be equal to TUnboxedValuePod size");
 
-template<typename TStorage>
+template <typename TStorage>
 bool DoAddMonths(TStorage& storage, i64 months, const NUdf::IDateBuilder& builder) {
     i64 newMonth = months + storage.Month;
     storage.Year += (newMonth - 1) / 12;
@@ -184,7 +184,7 @@ bool DoAddMonths(TStorage& storage, i64 months, const NUdf::IDateBuilder& builde
     return storage.Validate(builder);
 }
 
-template<typename TStorage>
+template <typename TStorage>
 bool DoAddYears(TStorage& storage, i64 years, const NUdf::IDateBuilder& builder) {
     storage.Year += years;
     // The minimal year value for TTMStorage is 1970, but the
@@ -207,4 +207,4 @@ TInstant DoAddMonths(TInstant current, i64 months, const NUdf::IDateBuilder& bui
 
 TInstant DoAddYears(TInstant current, i64 years, const NUdf::IDateBuilder& builder);
 
-}
+} // namespace NYql::DateTime

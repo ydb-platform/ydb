@@ -13,5 +13,5 @@ IComputationNode* WrapStableSort(TCallable& callable, const TComputationNodeFact
 
 IComputationNode* WrapNthElement(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 IComputationNode* WrapPartialSort(TCallable& callable, const TComputationNodeFactoryContext& ctx);
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

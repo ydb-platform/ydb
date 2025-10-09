@@ -1,6 +1,6 @@
 #include "mkql_discard.h"
 
-#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
+#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_runtime_version.h>
@@ -10,17 +10,21 @@ namespace NMiniKQL {
 
 namespace {
 
-class TDiscardFlowWrapper : public TStatelessFlowCodegeneratorRootNode<TDiscardFlowWrapper> {
+class TDiscardFlowWrapper: public TStatelessFlowCodegeneratorRootNode<TDiscardFlowWrapper> {
     typedef TStatelessFlowCodegeneratorRootNode<TDiscardFlowWrapper> TBaseComputation;
+
 public:
     TDiscardFlowWrapper(IComputationNode* flow)
-        : TBaseComputation(flow, EValueRepresentation::Embedded), Flow(flow)
-    {}
+        : TBaseComputation(flow, EValueRepresentation::Embedded)
+        , Flow(flow)
+    {
+    }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         while (true) {
-            if (auto item = Flow->GetValue(ctx); item.IsSpecial())
+            if (auto item = Flow->GetValue(ctx); item.IsSpecial()) {
                 return item.Release();
+            }
         }
     }
 
@@ -54,12 +58,16 @@ private:
     IComputationNode* const Flow;
 };
 
-class TDiscardWideFlowWrapper : public TStatelessFlowCodegeneratorRootNode<TDiscardWideFlowWrapper> {
-using TBaseComputation = TStatelessFlowCodegeneratorRootNode<TDiscardWideFlowWrapper>;
+class TDiscardWideFlowWrapper: public TStatelessFlowCodegeneratorRootNode<TDiscardWideFlowWrapper> {
+    using TBaseComputation = TStatelessFlowCodegeneratorRootNode<TDiscardWideFlowWrapper>;
+
 public:
     TDiscardWideFlowWrapper(IComputationWideFlowNode* flow, ui32 size)
-        : TBaseComputation(flow, EValueRepresentation::Embedded), Flow(flow), Stub(size, nullptr)
-    {}
+        : TBaseComputation(flow, EValueRepresentation::Embedded)
+        , Flow(flow)
+        , Stub(size, nullptr)
+    {
+    }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         while (true) {
@@ -104,10 +112,11 @@ private:
     mutable std::vector<NUdf::TUnboxedValue*> Stub;
 };
 
-class TDiscardWrapper : public TCustomValueCodegeneratorNode<TDiscardWrapper> {
+class TDiscardWrapper: public TCustomValueCodegeneratorNode<TDiscardWrapper> {
     typedef TCustomValueCodegeneratorNode<TDiscardWrapper> TBaseComputation;
+
 public:
-    class TValue : public TComputationValue<TValue> {
+    class TValue: public TComputationValue<TValue> {
     public:
         TValue(TMemoryUsageInfo* memInfo, NUdf::TUnboxedValue&& stream)
             : TComputationValue(memInfo)
@@ -136,8 +145,9 @@ public:
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
 #ifndef MKQL_DISABLE_CODEGEN
-        if (ctx.ExecuteLLVM && Fetch)
+        if (ctx.ExecuteLLVM && Fetch) {
             return ctx.HolderFactory.Create<TStreamCodegenValueStateless>(Fetch, &ctx, Stream->GetValue(ctx));
+        }
 #endif
         return ctx.HolderFactory.Create<TValue>(Stream->GetValue(ctx));
     }
@@ -154,8 +164,9 @@ private:
     }
 
     void FinalizeFunctions(NYql::NCodegen::ICodegen& codegen) final {
-        if (FetchFunc)
+        if (FetchFunc) {
             Fetch = reinterpret_cast<TFetchPtr>(codegen.GetPointerToFunction(FetchFunc));
+        }
     }
 
     Function* GenerateFetch(NYql::NCodegen::ICodegen& codegen) const {
@@ -163,8 +174,9 @@ private:
         auto& context = codegen.GetContext();
 
         const auto& name = TBaseComputation::MakeName("Fetch");
-        if (const auto f = module.getFunction(name.c_str()))
+        if (const auto f = module.getFunction(name.c_str())) {
             return f;
+        }
 
         const auto valueType = Type::getInt128Ty(context);
         const auto containerType = static_cast<Type*>(valueType);
@@ -217,7 +229,7 @@ private:
     IComputationNode* const Stream;
 };
 
-}
+} // namespace
 
 IComputationNode* WrapDiscard(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 1, "Expected 1 arg");
@@ -240,5 +252,5 @@ IComputationNode* WrapDiscard(TCallable& callable, const TComputationNodeFactory
     THROW yexception() << "Expected flow or stream.";
 }
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

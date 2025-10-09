@@ -15,11 +15,12 @@
 
 namespace NKikimr::NMiniKQL {
 
-class TBlockTrimmerBase : public IBlockTrimmer {
+class TBlockTrimmerBase: public IBlockTrimmer {
 protected:
     TBlockTrimmerBase(arrow::MemoryPool* pool)
         : Pool_(pool)
-    {}
+    {
+    }
 
     TBlockTrimmerBase() = delete;
 
@@ -37,7 +38,7 @@ protected:
         return result;
     }
 
-    template<typename TBuffer = NUdf::TResizeableBuffer>
+    template <typename TBuffer = NUdf::TResizeableBuffer>
     std::unique_ptr<arrow::ResizableBuffer> CreateResizableBuffer(size_t size) const {
         auto buffer = NUdf::AllocateResizableBuffer<TBuffer>(size, Pool_);
         ARROW_OK(buffer->Resize(size, false));
@@ -48,12 +49,13 @@ protected:
     arrow::MemoryPool* Pool_;
 };
 
-template<typename TLayout, bool Nullable>
-class TFixedSizeBlockTrimmer : public TBlockTrimmerBase {
+template <typename TLayout, bool Nullable>
+class TFixedSizeBlockTrimmer: public TBlockTrimmerBase {
 public:
     TFixedSizeBlockTrimmer(arrow::MemoryPool* pool)
         : TBlockTrimmerBase(pool)
-    {}
+    {
+    }
 
     std::shared_ptr<arrow::ArrayData> Trim(const std::shared_ptr<arrow::ArrayData>& array) override {
         Y_ENSURE(array->buffers.size() == 2);
@@ -70,16 +72,21 @@ public:
         auto trimmedDataBuffer = CreateResizableBuffer(dataSize);
         memcpy(trimmedDataBuffer->mutable_data(), origData, dataSize);
 
-        return arrow::ArrayData::Make(array->type, array->length, {std::move(trimmedNullBitmap), std::move(trimmedDataBuffer)}, array->GetNullCount());
+        return arrow::ArrayData::Make(
+            array->type, array->length,
+            {std::move(trimmedNullBitmap),
+             std::move(trimmedDataBuffer)},
+            array->GetNullCount());
     }
 };
 
-template<bool Nullable>
-class TResourceBlockTrimmer : public TBlockTrimmerBase {
+template <bool Nullable>
+class TResourceBlockTrimmer: public TBlockTrimmerBase {
 public:
     TResourceBlockTrimmer(arrow::MemoryPool* pool)
         : TBlockTrimmerBase(pool)
-    {}
+    {
+    }
 
     std::shared_ptr<arrow::ArrayData> Trim(const std::shared_ptr<arrow::ArrayData>& array) override {
         Y_ENSURE(array->buffers.size() == 2);
@@ -97,17 +104,21 @@ public:
         auto trimmedBufferData = reinterpret_cast<NUdf::TUnboxedValue*>(trimmedBuffer->mutable_data());
 
         for (int64_t i = 0; i < array->length; i++) {
-            ::new(&trimmedBufferData[i]) NUdf::TUnboxedValue(origData[i]);
+            ::new (&trimmedBufferData[i]) NUdf::TUnboxedValue(origData[i]);
         }
 
-        return arrow::ArrayData::Make(array->type, array->length, {std::move(trimmedNullBitmap), std::move(trimmedBuffer)}, array->GetNullCount());
+        return arrow::ArrayData::Make(
+            array->type, array->length,
+            {std::move(trimmedNullBitmap),
+             std::move(trimmedBuffer)}, array->GetNullCount());
     }
 };
 
 class TSingularBlockTrimmer: public TBlockTrimmerBase {
 public:
     TSingularBlockTrimmer(arrow::MemoryPool* pool)
-        : TBlockTrimmerBase(pool) {
+        : TBlockTrimmerBase(pool)
+    {
     }
 
     std::shared_ptr<arrow::ArrayData> Trim(const std::shared_ptr<arrow::ArrayData>& array) override {
@@ -115,14 +126,15 @@ public:
     }
 };
 
-template<typename TStringType, bool Nullable>
-class TStringBlockTrimmer : public TBlockTrimmerBase {
+template <typename TStringType, bool Nullable>
+class TStringBlockTrimmer: public TBlockTrimmerBase {
     using TOffset = typename TStringType::offset_type;
 
 public:
     TStringBlockTrimmer(arrow::MemoryPool* pool)
         : TBlockTrimmerBase(pool)
-    {}
+    {
+    }
 
     std::shared_ptr<arrow::ArrayData> Trim(const std::shared_ptr<arrow::ArrayData>& array) override {
         Y_ENSURE(array->buffers.size() == 3);
@@ -148,17 +160,22 @@ public:
         }
         memcpy(trimmedStringBufferData, origStringData, stringDataSize);
 
-        return arrow::ArrayData::Make(array->type, array->length, {std::move(trimmedNullBitmap), std::move(trimmedOffsetBuffer), std::move(trimmedStringBuffer)}, array->GetNullCount());
+        return arrow::ArrayData::Make(
+            array->type, array->length,
+            {std::move(trimmedNullBitmap),
+             std::move(trimmedOffsetBuffer),
+             std::move(trimmedStringBuffer)}, array->GetNullCount());
     }
 };
 
-template<bool Nullable>
-class TTupleBlockTrimmer : public TBlockTrimmerBase {
+template <bool Nullable>
+class TTupleBlockTrimmer: public TBlockTrimmerBase {
 public:
     TTupleBlockTrimmer(std::vector<IBlockTrimmer::TPtr> children, arrow::MemoryPool* pool)
         : TBlockTrimmerBase(pool)
         , Children_(std::move(children))
-    {}
+    {
+    }
 
     std::shared_ptr<arrow::ArrayData> Trim(const std::shared_ptr<arrow::ArrayData>& array) override {
         Y_ENSURE(array->buffers.size() == 1);
@@ -174,20 +191,23 @@ public:
             trimmedChildren.push_back(Children_[i]->Trim(array->child_data[i]));
         }
 
-        return arrow::ArrayData::Make(array->type, array->length, {std::move(trimmedNullBitmap)}, std::move(trimmedChildren), array->GetNullCount());
+        return arrow::ArrayData::Make(array->type, array->length,
+                                      {std::move(trimmedNullBitmap)},
+                                      std::move(trimmedChildren), array->GetNullCount());
     }
 
 protected:
     TTupleBlockTrimmer(arrow::MemoryPool* pool)
         : TBlockTrimmerBase(pool)
-    {}
+    {
+    }
 
 protected:
     std::vector<IBlockTrimmer::TPtr> Children_;
 };
 
-template<typename TDate, bool Nullable>
-class TTzDateBlockTrimmer : public TTupleBlockTrimmer<Nullable> {
+template <typename TDate, bool Nullable>
+class TTzDateBlockTrimmer: public TTupleBlockTrimmer<Nullable> {
     using TBase = TTupleBlockTrimmer<Nullable>;
     using TDateLayout = typename NUdf::TDataType<TDate>::TLayout;
 
@@ -200,12 +220,13 @@ public:
     }
 };
 
-class TExternalOptionalBlockTrimmer : public TBlockTrimmerBase {
+class TExternalOptionalBlockTrimmer: public TBlockTrimmerBase {
 public:
     TExternalOptionalBlockTrimmer(IBlockTrimmer::TPtr inner, arrow::MemoryPool* pool)
         : TBlockTrimmerBase(pool)
         , Inner_(std::move(inner))
-    {}
+    {
+    }
 
     std::shared_ptr<arrow::ArrayData> Trim(const std::shared_ptr<arrow::ArrayData>& array) override {
         Y_ENSURE(array->buffers.size() == 1);
@@ -214,7 +235,10 @@ public:
         auto trimmedNullBitmap = TrimNullBitmap(array);
         auto trimmedInner = Inner_->Trim(array->child_data[0]);
 
-        return arrow::ArrayData::Make(array->type, array->length, {std::move(trimmedNullBitmap)}, {std::move(trimmedInner)}, array->GetNullCount());
+        return arrow::ArrayData::Make(
+            array->type, array->length,
+            {std::move(trimmedNullBitmap)},
+            {std::move(trimmedInner)}, array->GetNullCount());
     }
 
 private:
@@ -230,9 +254,9 @@ struct TTrimmerTraits {
     template <typename TStringType, bool Nullable, NKikimr::NUdf::EDataSlot>
     using TStrings = TStringBlockTrimmer<TStringType, Nullable>;
     using TExtOptional = TExternalOptionalBlockTrimmer;
-    template<bool Nullable>
+    template <bool Nullable>
     using TResource = TResourceBlockTrimmer<Nullable>;
-    template<typename TTzDate, bool Nullable>
+    template <typename TTzDate, bool Nullable>
     using TTzDateReader = TTzDateBlockTrimmer<TTzDate, Nullable>;
     using TSingular = TSingularBlockTrimmer;
 
@@ -259,7 +283,7 @@ struct TTrimmerTraits {
         return std::make_unique<TSingular>(pool);
     }
 
-    template<typename TTzDate>
+    template <typename TTzDate>
     static TResult::TPtr MakeTzDate(bool isOptional, arrow::MemoryPool* pool) {
         if (isOptional) {
             return std::make_unique<TTzDateReader<TTzDate, true>>(pool);
@@ -273,4 +297,4 @@ IBlockTrimmer::TPtr MakeBlockTrimmer(const NUdf::ITypeInfoHelper& typeInfoHelper
     return DispatchByArrowTraits<TTrimmerTraits>(typeInfoHelper, type, nullptr, pool);
 }
 
-}
+} // namespace NKikimr::NMiniKQL

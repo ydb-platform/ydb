@@ -11,5 +11,5 @@ IComputationNode* WrapNull(TCallable& callable, const TComputationNodeFactoryCon
     return ctx.NodeFactory.CreateImmutableNode(NUdf::TUnboxedValuePod());
 }
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

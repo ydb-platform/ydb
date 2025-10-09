@@ -1,5 +1,5 @@
 #include "mkql_logical.h"
-#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
+#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_node_builder.h>
 #include "mkql_check_args.h"
@@ -10,8 +10,9 @@ namespace NMiniKQL {
 namespace {
 
 template <bool IsLeftOptional, bool IsRightOptional>
-class TAndWrapper : public TBinaryCodegeneratorNode<TAndWrapper<IsLeftOptional, IsRightOptional>> {
+class TAndWrapper: public TBinaryCodegeneratorNode<TAndWrapper<IsLeftOptional, IsRightOptional>> {
     typedef TBinaryCodegeneratorNode<TAndWrapper<IsLeftOptional, IsRightOptional>> TBaseComputation;
+
 public:
     TAndWrapper(TComputationMutables& mutables, IComputationNode* left, IComputationNode* right)
         : TBaseComputation(left, right, EValueRepresentation::Embedded)
@@ -82,8 +83,9 @@ public:
 };
 
 template <bool IsLeftOptional, bool IsRightOptional>
-class TOrWrapper : public TBinaryCodegeneratorNode<TOrWrapper<IsLeftOptional, IsRightOptional>> {
+class TOrWrapper: public TBinaryCodegeneratorNode<TOrWrapper<IsLeftOptional, IsRightOptional>> {
     typedef TBinaryCodegeneratorNode<TOrWrapper<IsLeftOptional, IsRightOptional>> TBaseComputation;
+
 public:
     TOrWrapper(TComputationMutables& mutables, IComputationNode* left, IComputationNode* right)
         : TBaseComputation(left, right, EValueRepresentation::Embedded)
@@ -154,8 +156,9 @@ public:
 };
 
 template <bool IsLeftOptional, bool IsRightOptional>
-class TXorWrapper : public TBinaryCodegeneratorNode<TXorWrapper<IsLeftOptional, IsRightOptional>> {
+class TXorWrapper: public TBinaryCodegeneratorNode<TXorWrapper<IsLeftOptional, IsRightOptional>> {
     typedef TBinaryCodegeneratorNode<TXorWrapper<IsLeftOptional, IsRightOptional>> TBaseComputation;
+
 public:
     TXorWrapper(TComputationMutables& mutables, IComputationNode* left, IComputationNode* right)
         : TBaseComputation(left, right, EValueRepresentation::Embedded)
@@ -244,12 +247,14 @@ public:
 };
 
 template <bool IsOptional>
-class TNotWrapper : public TDecoratorCodegeneratorNode<TNotWrapper<IsOptional>> {
+class TNotWrapper: public TDecoratorCodegeneratorNode<TNotWrapper<IsOptional>> {
     typedef TDecoratorCodegeneratorNode<TNotWrapper<IsOptional>> TBaseComputation;
+
 public:
     TNotWrapper(IComputationNode* arg)
         : TBaseComputation(arg)
-    {}
+    {
+    }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext&, const NUdf::TUnboxedValuePod& arg) const {
         if (IsOptional && !arg) {
@@ -289,8 +294,7 @@ IComputationNode* WrapLogicalFunction(TCallable& callable, const TComputationNod
         } else {
             return new TWrapper<true, false>(ctx.Mutables, left, right);
         }
-    }
-    else {
+    } else {
         if (isRightOptional) {
             return new TWrapper<false, true>(ctx.Mutables, left, right);
         } else {
@@ -299,7 +303,7 @@ IComputationNode* WrapLogicalFunction(TCallable& callable, const TComputationNod
     }
 }
 
-}
+} // namespace
 
 IComputationNode* WrapAnd(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     return WrapLogicalFunction<TAndWrapper>(callable, ctx);
@@ -325,12 +329,10 @@ IComputationNode* WrapNot(TCallable& callable, const TComputationNodeFactoryCont
 
     if (isOptional) {
         return new TNotWrapper<true>(node);
-    }
-    else {
+    } else {
         return new TNotWrapper<false>(node);
     }
 }
 
-
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

@@ -18,7 +18,7 @@ namespace NMiniKQL {
 
 namespace {
 
-class TScalarApplyWrapper : public TMutableComputationNode<TScalarApplyWrapper> {
+class TScalarApplyWrapper: public TMutableComputationNode<TScalarApplyWrapper> {
 public:
     struct TAccessors {
         TAccessors(const TVector<TType*>& argsTypes, TType* returnType, const NUdf::IPgBuilder& pgBuilder)
@@ -41,7 +41,7 @@ public:
         bool ScalarsProcessed = false;
     };
 
-    struct TKernelState : public arrow::compute::KernelState {
+    struct TKernelState: public arrow::compute::KernelState {
         TKernelState(const TVector<TType*>& argsTypes, TType* returnType, const TComputationContext& originalContext)
             : Alloc(__LOCATION__)
             , TypeEnv(Alloc)
@@ -53,10 +53,9 @@ public:
             , Accessors(argsTypes, returnType, *PgBuilder)
             , RandomProvider(CreateDefaultRandomProvider())
             , TimeProvider(CreateDefaultTimeProvider())
-            , Ctx(HolderFactory, &ValueBuilder, TComputationOptsFull(
-                nullptr, Alloc.Ref(), TypeEnv, *RandomProvider, *TimeProvider, NUdf::EValidatePolicy::Exception, originalContext.SecureParamsProvider,
-                originalContext.CountersProvider, originalContext.LogProvider, originalContext.LangVer),
-                originalContext.Mutables, *NYql::NUdf::GetYqlMemoryPool())
+            , Ctx(HolderFactory, &ValueBuilder, TComputationOptsFull(nullptr, Alloc.Ref(), TypeEnv, *RandomProvider, *TimeProvider, NUdf::EValidatePolicy::Exception, originalContext.SecureParamsProvider,
+                                                                     originalContext.CountersProvider, originalContext.LogProvider, originalContext.LangVer),
+                  originalContext.Mutables, *NYql::NUdf::GetYqlMemoryPool())
         {
             Alloc.Ref().EnableArrowTracking = false;
             Alloc.Release();
@@ -80,7 +79,7 @@ public:
         TComputationContext Ctx;
     };
 
-    class TArrowNode : public IArrowKernelComputationNode {
+    class TArrowNode: public IArrowKernelComputationNode {
     public:
         TArrowNode(const TScalarApplyWrapper* parent, TComputationContext& originalContext)
             : Parent_(parent)
@@ -132,7 +131,7 @@ public:
     friend class TArrowNode;
 
     TScalarApplyWrapper(TComputationMutables& mutables, const TVector<TType*>& argsTypes, TType* returnType,
-        TVector<IComputationNode*>&& args, TVector<IComputationExternalNode*>&& lambdaArgs, IComputationNode* lambdaRoot)
+                        TVector<IComputationNode*>&& args, TVector<IComputationExternalNode*>&& lambdaArgs, IComputationNode* lambdaRoot)
         : TMutableComputationNode(mutables)
         , StateIndex_(mutables.CurValueIndex++)
         , ArgsTypes_(argsTypes)
@@ -160,7 +159,7 @@ public:
     }
 
     arrow::Datum CalculateImpl(const TVector<TDatumProvider>& providers, TAccessors& accessors, arrow::MemoryPool& memoryPool,
-        TComputationContext& ctx) const {
+                               TComputationContext& ctx) const {
         TVector<arrow::Datum> args;
         args.reserve(providers.size());
         size_t length = 1;
@@ -201,9 +200,7 @@ public:
                         continue;
                     }
 
-                    auto item = args[j].is_scalar() ?
-                        accessors.ArgsReaders[j]->GetScalarItem(*args[j].scalar()) :
-                        accessors.ArgsReaders[j]->GetItem(*args[j].array(), i);
+                    auto item = args[j].is_scalar() ? accessors.ArgsReaders[j]->GetScalarItem(*args[j].scalar()) : accessors.ArgsReaders[j]->GetItem(*args[j].array(), i);
                     auto value = accessors.ArgsConverters[j]->MakeValue(item, ctx.HolderFactory);
                     LambdaArgs_[j]->SetValue(ctx, value);
                 }
@@ -232,7 +229,7 @@ private:
         this->DependsOn(LambdaRoot_);
     }
 
-    struct TState : public TComputationValue<TState> {
+    struct TState: public TComputationValue<TState> {
         using TComputationValue::TComputationValue;
 
         TState(TMemoryUsageInfo* memInfo, const TVector<TType*>& argsTypes, TType* returnType, const NUdf::IPgBuilder& pgBuilder)
@@ -276,8 +273,8 @@ IComputationNode* WrapScalarApply(TCallable& callable, const TComputationNodeFac
     }
 
     return new TScalarApplyWrapper(ctx.Mutables, argsTypes, callable.GetType()->GetReturnType(),
-        std::move(args), std::move(lambdaArgs), lambdaRoot);
+                                   std::move(args), std::move(lambdaArgs), lambdaRoot);
 }
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

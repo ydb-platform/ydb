@@ -7,5 +7,5 @@ namespace NMiniKQL {
 
 IBuiltinFunctionRegistry::TPtr CreateBuiltinRegistry();
 
-} // namspace NMiniKQL
-} // namspace NKikimr
+} // namespace NMiniKQL
+} // namespace NKikimr

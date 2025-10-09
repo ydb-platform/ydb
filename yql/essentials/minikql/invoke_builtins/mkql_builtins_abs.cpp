@@ -23,8 +23,8 @@ inline T Abs(T v) {
     return v < 0 ? SafeNeg(v) : v;
 }
 
-template<typename TInput, typename TOutput>
-struct TAbs : public TSimpleArithmeticUnary<TInput, TOutput, TAbs<TInput, TOutput>> {
+template <typename TInput, typename TOutput>
+struct TAbs: public TSimpleArithmeticUnary<TInput, TOutput, TAbs<TInput, TOutput>> {
     static constexpr auto NullMode = TKernel::ENullMode::Default;
 
     static TOutput Do(TInput val)
@@ -35,8 +35,9 @@ struct TAbs : public TSimpleArithmeticUnary<TInput, TOutput, TAbs<TInput, TOutpu
 #ifndef MKQL_DISABLE_CODEGEN
     static Value* Gen(Value* arg, const TCodegenContext& ctx, BasicBlock*& block)
     {
-        if (std::is_unsigned<TInput>())
+        if (std::is_unsigned<TInput>()) {
             return arg;
+        }
 
         if (std::is_floating_point<TInput>()) {
             auto& module = ctx.Codegen.GetModule();
@@ -56,7 +57,7 @@ struct TAbs : public TSimpleArithmeticUnary<TInput, TOutput, TAbs<TInput, TOutpu
 #endif
 };
 
-struct TDecimalAbs : public TDecimalUnary<TDecimalAbs> {
+struct TDecimalAbs: public TDecimalUnary<TDecimalAbs> {
     static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& arg) {
         const auto a = arg.GetInt128();
         return a < 0 ? NUdf::TUnboxedValuePod(SafeNeg(a)) : arg;
@@ -75,7 +76,7 @@ struct TDecimalAbs : public TDecimalUnary<TDecimalAbs> {
 #endif
 };
 
-}
+} // namespace
 
 void RegisterAbs(IBuiltinFunctionRegistry& registry) {
     RegisterUnaryNumericFunctionOpt<TAbs, TUnaryArgsOpt>(registry, "Abs");

@@ -1,4 +1,4 @@
-#include "mkql_builtins_impl.h"  // Y_IGNORE
+#include "mkql_builtins_impl.h" // Y_IGNORE
 #include <yql/essentials/minikql/mkql_string_util.h>
 #include <yql/essentials/minikql/computation/presort.h>
 #include <util/thread/singleton.h>
@@ -8,7 +8,7 @@ namespace NMiniKQL {
 
 namespace {
 
-struct TStringDescEncoder : public TPresortEncoder {
+struct TStringDescEncoder: public TPresortEncoder {
     TStringDescEncoder() {
         AddType(NUdf::EDataSlot::String, false, true);
     }
@@ -63,7 +63,7 @@ struct TInverseString {
 #endif
 };
 
-}
+} // namespace
 
 void RegisterInversePresortString(IBuiltinFunctionRegistry& registry) {
     const auto name = "InversePresortString";

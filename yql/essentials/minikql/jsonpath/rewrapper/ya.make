@@ -1,5 +1,7 @@
 LIBRARY()
 
+ENABLE(YQL_STYLE_CPP)
+
 PEERDIR(
     yql/essentials/minikql/jsonpath/rewrapper/proto
 )

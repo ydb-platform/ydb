@@ -10,27 +10,28 @@ TRowForMeasureValue::TRowForMeasureValue(
     const NUdf::TUnboxedValue& matchedVars,
     const TUnboxedValueVector& varNames,
     ui64 matchNumber)
-: TComputationValue<TRowForMeasureValue>(memInfo)
-, InputRow(inputRow)
-, RowIndex(rowIndex)
-, ColumnOrder(columnOrder)
-, MatchedVars(matchedVars)
-, VarNames(varNames)
-, MatchNumber(matchNumber)
-{}
+    : TComputationValue<TRowForMeasureValue>(memInfo)
+    , InputRow(inputRow)
+    , RowIndex(rowIndex)
+    , ColumnOrder(columnOrder)
+    , MatchedVars(matchedVars)
+    , VarNames(varNames)
+    , MatchNumber(matchNumber)
+{
+}
 
 NUdf::TUnboxedValue TRowForMeasureValue::GetElement(ui32 index) const {
-    switch(ColumnOrder[index].first) {
+    switch (ColumnOrder[index].first) {
         case NYql::NMatchRecognize::EMeasureInputDataSpecialColumns::Classifier: {
             auto varIterator = MatchedVars.GetListIterator();
             MKQL_ENSURE(varIterator, "Internal logic error");
             NUdf::TUnboxedValue var;
             size_t varIndex = 0;
-            while(varIterator.Next(var)) {
+            while (varIterator.Next(var)) {
                 auto rangeIterator = var.GetListIterator();
                 MKQL_ENSURE(varIterator, "Internal logic error");
                 NUdf::TUnboxedValue range;
-                while(rangeIterator.Next(range)) {
+                while (rangeIterator.Next(range)) {
                     const auto from = range.GetElement(0).Get<ui64>();
                     const auto to = range.GetElement(1).Get<ui64>();
                     if (RowIndex >= from and RowIndex <= to) {
@@ -44,7 +45,7 @@ NUdf::TUnboxedValue TRowForMeasureValue::GetElement(ui32 index) const {
         }
         case NYql::NMatchRecognize::EMeasureInputDataSpecialColumns::MatchNumber:
             return NUdf::TUnboxedValuePod(MatchNumber);
-        case NYql::NMatchRecognize::EMeasureInputDataSpecialColumns::Last: //Last corresponds to columns from the input table row
+        case NYql::NMatchRecognize::EMeasureInputDataSpecialColumns::Last: // Last corresponds to columns from the input table row
             return InputRow.GetElement(ColumnOrder[index].second);
     }
 }
@@ -56,13 +57,14 @@ TMeasureInputDataValue::TMeasureInputDataValue(
     const NUdf::TUnboxedValue& matchedVars,
     const TUnboxedValueVector& varNames,
     ui64 matchNumber)
-: TComputationValue<TMeasureInputDataValue>(memInfo)
-, InputData(inputData)
-, ColumnOrder(columnOrder)
-, MatchedVars(matchedVars)
-, VarNames(varNames)
-, MatchNumber(matchNumber)
-{}
+    : TComputationValue<TMeasureInputDataValue>(memInfo)
+    , InputData(inputData)
+    , ColumnOrder(columnOrder)
+    , MatchedVars(matchedVars)
+    , VarNames(varNames)
+    , MatchNumber(matchNumber)
+{
+}
 
 bool TMeasureInputDataValue::HasFastListLength() const {
     return true;
@@ -117,8 +119,7 @@ NUdf::TUnboxedValue TMeasureInputDataValue::Lookup(const NUdf::TUnboxedValuePod&
         ColumnOrder,
         MatchedVars,
         VarNames,
-        MatchNumber
-    )};
+        MatchNumber)};
 }
 
 bool TMeasureInputDataValue::HasDictItems() const {

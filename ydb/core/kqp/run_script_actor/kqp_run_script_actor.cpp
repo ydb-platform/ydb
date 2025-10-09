@@ -124,6 +124,7 @@ public:
         , QueryServiceConfig(std::move(queryServiceConfig))
         , SaveQueryPhysicalGraph(settings.SaveQueryPhysicalGraph)
         , DisableDefaultTimeout(settings.DisableDefaultTimeout)
+        , CheckpointId(settings.CheckpointId)
         , PhysicalGraph(std::move(settings.PhysicalGraph))
         , Counters(settings.Counters)
     {}
@@ -141,6 +142,7 @@ public:
             SelfId()
         );
         UserRequestContext->IsStreamingQuery = SaveQueryPhysicalGraph;
+        UserRequestContext->CheckpointId = CheckpointId;
 
         LOG_I("Bootstrap");
 
@@ -920,6 +922,7 @@ private:
     const NKikimrConfig::TQueryServiceConfig QueryServiceConfig;
     const bool SaveQueryPhysicalGraph = false;
     const bool DisableDefaultTimeout = false;
+    const TString CheckpointId;
     std::optional<NKikimrKqp::TQueryPhysicalGraph> PhysicalGraph;
     std::optional<TActorId> PhysicalGraphSender;
     TIntrusivePtr<TKqpCounters> Counters;

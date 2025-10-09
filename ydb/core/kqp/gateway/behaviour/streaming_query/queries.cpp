@@ -13,6 +13,7 @@
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
 #include <ydb/core/kqp/provider/yql_kikimr_gateway.h>
+#include <ydb/core/kqp/proxy_service/kqp_script_executions.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/resource_pools/resource_pool_settings.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
@@ -1525,6 +1526,7 @@ public:
         NKikimrKqp::TStreamingQueryState InitialState;
         NKikimrConfig::TStreamingQueriesConfig Config;
         TPathId QueryPathId;
+        ui64 QueryTextRevision = 0;
     };
 
     TStartStreamingQueryTableActor(const TExternalContext& context, const TString& queryPath, const TSettings& settings)
@@ -1535,12 +1537,19 @@ public:
     {}
 
     void Bootstrap() {
-        LOG_D("Bootstrap. Start new query: " << State.GetQueryText());
+        LOG_D("Bootstrap. SS text revision: " << Settings.QueryTextRevision << ", last query execution revision: " << State.GetQueryTextRevision() << ", start new query: " << State.GetQueryText());
+
+        if (State.HasCurrentExecutionId()) {
+            FatalError(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Can not start query, already started: " << State.GetCurrentExecutionId());
+            return;
+        }
+
         PrepareToStart();
     }
 
     STRICT_STFUNC(StateFuncPrepare,
         hFunc(TEvPrivate::TEvUpdateStreamingQueryResult, HandlePrepare);
+        hFunc(TEvGetScriptPhysicalGraphResponse, HandlePrepare);
         hFunc(TEvForgetScriptExecutionOperationResponse, HandlePrepare);
     )
 
@@ -1548,6 +1557,22 @@ public:
         if (HandleResult(ev, "Update streaming query state (prepare to start)")) {
             return;
         }
+
+        PrepareToStart();
+    }
+
+    void HandlePrepare(TEvGetScriptPhysicalGraphResponse::TPtr& ev) {
+        const auto status = ev->Get()->Status;
+        if (status != Ydb::StatusIds::NOT_FOUND && HandleResult(ev, "Load previous query execution state")) {
+            return;
+        }
+
+        if (Settings.QueryTextRevision == State.GetQueryTextRevision()) {
+            PreviousPhysicalGraph = std::move(ev->Get()->PhysicalGraph);
+        }
+
+        PreviousGeneration = ev->Get()->Generation;
+        LOG_D("Load previous query execution state " << ev->Sender << " finished " << status << ", generation: " << PreviousGeneration << ", has saved state: " << PreviousPhysicalGraph.has_value());
 
         PrepareToStart();
     }
@@ -1650,8 +1675,9 @@ protected:
         Become(&TStartStreamingQueryTableActor::StateFuncFinalize);
 
         if (status == Ydb::StatusIds::SUCCESS) {
-            if (State.GetStatus() != NKikimrKqp::TStreamingQueryState::STATUS_RUNNING) {
+            if (State.GetStatus() != NKikimrKqp::TStreamingQueryState::STATUS_RUNNING || Settings.QueryTextRevision != State.GetQueryTextRevision()) {
                 State.SetStatus(NKikimrKqp::TStreamingQueryState::STATUS_RUNNING);
+                State.SetQueryTextRevision(Settings.QueryTextRevision);
                 UpdateQueryState("move query to running");
 
                 FinalStatus = status;
@@ -1692,6 +1718,14 @@ private:
             return;
         }
 
+        if (State.PreviousExecutionIdsSize() > 0 && !StateLoaded) {
+            StateLoaded = true;
+            const auto& executionId = *State.GetPreviousExecutionIds().rbegin();
+            const auto& fetcherId = Register(CreateGetScriptExecutionPhysicalGraphActor(SelfId(), Context.GetDatabase(), executionId));
+            LOG_D("Load previous query state from execution: " << executionId << " with fetcher " << fetcherId);
+            return;
+        }
+
         if (const auto maxExecutions = Settings.Config.GetMaxQueryExecutions(); State.PreviousExecutionIdsSize() > maxExecutions) {
             const auto toCleanup = State.PreviousExecutionIdsSize() - maxExecutions;
             LOG_D("Cleanup #" << toCleanup << " previous executions (max executions: " << maxExecutions << ")");
@@ -1706,20 +1740,30 @@ private:
 
         // Execution id for streaming queries:
         // <GUID part>-<GUID part>-<GUID part>-<SS id>-<Path id in SS>
+        // Checkpoint id for streaming queries:
+        // <Execution id>-<Query path>
 
         const auto& pathId = Settings.QueryPathId;
         State.SetCurrentExecutionId(TStringBuilder() << CreateGuidAsString() << '-' << pathId.OwnerId << '-' << pathId.LocalPathId);
-        UpdateQueryState(TStringBuilder() << "allocate execution id: " << State.GetCurrentExecutionId());
+
+        if (!State.GetCheckpointId()) {
+            State.SetCheckpointId(TStringBuilder() << State.GetCurrentExecutionId() << '-' << QueryPath);
+        }
+
+        UpdateQueryState(TStringBuilder() << "allocate execution id: " << State.GetCurrentExecutionId() << ", checkpoint id: " << State.GetCheckpointId());
         Become(&TStartStreamingQueryTableActor::StateFuncStartQuery);
     }
 
     void StartQuery() {
         auto ev = std::make_unique<TEvKqp::TEvScriptRequest>();
         ev->SaveQueryPhysicalGraph = true;
+        ev->QueryPhysicalGraph = std::move(PreviousPhysicalGraph);
         ev->RetryMapping = CreateDefaultRetryMapping();
         ev->ExecutionId = State.GetCurrentExecutionId();
         ev->DisableDefaultTimeout = true;
         ev->ForgetAfter = TDuration::Max();
+        ev->Generation = PreviousGeneration + 1;
+        ev->CheckpointId = State.GetCheckpointId();
 
         auto& record = ev->Record;
         record.SetTraceId(TStringBuilder() << "streaming-query-" << QueryPath << "-" << State.GetCurrentExecutionId());
@@ -1839,8 +1883,11 @@ private:
     const TSettings Settings;
     NKikimrKqp::TStreamingQueryState State;
     ui64 OperationsToForget = 0;
+    i64 PreviousGeneration = 0;
+    std::optional<NKikimrKqp::TQueryPhysicalGraph> PreviousPhysicalGraph;
 
     // Query starting state
+    bool StateLoaded = false;
     bool RequestStarted = false;
     bool ExecutionFailed = false;
     TRetryPolicy::IRetryState::TPtr GetOperationRetryState;
@@ -2077,6 +2124,7 @@ private:
             .InitialState = State,
             .Config = Settings.Config,
             .QueryPathId = SchemeInfo.PathId,
+            .QueryTextRevision = QuerySettings.QueryTextRevision,
         }));
         LOG_D("Start TStartStreamingQueryTableActor " << startActorId);
     }
@@ -2516,6 +2564,7 @@ private:
         CHECK_STATUS(validator.SaveRequired(ESqlSettings::QUERY_TEXT_FEATURE, &TPropertyValidator::ValidateNotEmpty));
         CHECK_STATUS(validator.SaveDefault(EName::Run, "true", &TPropertyValidator::ValidateBool));
         CHECK_STATUS(validator.SaveDefault(EName::ResourcePool, NResourcePool::DEFAULT_POOL_ID));
+        CHECK_STATUS(validator.Save(EName::QueryTextRevision, ToString(1)));
 
         return validator.Finish();
     }
@@ -2628,6 +2677,7 @@ private:
         }
 
         CHECK_STATUS(validator.Save(ESqlSettings::QUERY_TEXT_FEATURE, queryTextValue.value_or(previousSettings.QueryText)));
+        CHECK_STATUS(validator.Save(EName::QueryTextRevision, ToString(queryTextValue.has_value() + previousSettings.QueryTextRevision)));
 
         return validator.Finish();
     }

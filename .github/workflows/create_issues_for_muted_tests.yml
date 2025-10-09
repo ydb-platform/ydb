@@ -26,17 +26,33 @@ jobs:
         github.event.review.state == 'approved' && 
         contains(github.event.pull_request.labels.*.name, 'mute-unmute')) || 
         github.event_name == 'workflow_dispatch'
-
     steps:
+      - name: Get PR info for workflow_dispatch
+        if: github.event_name == 'workflow_dispatch'
+        id: get_pr_info
+        run: |
+          PR_DATA=$(gh api repos/${{ github.repository }}/pulls/${{ github.event.inputs.pr_number }})
+          HEAD_REF=$(echo "$PR_DATA" | jq -r '.head.ref')
+          BASE_REF=$(echo "$PR_DATA" | jq -r '.base.ref')
+          echo "head_ref=$HEAD_REF" >> $GITHUB_OUTPUT
+          echo "base_ref=$BASE_REF" >> $GITHUB_OUTPUT
+        env:
+          GITHUB_TOKEN: ${{ env.GH_TOKEN }}
+
       - name: Set environment variables for branches
         run: |
-          echo "BRANCH_FOR_PR=${{ github.event.pull_request.head.ref || github.head_ref }}" >> $GITHUB_ENV
-          echo "BASE_BRANCH=${{ github.event.pull_request.base.ref || github.base_ref }}" >> $GITHUB_ENV
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            echo "BRANCH_FOR_PR=${{ steps.get_pr_info.outputs.head_ref }}" >> $GITHUB_ENV
+            echo "BASE_BRANCH=${{ steps.get_pr_info.outputs.base_ref }}" >> $GITHUB_ENV
+          else
+            echo "BRANCH_FOR_PR=${{ github.event.pull_request.head.ref }}" >> $GITHUB_ENV
+            echo "BASE_BRANCH=${{ github.event.pull_request.base.ref }}" >> $GITHUB_ENV
+          fi
 
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-            ref: ${{ github.event.pull_request.head.ref || github.head_ref }}
+            ref: ${{ github.event_name == 'workflow_dispatch' && steps.get_pr_info.outputs.head_ref || github.event.pull_request.head.ref }}
 
       - name: Install dependencies
         run: |
@@ -57,7 +73,13 @@ jobs:
       - name: Add issues to PR
         env:
           GITHUB_TOKEN: ${{ env.GH_TOKEN }}
-        run: python .github/scripts/create_or_update_pr.py append_pr_body --pr_number=${{ github.event.pull_request.number || github.event.inputs.pr_number  }} --body=${{ steps.create_issues.outputs.created_issues_file }}
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            PR_NUMBER=${{ github.event.inputs.pr_number }}
+          else
+            PR_NUMBER=${{ github.event.pull_request.number }}
+          fi
+          python .github/scripts/create_or_update_pr.py append_pr_body --pr_number=$PR_NUMBER --body=${{ steps.create_issues.outputs.created_issues_file }}
       
       - name: Comment PR
         uses: actions/github-script@v7
@@ -71,9 +93,16 @@ jobs:
             const filePath = '${{ steps.create_issues.outputs.created_issues_file }}';
             const bodyText = fs.readFileSync(filePath, 'utf8');
             const completeBody = `Collected in workflow [#${{ github.run_number }}](${workflowUrl})\n\n${bodyText}`;
+            
+            let prNumber;
+            if ('${{ github.event_name }}' === 'workflow_dispatch') {
+              prNumber = ${{ github.event.inputs.pr_number }};
+            } else {
+              prNumber = ${{ github.event.pull_request.number }};
+            }
       
             github.rest.issues.createComment({
-              issue_number: ${{ github.event.pull_request.number || github.event.inputs.pr_number }},
+              issue_number: prNumber,
               owner: context.repo.owner,
               repo: context.repo.repo,
               body: completeBody

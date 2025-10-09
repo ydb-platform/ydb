@@ -283,14 +283,14 @@ Y_UNIT_TEST(TestSingularTypeValueBuilderReader) {
     TArrayBuilderTestData data;
     const auto nullType = data.PgmBuilder.NewNullType();
 
-    std::shared_ptr<arrow::ArrayData> arrayData = arrow::NullArray{42}.data();
+    std::shared_ptr<arrow::ArrayData> arrayData = NYql::NUdf::MakeSingularArray(/*isNull=*/true, 42);
     IArrayBuilder::TArrayDataItem arrayDataItem = {.Data = arrayData.get(), .StartOffset = 0};
     {
         const auto arrayBuilder = MakeArrayBuilder(NMiniKQL::TTypeInfoHelper(), nullType, *data.ArrowPool, MAX_BLOCK_SIZE, /*pgBuilder=*/nullptr);
         // Check builder.
-        arrayBuilder->Add(TUnboxedValuePod::Zero());
-        arrayBuilder->Add(TBlockItem::Zero());
-        arrayBuilder->Add(TBlockItem::Zero(), 4);
+        arrayBuilder->Add(TUnboxedValuePod());
+        arrayBuilder->Add(TBlockItem());
+        arrayBuilder->Add(TBlockItem(), 4);
         TInputBuffer inputBuffer("Just arbitrary string");
         arrayBuilder->Add(inputBuffer);
         UNIT_ASSERT_VALUES_EQUAL_C(inputBuffer.PopChar(), 'J', "The input buffer must not be consumed.");
@@ -305,17 +305,17 @@ Y_UNIT_TEST(TestSingularTypeValueBuilderReader) {
         // Check reader.
         const auto blockReader = MakeBlockReader(NMiniKQL::TTypeInfoHelper(), nullType);
 
-        UNIT_ASSERT(blockReader->GetItem(*arrayData, 0));
-        UNIT_ASSERT(blockReader->GetScalarItem(arrow::Scalar(arrow::null())));
+        UNIT_ASSERT(!blockReader->GetItem(*arrayData, 0));
+        UNIT_ASSERT(!blockReader->GetScalarItem(*NYql::NUdf::MakeSingularScalar(/*isNull=*/true)));
         UNIT_ASSERT_EQUAL(blockReader->GetDataWeight(*arrayData), 0);
-        UNIT_ASSERT_EQUAL(blockReader->GetDataWeight(TBlockItem::Zero()), 0);
+        UNIT_ASSERT_EQUAL(blockReader->GetDataWeight(TBlockItem()), 0);
         UNIT_ASSERT_EQUAL(blockReader->GetDefaultValueWeight(), 0);
         UNIT_ASSERT_EQUAL(blockReader->GetDefaultValueWeight(), 0);
 
         TOutputBuffer outputBuffer;
         blockReader->SaveItem(*arrayData, 1, outputBuffer);
         UNIT_ASSERT(outputBuffer.Finish().empty());
-        blockReader->SaveScalarItem(arrow::Scalar(arrow::null()), outputBuffer);
+        blockReader->SaveScalarItem(*NYql::NUdf::MakeSingularScalar(/*isNull=*/true), outputBuffer);
         UNIT_ASSERT(outputBuffer.Finish().empty());
     }
 }

@@ -783,7 +783,7 @@ protected:
             TBlockItem tzDate{i};
             tzDate.SetTimezoneId(i % 100);
             builder4->Add(tzDate);
-            builder5->Add(TBlockItem::Zero());
+            builder5->Add(TBlockItem());
             switch (i % 3) {
                 case 0:
                     builder6->Add(TBlockItem(i));
@@ -933,7 +933,7 @@ protected:
             UNIT_ASSERT(b4.Get<ui16>() == i);
             UNIT_ASSERT(b4.GetTimezoneId() == (i % 100));
             TBlockItem b5 = reader5->GetItem(*TArrowBlock::From(unpackedColumns[legacyStruct ? 6 : 5]).GetDatum().array(), i - offset);
-            UNIT_ASSERT(b5);
+            UNIT_ASSERT(!b5);
             TBlockItem b6 = reader6->GetItem(*TArrowBlock::From(unpackedColumns[legacyStruct ? 7 : 6]).GetDatum().array(), i - offset);
             switch (i % 3) {
                 case 0:
@@ -1127,9 +1127,9 @@ protected:
         auto* rowType = PgmBuilder_.NewMultiType({blockNullType, scalarUi64Type});
 
         auto builder = MakeArrayBuilder(TTypeInfoHelper(), nullType, *ArrowPool_, CalcBlockLen(CalcMaxBlockItemSize(nullType)), nullptr);
-        builder->Add(NYql::NUdf::TBlockItem::Zero());
-        builder->Add(NYql::NUdf::TBlockItem::Zero());
-        builder->Add(NYql::NUdf::TBlockItem::Zero());
+        builder->Add(NYql::NUdf::TBlockItem());
+        builder->Add(NYql::NUdf::TBlockItem());
+        builder->Add(NYql::NUdf::TBlockItem());
         TUnboxedValueVector columns;
         columns.emplace_back(HolderFactory_.CreateArrowBlock(builder->Build(/*finish=*/true)));
         columns.emplace_back(HolderFactory_.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(3))));
@@ -1156,9 +1156,9 @@ protected:
         auto* rowType = PgmBuilder_.NewMultiType({blockOptNullType, scalarUi64Type});
 
         auto builder = MakeArrayBuilder(TTypeInfoHelper(), optNullType, *ArrowPool_, CalcBlockLen(CalcMaxBlockItemSize(optNullType)), nullptr);
-        builder->Add(NYql::NUdf::TBlockItem::Zero());
+        builder->Add(NYql::NUdf::TBlockItem().MakeOptional());
         builder->Add(NYql::NUdf::TBlockItem());
-        builder->Add(NYql::NUdf::TBlockItem::Zero());
+        builder->Add(NYql::NUdf::TBlockItem().MakeOptional());
         TUnboxedValueVector columns;
         columns.emplace_back(HolderFactory_.CreateArrowBlock(builder->Build(/*finish=*/true)));
         columns.emplace_back(HolderFactory_.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(3))));

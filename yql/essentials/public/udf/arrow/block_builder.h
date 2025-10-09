@@ -1367,6 +1367,7 @@ private:
     std::unique_ptr<TTypedBufferBuilder<ui8>> NullBuilder_;
 };
 
+template <bool IsNull>
 class TSingularBlockBuilder final: public TArrayBuilderBase {
 public:
     TSingularBlockBuilder(const TType* type, const ITypeInfoHelper& typeInfoHelper, arrow::MemoryPool& pool,
@@ -1406,7 +1407,7 @@ public:
     TBlockArrayTree::Ptr DoBuildTree(bool finish) final {
         TBlockArrayTree::Ptr result = std::make_shared<TBlockArrayTree>();
         Y_UNUSED(finish);
-        result->Payload.push_back(arrow::NullArray(GetCurrLen()).data());
+        result->Payload.push_back(NYql::NUdf::MakeSingularArray(IsNull, GetCurrLen()));
         return result;
     }
 
@@ -1431,7 +1432,8 @@ struct TBuilderTraits {
     using TResource = TResourceArrayBuilder<Nullable>;
     template <typename TTzDate, bool Nullable>
     using TTzDateReader = TTzDateArrayBuilder<TTzDate, Nullable>;
-    using TSingular = TSingularBlockBuilder;
+    template <bool IsNull>
+    using TSingular = TSingularBlockBuilder<IsNull>;
 
     constexpr static bool PassType = true;
 
@@ -1472,8 +1474,9 @@ struct TBuilderTraits {
         }
     }
 
+    template <bool IsNull>
     static std::unique_ptr<TResult> MakeSingular(const TType* type, const ITypeInfoHelper& typeInfoHelper, arrow::MemoryPool& pool, size_t maxLen, const TArrayBuilderParams& params) {
-        return std::make_unique<TSingular>(type, typeInfoHelper, pool, maxLen, params);
+        return std::make_unique<TSingular<IsNull>>(type, typeInfoHelper, pool, maxLen, params);
     }
 };
 

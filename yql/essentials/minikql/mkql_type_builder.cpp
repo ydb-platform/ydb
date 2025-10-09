@@ -1665,7 +1665,7 @@ bool ConvertArrowTypeImpl(TType* itemType, std::shared_ptr<arrow::DataType>& typ
     Y_ENSURE(!itemType->IsTagged(), "All tagged types must be handled above");
 
     if (IsSingularType(unpacked)) {
-        type = arrow::null();
+        type = NYql::NUdf::MakeSingularType(unpacked->IsNull());
         return true;
     }
 
@@ -2673,7 +2673,9 @@ struct TComparatorTraits {
         ythrow yexception() << "Comparator not implemented for block resources: ";
     }
 
+    template <bool IsNull>
     static std::unique_ptr<TResult> MakeSingular() {
+        Y_UNUSED(IsNull);
         return std::make_unique<TSingularType>();
     }
 
@@ -2720,8 +2722,9 @@ struct THasherTraits {
             return std::make_unique<TTzDateHasher<TTzDate, false>>();
         }
     }
-
+    template <bool IsNull>
     static std::unique_ptr<TResult> MakeSingular() {
+        Y_UNUSED(IsNull);
         return std::make_unique<TSingularType>();
     }
 };

@@ -2,6 +2,8 @@
 
 #include "defs.h"
 
+#include <arrow/array/array_base.h>
+#include <arrow/array/array_nested.h>
 #include <arrow/compute/api.h>
 #include <arrow/datum.h>
 #include <arrow/memory_pool.h>
@@ -268,6 +270,30 @@ inline bool NeedWrapWithExternalOptional(const ITypeInfoHelper& typeInfoHelper, 
         return true;
     }
     return false;
+}
+
+inline std::shared_ptr<arrow::DataType> MakeSingularType(bool isNull) {
+    if (isNull) {
+        return arrow::null();
+    } else {
+        return std::make_shared<arrow::StructType>(std::vector<std::shared_ptr<arrow::Field>>{});
+    }
+}
+
+inline std::shared_ptr<arrow::ArrayData> MakeSingularArray(bool isNull, i64 length) {
+    if (isNull) {
+        return arrow::NullArray(length).data();
+    } else {
+        return arrow::StructArray(MakeSingularType(/*isNull=*/false), length, /*children=*/{}, nullptr, /*null_count=*/0).data();
+    }
+}
+
+inline std::shared_ptr<arrow::Scalar> MakeSingularScalar(bool isNull) {
+    if (isNull) {
+        return arrow::MakeNullScalar(MakeSingularType(/*isNull=*/true));
+    } else {
+        return std::make_shared<arrow::StructScalar>(std::vector<std::shared_ptr<arrow::Scalar>>{}, MakeSingularType(/*isNull=*/false));
+    }
 }
 
 } // namespace NUdf

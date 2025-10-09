@@ -8,6 +8,7 @@
 #include <arrow/datum.h>
 
 #include <yql/essentials/public/decimal/yql_decimal.h>
+#include <yql/essentials/public/udf/udf_value_utils.h>
 
 namespace NYql {
 namespace NUdf {
@@ -493,9 +494,13 @@ private:
     TFixedSizeBlockReader<ui16, /* Nullable */ false> TimezoneReader_;
 };
 
-// NOTE: For any singular type we use arrow::null() data type.
+// NOTE: For null singular type we use arrow::null() data type.
 // This data type DOES NOT support bit mask so for optional type
 // we have to use |TExternalOptional| wrapper.
+//
+// For non-null singular types we use arrow::Struct({}).
+// We do not allow using bitmask too to be consistent with arrow::null().
+template <bool IsNull>
 class TSingularTypeBlockReader: public TBlockReaderBase {
 public:
     TSingularTypeBlockReader() = default;
@@ -504,12 +509,12 @@ public:
 
     TBlockItem GetItem(const arrow::ArrayData& data, size_t index) override {
         Y_UNUSED(data, index);
-        return TBlockItem::Zero();
+        return CreateSingularBlockItem<IsNull>();
     }
 
     TBlockItem GetScalarItem(const arrow::Scalar& scalar) override {
         Y_UNUSED(scalar);
-        return TBlockItem::Zero();
+        return CreateSingularBlockItem<IsNull>();
     }
 
     ui64 GetDataWeight(const arrow::ArrayData& data) const override {
@@ -619,7 +624,8 @@ struct TReaderTraits {
     using TResource = TResourceBlockReader<Nullable>;
     template <typename TTzDate, bool Nullable>
     using TTzDateReader = TTzDateBlockReader<TTzDate, Nullable>;
-    using TSingularType = TSingularTypeBlockReader;
+    template <bool IsNull>
+    using TSingularType = TSingularTypeBlockReader<IsNull>;
 
     constexpr static bool PassType = false;
 
@@ -640,8 +646,9 @@ struct TReaderTraits {
         }
     }
 
+    template <bool IsNull>
     static std::unique_ptr<TResult> MakeSingular() {
-        return std::make_unique<TSingularType>();
+        return std::make_unique<TSingularType<IsNull>>();
     }
 
     template <typename TTzDate>

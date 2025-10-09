@@ -279,7 +279,9 @@ struct TTrimmerTraits {
         }
     }
 
+    template <bool IsNull>
     static TResult::TPtr MakeSingular(arrow::MemoryPool* pool) {
+        Y_UNUSED(IsNull);
         return std::make_unique<TSingular>(pool);
     }
 

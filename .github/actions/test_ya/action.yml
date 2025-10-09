@@ -6,7 +6,7 @@ inputs:
   build_preset:
     required: true
     default: "relwithdebinfo"
-    description: "relwithdebinfo, release-asan, release-tsan"
+    description: "relwithdebinfo, relwithdebinfo-asan, relwithdebinfo-tsan"
   test_type:
     required: false
     type: string
@@ -192,27 +192,27 @@ runs:
           release)
             params+=(--build "release")
             ;;
-          release-asan)
+          relwithdebinfo-asan)
             params+=(
-              --build "release" --sanitize="address"
+              --build "relwithdebinfo" --sanitize="address"
             )
             if [ -z $TEST_RETRY_COUNT ]; then
               TEST_RETRY_COUNT=1
             fi
             IS_TEST_RESULT_IGNORED=1
             ;;
-          release-tsan)
+          relwithdebinfo-tsan)
             params+=(
-              --build "release" --sanitize="thread"
+              --build "relwithdebinfo" --sanitize="thread"
             )
             if [ -z $TEST_RETRY_COUNT ]; then
               TEST_RETRY_COUNT=1
             fi
             IS_TEST_RESULT_IGNORED=1
             ;;
-          release-msan)
+          relwithdebinfo-msan)
             params+=(
-              --build "release" --sanitize="memory"
+              --build "relwithdebinfo" --sanitize="memory"
             )
             if [ -z $TEST_RETRY_COUNT ]; then
               TEST_RETRY_COUNT=1

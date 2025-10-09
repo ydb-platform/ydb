@@ -11,8 +11,8 @@ on:
 jobs:
   build_and_test:
     if: ${{vars.CHECKS_SWITCH != '' && fromJSON(vars.CHECKS_SWITCH).postcommit_asan == true}}
-    runs-on: [ self-hosted, auto-provisioned, build-preset-release-asan, postcommit ]
-    name: Build and test release-asan
+    runs-on: [ self-hosted, auto-provisioned, build-preset-relwithdebinfo-asan, postcommit ]
+    name: Build and test relwithdebinfo-asan
     steps:
     - name: Checkout
       uses: actions/checkout@v4
@@ -25,7 +25,7 @@ jobs:
     - name: Build and test
       uses: ./.github/actions/build_and_test_ya
       with:
-        build_preset: "release-asan"
+        build_preset: "relwithdebinfo-asan"
         build_target: "ydb/"
         increment: true
         run_tests: true

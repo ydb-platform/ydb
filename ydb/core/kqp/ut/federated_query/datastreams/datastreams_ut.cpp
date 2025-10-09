@@ -249,7 +249,7 @@ public:
         ReadTopicMessages(topicName, {expectedMessage}, disposition, sort);
     }
 
-    void ReadTopicMessages(const TString& topicName, const TVector<TString>& expectedMessages, TInstant disposition = TInstant::Now() - TDuration::Seconds(100), bool sort = false) {
+    void ReadTopicMessages(const TString& topicName, TVector<TString> expectedMessages, TInstant disposition = TInstant::Now() - TDuration::Seconds(100), bool sort = false) {
         NTopic::TReadSessionSettings readSettings;
         readSettings
             .WithoutConsumer()
@@ -293,6 +293,7 @@ public:
         });
 
         if (sort) {
+            std::sort(expectedMessages.begin(), expectedMessages.end());
             std::sort(received.begin(), received.end());
         }
 

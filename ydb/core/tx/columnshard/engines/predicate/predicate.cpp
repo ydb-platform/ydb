@@ -211,4 +211,4 @@ IOutputStream& operator<<(IOutputStream& out, const TPredicate& pred) {
     return out;
 }
 
-} // namespace NKikimr::NOlap
+}   // namespace NKikimr::NOlap

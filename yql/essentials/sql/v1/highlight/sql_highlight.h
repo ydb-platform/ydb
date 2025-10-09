@@ -7,9 +7,6 @@
 #include <util/generic/vector.h>
 #include <util/generic/map.h>
 
-// TODO(vityaman): Migrate YDB to corrected version
-#define BindParamterIdentifier BindParameterIdentifier // NOLINT
-
 namespace NSQLHighlight {
 
 enum class EUnitKind {
@@ -17,6 +14,7 @@ enum class EUnitKind {
     Punctuation,
     QuotedIdentifier,
     BindParameterIdentifier,
+    OptionIdentifier,
     TypeIdentifier,
     FunctionIdentifier,
     Identifier,

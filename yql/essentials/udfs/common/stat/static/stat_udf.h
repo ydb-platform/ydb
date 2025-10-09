@@ -14,7 +14,7 @@ extern const char DigestResourceName[] = "Stat.TDigestResource";
 typedef TBoxedResource<TDigest, DigestResourceName> TDigestResource;
 typedef TRefCountedPtr<TDigestResource> TDigestResourcePtr;
 
-SIMPLE_UDF_WITH_OPTIONAL_ARGS(TTDigest_Create, TResource<DigestResourceName>(double, TOptional<double>, TOptional<double>), 2) {
+SIMPLE_UDF_WITH_OPTIONAL_ARGS(TTDigest_Create, TResource<DigestResourceName>(double, TOptional<double>, TOptional<double>), 2) { // NOLINT(readability-identifier-naming)
     Y_UNUSED(valueBuilder);
     const double delta = args[1].GetOrDefault<double>(0.01);
     const double K = args[2].GetOrDefault<double>(25.0);
@@ -25,7 +25,7 @@ SIMPLE_UDF_WITH_OPTIONAL_ARGS(TTDigest_Create, TResource<DigestResourceName>(dou
     return TUnboxedValuePod(new TDigestResource(delta, K, args[0].Get<double>(), true));
 }
 
-SIMPLE_STRICT_UDF(TTDigest_AddValue, TResource<DigestResourceName>(TResource<DigestResourceName>, double)) {
+SIMPLE_STRICT_UDF(TTDigest_AddValue, TResource<DigestResourceName>(TResource<DigestResourceName>, double)) { // NOLINT(readability-identifier-naming)
     Y_UNUSED(valueBuilder);
     TDigestResource::Validate(args[0]);
     TDigestResource* resource = static_cast<TDigestResource*>(args[0].AsBoxed().Get());
@@ -33,23 +33,23 @@ SIMPLE_STRICT_UDF(TTDigest_AddValue, TResource<DigestResourceName>(TResource<Dig
     return TUnboxedValuePod(resource);
 }
 
-SIMPLE_STRICT_UDF(TTDigest_GetPercentile, double(TResource<DigestResourceName>, double)) {
+SIMPLE_STRICT_UDF(TTDigest_GetPercentile, double(TResource<DigestResourceName>, double)) { // NOLINT(readability-identifier-naming)
     Y_UNUSED(valueBuilder);
     TDigestResource::Validate(args[0]);
     return TUnboxedValuePod(static_cast<TDigestResource*>(args[0].AsBoxed().Get())->Get()->GetPercentile(args[1].Get<double>()));
 }
 
-SIMPLE_STRICT_UDF(TTDigest_Serialize, char*(TResource<DigestResourceName>)) {
+SIMPLE_STRICT_UDF(TTDigest_Serialize, char*(TResource<DigestResourceName>)) { // NOLINT(readability-identifier-naming)
     TDigestResource::Validate(args[0]);
     return valueBuilder->NewString(static_cast<TDigestResource*>(args[0].AsBoxed().Get())->Get()->Serialize());
 }
 
-SIMPLE_UDF(TTDigest_Deserialize, TResource<DigestResourceName>(char*)) {
+SIMPLE_UDF(TTDigest_Deserialize, TResource<DigestResourceName>(char*)) { // NOLINT(readability-identifier-naming)
     Y_UNUSED(valueBuilder);
     return TUnboxedValuePod(new TDigestResource(TString(args[0].AsStringRef()), true));
 }
 
-SIMPLE_STRICT_UDF(TTDigest_Merge, TResource<DigestResourceName>(TResource<DigestResourceName>, TResource<DigestResourceName>)) {
+SIMPLE_STRICT_UDF(TTDigest_Merge, TResource<DigestResourceName>(TResource<DigestResourceName>, TResource<DigestResourceName>)) { // NOLINT(readability-identifier-naming)
     Y_UNUSED(valueBuilder);
     TDigestResource::Validate(args[0]);
     TDigestResource::Validate(args[1]);

@@ -9,7 +9,6 @@
 namespace NYql {
 
 struct TPlanSettings {
-
     TPlanSettings& SetWithLimits(bool limits) {
         WithLimits = limits;
         return *this;
@@ -27,4 +26,4 @@ public:
 
 TAutoPtr<IPlanBuilder> CreatePlanBuilder(TTypeAnnotationContext& types);
 
-}
+} // namespace NYql

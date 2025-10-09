@@ -849,6 +849,48 @@ public:
                 return nullptr;
             }
             return Y(func.EndsWith("strict") ? "MrPartitionListStrict" : "MrPartitionList", Y("EvaluateExpr", arg.Expr));
+        } else if (func == "partitions" || func == "partitionsstrict") {
+            auto requiredLangVer = MakeLangVersion(2025, 4);
+            if (!IsBackwardCompatibleFeatureAvailable(ctx.Settings.LangVer, requiredLangVer, ctx.Settings.BackportMode)) {
+                auto str = FormatLangVersion(requiredLangVer);
+                YQL_ENSURE(str);
+                ctx.Error(Pos_) << "PARTITIONS table function is not available before language version " << *str;
+                return nullptr;
+            }
+
+            if (ctx.DiscoveryMode) {
+                ctx.Error(Pos_, TIssuesIds::YQL_NOT_ALLOWED_IN_DISCOVERY) << "PARTITIONS is not allowed in Discovery mode";
+                return nullptr;
+            }
+
+            if (Args_.size() != 2) {
+                ctx.Error(Pos_) << "PARTITIONS requires 2 arguments, but got: " << Args_.size();
+                return nullptr;
+            }
+
+            if (Args_[0].HasAt || Args_[1].HasAt) {
+                ctx.Error(Pos_) << "Temporary tables are not supported here";
+                return nullptr;
+            }
+
+            if (!Args_[1].View.empty()) {
+                ctx.Error(Pos_) << "VIEW should be used only in first argument";
+                return nullptr;
+            }
+
+            ExtractTableName(ctx, Args_[0]);
+            ExtractTableName(ctx, Args_[1]);
+            auto path = ctx.GetPrefixedPath(Service_, Cluster_, Args_[0].Id);
+            if (!path) {
+                return nullptr;
+            }
+            TNodePtr key = Y("Key", Q(Y(Q("table"), Y("String", path))));
+            key = AddView(key, Args_[0].View);
+            if (!ValidateView(GetPos(), ctx, Service_, Args_[0].View)) {
+                return nullptr;
+            }
+            TDeferredAtom pattern = Args_[1].Id;
+            return Y(func.EndsWith("strict") ? "MrPartitionsStrict" : "MrPartitions", key, pattern.Build());
         }
 
         ctx.Error(Pos_) << "Unknown table name preprocessor: " << Func_;

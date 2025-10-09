@@ -8,11 +8,11 @@ namespace NYql {
 void LoadYqlDefaultMounts(TUserDataTable& userData);
 
 bool GetYqlDefaultModuleResolver(
-        TExprContext& ctx,
-        IModuleResolver::TPtr& moduleResolver,
-        const THashMap<TString, TString>& clusterMapping = {},
-        bool optimizeLibraries = true,
-        TModuleResolver::TModuleChecker moduleChecker = {});
+    TExprContext& ctx,
+    IModuleResolver::TPtr& moduleResolver,
+    const THashMap<TString, TString>& clusterMapping = {},
+    bool optimizeLibraries = true,
+    TModuleResolver::TModuleChecker moduleChecker = {});
 
 bool GetYqlDefaultModuleResolverWithContext(
     IModuleResolver::TPtr& moduleResolver,
@@ -21,12 +21,12 @@ bool GetYqlDefaultModuleResolverWithContext(
     TModuleResolver::TModuleChecker moduleChecker = {});
 
 TUserDataTable GetYqlModuleResolver(
-        TExprContext& ctx,
-        IModuleResolver::TPtr& moduleResolver,
-        const TVector<NUserData::TUserData>& userData,
-        const THashMap<TString, TString>& clusterMapping,
-        const THashSet<TString>& sqlFlags,
-        bool optimizeLibraries = true,
-        TModuleResolver::TModuleChecker moduleChecker = {});
+    TExprContext& ctx,
+    IModuleResolver::TPtr& moduleResolver,
+    const TVector<NUserData::TUserData>& userData,
+    const THashMap<TString, TString>& clusterMapping,
+    const THashSet<TString>& sqlFlags,
+    bool optimizeLibraries = true,
+    TModuleResolver::TModuleChecker moduleChecker = {});
 
 } // namespace NYql

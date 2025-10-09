@@ -30,21 +30,20 @@ constexpr ui32 RegOperOid = 2203;
 constexpr ui32 RegOperatorOid = 2204;
 constexpr ui32 RegClassOid = 2205;
 constexpr ui32 RegTypeOid = 2206;
-//constexpr ui32 AnyElementOid = 2283;
-//constexpr ui32 AnyNonArrayOid = 2776;
+// constexpr ui32 AnyElementOid = 2283;
+// constexpr ui32 AnyNonArrayOid = 2776;
 constexpr ui32 RegConfigOid = 3734;
 constexpr ui32 RegDictionaryOid = 3769;
 constexpr ui32 RegNamespaceOid = 4089;
 constexpr ui32 RegRoleOid = 4096;
-//constexpr ui32 AnyCompatibleOid = 5077;
-//constexpr ui32 AnyCompatibleArrayOid = 5078;
-//constexpr ui32 AnyCompatibleNonArrayOid = 5079;
+// constexpr ui32 AnyCompatibleOid = 5077;
+// constexpr ui32 AnyCompatibleArrayOid = 5078;
+// constexpr ui32 AnyCompatibleNonArrayOid = 5079;
 
 // See GetCCHashEqFuncs in PG sources
 // https://doxygen.postgresql.org/catcache_8c.html#a8a2dc395011dba02c083bfbf6b87ce6c
-const THashSet<ui32> regClasses({
-    RegProcOid, RegProcedureOid, RegOperOid, RegOperatorOid, RegClassOid, RegTypeOid,
-    RegConfigOid, RegDictionaryOid, RegRoleOid, RegNamespaceOid});
+const THashSet<ui32> regClasses({RegProcOid, RegProcedureOid, RegOperOid, RegOperatorOid, RegClassOid, RegTypeOid,
+                                 RegConfigOid, RegDictionaryOid, RegRoleOid, RegNamespaceOid});
 
 using TOperators = THashMap<ui32, TOperDesc>;
 
@@ -319,8 +318,7 @@ bool ValidateOperArgs(const TOperDesc& d, const TVector<ui32>& argTypeIds, const
         ui32 expectedArgType;
         if (d.Kind == EOperKind::RightUnary || (d.Kind == EOperKind::Binary && i == 0)) {
             expectedArgType = d.LeftType;
-        }
-        else {
+        } else {
             expectedArgType = d.RightType;
         }
 
@@ -337,17 +335,18 @@ struct TLazyOperInfo {
     TString Negate;
 };
 
-class TOperatorsParser : public TParser {
+class TOperatorsParser: public TParser {
 public:
     TOperatorsParser(TOperators& operators, const THashMap<TString, ui32>& typeByName, const TTypes& types,
-        const THashMap<TString, TVector<ui32>>& procByName, const TProcs& procs, THashMap<ui32, TLazyOperInfo>& lazyInfos)
+                     const THashMap<TString, TVector<ui32>>& procByName, const TProcs& procs, THashMap<ui32, TLazyOperInfo>& lazyInfos)
         : Operators_(operators)
         , TypeByName_(typeByName)
         , Types_(types)
         , ProcByName_(procByName)
         , Procs_(procs)
         , LazyInfos_(lazyInfos)
-    {}
+    {
+    }
 
     void OnKey(const TString& key, const TString& value) override {
         if (key == "oid") {
@@ -442,12 +441,13 @@ private:
     TString LastCom_;
 };
 
-class TProcsParser : public TParser {
+class TProcsParser: public TParser {
 public:
     TProcsParser(TProcs& procs, const THashMap<TString, ui32>& typeByName)
         : Procs_(procs)
         , TypeByName_(typeByName)
-    {}
+    {
+    }
 
     void OnKey(const TString& key, const TString& value) override {
         if (key == "oid") {
@@ -610,12 +610,13 @@ struct TLazyTypeInfo {
     TString SubscriptFunc;
 };
 
-class TTypesParser : public TParser {
+class TTypesParser: public TParser {
 public:
     TTypesParser(TTypes& types, THashMap<ui32, TLazyTypeInfo>& lazyInfos)
         : Types_(types)
         , LazyInfos_(lazyInfos)
-    {}
+    {
+    }
 
     void OnKey(const TString& key, const TString& value) override {
         if (key == "oid") {
@@ -651,22 +652,30 @@ public:
             Y_ENSURE(value.size() == 1);
             const auto typType = value[0];
 
-            LastType_.TypType =
-                    (typType == 'b') ? ETypType::Base :
-                    (typType == 'c') ? ETypType::Composite :
-                    (typType == 'd') ? ETypType::Domain :
-                    (typType == 'e') ? ETypType::Enum :
-                    (typType == 'm') ? ETypType::Multirange :
-                    (typType == 'p') ? ETypType::Pseudo :
-                    (typType == 'r') ? ETypType::Range :
-                    ythrow yexception() << "Unknown typtype value: " << value;
+            switch (typType) {
+            case 'b':
+            case 'c':
+            case 'd':
+            case 'e':
+            case 'm':
+            case 'p':
+            case 'r':
+                LastType_.TypType = (ETypType)typType;
+                break;
+            default:
+                throw yexception() << "Unknown typtype value: " << typType;
+            }
         } else if (key == "typcollation") {
             // hardcode collations for now. There are only three of 'em in .dat file
-            LastType_.TypeCollation =
-                    (value == "default") ? DefaultCollationOid :
-                    (value == "C") ? C_CollationOid :
-                    (value == "POSIX") ? PosixCollationOid :
-                    ythrow yexception() << "Unknown typcollation value: " << value;
+            if (value == "default") {
+                LastType_.TypeCollation = DefaultCollationOid;
+            } else if (value == "C") {
+                LastType_.TypeCollation = C_CollationOid;
+            }  else if (value == "POSIX") {
+                LastType_.TypeCollation = PosixCollationOid;
+            } else {
+                throw yexception() << "Unknown typcollation value: " << value;
+            }
         } else if (key == "typelem") {
             LastLazyTypeInfo_.ElementType = value; // resolve later
         } else if (key == "typinput") {
@@ -689,7 +698,7 @@ public:
             } else if (value == "t" || value == "FLOAT8PASSBYVAL") {
                 LastType_.PassByValue = true;
             } else {
-                ythrow yexception() << "Unknown typbyval value: " << value;
+                throw yexception() << "Unknown typbyval value: " << value;
             }
         } else if (key == "typispreferred") {
             LastType_.IsPreferred = (value == "t");
@@ -735,16 +744,17 @@ private:
     TLazyTypeInfo LastLazyTypeInfo_;
 };
 
-class TCastsParser : public TParser {
+class TCastsParser: public TParser {
 public:
     TCastsParser(TCasts& casts, const THashMap<TString, ui32>& typeByName, const TTypes& types,
-        const THashMap<TString, TVector<ui32>>& procByName, const TProcs& procs)
+                 const THashMap<TString, TVector<ui32>>& procByName, const TProcs& procs)
         : Casts_(casts)
         , TypeByName_(typeByName)
         , Types_(types)
         , ProcByName_(procByName)
         , Procs_(procs)
-    {}
+    {
+    }
 
     void OnKey(const TString& key, const TString& value) override {
         if (key == "castsource") {
@@ -807,17 +817,21 @@ public:
             } else if (value == "b") {
                 LastCast_.Method = ECastMethod::Binary;
             } else {
-                ythrow yexception() << "Unknown castmethod value: " << value;
+                throw yexception() << "Unknown castmethod value: " << value;
             }
         } else if (key == "castcontext") {
             Y_ENSURE(value.size() == 1);
             const auto castCtx = value[0];
 
-            LastCast_.CoercionCode =
-                    (castCtx == 'i') ? ECoercionCode::Implicit :
-                    (castCtx == 'a') ? ECoercionCode::Assignment :
-                    (castCtx == 'e') ? ECoercionCode::Explicit :
-                    ythrow yexception() << "Unknown castcontext value: " << value;
+            switch (castCtx) {
+            case 'i':
+            case 'a':
+            case 'e':
+                LastCast_.CoercionCode = (ECoercionCode)castCtx;
+                break;
+            default:
+                throw yexception() << "Unknown castcontext value: " << castCtx;
+            }
         }
     }
 
@@ -841,16 +855,17 @@ private:
     bool IsSupported_ = true;
 };
 
-class TAggregationsParser : public TParser {
+class TAggregationsParser: public TParser {
 public:
     TAggregationsParser(TAggregations& aggregations, const THashMap<TString, ui32>& typeByName,
-        const TTypes& types, const THashMap<TString, TVector<ui32>>& procByName, const TProcs& procs)
+                        const TTypes& types, const THashMap<TString, TVector<ui32>>& procByName, const TProcs& procs)
         : Aggregations_(aggregations)
         , TypeByName_(typeByName)
         , Types_(types)
         , ProcByName_(procByName)
         , Procs_(procs)
-    {}
+    {
+    }
 
     void OnKey(const TString& key, const TString& value) override {
         Y_UNUSED(ProcByName_);
@@ -878,12 +893,13 @@ public:
             } else if (value == "h") {
                 LastAggregation_.Kind = EAggKind::Hypothetical;
             } else {
-                ythrow yexception() << "Unknown aggkind value: " << value;
+                throw yexception() << "Unknown aggkind value: " << value;
             }
         } else if (key == "agginitval") {
             LastAggregation_.InitValue = value;
         } else if (key == "aggfinalextra") {
-            LastAggregation_.FinalExtra = (value == "t");;
+            LastAggregation_.FinalExtra = (value == "t");
+            ;
         } else if (key == "aggnumdirectargs") {
             LastAggregation_.NumDirectArgs = FromString<ui32>(value);
         }
@@ -1050,11 +1066,12 @@ private:
     TString LastDeserializeFunc_;
 };
 
-class TOpFamiliesParser : public TParser {
+class TOpFamiliesParser: public TParser {
 public:
     TOpFamiliesParser(TOpFamilies& opFamilies)
         : OpFamilies_(opFamilies)
-    {}
+    {
+    }
 
     void OnKey(const TString& key, const TString& value) override {
         if (key == "oid") {
@@ -1097,14 +1114,15 @@ private:
     bool IsSupported_ = true;
 };
 
-class TOpClassesParser : public TParser {
+class TOpClassesParser: public TParser {
 public:
     TOpClassesParser(TOpClasses& opClasses, const THashMap<TString, ui32>& typeByName,
-                     const TOpFamilies &opFamilies)
-            : OpClasses_(opClasses)
-            , TypeByName_(typeByName)
-            , OpFamilies_(opFamilies)
-    {}
+                     const TOpFamilies& opFamilies)
+        : OpClasses_(opClasses)
+        , TypeByName_(typeByName)
+        , OpFamilies_(opFamilies)
+    {
+    }
 
     void OnKey(const TString& key, const TString& value) override {
         if (key == "opcmethod") {
@@ -1135,24 +1153,24 @@ public:
         }
     }
 
-void OnFinish() override {
-    // Only default opclasses are used so far
-    if (IsSupported_ && IsDefault_) {
-        Y_ENSURE(!LastOpClass_.Name.empty());
+    void OnFinish() override {
+        // Only default opclasses are used so far
+        if (IsSupported_ && IsDefault_) {
+            Y_ENSURE(!LastOpClass_.Name.empty());
 
-        const auto key = std::make_pair(LastOpClass_.Method, LastOpClass_.TypeId);
+            const auto key = std::make_pair(LastOpClass_.Method, LastOpClass_.TypeId);
 
-        if (OpClasses_.contains(key)) {
-            throw yexception() << "Duplicate opclass: (" << (key.first == EOpClassMethod::Btree ? "btree" : "hash")
-                               << ", " << key.second << ")";
+            if (OpClasses_.contains(key)) {
+                throw yexception() << "Duplicate opclass: (" << (key.first == EOpClassMethod::Btree ? "btree" : "hash")
+                                   << ", " << key.second << ")";
+            }
+            OpClasses_[key] = LastOpClass_;
         }
-        OpClasses_[key] = LastOpClass_;
-    }
 
-    IsSupported_ = true;
-    IsDefault_ = true;
-    LastOpClass_ = TOpClassDesc();
-}
+        IsSupported_ = true;
+        IsDefault_ = true;
+        LastOpClass_ = TOpClassDesc();
+    }
 
 private:
     TOpClasses& OpClasses_;
@@ -1165,18 +1183,19 @@ private:
     bool IsDefault_ = true;
 };
 
-class TAmOpsParser : public TParser {
+class TAmOpsParser: public TParser {
 public:
     TAmOpsParser(TAmOps& amOps, const THashMap<TString, ui32>& typeByName, const TTypes& types,
-        const THashMap<TString, TVector<ui32>>& operatorsByName, const TOperators& operators,
-        const TOpFamilies &opFamilies)
+                 const THashMap<TString, TVector<ui32>>& operatorsByName, const TOperators& operators,
+                 const TOpFamilies& opFamilies)
         : AmOps_(amOps)
         , TypeByName_(typeByName)
         , Types_(types)
         , OperatorsByName_(operatorsByName)
         , Operators_(operators)
         , OpFamilies_(opFamilies)
-    {}
+    {
+    }
 
     void OnKey(const TString& key, const TString& value) override {
         if (key == "amopfamily") {
@@ -1242,10 +1261,12 @@ private:
     bool IsSupported_ = true;
 };
 
-
-class TAmsParser : public TParser {
+class TAmsParser: public TParser {
 public:
-    TAmsParser(TAms& ams) : Ams_(ams) {}
+    TAmsParser(TAms& ams)
+        : Ams_(ams)
+    {
+    }
 
     void OnKey(const TString& key, const TString& value) override {
         if (key == "oid") {
@@ -1276,17 +1297,18 @@ private:
     TAms& Ams_;
 };
 
-class TAmProcsParser : public TParser {
+class TAmProcsParser: public TParser {
 public:
     TAmProcsParser(TAmProcs& amProcs, const THashMap<TString, ui32>& typeByName,
-        const THashMap<TString, TVector<ui32>>& procByName, const TProcs& procs,
-        const TOpFamilies& opFamilies)
+                   const THashMap<TString, TVector<ui32>>& procByName, const TProcs& procs,
+                   const TOpFamilies& opFamilies)
         : AmProcs_(amProcs)
         , TypeByName_(typeByName)
         , ProcByName_(procByName)
         , Procs_(procs)
         , OpFamilies_(opFamilies)
-    {}
+    {
+    }
 
     void OnKey(const TString& key, const TString& value) override {
         if (key == "amprocfamily") {
@@ -1348,12 +1370,13 @@ private:
     bool IsSupported_ = true;
 };
 
-class TConversionsParser : public TParser {
+class TConversionsParser: public TParser {
 public:
     TConversionsParser(TConversions& conversions, const THashMap<TString, TVector<ui32>>& procByName)
         : Conversions_(conversions)
         , ProcByName_(procByName)
-    {}
+    {
+    }
 
     void OnKey(const TString& key, const TString& value) override {
         if (key == "oid") {
@@ -1390,11 +1413,12 @@ private:
     TConversionDesc LastConversion_;
 };
 
-class TLanguagesParser : public TParser {
+class TLanguagesParser: public TParser {
 public:
     TLanguagesParser(TLanguages& languages)
         : Languages_(languages)
-    {}
+    {
+    }
 
     void OnKey(const TString& key, const TString& value) override {
         if (key == "oid") {
@@ -1418,7 +1442,7 @@ private:
 };
 
 TOperators ParseOperators(const TString& dat, const THashMap<TString, ui32>& typeByName,
-    const TTypes& types, const THashMap<TString, TVector<ui32>>& procByName, const TProcs& procs, THashMap<ui32, TLazyOperInfo>& lazyInfos) {
+                          const TTypes& types, const THashMap<TString, TVector<ui32>>& procByName, const TProcs& procs, THashMap<ui32, TLazyOperInfo>& lazyInfos) {
     TOperators ret;
     TOperatorsParser parser(ret, typeByName, types, procByName, procs, lazyInfos);
     parser.Do(dat);
@@ -1480,7 +1504,7 @@ void ApplyLazyOperInfos(TOperators& operators, const THashMap<TString, TVector<u
 }
 
 TAggregations ParseAggregations(const TString& dat, const THashMap<TString, ui32>& typeByName,
-    const TTypes& types, const THashMap<TString, TVector<ui32>>& procByName, const TProcs& procs) {
+                                const TTypes& types, const THashMap<TString, TVector<ui32>>& procByName, const TProcs& procs) {
     TAggregations ret;
     TAggregationsParser parser(ret, typeByName, types, procByName, procs);
     parser.Do(dat);
@@ -1502,7 +1526,7 @@ TTypes ParseTypes(const TString& dat, THashMap<ui32, TLazyTypeInfo>& lazyInfos) 
 }
 
 TCasts ParseCasts(const TString& dat, const THashMap<TString, ui32>& typeByName, const TTypes& types,
-    const THashMap<TString, TVector<ui32>>& procByName, const TProcs& procs) {
+                  const THashMap<TString, TVector<ui32>>& procByName, const TProcs& procs) {
     TCasts ret;
     TCastsParser parser(ret, typeByName, types, procByName, procs);
     parser.Do(dat);
@@ -1517,7 +1541,7 @@ TOpFamilies ParseOpFamilies(const TString& dat) {
 }
 
 TOpClasses ParseOpClasses(const TString& dat, const THashMap<TString, ui32>& typeByName,
-    const TOpFamilies& opFamilies) {
+                          const TOpFamilies& opFamilies) {
     TOpClasses ret;
     TOpClassesParser parser(ret, typeByName, opFamilies);
     parser.Do(dat);
@@ -1525,8 +1549,8 @@ TOpClasses ParseOpClasses(const TString& dat, const THashMap<TString, ui32>& typ
 }
 
 TAmOps ParseAmOps(const TString& dat, const THashMap<TString, ui32>& typeByName, const TTypes& types,
-    const THashMap<TString, TVector<ui32>>& operatorsByName, const TOperators& operators,
-    const TOpFamilies& opFamilies) {
+                  const THashMap<TString, TVector<ui32>>& operatorsByName, const TOperators& operators,
+                  const TOpFamilies& opFamilies) {
     TAmOps ret;
     TAmOpsParser parser(ret, typeByName, types, operatorsByName, operators, opFamilies);
     parser.Do(dat);
@@ -1534,8 +1558,8 @@ TAmOps ParseAmOps(const TString& dat, const THashMap<TString, ui32>& typeByName,
 }
 
 TAmProcs ParseAmProcs(const TString& dat, const THashMap<TString, ui32>& typeByName,
-    const THashMap<TString, TVector<ui32>>& procByName, const TProcs& procs,
-    const TOpFamilies& opFamilies) {
+                      const THashMap<TString, TVector<ui32>>& procByName, const TProcs& procs,
+                      const TOpFamilies& opFamilies) {
     TAmProcs ret;
     TAmProcsParser parser(ret, typeByName, procByName, procs, opFamilies);
     parser.Do(dat);
@@ -1579,7 +1603,7 @@ struct TTableInfoKeyRaw {
     const char* Name;
 };
 
-struct TTableInfoRaw : public TTableInfoKeyRaw {
+struct TTableInfoRaw: public TTableInfoKeyRaw {
     ERelKind Kind;
     ui32 Oid;
 };
@@ -1605,7 +1629,7 @@ const char* AllowedProcsRaw[] = {
 #include "postgis_procs.h"
 };
 
-struct TCatalog : public IExtensionSqlBuilder {
+struct TCatalog: public IExtensionSqlBuilder {
     TCatalog() {
         Init();
     }
@@ -1620,69 +1644,52 @@ struct TCatalog : public IExtensionSqlBuilder {
         for (size_t i = 0; i < Y_ARRAY_SIZE(AllStaticTablesRaw); ++i) {
             const auto& raw = AllStaticTablesRaw[i];
             State->AllStaticTables.push_back(
-                {{TString(raw.Schema), TString(raw.Name)}, raw.Kind, raw.Oid}
-            );
+                {{TString(raw.Schema), TString(raw.Name)}, raw.Kind, raw.Oid});
         }
 
         for (size_t i = 0; i < Y_ARRAY_SIZE(AllStaticColumnsRaw); ++i) {
             const auto& raw = AllStaticColumnsRaw[i];
             State->AllStaticColumns.push_back(
-                {TString(raw.Schema), TString(raw.TableName), TString(raw.Name), TString(raw.UdtType)}
-            );
+                {TString(raw.Schema), TString(raw.TableName), TString(raw.Name), TString(raw.UdtType)});
         }
 
-        if ( GetEnv("YDB_EXPERIMENTAL_PG") == "1"){
+        if (GetEnv("YDB_EXPERIMENTAL_PG") == "1") {
             // grafana migration_log
             State->AllStaticTables.push_back(
-                {{"public", "migration_log"}, ERelKind::Relation, 100001}
-            );
+                {{"public", "migration_log"}, ERelKind::Relation, 100001});
             State->AllStaticColumns.push_back(
-                {"public", "migration_log", "id", "int"}
-            );
+                {"public", "migration_log", "id", "int"});
             State->AllStaticColumns.push_back(
-                {"public", "migration_log", "migration_id", "character varying(255)"}
-            );
+                {"public", "migration_log", "migration_id", "character varying(255)"});
             State->AllStaticColumns.push_back(
-                {"public", "migration_log", "sql", "text"}
-            );
+                {"public", "migration_log", "sql", "text"});
             State->AllStaticColumns.push_back(
-                {"public", "migration_log", "success", "boolean"}
-            );
+                {"public", "migration_log", "success", "boolean"});
             State->AllStaticColumns.push_back(
-                {"public", "migration_log", "error", "text"}
-            );
+                {"public", "migration_log", "error", "text"});
             State->AllStaticColumns.push_back(
-                {"public", "migration_log", "timestamp", "timestamp without time zone"}
-            );
+                {"public", "migration_log", "timestamp", "timestamp without time zone"});
 
             // zabbix config
             State->AllStaticTables.push_back(
-                {{"public", "config"}, ERelKind::Relation, 100001}
-            );
+                {{"public", "config"}, ERelKind::Relation, 100001});
             State->AllStaticColumns.push_back(
-                {"public", "config", "configid", "bigint"}
-            );
+                {"public", "config", "configid", "bigint"});
             State->AllStaticColumns.push_back(
-                {"public", "config", "server_check_interval", "integer"}
-            );
+                {"public", "config", "server_check_interval", "integer"});
 
             State->AllStaticColumns.push_back(
-                {"public", "config", "dbversion_status", "text"}
-            );
+                {"public", "config", "dbversion_status", "text"});
 
             // zabbix dbversion
             State->AllStaticTables.push_back(
-                {{"public", "dbversion"}, ERelKind::Relation, 100002}
-            );
+                {{"public", "dbversion"}, ERelKind::Relation, 100002});
             State->AllStaticColumns.push_back(
-                {"public", "dbversion", "dbversionid", "bigint"}
-            );
+                {"public", "dbversion", "dbversionid", "bigint"});
             State->AllStaticColumns.push_back(
-                {"public", "dbversion", "mandatory", "integer"}
-            );
+                {"public", "dbversion", "mandatory", "integer"});
             State->AllStaticColumns.push_back(
-                {"public", "dbversion", "mandatory", "optional"}
-            );
+                {"public", "dbversion", "mandatory", "optional"});
         }
         THashSet<ui32> usedTableOids;
         for (const auto& t : State->AllStaticTables) {
@@ -1691,7 +1698,7 @@ struct TCatalog : public IExtensionSqlBuilder {
             State->StaticTables.insert(std::make_pair(TTableInfoKey(t), t));
         }
 
-        for (const auto& c: State->AllStaticColumns) {
+        for (const auto& c : State->AllStaticColumns) {
             auto tablePtr = State->StaticColumns.FindPtr(TTableInfoKey{c.Schema, c.TableName});
             Y_ENSURE(tablePtr);
             tablePtr->push_back(c);
@@ -1829,19 +1836,19 @@ struct TCatalog : public IExtensionSqlBuilder {
         }
 
         State->Casts = ParseCasts(castData, State->TypeByName, State->Types, State->ProcByName, State->Procs);
-        for (const auto&[k, v] : State->Casts) {
+        for (const auto& [k, v] : State->Casts) {
             Y_ENSURE(State->CastsByDir.insert(std::make_pair(std::make_pair(v.SourceId, v.TargetId), k)).second);
         }
 
         THashMap<ui32, TLazyOperInfo> lazyOperInfos;
         State->Operators = ParseOperators(opData, State->TypeByName, State->Types, State->ProcByName, State->Procs, lazyOperInfos);
-        for (const auto&[k, v] : State->Operators) {
+        for (const auto& [k, v] : State->Operators) {
             State->OperatorsByName[v.Name].push_back(k);
         }
 
         ApplyLazyOperInfos(State->Operators, State->OperatorsByName, State->TypeByName, lazyOperInfos);
         State->Aggregations = ParseAggregations(aggData, State->TypeByName, State->Types, State->ProcByName, State->Procs);
-        for (const auto&[k, v] : State->Aggregations) {
+        for (const auto& [k, v] : State->Aggregations) {
             State->AggregationsByName[v.Name].push_back(k);
         }
 
@@ -1931,7 +1938,7 @@ struct TCatalog : public IExtensionSqlBuilder {
         }
 
         TString line = TStringBuilder() << "\"" << name << "\",\n";
-        with_lock(ExportGuard) {
+        with_lock (ExportGuard) {
             ExportFile->Write(line.data(), line.size());
         }
     }
@@ -2065,7 +2072,7 @@ struct TCatalog : public IExtensionSqlBuilder {
     }
 
     void InsertValues(const TTableInfoKey& table, const TVector<TString>& columns,
-        const TVector<TMaybe<TString>>& data) final {
+                      const TVector<TMaybe<TString>>& data) final {
         Y_ENSURE(State->StaticTables.contains(table));
         const auto& columnDefs = *State->StaticColumns.FindPtr(table);
         Y_ENSURE(columnDefs.size() == columns.size());
@@ -2304,8 +2311,7 @@ const TProcDesc& LookupProc(ui32 procId, const TVector<ui32>& argTypeIds) {
     }
 
     if (!ValidateProcArgs(*procPtr, argTypeIds)) {
-        throw yexception() << "Unable to find an overload for proc with oid " << procId << " with given argument types: " <<
-            ArgTypesList(argTypeIds);
+        throw yexception() << "Unable to find an overload for proc with oid " << procId << " with given argument types: " << ArgTypesList(argTypeIds);
     }
 
     catalog.ExportFunction(procId);
@@ -2336,7 +2342,7 @@ const TProcDesc& LookupProc(const TString& name, const TVector<ui32>& argTypeIds
     }
 
     throw yexception() << "Unable to find an overload for proc " << name << " with given argument types: "
-        << ArgTypesList(argTypeIds);
+                       << ArgTypesList(argTypeIds);
 }
 
 const TProcDesc& LookupProc(ui32 procId) {
@@ -2486,7 +2492,6 @@ void EnumOperators(std::function<void(const TOperDesc&)> f) {
     }
 }
 
-
 bool HasCast(ui32 sourceId, ui32 targetId) {
     const auto& catalog = TCatalog::Instance();
     return catalog.State->CastsByDir.contains(std::make_pair(sourceId, targetId));
@@ -2511,21 +2516,20 @@ constexpr ui64 NoFitScore = 0;
 bool CanUseCoercionType(ECoercionCode requiredCoercionLevel, ECoercionCode actualCoercionLevel) {
     switch (requiredCoercionLevel) {
         case NYql::NPg::ECoercionCode::Implicit:
-           return actualCoercionLevel == ECoercionCode::Implicit;
+            return actualCoercionLevel == ECoercionCode::Implicit;
 
         case NYql::NPg::ECoercionCode::Assignment:
-           return (actualCoercionLevel == ECoercionCode::Implicit) || (actualCoercionLevel == ECoercionCode::Assignment);
+            return (actualCoercionLevel == ECoercionCode::Implicit) || (actualCoercionLevel == ECoercionCode::Assignment);
 
         case NYql::NPg::ECoercionCode::Explicit:
-           return (actualCoercionLevel != ECoercionCode::Unknown);
+            return (actualCoercionLevel != ECoercionCode::Unknown);
 
         case NYql::NPg::ECoercionCode::Unknown:
             return false;
     }
 }
 
-enum class ECoercionSearchResult
-{
+enum class ECoercionSearchResult {
     None,
     Func,
     BinaryCompatible,
@@ -2600,13 +2604,13 @@ bool IsCoercible(ui32 fromTypeId, ui32 toTypeId, ECoercionCode coercionType, con
     if (toTypeId == AnyOid) {
         return true;
     }
-    //TODO: support polymorphic types
+    // TODO: support polymorphic types
 
     if (fromTypeId == UnknownOid) {
         return true;
     }
 
-    if (FindCoercionPath(fromTypeId, toTypeId, coercionType, catalog) != ECoercionSearchResult::None ) {
+    if (FindCoercionPath(fromTypeId, toTypeId, coercionType, catalog) != ECoercionSearchResult::None) {
         return true;
     }
 
@@ -2638,7 +2642,7 @@ bool IsPreferredType(char categoryId, const TTypeDesc& type) {
 }
 
 constexpr ui32 CoercibleMatchShift = 16;
-constexpr ui64 ArgExactTypeMatch = 1ULL << 2*CoercibleMatchShift;
+constexpr ui64 ArgExactTypeMatch = 1ULL << 2 * CoercibleMatchShift;
 constexpr ui64 ArgPreferredTypeMatch = 1ULL << CoercibleMatchShift;
 constexpr ui64 ArgCoercibleTypeMatch = 1ULL;
 constexpr ui64 ArgTypeMismatch = 0;
@@ -2676,8 +2680,7 @@ ui64 CalcBinaryOperatorScore(const TOperDesc& oper, ui32 leftArgTypeId, ui32 rig
         if (oper.LeftType == rightArgTypeId && oper.RightType == rightArgTypeId) {
             return ArgExactTypeMatch + ArgExactTypeMatch;
         }
-    }
-    else if (rightArgTypeId == UnknownOid && leftArgTypeId != InvalidOid) {
+    } else if (rightArgTypeId == UnknownOid && leftArgTypeId != InvalidOid) {
         if (oper.LeftType == leftArgTypeId && oper.RightType == leftArgTypeId) {
             return ArgExactTypeMatch + ArgExactTypeMatch;
         }
@@ -2760,32 +2763,32 @@ ui64 CalcProcScore(const TVector<ui32>& procArgTypes, ui32 procVariadicType, ui3
 
 [[noreturn]] void ThrowOperatorNotFound(const TString& name, const TVector<ui32>& argTypeIds) {
     throw yexception() << "Unable to find an overload for operator " << name << " with given argument type(s): "
-        << ArgTypesList(argTypeIds);
+                       << ArgTypesList(argTypeIds);
 }
 
 [[noreturn]] void ThrowOperatorAmbiguity(const TString& name, const TVector<ui32>& argTypeIds) {
     throw yexception() << "Ambiguity for operator " << name << " with given argument type(s): "
-        << ArgTypesList(argTypeIds);
+                       << ArgTypesList(argTypeIds);
 }
 
 [[noreturn]] void ThrowProcNotFound(const TString& name, const TVector<ui32>& argTypeIds) {
     throw yexception() << "Unable to find an overload for proc " << name << " with given argument types: "
-        << ArgTypesList(argTypeIds);
+                       << ArgTypesList(argTypeIds);
 }
 
 [[noreturn]] void ThrowProcAmbiguity(const TString& name, const TVector<ui32>& argTypeIds) {
     throw yexception() << "Ambiguity for proc " << name << " with given argument type(s): "
-        << ArgTypesList(argTypeIds);
+                       << ArgTypesList(argTypeIds);
 }
 
 [[noreturn]] void ThrowAggregateNotFound(const TString& name, const TVector<ui32>& argTypeIds) {
     throw yexception() << "Unable to find an overload for aggregate " << name << " with given argument types: "
-        << ArgTypesList(argTypeIds);
+                       << ArgTypesList(argTypeIds);
 }
 
 [[noreturn]] void ThrowAggregateAmbiguity(const TString& name, const TVector<ui32>& argTypeIds) {
     throw yexception() << "Ambiguity for aggregate " << name << " with given argument type(s): "
-        << ArgTypesList(argTypeIds);
+                       << ArgTypesList(argTypeIds);
 }
 
 struct TCommonCategoryDesc {
@@ -2794,11 +2797,15 @@ struct TCommonCategoryDesc {
     bool IsPreferred = false;
 
     TCommonCategoryDesc(size_t position, char category, bool isPreferred)
-    : Position(position), Category(category), IsPreferred(isPreferred) {}
+        : Position(position)
+        , Category(category)
+        , IsPreferred(isPreferred)
+    {
+    }
 };
 
 template <class C>
-char FindCommonCategory(const TVector<const C*> &candidates, std::function<ui32(const C*)> getTypeId, const TCatalog &catalog, bool &isPreferred) {
+char FindCommonCategory(const TVector<const C*>& candidates, std::function<ui32(const C*)> getTypeId, const TCatalog& catalog, bool& isPreferred) {
     char category = InvalidCategory;
     auto isConflict = false;
     isPreferred = false;
@@ -2844,7 +2851,7 @@ TVector<const C*> TryResolveUnknownsByCategory(const TVector<const C*>& candidat
         char category = InvalidCategory;
         bool isPreferred = false;
 
-        std::function<ui32(const C *)> typeGetter = [i] (const auto* candidate) {
+        std::function<ui32(const C*)> typeGetter = [i](const auto* candidate) {
             if constexpr (std::is_same_v<C, TProcDesc>) {
                 return i < candidate->ArgTypes.size() ? candidate->ArgTypes[i] : candidate->VariadicType;
             } else {
@@ -2908,16 +2915,16 @@ TVector<const TOperDesc*> TryResolveUnknownsByCategory<TOperDesc>(const TVector<
         char category = InvalidCategory;
         bool isPreferred = false;
 
-        std::function <ui32(const TOperDesc*)> typeGetter;
+        std::function<ui32(const TOperDesc*)> typeGetter;
         if (i == 1) {
-            typeGetter = [] (const auto* candidate) {
+            typeGetter = [](const auto* candidate) {
                 return candidate->RightType;
             };
         } else {
-            typeGetter = [] (const auto* candidate) {
+            typeGetter = [](const auto* candidate) {
                 return (candidate->Kind == EOperKind::Binary)
-                    ? candidate->LeftType
-                    : candidate->RightType;
+                           ? candidate->LeftType
+                           : candidate->RightType;
             };
         }
 
@@ -2936,8 +2943,9 @@ TVector<const TOperDesc*> TryResolveUnknownsByCategory<TOperDesc>(const TVector<
 
         for (const auto& category : argCommonCategory) {
             const auto argTypeId = (category.Position == 1)
-                ? candidate->RightType
-                : (candidate->Kind == EOperKind::Binary) ? candidate->LeftType : candidate->RightType;
+                                       ? candidate->RightType
+                                   : (candidate->Kind == EOperKind::Binary) ? candidate->LeftType
+                                                                            : candidate->RightType;
 
             const auto& argTypePtr = catalog.State->Types.FindPtr(argTypeId);
             Y_ENSURE(argTypePtr);
@@ -2970,7 +2978,7 @@ bool CanCastImplicitly(ui32 fromTypeId, ui32 toTypeId, const TCatalog& catalog) 
     return (castPtr->CoercionCode == ECoercionCode::Implicit);
 }
 
-}  // NPrivate
+} // namespace NPrivate
 
 bool IsCoercible(ui32 fromTypeId, ui32 toTypeId, ECoercionCode coercionType) {
     const auto& catalog = TCatalog::Instance();
@@ -3032,7 +3040,7 @@ std::variant<const TProcDesc*, const TTypeDesc*> LookupProcWithCasts(const TStri
             }
 
             const auto coercionType = NPrivate::FindCoercionPath(fromTypeId, typePtr->TypeId,
-                ECoercionCode::Explicit, catalog);
+                                                                 ECoercionCode::Explicit, catalog);
 
             switch (coercionType) {
                 case NPrivate::ECoercionSearchResult::BinaryCompatible:
@@ -3077,7 +3085,7 @@ std::variant<const TProcDesc*, const TTypeDesc*> LookupProcWithCasts(const TStri
     if (unknownsCount < argTypeIds.size()) {
         ui32 commonType = UnknownOid;
 
-        for (const auto argType: argTypeIds) {
+        for (const auto argType : argTypeIds) {
             if (argType == UnknownOid) {
                 continue;
             }
@@ -3147,7 +3155,7 @@ TMaybe<TIssue> LookupCommonType(const TVector<ui32>& typeIds, const std::functio
         if (otherType.Category != commonCategory) {
             // https://www.postgresql.org/docs/14/typeconv-union-case.html, step 4
             return TIssue(GetPosition(i), TStringBuilder() << "Cannot infer common type for types "
-                << commonType->TypeId << " and " << otherType.TypeId);
+                                                           << commonType->TypeId << " and " << otherType.TypeId);
         }
         castsNeeded = true;
         if (NPrivate::CanCastImplicitly(otherType.TypeId, commonType->TypeId, catalog)) {
@@ -3155,7 +3163,7 @@ TMaybe<TIssue> LookupCommonType(const TVector<ui32>& typeIds, const std::functio
         }
         if (commonType->IsPreferred || !NPrivate::CanCastImplicitly(commonType->TypeId, otherType.TypeId, catalog)) {
             return TIssue(GetPosition(i), TStringBuilder() << "Cannot infer common type for types "
-                << commonType->TypeId << " and " << otherType.TypeId);
+                                                           << commonType->TypeId << " and " << otherType.TypeId);
         }
         commonType = &otherType;
     }
@@ -3170,11 +3178,10 @@ TMaybe<TIssue> LookupCommonType(const TVector<ui32>& typeIds, const std::functio
     return {};
 }
 
-TMaybe<TIssue> LookupCommonType(const TVector<ui32>& typeIds, const std::function<TPosition(size_t i)>&GetPosition, const TTypeDesc*& typeDesc) {
+TMaybe<TIssue> LookupCommonType(const TVector<ui32>& typeIds, const std::function<TPosition(size_t i)>& GetPosition, const TTypeDesc*& typeDesc) {
     bool _;
     return LookupCommonType(typeIds, GetPosition, typeDesc, _);
 }
-
 
 const TOperDesc& LookupOper(const TString& name, const TVector<ui32>& argTypeIds) {
     const auto& catalog = TCatalog::Instance();
@@ -3190,16 +3197,16 @@ const TOperDesc& LookupOper(const TString& name, const TVector<ui32>& argTypeIds
     switch (argTypeIds.size()) {
         case 2:
             expectedOpKind = EOperKind::Binary;
-            calcScore = [&] (const auto* d) {
-                 return NPrivate::CalcBinaryOperatorScore(*d, argTypeIds[0], argTypeIds[1], catalog);
-                 };
+            calcScore = [&](const auto* d) {
+                return NPrivate::CalcBinaryOperatorScore(*d, argTypeIds[0], argTypeIds[1], catalog);
+            };
             break;
 
         case 1:
             expectedOpKind = EOperKind::LeftUnary;
-            calcScore = [&] (const auto* d) {
+            calcScore = [&](const auto* d) {
                 return NPrivate::CalcUnaryOperatorScore(*d, argTypeIds[0], catalog);
-                };
+            };
             break;
 
         default:
@@ -3263,7 +3270,7 @@ const TOperDesc& LookupOper(const TString& name, const TVector<ui32>& argTypeIds
         NPrivate::ThrowOperatorNotFound(name, argTypeIds);
     }
 
-    auto TryResolveUnknownsBySpreadingType = [&] (ui32 argTypeId, std::function<ui32(const TOperDesc*)> getArgType) {
+    auto TryResolveUnknownsBySpreadingType = [&](ui32 argTypeId, std::function<ui32(const TOperDesc*)> getArgType) {
         const TOperDesc* finalCandidate = nullptr;
 
         for (const auto* candidate : candidates) {
@@ -3279,9 +3286,9 @@ const TOperDesc& LookupOper(const TString& name, const TVector<ui32>& argTypeIds
 
     const TOperDesc* finalCandidate = nullptr;
     if (argTypeIds[0] == UnknownOid) {
-        finalCandidate = TryResolveUnknownsBySpreadingType(argTypeIds[1], [&] (const auto* oper) { return oper->LeftType; });
+        finalCandidate = TryResolveUnknownsBySpreadingType(argTypeIds[1], [&](const auto* oper) { return oper->LeftType; });
     } else if (argTypeIds[1] == UnknownOid) {
-        finalCandidate = TryResolveUnknownsBySpreadingType(argTypeIds[0], [&] (const auto* oper) { return oper->RightType; });
+        finalCandidate = TryResolveUnknownsBySpreadingType(argTypeIds[0], [&](const auto* oper) { return oper->RightType; });
     }
 
     if (finalCandidate) {
@@ -3299,7 +3306,7 @@ const TOperDesc& LookupOper(ui32 operId, const TVector<ui32>& argTypeIds) {
 
     if (!ValidateOperArgs(*operPtr, argTypeIds, catalog.State->Types)) {
         throw yexception() << "Unable to find an overload for operator with oid " << operId << " with given argument types: "
-            << ArgTypesList(argTypeIds);
+                           << ArgTypesList(argTypeIds);
     }
 
     return *operPtr;
@@ -3412,7 +3419,7 @@ const TAggregateDesc& LookupAggregation(const TString& name, const TVector<ui32>
     if (unknownsCount < argTypeIds.size()) {
         ui32 commonType = UnknownOid;
 
-        for (const auto argType: argTypeIds) {
+        for (const auto argType : argTypeIds) {
             if (argType == UnknownOid) {
                 continue;
             }
@@ -3477,9 +3484,7 @@ const TAggregateDesc& LookupAggregation(const TString& name, ui32 stateType, ui3
         return *d;
     }
 
-    throw yexception() << "Unable to find an overload for aggregate " << name << " with given state type: " <<
-        NPg::LookupType(stateType).Name << " and result type: " <<
-        NPg::LookupType(resultType).Name;
+    throw yexception() << "Unable to find an overload for aggregate " << name << " with given state type: " << NPg::LookupType(stateType).Name << " and result type: " << NPg::LookupType(resultType).Name;
 }
 
 void EnumAggregation(std::function<void(ui32, const TAggregateDesc&)> f) {
@@ -3498,8 +3503,9 @@ const TOpClassDesc* LookupDefaultOpClass(EOpClassMethod method, ui32 typeId) {
     const auto& catalog = TCatalog::Instance();
     auto lookupId = (typeId == VarcharOid ? TextOid : typeId);
     const auto opClassPtr = catalog.State->OpClasses.FindPtr(std::make_pair(method, lookupId));
-    if (opClassPtr)
+    if (opClassPtr) {
         return opClassPtr;
+    }
 
     throw yexception() << "No such opclass";
 
@@ -3507,7 +3513,7 @@ const TOpClassDesc* LookupDefaultOpClass(EOpClassMethod method, ui32 typeId) {
 }
 
 bool HasAmOp(ui32 familyId, ui32 strategy, ui32 leftType, ui32 rightType) {
-    const auto &catalog = TCatalog::Instance();
+    const auto& catalog = TCatalog::Instance();
     return catalog.State->AmOps.contains(std::make_tuple(familyId, strategy, leftType, rightType));
 }
 
@@ -3522,7 +3528,7 @@ const TAmOpDesc& LookupAmOp(ui32 familyId, ui32 strategy, ui32 leftType, ui32 ri
 }
 
 bool HasAmProc(ui32 familyId, ui32 num, ui32 leftType, ui32 rightType) {
-    const auto &catalog = TCatalog::Instance();
+    const auto& catalog = TCatalog::Instance();
     return catalog.State->AmProcs.contains(std::make_tuple(familyId, num, leftType, rightType));
 }
 
@@ -3537,7 +3543,7 @@ const TAmProcDesc& LookupAmProc(ui32 familyId, ui32 num, ui32 leftType, ui32 rig
 }
 
 bool HasConversion(const TString& from, const TString& to) {
-    const auto &catalog = TCatalog::Instance();
+    const auto& catalog = TCatalog::Instance();
     return catalog.State->Conversions.contains(std::make_pair(from, to));
 }
 
@@ -3602,13 +3608,13 @@ const TVector<TMaybe<TString>>* ReadTable(
     auto dataPtr = catalog.State->StaticTablesData.FindPtr(tableKey);
     if (!dataPtr) {
         throw yexception() << "Missing data for table "
-            << tableKey.Schema << "." << tableKey.Name;
+                           << tableKey.Schema << "." << tableKey.Name;
     }
 
     const auto& allColumns = *catalog.State->StaticColumns.FindPtr(tableKey);
     THashMap<TString, size_t> columnsToIndex;
     for (size_t i = 0; i < allColumns.size(); ++i) {
-        Y_ENSURE(columnsToIndex.emplace(allColumns[i].Name,i).second);
+        Y_ENSURE(columnsToIndex.emplace(allColumns[i].Name, i).second);
     }
 
     rowStep = allColumns.size();
@@ -3616,7 +3622,7 @@ const TVector<TMaybe<TString>>* ReadTable(
         auto indexPtr = columnsToIndex.FindPtr(columnNames[i]);
         if (!indexPtr) {
             throw yexception() << "Missing column " << columnNames[i] << " in table "
-                << tableKey.Schema << "." << tableKey.Name;
+                               << tableKey.Schema << "." << tableKey.Name;
         }
 
         columnsRemap[i] = *indexPtr;
@@ -3685,7 +3691,7 @@ void LoadSystemFunctions(ISystemFunctionsParser& parser) {
 }
 
 void RegisterExtensions(const TVector<TExtensionDesc>& extensions, bool typesOnly,
-    IExtensionSqlParser& parser, IExtensionLoader* loader) {
+                        IExtensionSqlParser& parser, IExtensionLoader* loader) {
     YQL_PROFILE_FUNC(DEBUG);
     if (extensions.size() > MaximumExtensionsCount) {
         throw yexception() << "Too many extensions: " << extensions.size();
@@ -4354,4 +4360,4 @@ ui32 LookupExtensionByInstallName(const TString& installName) {
     return *indexPtr;
 }
 
-}
+} // namespace NYql::NPg

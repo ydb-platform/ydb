@@ -9,23 +9,22 @@
 
 #include <tuple>
 
-
 namespace NYql::NPrivate {
 
 class TUrlListerManager: public IUrlListerManager {
 public:
     TUrlListerManager(
-        TVector<IUrlListerPtr> urlListers
-    )
+        TVector<IUrlListerPtr> urlListers)
         : UrlListers_(std::move(urlListers))
-    {}
+    {
+    }
 
     TVector<TUrlListEntry> ListUrl(const TString& url, const TString& tokenName) const override {
         auto [preprocessedUrl, alias] = GetPreparedUrlAndAlias(url);
 
         TString token = GetToken(tokenName, alias);
 
-        for (const auto& urlLister: UrlListers_) {
+        for (const auto& urlLister : UrlListers_) {
             if (urlLister->Accept(preprocessedUrl)) {
                 return urlLister->ListUrl(preprocessedUrl, token);
             }
@@ -39,11 +38,10 @@ public:
 
         TString token = GetToken(tokenName, alias);
 
-        for (const auto& urlLister: UrlListers_) {
+        for (const auto& urlLister : UrlListers_) {
             if (urlLister->Accept(preprocessedUrl)) {
                 return ListRecursive(urlLister, preprocessedUrl, token, separator,
-                                    foldersLimit == 0 ? Max<ui32>() : foldersLimit
-                                );
+                                     foldersLimit == 0 ? Max<ui32>() : foldersLimit);
             }
         }
         throw yexception() << "Unsupported url for listing content: " << url;
@@ -138,10 +136,9 @@ private:
             }
             for (auto& entry : subEntries) {
                 TUrlListEntry newEntry = {
-                        entry.Url,
-                        TStringBuilder() << currentEntry.Name << separator << entry.Name,
-                        entry.Type
-                    };
+                    entry.Url,
+                    TStringBuilder() << currentEntry.Name << separator << entry.Name,
+                    entry.Type};
                 if (entry.Type == EUrlListEntryType::DIRECTORY) {
                     urlsQueue.push_back(std::move(newEntry));
                     if (--foldersLimit == 0) {
@@ -163,14 +160,13 @@ private:
     TMaybe<NYT::TNode> Parameters_;
 };
 
-}
+} // namespace NYql::NPrivate
 
 namespace NYql {
 
 IUrlListerManagerPtr MakeUrlListerManager(
-    TVector<IUrlListerPtr> urlListers
-) {
+    TVector<IUrlListerPtr> urlListers) {
     return MakeIntrusive<NPrivate::TUrlListerManager>(std::move(urlListers));
 }
 
-}
+} // namespace NYql

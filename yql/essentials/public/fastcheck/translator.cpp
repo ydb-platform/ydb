@@ -16,7 +16,7 @@ namespace NFastCheck {
 
 namespace {
 
-class TTranslatorRunner : public TCheckRunnerBase {
+class TTranslatorRunner: public TCheckRunnerBase {
 public:
     TString GetCheckName() const final {
         return "translator";
@@ -24,12 +24,12 @@ public:
 
     TCheckResponse DoRun(const TChecksRequest& request) final {
         switch (request.Syntax) {
-        case ESyntax::SExpr:
-            return RunSExpr(request);
-        case ESyntax::PG:
-            return RunPg(request);
-        case ESyntax::YQL:
-            return RunYql(request);
+            case ESyntax::SExpr:
+                return RunSExpr(request);
+            case ESyntax::PG:
+                return RunPg(request);
+            case ESyntax::YQL:
+                return RunYql(request);
         }
     }
 
@@ -51,12 +51,11 @@ private:
         return TCheckResponse{
             .CheckName = GetCheckName(),
             .Success = astRes.IsOk(),
-            .Issues = astRes.Issues
-        };
+            .Issues = astRes.Issues};
     }
 
     TCheckResponse RunYql(const TChecksRequest& request) {
-        TCheckResponse res {.CheckName = GetCheckName()};
+        TCheckResponse res{.CheckName = GetCheckName()};
         google::protobuf::Arena arena;
         NSQLTranslation::TTranslationSettings settings;
         settings.Arena = &arena;
@@ -69,17 +68,17 @@ private:
         settings.Flags = TranslationFlags();
 
         switch (request.Mode) {
-        case EMode::Default:
-            settings.AlwaysAllowExports = true;
-            break;
-        case EMode::Library:
-            settings.Mode = NSQLTranslation::ESqlMode::LIBRARY;
-            break;
-        case EMode::Main:
-            break;
-        case EMode::View:
-            settings.Mode = NSQLTranslation::ESqlMode::LIMITED_VIEW;
-            break;
+            case EMode::Default:
+                settings.AlwaysAllowExports = true;
+                break;
+            case EMode::Library:
+                settings.Mode = NSQLTranslation::ESqlMode::LIBRARY;
+                break;
+            case EMode::Main:
+                break;
+            case EMode::View:
+                settings.Mode = NSQLTranslation::ESqlMode::LIMITED_VIEW;
+                break;
         }
 
         if (!ParseTranslationSettings(request.Program, settings, res.Issues)) {
@@ -102,39 +101,39 @@ private:
     void FillClusters(const TChecksRequest& request, NSQLTranslation::TTranslationSettings& settings) {
         if (!request.ClusterSystem.empty()) {
             Y_ENSURE(AnyOf(Providers, [&](const auto& p) { return p == request.ClusterSystem; }),
-                "Invalid ClusterSystem value: " + request.ClusterSystem);
+                     "Invalid ClusterSystem value: " + request.ClusterSystem);
         }
 
         switch (request.ClusterMode) {
-        case EClusterMode::Many:
-            for (const auto& x : request.ClusterMapping) {
-                Y_ENSURE(AnyOf(Providers, [&](const auto& p) { return p == x.second; }),
-                    "Invalid system: " + x.second);
-            }
+            case EClusterMode::Many:
+                for (const auto& x : request.ClusterMapping) {
+                    Y_ENSURE(AnyOf(Providers, [&](const auto& p) { return p == x.second; }),
+                             "Invalid system: " + x.second);
+                }
 
-            settings.ClusterMapping = request.ClusterMapping;
-            settings.DynamicClusterProvider = request.ClusterSystem;
-            break;
-        case EClusterMode::Single:
-            Y_ENSURE(!request.ClusterSystem.empty(), "Missing ClusterSystem parameter");
-            settings.DefaultCluster = "single";
-            settings.ClusterMapping["single"] = request.ClusterSystem;
-            settings.DynamicClusterProvider = request.ClusterSystem;
-            break;
-        case EClusterMode::Unknown:
-            settings.DefaultCluster = "single";
-            settings.ClusterMapping["single"] = UnknownProviderName;
-            settings.DynamicClusterProvider = UnknownProviderName;
-            break;
+                settings.ClusterMapping = request.ClusterMapping;
+                settings.DynamicClusterProvider = request.ClusterSystem;
+                break;
+            case EClusterMode::Single:
+                Y_ENSURE(!request.ClusterSystem.empty(), "Missing ClusterSystem parameter");
+                settings.DefaultCluster = "single";
+                settings.ClusterMapping["single"] = request.ClusterSystem;
+                settings.DynamicClusterProvider = request.ClusterSystem;
+                break;
+            case EClusterMode::Unknown:
+                settings.DefaultCluster = "single";
+                settings.ClusterMapping["single"] = UnknownProviderName;
+                settings.DynamicClusterProvider = UnknownProviderName;
+                break;
         }
     }
 };
 
-}
+} // namespace
 
 std::unique_ptr<ICheckRunner> MakeTranslatorRunner() {
     return std::make_unique<TTranslatorRunner>();
 }
 
-}
-}
+} // namespace NFastCheck
+} // namespace NYql

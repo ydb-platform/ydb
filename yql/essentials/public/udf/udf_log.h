@@ -11,30 +11,30 @@
 namespace NYql {
 namespace NUdf {
 
-#define UDF_LOG(logger, component, level, msg)              \
-do {                                                        \
-    if ((logger) && (logger)->IsActive(component, level)) { \
-        (logger)->Log(component, level, msg);               \
-    }                                                       \
-} while (0)
+#define UDF_LOG(logger, component, level, msg)                  \
+    do {                                                        \
+        if ((logger) && (logger)->IsActive(component, level)) { \
+            (logger)->Log(component, level, msg);               \
+        }                                                       \
+    } while (0)
 
-#define UDF_LOG_IF(condition, logger, component, level, msg)               \
-do {                                                                       \
-    if ((logger) && (condition) && (logger)->IsActive(component, level)) { \
-        (logger)->Log(component, level, msg);                              \
-    }                                                                      \
-} while (0)
+#define UDF_LOG_IF(condition, logger, component, level, msg)                   \
+    do {                                                                       \
+        if ((logger) && (condition) && (logger)->IsActive(component, level)) { \
+            (logger)->Log(component, level, msg);                              \
+        }                                                                      \
+    } while (0)
 
 #define UDF_LOG_LEVEL(XX) \
-    XX(Fatal, 0)  \
-    XX(Error, 1)  \
-    XX(Warn, 2)   \
-    XX(Notice, 3) \
-    XX(Info, 4) \
-    XX(Debug, 5) \
+    XX(Fatal, 0)          \
+    XX(Error, 1)          \
+    XX(Warn, 2)           \
+    XX(Notice, 3)         \
+    XX(Info, 4)           \
+    XX(Debug, 5)          \
     XX(Trace, 6)
 
-enum class ELogLevel : ui32 {
+enum class ELogLevel: ui32 {
     UDF_LOG_LEVEL(ENUM_VALUE_GEN)
 };
 
@@ -48,7 +48,7 @@ TMaybe<ELogLevel> TryLevelFromString(TStringBuf str);
 
 using TLogComponentId = ui32;
 
-class ILogger : public IRefCounted {
+class ILogger: public IRefCounted {
 public:
     virtual TLogComponentId RegisterComponent(const TStringRef& component) = 0;
     virtual void SetDefaultLevel(ELogLevel level) = 0;
@@ -75,10 +75,10 @@ TLoggerPtr MakeSynchronizedLogger(const TLoggerPtr& inner);
 using TLogProviderFunc = std::function<void(const TStringRef&, ELogLevel, const TStringRef&)>;
 TUniquePtr<ILogProvider> MakeLogProvider(TLogProviderFunc func, TMaybe<ELogLevel> filter = Nothing());
 
-} // namspace NUdf
-} // namspace NYql
+} // namespace NUdf
+} // namespace NYql
 
-template<>
-inline void Out<NYql::NUdf::ELogLevel>(IOutputStream &o, NYql::NUdf::ELogLevel value) {
+template <>
+inline void Out<NYql::NUdf::ELogLevel>(IOutputStream& o, NYql::NUdf::ELogLevel value) {
     o << NYql::NUdf::LevelToString(value);
 }

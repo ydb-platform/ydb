@@ -3,6 +3,7 @@
 #include "yql_yt_gateway.h"
 #include "yql_yt_op_settings.h"
 #include "yql_yt_helpers.h"
+#include "yql_yt_io_discovery_partitions.h"
 #include "yql_yt_io_discovery_walk_folders.h"
 
 #include <yt/yql/providers/yt/expr_nodes/yql_yt_expr_nodes.h>
@@ -52,6 +53,7 @@ public:
         const bool evaluationInProgress = State_->Types->EvaluationInProgress;
         TOptimizeExprSettings settings(nullptr);
         settings.VisitChanges = true;
+        bool seenMrPartitions = false;
         auto status = OptimizeExpr(input, output, [&](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
             if (auto maybeRead = TMaybeNode<TYtRead>(node)) {
                 if (!maybeRead.DataSource()) { // Validates provider
@@ -67,6 +69,11 @@ public:
                     ctx.AddError(YqlIssue(ctx.GetPosition(read.Pos()), TIssuesIds::YQL_NOT_ALLOWED_IN_DISCOVERY,
                         TStringBuilder() << node->Content() << " is not allowed in Discovery mode"));
                     return {};
+                }
+
+                if (read.Arg(2).Ref().IsCallable({MrPartitionsName, MrPartitionsStrictName})) {
+                    seenMrPartitions = true;
+                    return ExpandMrPartitions(read, ctx, *(State_->Types));
                 }
 
                 if (read.Arg(2).Ref().IsCallable({MrPartitionListName, MrPartitionListStrictName})) {
@@ -193,6 +200,12 @@ public:
         }, ctx, settings);
 
         if (status.Level != TStatus::Ok) {
+            if (seenMrPartitions && status.Level == TStatus::Repeat) {
+                ctx.Step
+                    .Repeat(TExprStep::ExpandApplyForLambdas)
+                    .Repeat(TExprStep::ExprEval);
+                return TStatus(TStatus::Repeat, true);
+            }
             return status;
         }
 

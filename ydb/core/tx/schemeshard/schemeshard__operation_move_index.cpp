@@ -583,6 +583,7 @@ TVector<ISubOperation::TPtr> CreateConsistentMoveIndex(TOperationId nextId, cons
         TPath dstImplTable = dstIndexPath.Child(srcImplTableName);
 
         result.push_back(CreateMoveTable(NextPartId(nextId, result), MoveTableTask(srcImplTable, dstImplTable)));
+        AddMoveSequences(nextId, result, srcImplTable, dstImplTable.PathString(), GetLocalSequences(context, srcImplTable));
     }
 
     return result;

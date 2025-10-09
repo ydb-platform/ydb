@@ -634,6 +634,8 @@ ISubOperation::TPtr CreateAlterLogin(TOperationId id, TTxState::ETxState state);
 
 TVector<ISubOperation::TPtr> CreateConsistentMoveTable(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
 TVector<ISubOperation::TPtr> CreateConsistentMoveIndex(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
+void AddMoveSequences(TOperationId nextId, TVector<ISubOperation::TPtr>& result,
+    const TPath& srcTable, const TString& dstPath, const THashSet<TString>& sequences);
 
 ISubOperation::TPtr CreateMoveTable(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateMoveTable(TOperationId id, TTxState::ETxState state);

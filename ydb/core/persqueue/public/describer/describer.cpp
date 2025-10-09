@@ -95,7 +95,7 @@ public:
                             }
                         } else {
                             if (Settings.UserToken && !entry.SecurityObject->CheckAccess(Settings.AccessRights, *Settings.UserToken)) {
-                                LOG_D("Path '" << realPath << "' UNAUTHORIZE");
+                                LOG_D("Path '" << realPath << "' UNAUTHORIZED");
                                 Result[originalPath] = TTopicInfo{
                                     .Status = EStatus::UNAUTHORIZED
                                 };
@@ -112,7 +112,7 @@ public:
                     } else {
                         LOG_D("Path '" << realPath << "' is not a topic: " << entry.Kind);
                         if (Settings.UserToken && !entry.SecurityObject->CheckAccess(NACLib::EAccessRights::DescribeSchema, *Settings.UserToken)) {
-                            LOG_D("Path '" << realPath << "' UNAUTHORIZE");
+                            LOG_D("Path '" << realPath << "' UNAUTHORIZED");
                             Result[originalPath] = TTopicInfo{
                                 .Status = EStatus::UNAUTHORIZED
                             };

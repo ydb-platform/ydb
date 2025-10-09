@@ -1723,7 +1723,7 @@ public:
         return value != 0;
     }
 
-    bool GetUseNewPrecharge() const {
+    bool GetUsePrechargeForExtBlobs() const {
         ui64 value = ReadIteratorKeysExtBlobsPrecharge;
         return value != 0;
     }

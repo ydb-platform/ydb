@@ -367,11 +367,11 @@ Y_UNIT_TEST_SUITE(KqpKv) {
         CompareYson(Sprintf("[[[%du];[%du]]]", valueToReturn_1, valueToReturn_2), TString{res});
     }
 
-    Y_UNIT_TEST_TWIN(ReadRows_ExternalBlobs, NewPrecharge) {
+    Y_UNIT_TEST_TWIN(ReadRows_ExternalBlobs, UseExtBlobsPrecharge) {
         NKikimrConfig::TImmediateControlsConfig controls;
 
-        if (NewPrecharge) {
-            controls.MutableDataShardControls()->SetReadIteratorKeysExtBlobsPrecharge(1);
+        if (UseExtBlobsPrecharge) {
+            controls.MutableDataShardControls()->SetReadIteratorKeysExtBlobsPrecharge(1); // sets to "true"
         }
 
         NKikimrConfig::TFeatureFlags flags;

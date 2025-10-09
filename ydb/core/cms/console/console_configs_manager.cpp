@@ -78,7 +78,7 @@ void TConfigsManager::ValidateMainConfig(TUpdateConfigOpContext& opCtx) {
     try {
         if (opCtx.UpdatedConfig != MainYamlConfig || YamlDropped) {
             auto tree = NFyaml::TDocument::Parse(opCtx.UpdatedConfig);
-            auto resolved = NYamlConfig::ResolveAll(tree);
+            auto resolved = NYamlConfig::ResolveUniqueDocs(tree);
 
             if (ClusterName != opCtx.Cluster) {
                 ythrow yexception() << "ClusterName mismatch"
@@ -95,7 +95,7 @@ void TConfigsManager::ValidateMainConfig(TUpdateConfigOpContext& opCtx) {
             TSimpleSharedPtr<NYamlConfig::TBasicUnknownFieldsCollector> unknownFieldsCollector = new NYamlConfig::TBasicUnknownFieldsCollector;
 
             std::vector<TString> errors;
-            for (auto& [_, config] : resolved.Configs) {
+            for (auto& config : resolved) {
                 auto cfg = NYamlConfig::YamlToProto(
                     config.second,
                     true,
@@ -177,13 +177,13 @@ void TConfigsManager::ValidateDatabaseConfig(TUpdateDatabaseConfigOpContext& opC
 
             auto tree = NFyaml::TDocument::Parse(MainYamlConfig);
             NYamlConfig::AppendDatabaseConfig(tree, databaseTree);
-            auto resolved = NYamlConfig::ResolveAll(tree);
+            auto resolved = NYamlConfig::ResolveUniqueDocs(tree);
 
             errors.clear();
 
             auto* csk = AppData()->ConfigSwissKnife;
 
-            for (auto& [_, config] : resolved.Configs) {
+            for (auto& config : resolved) {
                 auto cfg = NYamlConfig::YamlToProto(
                     config.second,
                     true,

@@ -193,6 +193,11 @@ struct TResolvedConfig {
 TResolvedConfig ResolveAll(NFyaml::TDocument& doc);
 
 /**
+ * Generates unique resolved documents without materializing label combinations
+ */
+TVector<TDocumentConfig> ResolveUniqueDocs(NFyaml::TDocument& doc);
+
+/**
  * Calculates hash of resolved config
  * Used to ensure that cli resolves config the same as a server
  */

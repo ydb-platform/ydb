@@ -2,6 +2,7 @@
 #include "yaml_config_impl.h"
 
 #include <util/digest/sequence.h>
+#include <functional>
 
 template <>
 struct THash<NKikimr::NYamlConfig::TLabel> {
@@ -24,6 +25,9 @@ struct THash<TVector<TString>> {
 template <>
 struct THash<TVector<NKikimr::NYamlConfig::TLabel>> : public TSimpleRangeHash {};
 
+template <>
+struct THash<TVector<int>> : public TSimpleRangeHash {};
+
 namespace NKikimr::NYamlConfig {
 
 inline const TMap<TString, EYamlConfigLabelTypeClass> ClassMapping{
@@ -37,11 +41,20 @@ inline const TStringBuf inheritMapInSeqTag{"!inherit"};
 inline const TStringBuf removeTag{"!remove"};
 inline const TStringBuf appendTag{"!append"};
 
+size_t Hash(const NFyaml::TNodeRef& resolved) {
+    TStringStream ss;
+    ss << resolved;
+    TString s = ss.Str();
+    return THash<TString>{}(s);
+}
+
 TString GetKey(const NFyaml::TNodeRef& node, TString key) {
     auto map = node.Map();
     auto k = map.at(key).Scalar();
     return k;
 }
+
+using TTriePath = TVector<int>;
 
 bool Fit(const TSelector& selector, const TSet<TNamedLabel>& labels) {
     bool result = true;
@@ -898,20 +911,21 @@ TIncompatibilityRules ParseIncompatibilityRules(const NFyaml::TNodeRef& root) {
     return userRules;
 }
 
-void Combine(
+void CombineForEach(
     TVector<TVector<TLabel>>& labelCombinations,
     TVector<TLabel>& combination,
     const TVector<std::pair<TString, TSet<TLabel>>>& labels,
-    size_t offset)
+    size_t offset,
+    const std::function<void(const TVector<TLabel>&)>& process)
 {
     if (offset == labels.size()) {
-        labelCombinations.push_back(combination);
+        process(combination);
         return;
     }
 
     for (auto& label : labels[offset].second) {
         combination[offset] = label;
-        Combine(labelCombinations, combination, labels, offset + 1);
+        CombineForEach(combination, labels, offset + 1, process);
     }
 }
 
@@ -964,18 +978,31 @@ bool Fit(
     return true;
 }
 
-TResolvedConfig ResolveAll(NFyaml::TDocument& doc)
-{
-    TVector<TString> labelNames;
-    TVector<std::pair<TString, TSet<TLabel>>> labels;
+struct TCompiledSelector {
+    TVector<std::pair<int, const TLabelValueSet*>> In;
+    TVector<std::pair<int, const TLabelValueSet*>> NotIn;
+};
 
-    auto config = ParseConfig(doc);
+THashSet<TString> ComputeUsedNames(const TYamlConfigModel& model) {
     THashSet<TString> usedNames;
-    usedNames.reserve(config.Selectors.size() * 2);
-    for (const auto& selectorModel : config.Selectors) {
-        for (const auto& [label, _] : selectorModel.Selector.In) usedNames.insert(label);
-        for (const auto& [label, _] : selectorModel.Selector.NotIn) usedNames.insert(label);
+    usedNames.reserve(model.Selectors.size() * 2);
+    for (const auto& selectorModel : model.Selectors) {
+        for (const auto& [label, _] : selectorModel.Selector.In) {
+            usedNames.insert(label);
+        }
+        for (const auto& [label, _] : selectorModel.Selector.NotIn) {
+            usedNames.insert(label);
+        }
     }
+    return usedNames;
+}
+
+void BuildLabelDomain(
+    NFyaml::TDocument& doc,
+    const THashSet<TString>& usedNames,
+    TVector<TString>& labelNames,
+    TVector<std::pair<TString, TSet<TLabel>>>& labels)
+{
     auto namedLabels = CollectLabels(doc);
 
     for (auto& [name, values]: namedLabels) {
@@ -996,121 +1023,132 @@ TResolvedConfig ResolveAll(NFyaml::TDocument& doc)
         labels.push_back({name, set});
         labelNames.push_back(name);
     }
+}
 
-    TVector<TVector<TLabel>> labelCombinations;
-
-    TVector<TLabel> combination;
-    combination.resize(labels.size());
-    
-    size_t prunedCount = 0;
-    
-    if (config.IncompatibilityRules.GetRuleCount() > 0 || config.IncompatibilityRules.GetDisabledCount() > 0) {
-        CombineWithRules(labelCombinations, combination, labels, config.IncompatibilityRules, 0, prunedCount);
-    } else {
-        Combine(labelCombinations, combination, labels, 0);
-    }
-
+THashMap<TString, int> BuildNameToIndex(const TVector<TString>& labelNames) {
     THashMap<TString, int> nameToIndex;
     nameToIndex.reserve(labelNames.size());
     for (size_t i = 0; i < labelNames.size(); ++i) {
         nameToIndex[labelNames[i]] = static_cast<int>(i);
     }
+    return nameToIndex;
+}
 
-    struct TCompiledSelector {
-        TVector<std::pair<int, const TLabelValueSet*>> In;
-        TVector<std::pair<int, const TLabelValueSet*>> NotIn;
-    };
-
+TVector<TCompiledSelector> CompileSelectors(
+    const TYamlConfigModel& model,
+    const THashMap<TString, int>& nameToIndex)
+{
     TVector<TCompiledSelector> compiled;
-    compiled.reserve(config.Selectors.size());
-    for (const auto& selectorModel : config.Selectors) {
+    compiled.reserve(model.Selectors.size());
+
+    for (const auto& selectorModel : model.Selectors) {
         TCompiledSelector cs;
         cs.In.reserve(selectorModel.Selector.In.size());
         cs.NotIn.reserve(selectorModel.Selector.NotIn.size());
+
         for (const auto& kv : selectorModel.Selector.In) {
-            auto it = nameToIndex.find(kv.first);
-            if (it != nameToIndex.end()) {
+            if (auto it = nameToIndex.find(kv.first); it != nameToIndex.end()) {
                 cs.In.push_back({it->second, &kv.second});
             }
         }
+
         for (const auto& kv : selectorModel.Selector.NotIn) {
-            auto it = nameToIndex.find(kv.first);
-            if (it != nameToIndex.end()) {
+            if (auto it = nameToIndex.find(kv.first); it != nameToIndex.end()) {
                 cs.NotIn.push_back({it->second, &kv.second});
             }
         }
+
         compiled.push_back(std::move(cs));
     }
 
-    auto cmp = [](const TVector<int>& lhs, const TVector<int>& rhs) {
-        auto lhsIt = lhs.begin();
-        auto rhsIt = rhs.begin();
+    return compiled;
+}
 
-        while (lhsIt != lhs.end() && rhsIt != rhs.end() && (*lhsIt == *rhsIt)) {
-            lhsIt++;
-            rhsIt++;
-        }
+struct TResolveContext {
+    TYamlConfigModel Model;
+    TVector<TString> LabelNames;
+    TVector<std::pair<TString, TSet<TLabel>>> Labels;
+    TVector<TCompiledSelector> Compiled;
+};
 
-        if (lhsIt == lhs.end()) {
-            return false;
-        } else if (rhsIt == rhs.end()) {
-            return true;
-        }
-
-        return *lhsIt < *rhsIt;
+static TResolveContext PrepareResolveContext(NFyaml::TDocument& doc) {
+    TResolveContext ctx{
+        .Model = ParseConfig(doc),
     };
+    auto usedNames = ComputeUsedNames(ctx.Model);
+    BuildLabelDomain(doc, usedNames, ctx.LabelNames, ctx.Labels);
+    auto nameToIndex = BuildNameToIndex(ctx.LabelNames);
+    ctx.Compiled = CompileSelectors(ctx.Model, nameToIndex);
+    return ctx;
+}
 
-    using TTriePath = TVector<int>;
+template <typename TCallback>
+void ForEachTerminal(
+    NFyaml::TDocument doc,
+    const TYamlConfigModel& model,
+    const TVector<std::pair<TString, TSet<TLabel>>>& labels,
+    const TVector<TCompiledSelector>& compiled,
+    const TCallback& onTerminal)
+{
+    THashMap<TTriePath, TSimpleSharedPtr<TDocumentConfig>> selectorsTrie;
+    auto rootPtr = MakeSimpleShared<TDocumentConfig>(std::move(doc), model.Config);
+    selectorsTrie[TTriePath{0}] = rootPtr;
+
+    TVector<TLabel> combination;
+    combination.resize(labels.size());
+
+    CombineForEach(
+        combination,
+        labels,
+        0,
+        [&](const TVector<TLabel>& current) {
+            TSimpleSharedPtr<TDocumentConfig> cur = rootPtr;
+            TTriePath path({0});
+
+            for (size_t i = 0; i < model.Selectors.size(); ++i) {
+                if (Fit(compiled[i].In, compiled[i].NotIn, current)) {
+                    path.push_back(i + 1);
+                    if (auto it = selectorsTrie.find(path); it != selectorsTrie.end()) {
+                        cur = it->second;
+                    } else {
+                        auto clone = cur->first.Clone();
+                        auto cloneConfig = ParseConfig(clone);
+
+                        Apply(cloneConfig.Config, cloneConfig.Selectors[i].Config);
+
+                        cur = MakeSimpleShared<TDocumentConfig>(std::move(clone), cloneConfig.Config);
+                        selectorsTrie[path] = cur;
+                    }
+                }
+            }
+
+            onTerminal(path, cur, current);
+        });
+}
+
+TResolvedConfig ResolveAll(NFyaml::TDocument& doc)
+{
+    auto ctx = PrepareResolveContext(doc);
 
     struct TTrieNode {
         TSimpleSharedPtr<TDocumentConfig> ResolvedConfig;
         TVector<TVector<TLabel>> LabelCombinations;
     };
 
-    std::map<TTriePath, TSimpleSharedPtr<TDocumentConfig>, decltype(cmp)> selectorsTrie(cmp);
-    std::map<TTriePath, TTrieNode, decltype(cmp)> appliedSelectors(cmp);
+    THashMap<TTriePath, TTrieNode> appliedSelectors;
 
-    auto rootConfig = TTrieNode {
-        MakeSimpleShared<TDocumentConfig>(std::move(doc), config.Config),
-        {},
-    };
-
-    selectorsTrie[{0}] = rootConfig.ResolvedConfig;
-
-    for (size_t j = 0; j < labelCombinations.size(); ++j) {
-        TSimpleSharedPtr<TDocumentConfig> cur = rootConfig.ResolvedConfig;
-        TTriePath triePath({0});
-
-        for (size_t i = 0; i < config.Selectors.size(); ++i) {
-            if (Fit(compiled[i].In, compiled[i].NotIn, labelCombinations[j])) {
-                triePath.push_back(i + 1);
-                if (auto it = selectorsTrie.find(triePath); it != selectorsTrie.end()) {
-                    cur = it->second;
-                } else {
-                    auto clone = cur->first.Clone();
-                    auto cloneConfig = ParseConfig(clone);
-
-                    Apply(cloneConfig.Config, cloneConfig.Selectors[i].Config);
-
-                    cur = MakeSimpleShared<std::pair<NFyaml::TDocument, NFyaml::TNodeRef>>(
-                        std::move(clone),
-                        cloneConfig.Config),
-                    selectorsTrie[triePath] = cur;
-                }
+    ForEachTerminal(
+        std::move(doc),
+        ctx.Model,
+        ctx.Labels,
+        ctx.Compiled,
+        [&](const TTriePath& path, const TSimpleSharedPtr<TDocumentConfig>& cur, const TVector<TLabel>& combination) {
+            auto& node = appliedSelectors[path];
+            if (!node.ResolvedConfig) {
+                node.ResolvedConfig = cur;
             }
-        }
-
-        if (auto it = appliedSelectors.find(triePath); it != appliedSelectors.end()) {
-            it->second.LabelCombinations.push_back(labelCombinations[j]);
-        } else {
-            appliedSelectors.try_emplace(triePath, TTrieNode{
-                    cur,
-                    {labelCombinations[j]}
-                });
-        }
-    }
-
-    selectorsTrie.clear();
+            node.LabelCombinations.push_back(combination);
+        });
 
     TMap<TSet<TVector<TLabel>>, TDocumentConfig> configs;
 
@@ -1122,14 +1160,50 @@ TResolvedConfig ResolveAll(NFyaml::TDocument& doc)
             std::make_pair(std::move(value.ResolvedConfig->first), value.ResolvedConfig->second));
     }
 
-    return {labelNames, std::move(configs)};
+    return {ctx.LabelNames, std::move(configs)};
 }
 
-size_t Hash(const NFyaml::TNodeRef& resolved) {
-    TStringStream ss;
-    ss << resolved;
-    TString s = ss.Str();
-    return THash<TString>{}(s);
+TVector<TDocumentConfig> ResolveUniqueDocs(NFyaml::TDocument& doc) {
+    auto ctx = PrepareResolveContext(doc);
+
+    TVector<TDocumentConfig> result;
+    THashMap<size_t, TVector<size_t>> hashToIdxs;
+    TVector<NFyaml::TNodeRef> nodes;
+    THashMap<const TDocumentConfig*, size_t> hashCache;
+
+    ForEachTerminal(
+        std::move(doc),
+        ctx.Model,
+        ctx.Labels,
+        ctx.Compiled,
+        [&](const TTriePath&, const TSimpleSharedPtr<TDocumentConfig>& cur, const TVector<TLabel>&) {
+            size_t h;
+            if (auto cacheIt = hashCache.find(cur.Get()); cacheIt != hashCache.end()) {
+                h = cacheIt->second;
+            } else {
+                h = Hash(cur->second);
+                hashCache[cur.Get()] = h;
+            }
+
+            bool duplicate = false;
+            if (auto vecIt = hashToIdxs.find(h); vecIt != hashToIdxs.end()) {
+                for (auto idx : vecIt->second) {
+                    if (nodes[idx].DeepEqual(cur->second)) {
+                        duplicate = true;
+                        break;
+                    }
+                }
+            }
+            if (!duplicate) {
+                auto clonedDoc = cur->first.Clone();
+                auto configNode = clonedDoc.Root().Map().at("config");
+                result.emplace_back(std::move(clonedDoc), configNode);
+                nodes.push_back(result.back().second);
+                hashToIdxs[h].push_back(nodes.size() - 1);
+            }
+        });
+
+    return result;
 }
 
 size_t Hash(const TResolvedConfig& config)

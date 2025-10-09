@@ -174,7 +174,6 @@ private:
             return;
         }
 
-
         if (state.State == NYdbGrpc::TAuthState::AS_UNAVAILABLE) {
             Counters->IncDatabaseUnavailableCounter();
             const TString error = "Unable to resolve token";
@@ -293,6 +292,7 @@ private:
                 requestBaseCtx->FinishSpan();
                 return;
             }
+
             Register(CreateGrpcRequestCheckActor<TEvent>(SelfId(),
                 database->SchemeBoardResult->DescribeSchemeResult,
                 database->SecurityObject,

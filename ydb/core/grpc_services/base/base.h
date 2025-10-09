@@ -1156,13 +1156,7 @@ public:
     }
 };
 
-template <ui32 TRpcId,
-    typename TReq,
-    typename TResp,
-    bool IsOperation,
-    typename TDerived,
-    class TMethodAccessorTraits = TYdbGrpcMethodAccessorTraits<TReq, TResp, IsOperation>,
-    NRuntimeEvents::EType RuntimeEventType = NRuntimeEvents::EType::UNKNOWN>
+template <ui32 TRpcId, typename TReq, typename TResp, bool IsOperation, typename TDerived, class TMethodAccessorTraits = TYdbGrpcMethodAccessorTraits<TReq, TResp, IsOperation>, NRuntimeEvents::EType RuntimeEventType = NRuntimeEvents::EType::UNKNOWN>
 class TGRpcRequestWrapperImpl
     : public std::conditional_t<IsOperation,
         TGrpcResponseSenderImpl<TGRpcRequestWrapperImpl<TRpcId, TReq, TResp, IsOperation, TDerived>>,
@@ -1526,13 +1520,7 @@ private:
     TMaybe<TString> TraceId;
 };
 
-template <ui32 TRpcId,
-    typename TReq,
-    typename TResp,
-    bool IsOperation,
-    typename TDerived,
-    class TMethodAccessorTraits = TYdbGrpcMethodAccessorTraits<TReq, TResp, IsOperation>,
-    NRuntimeEvents::EType RuntimeEventType = NRuntimeEvents::EType::UNKNOWN>
+template <ui32 TRpcId, typename TReq, typename TResp, bool IsOperation, typename TDerived, class TMethodAccessorTraits = TYdbGrpcMethodAccessorTraits<TReq, TResp, IsOperation>, NRuntimeEvents::EType RuntimeEventType = NRuntimeEvents::EType::UNKNOWN>
 class TGRpcRequestValidationWrapperImpl : public TGRpcRequestWrapperImpl<TRpcId, TReq, TResp, IsOperation, TDerived, TMethodAccessorTraits, RuntimeEventType> {
 public:
 
@@ -1562,29 +1550,13 @@ public:
 
 class IFacilityProvider;
 
-template <typename TReq,
-    typename TResp,
-    bool IsOperation,
-    class TMethodAccessorTraits = TYdbGrpcMethodAccessorTraits<TReq, TResp, IsOperation>,
-    NRuntimeEvents::EType RuntimeEventType = NRuntimeEvents::EType::UNKNOWN>
+template <typename TReq, typename TResp, bool IsOperation, class TMethodAccessorTraits = TYdbGrpcMethodAccessorTraits<TReq, TResp, IsOperation>, NRuntimeEvents::EType RuntimeEventType = NRuntimeEvents::EType::UNKNOWN>
 class TGrpcRequestCall
     : public std::conditional_t<TProtoHasValidate<TReq>::Value,
         TGRpcRequestValidationWrapperImpl<
-            TRpcServices::EvGrpcRuntimeRequest,
-            TReq,
-            TResp,
-            IsOperation,
-            TGrpcRequestCall<TReq, TResp, IsOperation, TMethodAccessorTraits, RuntimeEventType>,
-            TMethodAccessorTraits,
-            RuntimeEventType>,
+            TRpcServices::EvGrpcRuntimeRequest, TReq, TResp, IsOperation, TGrpcRequestCall<TReq, TResp, IsOperation, TMethodAccessorTraits, RuntimeEventType>, TMethodAccessorTraits, RuntimeEventType>,
         TGRpcRequestWrapperImpl<
-            TRpcServices::EvGrpcRuntimeRequest,
-            TReq,
-            TResp,
-            IsOperation,
-            TGrpcRequestCall<TReq, TResp, IsOperation, TMethodAccessorTraits, RuntimeEventType>,
-            TMethodAccessorTraits,
-            RuntimeEventType>>
+            TRpcServices::EvGrpcRuntimeRequest, TReq, TResp, IsOperation, TGrpcRequestCall<TReq, TResp, IsOperation, TMethodAccessorTraits, RuntimeEventType>, TMethodAccessorTraits, RuntimeEventType>>
 {
     using TRequestIface = typename std::conditional<IsOperation, IRequestOpCtx, IRequestNoOpCtx>::type;
 
@@ -1598,21 +1570,9 @@ public:
 
     using TBase = std::conditional_t<TProtoHasValidate<TReq>::Value,
         TGRpcRequestValidationWrapperImpl<
-            TRpcServices::EvGrpcRuntimeRequest,
-            TReq,
-            TResp,
-            IsOperation,
-            TGrpcRequestCall<TReq, TResp, IsOperation, TMethodAccessorTraits, RuntimeEventType>,
-            TMethodAccessorTraits,
-            RuntimeEventType>,
+            TRpcServices::EvGrpcRuntimeRequest, TReq, TResp, IsOperation, TGrpcRequestCall<TReq, TResp, IsOperation, TMethodAccessorTraits, RuntimeEventType>, TMethodAccessorTraits, RuntimeEventType>,
         TGRpcRequestWrapperImpl<
-            TRpcServices::EvGrpcRuntimeRequest,
-            TReq,
-            TResp,
-            IsOperation,
-            TGrpcRequestCall<TReq, TResp, IsOperation, TMethodAccessorTraits, RuntimeEventType>,
-            TMethodAccessorTraits,
-            RuntimeEventType>>;
+            TRpcServices::EvGrpcRuntimeRequest, TReq, TResp, IsOperation, TGrpcRequestCall<TReq, TResp, IsOperation, TMethodAccessorTraits, RuntimeEventType>, TMethodAccessorTraits, RuntimeEventType>>;
 
     template <typename TCallback>
     TGrpcRequestCall(NYdbGrpc::IRequestContextBase* ctx, TCallback&& cb, TRequestAuxSettings auxSettings = {})
@@ -1667,16 +1627,10 @@ private:
     const TRequestAuxSettings AuxSettings;
 };
 
-template <typename TReq,
-    typename TResp,
-    class TMethodAccessorTraits = TYdbGrpcMethodAccessorTraits<TReq, TResp, true>,
-    NRuntimeEvents::EType RuntimeEventType = NRuntimeEvents::EType::UNKNOWN>
+template <typename TReq, typename TResp, class TMethodAccessorTraits = TYdbGrpcMethodAccessorTraits<TReq, TResp, true>, NRuntimeEvents::EType RuntimeEventType = NRuntimeEvents::EType::UNKNOWN>
 using TGrpcRequestOperationCall = TGrpcRequestCall<TReq, TResp, true, TMethodAccessorTraits, RuntimeEventType>;
 
-template <typename TReq,
-    typename TResp,
-    class TMethodAccessorTraits = TYdbGrpcMethodAccessorTraits<TReq, TResp, false>,
-    NRuntimeEvents::EType RuntimeEventType = NRuntimeEvents::EType::UNKNOWN>
+template <typename TReq, typename TResp, class TMethodAccessorTraits = TYdbGrpcMethodAccessorTraits<TReq, TResp, false>, NRuntimeEvents::EType RuntimeEventType = NRuntimeEvents::EType::UNKNOWN>
 using TGrpcRequestNoOperationCall = TGrpcRequestCall<TReq, TResp, false, TMethodAccessorTraits, RuntimeEventType>;
 
 template <ui32 TRpcId, typename TReq, typename TResp, bool IsOperation, TRateLimiterMode RlMode = TRateLimiterMode::Off>

@@ -408,7 +408,7 @@ message TTableServiceConfig {
         HASH_V2 = 1;
     }
 
-    optional EHashKind DefaultHashShuffleFuncType = 93 [ default = HASH_V1 ];
+    optional EHashKind DefaultHashShuffleFuncType = 93 [ default = HASH_V2 ];
 
     optional bool EnableParallelUnionAllConnectionsForExtend = 94  [ default = false ];
 

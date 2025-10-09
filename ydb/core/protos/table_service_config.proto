@@ -386,7 +386,7 @@ message TTableServiceConfig {
 
     optional bool EnableFoldUdfs = 82 [ default = true ];
 
-    optional bool FilterPushdownOverJoinOptionalSide = 83 [ default = false ];
+    optional bool FilterPushdownOverJoinOptionalSide = 83 [ default = true ];
 
     optional bool EnableNewRBO = 84 [default = false];
     optional bool EnableSpillingInHashJoinShuffleConnections = 85 [default = true];
@@ -395,11 +395,11 @@ message TTableServiceConfig {
 
     optional bool EnableIndexStreamWrite = 88 [default = false];
 
-    optional bool EnableParallelPointReadConsolidation = 89 [default = false];
+    optional bool EnableParallelPointReadConsolidation = 89 [default = true];
 
     optional uint64 BufferPageAllocSize = 90  [ default = 4096 ];
 
-    optional bool EnableOlapPushdownProjections = 91  [ default = false ];
+    optional bool EnableOlapPushdownProjections = 91  [ default = true ];
 
     optional uint32 DefaultLangVer = 92 [default = 202501];
 

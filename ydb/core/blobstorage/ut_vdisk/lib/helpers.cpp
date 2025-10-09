@@ -118,13 +118,13 @@ class TRangeGet : public TActorBootstrapped<TRangeGet> {
 
     void SendRequest() {
         auto req = TEvBlobStorage::TEvVGet::CreateRangeIndexQuery(VDiskInfo.VDiskID,
-            TInstant::Max(),
-            NKikimrBlobStorage::EGetHandleClass::FastRead,
-            TEvBlobStorage::TEvVGet::EFlags::None,
-            {},
-            ReadFrom,
-            ReadTo,
-            MaxResults);
+                                                                  TInstant::Max(),
+                                                                  NKikimrBlobStorage::EGetHandleClass::FastRead,
+                                                                  TEvBlobStorage::TEvVGet::EFlags::None,
+                                                                  {},
+                                                                  ReadFrom,
+                                                                  ReadTo,
+                                                                  MaxResults);
 
         Send(VDiskInfo.ActorID, req.release(), IEventHandle::FlagTrackDelivery);
     }

@@ -520,7 +520,7 @@ private:
             case ETypeAnnotationKind::Struct:
                 break;
             default:
-                // We do not know how process input that is not a sequence of elements            
+                // We do not know how process input that is not a sequence of elements
                 return false;
         }
         YQL_ENSURE(inputType->GetKind() == ETypeAnnotationKind::Struct, "Unexpected predicate input type " << ui64(inputType->GetKind()));

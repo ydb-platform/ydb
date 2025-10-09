@@ -43,7 +43,7 @@ class TPgYdbAuthActor : public NActors::TActorBootstrapped<TPgYdbAuthActor> {
     };
 
     TPgWireAuthData PgWireAuthData;
-    TActorId PgYdbProxy; 
+    TActorId PgYdbProxy;
 
     TString DatabaseId;
     TString FolderId;
@@ -83,8 +83,8 @@ public:
 
     void Handle(TEvPrivate::TEvTokenReady::TPtr& ev) {
         Send(MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket({
-            .Database = PgWireAuthData.DatabasePath,
             .Ticket = ev->Get()->LoginResult.token(),
+            .Database = PgWireAuthData.DatabasePath,
             .PeerName = PgWireAuthData.PeerName,
         }));
     }
@@ -153,8 +153,8 @@ private:
         auto entries = NKikimr::NGRpcProxy::V1::GetTicketParserEntries(DatabaseId, FolderId);
 
         Send(NKikimr::MakeTicketParserID(), new NKikimr::TEvTicketParser::TEvAuthorizeTicket({
-            .Database = PgWireAuthData.DatabasePath,
             .Ticket = "ApiKey " + PgWireAuthData.Password,
+            .Database = PgWireAuthData.DatabasePath,
             .PeerName = PgWireAuthData.PeerName,
             .Entries = entries
         }));

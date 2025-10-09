@@ -16,7 +16,7 @@ bool IIndexMeta::DeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescripti
     }
     IndexId = proto.GetId();
     IndexName = proto.GetName();
-    StorageId = proto.GetStorageId() ? proto.GetStorageId() : IStoragesManager::DefaultStorageId;
+    DefaultStorageId = proto.GetStorageId() ? proto.GetStorageId() : IStoragesManager::DefaultStorageId;
     InheritPortionStorage = proto.GetInheritPortionStorage();
     return DoDeserializeFromProto(proto);
 }
@@ -26,8 +26,8 @@ void IIndexMeta::SerializeToProto(NKikimrSchemeOp::TOlapIndexDescription& proto)
     proto.SetId(IndexId);
     AFL_VERIFY(IndexName);
     proto.SetName(IndexName);
-    if (StorageId) {
-        proto.SetStorageId(StorageId);
+    if (DefaultStorageId) {
+        proto.SetStorageId(DefaultStorageId);
     }
     proto.SetInheritPortionStorage(GetInheritPortionStorage());
     return DoSerializeToProto(proto);

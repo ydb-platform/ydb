@@ -52,10 +52,11 @@ private:
     YDB_ACCESSOR(TString, TablePath, DEFAULT_TABLE_PATH);
 
 public:
-    TTieringTestHelper(TKikimrSettings runnerSettings = TKikimrSettings()) {
+    TTieringTestHelper() {
         CsController.emplace(NYDBTest::TControllers::RegisterCSControllerGuard<TCtrl>());
         (*CsController)->SetSkipSpecialCheckForEvict(true);
 
+        TKikimrSettings runnerSettings;
         runnerSettings.WithSampleTables = false;
         runnerSettings.SetColumnShardAlterObjectEnabled(true);
         TestHelper.emplace(runnerSettings);
@@ -517,9 +518,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
     }
     
     Y_UNIT_TEST(TieringForIndexes) {
-        TKikimrSettings settings;
-        settings.AppConfig.MutableColumnShardConfig()->SetEvictIndexesWithPortions(true);
-        TTieringTestHelper tieringHelper(std::move(settings));
+        TTieringTestHelper tieringHelper;
         auto& csController = tieringHelper.GetCsController();
         auto& olapHelper = tieringHelper.GetOlapHelper();
         auto& testHelper = tieringHelper.GetTestHelper();
@@ -534,7 +533,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         {
             auto alterQuery =
                 R"(ALTER OBJECT `/Root/olapTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=index_ngramm_uid, TYPE=BLOOM_NGRAMM_FILTER,
-                    FEATURES=`{"column_name" : "resource_id", "ngramm_size" : 3, "hashes_count" : 2, "filter_size_bytes" : 512, "records_count" : 1024}`);
+                    FEATURES=`{"inherit_portion_storage" : true, "column_name" : "resource_id", "ngramm_size" : 3, "hashes_count" : 2, "filter_size_bytes" : 512, "records_count" : 1024}`);
                 )";
             auto session = tableClient.CreateSession().GetValueSync().GetSession();
             auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();

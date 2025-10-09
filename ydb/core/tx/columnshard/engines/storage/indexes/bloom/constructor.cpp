@@ -15,8 +15,8 @@ std::shared_ptr<IIndexMeta> TBloomIndexConstructor::DoCreateIndexMeta(
     }
     const ui32 columnId = columnInfo->GetId();
     return std::make_shared<TBloomIndexMeta>(indexId, indexName, GetStorageId().value_or(NBlobOperations::TGlobal::DefaultStorageId),
-        currentSchema.GetIndexes().GetById(indexId)->GetIndexMeta()->GetInheritPortionStorage(), columnId, FalsePositiveProbability,
-        std::make_shared<TDefaultDataExtractor>(), TBase::GetBitsStorageConstructor());
+        GetInheritPortionStorage().value_or(false), columnId, FalsePositiveProbability, std::make_shared<TDefaultDataExtractor>(),
+        TBase::GetBitsStorageConstructor());
 }
 
 NKikimr::TConclusionStatus TBloomIndexConstructor::DoDeserializeFromJson(const NJson::TJsonValue& jsonInfo) {

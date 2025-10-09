@@ -124,12 +124,8 @@ std::optional<TWritePortionInfoWithBlobsResult> TReadPortionInfoWithBlobs::SyncP
     TIndexInfo::TSecondaryData secondaryData;
     secondaryData.MutableExternalData() = entityChunksNew;
     for (auto&& i : to->GetIndexInfo().GetIndexes()) {
-        std::optional<TString> overrideIndexStorage =
-            (AppDataVerified().ColumnShardConfig.GetEvictIndexesWithPortions() && !i.second->IsInplaceData()) ? targetTier
-                                                                                                              : std::optional<TString>();
         to->GetIndexInfo()
-            .AppendIndex(
-                entityChunksNew, i.first, storages, source.PortionInfo.GetPortionInfo().GetRecordsCount(), overrideIndexStorage, secondaryData)
+            .AppendIndex(entityChunksNew, i.first, storages, source.PortionInfo.GetPortionInfo().GetRecordsCount(), targetTier, secondaryData)
             .Validate();
     }
 

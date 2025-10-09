@@ -59,23 +59,6 @@ static constexpr std::array<std::pair<NYql::NDecimal::TInt128, NYql::NDecimal::T
     NYql::NDecimal::GetBounds<35>(),
 };
 
-bool IsValidDecimal(ui8 precision, NYql::NDecimal::TInt128 v) {
-    if (NYql::NDecimal::IsError(v))
-        return false;
-
-    if (NYql::NDecimal::IsNan(v))
-        return true;
-
-    if (NYql::NDecimal::IsInf(v))
-        return true;
-
-    if (precision >= DecimalBounds.size())
-        return false;
-
-    const auto& db = DecimalBounds[precision];
-    return v > db.first && v < db.second;
-}
-
 void ExportTypeToProtoImpl(TType* type, NKikimrMiniKQL::TType& res, const TVector<ui32>* columnOrder = nullptr);
 
 Y_FORCE_INLINE void HandleKindDataExport(const TType* type, const NUdf::TUnboxedValuePod& value, Ydb::Value& res) {
@@ -1858,6 +1841,23 @@ NUdf::TUnboxedValue TProtoImporter::ImportValueFromProto(const TType* type, cons
     default:
         MKQL_ENSURE(false, TStringBuilder() << "Unknown kind: " << type->GetKindAsStr());
     }
+}
+
+bool IsValidDecimal(ui8 precision, NYql::NDecimal::TInt128 v) {
+    if (NYql::NDecimal::IsError(v))
+        return false;
+
+    if (NYql::NDecimal::IsNan(v))
+        return true;
+
+    if (NYql::NDecimal::IsInf(v))
+        return true;
+
+    if (precision >= DecimalBounds.size())
+        return false;
+
+    const auto& db = DecimalBounds[precision];
+    return v > db.first && v < db.second;
 }
 
 NUdf::TUnboxedValue TProtoImporter::ImportValueFromProto(const TType* type, const NKikimrMiniKQL::TValue& value, const THolderFactory& factory) {

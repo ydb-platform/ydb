@@ -15,6 +15,7 @@
 #include <yql/essentials/core/yql_opt_normalize_depends_on.h>
 #include <yql/essentials/core/yql_opt_proposed_by_data.h>
 #include <yql/essentials/core/yql_opt_rewrite_io.h>
+#include <yql/essentials/utils/log/log.h>
 
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 
@@ -166,8 +167,42 @@ TTransformationPipeline& TTransformationPipeline::AddFinalCommonOptimization(EYq
     return *this;
 }
 
-TTransformationPipeline& TTransformationPipeline::AddOptimization(bool checkWorld, bool withFinalOptimization, EYqlIssueCode issueCode) {
+TTransformationPipeline& TTransformationPipeline::AddOptimizationWithLineage(bool checkWorld, bool withFinalOptimization, EYqlIssueCode issueCode) {
     AddCommonOptimization(false, issueCode);
+    Transformers_.push_back(TTransformStage(
+        CreateChoiceGraphTransformer(
+            [&typesCtx = std::as_const(*TypeAnnotationContext_)](const TExprNode::TPtr&, TExprContext&) {
+                return typesCtx.EnableLineage;
+            },
+            TTransformStage(
+                CreateFunctorTransformer(
+                    [typeCtx = TypeAnnotationContext_](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
+                        output = input;
+                        try {
+                            CalculateLineage(*input, *typeCtx, ctx, false);
+                        } catch (const std::exception& e) {
+                            YQL_LOG(ERROR) << "CalculateLineage error: " << e.what();
+                            typeCtx->CorrectLineage = false;
+                        }
+                        return IGraphTransformer::TStatus::Ok;
+                    }),
+                "Lineage",
+                issueCode),
+            TTransformStage(
+                new TNullTransformer(),
+                "SkipLineage",
+                issueCode)),
+        "LineageCalculation",
+        issueCode));
+    AddProviderOptimization(issueCode);
+    if (withFinalOptimization) {
+        AddFinalCommonOptimization(issueCode);
+    }
+    AddCheckExecution(checkWorld, issueCode);
+    return *this;
+}
+
+TTransformationPipeline& TTransformationPipeline::AddProviderOptimization(EYqlIssueCode issueCode) {
     Transformers_.push_back(TTransformStage(
         CreateChoiceGraphTransformer(
             [&typesCtx = std::as_const(*TypeAnnotationContext_)](const TExprNode::TPtr&, TExprContext&) {
@@ -210,6 +245,12 @@ TTransformationPipeline& TTransformationPipeline::AddOptimization(bool checkWorl
         CreatePhysicalFinalizers(*TypeAnnotationContext_),
         "PhysicalFinalizers",
         issueCode));
+    return *this;
+}
+
+TTransformationPipeline& TTransformationPipeline::AddOptimization(bool checkWorld, bool withFinalOptimization, EYqlIssueCode issueCode) {
+    AddCommonOptimization(false, issueCode);
+    AddProviderOptimization(issueCode);
     if (withFinalOptimization) {
         AddFinalCommonOptimization(issueCode);
     }
@@ -223,7 +264,7 @@ TTransformationPipeline& TTransformationPipeline::AddLineageOptimization(TMaybe<
         CreateFunctorTransformer(
             [typeCtx = TypeAnnotationContext_, &lineageOut](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
                 output = input;
-                lineageOut = CalculateLineage(*input, *typeCtx, ctx);
+                lineageOut = CalculateLineage(*input, *typeCtx, ctx, true);
                 return IGraphTransformer::TStatus::Ok;
             }),
         "LineageScanner",

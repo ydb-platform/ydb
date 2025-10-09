@@ -1402,7 +1402,7 @@ TProgram::TFutureStatus TProgram::RunAsync(
     pipeline.AddTypeAnnotation(TIssuesIds::CORE_TYPE_ANN, true);
     pipeline.AddPostTypeAnnotation();
     pipeline.Add(TExprOutputTransformer::Sync(ExprRoot_, traceOut), "ExprOutput");
-    pipeline.AddOptimization();
+    pipeline.AddOptimizationWithLineage();
     if (EnableRangeComputeFor_) {
         pipeline.Add(MakeExpandRangeComputeForTransformer(pipeline.GetTypeAnnotationContext()),
                      "ExpandRangeComputeFor", TIssuesIds::CORE_EXEC);
@@ -1480,7 +1480,7 @@ TProgram::TFutureStatus TProgram::RunAsyncWithConfig(
     pipeline.AddPostTypeAnnotation();
     pipelineConf.AfterTypeAnnotation(&pipeline);
 
-    pipeline.AddOptimization();
+    pipeline.AddOptimizationWithLineage();
     if (EnableRangeComputeFor_) {
         pipeline.Add(MakeExpandRangeComputeForTransformer(pipeline.GetTypeAnnotationContext()),
                      "ExpandRangeComputeFor", TIssuesIds::CORE_EXEC);
@@ -1833,6 +1833,14 @@ TMaybe<TString> TProgram::GetStatistics(bool totalOnly, THashMap<TString, TStrin
             writer.OnBeginMap();
             TypeCtx_->Modules->WriteStatistics(writer);
             writer.OnEndMap();
+    }
+
+    if (TypeCtx_->EnableLineage) {
+        writer.OnKeyedItem("CalculateLineage");
+        writer.OnBeginMap();
+            writer.OnKeyedItem("Correct");
+            writer.OnInt64Scalar(TypeCtx_->CorrectLineage);
+        writer.OnEndMap();
     }
 
     // extra

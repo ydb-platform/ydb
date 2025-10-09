@@ -325,12 +325,27 @@ public:
     }
 
     bool IsIngress(const TTaskType& task) const {
+        // No inputs at all or there is no input channels with checkpoints.
+
+        if (!task.Inputs) {
+            return true;
+        }
+
+        bool hasSource = false;
         for (const auto& input : task.Inputs) {
-            if (!input.SourceType) {
-                return false;
+            if (input.SourceType) {
+                hasSource = true;
+                continue;
+            }
+
+            for (ui64 channelId : input.Channels) {
+                if (GetChannel(channelId).CheckpointingMode != NDqProto::CHECKPOINTING_MODE_DISABLED) {
+                    return false;
+                }
             }
         }
-        return true;
+
+        return hasSource;
     }
 
     static bool IsInfiniteSourceType(const TString& sourceType) {

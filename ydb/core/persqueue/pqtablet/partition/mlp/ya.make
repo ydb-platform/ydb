@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     mlp_consumer.cpp
+    mlp_storage.cpp
 )
 
 

@@ -31,6 +31,7 @@ SRCS(
     sys_view_ut.cpp
     tiering_ut.cpp
     write_ut.cpp
+    kqp_select.cpp
 )
 
 PEERDIR(

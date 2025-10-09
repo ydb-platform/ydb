@@ -10,7 +10,7 @@ namespace NYql {
 struct TYtColumnStatistic {
     TString ColumnName;
     TMaybe<int64_t> EstimatedUniqueCount;
-    TMaybe<int64_t> DataWeight;
+    TMaybe<uint64_t> DataWeight;
 };
 
 struct TRelSizeInfo {
@@ -39,7 +39,7 @@ public:
         ui64 LookupJoinMaxRows;
     };
 
-    TYtProviderContext(TJoinAlgoLimits limits, TVector<TYtProviderRelInfo> relInfo);
+    TYtProviderContext(TJoinAlgoLimits limits, TVector<TYtProviderRelInfo> relInfo, ui32 version);
 
     virtual TOptimizerStatistics ComputeJoinStats(
         const TOptimizerStatistics& leftStats,
@@ -63,10 +63,6 @@ private:
 
     bool IsMapJoinApplicable(const TOptimizerStatistics& table) const;
 
-    TDynBitMap ExtractColumnsBitmap(const TDynBitMap& columnBitmap, const TVector<TString>& columns) const;
-
-    TVector<TYtColumnStatistic> MergeColumnStatistics(const TYtProviderStatistic& leftSpecific, const TYtProviderStatistic& rightSpecific, const TDynBitMap& outputBitmap) const;
-
     TMaybe<double> FindMaxUniqueVals(const TYtProviderStatistic& specific, const TVector<NDq::TJoinColumn>& columns) const;
 
     TMaybe<double> ColumnNumUniqueValues(const TDynBitMap& relMap,  const NDq::TJoinColumn& columnName) const;
@@ -76,6 +72,7 @@ private:
     const TJoinAlgoLimits Limits_;
     TVector<TYtProviderRelInfo> RelInfo_;
     THashMap<TString, THashSet<std::pair<int, int>>> ColumnIndex_;
+    ui32 Version_ = 0;
 };
 
 }  // namespace NYql

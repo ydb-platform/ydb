@@ -143,6 +143,16 @@ struct TFakeGenericClient: public NConnector::IClient {
         PRIMITIVE_TYPE_COL("json_document", JSON_DOCUMENT);
         PRIMITIVE_TYPE_COL("dynumber", DYNUMBER);
 
+        // Add decimal column
+        {
+            auto* col = schema.add_columns();
+            col->set_name("col_decimal");
+            auto* t = col->mutable_type();
+            auto* decimalType = t->mutable_decimal_type();
+            decimalType->set_precision(10);
+            decimalType->set_scale(0);
+        }
+
         return NThreading::MakeFuture<NConnector::TDescribeTableAsyncResult::value_type>(std::move(result));
     }
 
@@ -758,6 +768,38 @@ Y_UNIT_TEST_SUITE_F(PushdownTest, TPushdownFixture) {
                             }
                             value {
                                 bytes_value: "\\\\d+"
+                            }
+                        }
+                    }
+                }
+            )proto"
+        );
+    }
+
+    Y_UNIT_TEST(DecimalPushdown) {
+        AssertFilter(
+            R"ast(
+                (==
+                    (Member $row '"col_decimal")
+                    (Decimal '"1" '"10" '"0")
+                )
+                )ast",
+            R"proto(
+                comparison {
+                    operation: EQ
+                    left_value {
+                        column: "col_decimal"
+                    }
+                    right_value {
+                        typed_value {
+                            type {
+                                decimal_type {
+                                    precision: 10
+                                    scale: 0
+                                }
+                            }
+                            value {
+                                bytes_value: "\001"
                             }
                         }
                     }

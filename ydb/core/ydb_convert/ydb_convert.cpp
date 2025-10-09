@@ -1286,7 +1286,7 @@ bool CellFromProtoVal(const NScheme::TTypeInfo& type, i32 typmod, const Ydb::Val
         valInPool.second = val.high_128();
         ui8 precision = type.GetDecimalType().GetPrecision();
         auto validate = NYql::NDecimal::FromHalfs(val.low_128(), val.high_128());
-        if (!IsValidDecimal(precision, validate)) {
+        if (!NKikimr::NMiniKQL::IsValidDecimal(precision, validate)) {
             err = "Invalid decimal value";
             return false;
         }

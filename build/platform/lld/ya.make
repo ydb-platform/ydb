@@ -23,6 +23,9 @@ IF (OS_ANDROID)
     # Use LLD shipped with Android NDK.
     LDFLAGS(
         -fuse-ld=lld
+
+        # add build-id to binaries to allow external tools check equality of binaries
+        -Wl,--build-id=sha1
     )
     IF (ANDROID_API < 29)
         # Dynamic linker on Android does not support lld's default rosegment
@@ -43,6 +46,11 @@ IF (OS_ANDROID)
         LDFLAGS(-Wl,--pack-dyn-relocs=android+relr,--use-android-relr-tags)
     ELSEIF (ANDROID_API >= 23)
         LDFLAGS(-Wl,--pack-dyn-relocs=android)
+    ENDIF()
+    IF (ARCH_TYPE_64)
+        # 64-bit targets must support 16KiB pages
+        # See: https://developer.android.com/guide/practices/page-sizes
+        LDFLAGS(-Wl,-z,max-page-size=16384)
     ENDIF()
 ELSEIF (OS_LINUX)
     LDFLAGS(

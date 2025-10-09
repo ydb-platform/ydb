@@ -23,9 +23,9 @@
 namespace NYql {
 namespace NUdf {
 
-using TExec = arrow::Status(*)(arrow::compute::KernelContext*, const arrow::compute::ExecBatch&, arrow::Datum*);
+using TExec = arrow::Status (*)(arrow::compute::KernelContext*, const arrow::compute::ExecBatch&, arrow::Datum*);
 
-class TUdfKernelState : public arrow::compute::KernelState {
+class TUdfKernelState: public arrow::compute::KernelState {
 public:
     TUdfKernelState(const TVector<const TType*>& argTypes, const TType* outputType, bool onlyScalars, const ITypeInfoHelper* typeInfoHelper, const IValueBuilder* valueBuilder)
         : ArgTypes_(argTypes)
@@ -79,11 +79,11 @@ private:
     std::unique_ptr<IScalarBuilder> ScalarBuilder_;
 };
 
-class TSimpleArrowUdfImpl : public TBoxedValue {
+class TSimpleArrowUdfImpl: public TBoxedValue {
 public:
     TSimpleArrowUdfImpl(const TVector<const TType*> argBlockTypes, const TType* outputType, bool onlyScalars,
-        TExec exec, IFunctionTypeInfoBuilder& builder, const TString& name,
-        arrow::compute::NullHandling::type nullHandling)
+                        TExec exec, IFunctionTypeInfoBuilder& builder, const TString& name,
+                        arrow::compute::NullHandling::type nullHandling)
         : OnlyScalars_(onlyScalars)
         , Exec_(exec)
         , Pos_(GetSourcePosition(builder))
@@ -170,7 +170,7 @@ public:
             arrow::Datum res;
             if (OnlyScalars_) {
                 auto executor = arrow::compute::detail::KernelExecutor::MakeScalar();
-                ARROW_OK(executor->Init(&kernelContext, { &Kernel_, ArgsValuesDescr_, nullptr }));
+                ARROW_OK(executor->Init(&kernelContext, {&Kernel_, ArgsValuesDescr_, nullptr}));
 
                 auto listener = std::make_shared<arrow::compute::detail::DatumAccumulator>();
                 ARROW_OK(executor->Execute(argDatums, listener.get()));
@@ -182,7 +182,7 @@ public:
 
                 while (dechunker.Next(chunk)) {
                     auto executor = arrow::compute::detail::KernelExecutor::MakeScalar();
-                    ARROW_OK(executor->Init(&kernelContext, { &Kernel_, ArgsValuesDescr_, nullptr }));
+                    ARROW_OK(executor->Init(&kernelContext, {&Kernel_, ArgsValuesDescr_, nullptr}));
 
                     arrow::compute::detail::DatumAccumulator listener;
                     ARROW_OK(executor->Execute(chunk, &listener));
@@ -240,7 +240,7 @@ private:
 };
 
 inline void SetCallableArgumentAttributes(IFunctionArgTypesBuilder& argsBuilder,
-    const TCallableTypeInspector& callableInspector, const ui32 index) {
+                                          const TCallableTypeInspector& callableInspector, const ui32 index) {
     if (callableInspector.GetArgumentName(index).Size() > 0) {
         argsBuilder.Name(callableInspector.GetArgumentName(index));
     }
@@ -250,7 +250,7 @@ inline void SetCallableArgumentAttributes(IFunctionArgTypesBuilder& argsBuilder,
 }
 
 inline void PrepareSimpleArrowUdf(IFunctionTypeInfoBuilder& builder, TType* signature, TType* userType, TExec exec, bool typesOnly,
-    const TString& name, arrow::compute::NullHandling::type nullHandling = arrow::compute::NullHandling::type::COMPUTED_NO_PREALLOCATE) {
+                                  const TString& name, arrow::compute::NullHandling::type nullHandling = arrow::compute::NullHandling::type::COMPUTED_NO_PREALLOCATE) {
     auto typeInfoHelper = builder.TypeInfoHelper();
     TCallableTypeInspector callableInspector(*typeInfoHelper, signature);
     Y_ENSURE(callableInspector);
@@ -322,11 +322,11 @@ inline void PrepareSimpleArrowUdf(IFunctionTypeInfoBuilder& builder, TType* sign
 
     if (!typesOnly) {
         builder.Implementation(new TSimpleArrowUdfImpl(argBlockTypes, callableInspector.GetReturnType(),
-            onlyScalars, exec, builder, name, nullHandling));
+                                                       onlyScalars, exec, builder, name, nullHandling));
     }
 }
 
-template<typename TBuilder>
+template <typename TBuilder>
 TBuilder* CastToArrayBuilderImpl(IArrayBuilder& builder) {
     static_assert(std::is_base_of_v<IArrayBuilder, TBuilder>);
 
@@ -335,7 +335,7 @@ TBuilder* CastToArrayBuilderImpl(IArrayBuilder& builder) {
     return builderImpl;
 }
 
-template<typename TScalarBuilderImpl>
+template <typename TScalarBuilderImpl>
 TScalarBuilderImpl* CastToScalarBuilderImpl(IScalarBuilder& builder) {
     static_assert(std::is_base_of_v<IScalarBuilder, TScalarBuilderImpl>);
 
@@ -344,7 +344,7 @@ TScalarBuilderImpl* CastToScalarBuilderImpl(IScalarBuilder& builder) {
     return builderImpl;
 }
 
-template<typename TReader>
+template <typename TReader>
 TReader* CastToBlockReaderImpl(IBlockReader& reader) {
     static_assert(std::is_base_of_v<IBlockReader, TReader>);
 
@@ -355,7 +355,6 @@ TReader* CastToBlockReaderImpl(IBlockReader& reader) {
 
 template <typename TDerived, typename TReader = IBlockReader, typename TArrayBuilderImpl = IArrayBuilder, typename TScalarBuilderImpl = IScalarBuilder>
 struct TUnaryKernelExec {
-
     static arrow::Status Do(arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
         auto& state = dynamic_cast<TUdfKernelState&>(*ctx->state());
         auto& reader = state.GetReader(0);
@@ -370,8 +369,7 @@ struct TUnaryKernelExec {
             TDerived::Process(&state.GetValueBuilder(), item, [&](TBlockItem out) {
                 *res = builderImpl->Build(out);
             });
-        }
-        else {
+        } else {
             auto& array = *arg.array();
             auto& builder = state.GetArrayBuilder();
             auto* builderImpl = CastToArrayBuilderImpl<TArrayBuilderImpl>(builder);
@@ -420,8 +418,7 @@ struct TBinaryKernelExec {
             TDerived::Process(&state.GetValueBuilder(), item1, item2, [&](TBlockItem out) {
                 *res = builderImpl->Build(out);
             });
-        }
-        else if (arg1.is_scalar() && arg2.is_array()) {
+        } else if (arg1.is_scalar() && arg2.is_array()) {
             auto item1 = reader1Impl->GetScalarItem(*arg1.scalar());
             auto& array2 = *arg2.array();
             auto& builder = state.GetArrayBuilder();
@@ -580,7 +577,7 @@ struct TGenericKernelExec {
     }
 };
 
-template <typename TInput, typename TOutput, TOutput(*Core)(TInput)>
+template <typename TInput, typename TOutput, TOutput (*Core)(TInput)>
 arrow::Status UnaryPreallocatedExecImpl(arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
     Y_UNUSED(ctx);
     auto& inArray = batch.values[0].array();
@@ -595,8 +592,7 @@ arrow::Status UnaryPreallocatedExecImpl(arrow::compute::KernelContext* ctx, cons
     return arrow::Status::OK();
 }
 
-
-template <typename TReader, typename TOutput, TOutput(*Core)(TBlockItem)>
+template <typename TReader, typename TOutput, TOutput (*Core)(TBlockItem)>
 arrow::Status UnaryPreallocatedReaderExecImpl(arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
     Y_UNUSED(ctx);
     static_assert(std::is_base_of_v<IBlockReader, TReader>);
@@ -614,7 +610,7 @@ arrow::Status UnaryPreallocatedReaderExecImpl(arrow::compute::KernelContext* ctx
     return arrow::Status::OK();
 }
 
-template<typename TInput, typename TOutput, std::pair<TOutput, bool> Core(TInput)>
+template <typename TInput, typename TOutput, std::pair<TOutput, bool> Core(TInput)>
 struct TUnaryUnsafeFixedSizeFilterKernel {
     static arrow::Status Do(arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
         static_assert(std::is_arithmetic<TInput>::value);
@@ -656,9 +652,8 @@ struct TUnaryUnsafeFixedSizeFilterKernel {
     }
 };
 
-
-template <typename TInput, typename TOutput, TOutput(*Core)(TInput)>
-class TUnaryOverOptionalImpl : public TBoxedValue {
+template <typename TInput, typename TOutput, TOutput (*Core)(TInput)>
+class TUnaryOverOptionalImpl: public TBoxedValue {
 public:
     TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const final {
         Y_UNUSED(valueBuilder);
@@ -670,77 +665,77 @@ public:
     }
 };
 
-}
-}
+} // namespace NUdf
+} // namespace NYql
 
-#define BEGIN_ARROW_UDF_IMPL(udfNameBlocks, signatureFunc, optArgc, isStrict) \
-    class udfNameBlocks { \
-    public: \
-        typedef bool TTypeAwareMarker; \
-        static const ::NYql::NUdf::TStringRef& Name() { \
-            static auto name = ::NYql::NUdf::TStringRef::Of(#udfNameBlocks).Substring(1, 256); \
-            return name; \
-        } \
-        static bool IsStrict() { \
-            return isStrict; \
-        } \
+#define BEGIN_ARROW_UDF_IMPL(udfNameBlocks, signatureFunc, optArgc, isStrict)                           \
+    class udfNameBlocks {                                                                               \
+    public:                                                                                             \
+        typedef bool TTypeAwareMarker;                                                                  \
+        static const ::NYql::NUdf::TStringRef& Name() {                                                 \
+            static auto name = ::NYql::NUdf::TStringRef::Of(#udfNameBlocks).Substring(1, 256);          \
+            return name;                                                                                \
+        }                                                                                               \
+        static bool IsStrict() {                                                                        \
+            return isStrict;                                                                            \
+        }                                                                                               \
         static ::NYql::NUdf::TType* GetSignatureType(::NYql::NUdf::IFunctionTypeInfoBuilder& builder) { \
-            return builder.SimpleSignatureType<signatureFunc>(optArgc); \
-        } \
-        static bool DeclareSignature(\
-            const ::NYql::NUdf::TStringRef& name, \
-            ::NYql::NUdf::TType* userType, \
-            ::NYql::NUdf::IFunctionTypeInfoBuilder& builder, \
-            bool typesOnly); \
+            return builder.SimpleSignatureType<signatureFunc>(optArgc);                                 \
+        }                                                                                               \
+        static bool DeclareSignature(                                                                   \
+            const ::NYql::NUdf::TStringRef& name,                                                       \
+            ::NYql::NUdf::TType* userType,                                                              \
+            ::NYql::NUdf::IFunctionTypeInfoBuilder& builder,                                            \
+            bool typesOnly);                                                                            \
     };
 
-#define BEGIN_SIMPLE_ARROW_UDF(udfName, signatureFunc) \
+#define BEGIN_SIMPLE_ARROW_UDF(udfName, signatureFunc)                  \
     BEGIN_ARROW_UDF_IMPL(udfName##_BlocksImpl, signatureFunc, 0, false) \
     UDF_IMPL(udfName, builder.SimpleSignature<signatureFunc>().SupportsBlocks();, ;, ;, "", "", udfName##_BlocksImpl)
 
-#define BEGIN_SIMPLE_STRICT_ARROW_UDF(udfName, signatureFunc) \
+#define BEGIN_SIMPLE_STRICT_ARROW_UDF(udfName, signatureFunc)          \
     BEGIN_ARROW_UDF_IMPL(udfName##_BlocksImpl, signatureFunc, 0, true) \
     UDF_IMPL(udfName, builder.SimpleSignature<signatureFunc>().SupportsBlocks().IsStrict();, ;, ;, "", "", udfName##_BlocksImpl)
 
 #define BEGIN_SIMPLE_STRICT_ARROW_UDF_OPTIONS(udfName, signatureFunc, options) \
-    BEGIN_ARROW_UDF_IMPL(udfName##_BlocksImpl, signatureFunc, 0, true)     \
+    BEGIN_ARROW_UDF_IMPL(udfName##_BlocksImpl, signatureFunc, 0, true)         \
     UDF_IMPL(udfName, builder.SimpleSignature<signatureFunc>().SupportsBlocks().IsStrict(); options;, ;, ;, "", "", udfName##_BlocksImpl)
 
 #define BEGIN_SIMPLE_ARROW_UDF_WITH_OPTIONAL_ARGS(udfName, signatureFunc, optArgc) \
-    BEGIN_ARROW_UDF_IMPL(udfName##_BlocksImpl, signatureFunc, optArgc, false) \
+    BEGIN_ARROW_UDF_IMPL(udfName##_BlocksImpl, signatureFunc, optArgc, false)      \
     UDF_IMPL(udfName, builder.SimpleSignature<signatureFunc>().SupportsBlocks().OptionalArgs(optArgc);, ;, ;, "", "", udfName##_BlocksImpl)
 
 #define BEGIN_SIMPLE_STRICT_ARROW_UDF_WITH_OPTIONAL_ARGS(udfName, signatureFunc, optArgc) \
-    BEGIN_ARROW_UDF_IMPL(udfName##_BlocksImpl, signatureFunc, optArgc, true) \
+    BEGIN_ARROW_UDF_IMPL(udfName##_BlocksImpl, signatureFunc, optArgc, true)              \
     UDF_IMPL(udfName, builder.SimpleSignature<signatureFunc>().SupportsBlocks().IsStrict().OptionalArgs(optArgc);, ;, ;, "", "", udfName##_BlocksImpl)
 
-#define END_ARROW_UDF(udfNameBlocks, exec) \
-    inline bool udfNameBlocks::DeclareSignature(\
-        const ::NYql::NUdf::TStringRef& name, \
-        ::NYql::NUdf::TType* userType, \
-        ::NYql::NUdf::IFunctionTypeInfoBuilder& builder, \
-        bool typesOnly) { \
-            if (Name() == name) { \
-                if (IsStrict()) { \
-                    builder.IsStrict(); \
-                } \
-                PrepareSimpleArrowUdf(builder, GetSignatureType(builder), userType, exec, typesOnly, TString(name)); \
-                return true; \
-            } \
-            return false; \
+#define END_ARROW_UDF(udfNameBlocks, exec)                                                                       \
+    inline bool udfNameBlocks::DeclareSignature(                                                                 \
+        const ::NYql::NUdf::TStringRef& name,                                                                    \
+        ::NYql::NUdf::TType* userType,                                                                           \
+        ::NYql::NUdf::IFunctionTypeInfoBuilder& builder,                                                         \
+        bool typesOnly) {                                                                                        \
+        if (Name() == name) {                                                                                    \
+            if (IsStrict()) {                                                                                    \
+                builder.IsStrict();                                                                              \
+            }                                                                                                    \
+            PrepareSimpleArrowUdf(builder, GetSignatureType(builder), userType, exec, typesOnly, TString(name)); \
+            return true;                                                                                         \
+        }                                                                                                        \
+        return false;                                                                                            \
     }
 
-#define END_ARROW_UDF_WITH_NULL_HANDLING(udfNameBlocks, exec, nullHandling) \
-    inline bool udfNameBlocks::DeclareSignature(\
-        const ::NYql::NUdf::TStringRef& name, \
-        ::NYql::NUdf::TType* userType, \
-        ::NYql::NUdf::IFunctionTypeInfoBuilder& builder, \
-        bool typesOnly) { \
-            if (Name() == name) { \
-                PrepareSimpleArrowUdf(builder, GetSignatureType(builder), userType, exec, typesOnly, TString(name), nullHandling); \
-                return true; \
-            } \
-            return false; \
+#define END_ARROW_UDF_WITH_NULL_HANDLING(udfNameBlocks, exec, nullHandling)                                                    \
+    inline bool udfNameBlocks::DeclareSignature(                                                                               \
+        const ::NYql::NUdf::TStringRef& name,                                                                                  \
+        ::NYql::NUdf::TType* userType,                                                                                         \
+        ::NYql::NUdf::IFunctionTypeInfoBuilder& builder,                                                                       \
+        bool typesOnly) {                                                                                                      \
+        if (Name() == name) {                                                                                                  \
+            PrepareSimpleArrowUdf(builder, GetSignatureType(builder), userType, exec, typesOnly, TString(name), nullHandling); \
+            return true;                                                                                                       \
+        }                                                                                                                      \
+        return false;                                                                                                          \
     }
 
 #define END_SIMPLE_ARROW_UDF(udfName, exec) \

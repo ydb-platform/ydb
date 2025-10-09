@@ -2445,6 +2445,29 @@ bool IsValidStringValue(NUdf::EDataSlot type, NUdf::TStringRef buf) {
     MKQL_ENSURE(false, "Incorrect data slot: " << (ui32)type);
 }
 
+TMaybe<TString> RegexMatchingValidStringValues(NUdf::EDataSlot type, ERegexFlavor flavor) {
+    if (flavor != ERegexFlavor::RE2) {
+        return {};
+    }
+
+    const auto& typeInfo = NUdf::GetDataTypeInfo(type);
+    if (typeInfo.Features & NUdf::EDataTypeFeatures::IntegralType) {
+        TStringBuilder result;
+        if (typeInfo.Features & NUdf::EDataTypeFeatures::SignedIntegralType) {
+            result << R"([-+]?)";
+        } else {
+            result << R"(\+?)";
+        }
+        result << R"(\d+)";
+        return result;
+    }
+    if (type == NUdf::EDataSlot::Date) {
+        return R"(\d{4}-\d{2}-\d{2})";
+    }
+    // TODO: more cases
+    return {};
+}
+
 NUdf::TUnboxedValuePod ValueFromString(NUdf::EDataSlot type, NUdf::TStringRef buf) {
     switch (type) {
     case NUdf::EDataSlot::Bool: {

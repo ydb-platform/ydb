@@ -15,7 +15,7 @@ using TDataTypeId = ui16;
 
 using TTimezoneId = ui16;
 
-enum EDataTypeFeatures : ui32 {
+enum EDataTypeFeatures: ui32 {
     CanCompare = 1u << 0,
     HasDeterministicCompare = 1u << 1,
     CanEquate = 1u << 2,
@@ -30,9 +30,9 @@ enum EDataTypeFeatures : ui32 {
     AllowFromString = 1u << 11,
 
     PayloadType = AllowToBytes | AllowFromBytes | AllowToString | AllowFromString |
-    HasDeterministicToString | HasDeterministicToBytes,
+                  HasDeterministicToString | HasDeterministicToBytes,
     CommonType = PayloadType | CanCompare | HasDeterministicCompare | CanEquate | HasDeterministicEquals |
-    CanHash | HasDeterministicHash,
+                 CanHash | HasDeterministicHash,
     UnknownType = 0,
 
     StringType = 1u << 20,
@@ -52,82 +52,85 @@ template <typename T>
 struct TDataType;
 
 template <typename T>
-struct TKnownDataType
-{
+struct TKnownDataType {
     static constexpr bool Result = (TDataType<T>::Id != 0);
 };
 
 template <typename T>
-struct TPlainDataType
-{
+struct TPlainDataType {
     static constexpr bool Result = (TDataType<T>::Features & (NumericType | DateType | TimeIntervalType)) != 0 || std::is_same<T, bool>::value;
 };
 
 template <typename T>
-struct TTzDataType
-{
+struct TTzDataType {
     static constexpr bool Result = (TDataType<T>::Features & (TzDateType)) != 0;
 };
 
-#define INTEGRAL_VALUE_TYPES(xx) \
-    xx(i8)     \
-    xx(ui8)    \
-    xx(i16)    \
-    xx(ui16)   \
-    xx(i32)    \
-    xx(ui32)   \
-    xx(i64)    \
+// clang-format off
+#define INTEGRAL_VALUE_TYPES(xx)    \
+    xx(i8)                          \
+    xx(ui8)                         \
+    xx(i16)                         \
+    xx(ui16)                        \
+    xx(i32)                         \
+    xx(ui32)                        \
+    xx(i64)                         \
     xx(ui64)
+// clang-format on
 
+// clang-format off
 #define PRIMITIVE_VALUE_TYPES(xx) \
-    INTEGRAL_VALUE_TYPES(xx)     \
-    xx(float)  \
+    INTEGRAL_VALUE_TYPES(xx)      \
+    xx(float)                     \
     xx(double)
+// clang-format on
 
-#define KNOWN_PRIMITIVE_VALUE_TYPES(xx) \
-    xx(bool)    \
-    xx(i8)      \
-    xx(ui8)     \
-    xx(i16)     \
-    xx(ui16)    \
-    xx(i32)     \
-    xx(ui32)    \
-    xx(i64)     \
-    xx(ui64)    \
-    xx(float)   \
+// clang-format off
+#define KNOWN_PRIMITIVE_VALUE_TYPES(xx)         \
+    xx(bool)                                    \
+    xx(i8)                                      \
+    xx(ui8)                                     \
+    xx(i16)                                     \
+    xx(ui16)                                    \
+    xx(i32)                                     \
+    xx(ui32)                                    \
+    xx(i64)                                     \
+    xx(ui64)                                    \
+    xx(float)                                   \
     xx(double)
+// clang-format on
 
-#define KNOWN_FIXED_VALUE_TYPES(xx)         \
-    xx(bool, bool)               \
-    xx(i8, i8)                   \
-    xx(ui8, ui8)                 \
-    xx(i16, i16)                 \
-    xx(ui16, ui16)               \
-    xx(i32, i32)                 \
-    xx(ui32, ui32)               \
-    xx(i64, i64)                 \
-    xx(ui64, ui64)               \
-    xx(float, float)             \
-    xx(double, double)           \
-    xx(NUdf::TDate, ui16)        \
-    xx(NUdf::TDatetime, ui32)    \
-    xx(NUdf::TTimestamp, ui64)   \
-    xx(NUdf::TInterval, i64)     \
-    xx(NUdf::TDate32, i32)       \
-    xx(NUdf::TDatetime64, i64)   \
-    xx(NUdf::TTimestamp64, i64)  \
+// clang-format off
+#define KNOWN_FIXED_VALUE_TYPES(xx)     \
+    xx(bool, bool)                      \
+    xx(i8, i8)                          \
+    xx(ui8, ui8)                        \
+    xx(i16, i16)                        \
+    xx(ui16, ui16)                      \
+    xx(i32, i32)                        \
+    xx(ui32, ui32)                      \
+    xx(i64, i64)                        \
+    xx(ui64, ui64)                      \
+    xx(float, float)                    \
+    xx(double, double)                  \
+    xx(NUdf::TDate, ui16)               \
+    xx(NUdf::TDatetime, ui32)           \
+    xx(NUdf::TTimestamp, ui64)          \
+    xx(NUdf::TInterval, i64)            \
+    xx(NUdf::TDate32, i32)              \
+    xx(NUdf::TDatetime64, i64)          \
+    xx(NUdf::TTimestamp64, i64)         \
     xx(NUdf::TInterval64, i64)
+// clang-format on
 
 template <typename T>
-struct TPrimitiveDataType
-{
+struct TPrimitiveDataType {
     static constexpr bool Result = false;
 };
 
-#define UDF_PRIMITIVE_TYPE_IMPL(type) \
-    template <> \
-    struct TPrimitiveDataType<type> \
-    { \
+#define UDF_PRIMITIVE_TYPE_IMPL(type)        \
+    template <>                              \
+    struct TPrimitiveDataType<type> {        \
         static constexpr bool Result = true; \
     };
 
@@ -171,43 +174,43 @@ constexpr i64 MAX_DATETIME64 = 4611669811199ll;
 constexpr i64 MAX_TIMESTAMP64 = 4611669811199999999ll;
 constexpr i64 MAX_INTERVAL64 = MAX_TIMESTAMP64 - MIN_TIMESTAMP64;
 constexpr i32 MIN_YEAR32 = -144169; // inclusive
-constexpr i32 MAX_YEAR32 = 148108; // non-inclusive
+constexpr i32 MAX_YEAR32 = 148108;  // non-inclusive
 constexpr size_t UUID_SIZE = 16;
 
-#define UDF_TYPE_ID_MAP(XX)  \
-    XX(Bool, NYql::NProto::Bool, bool, CommonType, bool, 0) \
-    XX(Int8, NYql::NProto::Int8, i8, CommonType | NumericType | IntegralType | SignedIntegralType, i8, 0) \
-    XX(Uint8, NYql::NProto::Uint8, ui8, CommonType | NumericType | IntegralType | UnsignedIntegralType, ui8, 0) \
-    XX(Int16, NYql::NProto::Int16, i16, CommonType | NumericType | IntegralType | SignedIntegralType, i16, 0) \
+#define UDF_TYPE_ID_MAP(XX)                                                                                         \
+    XX(Bool, NYql::NProto::Bool, bool, CommonType, bool, 0)                                                         \
+    XX(Int8, NYql::NProto::Int8, i8, CommonType | NumericType | IntegralType | SignedIntegralType, i8, 0)           \
+    XX(Uint8, NYql::NProto::Uint8, ui8, CommonType | NumericType | IntegralType | UnsignedIntegralType, ui8, 0)     \
+    XX(Int16, NYql::NProto::Int16, i16, CommonType | NumericType | IntegralType | SignedIntegralType, i16, 0)       \
     XX(Uint16, NYql::NProto::Uint16, ui16, CommonType | NumericType | IntegralType | UnsignedIntegralType, ui16, 0) \
-    XX(Int32, NYql::NProto::Int32, i32, CommonType | NumericType | IntegralType | SignedIntegralType, i32, 0) \
+    XX(Int32, NYql::NProto::Int32, i32, CommonType | NumericType | IntegralType | SignedIntegralType, i32, 0)       \
     XX(Uint32, NYql::NProto::Uint32, ui32, CommonType | NumericType | IntegralType | UnsignedIntegralType, ui32, 0) \
-    XX(Int64, NYql::NProto::Int64, i64, CommonType | NumericType | IntegralType | SignedIntegralType, i64, 0) \
+    XX(Int64, NYql::NProto::Int64, i64, CommonType | NumericType | IntegralType | SignedIntegralType, i64, 0)       \
     XX(Uint64, NYql::NProto::Uint64, ui64, CommonType | NumericType | IntegralType | UnsignedIntegralType, ui64, 0) \
-    XX(Double, NYql::NProto::Double, double, CommonType | NumericType | FloatType, double, 0) \
-    XX(Float, NYql::NProto::Float, float, CommonType | NumericType | FloatType, float, 0) \
-    XX(String, NYql::NProto::String, char*, CommonType | StringType, char*, 0) \
-    XX(Utf8, NYql::NProto::Utf8, TUtf8, CommonType | StringType, TUtf8, 0) \
-    XX(Yson, NYql::NProto::Yson, TYson, PayloadType | StringType, TYson, 0) \
-    XX(Json, NYql::NProto::Json, TJson, PayloadType | StringType, TJson, 0) \
-    XX(Uuid, NYql::NProto::Uuid, TUuid, CommonType, TUuid, 0) \
-    XX(Date, NYql::NProto::Date, TDate, CommonType | DateType, ui16, 0) \
-    XX(Datetime, NYql::NProto::Datetime, TDatetime, CommonType | DateType, ui32, 0) \
-    XX(Timestamp, NYql::NProto::Timestamp, TTimestamp, CommonType | DateType, ui64, 0) \
-    XX(Interval, NYql::NProto::Interval, TInterval, CommonType | TimeIntervalType, i64, 0) \
-    XX(TzDate, NYql::NProto::TzDate, TTzDate, CommonType | TzDateType, ui16, 0) \
-    XX(TzDatetime, NYql::NProto::TzDatetime, TTzDatetime, CommonType | TzDateType, ui32, 0) \
-    XX(TzTimestamp, NYql::NProto::TzTimestamp, TTzTimestamp, CommonType | TzDateType, ui64, 0) \
-    XX(Decimal, NYql::NProto::Decimal, TDecimal, CommonType | DecimalType, TDecimal, 2) \
-    XX(DyNumber, NYql::NProto::DyNumber, TDyNumber, CommonType, TDyNumber, 0) \
-    XX(JsonDocument, NYql::NProto::JsonDocument, TJsonDocument, PayloadType, TJsonDocument, 0) \
-    XX(Date32, NYql::NProto::Date32, TDate32, CommonType | DateType | ExtDateType, i32, 0) \
-    XX(Datetime64, NYql::NProto::Datetime64, TDatetime64, CommonType | DateType | ExtDateType, i64, 0) \
-    XX(Timestamp64, NYql::NProto::Timestamp64, TTimestamp64, CommonType | DateType | ExtDateType, i64, 0) \
-    XX(Interval64, NYql::NProto::Interval64, TInterval64, CommonType | TimeIntervalType | ExtDateType, i64, 0) \
-    XX(TzDate32, NYql::NProto::TzDate32, TTzDate32, CommonType | TzDateType | ExtDateType, i32, 0) \
-    XX(TzDatetime64, NYql::NProto::TzDatetime64, TTzDatetime64, CommonType | TzDateType | ExtDateType, i64, 0) \
-    XX(TzTimestamp64, NYql::NProto::TzTimestamp64, TTzTimestamp64, CommonType | TzDateType | ExtDateType, i64, 0) \
+    XX(Double, NYql::NProto::Double, double, CommonType | NumericType | FloatType, double, 0)                       \
+    XX(Float, NYql::NProto::Float, float, CommonType | NumericType | FloatType, float, 0)                           \
+    XX(String, NYql::NProto::String, char*, CommonType | StringType, char*, 0)                                      \
+    XX(Utf8, NYql::NProto::Utf8, TUtf8, CommonType | StringType, TUtf8, 0)                                          \
+    XX(Yson, NYql::NProto::Yson, TYson, PayloadType | StringType, TYson, 0)                                         \
+    XX(Json, NYql::NProto::Json, TJson, PayloadType | StringType, TJson, 0)                                         \
+    XX(Uuid, NYql::NProto::Uuid, TUuid, CommonType, TUuid, 0)                                                       \
+    XX(Date, NYql::NProto::Date, TDate, CommonType | DateType, ui16, 0)                                             \
+    XX(Datetime, NYql::NProto::Datetime, TDatetime, CommonType | DateType, ui32, 0)                                 \
+    XX(Timestamp, NYql::NProto::Timestamp, TTimestamp, CommonType | DateType, ui64, 0)                              \
+    XX(Interval, NYql::NProto::Interval, TInterval, CommonType | TimeIntervalType, i64, 0)                          \
+    XX(TzDate, NYql::NProto::TzDate, TTzDate, CommonType | TzDateType, ui16, 0)                                     \
+    XX(TzDatetime, NYql::NProto::TzDatetime, TTzDatetime, CommonType | TzDateType, ui32, 0)                         \
+    XX(TzTimestamp, NYql::NProto::TzTimestamp, TTzTimestamp, CommonType | TzDateType, ui64, 0)                      \
+    XX(Decimal, NYql::NProto::Decimal, TDecimal, CommonType | DecimalType, TDecimal, 2)                             \
+    XX(DyNumber, NYql::NProto::DyNumber, TDyNumber, CommonType, TDyNumber, 0)                                       \
+    XX(JsonDocument, NYql::NProto::JsonDocument, TJsonDocument, PayloadType, TJsonDocument, 0)                      \
+    XX(Date32, NYql::NProto::Date32, TDate32, CommonType | DateType | ExtDateType, i32, 0)                          \
+    XX(Datetime64, NYql::NProto::Datetime64, TDatetime64, CommonType | DateType | ExtDateType, i64, 0)              \
+    XX(Timestamp64, NYql::NProto::Timestamp64, TTimestamp64, CommonType | DateType | ExtDateType, i64, 0)           \
+    XX(Interval64, NYql::NProto::Interval64, TInterval64, CommonType | TimeIntervalType | ExtDateType, i64, 0)      \
+    XX(TzDate32, NYql::NProto::TzDate32, TTzDate32, CommonType | TzDateType | ExtDateType, i32, 0)                  \
+    XX(TzDatetime64, NYql::NProto::TzDatetime64, TTzDatetime64, CommonType | TzDateType | ExtDateType, i64, 0)      \
+    XX(TzTimestamp64, NYql::NProto::TzTimestamp64, TTzTimestamp64, CommonType | TzDateType | ExtDateType, i64, 0)
 
 #define UDF_TYPE_ID(xName, xTypeId, xType, xFeatures, xLayoutType, xParamsCount)                 \
     template <>                                                                                  \
@@ -226,7 +229,9 @@ enum class EDataSlot {
 
 enum class ECountDataSlot {
     UDF_TYPE_ID_MAP(ENUM_VALUE_GEN_NO_VALUE)
+    // clang-format off
     Count
+    // clang-format on
 };
 
 constexpr ui32 DataSlotCount = static_cast<ui32>(ECountDataSlot::Count);
@@ -236,7 +241,7 @@ UDF_TYPE_ID(String, 0x1001, const char*, CommonType | StringType, const char*, 0
 UDF_TYPE_ID(String, 0x1001, char* const, CommonType | StringType, char* const, 0)
 
 template <ui8 Precision, ui8 Scale>
-struct TDecimalDataType : public TDataType<TDecimal> {};
+struct TDecimalDataType: public TDataType<TDecimal> {};
 
 TMaybe<EDataSlot> FindDataSlot(TDataTypeId id);
 EDataSlot GetDataSlot(TDataTypeId id); // throws if data type is unknown
@@ -261,7 +266,7 @@ inline const TDataTypeInfo& GetDataTypeInfo(EDataSlot slot) {
 
 using TCastResultOptions = ui8;
 
-enum ECastOptions : TCastResultOptions {
+enum ECastOptions: TCastResultOptions {
     Complete = 0U,
 
     MayFail = 1U << 0U,
@@ -281,5 +286,5 @@ inline IOutputStream& operator<<(IOutputStream& os, EDataSlot slot) {
     return os;
 }
 
-} // namspace NUdf
-} // namspace NYql
+} // namespace NUdf
+} // namespace NYql

@@ -16,4 +16,4 @@ size_t TDownloadStream::DoRead(void* buf, size_t len) {
     }
 }
 
-}
+} // namespace NYql

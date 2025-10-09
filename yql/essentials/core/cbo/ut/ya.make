@@ -1,5 +1,7 @@
 UNITTEST_FOR(yql/essentials/core/cbo)
 
+ENABLE(YQL_STYLE_CPP)
+
 SRCS(
     cbo_optimizer_ut.cpp
 )

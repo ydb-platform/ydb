@@ -1119,7 +1119,74 @@ TExprBase DqBuildLMapOverMuxStage(TExprBase node, TExprContext& ctx, IOptimizati
     return DqBuildLMapOverMuxStageStub<TCoLMap>(node, ctx, optCtx, parentsMap);
 }
 
+TExprBase DqPushOptionalToStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
+    const TParentsMap& parentsMap, bool allowStageMultiUsage)
+{
+    (void) ctx;
+    (void) optCtx;
+    (void) allowStageMultiUsage;
+    if (!node.Maybe<TCoToOptional>().List().Maybe<TDqCnUnionAll>()) {
+        return node;
+    }
 
+    auto consumers = GetConsumers(node, parentsMap);
+    if (!consumers.size() || consumers.size() > 1) {
+        return node;
+    }
+
+    auto parent = *consumers.begin();
+    if (!TExprBase(parent).Maybe<TExprList>()) {
+        Cerr << "PARENT CONTENT " << parent->Content() << Endl;
+        return node;
+    }
+
+    auto exprList = TExprBase(parent).Cast<TExprList>();
+    consumers = GetConsumers(exprList, parentsMap);
+    if (!consumers.size()) {
+        return node;
+    }
+
+    parent = *consumers.begin();
+    if (!TExprBase(parent).Maybe<TDqStage>()) {
+        return node;
+    }
+
+    auto dqUnion = node.Cast<TCoToOptional>().List().Cast<TDqCnUnionAll>();
+    auto lambda = Build<TCoLambda>(ctx, node.Pos())
+        .Args({"stream"})
+        .Body<TCoMap>()
+            .Input<TCoCondense>()
+                .Input("stream")
+                .State<TCoList>()
+                    .ListType(ExpandType(node.Pos(), *dqUnion.Ptr()->GetTypeAnn(), ctx))
+                .Build()
+                .SwitchHandler()
+                    .Args({"item", "stub"})
+                    .Body(MakeBool<false>(node.Pos(), ctx))
+                .Build()
+                .UpdateHandler()
+                    .Args({"item", "stub"})
+                    .Body<TCoAsList>()
+                        .Add("item")
+                    .Build()
+                .Build()
+            .Build()
+            .Lambda()
+                .Args({"arg"})
+                .Body<TCoToOptional>()
+                    .List("arg")
+                .Build()
+            .Build()
+        .Build()
+    .Done();
+
+    auto result = DqPushLambdaToStageUnionAll(dqUnion, lambda, {}, ctx, optCtx);
+    if (!result) {
+        return node;
+    }
+
+    return result.Cast();
+}
 
 TExprBase DqPushCombineToStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
     const TParentsMap& parentsMap, bool allowStageMultiUsage)
@@ -1398,8 +1465,8 @@ TExprBase DqBuildShuffleStage(
     }
 
     auto shuffle = node.Cast<TCoShuffleByKeys>();
-    if (!IsDqCompletePureExpr(shuffle.KeySelectorLambda()) ||
-        !IsDqCompletePureExpr(shuffle.ListHandlerLambda()))
+    if (!IsDqCompletePureExpr(shuffle.KeySelectorLambda(), true) ||
+        !IsDqCompletePureExpr(shuffle.ListHandlerLambda(), true))
     {
         return node;
     }

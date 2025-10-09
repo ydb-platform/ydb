@@ -1,3 +1,5 @@
+#include "bool_test_enums.h"
+
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/kqp/ut/common/columnshard.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
@@ -11,36 +13,56 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
-#include <util/generic/serialized_enum.h>
 
 #include <library/cpp/threading/local_executor/local_executor.h>
+#include <util/generic/serialized_enum.h>
 #include <util/string/printf.h>
 #include <yql/essentials/types/binary_json/write.h>
 #include <yql/essentials/types/uuid/uuid.h>
 
-#include "bool_test_enums.h"
-
-#define Y_UNIT_TEST_ALL_ENUM_VALUES(TestName, ...) \
-    static void TestName##_Body(EQueryMode Scan, ETableKind Table, ELoadKind Load) __VA_ARGS__ \
-    Y_UNIT_TEST(TestName##_Scan_ColumnShard_Arrow) { TestName##_Body(SCAN_QUERY, COLUMN_SHARD, ARROW); } \
-    Y_UNIT_TEST(TestName##_Scan_ColumnShard_YdbValue) { TestName##_Body(SCAN_QUERY, COLUMN_SHARD, YDB_VALUE); } \
-    Y_UNIT_TEST(TestName##_Scan_ColumnShard_Csv) { TestName##_Body(SCAN_QUERY, COLUMN_SHARD, CSV); } \
-    Y_UNIT_TEST(TestName##_Scan_DataShard_Arrow) { TestName##_Body(SCAN_QUERY, DATA_SHARD, ARROW); } \
-    Y_UNIT_TEST(TestName##_Scan_DataShard_YdbValue) { TestName##_Body(SCAN_QUERY, DATA_SHARD, YDB_VALUE); } \
-    Y_UNIT_TEST(TestName##_Scan_DataShard_Csv) { TestName##_Body(SCAN_QUERY, DATA_SHARD, CSV); } \
-    Y_UNIT_TEST(TestName##_Execute_ColumnShard_Arrow) { TestName##_Body(EXECUTE_QUERY, COLUMN_SHARD, ARROW); } \
-    Y_UNIT_TEST(TestName##_Execute_ColumnShard_YdbValue) { TestName##_Body(EXECUTE_QUERY, COLUMN_SHARD, YDB_VALUE); } \
-    Y_UNIT_TEST(TestName##_Execute_ColumnShard_Csv) { TestName##_Body(EXECUTE_QUERY, COLUMN_SHARD, CSV); } \
-    Y_UNIT_TEST(TestName##_Execute_DataShard_Arrow) { TestName##_Body(EXECUTE_QUERY, DATA_SHARD, ARROW); } \
-    Y_UNIT_TEST(TestName##_Execute_DataShard_YdbValue) { TestName##_Body(EXECUTE_QUERY, DATA_SHARD, YDB_VALUE); } \
-    Y_UNIT_TEST(TestName##_Execute_DataShard_Csv) { TestName##_Body(EXECUTE_QUERY, DATA_SHARD, CSV); }
+#define Y_UNIT_TEST_ALL_ENUM_VALUES(TestName, ...)                                                                                              \
+    static void TestName##_Body(EQueryMode Scan, ETableKind Table, ELoadKind Load) __VA_ARGS__ Y_UNIT_TEST(TestName##_Scan_ColumnShard_Arrow) { \
+        TestName##_Body(SCAN_QUERY, COLUMN_SHARD, ARROW);                                                                                       \
+    }                                                                                                                                           \
+    Y_UNIT_TEST(TestName##_Scan_ColumnShard_YdbValue) {                                                                                         \
+        TestName##_Body(SCAN_QUERY, COLUMN_SHARD, YDB_VALUE);                                                                                   \
+    }                                                                                                                                           \
+    Y_UNIT_TEST(TestName##_Scan_ColumnShard_Csv) {                                                                                              \
+        TestName##_Body(SCAN_QUERY, COLUMN_SHARD, CSV);                                                                                         \
+    }                                                                                                                                           \
+    Y_UNIT_TEST(TestName##_Scan_DataShard_Arrow) {                                                                                              \
+        TestName##_Body(SCAN_QUERY, DATA_SHARD, ARROW);                                                                                         \
+    }                                                                                                                                           \
+    Y_UNIT_TEST(TestName##_Scan_DataShard_YdbValue) {                                                                                           \
+        TestName##_Body(SCAN_QUERY, DATA_SHARD, YDB_VALUE);                                                                                     \
+    }                                                                                                                                           \
+    Y_UNIT_TEST(TestName##_Scan_DataShard_Csv) {                                                                                                \
+        TestName##_Body(SCAN_QUERY, DATA_SHARD, CSV);                                                                                           \
+    }                                                                                                                                           \
+    Y_UNIT_TEST(TestName##_Execute_ColumnShard_Arrow) {                                                                                         \
+        TestName##_Body(EXECUTE_QUERY, COLUMN_SHARD, ARROW);                                                                                    \
+    }                                                                                                                                           \
+    Y_UNIT_TEST(TestName##_Execute_ColumnShard_YdbValue) {                                                                                      \
+        TestName##_Body(EXECUTE_QUERY, COLUMN_SHARD, YDB_VALUE);                                                                                \
+    }                                                                                                                                           \
+    Y_UNIT_TEST(TestName##_Execute_ColumnShard_Csv) {                                                                                           \
+        TestName##_Body(EXECUTE_QUERY, COLUMN_SHARD, CSV);                                                                                      \
+    }                                                                                                                                           \
+    Y_UNIT_TEST(TestName##_Execute_DataShard_Arrow) {                                                                                           \
+        TestName##_Body(EXECUTE_QUERY, DATA_SHARD, ARROW);                                                                                      \
+    }                                                                                                                                           \
+    Y_UNIT_TEST(TestName##_Execute_DataShard_YdbValue) {                                                                                        \
+        TestName##_Body(EXECUTE_QUERY, DATA_SHARD, YDB_VALUE);                                                                                  \
+    }                                                                                                                                           \
+    Y_UNIT_TEST(TestName##_Execute_DataShard_Csv) {                                                                                             \
+        TestName##_Body(EXECUTE_QUERY, DATA_SHARD, CSV);                                                                                        \
+    }
 
 namespace NKikimr {
 namespace NKqp {
 
 using namespace NYdb;
 using namespace NYdb::NTable;
-
 
 Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
     namespace {
@@ -65,13 +87,28 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
         UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), NYdb::EStatus::SUCCESS);
     }
 
+    void CreateDataShardTableWithSecondColumn(TTestHelper& helper, const TString& name, const TString& secondName) {
+        auto& session = helper.GetSession();
+        auto res = session
+                       .ExecuteSchemeQuery(TStringBuilder() << R"(
+                CREATE TABLE `)" << name << R"(` (
+                    id Int32 NOT NULL,
+                    )" << secondName << R"( Int64,
+                    b Bool,
+                    PRIMARY KEY (id)
+                );
+            )")
+                       .ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), NYdb::EStatus::SUCCESS);
+    }
+
     void BulkUpsertRowTableYdbValue(TTestHelper& helper, const TString& name, const TVector<TRow>& rows) {
         TValueBuilder builder;
         builder.BeginList();
         for (auto&& r : rows) {
             builder.AddListItem().BeginStruct().AddMember("id").Int32(r.Id).AddMember("int").Int64(r.IntVal).AddMember("b");
             if (r.B.has_value()) {
-                builder.Bool(*r.B);
+                builder.BeginOptional().Bool(*r.B).EndOptional();
             } else {
                 builder.EmptyOptional(EPrimitiveType::Bool);
             }
@@ -84,14 +121,30 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
     }
 
+    void BulkUpsertRowTableYdbValueWithSecondColumn(
+        TTestHelper& helper, const TString& name, const TVector<TRow>& rows, const TString& secondName) {
+        TValueBuilder builder;
+        builder.BeginList();
+        for (auto&& r : rows) {
+            builder.AddListItem().BeginStruct().AddMember("id").Int32(r.Id).AddMember(secondName).Int64(r.IntVal).AddMember("b");
+            if (r.B.has_value()) {
+                builder.BeginOptional().Bool(*r.B).EndOptional();
+            } else {
+                builder.EmptyOptional(EPrimitiveType::Bool);
+            }
+            builder.EndStruct();
+        }
+        builder.EndList();
+        auto result = helper.GetKikimr().GetTableClient().BulkUpsert(name, builder.Build()).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    }
+
     void BulkUpsertRowTableCSV(TTestHelper& helper, const TString& name, const TVector<TRow>& rows) {
         TStringBuilder builder;
         for (auto&& r : rows) {
-            builder << r.Id << ", " << r.IntVal << ", ";
+            builder << r.Id << "," << r.IntVal << ",";
             if (r.B.has_value()) {
                 builder << (*r.B ? "true" : "false");
-            } else {
-                builder << "";
             }
 
             builder << '\n';
@@ -126,8 +179,43 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
         return arrow::RecordBatch::Make(schema, rows.size(), { idArr, intArr, boolArr });
     }
 
+    std::shared_ptr<arrow::RecordBatch> MakeArrowBatchWithSecondColumn(const TVector<TRow>& rows, const TString& secondName) {
+        arrow::Int32Builder idBuilder;
+        arrow::Int64Builder secondBuilder;
+        arrow::BooleanBuilder boolBuilder;
+        for (auto&& r : rows) {
+            Y_ABORT_UNLESS(idBuilder.Append(r.Id).ok());
+            Y_ABORT_UNLESS(secondBuilder.Append(r.IntVal).ok());
+            if (r.B.has_value()) {
+                Y_ABORT_UNLESS(boolBuilder.Append(*r.B).ok());
+            } else {
+                Y_ABORT_UNLESS(boolBuilder.AppendNull().ok());
+            }
+        }
+
+        std::shared_ptr<arrow::Array> idArr;
+        Y_ABORT_UNLESS(idBuilder.Finish(&idArr).ok());
+        std::shared_ptr<arrow::Array> secondArr;
+        Y_ABORT_UNLESS(secondBuilder.Finish(&secondArr).ok());
+        std::shared_ptr<arrow::Array> boolArr;
+        Y_ABORT_UNLESS(boolBuilder.Finish(&boolArr).ok());
+        auto schema = arrow::schema({ arrow::field("id", arrow::int32(), /*nullable*/ false), arrow::field(secondName, arrow::int64()),
+            arrow::field("b", arrow::boolean()) });
+        return arrow::RecordBatch::Make(schema, rows.size(), { idArr, secondArr, boolArr });
+    }
+
     void BulkUpsertRowTableArrow(TTestHelper& helper, const TString& name, const TVector<TRow>& rows) {
         auto batch = MakeArrowBatch(rows);
+        TString strBatch = NArrow::SerializeBatchNoCompression(batch);
+        TString strSchema = NArrow::SerializeSchema(*batch->schema());
+        auto result =
+            helper.GetKikimr().GetTableClient().BulkUpsert(name, NYdb::NTable::EDataFormat::ApacheArrow, strBatch, strSchema).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    }
+
+    void BulkUpsertRowTableArrowWithSecondColumn(
+        TTestHelper& helper, const TString& name, const TVector<TRow>& rows, const TString& secondName) {
+        auto batch = MakeArrowBatchWithSecondColumn(rows, secondName);
         TString strBatch = NArrow::SerializeBatchNoCompression(batch);
         TString strSchema = NArrow::SerializeSchema(*batch->schema());
         auto result =
@@ -276,8 +364,9 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
 
     Y_UNIT_TEST_ALL_ENUM_VALUES(TestSimpleQueries, {
         if (Table == ETableKind::COLUMN_SHARD) {
-            return; // skip until bool is supported in columnshard
+            return;   // skip until bool is supported in columnshard
         }
+
         const TString tableName = "/Root/Table1";
         TTestHelper helper(TKikimrSettings().SetWithSampleTables(false));
         TTestHelper::TColumnTable col;
@@ -285,14 +374,15 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
         PrepareBase(helper, Table, tableName, &col, &schema);
         LoadData(helper, Table, Load, tableName, { { 1, 4, true }, { 2, 3, false }, { 4, 1, true }, { 3, 2, true } }, &col, &schema);
         CheckOrExec(helper, "SELECT * FROM `/Root/Table1` WHERE id=1", "[[[%true];1;[4]]]", Scan);
-        CheckOrExec(helper, "SELECT * FROM `/Root/Table1` order by id",
-            "[[[%true];1;[4]];[[%false];2;[3]];[[%true];3;[2]];[[%true];4;[1]]]", Scan);
+        CheckOrExec(
+            helper, "SELECT * FROM `/Root/Table1` order by id", "[[[%true];1;[4]];[[%false];2;[3]];[[%true];3;[2]];[[%true];4;[1]]]", Scan);
     })
 
     Y_UNIT_TEST_ALL_ENUM_VALUES(TestFilterEqual, {
         if (Table == ETableKind::COLUMN_SHARD) {
-            return; // skip until bool is supported in columnshard
+            return;   // skip until bool is supported in columnshard
         }
+
         const TString tableName = "/Root/Table1";
         TTestHelper helper(TKikimrSettings().SetWithSampleTables(false));
         TTestHelper::TColumnTable col;
@@ -305,8 +395,9 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
 
     Y_UNIT_TEST_ALL_ENUM_VALUES(TestFilterNulls, {
         if (Table == ETableKind::COLUMN_SHARD) {
-            return; // skip until bool is supported in columnshard
+            return;   // skip until bool is supported in columnshard
         }
+
         const TString tableName = "/Root/Table1";
         TTestHelper helper(TKikimrSettings().SetWithSampleTables(false));
         TTestHelper::TColumnTable col;
@@ -314,15 +405,17 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
         PrepareBase(helper, Table, tableName, &col, &schema);
         LoadData(helper, Table, Load, tableName,
             { { 1, 4, true }, { 2, 3, false }, { 3, 2, true }, { 4, 1, true }, { 5, 5, std::nullopt }, { 6, 6, std::nullopt } }, &col, &schema);
-        CheckOrExec(helper, "SELECT * FROM `/Root/Table1` WHERE b is NULL order by id", "[[[#];5;[5]];[[#];6;[6]]]", Scan);
+        const TString expectedNulls = "[[#;5;[5]];[#;6;[6]]]";
+        CheckOrExec(helper, "SELECT * FROM `/Root/Table1` WHERE b is NULL order by id", expectedNulls, Scan);
         CheckOrExec(helper, "SELECT * FROM `/Root/Table1` WHERE b is not NULL order by id",
             "[[[%true];1;[4]];[[%false];2;[3]];[[%true];3;[2]];[[%true];4;[1]]]", Scan);
     })
 
     Y_UNIT_TEST_ALL_ENUM_VALUES(TestFilterCompare, {
         if (Table == ETableKind::COLUMN_SHARD) {
-            return; // skip until bool is supported in columnshard
+            return;   // skip until bool is supported in columnshard
         }
+
         const TString tableName = "/Root/Table1";
         TTestHelper helper(TKikimrSettings().SetWithSampleTables(false));
         TTestHelper::TColumnTable col;
@@ -330,32 +423,34 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
         PrepareBase(helper, Table, tableName, &col, &schema);
         LoadData(helper, Table, Load, tableName, { { 1, 4, true }, { 2, 3, false }, { 3, 2, true }, { 4, 1, true } }, &col, &schema);
         CheckOrExec(helper, "SELECT * FROM `/Root/Table1` WHERE b < true order by id", "[[[%false];2;[3]]]", Scan);
-        CheckOrExec(helper, "SELECT * FROM `/Root/Table1` WHERE b > false order by id",
-            "[[[%true];1;[4]];[[%true];3;[2]];[[%true];4;[1]]]", Scan);
+        CheckOrExec(
+            helper, "SELECT * FROM `/Root/Table1` WHERE b > false order by id", "[[[%true];1;[4]];[[%true];3;[2]];[[%true];4;[1]]]", Scan);
         CheckOrExec(helper, "SELECT * FROM `/Root/Table1` WHERE b <= true order by id",
             "[[[%true];1;[4]];[[%false];2;[3]];[[%true];3;[2]];[[%true];4;[1]]]", Scan);
-        CheckOrExec(helper, "SELECT * FROM `/Root/Table1` WHERE b >= true order by id",
-            "[[[%true];1;[4]];[[%true];3;[2]];[[%true];4;[1]]]", Scan);
+        CheckOrExec(
+            helper, "SELECT * FROM `/Root/Table1` WHERE b >= true order by id", "[[[%true];1;[4]];[[%true];3;[2]];[[%true];4;[1]]]", Scan);
     })
 
     Y_UNIT_TEST_ALL_ENUM_VALUES(TestOrderByBool, {
         if (Table == ETableKind::COLUMN_SHARD) {
-            return; // skip until bool is supported in columnshard
+            return;   // skip until bool is supported in columnshard
         }
+
         const TString tableName = "/Root/Table1";
         TTestHelper helper(TKikimrSettings().SetWithSampleTables(false));
         TTestHelper::TColumnTable col;
         TVector<TTestHelper::TColumnSchema> schema;
         PrepareBase(helper, Table, tableName, &col, &schema);
         LoadData(helper, Table, Load, tableName, { { 1, 4, true }, { 2, 3, false }, { 3, 2, true }, { 4, 1, true } }, &col, &schema);
-        CheckOrExec(helper, "SELECT * FROM `/Root/Table1` order by b",
-            "[[[%false];2;[3]];[[%true];1;[4]];[[%true];3;[2]];[[%true];4;[1]]]", Scan);
+        CheckOrExec(
+            helper, "SELECT * FROM `/Root/Table1` order by b, id", "[[[%false];2;[3]];[[%true];1;[4]];[[%true];3;[2]];[[%true];4;[1]]]", Scan);
     })
 
     Y_UNIT_TEST_ALL_ENUM_VALUES(TestGroupByBool, {
         if (Table == ETableKind::COLUMN_SHARD) {
-            return; // skip until bool is supported in columnshard
+            return;   // skip until bool is supported in columnshard
         }
+
         const TString tableName = "/Root/Table1";
         TTestHelper helper(TKikimrSettings().SetWithSampleTables(false));
         TTestHelper::TColumnTable col;
@@ -368,8 +463,9 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
 
     Y_UNIT_TEST_ALL_ENUM_VALUES(TestAggregation, {
         if (Table == ETableKind::COLUMN_SHARD) {
-            return; // skip until bool is supported in columnshard
+            return;   // skip until bool is supported in columnshard
         }
+
         const TString tableName = "/Root/Table1";
         TTestHelper helper(TKikimrSettings().SetWithSampleTables(false));
         TTestHelper::TColumnTable col;
@@ -382,8 +478,9 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
 
     Y_UNIT_TEST_ALL_ENUM_VALUES(TestJoinById, {
         if (Table == ETableKind::COLUMN_SHARD) {
-            return; // skip until bool is supported in columnshard
+            return;   // skip until bool is supported in columnshard
         }
+
         const TString t1 = "/Root/Table1";
         const TString t2 = "/Root/Table2";
         TTestHelper helper(TKikimrSettings().SetWithSampleTables(false));
@@ -395,6 +492,7 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
                 TTestHelper::TColumnSchema().SetName("int").SetType(NScheme::NTypeIds::Int64),
                 TTestHelper::TColumnSchema().SetName("b").SetType(NScheme::NTypeIds::Bool),
             };
+
             col1.SetName(t1).SetPrimaryKey({ "id" }).SetSharding({ "id" }).SetSchema(s1);
             helper.CreateTable(col1);
             s2 = {
@@ -402,14 +500,32 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
                 TTestHelper::TColumnSchema().SetName("table1_id").SetType(NScheme::NTypeIds::Int64),
                 TTestHelper::TColumnSchema().SetName("b").SetType(NScheme::NTypeIds::Bool),
             };
+
             col2.SetName(t2).SetPrimaryKey({ "id" }).SetSharding({ "id" }).SetSchema(s2);
             helper.CreateTable(col2);
         } else {
             CreateDataShardTable(helper, t1);
-            CreateDataShardTable(helper, t2);
+            CreateDataShardTableWithSecondColumn(helper, t2, "table1_id");
         }
+
         LoadData(helper, Table, Load, t1, { { 1, 4, true }, { 2, 3, true } }, &col1, &s1);
-        LoadData(helper, Table, Load, t2, { { 1, 1, true }, { 2, 1, false }, { 3, 2, true }, { 4, 2, false } }, &col2, &s2);
+        if (Table == ETableKind::COLUMN_SHARD) {
+            LoadData(helper, Table, Load, t2, { { 1, 1, true }, { 2, 1, false }, { 3, 2, true }, { 4, 2, false } }, &col2, &s2);
+        } else {
+            if (Load == ELoadKind::ARROW) {
+                BulkUpsertRowTableArrowWithSecondColumn(
+                    helper, t2, { { 1, 1, true }, { 2, 1, false }, { 3, 2, true }, { 4, 2, false } }, "table1_id");
+            } else if (Load == ELoadKind::YDB_VALUE) {
+                BulkUpsertRowTableYdbValueWithSecondColumn(
+                    helper, t2, { { 1, 1, true }, { 2, 1, false }, { 3, 2, true }, { 4, 2, false } }, "table1_id");
+            } else {
+                TStringBuilder csv;
+                csv << "1,1,true\n2,1,false\n3,2,true\n4,2,false\n";
+                auto result = helper.GetKikimr().GetTableClient().BulkUpsert(t2, EDataFormat::CSV, csv).GetValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            }
+        }
+
         CheckOrExec(helper,
             "SELECT t1.id, t1.b, t2.b FROM `/Root/Table1` as t1 join `/Root/Table2` as t2 on t1.id = t2.table1_id order by t1.id, t1.b, t2.b",
             R"([[1;[%true];[%false]];[1;[%true];[%true]];[2;[%true];[%false]];[2;[%true];[%true]]])", Scan);
@@ -417,8 +533,9 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
 
     Y_UNIT_TEST_ALL_ENUM_VALUES(TestJoinByBool, {
         if (Table == ETableKind::COLUMN_SHARD) {
-            return; // skip until bool is supported in columnshard
+            return;   // skip until bool is supported in columnshard
         }
+
         const TString t1 = "/Root/Table1";
         const TString t2 = "/Root/Table2";
         TTestHelper helper(TKikimrSettings().SetWithSampleTables(false));
@@ -443,11 +560,12 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
             CreateDataShardTable(helper, t1);
             CreateDataShardTable(helper, t2);
         }
+
         LoadData(helper, Table, Load, t1, { { 2, 3, true }, { 4, 1, true } }, &col1, &s1);
         LoadData(helper, Table, Load, t2, { { 2, 2, false }, { 4, 4, false }, { 1, 1, true }, { 3, 3, true } }, &col2, &s2);
         CheckOrExec(helper,
             "SELECT t1.id, t2.id, t1.b FROM `/Root/Table1` as t1 join `/Root/Table2` as t2 on t1.b = t2.b order by t1.id, t2.id, t1.b",
-            R"([[2;1;[%true]];[2;3;[%true]];[4;1;[%true]];[4;3;[%true]];[2;2;[%false]];[4;4;[%false]]])", Scan);
+            R"([[2;1;[%true]];[2;3;[%true]];[4;1;[%true]];[4;3;[%true]]])", Scan);
     })
 }
 

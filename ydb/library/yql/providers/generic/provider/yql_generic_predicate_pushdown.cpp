@@ -227,6 +227,26 @@ namespace NYql {
             return SerializeExpression(lambda.Body(), dstProto->mutable_then_expression(), ctx, depth + 1);
         }
 
+        bool SerializeDecimal(const TCoDecimal& coDecimal, TExpression* proto, TSerializationContext& /*ctx*/, ui64 /*depth*/) {
+            auto* protoTypedValue = proto->mutable_typed_value();
+            auto* protoDecimalType = protoTypedValue->mutable_type()->mutable_decimal_type();
+
+            // extract precision and scale
+            auto precision = FromString<ui32>(coDecimal.Precision().StringValue());
+            auto scale = FromString<ui32>(coDecimal.Scale().StringValue());
+            protoDecimalType->set_precision(precision);
+            protoDecimalType->set_scale(scale);
+
+            // extract decimal value itself and convert it into bytes
+            auto decimal = NDecimal::FromString(coDecimal.Cast<TCoDecimal>().Literal().Value(), precision, scale);
+            Y_ENSURE(sizeof(decimal) == 16, "wrong TInt128 size");
+            char* buf = reinterpret_cast<char*>(&decimal);
+            protoTypedValue->mutable_value()->set_bytes_value(buf);
+            
+            return true;
+        }
+
+
 #define MATCH_ATOM(AtomType, ATOM_ENUM, proto_name, cpp_type)                             \
     if (auto atom = expression.Maybe<Y_CAT(TCo, AtomType)>()) {                           \
         auto* value = proto->mutable_typed_value();                                       \
@@ -271,23 +291,6 @@ namespace NYql {
         bool SerializeSqlIfExpression(const TCoIf& sqlIf, TExpression* proto, TSerializationContext& ctx, ui64 depth);
 
         bool SerializeCoalesceExpression(const TCoCoalesce& coalesce, TExpression* proto, TSerializationContext& ctx, ui64 depth);
-
-        bool SerializeDecimal(const TCoDecimal& decimal, TExpression* proto, TSerializationContext& /*ctx*/, ui64 /*depth*/) {
-            auto* typedValue = proto->mutable_typed_value();
-            auto* decimalType = typedValue->mutable_type()->mutable_decimal_type();
-
-            auto precision = FromString<ui32>(decimal.Precision().StringValue());
-            auto scale = FromString<ui32>(decimal.Scale().StringValue());
-            
-            decimalType->set_precision(precision);
-            decimalType->set_scale(scale);
-            
-            // Set the decimal value
-            auto* v = typedValue->mutable_value();
-            v->set_bytes_value(decimal.Literal());
-            
-            return true;
-        }
 
         bool SerializeExpression(const TExprBase& expression, TExpression* proto, TSerializationContext& ctx, ui64 depth) {
             if (auto member = expression.Maybe<TCoMember>()) {

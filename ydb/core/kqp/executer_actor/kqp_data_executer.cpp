@@ -2851,26 +2851,37 @@ private:
     }
 
     void StartCheckpointCoordinator() {
+        const auto context = TasksGraph.GetMeta().UserRequestContext;
         bool enableCheckpointCoordinator = QueryServiceConfig.HasCheckpointsConfig()
             && QueryServiceConfig.GetCheckpointsConfig().GetEnabled()
-            && (Request.SaveQueryPhysicalGraph || Request.QueryPhysicalGraph != nullptr);
+            && (Request.SaveQueryPhysicalGraph || Request.QueryPhysicalGraph != nullptr)
+            && context && context->CheckpointId;
         if (!enableCheckpointCoordinator) {
             return;
         }
+
         const NKikimrConfig::TCheckpointsConfig& checkpointsConfig = QueryServiceConfig.GetCheckpointsConfig();
 
         FederatedQuery::StreamingDisposition streamingDisposition;
-        TString executionId = TasksGraph.GetMeta().UserRequestContext->CurrentExecutionId;
+        FederatedQuery::StateLoadMode stateLoadMode = FederatedQuery::FROM_LAST_CHECKPOINT;
+
+        if (!Request.QueryPhysicalGraph) {
+            // Request has no saved checkpoints or start from foreign checkpoint
+            stateLoadMode = FederatedQuery::EMPTY;
+            streamingDisposition.mutable_from_last_checkpoint();
+        }
+
+        const auto& checkpointId = context->CheckpointId;
         CheckpointCoordinatorId = Register(MakeCheckpointCoordinator(
-            ::NFq::TCoordinatorId(executionId, Generation),
+            ::NFq::TCoordinatorId(checkpointId, Generation),
             NYql::NDq::MakeCheckpointStorageID(),
             SelfId(),
             checkpointsConfig,
             Counters->Counters->GetKqpCounters(),
             NFq::NProto::TGraphParams(),
-            FederatedQuery::StateLoadMode::FROM_LAST_CHECKPOINT,
+            stateLoadMode,
             streamingDisposition).Release());
-        LOG_D("Created new CheckpointCoordinator (" << CheckpointCoordinatorId << "), execution id " << executionId << ", generation " << Generation);
+        LOG_D("Created new CheckpointCoordinator (" << CheckpointCoordinatorId << "), execution id " << context->CurrentExecutionId << ", checkpoint id " << checkpointId << ", generation " << Generation);
     }
 
 private:

@@ -500,4 +500,36 @@ Y_UNIT_TEST_SUITE(StateStorageConfigValidation) {
         auto res = ValidateStateStorageConfig("StateStorage", {}, proposed);
         UNIT_ASSERT(res.empty());
     }
+
+    Y_UNIT_TEST(CanDisableAndChange) {
+        NKikimrConfig::TDomainsConfig::TStateStorage cur;
+        FillRing(cur.MutableRing());
+        NKikimrConfig::TDomainsConfig::TStateStorage proposed;
+        FillRing(proposed.MutableRing());
+        proposed.MutableRing()->MutableRing(0)->SetIsDisabled(true);
+        proposed.MutableRing()->MutableRing(0)->AddNode(100);
+        auto res = ValidateStateStorageConfig("StateStorage", cur, proposed);
+        UNIT_ASSERT(res.empty());
+    }
+
+    Y_UNIT_TEST(CanChangeDisabled) {
+        NKikimrConfig::TDomainsConfig::TStateStorage cur;
+        FillRing(cur.MutableRing());
+        cur.MutableRing()->MutableRing(0)->SetIsDisabled(true);
+        NKikimrConfig::TDomainsConfig::TStateStorage proposed;
+        FillRing(proposed.MutableRing());
+        proposed.MutableRing()->MutableRing(0)->AddNode(100);
+        auto res = ValidateStateStorageConfig("StateStorage", cur, proposed);
+        UNIT_ASSERT(res.empty());
+    }
+
+    Y_UNIT_TEST(ChangesNotAllowed) {
+        NKikimrConfig::TDomainsConfig::TStateStorage cur;
+        FillRing(cur.MutableRing());
+        NKikimrConfig::TDomainsConfig::TStateStorage proposed;
+        FillRing(proposed.MutableRing());
+        proposed.MutableRing()->MutableRing(0)->AddNode(100);
+        auto res = ValidateStateStorageConfig("StateStorage", cur, proposed);
+        UNIT_ASSERT(res.StartsWith("StateStorage ring #0differs from# Ring"));
+    }
 }

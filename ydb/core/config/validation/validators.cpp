@@ -332,11 +332,6 @@ TString ValidateStateStorageConfig(const char* name, const NKikimrConfig::TDomai
                 << " from# " << SingleLineProto(oldSSConfig)
                 << " to# " << SingleLineProto(newSSConfig);
         }
-        if (toInfo->RingGroups != fromInfo->RingGroups) {
-            return TStringBuilder() << name << " NToSelect/rings differs"
-                << " from# " << SingleLineProto(oldSSConfig)
-                << " to# " << SingleLineProto(newSSConfig);
-        }
         return "";
     }
     if (newSSConfig.RingGroupsSize() < 1) {

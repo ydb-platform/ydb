@@ -10,7 +10,6 @@
 #include <util/generic/set.h>
 #include <util/system/datetime.h>
 
-#include "logging.h"
 #include "event_filter.h"
 
 #include <atomic>

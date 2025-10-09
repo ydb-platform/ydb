@@ -146,7 +146,7 @@ struct TFakeGenericClient: public NConnector::IClient {
         // Add decimal columns
         {
             auto* col = schema.add_columns();
-            col->set_name("col_decimal_scale0");
+            col->set_name("col_decimal_precision10_scale0");
             auto* t = col->mutable_type();
             auto* decimalType = t->mutable_decimal_type();
             decimalType->set_precision(10);
@@ -154,7 +154,7 @@ struct TFakeGenericClient: public NConnector::IClient {
         }
         {
             auto* col = schema.add_columns();
-            col->set_name("col_decimal_scale2");
+            col->set_name("col_decimal_precision4_scale2");
             auto* t = col->mutable_type();
             auto* decimalType = t->mutable_decimal_type();
             decimalType->set_precision(4);
@@ -788,7 +788,7 @@ Y_UNIT_TEST_SUITE_F(PushdownTest, TPushdownFixture) {
         AssertFilter(
             R"ast(
                 (==
-                    (Member $row '"col_decimal_scale0")
+                    (Member $row '"col_decimal_precision10_scale0")
                     (Decimal '"1" '"10" '"0")
                 )
                 )ast",
@@ -796,7 +796,7 @@ Y_UNIT_TEST_SUITE_F(PushdownTest, TPushdownFixture) {
                 comparison {
                     operation: EQ
                     left_value {
-                        column: "col_decimal_scale0"
+                        column: "col_decimal_precision10_scale0"
                     }
                     right_value {
                         typed_value {
@@ -821,7 +821,7 @@ Y_UNIT_TEST_SUITE_F(PushdownTest, TPushdownFixture) {
         AssertFilter(
             R"ast(
                 (==
-                    (Member $row '"col_decimal_scale2")
+                    (Member $row '"col_decimal_precision4_scale2")
                     (Decimal '"-22.22" '"4" '"2")
                 )
                 )ast",
@@ -829,7 +829,7 @@ Y_UNIT_TEST_SUITE_F(PushdownTest, TPushdownFixture) {
                 comparison {
                     operation: EQ
                     left_value {
-                        column: "col_decimal_scale2"
+                        column: "col_decimal_precision4_scale2"
                     }
                     right_value {
                         typed_value {

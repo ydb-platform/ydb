@@ -32,27 +32,7 @@ namespace NActors {
         ui64 ElapsedCycles = 0;
     };
 
-    template<bool>
-    struct TMailboxUsageImpl {
-        void Push(ui64 /*localId*/) {}
-        void ProcessEvents(TMailboxHeader* /*mailbox*/) {}
-    };
-
-    template<>
-    struct TMailboxUsageImpl<true> {
-        struct TPendingEvent {
-            ui64 LocalId;
-            ui64 Timestamp;
-        };
-        NThreading::TReadAsFilledQueue<TPendingEvent> PendingEventQueue;
-
-        ~TMailboxUsageImpl();
-        void Push(ui64 localId);
-        void ProcessEvents(TMailboxHeader *mailbox);
-    };
-
     struct TMailboxHeader
-        : TMailboxUsageImpl<ActorLibCollectUsageStats>
     {
         struct TMailboxActorPack {
             enum EType {

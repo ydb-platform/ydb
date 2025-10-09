@@ -1,5 +1,10 @@
 LIBRARY()
 
+SRCS(
+    tuple.cpp
+    accumulator.cpp
+)
+
 PEERDIR(
     contrib/libs/apache/arrow
     yql/essentials/types/binary_json
@@ -13,10 +18,6 @@ IF (ARCH_X86_64 AND OS_LINUX)
 
 PEERDIR(
     ydb/library/yql/dq/comp_nodes/hash_join_utils/simd
-)
-
-SRCS(
-    tuple.cpp
 )
 
 CFLAGS(

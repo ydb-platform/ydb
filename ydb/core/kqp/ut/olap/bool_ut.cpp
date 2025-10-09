@@ -20,39 +20,77 @@
 #include <yql/essentials/types/binary_json/write.h>
 #include <yql/essentials/types/uuid/uuid.h>
 
-#define Y_UNIT_TEST_ALL_ENUM_VALUES(N, ENUM_TYPE1, ENUM_TYPE2, ENUM_TYPE3) \
+#include <tuple>
+
+template <class... Es>
+static TString BuildParamTestName(const char* base, const Es&... es) {
+    TString s = base;
+    auto append = [&](const auto& e) {
+        s += "-";
+        s += ToString(e);
+    };
+
+    (append(es), ...);
+    return s;
+}
+
+template <class F>
+static void ForEachProductRanges(F&& f) {
+    f();
+}
+
+template <class F, class FirstRange, class... RestRanges>
+static void ForEachProductRanges(F&& f, const FirstRange& first, const RestRanges&... rest) {
+    for (auto&& x : first) {
+        ForEachProductRanges(
+            [&](auto&&... tail) {
+                f(x, tail...);
+            },
+            rest...);
+    }
+}
+
+template <class... Enums, class F>
+static void ForEachEnums(F&& f) {
+    ForEachProductRanges(std::forward<F>(f), GetEnumAllValues<Enums>()...);
+}
+
+template <class Tuple, size_t... I>
+static TString BuildParamTestNameFromTupleImpl(const char* base, const Tuple& t, std::index_sequence<I...>) {
+    return BuildParamTestName(base, std::get<I>(t)...);
+}
+
+template <class Tuple>
+static TString BuildParamTestNameFromTuple(const char* base, const Tuple& t) {
+    return BuildParamTestNameFromTupleImpl(base, t, std::make_index_sequence<std::tuple_size<Tuple>::value>{});
+}
+
+#define Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(N, ...) \
     struct TTestCase##N: public TCurrentTestCase { \
-        ENUM_TYPE1 Arg0; \
-        ENUM_TYPE2 Arg1; \
-        ENUM_TYPE3 Arg2; \
+        using Types = std::tuple<__VA_ARGS__>; \
+        Types Args; \
         TString ParametrizedTestName; \
-        TTestCase##N(ENUM_TYPE1 arg0, ENUM_TYPE2 arg1, ENUM_TYPE3 arg2) \
-            : TCurrentTestCase() \
-            , Arg0(arg0) \
-            , Arg1(arg1) \
-            , Arg2(arg2) \
-            , ParametrizedTestName(#N "-" + ToString(Arg0) + "-" + ToString(Arg1) + "-" + ToString(Arg2)) { \
+        explicit TTestCase##N(Types args) \
+            : Args(std::move(args)) \
+            , ParametrizedTestName(BuildParamTestNameFromTuple(#N, Args)) { \
             Name_ = ParametrizedTestName.c_str(); \
         } \
-        static THolder<NUnitTest::TBaseTestCase> Create(ENUM_TYPE1 arg0, ENUM_TYPE2 arg1, ENUM_TYPE3 arg2) { \
-            return ::MakeHolder<TTestCase##N>(arg0, arg1, arg2); \
+        static THolder<NUnitTest::TBaseTestCase> Create(Types args) { \
+            return ::MakeHolder<TTestCase##N>(std::move(args)); \
         } \
         void Execute_(NUnitTest::TTestContext&) override; \
+        template <size_t I> \
+        decltype(auto) Arg() const { \
+            return std::get<I>(Args); \
+        } \
     }; \
     struct TTestRegistration##N { \
         TTestRegistration##N() { \
-            const auto enumItems1 = GetEnumAllValues<ENUM_TYPE1>(); \
-            const auto enumItems2 = GetEnumAllValues<ENUM_TYPE2>(); \
-            const auto enumItems3 = GetEnumAllValues<ENUM_TYPE3>(); \
-            for (auto&& item1 : enumItems1) { \
-                for (auto&& item2 : enumItems2) { \
-                    for (auto&& item3 : enumItems3) { \
-                        TCurrentTest::AddTest([item1, item2, item3] { \
-                            return TTestCase##N::Create(item1, item2, item3); \
-                        }); \
-                    } \
-                } \
-            } \
+            ForEachEnums<__VA_ARGS__>([&](auto... items) { \
+                TCurrentTest::AddTest([=] { \
+                    return TTestCase##N::Create(typename TTestCase##N::Types(items...)); \
+                }); \
+            }); \
         } \
     }; \
     static TTestRegistration##N testRegistration##N; \
@@ -132,8 +170,10 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
             } else {
                 builder.EmptyOptional(EPrimitiveType::Bool);
             }
+
             builder.EndStruct();
         }
+
         builder.EndList();
         auto result = helper.GetKikimr().GetTableClient().BulkUpsert(name, builder.Build()).GetValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
@@ -362,10 +402,10 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
         TTestHelper::TColumnTable TestTable;
     };
 
-    Y_UNIT_TEST_ALL_ENUM_VALUES(TestSimpleQueries, EQueryMode, ETableKind, ELoadKind) {
-        const auto Scan = Arg0;
-        const auto Table = Arg1;
-        const auto Load = Arg2;
+    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(TestSimpleQueries, EQueryMode, ETableKind, ELoadKind) {
+        const auto Scan = Arg<0>();
+        const auto Table = Arg<1>();
+        const auto Load = Arg<2>();
         if (Table == ETableKind::COLUMN_SHARD) {
             return;   // skip until bool is supported in columnshard
         }
@@ -381,10 +421,10 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
             helper, "SELECT * FROM `/Root/Table1` order by id", "[[[%true];1;[4]];[[%false];2;[3]];[[%true];3;[2]];[[%true];4;[1]]]", Scan);
     }
 
-    Y_UNIT_TEST_ALL_ENUM_VALUES(TestFilterEqual, EQueryMode, ETableKind, ELoadKind) {
-        const auto Scan = Arg0;
-        const auto Table = Arg1;
-        const auto Load = Arg2;
+    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(TestFilterEqual, EQueryMode, ETableKind, ELoadKind) {
+        const auto Scan = Arg<0>();
+        const auto Table = Arg<1>();
+        const auto Load = Arg<2>();
         if (Table == ETableKind::COLUMN_SHARD) {
             return;   // skip until bool is supported in columnshard
         }
@@ -399,10 +439,10 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
         CheckOrExec(helper, "SELECT * FROM `/Root/Table1` WHERE b != true order by id", "[[[%false];2;[3]]]", Scan);
     }
 
-    Y_UNIT_TEST_ALL_ENUM_VALUES(TestFilterNulls, EQueryMode, ETableKind, ELoadKind) {
-        const auto Scan = Arg0;
-        const auto Table = Arg1;
-        const auto Load = Arg2;
+    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(TestFilterNulls, EQueryMode, ETableKind, ELoadKind) {
+        const auto Scan = Arg<0>();
+        const auto Table = Arg<1>();
+        const auto Load = Arg<2>();
         if (Table == ETableKind::COLUMN_SHARD) {
             return;   // skip until bool is supported in columnshard
         }
@@ -420,10 +460,10 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
             "[[[%true];1;[4]];[[%false];2;[3]];[[%true];3;[2]];[[%true];4;[1]]]", Scan);
     }
 
-    Y_UNIT_TEST_ALL_ENUM_VALUES(TestFilterCompare, EQueryMode, ETableKind, ELoadKind) {
-        const auto Scan = Arg0;
-        const auto Table = Arg1;
-        const auto Load = Arg2;
+    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(TestFilterCompare, EQueryMode, ETableKind, ELoadKind) {
+        const auto Scan = Arg<0>();
+        const auto Table = Arg<1>();
+        const auto Load = Arg<2>();
         if (Table == ETableKind::COLUMN_SHARD) {
             return;   // skip until bool is supported in columnshard
         }
@@ -443,10 +483,10 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
             helper, "SELECT * FROM `/Root/Table1` WHERE b >= true order by id", "[[[%true];1;[4]];[[%true];3;[2]];[[%true];4;[1]]]", Scan);
     }
 
-    Y_UNIT_TEST_ALL_ENUM_VALUES(TestOrderByBool, EQueryMode, ETableKind, ELoadKind) {
-        const auto Scan = Arg0;
-        const auto Table = Arg1;
-        const auto Load = Arg2;
+    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(TestOrderByBool, EQueryMode, ETableKind, ELoadKind) {
+        const auto Scan = Arg<0>();
+        const auto Table = Arg<1>();
+        const auto Load = Arg<2>();
         if (Table == ETableKind::COLUMN_SHARD) {
             return;   // skip until bool is supported in columnshard
         }
@@ -461,10 +501,10 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
             helper, "SELECT * FROM `/Root/Table1` order by b, id", "[[[%false];2;[3]];[[%true];1;[4]];[[%true];3;[2]];[[%true];4;[1]]]", Scan);
     }
 
-    Y_UNIT_TEST_ALL_ENUM_VALUES(TestGroupByBool, EQueryMode, ETableKind, ELoadKind) {
-        const auto Scan = Arg0;
-        const auto Table = Arg1;
-        const auto Load = Arg2;
+    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(TestGroupByBool, EQueryMode, ETableKind, ELoadKind) {
+        const auto Scan = Arg<0>();
+        const auto Table = Arg<1>();
+        const auto Load = Arg<2>();
         if (Table == ETableKind::COLUMN_SHARD) {
             return;   // skip until bool is supported in columnshard
         }
@@ -479,10 +519,10 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
         CheckOrExec(helper, "SELECT b, count(*) FROM `/Root/Table1` group by b order by b", "[[[%false];2u];[[%true];4u]]", Scan);
     }
 
-    Y_UNIT_TEST_ALL_ENUM_VALUES(TestAggregation, EQueryMode, ETableKind, ELoadKind) {
-        const auto Scan = Arg0;
-        const auto Table = Arg1;
-        const auto Load = Arg2;
+    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(TestAggregation, EQueryMode, ETableKind, ELoadKind) {
+        const auto Scan = Arg<0>();
+        const auto Table = Arg<1>();
+        const auto Load = Arg<2>();
         if (Table == ETableKind::COLUMN_SHARD) {
             return;   // skip until bool is supported in columnshard
         }
@@ -497,10 +537,10 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
         CheckOrExec(helper, "SELECT max(b) FROM `/Root/Table1`", "[[[%true]]]", Scan);
     }
 
-    Y_UNIT_TEST_ALL_ENUM_VALUES(TestJoinById, EQueryMode, ETableKind, ELoadKind) {
-        const auto Scan = Arg0;
-        const auto Table = Arg1;
-        const auto Load = Arg2;
+    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(TestJoinById, EQueryMode, ETableKind, ELoadKind) {
+        const auto Scan = Arg<0>();
+        const auto Table = Arg<1>();
+        const auto Load = Arg<2>();
         if (Table == ETableKind::COLUMN_SHARD) {
             return;   // skip until bool is supported in columnshard
         }
@@ -555,10 +595,10 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
             R"([[1;[%true];[%false]];[1;[%true];[%true]];[2;[%true];[%false]];[2;[%true];[%true]]])", Scan);
     }
 
-    Y_UNIT_TEST_ALL_ENUM_VALUES(TestJoinByBool, EQueryMode, ETableKind, ELoadKind) {
-        const auto Scan = Arg0;
-        const auto Table = Arg1;
-        const auto Load = Arg2;
+    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(TestJoinByBool, EQueryMode, ETableKind, ELoadKind) {
+        const auto Scan = Arg<0>();
+        const auto Table = Arg<1>();
+        const auto Load = Arg<2>();
         if (Table == ETableKind::COLUMN_SHARD) {
             return;   // skip until bool is supported in columnshard
         }
@@ -574,6 +614,7 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
                 TTestHelper::TColumnSchema().SetName("int").SetType(NScheme::NTypeIds::Int64),
                 TTestHelper::TColumnSchema().SetName("b").SetType(NScheme::NTypeIds::Bool),
             };
+
             col1.SetName(t1).SetPrimaryKey({ "id" }).SetSharding({ "id" }).SetSchema(s1);
             helper.CreateTable(col1);
             s2 = {
@@ -581,6 +622,7 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
                 TTestHelper::TColumnSchema().SetName("table1_id").SetType(NScheme::NTypeIds::Int64),
                 TTestHelper::TColumnSchema().SetName("b").SetType(NScheme::NTypeIds::Bool),
             };
+
             col2.SetName(t2).SetPrimaryKey({ "id" }).SetSharding({ "id" }).SetSchema(s2);
             helper.CreateTable(col2);
         } else {

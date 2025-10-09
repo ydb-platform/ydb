@@ -34,7 +34,6 @@ int main(int argc, char** argv) {
     tcmalloc::MallocExtension::SetProfileSamplingInterval(1);
     tcmalloc::MallocExtension::SetGuardedSamplingInterval(1);
     tcmalloc::MallocExtension::ActivateGuardedSampling();
-    tcmalloc::MallocExtension::SetBackgroundReleaseRate(tcmalloc::MallocExtension::BytesPerSecond{1});
 
     std::cout << "With GWP-ASan" << std::endl; 
     test(argc, argv);

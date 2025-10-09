@@ -565,30 +565,7 @@ TVector<ISubOperation::TPtr> CreateConsistentMoveIndex(TOperationId nextId, cons
                     << "exists, but overwrite flag has not been set";
                 return {CreateReject(nextId, NKikimrScheme::StatusSchemeError, errStr)};
             }
-            {
-                auto indexDropping = TransactionTemplate(mainTablePath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropTableIndex);
-                auto operation = indexDropping.MutableDrop();
-                operation->SetName(dstIndex);
-
-                result.push_back(CreateDropTableIndex(NextPartId(nextId, result), indexDropping));
-            }
-
-            for (const auto& [name, pathId]: dstIndexPath.Base()->GetChildren()) {
-                Y_ABORT_UNLESS(context.SS->PathsById.contains(pathId));
-                auto implPath = context.SS->PathsById.at(pathId);
-                if (implPath->Dropped()) {
-                    continue;
-                }
-
-                auto implTable = context.SS->PathsById.at(pathId);
-                Y_ABORT_UNLESS(implTable->IsTable());
-
-                auto implTableDropping = TransactionTemplate(dstIndexPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropTable);
-                auto operation = implTableDropping.MutableDrop();
-                operation->SetName(name);
-
-                result.push_back(CreateDropTable(NextPartId(nextId, result), implTableDropping));
-            }
+            AddDropIndex(result, nextId, dstIndexPath);
         }
     }
 

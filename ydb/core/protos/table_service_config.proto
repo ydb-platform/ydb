@@ -414,7 +414,7 @@ message TTableServiceConfig {
 
     optional bool EnableTempTablesForUser = 95 [default = false];
 
-    optional bool EnableSimpleProgramsSinglePartitionOptimization = 96 [default = false];
+    optional bool EnableSimpleProgramsSinglePartitionOptimization = 96 [default = true];
 
     optional bool EnableKqpScanQueryUseLlvm = 97 [default = true];
 

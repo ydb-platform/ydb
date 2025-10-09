@@ -2,8 +2,8 @@
 
 #include <util/system/thread.h>
 #include <ydb/library/actors/util/funnel_queue.h>
-
-#include "interconnect_stream.h"
+#include "poller.h"
+#include <util/network/address.h>
 
 #include <memory>
 #include <functional>

@@ -127,7 +127,7 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         COPYING [3:3]
-        README.rst [379:379]
+        README.rst [384:384]
         lib/includes/ngtcp2/version.h [4:4]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 94b9ad611aac02e9c9d2f6105f7ab5f2
@@ -141,6 +141,19 @@ BELONGS ya.make
     Files with this license:
         lib/ngtcp2_settings.c [4:4]
         lib/ngtcp2_settings.h [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b3a1dbf86df9b51e39d69be7e6eab066
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2025 ngtcp2 contributors
+         * Copyright (c) 2023 nghttp2 contributors
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/ngtcp2_ratelim.c [4:5]
+        lib/ngtcp2_ratelim.h [4:5]
 
 KEEP     COPYRIGHT_SERVICE_LABEL b9bce4a8047145ca716cda7c1ba12739
 BELONGS ya.make
@@ -244,6 +257,10 @@ BELONGS ya.make
         lib/ngtcp2_callbacks.h [4:4]
         lib/ngtcp2_dcidtr.c [4:4]
         lib/ngtcp2_dcidtr.h [4:4]
+        lib/ngtcp2_pcg.c [4:4]
+        lib/ngtcp2_pcg.h [4:4]
+        lib/ngtcp2_ratelim.c [4:5]
+        lib/ngtcp2_ratelim.h [4:5]
 
 KEEP     COPYRIGHT_SERVICE_LABEL d8ca50c11a8cd311a31e6462c4b42555
 BELONGS ya.make
@@ -257,6 +274,18 @@ BELONGS ya.make
     Files with this license:
         lib/ngtcp2_mem.c [4:5]
         lib/ngtcp2_mem.h [4:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ebed53083d3648d028f650e9586bc9b7
+BELONGS ya.make
+    License text:
+         * Copyright 2014-2019 Melissa O'Neill <oneill@pcg-random.org>,
+         *                     and the PCG Project contributors.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/ngtcp2_pcg.c [35:36]
 
 KEEP     COPYRIGHT_SERVICE_LABEL ed9787b1511b75f8534d2b25efbe271c
 BELONGS ya.make

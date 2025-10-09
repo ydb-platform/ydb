@@ -61,7 +61,7 @@ directory require at least one of the following TLS backends:
 - `quictls
   <https://github.com/quictls/openssl/tree/OpenSSL_1_1_1w+quic>`_
 - GnuTLS >= 3.7.5
-- BoringSSL (commit 0697c880516634fb1430868d99b4028b5e407465);
+- BoringSSL (commit 729648fb79df7bc46c145e49b0dfd8d2a24232f1);
   or aws-lc >= 1.39.0
 - Picotls (commit f350eab60742138ac62b42ee444adf04c7898b0d)
 - wolfSSL >= 5.5.0
@@ -115,7 +115,7 @@ Build with BoringSSL
 
    $ git clone https://boringssl.googlesource.com/boringssl
    $ cd boringssl
-   $ git checkout 0697c880516634fb1430868d99b4028b5e407465
+   $ git checkout 729648fb79df7bc46c145e49b0dfd8d2a24232f1
    $ cmake -B build -DCMAKE_POSITION_INDEPENDENT_CODE=ON
    $ make -j$(nproc) -C build
    $ cd ..
@@ -142,7 +142,7 @@ Build with aws-lc
 
 .. code-block:: shell
 
-   $ git clone --depth 1 -b v1.56.0 https://github.com/aws/aws-lc
+   $ git clone --depth 1 -b v1.58.1 https://github.com/aws/aws-lc
    $ cd aws-lc
    $ cmake -B build -DDISABLE_GO=ON
    $ make -j$(nproc) -C build
@@ -272,7 +272,8 @@ The header file exists under crypto/includes/ngtcp2 directory.
 Each library file is built for a particular TLS backend.  The
 available crypto helper libraries are:
 
-- libngtcp2_crypto_quictls: Use quictls and libressl as TLS backend
+- libngtcp2_crypto_quictls: Use quictls as TLS backend
+- libngtcp2_crypto_libressl: Use libressl as TLS backend
 - libngtcp2_crypto_gnutls: Use GnuTLS as TLS backend
 - libngtcp2_crypto_boringssl: Use BoringSSL and aws-lc as TLS backend
 - libngtcp2_crypto_picotls: Use Picotls as TLS backend
@@ -299,8 +300,12 @@ OpenSSL backend, your application must make sure that:
 If you cannot make sure neither of them, it is a good time to migrate
 your application to the other alternative (e.g., wolfSSL, aws-lc).
 
-libngtcp2_crypto_quictls and libngtcp2_crypto_ossl cannot be built at
-the same time.
+libngtcp2_crypto_quictls, libngtcp2_crypto_libressl and
+libngtcp2_crypto_ossl cannot be built at the same time.
+
+Although libressl has its own library libngtcp2_crypto_libressl, an
+application should include `ngtcp2/ngtcp2_crypto_quictls.h`.  There is
+no `ngtcp2/ngtcp2_crypto_libressl.h`.
 
 The examples directory contains client and server that are linked to
 those crypto helper libraries and TLS backends.  They are only built

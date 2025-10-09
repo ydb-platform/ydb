@@ -730,7 +730,7 @@ size_t THeaders::Parse(TStringBuf headers) {
     for (TStringBuf param = headers.NextTok("\r\n"); !param.empty(); param = headers.NextTok("\r\n")) {
         TStringBuf name = param.NextTok(":");
         param.SkipPrefix(" ");
-        Headers[name] = param;
+        Headers.insert({name, param});
     }
     return headers.begin() - start;
 }
@@ -796,8 +796,13 @@ void THeadersBuilder::Set(TStringBuf name, TStringBuf data) {
     if (it != Headers.end()) {
         it->second = Data.back().second; // update existing header
     } else {
-        Headers[Data.back().first] = Data.back().second; // add new header
+        Headers.insert({Data.back().first, Data.back().second}); // add new header
     }
+}
+
+void THeadersBuilder::Add(TStringBuf name, TStringBuf data) {
+    Data.emplace_back(name, data);
+    Headers.insert({Data.back().first, Data.back().second}); // add new header
 }
 
 void THeadersBuilder::Erase(TStringBuf name) {

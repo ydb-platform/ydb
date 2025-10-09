@@ -9,17 +9,17 @@
 
 ## Экспорт и импорт через федеративные запросы к {{ objstorage-name }} {#objstorage}
 
-[Федеративные запросы](../../concepts/federated_query/index.md) позволяют {{ ydb-short-name }} напрямую читать и записывать данные в файлах форматов Parquet или CSV. Этот метод удобен для выполнения операций экспорта и импорта непосредственно средствами SQL без использования внешних инструментов.
+[Федеративные запросы](../concepts/federated_query/index.md) позволяют {{ ydb-short-name }} напрямую читать и записывать данные в файлах форматов Parquet или CSV. Этот метод удобен для выполнения операций экспорта и импорта непосредственно средствами SQL без использования внешних инструментов.
 
 ### Предварительные требования
 
 - {{ objstorage-name }} и статический ключ доступа к нему, например [{{ objstorage-full-name }}](https://yandex.cloud/ru/docs/storage/) и созданный в нём [бакет](https://yandex.cloud/ru/docs/storage/concepts/bucket) с именем `your-bucket`.
 - Сетевой доступ от узлов кластера {{ ydb-short-name }} до {{ objstorage-name }}. В примере используется endpoint storage.yandexcloud.net к которму неоходим доступ по порту 443
-- В руководстве в качестве примера используются данные, созданные с помощью нагрузочного теста TPC-H. Загрузить эти тестовые данные в базу можно по [инструкции](../../reference/ydb-cli/workload-tpch.md).
+- В руководстве в качестве примера используются данные, созданные с помощью нагрузочного теста TPC-H. Загрузить эти тестовые данные в базу можно по [инструкции](../reference/ydb-cli/workload-tpch.md).
 
 ### Создайте секрет для доступа к {{ objstorage-name }}
 
-Для подключения к приватному бакету необходимо использовать аутентификацию по статическим ключам доступа. В {{ ydb-short-name }} эти ключи хранятся в виде [`SECRET`](../../concepts/datamodel/secrets.md) объектов.
+Для подключения к приватному бакету необходимо использовать аутентификацию по статическим ключам доступа. В {{ ydb-short-name }} эти ключи хранятся в виде [`SECRET`](../concepts/datamodel/secrets.md) объектов.
 
 ```sql
 CREATE OBJECT aws_access_id (TYPE SECRET) WITH (value='<ID_ключа>');
@@ -114,15 +114,15 @@ SELECT * FROM `external/backup/lineitem_sql`;
 
 ## Экспорт и импорт с помощью Apache Spark™ {#spark}
 
-Использование [коннектора]('../../../../integrations/ingestion/spark.md') {{ ydb-short-name }} для Apache Spark™ является гибким и масштабируемым решением для экспорта и импорта больших объемов данных.
+Использование [коннектора]('../../../integrations/ingestion/spark.md') {{ ydb-short-name }} для Apache Spark™ является гибким и масштабируемым решением для экспорта и импорта больших объемов данных.
 
 ### Предварительные требования
 
-- Установленный PySpark версии 4.0.1, установить можно по [инструкции] (https://spark.apache.org/docs/latest/api/python/getting_started/install.html).
-- Наличие [gRPC-эндпоинта](../../concepts/connect.md#эндпоинт-endpoint) для подключения к базе данных {{ ydb-short-name }}.
-- [Реквизиты доступа](../../reference/ydb-cli/connect.md#command-line-pars) {{ ydb-short-name }} с правами на чтение/запись.
+- Установленный PySpark версии 4.0.1, установить можно по [инструкции](https://spark.apache.org/docs/latest/api/python/getting_started/install.html).
+- Наличие [gRPC-эндпоинта](../concepts/connect.md#эндпоинт-endpoint) для подключения к базе данных {{ ydb-short-name }}.
+- [Реквизиты доступа](../reference/ydb-cli/connect.md#command-line-pars) {{ ydb-short-name }} с правами на чтение/запись.
 - {{ objstorage-name }} и статический ключ доступа к нему, например [{{ objstorage-full-name }}](https://yandex.cloud/ru/docs/storage/) и созданный в нём [бакет](https://yandex.cloud/ru/docs/storage/concepts/bucket) с именем `your-bucket`.
-- В руководстве в качестве примера используются данные, созданные с помощью нагрузочного теста TPC-H. Загрузить эти тестовые данные в базу можно по [инструкции](../../reference/ydb-cli/workload-tpch.md).
+- В руководстве в качестве примера используются данные, созданные с помощью нагрузочного теста TPC-H. Загрузить эти тестовые данные в базу можно по [инструкции](../reference/ydb-cli/workload-tpch.md).
 
 ### Экспорт данных из {{ ydb-short-name }} в Parquet
 
@@ -188,6 +188,7 @@ spark.stop()
 ```
 
 ### Импорт данных из Parquet в {{ ydb-short-name }}
+
 - `spark.jars.packages` — конфигурационный параметр Maven, который загрузит коннектор {{ ydb-short-name }} для Spark, а также другие необходимые компоненты.
 - `S3_ENDPOINT` — эндпоинт S3-совместимого хранилища (для {{ objstorage-full-name }} используйте `https://storage.yandexcloud.net`).
 - `S3_ACCESS_KEY` — ID статического ключа для доступа к S3.

@@ -241,7 +241,7 @@ namespace NYql {
             auto decimal = NDecimal::FromString(coDecimal.Cast<TCoDecimal>().Literal().Value(), precision, scale);
             static_assert(sizeof(decimal) == 16, "wrong TInt128 size");
             
-            // Set the bytes value with the 16 buffer containeing the decimal value bytes
+            // Set the bytes value with the 16 buffer containing the decimal value bytes
             protoTypedValue->mutable_value()->set_bytes_value(reinterpret_cast<char*>(&decimal), sizeof(decimal));
             
             return true;

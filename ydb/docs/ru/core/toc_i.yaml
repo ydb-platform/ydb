@@ -78,3 +78,11 @@ items:
       href: "https://yandex.cloud/ru/certification/ydbadministrator?utm_medium=owned&utm_source=oss_docs"
     - name: Сертификация для разработчиков
       href: "https://yandex.cloud/ru/certification/ydbdeveloper?utm_medium=owned&utm_source=oss_docs"
+- name: Карьера
+  labeled: true
+  when: audience != "tech"
+  items:
+    - name: Команда
+      href: "https://ydb.tech/ru/careers/"
+    - name: Студентам
+      href: "https://ydb.tech/ru/students/"

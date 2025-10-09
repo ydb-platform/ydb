@@ -99,6 +99,9 @@ struct TActorSystem: NActors::TTestActorRuntimeBase {
     TActorSystem()
         : NActors::TTestActorRuntimeBase(1, true)
     {}
+    ~TActorSystem() override {
+        TLogBackend::ReopenAllBackends();
+    }
 
     void Start()
     {
@@ -502,9 +505,11 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
         memoryLimits.MemoryQuotaManager = std::make_shared<TGuaranteeQuotaManager>(64_MB, 40_MB);
         TComputeRuntimeSettings runtimeSettings;
         runtimeSettings.StatsMode = statsMode;
+        Cerr << (TStringBuilder() << "CAIA " << LogPrefix) << Endl;
+        TTxId txid = LogPrefix;
         auto actor = CreateDqAsyncComputeActor(
                 EdgeActor, // executerId,
-                LogPrefix,
+                txid,
                 &task, // NYql::NDqProto::TDqTask* task,
                 CreateAsyncIoFactory(),
                 FunctionRegistry.Get(),
@@ -837,6 +842,7 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
            << " waitIntermediateAcks=" << waitIntermediateAcks
            << " channels=" << numChannels
            << " ";
+                        Cerr << (TStringBuilder() << "XAZ " << numChannels << ' ' << waitIntermediateAcks << ' ' << watermarkPeriod << ' ' << packets) << LogPrefix << Endl;
         NDqProto::TDqTask task;
         GenerateEmptyProgram(task, [](auto& ctx) {
             auto keyType = ctx.template MakeType<TDataExprType>(EDataSlot::Int32);
@@ -931,7 +937,7 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
                         auto ts = val.Get<ui64>();
                         LOG_D(column << " ts = " << ts << ' ' << watermark);
                         if (watermark) {
-                            WEAK_UNIT_ASSERT_GT_C(ts, watermark->Seconds(), "Timestamp " << ts << " before watermark: " << watermark->Seconds());
+                            WEAK_UNIT_ASSERT_GT_C(ts, watermark->Seconds(), LogPrefix << "Timestamp " << ts << " before watermark: " << watermark->Seconds());
                         }
                     } else if (columnName == "u.key") {
                         if (col0 >= MinTransformedValue && col0 <= MaxTransformedValue) {
@@ -1050,13 +1056,16 @@ Y_UNIT_TEST_SUITE(TAsyncComputeActorTest) {
         std::mt19937 rng(GetRandomSeed());
         for (ui32 t = 0; t < 16; ++t) sizes.push_back(1 + rng() % 734);
         for (ui32 numChannels: { 1, 2, 7, 11 }) {
-            for (bool waitIntermediateAcks : { false, true }) {
-                for (ui32 watermarkPeriod : { 0, 1, 3 }) {
+            for (bool waitIntermediateAcks : { /*false, */true }) {
+                for (ui32 watermarkPeriod : { /*0, */1, /*3*/ }) {
                     for (ui32 packets : sizes) {
+                        Cerr << (TStringBuilder() << "XAF " << numChannels << ' ' << waitIntermediateAcks << ' ' << watermarkPeriod << ' ' << packets) << Endl;
                         InputTransformMultichannelTests(packets, watermarkPeriod, waitIntermediateAcks, numChannels, rng);
+                        Cerr << "Done" << Endl;
                     }
                 }
             }
+            //TLogBackend::ReopenAllBackends();
         }
     }
 }

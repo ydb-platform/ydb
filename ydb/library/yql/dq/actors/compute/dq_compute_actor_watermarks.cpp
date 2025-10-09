@@ -4,7 +4,7 @@
 
 #include <yql/essentials/minikql/comp_nodes/mkql_saveload.h>
 
-#include <algorithm>
+#include <utility>
 
 #define LOG_T(s) \
     LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix << "Watermarks. " << s)
@@ -52,6 +52,7 @@ bool TDqComputeActorWatermarks::NotifyAsyncInputWatermarkReceived(ui64 inputId, 
 // TODO there are large overlap between SourceTracker and CA Watermark tracker, common code should be moved somewhere and reused
 void TDqComputeActorWatermarks::RegisterInput(ui64 inputId, bool isChannel, TDuration idleDelay)
 {
+    LOG_D("Register " << (isChannel ? "channel" : "async input") << " " << inputId << " for watermark with idle delay " << idleDelay);
     auto [it, inserted] = InputWatermarks.try_emplace(std::make_pair(inputId, isChannel));
     if (!inserted) {
         LOG_D("Repeated registration " << inputId <<" " << (isChannel ? "channel" : "async input"));
@@ -101,9 +102,11 @@ bool TDqComputeActorWatermarks::NotifyInputWatermarkReceived(ui64 inputId, bool 
         auto rec = ExpiresQueue.extract(TExpiresQueueItem { data.ExpiresAt, it });
         if (rec.empty()) {
             ExpiresQueue.emplace(expiresAt, it);
+            LOG_T("Unidle untill " << expiresAt);
         } else {
             rec.value().Time = expiresAt;
             auto inserted = ExpiresQueue.insert(std::move(rec)).inserted;
+            LOG_T("Bump idle from " << data.ExpiresAt << " to " << expiresAt);
             Y_DEBUG_ABORT_UNLESS(inserted);
         }
         data.ExpiresAt = expiresAt;
@@ -173,7 +176,7 @@ TMaybe<TInstant> TDqComputeActorWatermarks::HandleIdleness(TInstant systemTime) 
         if (it->Time >= systemTime + data.IdleDelay) {
             break;
         }
-        // LOG_T("Mark partition " << it->Iterator->first << " idle " << it->Time << '+' << IdleDelay_ << ">=" << systemTime);
+        LOG_T("Mark " << (it->Iterator->first.second ? "channel" : "async input") << ' ' << it->Iterator->first.first << " idle " << it->Time << '<' << systemTime << '+' << data.IdleDelay );
         auto removed = WatermarksQueue.erase(TWatermarksQueueItem {
                 it->Iterator->second.Watermark,
                 it->Iterator
@@ -186,6 +189,7 @@ TMaybe<TInstant> TDqComputeActorWatermarks::HandleIdleness(TInstant systemTime) 
         return Nothing();
     }
     if (auto nextWatermark = WatermarksQueue.begin()->Time; LastWatermark < nextWatermark) {
+        LOG_T("Idleness generates watermark " << nextWatermark);
         return PendingWatermark = LastWatermark = nextWatermark;
     } else if (nextWatermark < LastWatermark) {
         LOG_T("Watermark goes backward (partition was added or idle partition unidled) " << nextWatermark << '<' << LastWatermark);

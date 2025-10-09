@@ -84,6 +84,7 @@ public:
             CA_LOG_D("TDqAsyncComputeActor, make stat");
             Stat = MakeHolder<NYql::TCounters>();
         }
+        Cerr << (TStringBuilder() << "TCAIA " << LogPrefix) << Endl;
     }
 
     void DoBootstrap() {
@@ -972,6 +973,7 @@ private:
         if (watermark) {
             if (WatermarksTracker.NotifyInChannelWatermarkReceived( channelId, *watermark)) {
                 CA_LOG_T("Pause input channel " << channelId << " because of watermark");
+                ScheduleIdlenessCheck();
                 inputChannel->Pause(*watermark); // XXX does nothing in async CA
             }
         }
@@ -1135,6 +1137,7 @@ private:
             Y_ENSURE(*watermarkRequest >= ContinueRunEvent->WatermarkRequest);
             ContinueRunEvent->WatermarkRequest = *watermarkRequest;
             MetricsReporter.ReportInjectedToTaskRunnerWatermark(*watermarkRequest, WatermarksTracker.GetWatermarkDiscrepancy());
+            CA_LOG_T("Injecting watermark to TaskRunnerActorLocal " << watermarkRequest);
         }
 
         if (!UseCpuQuota()) {

@@ -244,7 +244,7 @@ public:
     }
 
     bool IsFinished() const override {
-        return Finished && (!IsPaused() || Batches.empty());
+        return Finished && !IsPaused() && Batches.empty();
     }
 
     NKikimr::NMiniKQL::TType* GetInputType() const override {
@@ -379,6 +379,7 @@ public:
     // p2            w11               p.w = w11                @11
     //                    | idle event
     void AddWatermark(TInstant watermark) override {
+        Y_ABORT_UNLESS(PendingBarriers.empty() || PendingBarriers.back().IsCheckpoint() || PendingBarriers.back().Barrier <= watermark);
         if (!PendingBarriers.empty() && PendingBarriers.back().Barrier >= watermark) {
             // must be idle channel; TODO verify
             return;

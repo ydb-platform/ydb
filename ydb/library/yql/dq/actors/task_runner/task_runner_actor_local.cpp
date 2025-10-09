@@ -168,15 +168,18 @@ private:
             const auto input = TaskRunner->GetSource(sourceId);
             // sources are not polled upon watermark
             if (!input->Empty()) { // check if buffer is empty
+                //LOG_T("ReadyToWatermark: source !empty " << sourceId);
                 return false;
             }
         }
         for (const auto inputChannelId: InputsWithWatermarks) {
             const auto input = TaskRunner->GetInputChannel(inputChannelId);
             if (!input->IsPausedByWatermark()) {
+                //LOG_T("ReadyToWatermark: channel !paused " << inputChannelId);
                 return false;
             }
             if (!input->Empty()) {
+                //LOG_T("ReadyToWatermark: channel !empty " << inputChannelId);
                 return false;
             }
         }
@@ -185,13 +188,22 @@ private:
             if (t) {
                 auto [_, transform] = *t;
                 if (!transform->Empty()) {
+                    //LOG_T("ReadyToWatermark: transform !empty " << transformId);
                     return false;
                 }
                 if (transform->IsPending()) {
+                    //LOG_T("ReadyToWatermark: transform pending " << transformId);
                     return false;
                 }
             }
         }
+#if 0
+        LOG_T("ReadyToWatermark: ready;"
+               << " sources: " << SourcesWithWatermarks.size() << '/' << Sources.size()
+               << " channels: " << InputsWithWatermarks.size() << '/' << Inputs.size()
+               << " transforms: " << InputTransformsWithWatermarks.size() << '/' << InputTransforms.size()
+               );
+#endif
         return true;
     }
 
@@ -224,7 +236,10 @@ private:
 
             if (res == ERunStatus::PendingInput && !WatermarkRequests.empty()) {
                 auto watermarkRequest = WatermarkRequests.front();
-                if (TaskRunner->GetWatermark().WatermarkIn < watermarkRequest && ReadyToWatermark()) {
+                if (TaskRunner->GetWatermark().WatermarkIn < watermarkRequest && ReadyToWatermark() && (InputsWithWatermarks.empty() && SourcesWithWatermarks.empty())) {
+                    LOG_E("XXX " << TaskRunner->GetWatermark().WatermarkIn << " req " << watermarkRequest << " but empty");
+                }
+                if (TaskRunner->GetWatermark().WatermarkIn < watermarkRequest && ReadyToWatermark() && !(InputsWithWatermarks.empty() && SourcesWithWatermarks.empty())) {
                     LOG_T("Task runner. Inject watermark " << watermarkRequest);
                     TaskRunner->SetWatermarkIn(watermarkRequest);
                     res = TaskRunner->Run();
@@ -245,7 +260,6 @@ private:
         if (res == ERunStatus::PendingInput || res == ERunStatus::Finished) {
             if (!WatermarkRequests.empty() && WatermarkRequests.front() == TaskRunner->GetWatermark().WatermarkIn) {
                 auto watermarkRequest = WatermarkRequests.front();
-                WatermarkRequests.pop_front();
                 LOG_T("Task runner. Watermarks. Injecting requested watermark " << watermarkRequest
                     << " to " << OutputsWithWatermarks.size() << " outputs ");
 
@@ -256,6 +270,7 @@ private:
                 }
                 ResumeByWatermark(watermarkRequest);
                 watermarkInjectedToOutputs = watermarkRequest;
+                WatermarkRequests.pop_front();
                 if (!WatermarkRequests.empty()) {
                     if (HasActiveCheckpoint) {
                         LOG_T("Next watermark delayed by active checkpoint");

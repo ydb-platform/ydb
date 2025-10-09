@@ -54,24 +54,7 @@ TVector<ISubOperation::TPtr> CreateConsistentMoveTable(TOperationId nextId, cons
         }
     }
 
-    THashSet<TString> sequences;
-    for (const auto& child: srcPath.Base()->GetChildren()) {
-        auto name = child.first;
-        auto pathId = child.second;
-
-        TPath childPath = srcPath.Child(name);
-        if (!childPath.IsSequence() || childPath.IsDeleted()) {
-            continue;
-        }
-
-        Y_ABORT_UNLESS(childPath.Base()->PathId == pathId);
-
-        TSequenceInfo::TPtr sequenceInfo = context.SS->Sequences.at(pathId);
-        const auto& sequenceDesc = sequenceInfo->Description;
-        const auto& sequenceName = sequenceDesc.GetName();
-
-        sequences.emplace(sequenceName);
-    }
+    THashSet<TString> sequences = GetLocalSequences(context, srcPath);
 
     TPath dstPath = TPath::Resolve(dstStr, context.SS);
 

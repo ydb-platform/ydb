@@ -82,7 +82,13 @@ TConclusionStatus TGeneralCompactColumnEngineChanges::DoConstructBlobs(TConstruc
                 }
             }
         }
-        std::vector<TReadPortionInfoWithBlobs> portions = TReadPortionInfoWithBlobs::RestorePortions(accessors, Blobs, context.SchemaVersions);
+
+        auto portionsOrError = TReadPortionInfoWithBlobs::TryRestorePortions(accessors, Blobs, context.SchemaVersions);
+        if (!portionsOrError) {
+            return portionsOrError;
+        }
+
+        std::vector<TReadPortionInfoWithBlobs> portions = portionsOrError.DetachResult();
         THashSet<ui64> usedPortionIds;
         std::vector<std::shared_ptr<ISubsetToMerge>> currentToMerge;
         for (auto&& i : portions) {

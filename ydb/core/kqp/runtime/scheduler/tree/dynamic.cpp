@@ -27,7 +27,13 @@ TQuery::TQuery(const TQueryId& id, const TDelayParams* delayParams, bool allowMi
 
 NSnapshot::TQuery* TQuery::TakeSnapshot() {
     auto* newQuery = new NSnapshot::TQuery(std::get<TQueryId>(GetId()), shared_from_this());
-    newQuery->Demand = Demand.load();
+    // Take the average of original demand and actual demand, but keep at least 1 if original demand not zero.
+    const auto demand = Demand.load();
+    newQuery->Demand = (demand + ActualDemand.load()) >> 1;
+    if (newQuery->Demand == 0 && demand > 0) {
+        newQuery->Demand = 1;
+    }
+    ActualDemand = 0;
 
     // Update previous burst values and pass difference to new snapshot - to calculate adjusted satisfaction
     const auto burstUsage = BurstUsage.load();
@@ -78,6 +84,12 @@ ui32 TQuery::ResumeTasks(ui32 count) {
     }
 
     return run;
+}
+
+void TQuery::UpdateActualDemand() {
+    auto demand = Usage + Throttle + 1;
+    auto actualDemand = ActualDemand.load();
+    while (actualDemand < demand && !ActualDemand.compare_exchange_weak(actualDemand, demand)) {}
 }
 
 ///////////////////////////////////////////////////////////////////////////////

@@ -51,6 +51,8 @@ bool TSchedulableTask::TryIncreaseUsage() {
         return false;
     }
 
+    Query->UpdateActualDemand();
+
     for (TTreeElement* parent = poolOrQuery; parent; parent = parent->GetParent()) {
         if (parent != poolOrQuery) {
             ++parent->Usage;
@@ -110,6 +112,9 @@ void TSchedulableTask::IncreaseThrottle() {
     if (Iterator) {
         (*Iterator)->second = true;
     }
+
+    Query->UpdateActualDemand();
+
     for (TTreeElement* parent = Query.get(); parent; parent = parent->GetParent()) {
         ++parent->Throttle;
     }

@@ -263,7 +263,7 @@ void TComputeScheduler::RemoveQuery(const TQueryPtr& query) {
     query->GetParent()->RemoveQuery(queryId);
 }
 
-void TComputeScheduler::UpdateFairShare() {
+void TComputeScheduler::UpdateFairShare(bool allowFairShareOverlimit) {
     auto startTime = TMonotonic::Now();
 
     NHdrf::NSnapshot::TRootPtr snapshot;
@@ -273,9 +273,7 @@ void TComputeScheduler::UpdateFairShare() {
     }
 
     snapshot->UpdateBottomUp(Root->TotalLimit);
-    // We want to allow FairShare to be over Limit.
-    // If you need to change this behaviour change variable's default value
-    snapshot->UpdateTopDown(true);
+    snapshot->UpdateTopDown(allowFairShareOverlimit);
 
     {
         TWriteGuard lock(Mutex);

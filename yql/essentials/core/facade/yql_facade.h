@@ -347,6 +347,8 @@ public:
         return UsedClusters_;
     }
 
+    TString GetSourceCode() const;
+
 private:
     TProgram(
         const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
@@ -403,7 +405,7 @@ private:
 
 private:
     std::optional<bool> CheckFallbackIssues(const TIssues& issues);
-    void HandleSourceCode(TString& sourceCode);
+    void HandleSourceCode();
     void HandleTranslationSettings(NSQLTranslation::TTranslationSettings& loadedSettings,
                                    NSQLTranslation::TTranslationSettings*& currentSettings);
 

@@ -794,7 +794,7 @@ int TFacadeRunner::DoRun(TProgramFactory& factory) {
             parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory();
             parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory();
             auto formatter = NSQLFormat::MakeSqlFormatter(lexers, parsers, settings);
-            if (!formatter->Format(RunOptions_.ProgramText, formattedProgramText, issues)) {
+            if (!formatter->Format(program->GetSourceCode(), formattedProgramText, issues)) {
                 *RunOptions_.ErrStream << "Format failed" << Endl;
                 issues.PrintTo(*RunOptions_.ErrStream);
                 return -1;
@@ -817,7 +817,7 @@ int TFacadeRunner::DoRun(TProgramFactory& factory) {
         }
         if (!fail && RunOptions_.TestLexers && 1 == RunOptions_.SyntaxVersion) {
             TIssues issues;
-            if (!NSQLTranslationV1::CheckLexers({}, RunOptions_.ProgramText, issues)) {
+            if (!NSQLTranslationV1::CheckLexers({}, program->GetSourceCode(), issues)) {
                 *RunOptions_.ErrStream << "Lexers mismatched" << Endl;
                 issues.PrintTo(*RunOptions_.ErrStream);
                 return -1;
@@ -826,7 +826,7 @@ int TFacadeRunner::DoRun(TProgramFactory& factory) {
         if (!fail && RunOptions_.TestComplete && 1 == RunOptions_.SyntaxVersion) {
             TIssues issues;
             if (!NSQLComplete::CheckComplete(
-                    RunOptions_.ProgramText,
+                    program->GetSourceCode(),
                     program->ExprRoot(),
                     program->ExprCtx(),
                     issues)) {
@@ -856,7 +856,7 @@ int TFacadeRunner::DoRun(TProgramFactory& factory) {
             NYql::TIssues issues;
             google::protobuf::Message* message = NSQLTranslation::SqlAST(
                 translators,
-                RunOptions_.ProgramText,
+                program->GetSourceCode(),
                 RunOptions_.ProgramFile,
                 issues,
                 NSQLTranslation::SQL_MAX_PARSER_ERRORS,

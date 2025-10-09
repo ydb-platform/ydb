@@ -23,6 +23,15 @@ class SolomonReadingTestBase(object):
 
         cleanup_emulator()
 
+        add_solomon_metrics("settings_validation", "settings_validation", "my_service", {"metrics": [
+            {
+                "labels"        : {"test_type": "setting_validation"},
+                "type"          : "DGAUGE",
+                "timestamps"    : [1000000],
+                "values"        : [0]
+            }
+        ]})
+
         add_solomon_metrics("basic_reading", "basic_reading", "my_service", {"metrics": [
             {
                 "labels"        : {"test_type": "basic_reading_test"},

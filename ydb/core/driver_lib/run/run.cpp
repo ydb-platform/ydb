@@ -1,5 +1,6 @@
 #include "auto_config_initializer.h"
 #include "run.h"
+#include "grpc_servers_manager.h"
 #include "service_initializer.h"
 #include "kikimr_services_initializers.h"
 
@@ -196,6 +197,8 @@ class TGRpcServersManager : public TActorBootstrapped<TGRpcServersManager> {
     std::weak_ptr<TGRpcServersWrapper> GRpcServersWrapper;
     TIntrusivePtr<NMemory::IProcessMemoryInfoProvider> ProcessMemoryInfoProvider;
     bool Started = false;
+    bool StopScheduled = false;
+    bool WaitingForDisconnectRequest = false;
 
 public:
     enum {
@@ -227,9 +230,26 @@ public:
         if (const auto& bridgeInfo = ev->Get()->BridgeInfo) {
             if (NBridge::PileStateTraits(bridgeInfo->SelfNodePile->State).RequiresConfigQuorum) {
                 Start();
-            } else {
-                Stop();
+            } else if (!StopScheduled) {
+                StopScheduled = true;
+                CheckAndExecuteStop();
             }
+        }
+    }
+
+    void HandleDisconnectRequestStarted() {
+        WaitingForDisconnectRequest = true;
+    }
+
+    void HandleDisconnectRequestFinished() {
+        WaitingForDisconnectRequest = false;
+        CheckAndExecuteStop();
+    }
+
+    void CheckAndExecuteStop() {
+        if (StopScheduled && !WaitingForDisconnectRequest) {
+            StopScheduled = false;
+            Stop();
         }
     }
 
@@ -238,6 +258,8 @@ public:
             return;
         }
         Started = true;
+        StopScheduled = false;
+        WaitingForDisconnectRequest = false;
         auto wrapper = GRpcServersWrapper.lock();
         if (!wrapper) {
             return;
@@ -292,6 +314,8 @@ public:
     STRICT_STFUNC(StateFunc,
         hFunc(TEvNodeWardenStorageConfig, Handle)
         hFunc(TEvStop, HandleStop)
+        cFunc(TEvGRpcServersManager::EvDisconnectRequestStarted, HandleDisconnectRequestStarted)
+        cFunc(TEvGRpcServersManager::EvDisconnectRequestFinished, HandleDisconnectRequestFinished)
     )
 };
 
@@ -2015,6 +2039,7 @@ void TKikimrRunner::KikimrStart() {
     if (GRpcServersWrapper) {
         GRpcServersWrapper->Servers = GRpcServersWrapper->GrpcServersFactory();
         GRpcServersManager = ActorSystem->Register(new TGRpcServersManager(GRpcServersWrapper, ProcessMemoryInfoProvider));
+        ActorSystem->RegisterLocalService(NKikimr::MakeGRpcServersManagerId(ActorSystem->NodeId), GRpcServersManager);
     }
 
     if (SqsHttp) {

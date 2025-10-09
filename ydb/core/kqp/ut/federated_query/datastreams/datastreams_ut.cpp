@@ -107,23 +107,25 @@ public:
                 AppConfig.emplace();
             }
 
-            AppConfig->MutableFeatureFlags()->SetEnableStreamingQueries(true);
+            auto& featureFlags = *AppConfig->MutableFeatureFlags();
+            featureFlags.SetEnableStreamingQueries(true);
+            featureFlags.SetEnableSchemaSecrets(UseSchemaSecrets());
 
             auto& queryServiceConfig = *AppConfig->MutableQueryServiceConfig();
             queryServiceConfig.SetEnableMatchRecognize(true);
             queryServiceConfig.SetProgressStatsPeriodMs(1000);
 
+            LogSettings
+                .AddLogPriority(NKikimrServices::STREAMS_STORAGE_SERVICE, NLog::PRI_DEBUG)
+                .AddLogPriority(NKikimrServices::STREAMS_CHECKPOINT_COORDINATOR, NLog::PRI_DEBUG);
+
             Kikimr = MakeKikimrRunner(true, ConnectorClient, nullptr, AppConfig, NYql::NDq::CreateS3ActorsFactory(), {
                 .CredentialsFactory = CreateCredentialsFactory(),
                 .PqGateway = PqGateway,
                 .CheckpointPeriod = CheckpointPeriod,
+                .LogSettings = LogSettings,
             });
 
-            if (GetTestParam("DEFAULT_LOG", "enabled") == "enabled") {
-                auto& runtime = *Kikimr->GetTestServer().GetRuntime();
-                runtime.SetLogPriority(NKikimrServices::STREAMS_STORAGE_SERVICE, NLog::PRI_DEBUG);
-                runtime.SetLogPriority(NKikimrServices::STREAMS_CHECKPOINT_COORDINATOR, NLog::PRI_DEBUG);
-            }
             Kikimr->GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableSchemaSecrets(UseSchemaSecrets());
         }
 
@@ -768,6 +770,7 @@ private:
 
 protected:
     TDuration CheckpointPeriod = TDuration::MilliSeconds(200);
+    TTestLogSettings LogSettings;
 
 private:
     std::optional<NKikimrConfig::TAppConfig> AppConfig;
@@ -1382,7 +1385,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
 }
 
 Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
-    Y_UNIT_TEST_F(CreateAndAlterStreamingQuery, TStreamingTestFixture) {
+    Y_UNIT_TEST_F(CreateAndAlterStreamingQuery, TStreamingWithSchemaSecretsTestFixture) {
         constexpr char inputTopicName[] = "createAndAlterStreamingQueryInputTopic";
         constexpr char outputTopicName[] = "createAndAlterStreamingQueryOutputTopic";
         CreateTopic(inputTopicName);
@@ -1393,7 +1396,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         constexpr char queryName[] = "streamingQuery";
         ExecQuery(fmt::format(R"(
+            CREATE SECRET test_secret WITH (value = "1234");
             CREATE TABLE test_table1 (Key Int32 NOT NULL, PRIMARY KEY (Key));
+            GRANT ALL ON `/Root/test_table1` TO `test@builtin`;
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
                 INSERT INTO `{pq_source}`.`{output_topic}`
@@ -1411,6 +1416,13 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             "input_topic"_a = inputTopicName,
             "output_topic"_a = outputTopicName
         ));
+
+        {
+            const auto tableDesc = Navigate(GetRuntime(), GetRuntime().AllocateEdgeActor(), "/Root/test_table1", NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
+            const auto& table = tableDesc->ResultSet.at(0);
+            UNIT_ASSERT_VALUES_EQUAL(table.Kind, NSchemeCache::TSchemeCacheNavigate::EKind::KindTable);
+            UNIT_ASSERT(table.SecurityObject->CheckAccess(NACLib::GenericFull, NACLib::TUserToken("test@builtin", {})));
+        }
 
         CheckScriptExecutionsCount(1, 1);
         Sleep(TDuration::Seconds(1));

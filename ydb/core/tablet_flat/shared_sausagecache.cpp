@@ -54,7 +54,7 @@ using TPendingRequests = THashMap<TIntrusivePtr<TRequest>, ui32>;
 
 struct TCollection {
     TLogoBlobID Id;
-    TSet<TActorId> InMemoryOwners;
+    TMap<TActorId, TIntrusiveConstPtr<NPageCollection::IPageCollection>> InMemoryOwners;
     TSet<TActorId> Owners;
     TPageMap<TIntrusivePtr<TPage>> PageMap;
     ui64 TotalSize;
@@ -765,8 +765,8 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             }
 
             if (loadedPages) {
-                for (const auto& owner : collection->InMemoryOwners) {
-                    NotifyOwners(msg->PageCollection, loadedPages, owner);
+                for (const auto& [owner, pageCollection] : collection->InMemoryOwners) {
+                    NotifyOwners(pageCollection, loadedPages, owner);
                 }
             }
         }
@@ -1101,7 +1101,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     }
 
     void TryMoveToTryKeepInMemoryCache(TCollection& collection, TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection, const TActorId& owner) {
-        if (!collection.InMemoryOwners.insert(owner).second) {
+        if (!collection.InMemoryOwners.emplace(owner, pageCollection).second) {
             return;
         }
 
@@ -1175,15 +1175,9 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             case PageStateLoaded:
                 Cache.Erase(page);
                 page->EnsureNoCacheFlags();
+                RemoveActivePage(page);
                 page->CacheMode = targetMode;
-                switch (page->CacheMode) {
-                case ECacheMode::Regular:
-                    Counters.ActiveInMemoryBytes->Sub(TPageTraits::GetSize(page));
-                    break;
-                case ECacheMode::TryKeepInMemory:
-                    Counters.ActiveInMemoryBytes->Add(TPageTraits::GetSize(page));
-                    break;
-                }
+                AddActivePage(page);
                 Evict(Cache.Insert(page));
                 break;
             default:
@@ -1256,48 +1250,54 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     }
 
     inline void AddActivePage(const TPage* page) {
-        StatActiveBytes += sizeof(TPage) + page->Size;
+        auto pageSize = TPageTraits::GetSize(page);
+        StatActiveBytes += pageSize;
         Counters.ActivePages->Inc();
-        Counters.ActiveBytes->Add(sizeof(TPage) + page->Size);
+        Counters.ActiveBytes->Add(pageSize);
         if (page->CacheMode == ECacheMode::TryKeepInMemory) {
-            Counters.ActiveInMemoryBytes->Add(sizeof(TPage) + page->Size);
+            Counters.ActiveInMemoryBytes->Add(pageSize);
         }
     }
 
     inline void RemoveActivePage(const TPage* page) {
-        Y_DEBUG_ABORT_UNLESS(StatActiveBytes >= sizeof(TPage) + page->Size);
-        StatActiveBytes -= sizeof(TPage) + page->Size;
+        auto pageSize = TPageTraits::GetSize(page);
+        Y_DEBUG_ABORT_UNLESS(StatActiveBytes >= pageSize);
+        StatActiveBytes -= pageSize;
         Counters.ActivePages->Dec();
-        Counters.ActiveBytes->Sub(sizeof(TPage) + page->Size);
+        Counters.ActiveBytes->Sub(pageSize);
         if (page->CacheMode == ECacheMode::TryKeepInMemory) {
-            Counters.ActiveInMemoryBytes->Sub(sizeof(TPage) + page->Size);
+            Counters.ActiveInMemoryBytes->Sub(pageSize);
         }
     }
 
     inline void AddPassivePage(const TPage* page) {
-        StatPassiveBytes += sizeof(TPage) + page->Size;
+        auto pageSize = TPageTraits::GetSize(page);
+        StatPassiveBytes += pageSize;
         Counters.PassivePages->Inc();
-        Counters.PassiveBytes->Add(sizeof(TPage) + page->Size);
+        Counters.PassiveBytes->Add(pageSize);
     }
 
     inline void RemovePassivePage(const TPage* page) {
-        Y_DEBUG_ABORT_UNLESS(StatPassiveBytes >= sizeof(TPage) + page->Size);
-        StatPassiveBytes -= sizeof(TPage) + page->Size;
+        auto pageSize = TPageTraits::GetSize(page);
+        Y_DEBUG_ABORT_UNLESS(StatPassiveBytes >= pageSize);
+        StatPassiveBytes -= pageSize;
         Counters.PassivePages->Dec();
-        Counters.PassiveBytes->Sub(sizeof(TPage) + page->Size);
+        Counters.PassiveBytes->Sub(pageSize);
     }
 
     inline void AddInFlyPages(ui64 count, ui64 size) {
-        StatLoadInFlyBytes += size;
+        ui64 totalBytes = size + sizeof(TPage) * count;
+        StatLoadInFlyBytes += totalBytes;
         Counters.LoadInFlyPages->Add(count);
-        Counters.LoadInFlyBytes->Add(size);
+        Counters.LoadInFlyBytes->Add(totalBytes);
     }
 
     inline void RemoveInFlyPages(ui64 count, ui64 size) {
-        Y_ENSURE(StatLoadInFlyBytes >= size);
-        StatLoadInFlyBytes -= size;
+        ui64 totalBytes = size + sizeof(TPage) * count;
+        Y_ENSURE(StatLoadInFlyBytes >= totalBytes);
+        StatLoadInFlyBytes -= totalBytes;
         Counters.LoadInFlyPages->Sub(count);
-        Counters.LoadInFlyBytes->Sub(size);
+        Counters.LoadInFlyBytes->Sub(totalBytes);
     }
 
 public:

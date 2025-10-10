@@ -2269,6 +2269,134 @@ ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_OPTIONS,
         );
     }
 
+    Y_UNIT_TEST(ShowCreateTableFamilyParameters) {
+        TTestEnv env(1, 4, {.StoragePools = 4, .ShowCreateTable = true, .EnableTableCacheModes = true});
+
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NActors::NLog::PRI_DEBUG);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_YQL, NActors::NLog::PRI_TRACE);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NActors::NLog::PRI_DEBUG);
+
+        TShowCreateChecker checker(env);
+
+        checker.CheckShowCreateTable(
+            R"(CREATE TABLE `/Root/test_show_create` (
+                Key Uint32,
+                Value0 String,
+                Value1 String FAMILY Family1,
+                Value2 String FAMILY Family2,
+                Value3 String FAMILY Family3,
+                Value4 String FAMILY Family4,
+                Value5 String FAMILY Family5,
+                Value6 String FAMILY Family6,
+                PRIMARY KEY (Key),
+                FAMILY default (
+                    DATA = "test0",
+                    COMPRESSION = "lz4",
+                    CACHE_MODE = "in_memory"
+                ),
+                FAMILY Family1 (
+                    COMPRESSION = "off",
+                    CACHE_MODE = "regular"
+                ),
+                FAMILY Family2 (
+                    DATA = "test1",
+                    CACHE_MODE = "in_memory"
+                ),
+                FAMILY Family3 (
+                    DATA = "test2",
+                    COMPRESSION = "lz4"
+                ),
+                FAMILY Family4 (
+                    DATA = "test3"
+                ),
+                FAMILY Family5 (
+                    COMPRESSION = "off"
+                ),
+                FAMILY Family6 (
+                    CACHE_MODE = "regular"
+                )
+            );
+            )", "test_show_create",
+R"(CREATE TABLE `test_show_create` (
+    `Key` Uint32,
+    `Value0` String,
+    `Value1` String FAMILY `Family1`,
+    `Value2` String FAMILY `Family2`,
+    `Value3` String FAMILY `Family3`,
+    `Value4` String FAMILY `Family4`,
+    `Value5` String FAMILY `Family5`,
+    `Value6` String FAMILY `Family6`,
+    FAMILY `default` (DATA = 'test0', COMPRESSION = 'lz4', CACHE_MODE = 'in_memory'),
+    FAMILY `Family1` (COMPRESSION = 'off', CACHE_MODE = 'regular'),
+    FAMILY `Family2` (DATA = 'test1', CACHE_MODE = 'in_memory'),
+    FAMILY `Family3` (DATA = 'test2', COMPRESSION = 'lz4'),
+    FAMILY `Family4` (DATA = 'test3'),
+    FAMILY `Family5` (COMPRESSION = 'off'),
+    FAMILY `Family6` (CACHE_MODE = 'regular'),
+    PRIMARY KEY (`Key`)
+);
+)"
+        );
+
+        checker.CheckShowCreateTable(
+            R"(CREATE TABLE `/Root/test_show_create` (
+                Key Uint32,
+                Value0 String,
+                PRIMARY KEY (Key),
+                FAMILY default (
+                    DATA = "test0"
+                )
+            );
+            )", "test_show_create",
+R"(CREATE TABLE `test_show_create` (
+    `Key` Uint32,
+    `Value0` String,
+    FAMILY `default` (DATA = 'test0'),
+    PRIMARY KEY (`Key`)
+);
+)"
+        );
+
+        checker.CheckShowCreateTable(
+            R"(CREATE TABLE `/Root/test_show_create` (
+                Key Uint32,
+                Value0 String,
+                PRIMARY KEY (Key),
+                FAMILY default (
+                    COMPRESSION = "lz4"
+                )
+            );
+            )", "test_show_create",
+R"(CREATE TABLE `test_show_create` (
+    `Key` Uint32,
+    `Value0` String,
+    FAMILY `default` (COMPRESSION = 'lz4'),
+    PRIMARY KEY (`Key`)
+);
+)"
+        );
+
+        checker.CheckShowCreateTable(
+            R"(CREATE TABLE `/Root/test_show_create` (
+                Key Uint32,
+                Value0 String,
+                PRIMARY KEY (Key),
+                FAMILY default (
+                    CACHE_MODE = "in_memory"
+                )
+            );
+            )", "test_show_create",
+R"(CREATE TABLE `test_show_create` (
+    `Key` Uint32,
+    `Value0` String,
+    FAMILY `default` (CACHE_MODE = 'in_memory'),
+    PRIMARY KEY (`Key`)
+);
+)"
+        );
+    }
+
     Y_UNIT_TEST(Nodes) {
         TTestEnv env;
         CreateTenantsAndTables(env, false);

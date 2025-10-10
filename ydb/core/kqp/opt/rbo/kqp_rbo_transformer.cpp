@@ -162,7 +162,6 @@ TExprNode::TPtr BuildSort(TExprNode::TPtr input, TExprNode::TPtr sort, TExprCont
         auto direction = sortItem->Child(2);
         auto nullsFirst = sortItem->Child(3);
 
-        
         // clang-format off
         sortElements.push_back(Build<TKqpOpSortElement>(ctx, input->Pos())
             .Input(input)

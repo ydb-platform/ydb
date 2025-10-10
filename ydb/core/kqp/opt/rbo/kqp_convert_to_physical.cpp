@@ -432,11 +432,15 @@ TExprNode::TPtr BuildDqGraceJoin(TOpJoin &join, TExprNode::TPtr leftInput, TExpr
      // clang-format on
 }
 
-TExprNode::TPtr BuildSort(TExprNode::TPtr input, TVector<TSortElement> sortElements, TExprContext &ctx, TPositionHandle pos) {
-    auto [selector, dirs] = BuildSortKeySelector(sortElements, ctx, pos);
+TExprNode::TPtr BuildSort(TExprNode::TPtr input, TOrderEnforcer & enforcer, TExprContext &ctx, TPositionHandle pos) {
+    if (enforcer.Action != EOrderEnforcerAction::REQUIRE) {
+        return input;
+    }
+
+    auto [selector, dirs] = BuildSortKeySelector(enforcer.SortElements, ctx, pos);
 
     TExprNode::TPtr dirList;
-    if (sortElements.size()==1){
+    if (dirs.size()==1){
         dirList = dirs[0];
     } else {
         dirList = Build<TExprList>(ctx, pos).Add(dirs).Done().Ptr();
@@ -519,7 +523,7 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TExprContext &ctx, TTypeAnnotat
             // clang-format on
 
             if (opSource->Props.OrderEnforcer.has_value()) {
-                currentStageBody = BuildSort(currentStageBody, op->Props.OrderEnforcer->SortElements, ctx, op->Pos);
+                currentStageBody = BuildSort(currentStageBody, *op->Props.OrderEnforcer, ctx, op->Pos);
             }
 
             stages[opStageId] = currentStageBody;
@@ -535,7 +539,7 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TExprContext &ctx, TTypeAnnotat
             auto filter = CastOperator<TOpFilter>(op);
 
             if (filter->GetInput()->Props.OrderEnforcer.has_value()) {
-                currentStageBody = BuildSort(currentStageBody, filter->GetInput()->Props.OrderEnforcer->SortElements, ctx, filter->GetInput()->Pos);
+                currentStageBody = BuildSort(currentStageBody, *filter->GetInput()->Props.OrderEnforcer, ctx, filter->GetInput()->Pos);
             }
 
             auto filterBody = TCoLambda(filter->FilterLambda).Body();
@@ -596,7 +600,7 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TExprContext &ctx, TTypeAnnotat
             auto map = CastOperator<TOpMap>(op);
 
             if (map->GetInput()->Props.OrderEnforcer.has_value()) {
-                currentStageBody = BuildSort(currentStageBody, map->GetInput()->Props.OrderEnforcer->SortElements, ctx, map->GetInput()->Pos);
+                currentStageBody = BuildSort(currentStageBody, *map->GetInput()->Props.OrderEnforcer, ctx, map->GetInput()->Pos);
             }
 
             auto arg = Build<TCoArgument>(ctx, op->Pos).Name("arg").Done().Ptr();
@@ -674,7 +678,7 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TExprContext &ctx, TTypeAnnotat
             auto limit = CastOperator<TOpLimit>(op);
 
             if (limit->GetInput()->Props.OrderEnforcer.has_value()) {
-                currentStageBody = BuildSort(currentStageBody, limit->GetInput()->Props.OrderEnforcer->SortElements, ctx, limit->GetInput()->Pos);
+                currentStageBody = BuildSort(currentStageBody, *limit->GetInput()->Props.OrderEnforcer, ctx, limit->GetInput()->Pos);
             }
 
             // clang-format off

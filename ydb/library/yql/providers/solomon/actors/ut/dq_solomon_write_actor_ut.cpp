@@ -180,4 +180,4 @@ Y_UNIT_TEST_SUITE(TDqSolomonWriteActorTest) {
     }
 }
 
-} // namespace NKikimr::NMiniKQL
+} // namespace NYql::NDq

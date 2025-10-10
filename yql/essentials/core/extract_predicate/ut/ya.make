@@ -1,7 +1,5 @@
 UNITTEST_FOR(yql/essentials/core/extract_predicate)
 
-ENABLE(YQL_STYLE_CPP)
-
 SRCS(
     extract_predicate_ut.cpp
 )

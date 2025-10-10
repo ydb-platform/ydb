@@ -1,7 +1,5 @@
 PROGRAM()
 
-ENABLE(YQL_STYLE_CPP)
-
 PEERDIR(
     yql/essentials/minikql
     yql/essentials/public/udf

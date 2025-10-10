@@ -6,8 +6,6 @@ YQL_ABI_VERSION(
     0
 )
 
-ENABLE(YQL_STYLE_CPP)
-
 IF (ARCH_X86_64)
     PEERDIR(
         yql/essentials/minikql/jsonpath/rewrapper/hyperscan

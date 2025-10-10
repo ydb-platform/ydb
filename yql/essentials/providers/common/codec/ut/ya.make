@@ -1,7 +1,5 @@
 UNITTEST_FOR(yql/essentials/providers/common/codec)
 
-ENABLE(YQL_STYLE_CPP)
-
 FORK_SUBTESTS()
 
 IF (SANITIZER_TYPE OR WITH_VALGRIND)

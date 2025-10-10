@@ -1,7 +1,5 @@
 UNITTEST_FOR(yql/essentials/minikql)
 
-ENABLE(YQL_STYLE_CPP)
-
 FORK_SUBTESTS()
 
 IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)

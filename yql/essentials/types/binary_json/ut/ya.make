@@ -1,7 +1,5 @@
 UNITTEST_FOR(yql/essentials/types/binary_json)
 
-ENABLE(YQL_STYLE_CPP)
-
 SRCS(
     container_ut.cpp
     identity_ut.cpp

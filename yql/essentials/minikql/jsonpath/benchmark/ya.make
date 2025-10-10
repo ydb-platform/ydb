@@ -1,7 +1,5 @@
 Y_BENCHMARK(jsonpath-benchmark)
 
-ENABLE(YQL_STYLE_CPP)
-
 PEERDIR(
     library/cpp/json
     yql/essentials/minikql/dom

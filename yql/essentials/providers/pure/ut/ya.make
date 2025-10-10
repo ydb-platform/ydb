@@ -1,7 +1,5 @@
 UNITTEST_FOR(yql/essentials/providers/pure)
 
-ENABLE(YQL_STYLE_CPP)
-
 SIZE(MEDIUM)
 
 SRCS(

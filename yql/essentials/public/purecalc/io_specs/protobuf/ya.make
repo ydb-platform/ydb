@@ -1,7 +1,5 @@
 LIBRARY()
 
-ENABLE(YQL_STYLE_CPP)
-
 PEERDIR(
     yql/essentials/public/purecalc/common
     yql/essentials/public/purecalc/io_specs/protobuf_raw

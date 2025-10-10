@@ -1,5 +1,4 @@
 IF (OS_LINUX)
-    ENABLE(YQL_STYLE_CPP)
     LIBRARY(oom_helper)
     SRCS(inject.cpp)
     END()

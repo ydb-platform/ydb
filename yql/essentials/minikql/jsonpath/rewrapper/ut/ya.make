@@ -1,7 +1,5 @@
 UNITTEST_FOR(yql/essentials/minikql/jsonpath/rewrapper)
 
-ENABLE(YQL_STYLE_CPP)
-
 IF(ARCH_X86_64)
     SRCS(
         hyperscan_ut.cpp

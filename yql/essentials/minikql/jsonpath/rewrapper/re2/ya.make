@@ -1,7 +1,5 @@
 LIBRARY()
 
-ENABLE(YQL_STYLE_CPP)
-
 PEERDIR(
     contrib/libs/re2
     yql/essentials/minikql/jsonpath/rewrapper

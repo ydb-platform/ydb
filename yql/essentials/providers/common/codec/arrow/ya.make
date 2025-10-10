@@ -1,7 +1,5 @@
 LIBRARY()
 
-ENABLE(YQL_STYLE_CPP)
-
 PEERDIR(
     contrib/libs/apache/arrow
     yql/essentials/minikql/arrow

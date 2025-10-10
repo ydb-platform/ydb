@@ -1,7 +1,5 @@
 LIBRARY()
 
-ENABLE(YQL_STYLE_CPP)
-
 PEERDIR(
     library/cpp/containers/stack_vector
 )

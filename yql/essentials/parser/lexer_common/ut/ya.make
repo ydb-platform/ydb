@@ -1,7 +1,5 @@
 UNITTEST_FOR(yql/essentials/parser/lexer_common)
 
-ENABLE(YQL_STYLE_CPP)
-
 PEERDIR(
     yql/essentials/sql/v1/lexer
     yql/essentials/sql/v1/lexer/antlr4

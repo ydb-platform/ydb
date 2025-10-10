@@ -6,7 +6,7 @@
 
 namespace NYql::NLayers {
 
-class ILayersIntegration : public TThrRefBase {
+class ILayersIntegration: public TThrRefBase {
 public:
     virtual TMaybe<TLocations> ResolveLayers(const TVector<TKey>& order, const TString& cluster, NYql::TExprContext& ctx) const = 0;
     virtual bool UpdateLayerCache(const TKey& key, const TLayerInfo& layer, NYql::TExprContext& ctx) = 0;
@@ -16,4 +16,4 @@ public:
 };
 
 using ILayersIntegrationPtr = TIntrusivePtr<ILayersIntegration>;
-}
+} // namespace NYql::NLayers

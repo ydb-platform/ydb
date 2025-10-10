@@ -1,7 +1,5 @@
 LIBRARY()
 
-ENABLE(YQL_STYLE_CPP)
-
 SRCS(
     udf_allocator.cpp
     udf_allocator.h

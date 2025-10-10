@@ -1,7 +1,5 @@
 LIBRARY()
 
-ENABLE(YQL_STYLE_CPP)
-
 SRCS(
     eq_width_histogram.h
     eq_width_histogram.cpp

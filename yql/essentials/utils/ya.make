@@ -1,7 +1,5 @@
 LIBRARY()
 
-ENABLE(YQL_STYLE_CPP)
-
 SRCS(
     cast.h
     checkpoint_map.cpp

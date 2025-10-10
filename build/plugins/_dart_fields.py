@@ -857,7 +857,12 @@ class ScriptRelPath:
 
     @classmethod
     def junit(cls, unit, flat_args, spec_args):
-        return 'junit5.test' if unit.get('MODULE_TYPE') == 'JUNIT5' else 'junit.test'
+        if unit.get('MODULE_TYPE') == 'JUNIT5':
+            return 'junit5.test'
+        elif unit.get('MODULE_TYPE') == 'JUNIT6':
+            return 'junit6.test'
+        else:
+            return 'junit.test'
 
 
 class Size:

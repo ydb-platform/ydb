@@ -1408,6 +1408,10 @@ public:
             AddLabelToAppConfig("node_name", Labels["node_name"]);
         }
 
+        if (CommonAppOptions.SeedNodesFile) {
+            return InitConfigFromSeedNodesDynamic();
+        }
+
         TVector<TString> addrs;
         CommonAppOptions.FillClusterEndpoints(AppConfig, addrs);
 
@@ -1573,6 +1577,29 @@ public:
         } else {
             Logger.Out() << "No configs received from seed nodes" << Endl;
         }
+    }
+    void InitConfigFromSeedNodesDynamic() {
+        if (CommonAppOptions.SeedNodes.empty()) {
+            ythrow yexception() << "No seed nodes provided";
+        }
+
+        auto cfgResult = ConfigClient.FetchConfig(CommonAppOptions.GrpcSslSettings, CommonAppOptions.SeedNodes, Env, Logger);
+        if (!cfgResult) {
+            Logger.Out() << "Failed to fetch config from seed nodes" << Endl;
+            return;
+        }
+
+        const TString& mainYaml = cfgResult->GetMainYamlConfig();
+        if (mainYaml.empty()) {
+            Logger.Out() << "No main config received from seed nodes" << Endl;
+            return;
+        }
+
+        NKikimrConfig::TAppConfig yamlConfig;
+        NYamlConfig::ResolveAndParseYamlConfig(mainYaml, {}, Labels, yamlConfig);
+
+        InitDebug.YamlConfig.CopyFrom(yamlConfig);
+        return ApplyConfigForNode(yamlConfig);
     }
 };
 

@@ -1,5 +1,6 @@
 #include "kqp_compute.h"
 #include "kqp_stream_lookup_join_helpers.h"
+#include "kqp_fulltext_tokenize.h"
 
 #include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders_codegen.h>
@@ -15,7 +16,25 @@ namespace NKikimr {
 namespace NMiniKQL {
 
 TComputationNodeFactory GetKqpBaseComputeFactory(const TKqpComputeContextBase* computeCtx) {
-    return NYql::NDq::GetDqBaseComputeFactory(computeCtx);
+    auto dqFactory = NYql::NDq::GetDqBaseComputeFactory(computeCtx);
+    
+    return [dqFactory](TCallable& callable, const TComputationNodeFactoryContext& ctx) -> IComputationNode* {
+        // Try KQP-specific callables first
+        if (callable.GetType()->GetName() == "FulltextTokenize") {
+            return WrapFulltextTokenize(callable, ctx);
+        }
+        
+        if (callable.GetType()->GetName() == "KqpEnsure") {
+            return WrapKqpEnsure(callable, ctx);
+        }
+        
+        if (callable.GetType()->GetName() == "KqpIndexLookupJoin") {
+            return WrapKqpIndexLookupJoin(callable, ctx);
+        }
+        
+        // Fall back to DQ factory
+        return dqFactory(callable, ctx);
+    };
 }
 
 namespace {

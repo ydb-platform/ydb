@@ -3,7 +3,7 @@
 #include <yql/essentials/minikql/computation/mkql_block_reader.h>
 #include <yql/essentials/minikql/computation/mkql_block_builder.h>
 #include <yql/essentials/minikql/computation/mkql_block_impl.h>
-#include <yql/essentials/minikql/computation/mkql_block_impl_codegen.h>  // Y_IGNORE
+#include <yql/essentials/minikql/computation/mkql_block_impl_codegen.h> // Y_IGNORE
 
 #include <yql/essentials/public/udf/arrow/block_item_comparator.h>
 
@@ -11,7 +11,7 @@
 #include <yql/essentials/minikql/arrow/arrow_util.h>
 #include <yql/essentials/minikql/mkql_type_builder.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
-#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
+#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
 #include <yql/essentials/minikql/mkql_node_builder.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 
@@ -400,13 +400,13 @@ public:
 };
 
 template <bool Sort, bool HasCount>
-class TTopOrSortBlocksFlowWrapper : public TStatefulWideFlowCodegeneratorNode<TTopOrSortBlocksFlowWrapper<Sort, HasCount>> {
+class TTopOrSortBlocksFlowWrapper: public TStatefulWideFlowCodegeneratorNode<TTopOrSortBlocksFlowWrapper<Sort, HasCount>> {
     using TBaseComputation = TStatefulWideFlowCodegeneratorNode<TTopOrSortBlocksFlowWrapper<Sort, HasCount>>;
     using TState = TTopOrSortBlocksState<Sort, HasCount>;
 
 public:
     TTopOrSortBlocksFlowWrapper(TComputationMutables& mutables, IComputationWideFlowNode* flow, TArrayRef<TType* const> wideComponents, IComputationNode* count,
-        TComputationNodePtrVector&& directions, std::vector<ui32>&& keyIndicies)
+                                TComputationNodePtrVector&& directions, std::vector<ui32>&& keyIndicies)
         : TBaseComputation(mutables, flow, EValueRepresentation::Boxed)
         , Flow_(flow)
         , Count_(count)
@@ -419,13 +419,14 @@ public:
         }
     }
 
-    EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
+    EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue* const* output) const {
         Y_ABORT_UNLESS(output[Columns_.size()]);
         auto& s = GetState(state, ctx);
 
         if (!s.Count) {
-            if (s.IsFinished_)
+            if (s.IsFinished_) {
                 return EFetchResult::Finish;
+            }
 
             if (!s.WritingOutput_) {
                 for (const auto fields = ctx.WideFields.data() + WideFieldsIndex_;;) {
@@ -442,8 +443,9 @@ public:
                 }
             }
 
-            if (!s.FillOutput(ctx.HolderFactory))
+            if (!s.FillOutput(ctx.HolderFactory)) {
                 return EFetchResult::Finish;
+            }
         }
 
         const auto sliceSize = s.Slice();
@@ -527,7 +529,7 @@ public:
         const auto state = new LoadInst(valueType, statePtr, "state", block);
         const auto half = CastInst::Create(Instruction::Trunc, state, Type::getInt64Ty(context), "half", block);
         const auto stateArg = CastInst::Create(Instruction::IntToPtr, half, statePtrType, "state_arg", block);
-        const auto countPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, { stateFields.This(), stateFields.GetCount() }, "count_ptr", block);
+        const auto countPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, {stateFields.This(), stateFields.GetCount()}, "count_ptr", block);
 
         const auto count = new LoadInst(indexType, countPtr, "count", block);
         const auto none = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, count, ConstantInt::get(indexType, 0), "none", block);
@@ -536,7 +538,7 @@ public:
 
         block = more;
 
-        const auto finishedPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, { stateFields.This(), stateFields.GetIsFinished() }, "is_finished_ptr", block);
+        const auto finishedPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, {stateFields.This(), stateFields.GetIsFinished()}, "is_finished_ptr", block);
         const auto finished = new LoadInst(flagType, finishedPtr, "finished", block);
 
         const auto result = PHINode::Create(statusType, 4U, "result", over);
@@ -546,7 +548,7 @@ public:
 
         block = test;
 
-        const auto writingOutputPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, { stateFields.This(), stateFields.GetWritingOutput() }, "writing_output_ptr", block);
+        const auto writingOutputPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, {stateFields.This(), stateFields.GetWritingOutput()}, "writing_output_ptr", block);
         const auto writingOutput = new LoadInst(flagType, writingOutputPtr, "writing_output", block);
 
         BranchInst::Create(work, read, writingOutput, block);
@@ -563,7 +565,7 @@ public:
 
         block = good;
 
-        const auto valuesPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, { stateFields.This(), stateFields.GetPointer() }, "values_ptr", block);
+        const auto valuesPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, {stateFields.This(), stateFields.GetPointer()}, "values_ptr", block);
         const auto values = new LoadInst(ptrValuesType, valuesPtr, "values", block);
         Value* array = UndefValue::get(arrayType);
         for (auto idx = 0U; idx < getres.second.size(); ++idx) {
@@ -634,10 +636,12 @@ private:
     class TLLVMFieldsStructureState: public TLLVMFieldsStructureBlockState {
     private:
         using TBase = TLLVMFieldsStructureBlockState;
-        llvm::IntegerType*const WritingOutputType;
-        llvm::IntegerType*const IsFinishedType;
+        llvm::IntegerType* const WritingOutputType;
+        llvm::IntegerType* const IsFinishedType;
+
     protected:
         using TBase::Context;
+
     public:
         std::vector<llvm::Type*> GetFieldsArray() {
             std::vector<llvm::Type*> result = TBase::GetFieldsArray();
@@ -658,7 +662,8 @@ private:
             : TBase(context, width)
             , WritingOutputType(Type::getInt1Ty(Context))
             , IsFinishedType(Type::getInt1Ty(Context))
-        {}
+        {
+        }
     };
 #endif
     void MakeState(TComputationContext& ctx, NUdf::TUnboxedValue& state, const bool* directions, ui64 count = 0ULL) const {
@@ -668,12 +673,13 @@ private:
     TTopOrSortBlocksState<Sort, HasCount>& GetState(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
         if (state.IsInvalid()) {
             std::vector<bool> dirs(Directions_.size());
-            std::transform(Directions_.cbegin(), Directions_.cend(), dirs.begin(), [&ctx](IComputationNode* dir){ return dir->GetValue(ctx).Get<bool>(); });
+            std::transform(Directions_.cbegin(), Directions_.cend(), dirs.begin(), [&ctx](IComputationNode* dir) { return dir->GetValue(ctx).Get<bool>(); });
 
-            if constexpr (HasCount)
+            if constexpr (HasCount) {
                 MakeState(ctx, state, dirs.data(), Count_->GetValue(ctx).Get<ui64>());
-            else
+            } else {
                 MakeState(ctx, state, dirs.data());
+            }
 
             auto& s = *static_cast<TState*>(state.AsBoxed().Get());
             const auto fields = ctx.WideFields.data() + WideFieldsIndex_;
@@ -686,8 +692,8 @@ private:
         return *static_cast<TState*>(state.AsBoxed().Get());
     }
 
-    IComputationWideFlowNode *const Flow_;
-    IComputationNode *const Count_;
+    IComputationWideFlowNode* const Flow_;
+    IComputationNode* const Count_;
     const TComputationNodePtrVector Directions_;
     const std::vector<ui32> KeyIndicies_;
     std::vector<TBlockType*> Columns_;
@@ -849,7 +855,7 @@ IComputationNode* WrapTopOrSort(TCallable& callable, const TComputationNodeFacto
     return new TTopOrSortBlocksFlowWrapper<Sort, HasCount>(ctx.Mutables, wideFlow, wideComponents, count, std::move(directions), std::move(keyIndicies));
 }
 
-} //namespace
+} // namespace
 
 IComputationNode* WrapWideTopBlocks(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     return WrapTopOrSort<false, true>(callable, ctx);
@@ -863,5 +869,5 @@ IComputationNode* WrapWideSortBlocks(TCallable& callable, const TComputationNode
     return WrapTopOrSort<true, false>(callable, ctx);
 }
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

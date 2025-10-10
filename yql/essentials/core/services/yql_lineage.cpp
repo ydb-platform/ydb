@@ -1,4 +1,5 @@
 #include "yql_lineage.h"
+#include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/core/yql_type_annotation.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_opt_utils.h>
@@ -12,10 +13,11 @@ namespace {
 
 class TLineageScanner {
 public:
-    TLineageScanner(const TExprNode& root, const TTypeAnnotationContext& ctx, TExprContext& exprCtx)
+    TLineageScanner(const TExprNode& root, const TTypeAnnotationContext& ctx, TExprContext& exprCtx, bool standalone)
         : Root_(root)
         , Ctx_(ctx)
         , ExprCtx_(exprCtx)
+        , Standalone_(standalone)
     {
     }
 
@@ -279,9 +281,13 @@ private:
 
     void Warning(const TExprNode& node) {
         auto message = TStringBuilder() << node.Type() << " : " << node.Content() << " is not supported";
-        auto issue = TIssue(ExprCtx_.GetPosition(node.Pos()), message);
-        SetIssueCode(EYqlIssueCode::TIssuesIds_EIssueCode_CORE_LINEAGE_INTERNAL_ERROR, issue);
-        ExprCtx_.AddWarning(issue);
+        if (Standalone_) {
+            auto issue = TIssue(ExprCtx_.GetPosition(node.Pos()), message);
+            SetIssueCode(EYqlIssueCode::TIssuesIds_EIssueCode_CORE_LINEAGE_INTERNAL_ERROR, issue);
+            ExprCtx_.AddWarning(issue);
+        } else {
+            throw yexception() << message;
+        }
     }
 
     void HandleExtractMembers(TLineage& lineage, const TExprNode& node) {
@@ -894,7 +900,8 @@ private:
     }
 
     void WriteLineage(NYson::TYsonWriter& writer, const TLineage& lineage) {
-        if (!lineage.Fields.Defined()) {
+        // TODO: remove Standalone_ after fixing all failed tests, see YQL-20445
+        if (Standalone_ && !lineage.Fields.Defined()) {
             YQL_ENSURE(!GetEnv("YQL_DETERMINISTIC_MODE"), "Can't calculate lineage");
             writer.OnEntity();
             return;
@@ -949,12 +956,13 @@ private:
     TNodeMap<ui32> WriteIds_;
     TNodeMap<TLineage> Lineages_;
     TNodeSet HasReads_;
+    bool Standalone_;
 };
 
 } // namespace
 
-TString CalculateLineage(const TExprNode& root, const TTypeAnnotationContext& ctx, TExprContext& exprCtx) {
-    TLineageScanner scanner(root, ctx, exprCtx);
+TString CalculateLineage(const TExprNode& root, const TTypeAnnotationContext& ctx, TExprContext& exprCtx, bool standalone) {
+    TLineageScanner scanner(root, ctx, exprCtx, standalone);
     return scanner.Process();
 }
 

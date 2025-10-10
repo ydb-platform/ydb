@@ -25,7 +25,6 @@
 #include <util/string/strip.h>
 #include <util/memory/tempbuf.h>
 
-
 using namespace NYql;
 using namespace NKikimr::NMiniKQL;
 
@@ -81,7 +80,7 @@ TString YsonToProtoText(TSetup& setup, NUdf::TProtoInfo& info, TStringBuf yson) 
     return StripString(res);
 }
 
-class TTestWriter : public NCommon::IBlockWriter {
+class TTestWriter: public NCommon::IBlockWriter {
 public:
     TTestWriter()
         : Buffer_(1024)
@@ -127,114 +126,101 @@ TString ProtoTextToYson(TSetup& setup, NUdf::TProtoInfo& info, TStringBuf protoT
     return NYT::NodeToYsonString(NYT::NodeFromYsonString(out.Str()), ::NYson::EYsonFormat::Text);
 }
 
-} // unnamed
+} // namespace
 
 Y_UNIT_TEST_SUITE(TProtobufValueBuilderTests) {
 
-    template <bool YTMODE>
-    void TestFloatSingle() {
-        TSetup setup;
-        NUdf::TProtoInfo info;
-        info.YtMode = YTMODE;
-        NUdf::ProtoTypeBuild<NYql::NProtoTest::TIntegral>(setup.FunctionTypeInfoBuilder, &info);
+template <bool YTMODE>
+void TestFloatSingle() {
+    TSetup setup;
+    NUdf::TProtoInfo info;
+    info.YtMode = YTMODE;
+    NUdf::ProtoTypeBuild<NYql::NProtoTest::TIntegral>(setup.FunctionTypeInfoBuilder, &info);
 
-        UNIT_ASSERT_VALUES_EQUAL(
-            YsonToProtoText<NYql::NProtoTest::TIntegral>(setup, info, "{FloatField=0.5}"),
-            "FloatField: 0.5"
-        );
-        UNIT_ASSERT_VALUES_EQUAL(
-            YsonToProtoText<NYql::NProtoTest::TIntegral>(setup, info, "{FloatField=0.}"),
-            "FloatField: 0"
-        );
-        UNIT_ASSERT_VALUES_EQUAL(
-            YsonToProtoText<NYql::NProtoTest::TIntegral>(setup, info, "{FloatField=-0.33333333}"),
-            "FloatField: -0.333333343"
-        );
-        UNIT_ASSERT_VALUES_EQUAL(
-            YsonToProtoText<NYql::NProtoTest::TIntegral>(setup, info, "{FloatField=%-inf}"),
-            "FloatField: -inf"
-        );
-        UNIT_ASSERT_VALUES_EQUAL(
-            YsonToProtoText<NYql::NProtoTest::TIntegral>(setup, info, "{FloatField=%nan}"),
-            "FloatField: nan"
-        );
+    UNIT_ASSERT_VALUES_EQUAL(
+        YsonToProtoText<NYql::NProtoTest::TIntegral>(setup, info, "{FloatField=0.5}"),
+        "FloatField: 0.5");
+    UNIT_ASSERT_VALUES_EQUAL(
+        YsonToProtoText<NYql::NProtoTest::TIntegral>(setup, info, "{FloatField=0.}"),
+        "FloatField: 0");
+    UNIT_ASSERT_VALUES_EQUAL(
+        YsonToProtoText<NYql::NProtoTest::TIntegral>(setup, info, "{FloatField=-0.33333333}"),
+        "FloatField: -0.333333343");
+    UNIT_ASSERT_VALUES_EQUAL(
+        YsonToProtoText<NYql::NProtoTest::TIntegral>(setup, info, "{FloatField=%-inf}"),
+        "FloatField: -inf");
+    UNIT_ASSERT_VALUES_EQUAL(
+        YsonToProtoText<NYql::NProtoTest::TIntegral>(setup, info, "{FloatField=%nan}"),
+        "FloatField: nan");
 
-        UNIT_ASSERT_VALUES_EQUAL(
-            ProtoTextToYson<NYql::NProtoTest::TIntegral>(setup, info, "FloatField: 0.5"),
-            "[#;#;#;#;#;[0.5];#;#;#;#;#;#;#;#]"
-        );
-        UNIT_ASSERT_VALUES_EQUAL(
-            ProtoTextToYson<NYql::NProtoTest::TIntegral>(setup, info, "FloatField: 0"),
-            "[#;#;#;#;#;[0.];#;#;#;#;#;#;#;#]"
-        );
-        UNIT_ASSERT_VALUES_EQUAL(
-            ProtoTextToYson<NYql::NProtoTest::TIntegral>(setup, info, "FloatField: -0.33333333"),
-            "[#;#;#;#;#;[-0.3333333433];#;#;#;#;#;#;#;#]"
-        );
-        UNIT_ASSERT_VALUES_EQUAL(
-            ProtoTextToYson<NYql::NProtoTest::TIntegral>(setup, info, "FloatField: -inf"),
-            "[#;#;#;#;#;[%-inf];#;#;#;#;#;#;#;#]"
-        );
-        UNIT_ASSERT_VALUES_EQUAL(
-            ProtoTextToYson<NYql::NProtoTest::TIntegral>(setup, info, "FloatField: nan"),
-            "[#;#;#;#;#;[%nan];#;#;#;#;#;#;#;#]"
-        );
-    }
+    UNIT_ASSERT_VALUES_EQUAL(
+        ProtoTextToYson<NYql::NProtoTest::TIntegral>(setup, info, "FloatField: 0.5"),
+        "[#;#;#;#;#;[0.5];#;#;#;#;#;#;#;#]");
+    UNIT_ASSERT_VALUES_EQUAL(
+        ProtoTextToYson<NYql::NProtoTest::TIntegral>(setup, info, "FloatField: 0"),
+        "[#;#;#;#;#;[0.];#;#;#;#;#;#;#;#]");
+    UNIT_ASSERT_VALUES_EQUAL(
+        ProtoTextToYson<NYql::NProtoTest::TIntegral>(setup, info, "FloatField: -0.33333333"),
+        "[#;#;#;#;#;[-0.3333333433];#;#;#;#;#;#;#;#]");
+    UNIT_ASSERT_VALUES_EQUAL(
+        ProtoTextToYson<NYql::NProtoTest::TIntegral>(setup, info, "FloatField: -inf"),
+        "[#;#;#;#;#;[%-inf];#;#;#;#;#;#;#;#]");
+    UNIT_ASSERT_VALUES_EQUAL(
+        ProtoTextToYson<NYql::NProtoTest::TIntegral>(setup, info, "FloatField: nan"),
+        "[#;#;#;#;#;[%nan];#;#;#;#;#;#;#;#]");
+}
 
-    Y_UNIT_TEST(FloatSingleYtMode) {
-        TestFloatSingle<true>();
-    }
+Y_UNIT_TEST(FloatSingleYtMode) {
+    TestFloatSingle<true>();
+}
 
-    Y_UNIT_TEST(FloatSingle) {
-        TestFloatSingle<false>();
-    }
+Y_UNIT_TEST(FloatSingle) {
+    TestFloatSingle<false>();
+}
 
-    template <bool YTMODE>
-    void TestFloatRepeated() {
-        TSetup setup;
-        NUdf::TProtoInfo info;
-        info.YtMode = YTMODE;
-        info.OptionalLists = true;
-        NUdf::ProtoTypeBuild<NYql::NProtoTest::TRepeated>(setup.FunctionTypeInfoBuilder, &info);
+template <bool YTMODE>
+void TestFloatRepeated() {
+    TSetup setup;
+    NUdf::TProtoInfo info;
+    info.YtMode = YTMODE;
+    info.OptionalLists = true;
+    NUdf::ProtoTypeBuild<NYql::NProtoTest::TRepeated>(setup.FunctionTypeInfoBuilder, &info);
 
-        UNIT_ASSERT_VALUES_EQUAL(
-            YsonToProtoText<NYql::NProtoTest::TRepeated>(setup, info, "{FloatField=[0.; -0.33333333; 0.5; 1.0; %inf; %nan]}"),
-            "FloatField: [0, -0.333333343, 0.5, 1, inf, nan]"
-        );
+    UNIT_ASSERT_VALUES_EQUAL(
+        YsonToProtoText<NYql::NProtoTest::TRepeated>(setup, info, "{FloatField=[0.; -0.33333333; 0.5; 1.0; %inf; %nan]}"),
+        "FloatField: [0, -0.333333343, 0.5, 1, inf, nan]");
 
-        UNIT_ASSERT_VALUES_EQUAL(
-            ProtoTextToYson<NYql::NProtoTest::TRepeated>(setup, info, "FloatField: [0, -0.33333333, 0.5, 1, inf, nan]"),
-            "[[[0.;-0.3333333433;0.5;1.;%inf;%nan]];#]"
-        );
-    }
+    UNIT_ASSERT_VALUES_EQUAL(
+        ProtoTextToYson<NYql::NProtoTest::TRepeated>(setup, info, "FloatField: [0, -0.33333333, 0.5, 1, inf, nan]"),
+        "[[[0.;-0.3333333433;0.5;1.;%inf;%nan]];#]");
+}
 
-    Y_UNIT_TEST(FloatRepeatedYtMode) {
-        TestFloatRepeated<true>();
-    }
+Y_UNIT_TEST(FloatRepeatedYtMode) {
+    TestFloatRepeated<true>();
+}
 
-    Y_UNIT_TEST(FloatRepeated) {
-        TestFloatRepeated<false>();
-    }
+Y_UNIT_TEST(FloatRepeated) {
+    TestFloatRepeated<false>();
+}
 
-    template <bool YTMODE>
-    void TestFloatDefaults() {
-        TSetup setup;
-        NUdf::TProtoInfo info;
-        info.YtMode = YTMODE;
-        info.OptionalLists = true;
-        NUdf::ProtoTypeBuild<NYql::NProtoTest::TWithDefaults>(setup.FunctionTypeInfoBuilder, &info);
+template <bool YTMODE>
+void TestFloatDefaults() {
+    TSetup setup;
+    NUdf::TProtoInfo info;
+    info.YtMode = YTMODE;
+    info.OptionalLists = true;
+    NUdf::ProtoTypeBuild<NYql::NProtoTest::TWithDefaults>(setup.FunctionTypeInfoBuilder, &info);
 
-        UNIT_ASSERT_VALUES_EQUAL(
-            ProtoTextToYson<NYql::NProtoTest::TWithDefaults>(setup, info, " "),
-            "[[0.];[0.5];[%inf];[%nan]]"
-        );
-    }
+    UNIT_ASSERT_VALUES_EQUAL(
+        ProtoTextToYson<NYql::NProtoTest::TWithDefaults>(setup, info, " "),
+        "[[0.];[0.5];[%inf];[%nan]]");
+}
 
-    Y_UNIT_TEST(FloatDefaultsYtMode) {
-        TestFloatDefaults<true>();
-    }
+Y_UNIT_TEST(FloatDefaultsYtMode) {
+    TestFloatDefaults<true>();
+}
 
-    Y_UNIT_TEST(FloatDefaults) {
-        TestFloatDefaults<false>();
-    }
-};
+Y_UNIT_TEST(FloatDefaults) {
+    TestFloatDefaults<false>();
+}
+}; // Y_UNIT_TEST_SUITE(TProtobufValueBuilderTests)

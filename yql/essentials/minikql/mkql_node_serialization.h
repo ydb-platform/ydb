@@ -19,5 +19,5 @@ TString SerializeRuntimeNode(TExploringNodeVisitor& explorer, TRuntimeNode node,
 TNode* DeserializeNode(const TStringBuf& buffer, const TTypeEnvironment& env);
 TRuntimeNode DeserializeRuntimeNode(const TStringBuf& buffer, const TTypeEnvironment& env);
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

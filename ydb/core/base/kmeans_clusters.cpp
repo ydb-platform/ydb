@@ -1,5 +1,7 @@
 #include "kmeans_clusters.h"
 
+#include <ydb/public/api/protos/ydb_table.pb.h>
+
 #include <library/cpp/dot_product/dot_product.h>
 #include <library/cpp/l1_distance/l1_distance.h>
 #include <library/cpp/l2_distance/l2_distance.h>
@@ -689,6 +691,29 @@ void FilterOverlapRows(TVector<TSerializedCellVec>& rows, size_t distancePos, ui
             auto d = rows[i].GetCells().at(distancePos).AsValue<double>();
             if (d > thresh) {
                 rows.resize(i);
+                break;
+            }
+        }
+    }
+}
+
+void FilterOverlapRows(TVector<std::pair<NTableIndex::NKMeans::TClusterId, double>>& rowClusters, ui32 overlapClusters, double overlapRatio) {
+    if (rowClusters.size() <= 1) {
+        return;
+    }
+    std::sort(rowClusters.begin(), rowClusters.end(),
+        [&](const std::pair<NTableIndex::NKMeans::TClusterId, double>& a,
+            const std::pair<NTableIndex::NKMeans::TClusterId, double>& b) {
+            return a.second < b.second;
+        });
+    if (rowClusters.size() > overlapClusters) {
+        rowClusters.resize(overlapClusters);
+    }
+    if (overlapRatio > 0) {
+        double thresh = (rowClusters[0].second < 0 ? rowClusters[0].second/overlapRatio : rowClusters[0].second*overlapRatio);
+        for (size_t i = 1; i < rowClusters.size(); i++) {
+            if (rowClusters[i].second > thresh) {
+                rowClusters.resize(i);
                 break;
             }
         }

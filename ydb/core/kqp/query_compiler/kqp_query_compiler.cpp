@@ -1998,6 +1998,8 @@ private:
             // Index settings
             auto& kmeansDesc = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(indexDesc->SpecializedIndexDescription);
             *vectorResolveProto.MutableIndexSettings() = kmeansDesc.GetSettings().Getsettings();
+            vectorResolveProto.SetOverlapClusters(kmeansDesc.GetSettings().overlap_clusters());
+            vectorResolveProto.SetOverlapRatio(kmeansDesc.GetSettings().overlap_ratio());
 
             // Main table
             FillTablesMap(vectorResolve.Table(), tablesMap);

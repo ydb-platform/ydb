@@ -41,6 +41,7 @@ END()
 
 RECURSE(
     mirrorer
+    mlp
 )
 
 RECURSE_FOR_TESTS(

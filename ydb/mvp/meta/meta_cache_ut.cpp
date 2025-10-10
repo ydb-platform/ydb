@@ -23,7 +23,7 @@ Y_UNIT_TEST_SUITE(MetaCache) {
 
         void SimulateSleep(TDuration duration) {
             auto sender = AllocateEdgeActor();
-            Schedule(new IEventHandle(sender, sender, new NActors::TEvents::TEvWakeup()), duration);
+            Schedule(new NActors::IEventHandle(sender, sender, new NActors::TEvents::TEvWakeup()), duration);
             GrabEdgeEventRethrow<NActors::TEvents::TEvWakeup>(sender);
         }
     };
@@ -57,7 +57,7 @@ Y_UNIT_TEST_SUITE(MetaCache) {
         actorSystem.Send(new NActors::IEventHandle(proxyId1, actorSystem.AllocateEdgeActor(), new NHttp::TEvHttpProxy::TEvAddListeningPort(port1)), 0, true);
         actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvConfirmListen>(handle);
 
-        TActorId cacheProxyId1 = actorSystem.Register(NMeta::CreateHttpMetaCache(proxyId1, GetCachePolicy, [=](const TString& id, NMeta::TGetCacheOwnershipCallback cb) {
+        NActors::TActorId cacheProxyId1 = actorSystem.Register(NMeta::CreateHttpMetaCache(proxyId1, GetCachePolicy, [=](const TString& id, NMeta::TGetCacheOwnershipCallback cb) {
             Y_UNUSED(id);
             cb({
                 .ForwardUrl = TStringBuilder() << LocalEndpoint << ":" << port2,
@@ -104,7 +104,7 @@ Y_UNIT_TEST_SUITE(MetaCache) {
         TTestActorRuntime actorSystem;
         TPortManager portManager;
 
-        actorSystem.SetScheduledEventFilter([num = 0](NActors::TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event, TDuration, TInstant&) mutable {
+        actorSystem.SetScheduledEventFilter([num = 0](NActors::TTestActorRuntimeBase& runtime, TAutoPtr<NActors::IEventHandle>& event, TDuration, TInstant&) mutable {
             if (runtime.GetActorName(event->GetRecipientRewrite()) == "NHttp::TOutgoingConnectionActor<NHttp::TPlainSocketImpl>") {
                 if (++num == 2) {
                     return false;
@@ -125,7 +125,7 @@ Y_UNIT_TEST_SUITE(MetaCache) {
         actorSystem.Send(new NActors::IEventHandle(proxyId1, actorSystem.AllocateEdgeActor(), new NHttp::TEvHttpProxy::TEvAddListeningPort(port1)), 0, true);
         actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvConfirmListen>(handle);
 
-        TActorId cacheProxyId1 = actorSystem.Register(NMeta::CreateHttpMetaCache(proxyId1, GetCachePolicy, [=](const TString& id, NMeta::TGetCacheOwnershipCallback cb) {
+        NActors::TActorId cacheProxyId1 = actorSystem.Register(NMeta::CreateHttpMetaCache(proxyId1, GetCachePolicy, [=](const TString& id, NMeta::TGetCacheOwnershipCallback cb) {
             Y_UNUSED(id);
             cb({
                 .ForwardUrl = TStringBuilder() << LocalEndpoint << ":" << port2,

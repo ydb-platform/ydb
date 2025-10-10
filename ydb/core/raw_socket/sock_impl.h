@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/library/actors/interconnect/poller_actor.h>
+#include <ydb/library/actors/interconnect/poller/poller_actor.h>
 #include "sock_config.h"
 #include "sock64.h"
 #include "sock_ssl.h"

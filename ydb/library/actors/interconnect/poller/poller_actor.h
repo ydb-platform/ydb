@@ -1,8 +1,9 @@
 #pragma once
 
-#include "events_local.h"
-#include "poller.h"
+#include <ydb/library/actors/interconnect/events/events.h>
 #include <ydb/library/actors/core/actor.h>
+
+#include "poller.h"
 
 namespace NActors {
     struct TEvPollerRegister : TEventLocal<TEvPollerRegister, ui32(ENetwork::EvPollerRegister)> {

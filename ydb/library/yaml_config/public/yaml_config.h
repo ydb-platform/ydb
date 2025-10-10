@@ -5,6 +5,8 @@
 
 #include <openssl/sha.h>
 
+#include <functional>
+
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
 #include <util/generic/set.h>
@@ -195,7 +197,9 @@ TResolvedConfig ResolveAll(NFyaml::TDocument& doc);
 /**
  * Generates unique resolved documents without materializing label combinations
  */
-TVector<TDocumentConfig> ResolveUniqueDocs(NFyaml::TDocument& doc);
+void ResolveUniqueDocs(
+    NFyaml::TDocument& doc,
+    const std::function<void(TDocumentConfig&&)>& onDocument);
 
 /**
  * Calculates hash of resolved config

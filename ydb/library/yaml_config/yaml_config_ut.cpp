@@ -1898,7 +1898,12 @@ selector_config:
     auto resolvedAll = NYamlConfig::ResolveAll(docAll);
 
     auto docUniq = NFyaml::TDocument::Parse(configWithNotUniqueSelectors);
-    auto resolvedUniq = NYamlConfig::ResolveUniqueDocs(docUniq);
+    TVector<NYamlConfig::TDocumentConfig> resolvedUniq;
+    NYamlConfig::ResolveUniqueDocs(
+        docUniq,
+        [&](NYamlConfig::TDocumentConfig&& cfg) {
+            resolvedUniq.push_back(std::move(cfg));
+        });
 
     UNIT_ASSERT(resolvedUniq.size() < resolvedAll.Configs.size());
 }
@@ -1909,7 +1914,12 @@ Y_UNIT_TEST(AllTestConfigs) {
         auto resolvedAll = NYamlConfig::ResolveAll(docAll);
 
         auto docUniq = NFyaml::TDocument::Parse(config);
-        auto resolvedUniq = NYamlConfig::ResolveUniqueDocs(docUniq);
+        TVector<NYamlConfig::TDocumentConfig> resolvedUniq;
+        NYamlConfig::ResolveUniqueDocs(
+            docUniq,
+            [&](NYamlConfig::TDocumentConfig&& cfg) {
+                resolvedUniq.push_back(std::move(cfg));
+            });
 
         auto toStr = [](const NFyaml::TNodeRef& node) {
             TStringStream ss;
@@ -1919,7 +1929,12 @@ Y_UNIT_TEST(AllTestConfigs) {
 
         TSet<TString> allDocs;
         for (auto& [_, cfg] : resolvedAll.Configs) {
-            allDocs.insert(toStr(cfg.second));
+            auto doc = cfg.first.Clone();
+            for (auto it = doc.begin(); it != doc.end(); ++it) {
+                it->RemoveTag();
+            }
+            auto cleanConfig = doc.Root().Map().at("config");
+            allDocs.insert(toStr(cleanConfig));
         }
 
         TSet<TString> uniqDocs;
@@ -1927,9 +1942,20 @@ Y_UNIT_TEST(AllTestConfigs) {
             uniqDocs.insert(toStr(cfg.second));
         }
 
-        UNIT_ASSERT_VALUES_EQUAL_C(allDocs.size(), uniqDocs.size(), TString("Config: ") + name);
+        UNIT_ASSERT_VALUES_EQUAL_C(uniqDocs.size(), resolvedUniq.size(), 
+            TString("Config: ") + name + ", ResolveUniqueDocs has duplicates");
+
+        for (const auto& s : uniqDocs) {
+            UNIT_ASSERT_C(allDocs.contains(s), 
+                TString("Config: ") + name + ", ResolveUniqueDocs has extra doc not in ResolveAll");
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL_C(allDocs.size(), uniqDocs.size(), 
+            TString("Config: ") + name + ", size mismatch");
+
         for (const auto& s : allDocs) {
-            UNIT_ASSERT_C(uniqDocs.contains(s), TString("Config: ") + name + ", missing doc");
+            UNIT_ASSERT_C(uniqDocs.contains(s), 
+                TString("Config: ") + name + ", ResolveUniqueDocs missing doc from ResolveAll");
         }
     };
 

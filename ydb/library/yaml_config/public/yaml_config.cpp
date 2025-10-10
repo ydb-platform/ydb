@@ -1082,31 +1082,33 @@ static TResolveContext PrepareResolveContext(NFyaml::TDocument& doc) {
     return ctx;
 }
 
-template <typename TCallback>
-void ForEachTerminal(
-    NFyaml::TDocument doc,
-    const TYamlConfigModel& model,
-    const TVector<std::pair<TString, TSet<TLabel>>>& labels,
-    const TVector<TCompiledSelector>& compiled,
-    const TCallback& onTerminal)
+TResolvedConfig ResolveAll(NFyaml::TDocument& doc)
 {
+    auto ctx = PrepareResolveContext(doc);
+
+    struct TTrieNode {
+        TSimpleSharedPtr<TDocumentConfig> ResolvedConfig;
+        TVector<TVector<TLabel>> LabelCombinations;
+    };
+
+    THashMap<TTriePath, TTrieNode> appliedSelectors;
     THashMap<TTriePath, TSimpleSharedPtr<TDocumentConfig>> selectorsTrie;
-    auto rootPtr = MakeSimpleShared<TDocumentConfig>(std::move(doc), model.Config);
+
+    auto rootPtr = MakeSimpleShared<TDocumentConfig>(std::move(doc), ctx.Model.Config);
     selectorsTrie[TTriePath{0}] = rootPtr;
 
-    TVector<TLabel> combination;
-    combination.resize(labels.size());
+    TVector<TLabel> combination(ctx.Labels.size());
 
     CombineForEach(
         combination,
-        labels,
+        ctx.Labels,
         0,
         [&](const TVector<TLabel>& current) {
             TSimpleSharedPtr<TDocumentConfig> cur = rootPtr;
             TTriePath path({0});
 
-            for (size_t i = 0; i < model.Selectors.size(); ++i) {
-                if (Fit(compiled[i].In, compiled[i].NotIn, current)) {
+            for (size_t i = 0; i < ctx.Model.Selectors.size(); ++i) {
+                if (Fit(ctx.Compiled[i].In, ctx.Compiled[i].NotIn, current)) {
                     path.push_back(i + 1);
                     if (auto it = selectorsTrie.find(path); it != selectorsTrie.end()) {
                         cur = it->second;
@@ -1122,32 +1124,11 @@ void ForEachTerminal(
                 }
             }
 
-            onTerminal(path, cur, current);
-        });
-}
-
-TResolvedConfig ResolveAll(NFyaml::TDocument& doc)
-{
-    auto ctx = PrepareResolveContext(doc);
-
-    struct TTrieNode {
-        TSimpleSharedPtr<TDocumentConfig> ResolvedConfig;
-        TVector<TVector<TLabel>> LabelCombinations;
-    };
-
-    THashMap<TTriePath, TTrieNode> appliedSelectors;
-
-    ForEachTerminal(
-        std::move(doc),
-        ctx.Model,
-        ctx.Labels,
-        ctx.Compiled,
-        [&](const TTriePath& path, const TSimpleSharedPtr<TDocumentConfig>& cur, const TVector<TLabel>& combination) {
             auto& node = appliedSelectors[path];
             if (!node.ResolvedConfig) {
                 node.ResolvedConfig = cur;
             }
-            node.LabelCombinations.push_back(combination);
+            node.LabelCombinations.push_back(current);
         });
 
     TMap<TSet<TVector<TLabel>>, TDocumentConfig> configs;
@@ -1163,47 +1144,83 @@ TResolvedConfig ResolveAll(NFyaml::TDocument& doc)
     return {ctx.LabelNames, std::move(configs)};
 }
 
-TVector<TDocumentConfig> ResolveUniqueDocs(NFyaml::TDocument& doc) {
+void ResolveUniqueDocs(
+    NFyaml::TDocument& doc,
+    const std::function<void(TDocumentConfig&&)>& onDocument)
+{
     auto ctx = PrepareResolveContext(doc);
 
-    TVector<TDocumentConfig> result;
-    THashMap<size_t, TVector<size_t>> hashToIdxs;
-    TVector<NFyaml::TNodeRef> nodes;
-    THashMap<const TDocumentConfig*, size_t> hashCache;
+    struct TState {
+        NFyaml::TDocument Doc;
+        NFyaml::TNodeRef Config;
+    };
 
-    ForEachTerminal(
-        std::move(doc),
-        ctx.Model,
+    TVector<TState> states;
+    states.reserve(ctx.Compiled.size() + 1);
+
+    {
+        auto baseDoc = doc.Clone();
+        auto model = ParseConfig(baseDoc);
+        states.push_back(TState{std::move(baseDoc), model.Config});
+    }
+
+    TVector<int> lastPath;
+    lastPath.reserve(ctx.Compiled.size());
+
+    TVector<TLabel> combination(ctx.Labels.size());
+    TVector<int> currentPath;
+    currentPath.reserve(ctx.Compiled.size());
+
+    THashSet<size_t> seenHashes;
+
+    // for each combination of labels, we build a path of selectors
+    CombineForEach(
+        combination,
         ctx.Labels,
-        ctx.Compiled,
-        [&](const TTriePath&, const TSimpleSharedPtr<TDocumentConfig>& cur, const TVector<TLabel>&) {
-            size_t h;
-            if (auto cacheIt = hashCache.find(cur.Get()); cacheIt != hashCache.end()) {
-                h = cacheIt->second;
-            } else {
-                h = Hash(cur->second);
-                hashCache[cur.Get()] = h;
-            }
-
-            bool duplicate = false;
-            if (auto vecIt = hashToIdxs.find(h); vecIt != hashToIdxs.end()) {
-                for (auto idx : vecIt->second) {
-                    if (nodes[idx].DeepEqual(cur->second)) {
-                        duplicate = true;
-                        break;
-                    }
+        0,
+        [&](const TVector<TLabel>& current) {
+            currentPath.clear();
+            // for each selector, we check if it fits the combination of labels
+            // if it does, we add the selector index to the current path
+            for (size_t selectorIdx = 0; selectorIdx < ctx.Compiled.size(); ++selectorIdx) {
+                if (Fit(ctx.Compiled[selectorIdx].In, ctx.Compiled[selectorIdx].NotIn, current)) {
+                    currentPath.push_back(static_cast<int>(selectorIdx));
                 }
             }
-            if (!duplicate) {
-                auto clonedDoc = cur->first.Clone();
-                auto configNode = clonedDoc.Root().Map().at("config");
-                result.emplace_back(std::move(clonedDoc), configNode);
-                nodes.push_back(result.back().second);
-                hashToIdxs[h].push_back(nodes.size() - 1);
+
+            // we find the common prefix of the current path and the last path
+            // this allows us to reuse one of the previous documents for the common prefix
+            size_t commonPrefix = 0;
+            while (commonPrefix < currentPath.size() && commonPrefix < lastPath.size()
+                   && currentPath[commonPrefix] == lastPath[commonPrefix]) {
+                ++commonPrefix;
+            }
+
+            // cut the last path to the common prefix
+            while (lastPath.size() > commonPrefix) {
+                lastPath.pop_back();
+                states.pop_back();
+            }
+
+            // for the selectors that are not in the common prefix, we applying them to the previous document
+            for (size_t idx = commonPrefix; idx < currentPath.size(); ++idx) {
+                int selectorIndex = currentPath[idx];
+                auto nextDoc = states.back().Doc.Clone();
+                auto model = ParseConfig(nextDoc);
+                Apply(model.Config, model.Selectors[selectorIndex].Config);
+                states.push_back(TState{std::move(nextDoc), model.Config});
+                lastPath.push_back(selectorIndex);
+            }
+
+            auto resolvedDoc = states.back().Doc.Clone();
+            RemoveTags(resolvedDoc);
+            auto resolvedConfig = resolvedDoc.Root().Map().at("config");
+            
+            size_t h = Hash(resolvedConfig);
+            if (seenHashes.emplace(h).second) {
+                onDocument(TDocumentConfig{std::move(resolvedDoc), resolvedConfig});
             }
         });
-
-    return result;
 }
 
 size_t Hash(const TResolvedConfig& config)

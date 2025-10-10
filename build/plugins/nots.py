@@ -130,7 +130,7 @@ class NotsUnitType(UnitType):
         Turn on code navigation indexing
         """
 
-    def on_setup_install_node_modules_recipe(self) -> None:
+    def on_setup_install_node_modules_recipe(self, args: UnitType.PluginArgs) -> None:
         """
         Setup test recipe to install node_modules before running tests
         """
@@ -603,7 +603,9 @@ def _setup_eslint(unit: NotsUnitType) -> None:
 
     unit.on_peerdir_ts_resource("eslint")
     user_recipes = unit.get_subst("TEST_RECIPES_VALUE")
-    unit.on_setup_install_node_modules_recipe()
+    pm = _create_pm(unit)
+
+    unit.on_setup_install_node_modules_recipe(pm.module_path)
 
     test_type = TsTestType.ESLINT
 
@@ -673,7 +675,9 @@ def _setup_tsc_typecheck(unit: NotsUnitType) -> None:
 
     unit.on_peerdir_ts_resource("typescript")
     user_recipes = unit.get_subst("TEST_RECIPES_VALUE")
-    unit.on_setup_install_node_modules_recipe()
+    pm = _create_pm(unit)
+
+    unit.on_setup_install_node_modules_recipe(pm.module_path)
 
     test_type = TsTestType.TSC_TYPECHECK
 
@@ -723,11 +727,13 @@ def _setup_stylelint(unit: NotsUnitType) -> None:
     from lib.nots.package_manager import constants
 
     recipes_value = unit.get_subst("TEST_RECIPES_VALUE")
-    unit.on_setup_install_node_modules_recipe()
+    pm = _create_pm(unit)
+
+    unit.on_setup_install_node_modules_recipe(pm.module_path)
 
     test_type = TsTestType.TS_STYLELINT
 
-    peers = _create_pm(unit).get_local_peers_from_package_json()
+    peers = pm.get_local_peers_from_package_json()
 
     deps = df.CustomDependencies.nots_with_recipies(unit, (peers,), {}).split()
     if deps:
@@ -929,8 +935,14 @@ def on_ts_test_for_configure(
     # user-defined recipes should be in the end
     user_recipes = unit.get_subst("TEST_RECIPES_VALUE").strip()
     unit.set(["TEST_RECIPES_VALUE", ""])
-    unit.on_setup_extract_node_modules_recipe([for_mod_path])
+
+    if test_runner in [TsTestType.JEST]:
+        unit.on_setup_install_node_modules_recipe([for_mod_path])
+    else:
+        unit.on_setup_extract_node_modules_recipe([for_mod_path])
+
     unit.on_setup_extract_output_tars_recipe([for_mod_path])
+
     __set_append(unit, "TEST_RECIPES_VALUE", user_recipes)
 
     build_root = "$B" if test_runner in [TsTestType.HERMIONE, TsTestType.PLAYWRIGHT_LARGE] else "$(BUILD_ROOT)"

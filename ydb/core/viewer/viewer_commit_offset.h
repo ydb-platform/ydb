@@ -77,13 +77,7 @@ public:
         yaml.AddParameter({
             .Name = "read_session_id",
             .Description = "read session if",
-            .Type = "string", // optional?
-        });
-        yaml.AddParameter({
-            .Name = "mode",
-            .Description = "If mode = 0 (default), than offset for only one partition is commited; if mode = 1, that offset for all partitions are updated",
-            .Type = "integer",
-            .Default = 0,
+            .Type = "string",
         });
         yaml.SetResponseSchema(TProtoToYaml::ProtoToYamlSchema<Ydb::Topic::CommitOffsetResult>());
         return yaml;

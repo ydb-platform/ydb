@@ -3573,19 +3573,13 @@ void TPartition::CommitUserAct(TEvPQ::TEvSetClientInfo& act) {
         return;
     }
 
-    if (strictCommitOffset && act.Offset < GetStartOffset()) {
-        // strict commit to past, reply error
-        TabletCounters.Cumulative()[COUNTER_PQ_SET_CLIENT_OFFSET_ERROR].Increment(1);
-        ScheduleReplyError(act.Cookie, act.IsInternal,
-                           NPersQueue::NErrorCode::SET_OFFSET_ERROR_COMMIT_TO_PAST,
-                           TStringBuilder() << "set offset " <<  act.Offset << " to past for consumer " << act.ClientId << " actual start offset is " << GetStartOffset());
-
-        return;
-    }
-
     //request in correct session - make it
 
     ui64 offset = (act.Type == TEvPQ::TEvSetClientInfo::ESCI_OFFSET ? act.Offset : userInfo.Offset);
+
+    if (strictCommitOffset && act.Offset < GetStartOffset()) {
+        offset = GetStartOffset();
+    }
     ui64 readRuleGeneration = userInfo.ReadRuleGeneration;
 
     if (act.Type == TEvPQ::TEvSetClientInfo::ESCI_INIT_READ_RULE) {
@@ -3709,7 +3703,7 @@ void TPartition::EmulatePostProcessUserAct(const TEvPQ::TEvSetClientInfo& act,
                     << " is set to " << offset << " (startOffset " << GetStartOffset() << ") session " << session
         );
 
-        userInfo.Offset = offset;
+        userInfo.Offset = std::max(offset, GetStartOffset());
         userInfo.CommittedMetadata = committedMetadata;
         userInfo.AnyCommits = userInfo.Offset > (i64)GetStartOffset();
 

@@ -1,9 +1,9 @@
 #include "mkql_builtins_impl.h" // Y_IGNORE
 #include "mkql_builtins_datetime.h"
 #include "mkql_builtins_decimal.h" // Y_IGNORE
-#include "mkql_safe_ops.h"
 
 #include <yql/essentials/minikql/mkql_type_ops.h>
+#include <yql/essentials/minikql/mkql_safe_arithmetic_ops.h>
 
 namespace NKikimr {
 namespace NMiniKQL {

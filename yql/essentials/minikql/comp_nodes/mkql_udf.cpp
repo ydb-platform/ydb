@@ -1,7 +1,7 @@
 #include "mkql_udf.h"
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders_codegen.h>
-#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
+#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/computation/mkql_validate.h>
 #include <yql/essentials/minikql/mkql_function_registry.h>
@@ -25,7 +25,7 @@ TString TruncateTypeDiff(const TString& s) {
         return s;
     }
 
-    return s.substr(0,TypeDiffLimit) + "...";
+    return s.substr(0, TypeDiffLimit) + "...";
 }
 
 static const char TMResourceName[] = "DateTime2.TM";
@@ -51,7 +51,9 @@ private:
     public:
         TDateTimeConverter(NUdf::TUnboxedValue&& closure)
             : Closure_(closure)
-        {}
+        {
+        }
+
     private:
         NUdf::TUnboxedValue Run(const NUdf::IValueBuilder* valueBuilder, const NUdf::TUnboxedValuePod* args) const final {
             NUdf::TUnboxedValuePod newArg;
@@ -68,19 +70,20 @@ private:
     const NUdf::TUnboxedValue Callable_;
 };
 
-template<class TValidatePolicy, class TValidateMode>
-class TSimpleUdfWrapper: public TMutableComputationNode<TSimpleUdfWrapper<TValidatePolicy,TValidateMode>> {
-using TBaseComputation = TMutableComputationNode<TSimpleUdfWrapper<TValidatePolicy,TValidateMode>>;
+template <class TValidatePolicy, class TValidateMode>
+class TSimpleUdfWrapper: public TMutableComputationNode<TSimpleUdfWrapper<TValidatePolicy, TValidateMode>> {
+    using TBaseComputation = TMutableComputationNode<TSimpleUdfWrapper<TValidatePolicy, TValidateMode>>;
+
 public:
     TSimpleUdfWrapper(
-            TComputationMutables& mutables,
-            TString&& functionName,
-            TString&& typeConfig,
-            NUdf::TSourcePosition pos,
-            const TCallableType* callableType,
-            const TCallableType* functionType,
-            TType* userType,
-            bool wrapDateTimeConvert)
+        TComputationMutables& mutables,
+        TString&& functionName,
+        TString&& typeConfig,
+        NUdf::TSourcePosition pos,
+        const TCallableType* callableType,
+        const TCallableType* functionType,
+        TType* userType,
+        bool wrapDateTimeConvert)
         : TBaseComputation(mutables, EValueRepresentation::Boxed)
         , FunctionName(std::move(functionName))
         , TypeConfig(std::move(typeConfig))
@@ -102,7 +105,8 @@ public:
 
         if (!status.IsOk()) {
             UdfTerminate((TStringBuilder() << Pos << " Failed to find UDF function " << FunctionName << ", reason: "
-                << status.GetError()).c_str());
+                                           << status.GetError())
+                             .c_str());
         }
 
         if (!funcInfo.Implementation) {
@@ -110,11 +114,12 @@ public:
         }
 
         NUdf::TUnboxedValue udf(NUdf::TUnboxedValuePod(funcInfo.Implementation.Release()));
-        TValidate<TValidatePolicy,TValidateMode>::WrapCallable(FunctionType, udf, TStringBuilder() << "FunctionWithConfig<" << FunctionName << ">");
+        TValidate<TValidatePolicy, TValidateMode>::WrapCallable(FunctionType, udf, TStringBuilder() << "FunctionWithConfig<" << FunctionName << ">");
         ExtendArgs(udf, CallableType, funcInfo.FunctionType);
         ConvertDateTimeArg(udf);
         return udf.Release();
     }
+
 private:
     // xXX: This class implements the wrapper to properly handle
     // the case when the signature of the emitted callable (i.e.
@@ -159,42 +164,45 @@ private:
         }
     }
 
-    void RegisterDependencies() const final {}
+    void RegisterDependencies() const final {
+    }
 
     const TString FunctionName;
     const TString TypeConfig;
     const NUdf::TSourcePosition Pos;
-    const TCallableType *const CallableType;
-    const TCallableType *const FunctionType;
-    TType *const UserType;
+    const TCallableType* const CallableType;
+    const TCallableType* const FunctionType;
+    TType* const UserType;
     bool WrapDateTimeConvert;
 };
 
 class TUdfRunCodegeneratorNode: public TSimpleUdfWrapper<TValidateErrorPolicyNone, TValidateModeLazy<TValidateErrorPolicyNone>>
 #ifndef MKQL_DISABLE_CODEGEN
-    , public ICodegeneratorRunNode
+    ,
+                                public ICodegeneratorRunNode
 #endif
 {
 public:
     TUdfRunCodegeneratorNode(
-            TComputationMutables& mutables,
-            TString&& functionName,
-            TString&& typeConfig,
-            NUdf::TSourcePosition pos,
-            const TCallableType* callableType,
-            const TCallableType* functionType,
-            TType* userType,
-            bool wrapDateTimeConvert,
-            TString&& moduleIRUniqID,
-            TString&& moduleIR,
-            TString&& fuctioNameIR,
-            NUdf::TUniquePtr<NUdf::IBoxedValue>&& impl)
+        TComputationMutables& mutables,
+        TString&& functionName,
+        TString&& typeConfig,
+        NUdf::TSourcePosition pos,
+        const TCallableType* callableType,
+        const TCallableType* functionType,
+        TType* userType,
+        bool wrapDateTimeConvert,
+        TString&& moduleIRUniqID,
+        TString&& moduleIR,
+        TString&& fuctioNameIR,
+        NUdf::TUniquePtr<NUdf::IBoxedValue>&& impl)
         : TSimpleUdfWrapper(mutables, std::move(functionName), std::move(typeConfig), pos, callableType, functionType, userType, wrapDateTimeConvert)
         , ModuleIRUniqID(std::move(moduleIRUniqID))
         , ModuleIR(std::move(moduleIR))
         , IRFunctionName(std::move(fuctioNameIR))
         , Impl(std::move(impl))
-    {}
+    {
+    }
 #ifndef MKQL_DISABLE_CODEGEN
     void CreateRun(const TCodegenContext& ctx, BasicBlock*& block, Value* result, Value* args) const final {
         ctx.Codegen.LoadBitCode(ModuleIR, ModuleIRUniqID);
@@ -221,20 +229,21 @@ private:
     const NUdf::TUniquePtr<NUdf::IBoxedValue> Impl;
 };
 
-template<class TValidatePolicy, class TValidateMode>
-class TUdfWrapper: public TMutableCodegeneratorPtrNode<TUdfWrapper<TValidatePolicy,TValidateMode>> {
-using TBaseComputation = TMutableCodegeneratorPtrNode<TUdfWrapper<TValidatePolicy,TValidateMode>>;
+template <class TValidatePolicy, class TValidateMode>
+class TUdfWrapper: public TMutableCodegeneratorPtrNode<TUdfWrapper<TValidatePolicy, TValidateMode>> {
+    using TBaseComputation = TMutableCodegeneratorPtrNode<TUdfWrapper<TValidatePolicy, TValidateMode>>;
+
 public:
     TUdfWrapper(
-            TComputationMutables& mutables,
-            TString&& functionName,
-            TString&& typeConfig,
-            NUdf::TSourcePosition pos,
-            IComputationNode* runConfigNode,
-            ui32 runConfigArgs,
-            const TCallableType* callableType,
-            TType* userType,
-            bool wrapDateTimeConvert)
+        TComputationMutables& mutables,
+        TString&& functionName,
+        TString&& typeConfig,
+        NUdf::TSourcePosition pos,
+        IComputationNode* runConfigNode,
+        ui32 runConfigArgs,
+        const TCallableType* callableType,
+        TType* userType,
+        bool wrapDateTimeConvert)
         : TBaseComputation(mutables, EValueRepresentation::Boxed)
         , FunctionName(std::move(functionName))
         , TypeConfig(std::move(typeConfig))
@@ -329,18 +338,19 @@ private:
 
         if (!status.IsOk()) {
             UdfTerminate((TStringBuilder() << Pos << " Failed to find UDF function " << FunctionName << ", reason: "
-                << status.GetError()).c_str());
+                                           << status.GetError())
+                             .c_str());
         }
 
         if (!funcInfo.Implementation) {
             UdfTerminate((TStringBuilder() << Pos << " UDF implementation is not set for function " << FunctionName).c_str());
         }
 
-        udf =  NUdf::TUnboxedValuePod(funcInfo.Implementation.Release());
+        udf = NUdf::TUnboxedValuePod(funcInfo.Implementation.Release());
     }
 
     void Wrap(NUdf::TUnboxedValue& callable) const {
-        TValidate<TValidatePolicy,TValidateMode>::WrapCallable(CallableType, callable, TStringBuilder() << "FunctionWithConfig<" << FunctionName << ">");
+        TValidate<TValidatePolicy, TValidateMode>::WrapCallable(CallableType, callable, TStringBuilder() << "FunctionWithConfig<" << FunctionName << ">");
     }
 
     void ConvertDateTimeArg(NUdf::TUnboxedValue& callable) const {
@@ -364,26 +374,26 @@ private:
     const ui32 UdfIndex;
 };
 
-template<bool Simple, class TValidatePolicy, class TValidateMode>
+template <bool Simple, class TValidatePolicy, class TValidateMode>
 using TWrapper = std::conditional_t<Simple, TSimpleUdfWrapper<TValidatePolicy, TValidateMode>, TUdfWrapper<TValidatePolicy, TValidateMode>>;
 
-template<bool Simple, typename...TArgs>
-inline IComputationNode* CreateUdfWrapper(const TComputationNodeFactoryContext& ctx, TArgs&&...args)
+template <bool Simple, typename... TArgs>
+inline IComputationNode* CreateUdfWrapper(const TComputationNodeFactoryContext& ctx, TArgs&&... args)
 {
     switch (ctx.ValidateMode) {
         case NUdf::EValidateMode::None:
-            return new TWrapper<Simple, TValidateErrorPolicyNone,TValidateModeLazy<TValidateErrorPolicyNone>>(ctx.Mutables, std::forward<TArgs>(args)...);
+            return new TWrapper<Simple, TValidateErrorPolicyNone, TValidateModeLazy<TValidateErrorPolicyNone>>(ctx.Mutables, std::forward<TArgs>(args)...);
         case NUdf::EValidateMode::Lazy:
             if (ctx.ValidatePolicy == NUdf::EValidatePolicy::Fail) {
-                return new TWrapper<Simple, TValidateErrorPolicyFail,TValidateModeLazy<TValidateErrorPolicyFail>>(ctx.Mutables, std::forward<TArgs>(args)...);
+                return new TWrapper<Simple, TValidateErrorPolicyFail, TValidateModeLazy<TValidateErrorPolicyFail>>(ctx.Mutables, std::forward<TArgs>(args)...);
             } else {
-                return new TWrapper<Simple, TValidateErrorPolicyThrow,TValidateModeLazy<TValidateErrorPolicyThrow>>(ctx.Mutables, std::forward<TArgs>(args)...);
+                return new TWrapper<Simple, TValidateErrorPolicyThrow, TValidateModeLazy<TValidateErrorPolicyThrow>>(ctx.Mutables, std::forward<TArgs>(args)...);
             }
         case NUdf::EValidateMode::Greedy:
             if (ctx.ValidatePolicy == NUdf::EValidatePolicy::Fail) {
-                return new TWrapper<Simple, TValidateErrorPolicyFail,TValidateModeGreedy<TValidateErrorPolicyFail>>(ctx.Mutables, std::forward<TArgs>(args)...);
+                return new TWrapper<Simple, TValidateErrorPolicyFail, TValidateModeGreedy<TValidateErrorPolicyFail>>(ctx.Mutables, std::forward<TArgs>(args)...);
             } else {
-                return new TWrapper<Simple, TValidateErrorPolicyThrow,TValidateModeGreedy<TValidateErrorPolicyThrow>>(ctx.Mutables, std::forward<TArgs>(args)...);
+                return new TWrapper<Simple, TValidateErrorPolicyThrow, TValidateModeGreedy<TValidateErrorPolicyThrow>>(ctx.Mutables, std::forward<TArgs>(args)...);
             }
         default:
             Y_ABORT("Unexpected validate mode: %u", static_cast<unsigned>(ctx.ValidateMode));
@@ -393,7 +403,7 @@ inline IComputationNode* CreateUdfWrapper(const TComputationNodeFactoryContext& 
 // XXX: The helper below allows to make a stitchless upgrade
 // of MKQL runtime, regarding the incompatible changes made for
 // DateTime::Format UDF.
-template<bool Extended>
+template <bool Extended>
 static bool IsDateTimeResource(const TType* type) {
     if (!type->IsResource()) {
         return false;
@@ -447,7 +457,7 @@ static bool IsDateTimeConvertible(const NUdf::TStringRef& funcName,
     return false;
 }
 
-}
+} // namespace
 
 IComputationNode* WrapUdf(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 4 || callable.GetInputsCount() == 7, "Expected 4 or 7 arguments");
@@ -480,7 +490,8 @@ IComputationNode* WrapUdf(TCallable& callable, const TComputationNodeFactoryCont
 
     if (!status.IsOk()) {
         UdfTerminate((TStringBuilder() << pos << " Failed to find UDF function " << funcName << ", reason: "
-            << status.GetError()).c_str());
+                                       << status.GetError())
+                         .c_str());
     }
 
     bool wrapDateTimeConvert = false;
@@ -496,21 +507,24 @@ IComputationNode* WrapUdf(TCallable& callable, const TComputationNodeFactoryCont
         // And vice versa for the forward compatibility.
         if (!runConfigNodeType->IsVoid() && !runConfigFuncType->IsVoid()) {
             TString diff = TStringBuilder()
-                << "run config type mismatch, expected: "
-                << PrintNode((runConfigNodeType), true)
-                << ", actual: "
-                << PrintNode(runConfigFuncType, true);
+                           << "run config type mismatch, expected: "
+                           << PrintNode((runConfigNodeType), true)
+                           << ", actual: "
+                           << PrintNode(runConfigFuncType, true);
             UdfTerminate((TStringBuilder() << pos
                                            << " UDF Function '"
                                            << funcName
                                            << "' "
-                                           << TruncateTypeDiff(diff)).c_str());
+                                           << TruncateTypeDiff(diff))
+                             .c_str());
         }
 
         const auto callableType = runConfigNodeType->IsVoid()
-                                ? callableNodeType : callableFuncType;
+                                      ? callableNodeType
+                                      : callableFuncType;
         const auto runConfigType = runConfigNodeType->IsVoid()
-                                 ? runConfigFuncType : runConfigNodeType;
+                                       ? runConfigFuncType
+                                       : runConfigNodeType;
 
         // If so, check the following invariants:
         // * The first argument of the head function in the sequence
@@ -525,60 +539,62 @@ IComputationNode* WrapUdf(TCallable& callable, const TComputationNodeFactoryCont
                                            << " Udf Function '"
                                            << funcName
                                            << "' wrapper has more than one required argument: "
-                                           << PrintNode(callableType)).c_str());
+                                           << PrintNode(callableType))
+                             .c_str());
         }
         const auto firstArgType = callableType->GetArgumentType(0);
         if (!runConfigType->IsSameType(*firstArgType)) {
             TString diff = TStringBuilder()
-                << "type mismatch, expected run config type: "
-                << PrintNode(runConfigType, true)
-                << ", actual: "
-                << PrintNode(firstArgType, true);
+                           << "type mismatch, expected run config type: "
+                           << PrintNode(runConfigType, true)
+                           << ", actual: "
+                           << PrintNode(firstArgType, true);
             UdfTerminate((TStringBuilder() << pos
                                            << " Udf Function '"
                                            << funcName
                                            << "' "
-                                           << TruncateTypeDiff(diff)).c_str());
+                                           << TruncateTypeDiff(diff))
+                             .c_str());
         }
         const auto closureFuncType = runConfigNodeType->IsVoid()
-                                   ? callableFuncType
-                                   : AS_TYPE(TCallableType, callableFuncType->GetReturnType());
+                                         ? callableFuncType
+                                         : AS_TYPE(TCallableType, callableFuncType->GetReturnType());
         const auto closureNodeType = runConfigNodeType->IsVoid()
-                                   ? AS_TYPE(TCallableType, callableNodeType->GetReturnType())
-                                   : callableNodeType;
+                                         ? AS_TYPE(TCallableType, callableNodeType->GetReturnType())
+                                         : callableNodeType;
         if (!closureNodeType->IsConvertableTo(*closureFuncType)) {
             if (!IsDateTimeConvertible(funcName, closureNodeType, closureFuncType, wrapDateTimeConvert)) {
                 TString diff = TStringBuilder()
-                    << "type mismatch, expected return type: "
-                    << PrintNode(closureNodeType, true)
-                    << ", actual: "
-                    << PrintNode(closureFuncType, true);
+                               << "type mismatch, expected return type: "
+                               << PrintNode(closureNodeType, true)
+                               << ", actual: "
+                               << PrintNode(closureFuncType, true);
                 UdfTerminate((TStringBuilder() << pos
                                                << " Udf Function '"
                                                << funcName
                                                << "' "
-                                               << TruncateTypeDiff(diff)).c_str());
+                                               << TruncateTypeDiff(diff))
+                                 .c_str());
             }
             MKQL_ENSURE(funcName == NUdf::TStringRef::Of("DateTime2.Format") ||
-                        funcName == NUdf::TStringRef::Of("DateTime2.Convert"),
+                            funcName == NUdf::TStringRef::Of("DateTime2.Convert"),
                         "Unexpected function violates the convertible invariants");
         }
 
         const auto runConfigCompNode = LocateNode(ctx.NodeLocator, *runCfgNode.GetNode());
         const auto runConfigArgs = funcInfo.FunctionType->GetArgumentsCount();
         return runConfigNodeType->IsVoid()
-            ? CreateUdfWrapper<true>(ctx, std::move(funcName), std::move(typeConfig), pos, callableNodeType, callableFuncType, userType, wrapDateTimeConvert)
-            : CreateUdfWrapper<false>(ctx, std::move(funcName), std::move(typeConfig), pos, runConfigCompNode, runConfigArgs, callableNodeType, userType, wrapDateTimeConvert);
+                   ? CreateUdfWrapper<true>(ctx, std::move(funcName), std::move(typeConfig), pos, callableNodeType, callableFuncType, userType, wrapDateTimeConvert)
+                   : CreateUdfWrapper<false>(ctx, std::move(funcName), std::move(typeConfig), pos, runConfigCompNode, runConfigArgs, callableNodeType, userType, wrapDateTimeConvert);
     }
 
     if (!callableFuncType->IsConvertableTo(*callableNodeType, true)) {
         if (!IsDateTimeConvertible(funcName, callableNodeType, callableFuncType, wrapDateTimeConvert)) {
-            TString diff = TStringBuilder() << "type mismatch, expected return type: " << PrintNode(callableNodeType, true) <<
-                    ", actual:" << PrintNode(callableFuncType, true);
+            TString diff = TStringBuilder() << "type mismatch, expected return type: " << PrintNode(callableNodeType, true) << ", actual:" << PrintNode(callableFuncType, true);
             UdfTerminate((TStringBuilder() << pos << " UDF Function '" << funcName << "' " << TruncateTypeDiff(diff)).c_str());
         }
         MKQL_ENSURE(funcName == NUdf::TStringRef::Of("DateTime2.Format") ||
-                    funcName == NUdf::TStringRef::Of("DateTime2.Convert"),
+                        funcName == NUdf::TStringRef::Of("DateTime2.Convert"),
                     "Unexpected function violates the convertible invariants");
     }
 
@@ -590,8 +606,7 @@ IComputationNode* WrapUdf(TCallable& callable, const TComputationNodeFactoryCont
         if (ctx.ValidateMode == NUdf::EValidateMode::None && funcInfo.ModuleIR && funcInfo.IRFunctionName) {
             return new TUdfRunCodegeneratorNode(
                 ctx.Mutables, std::move(funcName), std::move(typeConfig), pos, callableNodeType, callableFuncType, userType, wrapDateTimeConvert,
-                std::move(funcInfo.ModuleIRUniqID), std::move(funcInfo.ModuleIR), std::move(funcInfo.IRFunctionName), std::move(funcInfo.Implementation)
-            );
+                std::move(funcInfo.ModuleIRUniqID), std::move(funcInfo.ModuleIR), std::move(funcInfo.IRFunctionName), std::move(funcInfo.Implementation));
         }
         return CreateUdfWrapper<true>(ctx, std::move(funcName), std::move(typeConfig), pos, callableNodeType, callableFuncType, userType, wrapDateTimeConvert);
     }
@@ -628,7 +643,8 @@ IComputationNode* WrapScriptUdf(TCallable& callable, const TComputationNodeFacto
 
     if (!status.IsOk()) {
         UdfTerminate((TStringBuilder() << pos << " Failed to find UDF function " << funcName << ", reason: "
-            << status.GetError()).c_str());
+                                       << status.GetError())
+                         .c_str());
     }
 
     if (!funcInfo.Implementation) {
@@ -649,5 +665,5 @@ IComputationNode* WrapScriptUdf(TCallable& callable, const TComputationNodeFacto
     return CreateUdfWrapper<false>(ctx, std::move(funcName), std::move(typeConfig), pos, programCompNode, 1U, funcTypeInfo, userType, false);
 }
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

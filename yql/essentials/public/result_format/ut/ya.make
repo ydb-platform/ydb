@@ -1,5 +1,7 @@
 UNITTEST_FOR(yql/essentials/public/result_format)
 
+ENABLE(YQL_STYLE_CPP)
+
 SRCS(
     yql_result_format_response_ut.cpp
     yql_result_format_type_ut.cpp

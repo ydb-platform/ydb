@@ -22,8 +22,7 @@ struct TQItemKey {
     size_t Hash() const {
         return CombineHashes(
             THash<TString>()(Component),
-            THash<TString>()(Label)
-        );
+            THash<TString>()(Label));
     }
 };
 
@@ -96,15 +95,18 @@ using IQStoragePtr = std::shared_ptr<IQStorage>;
 class TQContext {
 public:
     TQContext()
-    {}
+    {
+    }
 
     TQContext(IQReaderPtr reader)
         : Reader_(reader)
-    {}
+    {
+    }
 
     TQContext(IQWriterPtr writer)
         : Writer_(writer)
-    {}
+    {
+    }
 
     TQContext(const TQContext&) = default;
     TQContext& operator=(const TQContext&) = default;
@@ -135,7 +137,7 @@ private:
 };
 
 IQWriterPtr MakeCloseAwareWriterDecorator(IQWriterPtr&& rhs);
-}
+} // namespace NYql
 
 template <>
 struct THash<NYql::TQItemKey> {

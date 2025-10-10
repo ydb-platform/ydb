@@ -2,18 +2,17 @@
 #include "mkql_spiller.h"
 #include <yql/essentials/minikql/computation/mkql_computation_node_pack.h>
 
-
 namespace NKikimr::NMiniKQL {
 
-///Stores and loads very long sequences of TMultiType UVs
-///Can split sequences into chunks
-///Sends chunks to ISplitter and keeps assigned keys
-///When all data is written switches to read mode. Switching back to writing mode is not supported
-///Provides an interface for sequential read (like forward iterator)
-///When interaction with ISpiller is required, Write and Read operations return a Future
+/// Stores and loads very long sequences of TMultiType UVs
+/// Can split sequences into chunks
+/// Sends chunks to ISplitter and keeps assigned keys
+/// When all data is written switches to read mode. Switching back to writing mode is not supported
+/// Provides an interface for sequential read (like forward iterator)
+/// When interaction with ISpiller is required, Write and Read operations return a Future
 class TWideUnboxedValuesSpillerAdapter {
 public:
-    TWideUnboxedValuesSpillerAdapter(ISpiller::TPtr spiller, const TMultiType* type, size_t sizeLimit, ui64 minMemorySizeToReport=10_KB)
+    TWideUnboxedValuesSpillerAdapter(ISpiller::TPtr spiller, const TMultiType* type, size_t sizeLimit, ui64 minMemorySizeToReport = 10_KB)
         : Spiller_(spiller)
         , ItemType_(type)
         , SizeLimit_(sizeLimit)
@@ -42,9 +41,9 @@ public:
         ReportPackerFreed();
     }
 
-    //Extracting interface
+    // Extracting interface
     bool Empty() const {
-       return StoredChunks_.empty() && !CurrentBatch_;
+        return StoredChunks_.empty() && !CurrentBatch_;
     }
     std::optional<NThreading::TFuture<std::optional<NYql::TChunkedBuffer>>> ExtractWideItem(const TArrayRef<NUdf::TUnboxedValue>& wideItem) {
         MKQL_ENSURE(!Empty(), "Internal logic error");
@@ -65,8 +64,8 @@ public:
         }
     }
 
-    void AsyncReadCompleted(NYql::TChunkedBuffer&& rope,const THolderFactory& holderFactory ) {
-        //Implementation detail: deserialization is performed in a processing thread
+    void AsyncReadCompleted(NYql::TChunkedBuffer&& rope, const THolderFactory& holderFactory) {
+        // Implementation detail: deserialization is performed in a processing thread
         TUnboxedValueBatch batch(ItemType_);
         Packer_.UnpackBatch(std::move(rope), holderFactory, batch);
         CurrentBatch_ = std::move(batch);
@@ -91,8 +90,9 @@ private:
     }
 
     std::optional<NThreading::TFuture<ISpiller::TKey>> FlushPacker(bool forced) {
-        if (Packer_.IsEmpty())
+        if (Packer_.IsEmpty()) {
             return std::nullopt;
+        }
 
         ui64 estimatedPackedSize = Packer_.PackedSizeEstimate();
         ReportPackerSize(estimatedPackedSize, forced);
@@ -113,4 +113,4 @@ private:
     const ui64 MinMemorySizeToReport_;
 };
 
-}//namespace NKikimr::NMiniKQL
+} // namespace NKikimr::NMiniKQL

@@ -245,16 +245,16 @@ public:
         }
     }
 
-    void ReadTopicMessage(const TString& topicName, const TString& expectedMessage, TDuration disposition = TDuration::Seconds(100)) {
-        ReadTopicMessages(topicName, {expectedMessage}, disposition);
+    void ReadTopicMessage(const TString& topicName, const TString& expectedMessage, TInstant disposition = TInstant::Now() - TDuration::Seconds(100), bool sort = false) {
+        ReadTopicMessages(topicName, {expectedMessage}, disposition, sort);
     }
 
-    void ReadTopicMessages(const TString& topicName, const TVector<TString>& expectedMessages, TDuration disposition = TDuration::Seconds(100)) {
+    void ReadTopicMessages(const TString& topicName, const TVector<TString>& expectedMessages, TInstant disposition = TInstant::Now() - TDuration::Seconds(100), bool sort = false) {
         NTopic::TReadSessionSettings readSettings;
         readSettings
             .WithoutConsumer()
             .AppendTopics(
-                NTopic::TTopicReadSettings(topicName).ReadFromTimestamp(TInstant::Now() - disposition)
+                NTopic::TTopicReadSettings(topicName).ReadFromTimestamp(disposition)
                     .AppendPartitionIds(0)
             );
 
@@ -283,11 +283,18 @@ public:
                 }
             }
 
-            UNIT_ASSERT_GE(expectedMessages.size(), received.size());
+            UNIT_ASSERT_C(expectedMessages.size() >= received.size(), TStringBuilder()
+                << "expected #" << expectedMessages.size() << " messages ("
+                << JoinSeq(", ", expectedMessages) << "), got #" << received.size() << " messages ("
+                << JoinSeq(", ", received) << ")");
 
             error = TStringBuilder() << "got new event, received #" << received.size() << " / " << expectedMessages.size() << " messages";
             return false;
         });
+
+        if (sort) {
+            std::sort(received.begin(), received.end());
+        }
 
         UNIT_ASSERT_VALUES_EQUAL(received.size(), expectedMessages.size());
         for (size_t i = 0; i < received.size(); ++i) {
@@ -2137,6 +2144,134 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             UNIT_ASSERT(ast);
             UNIT_ASSERT_STRING_CONTAINS(*ast, "DqCnStreamLookup");
         });
+    }
+
+    Y_UNIT_TEST_F(OffsetsAndStateRecoveryOnInternalRetry, TStreamingTestFixture) {
+        // Join with S3 used for introducing temporary failure and force retry on specific key
+
+        constexpr char sourceBucket[] = "test_streaming_query_recovery_on_internal_retry";
+        constexpr char objectContent[] = R"(
+{"fqdn": "host1.example.com", "payload": "P1"}
+{"fqdn": "host2.example.com"                              })";
+        constexpr char objectPath[] = "path/test_object.json";
+        CreateBucketWithObject(sourceBucket, objectPath, objectContent);
+
+        constexpr char inputTopicName[] = "internalRetryInputTopicName";
+        constexpr char outputTopicName[] = "internalRetryOutputTopicName";
+        CreateTopic(inputTopicName);
+        CreateTopic(outputTopicName);
+
+        constexpr char pqSourceName[] = "pqSourceName";
+        constexpr char s3SourceName[] = "s3Source";
+        CreatePqSource(pqSourceName);
+        CreateS3Source(sourceBucket, s3SourceName);
+
+        constexpr char queryName[] = "streamingQuery";
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                PRAGMA ydb.HashJoinMode = "map";
+                $s3_lookup = SELECT * FROM `{s3_source}`.`path/` WITH (
+                    FORMAT = "json_each_row",
+                    SCHEMA (
+                        fqdn String NOT NULL,
+                        payload String
+                    )
+                );
+
+                -- Test that offsets are recovered
+                $pq_source = SELECT * FROM `{pq_source}`.`{input_topic}` WITH (
+                    FORMAT = "json_each_row",
+                    SCHEMA (
+                        time String NOT NULL,
+                        event String,
+                        host String
+                    )
+                );
+
+                $joined = SELECT
+                    Unwrap(l.payload) AS payload, -- Test failure here
+                    p.*
+                FROM $pq_source AS p
+                LEFT JOIN $s3_lookup AS l
+                ON (l.fqdn = p.host);
+
+                -- Test that state also recovered
+                $grouped = SELECT
+                    event,
+                    CAST(SOME(time) AS String) AS time,
+                    SOME(payload) AS payload,
+                    CAST(COUNT(*) AS String) AS count
+                FROM $joined
+                GROUP BY
+                    HOP (CAST(time AS Timestamp), "PT1H", "PT1H", "PT0H"),
+                    event;
+
+                INSERT INTO `{pq_source}`.`{output_topic}`
+                SELECT Unwrap(event || "-" || time || "-" || payload || "-" || count) FROM $grouped
+            END DO;)",
+            "query_name"_a = queryName,
+            "pq_source"_a = pqSourceName,
+            "s3_source"_a = s3SourceName,
+            "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName
+        ));
+
+        CheckScriptExecutionsCount(1, 1);
+        Sleep(TDuration::Seconds(1));
+
+        // Fill HOP state for key A
+        WriteTopicMessages(inputTopicName, {
+            R"({"time": "2025-08-24T00:00:00.000000Z", "event": "A", "host": "host1.example.com"})",
+            R"({"time": "2025-08-25T00:00:00.000000Z", "event": "A", "host": "host1.example.com"})",
+        });
+        ReadTopicMessage(outputTopicName, "A-2025-08-24T00:00:00.000000Z-P1-1");
+
+        Sleep(TDuration::Seconds(2));
+        auto readDisposition = TInstant::Now();
+
+        // Write failure message for key B
+        WriteTopicMessage(inputTopicName, R"({"time": "2025-08-24T00:00:00.000000Z", "event": "B", "host": "host2.example.com"})");
+
+        // Wait script execution retry
+        WaitFor(TDuration::Seconds(10), "wait retry", [&](TString& error) {
+            const auto& results = ExecQuery(R"(
+                SELECT MAX(lease_generation) AS generation FROM `.metadata/script_executions`;
+            )");
+            UNIT_ASSERT_VALUES_EQUAL(results.size(), 1);
+
+            std::optional<i64> generation;
+            CheckScriptResult(results[0], 1, 1, [&](TResultSetParser& result) {
+                generation = result.ColumnParser(0).GetOptionalInt64();
+            });
+
+            if (!generation || *generation < 2) {
+                error = TStringBuilder() << "generation is: " << (generation ? ToString(*generation) : "null");
+                return false;
+            }
+
+            return true;
+        });
+
+        // Resolve query failure
+        UploadObject(sourceBucket, objectPath, R"(
+{"fqdn": "host1.example.com", "payload": "P1"}
+{"fqdn": "host2.example.com", "payload": "P2"             })");
+        Sleep(TDuration::Seconds(2));
+
+        // Check that offset is restored
+        WriteTopicMessage(inputTopicName, R"({"time": "2025-08-25T00:00:00.000000Z", "event": "B", "host": "host2.example.com"})");
+        ReadTopicMessage(outputTopicName, "B-2025-08-24T00:00:00.000000Z-P2-1", readDisposition);
+
+        Sleep(TDuration::Seconds(1));
+        readDisposition = TInstant::Now();
+
+        // Check that HOP state is restored
+        WriteTopicMessage(inputTopicName, R"({"time": "2025-08-26T00:00:00.000000Z", "event": "A", "host": "host1.example.com"})");
+        ReadTopicMessages(outputTopicName, {
+            "A-2025-08-25T00:00:00.000000Z-P1-1",
+            "B-2025-08-25T00:00:00.000000Z-P2-1"
+        }, readDisposition, /* sort */ true);
     }
 }
 

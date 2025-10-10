@@ -1016,6 +1016,8 @@ void TKqpTasksGraph::FillChannelDesc(NDqProto::TChannel& channelDesc, const TCha
     channelDesc.SetSrcTaskId(channel.SrcTask);
     channelDesc.SetDstTaskId(channel.DstTask);
     channelDesc.SetEnableSpilling(enableSpilling);
+    channelDesc.SetCheckpointingMode(channel.CheckpointingMode);
+    channelDesc.SetWatermarksMode(channel.WatermarksMode);
 
     const auto& resultChannelProxies = GetMeta().ResultChannelProxies;
 

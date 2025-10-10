@@ -75,6 +75,8 @@ TString ToVimName(EUnitKind kind) {
             return "yqlQuotedIdentifier";
         case EUnitKind::BindParameterIdentifier:
             return "yqlBindParameterIdentifier";
+        case EUnitKind::OptionIdentifier:
+            return "yqlOptionIdentifier";
         case EUnitKind::TypeIdentifier:
             return "yqlTypeIdentifier";
         case EUnitKind::FunctionIdentifier:
@@ -123,6 +125,8 @@ TVector<TStringBuf> ToVimGroups(EUnitKind kind) {
             return {"Special", "Underlined"};
         case EUnitKind::BindParameterIdentifier:
             return {"Define"};
+        case EUnitKind::OptionIdentifier:
+            return {"Keyword"};
         case EUnitKind::TypeIdentifier:
             return {"Type"};
         case EUnitKind::FunctionIdentifier:

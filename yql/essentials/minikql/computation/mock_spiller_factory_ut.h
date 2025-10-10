@@ -5,8 +5,7 @@
 
 namespace NKikimr::NMiniKQL {
 
-class TMockSpillerFactory : public ISpillerFactory
-{
+class TMockSpillerFactory: public ISpillerFactory {
 public:
     void SetTaskCounters(const TIntrusivePtr<NYql::NDq::TSpillingTaskCounters>& /*spillingTaskCounters*/) override {
     }
@@ -33,4 +32,3 @@ private:
 };
 
 } // namespace NKikimr::NMiniKQL
-

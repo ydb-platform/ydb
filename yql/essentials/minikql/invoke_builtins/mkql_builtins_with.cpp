@@ -5,7 +5,7 @@ namespace NMiniKQL {
 
 namespace {
 
-template<bool Reverse>
+template <bool Reverse>
 NUdf::TUnboxedValuePod StringWith(const NUdf::TUnboxedValuePod full, const NUdf::TUnboxedValuePod part) {
     const std::string_view one = full.AsStringRef();
     const std::string_view two = part.AsStringRef();
@@ -37,11 +37,14 @@ struct TStringWith {
 #endif
 };
 
-template<NUdf::EDataSlot> using TStartsWith = TStringWith<&StringWith<false>>;
-template<NUdf::EDataSlot> using TEndsWith = TStringWith<&StringWith<true>>;
-template<NUdf::EDataSlot> using TContains = TStringWith<&StringContains>;
+template <NUdf::EDataSlot>
+using TStartsWith = TStringWith<&StringWith<false>>;
+template <NUdf::EDataSlot>
+using TEndsWith = TStringWith<&StringWith<true>>;
+template <NUdf::EDataSlot>
+using TContains = TStringWith<&StringContains>;
 
-}
+} // namespace
 
 void RegisterWith(IBuiltinFunctionRegistry& registry) {
     RegisterCompareStrings<TStartsWith, TCompareArgsOpt, false>(registry, "StartsWith");

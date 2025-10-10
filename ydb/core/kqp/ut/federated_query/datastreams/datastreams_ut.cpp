@@ -1956,10 +1956,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                 .TableName = ydbTable,
                 .Columns = columns,
                 .DescribeCount = 2,
-                // Now List Split is smart enough to remove duplicated list split requests.
-                // It happens when query contains mutiple equal subqueries. Equal means that
-                // select has the same columns, table and where clause. In this case for all
-                // equal subqueries only one list split request is done.
+                // For stream queries type annotation is executed twice, but
+                // now List Split is done after type annotation optimization.
+                // That is why only single call to List Split is expected.
                 .ListSplitsCount = 1
             });
 
@@ -2062,7 +2061,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                 .TableName = ydbTable,
                 .Columns = columns,
                 .DescribeCount = 2,
-                // Now List Split is smart enough to remove duplicated list split requests.
+                // Now List Split is done after type annotation, that is the
+                // reason why this value equal to 4 not 5
                 .ListSplitsCount = 4,
                 .ValidateListSplitsArgs = false
             });

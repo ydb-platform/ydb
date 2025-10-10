@@ -1,35 +1,94 @@
 #include "yql_generic_list_splits.h"
 
-#include <library/cpp/json/json_reader.h>
-#include <ydb/core/fq/libs/result_formatter/result_formatter.h>
-#include <ydb/library/yql/providers/generic/provider/yql_generic_utils.h>
-#include <yql/essentials/ast/yql_expr.h>
-#include <yql/essentials/ast/yql_type_string.h>
-#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
-#include <yql/essentials/core/type_ann/type_ann_expr.h>
-#include <yql/essentials/core/yql_expr_optimize.h>
-#include <yql/essentials/core/yql_graph_transformer.h>
-#include <yql/essentials/minikql/comp_nodes/mkql_factories.h>
-#include <yql/essentials/minikql/computation/mkql_computation_node.h>
-#include <yql/essentials/minikql/mkql_alloc.h>
-#include <yql/essentials/minikql/mkql_program_builder.h>
-#include <yql/essentials/minikql/mkql_type_ops.h>
+#include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
-#include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
-#include <ydb/library/yql/providers/generic/connector/libcpp/client.h>
-#include <ydb/library/yql/providers/generic/connector/libcpp/error.h>
-#include <ydb/library/yql/providers/generic/expr_nodes/yql_generic_expr_nodes.h>
-#include <yql/essentials/utils/log/log.h>
-#include <ydb/core/external_sources/iceberg_fields.h>
+#include <yql/essentials/minikql/mkql_type_ops.h>
+#include <yql/essentials/minikql/mkql_program_builder.h>
+#include <yql/essentials/minikql/mkql_alloc.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node.h>
+#include <yql/essentials/minikql/comp_nodes/mkql_factories.h>
+#include <yql/essentials/core/yql_graph_transformer.h>
+#include <yql/essentials/core/yql_expr_optimize.h>
+#include <yql/essentials/core/type_ann/type_ann_expr.h>
+#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
+#include <yql/essentials/ast/yql_type_string.h>
+#include <yql/essentials/ast/yql_expr.h>
+#include <ydb/library/yql/providers/generic/provider/yql_generic_utils.h>
 #include <ydb/library/yql/providers/generic/provider/yql_generic_predicate_pushdown.h>
+#include <ydb/library/yql/providers/generic/expr_nodes/yql_generic_expr_nodes.h>
+#include <ydb/library/yql/providers/generic/connector/libcpp/error.h>
+#include <ydb/library/yql/providers/generic/connector/libcpp/client.h>
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
+#include <ydb/core/fq/libs/result_formatter/result_formatter.h>
+#include <ydb/core/external_sources/iceberg_fields.h>
+#include <library/cpp/json/json_reader.h>
 
 namespace NYql {
 
 using namespace NNodes;
 using namespace NKikimr;
 using namespace NKikimr::NMiniKQL;
+
+///
+/// Optimization process contains several transformers in a pipeline which are called
+/// consequently. If a DoTransform returns repeat, e.g. it changes expression, the process
+/// is starting again from the very begining, but with a new input. That is why transformer
+/// can be called multiple times. The purpose of this transformer is to find TGenSourceSettings
+/// nodes which were created during previous transformations and perform ListSplit request.
+/// ListSplit transformer has to work after where clause has been pushed; otherwise
+/// in a ReadSplit request, which ultimately occurs after pushdown, connector could receive
+/// where clause that is differ from ListSplit's.
+///
+/// The order of transformations calls:
+///
+/// 1. TGenericPhysicalOptProposalTransformer::PushFilterToReadTable pushdowns predicate into
+///    a TGenReadTable node.
+///
+/// 2. TKqpConstantFoldingTransformer folds const expression in a pushdown predicate.
+///
+/// 3. TGenericListSplitTransformer performs a ListSplit request on a TGenSourceSettings node.
+///
+class TGenericListSplitTransformer : public TGraphTransformerBase {
+    struct TListSplitRequestData {
+        TSelectKey Key;
+        NConnector::NApi::TSelect Select;
+        TGenericState::TTableAddress TableAddress;
+    };
+
+    struct TListResponse {
+        using TPtr = std::shared_ptr<TListResponse>;
+
+        std::vector<NConnector::NApi::TSplit> Splits;
+        TIssues Issues;
+    };
+
+    using TListResponseMap =
+        std::unordered_map<TSelectKey, TListResponse::TPtr, TSelectKeyHash>;
+
+public:
+    explicit TGenericListSplitTransformer(TGenericState::TPtr state);
+
+public:
+    TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final;
+
+    NThreading::TFuture<void> DoGetAsyncFuture(const TExprNode&) final {
+        return AsyncFuture_;
+    }
+
+    TStatus DoApplyAsyncChanges(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final;
+
+    void Rewind() final;
+
+private:
+    TIssues ListSplitsFromConnector(const TListSplitRequestData& data, std::vector<NThreading::TFuture<void>>& handles);
+
+private:
+    const TGenericState::TPtr State_;
+    TListResponseMap ListResponses_;
+    NThreading::TFuture<void> AsyncFuture_;
+};
 
 TGenericListSplitTransformer::TGenericListSplitTransformer(TGenericState::TPtr state)
     : State_(std::move(state))
@@ -260,7 +319,7 @@ IGraphTransformer::TStatus TGenericListSplitTransformer::DoApplyAsyncChanges(TEx
             return TStatus::Error;
         }
 
-        Y_ENSURE(result->Splits.size() > 0);
+        Y_ENSURE(!result->Splits.empty());
 
         if (auto issue = State_->AttachSplitsToTable(tableAddress, selectKey, result->Splits); issue) {
             ctx.AddError(*issue);
@@ -274,6 +333,10 @@ IGraphTransformer::TStatus TGenericListSplitTransformer::DoApplyAsyncChanges(TEx
 void TGenericListSplitTransformer::Rewind() {
     ListResponses_.clear();
     AsyncFuture_ = {};
+}
+
+THolder<TGraphTransformerBase> CreateGenericListSplitTransformer(TGenericState::TPtr state) {
+    return MakeHolder<TGenericListSplitTransformer>(std::move(state));
 }
 
 } // NYql

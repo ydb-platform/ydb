@@ -28,7 +28,7 @@ namespace NYql {
     using namespace NKikimr;
     using namespace NKikimr::NMiniKQL;
 
-    class [[deprecated("Now this transformer is represented by two transformers, it will be removed in a next version")]] TGenericLoadTableMetadataTransformer: public TGraphTransformerBase {
+    class [[deprecated("Now this transformer is represented by two transformers, it will be removed in the next version")]] TGenericLoadTableMetadataTransformer: public TGraphTransformerBase {
         struct TTableDescription {
             using TPtr = std::shared_ptr<TTableDescription>;
 
@@ -636,7 +636,7 @@ namespace NYql {
     };
 
     THolder<IGraphTransformer> CreateGenericLoadTableMetadataTransformer(TGenericState::TPtr state) {
-        return MakeHolder<TGenericDescribeTableTransformer>(std::move(state));
+        return CreateGenericDescribeTableTransformer(state);
     }
 
 } // namespace NYql

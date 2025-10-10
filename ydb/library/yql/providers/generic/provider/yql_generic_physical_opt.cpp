@@ -2,21 +2,22 @@
 #include "yql_generic_predicate_pushdown.h"
 #include "yql_generic_list_splits.h"
 
-#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
-#include <yql/essentials/core/yql_opt_utils.h>
-#include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
-#include <yql/essentials/providers/common/provider/yql_data_provider_impl.h>
+#include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/providers/common/transform/yql_optimize.h>
+#include <yql/essentials/providers/common/provider/yql_provider.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
-#include <ydb/library/yql/providers/common/pushdown/collection.h>
-#include <ydb/library/yql/providers/common/pushdown/physical_opt.h>
-#include <ydb/library/yql/providers/common/pushdown/predicate_node.h>
-#include <yql/essentials/providers/common/transform/yql_optimize.h>
+#include <yql/essentials/providers/common/provider/yql_data_provider_impl.h>
+#include <yql/essentials/core/yql_opt_utils.h>
+#include <yql/essentials/core/services/yql_transform_pipeline.h>
+#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <ydb/library/yql/providers/generic/expr_nodes/yql_generic_expr_nodes.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
-#include <yql/essentials/utils/log/log.h>
-#include <yql/essentials/providers/common/provider/yql_provider.h>
-#include <yql/essentials/core/services/yql_transform_pipeline.h>
+#include <ydb/library/yql/providers/common/pushdown/predicate_node.h>
+#include <ydb/library/yql/providers/common/pushdown/settings.h>
+#include <ydb/library/yql/providers/common/pushdown/physical_opt.h>
+#include <ydb/library/yql/providers/common/pushdown/collection.h>
+#include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
 
 namespace NYql {
 
@@ -216,13 +217,15 @@ namespace NYql {
         public:
             explicit TGenericPhysicalOptProposalWithListTransformer(TGenericState::TPtr state)
                 : PhysicalOptTransformer_(std::make_unique<TGenericPhysicalOptProposalTransformer>(state))
-                , ListTransformer_(std::make_unique<TGenericListSplitTransformer>(state))
+                , ListTransformer_(CreateGenericListSplitTransformer(state))
                 , AllowAsync_(false)
             { }
 
         public:
             TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
                 auto resultStatus = PhysicalOptTransformer_->DoTransform(input, output, ctx);
+
+                Y_ENSURE(resultStatus != TStatus::Async);
 
                 if (resultStatus != TStatus::Ok) {
                     return resultStatus;
@@ -256,7 +259,7 @@ namespace NYql {
 
         private:
             const std::unique_ptr<TGenericPhysicalOptProposalTransformer> PhysicalOptTransformer_;
-            const std::unique_ptr<TGenericListSplitTransformer> ListTransformer_;
+            const THolder<TGraphTransformerBase> ListTransformer_;
             bool AllowAsync_;
         };
     } // namespace

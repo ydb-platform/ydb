@@ -1,33 +1,77 @@
-#include "yql_generic_provider_impl.h"
 #include "yql_generic_describe_table.h"
 
-#include <library/cpp/json/json_reader.h>
-#include <ydb/core/fq/libs/result_formatter/result_formatter.h>
-#include <yql/essentials/ast/yql_expr.h>
-#include <yql/essentials/ast/yql_type_string.h>
-#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
-#include <yql/essentials/core/type_ann/type_ann_expr.h>
-#include <yql/essentials/core/yql_expr_optimize.h>
-#include <yql/essentials/core/yql_graph_transformer.h>
-#include <yql/essentials/minikql/comp_nodes/mkql_factories.h>
-#include <yql/essentials/minikql/computation/mkql_computation_node.h>
-#include <yql/essentials/minikql/mkql_alloc.h>
-#include <yql/essentials/minikql/mkql_program_builder.h>
-#include <yql/essentials/minikql/mkql_type_ops.h>
+#include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
-#include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
-#include <ydb/library/yql/providers/generic/connector/libcpp/client.h>
-#include <ydb/library/yql/providers/generic/connector/libcpp/error.h>
+#include <yql/essentials/minikql/mkql_type_ops.h>
+#include <yql/essentials/minikql/mkql_program_builder.h>
+#include <yql/essentials/minikql/mkql_alloc.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node.h>
+#include <yql/essentials/minikql/comp_nodes/mkql_factories.h>
+#include <yql/essentials/core/yql_graph_transformer.h>
+#include <yql/essentials/core/yql_expr_optimize.h>
+#include <yql/essentials/core/type_ann/type_ann_expr.h>
+#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
+#include <yql/essentials/ast/yql_type_string.h>
+#include <yql/essentials/ast/yql_expr.h>
 #include <ydb/library/yql/providers/generic/expr_nodes/yql_generic_expr_nodes.h>
-#include <yql/essentials/utils/log/log.h>
+#include <ydb/library/yql/providers/generic/connector/libcpp/error.h>
+#include <ydb/library/yql/providers/generic/connector/libcpp/client.h>
+#include <ydb/core/fq/libs/result_formatter/result_formatter.h>
 #include <ydb/core/external_sources/iceberg_fields.h>
+#include <library/cpp/json/json_reader.h>
 
 namespace NYql {
 
 using namespace NNodes;
 using namespace NKikimr;
 using namespace NKikimr::NMiniKQL;
+
+class TGenericDescribeTableTransformer : public TGraphTransformerBase {
+    struct TTableDescription {
+        using TPtr = std::shared_ptr<TTableDescription>;
+
+        NYql::TGenericDataSourceInstance DataSourceInstance;
+        std::optional<NConnector::NApi::TSchema> Schema;
+        // Issues that could occur at any phase of network interaction with Connector
+        TIssues Issues;
+    };
+
+    using TTableDescriptionMap =
+        std::unordered_map<TGenericState::TTableAddress, TTableDescription::TPtr, THash<TGenericState::TTableAddress>>;
+
+public:
+    explicit TGenericDescribeTableTransformer(TGenericState::TPtr state);
+
+public:
+    TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final;
+
+    NThreading::TFuture<void> DoGetAsyncFuture(const TExprNode&) final {
+        return AsyncFuture_;
+    }
+
+    TStatus DoApplyAsyncChanges(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final;
+
+    void Rewind() final;
+
+private:
+    TIssues DescribeTableFromConnector(const TGenericState::TTableAddress& tableAddress,
+                                       std::vector<NThreading::TFuture<void>>& handles);
+
+    TIssues FillDescribeTableRequest(NConnector::NApi::TDescribeTableRequest& request,
+                                    const TGenericClusterConfig& clusterConfig, const TString& tablePath);
+
+    void FillCredentials(NConnector::NApi::TDescribeTableRequest& request,
+                        const TGenericClusterConfig& clusterConfig);
+
+    void FillTypeMappingSettings(NConnector::NApi::TDescribeTableRequest& request);
+
+private:
+    const TGenericState::TPtr State_;
+    TTableDescriptionMap TableDescriptions_;
+    NThreading::TFuture<void> AsyncFuture_;
+};
 
 TGenericDescribeTableTransformer::TGenericDescribeTableTransformer(TGenericState::TPtr state)
     : State_(std::move(state))
@@ -565,5 +609,8 @@ void TGenericDescribeTableTransformer::Rewind() {
     AsyncFuture_ = {};
 }
 
+THolder<IGraphTransformer> CreateGenericDescribeTableTransformer(TGenericState::TPtr state) {
+    return MakeHolder<TGenericDescribeTableTransformer>(std::move(state));
+}
 
 } // NYql

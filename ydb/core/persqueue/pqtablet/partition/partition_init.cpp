@@ -673,7 +673,12 @@ void TInitDataRangeStep::FillBlobsMetaData(const NKikimrClient::TKeyValueRespons
             }
             head.PartNo = 0;
         } else {
-            PQ_INIT_ENSURE(endOffset <= k.GetOffset())("endOffset", endOffset)("key", pair.GetKey());
+            Y_ABORT_UNLESS(endOffset <= k.GetOffset(), "%s",
+                           (TStringBuilder() <<
+                            "endOffset=" << endOffset <<
+                            ", key=" << pair.GetKey()
+                           ).data());
+            //PQ_INIT_ENSURE(endOffset <= k.GetOffset())("endOffset", endOffset)("key", pair.GetKey());
             if (endOffset < k.GetOffset()) {
                 gapOffsets.push_back(std::make_pair(endOffset, k.GetOffset()));
                 gapSize += k.GetOffset() - endOffset;

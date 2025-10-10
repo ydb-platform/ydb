@@ -165,11 +165,51 @@ Y_UNIT_TEST(UpsertRowCovered) {
 }
 
 Y_UNIT_TEST(InsertRow) {
-    // TODO: inserts are not implemented
+    auto kikimr = Kikimr();
+    auto db = kikimr.GetQueryClient();
+    
+    CreateTexts(db);
+    AddIndex(db);
+    
+    // Insert a single row
+    TString query = R"sql(
+        INSERT INTO `/Root/Texts` (Key, Text, Data) VALUES
+            (250, "Dogs are big animals.", "new dogs data")
+    )sql";
+    auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+    auto index = ReadIndex(db);
+    CompareYson(R"([
+        [[250u];"animals"];
+        [[250u];"are"];
+        [[250u];"big"];
+        [[250u];"dogs"]
+    ])", NYdb::FormatResultSetYson(index));
 }
 
 Y_UNIT_TEST(InsertRowCovered) {
-    // TODO: inserts are not implemented
+    auto kikimr = Kikimr();
+    auto db = kikimr.GetQueryClient();
+    
+    CreateTexts(db);
+    AddIndexCovered(db);
+    
+    // Insert a single row
+    TString query = R"sql(
+        INSERT INTO `/Root/Texts` (Key, Text, Data) VALUES
+            (250, "Dogs are big animals.", "new dogs data")
+    )sql";
+    auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+    auto index = ReadIndex(db);
+    CompareYson(R"([
+        [["new dogs data"];[250u];"animals"];
+        [["new dogs data"];[250u];"are"];
+        [["new dogs data"];[250u];"big"];
+        [["new dogs data"];[250u];"dogs"]
+    ])", NYdb::FormatResultSetYson(index));
 }
 
 Y_UNIT_TEST(DeleteRow) {

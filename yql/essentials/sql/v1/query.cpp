@@ -3543,7 +3543,7 @@ public:
             for (ui32 i = 0; i < Values_.size(); ++i) {
                 Node_ = L(Node_, Values_[i].Build());
             }
-        } else if (Name_ == TStringBuf("AddFileByUrl") || Name_ == TStringBuf("SetFileOption") || Name_ == TStringBuf("AddFolderByUrl") || Name_ == TStringBuf("ImportUdfs") || Name_ == TStringBuf("SetPackageVersion")) {
+        } else if (Name_ == TStringBuf("AddFileByUrl") || Name_ == TStringBuf("SetFileOption") || Name_ == TStringBuf("AddFolderByUrl") || Name_ == TStringBuf("ImportUdfs") || Name_ == TStringBuf("SetPackageVersion") || Name_ == TStringBuf("Layer")) {
             Node_ = L(Node_, BuildQuotedAtom(Pos_, Name_));
             for (ui32 i = 0; i < Values_.size(); ++i) {
                 Node_ = L(Node_, Values_[i].Build());

@@ -128,7 +128,7 @@ TRuntimeNode TDqProgramBuilder::DqHashAggregate(TRuntimeNode flow, const bool sp
 TRuntimeNode TDqProgramBuilder::DqBlockHashJoin(TRuntimeNode leftStream, TRuntimeNode rightStream, EJoinKind joinKind,
     const TArrayRef<const ui32>& leftKeyColumns, const TArrayRef<const ui32>& rightKeyColumns, TType* returnType) {
 
-    MKQL_ENSURE(joinKind == EJoinKind::Inner, "Unsupported join kind");
+    MKQL_ENSURE(joinKind != EJoinKind::Cross, "Unsupported join kind");
     MKQL_ENSURE(leftKeyColumns.size() == rightKeyColumns.size(), "Key column count mismatch");
     MKQL_ENSURE(!leftKeyColumns.empty(), "At least one key column must be specified");
 

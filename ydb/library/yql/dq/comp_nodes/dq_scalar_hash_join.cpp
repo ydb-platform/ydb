@@ -30,7 +30,7 @@ class TScalarRowSource : public NNonCopyable::TMoveOnly {
         return Finished_;
     }
 
-    int Size() const {
+    int UserDataSize() const {
         return ConsumeBuff_.size();
     }
 

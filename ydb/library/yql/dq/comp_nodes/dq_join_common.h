@@ -19,75 +19,20 @@ struct TJoinMetadata {
     TKeyTypes KeyTypes;
 };
 
-class TBlockRowSource {
-  public:
-    TBlockRowSource(TComputationContext& ctx, IComputationNode* stream, const std::vector<TType*>& types)
-        : Stream_(stream)
-        , Values_(Stream_->GetValue(ctx))
-        , Buff_(types.size() + 1)
-    {
-        TTypeInfoHelper typeInfoHelper;
-        for (int index = 0; index < std::ssize(types); ++index) {
-            InputReaders[index] = NYql::NUdf::MakeBlockReader(typeInfoHelper, types[index]);
-            InputItemConverters[index] =
-                MakeBlockItemConverter(typeInfoHelper, types[index], ctx.Builder->GetPgBuilder());
-        }
-    }
-
-    bool Finished() const {
-        return Finished_;
-    }
-
-    int Size() const {
-        return ConsumeBuff_.size();
-    }
-
-    NYql::NUdf::EFetchStatus ForEachRow(TComputationContext& ctx, auto consume) {
-        auto res = Values_.WideFetch(Buff_.data(), Buff_.size());
-        if (res != NYql::NUdf::EFetchStatus::Ok) {
-            if (res == NYql::NUdf::EFetchStatus::Finish) {
-                Finished_ = true;
-            }
-            return res;
-        }
-        const int cols = std::ssize(Buff_) - 1;
-
-        for (int index = 0; index < cols; ++index) {
-            Blocks_[index] = &TArrowBlock::From(Buff_[index]).GetDatum();
-        }
-
-        const int rows = TArrowBlock::From(Buff_.back()).GetDatum().scalar_as<arrow::UInt64Scalar>().value;
-
-        for (int rowIndex = 0; rowIndex < rows; ++rowIndex) {
-            for (int colIndex = 0; colIndex < cols; ++colIndex) {
-                ConsumeBuff_[colIndex] = InputItemConverters[colIndex]->MakeValue(
-                    InputReaders[colIndex]->GetItem(*Blocks_[colIndex]->array(), rowIndex), ctx.HolderFactory);
-            }
-            consume(ConsumeBuff_.data());
-        }
-        return NYql::NUdf::EFetchStatus::Ok;
-    }
-
-  private:
-    bool Finished_ = false;
-    IComputationNode* Stream_;
-    NYql::NUdf::TUnboxedValue Values_;
-    TUnboxedValueVector Buff_;
-    TUnboxedValueVector ConsumeBuff_{Buff_.size() - 1};
-    std::vector<const arrow::Datum*> Blocks_{Buff_.size() - 1};
-    std::vector<std::unique_ptr<IBlockReader>> InputReaders{Buff_.size() - 1};
-    std::vector<std::unique_ptr<IBlockItemConverter>> InputItemConverters{Buff_.size() - 1};
-};
-
 template <EJoinKind Kind> struct TJoinKindTag {
     static constexpr EJoinKind Kind_ = Kind;
 };
 
 using TTypedJoinKind =
     std::variant<TJoinKindTag<EJoinKind::Inner>, TJoinKindTag<EJoinKind::Full>, TJoinKindTag<EJoinKind::Left>,
-                 TJoinKindTag<EJoinKind::Right>, TJoinKindTag<EJoinKind::LeftOnly>, TJoinKindTag<EJoinKind::RightOnly>,
-                 TJoinKindTag<EJoinKind::LeftSemi>, TJoinKindTag<EJoinKind::RightSemi>,
-                 TJoinKindTag<EJoinKind::Exclusion>, TJoinKindTag<EJoinKind::Cross>, TJoinKindTag<EJoinKind::SemiSide>,
+                 TJoinKindTag<EJoinKind::Right>,
+                 TJoinKindTag<EJoinKind::LeftOnly>,
+                 TJoinKindTag<EJoinKind::RightOnly>,
+                 TJoinKindTag<EJoinKind::LeftSemi>,
+                 TJoinKindTag<EJoinKind::RightSemi>,
+                 TJoinKindTag<EJoinKind::Exclusion>,
+                 TJoinKindTag<EJoinKind::Cross>,
+                 TJoinKindTag<EJoinKind::SemiSide>,
                  TJoinKindTag<EJoinKind::SemiMask>>;
 
 TTypedJoinKind TypifyJoinKind(EJoinKind kind);
@@ -123,21 +68,6 @@ constexpr bool IsInner(EJoinKind kind) {
 template <typename Source, EJoinKind Kind> class TJoin : public TComputationValue<TJoin<Source, Kind>> {
     using TBase = TComputationValue<TJoin>;
 
-    // void AppendTuple(NJoinTable::TTuple left, NJoinTable::TTuple right, std::vector<NUdf::TUnboxedValue>& output) {
-    //     MKQL_ENSURE(left || right,"appending invalid tuple");
-    //     auto outIt = std::back_inserter(output);
-    //     if (left) {
-    //         std::copy_n(left,LeftSize(), outIt);
-    //     } else {
-    //         std::copy_n(NullTuples.data(),LeftSize(), outIt);
-    //     }
-    //     if (right) {
-    //         std::copy_n(right,RightSize(), outIt);
-    //     } else {
-    //         std::copy_n(NullTuples.data(),RightSize(), outIt);
-    //     }
-    // }
-
   public:
     TJoin(TMemoryUsageInfo* memInfo, Source probe, Source build, TJoinMetadata meta, NUdf::TLoggerPtr logger,
           TString componentName)
@@ -160,27 +90,16 @@ template <typename Source, EJoinKind Kind> class TJoin : public TComputationValu
     }
 
     int ProbeSize() const {
-        return Meta_.Probe.ColumnTypes.size();
+        return Probe_.UserDataSize();
     }
 
     int BuildSize() const {
-        return Meta_.Build.ColumnTypes.size();
+        return Build_.UserDataSize();
     }
 
     EFetchResult MatchRows(TComputationContext& ctx, auto consume) {
-        // const int outputTupleSize = [&] {
-        //     if (SemiOrOnlyJoin(JoinKind())) {
-        //         if (JoinKind() == EJoinKind::RightOnly || JoinKind() == EJoinKind::RightSemi) {
-        //             return RightSize();
-        //         } else {
-        //             return LeftSize();
-        //         }
-        //     } else {
-        //         return RightSize() + LeftSize();
-        //     }
-        // }();
         if (!Build_.Finished()) {
-            auto res = Build_.ForEachRow(ctx, [&](auto tuple) { Table_.Add({tuple, tuple + Build_.Size()}); });
+            auto res = Build_.ForEachRow(ctx, [&](auto tuple) { Table_.Add({tuple, tuple + Build_.UserDataSize()}); });
             switch (res) {
             case NYql::NUdf::EFetchStatus::Finish: {
                 Table_.Build();

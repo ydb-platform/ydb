@@ -28,14 +28,14 @@ TVector<TString> GenerateStringKeyColumn(i32 size, i32 seed) {
 }
 
 template <typename KeyType>
-NKikimr::NMiniKQL::TInnerJoinDescription PrepareDescription(NKikimr::NMiniKQL::TDqSetup<false>* setup,
+NKikimr::NMiniKQL::TJoinDescription PrepareDescription(NKikimr::NMiniKQL::TDqSetup<false>* setup,
                                                             TVector<KeyType> leftKeys, TVector<KeyType> rightKeys) {
     const int leftSize = std::ssize(leftKeys);
     const int rightSize = std::ssize(rightKeys);
-    NKikimr::NMiniKQL::TInnerJoinDescription descr;
+    NKikimr::NMiniKQL::TJoinDescription descr;
     descr.Setup = setup;
     std::tie(descr.LeftSource.ColumnTypes, descr.LeftSource.ValuesList) = ConvertVectorsToRuntimeTypesAndValue(
-        *setup, std::move(leftKeys), TVector<ui64>(leftSize, 111), TVector<TString>(leftSize, "meow"));
+        *setup, std::move(leftKeys), TVector<ui64>(leftSize, 111));
     std::tie(descr.RightSource.ColumnTypes, descr.RightSource.ValuesList) =
         ConvertVectorsToRuntimeTypesAndValue(*setup, std::move(rightKeys), TVector<TString>(rightSize, "woo"));
     return descr;
@@ -64,7 +64,7 @@ TVector<TBenchmarkCaseResult> NKikimr::NMiniKQL::RunJoinsBench(const TBenchmarkS
         for (auto keyPreset : params.Presets) {
             for (auto sizes : keyPreset.Cases) {
                 NKikimr::NMiniKQL::TDqSetup<false> setup{NKikimr::NMiniKQL::GetPerfTestFactory()};
-                TInnerJoinDescription descr = [&] {
+                TJoinDescription descr = [&] {
                     using enum ETestedJoinKeyType;
                     switch (keyType) {
                     case kString: {
@@ -87,7 +87,7 @@ TVector<TBenchmarkCaseResult> NKikimr::NMiniKQL::RunJoinsBench(const TBenchmarkS
                     result.CaseName = CaseName(algo, keyType, keyPreset, sizes);
 
                     THolder<NKikimr::NMiniKQL::IComputationGraph> wideStreamGraph =
-                        ConstructInnerJoinGraphStream(algo, descr);
+                        ConstructJoinGraphStream(EJoinKind::Inner, algo, descr);
                     NYql::NUdf::TUnboxedValue wideStream = wideStreamGraph->GetValue();
                     std::vector<NYql::NUdf::TUnboxedValue> fetchBuff;
                     ui32 cols = NKikimr::NMiniKQL::ResultColumnCount(algo, descr);

@@ -1,11 +1,13 @@
 #include "utils.h"
 
+#include <ydb/library/yql/dq/comp_nodes/type_utils.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/public/udf/arrow/args_dechunker.h>
 #include <yql/essentials/public/udf/arrow/block_builder.h>
 #include <yql/essentials/minikql/computation/mkql_block_impl.h>
-
+#include <yql/essentials/minikql/computation/mkql_block_reader.h>
+#include <ranges>
 namespace NKikimr::NMiniKQL {
 namespace {
 bool IsOptionalOrNull(const TType* type) {
@@ -95,6 +97,10 @@ TType* MakeBlockTupleType(TProgramBuilder& pgmBuilder, TType* tupleType, bool sc
     return pgmBuilder.NewTupleType(blockItemTypes);
 }
 
+TType* LastScalarIndexBlock(TProgramBuilder& pb) {
+    return pb.NewBlockType(pb.NewDataType(NUdf::TDataType<ui64>::Id), TBlockType::EShape::Scalar);
+}
+
 TType* MakeJoinType(TProgramBuilder& pgmBuilder, EJoinKind joinKind,
     TType* leftStreamType, const TVector<ui32>& leftKeyDrops,
     TType* rightListType, const TVector<ui32>& rightKeyDrops
@@ -131,7 +137,7 @@ TType* MakeJoinType(TProgramBuilder& pgmBuilder, EJoinKind joinKind,
         }
     }
 
-    joinReturnItems.push_back(pgmBuilder.NewBlockType(pgmBuilder.NewDataType(NUdf::TDataType<ui64>::Id), TBlockType::EShape::Scalar));
+    joinReturnItems.push_back(LastScalarIndexBlock(pgmBuilder));
     return pgmBuilder.NewStreamType(pgmBuilder.NewMultiType(joinReturnItems));
 }
 
@@ -213,18 +219,27 @@ TRuntimeNode FromWideStreamToTupleStream(TProgramBuilder& pgmBuilder, TRuntimeNo
                              [&](TRuntimeNode::TList items) -> TRuntimeNode { return pgmBuilder.NewTuple(items); }));
 }
 
+NYql::NUdf::TUnboxedValue MakeTupleFromUVRange(const THolderFactory& factory, auto UVRange) {
+    NYql::NUdf::TUnboxedValue tuple;
+    NUdf::TUnboxedValue *items = nullptr;
+    tuple = factory.CreateDirectArrayHolder(std::ranges::distance(UVRange), items);
+    std::ranges::copy(UVRange, items);
+    return tuple;
+}
 
-TVector<NUdf::TUnboxedValue> ConvertStreamToVector(IComputationGraph& stream) {
-    NUdf::TUnboxedValue v;
+TVector<NUdf::TUnboxedValue> ConvertWideStreamToTupleVector(IComputationGraph& stream, size_t tupleSize) {
+    std::vector<NUdf::TUnboxedValue> buff{tupleSize};
     TVector<NUdf::TUnboxedValue> vec;
+    NYql::NUdf::TUnboxedValue tuple;
     auto it = stream.GetValue();
     while (true) {
         NYql::NUdf::EFetchStatus status;
-        status = it.Fetch(v);
+        status = it.WideFetch(buff.data(), tupleSize);
         switch (status) {
 
         case NYql::NUdf::EFetchStatus::Ok: {
-            vec.push_back(v);
+            const THolderFactory& factory = stream.GetContext().HolderFactory;
+            vec.push_back(MakeTupleFromUVRange(factory,buff));
             break;
         }
         case NYql::NUdf::EFetchStatus::Finish: {
@@ -260,6 +275,45 @@ void CompareVectorsIgnoringOrder(const TType* type, TVector<NYql::NUdf::TUnboxed
         UNIT_ASSERT(valueEqual(gotItems[i], expectedItems[i]));
     }
 }
+
+TVector<NUdf::TUnboxedValue> FlattenBlocks( const TComputationContext& ctx,TVector<NUdf::TUnboxedValue> blocks, const TTupleType* outputType) {
+    TVector<NUdf::TUnboxedValue> flattened;
+    TVector<NYql::NUdf::TUnboxedValue> tupleBuff;
+    NYql::NUdf::TUnboxedValue tuple;
+    TTypeInfoHelper typeInfoHelper;
+    size_t resultTupleSize = outputType->GetElementsCount();
+    std::vector<NYql::NUdf::TUnboxedValue> UVBlocks{resultTupleSize};
+    std::vector<const arrow::Datum*> Blocks{resultTupleSize};
+    std::vector<std::unique_ptr<IBlockReader>> InputReaders{resultTupleSize};
+    std::vector<std::unique_ptr<IBlockItemConverter>> InputItemConverters{resultTupleSize};
+    for (size_t index = 0; index < resultTupleSize; ++index) {
+        auto* thisType = outputType->GetElementType(index);
+        InputReaders[index] = NYql::NUdf::MakeBlockReader(typeInfoHelper, thisType);
+        InputItemConverters[index] =
+            MakeBlockItemConverter(typeInfoHelper, thisType, ctx.Builder->GetPgBuilder());
+    }
+
+
+    for(NYql::NUdf::TUnboxedValue block: blocks) {
+        auto uv = block.GetElement(resultTupleSize);
+        int rows = ArrowScalarAsInt(TArrowBlock::From(uv)); 
+        for(size_t colIdx = 0; colIdx < resultTupleSize; ++colIdx) {
+            UVBlocks[colIdx] = block.GetElement(colIdx);
+            Blocks[colIdx] = &TArrowBlock::From(UVBlocks[colIdx]).GetDatum();
+        }
+        for (int rowIdx = 0; rowIdx < rows; ++rowIdx) {
+            flattened.push_back(MakeTupleFromUVRange(
+                ctx.HolderFactory
+                , std::views::iota(0u,resultTupleSize) | 
+                std::views::transform([&](size_t colIndex){
+                    return InputItemConverters[colIndex]->MakeValue(
+                        InputReaders[colIndex]->GetItem(*Blocks[colIndex]->array(), rowIdx), ctx.HolderFactory);
+            })
+        ));
+        }
+    }
+    return flattened;
+}
 } // namespace
 
 void CompareListsIgnoringOrder(const TType* type, const NUdf::TUnboxedValue& expected,
@@ -267,9 +321,19 @@ void CompareListsIgnoringOrder(const TType* type, const NUdf::TUnboxedValue& exp
     CompareVectorsIgnoringOrder(type, ConvertListToVector(expected), ConvertListToVector(gotList));
 }
 
-void CompareListAndStreamIgnoringOrder(const TType* type, const NUdf::TUnboxedValue& expected,
+void CompareListAndStreamIgnoringOrder(const TypeAndValue& expected,
                                        IComputationGraph& gotStream) {
-    CompareVectorsIgnoringOrder(type, ConvertListToVector(expected), ConvertStreamToVector(gotStream));
+    auto listValueType = AS_TYPE(TTupleType, AS_TYPE(TListType, expected.Type)->GetItemType());
+    CompareVectorsIgnoringOrder(expected.Type, ConvertListToVector(expected.Value), ConvertWideStreamToTupleVector(gotStream, listValueType->GetElementsCount()));
+}
+
+void CompareListAndBlockStreamIgnoringOrder(const TypeAndValue& expected,
+                                       IComputationGraph& gotBlockStream) {
+    auto listValueType = AS_TYPE(TTupleType, AS_TYPE(TListType, expected.Type)->GetItemType());
+    auto blockList = ConvertWideStreamToTupleVector(gotBlockStream, listValueType->GetElementsCount() + 1);
+    auto flattenedList = FlattenBlocks(gotBlockStream.GetContext(), blockList, listValueType);
+    
+    CompareVectorsIgnoringOrder(expected.Type, ConvertListToVector(expected.Value), flattenedList);
 }
 
 } // namespace NKikimr::NMiniKQL

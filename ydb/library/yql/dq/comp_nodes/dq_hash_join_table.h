@@ -1,5 +1,6 @@
 #pragma once
 #include "type_utils.h"
+#include <util/string/printf.h>
 #include <yql/essentials/minikql/comp_nodes/mkql_rh_hash.h>
 
 namespace NKikimr::NMiniKQL::NJoinTable {
@@ -27,7 +28,7 @@ class TStdJoinTable {
 
     void Add(TSizedTuple tuple) {
         MKQL_ENSURE(BuiltTable.empty(), "JoinTable is built already");
-        MKQL_ENSURE(std::ssize(tuple) == TupleSize, "tuple size promise vs actual mismatch");
+        MKQL_ENSURE(std::ssize(tuple) == TupleSize, Sprintf("tuple size promise(%i) vs actual(%i) mismatch", TupleSize, std::ssize(tuple)));
         for (int idx = 0; idx < TupleSize; ++idx) {
             Tuples.push_back(tuple[idx]);
         }

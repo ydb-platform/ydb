@@ -39,12 +39,24 @@ TRuntimeNode FromWideStreamToTupleStream(TProgramBuilder& pgmBuilder, TRuntimeNo
 
 TVector<NUdf::TUnboxedValue> ConvertListToVector(const NUdf::TUnboxedValue& list); 
 
-TVector<NUdf::TUnboxedValue> ConvertStreamToVector(IComputationGraph& tupleStream);
+TVector<NUdf::TUnboxedValue> ConvertWideStreamToTupleVector(IComputationGraph& wideStream, size_t tupleSize);
+
+TType* LastScalarIndexBlock(TProgramBuilder& pb);
+
+struct TypeAndValue{
+    TType* Type;
+    NUdf::TUnboxedValue Value;    
+};
 
 void CompareListsIgnoringOrder(const TType* type, const NUdf::TUnboxedValue& expected,
                                const NUdf::TUnboxedValue& gotList);
-void CompareListAndStreamIgnoringOrder(const TType* type, const NUdf::TUnboxedValue& expected,
+void CompareListAndStreamIgnoringOrder(const TypeAndValue& expected,
                                        IComputationGraph& gotStream);
+void CompareListAndBlockStreamIgnoringOrder(const TypeAndValue& expected,
+                                       IComputationGraph& gitBlockStream);
+
+
+
 template<typename Type>
 const TVector<const TRuntimeNode> BuildListNodes(TProgramBuilder& pb,
     const TVector<Type>& vector
@@ -100,7 +112,7 @@ const TVector<const TRuntimeNode> BuildListNodes(TProgramBuilder& pb,
     return lists;
 }
 template<typename... TVectors>
-const std::pair<TType*, NUdf::TUnboxedValue> ConvertVectorsToTuples(
+TypeAndValue ConvertVectorsToTuples(
     TDqSetup<false>& setup, TVectors... vectors
 ) {
     TProgramBuilder& pb = *setup.PgmBuilder;
@@ -108,7 +120,7 @@ const std::pair<TType*, NUdf::TUnboxedValue> ConvertVectorsToTuples(
     const auto tuplesNode = pb.Zip(lists);
     const auto tuplesNodeType = tuplesNode.GetStaticType();
     const auto tuples = setup.BuildGraph(tuplesNode)->GetValue();
-    return std::make_pair(tuplesNodeType, tuples);
+    return {tuplesNodeType, tuples};
 }
 
 
@@ -117,7 +129,7 @@ std::pair<TArrayRef<TType* const>, NUdf::TUnboxedValue> ConvertVectorsToRuntimeT
     TDqSetup<false>& setup, TVectors... vectors
 ) {
     auto p = ConvertVectorsToTuples(setup, vectors...);
-    return std::make_pair(AS_TYPE(TTupleType, AS_TYPE(TListType, p.first)->GetItemType())->GetElements(), p.second);
+    return std::make_pair(AS_TYPE(TTupleType, AS_TYPE(TListType, p.Type)->GetItemType())->GetElements(), p.Value);
 }
 
 

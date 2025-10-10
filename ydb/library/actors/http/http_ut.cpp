@@ -630,7 +630,7 @@ CRA/5XcX13GJwHHj6LCoc3sL7mt8qV9HKY2AOZ88mpObzISZxgPpdKCfjsrdm63V
 
     void SimulateSleep(NActors::TTestActorRuntimeBase& actorSystem, TDuration duration) {
         auto sleepEdgeActor = actorSystem.AllocateEdgeActor();
-        actorSystem.Schedule(new IEventHandle(sleepEdgeActor, sleepEdgeActor, new NActors::TEvents::TEvWakeup()), duration);
+        actorSystem.Schedule(new NActors::IEventHandle(sleepEdgeActor, sleepEdgeActor, new NActors::TEvents::TEvWakeup()), duration);
         actorSystem.GrabEdgeEventRethrow<NActors::TEvents::TEvWakeup>(sleepEdgeActor);
     }
 

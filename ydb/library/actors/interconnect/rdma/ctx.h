@@ -20,6 +20,10 @@ namespace NLinkMgr {
     class TRdmaLinkManager;
 }
 
+// Open ibdrvlib. Throw exception in case of absent library, or other dlopen errors.
+// Is used to check the library is present.
+void IbvDlOpen();
+
 struct TDeviceCtx : public NNonCopyable::TNonCopyable {
     TDeviceCtx(ibv_context* ctx, ibv_pd* pd);
 

@@ -54,6 +54,13 @@ public:
     }
 
     TRdmaLinkManager() {
+        // Make sure libibverbs.so is present
+        try {
+            IbvDlOpen();
+        } catch (std::exception& ex) {
+            Cerr << "Unalbe to load ibverbs library: " << ex.what() << Endl;
+            return;
+        }
         ScanDevices();
     }
 private:

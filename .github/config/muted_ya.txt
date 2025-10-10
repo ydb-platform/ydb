@@ -64,22 +64,6 @@ ydb/core/viewer/tests test.py.test_topic_data_cdc
 ydb/core/viewer/ut Viewer.TabletMerging
 ydb/library/actors/core/ut_fat HeavyActorBenchmark.SendActivateReceiveCSV_10Pairs_LONG
 ydb/library/actors/core/ut_fat unittest.[*/*] chunk
-ydb/library/actors/interconnect/rdma/ut TAllocatorSuite.AllocMemoryManually
-ydb/library/actors/interconnect/rdma/ut TAllocatorSuite/WithAllPools.AllocMemoryWithMemPool/DummyMemPool
-ydb/library/actors/interconnect/rdma/ut TAllocatorSuite/WithAllPools.AllocMemoryWithMemPool/SlotMemPool
-ydb/library/actors/interconnect/rdma/ut TAllocatorSuite/WithAllPools.AllocMemoryWithMemPoolAsync/DummyMemPool
-ydb/library/actors/interconnect/rdma/ut TAllocatorSuite/WithAllPools.AllocMemoryWithMemPoolAsync/SlotMemPool
-ydb/library/actors/interconnect/rdma/ut TAllocatorSuite/WithAllPools.AllocMemoryWithMemPoolAsyncRandomOrderDealloc/SlotMemPool
-ydb/library/actors/interconnect/rdma/ut TAllocatorSuite/WithAllPools.FullChunkAllocationMultiThread/SlotMemPool
-ydb/library/actors/interconnect/rdma/ut TAllocatorSuite/WithAllPools.MemRegRcBuf/DummyMemPool
-ydb/library/actors/interconnect/rdma/ut TAllocatorSuite/WithAllPools.MemRegRcBuf/SlotMemPool
-ydb/library/actors/interconnect/rdma/ut TAllocatorSuite/WithAllPools.MemRegRcBufSubstr/DummyMemPool
-ydb/library/actors/interconnect/rdma/ut TAllocatorSuite/WithAllPools.MemRegRcBufSubstr/SlotMemPool
-ydb/library/actors/interconnect/rdma/ut TAllocatorSuite/WithAllPools.MemRegRope/DummyMemPool
-ydb/library/actors/interconnect/rdma/ut TAllocatorSuite/WithAllPools.MemRegRope/SlotMemPool
-ydb/library/actors/interconnect/rdma/ut TAllocatorSuite/WithAllPools.PageAlligned/SlotMemPool
-ydb/library/actors/interconnect/rdma/ut TAllocatorSuite/WithAllPools.SmallAllocationMultiThread/SlotMemPool
-ydb/library/actors/interconnect/rdma/ut TAllocatorSuite/WithAllPools.ThreadsDestroy/SlotMemPool
 ydb/library/actors/interconnect/ut_fat InterconnectUnstableConnection.InterconnectTestWithProxyTlsReestablishWithXdc
 ydb/library/actors/interconnect/ut_fat InterconnectZcLocalOp.ZcDisabledAfterHiddenCopy
 ydb/library/actors/interconnect/ut_fat InterconnectZcLocalOp.ZcIsDisabledByDefault

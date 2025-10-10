@@ -364,7 +364,7 @@ TStateStorage::TStateStorage(
 }
 
 TFuture<TIssues> TStateStorage::Init() {
-    // TIssues issues;
+    TIssues issues;
 
     // // TODO: list at first?
     // if (YdbConnection->DB != YdbConnection->TablePathPrefix) {
@@ -386,31 +386,30 @@ TFuture<TIssues> TStateStorage::Init() {
     
     // }
 
-    // auto stateDesc = TTableBuilder()
-    //     .AddNullableColumn("graph_id", EPrimitiveType::String)
-    //     .AddNullableColumn("task_id", EPrimitiveType::Uint64)
-    //     .AddNullableColumn("coordinator_generation", EPrimitiveType::Uint64)
-    //     .AddNullableColumn("seq_no", EPrimitiveType::Uint64)
-    //     .AddNullableColumn("blob", EPrimitiveType::String)
-    //     .AddNullableColumn("blob_seq_num", EPrimitiveType::Uint64)
-    //     .AddNullableColumn("type", EPrimitiveType::Uint8)
-    //     .SetPrimaryKeyColumns({"graph_id", "task_id", "coordinator_generation", "seq_no", "blob_seq_num"})
-    //     .Build();
+    auto stateDesc = TTableBuilder()
+        .AddNullableColumn("graph_id", EPrimitiveType::String)
+        .AddNullableColumn("task_id", EPrimitiveType::Uint64)
+        .AddNullableColumn("coordinator_generation", EPrimitiveType::Uint64)
+        .AddNullableColumn("seq_no", EPrimitiveType::Uint64)
+        .AddNullableColumn("blob", EPrimitiveType::String)
+        .AddNullableColumn("blob_seq_num", EPrimitiveType::Uint64)
+        .AddNullableColumn("type", EPrimitiveType::Uint8)
+        .SetPrimaryKeyColumns({"graph_id", "task_id", "coordinator_generation", "seq_no", "blob_seq_num"})
+        .Build();
 
-    // auto status = CreateTable(YdbConnection, StatesTable, std::move(stateDesc)).GetValueSync();
-    // if (!IsTableCreated(status)) {
-    //     issues = NYdb::NAdapters::ToYqlIssues(status.GetIssues());
+    auto status = CreateTable(YdbConnection, StatesTable, std::move(stateDesc)).GetValueSync();
+    if (!IsTableCreated(status)) {
+        issues = NYdb::NAdapters::ToYqlIssues(status.GetIssues());
 
-    //     TStringStream ss;
-    //     ss << "Failed to create " << StatesTable << " table: " << status.GetStatus();
-    //     if (issues) {
-    //         ss << ", issues: ";
-    //         issues.PrintTo(ss);
-    //     }
-    // }
+        TStringStream ss;
+        ss << "Failed to create " << StatesTable << " table: " << status.GetStatus();
+        if (issues) {
+            ss << ", issues: ";
+            issues.PrintTo(ss);
+        }
+    }
 
-    // return MakeFuture(std::move(issues));
-    return  MakeFuture<TIssues>();
+    return MakeFuture(std::move(issues));
 }
 
 EStateType TStateStorage::DeserializeState(const TContextPtr& context, TContext::TaskInfo& taskInfo) {

@@ -16,6 +16,7 @@
 #include <ydb/core/protos/config.pb.h>
 //#include <ydb/core/fq/libs/ydb/ydb_gateway.h>
 #include <ydb/core/fq/libs/ydb/generation_context.h>
+#include <ydb/core/fq/libs/ydb/ydb_connection.h>
 
 namespace NFq {
 
@@ -134,7 +135,7 @@ NThreading::TFuture<NYql::TIssues> StatusToIssues(
     const NThreading::TFuture<NYdb::TStatus>& future);
 
 NThreading::TFuture<NYdb::TStatus> CreateTable(
-    const TYdbConnectionPtr& ydbConnection,
+    const IYdbConnection::TPtr& ydbConnection,
     const TString& name,
     NYdb::NTable::TTableDescription&& description);
 

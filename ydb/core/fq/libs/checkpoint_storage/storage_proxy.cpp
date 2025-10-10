@@ -164,7 +164,7 @@ void TStorageProxy::Bootstrap() {
     Become(&TStorageProxy::StateFunc);
     
     LOG_STREAMS_STORAGE_SERVICE_INFO("Bootstrap");
-    auto ydbConnectionPtr = CreateLocalYdbConnection("/dc-1/.metadata/checkpoints"); //NewYdbConnection(Config.GetExternalStorage(), CredentialsProviderFactory, Driver);
+    auto ydbConnectionPtr = CreateLocalYdbConnection("dc-1", ".metadata/checkpoints"); //NewYdbConnection(Config.GetExternalStorage(), CredentialsProviderFactory, Driver);
    // auto gateway = MakeIntrusive<YdbSdkTableGateway>(ydbConnectionPtr->TableClient, ydbConnectionPtr->DB, ydbConnectionPtr->TablePathPrefix);
   // auto gateway = MakeIntrusive<YdbLocalTableGateway>(ydbConnectionPtr->DB, /*ydbConnectionPtr->TablePathPrefix*/ "/dc-1/.metadata/checkpoints");
     

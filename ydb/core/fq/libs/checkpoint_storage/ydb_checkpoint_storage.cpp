@@ -55,7 +55,6 @@ using TCheckpointGraphDescriptionContextPtr = TIntrusivePtr<TCheckpointGraphDesc
 
 ////////////////////////////////////////////////////////////////////////////////
 
-
 class TTablesCreator : public NKikimr::NTableCreator::TMultiTableCreator {
     using TBase = NKikimr::NTableCreator::TMultiTableCreator;
 
@@ -801,7 +800,7 @@ TCheckpointStorage::TCheckpointStorage(
 
 TFuture<TIssues> TCheckpointStorage::Init()
 {
-//     TIssues issues;
+    TIssues issues;
 
 //     // TODO: list at first?
 //     if (YdbGateway->GetDb() != YdbGateway->GetTablePathPrefix()) {
@@ -847,9 +846,67 @@ TFuture<TIssues> TCheckpointStorage::Init()
 
 //     return MakeFuture(std::move(issues));
 
-    auto promise = NThreading::NewPromise<TIssues>();
-    TActivationContext::Register(new TTablesCreator(promise));
-    return promise.GetFuture();
+    // auto promise = NThreading::NewPromise<TIssues>();
+    // TActivationContext::Register(new TTablesCreator(promise));
+    // return promise.GetFuture();
+
+
+#define RUN_CREATE_TABLE(tableName, desc)                           \
+    {                                                               \
+        auto status = CreateTable(YdbConnection,                    \
+                                  tableName,                        \
+                                  std::move(desc)).GetValueSync();  \
+        if (!IsTableCreated(status)) {                              \
+            issues = NYdb::NAdapters::ToYqlIssues(status.GetIssues());                            \
+                                                                    \
+            TStringStream ss;                                       \
+            ss << "Failed to create " << tableName                  \
+               << " table: " << status.GetStatus();                 \
+            if (issues) {                                           \
+                ss << ", issues: ";                                 \
+                issues.PrintTo(ss);                                 \
+            }                                                       \
+                                                                    \
+            return MakeFuture(std::move(issues));                   \
+        }                                                           \
+    }
+
+    auto graphDesc = TTableBuilder()
+        .AddNullableColumn("graph_id", EPrimitiveType::String)
+        .AddNullableColumn("generation", EPrimitiveType::Uint64)
+        .SetPrimaryKeyColumn("graph_id")
+        .Build();
+
+    RUN_CREATE_TABLE(CoordinatorsSyncTable, graphDesc);
+
+    // TODO: graph_id could be just secondary index, but API forbids it,
+    // so we set it primary key column to have index
+    auto checkpointDesc = TTableBuilder()
+        .AddNullableColumn("graph_id", EPrimitiveType::String)
+        .AddNullableColumn("coordinator_generation", EPrimitiveType::Uint64)
+        .AddNullableColumn("seq_no", EPrimitiveType::Uint64)
+        .AddNullableColumn("status", EPrimitiveType::Uint8)
+        .AddNullableColumn("created_by", EPrimitiveType::Timestamp)
+        .AddNullableColumn("modified_by", EPrimitiveType::Timestamp)
+        .AddNullableColumn("state_size", EPrimitiveType::Uint64)
+        .AddNullableColumn("graph_description_id", EPrimitiveType::String)
+        .SetPrimaryKeyColumns({"graph_id", "coordinator_generation", "seq_no"})
+        .Build();
+
+    RUN_CREATE_TABLE(CheckpointsMetadataTable, checkpointDesc);
+
+    auto checkpointGraphsDescDesc = TTableBuilder()
+        .AddNullableColumn("id", EPrimitiveType::String)
+        .AddNullableColumn("ref_count", EPrimitiveType::Uint64)
+        .AddNullableColumn("graph_description", EPrimitiveType::String)
+        .SetPrimaryKeyColumn("id")
+        .Build();
+
+    RUN_CREATE_TABLE(CheckpointsGraphsDescriptionTable, checkpointGraphsDescDesc);
+
+#undef RUN_CREATE_TABLE
+
+    return MakeFuture(std::move(issues));
 }
 
 TFuture<TIssues> TCheckpointStorage::RegisterGraphCoordinator(const TCoordinatorId& coordinator)

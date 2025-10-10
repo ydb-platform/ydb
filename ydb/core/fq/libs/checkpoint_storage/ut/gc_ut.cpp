@@ -94,7 +94,7 @@ struct TTestRuntime {
 
        // auto credFactory = NKikimr::CreateYdbCredentialsProviderFactory;
         NYdb::TDriver driver(NYdb::TDriverConfig{});
-        auto ydbConnectionPtr = CreateLocalYdbConnection(""); //NewYdbConnection(config.GetExternalStorage(), credFactory, driver);
+        auto ydbConnectionPtr = CreateLocalYdbConnection("", ""); //NewYdbConnection(config.GetExternalStorage(), credFactory, driver);
       //  auto gateway = MakeIntrusive<YdbSdkTableGateway>(ydbConnectionPtr->TableClient, ydbConnectionPtr->DB, ydbConnectionPtr->TablePathPrefix);
         // auto [storage, actor] = NewYdbCheckpointStorage(storageConfig, CreateEntityIdGenerator("id"), ydbConnectionPtr, gateway);
         // CheckpointStorage = storage

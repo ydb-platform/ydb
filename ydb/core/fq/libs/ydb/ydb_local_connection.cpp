@@ -7,25 +7,33 @@ namespace NFq {
 
 struct TLocalYdbConnection : public IYdbConnection {
 
-    TLocalYdbConnection(const TString& tablePathPrefix)
-    : TablePathPrefix(tablePathPrefix) {
+    TLocalYdbConnection(const TString& db, const TString& tablePathPrefix)
+    : TablePathPrefix(tablePathPrefix)
+    , Db(db) {
     }
 
     IYdbTableClient::TPtr GetYdbTableClient() override {
         return CreateLocalTableClient();
     }
     TString GetTablePathPrefix() override {
-        return TablePathPrefix;
+        return Db + '/' + TablePathPrefix;
     }
     TString GetDb() override {
-        return "";
+        return Db;
     }
 
+    TString GetTablePathPrefixWithoutDb() override {
+        return TablePathPrefix;
+    }
+
+
+private:
     const TString TablePathPrefix;
+    const TString Db;
 };
 
-IYdbConnection::TPtr CreateLocalYdbConnection(const TString& tablePathPrefix) {
-    return MakeIntrusive<TLocalYdbConnection>(tablePathPrefix);
+IYdbConnection::TPtr CreateLocalYdbConnection(const TString& db, const TString& tablePathPrefix) {
+    return MakeIntrusive<TLocalYdbConnection>(db, tablePathPrefix);
 }
 
 } // namespace NFq

@@ -12,6 +12,7 @@ struct IYdbConnection : public TThrRefBase {
     virtual IYdbTableClient::TPtr GetYdbTableClient() = 0;
     virtual TString GetTablePathPrefix() = 0;
     virtual TString GetDb() = 0;
+    virtual TString GetTablePathPrefixWithoutDb() = 0;
 };
 
 //using IYdbConnectionPtr = IYdbConnection::TPtr;

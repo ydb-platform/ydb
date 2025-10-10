@@ -42,7 +42,7 @@ public:
 
         //auto credFactory = NKikimr::CreateYdbCredentialsProviderFactory;
         NYdb::TDriver driver(NYdb::TDriverConfig{});
-        auto ydbConnectionPtr = CreateLocalYdbConnection("");
+        auto ydbConnectionPtr = CreateLocalYdbConnection("", "");
         //NewYdbConnection(checkpointStorageConfig, credFactory, driver);
        // IYdbTableGateway::TPtr ydbGateway;
         // if (UseSdk) {

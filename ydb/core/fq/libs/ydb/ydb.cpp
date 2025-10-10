@@ -69,7 +69,7 @@ TFuture<TStatus> CheckGeneration(
     if (parser.TryNextRow()) {
         Cerr << "CheckGeneration TryNextRow" << Endl;
         context->GenerationRead = parser.ColumnParser(context->GenerationColumn).GetOptionalUint64().value_or(0);
-        Cerr << "GenerationRead " << context->GenerationRead << Endl;
+        Cerr << "GenerationRead " << context->GenerationRead<< Endl;
     }
 
     bool isOk = false;
@@ -283,15 +283,15 @@ TFuture<TIssues> StatusToIssues(const TFuture<TStatus>& future) {
 }
 
 TFuture<TStatus> CreateTable(
-    const TYdbConnectionPtr& ydbConnection,
+    const IYdbConnection::TPtr& ydbConnection,
     const TString& name,
     TTableDescription&& description)
 {
-    auto tablePath = JoinPath(ydbConnection->TablePathPrefix, name.c_str());
+    auto tablePath = JoinPath(ydbConnection->GetTablePathPrefixWithoutDb(), name.c_str());
 
-    return ydbConnection->TableClient.RetryOperation(
-        [tablePath = std::move(tablePath), description = std::move(description)] (TSession session) mutable {
-            return session.CreateTable(tablePath, TTableDescription(description));
+    return ydbConnection->GetYdbTableClient()->RetryOperation(
+        [db = ydbConnection->GetDb(), tablePath = std::move(tablePath), description = std::move(description)] (ISession::TPtr session) mutable {
+            return session->CreateTable(db, tablePath, TTableDescription(description));
         });
 }
 

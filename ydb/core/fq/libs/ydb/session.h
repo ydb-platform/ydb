@@ -18,6 +18,9 @@ struct ISession : public TThrRefBase{
 
     virtual void Finish(bool needRollback) = 0;
 
+    virtual NYdb::TAsyncStatus CreateTable(const std::string& db, const std::string& path, NYdb::NTable::TTableDescription&& tableDesc
+        /*const TCreateTableSettings& settings = TCreateTableSettings()*/) = 0;
+
     private: 
     [[maybe_unused]]int Test = 456;
 };

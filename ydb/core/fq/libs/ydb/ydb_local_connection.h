@@ -4,6 +4,6 @@
 
 namespace NFq {
 
-IYdbConnection::TPtr CreateLocalYdbConnection(const TString& tablePathPrefix);
+IYdbConnection::TPtr CreateLocalYdbConnection(const TString& db, const TString& tablePathPrefix);
 
 } // namespace NFq

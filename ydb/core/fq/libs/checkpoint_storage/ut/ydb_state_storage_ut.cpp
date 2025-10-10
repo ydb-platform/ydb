@@ -47,7 +47,7 @@ public:
         stateStorageLimits.SetMaxRowSizeBytes(YdbRowSizeLimit);
 
         NYdb::TDriver driver(NYdb::TDriverConfig{});
-        auto ydbConnectionPtr = CreateLocalYdbConnection(""); // NewYdbConnection(config.GetExternalStorage(), NKikimr::CreateYdbCredentialsProviderFactory, driver);
+        auto ydbConnectionPtr = CreateLocalYdbConnection("", ""); // NewYdbConnection(config.GetExternalStorage(), NKikimr::CreateYdbCredentialsProviderFactory, driver);
         auto storage = NewYdbStateStorage(config, ydbConnectionPtr);
         storage->Init().GetValueSync();
         return storage;

@@ -523,18 +523,7 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
             auto textArg = MkqlBuildExpr(*node.Child(0), buildCtx);
             auto settingsArg = MkqlBuildExpr(*node.Child(1), buildCtx);
             
-            auto& pgmBuilder = ctx.PgmBuilder();
-            auto stringType = pgmBuilder.NewDataType(NUdf::TDataType<char*>::Id);
-            auto listType = pgmBuilder.NewListType(stringType);
-            
-            // Create a wrapper callable that will execute NKikimr::NFulltext::Analyze at runtime
-            // The callable should:
-            // 1. Deserialize settings from settingsArg
-            // 2. Call NKikimr::NFulltext::Analyze(text, settings)
-            // 3. Return list of tokens
-            
-            // For MKQL, we need to use a callable wrapper
-            return pgmBuilder.NewCallable(node.Pos(), "FulltextTokenize", listType, {textArg, settingsArg});
+            return ctx.PgmBuilder().FulltextAnalyze(textArg, settingsArg);
         });
 
     return compiler;

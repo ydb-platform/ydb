@@ -2,8 +2,10 @@
 
 #include <ydb/core/base/fulltext.h>
 
+#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_impl.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
+#include <yql/essentials/minikql/mkql_string_util.h>
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -28,25 +30,25 @@ public:
         auto text = TextArg->GetValue(ctx);
         if (!text) {
             // If text is null/empty, return empty list
-            return ctx.HolderFactory.GetEmptyContainer();
+            return ctx.HolderFactory.GetEmptyContainerLazy();
         }
 
-        TString textStr = text.AsStringRef();
+        TString textStr(text.AsStringRef());
 
         // Get settings argument (serialized proto)
         auto settingsValue = SettingsArg->GetValue(ctx);
         if (!settingsValue) {
             // If settings is null, return empty list
-            return ctx.HolderFactory.GetEmptyContainer();
+            return ctx.HolderFactory.GetEmptyContainerLazy();
         }
 
-        TString settingsStr = settingsValue.AsStringRef();
+        TString settingsStr(settingsValue.AsStringRef());
 
         // Deserialize settings
         Ydb::Table::FulltextIndexSettings::Analyzers analyzers;
         if (!analyzers.ParseFromString(settingsStr)) {
             // Failed to parse settings, return empty list
-            return ctx.HolderFactory.GetEmptyContainer();
+            return ctx.HolderFactory.GetEmptyContainerLazy();
         }
 
         // Tokenize text using NKikimr::NFulltext::Analyze

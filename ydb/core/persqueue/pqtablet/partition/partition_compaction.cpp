@@ -166,6 +166,11 @@ void TPartition::DumpKeysForBlobsCompaction() const
 
 void TPartition::TryRunCompaction()
 {
+    if (StopCompaction) {
+        LOG_D("Blobs compaction is stopped");
+        return;
+    }
+
     if (CompactionInProgress) {
         LOG_D("Blobs compaction in progress");
         return;
@@ -504,8 +509,18 @@ void TPartition::BlobsForCompactionWereWrite()
     KeysForCompaction.clear();
     CompactionBlobsCount = 0;
 
+    TryProcessGetWriteInfoRequest(ctx);
+
     ProcessTxsAndUserActs(ctx); // Now you can delete unnecessary keys.
     TryRunCompaction();
+}
+
+void TPartition::TryProcessGetWriteInfoRequest(const TActorContext& ctx)
+{
+    if (PendingGetWriteInfoRequest) {
+        ProcessPendingEvent(std::move(PendingGetWriteInfoRequest), ctx);
+        PendingGetWriteInfoRequest = nullptr;
+    }
 }
 
 void TPartition::EndProcessWritesForCompaction(TEvKeyValue::TEvRequest* request, const TInstant blobCreationUnixTime, const TActorContext& ctx)

@@ -55,11 +55,12 @@ struct TEvSolomonProvider {
         public NActors::TEventPB<TEvMetricsBatch, NSo::MetricQueue::TEvMetricsBatch, EvMetricsBatch> {
 
         TEvMetricsBatch() = default;
-        TEvMetricsBatch(std::vector<NSo::MetricQueue::TMetric> metrics, bool noMoreMetrics, const NDqProto::TMessageTransportMeta& transportMeta) {
+        TEvMetricsBatch(std::vector<NSo::MetricQueue::TMetric> metrics, bool noMoreMetrics, ui64 downloadedBytes, const NDqProto::TMessageTransportMeta& transportMeta) {
             Record.MutableMetrics()->Assign(
                 metrics.begin(), 
                 metrics.end());
             Record.SetNoMoreMetrics(noMoreMetrics);
+            Record.SetDownloadedBytes(downloadedBytes);
             *Record.MutableTransportMeta() = transportMeta;
         }
     };

@@ -235,6 +235,8 @@ private:
             return false;
         }
 
+        DownloadedBytes += response.DownloadedBytes;
+
         if (CurrentPage >= response.Result.PagesCount) {
             LOG_I("TDqSolomonMetricsQueueActor", "SaveRetrievedResults no more metrics to list");
             HasMoreMetrics = false;
@@ -372,7 +374,8 @@ private:
         }
 
         LOG_D("TDqSolomonMetricsQueueActor", "SendMetrics Sending " << result.size() << " metrics to consumer with id " << consumer);
-        Send(consumer, new TEvSolomonProvider::TEvMetricsBatch(std::move(result), HasNoMoreItems(), transportMeta));
+        Send(consumer, new TEvSolomonProvider::TEvMetricsBatch(std::move(result), HasNoMoreItems(), DownloadedBytes, transportMeta));
+        DownloadedBytes = 0;
 
         if (HasNoMoreItems()) {
             TryFinish(consumer, transportMeta.GetSeqNo());
@@ -421,6 +424,7 @@ private:
     bool HasPendingRequests;
     THashMap<NActors::TActorId, TDeque<NDqProto::TMessageTransportMeta>> PendingRequests;
     std::vector<NSo::MetricQueue::TMetric> Metrics;
+    ui64 DownloadedBytes = 0;
     TMaybe<TString> MaybeIssues;
     
     const TDqSolomonReadParams ReadParams;

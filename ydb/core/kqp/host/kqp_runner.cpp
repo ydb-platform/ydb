@@ -333,6 +333,7 @@ private:
             .Add(CreateKqpFinalizingOptTransformer(OptimizeCtx), "FinalizingOptimize")
             .Add(CreateKqpQueryPhasesTransformer(), "QueryPhases")
             .Add(CreateKqpQueryEffectsTransformer(OptimizeCtx), "QueryEffects")
+            .Add(CreateKqpSinkPrecomputeTransformer(OptimizeCtx), "KqpSinkPrecompute")
             .Add(CreateKqpCheckPhysicalQueryTransformer(), "CheckKqlPhysicalQuery")
             .Build(false));
 
@@ -372,16 +373,6 @@ private:
             //.Add(CreateKqpQueryEffectsTransformer(OptimizeCtx), "QueryEffects")
             //.Add(CreateKqpCheckPhysicalQueryTransformer(), "CheckKqlPhysicalQuery")
             .Build(false);
-
-        auto physicalKqpSinkPrecomputeTransformer = CreateKqpQueryBlocksTransformer(TTransformationPipeline(typesCtx)
-            .AddServiceTransformers()
-            .Add(Log("KqpSinkPrecompute"), "LogKqpSinkPrecompute")
-            .AddTypeAnnotationTransformer(CreateKqpTypeAnnotationTransformer(Cluster, sessionCtx->TablesPtr(), *typesCtx, Config))
-            .AddPostTypeAnnotation(/* forSubgraph */ true)
-            .Add(
-                CreateKqpSinkPrecomputeTransformer(OptimizeCtx),
-                "KqpSinkPrecompute")
-            .Build(false));
 
         auto physicalBuildTxsTransformer = CreateKqpQueryBlocksTransformer(TTransformationPipeline(typesCtx)
             .AddServiceTransformers()
@@ -495,8 +486,6 @@ private:
         Transformer = CreateCompositeGraphTransformer(
             {
                 TTransformStage{ physicalOptimizeTransformer, "PhysicalOptimize", TIssuesIds::DEFAULT_ERROR },
-                LogStage("PhysicalBuildSinkPrecompute"),
-                TTransformStage{ physicalKqpSinkPrecomputeTransformer, "PhysicalBuildSinkPrecompute", TIssuesIds::DEFAULT_ERROR },
                 LogStage("PhysicalOptimize"),
                 TTransformStage{ physicalBuildTxsTransformer, "PhysicalBuildTxs", TIssuesIds::DEFAULT_ERROR },
                 LogStage("PhysicalBuildTxs"),

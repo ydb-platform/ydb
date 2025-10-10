@@ -402,4 +402,8 @@ bool UseSchemaSecrets(const NKikimr::TFeatureFlags& flags, const TVector<TString
     return true; // New secrets are enabled and all of them start with '/'
 }
 
+bool UseSchemaSecrets(const NKikimr::TFeatureFlags& flags, const TString& secretName) {
+    return flags.GetEnableSchemaSecrets() && secretName.StartsWith('/');
+}
+
 }  // namespace NKikimr::NKqp

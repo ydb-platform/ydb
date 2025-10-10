@@ -2,6 +2,8 @@
 #include "private_events.h"
 #include "secret_resolver.h"
 
+#include <ydb/core/kqp/common/events/script_executions.h>
+#include <ydb/core/kqp/federated_query/kqp_federated_query_actors.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -10,8 +12,7 @@
 #include <ydb/services/metadata/secret/snapshot.h>
 #include <ydb/services/metadata/service.h>
 
-#include <ydb/core/kqp/common/events/script_executions.h>
-#include <ydb/core/kqp/federated_query/kqp_federated_query_actors.h>
+#include <util/generic/ptr.h>
 
 namespace NKikimr::NReplication::NController {
 
@@ -43,20 +44,20 @@ class TSecretResolver: public TActorBootstrapped<TSecretResolver> {
         }
 
         SecretId = NMetadata::NSecret::TSecretId(entry.SecurityObject->GetOwnerSID(), SecretName);
-        if (NKikimr::NKqp::UseSchemaSecrets(AppData()->FeatureFlags, {SecretId.GetSecretId()})) {
+        if (NKqp::UseSchemaSecrets(AppData()->FeatureFlags, SecretId.GetSecretId())) {
             const TVector<TString> secretNames{SecretId.GetSecretId()};
-            const TIntrusiveConstPtr<NACLib::TUserToken> userToken = new NACLib::TUserToken(entry.SecurityObject->GetOwnerSID(), {});
+            auto userToken = MakeIntrusiveConst<NACLib::TUserToken>(entry.SecurityObject->GetOwnerSID(), TVector<TString>());
             const auto actorSystem = ActorContext().ActorSystem();
             const auto replyActorId = SelfId();
-            auto future = NKikimr::NKqp::DescribeSecret(secretNames, userToken, Database, actorSystem);
-            future.Subscribe([actorSystem, replyActorId](const NThreading::TFuture<NKikimr::NKqp::TEvDescribeSecretsResponse::TDescription>& result) {
-                actorSystem->Send(replyActorId, new NKikimr::NKqp::TEvDescribeSecretsResponse(result.GetValue()));
+            auto future = NKqp::DescribeSecret(secretNames, userToken, Database, actorSystem);
+            future.Subscribe([actorSystem, replyActorId](const NThreading::TFuture<NKqp::TEvDescribeSecretsResponse::TDescription>& result) {
+                actorSystem->Send(replyActorId, new NKqp::TEvDescribeSecretsResponse(result.GetValue()));
             });
             return;
+        } else {
+            Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()),
+                new NMetadata::NProvider::TEvAskSnapshot(SnapshotFetcher()));
         }
-
-        Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()),
-            new NMetadata::NProvider::TEvAskSnapshot(SnapshotFetcher()));
     }
 
     void Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev) {
@@ -70,10 +71,11 @@ class TSecretResolver: public TActorBootstrapped<TSecretResolver> {
         Reply(secretValue.DetachResult());
     }
 
-    void Handle(NKikimr::NKqp::TEvDescribeSecretsResponse::TPtr& ev) {
+    void Handle(NKqp::TEvDescribeSecretsResponse::TPtr& ev) {
         if (ev->Get()->Description.Status != Ydb::StatusIds::SUCCESS) {
             return Reply(false, ev->Get()->Description.Issues.ToOneLineString());
         }
+
         Y_ENSURE(ev->Get()->Description.SecretValues.size() == 1);
         Reply(ev->Get()->Description.SecretValues[0]);
     }
@@ -121,7 +123,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
             hFunc(NMetadata::NProvider::TEvRefreshSubscriberData, Handle);
-            hFunc(NKikimr::NKqp::TEvDescribeSecretsResponse, Handle);
+            hFunc(NKqp::TEvDescribeSecretsResponse, Handle);
             sFunc(TEvents::TEvWakeup, Bootstrap);
             sFunc(TEvents::TEvPoison, PassAway);
         }

@@ -146,5 +146,6 @@ NThreading::TFuture<TEvDescribeSecretsResponse::TDescription> DescribeSecret(
 );
 
 bool UseSchemaSecrets(const NKikimr::TFeatureFlags& flags, const TVector<TString>& secretNames);
+bool UseSchemaSecrets(const NKikimr::TFeatureFlags& flags, const TString& secretName);
 
 }  // namespace NKikimr::NKqp

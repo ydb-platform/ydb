@@ -248,21 +248,43 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
     ui64 dataSize = tableStats.GetDataSize();
     ui64 rowCount = tableStats.GetRowCount();
 
-    const bool isDataShard = Self->Tables.contains(pathId);
-    const bool isOlapStore = Self->OlapStores.contains(pathId);
-    const bool isColumnTable = Self->ColumnTables.contains(pathId);
+    const auto pathElementIt = Self->PathsById.find(pathId);
+    if (pathElementIt == Self->PathsById.end()) {
+        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "PersistSingleStats for pathId " << pathId
+            << ", tabletId " << datashardId
+            << ", followerId " << followerId
+            << ": unknown pathId"
+        );
+        return true;
+    }
+    const auto& pathElement = pathElementIt->second;
+    if (pathElement->Dropped()) {
+        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "PersistSingleStats for pathId " << pathId
+            << ", tabletId " << datashardId
+            << ", followerId " << followerId
+            << ": pathId is dropped"
+        );
+        return true;
+    }
+
+    const bool isDataShard = pathElement->IsTable();
+    const bool isOlapStore = pathElement->IsOlapStore();
+    const bool isColumnTable = pathElement->IsColumnTable();
 
     if (!isDataShard && !isOlapStore && !isColumnTable) {
         LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Unexpected stats from shard " << datashardId);
         return true;
     }
 
-    if (!Self->TabletIdToShardIdx.contains(datashardId)) {
+    TShardIdx shardIdx = [this, &datashardId]() {
+        auto found = Self->TabletIdToShardIdx.find(datashardId);
+        return (found != Self->TabletIdToShardIdx.end()) ? found->second : InvalidShardIdx;
+    }();
+    if (!shardIdx) {
         LOG_ERROR_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "No shardIdx for shard " << datashardId);
         return true;
     }
 
-    TShardIdx shardIdx = Self->TabletIdToShardIdx[datashardId];
     LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
         "PersistSingleStats for pathId " << pathId.LocalPathId << " shard idx " << shardIdx << " data size " << dataSize << " row count " << rowCount
     );
@@ -279,7 +301,6 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
                                                                subDomainInfo->EffectiveStoragePools(),
                                                                shardInfo->BindedChannels);
 
-    const auto pathElement = Self->PathsById[pathId];
     const TPartitionStats newStats = PrepareStats(ctx, rec, now, channelsMapping);
 
     LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -379,9 +400,9 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
     }
 
     if (updateSubdomainInfo) {
-        auto subDomainId = Self->ResolvePathIdForDomain(pathId);
         subDomainInfo->AggrDiskSpaceUsage(Self, newAggrStats, oldAggrStats);
         if (subDomainInfo->CheckDiskSpaceQuotas(Self)) {
+            auto subDomainId = Self->ResolvePathIdForDomain(pathElement);
             Self->PersistSubDomainState(db, subDomainId, *subDomainInfo);
             // Publish is done in a separate transaction, so we may call this directly
             TDeque<TPathId> toPublish;

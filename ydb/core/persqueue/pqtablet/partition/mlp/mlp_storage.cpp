@@ -5,17 +5,16 @@
 namespace NKikimr::NPQ::NMLP {
 
 
-std::optional<ui64> TStorage::Next(TDuration deadline) {
+std::optional<TStorage::TMessageId> TStorage::Next(TInstant deadline, ui64 fromOffset) {
     if (!ReleasedMessages.empty()) {
         auto offset = ReleasedMessages.front();
         ReleasedMessages.pop_front();
         return DoLock(offset - FirstOffset, deadline);
     }
 
-    bool moveUnlockedOffset = true;
-    for (size_t i = FirstUnlockedOffset; i < Messages.size(); ++i) {
+    bool moveUnlockedOffset = fromOffset <= FirstUnlockedOffset;
+    for (size_t i = std::max(fromOffset, FirstUnlockedOffset) - FirstOffset; i < Messages.size(); ++i) {
         const auto& message = Messages[i];
-        const size_t offset = FirstOffset + i;
         if (message.Status == EMessageStatus::Unprocessed) {
             if (message.HasMessageGroupId && LockedMessageGroupsId.contains(message.MessageGroupIdHash)) {
                 moveUnlockedOffset = false;
@@ -23,24 +22,39 @@ std::optional<ui64> TStorage::Next(TDuration deadline) {
             }
 
             if (moveUnlockedOffset) {
-                FirstUnlockedOffset = offset + 1;
+                ++FirstUnlockedOffset;
             }
 
             return DoLock(i, deadline);
         } else if (moveUnlockedOffset) {
-            FirstUnlockedOffset = offset + 1;
+            ++FirstUnlockedOffset;
         }
     }
 
     return std::nullopt;
 }
 
-bool TStorage::Commit(ui64 offset) {
-    return DoCommit(offset);
+bool TStorage::Commit(TMessageId message) {
+    return DoCommit(message.Offset, message.Cookie);
 }
 
-bool TStorage::Unlock(ui64 offset) {
-    return DoUnlock(offset);
+bool TStorage::Unlock(TMessageId message) {
+    return DoUnlock(message.Offset, message.Cookie);
+}
+
+bool TStorage::ChangeMessageDeadline(TMessageId messageId, TInstant deadline) {
+    auto [offsetDelta, message] = GetMessage(messageId.Offset, messageId.Cookie, EMessageStatus::Locked);
+    if (!message) {
+        return false;
+    }
+
+    LockedMessages.erase(LockedMessage(message->DeadlineDelta, offsetDelta));
+
+    auto newDeadlineDelta = NormalizeDeadline(deadline);
+    message->DeadlineDelta = newDeadlineDelta;
+    LockedMessages.insert(LockedMessage(newDeadlineDelta, offsetDelta));
+
+    return true;
 }
 
 bool TStorage::ProccessDeadlines() {
@@ -48,7 +62,7 @@ bool TStorage::ProccessDeadlines() {
     bool result = false;
 
     for (auto it = LockedMessages.begin(); it != LockedMessages.end(); ) {
-        if (it->DeadlineDelta > deadlineDelta) {
+        if (it->DeadlineDelta >= deadlineDelta) {
             break;
         }
 
@@ -61,16 +75,49 @@ bool TStorage::ProccessDeadlines() {
     return result;
 }
 
-ui64 TStorage::DoLock(ui64 offsetDelta, TDuration deadline) {
+std::pair<ui64, TStorage::TMessage*> TStorage::GetMessage(ui64 offset, ui64 cookie, EMessageStatus expectedStatus) {
+    if (offset < FirstOffset) {
+        return {0, nullptr};
+    }
+
+    auto offsetDelta = offset - FirstOffset;
+    if (offsetDelta >= Messages.size()) {
+        return {0, nullptr};
+    }
+
+    auto& message = Messages[offsetDelta];
+    if (message.Status != expectedStatus) {
+        return {0, nullptr};
+    }
+
+    if (message.Cookie != cookie) {
+        return {0, nullptr};
+    }
+
+    return {offsetDelta, &message};
+}
+
+ui64 TStorage::NormalizeDeadline(TInstant deadline) {
+    auto now = TInstant::Now();
+    if (deadline <= now) {
+        return 0;
+    }
+
+    auto deadlineDelta = (deadline - BaseDeadline).Seconds();
+    if (deadlineDelta >= MaxDeadlineDelta) {
+        UpdateDeltas(FirstOffset);
+        deadlineDelta = std::min((deadline - BaseDeadline).Seconds(), MaxDeadlineDelta - 1);
+    }
+
+    return deadlineDelta;
+}
+
+TStorage::TMessageId TStorage::DoLock(ui64 offsetDelta, TInstant deadline) {
     auto& message = Messages[offsetDelta];
     AFL_VERIFY(message.Status == EMessageStatus::Unprocessed)("status", message.Status);
     message.Status = EMessageStatus::Locked;
 
-    auto deadlineDelta = (deadline - BaseDeadline).Seconds();
-    if (deadlineDelta >= MaxDeadlineDelta) {
-        UpdateBaseDeadline();
-        deadlineDelta = std::min((deadline - BaseDeadline).Seconds(), MaxDeadlineDelta - 1);
-    }
+    auto deadlineDelta = NormalizeDeadline(deadline);
  
     message.DeadlineDelta = deadlineDelta;
     message.Cookie = ++LockCookie;
@@ -80,31 +127,25 @@ ui64 TStorage::DoLock(ui64 offsetDelta, TDuration deadline) {
         LockedMessageGroupsId.insert(message.MessageGroupIdHash);
     }
 
-    return FirstOffset + offsetDelta;
+    return TMessageId{
+        .Offset = FirstOffset + offsetDelta,
+        .Cookie = message.Cookie
+    };
 }
 
-bool TStorage::DoCommit(ui64 offset) {
-    if (offset < FirstOffset) {
+bool TStorage::DoCommit(ui64 offset, ui64 cookie) {
+    auto [offsetDelta, message] = GetMessage(offset, cookie, EMessageStatus::Locked);
+    if (!message) {
         return false;
     }
 
-    auto offsetDelta = offset - FirstOffset;
-    if (offsetDelta >= Messages.size()) {
-        return false;
-    }
-    
-    auto& message = Messages[offsetDelta];
-    if (message.Status != EMessageStatus::Locked) {
-        return false;
-    }
+    message->Status = EMessageStatus::Committed;
+    message->DeadlineDelta = 0;
+    message->Cookie = 0;
 
-    message.Status = EMessageStatus::Committed;
-    message.DeadlineDelta = 0;
-    message.Cookie = 0;
-
-    LockedMessages.erase(LockedMessage(offsetDelta, message.DeadlineDelta));
-    if (message.HasMessageGroupId) {
-        LockedMessageGroupsId.erase(message.MessageGroupIdHash);
+    LockedMessages.erase(LockedMessage(offsetDelta, message->DeadlineDelta));
+    if (message->HasMessageGroupId) {
+        LockedMessageGroupsId.erase(message->MessageGroupIdHash);
     }
 
     UpdateFirstUncommittedOffset();
@@ -112,23 +153,14 @@ bool TStorage::DoCommit(ui64 offset) {
     return true;
 }
 
-bool TStorage::DoUnlock(ui64 offset) {
-    if (offset < FirstOffset) {
+bool TStorage::DoUnlock(ui64 offset, ui64 cookie) {
+    auto [offsetDelta, message] = GetMessage(offset, cookie, EMessageStatus::Locked);
+    if (!message) {
         return false;
     }
 
-    auto offsetDelta = offset - FirstOffset;
-    if (offsetDelta >= Messages.size()) {
-        return false;
-    }
-    
-    auto& message = Messages[offsetDelta];
-    if (message.Status != EMessageStatus::Locked) {
-        return false;
-    }
-
-    LockedMessages.erase(LockedMessage(offsetDelta, message.DeadlineDelta));
-    DoUnlock(message, offset);
+    LockedMessages.erase(LockedMessage(offsetDelta, message->DeadlineDelta));
+    DoUnlock(*message, offset);
 
     return true;
 }
@@ -149,17 +181,22 @@ void TStorage::DoUnlock(TMessage& message, ui64 offset) {
     }
 }
 
-void TStorage::UpdateBaseDeadline() {
+void TStorage::UpdateDeltas(const ui64 oldFirstOffset) {
     auto now = TInstant::Now();
-    auto diff = (now - BaseDeadline).Seconds();
+    auto deadlineDiff = (now - BaseDeadline).Seconds();
+    AFL_ENSURE(FirstOffset >= oldFirstOffset)("old", oldFirstOffset)("new", FirstOffset);
+    auto offsetDiff = FirstOffset - oldFirstOffset;
 
     std::set<LockedMessage> newLockedMessages;
     for (auto& message : LockedMessages) {
-        auto newDeadlineDelta = message.DeadlineDelta > diff ? message.DeadlineDelta - diff : 0;
-        Messages[message.OffsetDelta].DeadlineDelta = newDeadlineDelta;
-        newLockedMessages.emplace(message.OffsetDelta, newDeadlineDelta);
+        auto newDeadlineDelta = message.DeadlineDelta > deadlineDiff ? message.DeadlineDelta - deadlineDiff : 0;
+        auto newOffsetDelta = message.OffsetDelta > offsetDiff ? message.OffsetDelta - offsetDiff : 0;
+
+        Messages[newOffsetDelta].DeadlineDelta = newDeadlineDelta;
+        newLockedMessages.emplace(newOffsetDelta, newDeadlineDelta);
     }
 
+    BaseDeadline = now;
     LockedMessages = std::move(newLockedMessages);
 }
 

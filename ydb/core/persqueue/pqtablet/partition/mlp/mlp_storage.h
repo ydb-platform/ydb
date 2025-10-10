@@ -57,27 +57,41 @@ class TStorage {
     };
 public:
 
-    std::optional<ui64> Next(TDuration deadline);
-    bool Commit(ui64 offset);
-    bool Unlock(ui64 offset);
+    struct TMessageId {
+        ui64 Offset;
+        ui64 Cookie;
+    };
+
+    // Return next message for client processing.
+    // deadline - time for processing visibility
+    // fromOffset indicates from which offset it is necessary to continue searching for the next free message.
+    //            it is an optimization for the case when the method is called several times in a row.
+    std::optional<TMessageId> Next(TInstant deadline, ui64 fromOffset = 0);
+    bool Commit(TMessageId message);
+    bool Unlock(TMessageId message);
+    // For SQS compatibility
+    // https://docs.amazonaws.cn/en_us/AWSSimpleQueueService/latest/APIReference/API_ChangeMessageVisibility.html
+    bool ChangeMessageDeadline(TMessageId message, TInstant deadline);
 
     bool ProccessDeadlines();
 
 private:
-    ui64 DoLock(ui64 offsetDelta, TDuration deadline);
-    bool DoCommit(ui64 offsetDelta);
-    bool DoUnlock(ui64 offsetDelta);
+    // offsetDelte, TMessage
+    std::pair<ui64, TMessage*> GetMessage(ui64 offset, ui64 cookie, EMessageStatus expectedStatus);
+    ui64 NormalizeDeadline(TInstant deadline);
+
+    TMessageId DoLock(ui64 offsetDelta, TInstant deadline);
+    bool DoCommit(ui64 offset, ui64 cookie);
+    bool DoUnlock(ui64 offset, ui64 cookie);
     void DoUnlock(TMessage& message, ui64 offset);
 
-    void UpdateBaseDeadline();
+    void UpdateDeltas(const ui64 newFirstOffset);
     void UpdateFirstUncommittedOffset();
 
 private:
     // Первый загруженный оффсет  для обработки. Все сообщения с меньшим оффсетом либо уже закоммичены, либо удалены из партиции.
     // Как часто двигаем FirstOffset? Если FirstUncommittedOffset больше FirstOffset на 1000 (5000? 10000?) либо все сообщения обработаны закончились.
     ui64 FirstOffset;
-    // Последний загруженный оффсет для обработки. Всегда <= EndOffset партиции
-    ui64 LastOffset;
     // Первый не закоммиченный оффсет для обработки. Всегда <= LastOffset
     ui64 FirstUncommittedOffset;
     // Первый не отданный клиенту для обработки. Всегда <= LastOffset
@@ -87,7 +101,7 @@ private:
     // Список сообщений вычитанных ~400KB
     std::deque<TMessage> Messages;
 
-    TDuration BaseDeadline;
+    TInstant BaseDeadline;
 
 
     // Если timeout задается на сообщение. В SQS он задается на сообщение и по умолчанию равен 30 сек.

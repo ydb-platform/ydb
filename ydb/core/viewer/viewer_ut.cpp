@@ -15,6 +15,7 @@
 #include "viewer_tabletinfo.h"
 #include "viewer_vdiskinfo.h"
 #include "viewer_pdiskinfo.h"
+#include <ydb/services/ydb/ydb_keys_ut.h>
 #include "query_autocomplete_helper.h"
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -492,23 +493,22 @@ Y_UNIT_TEST_SUITE(Viewer) {
     }
 
    TKeepAliveHttpClient::THttpCode PostOffsetCommit(TKeepAliveHttpClient& httpClient,
+                                                    const TString& token,
                                                     const TString& database = "/Root",
                                                     const TString& path = "/Root/topic1",
                                                     const TString& consumer = "consumer1",
                                                     const i32 partition_id = 0,
-                                                    const i32 offset = 0,
-                                                    const i32 mode = 1) {
+                                                    const i32 offset = 0) {
         NJson::TJsonValue jsonRequest;
         jsonRequest["database"] = database;
         jsonRequest["path"] = path;
         jsonRequest["consumer"] = consumer;
         jsonRequest["partition_id"] = partition_id;
         jsonRequest["offset"] = offset;
-        jsonRequest["mode"] = mode;
         TStringStream responseStream;
         TKeepAliveHttpClient::THeaders headers;
         headers["Content-Type"] = "application/json";
-        headers["Authorization"] = VALID_TOKEN;
+        headers["Authorization"] = token;
         Cerr << "Doing PostOffsetCommit" << Endl;
         const TKeepAliveHttpClient::THttpCode statusCode = httpClient.DoPost("/viewer/commit_offset", NJson::WriteJson(jsonRequest, false), &responseStream, headers);
         return statusCode;
@@ -1950,8 +1950,6 @@ Y_UNIT_TEST_SUITE(Viewer) {
         auto grpcSettings = NYdbGrpc::TServerOptions().SetHost("[::1]").SetPort(grpcPort);
         TServer server{settings};
         server.EnableGRpc(grpcSettings);
-
-
         auto client = MakeHolder<NKikimr::NPersQueueTests::TFlatMsgBusPQClient>(settings, grpcPort);
         client->InitRoot();
         client->InitSourceIds();
@@ -1962,17 +1960,14 @@ Y_UNIT_TEST_SUITE(Viewer) {
 
         TString consumerName = "consumer1";
         NYdb::TDriver ydbDriver{driverCfg};
+
+        driverCfg.UseSecureConnection(TString(NYdbSslTestData::CaCrt));
+        driverCfg.SetAuthToken("root@builtin");
         auto topicClient = NYdb::NTopic::TTopicClient(ydbDriver);
 
         auto res = topicClient.CreateTopic(topicPath, NYdb::NTopic::TCreateTopicSettings()
-                        .BeginAddConsumer(consumerName).EndAddConsumer()).GetValueSync();
+                        .BeginAddConsumer(consumerName).EndAddConsumer().RetentionPeriod(TDuration::Seconds(1))).GetValueSync();
         UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
-
-        auto alterSettings = NYdb::NTopic::TAlterTopicSettings()
-                .SetRetentionPeriod(TDuration::Seconds(1));
-        auto alterTopicResult = topicClient.AlterTopic(topicPath, alterSettings).GetValueSync();
-        UNIT_ASSERT(alterTopicResult.IsSuccess());
-
         auto writeData = [&](NYdb::NPersQueue::ECodec codec, ui64 count, const TString& producerId, ui64 size = 100u) {
             NYdb::NPersQueue::TWriteSessionSettings wsSettings;
             wsSettings.Path(topicPath);
@@ -1995,16 +1990,22 @@ Y_UNIT_TEST_SUITE(Viewer) {
         NKikimr::NViewerTests::WaitForHttpReady(httpClient);
 
 
-        auto postReturnCode1 = PostOffsetCommit(httpClient);
+        auto postReturnCode1 = PostOffsetCommit(httpClient, VALID_TOKEN);
         UNIT_ASSERT_EQUAL(postReturnCode1, HTTP_FORBIDDEN);
-        // auto response = NJson::ReadJsonTree(&responseStream, /* throwOnError = */ true);
 
         TClient client1(settings);
         client1.InitRootScheme();
         GrantConnect(client1);
 
-        auto postReturnCode2 = PostOffsetCommit(httpClient);
+        auto postReturnCode2 = PostOffsetCommit(httpClient, VALID_TOKEN);
         UNIT_ASSERT_EQUAL(postReturnCode2, HTTP_OK);
+
+        TString invalid_token = "abracadabra";
+        auto postReturnCode10 = PostOffsetCommit(httpClient, invalid_token);
+        UNIT_ASSERT_EQUAL(postReturnCode10, HTTP_FORBIDDEN);
+
+        auto postReturnCode3 = PostOffsetCommit(httpClient, VALID_TOKEN, "/Root", "/Root/topic1", "consumer2", 0, 55000);
+        UNIT_ASSERT_EQUAL(postReturnCode3, HTTP_BAD_REQUEST);
 
 
         auto describeTopicResult = topicClient.DescribeTopic(topicPath).GetValueSync();
@@ -2016,60 +2017,11 @@ Y_UNIT_TEST_SUITE(Viewer) {
         writeData(ECodec::RAW, 50000, "producer2");
 
         Sleep(TDuration::Seconds(1));
-
-        NYdb::NTopic::TReadSessionSettings rSSettings{.ConsumerName_ = consumerName};
-        rSSettings.AppendTopics({topicPath});
-        auto readSession = topicClient.CreateReadSession(rSSettings);
-        auto getMessagesFromTopic = [&](auto& reader) {
-            TMaybe<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent> result;
-            while (true) {
-                auto event = reader->GetEvent(false);
-                if (!event)
-                    return result;
-                if (auto dataEvent = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&*event)) {
-                    dataEvent->Commit();
-                    result = *dataEvent;
-
-                    break;
-                } else if (auto *lockEv = std::get_if<NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(&*event)) {
-                    lockEv->Confirm();
-                } else if (auto *releaseEv = std::get_if<NYdb::NTopic::TReadSessionEvent::TStopPartitionSessionEvent>(&*event)) {
-                    releaseEv->Confirm();
-                } else if (auto *closeSessionEvent = std::get_if<NYdb::NTopic::TSessionClosedEvent>(&*event)) {
-                    Cerr << "Session closed event\n";
-                    return result;
-                }
-            }
-            return result;
-        };
-        ui64 totalTries = 5;
-        ui64 totalMessages = 0;
-        THashSet<TString> keysFound;
-        while(totalTries) {
-            auto result = getMessagesFromTopic(readSession);
-            if (!result) {
-                --totalTries;
-                Sleep(TDuration::MilliSeconds(500));
-                continue;
-            }
-            if (result) {
-                totalTries = 5;
-                for (const auto& message : result->GetMessages()) {
-                    totalMessages++;
-                    TStringBuilder msg;
-                    msg << "Got message from offset " << message.GetOffset() << " and size: " << message.GetData().size() << Endl;
-                    // Cerr << msg;
-                    UNIT_ASSERT(message.GetData().size() > 0);
-                }
-            }
-        }
-        Cerr << "Total messages: " << totalMessages << Endl;
-        auto postReturnCode3 = PostOffsetCommit(httpClient, "/Root", "/Root/topic1", "consumer1", 0, 1000); // сообщения удалились по retention
-        Cerr << "Return code 3: " << postReturnCode3 << Endl;
-        UNIT_ASSERT_EQUAL(postReturnCode3, HTTP_BAD_REQUEST);
-        auto postReturnCode4 = PostOffsetCommit(httpClient, "/Root", "/Root/topic1", "consumer1", 0, 55000);
-        Cerr << "Return code 4: " << postReturnCode4 << Endl;
+        auto postReturnCode4 = PostOffsetCommit(httpClient, VALID_TOKEN, "/Root", "/Root/topic1", "consumer1", 0, 1000); // сообщения удалились по retention
         UNIT_ASSERT_EQUAL(postReturnCode4, HTTP_OK);
+        auto postReturnCode5 = PostOffsetCommit(httpClient, VALID_TOKEN, "/Root", "/Root/topic1", "consumer1", 0, 55000);
+        UNIT_ASSERT_EQUAL(postReturnCode5, HTTP_OK);
+
     }
 
     Y_UNIT_TEST(Plan2SvgBad) {

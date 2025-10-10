@@ -75,6 +75,8 @@ public:
 
     TMaybe<TString> GetTableFilePath(const TGetTableFilePathOptions&& options) override;
 
+    NThreading::TFuture<TLayersSnapshotResult> SnapshotLayers(TSnapshotLayersOptions&& options) override;
+
 protected:
     IYtGateway::TPtr Slave_;
 };

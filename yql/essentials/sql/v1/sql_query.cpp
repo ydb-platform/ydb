@@ -3443,6 +3443,14 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
         ctx.Engine = *literal;
         return TNodePtr{};
     }),
+    TableElemExt("Layer", [](CB_SIG) -> TMaybe<TNodePtr> {
+        auto& ctx = query.Context();
+        if (values.size() != 1) {
+            query.Error() << "Expected exactly one argument for: " << pragma;
+            return {};
+        }
+        return BuildPragma(ctx.Pos(), TString(ConfigProviderName), "Layer", values, false);
+    }),
 
     // TMaybe<bool> fields.
     PAIRED_TABLE_ELEM("AnsiInForEmptyOrNullableItemsCollections", AnsiInForEmptyOrNullableItemsCollections),
@@ -3530,7 +3538,7 @@ TMaybe<TNodePtr> TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt) {
         }
     }
 
-    const bool withConfigure = prefix || normalizedPragma == "file" || normalizedPragma == "folder" || normalizedPragma == "udf";
+    const bool withConfigure = prefix || normalizedPragma == "file" || normalizedPragma == "folder" || normalizedPragma == "udf" || normalizedPragma == "layer";
     static const THashSet<TStringBuf> lexicalScopePragmas = {
         "classicdivision",
         "strictjoinkeytypes",

@@ -363,6 +363,7 @@ public:
         OPTION_FIELD(TSecureParams, SecureParams)
         OPTION_FIELD_DEFAULT(NUdf::ELogLevel, RuntimeLogLevel, NUdf::ELogLevel::Info)
         OPTION_FIELD_DEFAULT(TLangVersion, LangVer, UnknownLangVersion)
+        OPTION_FIELD(TVector<TString>, LayersPaths)
     };
 
     struct TResOrPullResult : public NCommon::TOperationResult {
@@ -391,6 +392,7 @@ public:
         OPTION_FIELD_DEFAULT(NUdf::ELogLevel, RuntimeLogLevel, NUdf::ELogLevel::Info)
         OPTION_FIELD_DEFAULT(TLangVersion, LangVer, UnknownLangVersion)
         OPTION_FIELD_DEFAULT(TSet<TString>, AdditionalSecurityTags, {})
+        OPTION_FIELD(TVector<TString>, LayersPaths)
     };
 
     struct TRunResult : public NCommon::TOperationResult {
@@ -653,6 +655,23 @@ public:
         OPTION_FIELD(bool, IsTemp)
     };
 
+    struct TSnapshotLayersOptions : public TCommonOptions {
+        using TSelf = TSnapshotLayersOptions;
+
+        TSnapshotLayersOptions(const TString& sessionId)
+            : TCommonOptions(sessionId)
+        {
+        }
+
+        OPTION_FIELD(TString, Cluster)
+        OPTION_FIELD(TVector<TString>, Layers)
+        OPTION_FIELD(TYtSettings::TConstPtr, Config)
+    };
+
+    struct TLayersSnapshotResult : public NCommon::TOperationResult {
+        TVector<std::pair<TString, ui64>> Data;
+    };
+
 public:
     virtual ~IYtGateway() = default;
 
@@ -690,6 +709,8 @@ public:
     virtual NThreading::TFuture<TCommitResult> Commit(TCommitOptions&& options) = 0;
 
     virtual NThreading::TFuture<TDropTrackablesResult> DropTrackables(TDropTrackablesOptions&& options) = 0;
+
+    virtual NThreading::TFuture<TLayersSnapshotResult> SnapshotLayers(TSnapshotLayersOptions&& options) = 0;
 
     virtual NThreading::TFuture<TPathStatResult> PathStat(TPathStatOptions&& options) = 0;
     virtual TPathStatResult TryPathStat(TPathStatOptions&& options) = 0;

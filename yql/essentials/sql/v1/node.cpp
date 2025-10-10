@@ -3125,11 +3125,20 @@ bool TUdfNode::DoInit(TContext& ctx, ISource* src) {
                 ExtraMem_ = MakeAtomFromExpression(Pos_, ctx, arg);
             } else if (arg->GetLabel() == "Depends") {
                 if (!IsBackwardCompatibleFeatureAvailable(ctx.Settings.LangVer,
-                                                          NYql::MakeLangVersion(2025, 3), ctx.Settings.BackportMode)) {
+                                                          NYql::MakeLangVersion(2025, 3), ctx.Settings.BackportMode))
+                {
                     ctx.Error() << "Udf: named argument Depends is not available before version 2025.03";
                     return false;
                 }
                 Depends_.push_back(arg);
+            } else if (arg->GetLabel() == "Layers") {
+                if (!IsBackwardCompatibleFeatureAvailable(ctx.Settings.LangVer,
+                                                          NYql::MakeLangVersion(2025, 4), ctx.Settings.BackportMode))
+                {
+                    ctx.Error() << "Udf: named argument Layers is not available before version 2025.03";
+                    return false;
+                }
+                Layers_ = arg;
             } else {
                 ctx.Error() << "Udf: unexpected named argument: " << arg->GetLabel();
                 return false;
@@ -3165,7 +3174,7 @@ const TVector<TNodePtr>& TUdfNode::GetDepends() const {
 }
 
 TNodePtr TUdfNode::BuildOptions() const {
-    if (Cpu_.Empty() && ExtraMem_.Empty()) {
+    if (Cpu_.Empty() && ExtraMem_.Empty() && !Layers_) {
         return nullptr;
     }
 
@@ -3176,6 +3185,11 @@ TNodePtr TUdfNode::BuildOptions() const {
 
     if (!ExtraMem_.Empty()) {
         options = L(options, Q(Y(Q("extraMem"), ExtraMem_.Build())));
+    }
+
+    if (Layers_) {
+        // layer path can be taken from table
+        options = L(options, Q(Y(Q("layers"), Y("EvaluateExpr", Layers_))));
     }
 
     return Q(options);

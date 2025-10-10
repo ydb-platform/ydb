@@ -4913,6 +4913,13 @@
             "uri": "https://{canondata_backend}/1937150/ec0019724df75083b0e89cab22f57e10ef36744e/resource.tar.gz#test_sql2yql.test_lambda-list_aggregate_flatmap_/sql.yql"
         }
     ],
+    "test_sql2yql.test[layers-layers_pragma_rewrite]": [
+        {
+            "checksum": "bf64ddda86ae4a8e842638b98d0410b9",
+            "size": 1334,
+            "uri": "https://{canondata_backend}/1936273/1f5b84bfc2d00ec94023e72a3c88307e6f9ce472/resource.tar.gz#test_sql2yql.test_layers-layers_pragma_rewrite_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[library-forward_import]": [
         {
             "checksum": "e56ae67b9659b2b5c812c09d1e0e1a19",
@@ -12285,6 +12292,11 @@
     "test_sql_format.test[lambda-list_aggregate_flatmap]": [
         {
             "uri": "file://test_sql_format.test_lambda-list_aggregate_flatmap_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[layers-layers_pragma_rewrite]": [
+        {
+            "uri": "file://test_sql_format.test_layers-layers_pragma_rewrite_/formatted.sql"
         }
     ],
     "test_sql_format.test[library-forward_import]": [

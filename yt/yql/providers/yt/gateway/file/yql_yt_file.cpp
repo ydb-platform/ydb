@@ -1621,6 +1621,11 @@ private:
         return Services_->GetTablePath(options.Cluster(), options.Path(), options.IsTemp());
     }
 
+    NThreading::TFuture<IYtGateway::TLayersSnapshotResult> SnapshotLayers(TSnapshotLayersOptions&&) override {
+        return MakeFuture<IYtGateway::TLayersSnapshotResult>();
+    }
+
+
 private:
     TYtFileServices::TPtr Services_;
     TIntrusivePtr<NCommon::TMkqlCommonCallableCompiler> MkqlCompiler_;

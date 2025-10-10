@@ -10,6 +10,7 @@
 #include <yt/yql/providers/yt/lib/expr_traits/yql_expr_traits.h>
 #include <yt/yql/providers/yt/lib/hash/yql_hash_builder.h>
 #include <yt/yql/providers/yt/provider/yql_yt_helpers.h>
+#include <yt/yql/providers/yt/provider/yql_yt_layers_integration.h>
 #include <yt/yql/providers/yt/provider/phy_opt/yql_yt_phy_opt_helper.h>
 
 #include <yql/essentials/providers/common/provider/yql_provider.h>
@@ -262,10 +263,60 @@ private:
         NCommon::FillSecureParams(optimizedNode, *State_->Types, secureParams);
 
         auto config = State_->Configuration->GetSettingsForNode(*input);
+
+        YQL_CLOG(DEBUG, ProviderYt) << "Executing " << input->Content() << " (UniqueId=" << input->UniqueId() << ")";
+
+        auto cypressPaths = BuildLayersPaths(optimizedNode, cluster, State_->Types->LayersRegistry,State_->LayersIntegration_, config, ctx);
+        if (!cypressPaths) {
+            return SyncError();
+        }
+        auto& snapshots = State_->LayersSnapshots[cluster];
+        TVector<TString> needSnapshots;
+        for (const auto& path: *cypressPaths) {
+            if (!snapshots.contains(path)) {
+                needSnapshots.emplace_back(path);
+            }
+        }
+        if (needSnapshots.size()) {
+            auto snapshotResult = State_->Gateway->SnapshotLayers(
+                IYtGateway::TSnapshotLayersOptions(State_->SessionId)
+                    .Cluster(cluster)
+                    .Layers(needSnapshots)
+                    .Config(config)
+            );
+            return WrapFutureCallback(snapshotResult,
+                [input, needSnapshots, state=State_, cluster](const IYtGateway::TLayersSnapshotResult& res, const TExprNode::TPtr&, TExprNode::TPtr&, TExprContext&)
+                {
+                    auto& snapshots = state->LayersSnapshots[cluster];
+                    for (size_t i = 0; i < needSnapshots.size(); ++i) {
+                        snapshots[needSnapshots[i]] = res.Data[i];
+                    }
+                    input->SetState(TExprNode::EState::ExecutionRequired);
+                    return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, true);
+                }
+            );
+        }
+
+        TVector<std::pair<TString, ui64>> snaphsotsResult(Reserve(cypressPaths->size()));
+        TVector<TString> finalCypressPaths(Reserve(cypressPaths->size()));
+        for (const auto& path: *cypressPaths) {
+            auto ptr = snapshots.FindPtr(path);
+            YQL_ENSURE(ptr);
+            snaphsotsResult.emplace_back(*ptr);
+            finalCypressPaths.emplace_back(ptr->first);
+        }
+
         const auto queryCacheMode = config->QueryCacheMode.Get().GetOrElse(EQueryCacheMode::Disable);
         if (queryCacheMode != EQueryCacheMode::Disable) {
             if (!hasNonDeterministicFunctions) {
                 operationHash = TYtNodeHashCalculator(State_, cluster, config).GetHash(*optimizedNode);
+                THashBuilder builder;
+                builder << TYtNodeHashCalculator::MakeSalt(settings, cluster) << operationHash << snaphsotsResult.size();
+                for (size_t i = 0; i < finalCypressPaths.size(); ++i) {
+                    builder << finalCypressPaths[i] << snaphsotsResult[i].second;
+                }
+                operationHash = builder.Finish();
+
             }
             YQL_CLOG(DEBUG, ProviderYt) << "Operation hash: " << HexEncode(operationHash).Quote()
                 << ", cache mode: " << queryCacheMode;
@@ -300,7 +351,6 @@ private:
             }
         }
 
-        YQL_CLOG(DEBUG, ProviderYt) << "Executing " << input->Content() << " (UniqueId=" << input->UniqueId() << ")";
 
         return State_->Gateway->Run(optimizedNode, ctx,
             IYtGateway::TRunOptions(State_->SessionId)
@@ -316,6 +366,7 @@ private:
                 .RuntimeLogLevel(State_->Types->RuntimeLogLevel)
                 .LangVer(State_->Types->LangVer)
                 .AdditionalSecurityTags(addSecTags)
+                .LayersPaths(std::move(finalCypressPaths))
             );
     }
 

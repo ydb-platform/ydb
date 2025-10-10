@@ -132,6 +132,8 @@ struct TYtState {
     IOptimizerFactory::TPtr OptimizerFactory_;
     IDqHelper::TPtr DqHelper;
     bool IsDqTimeout = false;
+    NLayers::ILayersIntegrationPtr LayersIntegration_;
+    THashMap<TString, THashMap<TString, std::pair<TString, ui64>>> LayersSnapshots;
 private:
     std::unordered_map<ui64, TYtVersionedConfiguration::TState> ConfigurationEvalStates_;
     std::unordered_map<ui64, ui32> EpochEvalStates_;

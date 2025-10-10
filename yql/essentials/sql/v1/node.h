@@ -997,8 +997,8 @@ private:
     bool ScriptUdf_ = false;
     TVector<TNodePtr> ScriptArgs_;
     TVector<TNodePtr> Depends_;
+    TNodePtr Layers_;
 };
-
 class IAggregation: public INode {
 public:
     bool IsDistinct() const;

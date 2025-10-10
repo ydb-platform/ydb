@@ -7810,8 +7810,9 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                     if (!EnsureTupleSize(*child, 1, ctx.Expr)) {
                         return IGraphTransformer::TStatus::Error;
                     }
-                } else if (settingName == "cpu" || settingName == "extraMem" ||
-                    settingName == "minLang" || settingName == "maxLang") {
+                } else if (settingName == "cpu" || settingName == "extraMem"
+                           || settingName == "minLang" || settingName == "maxLang")
+                {
                     if (!EnsureTupleSize(*child, 2, ctx.Expr)) {
                         return IGraphTransformer::TStatus::Error;
                     }
@@ -7844,6 +7845,36 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
 
                             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder() << "UDF '" << name << "' is not available after version " << str));
                             return IGraphTransformer::TStatus::Error;
+                        }
+                    }
+                } else if (settingName == "layers") {
+                    if (!EnsureTupleMinSize(*child, 2, ctx.Expr)) {
+                        return IGraphTransformer::TStatus::Error;
+                    }
+                    if (!child->Child(1)->IsAtom()) { // not rewrited yet
+                        auto expected = ctx.Expr.MakeType<TListExprType>(ctx.Expr.MakeType<TDataExprType>(EDataSlot::String));
+                        auto mustListString = child->Child(1)->GetTypeAnn();
+                        if (mustListString != expected) {
+                            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+                                TStringBuilder() << "Expected List<String> as list of layers, type diff: " << GetTypeDiff(*mustListString, *expected)
+                            ));
+                        }
+                        if (!child->Child(1)->IsCallable("AsList")) {
+                            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+                                "Expected list (AsList callable) of strings in Layers udf's annotation"
+                            ));
+                            return IGraphTransformer::TStatus::Error;
+                        }
+                        for (const auto& nameStr: child->Child(1)->Children()) {
+                            if (!nameStr->IsCallable("String")) {
+                                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(nameStr->Pos()),
+                                    "Expected string as a layer name"
+                                ));
+                                return IGraphTransformer::TStatus::Error;
+                            }
+                            if (!EnsureAtom(*nameStr->Child(0), ctx.Expr)) {
+                                return IGraphTransformer::TStatus::Error;
+                            }
                         }
                     }
                 } else {
@@ -7991,6 +8022,16 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
 
                                 if (auto setting = GetSetting(*settings, "extraMem")) {
                                     parent.Add(settingIndex++, setting);
+                                }
+
+                                if (auto setting = GetSetting(*settings, "layers"); setting && setting->Child(1)->ChildrenSize() > 0) {
+                                    auto sett = parent.List(settingIndex++)
+                                        .Atom(0, "layers");
+                                    size_t idx = 1;
+                                    for (const auto& nameStr: setting->Child(1)->Children()) {
+                                        sett.Atom(idx++, nameStr->Child(0)->Content());
+                                    }
+                                    sett.Seal();
                                 }
                             }
 
@@ -8152,8 +8193,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             if (!EnsureTuple(*input->Child(4), ctx.Expr)) {
                 return IGraphTransformer::TStatus::Error;
             }
-
-            for (auto setting: input->Child(4)->Children()) {
+            for (size_t i = 0; i < input->Child(4)->ChildrenSize(); ++i) {
+                auto setting = input->Child(4)->Child(i);
                 if (!EnsureTupleMinSize(*setting, 1, ctx.Expr)) {
                     return IGraphTransformer::TStatus::Error;
                 }
@@ -8179,6 +8220,38 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                         ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(nameNode->Pos()), TStringBuilder()
                             << "Bad " << TString{nameNode->Content()}.Quote() << " setting value: " << setting->Child(1)->Content()));
                         return IGraphTransformer::TStatus::Error;
+                    }
+                }
+                else if (nameNode->Content() == "layers") {
+                    if (!EnsureTupleMinSize(*setting, 2, ctx.Expr)) {
+                        return IGraphTransformer::TStatus::Error;
+                    }
+                    if (!setting->Child(1)->IsAtom()) { // not rewrited yet
+                        if (!setting->Child(1)->IsCallable("AsList")) {
+                            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+                                "Expected list (AsList callable) of strings in Layers udf's annotation"
+                            ));
+                            return IGraphTransformer::TStatus::Error;
+                        }
+                        for (const auto& nameStr: setting->Child(1)->Children()) {
+                            if (!nameStr->IsCallable("String")) {
+                                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(nameStr->Pos()),
+                                    "Expected string as a layer name"
+                                ));
+                                return IGraphTransformer::TStatus::Error;
+                            }
+                            if (!EnsureAtom(*nameStr->Child(0), ctx.Expr)) {
+                                return IGraphTransformer::TStatus::Error;
+                            }
+                        }
+                        auto sett = ctx.Expr.Builder(setting->Pos()).List()
+                            .Atom(0, "layers");
+                        size_t idx = 1;
+                        for (const auto& nameStr: setting->Child(1)->Children()) {
+                            sett.Atom(idx++, nameStr->Child(0)->Content());
+                        }
+                        output = ctx.Expr.ChangeChild(*input, 4, ctx.Expr.ChangeChild(*input->Child(4), i, sett.Seal().Build()));
+                        return IGraphTransformer::TStatus::Repeat;
                     }
                 }
                 else {

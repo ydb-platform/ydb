@@ -173,6 +173,11 @@ TExprBase MakeInsertFulltextIndexRows(const NYql::NNodes::TExprBase& inputRows, 
         settingsLiteral
     });
     
+    // Convert list to stream for FlatMap
+    auto analyzeStream = Build<TCoToStream>(ctx, pos)
+        .Input(analyzeCallable)
+        .Done();
+    
     if (!useStage) {
         // Build FlatMap directly with inline lambda for both levels
         return Build<TCoFlatMap>(ctx, pos)
@@ -180,7 +185,7 @@ TExprBase MakeInsertFulltextIndexRows(const NYql::NNodes::TExprBase& inputRows, 
             .Lambda()
                 .Args({inputRowArg})
                 .Body<TCoFlatMap>()
-                    .Input(analyzeCallable)
+                    .Input(analyzeStream)
                     .Lambda(tokenRowsLambda)
                     .Build()
                 .Build()
@@ -200,7 +205,7 @@ TExprBase MakeInsertFulltextIndexRows(const NYql::NNodes::TExprBase& inputRows, 
                     .Lambda()
                         .Args({inputRowArg})
                         .Body<TCoFlatMap>()
-                            .Input(analyzeCallable)
+                            .Input(analyzeStream)
                             .Lambda(tokenRowsLambda)
                             .Build()
                         .Build()

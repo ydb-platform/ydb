@@ -973,6 +973,7 @@ message TQueryPhysicalGraph {
 
     optional TPreparedQuery PreparedQuery = 1;
     repeated TTask Tasks = 2;
+    optional bool ZeroCheckpointSaved = 3;
 }
 
 /// KQP workload manager Events

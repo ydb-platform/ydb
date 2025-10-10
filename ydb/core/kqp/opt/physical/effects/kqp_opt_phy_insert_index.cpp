@@ -149,10 +149,13 @@ TExprBase MakeInsertFulltextIndexRows(const NYql::NNodes::TExprBase& inputRows, 
     }
     
     // Create lambda that builds output row for each token
+    // FlatMap expects lambda to return list/stream/optional, so wrap struct in Just
     auto tokenRowsLambda = Build<TCoLambda>(ctx, pos)
         .Args({tokenArg})
-        .Body<TCoAsStruct>()
-            .Add(tokenRowTuples)
+        .Body<TCoJust>()
+            .Input<TCoAsStruct>()
+                .Add(tokenRowTuples)
+                .Build()
             .Build()
         .Done();
     

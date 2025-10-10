@@ -1096,6 +1096,32 @@ Y_UNIT_TEST_SUITE(KqpCost) {
         }
     }
 
+
+    struct TTotalStats {
+        size_t Writes = 0;
+        size_t Reads = 0;
+        size_t Deletes = 0;
+    };
+
+    TTotalStats FromProto(const Ydb::TableStats::QueryStats& proto) {
+        TTotalStats stats;
+        for (int phase = 0; phase < proto.query_phases_size(); ++phase) {
+            for (int access = 0; access < proto.query_phases(phase).table_access_size(); ++access) {
+                stats.Writes += proto.query_phases(phase).table_access(access).updates().rows();
+                stats.Reads += proto.query_phases(phase).table_access(access).reads().rows();
+                stats.Deletes += proto.query_phases(phase).table_access(access).deletes().rows();
+            }
+        }
+        return stats;
+    }
+
+    void Check(const TTotalStats& lhs, const TTotalStats& rhs) {
+        UNIT_ASSERT_VALUES_EQUAL(lhs.Writes, rhs.Writes);
+        UNIT_ASSERT_VALUES_EQUAL(lhs.Reads, rhs.Reads);
+        UNIT_ASSERT_VALUES_EQUAL(lhs.Deletes, rhs.Deletes);
+    }
+    
+
     Y_UNIT_TEST_TWIN(OltpWriteRow, isSink) {
         TKikimrRunner kikimr(GetAppConfig(false, false, isSink));
         auto db = kikimr.GetQueryClient();
@@ -1127,6 +1153,14 @@ Y_UNIT_TEST_SUITE(KqpCost) {
                     UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(access).reads().bytes(), 0);
                 }
             }
+
+            Check(
+                FromProto(stats),
+                TTotalStats{
+                    .Writes = 1,
+                    .Reads = 0,
+                    .Deletes = 0,
+                });
         }
 
         {
@@ -1152,6 +1186,14 @@ Y_UNIT_TEST_SUITE(KqpCost) {
                     UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(access).reads().bytes(), 0);
                 }
             }
+
+            Check(
+                FromProto(stats),
+                TTotalStats{
+                    .Writes = 1,
+                    .Reads = 0,
+                    .Deletes = 0,
+                });
         }
 
         {
@@ -1172,6 +1214,14 @@ Y_UNIT_TEST_SUITE(KqpCost) {
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access_size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(0).reads().rows(), 1);
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(0).reads().bytes(), 8);
+
+            Check(
+                FromProto(stats),
+                TTotalStats{
+                    .Writes = 0,
+                    .Reads = 1,
+                    .Deletes = 0,
+                });
         }
 
         {
@@ -1198,6 +1248,14 @@ Y_UNIT_TEST_SUITE(KqpCost) {
                     UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(access).reads().bytes(), 0);
                 }
             }
+
+            Check(
+                FromProto(stats),
+                TTotalStats{
+                    .Writes = 1,
+                    .Reads = 0,
+                    .Deletes = 0,
+                });
         }
 
         {
@@ -1222,6 +1280,14 @@ Y_UNIT_TEST_SUITE(KqpCost) {
                     UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(0).reads().rows(), 0);
                 }
             }
+
+            Check(
+                FromProto(stats),
+                TTotalStats{
+                    .Writes = 0,
+                    .Reads = 0,
+                    .Deletes = 0,
+                });
         }
 
         {
@@ -1243,6 +1309,14 @@ Y_UNIT_TEST_SUITE(KqpCost) {
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(0).updates().bytes(), 20);
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(isSink ? phase : 1).table_access(0).reads().rows(), 1);
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(isSink ? phase : 1).table_access(0).reads().bytes(), 8);
+
+            Check(
+                FromProto(stats),
+                TTotalStats{
+                    .Writes = 1,
+                    .Reads = 1,
+                    .Deletes = 0,
+                });
         }
 
         {
@@ -1269,6 +1343,14 @@ Y_UNIT_TEST_SUITE(KqpCost) {
                     UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(access).reads().bytes(), 0);
                 }
             }
+
+            Check(
+                FromProto(stats),
+                TTotalStats{
+                    .Writes = 0,
+                    .Reads = 0,
+                    .Deletes = 1,
+                });
         }
 
         {
@@ -1295,6 +1377,14 @@ Y_UNIT_TEST_SUITE(KqpCost) {
                     UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(access).reads().bytes(), 0);
                 }
             }
+
+            Check(
+                FromProto(stats),
+                TTotalStats{
+                    .Writes = 0,
+                    .Reads = 0,
+                    .Deletes = 1,
+                });
         }
     }
 
@@ -1338,6 +1428,14 @@ Y_UNIT_TEST_SUITE(KqpCost) {
                 UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(5).table_access(0).reads().rows(), 1);
                 UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(5).table_access(0).reads().bytes(), 8);
             }
+
+            Check(
+                FromProto(stats),
+                TTotalStats{
+                    .Writes = 1,
+                    .Reads = 1,
+                    .Deletes = 0,
+                });
         }
 
         {
@@ -1370,6 +1468,14 @@ Y_UNIT_TEST_SUITE(KqpCost) {
                 UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(3).table_access(0).reads().rows(), 1);
                 UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(3).table_access(0).reads().bytes(), 8);
             }
+
+            Check(
+                FromProto(stats),
+                TTotalStats{
+                    .Writes = 1,
+                    .Reads = 1,
+                    .Deletes = 0,
+                });
         }
 
         {
@@ -1397,6 +1503,14 @@ Y_UNIT_TEST_SUITE(KqpCost) {
                 UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(1).reads().rows(), 1);
                 UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(1).reads().bytes(), 8);
             }
+
+            Check(
+                FromProto(stats),
+                TTotalStats{
+                    .Writes = 0,
+                    .Reads = 1,
+                    .Deletes = 0,
+                });
         }
 
         {
@@ -1426,6 +1540,14 @@ Y_UNIT_TEST_SUITE(KqpCost) {
                 UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(1).reads().rows(), 1);
                 UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(1).reads().bytes(), 8);
             }
+
+            Check(
+                FromProto(stats),
+                TTotalStats{
+                    .Writes = 0,
+                    .Reads = 1,
+                    .Deletes = 0,
+                });
         }
 
         {
@@ -1455,6 +1577,14 @@ Y_UNIT_TEST_SUITE(KqpCost) {
                 UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).reads().rows(), 1);
                 UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).reads().bytes(), 8);
             }
+
+            Check(
+                FromProto(stats),
+                TTotalStats{
+                    .Writes = 0,
+                    .Reads = 1,
+                    .Deletes = 0,
+                });
         }
 
         {
@@ -1486,6 +1616,14 @@ Y_UNIT_TEST_SUITE(KqpCost) {
                 UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).reads().rows(), 1);
                 UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).reads().bytes(), 8);
             }
+
+            Check(
+                FromProto(stats),
+                TTotalStats{
+                    .Writes = isSink ? 1 : 0, // EvWrite writes before next read
+                    .Reads = 1,
+                    .Deletes = 0,
+                });
         }
 
         {
@@ -1517,6 +1655,14 @@ Y_UNIT_TEST_SUITE(KqpCost) {
                 UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).reads().rows(), 1);
                 UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).reads().bytes(), 8);
             }
+
+            Check(
+                FromProto(stats),
+                TTotalStats{
+                    .Writes = isSink ? 1 : 0, // EvWrite writes before next read
+                    .Reads = 1,
+                    .Deletes = 0,
+                });
         }
 
         {
@@ -1548,6 +1694,14 @@ Y_UNIT_TEST_SUITE(KqpCost) {
                 UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).reads().rows(), 1);
                 UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).reads().bytes(), 8);
             }
+
+            Check(
+                FromProto(stats),
+                TTotalStats{
+                    .Writes = isSink ? 2 : 0, // EvWrite writes before next read
+                    .Reads = 1,
+                    .Deletes = 0,
+                });
         }
     }
 

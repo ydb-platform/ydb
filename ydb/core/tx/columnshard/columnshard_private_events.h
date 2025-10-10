@@ -192,10 +192,6 @@ struct TEvPrivate {
             return Result;
         }
 
-        TCounterGuard ExtractGuard() {
-            return std::move(ScanCounter);
-        }
-
         TEvTaskProcessedResult(
             TConclusion<std::shared_ptr<NOlap::NReader::IApplyAction>>&& result, TCounterGuard&& scanCounters)
             : Result(std::move(result))

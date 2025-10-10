@@ -29,6 +29,7 @@ struct TTestEnvSettings {
     bool EnableTableCacheModes = false;
     TMaybe<bool> EnableRealSystemViewPaths;
     NKikimrProto::TAuthConfig AuthConfig = {};
+    NKikimrConfig::TTableServiceConfig TableServiceConfig;
 };
 
 class TTestEnv {

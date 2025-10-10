@@ -1,5 +1,7 @@
 #include "load_actor_impl.h"
 
+#include <ydb/library/actors/interconnect/interconnect_stream.h>
+
 namespace NKikimr::NTestShard {
 
     class TStateServerInterfaceActor : public TActor<TStateServerInterfaceActor> {

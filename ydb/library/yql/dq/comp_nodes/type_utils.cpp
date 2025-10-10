@@ -19,11 +19,13 @@ bool UnwrapBlockTypes(const TArrayRef<TType* const>& typeComponents, std::vector
     MKQL_ENSURE(hasBlock != hasNonBlock, "Inconsistent wide item types: mixing of blocks and non-blocks detected");
     return hasBlock;
 }
+
 void WrapArrayBlockTypes(std::vector<TType*>& types, const TProgramBuilder& pb)
 {
     std::transform(types.begin(), types.end(), types.begin(),
                    [&](TType* type) { return pb.NewBlockType(type, TBlockType::EShape::Many); });
 }
+
 int ArrowScalarAsInt(const TArrowBlock& scalar) {
     return scalar.GetDatum().scalar_as<arrow::UInt64Scalar>().value;
 }
@@ -33,9 +35,9 @@ bool ForceRightOptional(EJoinKind kind) {
     case EJoinKind::Left:
     case EJoinKind::Exclusion:
     case EJoinKind::Full:
-    return true;
+        return true;
     default:
-    return false;
+        return false;
     }
 }
 
@@ -44,9 +46,9 @@ bool ForceLeftOptional(EJoinKind kind) {
     case EJoinKind::Right:
     case EJoinKind::Exclusion:
     case EJoinKind::Full:
-    return true;
+        return true;
     default:
-    return false;
+        return false;
     }
 }
-}
+} // namespace NKikimr::NMiniKQL

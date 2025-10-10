@@ -150,9 +150,12 @@ class TScalarHashJoinWrapper : public TStatefulWideFlowComputationNode<TScalarHa
 
   public:
     TScalarHashJoinWrapper(TComputationMutables& mutables, IComputationWideFlowNode* leftFlow,
-                           IComputationWideFlowNode* rightFlow, TVector<TType*>&& resultItemTypes,
-                           TVector<TType*>&& leftColumnTypes, TVector<ui32>&& leftKeyColumns,
-                           TVector<TType*>&& rightColumnTypes, TVector<ui32>&& rightKeyColumns)
+                           IComputationWideFlowNode* rightFlow,
+                           TVector<TType*>&& resultItemTypes,
+                           TVector<TType*>&& leftColumnTypes,
+                           TVector<ui32>&& leftKeyColumns,
+                           TVector<TType*>&& rightColumnTypes,
+                           TVector<ui32>&& rightKeyColumns)
         : TBaseComputation(mutables, nullptr, EValueRepresentation::Boxed)
         , LeftFlow_(leftFlow)
         , RightFlow_(rightFlow)

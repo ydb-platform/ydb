@@ -19,7 +19,7 @@ namespace NKikimr::NMiniKQL {
 
 namespace {
 
-class TBlockRowSource: public NNonCopyable::TMoveOnly {
+class TBlockRowSource : public NNonCopyable::TMoveOnly {
   public:
     TBlockRowSource(TComputationContext& ctx, IComputationNode* stream, const std::vector<TType*>& types)
         : Stream_(stream)
@@ -99,15 +99,8 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
     {}
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        return ctx.HolderFactory.Create<TStreamValue>(ctx,
-                                                      LeftKeyColumns_,
-                                                      RightKeyColumns_,
-                                                      LeftStream_,
-                                                      RightStream_,
-                                                      LeftItemTypes_,
-                                                      RightItemTypes_,
-                                                      ResultItemTypes_
-        );
+        return ctx.HolderFactory.Create<TStreamValue>(ctx, LeftKeyColumns_, RightKeyColumns_, LeftStream_, RightStream_,
+                                                      LeftItemTypes_, RightItemTypes_, ResultItemTypes_);
     }
 
   private:
@@ -115,43 +108,44 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
         using TBase = TComputationValue<TStreamValue>;
 
       public:
-        TStreamValue(TMemoryUsageInfo* memInfo, TComputationContext& ctx,
-                     const TVector<ui32>& leftKeyColumns, const TVector<ui32>& rightKeyColumns,
-                     IComputationNode* leftStream, IComputationNode* rightStream,
-                     const TVector<TType*>& leftStreamTypes, const TVector<TType*>& rightStreamTypes, const TVector<TType*>& resultStreamTypes)
+        TStreamValue(TMemoryUsageInfo* memInfo, TComputationContext& ctx, const TVector<ui32>& leftKeyColumns,
+                     const TVector<ui32>& rightKeyColumns, IComputationNode* leftStream, IComputationNode* rightStream,
+                     const TVector<TType*>& leftStreamTypes, const TVector<TType*>& rightStreamTypes,
+                     const TVector<TType*>& resultStreamTypes)
             : TBase(memInfo)
-            , Join_(memInfo
-                , TBlockRowSource{ctx, leftStream, leftStreamTypes}
-                , TBlockRowSource{ctx, rightStream, rightStreamTypes}
-                , TJoinMetadata{TColumnsMetadata{rightKeyColumns, rightStreamTypes},
-                              TColumnsMetadata{leftKeyColumns, leftStreamTypes},
-                              KeyTypesFromColumns(leftStreamTypes, leftKeyColumns)}
-                , ctx.MakeLogger()
-                , "BlockHashJoin"
-            )
+            , Join_(memInfo, TBlockRowSource{ctx, leftStream, leftStreamTypes},
+                    TBlockRowSource{ctx, rightStream, rightStreamTypes},
+                    TJoinMetadata{TColumnsMetadata{rightKeyColumns, rightStreamTypes},
+                                  TColumnsMetadata{leftKeyColumns, leftStreamTypes},
+                                  KeyTypesFromColumns(leftStreamTypes, leftKeyColumns)}, ctx.MakeLogger(),
+                    "BlockHashJoin")
             , Ctx_(&ctx)
             , OutputTypes_(resultStreamTypes)
         {
             TTypeInfoHelper typeInfoHelper;
-            for(auto outType : OutputTypes_) {
-                OutputItemConverters_.push_back(MakeBlockItemConverter(typeInfoHelper, outType, ctx.Builder->GetPgBuilder()));
+            for (auto outType : OutputTypes_) {
+                OutputItemConverters_.push_back(
+                    MakeBlockItemConverter(typeInfoHelper, outType, ctx.Builder->GetPgBuilder()));
             }
         }
+
         int TupleSize() const {
-            return OutputTypes_.size() - 1/*mind last integer column*/;
+            return OutputTypes_.size() - 1 /*mind last integer column*/;
         }
 
         int SizeTuples() const {
             MKQL_ENSURE(OutputBuffer_.size() % TupleSize() == 0, "buffer contains tuple parts??");
             return OutputBuffer_.size() / TupleSize();
         }
+
         void FlushTo(NUdf::TUnboxedValue* output) {
             MKQL_ENSURE(!OutputBuffer_.empty(), "make sure we are flushing something, not empty set of tuples");
             TTypeInfoHelper helper;
             std::vector<std::unique_ptr<NYql::NUdf::IArrayBuilder>> blockBuilders;
             int rows = SizeTuples();
             for (int i = 0; i < TupleSize(); ++i) {
-                blockBuilders.push_back(MakeArrayBuilder(helper, OutputTypes_[i], Ctx_->ArrowMemoryPool, rows, &Ctx_->Builder->GetPgBuilder()));
+                blockBuilders.push_back(MakeArrayBuilder(helper, OutputTypes_[i], Ctx_->ArrowMemoryPool, rows,
+                                                         &Ctx_->Builder->GetPgBuilder()));
             }
 
             for (int rowIndex = 0; rowIndex < rows; ++rowIndex) {
@@ -161,15 +155,17 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
                 }
             }
             OutputBuffer_.clear();
-            for(int colIndex = 0; colIndex < TupleSize(); ++colIndex) {
+            for (int colIndex = 0; colIndex < TupleSize(); ++colIndex) {
                 output[colIndex] = Ctx_->HolderFactory.CreateArrowBlock(blockBuilders[colIndex]->Build(true));
             }
             output[TupleSize()] = Ctx_->HolderFactory.CreateArrowBlock(arrow::Datum(static_cast<uint64_t>(rows)));
             MKQL_ENSURE(OutputBuffer_.empty(), "something left after flush??");
         }
+
       private:
         NUdf::EFetchStatus WideFetch(NUdf::TUnboxedValue* output, ui32 width) override {
-            MKQL_ENSURE(width == OutputTypes_.size(), Sprintf("runtime(%i) vs compile-time(%i) tuple width mismatch", width, OutputTypes_.size()));
+            MKQL_ENSURE(width == OutputTypes_.size(),
+                        Sprintf("runtime(%i) vs compile-time(%i) tuple width mismatch", width, OutputTypes_.size()));
             if (Finished_) {
                 return NYql::NUdf::EFetchStatus::Finish;
             }
@@ -196,10 +192,10 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
                     };
                 }
             }();
-            while(SizeTuples() < Threshold) {
+            while (SizeTuples() < Threshold) {
                 auto res = Join_.MatchRows(*Ctx_, consumeOneOrTwo);
                 switch (res) {
-                case EFetchResult::Finish:{
+                case EFetchResult::Finish: {
                     if (SizeTuples() == 0) {
                         return NYql::NUdf::EFetchStatus::Finish;
                     }
@@ -222,7 +218,7 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
         TComputationContext* Ctx_;
         std::vector<NUdf::TUnboxedValue> OutputBuffer_;
         std::vector<std::unique_ptr<IBlockItemConverter>> OutputItemConverters_;
-        const std::vector<TType*> OutputTypes_; 
+        const std::vector<TType*> OutputTypes_;
         const int Threshold = 10000;
         bool Finished_ = false;
         const std::vector<NYql::NUdf::TUnboxedValue> NullTuples_{
@@ -256,7 +252,7 @@ IComputationNode* WrapDqBlockHashJoin(TCallable& callable, const TComputationNod
     const auto joinComponents = GetWideComponents(joinStreamType);
     MKQL_ENSURE(joinComponents.size() > 0, "Expected at least one column");
     TVector<TType*> joinItems;
-    for (auto* blockType: joinComponents) {
+    for (auto* blockType : joinComponents) {
         MKQL_ENSURE(blockType->IsBlock(), "Expected block types as wide components of result stream");
         joinItems.push_back(AS_TYPE(TBlockType, blockType)->GetItemType());
     }
@@ -268,7 +264,7 @@ IComputationNode* WrapDqBlockHashJoin(TCallable& callable, const TComputationNod
     const auto leftStreamComponents = GetWideComponents(leftStreamType);
     MKQL_ENSURE(leftStreamComponents.size() > 0, "Expected at least one column");
     TVector<TType*> leftStreamItems;
-    for (auto* blockType: leftStreamComponents) {
+    for (auto* blockType : leftStreamComponents) {
         MKQL_ENSURE(blockType->IsBlock(), "Expected block types as wide components of left stream");
         leftStreamItems.push_back(AS_TYPE(TBlockType, blockType)->GetItemType());
     }
@@ -280,7 +276,7 @@ IComputationNode* WrapDqBlockHashJoin(TCallable& callable, const TComputationNod
     const auto rightStreamComponents = GetWideComponents(rightStreamType);
     MKQL_ENSURE(rightStreamComponents.size() > 0, "Expected at least one column");
     TVector<TType*> rightStreamItems;
-    for (auto* blockType: rightStreamComponents) {
+    for (auto* blockType : rightStreamComponents) {
         MKQL_ENSURE(blockType->IsBlock(), "Expected block types as wide components of right stream");
         rightStreamItems.push_back(AS_TYPE(TBlockType, blockType)->GetItemType());
     }

@@ -28,14 +28,14 @@ TVector<TString> GenerateStringKeyColumn(i32 size, i32 seed) {
 }
 
 template <typename KeyType>
-NKikimr::NMiniKQL::TJoinDescription PrepareDescription(NKikimr::NMiniKQL::TDqSetup<false>* setup,
-                                                            TVector<KeyType> leftKeys, TVector<KeyType> rightKeys) {
+NKikimr::NMiniKQL::TJoinDescription
+PrepareDescription(NKikimr::NMiniKQL::TDqSetup<false>* setup, TVector<KeyType> leftKeys, TVector<KeyType> rightKeys) {
     const int leftSize = std::ssize(leftKeys);
     const int rightSize = std::ssize(rightKeys);
     NKikimr::NMiniKQL::TJoinDescription descr;
     descr.Setup = setup;
-    std::tie(descr.LeftSource.ColumnTypes, descr.LeftSource.ValuesList) = ConvertVectorsToRuntimeTypesAndValue(
-        *setup, std::move(leftKeys), TVector<ui64>(leftSize, 111));
+    std::tie(descr.LeftSource.ColumnTypes, descr.LeftSource.ValuesList) =
+        ConvertVectorsToRuntimeTypesAndValue(*setup, std::move(leftKeys), TVector<ui64>(leftSize, 111));
     std::tie(descr.RightSource.ColumnTypes, descr.RightSource.ValuesList) =
         ConvertVectorsToRuntimeTypesAndValue(*setup, std::move(rightKeys), TVector<TString>(rightSize, "woo"));
     return descr;
@@ -67,6 +67,7 @@ TVector<TBenchmarkCaseResult> NKikimr::NMiniKQL::RunJoinsBench(const TBenchmarkS
                 TJoinDescription descr = [&] {
                     using enum ETestedJoinKeyType;
                     switch (keyType) {
+
                     case kString: {
                         return PrepareDescription(&setup, GenerateStringKeyColumn(sizes.Left, 123),
                                                   GenerateStringKeyColumn(sizes.Right, 111));

@@ -59,7 +59,7 @@ int ArrowScalarAsInt(const TArrowBlock& scalar);
 
 bool ForceLeftOptional(EJoinKind kind);
 
-// Left join causes all right columns to be nullable 
+// Left join causes all right columns to be nullable
 bool ForceRightOptional(EJoinKind kind);
 
 } // namespace NMiniKQL

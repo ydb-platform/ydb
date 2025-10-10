@@ -1,8 +1,8 @@
 #pragma once
 #include "benchmark_settings.h"
-#include <ydb/library/yql/dq/comp_nodes/ut/utils/utils.h>
 #include <ydb/library/yql/dq/comp_nodes/dq_program_builder.h>
 #include <ydb/library/yql/dq/comp_nodes/ut/utils/dq_setup.h>
+#include <ydb/library/yql/dq/comp_nodes/ut/utils/utils.h>
 
 namespace NKikimr::NMiniKQL {
 

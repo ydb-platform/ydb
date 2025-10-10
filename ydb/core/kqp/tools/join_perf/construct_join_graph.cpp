@@ -1,17 +1,18 @@
 #include "construct_join_graph.h"
 #include <algorithm>
+#include <ydb/library/yql/dq/comp_nodes/type_utils.h>
 #include <ydb/library/yql/dq/comp_nodes/ut/utils/utils.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_node_printer.h>
-#include <ydb/library/yql/dq/comp_nodes/type_utils.h>
+
 namespace NKikimr::NMiniKQL {
 
 namespace {
 
 TRuntimeNode BuildBlockJoin(TProgramBuilder& pgmBuilder, EJoinKind joinKind, TRuntimeNode leftList,
                             TArrayRef<const ui32> leftKeyColumns, const TVector<ui32>& leftKeyDrops,
-                            TRuntimeNode rightList, TArrayRef<const ui32> rightKeyColumns,
-                            const TVector<ui32>& rightKeyDrops, bool rightAny) {
+                            TRuntimeNode rightList,
+                            TArrayRef<const ui32> rightKeyColumns, const TVector<ui32>& rightKeyDrops, bool rightAny) {
     const auto leftStream = ToWideStream(pgmBuilder, leftList);
     const auto rightBlockList = ToBlockList(pgmBuilder, rightList);
 
@@ -73,12 +74,14 @@ THolder<IComputationGraph> ConstructJoinGraphStream(EJoinKind joinKind, ETestedJ
             leftRenames.push_back(colIndex);
             leftRenames.push_back(colIndex);
         }
-        for(auto& resType: descr.LeftSource.ColumnTypes) {
-            resultTypesArr.push_back([&]{if (ForceLeftOptional(joinKind) && !resType->IsOptional()) {
-                return pb.NewOptionalType(resType);
-            } else {
-                return resType;
-            }}());
+        for (auto& resType : descr.LeftSource.ColumnTypes) {
+            resultTypesArr.push_back([&] {
+                if (ForceLeftOptional(joinKind) && !resType->IsOptional()) {
+                    return pb.NewOptionalType(resType);
+                } else {
+                    return resType;
+                }
+            }());
         }
     }
     if (joinKind != EJoinKind::LeftOnly && joinKind != EJoinKind::LeftSemi) {
@@ -86,15 +89,17 @@ THolder<IComputationGraph> ConstructJoinGraphStream(EJoinKind joinKind, ETestedJ
             rightRenames.push_back(colIndex);
             rightRenames.push_back(colIndex + std::ssize(resultTypesArr));
         }
-        for(auto* resType: descr.LeftSource.ColumnTypes) {
-            resultTypesArr.push_back([&]{if (ForceRightOptional(joinKind) && !resType->IsOptional()) {
-                return pb.NewOptionalType(resType);
-            } else {
-                return resType;
-            }}());
+        for (auto* resType : descr.LeftSource.ColumnTypes) {
+            resultTypesArr.push_back([&] {
+                if (ForceRightOptional(joinKind) && !resType->IsOptional()) {
+                    return pb.NewOptionalType(resType);
+                } else {
+                    return resType;
+                }
+            }());
         }
     }
-    
+
     struct TJoinArgs {
         TRuntimeNode Left;
         TRuntimeNode Right;
@@ -202,7 +207,7 @@ THolder<IComputationGraph> ConstructJoinGraphStream(EJoinKind joinKind, ETestedJ
         }
         case ETestedJoinAlgo::kBlockHash: {
             TVector<TType*> blockResultTypes;
-            for(TType* type: resultTypesArr) {
+            for (TType* type : resultTypesArr) {
                 blockResultTypes.push_back(pb.NewBlockType(type, TBlockType::EShape::Many));
             }
             blockResultTypes.push_back(LastScalarIndexBlock(dqPb));

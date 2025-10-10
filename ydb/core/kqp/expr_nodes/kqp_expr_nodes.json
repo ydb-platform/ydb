@@ -761,6 +761,15 @@
             ]
         },
         {
+            "Name": "TFulltextAnalyze",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "FulltextAnalyze"},
+            "Children": [
+                {"Index": 0, "Name": "Text", "Type": "TCoAtom"},
+                {"Index": 1, "Name": "Settings", "Type": "TCoAtom"}
+            ]
+        },
+        {
             "Name": "TKqpOpRead",
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "KqpOpRead"},

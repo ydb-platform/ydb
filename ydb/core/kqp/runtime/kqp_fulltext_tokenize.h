@@ -5,7 +5,7 @@
 namespace NKikimr {
 namespace NMiniKQL {
 
-IComputationNode* WrapFulltextTokenize(TCallable& callable, const TComputationNodeFactoryContext& ctx);
+IComputationNode* WrapFulltextAnalyze(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 
 } // namespace NMiniKQL
 } // namespace NKikimr

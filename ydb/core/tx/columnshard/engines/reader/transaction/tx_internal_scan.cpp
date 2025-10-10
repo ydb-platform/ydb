@@ -75,6 +75,14 @@ void TTxInternalScan::Complete(const TActorContext& ctx) {
                 return SendError("cannot create read metadata", newRange.GetErrorMessage(), ctx);
             }
             readMetadataRange = TValidator::CheckNotNull(newRange.DetachResult());
+            if (!request.GetColumnIds().empty()) {
+                const auto& idxInfo = readMetadataRange->GetResultSchema()->GetIndexInfo();
+                for (auto&& colId : request.GetColumnIds()) {
+                    if (!idxInfo.HasColumnId(colId)) {
+                        return SendError("requested column not found in schema", ::ToString(colId), ctx);
+                    }
+                }
+            }
         }
     }
     TStringBuilder detailedInfo;

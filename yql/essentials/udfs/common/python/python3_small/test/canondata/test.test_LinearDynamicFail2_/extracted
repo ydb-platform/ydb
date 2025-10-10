@@ -1,0 +1,12 @@
+<tmp_path>/program.sql:<main>: Error: Execution
+
+    <tmp_path>/program.sql:<main>:52:1: Error: Execution of node: Result
+    	select $c($a,0),$c($a,1);
+	^
+        <tmp_path>/program.sql:<main>:46:14: Error: Failed to execute:
+Traceback (most recent call last):
+  File "embedded:g", line 35, in g
+ValueError: The linear value has already been used
+
+        	$c = Python::g(Callable<($l,Int32)->Int32>, $s);
+	             ^

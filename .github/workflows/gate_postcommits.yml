@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
 
 env:
-  QUEUE_THRESHOLD: 2  # Пороговое значение для очереди
+  QUEUE_THRESHOLD: 2
 
 jobs:
   switch_gate:

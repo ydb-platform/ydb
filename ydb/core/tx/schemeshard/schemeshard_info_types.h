@@ -3108,7 +3108,6 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         LockBuild = 47,
         Applying = 50,
         Unlocking = 60,
-        AlterSequence = 61,
         Done = 200,
 
         Cancellation_Applying = 350,
@@ -3128,6 +3127,9 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
 
         // Filling
         UniqIndexValidation = 100,
+
+        // Changing starting sequence value for a prefixed vector index
+        AlterSequence = 200,
     };
 
     struct TColumnBuildInfo {

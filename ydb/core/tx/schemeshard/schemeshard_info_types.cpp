@@ -2565,7 +2565,6 @@ bool TIndexBuildInfo::IsValidState(EState value)
         case EState::LockBuild:
         case EState::Applying:
         case EState::Unlocking:
-        case EState::AlterSequence:
         case EState::Done:
         case EState::Cancellation_Applying:
         case EState::Cancellation_Unlocking:
@@ -2585,6 +2584,7 @@ bool TIndexBuildInfo::IsValidSubState(ESubState value)
     switch (value) {
         case ESubState::None:
         case ESubState::UniqIndexValidation:
+        case ESubState::AlterSequence:
             return true;
     }
     return false;

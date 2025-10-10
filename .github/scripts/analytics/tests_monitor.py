@@ -283,7 +283,7 @@ def main():
     parser.add_argument('--days-window', default=1, type=int, help='how many days back we collecting history')
     parser.add_argument(
         '--build_type',
-        choices=['relwithdebinfo', 'release-asan', 'release-tsan', 'release-msan'],
+        choices=['relwithdebinfo', 'relwithdebinfo-asan', 'relwithdebinfo-tsan', 'relwithdebinfo-msan'],
         default='relwithdebinfo',
         type=str,
         help='build type',

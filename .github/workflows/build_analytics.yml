@@ -12,9 +12,9 @@ on:
           - debug
           - release
           - relwithdebinfo
-          - release-asan
-          - release-tsan
-          - release-msan
+          - relwithdebinfo-asan
+          - relwithdebinfo-tsan
+          - relwithdebinfo-msan
       runner_label:
         type: string
         default: "auto-provisioned"

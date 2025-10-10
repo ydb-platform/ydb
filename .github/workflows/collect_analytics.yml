@@ -74,7 +74,7 @@ jobs:
     - name: Set build types
       id: set-build-types
       run: |
-        echo "BUILD_TYPES=relwithdebinfo release-asan release-msan release-tsan" >> $GITHUB_ENV
+        echo "BUILD_TYPES=relwithdebinfo relwithdebinfo-asan relwithdebinfo-msan relwithdebinfo-tsan" >> $GITHUB_ENV
     - name: Collect test history data for all build types
       run: |
         for BUILD_TYPE in $BUILD_TYPES; do

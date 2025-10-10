@@ -473,9 +473,9 @@ static TInterconnectSettings GetInterconnectSettings(const NKikimrConfig::TInter
     if (config.HasNumPreallocatedBuffers()) {
         result.NumPreallocatedBuffers = config.GetNumPreallocatedBuffers();
     }
-    if (config.HasEnableExternalDataChannel()) {
-        result.EnableExternalDataChannel = config.GetEnableExternalDataChannel();
-    }
+
+    result.EnableExternalDataChannel = config.GetEnableExternalDataChannel();
+
     if (config.HasValidateIncomingPeerViaDirectLookup()) {
         result.ValidateIncomingPeerViaDirectLookup = config.GetValidateIncomingPeerViaDirectLookup();
     }
@@ -495,15 +495,13 @@ static TInterconnectSettings GetInterconnectSettings(const NKikimrConfig::TInter
         result.EventDelay = TDuration::MicroSeconds(config.GetEventDelayMicrosec());
     }
 
-    if (config.HasSocketSendOptimization()) {
-        switch (config.GetSocketSendOptimization()) {
-            case NKikimrConfig::TInterconnectConfig::IC_SO_DISABLED:
-                result.SocketSendOptimization = ESocketSendOptimization::DISABLED;
-                break;
-            case NKikimrConfig::TInterconnectConfig::IC_SO_MSG_ZEROCOPY:
-                result.SocketSendOptimization = ESocketSendOptimization::IC_MSG_ZEROCOPY;
-                break;
-        }
+    switch (config.GetSocketSendOptimization()) {
+        case NKikimrConfig::TInterconnectConfig::IC_SO_DISABLED:
+            result.SocketSendOptimization = ESocketSendOptimization::DISABLED;
+            break;
+        case NKikimrConfig::TInterconnectConfig::IC_SO_MSG_ZEROCOPY:
+            result.SocketSendOptimization = ESocketSendOptimization::IC_MSG_ZEROCOPY;
+            break;
     }
 
     return result;

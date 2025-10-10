@@ -19,7 +19,7 @@
 #include <ydb/library/actors/interconnect/interconnect_common.h>
 #include <ydb/library/actors/interconnect/interconnect_tcp_proxy.h>
 #include <ydb/library/actors/interconnect/interconnect_tcp_server.h>
-#include <ydb/library/actors/interconnect/poller_actor.h>
+#include <ydb/library/actors/interconnect/poller/poller_actor.h>
 #include <library/cpp/yson/node/node_io.h>
 
 #include <util/stream/file.h>

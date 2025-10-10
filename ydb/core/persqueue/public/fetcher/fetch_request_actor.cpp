@@ -123,6 +123,7 @@ public:
             fetchInfo->Record.SetOffset(p.Offset);
             fetchInfo->Record.SetDeadline(deadline);
             fetchInfo->Record.SetCookie(i);
+            fetchInfo->Record.SetClientId(Settings.Consumer);
             TopicInfo[topicPath].HasDataRequests[p.Partition] = fetchInfo;
 
             PartitionStatus[i] = EPartitionStatus::Unprocessed;
@@ -531,6 +532,7 @@ public:
                 fetchInfo->Record.SetPartition(p.Partition);
                 fetchInfo->Record.SetOffset(p.Offset);
                 fetchInfo->Record.SetCookie(i);
+                fetchInfo->Record.SetClientId(Settings.Consumer);
                 fetchInfo->Record.SetDeadline(0);
 
                 auto tabletId = topicInfo.PartitionToTablet[p.Partition];

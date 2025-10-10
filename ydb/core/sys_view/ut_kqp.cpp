@@ -844,6 +844,69 @@ Y_UNIT_TEST_SUITE(SystemView) {
         check.Uint64(1u); // LastTtlRowsProcessed
         check.Uint64(1u); // LastTtlRowsErased
     }
+    
+    Y_UNIT_TEST(PartitionStatsAfterRemoveColumnTable) {
+        TTestEnv env;
+        NQuery::TQueryClient client(env.GetDriver());
+        
+        {
+            auto result = client.ExecuteQuery(R"(
+                CREATE TABLE `/Root/test_table` (
+                    key int not null,
+                    value utf8,
+                    PRIMARY KEY(key)
+                ) WITH (STORE=COLUMN);
+            )", NQuery::TTxControl::NoTx()).GetValueSync();
+            
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        
+        {
+            auto result = client.ExecuteQuery(R"(
+                SELECT Path FROM `/Root/.sys/partition_stats`
+                GROUP BY Path;
+            )", NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            auto parser = result.GetResultSetParser(0);
+            bool existsPath = false;
+            while (parser.TryNextRow()) {
+                auto path = parser.ColumnParser("Path").GetOptionalUtf8();
+                UNIT_ASSERT(path);
+                if (*path == "/Root/test_table") {
+                    existsPath = true;
+                    break;
+                }
+            }
+            UNIT_ASSERT_C(existsPath, "Path /Root/test_table not found");
+        }
+        
+        {
+            auto result = client.ExecuteQuery(R"(
+                DROP TABLE `/Root/test_table`
+            )", NQuery::TTxControl::NoTx()).GetValueSync();
+            
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        
+        {
+            auto result = client.ExecuteQuery(R"(
+                SELECT Path FROM `/Root/.sys/partition_stats`
+                GROUP BY Path;
+            )", NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            auto parser = result.GetResultSetParser(0);
+            bool existsPath = false;
+            while (parser.TryNextRow()) {
+                auto path = parser.ColumnParser("Path").GetOptionalUtf8();
+                UNIT_ASSERT(path);
+                if (*path == "/Root/test_table") {
+                    existsPath = true;
+                    break;
+                }
+            }
+            UNIT_ASSERT_C(!existsPath, "Path /Root/test_table found");
+        }
+    }
 
     Y_UNIT_TEST(PartitionStatsLocksFields) {
         NDataShard::gDbStatsReportInterval = TDuration::Seconds(0);

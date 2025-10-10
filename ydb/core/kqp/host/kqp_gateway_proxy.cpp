@@ -2424,6 +2424,9 @@ public:
             if (const auto& staticCreds = settings.Settings.StaticCredentials) {
                 staticCreds->Serialize(*params.MutableStaticCredentials());
             }
+            if (const auto& iamCreds = settings.Settings.IamCredentials) {
+                iamCreds->Serialize(*params.MutableIamCredentials());
+            }
             if (const auto& caCert = settings.Settings.CaCert) {
                 params.SetCaCert(*caCert);
             }
@@ -2499,6 +2502,7 @@ public:
                 || settings.Settings.Database
                 || settings.Settings.OAuthToken
                 || settings.Settings.StaticCredentials
+                || settings.Settings.IamCredentials
                 || settings.Settings.CaCert
             ) {
                 auto& config = *op.MutableConfig();
@@ -2520,6 +2524,9 @@ public:
                 }
                 if (const auto& staticCreds = settings.Settings.StaticCredentials) {
                     staticCreds->Serialize(*params.MutableStaticCredentials());
+                }
+                if (const auto& iamCreds = settings.Settings.IamCredentials) {
+                    iamCreds->Serialize(*params.MutableIamCredentials());
                 }
                 if (const auto& caCert = settings.Settings.CaCert) {
                     params.SetCaCert(*caCert);
@@ -2630,6 +2637,9 @@ public:
             if (const auto& staticCreds = settings.Settings.StaticCredentials) {
                 staticCreds->Serialize(*params.MutableStaticCredentials());
             }
+            if (const auto& iamCreds = settings.Settings.IamCredentials) {
+                iamCreds->Serialize(*params.MutableIamCredentials());
+            }
             if (const auto& caCert = settings.Settings.CaCert) {
                 params.SetCaCert(*caCert);
             }
@@ -2727,6 +2737,7 @@ public:
                 || settings.Settings.Database
                 || settings.Settings.OAuthToken
                 || settings.Settings.StaticCredentials
+                || settings.Settings.IamCredentials
                 || settings.Settings.CaCert
             ) {
                 auto& config = *op.MutableConfig();
@@ -2748,6 +2759,9 @@ public:
                 }
                 if (const auto& staticCreds = settings.Settings.StaticCredentials) {
                     staticCreds->Serialize(*params.MutableStaticCredentials());
+                }
+                if (const auto& iamCreds = settings.Settings.IamCredentials) {
+                    iamCreds->Serialize(*params.MutableIamCredentials());
                 }
                 if (const auto& caCert = settings.Settings.CaCert) {
                     params.SetCaCert(*caCert);

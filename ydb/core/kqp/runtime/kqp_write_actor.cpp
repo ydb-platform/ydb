@@ -609,9 +609,7 @@ public:
                 << getIssues().ToOneLineString());
 
             const auto metadata = ShardedWriteController->GetMessageMetadata(ev->Get()->Record.GetOrigin());
-            YQL_ENSURE(metadata);
-
-            if (ev->Get()->Record.GetOverloadSubscribed() + 1 == metadata->NextOverloadSeqNo) {
+            if (metadata && ev->Get()->Record.GetOverloadSubscribed() + 1 == metadata->NextOverloadSeqNo) {
                 ResetShardRetries(ev->Get()->Record.GetOrigin(), ev->Cookie);
             }
 
@@ -1123,17 +1121,18 @@ public:
             return;
         }
 
+        const auto& reattachState = TxManager->GetReattachState(ev->Get()->TabletId);
+
         const auto state = TxManager->GetState(ev->Get()->TabletId);
         if ((state == IKqpTransactionManager::PREPARED
                     || state == IKqpTransactionManager::EXECUTING)
                 && TxManager->ShouldReattach(ev->Get()->TabletId, TlsActivationContext->Now())) {
             // Disconnected while waiting for other shards to prepare
-            auto& reattachState = TxManager->GetReattachState(ev->Get()->TabletId);
             CA_LOG_N("Shard " << ev->Get()->TabletId << " delivery problem (reattaching in "
                         << reattachState.ReattachInfo.Delay << ")");
 
             Schedule(reattachState.ReattachInfo.Delay, new TEvPrivate::TEvReattachToShard(ev->Get()->TabletId));
-        } else if (state == IKqpTransactionManager::EXECUTING && !ev->Get()->NotDelivered) {
+        } else if (state == IKqpTransactionManager::EXECUTING && (!ev->Get()->NotDelivered || reattachState.Cookie != 0)) {
             TxManager->SetError(ev->Get()->TabletId);
             RuntimeError(
                 NYql::NDqProto::StatusIds::UNDETERMINED,
@@ -1146,7 +1145,7 @@ public:
         } else if (state == IKqpTransactionManager::PROCESSING
                 || state == IKqpTransactionManager::PREPARING
                 || state == IKqpTransactionManager::PREPARED
-                || (state == IKqpTransactionManager::EXECUTING && ev->Get()->NotDelivered)) {
+                || (state == IKqpTransactionManager::EXECUTING && (ev->Get()->NotDelivered && reattachState.Cookie == 0))) {
             TxManager->SetError(ev->Get()->TabletId);
             RuntimeError(
                 NYql::NDqProto::StatusIds::UNAVAILABLE,
@@ -1165,7 +1164,7 @@ public:
         const auto& record = ev->Get()->Record;
         const ui64 shardId = record.GetTabletId();
 
-        auto& reattachState = TxManager->GetReattachState(shardId);
+        const auto& reattachState = TxManager->GetReattachState(shardId);
         if (reattachState.Cookie != ev->Cookie) {
             return;
         }

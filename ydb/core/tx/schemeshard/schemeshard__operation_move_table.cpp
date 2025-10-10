@@ -150,6 +150,7 @@ public:
             auto move = tx.MutableMoveTable();
             move->SetSrcPathId(srcPath->PathId.LocalPathId);
             move->SetDstPathId(dstPath->PathId.LocalPathId);
+            move->SetDstPath(TPath::Init(dstPath->PathId, context.SS).PathString());
             Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&txBody);
         } else {
             Y_ABORT();
@@ -351,6 +352,7 @@ public:
             TEvDataShard::TEvProposeTransactionResult::EventType,
             TEvColumnShard::TEvProposeTransactionResult::EventType,
             TEvPrivate::TEvOperationPlan::EventType,
+            TEvPrivate::TEvCompletePublication::EventType,
         });
     }
 
@@ -444,6 +446,7 @@ public:
             TEvDataShard::TEvProposeTransactionResult::EventType,
             TEvColumnShard::TEvProposeTransactionResult::EventType,
             TEvPrivate::TEvOperationPlan::EventType,
+            TEvPrivate::TEvCompletePublication::EventType,
         });
     }
 

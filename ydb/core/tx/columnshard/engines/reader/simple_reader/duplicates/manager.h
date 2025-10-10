@@ -88,9 +88,12 @@ private:
         intervals.EachRange(
             [&portions](const TPortionIntervalTree::TOwnedRange& /*range*/, const std::shared_ptr<TPortionInfo>& portion) mutable {
                 AFL_VERIFY(portions.emplace(portion->GetPortionId(), portion).second);
+                return true;
             });
         return std::make_shared<TPortionStore>(std::move(portions));
     }
+
+    bool IsExclusiveInterval(const NArrow::TSimpleRow& begin, const NArrow::TSimpleRow& end) const;
 
 private:
     STATEFN(StateMain) {

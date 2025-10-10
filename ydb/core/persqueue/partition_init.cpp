@@ -3,8 +3,10 @@
 #include "partition_compactification.h"
 #include "partition_log.h"
 #include "partition_util.h"
+#include "blob_key_filter.h"
 
 #include <memory>
+#include <util/string/join.h>
 
 namespace NKikimr::NPQ {
 
@@ -532,28 +534,25 @@ enum EKeyPosition {
 // Calculates the location of keys relative to each other
 static EKeyPosition KeyPosition(const TKey& lhs, const TKey& rhs)
 {
-    // Called from FilterBlobsMetaData. The keys are pre-sorted
-    Y_ABORT_UNLESS(lhs.GetOffset() <= rhs.GetOffset(),
-                   "lhs: %s, rhs: %s",
-                   lhs.ToString().data(), rhs.ToString().data());
-
     if (lhs.GetOffset() == rhs.GetOffset()) {
         if (lhs.GetPartNo() == rhs.GetPartNo()) {
-            Y_ABORT_UNLESS(lhs.GetCount() <= rhs.GetCount(),
-                           "lhs: %s, rhs: %s",
-                           lhs.ToString().data(), rhs.ToString().data());
-            return RhsContainsLhs;
+            if (lhs.GetCount() < rhs.GetCount()) {
+                return RhsContainsLhs;
+            } else if (lhs.GetCount() == rhs.GetCount()) {
+                if (lhs.GetInternalPartsCount() < rhs.GetInternalPartsCount()) {
+                    return RhsContainsLhs;
+                } else {
+                    return LhsContainsRhs;
+                }
+            } else {
+                return LhsContainsRhs;
+            }
+        } else if (lhs.GetPartNo() > rhs.GetPartNo()) {
+            return LhsContainsRhs;
+        } else {
+            return RhsAfterLhs;
         }
-
-        // case lhs.GetOffset() == rhs.GetOffset() && lhs.GetPartNo() < rhs.GetPartNo()
-        Y_ABORT_UNLESS(lhs.GetPartNo() + lhs.GetInternalPartsCount() <= rhs.GetPartNo(),
-                       "lhs: %s, rhs: %s",
-                       lhs.ToString().data(), rhs.ToString().data());
-
-        return RhsAfterLhs;
     }
-
-    // case lhs.GetOffset() < rhs.GetOffset()
 
     if (ui64 nextOffset = lhs.GetOffset() + lhs.GetCount(); nextOffset > rhs.GetOffset()) {
         return LhsContainsRhs;
@@ -564,8 +563,8 @@ static EKeyPosition KeyPosition(const TKey& lhs, const TKey& rhs)
     }
 }
 
-static THashSet<TString> FilterBlobsMetaData(const NKikimrClient::TKeyValueResponse::TReadRangeResult& range,
-                                             const TPartitionId& partitionId)
+THashSet<TString> FilterBlobsMetaData(const NKikimrClient::TKeyValueResponse::TReadRangeResult& range,
+                                      const TPartitionId& partitionId)
 {
     TVector<TString> keys;
 
@@ -575,7 +574,18 @@ static THashSet<TString> FilterBlobsMetaData(const NKikimrClient::TKeyValueRespo
         keys.push_back(pair.GetKey());
     }
 
-    std::sort(keys.begin(), keys.end());
+    auto compare = [](const TString& lhs, const TString& rhs) {
+        auto getKeySuffix = [](const TString& v) {
+            return (v.back() == '?') ? '?' : '|';
+        };
+
+        if (getKeySuffix(lhs) == getKeySuffix(rhs)) {
+            return lhs < rhs;
+        }
+
+        return getKeySuffix(lhs) == '|';
+    };
+    std::sort(keys.begin(), keys.end(), compare);
 
     TDeque<TString> filtered;
     TKey lastKey;

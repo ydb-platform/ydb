@@ -35,7 +35,7 @@ std::shared_ptr<arrow::RecordBatch> ConvertArrowColumns(
     std::shared_ptr<arrow::RecordBatch> batch,
     std::vector<TColumnConverter>& columnConverters);
 
-bool S3ConvertArrowOutputType(NUdf::EDataSlot slot, std::shared_ptr<arrow::DataType>& type);
+bool S3ConvertArrowOutputType(NUdf::EDataSlot slot, std::shared_ptr<arrow::DataType>& type, NKikimr::NMiniKQL::TType* itemType = nullptr);
 bool S3ConvertArrowOutputType(NKikimr::NMiniKQL::TType* itemType, std::shared_ptr<arrow::DataType>& type);
 
 void BuildOutputColumnConverters(

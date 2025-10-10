@@ -772,7 +772,7 @@ bool BuildEffects(TPositionHandle pos, const TVector<TExprBase>& effects,
                 ++order;
             }
 
-            if (input) {
+            if (input && !sinkEffect) {
                 inputArgs.push_back(inputArg);
                 inputs.push_back(input.Cast());
             }

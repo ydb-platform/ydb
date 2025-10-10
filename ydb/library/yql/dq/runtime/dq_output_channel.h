@@ -37,6 +37,7 @@ struct TDqOutputChannelSettings {
     IDqChannelStorage::TPtr ChannelStorage;
     TCollectStatsLevel Level = TCollectStatsLevel::None;
     TMaybe<ui8> ArrayBufferMinFillPercentage;
+    TMaybe<size_t> BufferPageAllocSize;
     TMutable MutableSettings;
 };
 

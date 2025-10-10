@@ -36,7 +36,6 @@ void TWriteOperation::Start(
     auto writeMeta = std::make_shared<NEvWrite::TWriteMeta>(
         (ui64)WriteId, PathId, source, GranuleShardingVersionId, GetIdentifier(),
         context.GetWritingCounters()->GetWriteFlowCounters());
-    writeMeta->SetLockId(LockId);
     writeMeta->SetModificationType(ModificationType);
     writeMeta->SetBulk(IsBulk());
     auto writingAction = owner.StoragesManager->GetInsertOperator()->StartWritingAction(NOlap::NBlobOperations::EConsumer::WRITING_OPERATOR);
@@ -101,6 +100,7 @@ void TWriteOperation::ToProto(NKikimrTxColumnShard::TInternalOperationData& prot
     proto.SetWritePortions(true);
     proto.SetIsBulk(IsBulk());
     PathId.InternalPathId.ToProto(proto);
+    PathId.SchemeShardLocalPathId.ToProto(proto);
 }
 
 void TWriteOperation::FromProto(const NKikimrTxColumnShard::TInternalOperationData& proto) {
@@ -109,6 +109,9 @@ void TWriteOperation::FromProto(const NKikimrTxColumnShard::TInternalOperationDa
     }
     PathId.InternalPathId = TInternalPathId::FromProto(proto);
     AFL_VERIFY(PathId.InternalPathId);
+    if (proto.HasSchemeShardLocalPathId()) {   //TODO remove this check in 25.3
+        PathId.SchemeShardLocalPathId = TSchemeShardLocalPathId::FromProto(proto);
+    }
     if (proto.HasModificationType()) {
         ModificationType = (NEvWrite::EModificationType)proto.GetModificationType();
     } else {

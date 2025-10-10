@@ -23,6 +23,11 @@ using namespace NNodes;
 
 namespace {
 
+TString GetLastName(const TString& fullName) {
+    auto n = fullName.find_last_of('/');
+    return (n == fullName.npos) ? fullName : fullName.substr(n + 1);
+}
+
 bool ExtractSettingValue(const TExprNode& value, TStringBuf settingName, TExprContext& ctx, TStringBuf& settingValue) {
     if (value.IsAtom()) {
         settingValue = value.Content();
@@ -116,7 +121,7 @@ public:
 
             auto settings = soReadObject.Object().Settings();
             auto& settingsRef = settings.Ref();
-            TInstant from = TInstant::Now() - TDuration::Hours(1);
+            TInstant from = TInstant::Zero();
             TInstant to = TInstant::Now();
             TString program;
             TString selectors;
@@ -224,7 +229,7 @@ public:
 
             if (downsamplingDisabled.has_value() && *downsamplingDisabled) {
                 if (downsamplingAggregation || downsamplingFill || downsamplingGridSec) {
-                    ctx.AddError(TIssue(ctx.GetPosition(settingsRef.Pos()), "downsampling.disabled must be false if downsampling.aggregation, downsampling.fill or downsamplig.grid_interval is specified"));
+                    ctx.AddError(TIssue(ctx.GetPosition(settingsRef.Pos()), "downsampling.disabled must be false if downsampling.aggregation, downsampling.fill or downsampling.grid_interval is specified"));
                     return {};
                 }
             } else {
@@ -293,11 +298,11 @@ public:
         
         auto selectors = settings.Selectors().StringValue();
         if (!selectors.empty()) {
-            std::map<TString, TString> selectorValues;
+            NSo::TSelectors selectorValues;
             if (auto error = NSo::BuildSelectorValues(source, selectors, selectorValues)) {
                 throw yexception() << *error;
             }
-            source.MutableSelectors()->insert(selectorValues.begin(), selectorValues.end());
+            NSo::SelectorsToProto(selectorValues, *source.MutableSelectors());
         }
 
         auto program = settings.Program().StringValue();
@@ -435,6 +440,50 @@ public:
 
         protoSettings.PackFrom(shardDesc);
         sinkType = "SolomonSink";
+    }
+
+    bool FillSourcePlanProperties(const NNodes::TExprBase& node, TMap<TString, NJson::TJsonValue>& properties) override {
+        if (!node.Maybe<TDqSource>()) {
+            return false;
+        }
+
+        auto source = node.Cast<TDqSource>();
+        const auto maybeSettings = source.Settings().Maybe<TSoSourceSettings>();
+        if (!maybeSettings) {
+            return false;
+        }
+
+        const auto settings = maybeSettings.Cast();
+        const auto& cluster = source.DataSource().Cast<TSoDataSource>().Cluster().StringValue();
+        const auto* clusterDesc = State_->Configuration->ClusterConfigs.FindPtr(cluster);
+
+        properties["ExternalDataSource"] = GetLastName(cluster);
+        properties["ClusterType"] = clusterDesc->GetClusterType() == TSolomonClusterConfig::SCT_SOLOMON ? "solomon" : "monitoring";
+
+        properties["From"] = settings.From().StringValue();
+        properties["To"] = settings.To().StringValue();
+
+        auto selectors = settings.Selectors().StringValue();
+        if (!selectors.empty()) {
+            properties["Selectors"] = selectors;
+        }
+
+        auto program = settings.Program().StringValue();
+        if (!program.empty()) {
+            properties["Program"] = program;
+        }
+        
+        const bool isDisabled = FromString<bool>(settings.DownsamplingDisabled().Literal().Value());
+        if (!isDisabled) {
+            properties["DownsamplingDisabled"] = "false";
+            properties["DownsamplingAggregation"] = settings.DownsamplingAggregation().StringValue();
+            properties["DownsamplingFill"] = settings.DownsamplingFill().StringValue();
+            properties["DownsamplingGridInterval"] = settings.DownsamplingGridSec().Literal().Value();
+        } else {
+            properties["DownsamplingDisabled"] = "true";
+        }
+
+        return true;
     }
 
     void RegisterMkqlCompiler(NCommon::TMkqlCallableCompilerBase& compiler) override {

@@ -1,21 +1,13 @@
 #pragma once
 
 #include <ydb/core/base/events.h>
+#include <ydb/library/yql/providers/solomon/common/util.h>
 #include <ydb/library/yql/providers/solomon/proto/metrics_queue.pb.h>
 #include <ydb/library/yql/providers/solomon/solomon_accessor/client/solomon_accessor_client.h>
 
 #include <library/cpp/retry/retry_policy.h>
 
 namespace NYql::NDq {
-
-struct TMetricTimeRange {
-    std::map<TString, TString> Selectors;
-    TString Program;
-    TInstant From;
-    TInstant To;
-};
-
-bool operator<(const TMetricTimeRange& a, const TMetricTimeRange& b);
 
 struct TEvSolomonProvider {
 
@@ -93,16 +85,16 @@ struct TEvSolomonProvider {
     
     struct TEvNewDataBatch: public NActors::TEventLocal<TEvNewDataBatch, EvNewDataBatch> {
         NSo::TGetDataResponse Response;
-        TMetricTimeRange Request;
-        TEvNewDataBatch(NSo::TGetDataResponse&& response, TMetricTimeRange&& request)
+        NSo::TMetricTimeRange Request;
+        TEvNewDataBatch(NSo::TGetDataResponse&& response, NSo::TMetricTimeRange&& request)
             : Response(std::move(response))
             , Request(std::move(request))
         {}
     };
 
     struct TEvRetryDataRequest: public NActors::TEventLocal<TEvRetryDataRequest, EvRetryDataRequest> {
-        TMetricTimeRange Request;
-        explicit TEvRetryDataRequest(TMetricTimeRange&& request)
+        NSo::TMetricTimeRange Request;
+        explicit TEvRetryDataRequest(NSo::TMetricTimeRange&& request)
             : Request(std::move(request))
         {}
     };

@@ -327,11 +327,7 @@ RewriteInputForConstraint(const TExprBase& inputRows, const THashSet<TStringBuf>
         hasUniqIndex |= (indexDesc->Type == TIndexDescription::EType::GlobalSyncUnique);
         for (const auto& indexKeyCol : indexDesc->KeyColumns) {
             if (inputColumns.contains(indexKeyCol)) {
-                if (!usedIndexes.contains(indexDesc->Name) &&
-                    std::find(mainPk.begin(), mainPk.end(), indexKeyCol) == mainPk.end())
-                {
-                    usedIndexes.insert(indexDesc->Name);
-                }
+                usedIndexes.insert(indexDesc->Name);
             } else {
                 // input always contains key columns
                 YQL_ENSURE(std::find(mainPk.begin(), mainPk.end(), indexKeyCol) == mainPk.end());
@@ -339,6 +335,8 @@ RewriteInputForConstraint(const TExprBase& inputRows, const THashSet<TStringBuf>
             }
         }
     }
+
+    AFL_ENSURE(!hasUniqIndex || !usedIndexes.empty());
 
     if (!hasUniqIndex) {
         missedKeyInput.clear();

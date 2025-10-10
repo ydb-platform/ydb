@@ -106,8 +106,9 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
             while (!rowset.EndOfSet()) {
                 ui64 schemeShardId = rowset.GetValue<Schema::BaseStatistics::SchemeShardId>();
                 TString stats = rowset.GetValue<Schema::BaseStatistics::Stats>();
-
-                Self->BaseStatistics[schemeShardId] = stats;
+                auto& schemeShardStats = Self->BaseStatistics[schemeShardId];
+                schemeShardStats.Committed = std::make_shared<TString>(std::move(stats));
+                schemeShardStats.Latest = schemeShardStats.Committed;
 
                 if (!rowset.Next()) {
                     return false;

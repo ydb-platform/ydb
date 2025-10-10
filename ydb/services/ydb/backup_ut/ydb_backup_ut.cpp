@@ -204,11 +204,12 @@ TDataQueryResult GetTableContent(TSession& session, const char* table,
 }
 
 NQuery::TExecuteQueryResult GetTableContent(NQuery::TSession& session, const char* table,
-    const char* keyColumn = "Key"
+    const char* keyColumn = "Key", const TMaybe<TString>& pathPrefix = Nothing()
 ) {
     return ExecuteQuery(session, Sprintf(R"(
+            %s
             SELECT * FROM `%s` ORDER BY %s;
-        )", table, keyColumn
+        )", pathPrefix.GetOrElse("").c_str(), table, keyColumn
     ));
 }
 
@@ -898,18 +899,20 @@ void TestViewDependentOnAnotherViewIsRestored(
 
 void TestViewRelativeReferencesArePreserved(
     const char* view, const char* table, const char* restoredView, NQuery::TSession& session,
-    TBackupFunction&& backup, TRestoreFunction&& restore
+    TBackupFunction&& backup, TRestoreFunction&& restore, const TMaybe<TString>& pathPrefix = Nothing()
 ) {
     ExecuteQuery(session, Sprintf(R"(
+                %s
                 CREATE TABLE `%s` (
                     Key Uint32,
                     Value Utf8,
                     PRIMARY KEY (Key)
                 );
-            )", table
+            )", pathPrefix.GetOrElse("").c_str(), table
         ), true
     );
     ExecuteQuery(session, Sprintf(R"(
+            %s
             UPSERT INTO `%s` (
                 Key,
                 Value
@@ -918,8 +921,7 @@ void TestViewRelativeReferencesArePreserved(
                 (1, "one"),
                 (2, "two"),
                 (3, "three");
-        )",
-        table
+        )", pathPrefix.GetOrElse("").c_str(), table
     ));
 
     const TString viewQuery = Sprintf(R"(
@@ -927,22 +929,25 @@ void TestViewRelativeReferencesArePreserved(
         )", table
     );
     ExecuteQuery(session, Sprintf(R"(
+                %s
                 CREATE VIEW `%s` WITH security_invoker = TRUE AS %s;
-            )", view, viewQuery.c_str()
+            )", pathPrefix.GetOrElse("").c_str(), view, viewQuery.c_str()
         ), true
     );
-    const auto originalContent = GetTableContent(session, view);
+    const auto originalContent = GetTableContent(session, view, "Key", pathPrefix);
 
     backup();
 
     ExecuteQuery(session, Sprintf(R"(
+                %s
                 DROP VIEW `%s`;
-            )", view
+            )", pathPrefix.GetOrElse("").c_str(), view
         ), true
     );
     ExecuteQuery(session, Sprintf(R"(
+                %s
                 DROP TABLE `%s`;
-            )", table
+            )", pathPrefix.GetOrElse("").c_str(), table
         ), true
     );
 
@@ -2050,6 +2055,52 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             session,
             CreateBackupLambda(driver, pathToBackup, "/Root/a/b/c"),
             CreateRestoreLambda(driver, pathToBackup, "/Root/restore/point")
+        );
+    }
+
+    Y_UNIT_TEST(RestoreViewTablePathPrefix) {
+        TKikimrWithGrpcAndRootSchema server;
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
+        NQuery::TQueryClient queryClient(driver);
+        auto session = CreateSession(queryClient);
+        TTempDir tempDir;
+        const auto& pathToBackup = tempDir.Path();
+
+        constexpr const char* view = "view";
+        constexpr const char* table = "table";
+        constexpr const char* restoredView = "restore/point/a/b/c/view";
+
+        TestViewRelativeReferencesArePreserved(
+            view,
+            table,
+            restoredView,
+            session,
+            CreateBackupLambda(driver, pathToBackup),
+            CreateRestoreLambda(driver, pathToBackup, "/Root/restore/point"),
+            "PRAGMA TablePathPrefix = '/Root/a/b/c';\n"
+        );
+    }
+
+    Y_UNIT_TEST(RestoreViewTablePathPrefixLowercase) {
+        TKikimrWithGrpcAndRootSchema server;
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
+        NQuery::TQueryClient queryClient(driver);
+        auto session = CreateSession(queryClient);
+        TTempDir tempDir;
+        const auto& pathToBackup = tempDir.Path();
+
+        constexpr const char* view = "view";
+        constexpr const char* table = "table";
+        constexpr const char* restoredView = "restore/point/a/b/c/view";
+
+        TestViewRelativeReferencesArePreserved(
+            view,
+            table,
+            restoredView,
+            session,
+            CreateBackupLambda(driver, pathToBackup),
+            CreateRestoreLambda(driver, pathToBackup, "/Root/restore/point"),
+            "pragma tablepathprefix = '/Root/a/b/c';\n" // note the lowercase
         );
     }
 

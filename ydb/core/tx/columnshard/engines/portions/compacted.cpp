@@ -37,4 +37,23 @@ std::unique_ptr<TPortionInfoConstructor> TCompactedPortionInfo::BuildConstructor
     return std::make_unique<TCompactedPortionInfoConstructor>(*this, withMetadata);
 }
 
+NSplitter::TEntityGroups TCompactedPortionInfo::GetEntityGroupsByStorageId(
+    const TString& specialTier, const IStoragesManager& storages, const TIndexInfo& indexInfo, const IColumnIndexAccessor& indexAccessor) const {
+    return indexInfo.GetEntityGroupsByStorageId(specialTier, storages, indexAccessor);
+}
+
+const TString& TCompactedPortionInfo::GetColumnStorageId(const ui32 columnId, const TIndexInfo& indexInfo) const {
+    return indexInfo.GetColumnStorageId(columnId, GetMeta().GetTierName());
+}
+
+const TString& TCompactedPortionInfo::GetEntityStorageId(
+    const ui32 columnId, const TIndexInfo& indexInfo, const IColumnIndexAccessor& indexAccessor) const {
+    return indexInfo.GetEntityStorageId(columnId, GetMeta().GetTierName(), indexAccessor);
+}
+
+const TString& TCompactedPortionInfo::GetIndexStorageId(
+    const ui32 indexId, const TIndexInfo& indexInfo, const IColumnIndexAccessor& indexAccessor) const {
+    return indexInfo.GetIndexStorageId(indexId, GetMeta().GetTierName(), indexAccessor);
+}
+
 }   // namespace NKikimr::NOlap

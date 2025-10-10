@@ -8,6 +8,7 @@
 #include <ydb/core/tx/columnshard/common/blob.h>
 #include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/common/thread_safe_optional.h>
+#include <ydb/core/tx/columnshard/engines/scheme/indexes/abstract/accessor.h>
 #include <ydb/core/tx/columnshard/engines/scheme/versions/abstract_scheme.h>
 
 #include <ydb/library/accessor/accessor.h>
@@ -198,6 +199,14 @@ public:
     const std::optional<ui64>& GetShardingVersionOptional() const {
         return ShardingVersion;
     }
+
+    virtual NSplitter::TEntityGroups GetEntityGroupsByStorageId(const TString& specialTier, const IStoragesManager& storages,
+        const TIndexInfo& indexInfo, const IColumnIndexAccessor& indexAccessor) const = 0;
+    virtual const TString& GetColumnStorageId(const ui32 columnId, const TIndexInfo& indexInfo) const = 0;
+    virtual const TString& GetEntityStorageId(
+        const ui32 columnId, const TIndexInfo& indexInfo, const IColumnIndexAccessor& indexAccessor) const = 0;
+    virtual const TString& GetIndexStorageId(
+        const ui32 indexId, const TIndexInfo& indexInfo, const IColumnIndexAccessor& indexAccessor) const = 0;
 
     bool CrossSSWith(const TPortionInfo& p) const {
         return std::min(RecordSnapshotMax(), p.RecordSnapshotMax()) <= std::max(RecordSnapshotMin(), p.RecordSnapshotMin());

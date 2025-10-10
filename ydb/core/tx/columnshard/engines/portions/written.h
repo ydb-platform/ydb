@@ -43,6 +43,26 @@ private:
 public:
     virtual void FillDefaultColumn(NAssembling::TColumnAssemblingInfo& column, const std::optional<TSnapshot>& defaultSnapshot) const override;
 
+    virtual NSplitter::TEntityGroups GetEntityGroupsByStorageId(const TString& /*specialTier*/, const IStoragesManager& storages,
+        const TIndexInfo& /*indexInfo*/, const IColumnIndexAccessor& /*indexAccessor*/) const override {
+        NSplitter::TEntityGroups groups(storages.GetDefaultOperator()->GetBlobSplitSettings(), IStoragesManager::DefaultStorageId);
+        return groups;
+    }
+
+    virtual const TString& GetColumnStorageId(const ui32 /*columnId*/, const TIndexInfo& /*indexInfo*/) const override {
+        return { NBlobOperations::TGlobal::DefaultStorageId };
+    }
+
+    virtual const TString& GetEntityStorageId(
+        const ui32 /*columnId*/, const TIndexInfo& /*indexInfo*/, const IColumnIndexAccessor& /*indexAccessor*/) const override {
+        return { NBlobOperations::TGlobal::DefaultStorageId };
+    }
+
+    virtual const TString& GetIndexStorageId(
+        const ui32 /*indexId*/, const TIndexInfo& /*indexInfo*/, const IColumnIndexAccessor& /*indexAccessor*/) const override {
+        return { NBlobOperations::TGlobal::DefaultStorageId };
+    }
+
     void CommitToDatabase(IDbWrapper& wrapper);
 
     virtual std::unique_ptr<TPortionInfoConstructor> BuildConstructor(const bool withMetadata) const override;

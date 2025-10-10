@@ -20,8 +20,8 @@ TComputationNodeFactory GetKqpBaseComputeFactory(const TKqpComputeContextBase* c
     
     return [dqFactory](TCallable& callable, const TComputationNodeFactoryContext& ctx) -> IComputationNode* {
         // Try KQP-specific callables first
-        if (callable.GetType()->GetName() == "FulltextTokenize") {
-            return WrapFulltextTokenize(callable, ctx);
+        if (callable.GetType()->GetName() == "FulltextAnalyze") {
+            return WrapFulltextAnalyze(callable, ctx);
         }
         
         if (callable.GetType()->GetName() == "KqpEnsure") {

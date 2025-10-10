@@ -14,11 +14,11 @@ using namespace NKikimr::NFulltext;
 
 namespace {
 
-class TFulltextTokenizeWrapper : public TMutableComputationNode<TFulltextTokenizeWrapper> {
-    typedef TMutableComputationNode<TFulltextTokenizeWrapper> TBaseComputation;
+class TFulltextAnalyzeWrapper : public TMutableComputationNode<TFulltextAnalyzeWrapper> {
+    typedef TMutableComputationNode<TFulltextAnalyzeWrapper> TBaseComputation;
 
 public:
-    TFulltextTokenizeWrapper(TComputationMutables& mutables, IComputationNode* textArg, IComputationNode* settingsArg)
+    TFulltextAnalyzeWrapper(TComputationMutables& mutables, IComputationNode* textArg, IComputationNode* settingsArg)
         : TBaseComputation(mutables)
         , TextArg(textArg)
         , SettingsArg(settingsArg)
@@ -76,13 +76,13 @@ private:
 
 } // namespace
 
-IComputationNode* WrapFulltextTokenize(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-    MKQL_ENSURE(callable.GetInputsCount() == 2, "FulltextTokenize requires exactly 2 arguments");
+IComputationNode* WrapFulltextAnalyze(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
+    MKQL_ENSURE(callable.GetInputsCount() == 2, "FulltextAnalyze requires exactly 2 arguments");
 
     auto textArg = LocateNode(ctx.NodeLocator, callable, 0);
     auto settingsArg = LocateNode(ctx.NodeLocator, callable, 1);
 
-    return new TFulltextTokenizeWrapper(ctx.Mutables, textArg, settingsArg);
+    return new TFulltextAnalyzeWrapper(ctx.Mutables, textArg, settingsArg);
 }
 
 } // namespace NMiniKQL

@@ -372,7 +372,7 @@ TRuntimeNode TKqpProgramBuilder::FulltextAnalyze(TRuntimeNode text, TRuntimeNode
     auto stringType = TDataType::Create(NUdf::TDataType<char*>::Id, Env);
     auto listType = TListType::Create(stringType, Env);
 
-    TCallableBuilder callableBuilder(Env, "FulltextTokenize", listType);
+    TCallableBuilder callableBuilder(Env, "FulltextAnalyze", listType);
     callableBuilder.Add(text);
     callableBuilder.Add(settings);
     return TRuntimeNode(callableBuilder.Build(), false);

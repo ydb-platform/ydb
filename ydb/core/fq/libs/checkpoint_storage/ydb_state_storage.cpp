@@ -410,7 +410,7 @@ TFuture<TIssues> TStateStorage::Init() {
     // }
 
     // return MakeFuture(std::move(issues));
-    return  TFuture<TIssues>();
+    return  MakeFuture<TIssues>();
 }
 
 EStateType TStateStorage::DeserializeState(const TContextPtr& context, TContext::TaskInfo& taskInfo) {

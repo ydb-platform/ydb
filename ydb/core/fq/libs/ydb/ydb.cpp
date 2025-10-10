@@ -57,15 +57,19 @@ TFuture<TStatus> CheckGeneration(
     const TDataQueryResult& selectResult,
     const TGenerationContextPtr& context)
 {
+    Cerr << "CheckGeneration" << Endl;
+
     if (!selectResult.IsSuccess()) {
         Cerr << "CheckGeneration !IsSuccess" << Endl;
         return MakeFuture<TStatus>(selectResult);
     }
 
-
+    Cerr << "CheckGeneration 1" << Endl;
     TResultSetParser parser(selectResult.GetResultSet(0));
     if (parser.TryNextRow()) {
+        Cerr << "CheckGeneration TryNextRow" << Endl;
         context->GenerationRead = parser.ColumnParser(context->GenerationColumn).GetOptionalUint64().value_or(0);
+        Cerr << "GenerationRead " << context->GenerationRead << Endl;
     }
 
     bool isOk = false;
@@ -93,22 +97,25 @@ TFuture<TStatus> CheckGeneration(
     }
     }
 
+    Cerr << "CheckGeneration isOk " << isOk << Endl;
+
     // TODO
     // context->Transaction = selectResult.GetTransaction();
     // selectResult.GetTransaction().reset();
 
-    // if (!isOk) {
+    if (!isOk) {
+        context->Session->Finish(true);
     //     RollbackTransaction(context); // don't care about result
 
-    //     TStringStream ss;
-    //     ss << "Table: " << JoinPath(context->TablePathPrefix, context->Table)
-    //        << ", pk: " << context->PrimaryKey
-    //        << ", current generation: " << context->GenerationRead
-    //        << ", expected/new generation: " << context->Generation
-    //        << ", operation: " << (int)context->OperationType;
+        TStringStream ss;
+        ss << "Table: " << JoinPath(context->TablePathPrefix, context->Table)
+           << ", pk: " << context->PrimaryKey
+           << ", current generation: " << context->GenerationRead
+           << ", expected/new generation: " << context->Generation
+           << ", operation: " << (int)context->OperationType;
 
-    //     return MakeFuture(MakeErrorStatus(EStatus::ALREADY_EXISTS, ss.Str()));
-    // }
+        return MakeFuture(MakeErrorStatus(EStatus::ALREADY_EXISTS, ss.Str()));
+    }
 
     // if (requiresTransaction && !context->Transaction) {
     //     // just sanity check, normally should not happen.
@@ -121,7 +128,7 @@ TFuture<TStatus> CheckGeneration(
     //        << ", failed to get transaction after select";
 
     //     return MakeFuture(MakeErrorStatus(EStatus::ABORTED, ss.Str(), NYql::TSeverityIds::S_WARNING));
-    // }
+    //}
 
     return MakeFuture<TStatus>(selectResult);
 }

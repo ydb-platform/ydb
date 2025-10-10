@@ -298,7 +298,8 @@ TFuture<TStatus> CreateCheckpoint(const TCheckpointContextPtr& context) {
         query << graphDescriptionPart;
     }
 
-    auto ttxControl = TTxControl::Tx(*generationContext->Transaction).CommitTx();
+    // auto ttxControl = TTxControl::Tx(*generationContext->Transaction).CommitTx();
+    auto ttxControl = TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx();
     return generationContext->Session->ExecuteDataQuery(query, std::move(params), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), generationContext->ExecDataQuerySettings).Apply(
 
    // return generationContext->Session.ExecuteDataQuery(query, ttxControl, params.Build(), generationContext->ExecDataQuerySettings).Apply(
@@ -351,7 +352,8 @@ TFuture<TStatus> UpdateCheckpoint(const TCheckpointContextPtr& context) {
             .Timestamp(TInstant::Now())
             .Build();
 
-    auto ttxControl = TTxControl::Tx(*generationContext->Transaction).CommitTx();
+ //   auto ttxControl = TTxControl::Tx(*generationContext->Transaction).CommitTx();
+    auto ttxControl = TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx();
     return generationContext->Session->ExecuteDataQuery(query, std::move(params), ttxControl, generationContext->ExecDataQuerySettings).Apply(
 
     //return generationContext->Session.ExecuteDataQuery(query, ttxControl, params.Build(), generationContext->ExecDataQuerySettings).Apply(
@@ -361,9 +363,11 @@ TFuture<TStatus> UpdateCheckpoint(const TCheckpointContextPtr& context) {
         });
 }
 
-TFuture<TDataQueryResult> SelectGraphDescId(const TCheckpointContextPtr& context) {
+[[maybe_unused]] TFuture<TDataQueryResult> SelectGraphDescId(const TCheckpointContextPtr& context) {
     const auto& generationContext = context->GenerationContext;
     const auto& graphDescContext = context->CheckpointGraphDescriptionContext;
+
+    Cerr << "SelectGraphDescId  0" << Endl;
 
     auto query = Sprintf(R"(
         --!syntax_v1
@@ -377,18 +381,21 @@ TFuture<TDataQueryResult> SelectGraphDescId(const TCheckpointContextPtr& context
         CheckpointsGraphsDescriptionTable);
     //NYdb::TParamsBuilder params;
     auto params = std::make_shared<NYdb::TParamsBuilder>();
-    params.get()->
+    params->
     //params
          AddParam("$graph_desc_id")
             .String(graphDescContext->GraphDescId)
             .Build();
 
-    return generationContext->Session->ExecuteDataQuery(query, std::move(params), TTxControl::Tx(*generationContext->Transaction), generationContext->ExecDataQuerySettings);
+    Cerr << "SelectGraphDescId  1" << Endl;
 
+    auto f = generationContext->Session->ExecuteDataQuery(query, std::move(params), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), /*TTxControl::Tx(*generationContext->Transaction)*/ generationContext->ExecDataQuerySettings);
+    Cerr << "SelectGraphDescId  2" << Endl;
+    return f;
 //    return generationContext->Session.ExecuteDataQuery(query, TTxControl::Tx(*generationContext->Transaction), params.Build(), generationContext->ExecDataQuerySettings);
 }
 
-bool GraphDescIdExists(const TFuture<TDataQueryResult>& result) {
+[[maybe_unused]] bool GraphDescIdExists(const TFuture<TDataQueryResult>& result) {
     return result.GetValue().GetResultSet(0).RowsCount() != 0;
 }
 
@@ -397,11 +404,19 @@ TFuture<TStatus> GenerateGraphDescId(const TCheckpointContextPtr& context) {
         return MakeFuture(TStatus(EStatus::SUCCESS, NYdb::NIssue::TIssues()));
     }
 
+    Cerr << "GenerateGraphDescId  0" << Endl;
+
+
     Y_ABORT_UNLESS(context->EntityIdGenerator);
+    Cerr << "GenerateGraphDescId  1" << Endl;
     context->CheckpointGraphDescriptionContext->GraphDescId = context->EntityIdGenerator->Generate(EEntityType::CHECKPOINT_GRAPH_DESCRIPTION);
+    Cerr << "GenerateGraphDescId  2" << Endl;
     return SelectGraphDescId(context)
         .Apply(
             [context](const TFuture<TDataQueryResult>& result) {
+
+                Cerr << "GenerateGraphDescId  3" << Endl;
+
                 if (!result.GetValue().IsSuccess()) {
                     return MakeFuture<TStatus>(result.GetValue());
                 }
@@ -422,10 +437,12 @@ TFuture<TStatus> CreateCheckpointWrapper(
     return generationFuture.Apply(
         [context] (const TFuture<TStatus>& generationFuture) {
             auto generationSelect = generationFuture.GetValue();
+            Cerr << "CreateCheckpointWrapper  0" << Endl;
             if (!generationSelect.IsSuccess()) {
                 return MakeFuture(generationSelect);
             }
 
+            Cerr << "CreateCheckpointWrapper  1" << Endl;
             return GenerateGraphDescId(context)
                 .Apply(
                     [context](const TFuture<TStatus>& result) {
@@ -592,7 +609,8 @@ TFuture<TDataQueryResult> SelectCheckpoint(const TCheckpointContextPtr& context)
     return generationContext->Session->ExecuteDataQuery(
         query,
         std::move(params),
-        TTxControl::Tx(*generationContext->Transaction),
+        TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
+        //TTxControl::Tx(*generationContext->Transaction),
         generationContext->ExecDataQuerySettings);
 
 

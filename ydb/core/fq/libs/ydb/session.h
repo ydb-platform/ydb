@@ -15,6 +15,11 @@ struct ISession : public TThrRefBase{
         std::shared_ptr<NYdb::TParamsBuilder> params,
         NYdb::NTable::TTxControl txControl,
         NYdb::NTable::TExecDataQuerySettings execDataQuerySettings = NYdb::NTable::TExecDataQuerySettings()) = 0;
+
+    virtual void Finish(bool needRollback) = 0;
+
+    private: 
+    [[maybe_unused]]int Test = 456;
 };
 
 } // namespace NFq

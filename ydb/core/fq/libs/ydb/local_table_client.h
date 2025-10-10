@@ -13,6 +13,7 @@ struct TLocalYdbTableClient : public IYdbTableClient {
     NYdb::TAsyncStatus RetryOperation(
         TOperationFunc&& operation,
         const NYdb::NRetry::TRetryOperationSettings& /*settings*/ = NYdb::NRetry::TRetryOperationSettings()) override {
+            Cerr << "TLocalYdbTableClient::RetryOperation" << Endl;
 
             auto session = MakeIntrusive<TLocalSession>();
             auto future = operation(session);

@@ -87,11 +87,8 @@ struct TEvPrivate {
 
 
 
-std::unique_ptr<TQueryActor> MakeQueryActor() {
-    Cerr << "NewDataQuery" << Endl;
-
-    return std::unique_ptr<TQueryActor>(new TQueryActor());
-    //return std::unique_ptr<NActors::IActor>(new TRowDispatcher(
+std::unique_ptr<TQuerySession> MakeQueryActor() {
+    return std::unique_ptr<TQuerySession>(new TQuerySession());
 }
 
 

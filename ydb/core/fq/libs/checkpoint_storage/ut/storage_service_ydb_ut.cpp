@@ -115,14 +115,14 @@ public:
         Server->GetRuntime()->SetLogPriority(NKikimrServices::STREAMS_STORAGE_SERVICE, NActors::NLog::PRI_DEBUG);
         //Server->GetRuntime()->SetLogPriority(NKikimrServices::INTERCONNECT_PROXY_TCP, NActors::NLog::PRI_DEBUG);
     //    Server->GetRuntime()->SetLogPriority(NKikimrServices::INTERCONNECT_SESSION_TCP, NActors::NLog::PRI_DEBUG);
-        Server->GetRuntime()->SetLogPriority(NActorsServices::INTERCONNECT, NActors::NLog::PRI_DEBUG);
-        Server->GetRuntime()->SetLogPriority(NActorsServices::INTERCONNECT_SESSION, NActors::NLog::PRI_DEBUG);
+     //   Server->GetRuntime()->SetLogPriority(NActorsServices::INTERCONNECT, NActors::NLog::PRI_DEBUG);
+   //     Server->GetRuntime()->SetLogPriority(NActorsServices::INTERCONNECT_SESSION, NActors::NLog::PRI_DEBUG);
 
         Server->GetRuntime()->SetDispatchTimeout(TestTimeout);
         Server->EnableGRpc(GrpcPort);
         Client->InitRootScheme();
 
-
+        Sleep(TDuration::Seconds(5));
         Cerr << "\n\n\n--------------------------- INIT FINISHED ---------------------------\n\n\n";
 
      //   PrepareTestActorRuntime();
@@ -134,13 +134,8 @@ public:
     {
         TActorId sender = Server->GetRuntime()->AllocateEdgeActor();
         auto request = std::make_unique<TEvCheckpointStorage::TEvRegisterCoordinatorRequest>(coordinatorId);
-
-        Cerr << "Node id = " << Server->GetRuntime()->GetNodeId() << Endl;
-        Sleep(TDuration::Seconds(5));
-        
-        Cerr << "sleep end "  << Endl;
-        
-        
+       // Sleep(TDuration::Seconds(5));
+                
         Server->GetRuntime()->Send(new IEventHandle(
             NYql::NDq::MakeCheckpointStorageID(), sender, request.release(), IEventHandle::FlagTrackDelivery));
 
@@ -358,7 +353,6 @@ private:
 Y_UNIT_TEST_SUITE(TStorageServiceTest) {
     Y_UNIT_TEST_F(ShouldRegister111, TFixture)
     {
-       // auto runtime = PrepareTestActorRuntime("TStorageServiceTestShouldRegister");
         RegisterDefaultCoordinator();
     }
 
@@ -396,7 +390,7 @@ Y_UNIT_TEST_SUITE(TStorageServiceTest) {
         RegisterCoordinator(coordinator1, true);
     }
 
-    Y_UNIT_TEST_F(ShouldCreateCheckpoint, TFixture)
+    Y_UNIT_TEST_F(ShouldCreateCheckpoint1, TFixture)
     {
         RegisterDefaultCoordinator();
         CreateCheckpoint(GraphId, Generation, CheckpointId1, false);
@@ -579,13 +573,22 @@ Y_UNIT_TEST_SUITE(TStorageServiceTest) {
     Y_UNIT_TEST_F(ShouldUseGc, TFixture)
     {
         RegisterDefaultCoordinator();
+        Cerr << "\n--------------------------- RegisterDefaultCoordinator end ---------------------------\n";
+
+
         CreateCompletedCheckpoint(GraphId, Generation, CheckpointId1);
+        Cerr << "\n-------------------------- CreateCompletedCheckpoint 0 end ---------------------------\n";
+
         CreateCompletedCheckpoint(GraphId, Generation, CheckpointId2);
+        Cerr << "\n-------------------------- CreateCompletedCheckpoint 1 end ---------------------------\n";
+
         CreateCompletedCheckpoint(GraphId, Generation, CheckpointId3);
+        Cerr << "\n--------------------------- CreateCompletedCheckpoint 2 end ---------------------------\n";
 
         TCheckpoints checkpoints;
 
         DoWithRetry<yexception>([&]() {
+            Cerr << "GetCheckpoints 0 " << Endl;
             checkpoints = GetCheckpoints(GraphId);
             if (checkpoints.size() != 1) {
                 throw yexception() << "gc not finished yet";

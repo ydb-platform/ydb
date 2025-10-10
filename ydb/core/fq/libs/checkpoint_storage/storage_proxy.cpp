@@ -174,10 +174,8 @@ void TStorageProxy::Bootstrap() {
     CheckpointStorage = NewYdbCheckpointStorage(StorageConfig, CreateEntityIdGenerator(IdsPrefix), ydbConnectionPtr);
 
     StateStorage = NewYdbStateStorage(Config, ydbConnectionPtr);
-    if (Config.GetCheckpointGarbageConfig().GetEnabled()) {
-        const auto& gcConfig = Config.GetCheckpointGarbageConfig();
-        ActorGC = Register(NewGC(gcConfig, CheckpointStorage, StateStorage).release());
-    }
+    const auto& gcConfig = Config.GetCheckpointGarbageConfig();
+    ActorGC = Register(NewGC(gcConfig, CheckpointStorage, StateStorage).release());
     Initialize();
     
 
@@ -193,18 +191,17 @@ void TStorageProxy::Initialize() {
     LOG_STREAMS_STORAGE_SERVICE_INFO("Initialize");
     Initialized = true;
 
-    // TODO
     auto issues = CheckpointStorage->Init().GetValueSync();
     if (!issues.Empty()) {
         LOG_STREAMS_STORAGE_SERVICE_ERROR("Failed to init checkpoint storage: " << issues.ToOneLineString());
         Initialized = false;
     }
     
-    // issues = StateStorage->Init().GetValueSync();
-    // if (!issues.Empty()) {
-    //     LOG_STREAMS_STORAGE_SERVICE_ERROR("Failed to init checkpoint state storage: " << issues.ToOneLineString());
-    //     Initialized = false;
-    // }
+    issues = StateStorage->Init().GetValueSync();
+    if (!issues.Empty()) {
+        LOG_STREAMS_STORAGE_SERVICE_ERROR("Failed to init checkpoint state storage: " << issues.ToOneLineString());
+        Initialized = false;
+    }
 }
 
 void TStorageProxy::Handle(TEvCheckpointStorage::TEvRegisterCoordinatorRequest::TPtr& ev) {
@@ -260,6 +257,8 @@ void TStorageProxy::Handle(TEvCheckpointStorage::TEvCreateCheckpointRequest::TPt
                 context->IncError();
                 return NThreading::MakeFuture(ICheckpointStorage::TCreateCheckpointResult {TString(), std::move(issues) } );
             }
+//            return NThreading::MakeFuture(ICheckpointStorage::TCreateCheckpointResult {TString(), std::move(issues) } );
+
             if (std::holds_alternative<TString>(graphDesc)) {
                 return storage->CreateCheckpoint(coordinatorId, checkpointId, std::get<TString>(graphDesc), ECheckpointStatus::Pending);
             } else {
@@ -321,7 +320,7 @@ void TStorageProxy::Handle(TEvCheckpointStorage::TEvCompleteCheckpointRequest::T
                 cookie = ev->Cookie,
                 sender = ev->Sender,
                 type = event->Type,
-                gcEnabled = Config.GetCheckpointGarbageConfig().GetEnabled(),
+              //  gcEnabled = Config.GetCheckpointGarbageConfig().GetEnabled(),
                 actorGC = ActorGC,
                 actorSystem = TActivationContext::ActorSystem(),
                 context]
@@ -333,11 +332,10 @@ void TStorageProxy::Handle(TEvCheckpointStorage::TEvCompleteCheckpointRequest::T
                 LOG_STREAMS_STORAGE_SERVICE_AS_DEBUG(*actorSystem, "[" << coordinatorId << "] [" << checkpointId << "] Failed to set 'Completed' status: " << response->Issues.ToString())
             } else {
                 LOG_STREAMS_STORAGE_SERVICE_AS_INFO(*actorSystem, "[" << coordinatorId << "] [" << checkpointId << "] Status updated to 'Completed'")
-                if (gcEnabled) {
-                    auto request = std::make_unique<TEvCheckpointStorage::TEvNewCheckpointSucceeded>(coordinatorId, checkpointId, type);
-                    LOG_STREAMS_STORAGE_SERVICE_AS_DEBUG(*actorSystem, "[" << coordinatorId << "] [" << checkpointId << "] Send TEvNewCheckpointSucceeded")
-                    actorSystem->Send(actorGC, request.release(), 0);
-                }
+
+                auto request = std::make_unique<TEvCheckpointStorage::TEvNewCheckpointSucceeded>(coordinatorId, checkpointId, type);
+                LOG_STREAMS_STORAGE_SERVICE_AS_DEBUG(*actorSystem, "[" << coordinatorId << "] [" << checkpointId << "] Send TEvNewCheckpointSucceeded")
+                actorSystem->Send(actorGC, request.release(), 0);
             }
             LOG_STREAMS_STORAGE_SERVICE_AS_DEBUG(*actorSystem, "[" << coordinatorId << "] [" << checkpointId << "] Send TEvCompleteCheckpointResponse")
             actorSystem->Send(sender, response.release(), 0, cookie);

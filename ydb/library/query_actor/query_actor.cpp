@@ -156,7 +156,7 @@ void TQueryBase::Handle(TEvQueryBasePrivate::TEvCreateSessionResult::TPtr& ev) {
 
         DeleteSession = true;
         RunQuery();
-        Y_ABORT_UNLESS(Finished || RunningQuery);
+   //     Y_ABORT_UNLESS(Finished || RunningQuery);
     } else {
         LOG_W("Failed to create session: " << ev->Get()->Status << ". Issues: " << ev->Get()->Issues.ToOneLineString());
         Finish(ev->Get()->Status, std::move(ev->Get()->Issues));

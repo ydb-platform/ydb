@@ -13,10 +13,11 @@ using namespace NSchemeCache;
 
 class TDescribeActor : public TActorBootstrapped<TDescribeActor> {
 public:
-    TDescribeActor(const NActors::TActorId& parent, const TString& databasePath, const std::unordered_set<TString>&& topicPaths)
+    TDescribeActor(const NActors::TActorId& parent, const TString& databasePath, const std::unordered_set<TString>&& topicPaths, const TDescribeSettings& settings)
         : Parent(parent)
         , DatabasePath(databasePath)
         , TopicPaths(std::move(topicPaths))
+        , Settings(settings)
     {
     }
 
@@ -93,20 +94,34 @@ public:
                                 unknownPaths.insert(realPath);
                             }
                         } else {
-                            LOG_D("Path '" << realPath << "' SUCCESS");
-                            Result[originalPath] = TTopicInfo{
-                                .Status = EStatus::SUCCESS,
-                                .RealPath = realPath,
-                                .Info = entry.PQGroupInfo,
-                                .SecurityObject = entry.SecurityObject
-                            };
+                            if (Settings.UserToken && !entry.SecurityObject->CheckAccess(Settings.AccessRights, *Settings.UserToken)) {
+                                LOG_D("Path '" << realPath << "' UNAUTHORIZED");
+                                Result[originalPath] = TTopicInfo{
+                                    .Status = EStatus::UNAUTHORIZED
+                                };
+                            } else {
+                                LOG_D("Path '" << realPath << "' SUCCESS");
+                                Result[originalPath] = TTopicInfo{
+                                    .Status = EStatus::SUCCESS,
+                                    .RealPath = realPath,
+                                    .Info = entry.PQGroupInfo,
+                                    .SecurityObject = entry.SecurityObject
+                                };
+                            }
                         }
                     } else {
                         LOG_D("Path '" << realPath << "' is not a topic: " << entry.Kind);
-                        Result[originalPath] = TTopicInfo{
-                            .Status = EStatus::NOT_TOPIC,
-                            .RealPath = realPath
-                        };
+                        if (Settings.UserToken && !entry.SecurityObject->CheckAccess(NACLib::EAccessRights::DescribeSchema, *Settings.UserToken)) {
+                            LOG_D("Path '" << realPath << "' UNAUTHORIZED");
+                            Result[originalPath] = TTopicInfo{
+                                .Status = EStatus::UNAUTHORIZED
+                            };
+                        } else {
+                            Result[originalPath] = TTopicInfo{
+                                .Status = EStatus::NOT_TOPIC,
+                                .RealPath = realPath
+                            };
+                        }
                     }
                     break;
                 }
@@ -123,6 +138,7 @@ public:
 
         if (!unknownPaths.empty()) {
             RetryWithSyncVersion = true;
+            UsedSyncVersion = true;
             return DoRequest(unknownPaths);
         }
 
@@ -139,7 +155,7 @@ public:
             return DoRequest(newPath);
         }
 
-        Send(Parent, new TEvDescribeTopicsResponse(std::move(Result)));
+        Send(Parent, new TEvDescribeTopicsResponse(std::move(Result), UsedSyncVersion));
         PassAway();
     }
 
@@ -154,8 +170,10 @@ private:
     const NActors::TActorId Parent;
     const TString DatabasePath;
     const std::unordered_set<TString> TopicPaths;
+    const TDescribeSettings Settings;
 
     bool RetryWithSyncVersion = false;
+    bool UsedSyncVersion = false;
     bool RetryWithCDC = false;
     // CDC topic path -> original topic path
     std::unordered_map<TString, TString> CDCPaths;
@@ -163,8 +181,8 @@ private:
 };
 
 
-NActors::IActor* CreateDescriberActor(const NActors::TActorId& parent, const TString& databasePath, const std::unordered_set<TString>&& topicPaths) {
-    return new TDescribeActor(parent, databasePath, std::move(topicPaths));
+NActors::IActor* CreateDescriberActor(const NActors::TActorId& parent, const TString& databasePath, const std::unordered_set<TString>&& topicPaths, const TDescribeSettings& settings) {
+    return new TDescribeActor(parent, databasePath, std::move(topicPaths), settings);
 }
 
 TString Description(const TString& topicPath, const EStatus status) {
@@ -172,7 +190,8 @@ TString Description(const TString& topicPath, const EStatus status) {
         case EStatus::SUCCESS:
             return TStringBuilder() << "The topic '" << topicPath << "' has been successfully described";
         case EStatus::NOT_FOUND:
-            return TStringBuilder() << "The '" << topicPath << "' topic was not found";
+        case EStatus::UNAUTHORIZED:
+            return TStringBuilder() << "You do not have access or the '" << topicPath << "' does not exist";
         case EStatus::NOT_TOPIC:
             return TStringBuilder() << "The '" << topicPath << "' path is not a topic";
         case EStatus::UNKNOWN_ERROR:

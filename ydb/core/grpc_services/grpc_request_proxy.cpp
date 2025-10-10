@@ -139,6 +139,11 @@ private:
         return true;
     }
 
+    template<typename TEvent>
+    void HandleEventWithoutDatabase(TAutoPtr<TEventHandle<TEvent>>& event, bool skipCheckConnectRights);
+    template<typename TEvent>
+    bool CanHandleEventWithoutDatabase(TAutoPtr<TEventHandle<TEvent>>& event);
+
     template<class TEvent>
     void PreHandle(TAutoPtr<TEventHandle<TEvent>>& event, const TActorContext& ctx) {
         LogRequest(event);
@@ -184,7 +189,7 @@ private:
         bool skipResourceCheck = false;
         // do not check connect rights for the deprecated requests without database
         // remove this along with AllowYdbRequestsWithoutDatabase flag
-        bool skipCheckConnectRigths = false;
+        bool skipCheckConnectRights = false;
 
         if (state.State == NYdbGrpc::TAuthState::AS_NOT_PERFORMED) {
             const auto& maybeDatabaseName = requestBaseCtx->GetDatabaseName();
@@ -198,7 +203,7 @@ private:
                 } else {
                     databaseName = RootDatabase;
                     skipResourceCheck = true;
-                    skipCheckConnectRigths = true;
+                    skipCheckConnectRights = true;
                 }
             }
             if (databaseName.empty()) {
@@ -210,6 +215,9 @@ private:
             auto it = Databases.find(databaseName);
             if (it != Databases.end() && it->second.IsDatabaseReady()) {
                 database = &it->second;
+            } else if (CanHandleEventWithoutDatabase(event)) {
+                HandleEventWithoutDatabase(event, skipCheckConnectRights);
+                return;
             } else {
                 // No given database found, start update if possible
                 if (!DeferAndStartUpdate(databaseName, event, requestBaseCtx)) {
@@ -290,7 +298,7 @@ private:
                 database->SecurityObject,
                 event.Release(),
                 Counters,
-                skipCheckConnectRigths,
+                skipCheckConnectRights,
                 rootAttributes,
                 this));
             return;
@@ -455,6 +463,44 @@ bool TGRpcRequestProxyImpl::IsAuthStateOK(const IRequestProxyCtx& ctx) {
         return true;
     }
     return false;
+}
+
+template<typename TEvent>
+void TGRpcRequestProxyImpl::HandleEventWithoutDatabase(TAutoPtr<TEventHandle<TEvent>>& event, bool skipCheckConnectRights) {
+    IRequestProxyCtx* requestProxyCtx = event->Get();
+    if (requestProxyCtx->IsClientLost()) {
+        // Any status here
+        LOG_DEBUG(*TlsActivationContext, NKikimrServices::GRPC_SERVER,
+            "Client was disconnected before processing request (grpc request proxy)");
+        requestProxyCtx->ReplyWithYdbStatus(Ydb::StatusIds::UNAVAILABLE);
+        requestProxyCtx->FinishSpan();
+        return;
+    }
+
+    TSchemeBoardEvents::TDescribeSchemeResult schemeData;
+    Register(CreateGrpcRequestCheckActor<TEvent>(SelfId(),
+        schemeData,
+        nullptr, // Do not have security object, cluster is not initialized. Check rights via list bootstrap_allowed_sids
+        event.Release(),
+        Counters,
+        skipCheckConnectRights,
+        {}, // Empty rootAttributes
+        this));
+    return;
+}
+
+template<typename TEvent>
+bool TGRpcRequestProxyImpl::CanHandleEventWithoutDatabase(TAutoPtr<TEventHandle<TEvent>>& event) {
+    if constexpr (TEvent::EventType == TRpcServices::EvGrpcRuntimeRequest) {
+        switch (event->Get()->GetRuntimeEventType()) {
+        case NRuntimeEvents::EType::BOOTSTRAP_CLUSTER:
+            return true;
+        case NRuntimeEvents::EType::UNKNOWN:
+            return false;
+        }
+    } else {
+        return false;
+    }
 }
 
 template<class TEvent>

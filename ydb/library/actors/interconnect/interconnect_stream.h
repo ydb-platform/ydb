@@ -6,7 +6,7 @@
 #include <util/network/init.h>
 #include <util/system/defaults.h>
 
-#include "poller.h"
+#include <ydb/library/actors/interconnect/poller/poller.h>
 
 #include "interconnect_address.h"
 

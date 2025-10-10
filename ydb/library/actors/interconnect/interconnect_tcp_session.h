@@ -4,6 +4,8 @@
 #include <ydb/library/actors/core/event_pb.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/actors/interconnect/poller/poller_tcp.h>
+#include <ydb/library/actors/interconnect/poller/poller_actor.h>
 #include <ydb/library/actors/protos/services_common.pb.h>
 #include <ydb/library/actors/util/datetime.h>
 #include <ydb/library/actors/util/rope.h>
@@ -19,10 +21,9 @@
 #include <util/generic/deque.h>
 #include <util/datetime/cputimer.h>
 
+#include "events_local.h"
 #include "interconnect_impl.h"
 #include "interconnect_zc_processor.h"
-#include "poller_tcp.h"
-#include "poller_actor.h"
 #include "interconnect_channel.h"
 #include "logging.h"
 #include "watchdog_timer.h"

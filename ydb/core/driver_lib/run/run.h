@@ -6,7 +6,7 @@
 #include <ydb/core/memory_controller/memory_controller.h>
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/log_settings.h>
-#include <ydb/library/actors/interconnect/poller_tcp.h>
+#include <ydb/library/actors/interconnect/poller/poller_tcp.h>
 #include <ydb/library/actors/util/should_continue.h>
 #include <ydb/library/grpc/server/grpc_server.h>
 #include <ydb/core/base/appdata.h>

@@ -34,9 +34,13 @@ class TestInsertStatement(object):
 
         cls.test_dir = f"{cls.ydb_client.database}/{cls.test_name}"
 
+    def get_table_path(self):
+        # avoid using same table in parallel tests
+        return f"{self.test_dir}/table{random.randrange(99999)}"
+
     def create_table(self):
         # avoid using same table in parallel tests
-        self.table_path = f"{self.test_dir}/table{random.randrange(9999)}"
+        self.table_path = self.get_table_path()
         self.ydb_client.query(
             f"""
             CREATE TABLE `{self.table_path}` (
@@ -150,7 +154,7 @@ class TestInsertStatement(object):
         # given
         self.create_table()
         self.write_data()
-        t2 = f"{self.table_path}_p"
+        t2 = self.get_table_path()
         self.ydb_client.query(
             f"""
             CREATE TABLE `{t2}` (
@@ -190,8 +194,8 @@ class TestInsertStatement(object):
         try:
             self.ydb_client.query(f"INSERT INTO `{self.table_path}` (id, vn, vs) VALUES (0, 1, 'One');")
             assert False, 'Should Fail'
-        except ydb.issues.PreconditionFailed:
-            pass
+        except ydb.issues.PreconditionFailed as ex:
+            assert "Conflict with existing key" in str(ex), str(ex)
 
         # then
         result_sets = self.ydb_client.query(f"SELECT * FROM `{self.table_path}`")
@@ -223,25 +227,57 @@ class TestInsertStatement(object):
         self.create_table()
 
         try:
-        # when wrong table name
+            # when wrong table name
             self.ydb_client.query("INSERT INTO `wrongTable` (id, vn, vs) VALUES (0, 0, 'A');")
-        # then
+            # then
             assert False, 'Should Fail'
-        except ydb.issues.SchemeError:
-            pass
+        except ydb.issues.SchemeError as ex:
+            assert "Cannot find table" in str(ex), str(ex)
 
         try:
-        # when wrong column name
+            # when wrong column name
             self.ydb_client.query(f"INSERT INTO `{self.table_path}` (id, wrongColumn, vs) VALUES (0, 0, 'A');")
-        # then
+            # then
             assert False, 'Should Fail'
-        except ydb.issues.GenericError:
-            pass
+        except ydb.issues.GenericError as ex:
+            assert "No such column: wrongColumn" in str(ex), str(ex)
 
         try:
-        # when wrong data type
+            # when wrong data type
             self.ydb_client.query(f"INSERT INTO `{self.table_path}` (id, vn, vs) VALUES (0, 'A', 0);")
-        # then
+            # then
             assert False, 'Should Fail'
-        except ydb.issues.GenericError:
-            pass
+        except ydb.issues.GenericError as ex:
+            assert "Failed to convert type" in str(ex), str(ex)
+
+
+    def test_out_of_range(self):
+        rt = self.get_table_path()
+        self.ydb_client.query(
+            f"""
+            CREATE TABLE `{rt}` (
+                id Uint64 NOT NULL,
+                vu8 Uint8,
+                PRIMARY KEY(id),
+            )
+            WITH (
+                STORE = COLUMN
+            )
+            """
+        )
+
+        try:
+            # when too big
+            self.ydb_client.query(f"INSERT INTO `{rt}` (id, vu8) VALUES (0, 300);")
+            # then
+            assert False, 'Should Fail'
+        except ydb.issues.GenericError as ex:
+            assert "Failed to convert type" in str(ex), str(ex)
+
+        try:
+            # when too small
+            self.ydb_client.query(f"INSERT INTO `{rt}` (id, vu8) VALUES (1, -1);")
+            # then
+            assert False, 'Should Fail'
+        except ydb.issues.GenericError as ex:
+            assert "Failed to convert type" in str(ex), str(ex)

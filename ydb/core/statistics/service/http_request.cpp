@@ -34,6 +34,8 @@ void THttpRequest::Bootstrap() {
     entry.Operation = TNavigate::EOp::OpTable;
     entry.RequestType = TNavigate::TEntry::ERequestType::ByPath;
     entry.ShowPrivatePath = true;
+
+    navigate->DatabaseName = ""; // it's intentional, because we checked access via AllowedSIDs on Monitoring side
     navigate->Cookie = FirstRoundCookie;
 
     Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(navigate.release()));

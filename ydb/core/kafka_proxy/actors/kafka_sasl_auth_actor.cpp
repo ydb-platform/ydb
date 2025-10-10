@@ -183,7 +183,7 @@ void TKafkaSaslAuthActor::SendDescribeRequest(const TActorContext& ctx) {
     entry.Operation = NKikimr::NSchemeCache::TSchemeCacheNavigate::OpPath;
     entry.SyncVersion = false;
     schemeCacheRequest->ResultSet.emplace_back(entry);
-    schemeCacheRequest->DatabaseName = CanonizePath(AppData()->DomainsInfo->GetDomain()->Name);
+    schemeCacheRequest->DatabaseName = AppData()->DomainsInfo->GetDomain()->Name;
     ctx.Send(NKikimr::MakeSchemeCacheID(), MakeHolder<NKikimr::TEvTxProxySchemeCache::TEvNavigateKeySet>(schemeCacheRequest.release()));
 }
 
@@ -196,7 +196,7 @@ void TKafkaSaslAuthActor::GetPathByPathId(const TPathId& pathId, const TActorCon
     entry.SyncVersion = false;
     entry.RedirectRequired = false;
     schemeCacheRequest->ResultSet.emplace_back(entry);
-    schemeCacheRequest->DatabaseName = CanonizePath(AppData()->DomainsInfo->GetDomain()->Name);
+    schemeCacheRequest->DatabaseName = AppData()->DomainsInfo->GetDomain()->Name;
     ctx.Send(NKikimr::MakeSchemeCacheID(), MakeHolder<NKikimr::TEvTxProxySchemeCache::TEvNavigateKeySet>(schemeCacheRequest.release()));
 }
 

@@ -116,6 +116,7 @@ struct TEvStatistics {
     {};
 
     struct TEvGetStatistics : public TEventLocal<TEvGetStatistics, EvGetStatistics> {
+        TString Database;
         EStatType StatType;
         std::vector<TRequest> StatRequests;
     };
@@ -249,7 +250,7 @@ struct TEvStatistics {
         TEvAnalyzeTableResponse,
         NKikimrStat::TEvAnalyzeTableResponse,
         EvAnalyzeTableResponse>
-    {};    
+    {};
 
     struct TEvStatisticsRequest : public TEventPB<
         TEvStatisticsRequest,

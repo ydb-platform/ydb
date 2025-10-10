@@ -324,6 +324,7 @@ private:
     void ResolveKeys() {
         auto requestNavigate = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
         auto request = MakeHolder<NSchemeCache::TSchemeCacheRequest>();
+        request->DatabaseName = TasksGraph.GetMeta().Database; 
         request->ResultSet.reserve(TasksGraph.GetStagesInfo().size());
         if (UserToken && !UserToken->GetSerializedToken().empty()) {
             request->UserToken = UserToken;

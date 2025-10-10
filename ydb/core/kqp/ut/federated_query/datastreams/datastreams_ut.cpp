@@ -2534,6 +2534,119 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             "B-2025-08-26T00:00:00.000000Z-1"
         }, readDisposition, /* sort */ true);
     }
+
+    Y_UNIT_TEST_F(CheckpointPropagationWithStreamLookupJoinHanging, TStreamingTestFixture) {
+        const auto connectorClient = SetupMockConnectorClient();
+
+        constexpr char inputTopicName[] = "sljInputTopicName";
+        constexpr char outputTopicName[] = "sljOutputTopicName";
+        CreateTopic(inputTopicName);
+        CreateTopic(outputTopicName);
+
+        constexpr char pqSourceName[] = "pqSourceName";
+        constexpr char ydbSourceName[] = "ydbSourceName";
+        CreatePqSource(pqSourceName);
+        CreateYdbSource(ydbSourceName);
+
+        constexpr char ydbTable[] = "lookup";
+        ExecExternalQuery(fmt::format(R"(
+            CREATE TABLE `{table}` (
+                fqdn String,
+                payload String,
+                PRIMARY KEY (fqdn)
+            ))",
+            "table"_a = ydbTable
+        ));
+
+        {   // Prepare connector mock
+            const std::vector<TColumn> columns = {
+                {"fqdn", Ydb::Type::STRING},
+                {"payload", Ydb::Type::STRING}
+            };
+            SetupMockConnectorTableDescription(connectorClient, {
+                .TableName = ydbTable,
+                .Columns = columns,
+                .DescribeCount = 2,
+                .ListSplitsCount = 5,
+                .ValidateListSplitsArgs = false
+            });
+
+            const std::vector<std::string> fqdnColumn = {"host1.example.com", "host2.example.com", "host3.example.com"};
+            const std::vector<std::string> payloadColumn = std::vector<std::string>{"P1", "P2", "P3"};
+            SetupMockConnectorTableData(connectorClient, {
+                .TableName = ydbTable,
+                .Columns = columns,
+                .NumberReadSplits = 3,
+                .ValidateReadSplitsArgs = false,
+                .ResultFactory = [&]() {
+                    return MakeRecordBatch(
+                        MakeArray<arrow::BinaryBuilder>("fqdn", fqdnColumn, arrow::binary()),
+                        MakeArray<arrow::BinaryBuilder>("payload", payloadColumn, arrow::binary())
+                    );
+                }
+            });
+        }
+
+        constexpr char queryName[] = "streamingQuery";
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                $ydb_lookup = SELECT * FROM `{ydb_source}`.`{ydb_table}`;
+
+                $pq_source = SELECT * FROM `{pq_source}`.`{input_topic}` WITH (
+                    FORMAT = "json_each_row",
+                    SCHEMA (
+                        time Int32 NOT NULL,
+                        event String,
+                        host String
+                    )
+                );
+
+                $joined = SELECT l.payload AS payload, p.* FROM $pq_source AS p
+                LEFT JOIN /*+ streamlookup(TTL 1) */ ANY $ydb_lookup AS l
+                ON (l.fqdn = p.host);
+
+                INSERT INTO `{pq_source}`.`{output_topic}`
+                SELECT Unwrap(event || "-" || payload) FROM $joined
+            END DO;)",
+            "query_name"_a = queryName,
+            "pq_source"_a = pqSourceName,
+            "ydb_source"_a = ydbSourceName,
+            "ydb_table"_a = ydbTable,
+            "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName
+        ));
+        CheckScriptExecutionsCount(1, 1);
+        Sleep(TDuration::Seconds(1));
+
+        WriteTopicMessage(inputTopicName, R"({"time": 0, "event": "A", "host": "host1.example.com"})");
+        ReadTopicMessage(outputTopicName, "A-P1");
+
+        connectorClient->LockReading();
+        WriteTopicMessage(inputTopicName, R"({"time": 1, "event": "B", "host": "host3.example.com"})");
+        Sleep(TDuration::Seconds(2));
+        const auto readDisposition = TInstant::Now();
+
+        ExecQuery(fmt::format(R"(
+            ALTER STREAMING QUERY `{query_name}` SET (
+                RUN = FALSE
+            );)",
+            "query_name"_a = queryName
+        ));
+        CheckScriptExecutionsCount(1, 0);
+
+        connectorClient->UnlockReading();
+
+        ExecQuery(fmt::format(R"(
+            ALTER STREAMING QUERY `{query_name}` SET (
+                RUN = TRUE
+            );)",
+            "query_name"_a = queryName
+        ));
+        CheckScriptExecutionsCount(2, 1);
+
+        ReadTopicMessage(outputTopicName, "B-P3", readDisposition);
+    }
 }
 
 } // namespace NKikimr::NKqp

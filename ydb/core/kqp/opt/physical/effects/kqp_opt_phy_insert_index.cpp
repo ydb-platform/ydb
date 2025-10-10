@@ -121,7 +121,13 @@ TExprBase MakeInsertFulltextIndexRows(const NYql::NNodes::TExprBase& inputRows, 
     tokenRowTuples.emplace_back(tokenTuple);
     
     // Add all other columns (primary key + data columns)
+    // Skip __ydb_token as it's already added above
     for (const auto& column : indexColumns) {
+        // Skip the token column as we already added it
+        if (column == NTableIndex::NFulltext::TokenColumn) {
+            continue;
+        }
+        
         auto columnAtom = ctx.NewAtom(pos, column);
         
         if (inputColumns.contains(column)) {

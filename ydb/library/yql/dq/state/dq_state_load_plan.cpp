@@ -81,7 +81,7 @@ bool ParseTopicInput(
     bool force,
     bool isSourceGraph,
     NYql::NPq::NProto::TDqPqTopicSource& srcDesc,
-    NPq::TTopicPartitionsSet& partitionsSet,
+    std::vector<NPq::TTopicPartitionsSet>& partitionsSets,
     TIssues& issues)
 {
 #pragma clang diagnostic push
@@ -99,28 +99,30 @@ bool ParseTopicInput(
         return false;
     }
 
-    const TMaybe<NPq::TTopicPartitionsSet> foundPartitionsSet = NPq::GetTopicPartitionsSet(task.GetMeta());
-    if (!foundPartitionsSet) {
+    partitionsSets = NPq::GetTopicPartitionsSets(task);
+    if (partitionsSets.empty()) {
         ISSUE("Can't read " << queryKindStr << " query params: failed to load partitions of topic `" << srcDesc.GetTopicPath() << "` from input " << inputIndex << " of task " << task.GetId());
         return false;
     }
-    partitionsSet = *foundPartitionsSet;
+
     return true;
 }
 
 void AddToMapping(
     const NYql::NPq::NProto::TDqPqTopicSource& srcDesc,
-    const NPq::TTopicPartitionsSet& partitionsSet,
+    const std::vector<NPq::TTopicPartitionsSet>& partitionsSets,
     ui64 taskId,
     ui64 inputIndex,
     TTopicsMapping& mapping)
 {
     TTopicMappingInfo& info = mapping[TTopic{srcDesc.GetDatabaseId(), srcDesc.GetDatabase(), srcDesc.GetTopicPath()}];
-    ui64 currentPartition = partitionsSet.EachTopicPartitionGroupId;
-    do {
-        info.PartitionsMapping.emplace(currentPartition, TTaskSource{taskId, inputIndex});
-        currentPartition += partitionsSet.DqPartitionsCount;
-    } while (currentPartition < partitionsSet.TopicPartitionsCount);
+    for (const auto& partitionsSet : partitionsSets) {
+        ui64 currentPartition = partitionsSet.EachTopicPartitionGroupId;
+        do {
+            info.PartitionsMapping.emplace(currentPartition, TTaskSource{taskId, inputIndex});
+            currentPartition += partitionsSet.DqPartitionsCount;
+        } while (currentPartition < partitionsSet.TopicPartitionsCount);
+    }
 }
 
 void InitForeignPlan(const NYql::NDqProto::TDqTask& task, NDqProto::NDqStateLoadPlan::TTaskPlan& taskPlan) {
@@ -172,15 +174,15 @@ bool MakeContinueFromStreamingOffsetsPlan(
             const NYql::NDqProto::TTaskInput& taskInput = task.GetInputs(inputIndex);
             if (IsTopicInput(taskInput)) {
                 NYql::NPq::NProto::TDqPqTopicSource srcDesc;
-                NPq::TTopicPartitionsSet partitionsSet;
-                if (!ParseTopicInput(task, taskInput, inputIndex, force, true, srcDesc, partitionsSet, issues)) {
+                std::vector<NPq::TTopicPartitionsSet> partitionsSets;
+                if (!ParseTopicInput(task, taskInput, inputIndex, force, true, srcDesc, partitionsSets, issues)) {
                     if (!force) {
                         result = false;
                     }
                     continue;
                 }
 
-                AddToMapping(srcDesc, partitionsSet, task.GetId(), inputIndex, srcMapping);
+                AddToMapping(srcDesc, partitionsSets, task.GetId(), inputIndex, srcMapping);
             }
         }
     }
@@ -194,8 +196,8 @@ bool MakeContinueFromStreamingOffsetsPlan(
             const NYql::NDqProto::TTaskInput& taskInput = task.GetInputs(inputIndex);
             if (IsTopicInput(taskInput)) {
                 NYql::NPq::NProto::TDqPqTopicSource srcDesc;
-                NPq::TTopicPartitionsSet partitionsSet;
-                if (!ParseTopicInput(task, taskInput, inputIndex, force, false, srcDesc, partitionsSet, issues)) {
+                std::vector<NPq::TTopicPartitionsSet> partitionsSets;
+                if (!ParseTopicInput(task, taskInput, inputIndex, force, false, srcDesc, partitionsSets, issues)) {
                     if (!force) {
                         result = false;
                     }
@@ -212,21 +214,23 @@ bool MakeContinueFromStreamingOffsetsPlan(
                 THashSet<TTaskSource, TTaskSourceHash> tasksSet;
 
                 // Process all partitions
-                ui64 currentPartition = partitionsSet.EachTopicPartitionGroupId;
-                do {
-                    auto [taskBegin, taskEnd] = mappingInfo.PartitionsMapping.equal_range(currentPartition);
-                    if (taskBegin == taskEnd) {
-                        ISSUE("Topic `" << srcDesc.GetTopicPath() << "` partition " << currentPartition << " is not found in previous query" << FORCE_MSG("Query will use fresh offsets for it"));
-                    } else {
-                        if (std::distance(taskBegin, taskEnd) > 1) {
-                            ISSUE("Topic `" << srcDesc.GetTopicPath() << "` partition " << currentPartition << " has ambiguous offsets source in previous query checkpoint" << FORCE_MSG("Query will use minimum offset to avoid skipping data"));
+                for (const auto& partitionsSet : partitionsSets) {
+                    ui64 currentPartition = partitionsSet.EachTopicPartitionGroupId;
+                    do {
+                        auto [taskBegin, taskEnd] = mappingInfo.PartitionsMapping.equal_range(currentPartition);
+                        if (taskBegin == taskEnd) {
+                            ISSUE("Topic `" << srcDesc.GetTopicPath() << "` partition " << currentPartition << " is not found in previous query" << FORCE_MSG("Query will use fresh offsets for it"));
+                        } else {
+                            if (std::distance(taskBegin, taskEnd) > 1) {
+                                ISSUE("Topic `" << srcDesc.GetTopicPath() << "` partition " << currentPartition << " has ambiguous offsets source in previous query checkpoint" << FORCE_MSG("Query will use minimum offset to avoid skipping data"));
+                            }
+                            for (; taskBegin != taskEnd; ++taskBegin) {
+                                tasksSet.insert(taskBegin->second);
+                            }
                         }
-                        for (; taskBegin != taskEnd; ++taskBegin) {
-                            tasksSet.insert(taskBegin->second);
-                        }
-                    }
-                    currentPartition += partitionsSet.DqPartitionsCount;
-                } while (currentPartition < partitionsSet.TopicPartitionsCount);
+                        currentPartition += partitionsSet.DqPartitionsCount;
+                    } while (currentPartition < partitionsSet.TopicPartitionsCount);
+                }
 
                 if (!tasksSet.empty()) {
                     if (!foreignStatePlanInited) {

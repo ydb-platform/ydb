@@ -237,6 +237,8 @@ void TCheckpointCoordinator::TryToRestoreOffsetsFromForeignCheckpoint(const TChe
         Send(RunActorId, new NFq::TEvCheckpointCoordinator::TEvRaiseTransientIssues(std::move(issues)));
     }
 
+    CC_LOG_I("Going to restore offsets from foreign checkpoint " << checkpoint.CheckpointId << " for tasks #" << plan.size());
+
     PendingRestoreCheckpoint = TPendingRestoreCheckpoint(checkpoint.CheckpointId, false, ActorsToWaitForSet);
     ++*Metrics.RestoredStreamingOffsetsFromCheckpoint;
     for (const auto& [taskId, taskPlan] : plan) {
@@ -249,6 +251,7 @@ void TCheckpointCoordinator::TryToRestoreOffsetsFromForeignCheckpoint(const TChe
         }
         const auto transportIt = ActorsToWaitFor.find(actorIdIt->second);
         if (transportIt != ActorsToWaitFor.end()) {
+            CC_LOG_D("Restore offsets from foreign checkpoint " << checkpoint.CheckpointId << " for task " << taskId);
             transportIt->second->EventsQueue.Send(
                 new NYql::NDq::TEvDqCompute::TEvRestoreFromCheckpoint(
                     checkpoint.CheckpointId.SeqNo,

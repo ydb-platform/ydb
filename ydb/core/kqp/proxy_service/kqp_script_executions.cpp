@@ -4818,7 +4818,7 @@ IActor* CreateRefreshScriptExecutionLeasesActor(const TActorId& replyActorId, co
     return new TRefreshScriptExecutionLeasesActor(replyActorId, queryServiceConfig, counters);
 }
 
-IActor* CreateSaveScriptExecutionPhysicalGraphActor(const TActorId& replyActorId, const TString& database, const TString& executionId, NKikimrKqp::TQueryPhysicalGraph&& physicalGraph, i64 leaseGeneration, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig) {
+IActor* CreateSaveScriptExecutionPhysicalGraphActor(const TActorId& replyActorId, const TString& database, const TString& executionId, NKikimrKqp::TQueryPhysicalGraph physicalGraph, i64 leaseGeneration, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig) {
     return new TSaveScriptExecutionPhysicalGraphActor::TRetry(replyActorId, database, executionId, std::move(physicalGraph), leaseGeneration, queryServiceConfig);
 }
 

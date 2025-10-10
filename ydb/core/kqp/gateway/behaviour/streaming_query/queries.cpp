@@ -1633,10 +1633,6 @@ public:
         const auto& info = *ev->Get();
         LOG_D("Got script execution info, StateSaved: " << info.StateSaved << ", Ready: " << info.Ready);
 
-        if (info.Ready && ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
-            ExecutionFailed = true;
-        }
-
         if (HandleResult(ev, "Query compilation / planing")) {
             return;
         }
@@ -1668,10 +1664,6 @@ public:
 
 protected:
     bool BeforeFinish(Ydb::StatusIds::StatusCode status) final {
-        if (!RequestStarted) {
-            return false;
-        }
-
         Become(&TStartStreamingQueryTableActor::StateFuncFinalize);
 
         if (status == Ydb::StatusIds::SUCCESS) {
@@ -1683,11 +1675,11 @@ protected:
                 FinalStatus = status;
                 return true;
             }
-        } else if (ExecutionFailed) {
-            ExecutionFailed = false;
+        } else if (State.GetCurrentExecutionId()) {
+            if (RequestStarted) {
+                State.AddPreviousExecutionIds(State.GetCurrentExecutionId());
+            }
 
-            const auto& executionId = State.GetCurrentExecutionId();
-            State.AddPreviousExecutionIds(executionId);
             State.ClearCurrentExecutionId();
             State.SetStatus(NKikimrKqp::TStreamingQueryState::STATUS_STOPPED);
             UpdateQueryState("move query to stopped");
@@ -1718,7 +1710,7 @@ private:
             return;
         }
 
-        if (State.PreviousExecutionIdsSize() > 0 && !StateLoaded) {
+        if (!State.GetPreviousExecutionIds().empty() && !StateLoaded) {
             StateLoaded = true;
             const auto& executionId = *State.GetPreviousExecutionIds().rbegin();
             const auto& fetcherId = Register(CreateGetScriptExecutionPhysicalGraphActor(SelfId(), Context.GetDatabase(), executionId));
@@ -1889,7 +1881,6 @@ private:
     // Query starting state
     bool StateLoaded = false;
     bool RequestStarted = false;
-    bool ExecutionFailed = false;
     TRetryPolicy::IRetryState::TPtr GetOperationRetryState;
     Ydb::StatusIds::StatusCode FinalStatus = Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
 };

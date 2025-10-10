@@ -62,7 +62,7 @@ int main(int argc, char** argv) {
     opts.AddLongOption("scale").Help("size of smallest table in case").DefaultValue(1).StoreResult(&scale);
     params.Algorithms = {
         NKikimr::NMiniKQL::ETestedJoinAlgo::kBlockMap,
-        // NKikimr::NMiniKQL::ETestedJoinAlgo::kBlockHash,
+        NKikimr::NMiniKQL::ETestedJoinAlgo::kBlockHash,
         // NKikimr::NMiniKQL::ETestedJoinAlgo::kScalarMap, // slow
         NKikimr::NMiniKQL::ETestedJoinAlgo::kScalarHash,
         NKikimr::NMiniKQL::ETestedJoinAlgo::kScalarGrace,

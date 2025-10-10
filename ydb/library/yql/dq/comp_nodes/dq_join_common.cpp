@@ -1,5 +1,5 @@
 #include "dq_join_common.h"
-
+#include <yql/essentials/minikql/mkql_node_cast.h>
 namespace NKikimr::NMiniKQL {
 
 TKeyTypes KeyTypesFromColumns(const std::vector<TType*>& types, const std::vector<ui32>& keyIndexes) {
@@ -7,6 +7,7 @@ TKeyTypes KeyTypesFromColumns(const std::vector<TType*>& types, const std::vecto
     std::ranges::copy(keyIndexes | std::views::transform([&types](ui32 typeIndex) {
                           const TType* type = types[typeIndex];
                           MKQL_ENSURE(type->IsData(), "exepected data type");
+                          AS_TYPE(TDataType, type)->GetDataSlot();
                           return std::pair{*static_cast<const TDataType*>(type)->GetDataSlot(), false};
                       }), std::back_inserter(kt));
     return kt;

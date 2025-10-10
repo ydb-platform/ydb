@@ -107,7 +107,7 @@ TVector<TBenchmarkCaseResult> NKikimr::NMiniKQL::RunJoinsBench(const TBenchmarkS
                     }
 
                     result.RunDuration = TDuration::MicroSeconds(ThreadCPUTime() - timeStartMicroSeconds);
-                    Cerr << ". Output line count: " << lineCount << Endl;
+                    Cerr << Sprintf(". output line count: %i, time took: %ims.", lineCount, result.RunDuration.MilliSeconds()) << Endl;
                     ret.push_back(result);
                 }
             }

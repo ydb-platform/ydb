@@ -98,18 +98,18 @@ template <typename Source, EJoinKind Kind> class TJoin : public TComputationValu
     }
 
     EFetchResult MatchRows(TComputationContext& ctx, auto consume) {
-        if (!Build_.Finished()) {
+        while (!Build_.Finished()) {
             auto res = Build_.ForEachRow(ctx, [&](auto tuple) { Table_.Add({tuple, tuple + Build_.UserDataSize()}); });
             switch (res) {
             case NYql::NUdf::EFetchStatus::Finish: {
                 Table_.Build();
-                return EFetchResult::Yield;
+                break;
             }
             case NYql::NUdf::EFetchStatus::Yield: {
                 return EFetchResult::Yield;
             }
             case NYql::NUdf::EFetchStatus::Ok: {
-                return EFetchResult::Yield;
+                break;
             }
             default:
                 MKQL_ENSURE(false, "unreachable");

@@ -181,7 +181,7 @@ void TColumnShardScan::CheckHanging(const bool logging) const {
             "debug", ScanIterator ? ScanIterator->DebugString() : Default<TString>())("last", LastResultInstant);
     }
     const bool ok = !!FinishInstant || !ScanIterator || !ChunksLimiter.HasMore() || ScanCountersPool.InWaiting();
-    AFL_VERIFY(ok)
+    AFL_VERIFY_DEBUG(ok)
     ("finished", ScanIterator->Finished())
     ("scan_actor_id", ScanActorId)("tx_id", TxId)("scan_id", ScanId)("gen", ScanGen)("tablet", TabletId)("debug", ScanIterator->DebugString())(
         "counters", ScanCountersPool.DebugString());

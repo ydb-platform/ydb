@@ -227,6 +227,27 @@ namespace NYql {
             return SerializeExpression(lambda.Body(), dstProto->mutable_then_expression(), ctx, depth + 1);
         }
 
+        bool SerializeDecimal(const TCoDecimal& coDecimal, TExpression* proto, TSerializationContext& /*ctx*/, ui64 /*depth*/) {
+            auto* protoTypedValue = proto->mutable_typed_value();
+            auto* protoDecimalType = protoTypedValue->mutable_type()->mutable_decimal_type();
+
+            // extract precision and scale
+            auto precision = FromString<ui32>(coDecimal.Precision().StringValue());
+            auto scale = FromString<ui32>(coDecimal.Scale().StringValue());
+            protoDecimalType->set_precision(precision);
+            protoDecimalType->set_scale(scale);
+
+            // extract decimal value itself 
+            auto decimal = NDecimal::FromString(coDecimal.Cast<TCoDecimal>().Literal().Value(), precision, scale);
+            static_assert(sizeof(decimal) == 16, "wrong TInt128 size");
+            
+            // Set the bytes value with the 16 buffer containing the decimal value bytes
+            protoTypedValue->mutable_value()->set_bytes_value(reinterpret_cast<char*>(&decimal), sizeof(decimal));
+            
+            return true;
+        }
+
+
 #define MATCH_ATOM(AtomType, ATOM_ENUM, proto_name, cpp_type)                             \
     if (auto atom = expression.Maybe<Y_CAT(TCo, AtomType)>()) {                           \
         auto* value = proto->mutable_typed_value();                                       \
@@ -299,6 +320,9 @@ namespace NYql {
             }
             if (auto dependsOn = expression.Maybe<TCoDependsOn>()) {
                 return SerializeExpression(dependsOn.Cast().Input(), proto, ctx, depth + 1);
+            }
+            if (auto decimal = expression.Maybe<TCoDecimal>()) {
+                return SerializeDecimal(decimal.Cast(), proto, ctx, depth);
             }
 
             // data

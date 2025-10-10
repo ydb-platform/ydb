@@ -1,7 +1,6 @@
 #include "collection.h"
 
 #include <yql/essentials/core/yql_expr_type_annotation.h>
-#include <yql/essentials/utils/log/log.h>
 
 #include <vector>
 
@@ -209,6 +208,9 @@ private:
             return true;
         }
         if (Settings.IsEnabled(EFlag::StringTypes) && (node.Maybe<TCoUtf8>() || node.Maybe<TCoString>())) {
+            return true;
+        }
+        if (Settings.IsEnabled(EFlag::DecimalCtor) && node.Maybe<TCoDecimal>()) {
             return true;
         }
         return false;

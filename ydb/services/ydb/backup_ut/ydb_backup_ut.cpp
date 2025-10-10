@@ -3244,6 +3244,39 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
         );
     }
 
+    Y_UNIT_TEST(RestoreViewTablePathPrefix) {
+        TS3TestEnv testEnv;
+        constexpr const char* view = "view";
+        constexpr const char* table = "table";
+        constexpr const char* restoredView = "a/b/c/view";
+
+        TestViewRelativeReferencesArePreserved(
+            view,
+            table,
+            restoredView,
+            testEnv.GetQuerySession(),
+            CreateBackupLambda(testEnv.GetDriver(), testEnv.GetS3Port()),
+            CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port(), { "a/b/c/view", "a/b/c/table" }),
+            "PRAGMA TablePathPrefix = '/Root/a/b/c';\n"
+        );
+    }
+
+    Y_UNIT_TEST(RestoreViewTablePathPrefixLowercase) {
+        TS3TestEnv testEnv;
+        constexpr const char* view = "view";
+        constexpr const char* table = "table";
+        constexpr const char* restoredView = "a/b/c/view";
+
+        TestViewRelativeReferencesArePreserved(
+            view,
+            table,
+            restoredView,
+            testEnv.GetQuerySession(),
+            CreateBackupLambda(testEnv.GetDriver(), testEnv.GetS3Port()),
+            CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port(), { "a/b/c/view", "a/b/c/table" }),
+            "pragma tablepathprefix = '/Root/a/b/c';\n" // note the lowercase
+        );
+    }
 
     // TO DO: test view restoration to a different database
 

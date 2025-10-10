@@ -3,6 +3,7 @@ RECURSE(
     audit
     autoconfig
     backup
+    backup_collection
     benchmarks_init
     blobstorage
     bridge

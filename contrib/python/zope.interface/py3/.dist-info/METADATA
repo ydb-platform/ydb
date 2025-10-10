@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: zope.interface
-Version: 8.0
+Version: 8.0.1
 Summary: Interfaces for Python
 Home-page: https://github.com/zopefoundation/zope.interface
 Author: Zope Foundation and Contributors
@@ -25,7 +25,6 @@ Classifier: Topic :: Software Development :: Libraries :: Python Modules
 Requires-Python: >=3.9
 Description-Content-Type: text/x-rst
 License-File: LICENSE.txt
-Requires-Dist: setuptools
 Provides-Extra: docs
 Requires-Dist: Sphinx; extra == "docs"
 Requires-Dist: repoze.sphinx.autointerface; extra == "docs"
@@ -48,7 +47,6 @@ Dynamic: keywords
 Dynamic: license
 Dynamic: license-file
 Dynamic: provides-extra
-Dynamic: requires-dist
 Dynamic: requires-python
 Dynamic: summary
 
@@ -87,6 +85,14 @@ For detailed documentation, please see https://zopeinterface.readthedocs.io/en/l
 =========
  Changes
 =========
+
+8.0.1 (2025-09-25)
+==================
+
+- Make tests resilient against different ways of calling them.
+
+- Remove run-time dependency on ``setuptools``.
+
 
 8.0 (2025-09-12)
 ================

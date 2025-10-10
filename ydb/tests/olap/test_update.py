@@ -165,24 +165,24 @@ class TestUpdate(object):
             self.ydb_client.query(f"UPDATE `wrongTable` SET vs = 'A' WHERE id = 1;")
             # then
             assert False, 'Should Fail'
-        except ydb.issues.SchemeError:
-            pass
+        except ydb.issues.SchemeError as ex:
+            assert "Cannot find table" in ex.message
 
         try:
             # when wrong column name
-            self.ydb_client.query(f"UPDATE `{self.table_path}` wrongColumn = 'A' WHERE id = 1;")
+            self.ydb_client.query(f"UPDATE `{self.table_path}` SET wrongColumn = 'A' WHERE id = 1;")
             # then
             assert False, 'Should Fail'
-        except ydb.issues.GenericError:
-            pass
+        except ydb.issues.BadRequest as ex:
+            assert "Column \\'wrongColumn\\' does not exist in table" in ex.message
 
         try:
             # when wrong data type
-            self.ydb_client.query(f"UPDATE `{self.table_path}` vn = 'A' WHERE id = 1;")
+            self.ydb_client.query(f"UPDATE `{self.table_path}` SET vn = 'A' WHERE id = 1;")
             # then
             assert False, 'Should Fail'
-        except ydb.issues.GenericError:
-            pass
+        except ydb.issues.GenericError as ex:
+            assert "Failed to convert \\'vn\\': String to Optional<Int32>" in ex.message
 
     def test_update_pk(self):
         # given
@@ -194,5 +194,5 @@ class TestUpdate(object):
             self.ydb_client.query(f"UPDATE `{self.table_path}` SET id = 0;")
             # then
             assert False, 'Should Fail'
-        except ydb.issues.GenericError:
-            pass
+        except ydb.issues.GenericError as ex:
+            assert "Cannot update primary key column: id" in ex.message

@@ -1,4 +1,5 @@
 #include <ydb/core/base/table_index.h>
+#include <ydb/core/base/fulltext.h>
 
 #include "kqp_opt_phy_effects_rules.h"
 #include "kqp_opt_phy_effects_impl.h"
@@ -80,6 +81,137 @@ TExprBase MakeInsertIndexRows(const NYql::NNodes::TExprBase& inputRows, const TK
         .Settings().Build()
         .Done();
 
+    return Build<TDqCnUnionAll>(ctx, pos)
+        .Output()
+            .Stage(computeRowsStage)
+            .Index().Build("0")
+            .Build()
+        .Done();
+}
+
+TExprBase MakeInsertFulltextIndexRows(const NYql::NNodes::TExprBase& inputRows, const TKikimrTableDescription& table,
+    const THashSet<TStringBuf>& inputColumns, const TVector<TStringBuf>& indexColumns,
+    const TIndexDescription* indexDesc, TPositionHandle pos, TExprContext& ctx, bool useStage)
+{
+    // Extract fulltext index settings
+    const auto* fulltextDesc = std::get_if<NKikimrKqp::TFulltextIndexDescription>(&indexDesc->SpecializedIndexDescription);
+    YQL_ENSURE(fulltextDesc, "Expected fulltext index description");
+    
+    const auto& settings = fulltextDesc->GetSettings();
+    YQL_ENSURE(settings.columns().size() == 1, "Expected single text column in fulltext index");
+    
+    const TString textColumn = settings.columns().at(0).column();
+    const auto& analyzers = settings.columns().at(0).analyzers();
+    
+    // Serialize analyzer settings for runtime usage
+    TString settingsProto;
+    YQL_ENSURE(analyzers.SerializeToString(&settingsProto));
+    
+    auto inputRowArg = TCoArgument(ctx.NewArgument(pos, "input_row"));
+    auto tokenArg = TCoArgument(ctx.NewArgument(pos, "token"));
+    
+    // Build output row structure for each token
+    TVector<TExprBase> tokenRowTuples;
+    
+    // Add token column (first column in fulltext index)
+    auto tokenTuple = Build<TCoNameValueTuple>(ctx, pos)
+        .Name().Build(NTableIndex::NFulltext::TokenColumn)
+        .Value(tokenArg)
+        .Done();
+    tokenRowTuples.emplace_back(tokenTuple);
+    
+    // Add all other columns (primary key + data columns)
+    for (const auto& column : indexColumns) {
+        auto columnAtom = ctx.NewAtom(pos, column);
+        
+        if (inputColumns.contains(column)) {
+            auto tuple = Build<TCoNameValueTuple>(ctx, pos)
+                .Name(columnAtom)
+                .Value<TCoMember>()
+                    .Struct(inputRowArg)
+                    .Name(columnAtom)
+                    .Build()
+                .Done();
+            
+            tokenRowTuples.emplace_back(tuple);
+        } else {
+            auto columnType = table.GetColumnType(TString(column));
+            
+            auto tuple = Build<TCoNameValueTuple>(ctx, pos)
+                .Name(columnAtom)
+                .Value<TCoNothing>()
+                    .OptionalType(NCommon::BuildTypeExpr(pos, *columnType, ctx))
+                    .Build()
+                .Done();
+            
+            tokenRowTuples.emplace_back(tuple);
+        }
+    }
+    
+    // Create lambda that builds output row for each token
+    auto tokenRowsLambda = Build<TCoLambda>(ctx, pos)
+        .Args({tokenArg})
+        .Body<TCoAsStruct>()
+            .Add(tokenRowTuples)
+            .Build()
+        .Done();
+    
+    // Get text member from input row
+    auto textMember = Build<TCoMember>(ctx, pos)
+        .Struct(inputRowArg)
+        .Name().Build(textColumn)
+        .Done();
+    
+    // Create callable for fulltext tokenization
+    // Format: FulltextAnalyze(text: String, settings: String) -> List<String>
+    auto settingsLiteral = ctx.NewCallable(pos, "String", {
+        ctx.NewAtom(pos, settingsProto)
+    });
+    
+    auto analyzeCallable = ctx.NewCallable(pos, "FulltextAnalyze", {
+        textMember.Ptr(),
+        settingsLiteral
+    });
+    
+    // FlatMap over tokens to create output rows
+    auto flatMapBody = ctx.NewCallable(pos, "FlatMap", {
+        analyzeCallable,
+        tokenRowsLambda.Ptr()
+    });
+    
+    if (!useStage) {
+        auto mapLambda = Build<TCoLambda>(ctx, pos)
+            .Args({inputRowArg})
+            .Body(flatMapBody)
+            .Done();
+            
+        return Build<TCoFlatMap>(ctx, pos)
+            .Input(inputRows)
+            .Lambda(mapLambda)
+            .Done();
+    }
+    
+    auto mapLambda = Build<TCoLambda>(ctx, pos)
+        .Args({inputRowArg})
+        .Body(flatMapBody)
+        .Done();
+    
+    auto computeRowsStage = Build<TDqStage>(ctx, pos)
+        .Inputs()
+            .Add(inputRows)
+            .Build()
+        .Program()
+            .Args({"rows"})
+            .Body<TCoIterator>()
+                .List<TCoFlatMap>()
+                    .Input("rows")
+                    .Lambda(mapLambda)
+                    .Build()
+                .Build()
+            .Build()
+        .Settings().Build()
+        .Done();
+    
     return Build<TDqCnUnionAll>(ctx, pos)
         .Output()
             .Stage(computeRowsStage)
@@ -215,6 +347,10 @@ TExprBase KqpBuildInsertIndexStages(TExprBase node, TExprContext& ctx, const TKq
                 upsertIndexRows = BuildVectorIndexPostingRows(table, insert.Table(), indexDesc->Name, indexTableColumns,
                     upsertIndexRows, true, insert.Pos(), ctx);
                 indexTableColumns = BuildVectorIndexPostingColumns(table, indexDesc);
+            } else if (indexDesc->Type == TIndexDescription::EType::GlobalFulltext) {
+                // For fulltext indexes, we need to tokenize the text and create index rows
+                upsertIndexRows = MakeInsertFulltextIndexRows(insertRowsPrecompute, table, inputColumnsSet, indexTableColumns,
+                    indexDesc, insert.Pos(), ctx, true);
             }
 
             auto upsertIndex = Build<TKqlUpsertRows>(ctx, insert.Pos())

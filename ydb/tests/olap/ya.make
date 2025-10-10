@@ -12,9 +12,11 @@ PY3TEST()
         data_read_correctness.py
         test_overloads.py
         zip_bomb.py
+        test_create.py
         test_delete.py
         test_insert.py
         test_replace.py
+        test_select.py
         test_update.py
         test_upsert.py
     )

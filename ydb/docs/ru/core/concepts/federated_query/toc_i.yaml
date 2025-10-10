@@ -1,7 +1,6 @@
 items:
 - { name: Обзор,                                                  href: index.md }
 - { name: Архитектура,                                            href: architecture.md }
-- { name: Конфигурация,                                           href: config.md }
 - { name: Работа с базами данных ClickHouse,                      href: clickhouse.md }
 - { name: Работа с базами данных Greenplum,                       href: greenplum.md }
 - { name: Работа с базами данных Microsoft SQL Server,            href: ms_sql_server.md }

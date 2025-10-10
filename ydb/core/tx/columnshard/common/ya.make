@@ -7,7 +7,6 @@ SRCS(
     snapshot.cpp
     portion.cpp
     tablet_id.cpp
-    thread_safe_optional.cpp
     blob.cpp
     volume.cpp
     path_id.cpp

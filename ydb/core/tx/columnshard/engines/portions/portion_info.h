@@ -7,14 +7,12 @@
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
 #include <ydb/core/tx/columnshard/common/blob.h>
 #include <ydb/core/tx/columnshard/common/path_id.h>
-#include <ydb/core/tx/columnshard/common/thread_safe_optional.h>
 #include <ydb/core/tx/columnshard/engines/scheme/versions/abstract_scheme.h>
 
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/formats/arrow/replace_key.h>
 
 #include <util/generic/hash_set.h>
-
 
 namespace NKikimrColumnShardDataSharingProto {
 class TPortionInfo;
@@ -91,7 +89,7 @@ private:
 
     TInternalPathId PathId;
     ui64 PortionId = 0;   // Id of independent (overlayed by PK) portion of data in pathId
-    TThreadSafeOptional<TSnapshot> RemoveSnapshot;
+    TSnapshot RemoveSnapshot = TSnapshot::Zero();
     ui64 SchemaVersion = 0;
     std::optional<ui64> ShardingVersion;
 
@@ -215,8 +213,8 @@ public:
     }
 
     void SetRemoveSnapshot(const TSnapshot& snap) {
-        AFL_VERIFY(!HasRemoveSnapshot());
-        RemoveSnapshot.Set(snap);
+        AFL_VERIFY(!RemoveSnapshot.Valid());
+        RemoveSnapshot = snap;
     }
 
     void SetRemoveSnapshot(const ui64 planStep, const ui64 txId) {
@@ -341,7 +339,7 @@ public:
     TString DebugString(const bool withDetails = false) const;
 
     bool HasRemoveSnapshot() const {
-        return RemoveSnapshot.Has();
+        return RemoveSnapshot.Valid();
     }
 
     bool IsRemovedFor(const TSnapshot& snapshot) const {
@@ -378,12 +376,12 @@ public:
 
     const TSnapshot& GetRemoveSnapshotVerified() const {
         AFL_VERIFY(HasRemoveSnapshot());
-        return RemoveSnapshot.Get();
+        return RemoveSnapshot;
     }
 
     std::optional<TSnapshot> GetRemoveSnapshotOptional() const {
-        if (HasRemoveSnapshot()) {
-            return RemoveSnapshot.Get();
+        if (RemoveSnapshot.Valid()) {
+            return RemoveSnapshot;
         } else {
             return {};
         }
@@ -394,8 +392,8 @@ public:
         return SchemaVersion;
     }
 
-    bool IsVisible(const TSnapshot& snapshot, const bool checkCommitSnapshot = true) const {
-        const bool visible = (!HasRemoveSnapshot() || snapshot < GetRemoveSnapshotVerified()) && DoIsVisible(snapshot, checkCommitSnapshot);
+    bool IsVisible(const TSnapshot& snapshot, const bool checkCommitSnapshot) const {
+        const bool visible = (!RemoveSnapshot.Valid() || snapshot < RemoveSnapshot) && DoIsVisible(snapshot, checkCommitSnapshot);
 
         AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "IsVisible")("analyze_portion", DebugString())("visible", visible)(
             "snapshot", snapshot.DebugString());

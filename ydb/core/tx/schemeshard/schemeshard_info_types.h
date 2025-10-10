@@ -3069,6 +3069,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         LockBuild = 47,
         Applying = 50,
         Unlocking = 60,
+        AlterSequence = 61,
         Done = 200,
 
         Cancellation_Applying = 350,
@@ -3175,6 +3176,8 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         bool IsEmpty = false;
 
         EState State = Sample;
+
+        bool AlterPrefixSequenceDone = false;
 
         NTableIndex::NKMeans::TClusterId ParentBegin = 0;  // included
         NTableIndex::NKMeans::TClusterId Parent = ParentBegin;
@@ -3407,6 +3410,10 @@ public:
         return result;
     }
 
+    static bool IsValidState(EState value);
+    static bool IsValidSubState(ESubState value);
+    static bool IsValidBuildKind(EBuildKind value);
+
     struct TClusterShards {
         NTableIndex::NKMeans::TClusterId From = std::numeric_limits<NTableIndex::NKMeans::TClusterId>::max();
         std::vector<TShardIdx> Shards;
@@ -3464,18 +3471,34 @@ public:
         indexInfo->Id = id;
         indexInfo->Uid = uid;
 
-        indexInfo->State = TIndexBuildInfo::EState(
-            row.template GetValue<Schema::IndexBuild::State>());
-        indexInfo->SubState = TIndexBuildInfo::ESubState(
-            row.template GetValueOrDefault<Schema::IndexBuild::SubState>(ui32(TIndexBuildInfo::ESubState::None)));
         indexInfo->Issue =
             row.template GetValueOrDefault<Schema::IndexBuild::Issue>();
+
+        indexInfo->State = TIndexBuildInfo::EState(
+            row.template GetValue<Schema::IndexBuild::State>());
+        if (!IsValidState(indexInfo->State)) {
+            indexInfo->IsBroken = true;
+            indexInfo->AddIssue(TStringBuilder() << "Unknown build state: " << ui32(indexInfo->State));
+            indexInfo->State = TIndexBuildInfo::EState::Invalid;
+        }
+        indexInfo->SubState = TIndexBuildInfo::ESubState(
+            row.template GetValueOrDefault<Schema::IndexBuild::SubState>(ui32(TIndexBuildInfo::ESubState::None)));
+        if (!IsValidSubState(indexInfo->SubState)) {
+            indexInfo->IsBroken = true;
+            indexInfo->AddIssue(TStringBuilder() << "Unknown build sub-state: " << ui32(indexInfo->SubState));
+            indexInfo->SubState = TIndexBuildInfo::ESubState::None;
+        }
 
         // note: please note that here we specify BuildSecondaryIndex as operation default,
         // because previously this table was dedicated for build secondary index operations only.
         indexInfo->BuildKind = TIndexBuildInfo::EBuildKind(
             row.template GetValueOrDefault<Schema::IndexBuild::BuildKind>(
                 ui32(TIndexBuildInfo::EBuildKind::BuildSecondaryIndex)));
+        if (!IsValidBuildKind(indexInfo->BuildKind)) {
+            indexInfo->IsBroken = true;
+            indexInfo->AddIssue(TStringBuilder() << "Unknown build kind: " << ui32(indexInfo->BuildKind));
+            indexInfo->BuildKind = TIndexBuildInfo::EBuildKind::BuildKindUnspecified;
+        }
 
         indexInfo->DomainPathId =
             TPathId(row.template GetValue<Schema::IndexBuild::DomainOwnerId>(),

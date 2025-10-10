@@ -82,7 +82,6 @@ void TColumnShardScan::Bootstrap(const TActorContext& ctx) {
 }
 
 void TColumnShardScan::HandleScan(NColumnShard::TEvPrivate::TEvTaskProcessedResult::TPtr& ev) {
-    auto droppedGuard = ev->Get()->ExtractGuard();
     TDuration delta = TDuration::Zero();
     if (ChunksLimiter.HasMore()) {
         delta = TInstant::Now() - StartWaitTime;

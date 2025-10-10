@@ -140,10 +140,6 @@ class TestUpdate(object):
         assert len(result_sets[0].rows) == 1
         assert result_sets[0].rows[0]['vs'] == '50'
 
-        # TODO: fix crash
-        # https://github.com/ydb-platform/ydb/issues/25336
-        return
-
         # when 1 (all)
         session = self.ydb_client.session_acquire()
         tx = session.transaction().begin()

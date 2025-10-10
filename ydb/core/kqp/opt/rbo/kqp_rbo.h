@@ -63,11 +63,10 @@ class IRBOStage {
  */
 class TRuleBasedStage : public IRBOStage {
   public:
-    TRuleBasedStage(TVector<std::shared_ptr<IRule>> rules, bool requiresRebuild) : Rules(rules), RequiresRebuild(requiresRebuild) {}
+    TRuleBasedStage(TVector<std::shared_ptr<IRule>> rules) : Rules(rules) {}
     virtual void RunStage(TRuleBasedOptimizer *optimizer, TOpRoot &root, TExprContext &ctx) override;
 
     TVector<std::shared_ptr<IRule>> Rules;
-    bool RequiresRebuild;
 };
 
 /**

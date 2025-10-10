@@ -25,28 +25,10 @@ class PlanConverter {
     std::shared_ptr<IOperator> ConvertTKqpOpLimit(TExprNode::TPtr node);
     std::shared_ptr<IOperator> ConvertTKqpOpProject(TExprNode::TPtr node);
     std::shared_ptr<IOperator> ConvertTKqpOpUnionAll(TExprNode::TPtr node);
+    std::shared_ptr<IOperator> ConvertTKqpOpSort(TExprNode::TPtr node);
 
     THashMap<TExprNode *, std::shared_ptr<IOperator>> Converted;
-};
-
-class ExprNodeRebuilder {
-  public:
-    ExprNodeRebuilder(TExprContext &ctx, TPositionHandle pos) : Ctx(ctx), Pos(pos) {}
-
-    void RebuildExprNodes(TOpRoot &root);
-    void RebuildExprNode(std::shared_ptr<IOperator> op);
-
-    TExprNode::TPtr RebuildEmptySource();
-    TExprNode::TPtr RebuildMap(std::shared_ptr<IOperator> op);
-    TExprNode::TPtr RebuildProject(std::shared_ptr<IOperator> op);
-    TExprNode::TPtr RebuildFilter(std::shared_ptr<IOperator> op);
-    TExprNode::TPtr RebuildJoin(std::shared_ptr<IOperator> op);
-    TExprNode::TPtr RebuildLimit(std::shared_ptr<IOperator> op);
-    TExprNode::TPtr RebuildUnionAll(std::shared_ptr<IOperator> op);
-
-    TExprContext &Ctx;
-    TPositionHandle Pos;
-    THashMap<std::shared_ptr<IOperator>, TExprNode::TPtr, TIOperatorSharedPtrHash> RebuiltNodes;
+    TPlanProps PlanProps;
 };
 
 } // namespace NKqp

@@ -9,8 +9,9 @@ using namespace NNodes;
 TOpRoot PlanConverter::ConvertRoot(TExprNode::TPtr node) {
     auto opRoot = TKqpOpRoot(node);
     auto rootInput = ExprNodeToOperator(opRoot.Input().Ptr());
-    auto res = TOpRoot(rootInput);
+    auto res = TOpRoot(rootInput, node->Pos());
     res.Node = node;
+    res.PlanProps = PlanProps;
     return res;
 }
 
@@ -21,7 +22,7 @@ std::shared_ptr<IOperator> PlanConverter::ExprNodeToOperator(TExprNode::TPtr nod
 
     std::shared_ptr<IOperator> result;
     if (NYql::NNodes::TKqpOpEmptySource::Match(node.Get())) {
-        result = std::make_shared<TOpEmptySource>();
+        result = std::make_shared<TOpEmptySource>(node->Pos());
     } else if (NYql::NNodes::TKqpOpRead::Match(node.Get())) {
         result = std::make_shared<TOpRead>(node);
     } else if (NYql::NNodes::TKqpOpMap::Match(node.Get())) {
@@ -36,6 +37,8 @@ std::shared_ptr<IOperator> PlanConverter::ExprNodeToOperator(TExprNode::TPtr nod
         result = ConvertTKqpOpProject(node);
     } else if (NYql::NNodes::TKqpOpUnionAll::Match(node.Get())) {
         result = ConvertTKqpOpUnionAll(node);
+    } else if (NYql::NNodes::TKqpOpSort::Match(node.Get())) {
+        result = ConvertTKqpOpSort(node);
     } else {
         YQL_ENSURE(false, "Unknown operator node");
     }
@@ -67,13 +70,13 @@ std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpMap(TExprNode::TPtr node)
             }
         }
     }
-    return std::make_shared<TOpMap>(input, mapElements, project);
+    return std::make_shared<TOpMap>(input, node->Pos(), mapElements, project);
 }
 
 std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpFilter(TExprNode::TPtr node) {
     auto opFilter = TKqpOpFilter(node);
     auto input = ExprNodeToOperator(opFilter.Input().Ptr());
-    return std::make_shared<TOpFilter>(input, opFilter.Lambda().Ptr());
+    return std::make_shared<TOpFilter>(input, node->Pos(), opFilter.Lambda().Ptr());
 }
 
 std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpJoin(TExprNode::TPtr node) {
@@ -90,7 +93,7 @@ std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpJoin(TExprNode::TPtr node
 
         joinKeys.push_back(std::make_pair(leftKey, rightKey));
     }
-    return std::make_shared<TOpJoin>(leftInput, rightInput, joinKind, joinKeys);
+    return std::make_shared<TOpJoin>(leftInput, rightInput, node->Pos(), joinKind, joinKeys);
 }
 
 std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpUnionAll(TExprNode::TPtr node) {
@@ -98,13 +101,13 @@ std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpUnionAll(TExprNode::TPtr 
     auto leftInput = ExprNodeToOperator(opUnionAll.LeftInput().Ptr());
     auto rightInput = ExprNodeToOperator(opUnionAll.RightInput().Ptr());
 
-    return std::make_shared<TOpUnionAll>(leftInput, rightInput);
+    return std::make_shared<TOpUnionAll>(leftInput, rightInput, node->Pos());
 }
 
 std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpLimit(TExprNode::TPtr node) {
     auto opLimit = TKqpOpLimit(node);
     auto input = ExprNodeToOperator(opLimit.Input().Ptr());
-    return std::make_shared<TOpLimit>(input, opLimit.Count().Ptr());
+    return std::make_shared<TOpLimit>(input, node->Pos(), opLimit.Count().Ptr());
 }
 
 std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpProject(TExprNode::TPtr node) {
@@ -116,201 +119,36 @@ std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpProject(TExprNode::TPtr n
     for (auto p : opProject.ProjectList()) {
         projectList.push_back(TInfoUnit(p.StringValue()));
     }
-    return std::make_shared<TOpProject>(input, projectList);
+    return std::make_shared<TOpProject>(input, node->Pos(), projectList);
 }
 
-void ExprNodeRebuilder::RebuildExprNodes(TOpRoot &root) {
-    for (auto it : root) {
-        YQL_CLOG(TRACE, CoreDq) << "Rebuilding: " << it.Current->ToString();
-        RebuildExprNode(it.Current);
-    }
+std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpSort(TExprNode::TPtr node) {
+    auto opSort = TKqpOpSort(node);
+    auto input = ExprNodeToOperator(opSort.Input().Ptr());
+    auto output = input;
 
-    // clang-format off
-    auto node = Build<TKqpOpRoot>(Ctx, Pos)
-        .Input(root.GetInput()->Node)
-    .Done().Ptr();
-    // clang-format on
-    root.Node = node;
-}
+    TVector<TSortElement> sortElements;
+    TVector<std::pair<TInfoUnit, std::variant<TInfoUnit, TExprNode::TPtr>>> mapElements;
 
-void ExprNodeRebuilder::RebuildExprNode(std::shared_ptr<IOperator> op) {
-    if (RebuiltNodes.contains(op)) {
-        op->Node = RebuiltNodes.at(op);
-        return;
-    }
+    for (auto el : opSort.SortExpressions()) {
+        TInfoUnit column;
 
-    TExprNode::TPtr newNode;
-    switch (op->Kind) {
-    case EOperator::EmptySource:
-        newNode = RebuildEmptySource();
-        break;
-    case EOperator::Source:
-        newNode = op->Node;
-        break;
-    case EOperator::Map:
-        newNode = RebuildMap(op);
-        break;
-    case EOperator::Project:
-        newNode = RebuildProject(op);
-        break;
-    case EOperator::Filter:
-        newNode = RebuildFilter(op);
-        break;
-    case EOperator::Join:
-        newNode = RebuildJoin(op);
-        break;
-    case EOperator::Limit:
-        newNode = RebuildLimit(op);
-        break;
-    case EOperator::UnionAll:
-        newNode = RebuildUnionAll(op);
-        break;
-    default:
-        YQL_ENSURE(false, "Unknown operator");
-    }
-
-    op->Node = newNode;
-}
-
-TExprNode::TPtr ExprNodeRebuilder::RebuildEmptySource() {
-    // clang-format off
-    return Build<TKqpOpEmptySource>(Ctx, Pos)
-            .Done().Ptr();
-    // clang-format on
-}
-
-TExprNode::TPtr ExprNodeRebuilder::RebuildMap(std::shared_ptr<IOperator> op) {
-    auto map = CastOperator<TOpMap>(op);
-
-    TVector<TExprNode::TPtr> newMapElements;
-    TExprNode::TPtr newInput = map->GetInput()->Node;
-
-    for (auto &[iu, body] : map->MapElements) {
-        if (std::holds_alternative<TInfoUnit>(body)) {
-            // clang-format off
-            newMapElements.push_back(Build<TKqpOpMapElementRename>(Ctx, Pos)
-                .Input(newInput)
-                .Variable().Build(iu.GetFullName())
-                .From().Build(std::get<TInfoUnit>(body).GetFullName())
-            .Done().Ptr());
-            // clang-format on
+        if (auto member = el.Lambda().Body().Maybe<TCoMember>()) {
+            column = TInfoUnit(member.Cast().Name().StringValue());
         } else {
-            // clang-format off
-            newMapElements.push_back(Build<TKqpOpMapElementLambda>(Ctx, Pos)
-                .Input(newInput)
-                .Variable().Build(iu.GetFullName())
-                .Lambda(std::get<TExprNode::TPtr>(body))
-            .Done().Ptr());
-            // clang-format on
+            TString newName = "_rbo_arg_" + std::to_string(PlanProps.InternalVarIdx++);
+            column = TInfoUnit(newName);
+            mapElements.push_back(std::make_pair(column, el.Lambda().Ptr()));
         }
+        sortElements.push_back(TSortElement(column, el.Direction().StringValue() == "asc", el.NullsFirst().StringValue() == "first"));
     }
 
-    TExprNode::TPtr result;
-    if (!map->Project) {
-        // clang-format off
-        result = Build<TKqpOpMap>(Ctx, Pos)
-            .Input(newInput)
-            .MapElements()
-                .Add(newMapElements)
-            .Build()
-        .Done().Ptr();
-        // clang-format on
-    } else {
-        // clang-format off
-        result = Build<TKqpOpMap>(Ctx, Pos)
-            .Input(newInput)
-            .MapElements()
-                .Add(newMapElements)
-            .Build()
-            .Project().Value("true").Build()
-        .Done().Ptr();
-        // clang-format on
-    }
-    return result;
-}
-
-TExprNode::TPtr ExprNodeRebuilder::RebuildProject(std::shared_ptr<IOperator> op) {
-    auto project = CastOperator<TOpProject>(op);
-    TVector<TExprNode::TPtr> projectList;
-
-    for (auto iu : project->ProjectList) {
-        projectList.push_back(Build<TCoAtom>(Ctx, Pos).Value(iu.GetFullName()).Done().Ptr());
+    if (mapElements.size()) {
+        output = std::make_shared<TOpMap>(input, input->Pos, mapElements, false);
     }
 
-    // clang-format off
-    return Build<TKqpOpProject>(Ctx, Pos)
-                .Input(project->GetInput()->Node)
-                .ProjectList().Add(projectList).Build()
-            .Done().Ptr();
-    // clang-format on
-}
-
-TExprNode::TPtr ExprNodeRebuilder::RebuildFilter(std::shared_ptr<IOperator> op) {
-    auto filter = CastOperator<TOpFilter>(op);
-
-    // clang-format off
-    return Build<TKqpOpFilter>(Ctx, Pos)
-        .Input(filter->GetInput()->Node)
-        .Lambda(filter->FilterLambda)
-    .Done().Ptr();
-    // clang-format on
-}
-
-TExprNode::TPtr ExprNodeRebuilder::RebuildJoin(std::shared_ptr<IOperator> op) {
-    auto join = CastOperator<TOpJoin>(op);
-
-    TVector<TDqJoinKeyTuple> keys;
-    for (auto k : join->JoinKeys) {
-        // clang-format off
-        keys.push_back(Build<TDqJoinKeyTuple>(Ctx, Pos)
-            .LeftLabel()
-                .Value(k.first.Alias)
-            .Build()
-            .LeftColumn()
-                .Value(k.first.ColumnName)
-            .Build()
-            .RightLabel()
-                .Value(k.second.Alias)
-            .Build()
-            .RightColumn()
-                .Value(k.second.ColumnName)
-            .Build()
-        .Done());
-        // clang-format on
-    }
-
-    auto joinKeys = Build<TDqJoinKeyTupleList>(Ctx, Pos).Add(keys).Done();
-
-    // clang-format off
-    return Build<TKqpOpJoin>(Ctx, Pos)
-        .LeftInput(join->GetLeftInput()->Node)
-        .RightInput(join->GetRightInput()->Node)
-        .JoinKind().Value(join->JoinKind).Build()
-        .JoinKeys(joinKeys)
-    .Done().Ptr();
-    // clang-format on
-}
-
-TExprNode::TPtr ExprNodeRebuilder::RebuildLimit(std::shared_ptr<IOperator> op) {
-    auto limit = CastOperator<TOpLimit>(op);
-
-    // clang-format off
-    return Build<TKqpOpLimit>(Ctx, Pos)
-        .Input(limit->GetInput()->Node)
-        .Count(limit->LimitCond)
-    .Done().Ptr();
-    // clang-format on
-}
-
-TExprNode::TPtr ExprNodeRebuilder::RebuildUnionAll(std::shared_ptr<IOperator> op) {
-    auto unionAll = CastOperator<TOpUnionAll>(op);
-
-    // clang-format off
-    return Build<TKqpOpUnionAll>(Ctx, Pos)
-        .LeftInput(unionAll->GetLeftInput()->Node)
-        .RightInput(unionAll->GetRightInput()->Node)
-    .Done().Ptr();
-    // clang-format on
+    output->Props.OrderEnforcer = TOrderEnforcer(EOrderEnforcerAction::REQUIRE, EOrderEnforcerReason::USER, sortElements);
+    return output;
 }
 
 } // namespace NKqp

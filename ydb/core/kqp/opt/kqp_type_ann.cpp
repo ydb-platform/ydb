@@ -2395,6 +2395,19 @@ TStatus AnnotateOpLimit(const TExprNode::TPtr& input, TExprContext& ctx) {
     return TStatus::Ok;
 }
 
+TStatus AnnotateOpSortElement(const TExprNode::TPtr& input, TExprContext& ctx) {
+    Y_UNUSED(ctx);
+    input->SetTypeAnn(ctx.MakeType<TVoidExprType>());
+    return TStatus::Ok;
+}
+
+TStatus AnnotateOpSort(const TExprNode::TPtr& input, TExprContext& ctx) {
+    Y_UNUSED(ctx);
+    const TTypeAnnotationNode* inputType = input->ChildPtr(TKqpOpRoot::idx_Input)->GetTypeAnn();
+    input->SetTypeAnn(inputType);
+    return TStatus::Ok;
+}
+
 TStatus AnnotateOpRoot(const TExprNode::TPtr& input, TExprContext& ctx) {
     Y_UNUSED(ctx);
     const TTypeAnnotationNode* inputType = input->ChildPtr(TKqpOpRoot::idx_Input)->GetTypeAnn();
@@ -2622,6 +2635,14 @@ TAutoPtr<IGraphTransformer> CreateKqpTypeAnnotationTransformer(const TString& cl
 
             if (TKqpOpLimit::Match(input.Get())) {
                 return AnnotateOpLimit(input, ctx);
+            }
+
+            if (TKqpOpSortElement::Match(input.Get())) {
+                return AnnotateOpSortElement(input, ctx);
+            }
+
+            if (TKqpOpSort::Match(input.Get())) {
+                return AnnotateOpSort(input, ctx);
             }
 
             if (TKqpOpRoot::Match(input.Get())) {

@@ -175,7 +175,11 @@ public:
             topics.insert(part.Topic);
         }
 
-        RegisterWithSameMailbox(NDescriber::CreateDescriberActor(SelfId(), Settings.Database, std::move(topics)));
+        NDescriber::TDescribeSettings settings = {
+            .UserToken = Settings.UserToken,
+            .AccessRights = NACLib::EAccessRights::SelectRow
+        };
+        RegisterWithSameMailbox(NDescriber::CreateDescriberActor(SelfId(), Settings.Database, std::move(topics), settings));
     }
 
     void Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev, const TActorContext& ctx) {
@@ -184,15 +188,6 @@ public:
         for (auto& [topicPath, info] : ev->Get()->Topics) {
             switch (info.Status) {
                 case NDescriber::EStatus::SUCCESS: {
-                    if (!CheckAccess(*info.SecurityObject)) {
-                        return SendReplyAndDie(
-                                CreateErrorReply(
-                                    Ydb::StatusIds::UNAUTHORIZED,
-                                    TStringBuilder() << "Access denied for topic: " << topicPath
-                                ), ctx
-                        );
-                    }
-
                     auto& topicInfo = TopicInfo[topicPath];
                     topicInfo.PQInfo = info.Info;
                     topicInfo.RealPath = std::move(info.RealPath);
@@ -201,7 +196,7 @@ public:
                 default:
                     return SendReplyAndDie(
                         CreateErrorReply(
-                            Ydb::StatusIds::SCHEME_ERROR,
+                            info.Status == NDescriber::EStatus::UNAUTHORIZED ? Ydb::StatusIds::UNAUTHORIZED : Ydb::StatusIds::SCHEME_ERROR,
                             NDescriber::Description(topicPath, info.Status)
                         ),
                         ctx
@@ -587,13 +582,6 @@ public:
             }
         }
         return readBytesSize;
-    }
-
-    bool CheckAccess(const TSecurityObject& access) {
-        if (Settings.UserToken == nullptr) {
-            return true;
-        }
-        return access.CheckAccess(NACLib::EAccessRights::SelectRow, *Settings.UserToken);
     }
 
     void SendReplyAndDie(THolder<TEvPQ::TEvFetchResponse> event, const TActorContext& ctx) {

@@ -354,5 +354,29 @@ TRuntimeNode TKqpProgramBuilder::KqpIndexLookupJoin(const TRuntimeNode& input, c
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
+TRuntimeNode TKqpProgramBuilder::FulltextAnalyze(TRuntimeNode text, TRuntimeNode settings)
+{
+    // Validate text argument - should be a string
+    const auto& textType = text.GetStaticType();
+    MKQL_ENSURE(textType->IsData(), "Expected data type for text.");
+    const auto& textTypeData = static_cast<const TDataType&>(*textType);
+    MKQL_ENSURE(textTypeData.GetSchemeType() == NUdf::TDataType<char*>::Id, "Expected string for text.");
+
+    // Validate settings argument - should be a string (serialized proto)
+    const auto& settingsType = settings.GetStaticType();
+    MKQL_ENSURE(settingsType->IsData(), "Expected data type for settings.");
+    const auto& settingsTypeData = static_cast<const TDataType&>(*settingsType);
+    MKQL_ENSURE(settingsTypeData.GetSchemeType() == NUdf::TDataType<char*>::Id, "Expected string for settings.");
+
+    // Return type: List<String>
+    auto stringType = TDataType::Create(NUdf::TDataType<char*>::Id, Env);
+    auto listType = TListType::Create(stringType, Env);
+
+    TCallableBuilder callableBuilder(Env, "FulltextTokenize", listType);
+    callableBuilder.Add(text);
+    callableBuilder.Add(settings);
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
 } // namespace NMiniKQL
 } // namespace NKikimr

@@ -67,6 +67,8 @@ public:
     TRuntimeNode KqpEnsure(TRuntimeNode value, TRuntimeNode predicate, TRuntimeNode issueCode, TRuntimeNode message);
 
     TRuntimeNode KqpIndexLookupJoin(const TRuntimeNode& input, const TString& joinType, const TString& leftLabel, const TString& rightLabel);
+
+    TRuntimeNode FulltextAnalyze(TRuntimeNode text, TRuntimeNode settings);
 };
 
 } // namespace NMiniKQL

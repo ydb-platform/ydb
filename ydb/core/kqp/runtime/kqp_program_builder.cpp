@@ -356,11 +356,23 @@ TRuntimeNode TKqpProgramBuilder::KqpIndexLookupJoin(const TRuntimeNode& input, c
 
 TRuntimeNode TKqpProgramBuilder::FulltextAnalyze(TRuntimeNode text, TRuntimeNode settings)
 {
-    // Validate text argument - should be a string
+    // Validate text argument - should be a string or optional string
     const auto& textType = text.GetStaticType();
-    MKQL_ENSURE(textType->IsData(), "Expected data type for text.");
-    const auto& textTypeData = static_cast<const TDataType&>(*textType);
-    MKQL_ENSURE(textTypeData.GetSchemeType() == NUdf::TDataType<char*>::Id, "Expected string for text.");
+    bool isTextOptional = false;
+    const TDataType* textDataType = nullptr;
+    
+    if (textType->IsOptional()) {
+        isTextOptional = true;
+        auto optionalType = static_cast<const TOptionalType*>(textType);
+        auto itemType = optionalType->GetItemType();
+        MKQL_ENSURE(itemType->IsData(), "Expected data type inside optional for text.");
+        textDataType = static_cast<const TDataType*>(itemType);
+    } else {
+        MKQL_ENSURE(textType->IsData(), "Expected data or optional data type for text.");
+        textDataType = static_cast<const TDataType*>(textType);
+    }
+    
+    MKQL_ENSURE(textDataType->GetSchemeType() == NUdf::TDataType<char*>::Id, "Expected string for text.");
 
     // Validate settings argument - should be a string (serialized proto)
     const auto& settingsType = settings.GetStaticType();
@@ -372,7 +384,7 @@ TRuntimeNode TKqpProgramBuilder::FulltextAnalyze(TRuntimeNode text, TRuntimeNode
     auto stringType = TDataType::Create(NUdf::TDataType<char*>::Id, Env);
     auto listType = TListType::Create(stringType, Env);
 
-    TCallableBuilder callableBuilder(Env, "FulltextAnalyze", listType);
+    TCallableBuilder callableBuilder(Env, "FulltextTokenize", listType);
     callableBuilder.Add(text);
     callableBuilder.Add(settings);
     return TRuntimeNode(callableBuilder.Build(), false);

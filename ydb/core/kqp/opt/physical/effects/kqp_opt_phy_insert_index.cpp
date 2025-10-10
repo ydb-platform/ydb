@@ -232,6 +232,32 @@ TExprBase MakeInsertFulltextIndexRows(const NYql::NNodes::TExprBase& inputRows, 
         .Done();
 }
 
+TVector<TStringBuf> BuildFulltextIndexColumns(const TKikimrTableDescription& table,
+    const TIndexDescription* indexDesc) {
+    TVector<TStringBuf> indexTableColumns;
+    THashSet<TStringBuf> indexTableColumnSet;
+
+    // Add token column first (replaces the text column)
+    indexTableColumns.emplace_back(NTableIndex::NFulltext::TokenColumn);
+    indexTableColumnSet.insert(NTableIndex::NFulltext::TokenColumn);
+
+    // Add primary key columns
+    for (const auto& column : table.Metadata->KeyColumnNames) {
+        if (indexTableColumnSet.insert(column).second) {
+            indexTableColumns.emplace_back(column);
+        }
+    }
+
+    // Add data columns (covered columns)
+    for (const auto& column : indexDesc->DataColumns) {
+        if (indexTableColumnSet.insert(column).second) {
+            indexTableColumns.emplace_back(column);
+        }
+    }
+
+    return indexTableColumns;
+}
+
 } // namespace
 
 TExprBase KqpBuildInsertIndexStages(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
@@ -363,6 +389,8 @@ TExprBase KqpBuildInsertIndexStages(TExprBase node, TExprContext& ctx, const TKq
                 // For fulltext indexes, we need to tokenize the text and create index rows
                 upsertIndexRows = MakeInsertFulltextIndexRows(insertRowsPrecompute, table, inputColumnsSet, indexTableColumns,
                     indexDesc, insert.Pos(), ctx, true);
+                // Update columns to reflect transformation: text column -> __ydb_token
+                indexTableColumns = BuildFulltextIndexColumns(table, indexDesc);
             }
 
             auto upsertIndex = Build<TKqlUpsertRows>(ctx, insert.Pos())

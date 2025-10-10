@@ -316,21 +316,12 @@ NThreading::TFuture<TEvDescribeSecretsResponse::TDescription> DescribeSecret(
     TActorSystem* actorSystem
 ) {
     auto promise = NThreading::NewPromise<TEvDescribeSecretsResponse::TDescription>();
-    if (actorSystem->AppData<TAppData>()->FeatureFlags.GetEnableSchemaSecrets()) {
-        bool schemaSecrets = false;
-        for (const auto& secretName : secretNames) {
-            if (secretName.StartsWith('/')) {
-                schemaSecrets = true;
-                break;
-            }
-        }
-        if (schemaSecrets) {
-            actorSystem->Send(
-                MakeKqpDescribeSchemaSecretServiceId(actorSystem->NodeId),
-                new TDescribeSchemaSecretsService::TEvResolveSecret(userToken, database, secretNames, promise)
-            );
-            return promise.GetFuture();
-        }
+    if (UseSchemaSecrets(AppData()->FeatureFlags, secretNames)) {
+        actorSystem->Send(
+            MakeKqpDescribeSchemaSecretServiceId(actorSystem->NodeId),
+            new TDescribeSchemaSecretsService::TEvResolveSecret(userToken, database, secretNames, promise)
+        );
+        return promise.GetFuture();
     }
 
     actorSystem->Register(CreateDescribeSecretsActor(userToken ? userToken->GetUserSID() : "", secretNames, promise));
@@ -395,6 +386,24 @@ NThreading::TFuture<TEvDescribeSecretsResponse::TDescription> DescribeExternalDa
 
 IActor* TDescribeSchemaSecretsServiceFactory::CreateService() {
     return new TDescribeSchemaSecretsService();
+}
+
+bool UseSchemaSecrets(const NKikimr::TFeatureFlags& flags, const TVector<TString>& secretNames) {
+    if (!flags.GetEnableSchemaSecrets()) {
+        return false;
+    }
+
+    for (const auto& secretName : secretNames) {
+        if (!secretName.StartsWith('/')) {
+            return false;
+        }
+    }
+
+    return true; // New secrets are enabled and all of them start with '/'
+}
+
+bool UseSchemaSecrets(const NKikimr::TFeatureFlags& flags, const TString& secretName) {
+    return flags.GetEnableSchemaSecrets() && secretName.StartsWith('/');
 }
 
 }  // namespace NKikimr::NKqp

@@ -52,6 +52,19 @@ TStatus ExecuteGeneric(NYdb::NQuery::TQueryClient& queryClient, TSession& sessio
     }
 }
 
+template<bool UseSchemaSecrets>
+void CreateSecret(TString& secretName, const TString& secretValue, TSession& session) {
+    TString query;
+    if constexpr (UseSchemaSecrets) {
+        secretName = "/Root/" + secretName;
+        query = Sprintf("CREATE SECRET `%s` WITH (value=\"%s\")", secretName.c_str(), secretValue.c_str());
+    } else {
+        query = Sprintf("CREATE OBJECT %s (TYPE SECRET) WITH value=\"%s\"", secretName.c_str(), secretValue.c_str());
+    }
+    const auto queryResult = session.ExecuteSchemeQuery(query).GetValueSync();
+    UNIT_ASSERT_EQUAL_C(NYdb::EStatus::SUCCESS, queryResult.GetStatus(), queryResult.GetIssues().ToString());
+}
+
 }
 
 Y_UNIT_TEST_SUITE(KqpScheme) {
@@ -9206,10 +9219,13 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
     }
 
-    Y_UNIT_TEST(CreateAsyncReplicationWithTokenSecret) {
+    Y_UNIT_TEST_TWIN(CreateAsyncReplicationWithTokenSecret, UseSchemaSecrets) {
         using namespace NReplication;
 
         TKikimrRunner kikimr("root@builtin");
+        if (UseSchemaSecrets) {
+            kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableSchemaSecrets(true);
+        }
         auto repl = TReplicationClient(kikimr.GetDriver(), TCommonClientSettings().Database("/Root"));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -9230,17 +9246,20 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
         // ok
         {
+            TString secretId = "mysecretname";
+            const TString secretValue = "root@builtin";
+            CreateSecret<UseSchemaSecrets>(secretId, secretValue, session);
+
             auto query = Sprintf(R"(
                 --!syntax_v1
-                CREATE OBJECT mysecret (TYPE SECRET) WITH (value = "root@builtin");
                 CREATE ASYNC REPLICATION `/Root/replication` FOR
                     `/Root/table` AS `/Root/replica`
                 WITH (
                     ENDPOINT = "%s",
                     DATABASE = "/Root",
-                    TOKEN_SECRET_NAME = "mysecret"
+                    TOKEN_SECRET_NAME = "%s"
                 );
-            )", kikimr.GetEndpoint().c_str());
+            )", kikimr.GetEndpoint().c_str(), secretId.c_str());
 
             const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());

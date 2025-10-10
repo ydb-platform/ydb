@@ -3799,20 +3799,29 @@ void THive::MakeScaleRecommendation() {
             recommendedNodes = std::max(recommendedNodes, policy->MakeScaleRecommendation(readyNodesCount, CurrentConfig));
         }
 
-        domain.LastScaleRecommendation = TScaleRecommendation{
-            .Nodes = recommendedNodes,
-            .Timestamp = TActivationContext::Now()
-        };
-        TabletCounters->Simple()[NHive::COUNTER_NODES_RECOMMENDED].Set(recommendedNodes);
-        BLOG_TRACE("[MSR] Recommended nodes: " << recommendedNodes << ", current nodes: " << readyNodesCount);
+        if (recommendedNodes != readyNodesCount) {
+            domain.LastScaleRecommendation = TScaleRecommendation{
+                .Nodes = recommendedNodes,
+                .Timestamp = TActivationContext::Now()
+            };
+            TabletCounters->Simple()[NHive::COUNTER_NODES_RECOMMENDED].Set(recommendedNodes);
+            BLOG_TRACE("[MSR] Recommended nodes: " << recommendedNodes << ", current nodes: " << readyNodesCount);
+        } else {
+            BLOG_TRACE("[MSR] No scaling action recommended");
+        }
     }
 
     if (CurrentConfig.GetDryRunTargetTrackingCPU() != 0) {
         ui32 dryRunRecommendedNodes = 1;
         TTargetTrackingPolicy dryRunPolicy(CurrentConfig.GetDryRunTargetTrackingCPU(), avgCpuUsageHistory, TabletID(), true);
         dryRunRecommendedNodes = std::max(dryRunRecommendedNodes, dryRunPolicy.MakeScaleRecommendation(readyNodesCount, CurrentConfig));
-        TabletCounters->Simple()[NHive::COUNTER_NODES_RECOMMENDED_DRY_RUN].Set(dryRunRecommendedNodes);
-        BLOG_TRACE("[MSR] Dry run recommended nodes: " << dryRunRecommendedNodes << ", current nodes: " << readyNodesCount);
+
+        if (dryRunRecommendedNodes != readyNodesCount) {
+            TabletCounters->Simple()[NHive::COUNTER_NODES_RECOMMENDED_DRY_RUN].Set(dryRunRecommendedNodes);
+            BLOG_TRACE("[MSR] Dry run recommended nodes: " << dryRunRecommendedNodes << ", current nodes: " << readyNodesCount);
+        } else {
+            BLOG_TRACE("[MSR] No dry run scaling action recommended");
+        }
     }
 
     Schedule(GetScaleRecommendationRefreshFrequency(), new TEvPrivate::TEvRefreshScaleRecommendation());

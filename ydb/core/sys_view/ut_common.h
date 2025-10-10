@@ -93,5 +93,11 @@ private:
     TVector<ui64> PqTabletIds;
 };
 
+void CreateTenant(TTestEnv& env, const TString& tenantName, bool extSchemeShard = true, ui64 nodesCount = 2);
+
+void CreateTenants(TTestEnv& env, bool extSchemeShard = true);
+
+void CreateTenantsAndTables(TTestEnv& env, bool extSchemeShard = true, ui64 partitionCount = 1);
+
 } // NSysView
 } // NKikimr

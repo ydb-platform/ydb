@@ -608,7 +608,9 @@ class LintWrapperScript:
     @classmethod
     def value(cls, unit, flat_args, spec_args):
         if spec_args.get('WRAPPER_SCRIPT'):
-            return spec_args['WRAPPER_SCRIPT'][0]
+            path = spec_args['WRAPPER_SCRIPT'][0]
+            unit.on_data_files(path)
+            return path
 
 
 class LintConfigs:
@@ -640,6 +642,7 @@ class LintConfigs:
     def python_configs(cls, unit, flat_args, spec_args):
         if config := cls._from_config_type(unit, spec_args):
             # specified by config type, autoincludes scheme
+            unit.on_data_files(config)
             return serialize_list([config])
 
         # default config
@@ -654,12 +657,14 @@ class LintConfigs:
         configs = [config]
         if linter_name in ('flake8', 'py2_flake8'):
             configs.extend(spec_args.get('FLAKE_MIGRATIONS_CONFIG', []))
+        unit.on_data_files(configs)
         return serialize_list(configs)
 
     @classmethod
     def cpp_configs(cls, unit, flat_args, spec_args):
         if config := cls._from_config_type(unit, spec_args):
             # specified by config type, autoincludes scheme
+            unit.on_data_files(config)
             return serialize_list([config])
 
         # default config
@@ -671,6 +676,7 @@ class LintConfigs:
             message = f"Default config in {default_configs_path} can't be found for a linter {linter_name}"
             raise DartValueError(message)
         assert_file_exists(unit, config)
+        unit.on_data_files(config)
         return serialize_list([config])
 
     @classmethod

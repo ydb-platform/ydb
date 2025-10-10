@@ -2389,7 +2389,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         }, readDisposition, /* sort */ true);
     }
 
-    Y_UNIT_TEST_F(OffsetsRecoveryOnQueryTextChange, TStreamingTestFixture) {
+    Y_UNIT_TEST_F(OffsetsRecoveryOnQueryTextChangeBasic, TStreamingTestFixture) {
         const auto info = SetupCheckpointRecoveryTest(*this);
 
         WriteTopicMessages(info.InputTopicName, {
@@ -2427,6 +2427,112 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         WriteTopicMessage(info.InputTopicName, R"({"time": "2025-08-26T00:00:00.000000Z", "event": "A"})");
         ReadTopicMessage(info.OutputTopicName, "B-2025-08-25T00:00:00.000000Z-1", readDisposition);
+    }
+
+    Y_UNIT_TEST_F(OffsetsRecoveryOnQueryTextChangeWithFail, TStreamingTestFixture) {
+        const auto info = SetupCheckpointRecoveryTest(*this);
+
+        WriteTopicMessages(info.InputTopicName, {
+            R"({"time": "2025-08-24T00:00:00.000000Z", "event": "A"})",
+            R"({"time": "2025-08-25T00:00:00.000000Z", "event": "A"})",
+        });
+        ReadTopicMessage(info.OutputTopicName, "A-2025-08-24T00:00:00.000000Z-1");
+
+        ExecQuery(fmt::format(R"(
+            ALTER STREAMING QUERY `{query_name}` SET (
+                FORCE = TRUE,
+                RESOURCE_POOL = "unknown_pool"
+            ) AS
+            DO BEGIN
+                /* some comment */
+                {text}
+            END DO;)",
+            "query_name"_a = info.QueryName,
+            "text"_a = info.QueryText
+        ), EStatus::NOT_FOUND, "Resource pool unknown_pool not found or you don't have access permissions");
+
+        Sleep(TDuration::Seconds(1));
+        WriteTopicMessage(info.InputTopicName, R"({"time": "2025-08-25T00:00:00.000000Z", "event": "B"})");
+        const auto readDisposition = TInstant::Now();
+
+        ExecQuery(fmt::format(R"(
+            ALTER STREAMING QUERY `{query_name}` SET (
+                RESOURCE_POOL = "default"
+            );)",
+            "query_name"_a = info.QueryName
+        ));
+        CheckScriptExecutionsCount(3, 1);
+        Sleep(TDuration::Seconds(1));
+
+        WriteTopicMessage(info.InputTopicName, R"({"time": "2025-08-26T00:00:00.000000Z", "event": "A"})");
+        ReadTopicMessage(info.OutputTopicName, "B-2025-08-25T00:00:00.000000Z-1", readDisposition);
+    }
+
+    Y_UNIT_TEST_F(OffsetsAndStateRecoveryAfterQueryTextChange, TStreamingTestFixture) {
+        const auto info = SetupCheckpointRecoveryTest(*this);
+
+        WriteTopicMessages(info.InputTopicName, {
+            R"({"time": "2025-08-24T00:00:00.000000Z", "event": "A"})",
+            R"({"time": "2025-08-25T00:00:00.000000Z", "event": "A"})",
+        });
+        ReadTopicMessage(info.OutputTopicName, "A-2025-08-24T00:00:00.000000Z-1");
+
+        ExecQuery(fmt::format(R"(
+            ALTER STREAMING QUERY `{query_name}` SET (
+                FORCE = TRUE,
+                RUN = FALSE
+            ) AS
+            DO BEGIN
+                /* some comment */
+                {text}
+            END DO;)",
+            "query_name"_a = info.QueryName,
+            "text"_a = info.QueryText
+        ));
+        CheckScriptExecutionsCount(1, 0);
+
+        Sleep(TDuration::Seconds(1));
+        WriteTopicMessage(info.InputTopicName, R"({"time": "2025-08-25T00:00:00.000000Z", "event": "B"})");
+        auto readDisposition = TInstant::Now();
+
+        ExecQuery(fmt::format(R"(
+            ALTER STREAMING QUERY `{query_name}` SET (
+                RUN = TRUE
+            );)",
+            "query_name"_a = info.QueryName
+        ));
+        CheckScriptExecutionsCount(2, 1);
+        Sleep(TDuration::Seconds(1));
+
+        WriteTopicMessage(info.InputTopicName, R"({"time": "2025-08-26T00:00:00.000000Z", "event": "A"})");
+        ReadTopicMessage(info.OutputTopicName, "B-2025-08-25T00:00:00.000000Z-1", readDisposition);
+
+        ExecQuery(fmt::format(R"(
+            ALTER STREAMING QUERY `{query_name}` SET (
+                RUN = FALSE
+            );)",
+            "query_name"_a = info.QueryName
+        ));
+        CheckScriptExecutionsCount(2, 0);
+
+        Sleep(TDuration::Seconds(1));
+        WriteTopicMessage(info.InputTopicName, R"({"time": "2025-08-26T00:00:00.000000Z", "event": "B"})");
+        readDisposition = TInstant::Now();
+
+        ExecQuery(fmt::format(R"(
+            ALTER STREAMING QUERY `{query_name}` SET (
+                RUN = TRUE
+            );)",
+            "query_name"_a = info.QueryName
+        ));
+        CheckScriptExecutionsCount(3, 1);
+        Sleep(TDuration::Seconds(1));
+
+        WriteTopicMessage(info.InputTopicName, R"({"time": "2025-08-27T00:00:00.000000Z", "event": "A"})");
+        ReadTopicMessages(info.OutputTopicName, {
+            "A-2025-08-26T00:00:00.000000Z-1",
+            "B-2025-08-26T00:00:00.000000Z-1"
+        }, readDisposition, /* sort */ true);
     }
 }
 

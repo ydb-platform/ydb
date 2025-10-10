@@ -103,6 +103,7 @@ GENERATE_ENUM_SERIALIZATION(log_iface.h)
 
 PEERDIR(
     ydb/library/actors/actor_type
+    ydb/library/actors/interconnect/rdma
     ydb/library/actors/core/harmonizer
     ydb/library/actors/memory_log
     ydb/library/actors/prof

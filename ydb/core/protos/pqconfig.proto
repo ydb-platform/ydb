@@ -1327,3 +1327,25 @@ message TEvMLPReleaesResponse {
     optional EStatus Status = 1;
     optional string MessageId = 2;
 }
+
+// To PQTablet
+// Изменяет дедлайн сообщения
+message TEvMLPChangeMessageDeadlineRequest {
+    optional string Topic = 1; // PathId? Нужен для возможности в одной таблетке хранить несколько топиков
+    optional string Consumer = 2;
+    optional uint32 PartitionId = 3;
+    optional string MessageId = 4;
+    optional uint64 DeadlineTimestamp = 5;
+}
+
+// From PQTablet
+message TEvMLPChangeMessageDeadlineResponse {
+    enum EStatus {
+        SUCCESS = 0; // Сообщение получено
+        ERROR = 1;   // Поизошла ошибка
+    }
+
+    optional EStatus Status = 1;
+    optional string MessageId = 2;
+}
+

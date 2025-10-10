@@ -422,12 +422,15 @@ THttpIncomingRequestPtr THttpIncomingRequest::Duplicate() {
 THttpOutgoingRequestPtr THttpIncomingRequest::Forward(TStringBuf baseUrl) const {
     TStringBuf newScheme;
     TStringBuf newHost;
-    TStringBuf emptyUri; // it supposed to be be empty
-    if (!CrackURL(baseUrl, newScheme, newHost, emptyUri)) {
+    TStringBuf newUrl;
+    if (!CrackURL(baseUrl, newScheme, newHost, newUrl)) {
         // TODO(xenoxeno)
         Y_ABORT("Invalid URL specified");
     }
-    THttpOutgoingRequestPtr request = new THttpOutgoingRequest(Method, newScheme, newHost, GetURL(), Protocol, Version);
+    if (!newUrl) {
+        newUrl = URL;
+    }
+    THttpOutgoingRequestPtr request = new THttpOutgoingRequest(Method, newScheme, newHost, newUrl, Protocol, Version);
     THeadersBuilder newHeaders(Headers);
     newHeaders.Erase("Accept-Encoding");
     newHeaders.Erase("Host"); // host being set by THttpOutgoingRequest constructor

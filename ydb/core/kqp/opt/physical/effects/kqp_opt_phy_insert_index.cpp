@@ -173,31 +173,21 @@ TExprBase MakeInsertFulltextIndexRows(const NYql::NNodes::TExprBase& inputRows, 
         settingsLiteral
     });
     
-    // FlatMap over tokens to create output rows
-    // This creates: FlatMap(FulltextAnalyze(text, settings), lambda token: AsStruct(...))
-    auto flatMapBody = Build<TCoFlatMap>(ctx, pos)
-        .Input(analyzeCallable)
-        .Lambda(tokenRowsLambda)
-        .Done();
-    
     if (!useStage) {
-        // Create outer lambda that processes each input row
-        auto mapLambda = Build<TCoLambda>(ctx, pos)
-            .Args({inputRowArg})
-            .Body(flatMapBody)
-            .Done();
-            
+        // Build FlatMap directly with inline lambda for both levels
         return Build<TCoFlatMap>(ctx, pos)
             .Input(inputRows)
-            .Lambda(mapLambda)
+            .Lambda()
+                .Args({inputRowArg})
+                .Body<TCoFlatMap>()
+                    .Input(analyzeCallable)
+                    .Lambda(tokenRowsLambda)
+                    .Build()
+                .Build()
             .Done();
     }
     
-    auto mapLambda = Build<TCoLambda>(ctx, pos)
-        .Args({inputRowArg})
-        .Body(flatMapBody)
-        .Done();
-    
+    // For stage case, wrap in Iterator and DqStage
     auto computeRowsStage = Build<TDqStage>(ctx, pos)
         .Inputs()
             .Add(inputRows)
@@ -207,7 +197,13 @@ TExprBase MakeInsertFulltextIndexRows(const NYql::NNodes::TExprBase& inputRows, 
             .Body<TCoIterator>()
                 .List<TCoFlatMap>()
                     .Input("rows")
-                    .Lambda(mapLambda)
+                    .Lambda()
+                        .Args({inputRowArg})
+                        .Body<TCoFlatMap>()
+                            .Input(analyzeCallable)
+                            .Lambda(tokenRowsLambda)
+                            .Build()
+                        .Build()
                     .Build()
                 .Build()
             .Build()

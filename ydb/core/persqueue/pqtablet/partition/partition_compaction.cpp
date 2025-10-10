@@ -3,6 +3,9 @@
 #include "partition_util.h"
 #include <util/string/escape.h>
 
+#define LOG_PREFIX_INT TStringBuilder() << "[" << TabletId << "]" << GetLogPrefix()
+#define PQBC_LOG_I(stream) LOG_INFO_S(*NActors::TlsActivationContext, NKikimrServices::PQ_KV_OPS, LOG_PREFIX_INT << stream)
+
 namespace NKikimr::NPQ {
 
 bool TPartition::ExecRequestForCompaction(TWriteMsg& p, TProcessParametersBase& parameters, TEvKeyValue::TEvRequest* request, const TInstant blobCreationUnixTime)
@@ -365,6 +368,7 @@ void TPartition::BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& 
     const auto& ctx = ActorContext();
 
     LOG_D("Continue blobs compaction");
+    PQBC_LOG_I("Begin blobs compaction");
 
     AFL_ENSURE(CompactionInProgress);
     AFL_ENSURE(blobs.size() == CompactionBlobsCount);
@@ -399,7 +403,7 @@ void TPartition::BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& 
 
         if (pos == Max<size_t>()) {
             // большой блоб надо переименовать
-            LOG_D("Rename key " << k.Key.ToString());
+            PQBC_LOG_I("Rename key " << k.Key.ToString());
 
             if (!WasTheLastBlobBig) {
                 needToCompactHead = true;
@@ -423,7 +427,7 @@ void TPartition::BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& 
             WasTheLastBlobBig = true;
         } else {
             // маленький блоб надо дописать
-            LOG_D("Append blob for key " << k.Key.ToString());
+            PQBC_LOG_I("Append blob for key " << k.Key.ToString());
             LOG_D("Need to compact head " << needToCompactHead);
 
             const TRequestedBlob& requestedBlob = blobs[pos];
@@ -445,6 +449,7 @@ void TPartition::BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& 
 
     EndProcessWritesForCompaction(compactionRequest.Get(), blobCreationUnixTime, ctx);
 
+    PQBC_LOG_I("Send request to KV");
     // for debugging purposes
     //DumpKeyValueRequest(compactionRequest->Record);
 
@@ -455,7 +460,7 @@ void TPartition::BlobsForCompactionWereWrite()
 {
     const auto& ctx = ActorContext();
 
-    LOG_D("Blobs compaction is completed");
+    PQBC_LOG_I("Blobs compaction is completed");
 
     AFL_ENSURE(CompactionInProgress);
     AFL_ENSURE(BlobEncoder.DataKeysBody.size() >= KeysForCompaction.size());

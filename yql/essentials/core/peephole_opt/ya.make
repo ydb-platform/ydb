@@ -1,5 +1,7 @@
 LIBRARY()
 
+ENABLE(SKIP_YQL_STYLE_CPP)
+
 SRCS(
     yql_opt_json_peephole_physical.h
     yql_opt_json_peephole_physical.cpp

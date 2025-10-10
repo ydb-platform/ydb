@@ -56,7 +56,7 @@ struct TLayerInfo {
     TString Url;
     TMaybe<TKey> Parent;
 };
-}
+} // namespace NYql::NLayers
 
 template <>
 struct THash<NYql::NLayers::TKey> {

@@ -18,17 +18,18 @@ struct TLogicalInfo {
     TMaybe<TString> Url;
 };
 
-class TLayersRegistry : public ILayersRegistry {
+class TLayersRegistry: public ILayersRegistry {
 public:
     TLayersRegistry(const THashMap<TString, IRemoteLayerProviderPtr>& remoteProviders, const THashMap<TString, ILayersIntegrationPtr>& integrations)
         : RemoteProviders_(remoteProviders)
         , Integrations_(integrations)
-        {}
+    {
+    }
 
     TMaybe<TVector<TKey>> ResolveLogicalLayers(const TVector<TLayerOrder>& orders, NYql::TExprContext& ctx) const override {
         THashMap<TKey, THashSet<TKey>> graph;
         // first of all let's prepare graph of restrictions
-        for (auto& order: orders) {
+        for (auto& order : orders) {
             for (size_t i = 0; i < order.size(); ++i) {
                 auto& layer = order[i];
                 auto logicalInfoPtr = LogicalInfoByName_.FindPtr(layer);
@@ -92,7 +93,7 @@ public:
         bool hasErrors = false;
         std::function<void(const TKey&)> topSort = [&](const TKey& v) {
             currentVisited.emplace(v);
-            for (auto& e: graph[v]) {
+            for (auto& e : graph[v]) {
                 if (currentVisited.contains(e)) {
                     ctx.AddError(NYql::TIssue(TStringBuilder() << "Layers graph contain cycles"));
                     hasErrors = true;
@@ -105,7 +106,7 @@ public:
             currentVisited.erase(v);
             order.emplace_back(v);
         };
-        for (auto& [v, _]: graph) {
+        for (auto& [v, _] : graph) {
             if (!visited.emplace(v).second) {
                 continue;
             }
@@ -115,7 +116,7 @@ public:
             return {};
         }
         size_t sz = 0;
-        for (auto& k: order) {
+        for (auto& k : order) {
             if (k.Url) {
                 order[sz++] = std::move(k);
                 continue;
@@ -150,34 +151,30 @@ public:
     bool AddLayer(const TString& name, const TMaybe<TString>& parent, const TMaybe<TString>& url, NYql::TExprContext& ctx) override {
         if (parent && *parent == name) {
             ctx.AddError(NYql::TIssue(
-                TStringBuilder() << "Layer's parent can't point to itself"
-            ));
+                TStringBuilder() << "Layer's parent can't point to itself"));
             return false;
         }
 
         if (parent && !LogicalInfoByName_.contains(*parent)) {
             ctx.AddError(NYql::TIssue(
-                TStringBuilder() << "Layer " << parent->Quote() << " not found"
-            ));
+                TStringBuilder() << "Layer " << parent->Quote() << " not found"));
             return false;
         }
 
         auto [_, emplaced] = LogicalInfoByName_.emplace(name, TLogicalInfo{
-            .Name = name,
-            .Parent = parent,
-            .Url = url
-        });
+                                                                  .Name = name,
+                                                                  .Parent = parent,
+                                                                  .Url = url});
 
         if (!emplaced) {
             ctx.AddError(NYql::TIssue(
-                TStringBuilder() << "Layer " << name.Quote() << " already exists"
-            ));
+                TStringBuilder() << "Layer " << name.Quote() << " already exists"));
             return false;
         }
 
-        for (const auto& [_, integration]: Integrations_) {
+        for (const auto& [_, integration] : Integrations_) {
             if (!integration->UpdateLayerCache(TKey(name),
-                TLayerInfo{.Parent = parent ? TMaybe<TKey>(TKey(*parent)) : TMaybe<TKey>{}}, ctx))
+                                               TLayerInfo{.Parent = parent ? TMaybe<TKey>(TKey(*parent)) : TMaybe<TKey>{}}, ctx))
             {
                 return false;
             }
@@ -199,8 +196,7 @@ public:
         auto providerPtr = RemoteProviders_.FindPtr(schema);
         if (!providerPtr) {
             ctx.AddError(NYql::TIssue(
-                TStringBuilder() << "Unkown layer schema: " << schema.Quote()
-            ));
+                TStringBuilder() << "Unkown layer schema: " << schema.Quote()));
             return false;
         }
 
@@ -210,7 +206,7 @@ public:
         while (currentUrl && !InfoByUrl_.contains(*currentUrl->Url)) {
             try {
                 auto info = provider->GetLayerInfo(parent, *currentUrl->Url).GetValueSync();
-                for (const auto& [_, integration]: Integrations_) {
+                for (const auto& [_, integration] : Integrations_) {
                     if (!integration->UpdateLayerCache(TKey({}, *currentUrl->Url), info, ctx)) {
                         return false;
                     }
@@ -227,8 +223,8 @@ public:
     }
 
     void ClearLayers() override {
-        for (const auto& [name, _]: LogicalInfoByName_) {
-            for (const auto& [_, integration]: Integrations_) {
+        for (const auto& [name, _] : LogicalInfoByName_) {
+            for (const auto& [_, integration] : Integrations_) {
                 integration->RemoveLayerByName(name);
             }
         }
@@ -239,21 +235,18 @@ public:
         NJson::TJsonValue val;
         if (!NJson::ReadJsonTree(json, &val)) {
             ctx.AddError(NYql::TIssue(
-                    TStringBuilder() << "Layer description must be a valid JSON string"
-                ));
+                TStringBuilder() << "Layer description must be a valid JSON string"));
             return false;
         }
         if (!val.Has("name")) {
             ctx.AddError(NYql::TIssue(
-                    TStringBuilder() << "Layer description must contain name field"
-                ));
+                TStringBuilder() << "Layer description must contain name field"));
             return false;
         }
-        for (const auto& [name, _]: val.GetMap()) {
+        for (const auto& [name, _] : val.GetMap()) {
             if (name != "name" && name != "parent" && name != "url") {
                 ctx.AddError(NYql::TIssue(
-                    TStringBuilder() << "Layer unsupported attribute: " << name.Quote()
-                ));
+                    TStringBuilder() << "Layer unsupported attribute: " << name.Quote()));
                 return false;
             }
         }
@@ -262,16 +255,16 @@ public:
             val["name"].GetString(),
             val.Has("parent") ? val["parent"].GetString() : TMaybe<TString>(),
             val.Has("url") ? val["url"].GetString() : TMaybe<TString>(),
-            ctx
-        );
+            ctx);
     }
+
 private:
     const THashMap<TString, IRemoteLayerProviderPtr> RemoteProviders_;
     const THashMap<TString, ILayersIntegrationPtr> Integrations_;
     THashMap<TString, TLayerInfo> InfoByUrl_;
     THashMap<TString, TLogicalInfo> LogicalInfoByName_;
 };
-}
+} // namespace
 
 namespace NYql::NLayers {
 
@@ -298,7 +291,7 @@ TMaybe<TVector<TLocations>> RemoveDuplicates(const TVector<std::pair<TKey, const
     for (size_t i = 0; i < layers.size(); ++i) {
         auto& layer = layers[i];
         bool exists = false;
-        for (auto &loc: layer.second->Locations) {
+        for (auto& loc : layer.second->Locations) {
             if (loc.System != system || loc.Cluster != cluster) {
                 continue;
             }
@@ -324,7 +317,7 @@ TMaybe<TVector<TLocations>> RemoveDuplicates(const TVector<std::pair<TKey, const
             if (i && !layers[i].second->Parent) {
                 TStringBuilder err;
                 err << "Found base layer, that differs from another base layer (there are no common paths). Choises [";
-                for (auto &loc: layers[i].second->Locations) {
+                for (auto& loc : layers[i].second->Locations) {
                     if (loc.System != system || loc.Cluster != cluster) {
                         continue;
                     }
@@ -337,7 +330,7 @@ TMaybe<TVector<TLocations>> RemoveDuplicates(const TVector<std::pair<TKey, const
             }
             result.emplace_back();
         }
-        for (auto &loc: layers[i].second->Locations) {
+        for (auto& loc : layers[i].second->Locations) {
             if (loc.System != system || loc.Cluster != cluster) {
                 continue;
             }
@@ -350,4 +343,4 @@ TMaybe<TVector<TLocations>> RemoveDuplicates(const TVector<std::pair<TKey, const
 ILayersRegistryPtr MakeLayersRegistry(const THashMap<TString, IRemoteLayerProviderPtr>& remoteProviders, const THashMap<TString, ILayersIntegrationPtr>& integrations) {
     return MakeIntrusive<TLayersRegistry>(remoteProviders, integrations);
 }
-}
+} // namespace NYql::NLayers

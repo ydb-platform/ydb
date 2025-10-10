@@ -12,11 +12,11 @@ extern "C" {
 }
 
 #ifdef _WIN32
-#define __restrict
+    #define __restrict
 #endif
 
 #define TypeName PG_TypeName // NOLINT(readability-identifier-naming)
-#define SortBy PG_SortBy // NOLINT(readability-identifier-naming)
+#define SortBy PG_SortBy     // NOLINT(readability-identifier-naming)
 #undef SIZEOF_SIZE_T
 
 extern "C" {
@@ -55,16 +55,13 @@ Y_UNIT_TEST(MakeRelOptInfo) {
     UNIT_ASSERT(r1);
     UNIT_ASSERT_EQUAL(r1->reltarget->exprs->length, 1);
     UNIT_ASSERT_EQUAL(
-        ((Var*)r1->reltarget->exprs->elements[0].ptr_value)->varattno, 1
-    );
+        ((Var*)r1->reltarget->exprs->elements[0].ptr_value)->varattno, 1);
 
     UNIT_ASSERT_EQUAL(r1->pathlist->length, 1);
     UNIT_ASSERT_EQUAL(
-        ((Path*)r1->pathlist->elements[0].ptr_value)->rows, 10
-    );
+        ((Path*)r1->pathlist->elements[0].ptr_value)->rows, 10);
     UNIT_ASSERT_EQUAL(
-        ((Path*)r1->pathlist->elements[0].ptr_value)->total_cost, 100
-    );
+        ((Path*)r1->pathlist->elements[0].ptr_value)->total_cost, 100);
 
     IOptimizer::TRel rel2 = {100, 99, {{}, {}}};
     auto* r2 = MakeRelOptInfo(rel2, 2);
@@ -82,10 +79,10 @@ Y_UNIT_TEST(MakeRelOptInfoList) {
     TArenaMemoryContext ctx;
     IOptimizer::TRel rel1 = {10, 100, {{}}};
     IOptimizer::TRel rel2 = {100, 99, {{}}};
-    IOptimizer::TInput input = {.Rels={rel1, rel2}};
+    IOptimizer::TInput input = {.Rels = {rel1, rel2}};
     auto* l = MakeRelOptInfoList(input);
     UNIT_ASSERT(l);
     UNIT_ASSERT_EQUAL(l->length, 2);
 }
 
-} // PgOptimizerImpl
+} // Y_UNIT_TEST_SUITE(PgOptimizerImpl)

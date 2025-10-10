@@ -414,6 +414,15 @@ bool TColumnShardScan::SendResult(bool pageFault, bool lastBatch) {
     Result->WaitTime = WaitTime;
     Result->RawBytes = ScanCountersPool.GetRawBytes();
 
+    if (AppDataVerified().ColumnShardConfig.GetCombineChunksInResult() && Result->ArrowBatch) {
+        for (const auto& column : Result->ArrowBatch->columns()) {
+            if (column->num_chunks() > 1) {
+                Result->ArrowBatch = Result->ArrowBatch->CombineChunks().ValueOr(Result->ArrowBatch);
+                break;
+            }
+        }
+    }
+
     LWPROBE(SendResult, TabletId, ScanId, TxId, Result->GetRowsCount(), (Result->ArrowBatch ? NArrow::GetTableDataSize(Result->ArrowBatch) : 0), Result->CpuTime, Result->WaitTime, TInstant::Now() - LastSend, Result->Finished);
     Send(ScanComputeActorId, Result.Release(), IEventHandle::FlagTrackDelivery);   // TODO: FlagSubscribeOnSession ?
     LastSend = TInstant::Now();

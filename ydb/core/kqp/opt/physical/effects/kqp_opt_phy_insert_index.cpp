@@ -174,12 +174,14 @@ TExprBase MakeInsertFulltextIndexRows(const NYql::NNodes::TExprBase& inputRows, 
     });
     
     // FlatMap over tokens to create output rows
-    auto flatMapBody = ctx.NewCallable(pos, "FlatMap", {
-        analyzeCallable,
-        tokenRowsLambda.Ptr()
-    });
+    // This creates: FlatMap(FulltextAnalyze(text, settings), lambda token: AsStruct(...))
+    auto flatMapBody = Build<TCoFlatMap>(ctx, pos)
+        .Input(analyzeCallable)
+        .Lambda(tokenRowsLambda)
+        .Done();
     
     if (!useStage) {
+        // Create outer lambda that processes each input row
         auto mapLambda = Build<TCoLambda>(ctx, pos)
             .Args({inputRowArg})
             .Body(flatMapBody)

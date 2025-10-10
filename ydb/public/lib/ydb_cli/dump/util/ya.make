@@ -15,6 +15,7 @@ PEERDIR(
     yql/essentials/parser/proto_ast/gen/v1
     yql/essentials/parser/proto_ast/gen/v1_proto_split
     yql/essentials/sql/settings
+    yql/essentials/sql/v1
     yql/essentials/sql/v1/format
     yql/essentials/sql/v1/proto_parser
     yql/essentials/sql/v1/lexer/antlr4

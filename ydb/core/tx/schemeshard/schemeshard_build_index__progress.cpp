@@ -676,6 +676,9 @@ private:
             buildInfo.DataColumns.begin(), buildInfo.DataColumns.end()
         };
 
+        ev->Record.SetOverlapClusters(buildInfo.KMeans.OverlapClusters);
+        ev->Record.SetOverlapRatio(buildInfo.KMeans.OverlapRatio);
+
         auto shardId = FillScanRequestCommon(ev->Record, shardIdx, buildInfo);
         LOG_N("TTxBuildProgress: TEvReshuffleKMeansRequest: " << ToShortDebugString(ev->Record));
 
@@ -757,6 +760,9 @@ private:
             buildInfo.DataColumns.begin(), buildInfo.DataColumns.end()
         };
 
+        ev->Record.SetOverlapClusters(buildInfo.KMeans.OverlapClusters);
+        ev->Record.SetOverlapRatio(buildInfo.KMeans.OverlapRatio);
+
         auto shardId = FillScanRequestCommon(ev->Record, shardIdx, buildInfo);
         FillScanRequestSeed(ev->Record);
         LOG_N("TTxBuildProgress: TEvLocalKMeansRequest: " << ev->Record.ShortDebugString());
@@ -802,6 +808,9 @@ private:
         for (ui32 keyPos: tableInfo.KeyColumnIds) {
             ev->Record.AddSourcePrimaryKeyColumns(tableInfo.Columns.at(keyPos).Name);
         }
+
+        ev->Record.SetOverlapClusters(buildInfo.KMeans.OverlapClusters);
+        ev->Record.SetOverlapRatio(buildInfo.KMeans.OverlapRatio);
 
         auto shardId = FillScanRequestCommon<false>(ev->Record, shardIdx, buildInfo);
         FillScanRequestSeed(ev->Record);

@@ -40,6 +40,8 @@ public:
         TIntrusivePtr<TKqpCounters> counters)
         : Settings(std::move(settings))
         , IsPrefixed(Settings.HasRootClusterColumnIndex())
+        , OverlapClusters(Settings.GetOverlapClusters() > 0 ? Settings.GetOverlapClusters() : 1)
+        , OverlapRatio(Settings.GetOverlapRatio())
         , LogPrefix(TStringBuilder() << "VectorResolveActor, inputIndex: " << inputIndex << ", CA Id " << computeActorId)
         , InputIndex(inputIndex)
         , Input(input)
@@ -180,57 +182,66 @@ private:
         while (!LevelsFinished) {
             if (!LevelClusters.size()) {
                 LevelClusters.clear();
+                NextClusters.clear();
+                NextClusters.resize(PendingRows.size());
                 if (!ResolvedLevel) {
                     if (IsPrefixed) {
                         for (size_t i = 0; i < PendingRows.size(); i++) {
                             auto rootClusterId = (ui64)PendingRows[i].GetElement(Settings.GetRootClusterColumnIndex()).GetInt128();
-                            PrevClusters.push_back(rootClusterId);
                             if (!NKikimr::NTableIndex::NKMeans::HasPostingParentFlag(rootClusterId)) {
-                                LevelClusters.insert(rootClusterId);
+                                LevelClusters[rootClusterId].push_back(i);
+                            } else {
+                                // Add leaf clusters directly to NextClusters
+                                NextClusters[i] = {std::make_pair(rootClusterId, (double)0.0)};
                             }
                         }
                     } else {
                         PrevClusters.resize(PendingRows.size());
-                        LevelClusters.insert(0);
+                        for (size_t i = 0; i < PendingRows.size(); i++) {
+                            LevelClusters[0].push_back(i);
+                        }
                     }
                 } else {
-                    for (auto cluster: PrevClusters) {
-                        if (!NKikimr::NTableIndex::NKMeans::HasPostingParentFlag(cluster)) {
-                            LevelClusters.insert(cluster);
+                    for (size_t i = 0; i < PendingRows.size(); i++) {
+                        for (auto cl: PrevClusters[i]) {
+                            if (!NKikimr::NTableIndex::NKMeans::HasPostingParentFlag(cl.first)) {
+                                LevelClusters[cl.first].push_back(i);
+                            } else {
+                                // Copy leaf clusters to NextClusters
+                                NextClusters[i].push_back(cl);
+                            }
                         }
                     }
                 }
                 if (!LevelClusters.size()) {
                     // All clusters are invalid (0) or already leaf (PostingParentFlag is set)
+                    // Stop after this level
                     LevelsFinished = true;
-                    break;
                 }
-                NextClusters = PrevClusters;
                 CurClusters.reset();
             }
             while (LevelClusters.size() > 0) {
-                auto cluster = *LevelClusters.begin();
+                auto cluster = LevelClusters.begin()->first;
                 if (IsPrefixed || ResolvedLevel > 0 ? !CurClusters : !RootClusters) {
                     ReadChildClusters(cluster);
                     return;
                 }
                 auto & clusters = (IsPrefixed || ResolvedLevel > 0 ? CurClusters : RootClusters);
                 auto & clusterIds = (IsPrefixed || ResolvedLevel > 0 ? CurClusterIds : RootClusterIds);
-                for (size_t i = 0; i < PendingRows.size(); i++) {
-                    if ((ResolvedLevel > 0 || IsPrefixed) && PrevClusters[i] != cluster) {
-                        continue;
-                    }
-                    auto embedding = PendingRows[i].GetElement(Settings.GetVectorColumnIndex());
-                    auto cluster = clusters->FindCluster(embedding.AsStringRef());
-                    if (!cluster.has_value()) {
-                        // embedding is invalid
-                        NextClusters[i] = 0;
-                    } else {
-                        NextClusters[i] = clusterIds[*cluster];
+                for (size_t rowNum: LevelClusters[cluster]) {
+                    auto embedding = PendingRows[rowNum].GetElement(Settings.GetVectorColumnIndex());
+                    clusters->FindClusters(embedding.AsStringRef(), TmpClusters, OverlapClusters, OverlapRatio);
+                    for (auto& cluster: TmpClusters) {
+                        NextClusters[rowNum].push_back(std::make_pair(clusterIds[cluster.first], cluster.second));
                     }
                 }
                 CurClusters.reset();
                 LevelClusters.erase(cluster);
+            }
+            if (OverlapClusters > 1) {
+                for (auto& rowClusters: NextClusters) {
+                    NKMeans::FilterOverlapRows(rowClusters, OverlapClusters, OverlapRatio);
+                }
             }
             PrevClusters = std::move(NextClusters);
             ResolvedLevel++;
@@ -428,8 +439,8 @@ private:
 
         while (PendingRows.size() > 0 && freeSpace > 0) {
             i64 rowSize = 0;
-            NUdf::TUnboxedValue currentValue = std::move(PendingRows.back());
-            PendingRows.pop_back();
+            auto& row = PendingRows[PendingRows.size()-1];
+            auto& rowClusters = PrevClusters[PendingRows.size()-1];
 
             NUdf::TUnboxedValue* rowItems = nullptr;
             // Output columns: Cluster ID + Source table PK [ + Data Columns ]
@@ -437,18 +448,24 @@ private:
 
             if (Settings.GetClusterColumnOutPos() == 0) {
                 // We support inserting cluster ID column into any position to maintain alphabetical order of columns
-                *rowItems++ = NUdf::TUnboxedValuePod((ui64)PrevClusters[PendingRows.size()]);
+                *rowItems++ = NUdf::TUnboxedValuePod((ui64)rowClusters[rowClusters.size()-1].first);
                 rowSize += sizeof(NUdf::TUnboxedValuePod);
             }
             for (size_t i = 0; i < Settings.CopyColumnIndexesSize(); i++) {
                 auto colIdx = Settings.GetCopyColumnIndexes(i);
-                *rowItems++ = currentValue.GetElement(colIdx);
-                rowSize += NMiniKQL::GetUnboxedValueSize(currentValue.GetElement(colIdx), ColumnTypeInfos[colIdx]).AllocatedBytes;
+                *rowItems++ = row.GetElement(colIdx);
+                rowSize += NMiniKQL::GetUnboxedValueSize(row.GetElement(colIdx), ColumnTypeInfos[colIdx]).AllocatedBytes;
                 if (Settings.GetClusterColumnOutPos() == i+1) {
                     // We support inserting cluster ID column into any position to maintain alphabetical order of columns
-                    *rowItems++ = NUdf::TUnboxedValuePod((ui64)PrevClusters[PendingRows.size()]);
+                    *rowItems++ = NUdf::TUnboxedValuePod((ui64)rowClusters[rowClusters.size()-1].first);
                     rowSize += sizeof(NUdf::TUnboxedValuePod);
                 }
+            }
+            if (rowClusters.size() == 1) {
+                PendingRows.pop_back();
+                PrevClusters.pop_back();
+            } else {
+                rowClusters.pop_back();
             }
 
             totalSize += rowSize;
@@ -517,6 +534,8 @@ private:
 
     const NKikimrTxDataShard::TKqpVectorResolveSettings Settings;
     const bool IsPrefixed;
+    const ui32 OverlapClusters;
+    const double OverlapRatio;
     const TString LogPrefix;
     const ui64 InputIndex;
     NUdf::TUnboxedValue Input;
@@ -546,14 +565,15 @@ private:
     TMap<NTableIndex::NKMeans::TClusterId, TString> FetchedClusters;
     ui32 ResolvedLevel = 0;
     bool LevelsFinished = false;
-    TVector<NTableIndex::NKMeans::TClusterId> PrevClusters;
-    TVector<NTableIndex::NKMeans::TClusterId> NextClusters;
-    TSet<NTableIndex::NKMeans::TClusterId> LevelClusters;
+    TVector<TVector<std::pair<NTableIndex::NKMeans::TClusterId, double>>> PrevClusters;
+    TVector<TVector<std::pair<NTableIndex::NKMeans::TClusterId, double>>> NextClusters;
+    TMap<NTableIndex::NKMeans::TClusterId, TVector<size_t>> LevelClusters;
     std::unique_ptr<NKikimr::NKMeans::IClusters> RootClusters;
     TVector<NTableIndex::NKMeans::TClusterId> RootClusterIds;
     bool EmptyIndex = false;
     std::unique_ptr<NKikimr::NKMeans::IClusters> CurClusters;
     TVector<NTableIndex::NKMeans::TClusterId> CurClusterIds;
+    std::vector<std::pair<ui32, double>> TmpClusters;
 
     TVector<NKikimrDataEvents::TLock> Locks;
 

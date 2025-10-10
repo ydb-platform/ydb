@@ -432,6 +432,29 @@ TExprNode::TPtr BuildDqGraceJoin(TOpJoin &join, TExprNode::TPtr leftInput, TExpr
      // clang-format on
 }
 
+TExprNode::TPtr BuildSort(TExprNode::TPtr input, TOrderEnforcer & enforcer, TExprContext &ctx, TPositionHandle pos) {
+    if (enforcer.Action != EOrderEnforcerAction::REQUIRE) {
+        return input;
+    }
+
+    auto [selector, dirs] = BuildSortKeySelector(enforcer.SortElements, ctx, pos);
+
+    TExprNode::TPtr dirList;
+    if (dirs.size()==1){
+        dirList = dirs[0];
+    } else {
+        dirList = Build<TExprList>(ctx, pos).Add(dirs).Done().Ptr();
+    }
+
+    // clang-format off
+    return Build<TCoSort>(ctx, pos)
+        .Input(input)
+        .SortDirections(dirList)
+        .KeySelectorLambda(selector)
+        .Done().Ptr();
+    // clang-format on
+}
+
 } // namespace
 
 namespace NKikimr {
@@ -446,6 +469,8 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TExprContext &ctx, TTypeAnnotat
 
     THashMap<int, TExprNode::TPtr> stages;
     THashMap<int, TVector<TExprNode::TPtr>> stageArgs;
+    THashMap<int, TPositionHandle> stagePos;
+
     auto &graph = root.PlanProps.StageGraph;
     for (auto id : graph.StageIds) {
         stageArgs[id] = TVector<TExprNode::TPtr>();
@@ -463,28 +488,33 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TExprContext &ctx, TTypeAnnotat
 
         if (op->Kind == EOperator::EmptySource) {
             TVector<TExprBase> listElements;
-            listElements.push_back(Build<TCoAsStruct>(ctx, root.Node->Pos()).Done());
+            listElements.push_back(Build<TCoAsStruct>(ctx, op->Pos).Done());
 
             // clang-format off
-            currentStageBody = Build<TCoIterator>(ctx, root.Node->Pos())
+            currentStageBody = Build<TCoIterator>(ctx, op->Pos)
                 .List<TCoAsList>()
                     .Add(listElements)
                 .Build()
             .Done().Ptr();
             // clang-format on
             stages[opStageId] = currentStageBody;
+            stagePos[opStageId] = op->Pos;
             YQL_CLOG(TRACE, CoreDq) << "Converted Empty Source " << opStageId;
         } else if (op->Kind == EOperator::Source) {
-            auto read = TKqpOpRead(op->Node);
             auto opSource = CastOperator<TOpRead>(op);
 
-            auto source = ctx.NewCallable(root.Node->Pos(), "DataSource", {ctx.NewAtom(root.Node->Pos(), "KqpReadRangesSource")});
+            auto source = ctx.NewCallable(op->Pos, "DataSource", {ctx.NewAtom(op->Pos, "KqpReadRangesSource")});
+            TVector<TExprNode::TPtr> columns;
+            for (auto c : opSource->Columns) {
+                columns.push_back(ctx.NewAtom(op->Pos, c));
+            }
+
             // clang-format off
-            currentStageBody = Build<TDqSource>(ctx, root.Node->Pos())
+            currentStageBody = Build<TDqSource>(ctx, op->Pos)
                 .DataSource(source)
                 .Settings<TKqpReadRangesSourceSettings>()
-                    .Table(read.Table())
-                    .Columns(read.Columns())
+                    .Table(opSource->TableCallable)
+                    .Columns().Add(columns).Build()
                     .Settings<TCoNameValueTupleList>().Build()
                     .RangesExpr<TCoVoid>().Build()
                     .ExplainPrompt<TCoNameValueTupleList>().Build()
@@ -492,7 +522,12 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TExprContext &ctx, TTypeAnnotat
             .Done().Ptr();
             // clang-format on
 
+            if (opSource->Props.OrderEnforcer.has_value()) {
+                currentStageBody = BuildSort(currentStageBody, *op->Props.OrderEnforcer, ctx, op->Pos);
+            }
+
             stages[opStageId] = currentStageBody;
+            stagePos[opStageId] = op->Pos;
             YQL_CLOG(TRACE, CoreDq) << "Converted Read " << opStageId;
         } else if (op->Kind == EOperator::Filter) {
             if (!currentStageBody) {
@@ -501,19 +536,24 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TExprContext &ctx, TTypeAnnotat
                 currentStageBody = stageInput;
             }
 
-            auto filter = TKqpOpFilter(op->Node);
-            auto filterBody = filter.Lambda().Body();
-            auto filter_arg = Build<TCoArgument>(ctx, root.Node->Pos()).Name("arg").Done().Ptr();
-            auto map_arg = Build<TCoArgument>(ctx, root.Node->Pos()).Name("arg").Done().Ptr();
+            auto filter = CastOperator<TOpFilter>(op);
+
+            if (filter->GetInput()->Props.OrderEnforcer.has_value()) {
+                currentStageBody = BuildSort(currentStageBody, *filter->GetInput()->Props.OrderEnforcer, ctx, filter->GetInput()->Pos);
+            }
+
+            auto filterBody = TCoLambda(filter->FilterLambda).Body();
+            auto filter_arg = Build<TCoArgument>(ctx, op->Pos).Name("arg").Done().Ptr();
+            auto map_arg = Build<TCoArgument>(ctx, op->Pos).Name("arg").Done().Ptr();
 
             auto newFilterBody = ReplaceArg(filterBody.Ptr(), filter_arg, ctx);
-            newFilterBody = ctx.Builder(root.Node->Pos()).Callable("FromPg").Add(0, newFilterBody).Seal().Build();
+            newFilterBody = ctx.Builder(op->Pos).Callable("FromPg").Add(0, newFilterBody).Seal().Build();
 
             TVector<TExprBase> items;
             for (auto iu : op->GetOutputIUs()) {
                 auto memberName = iu.GetFullName();
                 // clang-format off
-                auto tuple = Build<TCoNameValueTuple>(ctx, root.Node->Pos())
+                auto tuple = Build<TCoNameValueTuple>(ctx, op->Pos)
                     .Name().Build(memberName)
                     .Value<TCoMember>()
                         .Struct(map_arg)
@@ -525,7 +565,7 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TExprContext &ctx, TTypeAnnotat
             }
 
             // clang-format off
-            currentStageBody = Build<TCoMap>(ctx, root.Node->Pos())
+            currentStageBody = Build<TCoMap>(ctx, op->Pos)
                 .Input<TCoFilter>()
                     .Input(TExprBase(currentStageBody))
                     .Lambda<TCoLambda>()
@@ -548,6 +588,7 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TExprContext &ctx, TTypeAnnotat
             // clang-format off
 
             stages[opStageId] = currentStageBody;
+            stagePos[opStageId] = op->Pos;
             YQL_CLOG(TRACE, CoreDq) << "Converted Filter " << opStageId;
         } else if (op->Kind == EOperator::Map) {
             if (!currentStageBody) {
@@ -557,13 +598,18 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TExprContext &ctx, TTypeAnnotat
             }
 
             auto map = CastOperator<TOpMap>(op);
-            auto arg = Build<TCoArgument>(ctx, root.Node->Pos()).Name("arg").Done().Ptr();
+
+            if (map->GetInput()->Props.OrderEnforcer.has_value()) {
+                currentStageBody = BuildSort(currentStageBody, *map->GetInput()->Props.OrderEnforcer, ctx, map->GetInput()->Pos);
+            }
+
+            auto arg = Build<TCoArgument>(ctx, op->Pos).Name("arg").Done().Ptr();
 
             TVector<TExprBase> items;
             if (!map->Project) {
                 for (auto iu : map->GetInput()->GetOutputIUs()) {
                     // clang-format off
-                    auto tuple = Build<TCoNameValueTuple>(ctx, root.Node->Pos())
+                    auto tuple = Build<TCoNameValueTuple>(ctx, op->Pos)
                         .Name().Value(iu.GetFullName()).Build()
                         .Value<TCoMember>()
                             .Struct(arg)
@@ -586,7 +632,7 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TExprContext &ctx, TTypeAnnotat
                     auto var = std::get<TInfoUnit>(mapElement.second);
 
                     // clang-format off
-                    mapLambda = Build<TCoLambda>(ctx, root.Node->Pos())
+                    mapLambda = Build<TCoLambda>(ctx, op->Pos)
                         .Args({arg})
                         .Body<TCoMember>()
                             .Struct(arg)
@@ -597,7 +643,7 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TExprContext &ctx, TTypeAnnotat
                 }
 
                 // clang-format off
-                auto tuple = Build<TCoNameValueTuple>(ctx, root.Node->Pos())
+                auto tuple = Build<TCoNameValueTuple>(ctx, op->Pos)
                     .Name().Value(mapElement.first.GetFullName()).Build()
                     .Value(mapLambda.Body())
                 .Done();
@@ -608,7 +654,7 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TExprContext &ctx, TTypeAnnotat
             }
 
             // clang-format off
-            currentStageBody = Build<TCoMap>(ctx, root.Node->Pos())
+            currentStageBody = Build<TCoMap>(ctx, op->Pos)
                 .Input(TExprBase(currentStageBody))
                 .Lambda<TCoLambda>()
                     .Args({arg})
@@ -620,6 +666,7 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TExprContext &ctx, TTypeAnnotat
             // clang-fort on
 
             stages[opStageId] = currentStageBody;
+            stagePos[opStageId] = op->Pos;
             YQL_CLOG(TRACE, CoreDq) << "Converted Map " << opStageId;
         } else if (op->Kind == EOperator::Limit) {
             if (!currentStageBody) {
@@ -628,14 +675,21 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TExprContext &ctx, TTypeAnnotat
                 currentStageBody = stageInput;
             }
 
+            auto limit = CastOperator<TOpLimit>(op);
+
+            if (limit->GetInput()->Props.OrderEnforcer.has_value()) {
+                currentStageBody = BuildSort(currentStageBody, *limit->GetInput()->Props.OrderEnforcer, ctx, limit->GetInput()->Pos);
+            }
+
             // clang-format off
-            currentStageBody = Build<TCoTake>(ctx, root.Node->Pos())
+            currentStageBody = Build<TCoTake>(ctx, op->Pos)
                 .Input(TExprBase(currentStageBody))
-                .Count(TKqpOpLimit(op->Node).Count())
+                .Count(limit->LimitCond)
             .Done().Ptr();
             // clang-format on
 
             stages[opStageId] = currentStageBody;
+            stagePos[opStageId] = op->Pos;
             YQL_CLOG(TRACE, CoreDq) << "Converted Limit " << opStageId;
         } else if (op->Kind == EOperator::Join) {
             auto join = CastOperator<TOpJoin>(op);
@@ -646,9 +700,9 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TExprContext &ctx, TTypeAnnotat
                 graph.GenerateStageInput(stageInputCounter, root.Node, ctx, *join->GetRightInput()->Props.StageId);
             stageArgs[opStageId].push_back(rightArg);
             if (join->JoinKind == "Cross") {
-                currentStageBody = BuildCrossJoin(*join, leftInput, rightInput, ctx, root.Node->Pos());
+                currentStageBody = BuildCrossJoin(*join, leftInput, rightInput, ctx, op->Pos);
             } else if (const auto joinKind = to_lower(join->JoinKind); (joinKind == "inner" || joinKind == "left")) {
-                currentStageBody = BuildGraceJoinCore(*join, leftInput, rightInput, ctx, root.Node->Pos());
+                currentStageBody = BuildGraceJoinCore(*join, leftInput, rightInput, ctx, op->Pos);
             } else {
                 TStringBuilder builder;
                 builder << "Unsupported join kind " << join->JoinKind;
@@ -656,6 +710,7 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TExprContext &ctx, TTypeAnnotat
             }
 
             stages[opStageId] = currentStageBody;
+            stagePos[opStageId] = op->Pos;
             YQL_CLOG(TRACE, CoreDq) << "Converted Join " << opStageId;
         } else if (op->Kind == EOperator::UnionAll) {
             auto unionAll = CastOperator<TOpUnionAll>(op);
@@ -670,16 +725,16 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TExprContext &ctx, TTypeAnnotat
             TVector<TExprNode::TPtr> extendArgs{leftArg, rightArg};
 
             // clang-format off
-            currentStageBody = Build<TCoExtend>(ctx, root.Node->Pos())
+            currentStageBody = Build<TCoExtend>(ctx, op->Pos)
                 .Add(extendArgs)
             .Done().Ptr();
             // clang-format on
 
             stages[opStageId] = currentStageBody;
+            stagePos[opStageId] = op->Pos;
             YQL_CLOG(TRACE, CoreDq) << "Converted UnionAll " << opStageId;
         } else {
-            // Should we fail here?
-            return root.Node;
+            Y_ENSURE(false, "Could not generate physical plan");
         }
     }
 
@@ -701,7 +756,7 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TExprContext &ctx, TTypeAnnotat
             auto connection = graph.GetConnection(inputStageId, id);
             YQL_CLOG(TRACE, CoreDq) << "Building connection: " << inputStageId << "->" << id << ", " << connection->Type;
             TExprNode::TPtr newStage;
-            auto dqConnection = connection->BuildConnection(inputStage, root.Node, newStage, ctx);
+            auto dqConnection = connection->BuildConnection(inputStage, stagePos.at(inputStageId), newStage, ctx);
             if (newStage) {
                 txStages.push_back(newStage);
             }
@@ -714,7 +769,7 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TExprContext &ctx, TTypeAnnotat
             stage = stages.at(id);
         } else {
             // clang-format off
-            stage = Build<TDqPhyStage>(ctx, root.Node->Pos())
+            stage = Build<TDqPhyStage>(ctx, stagePos.at(id))
                 .Inputs()
                     .Add(inputs)
                     .Build()
@@ -740,7 +795,7 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TExprContext &ctx, TTypeAnnotat
 
     // clang-format off
     // wrap in DqResult
-    auto dqResult = Build<TDqCnResult>(ctx, root.Node->Pos())
+    auto dqResult = Build<TDqCnResult>(ctx, root.Pos)
         .Output()
             .Stage(lastStage)
             .Index().Build("0")
@@ -751,12 +806,12 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TExprContext &ctx, TTypeAnnotat
 
     TVector<TExprNode::TPtr> txSettings;
     // clang-format off
-    txSettings.push_back(Build<TCoNameValueTuple>(ctx, root.Node->Pos())
+    txSettings.push_back(Build<TCoNameValueTuple>(ctx, root.Pos)
                             .Name().Build("type")
                             .Value<TCoAtom>().Build("compute")
                         .Done().Ptr());
     // Build PhysicalTx
-    auto physTx = Build<TKqpPhysicalTx>(ctx, root.Node->Pos())
+    auto physTx = Build<TKqpPhysicalTx>(ctx, root.Pos)
         .Stages()
             .Add(txStages)
         .Build()
@@ -770,7 +825,7 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TExprContext &ctx, TTypeAnnotat
     .Done().Ptr();
 
     TVector<TExprNode::TPtr> querySettings;
-    querySettings.push_back(Build<TCoNameValueTuple>(ctx, root.Node->Pos())
+    querySettings.push_back(Build<TCoNameValueTuple>(ctx, root.Pos)
                                 .Name().Build("type")
                                 .Value<TCoAtom>().Build("data_query")
                             .Done().Ptr());
@@ -791,14 +846,14 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TExprContext &ctx, TTypeAnnotat
     YQL_CLOG(TRACE, CoreDq) << "Inferred final type: " << *dqResult->GetTypeAnn();
 
     // clang-format off
-    auto binding = Build<TKqpTxResultBinding>(ctx, root.Node->Pos())
-        .Type(ExpandType(root.Node->Pos(), *dqResult->GetTypeAnn(), ctx))
+    auto binding = Build<TKqpTxResultBinding>(ctx, root.Pos)
+        .Type(ExpandType(root.Pos, *dqResult->GetTypeAnn(), ctx))
         .TxIndex().Build("0")
         .ResultIndex().Build("0")
     .Done();
 
     // Build Physical query
-    auto physQuery = Build<TKqpPhysicalQuery>(ctx, root.Node->Pos())
+    auto physQuery = Build<TKqpPhysicalQuery>(ctx, root.Pos)
         .Transactions()
             .Add({physTx})
         .Build()

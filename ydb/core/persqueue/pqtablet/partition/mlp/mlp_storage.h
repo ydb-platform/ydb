@@ -13,9 +13,7 @@ namespace NKikimr::NPQ::NMLP {
 // * Общая информация об процессе (мета), включающая FirstOffset, LastOffset, FirstUncommittedOffset и т.д. Всегда один блоб.
 // * Информация о статусе обработке сообщений. MaxMessages * 4 байтов (~400Kb) . Всегда один блоб. Перезаписывается редко.
 // * WAL изменений. Несколько блобов. Частая запись. Информация об измененных статусах сообщениях.
-// * Deadlins обрабатываемых сообщений. Один блоб. Перезаписывается редко. Если maxdeadline < 16 sec и все MaxMessages
-//   сообщения отданы, то размер MaxMessages байт (по одному байту на deadline delta, упаковываем дельтой от предыдущего значения) 100Kb + MaxMessages * 2 (2 байта на delta offset от FirstOffset) 200Kb (итого 300Kb)
-// * WAL deadlines. Несколько блобов. Частая запись. (TODO объединить с WAL статусов)
+
 class TStorage {
 
     // Имеет смысл ограничить 100К сообщений на партицию. Надо больше - увеличивайте кол-во партиции
@@ -34,16 +32,14 @@ class TStorage {
     struct TMessage {
         ui32 Status: 2; // Статус сообщения. EMessageStatus
         ui32 HasMessageGroupId: 1;
-        ui32 MessageGroupIdHash: 13; // Hash группы сообщений (отбрасываем лишние биты)
-        ui32 DeadlineDelta: 16; // Для заблокированных
+        ui32 DeadlineDelta: 15; // Для заблокированных
+        ui32 Cookie: 13; // Cookie для заблокированных для исключения коммита из умерших сессий
+        ui32 MessageGroupIdHash; // Hash группы сообщений (отбрасываем лишние биты)
     };
 
     struct LockedMessage {
          // Дельта от FirstOffset (надо будет обновлять все дельты при изменении FirstOffset)
         ui32 OffsetDelta : 17;
-        // Защита от коммита от протухшего клиента (нужна?)
-        ui32 Cookie0: 15;
-        ui32 Cookie1: 16;
         // Дельта от BaseDeadline (надо будет обновлять все дельты при изменении BaseDeadline)
         // (какое максимальное значение timeout-а может быть? можем ли использовать меньше бит? например,
         // daedline не до миллисекунд, а до десчятых секунды т.к. чаще все равно обрабатываеть не будем.
@@ -51,18 +47,12 @@ class TStorage {
         // BaseDeadline, например, раз в минуту, то макс значение 1200 - это 11 бит + 1 прозапас)
         // В SQS максимальный лимит 12 часов. В секундах это 43200, требуется 16 бит. 15 бит позволяет огграничить 
         // 32767 или 9 часов. (если не нужна кука, то можно сократить до 15 бит)
-        ui32 DeadlineDelta : 16;
+        ui32 DeadlineDelta : 15;
 
-        LockedMessage(ui32 offsetDelta, ui32 deadlineDelta, ui32 cookie)
+        LockedMessage(ui32 offsetDelta, ui32 deadlineDelta)
             : OffsetDelta(offsetDelta)
-            , Cookie0(cookie & 0x7FFF)
-            , Cookie1(cookie >> 15)
             , DeadlineDelta(deadlineDelta)
         {
-        }
-
-        ui32 Cookie() const {
-            return Cookie0 | (Cookie1 << 15);
         }
     };
 public:
@@ -77,9 +67,10 @@ private:
     ui64 DoLock(ui64 offsetDelta, TDuration deadline);
     bool DoCommit(ui64 offsetDelta);
     bool DoUnlock(ui64 offsetDelta);
-    bool DoUnlock(TMessage& message, ui64 offset);
+    void DoUnlock(TMessage& message, ui64 offset);
 
     void UpdateBaseDeadline();
+    void UpdateFirstUncommittedOffset();
 
 private:
     // Первый загруженный оффсет  для обработки. Все сообщения с меньшим оффсетом либо уже закоммичены, либо удалены из партиции.
@@ -114,6 +105,8 @@ private:
     // FirstUnlockedOffset, если не смогли поместить сообщение в ReleasedMessages).
     // В худшем случае список содержит 1000 * 16 = ~16Kb
     std::deque<ui64> ReleasedMessages;
+
+    size_t LockCookie = 0;
 };
 
 

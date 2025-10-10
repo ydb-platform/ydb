@@ -4,8 +4,8 @@ import threading
 import queue
 import traceback
 import requests
-from urllib.parse import urljoin
 from concurrent.futures import ThreadPoolExecutor
+
 
 class Workload:
     def __init__(self, mon_endpoint, database, duration):

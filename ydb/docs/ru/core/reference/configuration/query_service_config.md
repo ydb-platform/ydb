@@ -31,7 +31,7 @@
 ||
 || `query_service_config.available_external_data_sources`
 | пустой список
-| Список с разрешенными типами внешними источниками.
+| Список с разрешенными типами внешними источниками. Возможные значения: ObjectStorage, ClickHouse, PostgreSQL, MySQL, Greenplum, MsSQLServer, Ydb
 Применяется при `all_external_data_sources_are_available: false`.
 ||
 || `query_service_config.all_external_data_sources_are_available`

@@ -6,31 +6,6 @@
 #include <ydb/core/protos/sys_view.pb.h>
 #include <ydb/core/protos/table_stats.pb.h>
 
-namespace {
-
-THashMap<ui32, TString> MapChannelsToStoragePoolKinds(const NActors::TActorContext& ctx,
-                                                      const NKikimr::TStoragePools& pools,
-                                                      const NKikimr::TChannelsBindings& bindings
-) {
-    THashMap<TString, TString> nameToKindMap(pools.size());
-    for (const auto& pool : pools) {
-        nameToKindMap.emplace(pool.GetName(), pool.GetKind());
-    }
-    THashMap<ui32, TString> channelsMapping(bindings.size());
-    for (ui32 channel = 0u; channel < bindings.size(); ++channel) {
-        if (const auto* poolKind = nameToKindMap.FindPtr(bindings[channel].GetStoragePoolName())) {
-            channelsMapping.emplace(channel, *poolKind);
-        } else {
-            LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                        "MapChannelsToStoragePoolKinds: the subdomain has no info about the storage pool named "
-                            << bindings[channel].GetStoragePoolName()
-            );
-        }
-    }
-    return channelsMapping;
-}
-
-}
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -128,7 +103,7 @@ public:
     void ScheduleNextBatch(const TActorContext& ctx) override;
 
     template <typename T>
-    TPartitionStats PrepareStats(const TActorContext& ctx, const T& rec, TInstant now, const THashMap<ui32, TString>& channelsMapping = {}) const;
+    TPartitionStats PrepareStats(const T& rec, TInstant now, const NKikimr::TStoragePools& pools, const NKikimr::TChannelsBindings& bindings) const;
 };
 
 
@@ -160,10 +135,10 @@ THolder<TProposeRequest> MergeRequest(
 }
 
 template <typename T>
-TPartitionStats TTxStoreTableStats::PrepareStats(const TActorContext& ctx,
-                                                 const T& rec,
+TPartitionStats TTxStoreTableStats::PrepareStats(const T& rec,
                                                  TInstant now,
-                                                 const THashMap<ui32, TString>& channelsMapping
+                                                 const NKikimr::TStoragePools& pools,
+                                                 const NKikimr::TChannelsBindings& bindings
 ) const {
     const auto& tableStats = rec.GetTableStats();
     const auto& tabletMetrics = rec.GetTabletMetrics();
@@ -177,17 +152,15 @@ TPartitionStats TTxStoreTableStats::PrepareStats(const TActorContext& ctx,
     newStats.ByKeyFilterSize = tableStats.GetByKeyFilterSize();
     newStats.LastAccessTime = TInstant::MilliSeconds(tableStats.GetLastAccessTime());
     newStats.LastUpdateTime = TInstant::MilliSeconds(tableStats.GetLastUpdateTime());
+
+    Y_UNUSED(pools);
+
     for (const auto& channelStats : tableStats.GetChannels()) {
-        if (const auto* poolKind = channelsMapping.FindPtr(channelStats.GetChannel())) {
-            auto& [dataSize, indexSize] = newStats.StoragePoolsStats[*poolKind];
-            dataSize += channelStats.GetDataSize();
-            indexSize += channelStats.GetIndexSize();
-        } else {
-            LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                        "PrepareStats: SchemeShard has no info on DataShard "
-                            << rec.GetDatashardId() << " channel " << channelStats.GetChannel() << " binding"
-            );
-        }
+        const auto& channelBind = bindings[channelStats.GetChannel()];
+        const auto& poolKind = channelBind.GetStoragePoolKind();
+        auto& [dataSize, indexSize] = newStats.StoragePoolsStats[poolKind];
+        dataSize += channelStats.GetDataSize();
+        indexSize += channelStats.GetIndexSize();
     }
 
     newStats.ImmediateTxCompleted = tableStats.GetImmediateTxCompleted();
@@ -296,12 +269,9 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
         return true;
     }
 
-    auto subDomainInfo = Self->ResolveDomainInfo(pathId);
-    const auto channelsMapping = MapChannelsToStoragePoolKinds(ctx,
-                                                               subDomainInfo->EffectiveStoragePools(),
-                                                               shardInfo->BindedChannels);
+    auto subDomainInfo = Self->ResolveDomainInfo(pathElement);
 
-    const TPartitionStats newStats = PrepareStats(ctx, rec, now, channelsMapping);
+    const TPartitionStats newStats = PrepareStats(rec, now, subDomainInfo->EffectiveStoragePools(), shardInfo->BindedChannels);
 
     LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                 "TTxStoreTableStats.PersistSingleStats: main stats from"
@@ -373,7 +343,7 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
         LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "OLAP store contains " << tables.size() << " tables.");
 
         for (const auto& table : tables) {
-            const TPartitionStats newTableStats = PrepareStats(ctx, table, now);
+            const TPartitionStats newTableStats = PrepareStats(table, now, {}, {});
 
             const TPathId tablePathId = TPathId(TOwnerId(pathId.OwnerId), TLocalPathId(table.GetTableLocalId()));
 

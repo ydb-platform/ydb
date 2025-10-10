@@ -644,6 +644,13 @@ struct TCmdWriteOptions {
 };
 void CmdWrite(const TCmdWriteOptions&);
 
+void CmdRunCompaction(TTestActorRuntime& runtime,
+                      ui64 tabletId,
+                      const TActorId& sender,
+                      const ui32 partition);
+void CmdRunCompaction(const ui32 partition,
+                      TTestContext& tc);
+
 THolder<TEvPersQueue::TEvPeriodicTopicStats> GetReadBalancerPeriodicTopicStats(TTestActorRuntime& runtime, ui64 balancerId);
 
 } // namespace NKikimr::NPQ

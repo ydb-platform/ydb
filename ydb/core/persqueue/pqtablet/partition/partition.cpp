@@ -27,6 +27,7 @@
 #include <util/folder/path.h>
 #include <util/string/escape.h>
 #include <util/system/byteorder.h>
+#include <ydb/library/dbgtrace/debug_trace.h>
 
 namespace NKafka {
 
@@ -2600,49 +2601,49 @@ bool TPartition::TryAddDeleteHeadKeysToPersistRequest()
     return haveChanges;
 }
 
-//void TPartition::DumpKeyValueRequest(const NKikimrClient::TKeyValueRequest& request)
-//{
-//    DBGTRACE_LOG("=== DumpKeyValueRequest ===");
-//    DBGTRACE_LOG("--- delete ----------------");
-//    for (size_t i = 0; i < request.CmdDeleteRangeSize(); ++i) {
-//        const auto& cmd = request.GetCmdDeleteRange(i);
-//        const auto& range = cmd.GetRange();
-//        Y_UNUSED(range);
-//        DBGTRACE_LOG((range.GetIncludeFrom() ? '[' : '(') << range.GetFrom() <<
-//                     ", " <<
-//                     range.GetTo() << (range.GetIncludeTo() ? ']' : ')'));
-//    }
-//    DBGTRACE_LOG("--- write -----------------");
-//    for (size_t i = 0; i < request.CmdWriteSize(); ++i) {
-//        const auto& cmd = request.GetCmdWrite(i);
-//        Y_UNUSED(cmd);
-//        DBGTRACE_LOG(cmd.GetKey());
-//    }
-//    DBGTRACE_LOG("--- rename ----------------");
-//    for (size_t i = 0; i < request.CmdRenameSize(); ++i) {
-//        const auto& cmd = request.GetCmdRename(i);
-//        Y_UNUSED(cmd);
-//        DBGTRACE_LOG(cmd.GetOldKey() << ", " << cmd.GetNewKey());
-//    }
-//    DBGTRACE_LOG("===========================");
-//}
+void TPartition::DumpKeyValueRequest(const NKikimrClient::TKeyValueRequest& request)
+{
+    DBGTRACE_LOG("=== DumpKeyValueRequest ===");
+    DBGTRACE_LOG("--- delete ----------------");
+    for (size_t i = 0; i < request.CmdDeleteRangeSize(); ++i) {
+        const auto& cmd = request.GetCmdDeleteRange(i);
+        const auto& range = cmd.GetRange();
+        Y_UNUSED(range);
+        DBGTRACE_LOG((range.GetIncludeFrom() ? '[' : '(') << range.GetFrom() <<
+                     ", " <<
+                     range.GetTo() << (range.GetIncludeTo() ? ']' : ')'));
+    }
+    DBGTRACE_LOG("--- write -----------------");
+    for (size_t i = 0; i < request.CmdWriteSize(); ++i) {
+        const auto& cmd = request.GetCmdWrite(i);
+        Y_UNUSED(cmd);
+        DBGTRACE_LOG(cmd.GetKey());
+    }
+    DBGTRACE_LOG("--- rename ----------------");
+    for (size_t i = 0; i < request.CmdRenameSize(); ++i) {
+        const auto& cmd = request.GetCmdRename(i);
+        Y_UNUSED(cmd);
+        DBGTRACE_LOG(cmd.GetOldKey() << ", " << cmd.GetNewKey());
+    }
+    DBGTRACE_LOG("===========================");
+}
 
-//void TPartition::DumpZones(const char* file, unsigned line) const
-//{
-//    DBGTRACE("TPartition::DumpZones");
-//
-//    if (file) {
-//        Y_UNUSED(line);
-//        DBGTRACE_LOG(file << "(" << line << ")");
-//    }
-//
-//    DBGTRACE_LOG("=== DumpPartitionZones ===");
-//    DBGTRACE_LOG("--- Compaction -----------");
-//    CompactionBlobEncoder.Dump();
-//    DBGTRACE_LOG("--- FastWrite ------------");
-//    BlobEncoder.Dump();
-//    DBGTRACE_LOG("==========================");
-//}
+void TPartition::DumpZones(const char* file, unsigned line) const
+{
+    DBGTRACE("TPartition::DumpZones");
+
+    if (file) {
+        Y_UNUSED(line);
+        DBGTRACE_LOG(file << "(" << line << ")");
+    }
+
+    DBGTRACE_LOG("=== DumpPartitionZones ===");
+    DBGTRACE_LOG("--- Compaction -----------");
+    CompactionBlobEncoder.Dump();
+    DBGTRACE_LOG("--- FastWrite ------------");
+    BlobEncoder.Dump();
+    DBGTRACE_LOG("==========================");
+}
 
 TBlobKeyTokenPtr TPartition::MakeBlobKeyToken(const TString& key)
 {

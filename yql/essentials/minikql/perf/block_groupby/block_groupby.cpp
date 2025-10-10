@@ -1,4 +1,5 @@
 #include <util/datetime/cputimer.h>
+#include <util/system/unaligned_mem.h>
 
 #include <yql/essentials/minikql/comp_nodes/mkql_rh_hash.h>
 
@@ -148,7 +149,7 @@ public:
                             bool isNew;
                             auto iter = Rh_.Insert(One_.Key, isNew);
                             Y_ASSERT(isNew);
-                            *(i64*)Rh_.GetPayload(iter) = One_.State;
+                            WriteUnaligned<i64>(Rh_.GetMutablePayloadPtr(iter), One_.State);
                         } else {
                             bool isNew;
                             ui64 bucket = AddBucketFromKeyImpl(One_.Key, Cells_, isNew);
@@ -166,13 +167,13 @@ public:
                 auto iter = Rh_.Insert(key, isNew);
                 if (isNew) {
                     for (const auto& a : Aggs_) {
-                        a->Init((i64*)Rh_.GetPayload(iter), payload);
+                        a->Init((i64*)Rh_.GetPayloadPtr(iter), payload);
                     }
 
                     Rh_.CheckGrow();
                 } else {
                     for (const auto& a : Aggs_) {
-                        a->Update((i64*)Rh_.GetPayload(iter), payload);
+                        a->Update((i64*)Rh_.GetPayloadPtr(iter), payload);
                     }
                 }
             } else {
@@ -342,13 +343,13 @@ public:
             i64 sumPSL = 0;
             if constexpr (UseRH) {
                 for (auto iter = Rh_.Begin(); iter != Rh_.End(); Rh_.Advance(iter)) {
-                    auto& psl = Rh_.GetPSL(iter);
+                    auto psl = ReadUnaligned<typename decltype(Rh_)::TPSLStorage>(Rh_.GetPslPtr(iter));
                     if (psl.Distance < 0) {
                         continue;
                     }
 
-                    keysBuilder.UnsafeAppend(Rh_.GetKey(iter));
-                    sumsBuilder.UnsafeAppend(*(i64*)Rh_.GetPayload(iter));
+                    keysBuilder.UnsafeAppend(Rh_.GetKeyValue(iter));
+                    sumsBuilder.UnsafeAppend(ReadUnaligned<i64>(Rh_.GetPayloadPtr(iter)));
                     maxPSL = Max(psl.Distance, maxPSL);
                     sumPSL += psl.Distance;
                 }

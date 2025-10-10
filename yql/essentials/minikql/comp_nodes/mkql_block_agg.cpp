@@ -90,11 +90,11 @@ public:
         return it->first;
     }
 
-    char* GetMutablePayload(iterator it) const {
+    char* GetMutablePayloadPtr(iterator it) const {
         return it->second.data();
     }
 
-    const char* GetPayload(const_iterator it) const {
+    const char* GetPayloadPtr(const_iterator it) const {
         return it->second.data();
     }
 
@@ -157,11 +157,11 @@ public:
         return it->first;
     }
 
-    char* GetMutablePayload(iterator it) const {
+    char* GetMutablePayloadPtr(iterator it) const {
         return (char*)&it->second;
     }
 
-    const char* GetPayload(const_iterator it) const {
+    const char* GetPayloadPtr(const_iterator it) const {
         return (const char*)&it->second;
     }
 
@@ -226,12 +226,12 @@ public:
         return *it;
     }
 
-    char* GetMutablePayload(iterator it) const {
+    char* GetMutablePayloadPtr(iterator it) const {
         Y_UNUSED(it);
         return nullptr;
     }
 
-    const char* GetPayload(const_iterator it) const {
+    const char* GetPayloadPtr(const_iterator it) const {
         Y_UNUSED(it);
         return nullptr;
     }
@@ -256,7 +256,7 @@ using TStateArena = void*;
 static_assert(sizeof(TStateArena) == sizeof(void*));
 
 struct TExternalFixedSizeKey {
-    mutable const char* Data;
+    const char* Data;
 };
 
 struct TKey16 {
@@ -281,6 +281,8 @@ private:
     };
 
 public:
+    TSSOKey() = default;
+
     TSSOKey(const TSSOKey& other) {
         memcpy(U.A, other.U.A, SSO_Length + 1);
     }
@@ -319,9 +321,9 @@ public:
         }
     }
 
-    void UpdateExternalPointer(const char* ptr) const {
+    void UpdateExternalPointer(const char* ptr) {
         Y_ASSERT(!IsInplace());
-        const_cast<TExternal&>(U.E).Ptr_ = ptr;
+        U.E.Ptr_ = ptr;
     }
 
 private:
@@ -894,22 +896,31 @@ TExternalFixedSizeKey MakeKey(TStringBuf s, ui32 keyLength) {
     return {s.Data()};
 }
 
-void MoveKeyToArena(const TSSOKey& key, TPagedArena& arena, ui32 keyLength) {
+template <typename T>
+void MoveKeyToArena(void* keyPtr, TPagedArena& arena, ui32 keyLength) = delete;
+
+template <>
+void MoveKeyToArena<TSSOKey>(void* keyPtr, TPagedArena& arena, ui32 keyLength) {
     Y_UNUSED(keyLength);
+    TSSOKey key = ReadUnaligned<TSSOKey>(keyPtr);
     if (key.IsInplace()) {
         return;
     }
 
     auto view = key.AsView();
-    auto ptr = (char*)arena.Alloc(view.Size());
-    memcpy(ptr, view.Data(), view.Size());
-    key.UpdateExternalPointer(ptr);
+    auto arenaPtr = (char*)arena.Alloc(view.Size());
+    memcpy(arenaPtr, view.Data(), view.Size());
+    key.UpdateExternalPointer(arenaPtr);
+    WriteUnaligned<TSSOKey>(keyPtr, key);
 }
 
-void MoveKeyToArena(const TExternalFixedSizeKey& key, TPagedArena& arena, ui32 keyLength) {
+template <>
+void MoveKeyToArena<TExternalFixedSizeKey>(void* keyPtr, TPagedArena& arena, ui32 keyLength) {
+    TExternalFixedSizeKey key = ReadUnaligned<TExternalFixedSizeKey>(keyPtr);
     auto ptr = (char*)arena.Alloc(keyLength);
     memcpy(ptr, key.Data, keyLength);
     key.Data = ptr;
+    WriteUnaligned<TExternalFixedSizeKey>(keyPtr, key);
 }
 
 template <typename T>
@@ -1321,7 +1332,7 @@ public:
                     Y_UNUSED(index);
                     if (isNew) {
                         if constexpr (std::is_same<TKey, TSSOKey>::value || std::is_same<TKey, TExternalFixedSizeKey>::value) {
-                            MoveKeyToArena(HashSet_->GetKey(iter), Arena_, KeyLength_);
+                            MoveKeyToArena<TKey>(HashSet_->GetKeyPtr(iter), Arena_, KeyLength_);
                         }
                     }
                 });
@@ -1337,19 +1348,19 @@ public:
                 hash->BatchInsert({insertBatch.data(), insertBatchLen}, [&](size_t index, typename THashTable::iterator iter, bool isNew) {
                     if (isNew) {
                         if constexpr (std::is_same<TKey, TSSOKey>::value || std::is_same<TKey, TExternalFixedSizeKey>::value) {
-                            MoveKeyToArena(hash->GetKey(iter), Arena_, KeyLength_);
+                            MoveKeyToArena<TKey>(hash->GetKeyPtr(iter), Arena_, KeyLength_);
                         }
                     }
 
                     if constexpr (UseArena) {
                         // prefetch payloads only
-                        auto payload = hash->GetPayload(iter);
+                        auto* payload = hash->GetMutablePayloadPtr(iter);
                         char* ptr;
                         if (isNew) {
                             ptr = (char*)Arena_.Alloc(TotalStateSize_);
-                            *(char**)payload = ptr;
+                            WriteUnaligned<char*>(payload, ptr);
                         } else {
-                            ptr = *(char**)payload;
+                            ptr = ReadUnaligned<char*>(payload);
                         }
 
                         insertBatchIsNew[index] = isNew;
@@ -1357,14 +1368,14 @@ public:
                         NYql::PrefetchForWrite(ptr);
                     } else {
                         // process insert
-                        auto payload = (char*)hash->GetPayload(iter);
+                        auto* payload = hash->GetMutablePayloadPtr(iter);
                         auto row = insertBatchRows[index];
                         ui32 streamIndex = 0;
                         if constexpr (Many) {
                             streamIndex = streamIndexScalar ? *streamIndexScalar : streamIndexData[row];
                         }
 
-                        Insert(row, payload, isNew, streamIndex);
+                        Insert(row, static_cast<char*>(payload), isNew, streamIndex);
                     }
                 });
 
@@ -1456,7 +1467,7 @@ public:
                         break;
                     }
 
-                    const TKey& key = HashSet_->GetKey(HashSetIt_);
+                    TKey key = HashSet_->GetKeyValue(HashSetIt_);
                     TInputBuffer in(GetKeyView<TKey>(key, KeyLength_));
                     for (auto& kb : Builders_) {
                         kb->Add(in);
@@ -1586,13 +1597,13 @@ private:
         auto iterateBatch = [&]() {
             for (ui32 i = 0; i < itersLen; ++i) {
                 auto iter = iters[i];
-                const TKey& key = hash.GetKey(iter);
-                auto payload = (char*)hash.GetPayload(iter);
+                TKey key = hash.GetKeyValue(iter);
+                auto payload = hash.GetPayloadPtr(iter);
                 char* ptr;
                 if constexpr (UseArena) {
-                    ptr = *(char**)payload;
+                    ptr = ReadUnaligned<char*>(payload);
                 } else {
-                    ptr = payload;
+                    ptr = (char*)payload;
                 }
 
                 TInputBuffer in(GetKeyView<TKey>(key, KeyLength_));
@@ -1636,18 +1647,18 @@ private:
             ++itersLen;
             ++OutputBlockSize_;
             if constexpr (UseArena) {
-                auto payload = (char*)hash.GetPayload(iter);
-                auto ptr = *(char**)payload;
+                auto payload = hash.GetPayloadPtr(iter);
+                auto ptr = ReadUnaligned<char*>(payload);
                 NYql::PrefetchForWrite(ptr);
             }
 
             if constexpr (std::is_same<TKey, TSSOKey>::value) {
-                const auto& key = hash.GetKey(iter);
+                TKey key = hash.GetKeyValue(iter);
                 if (!key.IsInplace()) {
                     NYql::PrefetchForRead(key.AsView().Data());
                 }
             } else if constexpr (std::is_same<TKey, TExternalFixedSizeKey>::value) {
-                const auto& key = hash.GetKey(iter);
+                TKey key = hash.GetKeyValue(iter);
                 NYql::PrefetchForRead(key.Data);
             }
         }

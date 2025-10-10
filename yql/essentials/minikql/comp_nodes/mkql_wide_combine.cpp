@@ -303,7 +303,7 @@ public:
             }
             Tongue = CurrentPage->data() + CurrentPosition;
         }
-        Throat = States->GetKey(itInsert) + KeyWidth;
+        Throat = States->GetKeyValue(itInsert) + KeyWidth;
         if (isNew) {
             GrowStates();
         }

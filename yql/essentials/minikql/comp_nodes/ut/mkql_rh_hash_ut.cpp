@@ -17,14 +17,14 @@ Y_UNIT_TEST(Map) {
         auto [it, inserted] = h.emplace(k, 0);
         bool isNew;
         auto iter = rh.Insert(k, isNew);
-        UNIT_ASSERT_VALUES_EQUAL(rh.GetKey(iter), k);
+        UNIT_ASSERT_VALUES_EQUAL(rh.GetKeyValue(iter), k);
         UNIT_ASSERT_VALUES_EQUAL(isNew, inserted);
         it->second += i;
         if (isNew) {
-            *(i64*)rh.GetMutablePayload(iter) = i;
+            WriteUnaligned<i64>(rh.GetMutablePayloadPtr(iter), i);
             rh.CheckGrow();
         } else {
-            *(i64*)rh.GetMutablePayload(iter) += i;
+            WriteUnaligned<i64>(rh.GetMutablePayloadPtr(iter), ReadUnaligned<i64>(rh.GetPayloadPtr(iter)) + i);
         }
 
         UNIT_ASSERT_VALUES_EQUAL(h.size(), rh.GetSize());
@@ -35,10 +35,10 @@ Y_UNIT_TEST(Map) {
             continue;
         }
 
-        auto key = rh.GetKey(it);
+        auto key = rh.GetKeyValue(it);
         auto hit = h.find(key);
         UNIT_ASSERT(hit != h.end());
-        UNIT_ASSERT_VALUES_EQUAL(*(i64*)rh.GetPayload(it), hit->second);
+        UNIT_ASSERT_VALUES_EQUAL(ReadUnaligned<i64>(rh.GetPayloadPtr(it)), hit->second);
         h.erase(key);
     }
 
@@ -53,14 +53,14 @@ Y_UNIT_TEST(FixedMap) {
         auto [it, inserted] = h.emplace(k, 0);
         bool isNew;
         auto iter = rh.Insert(k, isNew);
-        UNIT_ASSERT_VALUES_EQUAL(rh.GetKey(iter), k);
+        UNIT_ASSERT_VALUES_EQUAL(rh.GetKeyValue(iter), k);
         UNIT_ASSERT_VALUES_EQUAL(isNew, inserted);
         it->second += i;
         if (isNew) {
-            *(i64*)rh.GetMutablePayload(iter) = i;
+            WriteUnaligned<i64>(rh.GetMutablePayloadPtr(iter), i);
             rh.CheckGrow();
         } else {
-            *(i64*)rh.GetMutablePayload(iter) += i;
+            WriteUnaligned<i64>(rh.GetMutablePayloadPtr(iter), ReadUnaligned<i64>(rh.GetPayloadPtr(iter)) + i);
         }
 
         UNIT_ASSERT_VALUES_EQUAL(h.size(), rh.GetSize());
@@ -71,10 +71,10 @@ Y_UNIT_TEST(FixedMap) {
             continue;
         }
 
-        auto key = rh.GetKey(it);
+        auto key = rh.GetKeyValue(it);
         auto hit = h.find(key);
         UNIT_ASSERT(hit != h.end());
-        UNIT_ASSERT_VALUES_EQUAL(*(i64*)rh.GetPayload(it), hit->second);
+        UNIT_ASSERT_VALUES_EQUAL(ReadUnaligned<i64>(rh.GetPayloadPtr(it)), hit->second);
         h.erase(key);
     }
 
@@ -89,7 +89,7 @@ Y_UNIT_TEST(Set) {
         auto [it, inserted] = h.emplace(k);
         bool isNew;
         auto iter = rh.Insert(k, isNew);
-        UNIT_ASSERT_VALUES_EQUAL(rh.GetKey(iter), k);
+        UNIT_ASSERT_VALUES_EQUAL(rh.GetKeyValue(iter), k);
         UNIT_ASSERT_VALUES_EQUAL(isNew, inserted);
         if (isNew) {
             rh.CheckGrow();
@@ -103,7 +103,7 @@ Y_UNIT_TEST(Set) {
             continue;
         }
 
-        auto key = rh.GetKey(it);
+        auto key = rh.GetKeyValue(it);
         auto hit = h.find(key);
         UNIT_ASSERT(hit != h.end());
         h.erase(key);
@@ -124,11 +124,11 @@ Y_UNIT_TEST(MapBatch) {
     auto processBatch = [&]() {
         rh.BatchInsert({batch.data(), batchLen}, [&](size_t i, THashTable::iterator iter, bool isNew) {
             UNIT_ASSERT_VALUES_EQUAL(isNew, batchInserted[i]);
-            UNIT_ASSERT_VALUES_EQUAL(rh.GetKey(iter), batch[i].GetKey());
+            UNIT_ASSERT_VALUES_EQUAL(rh.GetKeyValue(iter), batch[i].GetKey());
             if (isNew) {
-                *(i64*)rh.GetMutablePayload(iter) = batchI[i];
+                WriteUnaligned<i64>(rh.GetMutablePayloadPtr(iter), batchI[i]);
             } else {
-                *(i64*)rh.GetMutablePayload(iter) += batchI[i];
+                WriteUnaligned<i64>(rh.GetMutablePayloadPtr(iter), ReadUnaligned<i64>(rh.GetPayloadPtr(iter)) + batchI[i]);
             }
         });
 
@@ -156,10 +156,10 @@ Y_UNIT_TEST(MapBatch) {
             continue;
         }
 
-        auto key = rh.GetKey(it);
+        auto key = rh.GetKeyValue(it);
         auto hit = h.find(key);
         UNIT_ASSERT(hit != h.end());
-        UNIT_ASSERT_VALUES_EQUAL(*(i64*)rh.GetPayload(it), hit->second);
+        UNIT_ASSERT_VALUES_EQUAL(ReadUnaligned<i64>(rh.GetPayloadPtr(it)), hit->second);
         h.erase(key);
     }
 
@@ -178,11 +178,11 @@ Y_UNIT_TEST(FixedMapBatch) {
     auto processBatch = [&]() {
         rh.BatchInsert({batch.data(), batchLen}, [&](size_t i, THashTable::iterator iter, bool isNew) {
             UNIT_ASSERT_VALUES_EQUAL(isNew, batchInserted[i]);
-            UNIT_ASSERT_VALUES_EQUAL(rh.GetKey(iter), batch[i].GetKey());
+            UNIT_ASSERT_VALUES_EQUAL(rh.GetKeyValue(iter), batch[i].GetKey());
             if (isNew) {
-                *(i64*)rh.GetMutablePayload(iter) = batchI[i];
+                WriteUnaligned<i64>(rh.GetMutablePayloadPtr(iter), batchI[i]);
             } else {
-                *(i64*)rh.GetMutablePayload(iter) += batchI[i];
+                WriteUnaligned<i64>(rh.GetMutablePayloadPtr(iter), ReadUnaligned<i64>(rh.GetPayloadPtr(iter)) + batchI[i]);
             }
         });
 
@@ -210,10 +210,10 @@ Y_UNIT_TEST(FixedMapBatch) {
             continue;
         }
 
-        auto key = rh.GetKey(it);
+        auto key = rh.GetKeyValue(it);
         auto hit = h.find(key);
         UNIT_ASSERT(hit != h.end());
-        UNIT_ASSERT_VALUES_EQUAL(*(i64*)rh.GetPayload(it), hit->second);
+        UNIT_ASSERT_VALUES_EQUAL(ReadUnaligned<i64>(rh.GetPayloadPtr(it)), hit->second);
         h.erase(key);
     }
 
@@ -231,7 +231,7 @@ Y_UNIT_TEST(SetBatch) {
     auto processBatch = [&]() {
         rh.BatchInsert({batch.data(), batchLen}, [&](size_t i, THashTable::iterator iter, bool isNew) {
             UNIT_ASSERT_VALUES_EQUAL(isNew, batchInserted[i]);
-            UNIT_ASSERT_VALUES_EQUAL(rh.GetKey(iter), batch[i].GetKey());
+            UNIT_ASSERT_VALUES_EQUAL(rh.GetKeyValue(iter), batch[i].GetKey());
         });
 
         UNIT_ASSERT_VALUES_EQUAL(h.size(), rh.GetSize());
@@ -256,7 +256,7 @@ Y_UNIT_TEST(SetBatch) {
             continue;
         }
 
-        auto key = rh.GetKey(it);
+        auto key = rh.GetKeyValue(it);
         auto hit = h.find(key);
         UNIT_ASSERT(hit != h.end());
         h.erase(key);
@@ -271,7 +271,7 @@ Y_UNIT_TEST(Power2Collisions) {
         auto k = i << 32;
         bool isNew;
         auto iter = rh.Insert(k, isNew);
-        UNIT_ASSERT_VALUES_EQUAL(rh.GetKey(iter), k);
+        UNIT_ASSERT_VALUES_EQUAL(rh.GetKeyValue(iter), k);
         if (isNew) {
             rh.CheckGrow();
         }
@@ -285,7 +285,8 @@ Y_UNIT_TEST(Power2Collisions) {
             continue;
         }
 
-        auto distance = rh.GetPSL(it).Distance;
+        auto psl = ReadUnaligned<decltype(rh)::TPSLStorage>(rh.GetPslPtr(it));
+        auto distance = psl.Distance;
         maxDistance = Max(maxDistance, distance);
     }
 
@@ -315,8 +316,8 @@ Y_UNIT_TEST(RehashCollisions) {
         auto k = values[i];
         bool isNew;
         auto iter = rh.Insert(k, isNew);
-        if (rh.GetKey(iter) != k) {
-            UNIT_ASSERT_VALUES_EQUAL(rh.GetKey(iter), k);
+        if (rh.GetKeyValue(iter) != k) {
+            UNIT_ASSERT_VALUES_EQUAL(rh.GetKeyValue(iter), k);
         }
 
         if (isNew) {
@@ -337,14 +338,15 @@ Y_UNIT_TEST(RehashCollisions) {
             continue;
         }
 
-        auto distance = rh.GetPSL(it).Distance;
+        auto psl = ReadUnaligned<decltype(rh)::TPSLStorage>(rh.GetPslPtr(it));
+        auto distance = psl.Distance;
         maxDistance1 = Max(maxDistance1, distance);
 
-        auto k = rh.GetKey(it);
+        auto k = rh.GetKeyValue(it);
         bool isNew;
         auto iter = rh2.Insert(k, isNew);
-        if (rh2.GetKey(iter) != k) {
-            UNIT_ASSERT_VALUES_EQUAL(rh2.GetKey(iter), k);
+        if (rh2.GetKeyValue(iter) != k) {
+            UNIT_ASSERT_VALUES_EQUAL(rh2.GetKeyValue(iter), k);
         }
 
         if (isNew) {
@@ -367,7 +369,8 @@ Y_UNIT_TEST(RehashCollisions) {
             continue;
         }
 
-        auto distance = rh2.GetPSL(it).Distance;
+        auto psl = ReadUnaligned<decltype(rh2)::TPSLStorage>(rh2.GetPslPtr(it));
+        auto distance = psl.Distance;
         maxDistance2 = Max(maxDistance2, distance);
     }
 
@@ -383,14 +386,14 @@ Y_UNIT_TEST(Lookup) {
         auto [it, inserted] = h.emplace(k, 0);
         bool isNew;
         auto iter = rh.Insert(k, isNew);
-        UNIT_ASSERT_VALUES_EQUAL(rh.GetKey(iter), k);
+        UNIT_ASSERT_VALUES_EQUAL(rh.GetKeyValue(iter), k);
         UNIT_ASSERT_VALUES_EQUAL(isNew, inserted);
         it->second += i;
         if (isNew) {
-            *(i64*)rh.GetMutablePayload(iter) = i;
+            WriteUnaligned<i64>(rh.GetMutablePayloadPtr(iter), i);
             rh.CheckGrow();
         } else {
-            *(i64*)rh.GetMutablePayload(iter) += i;
+            WriteUnaligned<i64>(rh.GetMutablePayloadPtr(iter), ReadUnaligned<i64>(rh.GetPayloadPtr(iter)) + i);
         }
 
         UNIT_ASSERT_VALUES_EQUAL(h.size(), rh.GetSize());
@@ -399,7 +402,7 @@ Y_UNIT_TEST(Lookup) {
     for (ui64 i = 0; i < 1000; ++i) {
         auto iter = rh.Lookup(i);
         auto hit = h.find(i);
-        UNIT_ASSERT_VALUES_EQUAL(*(i64*)rh.GetPayload(iter), hit->second);
+        UNIT_ASSERT_VALUES_EQUAL(ReadUnaligned<i64>(rh.GetPayloadPtr(iter)), hit->second);
         h.erase(hit);
     }
 
@@ -415,14 +418,14 @@ Y_UNIT_TEST(BatchLookup) {
         auto [it, inserted] = h.emplace(k, 0);
         bool isNew;
         auto iter = rh.Insert(k, isNew);
-        UNIT_ASSERT_VALUES_EQUAL(rh.GetKey(iter), k);
+        UNIT_ASSERT_VALUES_EQUAL(rh.GetKeyValue(iter), k);
         UNIT_ASSERT_VALUES_EQUAL(isNew, inserted);
         it->second += i;
         if (isNew) {
-            *(i64*)rh.GetMutablePayload(iter) = i;
+            WriteUnaligned<i64>(rh.GetMutablePayloadPtr(iter), i);
             rh.CheckGrow();
         } else {
-            *(i64*)rh.GetMutablePayload(iter) += i;
+            WriteUnaligned<i64>(rh.GetMutablePayloadPtr(iter), ReadUnaligned<i64>(rh.GetPayloadPtr(iter)) + i);
         }
 
         UNIT_ASSERT_VALUES_EQUAL(h.size(), rh.GetSize());
@@ -436,7 +439,7 @@ Y_UNIT_TEST(BatchLookup) {
         rh.BatchLookup({batch.data(), batchLen}, [&](size_t i, THashTable::iterator iter) {
             auto key = batchI[i];
             auto hit = h.find(key);
-            UNIT_ASSERT_VALUES_EQUAL(*(i64*)rh.GetPayload(iter), hit->second);
+            UNIT_ASSERT_VALUES_EQUAL(ReadUnaligned<i64>(rh.GetPayloadPtr(iter)), hit->second);
             h.erase(hit);
         });
     };

@@ -358,11 +358,9 @@ TRuntimeNode TKqpProgramBuilder::FulltextAnalyze(TRuntimeNode text, TRuntimeNode
 {
     // Validate text argument - should be a string or optional string
     const auto& textType = text.GetStaticType();
-    bool isTextOptional = false;
     const TDataType* textDataType = nullptr;
     
     if (textType->IsOptional()) {
-        isTextOptional = true;
         auto optionalType = static_cast<const TOptionalType*>(textType);
         auto itemType = optionalType->GetItemType();
         MKQL_ENSURE(itemType->IsData(), "Expected data type inside optional for text.");
@@ -384,7 +382,7 @@ TRuntimeNode TKqpProgramBuilder::FulltextAnalyze(TRuntimeNode text, TRuntimeNode
     auto stringType = TDataType::Create(NUdf::TDataType<char*>::Id, Env);
     auto listType = TListType::Create(stringType, Env);
 
-    TCallableBuilder callableBuilder(Env, "FulltextTokenize", listType);
+    TCallableBuilder callableBuilder(Env, __func__, listType);
     callableBuilder.Add(text);
     callableBuilder.Add(settings);
     return TRuntimeNode(callableBuilder.Build(), false);

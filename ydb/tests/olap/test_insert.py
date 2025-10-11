@@ -195,7 +195,7 @@ class TestInsertStatement(object):
             self.ydb_client.query(f"INSERT INTO `{self.table_path}` (id, vn, vs) VALUES (0, 1, 'One');")
             assert False, 'Should Fail'
         except ydb.issues.PreconditionFailed as ex:
-            assert "Conflict with existing key" in str(ex), str(ex)
+            assert "Conflict with existing key" in ex.message
 
         # then
         result_sets = self.ydb_client.query(f"SELECT * FROM `{self.table_path}`")
@@ -232,7 +232,7 @@ class TestInsertStatement(object):
             # then
             assert False, 'Should Fail'
         except ydb.issues.SchemeError as ex:
-            assert "Cannot find table" in str(ex), str(ex)
+            assert "Cannot find table" in ex.message
 
         try:
             # when wrong column name
@@ -240,7 +240,7 @@ class TestInsertStatement(object):
             # then
             assert False, 'Should Fail'
         except ydb.issues.GenericError as ex:
-            assert "No such column: wrongColumn" in str(ex), str(ex)
+            assert "No such column: wrongColumn" in ex.message
 
         try:
             # when wrong data type
@@ -248,7 +248,7 @@ class TestInsertStatement(object):
             # then
             assert False, 'Should Fail'
         except ydb.issues.GenericError as ex:
-            assert "Failed to convert type" in str(ex), str(ex)
+            assert "Failed to convert type" in ex.message
 
 
     def test_out_of_range(self):
@@ -272,7 +272,7 @@ class TestInsertStatement(object):
             # then
             assert False, 'Should Fail'
         except ydb.issues.GenericError as ex:
-            assert "Failed to convert type" in str(ex), str(ex)
+            assert "Failed to convert type" in ex.message
 
         try:
             # when too small
@@ -280,4 +280,4 @@ class TestInsertStatement(object):
             # then
             assert False, 'Should Fail'
         except ydb.issues.GenericError as ex:
-            assert "Failed to convert type" in str(ex), str(ex)
+            assert "Failed to convert type" in ex.message

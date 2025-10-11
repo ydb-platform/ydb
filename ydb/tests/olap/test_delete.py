@@ -140,21 +140,21 @@ class TestDelete(object):
             self.ydb_client.query("DELETE FROM `wrongTable`;")
         # then
             assert False, 'Should Fail'
-        except ydb.issues.SchemeError:
-            pass
+        except ydb.issues.SchemeError as ex:
+            assert "Cannot find table" in ex.message
 
         try:
         # when wrong column name
             self.ydb_client.query(f"DELETE FROM `{self.table_path}` WHERE wrongColumn = 0;")
         # then
             assert False, 'Should Fail'
-        except ydb.issues.GenericError:
-            pass
+        except ydb.issues.GenericError as ex:
+            assert "No such column: wrongColumn" in ex.message
 
         try:
         # when wrong data type
-            self.ydb_client.query(f"DELETE FROM `{self.table_path}` vn = 'A';")
+            self.ydb_client.query(f"DELETE FROM `{self.table_path}` WHERE vn = 'A';")
         # then
             assert False, 'Should Fail'
-        except ydb.issues.GenericError:
-            pass
+        except ydb.issues.GenericError as ex:
+            assert "Failed to convert type" in ex.message

@@ -236,21 +236,22 @@ class TestReplace(object):
             self.ydb_client.query(f"REPLACE INTO `wrongTable` (id, vn, vs) VALUES (0, 0, 'A');")
         # then
             assert False, 'Should Fail'
-        except ydb.issues.SchemeError:
-            pass
+        except ydb.issues.SchemeError as ex:
+            assert "Cannot find table" in ex.message
 
         try:
         # when wrong column name
             self.ydb_client.query(f"REPLACE INTO `{self.table_path}` (id, wrongColumn, vs) VALUES (0, 0, 'A');")
         # then
             assert False, 'Should Fail'
-        except ydb.issues.GenericError:
-            pass
+        except ydb.issues.GenericError as ex:
+            assert "No such column: wrongColumn" in ex.message
 
         try:
         # when wrong data type
             self.ydb_client.query(f"REPLACE INTO `{self.table_path}` (id, vn, vs) VALUES (0, 'A', 0);")
         # then
             assert False, 'Should Fail'
-        except ydb.issues.GenericError:
-            pass
+        except ydb.issues.GenericError as ex:
+            assert "Failed to convert type" in ex.message
+

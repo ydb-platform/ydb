@@ -106,8 +106,8 @@ class TestCreate(object):
         try:
             self.ydb_client.query(f"INSERT INTO `{table_path}` (id) VALUES (0);")
             assert False, "Should Fail"
-        except:
-            pass
+        except ydb.issues.GenericError as ex:
+            assert "NotEnough" in ex.message
 
         self.ydb_client.query(
             f"""
@@ -191,8 +191,8 @@ class TestCreate(object):
         try:
             self.ydb_client.query(f"INSERT INTO `{table_path}` (id) VALUES (0);")
             assert False, "Should Fail"
-        except:
-            pass
+        except ydb.issues.GenericError as ex:
+            assert "NotEnough" in ex.message
 
         self.ydb_client.query(
             f"""
@@ -302,4 +302,4 @@ class TestCreate(object):
             )
             assert False, "Should Fail"
         except ydb.issues.SchemeError as ex:
-            assert "Type \\'DyNumber\\' specified for column \\'v0\\' is not supported" in str(ex), str(ex)
+            assert "Type \\'DyNumber\\' specified for column \\'v0\\' is not supported" in ex.message

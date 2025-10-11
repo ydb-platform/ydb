@@ -110,7 +110,7 @@ class TestSelect(object):
             # then
             assert False, 'Should Fail'
         except ydb.issues.SchemeError as ex:
-            assert "Cannot find table" in str(ex), str(ex)
+            assert "Cannot find table" in ex.message
 
         try:
             # when wrong column name
@@ -118,7 +118,7 @@ class TestSelect(object):
             # then
             assert False, 'Should Fail'
         except ydb.issues.GenericError as ex:
-            assert "Member not found: wrongColumn" in str(ex), str(ex)
+            assert "Member not found: wrongColumn" in ex.message
 
         try:
             # when wrong data type
@@ -126,7 +126,7 @@ class TestSelect(object):
             # then
             assert False, 'Should Fail'
         except ydb.issues.GenericError as ex:
-            assert "Cannot add type Optional<Utf8> and Int32" in str(ex), str(ex)
+            assert "Cannot add type Optional<Utf8> and Int32" in ex.message
 
 
 

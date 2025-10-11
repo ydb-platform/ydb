@@ -192,21 +192,21 @@ class TestUpsert(object):
             self.ydb_client.query("UPSERT INTO `wrongTable` (id, vn, vs) VALUES (0, 0, 'A');")
             # then
             assert False, 'Should Fail'
-        except ydb.issues.SchemeError:
-            pass
+        except ydb.issues.SchemeError as ex:
+            assert "Cannot find table" in ex.message
 
         try:
             # when wrong column name
             self.ydb_client.query(f"UPSERT INTO `{self.table_path}` (id, wrongColumn, vs) VALUES (0, 0, 'A');")
             # then
             assert False, 'Should Fail'
-        except ydb.issues.GenericError:
-            pass
+        except ydb.issues.GenericError as ex:
+            assert "Member not found: wrongColumn" in ex.message
 
         try:
             # when wrong data type
             self.ydb_client.query(f"UPSERT INTO `{self.table_path}` (id, vn, vs) VALUES (0, 'A', 0);")
             # then
             assert False, 'Should Fail'
-        except ydb.issues.GenericError:
-            pass
+        except ydb.issues.GenericError as ex:
+            assert "Cannot add type Optional<Utf8> and Int32" in ex.message

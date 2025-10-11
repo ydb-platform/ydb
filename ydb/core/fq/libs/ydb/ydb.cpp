@@ -288,7 +288,6 @@ TFuture<TStatus> CreateTable(
     TTableDescription&& description)
 {
     auto tablePath = JoinPath(ydbConnection->GetTablePathPrefixWithoutDb(), name.c_str());
-
     return ydbConnection->GetYdbTableClient()->RetryOperation(
         [db = ydbConnection->GetDb(), tablePath = std::move(tablePath), description = std::move(description)] (ISession::TPtr session) mutable {
             return session->CreateTable(db, tablePath, TTableDescription(description));

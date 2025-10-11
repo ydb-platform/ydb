@@ -104,28 +104,27 @@ public:
         authConfig.SetUseBuiltinDomain(true);
         ServerSettings = MakeHolder<Tests::TServerSettings>(MsgBusPort, authConfig);
         ServerSettings->AppConfig->MutableQueryServiceConfig()->MutableCheckpointsConfig()->SetEnabled(true);
+        ServerSettings->AppConfig->MutableFeatureFlags()->SetEnableStreamingQueries(true);
+
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableStreamingQueries(true);
+        ServerSettings->SetFeatureFlags(featureFlags);
+
+
         ServerSettings->SetEnableScriptExecutionOperations(true);
         ServerSettings->SetInitializeFederatedQuerySetupFactory(true);
         ServerSettings->SetGrpcPort(GrpcPort);
         ServerSettings->NodeCount = 1;
         Server = MakeHolder<Tests::TServer>(*ServerSettings);
         Client = MakeHolder<Tests::TClient>(*ServerSettings);
-
         Server->GetRuntime()->SetLogPriority(NKikimrServices::KQP_PROXY, NActors::NLog::PRI_DEBUG);
         Server->GetRuntime()->SetLogPriority(NKikimrServices::STREAMS_STORAGE_SERVICE, NActors::NLog::PRI_DEBUG);
-        //Server->GetRuntime()->SetLogPriority(NKikimrServices::INTERCONNECT_PROXY_TCP, NActors::NLog::PRI_DEBUG);
-    //    Server->GetRuntime()->SetLogPriority(NKikimrServices::INTERCONNECT_SESSION_TCP, NActors::NLog::PRI_DEBUG);
-     //   Server->GetRuntime()->SetLogPriority(NActorsServices::INTERCONNECT, NActors::NLog::PRI_DEBUG);
-   //     Server->GetRuntime()->SetLogPriority(NActorsServices::INTERCONNECT_SESSION, NActors::NLog::PRI_DEBUG);
-
         Server->GetRuntime()->SetDispatchTimeout(TestTimeout);
         Server->EnableGRpc(GrpcPort);
         Client->InitRootScheme();
 
         Sleep(TDuration::Seconds(5));
         Cerr << "\n\n\n--------------------------- INIT FINISHED ---------------------------\n\n\n";
-
-     //   PrepareTestActorRuntime();
     }
 
     void RegisterCoordinator(

@@ -1779,13 +1779,11 @@ private:
     }
 
     void InitCheckpointStorage() {
-
-      //  !AppData()->FeatureFlags.GetEnableStreamingQueries()
-        Cerr << "InitCheckpointStorage 0 " << Endl;
+        if (!AppData()->FeatureFlags.GetEnableStreamingQueries()) {
+            return;
+        }
         const auto& checkpointConfig = QueryServiceConfig.GetCheckpointsConfig();
         if (!checkpointConfig.GetEnabled() || !FederatedQuerySetup) {
-            Cerr << "InitCheckpointStorage GetEnabled " << checkpointConfig.GetEnabled() << Endl;
-            Cerr << "InitCheckpointStorage !FederatedQuerySetup " << (bool)(!FederatedQuerySetup) << Endl;
             return;
         }
         auto service = NFq::NewCheckpointStorageService(

@@ -6,6 +6,7 @@ SRCS(
     ydb.cpp
     query_actor.cpp
     ydb_local_connection.cpp
+    ydb_sdk_connection.cpp
 )
 
 PEERDIR(

@@ -819,38 +819,6 @@ TFuture<TIssues> TCheckpointStorage::Init()
 //         }
 //     }
 
-// #define RUN_CREATE_TABLE(tableName, desc)                           \
-//     {                                                               \
-//         auto status = CreateTable(YdbConnection,                    \
-//                                   tableName,                        \
-//                                   std::move(desc)).GetValueSync();  \
-//         if (!IsTableCreated(status)) {                              \
-//             issues = NYdb::NAdapters::ToYqlIssues(status.GetIssues());                            \
-//                                                                     \
-//             TStringStream ss;                                       \
-//             ss << "Failed to create " << tableName                  \
-//                << " table: " << status.GetStatus();                 \
-//             if (issues) {                                           \
-//                 ss << ", issues: ";                                 \
-//                 issues.PrintTo(ss);                                 \
-//             }                                                       \
-//                                                                     \
-//             return MakeFuture(std::move(issues));                   \
-//         }                                                           \
-//     }
-
-
-
-
-// #undef RUN_CREATE_TABLE
-
-//     return MakeFuture(std::move(issues));
-
-    // auto promise = NThreading::NewPromise<TIssues>();
-    // TActivationContext::Register(new TTablesCreator(promise));
-    // return promise.GetFuture();
-
-
 #define RUN_CREATE_TABLE(tableName, desc)                           \
     {                                                               \
         auto status = CreateTable(YdbConnection,                    \

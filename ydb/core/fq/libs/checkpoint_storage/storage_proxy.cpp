@@ -24,6 +24,7 @@
 #include <util/string/strip.h>
 
 #include <ydb/core/fq/libs/ydb/ydb_local_connection.h>
+#include <ydb/core/base/appdata_fwd.h>
 
 namespace NFq {
 
@@ -164,16 +165,16 @@ void TStorageProxy::Bootstrap() {
     Become(&TStorageProxy::StateFunc);
     
     LOG_STREAMS_STORAGE_SERVICE_INFO("Bootstrap");
-    auto ydbConnectionPtr = CreateLocalYdbConnection("dc-1", ".metadata/checkpoints"); //NewYdbConnection(Config.GetExternalStorage(), CredentialsProviderFactory, Driver);
-   // auto gateway = MakeIntrusive<YdbSdkTableGateway>(ydbConnectionPtr->TableClient, ydbConnectionPtr->DB, ydbConnectionPtr->TablePathPrefix);
-  // auto gateway = MakeIntrusive<YdbLocalTableGateway>(ydbConnectionPtr->DB, /*ydbConnectionPtr->TablePathPrefix*/ "/dc-1/.metadata/checkpoints");
-    
-   // auto [storage, actor] = NewYdbCheckpointStorage(StorageConfig, CreateEntityIdGenerator(IdsPrefix), ydbConnectionPtr, gateway);
-    // CheckpointStorage = storage;
-
-    CheckpointStorage = NewYdbCheckpointStorage(StorageConfig, CreateEntityIdGenerator(IdsPrefix), ydbConnectionPtr);
-
-    StateStorage = NewYdbStateStorage(Config, ydbConnectionPtr);
+    IYdbConnection::TPtr ydbConnection;
+    if (StorageConfig.HasEndpoint()) {
+        LOG_STREAMS_STORAGE_SERVICE_INFO("Create sdk ydb connection");
+        ydbConnection = CreateSdkYdbConnection(StorageConfig, CredentialsProviderFactory, Driver);
+    } else {
+        LOG_STREAMS_STORAGE_SERVICE_INFO("Create local ydb connection");
+        ydbConnection = CreateLocalYdbConnection(NKikimr::AppData()->TenantName, ".metadata/checkpoints");
+    }
+    CheckpointStorage = NewYdbCheckpointStorage(StorageConfig, CreateEntityIdGenerator(IdsPrefix), ydbConnection);
+    StateStorage = NewYdbStateStorage(Config, ydbConnection);
     const auto& gcConfig = Config.GetCheckpointGarbageConfig();
     ActorGC = Register(NewGC(gcConfig, CheckpointStorage, StateStorage).release());
     Initialize();

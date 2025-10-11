@@ -13,7 +13,7 @@ struct TLocalYdbConnection : public IYdbConnection {
     }
 
     IYdbTableClient::TPtr GetYdbTableClient() override {
-        return CreateLocalTableClient();
+        return CreateLocalTableClient();  // TODO member
     }
     TString GetTablePathPrefix() override {
         return Db + '/' + TablePathPrefix;

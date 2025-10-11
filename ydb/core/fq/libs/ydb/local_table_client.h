@@ -6,8 +6,6 @@
 
 namespace NFq {
 
-
-
 struct TLocalYdbTableClient : public IYdbTableClient {
 
     NYdb::TAsyncStatus RetryOperation(

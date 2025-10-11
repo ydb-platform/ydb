@@ -360,6 +360,7 @@ public:
         entry.SyncVersion = false;
         entry.ShowPrivatePath = false;
         auto request = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
+        request->DatabaseName = GetDatabase();
         request->ResultSet.emplace_back(entry);
         Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.release()), 0, 0, Span.GetTraceId());
         return true;

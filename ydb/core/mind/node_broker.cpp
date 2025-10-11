@@ -1394,7 +1394,7 @@ void TNodeBroker::TDirtyState::DbUpdateNodeLocation(const TNodeInfo &node,
 }
 
 void TNodeBroker::TDirtyState::DbReleaseSlotIndex(const TNodeInfo &node,
-                                       TTransactionContext &txc) 
+                                       TTransactionContext &txc)
 {
 
     LOG_DEBUG_S(TActorContext::AsActorContext(), NKikimrServices::NODE_BROKER,
@@ -1405,7 +1405,7 @@ void TNodeBroker::TDirtyState::DbReleaseSlotIndex(const TNodeInfo &node,
     db.Table<T>().Key(node.NodeId)
         .UpdateToNull<T::SlotIndex>();
 }
-  
+
 void TNodeBroker::TDirtyState::DbUpdateNodeAuthorizedByCertificate(const TNodeInfo &node,
                                        TTransactionContext &txc)
 {
@@ -1539,6 +1539,8 @@ void TNodeBroker::Handle(TEvNodeBroker::TEvRegistrationRequest::TPtr &ev,
 
             if (record.HasPath()) {
                 auto req = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+                req->DatabaseName = AppData()->DomainsInfo->GetDomain()->Name;
+
                 auto& rset = req->ResultSet;
                 rset.emplace_back();
                 auto& item = rset.back();
@@ -1601,9 +1603,9 @@ void TNodeBroker::Handle(TEvNodeBroker::TEvRegistrationRequest::TPtr &ev,
 void TNodeBroker::Handle(TEvNodeBroker::TEvGracefulShutdownRequest::TPtr &ev,
                          const TActorContext &ctx) {
     LOG_TRACE_S(ctx, NKikimrServices::NODE_BROKER, "Handle TEvNodeBroker::TEvGracefulShutdownRequest"
-        << ": request# " << ev->Get()->Record.ShortDebugString());   
+        << ": request# " << ev->Get()->Record.ShortDebugString());
     TabletCounters->Cumulative()[COUNTER_GRACEFUL_SHUTDOWN_REQUESTS].Increment(1);
-    Execute(CreateTxGracefulShutdown(ev), ctx);                     
+    Execute(CreateTxGracefulShutdown(ev), ctx);
 }
 
 void TNodeBroker::Handle(TEvNodeBroker::TEvExtendLeaseRequest::TPtr &ev,

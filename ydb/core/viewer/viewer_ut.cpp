@@ -15,6 +15,7 @@
 #include "viewer_tabletinfo.h"
 #include "viewer_vdiskinfo.h"
 #include "viewer_pdiskinfo.h"
+#include <ydb/services/ydb/ydb_keys_ut.h>
 #include "query_autocomplete_helper.h"
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -30,6 +31,15 @@
 #include <util/string/builder.h>
 #include <regex>
 
+#include <library/cpp/string_utils/quote/quote.h>
+#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/tests_data.h>
+#include <library/cpp/http/fetch/httpheader.h>
+#include <ydb/core/testlib/test_pq_client.h>
+#include <ydb/core/testlib/test_client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
+
 using namespace NKikimr;
 using namespace NViewer;
 using namespace NKikimrWhiteboard;
@@ -40,6 +50,12 @@ using namespace NMonitoring;
 using namespace NMonitoring::NTests;
 using namespace NKikimr::NViewerTests;
 using TNavigate = NSchemeCache::TSchemeCacheNavigate;
+
+// using namespace NKikimr;
+using namespace Tests;
+using namespace NYdb::NPersQueue;
+// using namespace NHttp;
+using namespace NJson;
 
 #ifdef NDEBUG
 #define Ctest Cnull
@@ -474,6 +490,28 @@ Y_UNIT_TEST_SUITE(Viewer) {
             { "database_id", "test_database_id" },
         });
         UNIT_ASSERT_EQUAL(alterAttrsStatus, NMsgBusProxy::MSTATUS_OK);
+    }
+
+   TKeepAliveHttpClient::THttpCode PostOffsetCommit(TKeepAliveHttpClient& httpClient,
+                                                    const TString& token,
+                                                    const TString& database = "/Root",
+                                                    const TString& path = "/Root/topic1",
+                                                    const TString& consumer = "consumer1",
+                                                    const i32 partition_id = 0,
+                                                    const i32 offset = 0) {
+        NJson::TJsonValue jsonRequest;
+        jsonRequest["database"] = database;
+        jsonRequest["path"] = path;
+        jsonRequest["consumer"] = consumer;
+        jsonRequest["partition_id"] = partition_id;
+        jsonRequest["offset"] = offset;
+        TStringStream responseStream;
+        TKeepAliveHttpClient::THeaders headers;
+        headers["Content-Type"] = "application/json";
+        headers["Authorization"] = token;
+        Cerr << "Doing PostOffsetCommit" << Endl;
+        const TKeepAliveHttpClient::THttpCode statusCode = httpClient.DoPost("/viewer/commit_offset", NJson::WriteJson(jsonRequest, false), &responseStream, headers);
+        return statusCode;
     }
 
     NJson::TJsonValue SendQuery(const TString& query, const TString& schema, const bool base64) {
@@ -1891,6 +1929,99 @@ Y_UNIT_TEST_SUITE(Viewer) {
         const TString response = responseStream.ReadAll();
         UNIT_ASSERT_EQUAL_C(statusCode, HTTP_OK, statusCode << ": " << response);
         UNIT_ASSERT_C(response.StartsWith("<svg"), response);
+    }
+
+    Y_UNIT_TEST(CommitOffsetTest) {
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        ui16 monPort = tp.GetPort(8765);
+
+        auto settings = NKikimr::NPersQueueTests::PQSettings(port, 1);
+        settings.PQConfig.MutableQuotingConfig()->SetEnableQuoting(false);
+        settings.PQConfig.SetTopicsAreFirstClassCitizen(true);
+
+        settings.InitKikimrRunConfig()
+                .SetNodeCount(1)
+                .SetUseRealThreads(true)
+                .SetDomainName("Root")
+                .SetMonitoringPortOffset(monPort, true);
+        settings.CreateTicketParser = CreateFakeTicketParser;
+        auto grpcSettings = NYdbGrpc::TServerOptions().SetHost("[::1]").SetPort(grpcPort);
+        TServer server{settings};
+        server.EnableGRpc(grpcSettings);
+        auto client = MakeHolder<NKikimr::NPersQueueTests::TFlatMsgBusPQClient>(settings, grpcPort);
+        client->InitRoot();
+        client->InitSourceIds();
+        NYdb::TDriverConfig driverCfg;
+        TString topicPath = "/Root/topic1";
+        driverCfg.SetEndpoint(TStringBuilder() << "localhost:" << grpcPort)
+                .SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG).Release()));
+
+        TString consumerName = "consumer1";
+        NYdb::TDriver ydbDriver{driverCfg};
+
+        driverCfg.UseSecureConnection(TString(NYdbSslTestData::CaCrt));
+        driverCfg.SetAuthToken("root@builtin");
+        auto topicClient = NYdb::NTopic::TTopicClient(ydbDriver);
+
+        auto res = topicClient.CreateTopic(topicPath, NYdb::NTopic::TCreateTopicSettings()
+                        .BeginAddConsumer(consumerName).EndAddConsumer().RetentionPeriod(TDuration::Seconds(1))).GetValueSync();
+        UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+        auto writeData = [&](NYdb::NPersQueue::ECodec codec, ui64 count, const TString& producerId, ui64 size = 100u) {
+            NYdb::NPersQueue::TWriteSessionSettings wsSettings;
+            wsSettings.Path(topicPath);
+            wsSettings.MessageGroupId(producerId);
+            wsSettings.Codec(codec);
+
+            auto writer = TPersQueueClient(ydbDriver).CreateSimpleBlockingWriteSession(TWriteSessionSettings(wsSettings).ClusterDiscoveryMode(EClusterDiscoveryMode::Off));
+            TString dataFiller{size, 'a'};
+
+            for (auto i = 0u; i < count; ++i) {
+                writer->Write(TStringBuilder() << "Message " << i << " : " << dataFiller);
+            }
+            writer->Close();
+        };
+
+        writeData(ECodec::GZIP, 50000, "producer1");
+
+
+        TKeepAliveHttpClient httpClient("localhost", monPort);
+        NKikimr::NViewerTests::WaitForHttpReady(httpClient);
+
+
+        auto postReturnCode1 = PostOffsetCommit(httpClient, VALID_TOKEN);
+        UNIT_ASSERT_EQUAL(postReturnCode1, HTTP_FORBIDDEN);
+
+        TClient client1(settings);
+        client1.InitRootScheme();
+        GrantConnect(client1);
+
+        auto postReturnCode2 = PostOffsetCommit(httpClient, VALID_TOKEN);
+        UNIT_ASSERT_EQUAL(postReturnCode2, HTTP_OK);
+
+        TString invalid_token = "abracadabra";
+        auto postReturnCode10 = PostOffsetCommit(httpClient, invalid_token);
+        UNIT_ASSERT_EQUAL(postReturnCode10, HTTP_FORBIDDEN);
+
+        auto postReturnCode3 = PostOffsetCommit(httpClient, VALID_TOKEN, "/Root", "/Root/topic1", "consumer2", 0, 55000);
+        UNIT_ASSERT_EQUAL(postReturnCode3, HTTP_BAD_REQUEST);
+
+
+        auto describeTopicResult = topicClient.DescribeTopic(topicPath).GetValueSync();
+        UNIT_ASSERT(describeTopicResult.IsSuccess());
+        const auto& consumers = describeTopicResult.GetTopicDescription().GetConsumers();
+        UNIT_ASSERT_EQUAL(consumers.size(), 1);
+        UNIT_ASSERT_EQUAL(consumers[0].GetConsumerName(), consumerName);
+
+        writeData(ECodec::RAW, 50000, "producer2");
+
+        Sleep(TDuration::Seconds(1));
+        auto postReturnCode4 = PostOffsetCommit(httpClient, VALID_TOKEN, "/Root", "/Root/topic1", "consumer1", 0, 1000); // сообщения удалились по retention
+        UNIT_ASSERT_EQUAL(postReturnCode4, HTTP_OK);
+        auto postReturnCode5 = PostOffsetCommit(httpClient, VALID_TOKEN, "/Root", "/Root/topic1", "consumer1", 0, 55000);
+        UNIT_ASSERT_EQUAL(postReturnCode5, HTTP_OK);
+
     }
 
     Y_UNIT_TEST(Plan2SvgBad) {

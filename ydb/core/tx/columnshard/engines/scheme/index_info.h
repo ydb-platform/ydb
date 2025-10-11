@@ -3,11 +3,11 @@
 #include "column_features.h"
 #include "objects_cache.h"
 #include "schema_diff.h"
-#include "tier_info.h"
 
 #include "abstract/index_info.h"
 #include "indexes/abstract/meta.h"
 
+#include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/dictionary/object.h>
 #include <ydb/core/formats/arrow/program/execution.h>
 #include <ydb/core/formats/arrow/serializer/abstract.h>
@@ -17,6 +17,7 @@
 #include <ydb/core/tx/columnshard/common/snapshot.h>
 #include <ydb/core/tx/columnshard/data_accessor/abstract/constructor.h>
 #include <ydb/core/tx/columnshard/engines/scheme/abstract/column_ids.h>
+#include <ydb/core/tx/columnshard/engines/scheme/indexes/abstract/accessor.h>
 
 #include <ydb/library/formats/arrow/transformer/abstract.h>
 
@@ -150,10 +151,13 @@ private:
     std::shared_ptr<TColumnFeatures> BuildDefaultColumnFeatures(
         const NTable::TColumn& column, const std::shared_ptr<IStoragesManager>& operators) const;
 
-    const TString& GetIndexStorageId(const ui32 indexId) const {
+    const TString& GetIndexStorageId(const ui32 indexId, const TString& specialTier, const IColumnIndexAccessor& indexAccessor) const {
+        if (specialTier && specialTier != IStoragesManager::DefaultStorageId && indexAccessor.IsIndexInheritPortionStorage(indexId)) {
+            return specialTier;
+        }
         auto it = Indexes.find(indexId);
         AFL_VERIFY(it != Indexes.end());
-        return it->second->GetStorageId();
+        return it->second->GetDefaultStorageId();
     }
 
     const TString& GetColumnStorageId(const ui32 columnId, const TString& specialTier) const {
@@ -173,15 +177,14 @@ private:
     }
 
 public:
-    const TString& GetEntityStorageId(const ui32 entityId, const TString& specialTier) const {
-        auto it = Indexes.find(entityId);
-        if (it != Indexes.end()) {
-            return it->second->GetStorageId();
+    const TString& GetEntityStorageId(const ui32 entityId, const TString& specialTier, const IColumnIndexAccessor& indexAccessor) const {
+        if (Indexes.contains(entityId)) {
+            return GetIndexStorageId(entityId, specialTier, indexAccessor);
         }
         return GetColumnStorageId(entityId, specialTier);
     }
 
-    NSplitter::TEntityGroups GetEntityGroupsByStorageId(const TString& specialTier, const IStoragesManager& storages) const;
+    NSplitter::TEntityGroups GetEntityGroupsByStorageId(const TString& specialTier, const IStoragesManager& storages, const IColumnIndexAccessor& indexAccessor) const;
     std::optional<ui32> GetPKColumnIndexByIndexVerified(const ui32 columnIndex) const {
         AFL_VERIFY(columnIndex < ColumnFeatures.size());
         return ColumnFeatures[columnIndex]->GetPKColumnIndex();
@@ -359,11 +362,11 @@ public:
     };
 
     [[nodiscard]] TConclusion<TSecondaryData> AppendIndexes(const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& primaryData,
-        const std::shared_ptr<IStoragesManager>& operators, const ui32 recordsCount) const {
+        const std::shared_ptr<IStoragesManager>& operators, const ui32 recordsCount, const TString& specialTier) const {
         TSecondaryData result;
         result.MutableExternalData() = primaryData;
         for (auto&& i : Indexes) {
-            auto conclusion = AppendIndex(primaryData, i.first, operators, recordsCount, result);
+            auto conclusion = AppendIndex(primaryData, i.first, operators, recordsCount, specialTier, result);
             if (conclusion.IsFail()) {
                 return conclusion;
             }
@@ -377,7 +380,7 @@ public:
     std::shared_ptr<NIndexes::NCountMinSketch::TIndexMeta> GetIndexMetaCountMinSketch(const std::set<ui32>& columnIds) const;
 
     [[nodiscard]] TConclusionStatus AppendIndex(const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& originalData,
-        const ui32 indexId, const std::shared_ptr<IStoragesManager>& operators, const ui32 recordsCount, TSecondaryData& result) const;
+        const ui32 indexId, const std::shared_ptr<IStoragesManager>& operators, const ui32 recordsCount, const TString& specialTier, TSecondaryData& result) const;
 
     /// Returns an id of the column located by name. The name should exists in the schema.
     ui32 GetColumnIdVerified(const std::string& name) const;

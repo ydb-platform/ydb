@@ -29,11 +29,12 @@ bool TIndexByColumns::DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDe
     return true;
 }
 
-TIndexByColumns::TIndexByColumns(
-    const ui32 indexId, const TString& indexName, const ui32 columnId, const TString& storageId, const TReadDataExtractorContainer& extractor)
-    : TBase(indexId, indexName, storageId)
+TIndexByColumns::TIndexByColumns(const ui32 indexId, const TString& indexName, const ui32 columnId, const TString& storageId,
+    const bool inheritPortionStorage, const TReadDataExtractorContainer& extractor)
+    : TBase(indexId, indexName, storageId, inheritPortionStorage)
     , DataExtractor(extractor)
-    , ColumnIds({ columnId }) {
+    , ColumnIds({ columnId })
+{
     Serializer = NArrow::NSerialization::TSerializerContainer::GetDefaultSerializer();
 }
 

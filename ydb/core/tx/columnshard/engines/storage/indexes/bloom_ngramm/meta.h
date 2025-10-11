@@ -116,15 +116,16 @@ protected:
 
 public:
     TIndexMeta() = default;
-    TIndexMeta(const ui32 indexId, const TString& indexName, const TString& storageId, const ui32 columnId,
+    TIndexMeta(const ui32 indexId, const TString& indexName, const TString& storageId, const bool inheritPortionIndex, const ui32 columnId,
         const TReadDataExtractorContainer& dataExtractor, const ui32 hashesCount, const ui32 filterSizeBytes, const ui32 nGrammSize,
         const ui32 recordsCount, const std::shared_ptr<IBitsStorageConstructor>& bitsStorageConstructor, const bool caseSensitive)
-        : TBase(indexId, indexName, columnId, storageId, dataExtractor, bitsStorageConstructor)
+        : TBase(indexId, indexName, columnId, storageId, inheritPortionIndex, dataExtractor, bitsStorageConstructor)
         , CaseSensitive(caseSensitive)
         , NGrammSize(nGrammSize)
         , FilterSizeBytes(filterSizeBytes)
         , RecordsCount(recordsCount)
-        , HashesCount(hashesCount) {
+        , HashesCount(hashesCount)
+    {
         Initialize();
     }
 

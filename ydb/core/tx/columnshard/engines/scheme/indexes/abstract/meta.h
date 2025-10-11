@@ -44,7 +44,8 @@ class IIndexMeta {
 private:
     YDB_READONLY_DEF(TString, IndexName);
     YDB_READONLY(ui32, IndexId, 0);
-    YDB_READONLY(TString, StorageId, IStoragesManager::DefaultStorageId);
+    YDB_READONLY(TString, DefaultStorageId, IStoragesManager::DefaultStorageId);
+    YDB_READONLY_DEF(bool, InheritPortionStorage);
 
     virtual std::shared_ptr<NReader::NCommon::IKernelFetchLogic> DoBuildFetchTask(const THashSet<NRequest::TOriginalDataAddress>& dataAddresses,
         const std::shared_ptr<IIndexMeta>& selfPtr,
@@ -88,15 +89,18 @@ public:
         return DoBuildFetchTask(dataAddresses, meta, storagesManager);
     }
 
-    bool IsInplaceData() const {
-        return StorageId == NBlobOperations::TGlobal::LocalMetadataStorageId;
+    bool IsInplaceData(const TString& specialTier) const {
+        return DefaultStorageId == NBlobOperations::TGlobal::LocalMetadataStorageId &&
+               !(InheritPortionStorage && specialTier && specialTier != NBlobOperations::TGlobal::DefaultStorageId);
     }
 
     IIndexMeta() = default;
-    IIndexMeta(const ui32 indexId, const TString& indexName, const TString& storageId)
+    IIndexMeta(const ui32 indexId, const TString& indexName, const TString& storageId, const bool inheritPortionStorage)
         : IndexName(indexName)
         , IndexId(indexId)
-        , StorageId(storageId) {
+        , DefaultStorageId(storageId)
+        , InheritPortionStorage(inheritPortionStorage)
+    {
     }
 
     NJson::TJsonValue SerializeDataToJson(const TIndexChunk& iChunk, const TIndexInfo& indexInfo) const;

@@ -24,6 +24,7 @@ message TIndexChunk {
         optional uint32 RawBytes = 2;
     }
     optional TMeta Meta = 4;
+    optional bool InheritPortionStorage = 6;
 }
 
 message TPortionInfo {

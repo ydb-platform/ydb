@@ -9,6 +9,7 @@ SRCS(
     meta.cpp
     checker.cpp
     common.cpp
+    accessor.cpp
 )
 
 PEERDIR(

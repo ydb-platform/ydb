@@ -47,7 +47,8 @@ std::vector<std::shared_ptr<IPortionDataChunk>> TIndexMeta::DoBuildIndexImpl(TCh
     }
 
     TString indexData(sketch->AsStringBuf());
-    return { std::make_shared<NChunks::TPortionIndexChunk>(TChunkAddress(GetIndexId(), 0), recordsCount, indexData.size(), indexData) };
+    return { std::make_shared<NChunks::TPortionIndexChunk>(
+        TChunkAddress(GetIndexId(), 0), recordsCount, indexData.size(), GetInheritPortionStorage(), indexData) };
 }
 
 }   // namespace NKikimr::NOlap::NIndexes::NCountMinSketch

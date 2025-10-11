@@ -330,11 +330,11 @@ public:
     }
 
     virtual TString GetEntityStorageId(const ui32 entityId) const override {
-        return Portion->GetEntityStorageId(entityId, Schema->GetIndexInfo());
+        return GetPortionAccessor().GetEntityStorageId(entityId, Schema->GetIndexInfo());
     }
 
     virtual TString GetColumnStorageId(const ui32 columnId) const override {
-        return Portion->GetColumnStorageId(columnId, Schema->GetIndexInfo());
+        return GetPortionAccessor().GetEntityStorageId(columnId, Schema->GetIndexInfo());
     }
 
     virtual TBlobRange RestoreBlobRange(const TBlobRangeLink16& rangeLink) const override {

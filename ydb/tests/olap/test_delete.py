@@ -35,7 +35,7 @@ class TestDelete(object):
 
     def create_table(self):
         # avoid using same table in parallel tests
-        self.table_path = f"{self.test_dir}/table{random.randrange(9999)}"
+        self.table_path = f"{self.test_dir}/table{random.randrange(99999)}"
         self.ydb_client.query(
             f"""
             CREATE TABLE `{self.table_path}` (
@@ -149,7 +149,7 @@ class TestDelete(object):
         # then
             assert False, 'Should Fail'
         except ydb.issues.GenericError as ex:
-            assert "No such column: wrongColumn" in ex.message
+            assert "Member not found: wrongColumn" in ex.message
 
         try:
         # when wrong data type

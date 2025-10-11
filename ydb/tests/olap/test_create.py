@@ -42,7 +42,7 @@ class TestCreate(object):
 
 
     def test_create_all_opt_ints(self):
-        table_path = self.get_table_path()
+        table_path = self.get_table_path() + "_1"
         self.ydb_client.query(
             f"""
             CREATE TABLE `{table_path}` (
@@ -84,7 +84,7 @@ class TestCreate(object):
 
 
     def test_create_all_req_ints(self):
-        table_path = self.get_table_path()
+        table_path = self.get_table_path() + "_2"
         self.ydb_client.query(
             f"""
             CREATE TABLE `{table_path}` (
@@ -106,8 +106,8 @@ class TestCreate(object):
         try:
             self.ydb_client.query(f"INSERT INTO `{table_path}` (id) VALUES (0);")
             assert False, "Should Fail"
-        except ydb.issues.GenericError as ex:
-            assert "NotEnough" in ex.message
+        except ydb.issues.BadRequest as ex:
+            assert "Missing not null column in input" in ex.message
 
         self.ydb_client.query(
             f"""
@@ -125,7 +125,7 @@ class TestCreate(object):
 
 
     def test_create_decimals(self):
-        table_path = self.get_table_path()
+        table_path = self.get_table_path() + "_3"
         # create query
         ql = [f"CREATE TABLE `{table_path}` (id Uint64 NOT NULL, "]
         for p in range(1, 36):  # precision up to 35
@@ -175,7 +175,7 @@ class TestCreate(object):
 
 
     def test_create_real_req(self):
-        table_path = self.get_table_path()
+        table_path = self.get_table_path() + "_4"
         self.ydb_client.query(
             f"""
             CREATE TABLE `{table_path}` (
@@ -191,8 +191,8 @@ class TestCreate(object):
         try:
             self.ydb_client.query(f"INSERT INTO `{table_path}` (id) VALUES (0);")
             assert False, "Should Fail"
-        except ydb.issues.GenericError as ex:
-            assert "NotEnough" in ex.message
+        except ydb.issues.BadRequest as ex:
+            assert "Missing not null column in input" in ex.message
 
         self.ydb_client.query(
             f"""
@@ -211,7 +211,7 @@ class TestCreate(object):
         assert rows[0]['v1'] == pytest.approx(2.3)
 
     def test_create_real_opt(self):
-        table_path = self.get_table_path()
+        table_path = self.get_table_path() + "_5"
         self.ydb_client.query(
             f"""
             CREATE TABLE `{table_path}` (
@@ -250,7 +250,7 @@ class TestCreate(object):
 
 
     def test_create_strings_opt(self):
-        table_path = self.get_table_path()
+        table_path = self.get_table_path() + "_6"
         self.ydb_client.query(
             f"""
             CREATE TABLE `{table_path}` (
@@ -288,7 +288,7 @@ class TestCreate(object):
 
 
     def test_dy_number_not_supported(self):
-        table_path = self.get_table_path()
+        table_path = self.get_table_path() + "_7"
         try:
             self.ydb_client.query(
                 f"""

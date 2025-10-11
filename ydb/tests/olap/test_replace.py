@@ -30,10 +30,14 @@ class TestReplace(object):
         cls.ydb_client = YdbClient(database=f"/{config.domain_name}", endpoint=f"grpc://{node.host}:{node.port}")
         cls.ydb_client.wait_connection()
 
-        test_dir = f"{cls.ydb_client.database}/{cls.test_name}"
-        cls.table_path = f"{test_dir}/table"
+        cls.test_dir = f"{cls.ydb_client.database}/{cls.test_name}"
+
+    def get_table_path(self):
+        # avoid using same table in parallel tests
+        return f"{self.test_dir}/table{random.randrange(99999)}"
 
     def create_table(self):
+        self.table_path = self.get_table_path()
         self.ydb_client.query(
             f"""
             CREATE TABLE `{self.table_path}` (

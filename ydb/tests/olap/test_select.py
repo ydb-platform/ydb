@@ -33,9 +33,12 @@ class TestSelect(object):
 
         cls.test_dir = f"{cls.ydb_client.database}/{cls.test_name}"
 
-    def create_table(self):
+    def get_table_path(self):
         # avoid using same table in parallel tests
-        self.table_path = f"{self.test_dir}/table{random.randrange(9999)}"
+        return f"{self.test_dir}/table{random.randrange(99999)}"
+
+    def create_table(self):
+        self.table_path = self.get_table_path()
         self.ydb_client.query(
             f"""
             CREATE TABLE `{self.table_path}` (
@@ -52,7 +55,7 @@ class TestSelect(object):
 
     def test_json_query(self):
         # given
-        self.table_path = f"{self.test_dir}/table{random.randrange(9999)}"
+        self.table_path = self.get_table_path() + "_js"
         self.ydb_client.query(
             f"""
             CREATE TABLE `{self.table_path}` (

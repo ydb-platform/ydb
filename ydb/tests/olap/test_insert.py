@@ -39,7 +39,6 @@ class TestInsertStatement(object):
         return f"{self.test_dir}/table{random.randrange(99999)}"
 
     def create_table(self):
-        # avoid using same table in parallel tests
         self.table_path = self.get_table_path()
         self.ydb_client.query(
             f"""
@@ -126,7 +125,7 @@ class TestInsertStatement(object):
         # given
         self.create_table()
         self.write_data()
-        t2 = f"{self.table_path}_2"
+        t2 = self.get_table_path() + "_2f"
         self.ydb_client.query(
             f"""
             CREATE TABLE `{t2}` (
@@ -154,7 +153,7 @@ class TestInsertStatement(object):
         # given
         self.create_table()
         self.write_data()
-        t2 = self.get_table_path()
+        t2 = self.get_table_path() + "_2p"
         self.ydb_client.query(
             f"""
             CREATE TABLE `{t2}` (
@@ -252,7 +251,7 @@ class TestInsertStatement(object):
 
 
     def test_out_of_range(self):
-        rt = self.get_table_path()
+        rt = self.get_table_path() + "_r"
         self.ydb_client.query(
             f"""
             CREATE TABLE `{rt}` (

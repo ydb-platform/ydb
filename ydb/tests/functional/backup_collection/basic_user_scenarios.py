@@ -808,16 +808,11 @@ class TestFullCycleLocalBackupRestoreWIncr(TestFullCycleLocalBackupRestore):
         col_inc1 = f"restore_inc1_{int(time.time())}"
         time.sleep(1.1)
         ts_inc1 = self.extract_ts(snap_inc1)
-        time.sleep(1.1)
         self.import_exported_up_to_timestamp(col_inc1, ts_inc1, export_dir, full_orders, full_products)
-        time.sleep(1.1)
         # ensure target tables absent
         self._remove_tables([full_orders, full_products])
-        time.sleep(1.1)
         rest_inc1 = self._execute_yql(f"RESTORE `{col_inc1}`;")
-        time.sleep(1.1)
         assert rest_inc1.exit_code == 0, f"RESTORE inc1 failed: {rest_inc1.std_err}"
-        time.sleep(1.1)
         restored_rows = self._capture_snapshot(t_orders)
         time.sleep(1.1)
         assert self.normalize_rows(restored_rows) == self.normalize_rows(snapshot_rows[snap_inc1]), "Verify data in backup (2) failed"
@@ -828,11 +823,8 @@ class TestFullCycleLocalBackupRestoreWIncr(TestFullCycleLocalBackupRestore):
         col_inc2 = f"restore_inc2_{int(time.time())}"
         ts_inc2 = self.extract_ts(snap_inc2)
         self.import_exported_up_to_timestamp(col_inc2, ts_inc2, export_dir, full_orders, full_products)
-        time.sleep(1.1)
         self._remove_tables([full_orders, full_products])
-        time.sleep(1.1)
         rest_inc2 = self._execute_yql(f"RESTORE `{col_inc2}`;")
-        time.sleep(1.1)
         assert rest_inc2.exit_code == 0, f"RESTORE inc2 failed: {rest_inc2.std_err}"
         restored_rows = self._capture_snapshot(t_orders)
         time.sleep(1.1)

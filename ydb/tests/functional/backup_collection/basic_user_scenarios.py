@@ -8,7 +8,6 @@ import pytest
 import tempfile
 import re
 from typing import List
-import re
 
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator

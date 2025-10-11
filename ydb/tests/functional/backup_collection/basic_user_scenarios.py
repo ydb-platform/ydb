@@ -871,9 +871,9 @@ class TestFullCycleLocalBackupRestoreWIncr(BaseTestBackupInFiles):
         # ensure target tables absent
         self._remove_tables([full_orders, full_products])
         rest_inc1 = self._execute_yql(f"RESTORE `{col_inc1}`;")
+        time.sleep(1.1)
         assert rest_inc1.exit_code == 0, f"RESTORE inc1 failed: {rest_inc1.std_err}"
         restored_rows = self._capture_snapshot(t_orders)
-        time.sleep(1.1)
         assert self.normalize_rows(restored_rows) == self.normalize_rows(snapshot_rows[snap_inc1]), "Verify data in backup (2) failed"
 
         time.sleep(1.1)
@@ -886,7 +886,6 @@ class TestFullCycleLocalBackupRestoreWIncr(BaseTestBackupInFiles):
         rest_inc2 = self._execute_yql(f"RESTORE `{col_inc2}`;")
         assert rest_inc2.exit_code == 0, f"RESTORE inc2 failed: {rest_inc2.std_err}"
         restored_rows = self._capture_snapshot(t_orders)
-        time.sleep(1.1)
         assert self.normalize_rows(restored_rows) == self.normalize_rows(snapshot_rows[snap_inc2]), "Verify data in backup (3) failed"
 
         # Remove all tables (2)

@@ -48,8 +48,8 @@ def get_blacklisted_run_ids(blacklist_param: str = None) -> set:
     if not blacklist_param:
         return set()
     
-    # Split by spaces and convert to set of strings
-    run_ids = blacklist_param.strip().split()
+    # Split by any whitespace and convert to set of strings
+    run_ids = blacklist_param.split()
     return set(run_ids)
 
 # Constants

@@ -888,6 +888,7 @@ class TestFullCycleLocalBackupRestoreWIncr(BaseTestBackupInFiles):
         rest_inc2 = self._execute_yql(f"RESTORE `{col_inc2}`;")
         assert rest_inc2.exit_code == 0, f"RESTORE inc2 failed: {rest_inc2.std_err}"
         restored_rows = self._capture_snapshot(t_orders)
+        time.sleep(1.1)
         assert self.normalize_rows(restored_rows) == self.normalize_rows(snapshot_rows[snap_inc2]), "Verify data in backup (3) failed"
 
         # Remove all tables (2)

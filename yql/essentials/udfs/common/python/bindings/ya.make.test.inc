@@ -1,5 +1,3 @@
-ENABLE(YQL_STYLE_CPP)
-
 SRCS(
     py_callable_ut.cpp
     py_cast_ut.cpp

@@ -78,6 +78,7 @@ constexpr auto PG_ERROR = ERROR;
 #include <yql/essentials/minikql/mkql_node_builder.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
 #include <yql/essentials/minikql/mkql_type_builder.h>
+#include <yql/essentials/minikql/mkql_safe_arithmetic_ops.h>
 #include <yql/essentials/types/binary_json/read.h>
 #include <yql/essentials/types/uuid/uuid.h>
 #include <yql/essentials/public/udf/arrow/block_reader.h>
@@ -2236,7 +2237,7 @@ NUdf::TUnboxedValuePod ConvertFromPgValue(NUdf::TUnboxedValuePod value, TMaybe<N
         return NUdf::TUnboxedValuePod(res);
     }
     case NUdf::EDataSlot::Timestamp64: {
-        auto res = (i64)DatumGetInt64(ScalarDatumFromPod(value)) - PgTimestampShift;
+        auto res = SafeSub((i64)DatumGetInt64(ScalarDatumFromPod(value)), PgTimestampShift);
         if (res < NUdf::MIN_TIMESTAMP64 || res > NUdf::MAX_TIMESTAMP64) {
             return NUdf::TUnboxedValuePod();
         }

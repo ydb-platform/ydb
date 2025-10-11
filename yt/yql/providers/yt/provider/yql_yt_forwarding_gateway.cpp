@@ -145,4 +145,9 @@ TMaybe<TString> TYtForwardingGatewayBase::GetTableFilePath(const TGetTableFilePa
     return Slave_->GetTableFilePath(std::move(options));
 }
 
+NThreading::TFuture<IYtGateway::TLayersSnapshotResult> TYtForwardingGatewayBase::SnapshotLayers(TSnapshotLayersOptions&& options) {
+    return Slave_->SnapshotLayers(std::move(options));
+}
+
+
 } // namspace NYql

@@ -13,4 +13,4 @@ private:
     THashMap<TString, TString> CaseSensitiveClusters_;
     THashMap<TString, TString> CaseInsensitiveClusters_;
 };
-}
+} // namespace NSQLTranslation

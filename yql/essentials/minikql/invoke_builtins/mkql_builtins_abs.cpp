@@ -1,5 +1,6 @@
 #include "mkql_builtins_decimal.h" // Y_IGNORE
-#include "mkql_safe_ops.h"
+
+#include <yql/essentials/minikql/mkql_safe_arithmetic_ops.h>
 
 #include <cmath>
 

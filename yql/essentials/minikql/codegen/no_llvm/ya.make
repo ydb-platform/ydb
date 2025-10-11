@@ -1,7 +1,5 @@
 LIBRARY()
 
-ENABLE(YQL_STYLE_CPP)
-
 SRCDIR(
     yql/essentials/minikql/codegen
 )

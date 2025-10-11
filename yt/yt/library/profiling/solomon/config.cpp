@@ -13,6 +13,9 @@ void TShardConfig::Register(TRegistrar registrar)
 
     registrar.Parameter("grid_step", &TThis::GridStep)
         .Default();
+
+    registrar.Parameter("strip_sensors_name_prefix", &TThis::StripSensorsNamePrefix)
+        .Default(false);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

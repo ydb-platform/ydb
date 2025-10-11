@@ -357,6 +357,10 @@ IYtflowOptimization* TDataProviderBase::GetYtflowOptimization() {
     return nullptr;
 }
 
+NLayers::ILayersIntegrationPtr TDataProviderBase::GetLayersIntegration() const {
+    return nullptr;
+}
+
 TExprNode::TPtr DefaultCleanupWorld(const TExprNode::TPtr& node, TExprContext& ctx) {
     auto root = node;
     auto status = OptimizeExpr(root, root, [&](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {

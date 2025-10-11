@@ -2,13 +2,9 @@
 
 PY3_LIBRARY()
 
-VERSION(8.0)
+VERSION(8.0.1)
 
 LICENSE(ZPL-2.1)
-
-PEERDIR(
-    contrib/python/setuptools
-)
 
 NO_COMPILER_WARNINGS()
 

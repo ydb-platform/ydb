@@ -9,7 +9,7 @@ struct TTranslationSettings;
 class ITranslator;
 using TTranslatorPtr = TIntrusivePtr<ITranslator>;
 
-} // NSQLTranslation
+} // namespace NSQLTranslation
 
 namespace NSQLTranslationPG {
 
@@ -20,4 +20,4 @@ std::unique_ptr<NYql::NPg::ISystemFunctionsParser> CreateSystemFunctionsParser()
 std::unique_ptr<NYql::NPg::ISqlLanguageParser> CreateSqlLanguageParser();
 NSQLTranslation::TTranslatorPtr MakeTranslator();
 
-} // NSQLTranslationPG
+} // namespace NSQLTranslationPG

@@ -1,7 +1,5 @@
 UNITTEST_FOR(yql/essentials/public/udf)
 
-ENABLE(YQL_STYLE_CPP)
-
 SRCS(
     udf_counter_ut.cpp
     udf_value_ut.cpp

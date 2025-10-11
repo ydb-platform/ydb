@@ -653,17 +653,17 @@ public:
             const auto typType = value[0];
 
             switch (typType) {
-            case 'b':
-            case 'c':
-            case 'd':
-            case 'e':
-            case 'm':
-            case 'p':
-            case 'r':
-                LastType_.TypType = (ETypType)typType;
-                break;
-            default:
-                throw yexception() << "Unknown typtype value: " << typType;
+                case 'b':
+                case 'c':
+                case 'd':
+                case 'e':
+                case 'm':
+                case 'p':
+                case 'r':
+                    LastType_.TypType = (ETypType)typType;
+                    break;
+                default:
+                    throw yexception() << "Unknown typtype value: " << typType;
             }
         } else if (key == "typcollation") {
             // hardcode collations for now. There are only three of 'em in .dat file
@@ -671,7 +671,7 @@ public:
                 LastType_.TypeCollation = DefaultCollationOid;
             } else if (value == "C") {
                 LastType_.TypeCollation = C_CollationOid;
-            }  else if (value == "POSIX") {
+            } else if (value == "POSIX") {
                 LastType_.TypeCollation = PosixCollationOid;
             } else {
                 throw yexception() << "Unknown typcollation value: " << value;
@@ -824,13 +824,13 @@ public:
             const auto castCtx = value[0];
 
             switch (castCtx) {
-            case 'i':
-            case 'a':
-            case 'e':
-                LastCast_.CoercionCode = (ECoercionCode)castCtx;
-                break;
-            default:
-                throw yexception() << "Unknown castcontext value: " << castCtx;
+                case 'i':
+                case 'a':
+                case 'e':
+                    LastCast_.CoercionCode = (ECoercionCode)castCtx;
+                    break;
+                default:
+                    throw yexception() << "Unknown castcontext value: " << castCtx;
             }
         }
     }

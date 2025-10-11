@@ -16,20 +16,20 @@ extern "C" {
 namespace NYql {
 
 Y_UNIT_TEST_SUITE(TProcTests) {
-    Y_UNIT_TEST(BuiltinsHasRuntimeFuncs) {
-        if (NPg::AreAllFunctionsAllowed()) {
-            return;
-        }
-        
-        NPg::EnumProc([](ui32 oid, const NPg::TProcDesc& desc) {
-            if (desc.ExtensionIndex == 0 && desc.Kind == NPg::EProcKind::Function &&
-                desc.Lang == NPg::LangInternal) {
-                FmgrInfo finfo;
-                UNIT_ASSERT(GetPgFuncAddr(oid, finfo));
-                UNIT_ASSERT(finfo.fn_addr);
-            }
-        });
+Y_UNIT_TEST(BuiltinsHasRuntimeFuncs) {
+    if (NPg::AreAllFunctionsAllowed()) {
+        return;
     }
-}
 
+    NPg::EnumProc([](ui32 oid, const NPg::TProcDesc& desc) {
+        if (desc.ExtensionIndex == 0 && desc.Kind == NPg::EProcKind::Function &&
+            desc.Lang == NPg::LangInternal) {
+            FmgrInfo finfo;
+            UNIT_ASSERT(GetPgFuncAddr(oid, finfo));
+            UNIT_ASSERT(finfo.fn_addr);
+        }
+    });
 }
+} // Y_UNIT_TEST_SUITE(TProcTests)
+
+} // namespace NYql

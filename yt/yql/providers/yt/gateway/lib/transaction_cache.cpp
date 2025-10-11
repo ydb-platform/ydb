@@ -74,6 +74,7 @@ void TTransactionCache::TEntry::Finalize(const TString& clusterName) {
     THashMap<TString, bool> toDelete;
     decltype(CheckpointTxs) checkpointTxs;
     decltype(WriteTxs) writeTxs;
+    NYT::ITransactionPtr layersTx;
     with_lock(Lock_) {
         binarySnapshotTx.Swap(BinarySnapshotTx);
         snapshotTxs.swap(SnapshotTxs);
@@ -82,6 +83,11 @@ void TTransactionCache::TEntry::Finalize(const TString& clusterName) {
         ExternalTempTablesCount = 0;
         checkpointTxs.swap(CheckpointTxs);
         writeTxs.swap(WriteTxs);
+        layersTx.Swap(LayersSnapshotTx);
+    }
+
+    if (layersTx) {
+        layersTx->Abort();
     }
 
     for (auto& item: writeTxs) {
@@ -406,6 +412,45 @@ TMaybe<std::pair<TString, NYT::TTransactionId>> TTransactionCache::TEntry::GetBi
     return std::make_pair(snapshotPath, snapshotTx->GetId());
 }
 
+TVector<std::pair<TString, ui64>> TTransactionCache::TEntry::GetLayersSnapshot(const TVector<TString>& needSnapshots) {
+    ITransactionPtr snapshotTx;
+    with_lock(Lock_) {
+        if (!LayersSnapshotTx) {
+            LayersSnapshotTx = Tx->StartTransaction(TStartTransactionOptions().Attributes(TransactionSpec));
+        }
+        snapshotTx = LayersSnapshotTx;
+    }
+
+    auto batchLock = snapshotTx->CreateBatchRequest();
+    TVector<NThreading::TFuture<TString>> batchNodeIdRes(Reserve(needSnapshots.size()));
+    for (const auto& path: needSnapshots) {
+        YQL_CLOG(DEBUG, ProviderYt) << "Trying take snapshot of layer at " << path.Quote();
+        batchNodeIdRes.emplace_back(batchLock->Lock(path, ELockMode::LM_SNAPSHOT).Apply([] (const NThreading::TFuture<ILockPtr>& res) {
+            return TString(TStringBuilder() << '#' << GetGuidAsString(res.GetValue()->GetLockedNodeId()));
+        }));
+    }
+    batchLock->ExecuteBatch();
+
+    auto batchGetRevision = snapshotTx->CreateBatchRequest();
+    TVector<NThreading::TFuture<ui64>> batchGetRevisionRes(Reserve(needSnapshots.size()));
+    for (const auto& nodeRes: batchNodeIdRes) {
+        auto nodeId = nodeRes.GetValue();
+        YQL_CLOG(DEBUG, ProviderYt) << "Trying take revision for nodeId=" << nodeId;
+        batchGetRevisionRes.emplace_back(batchGetRevision->Get(nodeId + "/@revision").Apply([] (const NThreading::TFuture<NYT::TNode>& res) {
+            return res.GetValue().AsUint64();
+        }));
+    }
+
+    batchGetRevision->ExecuteBatch();
+    TVector<std::pair<TString, ui64>> snapshots;
+    for (size_t i = 0; i < needSnapshots.size(); ++i) {
+        with_lock(Lock_) {
+            snapshots.emplace_back(batchNodeIdRes[i].GetValue(), batchGetRevisionRes[i].GetValue());
+        }
+    }
+    return snapshots;
+}
+
 void TTransactionCache::TEntry::CreateDefaultTmpFolder() {
     if (DefaultTmpFolder) {
         Client->Create(DefaultTmpFolder, NYT::NT_MAP, NYT::TCreateOptions().Recursive(true).IgnoreExisting(true));
@@ -564,6 +609,11 @@ void TTransactionCache::AbortAll() {
         if (entry->Tx) {
             YQL_CLOG(INFO, ProviderYt) << "Aborting tx " << GetGuidAsString(entry->Tx->GetId())  << " on " << item.first;
             abortTx(entry->Tx);
+        }
+
+        if (entry->LayersSnapshotTx) {
+            YQL_CLOG(INFO, ProviderYt) << "Aborting LayersSnapshotTx " << GetGuidAsString(entry->LayersSnapshotTx->GetId())  << " on " << item.first;
+            abortTx(entry->LayersSnapshotTx);
         }
 
         if (entry->Client) {

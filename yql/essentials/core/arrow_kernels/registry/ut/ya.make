@@ -1,7 +1,5 @@
 UNITTEST_FOR(yql/essentials/core/arrow_kernels/registry)
 
-ENABLE(YQL_STYLE_CPP)
-
 PEERDIR(
 )
 

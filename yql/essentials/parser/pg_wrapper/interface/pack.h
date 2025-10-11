@@ -13,7 +13,7 @@ class TPgType;
 class TPagedBuffer;
 namespace NDetails {
 class TChunkedInputBuffer;
-}
+} // namespace NDetails
 
 void PGPackImpl(bool stable, const TPgType* type, const NUdf::TUnboxedValuePod& value, TBuffer& buf);
 void PGPackImpl(bool stable, const TPgType* type, const NUdf::TUnboxedValuePod& value, TPagedBuffer& buf);

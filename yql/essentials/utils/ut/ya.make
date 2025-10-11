@@ -1,7 +1,5 @@
 UNITTEST_FOR(yql/essentials/utils)
 
-ENABLE(YQL_STYLE_CPP)
-
 SRCS(
     checkpoint_map_ut.cpp
     fp_bits_ut.cpp

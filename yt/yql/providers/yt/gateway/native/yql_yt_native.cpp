@@ -4924,6 +4924,11 @@ private:
             bool localRun = !testRun &&
                 (execCtx->Config_->HasExecuteUdfLocallyIfPossible()
                     ? execCtx->Config_->GetExecuteUdfLocallyIfPossible() : false);
+            bool hasLayerPaths = false;
+            if constexpr (NPrivate::THasLayersPaths<TRunOptions>::value) {
+                hasLayerPaths |= !execCtx->Options_.LayersPaths().empty();
+                localRun &= !execCtx->Options_.LayersPaths().empty();
+            }
             {
                 TUserJobSpec userJobSpec;
                 TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(),
@@ -4945,7 +4950,7 @@ private:
                     execCtx->Options_.OptLLVM("OFF");
                 }
 
-                if (transform.CanExecuteInternally() && !testRun) {
+                if (!hasLayerPaths && transform.CanExecuteInternally() && !testRun) {
                     const auto nativeTypeCompat = execCtx->Options_.Config()->NativeYtTypeCompatibility.Get(execCtx->Cluster_).GetOrElse(NTCF_LEGACY);
                     execCtx->SetNodeExecProgress("Waiting for concurrency limit");
                     execCtx->Session_->InitLocalCalcSemaphore(execCtx->Options_.Config());
@@ -5526,6 +5531,11 @@ private:
         auto tmpFiles = std::make_shared<TTempFiles>(execCtx->FileStorage_->GetTemp());
 
         bool localRun = execCtx->Config_->HasExecuteUdfLocallyIfPossible() ? execCtx->Config_->GetExecuteUdfLocallyIfPossible() : false;
+        bool hasLayerPaths = false;
+        if constexpr (NPrivate::THasLayersPaths<decltype(execCtx->Options_)>::value) {
+            hasLayerPaths |= !execCtx->Options_.LayersPaths().empty();
+            localRun &= !execCtx->Options_.LayersPaths().empty();
+        }
         {
             execCtx->SetNodeExecProgress("Preparing");
             TUserJobSpec userJobSpec;
@@ -5552,7 +5562,7 @@ private:
                 execCtx->Options_.OptLLVM("OFF");
             }
 
-            if (transform.CanExecuteInternally()) {
+            if (!hasLayerPaths && transform.CanExecuteInternally()) {
                 execCtx->SetNodeExecProgress("Waiting for concurrency limit");
                 execCtx->Session_->InitLocalCalcSemaphore(execCtx->Options_.Config());
                 TGuard<TFastSemaphore> guard(*execCtx->Session_->LocalCalcSemaphore_);
@@ -5908,6 +5918,27 @@ private:
             return TOperationProgress::EOpBlockStatus::None;
         } else {
             YQL_ENSURE(false, "unknown operation: " << op.Ref().Content());
+        }
+    }
+
+    NThreading::TFuture<TLayersSnapshotResult> SnapshotLayers(TSnapshotLayersOptions&& options) override {
+        try {
+            TSession::TPtr session = GetSession(options.SessionId());
+            auto execCtx = MakeExecCtx(TSnapshotLayersOptions(options), session, options.Cluster(), nullptr, nullptr);
+            auto logCtx = NYql::NLog::CurrentLogContextPath();
+            return session->Queue_->Async([session, execCtx, logCtx, paths = options.Layers(), cluster = options.Cluster()] () {
+                YQL_LOG_CTX_ROOT_SESSION_SCOPE(logCtx);
+                try {
+                    TLayersSnapshotResult result;
+                    result.Data = execCtx->GetOrCreateEntry()->GetLayersSnapshot(paths);
+                    result.SetSuccess();
+                    return result;
+                } catch (...) {
+                    return ResultFromCurrentException<TLayersSnapshotResult>();
+                }
+            });
+        } catch (...) {
+            return MakeFuture(ResultFromCurrentException<TLayersSnapshotResult>());
         }
     }
 

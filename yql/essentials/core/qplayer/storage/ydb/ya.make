@@ -2,8 +2,6 @@ IF (NOT OPENSOURCE)
 
 LIBRARY()
 
-ENABLE(YQL_STYLE_CPP)
-
 SRCS(
     yql_qstorage_ydb.cpp
 )

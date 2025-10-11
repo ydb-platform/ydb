@@ -1,5 +1,3 @@
-ENABLE(YQL_STYLE_CPP)
-
 
 INCLUDE(header.ya.make.inc)
 

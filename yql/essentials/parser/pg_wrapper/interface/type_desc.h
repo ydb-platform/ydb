@@ -15,7 +15,7 @@ const ITypeDesc* TypeDescFromPgTypeName(const TStringBuf name);
 TString TypeModFromPgTypeName(const TStringBuf name);
 
 bool TypeDescIsComparable(const ITypeDesc* typeDesc);
-i32  TypeDescGetTypeLen(const ITypeDesc* typeDesc);
+i32 TypeDescGetTypeLen(const ITypeDesc* typeDesc);
 ui32 TypeDescGetStoredSize(const ITypeDesc* typeDesc);
 bool TypeDescNeedsCoercion(const ITypeDesc* typeDesc);
 

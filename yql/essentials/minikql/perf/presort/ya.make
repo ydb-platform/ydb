@@ -1,7 +1,5 @@
 PROGRAM()
 
-ENABLE(YQL_STYLE_CPP)
-
 PEERDIR(
     library/cpp/presort
     yql/essentials/minikql/invoke_builtins/llvm16

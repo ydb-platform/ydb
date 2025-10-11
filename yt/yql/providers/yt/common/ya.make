@@ -10,6 +10,7 @@ PEERDIR(
     library/cpp/regex/pcre
     library/cpp/string_utils/parse_size
     library/cpp/yson/node
+    library/cpp/json
     yt/cpp/mapreduce/interface
     yql/essentials/ast
     yql/essentials/utils/log

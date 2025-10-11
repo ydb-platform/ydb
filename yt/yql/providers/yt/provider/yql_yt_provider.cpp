@@ -2,6 +2,7 @@
 #include "yql_yt_dq_integration.h"
 #include "yql_yt_ytflow_integration.h"
 #include "yql_yt_ytflow_optimize.h"
+#include "yql_yt_layers_integration.h"
 
 #include <yt/yql/providers/yt/expr_nodes/yql_yt_expr_nodes.h>
 #include <yt/yql/providers/yt/common/yql_names.h>
@@ -350,6 +351,7 @@ std::pair<std::shared_ptr<TYtState>, TStatWriter> CreateYtNativeState(IYtGateway
     ytState->DqHelper = helper;
     ytState->YtflowIntegration_ = CreateYtYtflowIntegration(ytState);
     ytState->YtflowOptimization_ = CreateYtYtflowOptimization(ytState);
+    ytState->LayersIntegration_ = CreateYtLayersIntegration();
 
     if (ytGatewayConfig) {
         std::unordered_set<std::string_view> groups;

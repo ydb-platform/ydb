@@ -1,7 +1,5 @@
 LIBRARY()
 
-ENABLE(YQL_STYLE_CPP)
-
 IF (ARCH_X86_64)
     CFLAGS(
         -DYDB_REWRAPPER_LIB_ID=kHyperscan

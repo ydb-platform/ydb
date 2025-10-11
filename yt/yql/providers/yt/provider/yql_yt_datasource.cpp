@@ -563,6 +563,10 @@ public:
         return State_->YtflowOptimization_.Get();
     }
 
+    NLayers::ILayersIntegrationPtr GetLayersIntegration() const override {
+        return State_->LayersIntegration_;
+    }
+
 private:
     TExprNode::TPtr InjectUdfRemapperOrView(TYtRead readNode, TExprContext& ctx, bool fromReadSchema, bool buildLeft) {
         const bool weakConcat = NYql::HasSetting(readNode.Arg(4).Ref(), EYtSettingType::WeakConcat);

@@ -1,7 +1,5 @@
 LIBRARY()
 
-ENABLE(YQL_STYLE_CPP)
-
 SRCS(
     extract_predicate_dbg.cpp
     extract_predicate_dbg.h

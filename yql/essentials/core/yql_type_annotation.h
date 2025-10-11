@@ -15,6 +15,7 @@
 #include <yql/essentials/core/credentials/yql_credentials.h>
 #include <yql/essentials/core/url_lister/interface/url_lister_manager.h>
 #include <yql/essentials/core/qplayer/storage/interface/yql_qstorage.h>
+#include <yql/essentials/core/layers/layers.h>
 #include <yql/essentials/ast/yql_expr.h>
 #include <yql/essentials/sql/sql.h>
 
@@ -475,6 +476,9 @@ struct TTypeAnnotationContext: public TThrRefBase {
     bool EnableLineage = false;
     bool CorrectLineage = true;
 
+    THashMap<TString, NLayers::IRemoteLayerProviderPtr> RemoteLayerProviderByName;
+    NLayers::ILayersRegistryPtr LayersRegistry;
+
     TMaybe<TColumnOrder> LookupColumnOrder(const TExprNode& node) const;
     IGraphTransformer::TStatus SetColumnOrder(const TExprNode& node, const TColumnOrder& columnOrder, TExprContext& ctx);
 
@@ -554,6 +558,10 @@ struct TTypeAnnotationContext: public TThrRefBase {
             DataSinkMap[name] = provider;
         }
         DataSinks.push_back(std::move(provider));
+    }
+
+    void AddRemoteLayersProvider(const TString& name, NLayers::IRemoteLayerProviderPtr provider) {
+        RemoteLayerProviderByName[name] = provider;
     }
 
     bool Initialize(TExprContext& ctx);

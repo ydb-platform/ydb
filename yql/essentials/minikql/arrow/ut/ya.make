@@ -1,7 +1,5 @@
 UNITTEST_FOR(yql/essentials/minikql/arrow)
 
-ENABLE(YQL_STYLE_CPP)
-
 TIMEOUT(600)
 SIZE(MEDIUM)
 

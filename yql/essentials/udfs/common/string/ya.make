@@ -6,8 +6,6 @@ YQL_UDF_CONTRIB(string_udf)
         0
     )
 
-    ENABLE(YQL_STYLE_CPP)
-    
     SRCS(
         string_udf.cpp
     )

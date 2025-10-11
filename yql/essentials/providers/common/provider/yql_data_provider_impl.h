@@ -95,6 +95,7 @@ public:
     IDqOptimization* GetDqOptimization() override;
     IYtflowIntegration* GetYtflowIntegration() override;
     IYtflowOptimization* GetYtflowOptimization() override;
+    NLayers::ILayersIntegrationPtr GetLayersIntegration() const override;
 
 protected:
     THolder<IGraphTransformer> DefConstraintTransformer_;

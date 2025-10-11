@@ -4,7 +4,7 @@ YQL_UDF_CONTRIB(datetime2_udf)
         43
         0
     )
-    ENABLE(YQL_STYLE_CPP)
+
     SRCS(
         datetime_udf.cpp
     )

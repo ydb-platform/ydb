@@ -35,11 +35,9 @@ class TestCreate(object):
 
         cls.test_dir = f"{cls.ydb_client.database}/{cls.test_name}"
 
-
     def get_table_path(self):
         # avoid using same table in parallel tests
         return f"{self.test_dir}/table{random.randrange(99999)}"
-
 
     def test_create_all_opt_ints(self):
         table_path = self.get_table_path() + "_1"
@@ -82,7 +80,6 @@ class TestCreate(object):
                 assert rows[0][key] is None
         assert rows[1] == {'id': 1, 'v0': -2, 'v1': -3, 'v2': -4, 'v3': -5, 'v4': 6, 'v5': 7, 'v6': 8, 'v7': 9}
 
-
     def test_create_all_req_ints(self):
         table_path = self.get_table_path() + "_2"
         self.ydb_client.query(
@@ -122,7 +119,6 @@ class TestCreate(object):
         rows = result_sets[0].rows
         assert len(rows) == 1
         assert rows[0] == {'id': 1, 'v0': -2, 'v1': -3, 'v2': -4, 'v3': -5, 'v4': 6, 'v5': 7, 'v6': 8, 'v7': 9}
-
 
     def test_create_decimals(self):
         table_path = self.get_table_path() + "_3"
@@ -172,7 +168,6 @@ class TestCreate(object):
                 else:
                     assert row[f"d_{p}_{s}_o"] == Decimal('1.2'), desc
                     assert row[f"d_{p}_{s}"] == Decimal('3.4'), desc
-
 
     def test_create_real_req(self):
         table_path = self.get_table_path() + "_4"
@@ -248,7 +243,6 @@ class TestCreate(object):
         assert rows[1]['v0'] == pytest.approx(6.7)
         assert rows[1]['v1'] == pytest.approx(8.9)
 
-
     def test_create_strings_opt(self):
         table_path = self.get_table_path() + "_6"
         self.ydb_client.query(
@@ -285,7 +279,6 @@ class TestCreate(object):
         assert rows[1]['id'] == 1
         assert rows[1]['v0'] == b'abc'
         assert rows[1]['v1'] == 'xyz'
-
 
     def test_dy_number_not_supported(self):
         table_path = self.get_table_path() + "_7"

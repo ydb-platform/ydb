@@ -1,5 +1,6 @@
 import logging
 import os
+import random
 import yatest.common
 import ydb
 
@@ -162,7 +163,7 @@ class TestUpdate(object):
 
         try:
             # when wrong table name
-            self.ydb_client.query(f"UPDATE `wrongTable` SET vs = 'A' WHERE id = 1;")
+            self.ydb_client.query("UPDATE `wrongTable` SET vs = 'A' WHERE id = 1;")
             # then
             assert False, 'Should Fail'
         except ydb.issues.SchemeError as ex:

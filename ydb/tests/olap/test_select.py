@@ -78,13 +78,13 @@ class TestSelect(object):
         result_sets = self.ydb_client.query(f'SELECT JSON_EXISTS(vjs, "$.vals[*].vs") AS e FROM `{self.table_path}`;')
         assert len(result_sets) > 0
         row = result_sets[0].rows[0]
-        assert row['e'] == True
+        assert row['e'] is True
 
         # negative
         result_sets = self.ydb_client.query(f'SELECT JSON_EXISTS(vjs, "$.vals[1].vs") AS e FROM `{self.table_path}`;')
         assert len(result_sets) > 0
         row = result_sets[0].rows[0]
-        assert row['e'] == False
+        assert row['e'] is False
 
         # positive
         result_sets = self.ydb_client.query(f'SELECT id FROM `{self.table_path}` WHERE JSON_VALUE(vjs, "$.vals[0].vn" RETURNING Int32) = 2;')
@@ -97,7 +97,7 @@ class TestSelect(object):
         assert len(result_sets) > 0
         assert len(result_sets[0].rows) == 0
 
-        #positive
+        # positive
         result_sets = self.ydb_client.query(f'SELECT JSON_QUERY(vjs, "$.vals") AS json FROM `{self.table_path}` WHERE id = 11;')
         assert len(result_sets) > 0
         row = result_sets[0].rows[0]
@@ -130,11 +130,3 @@ class TestSelect(object):
             assert False, 'Should Fail'
         except ydb.issues.GenericError as ex:
             assert "Cannot add type Optional<Utf8> and Int32" in ex.message
-
-
-
-
-
-
-
-

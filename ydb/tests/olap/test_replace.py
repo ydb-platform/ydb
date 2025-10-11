@@ -1,5 +1,6 @@
 import logging
 import os
+import random
 import yatest.common
 import ydb
 
@@ -236,26 +237,25 @@ class TestReplace(object):
         self.create_table()
 
         try:
-        # when wrong table name
-            self.ydb_client.query(f"REPLACE INTO `wrongTable` (id, vn, vs) VALUES (0, 0, 'A');")
-        # then
+            # when wrong table name
+            self.ydb_client.query("REPLACE INTO `wrongTable` (id, vn, vs) VALUES (0, 0, 'A');")
+            # then
             assert False, 'Should Fail'
         except ydb.issues.SchemeError as ex:
             assert "Cannot find table" in ex.message
 
         try:
-        # when wrong column name
+            # when wrong column name
             self.ydb_client.query(f"REPLACE INTO `{self.table_path}` (id, wrongColumn, vs) VALUES (0, 0, 'A');")
-        # then
+            # then
             assert False, 'Should Fail'
         except ydb.issues.GenericError as ex:
             assert "No such column: wrongColumn" in ex.message
 
         try:
-        # when wrong data type
+            # when wrong data type
             self.ydb_client.query(f"REPLACE INTO `{self.table_path}` (id, vn, vs) VALUES (0, 'A', 0);")
-        # then
+            # then
             assert False, 'Should Fail'
         except ydb.issues.GenericError as ex:
             assert "Failed to convert type" in ex.message
-

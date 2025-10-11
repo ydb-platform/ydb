@@ -218,7 +218,7 @@ class TestInsertStatement(object):
         result_sets = self.ydb_client.query(f"SELECT count(*) AS cnt FROM `{self.table_path}`;")
         assert len(result_sets[0].rows) == 1
         assert result_sets[0].rows[0]['cnt'] == 0
-        
+
         self.ydb_client.session_release(session)
 
     def test_incorrect(self):
@@ -248,7 +248,6 @@ class TestInsertStatement(object):
             assert False, 'Should Fail'
         except ydb.issues.GenericError as ex:
             assert "Failed to convert type" in ex.message
-
 
     def test_out_of_range(self):
         rt = self.get_table_path() + "_r"

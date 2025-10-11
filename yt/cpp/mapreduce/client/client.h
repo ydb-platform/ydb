@@ -498,6 +498,8 @@ public:
         const TVector<int>& tabletIndexes,
         const TGetTabletInfosOptions& options) override;
 
+    const TNode::TMapType& GetDynamicConfiguration(const TString& configProfile) override;
+
     void SuspendOperation(
         const TOperationId& operationId,
         const TSuspendOperationOptions& options) override;
@@ -527,6 +529,10 @@ private:
     std::atomic<bool> Shutdown_ = false;
     TMutex Lock_;
     std::unique_ptr<TYtPoller> YtPoller_;
+
+    // Cached cluster configuration to be returned from |GetClusterConfig|.
+    TMutex ClusterConfigLock_;
+    std::optional<TNode::TMapType> ClusterConfig_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

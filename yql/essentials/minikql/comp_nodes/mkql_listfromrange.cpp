@@ -2,6 +2,7 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
 #include <yql/essentials/minikql/mkql_node_cast.h>
+#include <yql/essentials/minikql/mkql_safe_arithmetic_ops.h>
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -75,8 +76,7 @@ private:
                 if (!Count) {
                     return false;
                 }
-                Current += Step;
-                --Count;
+                AddStep();
                 return true;
             }
 
@@ -86,14 +86,19 @@ private:
                 }
 
                 value = NUdf::TUnboxedValuePod(Current);
-                Current += Step;
-                --Count;
+                AddStep();
                 return true;
             }
 
             T Current;
             const TStep Step;
             ui64 Count;
+
+        private:
+            void AddStep() {
+                Current = SafeAdd(Current, static_cast<T>(Step));
+                --Count;
+            }
         };
 
         template <bool Asc>

@@ -1,7 +1,6 @@
 #pragma once
 
-#include <yql/essentials/minikql/defs.h>
-#include <yql/essentials/minikql/invoke_builtins/mkql_numeric_cast.h>
+#include <yql/essentials/minikql/mkql_numeric_cast.h>
 #include <yql/essentials/public/decimal/yql_decimal.h>
 
 #include <type_traits>

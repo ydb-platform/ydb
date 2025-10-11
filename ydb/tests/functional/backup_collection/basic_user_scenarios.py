@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-
 import os
 import time
 import logging
@@ -7,6 +6,7 @@ import shutil
 import yatest
 import pytest
 import tempfile
+import re
 from typing import List
 import re
 
@@ -15,8 +15,8 @@ from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.oss.ydb_sdk_import import ydb
 from contextlib import contextmanager
 
-
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 
 def backup_bin():
@@ -36,7 +36,6 @@ def is_system_object(obj):
 
 
 def sdk_select_table_rows(session, table, path_prefix="/Root"):
-    # Use SDK to query table rows instead of parsing CLI output — more robust.
     sql = f'PRAGMA TablePathPrefix("{path_prefix}"); SELECT id, number, txt FROM {table} ORDER BY id;'
     result_sets = session.transaction().execute(sql, commit_tx=True)
 
@@ -67,7 +66,6 @@ def sdk_select_table_rows(session, table, path_prefix="/Root"):
 
 
 def create_table_with_data(session, path, not_null=False):
-    # Create a simple table and insert a few rows for test purposes.
     full_path = "/Root/" + path
     session.create_table(
         full_path,
@@ -122,7 +120,6 @@ class BaseTestBackupInFiles(object):
 
     @contextmanager
     def session_scope(self):
-        # Wrapper context manager to ensure sessions are closed properly.
         session = self.driver.table_client.session().create()
         try:
             yield session
@@ -186,25 +183,6 @@ class BaseTestBackupInFiles(object):
         return [child.name for child in self.driver.scheme_client.list_directory(path).children
                 if not is_system_object(child)]
 
-    def create_user(self, user, password="password"):
-        cmd = [
-            backup_bin(),
-            "--verbose",
-            "--endpoint",
-            "grpc://localhost:%d" % self.cluster.nodes[1].grpc_port,
-            "--database",
-            self.root_dir,
-            "yql",
-            "--script",
-            f"CREATE USER {user} PASSWORD '{password}'",
-        ]
-        yatest.common.execute(cmd)
-
-    def create_users(self):
-        self.create_user("alice")
-        self.create_user("bob")
-        self.create_user("eve")
-
     def collection_scheme_path(self, collection_name: str) -> str:
         return os.path.join(self.root_dir, ".backups", "collections", collection_name)
 
@@ -255,21 +233,61 @@ class BaseTestBackupInFiles(object):
             time.sleep(poll_interval)
         raise AssertionError(f"Backup collection '{collection_name}' has no snapshots within {timeout_s}s")
 
+    def _execute_yql(self, script, verbose=False):
+        cmd = [backup_bin()]
+        if verbose:
+            cmd.append("--verbose")
+        cmd += [
+            "--endpoint",
+            f"grpc://localhost:{self.cluster.nodes[1].grpc_port}",
+            "--database",
+            self.root_dir,
+            "yql",
+            "--script",
+            script,
+        ]
+        return yatest.common.execute(cmd, check_exit_code=False)
+
+    def _capture_snapshot(self, table):
+        with self.session_scope() as session:
+            return sdk_select_table_rows(session, table)
+
+    def _export_backups(self, collection_src):
+        export_dir = output_path(self.test_name, collection_src)
+        if os.path.exists(export_dir):
+            shutil.rmtree(export_dir)
+        os.makedirs(export_dir, exist_ok=True)
+
+        dump_cmd = [
+            backup_bin(),
+            "--verbose",
+            "--endpoint",
+            "grpc://localhost:%d" % self.cluster.nodes[1].grpc_port,
+            "--database",
+            self.root_dir,
+            "tools",
+            "dump",
+            "--path",
+            f"/Root/.backups/collections/{collection_src}",
+            "--output",
+            export_dir,
+        ]
+        dump_res = yatest.common.execute(dump_cmd, check_exit_code=False)
+        if dump_res.exit_code != 0:
+            raise AssertionError(f"tools dump failed: {dump_res.std_err}")
+
+        exported_items = sorted([name for name in os.listdir(export_dir)
+                                 if os.path.isdir(os.path.join(export_dir, name))])
+        assert len(exported_items) >= 1, f"Expected at least 1 exported backup, got: {exported_items}"
+
+        return export_dir, exported_items
+
     def assert_collection_contains_tables(self, collection_name: str, expected_tables: List[str]):
         export_dir = tempfile.mkdtemp(prefix=f"verify_dump_{collection_name}_")
         try:
             collection_full_path = f"/Root/.backups/collections/{collection_name}"
             res = self.run_tools_dump(collection_full_path, export_dir)
             assert res.exit_code == 0, f"tools dump for verification failed: exit_code={res.exit_code}, stderr={res.std_err}"
-
-            logger.info(f"Export directory structure for {collection_name}:")
-            for root, dirs, files in os.walk(export_dir):
-                level = root.replace(export_dir, '').count(os.sep)
-                indent = ' ' * 2 * level
-                logger.info(f"{indent}{os.path.basename(root)}/")
-                subindent = ' ' * 2 * (level + 1)
-                for file in files:
-                    logger.info(f"{subindent}{file}")
 
             found = {t: False for t in expected_tables}
 
@@ -289,63 +307,16 @@ class BaseTestBackupInFiles(object):
                                             table_name_only in data_str or
                                             t in data_str or t.encode() in data):
                                         found[t] = True
-                                        logger.info(f"Found table {t} in file {fpath}")
-                        except Exception as e:
-                            logger.debug(f"Failed to read file {fpath}: {e}")
+                        except Exception:
+                            pass
 
                 for d in dirs:
                     for t in expected_tables:
                         table_name_only = os.path.basename(t)
                         if table_name_only in d:
                             found[t] = True
-                            logger.info(f"Found table {t} as directory {d}")
-
-            if not all(found.values()):
-                for root, _, files in os.walk(export_dir):
-                    for fn in files:
-                        if fn.startswith("data") or fn.endswith(".csv"):
-                            fpath = os.path.join(root, fn)
-                            try:
-                                with open(fpath, "r", encoding="utf-8") as f:
-                                    first_lines = f.read(1024)
-                                    for t in expected_tables:
-                                        if not found[t]:
-                                            table_name_only = os.path.basename(t)
-                                            if table_name_only in first_lines or "orders	number	txt" in first_lines:
-                                                found[t] = True
-                                                logger.info(f"Found evidence of table {t} in CSV {fpath}")
-                            except Exception:
-                                pass
-
-            snapshot_dirs = []
-            for item in os.listdir(export_dir):
-                item_path = os.path.join(export_dir, item)
-                if os.path.isdir(item_path):
-                    snapshot_dirs.append(item)
-                    logger.info(f"Found snapshot directory: {item}")
-
-                    for root, dirs, files in os.walk(item_path):
-                        for t in expected_tables:
-                            table_name_only = os.path.basename(t)
-                            if table_name_only in dirs:
-                                found[t] = True
-                                logger.info(f"Found table {table_name_only} directory in snapshot {item}")
-
-                            for f in files:
-                                if table_name_only in f:
-                                    found[t] = True
-                                    logger.info(f"Found file {f} related to table {table_name_only} in snapshot {item}")
-
-            if snapshot_dirs and not any(found.values()):
-                logger.warning(f"Found snapshots {snapshot_dirs} but couldn't verify table names. Assuming OK.")
-                for t in expected_tables:
-                    found[t] = True
 
             missing = [t for t, ok in found.items() if not ok]
-            if missing:
-                logger.error(f"Missing tables: {missing}")
-                logger.error(f"Export directory contents: {os.listdir(export_dir)}")
-
             assert not missing, f"Expected tables not found in collection export: {missing}"
 
         finally:

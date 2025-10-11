@@ -1,20 +1,23 @@
 #include "yql_generic_provider_impl.h"
 #include "yql_generic_predicate_pushdown.h"
+#include "yql_generic_list_splits.h"
 
-#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
-#include <yql/essentials/core/yql_opt_utils.h>
-#include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
-#include <yql/essentials/providers/common/provider/yql_data_provider_impl.h>
+#include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/providers/common/transform/yql_optimize.h>
+#include <yql/essentials/providers/common/provider/yql_provider.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
-#include <ydb/library/yql/providers/common/pushdown/collection.h>
-#include <ydb/library/yql/providers/common/pushdown/physical_opt.h>
-#include <ydb/library/yql/providers/common/pushdown/predicate_node.h>
-#include <yql/essentials/providers/common/transform/yql_optimize.h>
+#include <yql/essentials/providers/common/provider/yql_data_provider_impl.h>
+#include <yql/essentials/core/yql_opt_utils.h>
+#include <yql/essentials/core/services/yql_transform_pipeline.h>
+#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <ydb/library/yql/providers/generic/expr_nodes/yql_generic_expr_nodes.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
-#include <yql/essentials/utils/log/log.h>
-#include <yql/essentials/providers/common/provider/yql_provider.h>
+#include <ydb/library/yql/providers/common/pushdown/predicate_node.h>
+#include <ydb/library/yql/providers/common/pushdown/settings.h>
+#include <ydb/library/yql/providers/common/pushdown/physical_opt.h>
+#include <ydb/library/yql/providers/common/pushdown/collection.h>
+#include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
 
 namespace NYql {
 
@@ -38,7 +41,9 @@ namespace NYql {
                     EFlag::JustPassthroughOperators | // To pushdown REGEXP over String column
                     EFlag::FlatMapOverOptionals | // To pushdown REGEXP over Utf8 column
                     EFlag::ToStringFromStringExpressions | // To pushdown REGEXP over Utf8 column
-                    EFlag::DecimalType | EFlag::DecimalCtor
+                    EFlag::DecimalType | EFlag::DecimalCtor |
+                    EFlag::IntervalCtor |
+                    EFlag::DateCtor
                 );
                 EnableFunction("Re2.Grep");  // For REGEXP pushdown
             }
@@ -207,10 +212,60 @@ namespace NYql {
         private:
             const TGenericState::TPtr State_;
         };
+
+        class TGenericPhysicalOptProposalWithListTransformer : public TGraphTransformerBase {
+        public:
+            explicit TGenericPhysicalOptProposalWithListTransformer(TGenericState::TPtr state)
+                : PhysicalOptTransformer_(std::make_unique<TGenericPhysicalOptProposalTransformer>(state))
+                , ListTransformer_(CreateGenericListSplitTransformer(state))
+                , AllowAsync_(false)
+            { }
+
+        public:
+            TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
+                auto resultStatus = PhysicalOptTransformer_->DoTransform(input, output, ctx);
+
+                Y_ENSURE(resultStatus != TStatus::Async);
+
+                if (resultStatus != TStatus::Ok) {
+                    return resultStatus;
+                }
+
+                input = output;
+                resultStatus = ListTransformer_->DoTransform(input, output, ctx);
+
+                if (resultStatus == TStatus::Async) {
+                    AllowAsync_ = true;
+                }
+
+                return resultStatus;
+            }
+
+            NThreading::TFuture<void> DoGetAsyncFuture(const TExprNode& node) final {
+                Y_ENSURE(AllowAsync_);
+                return ListTransformer_->DoGetAsyncFuture(node);
+            }
+
+            TStatus DoApplyAsyncChanges(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
+                Y_ENSURE(AllowAsync_);
+                return ListTransformer_->DoApplyAsyncChanges(input, output, ctx);
+            }
+
+            void Rewind() final {
+                AllowAsync_ = false;
+                PhysicalOptTransformer_->Rewind();
+                ListTransformer_->Rewind();
+            }
+
+        private:
+            const std::unique_ptr<TGenericPhysicalOptProposalTransformer> PhysicalOptTransformer_;
+            const THolder<TGraphTransformerBase> ListTransformer_;
+            bool AllowAsync_;
+        };
     } // namespace
 
     THolder<IGraphTransformer> CreateGenericPhysicalOptProposalTransformer(TGenericState::TPtr state) {
-        return MakeHolder<TGenericPhysicalOptProposalTransformer>(state);
+        return MakeHolder<TGenericPhysicalOptProposalWithListTransformer>(state);
     }
 
 } // namespace NYql

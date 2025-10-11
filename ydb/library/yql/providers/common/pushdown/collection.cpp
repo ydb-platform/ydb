@@ -201,6 +201,9 @@ private:
             node.Maybe<TCoUint64>()) {
             return true;
         }
+        if (Settings.IsEnabled(EFlag::DateCtor) && node.Maybe<TCoDate>()) {
+            return true;
+        }
         if (Settings.IsEnabled(EFlag::TimestampCtor) && node.Maybe<TCoTimestamp>()) {
             return true;
         }

@@ -211,6 +211,10 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
         ServerSettings->SetFederatedQuerySetupFactory(settings.FederatedQuerySetupFactory);
     }
 
+    if (settings.DescribeSchemaSecretsServiceFactory) {
+        ServerSettings->SetDescribeSchemaSecretsServiceFactory(settings.DescribeSchemaSecretsServiceFactory);
+    }
+
     Server.Reset(MakeHolder<Tests::TServer>(*ServerSettings));
 
     if (settings.GrpcServerOptions) {

@@ -86,6 +86,7 @@ public:
                 runtime.SetLogPriority(NKikimrServices::STREAMS_STORAGE_SERVICE, NLog::PRI_DEBUG);
                 runtime.SetLogPriority(NKikimrServices::STREAMS_CHECKPOINT_COORDINATOR, NLog::PRI_DEBUG);
             }
+            Kikimr->GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableSchemaSecrets(UseSchemaSecrets());
         }
 
         return Kikimr;
@@ -263,9 +264,23 @@ public:
         ));
     }
 
-    void CreatePqSourceBasicAuth(const TString& pqSourceName) {
+    void CreatePqSourceBasicAuth(const TString& pqSourceName, const bool useSchemaSecrets = false) {
+        const TString secretName = useSchemaSecrets ? "/Root/secret_local_password" : "secret_local_password";
+        if (useSchemaSecrets) {
+            ExecQuery(fmt::format(R"(
+                CREATE SECRET `{secret_name}` WITH (value = "1234");
+                )",
+                "secret_name"_a = secretName
+            ));
+        } else {
+            ExecQuery(fmt::format(R"(
+                CREATE OBJECT `{secret_name}` (TYPE SECRET) WITH (value = "1234");
+                )",
+                "secret_name"_a = secretName
+            ));
+        }
+
         ExecQuery(fmt::format(R"(
-            CREATE OBJECT secret_local_password (TYPE SECRET) WITH (value = "1234");
             CREATE EXTERNAL DATA SOURCE `{pq_source}` WITH (
                 SOURCE_TYPE = "Ydb",
                 LOCATION = "{pq_location}",
@@ -493,6 +508,10 @@ private:
         UNIT_ASSERT_C(!Kikimr, "Kikimr runner is already initialized, can not setup " << info);
     }
 
+    virtual bool UseSchemaSecrets() {
+        return false;
+    }
+
 private:
     std::optional<NKikimrConfig::TAppConfig> AppConfig;
     TIntrusivePtr<NYql::IPqGateway> PqGateway;
@@ -507,6 +526,13 @@ private:
     // Attached to database from recipe (YDB_ENDPOINT / YDB_DATABASE)
     std::shared_ptr<TDriver> ExternalDriver;
     std::shared_ptr<NTopic::TTopicClient> TopicClient;
+};
+
+class TStreamingWithSchemaSecretsTestFixture : public TStreamingTestFixture {
+public:
+    bool UseSchemaSecrets() override {
+        return true;
+    }
 };
 
 } // anonymous namespace
@@ -625,35 +651,36 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         });
     }
 
-    Y_UNIT_TEST_F(ReadTopicBasic, TStreamingTestFixture) {
-        TString sourceName = "sourceName";
-        TString topicName = "topicName";
-        TString tableName = "tableName";
+    Y_UNIT_TEST_F(ReadTopicBasic, TStreamingWithSchemaSecretsTestFixture) {
+        for (int i = 0; i < 2; ++i) {
+            const bool useSchemaSecrets = static_cast<bool>(i);
+            const TString sourceName = "sourceName" + ToString(i);
+            const TString topicName = "topicName" + ToString(i);
+            CreateTopic(topicName);
 
-        CreateTopic(topicName);
+            CreatePqSourceBasicAuth(sourceName, useSchemaSecrets);
 
-        CreatePqSourceBasicAuth(sourceName);
+            const auto scriptExecutionOperation = ExecScript(fmt::format(R"(
+                SELECT * FROM `{source}`.`{topic}`
+                    WITH (
+                        FORMAT="json_each_row",
+                        SCHEMA=(
+                            key String NOT NULL,
+                            value String NOT NULL
+                        ))
+                    LIMIT 1;
+                )",
+                "source"_a=sourceName,
+                "topic"_a=topicName
+            ));
 
-        const auto scriptExecutionOperation = ExecScript(fmt::format(R"(
-            SELECT * FROM `{source}`.`{topic}`
-                WITH (
-                    FORMAT="json_each_row",
-                    SCHEMA=(
-                        key String NOT NULL,
-                        value String NOT NULL
-                    ))
-                LIMIT 1;
-            )",
-            "source"_a=sourceName,
-            "topic"_a=topicName
-        ));
+            WriteTopicMessage(topicName, R"({"key": "key1", "value": "value1"})");
 
-        WriteTopicMessage(topicName, R"({"key": "key1", "value": "value1"})");
-
-        CheckScriptResult(scriptExecutionOperation, 2, 1, [](TResultSetParser& result) {
-            UNIT_ASSERT_VALUES_EQUAL(result.ColumnParser(0).GetString(), "key1");
-            UNIT_ASSERT_VALUES_EQUAL(result.ColumnParser(1).GetString(), "value1");
-        });
+            CheckScriptResult(scriptExecutionOperation, 2, 1, [](TResultSetParser& result) {
+                UNIT_ASSERT_VALUES_EQUAL(result.ColumnParser(0).GetString(), "key1");
+                UNIT_ASSERT_VALUES_EQUAL(result.ColumnParser(1).GetString(), "value1");
+            });
+        }
     }
 
     Y_UNIT_TEST_F(InsertTopicBasic, TStreamingTestFixture) {

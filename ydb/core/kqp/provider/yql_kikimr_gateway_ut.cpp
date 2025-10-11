@@ -428,7 +428,17 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
         UNIT_ASSERT_C(createSecretQueryResult.GetStatus() == NYdb::EStatus::SUCCESS, createSecretQueryResult.GetIssues().ToString());
     }
 
-    Y_UNIT_TEST_TWIN(TestLoadServiceAccountSecretValueFromExternalDataSourceMetadata, UseSchemaSecrets) {
+    template<bool UseSchemaSecrets>
+    void CreateSecret(TString& secretName, const TString& secretValue, TSession& session) {
+        if constexpr (UseSchemaSecrets) {
+            secretName = "/Root/" + secretName;
+            CreateSchemaSecret(secretName, secretValue, session);
+        } else {
+            CreateSecretObject(secretName, secretValue, session);
+        }
+    }
+
+    Y_UNIT_TEST_QUAD(TestLoadServiceAccountSecretValueFromExternalDataSourceMetadata, UseSchemaSecrets, UseAuthToken) {
         NKikimrConfig::TAppConfig appCfg;
         appCfg.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
         TKikimrRunner kikimr{ NKqp::TKikimrSettings(appCfg) };
@@ -436,18 +446,12 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
         if (UseSchemaSecrets) {
             kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableSchemaSecrets(true);
         }
-        auto db = kikimr.GetTableClient();
+        auto db = UseAuthToken ? kikimr.GetTableClient(NYdb::NTable::TClientSettings().AuthToken("root@builtin")) : kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
-        TString secretId;
+        TString secretId = "mySaSecretId";
         TString secretValue = "mySaSecretValue";
-        if (UseSchemaSecrets) {
-            secretId = "/Root/mySaSecretId";
-            CreateSchemaSecret(secretId, secretValue, session);
-        } else {
-            secretId = "mySaSecretId";
-            CreateSecretObject(secretId, secretValue, session);
-        }
+        CreateSecret<UseSchemaSecrets>(secretId, secretValue, session);
 
         TString externalDataSourceName = "/Root/ExternalDataSource";
         TString externalTableName = "/Root/ExternalTable";
@@ -469,7 +473,11 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
 
-        auto responseFuture = GetIcGateway(kikimr.GetTestServer())->LoadTableMetadata(TestCluster, externalTableName, IKikimrGateway::TLoadTableMetadataSettings());
+        auto gateway = GetIcGateway(kikimr.GetTestServer());
+        if (UseAuthToken) {
+            gateway->SetToken(TestCluster, new NACLib::TUserToken("root@builtin", {}));
+        }
+        auto responseFuture = gateway->LoadTableMetadata(TestCluster, externalTableName, IKikimrGateway::TLoadTableMetadataSettings());
         responseFuture.Wait();
 
         auto response = responseFuture.GetValue();
@@ -488,15 +496,9 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
-        TString secretId;
+        TString secretId = "myPasswordSecretId";
         TString secretValue = "pswd";
-        if (UseSchemaSecrets) {
-            secretId = "/Root/myPasswordSecretId";
-            CreateSchemaSecret(secretId, secretValue, session);
-        } else {
-            secretId = "myPasswordSecretId";
-            CreateSecretObject(secretId, secretValue, session);
-        }
+        CreateSecret<UseSchemaSecrets>(secretId, secretValue, session);
 
         TString externalDataSourceName = "/Root/ExternalDataSource";
         auto query = TStringBuilder() << R"(
@@ -519,21 +521,24 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
         UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalSource.Password, secretValue);
     }
 
-    Y_UNIT_TEST(TestLoadMdbBasicSecretValueFromExternalDataSourceMetadata) {
+    Y_UNIT_TEST_TWIN(TestLoadMdbBasicSecretValueFromExternalDataSourceMetadata, UseSchemaSecrets) {
         NKikimrConfig::TAppConfig appCfg;
         appCfg.MutableQueryServiceConfig()->AddAvailableExternalDataSources("PostgreSQL");
         TKikimrRunner kikimr{ NKqp::TKikimrSettings(appCfg) };
         kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);
+        if (UseSchemaSecrets) {
+            kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableSchemaSecrets(true);
+        }
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         TString secretPasswordId = "myPasswordSecretId";
         TString secretPasswordValue = "pswd";
-        CreateSecretObject(secretPasswordId, secretPasswordValue, session);
+        CreateSecret<UseSchemaSecrets>(secretPasswordId, secretPasswordValue, session);
 
         TString secretSaId = "mySa";
         TString secretSaValue = "sign(mySa)";
-        CreateSecretObject(secretSaId, secretSaValue, session);
+        CreateSecret<UseSchemaSecrets>(secretSaId, secretSaValue, session);
 
         TString externalDataSourceName = "/Root/ExternalDataSource";
         auto query = TStringBuilder() << R"(
@@ -559,21 +564,24 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
         UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalSource.ServiceAccountIdSignature, secretSaValue);
     }
 
-     Y_UNIT_TEST(TestLoadAwsSecretValueFromExternalDataSourceMetadata) {
+     Y_UNIT_TEST_TWIN(TestLoadAwsSecretValueFromExternalDataSourceMetadata, UseSchemaSecrets) {
         NKikimrConfig::TAppConfig appCfg;
         appCfg.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
         TKikimrRunner kikimr{ NKqp::TKikimrSettings(appCfg) };
         kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);
+        if (UseSchemaSecrets) {
+            kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableSchemaSecrets(true);
+        }
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         TString awsAccessKeyIdSecretId = "awsAccessKeyIdSecretId";
         TString awsAccessKeyIdSecretValue = "key";
-        CreateSecretObject(awsAccessKeyIdSecretId, awsAccessKeyIdSecretValue, session);
+        CreateSecret<UseSchemaSecrets>(awsAccessKeyIdSecretId, awsAccessKeyIdSecretValue, session);
 
         TString awsSecretAccessKeySecretId = "awsSecretAccessKeySecretId";
         TString awsSecretAccessKeySecretValue = "value";
-        CreateSecretObject(awsSecretAccessKeySecretId, awsSecretAccessKeySecretValue, session);
+        CreateSecret<UseSchemaSecrets>(awsSecretAccessKeySecretId, awsSecretAccessKeySecretValue, session);
 
         TString externalDataSourceName = "/Root/ExternalDataSource";
         auto query = TStringBuilder() << R"(
@@ -598,21 +606,24 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
         UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalSource.DataSourceAuth.GetAws().GetAwsRegion(), "ru-central-1");
     }
 
-    Y_UNIT_TEST(TestLoadDataSourceProperties) {
+    Y_UNIT_TEST_TWIN(TestLoadDataSourceProperties, UseSchemaSecrets) {
         NKikimrConfig::TAppConfig appCfg;
         appCfg.MutableQueryServiceConfig()->AddAvailableExternalDataSources("PostgreSQL");
         TKikimrRunner kikimr{ NKqp::TKikimrSettings(appCfg) };
         kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);
+        if (UseSchemaSecrets) {
+            kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableSchemaSecrets(true);
+        }
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         TString secretPasswordId = "myPasswordSecretId";
         TString secretPasswordValue = "pswd";
-        CreateSecretObject(secretPasswordId, secretPasswordValue, session);
+        CreateSecret<UseSchemaSecrets>(secretPasswordId, secretPasswordValue, session);
 
         TString secretSaId = "mySa";
         TString secretSaValue = "sign(mySa)";
-        CreateSecretObject(secretSaId, secretSaValue, session);
+        CreateSecret<UseSchemaSecrets>(secretSaId, secretSaValue, session);
 
         TString externalDataSourceName = "/Root/ExternalDataSource";
         auto query = TStringBuilder() << R"(
@@ -659,15 +670,9 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
-        TString secretTokenId;
+        TString secretTokenId = "myTokenSecretId";
         TString secretTokenValue = "token";
-        if (UseSchemaSecrets) {
-            secretTokenId = "/Root/myTokenSecretId";
-            CreateSchemaSecret(secretTokenId, secretTokenValue, session);
-        } else {
-            secretTokenId = "myTokenSecretId";
-            CreateSecretObject(secretTokenId, secretTokenValue, session);
-        }
+        CreateSecret<UseSchemaSecrets>(secretTokenId, secretTokenValue, session);
 
         TString externalDataSourceName = "/Root/ExternalDataSource";
         auto query = TStringBuilder() << R"(
@@ -689,15 +694,18 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
         UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalSource.Properties.GetProperties().size(), 0);
     }
 
-    Y_UNIT_TEST(TestSecretsExistingValidation) {
+    Y_UNIT_TEST_TWIN(TestSecretsExistingValidation, UseSchemaSecrets) {
         NKikimrConfig::TAppConfig appCfg;
         appCfg.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
         TKikimrRunner kikimr{ NKqp::TKikimrSettings(appCfg) };
         kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);
+        if (UseSchemaSecrets) {
+            kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableSchemaSecrets(true);
+        }
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
-        TString secretId = "unexisting_secret_name";
+        TString secretId = UseSchemaSecrets ? "/Root/unexisting_secret_name" : "unexisting_secret_name";
         auto query = TStringBuilder() << R"(
             CREATE EXTERNAL DATA SOURCE `/Root/ExternalDataSource` WITH (
                 SOURCE_TYPE="YT",
@@ -708,7 +716,11 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
 
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::BAD_REQUEST, result.GetIssues().ToString());
-        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), TStringBuilder() << "secret with name '" << secretId << "' not found");
+        if (UseSchemaSecrets) {
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), TStringBuilder() << "secret `" << secretId << "` not found");
+        } else {
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), TStringBuilder() << "secret with name '" << secretId << "' not found");
+        }
     }
 
     Y_UNIT_TEST(TestCreateResourcePool) {

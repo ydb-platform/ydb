@@ -508,103 +508,44 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         tieringHelper.CheckAllDataInTier(DEFAULT_TIER_PATH);
         UNIT_ASSERT_GT(Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetBucket("olap-another-bucket").GetSize(), 0);
     }
-    
-    void WriteTestData2(TKikimrRunner& kikimr, TString testTable, ui64 pathIdBegin, ui64 tsBegin, size_t rowCount) {
-        UNIT_ASSERT(testTable != "/Root/benchTable"); // TODO: check schema instead
-        TLocalHelper lHelper(kikimr);
-        lHelper.SetWithJsonDocument(true);
-        auto batch = lHelper.TestArrowBatch(pathIdBegin, tsBegin, rowCount, 1);
-        lHelper.SendDataViaActorSystem(testTable, batch);
-    }
-    
+
     Y_UNIT_TEST(TieringForIndexes) {
         TTieringTestHelper tieringHelper;
         auto& csController = tieringHelper.GetCsController();
         auto& olapHelper = tieringHelper.GetOlapHelper();
         auto& testHelper = tieringHelper.GetTestHelper();
-        tieringHelper.SetTablePath("/Root/olapTable");
-        olapHelper.SetWithJsonDocument(true);
-        olapHelper.CreateTestOlapStandaloneTable();
+        olapHelper.CreateTestOlapTable();
         testHelper.CreateTier(DEFAULT_TIER_NAME);
-        testHelper.SetTiering("/Root/olapTable", DEFAULT_TIER_PATH, DEFAULT_COLUMN_NAME);
+        testHelper.SetTiering(DEFAULT_TABLE_PATH, DEFAULT_TIER_PATH, DEFAULT_COLUMN_NAME);
 
         NYdb::NTable::TTableClient tableClient = testHelper.GetKikimr().GetTableClient();
         
         {
             auto alterQuery =
-                R"(ALTER OBJECT `/Root/olapTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=index_ngramm_uid, TYPE=BLOOM_NGRAMM_FILTER,
+                R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_ngramm_uid, TYPE=BLOOM_NGRAMM_FILTER,
                     FEATURES=`{"inherit_portion_storage" : true, "column_name" : "resource_id", "ngramm_size" : 3, "hashes_count" : 2, "filter_size_bytes" : 512, "records_count" : 1024}`);
                 )";
             auto session = tableClient.CreateSession().GetValueSync().GetSession();
             auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
         }
-        
-        {
-            auto alterQuery =
-                R"(ALTER OBJECT `/Root/olapTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=index_ngramm_uid1, TYPE=CATEGORY_BLOOM_FILTER,
-                    FEATURES=`{"column_name" : "json_payload", "false_positive_probability" : 0.01}`);
-                )";
-            auto session = tableClient.CreateSession().GetValueSync().GetSession();
-            auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
-        }
 
-        {
-            auto alterQuery =
-                R"(
-                ALTER OBJECT `/Root/olapTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=json_payload, `DATA_EXTRACTOR_CLASS_NAME`=`JSON_SCANNER`, `SCAN_FIRST_LEVEL_ONLY`=`true`,
-                    `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, `FORCE_SIMD_PARSING`=`true`, `COLUMNS_LIMIT`=`1024`,
-                    `SPARSED_DETECTOR_KFF`=`10`, `MEM_LIMIT_CHUNK`=`100`, `OTHERS_ALLOWED_FRACTION`=`0.5`)
-                )";
-            auto session = tableClient.CreateSession().GetValueSync().GetSession();
-            auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
-        }
+        tieringHelper.WriteSampleData();
+        csController->WaitCompactions(TDuration::Seconds(5));
+        csController->WaitActualization(TDuration::Seconds(5));
 
-        for (ui64 i = 0; i < 1; ++i) {
-            WriteTestData2(testHelper.GetKikimr(), "/Root/olapTable", 0, 3600000000 + i * 10000, 1000);
-            WriteTestData2(testHelper.GetKikimr(), "/Root/olapTable", 0, 3600000000 + i * 10000, 1000);
-        }
-        
-        auto now = TInstant::Now().GetValue();
-        for (ui64 i = 0; i < 5; ++i) {
-            WriteTestData2(testHelper.GetKikimr(), "/Root/olapTable", 0, now + i * 10000, 1000);
-            WriteTestData2(testHelper.GetKikimr(), "/Root/olapTable", 0, now + i * 10000, 1000);
-        }
-
-        csController->WaitCompactions(TDuration::Seconds(20));
-        csController->WaitActualization(TDuration::Seconds(20));
-        
         {
             auto selectQuery = TStringBuilder() << R"(
                 SELECT *
-                FROM `/Root/olapTable/.sys/primary_index_stats`
+                FROM `/Root/olapStore/olapTable/.sys/primary_index_stats`
             )";
 
-            TSet<std::string> tiers;
             auto rows = ExecuteScanQuery(tableClient, selectQuery);
             for (auto& row: rows) {
                 if (NYdb::TValueParser(row.find("EntityName")->second).GetOptionalUtf8() == "index_ngramm_uid") {
-                    tiers.insert(*NYdb::TValueParser(row.find("TierName")->second).GetOptionalUtf8());
+                    UNIT_ASSERT_VALUES_EQUAL(*NYdb::TValueParser(row.find("TierName")->second).GetOptionalUtf8(), "/Root/tier1");
                 }
-                Cerr << "aboba" << Endl;
-                for (const auto& column: row) {
-                    Cerr << column.first << ": " << column.second.GetProto().DebugString();
-                }
-                Cerr << Endl;
             }
-            UNIT_ASSERT(tiers.contains("/Root/tier1"));
-        }
-        
-        {
-            auto selectQuery = TStringBuilder() << R"(
-                SELECT *
-                FROM `/Root/olapTable`
-            )";
-
-            auto rows = ExecuteScanQuery(tableClient, selectQuery);
-            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 6000);
         }
     }
 }

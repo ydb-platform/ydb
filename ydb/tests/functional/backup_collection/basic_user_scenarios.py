@@ -884,8 +884,11 @@ class TestFullCycleLocalBackupRestoreWIncr(BaseTestBackupInFiles):
         col_inc2 = f"restore_inc2_{int(time.time())}"
         ts_inc2 = self.extract_ts(snap_inc2)
         self.import_exported_up_to_timestamp(col_inc2, ts_inc2, export_dir, full_orders, full_products)
+        time.sleep(1.1)
         self._remove_tables([full_orders, full_products])
+        time.sleep(1.1)
         rest_inc2 = self._execute_yql(f"RESTORE `{col_inc2}`;")
+        time.sleep(1.1)
         assert rest_inc2.exit_code == 0, f"RESTORE inc2 failed: {rest_inc2.std_err}"
         restored_rows = self._capture_snapshot(t_orders)
         time.sleep(1.1)

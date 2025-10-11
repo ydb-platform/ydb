@@ -23,6 +23,8 @@ SET(ORIG_SOURCES
     dq_block_hash_join.cpp
     dq_scalar_hash_join.cpp
     dq_hash_join_table.cpp
+    dq_join_common.cpp
+    type_utils.cpp
 )
 
 YQL_LAST_ABI_VERSION()

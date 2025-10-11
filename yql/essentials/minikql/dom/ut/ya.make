@@ -1,6 +1,8 @@
 IF (NOT WINDOWS)
     UNITTEST_FOR(yql/essentials/minikql/dom)
 
+    ENABLE(YQL_STYLE_CPP)
+
     SRCS(
         yson_ut.cpp
         json_ut.cpp

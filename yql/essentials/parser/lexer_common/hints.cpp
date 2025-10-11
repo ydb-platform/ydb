@@ -35,7 +35,8 @@ public:
         : QueryFile_(queryFile)
         , Hints_(hints)
         , Utf8Aware_(utf8Aware)
-    {}
+    {
+    }
 
     TPosition ExtractPosition(const TParsedToken& token) const {
         return TPosition(token.LinePos + 1, token.Line, QueryFile_);
@@ -74,13 +75,12 @@ private:
     const bool Utf8Aware_;
 };
 
-}
+} // namespace
 
 bool CollectSqlHints(ILexer& lexer, const TString& query, const TString& queryName,
-    const TString& queryFile, TSQLHints& hints, NYql::TIssues& issues, size_t maxErrors, bool utf8Aware) {
+                     const TString& queryFile, TSQLHints& hints, NYql::TIssues& issues, size_t maxErrors, bool utf8Aware) {
     TTokenProcessor tp(queryFile, hints, utf8Aware);
     return lexer.Tokenize(query, queryName, [&tp](TParsedToken&& token) { tp.ProcessToken(std::move(token)); }, issues, maxErrors);
 }
 
-
-}
+} // namespace NSQLTranslation

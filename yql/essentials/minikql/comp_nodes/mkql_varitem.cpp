@@ -1,6 +1,6 @@
 #include "mkql_varitem.h"
 
-#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
+#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
 
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_node_builder.h>
@@ -13,6 +13,7 @@ namespace {
 template <bool IsOptional>
 class TVariantItemWrapper: public TMutableCodegeneratorPtrNode<TVariantItemWrapper<IsOptional>> {
     typedef TMutableCodegeneratorPtrNode<TVariantItemWrapper<IsOptional>> TBaseComputation;
+
 public:
     TVariantItemWrapper(TComputationMutables& mutables, EValueRepresentation kind, IComputationNode* varNode)
         : TBaseComputation(mutables, kind)
@@ -52,9 +53,9 @@ public:
             block = good;
         }
 
-        const auto lshr = BinaryOperator::CreateLShr(var, ConstantInt::get(valueType, 122), "lshr",  block);
+        const auto lshr = BinaryOperator::CreateLShr(var, ConstantInt::get(valueType, 122), "lshr", block);
         const auto trunc = CastInst::Create(Instruction::Trunc, lshr, indexType, "trunc", block);
-        const auto check = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_NE, trunc, ConstantInt::get(indexType , 0), "check", block);
+        const auto check = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_NE, trunc, ConstantInt::get(indexType, 0), "check", block);
 
         const auto box = BasicBlock::Create(context, "box", ctx.Func);
         const auto emb = BasicBlock::Create(context, "emb", ctx.Func);
@@ -64,7 +65,7 @@ public:
 
         const uint64_t init[] = {0xFFFFFFFFFFFFFFFFULL, 0x3FFFFFFFFFFFFFFULL};
         const auto mask = ConstantInt::get(valueType, APInt(128, 2, init));
-        const auto clean = BinaryOperator::CreateAnd(var, mask, "clean",  block);
+        const auto clean = BinaryOperator::CreateAnd(var, mask, "clean", block);
         new StoreInst(clean, pointer, block);
         ValueAddRef(this->RepresentationKind_, pointer, ctx, block);
         BranchInst::Create(done, block);
@@ -81,10 +82,10 @@ private:
         this->DependsOn(VarNode);
     }
 
-    IComputationNode *const VarNode;
+    IComputationNode* const VarNode;
 };
 
-}
+} // namespace
 
 IComputationNode* WrapVariantItem(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 1, "Expected 1 argument");
@@ -100,5 +101,5 @@ IComputationNode* WrapVariantItem(TCallable& callable, const TComputationNodeFac
     }
 }
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

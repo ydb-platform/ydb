@@ -586,13 +586,28 @@ NDqProto::ECheckpointingMode GetTaskCheckpointingMode(const TDqTaskSettings& tas
 }
 
 bool IsIngress(const TDqTaskSettings& task) {
-    // No inputs at all or the only inputs are sources.
-    for (const auto& input : task.GetInputs()) {
-        if (!input.HasSource()) {
-            return false;
+    // No inputs at all or there is no input channels with checkpoints.
+
+    const auto& inputs = task.GetInputs();
+    if (inputs.empty()) {
+        return true;
+    }
+
+    bool hasSource = false;
+    for (const auto& input : inputs) {
+        if (input.HasSource()) {
+            hasSource = true;
+            continue;
+        }
+
+        for (const auto& channel : input.GetChannels()) {
+            if (channel.GetCheckpointingMode() != NDqProto::CHECKPOINTING_MODE_DISABLED) {
+                return false;
+            }
         }
     }
-    return true;
+
+    return hasSource;
 }
 
 bool IsEgress(const TDqTaskSettings& task) {

@@ -63,6 +63,10 @@ def build_nm_store_path(moddir: str) -> str:
     return os.path.join(build_nots_path(), "nm_store", moddir)
 
 
+def build_vs_store_path(moddir: str) -> str:
+    return os.path.join(build_nots_path(), "vm_store", moddir)
+
+
 def build_traces_store_path(moddir: str) -> str:
     return os.path.join(build_nots_path(), "traces", moddir)
 

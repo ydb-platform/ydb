@@ -99,6 +99,11 @@ const ITimestampProviderPtr& TClient::GetTimestampProvider()
     return TimestampProvider_.Value();
 }
 
+const TClientOptions& TClient::GetOptions()
+{
+    return ClientOptions_;
+}
+
 void TClient::Terminate()
 { }
 
@@ -526,6 +531,9 @@ TFuture<void> TClient::AlterTable(
     }
     if (options.ReplicationProgress) {
         ToProto(req->mutable_replication_progress(), *options.ReplicationProgress);
+    }
+    if (options.ClipTimestamp) {
+        req->set_clip_timestamp(*options.ClipTimestamp);
     }
 
     ToProto(req->mutable_mutating_options(), options);

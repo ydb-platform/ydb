@@ -8,8 +8,8 @@
 
 namespace NSQLComplete {
 
-    INameService::TPtr MakeStaticNameService(TNameSet names, TFrequencyData frequency);
+INameService::TPtr MakeStaticNameService(TNameSet names, TFrequencyData frequency);
 
-    INameService::TPtr MakeStaticNameService(TNameSet names, IRanking::TPtr ranking);
+INameService::TPtr MakeStaticNameService(TNameSet names, IRanking::TPtr ranking);
 
 } // namespace NSQLComplete

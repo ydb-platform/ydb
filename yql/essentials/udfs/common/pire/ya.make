@@ -5,6 +5,8 @@ YQL_UDF_CONTRIB(pire_udf)
         27
         0
     )
+
+    ENABLE(YQL_STYLE_CPP)
     
     SRCS(
         pire_udf.cpp

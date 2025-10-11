@@ -1,5 +1,7 @@
 LIBRARY()
 
+ENABLE(YQL_STYLE_CPP)
+
 PEERDIR(
     yql/essentials/core/issue/protos
     yql/essentials/sql/settings

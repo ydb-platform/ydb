@@ -9,5 +9,5 @@ IComputationNode* WrapFormatCode(TCallable& callable, const TComputationNodeFact
 
 IComputationNode* WrapSerializeCode(TCallable& callable, const TComputationNodeFactoryContext& ctx, ui32 exprCtxMutableIndex);
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

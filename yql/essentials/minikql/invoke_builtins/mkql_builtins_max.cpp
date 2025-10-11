@@ -18,8 +18,8 @@ inline T Max(T l, T r) {
     return std::fmax(l, r);
 }
 
-template<typename TLeft, typename TRight, typename TOutput>
-struct TMax : public TSimpleArithmeticBinary<TLeft, TRight, TOutput, TMax<TLeft, TRight, TOutput>> {
+template <typename TLeft, typename TRight, typename TOutput>
+struct TMax: public TSimpleArithmeticBinary<TLeft, TRight, TOutput, TMax<TLeft, TRight, TOutput>> {
     static TOutput Do(TLeft left, TRight right)
     {
         return Max<TOutput>(left, right);
@@ -45,11 +45,11 @@ struct TMax : public TSimpleArithmeticBinary<TLeft, TRight, TOutput, TMax<TLeft,
 #endif
 };
 
-template<typename TType>
-struct TFloatAggrMax : public TSimpleArithmeticBinary<TType, TType, TType, TFloatAggrMax<TType>> {
+template <typename TType>
+struct TFloatAggrMax: public TSimpleArithmeticBinary<TType, TType, TType, TFloatAggrMax<TType>> {
     static TType Do(TType left, TType right)
     {
-        return  left > right || std::isnan(left) ? left : right;
+        return left > right || std::isnan(left) ? left : right;
     }
 #ifndef MKQL_DISABLE_CODEGEN
     static Value* Gen(Value* left, Value* right, const TCodegenContext&, BasicBlock*& block)
@@ -62,11 +62,14 @@ struct TFloatAggrMax : public TSimpleArithmeticBinary<TType, TType, TType, TFloa
 #endif
 };
 
-template<typename TType>
-using TAggrMax = std::conditional_t<std::is_floating_point<TType>::value, TFloatAggrMax<TType>, TMax<TType, TType, TType>>;
+template <typename TType>
+using TAggrMax = std::conditional_t<
+    std::is_floating_point<TType>::value,
+    TFloatAggrMax<TType>,
+    TMax<TType, TType, TType>>;
 
-template<typename TType>
-struct TTzMax : public TSelectArithmeticBinaryCopyTimezone<TType, TTzMax<TType>> {
+template <typename TType>
+struct TTzMax: public TSelectArithmeticBinaryCopyTimezone<TType, TTzMax<TType>> {
     static bool Do(TType left, TType right)
     {
         return left >= right;
@@ -79,8 +82,8 @@ struct TTzMax : public TSelectArithmeticBinaryCopyTimezone<TType, TTzMax<TType>>
 #endif
 };
 
-template<typename TType>
-struct TAggrTzMax : public TSelectArithmeticBinaryWithTimezone<TType, TAggrTzMax<TType>> {
+template <typename TType>
+struct TAggrTzMax: public TSelectArithmeticBinaryWithTimezone<TType, TAggrTzMax<TType>> {
     static bool Do(TType left, TType right)
     {
         return left >= right;
@@ -103,15 +106,17 @@ struct TAggrTzMax : public TSelectArithmeticBinaryWithTimezone<TType, TAggrTzMax
 #endif
 };
 
-template<NUdf::EDataSlot Slot>
+template <NUdf::EDataSlot Slot>
 struct TDecimalMax {
     static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& left, const NUdf::TUnboxedValuePod& right) {
         const auto rv = right.GetInt128();
-        if (!NYql::NDecimal::IsComparable(rv))
+        if (!NYql::NDecimal::IsComparable(rv)) {
             return left;
+        }
         const auto lv = left.GetInt128();
-        if (!NYql::NDecimal::IsComparable(lv))
+        if (!NYql::NDecimal::IsComparable(lv)) {
             return right;
+        }
         return NUdf::TUnboxedValuePod(lv < rv ? rv : lv);
     }
 
@@ -150,7 +155,7 @@ struct TDecimalMax {
 #endif
 };
 
-template<NUdf::EDataSlot Slot>
+template <NUdf::EDataSlot Slot>
 struct TDecimalAggrMax {
     static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& left, const NUdf::TUnboxedValuePod& right) {
         const auto lv = left.GetInt128();
@@ -169,7 +174,7 @@ struct TDecimalAggrMax {
 #endif
 };
 
-template<NUdf::EDataSlot Slot>
+template <NUdf::EDataSlot Slot>
 struct TCustomMax {
     static NUdf::TUnboxedValuePod Execute(NUdf::TUnboxedValuePod left, NUdf::TUnboxedValuePod right) {
         const bool r = CompareCustoms<Slot>(left, right) < 0;
@@ -191,7 +196,7 @@ struct TCustomMax {
 #endif
 };
 
-}
+} // namespace
 
 void RegisterMax(IBuiltinFunctionRegistry& registry) {
     RegisterBinaryNumericFunctionOpt<TMax, TBinaryArgsOpt>(registry, "Max");

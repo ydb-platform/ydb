@@ -36,7 +36,7 @@ void TTreeElement::UpdateBottomUp(ui64 totalLimit) {
     Guarantee = Min<ui64>(GetGuarantee(), Demand);
 }
 
-void TTreeElement::UpdateTopDown() {
+void TTreeElement::UpdateTopDown(bool allowFairShareOverlimit) {
     if (IsRoot()) {
         FairShare = Demand;
     }
@@ -69,7 +69,7 @@ void TTreeElement::UpdateTopDown() {
                 child->FairShare = 0;
             }
 
-            child->UpdateTopDown();
+            child->UpdateTopDown(allowFairShareOverlimit);
         });
     }
     // FIFO variant (when children are queries)
@@ -80,13 +80,15 @@ void TTreeElement::UpdateTopDown() {
 
         // Give at least 1 fair-share for each demanding child
         ForEachChild<TTreeElement>([&](TTreeElement* child, size_t) -> bool {
-            if (leftFairShare == 0) {
+            if (!allowFairShareOverlimit && leftFairShare == 0) {
                 return true;
             }
 
             if (child->Demand > 0) {
                 child->FairShare = 1;
-                --leftFairShare;
+                if (!allowFairShareOverlimit || leftFairShare > 0) {
+                    --leftFairShare;
+                }
             }
 
             return false;
@@ -135,7 +137,11 @@ TPool::TPool(const TPoolId& id, const std::optional<TPoolCounters>& counters, co
 void TPool::AccountSnapshotDuration(const TDuration& period) {
     if (Counters) {
         Counters->FairShare->Add(FairShare * period.MicroSeconds());
-        Counters->Satisfaction->Set(Satisfaction.value_or(0) * 1'000'000);
+        if (Satisfaction) {
+            Counters->Satisfaction->Set(Satisfaction.value_or(0) * 1'000'000);
+        } else {
+            Counters->Satisfaction->Set(-1);
+        }
         // TODO: calculate satisfaction as burst-usage increment / fair-share increment - for better precision
     }
     TTreeElement::AccountSnapshotDuration(period);

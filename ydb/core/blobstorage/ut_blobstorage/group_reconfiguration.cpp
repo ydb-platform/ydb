@@ -182,7 +182,7 @@ Y_UNIT_TEST_SUITE(GroupReconfiguration) {
         const ui32 numDCs = 3;
         const ui32 numNodesInDC = 4;
         const ui32 numNodes = numDCs * numNodesInDC;
-        const ui32 bscNodeId = numNodes;
+        const ui32 bscNodeId = numNodes + 1;
 
         ui32 groupId;
         std::set<ui32> nodesInGroup;
@@ -200,7 +200,7 @@ Y_UNIT_TEST_SUITE(GroupReconfiguration) {
 
         response = env->Invoke(request);
 
-        std::array<bool, numNodes - 1> passedMessages{true};
+        std::array<bool, numNodes> passedMessages{true};
 
         env->Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
             if (ev->Sender.NodeId() == bscNodeId && nodeId != bscNodeId) {

@@ -180,5 +180,6 @@ NNodes::TExprBase DqPushUnorderedToStage(NNodes::TExprBase node, TExprContext& c
 NNodes::TMaybeNode<NNodes::TExprBase> DqUnorderedOverStageInput(NNodes::TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
     const TTypeAnnotationContext& typeAnnCtx, const TParentsMap& parentsMap, bool allowStageMultiUsage);
 
+NNodes::TMaybeNode<NNodes::TExprBase> DqRewriteStreamLookupJoin(NNodes::TExprBase node, TExprContext& ctx);
 
 } // namespace NYql::NDq

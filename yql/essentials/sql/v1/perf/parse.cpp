@@ -65,12 +65,12 @@ int main(int, char**) {
             builder << "fld" << j;
         };
 
-        builder << " FROM " << (i == 0? "Input" : "$query") << ";\n";
+        builder << " FROM " << (i == 0 ? "Input" : "$query") << ";\n";
     }
 
     builder << "SELECT * FROM $query;\n";
     TString sql = builder;
-    //Cerr << sql;
+    // Cerr << sql;
     TSimpleTimer timer;
     for (ui32 i = 0; i < 100; ++i) {
         NYql::TAstParseResult res = SqlToYql(sql);

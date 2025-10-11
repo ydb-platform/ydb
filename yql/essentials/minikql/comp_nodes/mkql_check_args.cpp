@@ -5,8 +5,8 @@ namespace NKikimr {
 namespace NMiniKQL {
 
 TBinaryFunctionArgsDesc CheckBinaryFunctionArgs(
-        TType* left, TType* right,
-        bool allowOptionalInput, bool requiresBooleanArgs)
+    TType* left, TType* right,
+    bool allowOptionalInput, bool requiresBooleanArgs)
 {
     TBinaryFunctionArgsDesc desc;
     const auto& leftType = UnpackOptional(left, desc.IsLeftOptional);
@@ -32,5 +32,5 @@ TBinaryFunctionArgsDesc CheckBinaryFunctionArgs(
     return desc;
 }
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

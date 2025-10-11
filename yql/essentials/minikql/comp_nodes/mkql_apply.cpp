@@ -1,7 +1,7 @@
 #include "mkql_apply.h"
 
 #include <yql/essentials/minikql/computation/mkql_block_impl.h>
-#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
+#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <library/cpp/containers/stack_array/stack_array.h>
@@ -15,8 +15,9 @@ namespace {
 
 class TApplyWrapper: public TMutableCodegeneratorPtrNode<TApplyWrapper> {
     typedef TMutableCodegeneratorPtrNode<TApplyWrapper> TBaseComputation;
+
 public:
-    struct TKernelState : public arrow::compute::KernelState {
+    struct TKernelState: public arrow::compute::KernelState {
         TKernelState(ui32 argsCount)
             : Alloc(__LOCATION__)
             , MemInfo("Apply")
@@ -40,7 +41,7 @@ public:
         TVector<NUdf::TUnboxedValue> Args;
     };
 
-    class TArrowNode : public IArrowKernelComputationNode {
+    class TArrowNode: public IArrowKernelComputationNode {
     public:
         TArrowNode(const TApplyWrapper* parent, const NUdf::TUnboxedValue& callable, TType* returnType, const TVector<TType*>& argsTypes)
             : Parent_(parent)
@@ -92,7 +93,7 @@ public:
     friend class TArrowNode;
 
     TApplyWrapper(TComputationMutables& mutables, EValueRepresentation kind, IComputationNode* callableNode,
-        TComputationNodePtrVector&& argNodes, ui32 usedArgs, const NUdf::TSourcePosition& pos, TCallableType* callableType)
+                  TComputationNodePtrVector&& argNodes, ui32 usedArgs, const NUdf::TSourcePosition& pos, TCallableType* callableType)
         : TBaseComputation(mutables, kind)
         , CallableNode(callableNode)
         , ArgNodes(std::move(argNodes))
@@ -150,9 +151,7 @@ public:
         const auto idxType = Type::getInt32Ty(context);
         const auto valType = Type::getInt128Ty(context);
         const auto arrayType = ArrayType::get(valType, ArgNodes.size());
-        const auto args = *Stateless_ || ctx.AlwaysInline ?
-            new AllocaInst(arrayType, 0U, "args", &ctx.Func->getEntryBlock().back()):
-            new AllocaInst(arrayType, 0U, "args", block);
+        const auto args = *Stateless_ || ctx.AlwaysInline ? new AllocaInst(arrayType, 0U, "args", &ctx.Func->getEntryBlock().back()) : new AllocaInst(arrayType, 0U, "args", block);
 
         ui32 i = 0;
         std::vector<std::pair<Value*, EValueRepresentation>> argsv;
@@ -196,14 +195,14 @@ private:
         }
     }
 
-    IComputationNode *const CallableNode;
+    IComputationNode* const CallableNode;
     const TComputationNodePtrVector ArgNodes;
     const ui32 UsedArgs;
     const NUdf::TSourcePosition Position;
     TCallableType* CallableType;
 };
 
-}
+} // namespace
 
 IComputationNode* WrapApply(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() >= 5, "Expected at least 5 arguments");
@@ -243,8 +242,8 @@ IComputationNode* WrapApply(TCallable& callable, const TComputationNodeFactoryCo
 
     auto functionNode = LocateNode(ctx.NodeLocator, callable, 0);
     return new TApplyWrapper(ctx.Mutables, GetValueRepresentation(callable.GetType()->GetReturnType()), functionNode, std::move(argNodes),
-        callableType->GetArgumentsCount(), NUdf::TSourcePosition(row, column, file), callableType);
+                             callableType->GetArgumentsCount(), NUdf::TSourcePosition(row, column, file), callableType);
 }
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

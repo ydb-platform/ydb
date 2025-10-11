@@ -25,4 +25,4 @@ protected:
     TFileStoragePtr Inner_;
 };
 
-} // NYql
+} // namespace NYql

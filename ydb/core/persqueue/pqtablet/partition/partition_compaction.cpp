@@ -3,6 +3,9 @@
 #include "partition_util.h"
 #include <util/string/escape.h>
 
+#define LOG_PREFIX_INT TStringBuilder() << "[" << TabletId << "]" << GetLogPrefix()
+#define PQBC_LOG_I(stream) LOG_INFO_S(*NActors::TlsActivationContext, NKikimrServices::PQ_KV_OPS, LOG_PREFIX_INT << stream)
+
 namespace NKikimr::NPQ {
 
 bool TPartition::ExecRequestForCompaction(TWriteMsg& p, TProcessParametersBase& parameters, TEvKeyValue::TEvRequest* request, const TInstant blobCreationUnixTime)
@@ -163,6 +166,11 @@ void TPartition::DumpKeysForBlobsCompaction() const
 
 void TPartition::TryRunCompaction()
 {
+    if (StopCompaction) {
+        LOG_D("Blobs compaction is stopped");
+        return;
+    }
+
     if (CompactionInProgress) {
         LOG_D("Blobs compaction in progress");
         return;
@@ -178,41 +186,28 @@ void TPartition::TryRunCompaction()
     const ui64 blobsKeyCountLimit = GetBodyKeysCountLimit();
     const ui64 compactedBlobSizeLowerBound = GetCompactedBlobSizeLowerBound();
 
-    if (BlobEncoder.DataKeysBody.size() >= blobsKeyCountLimit) {
-        CompactionInProgress = true;
-        Send(SelfId(), new TEvPQ::TEvRunCompaction(BlobEncoder.DataKeysBody.size()));
+    if ((BlobEncoder.DataKeysBody.size() < blobsKeyCountLimit) && (BlobEncoder.GetSize() < GetCumulativeSizeLimit())) {
+        LOG_D("No data for blobs compaction");
         return;
     }
 
-    size_t blobsCount = 0, blobsSize = 0, totalSize = 0;
+    size_t blobsCount = 0, blobsSize = 0;
     for (; blobsCount < BlobEncoder.DataKeysBody.size(); ++blobsCount) {
         const auto& k = BlobEncoder.DataKeysBody[blobsCount];
         if (k.Size < compactedBlobSizeLowerBound) {
             // неполный блоб. можно дописать
             blobsSize += k.Size;
-            totalSize += k.Size;
             if (blobsSize > 2 * MaxBlobSize) {
                 // KV не может отдать много
                 blobsSize -= k.Size;
-                totalSize -= k.Size;
                 break;
             }
             LOG_D("Blob key for append " << k.Key.ToString());
         } else {
-            totalSize += k.Size;
             LOG_D("Blob key for rename " << k.Key.ToString());
         }
     }
-    LOG_D(blobsCount << " keys were taken away. Let's read " << blobsSize << " bytes (" << totalSize << ")");
-
-    if (totalSize < GetCumulativeSizeLimit()) {
-        LOG_D("Need more data for compaction. " <<
-                 "Blobs " << BlobEncoder.DataKeysBody.size() <<
-                 ", size " << totalSize << " (" << GetCumulativeSizeLimit() << ")");
-        return;
-    }
-
-    LOG_D("Run compaction for " << blobsCount << " blobs");
+    LOG_D(blobsCount << " keys were taken away. Let's read " << blobsSize << " bytes");
 
     CompactionInProgress = true;
 
@@ -378,6 +373,7 @@ void TPartition::BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& 
     const auto& ctx = ActorContext();
 
     LOG_D("Continue blobs compaction");
+    PQBC_LOG_I("Begin blobs compaction");
 
     AFL_ENSURE(CompactionInProgress);
     AFL_ENSURE(blobs.size() == CompactionBlobsCount);
@@ -412,7 +408,7 @@ void TPartition::BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& 
 
         if (pos == Max<size_t>()) {
             // большой блоб надо переименовать
-            LOG_D("Rename key " << k.Key.ToString());
+            PQBC_LOG_I("Rename key " << k.Key.ToString());
 
             if (!WasTheLastBlobBig) {
                 needToCompactHead = true;
@@ -436,7 +432,7 @@ void TPartition::BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& 
             WasTheLastBlobBig = true;
         } else {
             // маленький блоб надо дописать
-            LOG_D("Append blob for key " << k.Key.ToString());
+            PQBC_LOG_I("Append blob for key " << k.Key.ToString());
             LOG_D("Need to compact head " << needToCompactHead);
 
             const TRequestedBlob& requestedBlob = blobs[pos];
@@ -458,6 +454,7 @@ void TPartition::BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& 
 
     EndProcessWritesForCompaction(compactionRequest.Get(), blobCreationUnixTime, ctx);
 
+    PQBC_LOG_I("Send request to KV");
     // for debugging purposes
     //DumpKeyValueRequest(compactionRequest->Record);
 
@@ -468,7 +465,7 @@ void TPartition::BlobsForCompactionWereWrite()
 {
     const auto& ctx = ActorContext();
 
-    LOG_D("Blobs compaction is completed");
+    PQBC_LOG_I("Blobs compaction is completed");
 
     AFL_ENSURE(CompactionInProgress);
     AFL_ENSURE(BlobEncoder.DataKeysBody.size() >= KeysForCompaction.size());
@@ -512,8 +509,18 @@ void TPartition::BlobsForCompactionWereWrite()
     KeysForCompaction.clear();
     CompactionBlobsCount = 0;
 
+    TryProcessGetWriteInfoRequest(ctx);
+
     ProcessTxsAndUserActs(ctx); // Now you can delete unnecessary keys.
     TryRunCompaction();
+}
+
+void TPartition::TryProcessGetWriteInfoRequest(const TActorContext& ctx)
+{
+    if (PendingGetWriteInfoRequest) {
+        ProcessPendingEvent(std::move(PendingGetWriteInfoRequest), ctx);
+        PendingGetWriteInfoRequest = nullptr;
+    }
 }
 
 void TPartition::EndProcessWritesForCompaction(TEvKeyValue::TEvRequest* request, const TInstant blobCreationUnixTime, const TActorContext& ctx)

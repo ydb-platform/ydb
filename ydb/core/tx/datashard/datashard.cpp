@@ -4471,25 +4471,6 @@ void TDataShard::Handle(TEvDataShard::TEvStoreS3DownloadInfo::TPtr& ev, const TA
     Execute(new TTxStoreS3DownloadInfo(this, ev), ctx);
 }
 
-void TDataShard::Handle(TEvDataShard::TEvS3UploadRowsRequest::TPtr& ev, const TActorContext& ctx)
-{
-    if (ShouldDelayOperation(ev)) {
-        return;
-    }
-
-    const float rejectProbabilty = Executor()->GetRejectProbability();
-    if (rejectProbabilty > 0) {
-        const float rnd = AppData(ctx)->RandomProvider->GenRandReal2();
-        if (rnd < rejectProbabilty) {
-            DelayedS3UploadRows.emplace_back().Reset(ev.Release());
-            IncCounter(COUNTER_BULK_UPSERT_OVERLOADED);
-            return;
-        }
-    }
-
-    Execute(new TTxS3UploadRows(this, ev), ctx);
-}
-
 void TDataShard::ScanComplete(NTable::EStatus,
                                      TAutoPtr<IDestructable> prod,
                                      ui64 cookie,

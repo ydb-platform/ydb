@@ -6,8 +6,7 @@ namespace NYql {
 
 // clang generates bswap for ui32 and ui64
 template <typename TUnsigned>
-Y_FORCE_INLINE
-TUnsigned SwapBytes(TUnsigned value) {
+Y_FORCE_INLINE TUnsigned SwapBytes(TUnsigned value) {
     TUnsigned result;
     auto* from = (ui8*)&value + sizeof(TUnsigned) - 1;
     auto* to = (ui8*)&result;
@@ -17,4 +16,4 @@ TUnsigned SwapBytes(TUnsigned value) {
     return result;
 }
 
-}
+} // namespace NYql

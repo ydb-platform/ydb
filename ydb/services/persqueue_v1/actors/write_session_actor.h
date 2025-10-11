@@ -131,7 +131,6 @@ private:
     void Handle(typename TEvWrite::TPtr& ev, const NActors::TActorContext& ctx);
     void Handle(typename TEvUpdateToken::TPtr& ev, const NActors::TActorContext& ctx);
     void Handle(TEvPQProxy::TEvDone::TPtr& ev, const NActors::TActorContext& ctx);
-    void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDescribeTopicsResponse::TPtr& ev, const TActorContext& ctx);
     void LogSession(const TActorContext& ctx);
     bool InitAfterDiscovery(const TActorContext& ctx);

@@ -1654,10 +1654,13 @@ void TBalancer::Handle(TEvTabletPipe::TEvServerConnected::TPtr& ev, const TActor
 }
 
 void TBalancer::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev, const TActorContext& ctx) {
+    PQ_LOG_D("pipe " << ev->Get()->ClientId << " disconnected.");
+    Subscriptions.erase(ev->Get()->ClientId);
+
     auto it = Sessions.find(ev->Get()->ClientId);
 
     if (it == Sessions.end()) {
-        PQ_LOG_ERROR("pipe " << ev->Get()->ClientId << " disconnected but there aren't sessions exists.");
+        PQ_LOG_D("pipe " << ev->Get()->ClientId << " disconnected but there aren't sessions exists.");
         return;
     }
 
@@ -1678,6 +1681,7 @@ void TBalancer::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev, const TAc
             consumer->UnregisterReadingSession(session.get(), ctx);
 
             if (consumer->Sessions.empty()) {
+                Notify(consumer->ConsumerName, NKikimrPQ::TEvBalancingSubscribeNotify::FREE, ctx);
                 Consumers.erase(consumer->ConsumerName);
             } else {
                 consumer->ScheduleBalance(ctx);
@@ -1749,6 +1753,8 @@ void TBalancer::Handle(TEvPersQueue::TEvRegisterReadSession::TPtr& ev, const TAc
         auto [i, _] = Consumers.emplace(consumerName, std::make_unique<TConsumer>(*this, consumerName));
         i->second->InitPartitions(ctx);
         it = i;
+
+        Notify(consumerName, NKikimrPQ::TEvBalancingSubscribeNotify::BALANCING, ctx);
     }
 
     auto* consumer = it->second.get();
@@ -1833,6 +1839,59 @@ void TBalancer::ProcessPendingStats(const TActorContext& ctx) {
     });
 
     PendingUpdates.clear();
+}
+
+void TBalancer::Handle(TEvPersQueue::TEvBalancingSubscribe::TPtr& ev, const TActorContext& ctx) {
+    auto& record = ev->Get()->Record;
+    PQ_LOG_D("Handle TEvPersQueue::TEvBalancingSubscribe " << record.ShortDebugString());
+    
+    auto sender = ActorIdFromProto(record.GetSourceActor());
+    auto status = Consumers.contains(record.GetConsumer()) ?
+        NKikimrPQ::TEvBalancingSubscribeNotify::BALANCING : NKikimrPQ::TEvBalancingSubscribeNotify::FREE;
+    Notify(sender, record.GetConsumer(), status, ctx);
+
+    Subscriptions[ev->Sender].emplace_back(std::move(sender), std::move(*record.MutableConsumer()));
+}
+
+void TBalancer::Handle(TEvPersQueue::TEvBalancingUnsubscribe::TPtr& ev, const TActorContext&) {
+    auto& record = ev->Get()->Record;
+    PQ_LOG_D("Handle TEvPersQueue::TEvBalancingUnsubscribe " << record.ShortDebugString());
+
+    auto sender = ActorIdFromProto(record.GetSourceActor());
+    auto& consumer = record.GetConsumer();
+
+    auto it = Subscriptions.find(ev->Sender);
+    if (it == Subscriptions.end()) {
+        return;
+    }
+
+    std::vector<TSubscription>& subscriptions = it->second;
+    std::vector<TSubscription> actualSubscriptions;
+    actualSubscriptions.resize(subscriptions.size());
+
+    for (auto& [existsSender, existsConsumer] : subscriptions) {
+        if (sender == existsSender && consumer == existsConsumer) {
+            continue;
+        }
+
+        actualSubscriptions.emplace_back(std::move(existsSender), std::move(existsConsumer));
+    }
+
+    subscriptions = std::move(actualSubscriptions);
+}
+
+void TBalancer::Notify(const TString& consumer, NKikimrPQ::TEvBalancingSubscribeNotify::EStatus status, const TActorContext& ctx) {
+    for (auto& [_, subscriptions] : Subscriptions) {
+        for (auto& subscription : subscriptions) {
+            if (subscription.Consumer == consumer) {
+                Notify(subscription.Sender, consumer, status, ctx);
+            }
+        }
+    }
+}
+
+void TBalancer::Notify(const TActorId subscriber, const TString& consumer, NKikimrPQ::TEvBalancingSubscribeNotify::EStatus status, const TActorContext& ctx) {
+    ctx.Send(subscriber, new TEvPersQueue::TEvBalancingSubscribeNotify(TabletGeneration(), ++NotifyCookie, TopicPath(), consumer, status));
 }
 
 TString TBalancer::LogPrefix() const {

@@ -5,6 +5,8 @@ YQL_UDF_CONTRIB(top_udf)
         28
         0
     )
+
+    ENABLE(YQL_STYLE_CPP)
     
     SRCS(
         top_udf.cpp

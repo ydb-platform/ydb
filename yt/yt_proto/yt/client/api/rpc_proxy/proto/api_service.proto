@@ -712,6 +712,7 @@ message TReqSelectRows
     optional int64 max_join_batch_size = 31;
     optional bool use_order_by_in_join_subqueries = 32;
     optional int32 statistics_aggregation = 33; // EStatisticsAggregation
+    optional int32 optimization_level = 35; // EOptimizationLevel
 
     optional TSuppressableAccessTrackingOptions suppressable_access_tracking_options = 104;
 
@@ -2054,6 +2055,7 @@ message TReqAlterTable
     optional ETableSchemaModification schema_modification = 5;
     optional NYT.NChaosClient.NProto.TReplicationProgress replication_progress = 6;
     optional NYT.NProto.TGuid schema_id = 7;
+    optional uint64 clip_timestamp = 8;
 
     optional TTransactionalOptions transactional_options = 100;
     optional TMutatingOptions mutating_options = 103;
@@ -2580,6 +2582,8 @@ message TReqListJobs
     optional NYT.NYTree.NProto.TAttributeFilter attributes = 27;
 
     optional string monitoring_descriptor = 28;
+
+    optional NYT.NProto.TGuid main_job_id = 29;
 
     optional TMasterReadOptions master_read_options = 102;
 }
@@ -3357,6 +3361,8 @@ message TJob
     optional bytes events = 34; // YSON
     optional bytes statistics = 35; // YSON
     optional int64 gang_rank = 36;
+    optional uint64 job_cookie_group_index = 37;
+    optional NYT.NProto.TGuid main_job_id = 38;
 }
 
 message TListJobsStatistics

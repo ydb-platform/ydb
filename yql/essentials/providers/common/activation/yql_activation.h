@@ -11,4 +11,4 @@ ui32 GetPercentage(const TActivation& activation, const TString& userName, const
 template <class TActivation>
 bool Allow(const TActivation& activation, const TString& userName, const std::unordered_set<std::string_view>& groups);
 
-} // namespace
+} // namespace NYql::NConfig

@@ -40,7 +40,6 @@
 #include <util/system/utime.h>
 #include <util/folder/path.h>
 
-
 namespace NYql {
 
 namespace {
@@ -60,7 +59,7 @@ private:
     TGuard<TFileLock> Guard_;
 };
 
-}
+} // namespace
 
 class TFileStorageImpl: public IFileStorage {
 public:
@@ -164,7 +163,7 @@ public:
         try {
             YQL_LOG(INFO) << "PutUrl to cache: " << urlStr;
             THttpURL url = ParseURL(urlStr);
-            for (const auto& d: Downloaders_) {
+            for (const auto& d : Downloaders_) {
                 if (d->Accept(url)) {
                     return PutUrl(url, token, d);
                 }
@@ -208,12 +207,9 @@ public:
 
 private:
     TFileLinkPtr PutUrl(const THttpURL& url, const TString& token, const NFS::IDownloaderPtr& downloader) {
-        return WithRetry<TDownloadError>(Config_.GetRetryCount(), [&, this]() {
-            return this->DoPutUrl(url, token, downloader);
-        }, [&](const auto& e, int attempt, int attemptCount) {
+        return WithRetry<TDownloadError>(Config_.GetRetryCount(), [&, this]() { return this->DoPutUrl(url, token, downloader); }, [&](const auto& e, int attempt, int attemptCount) {
             YQL_LOG(WARN) << "Error while downloading url " << url.PrintS() << ", attempt " << attempt << "/" << attemptCount << ", details: " << e.what();
-            Sleep(TDuration::MilliSeconds(Config_.GetRetryDelayMs()));
-        });
+            Sleep(TDuration::MilliSeconds(Config_.GetRetryDelayMs())); });
     }
 
     TFileLinkPtr DoPutUrl(const THttpURL& url, const TString& token, const NFS::IDownloaderPtr& downloader) {
@@ -232,8 +228,8 @@ private:
         }
 
         YQL_LOG(INFO) << "UrlMeta: " << urlMetaFile << ", ETag=" << urlMeta.ETag
-            << ", ContentFile=" << urlMeta.ContentFile << ", Md5=" << urlMeta.Md5
-            << ", LastModified=" << urlMeta.LastModified;
+                      << ", ContentFile=" << urlMeta.ContentFile << ", Md5=" << urlMeta.Md5
+                      << ", LastModified=" << urlMeta.LastModified;
 
         NFS::TDataProvider puller;
         TString etag;
@@ -252,8 +248,7 @@ private:
         }
         if (urlMeta.ETag && etag) {
             YQL_LOG(INFO) << "ETag for url " << url.PrintS() << " has been changed from " << urlMeta.ETag << " to " << etag << ". We have to download new version";
-        }
-        else if (urlMeta.LastModified && lastModified) {
+        } else if (urlMeta.LastModified && lastModified) {
             YQL_LOG(INFO) << "LastModified for url " << url.PrintS() << " has been changed from " << urlMeta.LastModified << " to " << lastModified << ". We have to download new version";
         }
 
@@ -302,7 +297,7 @@ private:
     TStorage Storage_;
     const TFileStorageConfig Config_;
     std::vector<NFS::IDownloaderPtr> Downloaders_;
-    const bool UseFakeChecksums_;   // YQL-15353
+    const bool UseFakeChecksums_; // YQL-15353
 };
 
 class TFileStorageWithAsync: public TFileStorageDecorator {
@@ -358,7 +353,6 @@ private:
     THolder<IThreadPool> MtpQueue_;
 };
 
-
 TFileStoragePtr CreateFileStorage(const TFileStorageConfig& params, const std::vector<NFS::IDownloaderPtr>& downloaders) {
     Y_ENSURE(0 != params.GetMaxFiles(), "FileStorage: MaxFiles must be greater than 0");
     Y_ENSURE(0 != params.GetMaxSizeMb(), "FileStorage: MaxSizeMb must be greater than 0");
@@ -386,7 +380,7 @@ void LoadFsConfigFromFile(TStringBuf path, TFileStorageConfig& params) {
     prefix.append('_');
     TVector<TFsPath> children;
     fs.Parent().List(children);
-    for (auto c: children) {
+    for (auto c : children) {
         if (c.IsFile()) {
             const auto name = c.GetName();
             TStringBuf key(name);
@@ -417,7 +411,7 @@ void LoadFsConfigFromResource(TStringBuf path, TFileStorageConfig& params) {
     }
     prefix.append('_');
 
-    for (auto res: NResource::ListAllKeys()) {
+    for (auto res : NResource::ListAllKeys()) {
         TStringBuf key{res};
         if (key.SkipPrefix(prefix) && (!ext || key.ChopSuffix(ext))) {
             configData = NResource::Find(res);
@@ -426,4 +420,4 @@ void LoadFsConfigFromResource(TStringBuf path, TFileStorageConfig& params) {
     }
 }
 
-} // NYql
+} // namespace NYql

@@ -1165,7 +1165,7 @@ TString SafeGetUsernameByUid(int /*uid*/)
 }
 #endif
 
-void CloseAllDescriptors(const std::vector<int>& exceptFor)
+std::vector<int> CloseAllDescriptors(const std::vector<int>& exceptFor)
 {
 #ifdef _linux_
     std::vector<int> fds;
@@ -1189,8 +1189,11 @@ void CloseAllDescriptors(const std::vector<int>& exceptFor)
     for (int fd : fds) {
         YT_VERIFY(TryClose(fd, ignoreBadFD));
     }
+
+    return fds;
 #else
     Y_UNUSED(exceptFor);
+    return {};
 #endif
 }
 

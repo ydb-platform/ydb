@@ -1,26 +1,28 @@
 #include "mkql_builtins_decimal.h" // Y_IGNORE
+#include "mkql_safe_ops.h"
 
 namespace NKikimr {
 namespace NMiniKQL {
 
 namespace {
 
-template<typename TInput, typename TOutput>
-struct TMinus : public TSimpleArithmeticUnary<TInput, TOutput, TMinus<TInput, TOutput>> {
+template <typename TInput, typename TOutput>
+struct TMinus: public TSimpleArithmeticUnary<TInput, TOutput, TMinus<TInput, TOutput>> {
     static constexpr auto NullMode = TKernel::ENullMode::Default;
 
     static TOutput Do(TInput val)
     {
-        return -val;
+        return SafeNeg(val);
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
     static Value* Gen(Value* arg, const TCodegenContext&, BasicBlock*& block)
     {
-        if constexpr (std::is_integral<TInput>())
+        if constexpr (std::is_integral<TInput>()) {
             return BinaryOperator::CreateNeg(arg, "neg", block);
-        else
+        } else {
             return UnaryOperator::CreateFNeg(arg, "neg", block);
+        }
     }
 #endif
 };
@@ -42,7 +44,7 @@ struct TDecimalMinus: TDecimalUnary<TDecimalMinus> {
     }
 #endif
 };
-}
+} // namespace
 
 void RegisterMinus(IBuiltinFunctionRegistry& registry) {
     RegisterUnaryNumericFunctionOpt<TMinus, TUnaryArgsOpt>(registry, "Minus");

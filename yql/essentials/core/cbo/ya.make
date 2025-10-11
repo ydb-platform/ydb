@@ -1,5 +1,7 @@
 LIBRARY()
 
+ENABLE(YQL_STYLE_CPP)
+
 SRCS(
     cbo_optimizer_new.cpp
     cbo_interesting_orderings.cpp

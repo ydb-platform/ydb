@@ -38,11 +38,11 @@ TString GetLastErrorAsString()
         return {};
     }
 
-    TPyObjectPtr etypePtr {etype, TPyObjectPtr::ADD_REF};
-    TPyObjectPtr evaluePtr {evalue, TPyObjectPtr::ADD_REF};
-    TPyObjectPtr etracebackPtr {etraceback, TPyObjectPtr::ADD_REF};
+    TPyObjectPtr etypePtr{etype, TPyObjectPtr::ADD_REF};
+    TPyObjectPtr evaluePtr{evalue, TPyObjectPtr::ADD_REF};
+    TPyObjectPtr etracebackPtr{etraceback, TPyObjectPtr::ADD_REF};
 
-    TPyObjectPtr stderrObject {PySys_GetObject("stderr"), TPyObjectPtr::ADD_REF};
+    TPyObjectPtr stderrObject{PySys_GetObject("stderr"), TPyObjectPtr::ADD_REF};
     if (!stderrObject) {
         return {};
     }
@@ -59,8 +59,7 @@ TString GetLastErrorAsString()
         return {};
     }
     unused.ResetSteal(
-        PyObject_CallMethod(stderrObject.Get(), "_toggle_real_mode", nullptr)
-    );
+        PyObject_CallMethod(stderrObject.Get(), "_toggle_real_mode", nullptr));
 
     TString errorValue;
     if (!TryPyCast(error.Get(), errorValue)) {
@@ -69,4 +68,4 @@ TString GetLastErrorAsString()
     return errorValue;
 }
 
-} // namspace NPython
+} // namespace NPython

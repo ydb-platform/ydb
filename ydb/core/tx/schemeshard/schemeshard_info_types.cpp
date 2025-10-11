@@ -2143,17 +2143,26 @@ bool TTableInfo::CheckSplitByLoad(
         }
     }
 
+    // NOTE: Do not suggest splitting-by-load, if the expected number of partitions
+    //       (taking into account all in-flight split operations) already exceeds
+    //       the overall limit on the number of partitions. Using the maximum
+    //       between the current partition count and the expected partition count
+    //       prevents splitting-by-load when there are some in-flight merge
+    //       operations (which reduce the expected partition count).
+    const ui64 effectiveShardCount = Max(ExpectedPartitionCount, Stats.PartitionStats.size());
+
     const auto& stats = *Stats.PartitionStats.FindPtr(shardIdx);
     if (rowCount < MIN_ROWS_FOR_SPLIT_BY_LOAD ||
         dataSize < MIN_SIZE_FOR_SPLIT_BY_LOAD ||
-        Stats.PartitionStats.size() >= maxShards ||
+        effectiveShardCount >= maxShards ||
         stats.GetCurrentRawCpuUsage() < cpuUsageThreshold * 1000000)
     {
         reason = TStringBuilder() << "ConditionsNotMet"
-            << " rowCount: " << rowCount << " minRows: " << MIN_ROWS_FOR_SPLIT_BY_LOAD
-            << " dataSize: " << dataSize << " minSize: " << MIN_SIZE_FOR_SPLIT_BY_LOAD
-            << " shardCount: " << Stats.PartitionStats.size() << " maxShards: " << maxShards
-            << " cpuUsage: " << stats.GetCurrentRawCpuUsage() << " threshold: " << cpuUsageThreshold * 1000000;
+            << " rowCount: " << rowCount << " minRowCount: " << MIN_ROWS_FOR_SPLIT_BY_LOAD
+            << " shardSize: " << dataSize << " minShardSize: " << MIN_SIZE_FOR_SPLIT_BY_LOAD
+            << " shardCount: " << Stats.PartitionStats.size()
+            << " expectedShardCount: " << ExpectedPartitionCount << " maxShardCount: " << maxShards
+            << " cpuUsage: " << stats.GetCurrentRawCpuUsage() << " cpuUsageThreshold: " << cpuUsageThreshold * 1000000;
         return false;
     }
 
@@ -2163,6 +2172,7 @@ bool TTableInfo::CheckSplitByLoad(
         << "shardSize: " << dataSize << ", "
         << "minShardSize: " << MIN_SIZE_FOR_SPLIT_BY_LOAD << ", "
         << "shardCount: " << Stats.PartitionStats.size() << ", "
+        << "expectedShardCount: " << ExpectedPartitionCount << ", "
         << "maxShardCount: " << maxShards << ", "
         << "cpuUsage: " << stats.GetCurrentRawCpuUsage() << ", "
         << "cpuUsageThreshold: " << cpuUsageThreshold * 1000000 << ")";

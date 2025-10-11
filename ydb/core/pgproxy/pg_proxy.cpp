@@ -3,7 +3,7 @@
 #include "pg_connection.h"
 #include "pg_listener.h"
 #include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/actors/interconnect/poller_actor.h>
+#include <ydb/library/actors/interconnect/poller/poller_actor.h>
 
 namespace NPG {
 

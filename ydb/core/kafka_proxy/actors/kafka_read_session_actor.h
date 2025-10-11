@@ -52,9 +52,6 @@ namespace NKafka {
      *           <----------------
      */
 
-static const TString SUPPORTED_ASSIGN_STRATEGY = "roundrobin";
-static const TString SUPPORTED_JOIN_GROUP_PROTOCOL = "consumer";
-
 class TKafkaReadSessionActor: public NActors::TActorBootstrapped<TKafkaReadSessionActor> {
 
 enum EReadSessionSteps {
@@ -157,7 +154,6 @@ private:
     bool CheckHeartbeatIsExpired();
     bool CheckTopicsListAreChanged(const TMessagePtr<TJoinGroupRequestData> joinGroupRequestData);
     bool TryFillTopicsToRead(const TMessagePtr<TJoinGroupRequestData> joinGroupRequestData, THashSet<TString>& topics);
-    void FillTopicsFromJoinGroupMetadata(TKafkaBytes& metadata, THashSet<TString>& topics);
 
 private:
     const TContext::TPtr Context;

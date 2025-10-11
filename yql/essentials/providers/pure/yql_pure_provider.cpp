@@ -32,7 +32,7 @@ namespace {
 using namespace NKikimr;
 using namespace NKikimr::NMiniKQL;
 
-class TPureDataSinkExecTransformer : public TExecTransformerBase {
+class TPureDataSinkExecTransformer: public TExecTransformerBase {
 public:
     TPureDataSinkExecTransformer(const TPureState::TPtr state)
         : State_(state)
@@ -65,28 +65,28 @@ public:
         const bool isList = lambda.Ref().GetTypeAnn()->GetKind() == ETypeAnnotationKind::List;
         auto optimized = lambda.Ptr();
         auto source1 = ctx.Builder(lambda.Pos())
-            .Callable("Take")
-                .Callable(0, "SourceOf")
-                    .Callable(0, "StreamType")
-                        .Callable(0, "NullType")
-                        .Seal()
-                    .Seal()
-                .Seal()
-                .Callable(1, "Uint64")
-                    .Atom(0, "1")
-                .Seal()
-            .Seal()
-            .Build();
+                           .Callable("Take")
+                           .Callable(0, "SourceOf")
+                           .Callable(0, "StreamType")
+                           .Callable(0, "NullType")
+                           .Seal()
+                           .Seal()
+                           .Seal()
+                           .Callable(1, "Uint64")
+                           .Atom(0, "1")
+                           .Seal()
+                           .Seal()
+                           .Build();
 
         optimized = ctx.Builder(lambda.Pos())
-            .Callable(isList ? "FlatMap" : "Map")
-                .Add(0, source1)
-                .Lambda(1)
-                    .Param("x")
-                    .Set(optimized)
-                .Seal()
-            .Seal()
-            .Build();
+                        .Callable(isList ? "FlatMap" : "Map")
+                        .Add(0, source1)
+                        .Lambda(1)
+                        .Param("x")
+                        .Set(optimized)
+                        .Seal()
+                        .Seal()
+                        .Build();
 
         bool hasNonDeterministicFunctions;
         auto status = PeepHoleOptimizeNode(optimized, optimized, ctx, *State_->Types, nullptr, hasNonDeterministicFunctions);
@@ -126,26 +126,23 @@ public:
 
         TExploringNodeVisitor explorer;
         explorer.Walk(root.GetNode(), env.GetNodeStack());
-        auto compFactory = GetCompositeWithBuiltinFactory({
-            GetYqlFactory(),
-            GetPgFactory()
-        });
+        auto compFactory = GetCompositeWithBuiltinFactory({GetYqlFactory(),
+                                                           GetPgFactory()});
 
         NUdf::TUniquePtr<NUdf::ILogProvider> logProvider = NUdf::MakeLogProvider(
             [](const NUdf::TStringRef& component, NUdf::ELogLevel level, const NUdf::TStringRef& message) {
                 Cerr << Now() << " " << component << " [" << level << "] " << message << "\n";
             },
-            State_->Types->RuntimeLogLevel
-        );
+            State_->Types->RuntimeLogLevel);
 
         TComputationPatternOpts patternOpts(alloc.Ref(), env, compFactory, State_->FunctionRegistry,
-            State_->Types->ValidateMode, NUdf::EValidatePolicy::Exception, State_->Types->OptLLVM.GetOrElse(TString()),
-            EGraphPerProcess::Multi, nullptr, nullptr, nullptr, logProvider.Get());
+                                            State_->Types->ValidateMode, NUdf::EValidatePolicy::Exception, State_->Types->OptLLVM.GetOrElse(TString()),
+                                            EGraphPerProcess::Multi, nullptr, nullptr, nullptr, logProvider.Get());
 
         auto pattern = MakeComputationPattern(explorer, root, {}, patternOpts);
         const TComputationOptsFull computeOpts(nullptr, alloc.Ref(), env,
-            *State_->Types->RandomProvider, *State_->Types->TimeProvider,
-            NUdf::EValidatePolicy::Exception, nullptr, nullptr, logProvider.Get(), State_->Types->LangVer);
+                                               *State_->Types->RandomProvider, *State_->Types->TimeProvider,
+                                               NUdf::EValidatePolicy::Exception, nullptr, nullptr, logProvider.Get(), State_->Types->LangVer);
         auto graph = pattern->Clone(computeOpts);
         const TBindTerminator bind(graph->GetTerminator());
         graph->Prepare();
@@ -209,7 +206,7 @@ private:
         explorer.Walk(root.GetNode(), env.GetNodeStack());
         bool wereChanges = false;
         TRuntimeNode program = SinglePassVisitCallables(root, explorer,
-            TSimpleFileTransformProvider(State_->FunctionRegistry, files), env, true, wereChanges);
+                                                        TSimpleFileTransformProvider(State_->FunctionRegistry, files), env, true, wereChanges);
         program = LiteralPropagationOptimization(program, env, true);
         return program;
     }
@@ -222,12 +219,13 @@ THolder<TExecTransformerBase> CreatePureDataSourceExecTransformer(const TPureSta
     return THolder(new TPureDataSinkExecTransformer(state));
 }
 
-class TPureProvider : public TDataProviderBase {
+class TPureProvider: public TDataProviderBase {
 public:
     TPureProvider(const TPureState::TPtr& state)
         : State_(state)
         , ExecTransformer_([this]() { return CreatePureDataSourceExecTransformer(State_); })
-    {}
+    {
+    }
 
     TStringBuf GetName() const final {
         return PureProviderName;
@@ -242,25 +240,24 @@ private:
     TLazyInitHolder<TExecTransformerBase> ExecTransformer_;
 };
 
-}
+} // namespace
 
 TIntrusivePtr<IDataProvider> CreatePureProvider(const TPureState::TPtr& state) {
     return MakeIntrusive<TPureProvider>(state);
 }
 
 TDataProviderInitializer GetPureDataProviderInitializer() {
-    return [] (
-        const TString& userName,
-        const TString& sessionId,
-        const TGatewaysConfig* gatewaysConfig,
-        const IFunctionRegistry* functionRegistry,
-        TIntrusivePtr<IRandomProvider> randomProvider,
-        TIntrusivePtr<TTypeAnnotationContext> typeCtx,
-        const TOperationProgressWriter& progressWriter,
-        const TYqlOperationOptions& operationOptions,
-        THiddenQueryAborter hiddenAborter,
-        const TQContext& qContext
-    ) {
+    return [](
+               const TString& userName,
+               const TString& sessionId,
+               const TGatewaysConfig* gatewaysConfig,
+               const IFunctionRegistry* functionRegistry,
+               TIntrusivePtr<IRandomProvider> randomProvider,
+               TIntrusivePtr<TTypeAnnotationContext> typeCtx,
+               const TOperationProgressWriter& progressWriter,
+               const TYqlOperationOptions& operationOptions,
+               THiddenQueryAborter hiddenAborter,
+               const TQContext& qContext) {
         Y_UNUSED(userName);
         Y_UNUSED(sessionId);
         Y_UNUSED(gatewaysConfig);
@@ -280,12 +277,12 @@ TDataProviderInitializer GetPureDataProviderInitializer() {
 
         info.Source = CreatePureProvider(state);
         info.OpenSession = [state](
-            const TString& sessionId,
-            const TString& username,
-            const TOperationProgressWriter& progressWriter,
-            const TYqlOperationOptions& operationOptions,
-            TIntrusivePtr<IRandomProvider> randomProvider,
-            TIntrusivePtr<ITimeProvider> timeProvider) {
+                               const TString& sessionId,
+                               const TString& username,
+                               const TOperationProgressWriter& progressWriter,
+                               const TYqlOperationOptions& operationOptions,
+                               TIntrusivePtr<IRandomProvider> randomProvider,
+                               TIntrusivePtr<ITimeProvider> timeProvider) {
             Y_UNUSED(sessionId);
             Y_UNUSED(username);
             Y_UNUSED(progressWriter);
@@ -304,4 +301,4 @@ TDataProviderInitializer GetPureDataProviderInitializer() {
     };
 }
 
-}
+} // namespace NYql

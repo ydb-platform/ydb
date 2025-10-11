@@ -236,8 +236,8 @@
 #include <ydb/library/actors/interconnect/interconnect_tcp_server.h>
 #include <ydb/library/actors/interconnect/handshake_broker.h>
 #include <ydb/library/actors/interconnect/load.h>
-#include <ydb/library/actors/interconnect/poller_actor.h>
-#include <ydb/library/actors/interconnect/poller_tcp.h>
+#include <ydb/library/actors/interconnect/poller/poller_actor.h>
+#include <ydb/library/actors/interconnect/poller/poller_tcp.h>
 #include <ydb/library/actors/util/affinity.h>
 #include <ydb/library/actors/wilson/wilson_uploader.h>
 #include <ydb/library/slide_limiter/service/service.h>
@@ -473,9 +473,9 @@ static TInterconnectSettings GetInterconnectSettings(const NKikimrConfig::TInter
     if (config.HasNumPreallocatedBuffers()) {
         result.NumPreallocatedBuffers = config.GetNumPreallocatedBuffers();
     }
-    if (config.HasEnableExternalDataChannel()) {
-        result.EnableExternalDataChannel = config.GetEnableExternalDataChannel();
-    }
+
+    result.EnableExternalDataChannel = config.GetEnableExternalDataChannel();
+
     if (config.HasValidateIncomingPeerViaDirectLookup()) {
         result.ValidateIncomingPeerViaDirectLookup = config.GetValidateIncomingPeerViaDirectLookup();
     }
@@ -495,15 +495,13 @@ static TInterconnectSettings GetInterconnectSettings(const NKikimrConfig::TInter
         result.EventDelay = TDuration::MicroSeconds(config.GetEventDelayMicrosec());
     }
 
-    if (config.HasSocketSendOptimization()) {
-        switch (config.GetSocketSendOptimization()) {
-            case NKikimrConfig::TInterconnectConfig::IC_SO_DISABLED:
-                result.SocketSendOptimization = ESocketSendOptimization::DISABLED;
-                break;
-            case NKikimrConfig::TInterconnectConfig::IC_SO_MSG_ZEROCOPY:
-                result.SocketSendOptimization = ESocketSendOptimization::IC_MSG_ZEROCOPY;
-                break;
-        }
+    switch (config.GetSocketSendOptimization()) {
+        case NKikimrConfig::TInterconnectConfig::IC_SO_DISABLED:
+            result.SocketSendOptimization = ESocketSendOptimization::DISABLED;
+            break;
+        case NKikimrConfig::TInterconnectConfig::IC_SO_MSG_ZEROCOPY:
+            result.SocketSendOptimization = ESocketSendOptimization::IC_MSG_ZEROCOPY;
+            break;
     }
 
     return result;
@@ -1629,12 +1627,11 @@ void TMessageBusServicesInitializer::InitializeServices(NActors::TActorSystemSet
             setup->LocalServices.emplace_back(NMsgBusProxy::CreateMsgBusProxyId(),
                                                          TActorSetupCmd(proxy, TMailboxType::ReadAsFilled, appData->UserPoolId));
 
-            TDuration pqMetaRefresh = TDuration::MilliSeconds(appData->PQConfig.GetPQDiscoveryConfig().GetCacheRefreshIntervalMilliSeconds());
             if (appData->PQConfig.GetEnabled()) {
                 setup->LocalServices.emplace_back(
                         NMsgBusProxy::CreatePersQueueMetaCacheV2Id(),
                         TActorSetupCmd(
-                                NMsgBusProxy::NPqMetaCacheV2::CreatePQMetaCache(appData->Counters, pqMetaRefresh),
+                                NMsgBusProxy::NPqMetaCacheV2::CreatePQMetaCache(appData->Counters),
                                 TMailboxType::ReadAsFilled, appData->UserPoolId
                         )
                 );
@@ -1741,10 +1738,7 @@ void TGRpcServicesInitializer::InitializeServices(NActors::TActorSystemSetup* se
 
         if (appData->PQConfig.GetEnabled()) {
 
-            TDuration pqMetaRefresh = TDuration::Seconds(NMsgBusProxy::PQ_METACACHE_REFRESH_INTERVAL_SECONDS);
-            IActor * cache = NMsgBusProxy::NPqMetaCacheV2::CreatePQMetaCache(
-                    appData->Counters, pqMetaRefresh
-            );
+            IActor * cache = NMsgBusProxy::NPqMetaCacheV2::CreatePQMetaCache(appData->Counters);
             Y_ABORT_UNLESS(cache);
             setup->LocalServices.emplace_back(
                 NMsgBusProxy::CreatePersQueueMetaCacheV2Id(),

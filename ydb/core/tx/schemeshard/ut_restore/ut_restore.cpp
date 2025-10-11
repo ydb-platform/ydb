@@ -297,7 +297,8 @@ namespace {
         const TTypedScheme& typedScheme,
         const TVector<std::pair<TString, ui64>>& shardsConfig = {{"a", 1}},
         const TString& permissions = "",
-        const TString& metadata = R"({"version": 0})"
+        const TString& metadata = R"({"version": 1})",
+        ECompressionCodec codec = ECompressionCodec::None
     ) {
         TTestDataWithScheme result;
         result.Type = typedScheme.Type;
@@ -308,7 +309,7 @@ namespace {
         case EPathTypeTable:
             result.Scheme = typedScheme.Scheme;
             for (const auto& [keyPrefix, count] : shardsConfig) {
-                result.Data.emplace_back(GenerateTestData(keyPrefix, count));
+                result.Data.emplace_back(GenerateTestData(codec, keyPrefix, count));
             }
             break;
         case EPathTypeView:
@@ -6023,6 +6024,48 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
             }
             primary_key: "key"
         )" , {{"a", 1}}, "", R"({"version": 1})");
+
+        TS3Mock s3Mock(ConvertTestData(data), TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TTestWithReboots t;
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            {
+                TInactiveZone inactive(activeZone);
+
+                runtime.SetLogPriority(NKikimrServices::DATASHARD_RESTORE, NActors::NLog::PRI_TRACE);
+                runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+            }
+
+            const ui64 importId = ++t.TxId;
+            AsyncImport(runtime, importId, "/MyRoot", Sprintf(DefaultImportSettings.data(), port));
+            t.TestEnv->TestWaitNotification(runtime, importId);
+
+            {
+                TInactiveZone inactive(activeZone);
+                TestGetImport(runtime, importId, "/MyRoot", {
+                    Ydb::StatusIds::SUCCESS,
+                    Ydb::StatusIds::NOT_FOUND
+                });
+            }
+        });
+    }
+
+    Y_UNIT_TEST(ShouldSucceedOnBigCompressedTable) {
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        auto data = GenerateTestData(R"(
+            columns {
+              name: "key"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+            columns {
+              name: "value"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+            primary_key: "key"
+        )" , {{TString(1'000'000, 'a'), 10}}, "", R"({"version": 1})", ECompressionCodec::Zstd);
 
         TS3Mock s3Mock(ConvertTestData(data), TS3Mock::TSettings(port));
         UNIT_ASSERT(s3Mock.Start());

@@ -68,6 +68,12 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic {
         const TDelayParams* const DelayParams; // owned by scheduler
 
     private:
+        // used to calculate adjusted satisfaction between snapshots
+        ui64 PrevBurstUsage = 0;
+        ui64 PrevBurstUsageResume = 0;
+        ui64 PrevBurstUsageExtra = 0;
+        ui64 PrevBurstThrottle = 0;
+
         TRWMutex TasksMutex;
         TSchedulableTaskList SchedulableTasks; // protected by TasksMutex
     };

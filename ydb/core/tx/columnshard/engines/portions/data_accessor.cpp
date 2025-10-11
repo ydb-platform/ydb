@@ -832,8 +832,4 @@ TConclusion<std::shared_ptr<NArrow::TGeneralContainer>> TPortionDataAccessor::TP
     return std::make_shared<NArrow::TGeneralContainer>(fields, std::move(columns));
 }
 
-TString TPortionDataAccessor::GetEntityStorageId(const ui64 entityId, const TIndexInfo& indexInfo) const {
-    return PortionInfo->GetEntityStorageId(entityId, indexInfo, *this);
-}
-
 }   // namespace NKikimr::NOlap

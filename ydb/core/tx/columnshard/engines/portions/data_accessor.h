@@ -574,7 +574,13 @@ public:
         AFL_VERIFY(findProperties)("index", indexId);
         return findProperties->GetInheritPortionStorage();
     }
-    TString GetEntityStorageId(const ui64 entityId, const TIndexInfo& indexInfo) const;
+    TString GetEntityStorageId(const ui64 entityId, const TIndexInfo& indexInfo) const {
+        return PortionInfo->GetEntityStorageId(entityId, indexInfo, *this);
+    }
+    NSplitter::TEntityGroups GetEntityGroupsByStorageId(
+        const TString& specialTier, const IStoragesManager& storages, const TIndexInfo& indexInfo) const {
+        return PortionInfo->GetEntityGroupsByStorageId(specialTier, storages, indexInfo, *this);
+    }
 };
 
 }   // namespace NKikimr::NOlap

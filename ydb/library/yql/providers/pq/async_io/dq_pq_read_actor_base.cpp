@@ -13,6 +13,11 @@
 #include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 #include <ydb/library/yql/providers/pq/proto/dq_io_state.pb.h>
 
+#define SRC_LOG_T(s) \
+    LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, LogPrefix << s)
+#define SRC_LOG_D(s) \
+    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, LogPrefix << s)
+
 namespace NYql::NDq::NInternal {
 
 namespace {
@@ -136,6 +141,43 @@ ui64 TDqPqReadActorBase::GetInputIndex() const {
 
 const NYql::NDq::TDqAsyncStats& TDqPqReadActorBase::GetIngressStats() const {
     return IngressStats;
+}
+
+void TDqPqReadActorBase::InitWatermarkTracker(ui64 lateArrivalDelayUs, ui64 idleDelayUs) {
+    SRC_LOG_D("SessionId: " << GetSessionId() << " Watermarks enabled: " << SourceParams.GetWatermarks().GetEnabled() << " granularity: "
+        << SourceParams.GetWatermarks().GetGranularityUs() << " microseconds"
+        << " idle delay: " << idleDelayUs << " microseconds"
+        << " idle: " << SourceParams.GetWatermarks().GetIdlePartitionsEnabled()
+        );
+
+    if (!SourceParams.GetWatermarks().GetEnabled()) {
+        return;
+    }
+
+    WatermarkTracker.ConstructInPlace(
+        TDuration::MicroSeconds(SourceParams.GetWatermarks().GetGranularityUs()),
+        SourceParams.GetWatermarks().GetIdlePartitionsEnabled(),
+        TDuration::MicroSeconds(lateArrivalDelayUs),
+        TDuration::MicroSeconds(idleDelayUs),
+        TInstant::Now()
+    );
+}
+
+void TDqPqReadActorBase::MaybeScheduleNextIdleCheck(TInstant systemTime) {
+    if (!WatermarkTracker) {
+        return;
+    }
+
+    const auto nextIdleCheckAt = WatermarkTracker->GetNextIdlenessCheckAt(systemTime);
+    if (!nextIdleCheckAt) {
+        return;
+    }
+
+    if (!NextIdlenessCheckAt.Defined() || nextIdleCheckAt != *NextIdlenessCheckAt) {
+        NextIdlenessCheckAt = *nextIdleCheckAt;
+        SRC_LOG_T("SessionId: " << GetSessionId() << " Next idleness check scheduled at " << *nextIdleCheckAt);
+        ScheduleSourcesCheck(*nextIdleCheckAt);
+    }
 }
 
 } // namespace NYql::NDq::NInternal

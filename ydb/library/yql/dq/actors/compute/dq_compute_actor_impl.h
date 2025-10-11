@@ -1493,7 +1493,7 @@ protected:
         }
 
         // Don't produce any input from sources if we're about to save checkpoint.
-        if ((Checkpoints && Checkpoints->HasPendingCheckpoint() && !Checkpoints->ComputeActorStateSaved())) {
+        if (Checkpoints && Checkpoints->HasPendingCheckpoint() && !Checkpoints->ComputeActorStateSaved()) {
             CA_LOG_T("Skip polling sources because of pending checkpoint");
             return pollResult;
         }

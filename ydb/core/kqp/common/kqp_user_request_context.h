@@ -20,6 +20,7 @@ namespace NKikimr::NKqp {
         TString PoolId;
         std::optional<NResourcePool::TPoolSettings> PoolConfig;
         bool IsStreamingQuery = false;
+        TString CheckpointId;
 
         TUserRequestContext() = default;
 

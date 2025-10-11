@@ -152,7 +152,13 @@ protected: //TDqComputeActorChannels::ICalbacks
 
 protected: //TDqComputeActorCheckpoints::ICallbacks
     bool ReadyToCheckpoint() const override final {
-        for (auto& [id, channelInfo] : this->InputChannelsMap) {
+        for (const auto& [_, sourceInfo] : this->SourcesMap) {
+            if (!sourceInfo.Buffer->Empty()) {
+                return false;
+            }
+        }
+
+        for (const auto& [_, channelInfo] : this->InputChannelsMap) {
             if (channelInfo.CheckpointingMode == NDqProto::CHECKPOINTING_MODE_DISABLED) {
                 continue;
             }
@@ -160,10 +166,23 @@ protected: //TDqComputeActorCheckpoints::ICallbacks
             if (!channelInfo.IsPaused()) {
                 return false;
             }
+
             if (!channelInfo.Channel->Empty()) {
                 return false;
             }
         }
+
+        for (const auto& [_, transformInfo] : this->InputTransformsMap) {
+            const auto buffer = transformInfo.Buffer;
+            if (!buffer->Empty()) {
+                return false;
+            }
+
+            if (buffer->IsPending()) {
+                return false;
+            }
+        }
+
         return true;
     }
 

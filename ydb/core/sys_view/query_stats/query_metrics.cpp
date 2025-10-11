@@ -63,8 +63,8 @@ struct TQueryMetricsExtractorsMap :
 };
 
 THolder<NActors::IActor> CreateQueryMetricsScan(const NActors::TActorId& ownerId, ui32 scanId,
-    const NKikimrSysView::TSysViewDescription& sysViewInfo, const TTableRange& tableRange,
-    const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
+    const TString& database, const NKikimrSysView::TSysViewDescription& sysViewInfo,
+    const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
 {
     using TQueryMetricsScan = TProcessorScan<
         NKikimrSysView::TQueryMetricsEntry,
@@ -77,7 +77,7 @@ THolder<NActors::IActor> CreateQueryMetricsScan(const NActors::TActorId& ownerId
         ui32
     >;
 
-    return MakeHolder<TQueryMetricsScan>(ownerId, scanId, sysViewInfo, tableRange, columns,
+    return MakeHolder<TQueryMetricsScan>(ownerId, scanId, database, sysViewInfo, tableRange, columns,
         NKikimrSysView::METRICS_ONE_MINUTE);
 }
 

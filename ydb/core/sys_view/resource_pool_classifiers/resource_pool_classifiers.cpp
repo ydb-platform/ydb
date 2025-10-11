@@ -33,12 +33,11 @@ public:
     }
 
     TResourcePoolClassifiersScan(const NActors::TActorId& ownerId, ui32 scanId,
-        const NKikimrSysView::TSysViewDescription& sysViewInfo,
+        const TString& database, const NKikimrSysView::TSysViewDescription& sysViewInfo,
         const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
-        TIntrusiveConstPtr<NACLib::TUserToken> userToken, const TString& database, bool reverse)
-        : TBase(ownerId, scanId, sysViewInfo, tableRange, columns)
+        TIntrusiveConstPtr<NACLib::TUserToken> userToken, bool reverse)
+        : TBase(ownerId, scanId, database, sysViewInfo, tableRange, columns)
         , UserToken(std::move(userToken))
-        , Database(database)
         , Reverse(reverse)
     {}
 
@@ -74,7 +73,7 @@ private:
         if (!NMetadata::NProvider::TServiceOperator::IsEnabled()) {
             ReplyEmptyAndDie();
         }
-        Register(NKqp::NWorkload::CreateDatabaseFetcherActor(SelfId(), Database, UserToken, NACLib::EAccessRights::GenericFull));
+        Register(NKqp::NWorkload::CreateDatabaseFetcherActor(SelfId(), TenantName, UserToken, NACLib::EAccessRights::GenericFull));
     }
 
     void Handle(NKqp::TEvKqpCompute::TEvScanDataAck::TPtr&) {
@@ -87,7 +86,7 @@ private:
             ReplyErrorAndDie(event.Status, event.Issues.ToOneLineString());
             return;
         }
-        Database = event.DatabaseId;
+        DatabaseId = event.DatabaseId;
         Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()), new NMetadata::NProvider::TEvAskSnapshot(std::make_shared<NKqp::TResourcePoolClassifierSnapshotsFetcher>()));
     }
 
@@ -117,7 +116,7 @@ private:
 
         const auto& snapshot = ev->Get()->GetSnapshotAs<NKqp::TResourcePoolClassifierSnapshot>();
         const auto& config = snapshot->GetResourcePoolClassifierConfigs();
-        auto resourcePoolsIt = config.find(Database);
+        auto resourcePoolsIt = config.find(DatabaseId);
         if (resourcePoolsIt == config.end()) {
             ReplyEmptyAndDie();
             return;
@@ -150,17 +149,17 @@ private:
 
 private:
     const TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
-    TString Database;
     const bool Reverse;
+    TString DatabaseId;
 };
 
 THolder<NActors::IActor> CreateResourcePoolClassifiersScan(const NActors::TActorId& ownerId, ui32 scanId,
-    const NKikimrSysView::TSysViewDescription& sysViewInfo,
+    const TString& database, const NKikimrSysView::TSysViewDescription& sysViewInfo,
     const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
-    TIntrusiveConstPtr<NACLib::TUserToken> userToken, const TString& database, bool reverse)
+    TIntrusiveConstPtr<NACLib::TUserToken> userToken, bool reverse)
 {
-    return MakeHolder<TResourcePoolClassifiersScan>(ownerId, scanId, sysViewInfo, tableRange, columns,
-        std::move(userToken), database, reverse);
+    return MakeHolder<TResourcePoolClassifiersScan>(ownerId, scanId, database, sysViewInfo, tableRange, columns,
+        std::move(userToken), reverse);
 }
 
 } // NSysView

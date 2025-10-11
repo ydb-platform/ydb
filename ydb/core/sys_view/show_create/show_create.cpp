@@ -59,11 +59,10 @@ public:
     }
 
     TShowCreate(const NActors::TActorId& ownerId, ui32 scanId,
-        const NKikimrSysView::TSysViewDescription& sysViewInfo,
+        const TString& database, const NKikimrSysView::TSysViewDescription& sysViewInfo,
         const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
-        const TString& database, TIntrusiveConstPtr<NACLib::TUserToken> userToken)
-        : TBase(ownerId, scanId, sysViewInfo, tableRange, columns)
-        , Database(database)
+        TIntrusiveConstPtr<NACLib::TUserToken> userToken)
+        : TBase(ownerId, scanId, database, sysViewInfo, tableRange, columns)
         , UserToken(std::move(userToken))
     {
     }
@@ -147,7 +146,7 @@ private:
         }
 
         std::unique_ptr<TEvTxUserProxy::TEvNavigate> navigateRequest(new TEvTxUserProxy::TEvNavigate());
-        navigateRequest->Record.SetDatabaseName(Database);
+        navigateRequest->Record.SetDatabaseName(DatabaseName);
         if (UserToken) {
             navigateRequest->Record.SetUserToken(UserToken->GetSerializedToken());
         }
@@ -188,7 +187,7 @@ private:
 
         for (const auto& cdcStream: tableDesc.GetCdcStreams()) {
             std::unique_ptr<TEvTxUserProxy::TEvNavigate> navigateRequest(new TEvTxUserProxy::TEvNavigate());
-            navigateRequest->Record.SetDatabaseName(Database);
+            navigateRequest->Record.SetDatabaseName(DatabaseName);
             if (UserToken) {
                 navigateRequest->Record.SetUserToken(UserToken->GetSerializedToken());
             }
@@ -213,7 +212,7 @@ private:
             CollectTableSettingsState->Sequences[sequencePathId] = nullptr;
 
             Send(NSequenceProxy::MakeSequenceProxyServiceID(),
-                new NSequenceProxy::TEvSequenceProxy::TEvGetSequence(Database, sequencePathId)
+                new NSequenceProxy::TEvSequenceProxy::TEvGetSequence(DatabaseName, sequencePathId)
             );
         }
     }
@@ -263,7 +262,7 @@ private:
                 std::pair<TString, TString> pathPair;
                 {
                     TString error;
-                    if (!TrySplitPathByDb(Path, Database, pathPair, error)) {
+                    if (!TrySplitPathByDb(Path, DatabaseName, pathPair, error)) {
                         ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR, error);
                         return;
                     }
@@ -275,9 +274,9 @@ private:
                         auto tablePath = pathPair.second;
 
                         bool temporary = false;
-                        if (NKqp::IsSessionsDirPath(Database, pathPair.second)) {
+                        if (NKqp::IsSessionsDirPath(DatabaseName, pathPair.second)) {
                             TString error;
-                            if (!RewriteTemporaryTablePath(Database, tablePath, error)) {
+                            if (!RewriteTemporaryTablePath(DatabaseName, tablePath, error)) {
                                 return ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR, error);
                             }
                             temporary = true;
@@ -305,9 +304,9 @@ private:
                         auto tablePath = pathPair.second;
 
                         bool temporary = false;
-                        if (NKqp::IsSessionsDirPath(Database, pathPair.second)) {
+                        if (NKqp::IsSessionsDirPath(DatabaseName, pathPair.second)) {
                             TString error;
-                            if (!RewriteTemporaryTablePath(Database, tablePath, error)) {
+                            if (!RewriteTemporaryTablePath(DatabaseName, tablePath, error)) {
                                 return ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR, error);
                             }
                             temporary = true;
@@ -388,7 +387,7 @@ private:
                 std::pair<TString, TString> pathPair;
                 {
                     TString error;
-                    if (!TrySplitPathByDb(currentPath, Database, pathPair, error)) {
+                    if (!TrySplitPathByDb(currentPath, DatabaseName, pathPair, error)) {
                         ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR, error);
                         return;
                     }
@@ -515,7 +514,6 @@ private:
     }
 
 private:
-    TString Database;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     TString Path;
     TString PathType;
@@ -539,11 +537,11 @@ private:
 }
 
 THolder<NActors::IActor> CreateShowCreate(const NActors::TActorId& ownerId, ui32 scanId,
-    const NKikimrSysView::TSysViewDescription& sysViewInfo, const TTableRange& tableRange,
-    const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns, const TString& database,
+    const TString& database, const NKikimrSysView::TSysViewDescription& sysViewInfo,
+    const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
     TIntrusiveConstPtr<NACLib::TUserToken> userToken)
 {
-    return MakeHolder<TShowCreate>(ownerId, scanId, sysViewInfo, tableRange, columns, database,
+    return MakeHolder<TShowCreate>(ownerId, scanId, database, sysViewInfo, tableRange, columns,
         std::move(userToken));
 }
 

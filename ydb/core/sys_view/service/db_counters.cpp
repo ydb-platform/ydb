@@ -32,8 +32,8 @@ public:
 
 private:
     void Handle(NSysView::TEvSysView::TEvWatchDatabase::TPtr& ev) {
-        auto database = ev->Get()->Database;
-        auto pathId = ev->Get()->PathId;
+        const auto& database = ev->Get()->Database;
+        const auto& pathId = ev->Get()->PathId;
 
         if (!database) {
             if (!pathId || PathIdToDatabase.FindPtr(pathId)) {
@@ -52,6 +52,7 @@ private:
         DatabaseToPathId.emplace(database, TPathId());
 
         auto request = MakeHolder<TNavigate>();
+        request->DatabaseName = database;
         request->ResultSet.push_back({});
 
         auto& entry = request->ResultSet.back();

@@ -861,6 +861,7 @@ class TestFullCycleLocalBackupRestoreWIncr(BaseTestBackupInFiles):
         rest_full1 = self._execute_yql(f"RESTORE `{col_full1}`;")
         assert rest_full1.exit_code == 0, f"RESTORE full1 failed: {rest_full1.std_err}"
         restored_rows = self._capture_snapshot(t_orders)
+        time.sleep(1.1)
         assert self.normalize_rows(restored_rows) == self.normalize_rows(snapshot_rows[snap_full1]), "Verify data in backup (1) failed"
 
         # Restore to incremental 1 (full1 + inc1)
@@ -879,6 +880,8 @@ class TestFullCycleLocalBackupRestoreWIncr(BaseTestBackupInFiles):
         restored_rows = self._capture_snapshot(t_orders)
         time.sleep(1.1)
         assert self.normalize_rows(restored_rows) == self.normalize_rows(snapshot_rows[snap_inc1]), "Verify data in backup (2) failed"
+
+        time.sleep(1.1)
 
         # Restore to incremental 2 (full1 + inc1 + inc2)
         col_inc2 = f"restore_inc2_{int(time.time())}"

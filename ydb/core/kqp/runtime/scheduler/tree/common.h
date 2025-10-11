@@ -178,6 +178,7 @@ namespace NKikimr::NKqp::NScheduler::NHdrf {
         NMonitoring::TDynamicCounters::TCounterPtr Waiting;
         NMonitoring::TDynamicCounters::TCounterPtr Queries;
         NMonitoring::TDynamicCounters::TCounterPtr Satisfaction;
+        NMonitoring::TDynamicCounters::TCounterPtr AdjustedSatisfaction;
         NMonitoring::TDynamicCounters::TCounterPtr InFlightExtra;
         NMonitoring::TDynamicCounters::TCounterPtr UsageExtra;
         NMonitoring::THistogramPtr                 Delay;

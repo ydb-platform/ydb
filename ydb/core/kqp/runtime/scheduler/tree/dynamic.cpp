@@ -27,6 +27,21 @@ TQuery::TQuery(const TQueryId& id, const TDelayParams* delayParams, const TStati
 NSnapshot::TQuery* TQuery::TakeSnapshot() {
     auto* newQuery = new NSnapshot::TQuery(std::get<TQueryId>(GetId()), shared_from_this());
     newQuery->Demand = Demand.load();
+
+    // Update previous burst values and pass difference to new snapshot - to calculate adjusted satisfaction
+    const auto burstUsage = BurstUsage.load();
+    const auto burstUsageResume = BurstUsageResume.load();
+    const auto burstUsageExtra = BurstUsageExtra.load();
+    const auto burstThrottle = BurstThrottle.load();
+    newQuery->BurstUsage += burstUsage - PrevBurstUsage;
+    newQuery->BurstUsage += burstUsageResume - PrevBurstUsageResume;
+    newQuery->BurstUsage += burstUsageExtra - PrevBurstUsageExtra;
+    newQuery->BurstThrottle = burstThrottle - PrevBurstThrottle;
+    PrevBurstUsage = burstUsage;
+    PrevBurstUsageResume = burstUsageResume;
+    PrevBurstUsageExtra = burstUsageExtra;
+    PrevBurstThrottle = burstThrottle;
+
     newQuery->Usage = Usage.load();
     return newQuery;
 }
@@ -99,6 +114,8 @@ TPool::TPool(const TPoolId& id, const TIntrusivePtr<TKqpCounters>& counters, con
 
     Counters->Delay = group->GetHistogram("Delay",
         NMonitoring::ExplicitHistogram({10, 10e2, 10e3, 10e4, 10e5, 10e6, 10e7}), true); // TODO: make from MinDelay to MaxDelay.
+
+    Counters->AdjustedSatisfaction = group->GetCounter("AdjustedSatisfaction", true); // snapshot
 }
 
 NSnapshot::TPool* TPool::TakeSnapshot() {

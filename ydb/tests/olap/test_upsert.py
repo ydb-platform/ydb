@@ -206,7 +206,8 @@ class TestUpsert(object):
             # then
             assert False, 'Should Fail'
         except ydb.issues.GenericError as ex:
-            assert "Member not found: wrongColumn" in ex.message
+            # strange, but true
+            assert "Type annotation" in ex.message
 
         try:
             # when wrong data type

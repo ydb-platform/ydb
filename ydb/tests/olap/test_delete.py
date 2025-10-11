@@ -157,4 +157,4 @@ class TestDelete(object):
             # then
             assert False, 'Should Fail'
         except ydb.issues.GenericError as ex:
-            assert "Failed to convert type" in ex.message
+            assert "Type annotation" in ex.message

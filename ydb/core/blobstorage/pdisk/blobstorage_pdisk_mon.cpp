@@ -265,6 +265,7 @@ TPDiskMon::TPDiskMon(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& count
     COUNTER_INIT(PDiskGroup, TrimThreadCPU, true);
     COUNTER_INIT(PDiskGroup, CompletionThreadCPU, true);
 
+
     COUNTER_INIT(CounterGroup, PDiskCount, false);
 }
 

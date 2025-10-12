@@ -136,6 +136,9 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         csController->WaitActualization(TDuration::Seconds(5));
         tieringHelper.CheckAllDataInTier(DEFAULT_TIER_PATH);
 
+        Cerr << "aboba=s3 "
+             << "buckets=" << Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetBucket("olap-tier1").GetSize() << Endl;
+
         testHelper.ResetTiering(DEFAULT_TABLE_PATH);
         csController->WaitCompactions(TDuration::Seconds(5));
         tieringHelper.CheckAllDataInTier("__DEFAULT");
@@ -466,6 +469,8 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
     Y_UNIT_TEST(ReconfigureTier) {
         TTieringTestHelper tieringHelper;
         auto& csController = tieringHelper.GetCsController();
+        csController->SetOverrideMaxReadStaleness(TDuration::Seconds(1));
+        csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
         auto& olapHelper = tieringHelper.GetOlapHelper();
         auto& testHelper = tieringHelper.GetTestHelper();
         NYdb::NTable::TTableClient tableClient = testHelper.GetKikimr().GetTableClient();
@@ -516,15 +521,19 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         auto& testHelper = tieringHelper.GetTestHelper();
         olapHelper.CreateTestOlapTable();
         testHelper.CreateTier(DEFAULT_TIER_NAME);
-        testHelper.SetTiering(DEFAULT_TABLE_PATH, DEFAULT_TIER_PATH, DEFAULT_COLUMN_NAME);
+        // testHelper.SetTiering(DEFAULT_TABLE_PATH, DEFAULT_TIER_PATH, DEFAULT_COLUMN_NAME);
 
         NYdb::NTable::TTableClient tableClient = testHelper.GetKikimr().GetTableClient();
         
         {
             auto alterQuery =
                 R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_ngramm_uid, TYPE=BLOOM_NGRAMM_FILTER,
-                    FEATURES=`{"inherit_portion_storage" : true, "column_name" : "resource_id", "ngramm_size" : 3, "hashes_count" : 2, "filter_size_bytes" : 512, "records_count" : 1024}`);
+                    FEATURES=`{"column_name" : "resource_id", "ngramm_size" : 3, "hashes_count" : 2, "filter_size_bytes" : 512, "records_count" : 1024}`);
                 )";
+            // auto alterQuery =
+            //     R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_ngramm_uid, TYPE=BLOOM_NGRAMM_FILTER,
+            //         FEATURES=`{"inherit_portion_storage" : false, "column_name" : "resource_id", "ngramm_size" : 3, "hashes_count" : 2, "filter_size_bytes" : 512, "records_count" : 1024}`);
+            //     )";
             auto session = tableClient.CreateSession().GetValueSync().GetSession();
             auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
@@ -533,20 +542,42 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         tieringHelper.WriteSampleData();
         csController->WaitCompactions(TDuration::Seconds(5));
         csController->WaitActualization(TDuration::Seconds(5));
+        // testHelper.SetTiering(DEFAULT_TABLE_PATH, DEFAULT_TIER_PATH, DEFAULT_COLUMN_NAME);
+        // csController->WaitCompactions(TDuration::Seconds(5));
+        // csController->WaitActualization(TDuration::Seconds(5));
+        // tieringHelper.CheckAllDataInTier(DEFAULT_TIER_PATH);
+
+        Cerr << "aboba=s3 "
+             << "buckets=" << Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetBucket("olap-tier1").GetSize() << Endl;
 
         {
             auto selectQuery = TStringBuilder() << R"(
                 SELECT *
                 FROM `/Root/olapStore/olapTable/.sys/primary_index_stats`
+                WHERE Activity == 1
+            )";
+
+            auto rows = ExecuteScanQuery(tableClient, selectQuery);
+            // for (auto& row: rows) {
+            //     Cerr << "aboba " << *NYdb::TValueParser(row.find("TierName")->second).GetOptionalUtf8() << Endl;
+            //     // UNIT_ASSERT_VALUES_EQUAL(*NYdb::TValueParser(row.find("TierName")->second).GetOptionalUtf8(), "/Root/tier1");
+            // }
+        }
+
+        {
+            auto selectQuery = TStringBuilder() << R"(
+                SELECT *
+                FROM `/Root/olapStore/olapTable/.sys/primary_index_stats`
+                WHERE Activity == 1 AND EntityName == "index_ngramm_uid"
             )";
 
             auto rows = ExecuteScanQuery(tableClient, selectQuery);
             for (auto& row: rows) {
-                if (NYdb::TValueParser(row.find("EntityName")->second).GetOptionalUtf8() == "index_ngramm_uid") {
-                    UNIT_ASSERT_VALUES_EQUAL(*NYdb::TValueParser(row.find("TierName")->second).GetOptionalUtf8(), "/Root/tier1");
-                }
+                Cerr << "aboba " << *NYdb::TValueParser(row.find("TierName")->second).GetOptionalUtf8() << Endl;
+                // UNIT_ASSERT_VALUES_EQUAL(*NYdb::TValueParser(row.find("TierName")->second).GetOptionalUtf8(), "/Root/tier1");
             }
         }
+        AFL_VERIFY(false);
     }
 }
 

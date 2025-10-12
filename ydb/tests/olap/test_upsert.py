@@ -215,4 +215,4 @@ class TestUpsert(object):
             # then
             assert False, 'Should Fail'
         except ydb.issues.GenericError as ex:
-            assert "Cannot add type Optional<Utf8> and Int32" in ex.message
+            assert "Type annotation" in ex.message

@@ -542,67 +542,7 @@ class TestFullCycleLocalBackupRestore(BaseTestBackupInFiles):
         self._verify_restore(export_info, snapshot1, snapshot2)
 
 
-class TestFullCycleLocalBackupRestoreWIncr(BaseTestBackupInFiles):
-    def _capture_snapshot(self, table):
-        with self.session_scope() as session:
-            return sdk_select_table_rows(session, table)
-
-    def _export_backups(self, collection_src):
-        export_dir = output_path(self.test_name, collection_src)
-        if os.path.exists(export_dir):
-            shutil.rmtree(export_dir)
-        os.makedirs(export_dir, exist_ok=True)
-
-        dump_cmd = [
-            backup_bin(),
-            "--verbose",
-            "--endpoint",
-            "grpc://localhost:%d" % self.cluster.nodes[1].grpc_port,
-            "--database",
-            self.root_dir,
-            "tools",
-            "dump",
-            "--path",
-            f"/Root/.backups/collections/{collection_src}",
-            "--output",
-            export_dir,
-        ]
-        dump_res = yatest.common.execute(dump_cmd, check_exit_code=False)
-        if dump_res.exit_code != 0:
-            raise AssertionError(f"tools dump failed: {dump_res.std_err}")
-
-        exported_items = sorted([name for name in os.listdir(export_dir)
-                                 if os.path.isdir(os.path.join(export_dir, name))])
-        assert len(exported_items) >= 2, f"Expected at least 2 exported backups, got: {exported_items}"
-
-        return export_dir, exported_items
-
-    def _execute_yql(self, script, verbose=False):
-        cmd = [backup_bin()]
-        if verbose:
-            cmd.append("--verbose")
-        cmd += [
-            "--endpoint",
-            f"grpc://localhost:{self.cluster.nodes[1].grpc_port}",
-            "--database",
-            self.root_dir,
-            "yql",
-            "--script",
-            script,
-        ]
-        return yatest.common.execute(cmd, check_exit_code=False)
-
-    def _setup_test_collections(self):
-        collection_src = f"coll_src_{int(time.time())}"
-        t1 = "orders"
-        t2 = "products"
-
-        with self.session_scope() as session:
-            create_table_with_data(session, t1)
-            create_table_with_data(session, t2)
-
-        return collection_src, t1, t2
-
+class TestFullCycleLocalBackupRestoreWIncr(TestFullCycleLocalBackupRestore):
     def _modify_data_add_and_remove(self, add_rows: List[tuple] = None, remove_ids: List[int] = None):
         add_rows = add_rows or []
         remove_ids = remove_ids or []

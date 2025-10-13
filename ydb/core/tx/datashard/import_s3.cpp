@@ -594,21 +594,13 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
         }
     }
 
-    TChecksumState GetChecksumState() const {
-        TChecksumState checksumState;
-        if (Checksum) {
-            checksumState = Checksum->GetState();
-        }
-        return checksumState;
-    }
-
     void Handle(TEvDataShard::TEvS3DownloadInfo::TPtr& ev) {
         IMPORT_LOG_D("Handle " << ev->Get()->ToString());
 
         const auto& info = ev->Get()->Info;
         if (!info.DataETag) {
             Send(DataShard, new TEvDataShard::TEvStoreS3DownloadInfo(TxId, {
-                ETag, ProcessedBytes, WrittenBytes, WrittenRows, GetChecksumState(), DownloadState
+                ETag, ProcessedBytes, WrittenBytes, WrittenRows, ProcessedChecksumState, DownloadState
             }));
             return;
         }
@@ -628,7 +620,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
         DownloadState = info.DownloadState;
         if (loadState) {
             if (Checksum) {
-                Checksum->Continue(info.ChecksumState);
+                Checksum->SetState(info.ProcessedChecksumState);
             }
             if (TString restoreErr; !Reader->RestoreFromState(DownloadState, restoreErr)) {
                 const TString error = TStringBuilder() << "Failed to restore reader state: " << restoreErr;
@@ -638,6 +630,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
         }
 
         ProcessedBytes = info.ProcessedBytes;
+        ProcessedChecksumState = info.ProcessedChecksumState;
         ReadBytes = ProcessedBytes + Reader->PendingBytes();
         WrittenBytes = info.WrittenBytes;
         WrittenRows = info.WrittenRows;
@@ -729,22 +722,26 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
                 << ": " << error);
         }
 
-        if (Checksum) {
-            Checksum->AddData(data);
-        }
-
         RequestBuilder.New(TableInfo, Scheme);
 
         // Special case:
         // in encrypted file we have nonzero bytes on input, but can still have zero bytes on output
         // In this case TryGetData() returns READY_DATA
         if (data) {
+            if (Checksum) {
+                Checksum->AddData(data);
+            }
+
             TMemoryPool pool(256);
             while (ProcessData(data, pool));
         }
 
         if (const auto processed = Reader->ReadyBytes()) { // has progress
             ProcessedBytes += processed;
+            if (Checksum) {
+                ProcessedChecksumState = Checksum->GetState();
+            }
+
             WrittenBytes += std::exchange(PendingBytes, 0);
             WrittenRows += std::exchange(PendingRows, 0);
         }
@@ -806,7 +803,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
             << ", size# " << record->ByteSizeLong());
 
         Send(DataShard, new TEvDataShard::TEvS3UploadRowsRequest(TxId, record, {
-            ETag, ProcessedBytes, WrittenBytes, WrittenRows, GetChecksumState(), DownloadState
+            ETag, ProcessedBytes, WrittenBytes, WrittenRows, ProcessedChecksumState, DownloadState
         }));
     }
 
@@ -1003,6 +1000,7 @@ public:
         , ReadBatchSize(task.GetS3Settings().GetLimits().GetReadBatchSize())
         , ReadBufferSizeLimit(AppData()->DataShardConfig.GetRestoreReadBufferSizeLimit())
         , Checksum(task.GetValidateChecksums() ? CreateChecksum() : nullptr)
+        , ProcessedChecksumState(Checksum ? Checksum->GetState() : NKikimrBackup::TChecksumState())
     {
     }
 
@@ -1083,6 +1081,7 @@ private:
     TUploadRowsRequestBuilder RequestBuilder;
 
     NBackup::IChecksum::TPtr Checksum;
+    NKikimrBackup::TChecksumState ProcessedChecksumState;
     TString ExpectedChecksum;
 }; // TS3Downloader
 

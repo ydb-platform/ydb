@@ -12,7 +12,7 @@ struct TS3Download {
     ui64 ProcessedBytes = 0;
     ui64 WrittenBytes = 0;
     ui64 WrittenRows = 0;
-    NKikimrBackup::TChecksumState ChecksumState;
+    NKikimrBackup::TChecksumState ProcessedChecksumState;
     NKikimrBackup::TS3DownloadState DownloadState; // Can hold secure encryption key
 
     void Out(IOutputStream& out) const;

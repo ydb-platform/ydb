@@ -1794,7 +1794,7 @@ Y_UNIT_TEST(TestGetTimestamps) {
 
         CmdSetOffset(0, "user1", 1, true, tc);
         CmdSetOffset(0, "user1", 0, true, tc);
-        CmdGetOffset(0, "user1", 0, tc, Max<i64>());
+        CmdGetOffset(0, "user1", 1, tc, Max<i64>());
         CmdSetOffset(0, "user1", 1, true, tc);
         CmdGetOffset(0, "user1", 1, tc, 1);
         CmdSetOffset(0, "user1", 3, true, tc);

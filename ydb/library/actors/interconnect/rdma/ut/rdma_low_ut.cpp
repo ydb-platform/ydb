@@ -20,6 +20,8 @@ using namespace NActors;
 
 static const size_t MEM_REG_SZ = 4096;
 
+class TRdmaLow : public TSkipFixture {};
+
 static NInterconnect::NRdma::TMemRegionPtr AllocSourceRegion(std::shared_ptr<IMemPool> memPool) {
     auto reg = memPool->Alloc(MEM_REG_SZ, IMemPool::EMPTY);
     memset(reg->GetAddr(), 0, MEM_REG_SZ);
@@ -39,11 +41,11 @@ void DoReadInOneProcess(TString bindTo) {
     ASSERT_TRUE(strncmp((char*)reg1->GetAddr(), (char*)reg2->GetAddr(), MEM_REG_SZ) == 0);
 }
 
-TEST(RdmaLow, ReadInOneProcessIpV4) {
+TEST_F(TRdmaLow, ReadInOneProcessIpV4) {
     DoReadInOneProcess("127.0.0.1");
 }
 
-TEST(RdmaLow, ReadInOneProcessIpV6) {
+TEST_F(TRdmaLow, ReadInOneProcessIpV6) {
     DoReadInOneProcess("::1");
 }
 
@@ -52,7 +54,7 @@ TEST(RdmaLow, ReadInOneProcessIpV6) {
  * information about remote reading in progress.
  * In this case we change QP on the sender to the 'Reset' state and expect reader will fail with read error
  */
-TEST(RdmaLow, ReadInOneProcessWithQpInterruption) {
+TEST_F(TRdmaLow, ReadInOneProcessWithQpInterruption) {
     TString addr = "127.0.0.1";
 
     auto rdma = InitLocalRdmaStuff(addr);

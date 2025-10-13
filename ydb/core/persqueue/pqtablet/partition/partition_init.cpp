@@ -778,6 +778,8 @@ void TInitDataRangeStep::FormHeadAndProceed() {
 
         cz.Head.Offset = headKey.GetOffset();
         cz.Head.PartNo = headKey.GetPartNo();
+
+        Partition()->WasTheLastBlobBig = false;
     }
 
     // FastWrite Body

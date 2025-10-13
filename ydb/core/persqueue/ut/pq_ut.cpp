@@ -52,6 +52,52 @@ TMaybe<ui64> PQGetStartOffset(TTestContext& tc)
     return Nothing();
 }
 
+Y_UNIT_TEST(TestCompaction) {
+    TTestContext tc;
+    tc.EnableDetailedPQLog = true;
+    RunTestWithReboots(tc.TabletIds, [&]() {
+        return tc.InitialEventsFilter.Prepare();
+    }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
+        activeZone = false;
+        TFinalizer finalizer(tc);
+        tc.Prepare(dispatchName, setup, activeZone);
+        activeZone = false;
+        tc.Runtime->SetScheduledLimit(1000);
+
+        ui32 sourceIdx = 0;
+        auto cmdWrite = [&](const TVector<size_t>& sizes) {
+            TVector<std::pair<ui64, TString>> data;
+            for (size_t k = 1; k <= sizes.size(); ++k) {
+                data.emplace_back(k, TString(sizes[k - 1], 'x'));
+            }
+            TString sourceId = "sourceid_" + ToString(sourceIdx++);
+            CmdWrite(0, sourceId, data, tc, false, {}, false, "", -1, -1, false, false, true);
+        };
+        auto cmdCompaction = [&]() {
+            CmdRunCompaction(0, tc);
+        };
+
+        PQTabletPrepare({.partitions = 1, .writeSpeed = 50_MB}, {{"user1", true}}, tc);
+
+        cmdWrite({17400_KB});
+        cmdCompaction();
+
+        cmdWrite({16800_KB});
+        cmdCompaction();
+
+        PQTabletRestart(tc);
+
+        cmdWrite({7000_KB, 13300_KB});
+        cmdCompaction();
+
+        cmdWrite({1_KB});
+
+        PQTabletRestart(tc);
+
+        PQGetPartInfo(0, 4 + 1, tc);
+    });
+}
+
 Y_UNIT_TEST(TestCmdReadWithLastOffset) {
     TTestContext tc;
     tc.EnableDetailedPQLog = true;

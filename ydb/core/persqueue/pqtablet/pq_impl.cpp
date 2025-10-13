@@ -5238,6 +5238,23 @@ void TPersQueue::ProcessPendingEvents()
     }
 }
 
+void TPersQueue::Handle(TEvPQ::TEvForceCompaction::TPtr& ev, const TActorContext& ctx)
+{
+    PQ_LOG_D("TPersQueue::Handle(TEvPQ::TEvForceCompaction)");
+
+    const auto& event = *ev->Get();
+    const TPartitionId partitionId(event.PartitionId);
+
+    if (!Partitions.contains(partitionId)) {
+        PQ_LOG_D("Unknown partition id " << event.PartitionId);
+        return;
+    }
+
+    auto p = Partitions.find(partitionId);
+    ctx.Send(p->second.Actor,
+             new TEvPQ::TEvForceCompaction(event.PartitionId));
+}
+
 bool TPersQueue::HandleHook(STFUNC_SIG)
 {
     TRACE_EVENT(NKikimrServices::PERSQUEUE);
@@ -5285,6 +5302,7 @@ bool TPersQueue::HandleHook(STFUNC_SIG)
         HFuncTraced(TEvPQ::TEvReadingPartitionStatusRequest, Handle);
         HFuncTraced(TEvPQ::TEvDeletePartitionDone, Handle);
         HFuncTraced(TEvPQ::TEvTransactionCompleted, Handle);
+        HFuncTraced(TEvPQ::TEvForceCompaction, Handle);
         default:
             return false;
     }

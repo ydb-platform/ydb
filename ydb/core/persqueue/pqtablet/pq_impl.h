@@ -603,6 +603,7 @@ private:
 
     void ResendSplitMergeRequests(const TActorContext& ctx);
 
+    void Handle(TEvPQ::TEvForceCompaction::TPtr& ev, const TActorContext& ctx);
 
     TIntrusivePtr<NJaegerTracing::TSamplingThrottlingControl> SamplingControl;
     NWilson::TSpan WriteTxsSpan;

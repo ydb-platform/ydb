@@ -198,6 +198,7 @@ struct TEvPQ {
         EvRunCompaction,
         EvMirrorTopicDescription,
         EvBroadcastPartitionError,
+        EvForceCompaction,
         EvEnd
     };
 
@@ -1277,6 +1278,15 @@ struct TEvPQ {
         }
 
         ui64 BlobsCount = 0;
+    };
+
+    struct TEvForceCompaction : TEventLocal<TEvForceCompaction, EvForceCompaction> {
+        explicit TEvForceCompaction(const ui32 partitionId) :
+            PartitionId(partitionId)
+        {
+        }
+
+        ui32 PartitionId = 0;
     };
 };
 

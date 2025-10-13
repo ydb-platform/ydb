@@ -126,6 +126,17 @@ public:
             : TMaybe<TInstant>();
     }
 
+    TMaybe<TDuration> GetWatermarkDiscrepancy() const {
+        auto first = WatermarksQueue_.cbegin();
+        auto last = WatermarksQueue_.cend();
+        if (first == last || !first->Time) {
+            return Nothing();
+        }
+        --last;
+        Y_DEBUG_ABORT_UNLESS(last->Time); // when first watermark is defined, last watermark must be defined too
+        return *last->Time - *first->Time;
+    }
+
 private:
     struct TPartitionState {
         TInstant Time;  // partition time, notified outside

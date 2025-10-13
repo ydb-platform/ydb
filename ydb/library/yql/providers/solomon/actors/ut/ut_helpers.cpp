@@ -61,7 +61,7 @@ void InitAsyncOutput(
 }
 
 void CleanupSolomon(TString cloudId, TString folderId, TString service, bool isCloud) {
-    const auto solomonPort = TString(getenv("SOLOMON_PORT"));
+    const auto solomonPort = TString(getenv("SOLOMON_HTTP_PORT"));
     TSimpleHttpClient httpClient("localhost", std::stoi(solomonPort));
     TStringStream str;
     TStringBuilder builder;
@@ -79,16 +79,16 @@ void CleanupSolomon(TString cloudId, TString folderId, TString service, bool isC
 }
 
 TString GetSolomonMetrics(TString folderId, TString service) {
-    const auto solomonPort = TString(getenv("SOLOMON_PORT"));
+    const auto solomonPort = TString(getenv("SOLOMON_HTTP_PORT"));
     TSimpleHttpClient httpClient("localhost", std::stoi(solomonPort));
     TStringStream str;
-    httpClient.DoGet("/metrics?folderId=" + folderId + "&service=" + service, &str);
+    httpClient.DoGet("/metrics/get?folderId=" + folderId + "&service=" + service, &str);
     return TString(str.Str());
 }
 
 NSo::NProto::TDqSolomonShard BuildSolomonShardSettings(bool isCloud) {
     NSo::NProto::TDqSolomonShard settings;
-    settings.SetEndpoint(TStringBuilder() << getenv("SOLOMON_HOST") << ":" << TString(getenv("SOLOMON_PORT")));
+    settings.SetEndpoint(TString(getenv("SOLOMON_HTTP_ENDPOINT")));
     if (isCloud) {
         settings.SetProject("folderId1");
         settings.SetCluster("folderId1");

@@ -29,7 +29,7 @@ def _build_headers():
     headers = {}
     headers["accept"] = "application/json;charset=UTF-8"
     if token is not None:
-        headers["Authorization"] = token
+        headers["Authorization"] = "OAuth {}".format(token)
 
     return headers
 
@@ -40,11 +40,11 @@ def list_sensors(args):
     request_params = {
         "projectId": args.project,
         "selectors": args.selectors,
-        "forceCluster": "sas",
+        "forceCluster": args.default_replica,
         "from": args.from_range,
         "to": args.to_range,
         "page": 0,
-        "pageSize": 10000
+        "pageSize": args.page_size
     }
 
     pages_count = 1
@@ -73,7 +73,6 @@ def list_sensor_names(args):
     request_params = {
         "projectId": args.project,
         "selectors": args.selectors,
-        "forceCluster": "sas",
         "from": args.from_range,
         "to": args.to_range
     }
@@ -91,12 +90,14 @@ def parse_args():
         description="solomon client util"
     )
     subparsers = parser.add_subparsers(help='sub-command help', required=True)
-    list_parser = subparsers.add_parser(
+    sensors_parser = subparsers.add_parser(
         'sensors',
         formatter_class=argparse.RawTextHelpFormatter,
         description="""list metrics for specified selectors"""
     )
-    list_parser.set_defaults(command=list_sensors)
+    sensors_parser.set_defaults(command=list_sensors)
+
+    sensors_parser.add_argument("--page-size", type=int, required=False, default=10000, help="List metrics query page size")
 
     label_names_parser = subparsers.add_parser(
         'names',
@@ -107,6 +108,7 @@ def parse_args():
 
     parser.add_argument("--http-location", type=str, required=False, default="solomon.yandex.net", help="Solomon installation http endpoint")
     parser.add_argument("--grpc-location", type=str, required=False, default="solomon.yandex.net", help="Solomon installation grpc endpoint")
+    parser.add_argument("--default-replica", type=str, required=False, default="sas", help="Solomon default replica")
     parser.add_argument("-P", "--project", type=str, required=True, help="Selectors project")
     parser.add_argument("-S", "--selectors", type=str, required=True, help="Selectors query")
     parser.add_argument("-F", "--from-range", type=str, required=False, default=(datetime.datetime.now() - datetime.timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%SZ"), help="Left time range border")

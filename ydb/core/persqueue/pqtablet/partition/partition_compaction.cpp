@@ -164,7 +164,7 @@ void TPartition::DumpKeysForBlobsCompaction() const
     LOG_D("===================================");
 }
 
-void TPartition::TryRunCompaction()
+void TPartition::TryRunCompaction(bool force)
 {
     if (StopCompaction) {
         LOG_D("Blobs compaction is stopped");
@@ -186,7 +186,7 @@ void TPartition::TryRunCompaction()
     const ui64 blobsKeyCountLimit = GetBodyKeysCountLimit();
     const ui64 compactedBlobSizeLowerBound = GetCompactedBlobSizeLowerBound();
 
-    if ((BlobEncoder.DataKeysBody.size() < blobsKeyCountLimit) && (BlobEncoder.GetSize() < GetCumulativeSizeLimit())) {
+    if ((BlobEncoder.DataKeysBody.size() < blobsKeyCountLimit) && (BlobEncoder.GetSize() < GetCumulativeSizeLimit()) && !force) {
         LOG_D("No data for blobs compaction");
         return;
     }
@@ -207,11 +207,17 @@ void TPartition::TryRunCompaction()
             LOG_D("Blob key for rename " << k.Key.ToString());
         }
     }
+
     LOG_D(blobsCount << " keys were taken away. Let's read " << blobsSize << " bytes");
 
     CompactionInProgress = true;
 
     Send(SelfId(), new TEvPQ::TEvRunCompaction(blobsCount));
+}
+
+void TPartition::Handle(TEvPQ::TEvForceCompaction::TPtr&)
+{
+    TryRunCompaction(true);
 }
 
 void TPartition::Handle(TEvPQ::TEvRunCompaction::TPtr& ev)
@@ -337,7 +343,7 @@ void TPartition::RenameCompactedBlob(TDataKey& k,
 
     if (!CompactionBlobEncoder.PartitionedBlob.IsInited()) {
         CompactionBlobEncoder.NewPartitionedBlob(Partition,
-                                                 CompactionBlobEncoder.NewHead.Offset,
+                                                 parameters.CurOffset,
                                                  "",                      // SourceId
                                                  0,                       // SeqNo
                                                  0,                       // TotalParts

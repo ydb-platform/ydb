@@ -32,11 +32,12 @@ struct TSdkSession : public ISession {
     void Finish(bool /*needRollback*/) override {
     }
 
-    ~TSdkSession() {
-    }
-
     NYdb::TAsyncStatus CreateTable(const std::string& /*db*/, const std::string& path, NYdb::NTable::TTableDescription&& tableDesc) override {
         return Session.CreateTable(path, std::move(tableDesc));
+    }
+
+    NYdb::TAsyncStatus DropTable( const std::string& path) override {
+        return Session.DropTable(path);
     }
 
 private: 

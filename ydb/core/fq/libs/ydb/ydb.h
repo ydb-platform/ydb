@@ -135,6 +135,11 @@ NThreading::TFuture<NYql::TIssues> StatusToIssues(
     const NThreading::TFuture<NYdb::TStatus>& future);
 
 NThreading::TFuture<NYdb::TStatus> CreateTable(
+    const TYdbConnectionPtr& ydbConnection,
+    const TString& name,
+    NYdb::NTable::TTableDescription&& description);
+
+NThreading::TFuture<NYdb::TStatus> CreateTable(
     const IYdbConnection::TPtr& ydbConnection,
     const TString& name,
     NYdb::NTable::TTableDescription&& description);

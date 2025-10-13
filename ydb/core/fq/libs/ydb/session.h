@@ -20,7 +20,9 @@ struct ISession : public TThrRefBase{
 
     virtual NYdb::TAsyncStatus CreateTable(const std::string& db, const std::string& path, NYdb::NTable::TTableDescription&& tableDesc
         /*const TCreateTableSettings& settings = TCreateTableSettings()*/) = 0;
-
+    
+    virtual NYdb::TAsyncStatus DropTable( const std::string& path) = 0;
+        
     private: 
     [[maybe_unused]]int Test = 456;
 };

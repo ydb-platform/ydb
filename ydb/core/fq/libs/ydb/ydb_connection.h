@@ -12,7 +12,7 @@ struct IYdbConnection : public TThrRefBase {
 
     using TPtr = TIntrusivePtr<IYdbConnection>;
 
-    virtual IYdbTableClient::TPtr GetYdbTableClient() = 0;
+    virtual IYdbTableClient::TPtr GetTableClient() = 0;
     virtual TString GetTablePathPrefix() = 0;
     virtual TString GetDb() = 0;
     virtual TString GetTablePathPrefixWithoutDb() = 0;

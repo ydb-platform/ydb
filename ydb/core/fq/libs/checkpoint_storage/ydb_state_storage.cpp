@@ -562,7 +562,7 @@ TFuture<IStateStorage::TCountStatesResult> TStateStorage::CountStates(
     const TCheckpointId& checkpointId) {
     auto context = MakeIntrusive<TCountStateContext>();
 
-    auto future = YdbConnection->GetYdbTableClient()->RetryOperation(
+    auto future = YdbConnection->GetTableClient()->RetryOperation(
         [prefix = YdbConnection->GetTablePathPrefix(), graphId, checkpointId, context, thisPtr = TIntrusivePtr(this)] (ISession::TPtr session) {
 
             // publish nodes
@@ -618,7 +618,7 @@ TFuture<IStateStorage::TCountStatesResult> TStateStorage::CountStates(
 }
 
 TFuture<TStatus> TStateStorage::ListStates(const TContextPtr& context) {
-    return YdbConnection->GetYdbTableClient()->RetryOperation(
+    return YdbConnection->GetTableClient()->RetryOperation(
         [prefix = YdbConnection->GetTablePathPrefix(), context, thisPtr = TIntrusivePtr(this)] (ISession::TPtr session) {
            // NYdb::TParamsBuilder paramsBuilder;
             auto paramsBuilder = std::make_shared<NYdb::TParamsBuilder>();
@@ -710,7 +710,7 @@ TExecDataQuerySettings TStateStorage::GetExecDataQuerySettings(ui64 multiplier) 
 }
 
 TFuture<TIssues> TStateStorage::DeleteGraph(const TString& graphId) {
-    auto future = YdbConnection->GetYdbTableClient()->RetryOperation(
+    auto future = YdbConnection->GetTableClient()->RetryOperation(
         [prefix = YdbConnection->GetTablePathPrefix(), graphId, thisPtr = TIntrusivePtr(this)] (ISession::TPtr session) {
 
             // publish nodes
@@ -751,7 +751,7 @@ TFuture<TIssues> TStateStorage::DeleteGraph(const TString& graphId) {
 TFuture<TIssues> TStateStorage::DeleteCheckpoints(
     const TString& graphId,
     const TCheckpointId& checkpointUpperBound) {
-    auto future = YdbConnection->GetYdbTableClient()->RetryOperation(
+    auto future = YdbConnection->GetTableClient()->RetryOperation(
         [prefix = YdbConnection->GetTablePathPrefix(), graphId, checkpointUpperBound, thisPtr = TIntrusivePtr(this)] (ISession::TPtr session) {
 
             // publish nodes
@@ -798,7 +798,7 @@ TFuture<TIssues> TStateStorage::DeleteCheckpoints(
 }
 
 TFuture<TStatus> TStateStorage::SelectRowState(const TContextPtr& context) {
-    return YdbConnection->GetYdbTableClient()->RetryOperation(
+    return YdbConnection->GetTableClient()->RetryOperation(
         [context, this] (ISession::TPtr session) {
             context->Session = session;
             auto future = SelectState(context);
@@ -860,7 +860,7 @@ TFuture<TDataQueryResult> TStateStorage::SelectState(const TContextPtr& context)
 
 TFuture<TStatus> TStateStorage::UpsertRow(const TContextPtr& context) {
 
-    return YdbConnection->GetYdbTableClient()->RetryOperation(
+    return YdbConnection->GetTableClient()->RetryOperation(
         [context, thisPtr = TIntrusivePtr(this)] (ISession::TPtr session) {
             context->Session = session;
             // publish nodes

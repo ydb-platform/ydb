@@ -584,7 +584,13 @@ Y_UNIT_TEST_SUITE(TStorageServiceTest) {
         CreateCompletedCheckpoint(GraphId, Generation, CheckpointId3);
         Cerr << "\n--------------------------- CreateCompletedCheckpoint 2 end ---------------------------\n";
 
+        Sleep(TDuration::Seconds(5));
+        Cerr << "\n--------------------------- CreateCompletedCheckpoint 3 end ---------------------------\n";
+
+
+        Sleep(TDuration::Seconds(5));
         TCheckpoints checkpoints;
+        
 
         DoWithRetry<yexception>([&]() {
             Cerr << "GetCheckpoints 0 " << Endl;

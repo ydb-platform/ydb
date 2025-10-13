@@ -21,11 +21,13 @@ public:
         , TableDesc(std::move(tableDesc))
         , Promise(promise)
     {
-        Cerr << "TTableCreator() path = " << path << Endl;
+        LOG_STREAMS_STORAGE_SERVICE_INFO("TTableCreator()");
+        //Cerr << "TTableCreator() path = " << path << Endl;
     }
 
     void Bootstrap() {
         Become(&TTableCreator::StateFunc);
+        LOG_STREAMS_STORAGE_SERVICE_INFO("TTableCreator::Bootstrap()");
 
         TVector<TString> keyColumns;
         for (const auto& key : TableDesc.GetPrimaryKeyColumns()) {
@@ -94,6 +96,8 @@ struct TLocalSession : public ISession {
     TLocalSession() {
       //  QuerySession = MakeQueryActor().release();
         QuerySessionId = NActors::TActivationContext::AsActorContext().RegisterWithSameMailbox(MakeQueryActor().release());
+        LOG_STREAMS_STORAGE_SERVICE_INFO("TLocalSession()");
+
     }
 
     NThreading::TFuture<NYdb::NTable::TDataQueryResult> ExecuteDataQuery(
@@ -101,8 +105,7 @@ struct TLocalSession : public ISession {
         std::shared_ptr<NYdb::TParamsBuilder> params,
         NYdb::NTable::TTxControl txControl,
         NYdb::NTable::TExecDataQuerySettings execDataQuerySettings = NYdb::NTable::TExecDataQuerySettings()) override {
-        Cerr << "TLocalSession::ExecuteDataQuery" << Endl;
-        //return QueryActor->ExecuteDataQuery(sql, params,txControl);
+        LOG_STREAMS_STORAGE_SERVICE_INFO("TLocalSession::ExecuteDataQuery()");
 
         auto p = NThreading::NewPromise<NYdb::NTable::TDataQueryResult>();
 
@@ -111,8 +114,7 @@ struct TLocalSession : public ISession {
     }
 
     void Finish(bool needRollback) override {
-        // Cerr << "TLocalSession::Finish" << Endl;
-        // QueryActor->Finish222(needRollback);
+        LOG_STREAMS_STORAGE_SERVICE_INFO("TLocalSession::Finish()");
         NActors::TActivationContext::AsActorContext().Send(QuerySessionId, new TEvQueryActor::TEvFinish(needRollback));
     }
 
@@ -121,15 +123,22 @@ struct TLocalSession : public ISession {
         //     Cerr << "TLocalSession::call finish" << Endl;
         //     Finish(false);
         // }
-                Cerr << "~TLocalSession" << Endl;
-
+        LOG_STREAMS_STORAGE_SERVICE_INFO("~TLocalSession()");
         NActors::TActivationContext::AsActorContext().Send(QuerySessionId, new NActors::TEvents::TEvPoison());
     }
 
     NYdb::TAsyncStatus CreateTable(const std::string& db, const std::string& path, NYdb::NTable::TTableDescription&& tableDesc) override {
+        LOG_STREAMS_STORAGE_SERVICE_INFO("TLocalSession::CreateTable()");
+
         auto promise = NThreading::NewPromise<NYdb::TStatus>();
         NActors::TActivationContext::Register(new TTableCreator(db, path, std::move(tableDesc), promise));
         return promise.GetFuture();
+    }
+
+
+    NYdb::TAsyncStatus DropTable( const std::string& /*path*/) override {
+        Y_ABORT("Not implemented");
+        return NYdb::TAsyncStatus();
     }
 
 private: 

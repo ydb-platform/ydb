@@ -882,7 +882,7 @@ TFuture<TIssues> TCheckpointStorage::RegisterGraphCoordinator(const TCoordinator
     //YdbGateway->RetryOperation
     //auto future = YdbConnection->TableClient.RetryOperation(
     Cerr << "RegisterGraphCoordinator" << Endl;
-    auto future = YdbConnection->GetYdbTableClient()->RetryOperation(
+    auto future = YdbConnection->GetTableClient()->RetryOperation(
         [prefix = YdbConnection->GetTablePathPrefix(), coordinator,
          execDataQuerySettings = DefaultExecDataQuerySettings()] (ISession::TPtr session) {
             Cerr << "RegisterGraphCoordinator 1" << Endl;
@@ -908,7 +908,7 @@ TFuture<ICheckpointStorage::TGetCoordinatorsResult> TCheckpointStorage::GetCoord
     auto getContext = MakeIntrusive<TGetCoordinatorsContext>();
 
     //auto future = YdbConnection->TableClient.RetryOperation(
-    auto future = YdbConnection->GetYdbTableClient()->RetryOperation(
+    auto future = YdbConnection->GetTableClient()->RetryOperation(
         [prefix = YdbConnection->GetTablePathPrefix(), getContext, execDataQuerySettings = DefaultExecDataQuerySettings()] (ISession::TPtr session) {
             auto generationContext = MakeIntrusive<TGenerationContext>(
                 session,
@@ -963,7 +963,7 @@ TFuture<ICheckpointStorage::TCreateCheckpointResult> TCheckpointStorage::CreateC
 
 TFuture<ICheckpointStorage::TCreateCheckpointResult> TCheckpointStorage::CreateCheckpointImpl(const TCoordinatorId& coordinator, const TCheckpointContextPtr& checkpointContext) {
     Y_ABORT_UNLESS(checkpointContext->CheckpointGraphDescriptionContext->GraphDescId || checkpointContext->EntityIdGenerator);
-    auto future = YdbConnection->GetYdbTableClient()->RetryOperation(
+    auto future = YdbConnection->GetTableClient()->RetryOperation(
         [prefix = YdbConnection->GetTablePathPrefix(), coordinator, checkpointContext, execDataQuerySettings = DefaultExecDataQuerySettings()] (ISession::TPtr session) {
             auto generationContext = MakeIntrusive<TGenerationContext>(
                 session,
@@ -998,7 +998,7 @@ TFuture<TIssues> TCheckpointStorage::UpdateCheckpointStatus(
     ui64 stateSizeBytes)
 {
     auto checkpointContext = MakeIntrusive<TCheckpointContext>(checkpointId, newStatus, prevStatus, stateSizeBytes);
-    auto future = YdbConnection->GetYdbTableClient()->RetryOperation(
+    auto future = YdbConnection->GetTableClient()->RetryOperation(
         [prefix = YdbConnection->GetTablePathPrefix(), coordinator, checkpointContext, execDataQuerySettings = DefaultExecDataQuerySettings()] (ISession::TPtr session) {
             auto generationContext = MakeIntrusive<TGenerationContext>(
                 session,
@@ -1025,7 +1025,7 @@ TFuture<TIssues> TCheckpointStorage::AbortCheckpoint(
     const TCheckpointId& checkpointId)
 {
     auto checkpointContext = MakeIntrusive<TCheckpointContext>(checkpointId, ECheckpointStatus::Aborted, ECheckpointStatus::Pending, 0ul);
-    auto future = YdbConnection->GetYdbTableClient()->RetryOperation(
+    auto future = YdbConnection->GetTableClient()->RetryOperation(
         [prefix = YdbConnection->GetTablePathPrefix(), coordinator, checkpointContext, execDataQuerySettings = DefaultExecDataQuerySettings()] (ISession::TPtr session) {
             auto generationContext = MakeIntrusive<TGenerationContext>(
                 session,
@@ -1056,7 +1056,7 @@ TFuture<ICheckpointStorage::TGetCheckpointsResult> TCheckpointStorage::GetCheckp
 {
     auto getContext = MakeIntrusive<TGetCheckpointsContext>();
 
-    auto future = YdbConnection->GetYdbTableClient()->RetryOperation(
+    auto future = YdbConnection->GetTableClient()->RetryOperation(
         [prefix = YdbConnection->GetTablePathPrefix(), graph, getContext, statuses, limit, loadGraphDescription, execDataQuerySettings = DefaultExecDataQuerySettings()] (ISession::TPtr session) {
             auto generationContext = MakeIntrusive<TGenerationContext>(
                 session,
@@ -1084,7 +1084,7 @@ TFuture<ICheckpointStorage::TGetCheckpointsResult> TCheckpointStorage::GetCheckp
 }
 
 TFuture<TIssues> TCheckpointStorage::DeleteGraph(const TString& graphId) {
-    auto future = YdbConnection->GetYdbTableClient()->RetryOperation(
+    auto future = YdbConnection->GetTableClient()->RetryOperation(
         [prefix = YdbConnection->GetTablePathPrefix(), graphId, settings = DefaultExecDataQuerySettings()] (ISession::TPtr session) {
             // TODO: use prepared queries
             auto query = Sprintf(R"(
@@ -1146,7 +1146,7 @@ TFuture<TIssues> TCheckpointStorage::MarkCheckpointsGC(
     const TString& graphId,
     const TCheckpointId& checkpointUpperBound)
 {
-    auto future = YdbConnection->GetYdbTableClient()->RetryOperation(
+    auto future = YdbConnection->GetTableClient()->RetryOperation(
         [prefix = YdbConnection->GetTablePathPrefix(), graphId, checkpointUpperBound, thisPtr = TIntrusivePtr(this)] (ISession::TPtr session) {
             // TODO: use prepared queries
             auto query = Sprintf(R"(
@@ -1221,7 +1221,7 @@ TFuture<TIssues> TCheckpointStorage::DeleteMarkedCheckpoints(
     const TString& graphId,
     const TCheckpointId& checkpointUpperBound)
 {
-    auto future = YdbConnection->GetYdbTableClient()->RetryOperation(
+    auto future = YdbConnection->GetTableClient()->RetryOperation(
         [prefix = YdbConnection->GetTablePathPrefix(), graphId, checkpointUpperBound, settings = DefaultExecDataQuerySettings()] (ISession::TPtr session) {
             // TODO: use prepared queries
             using namespace fmt::literals;
@@ -1301,7 +1301,7 @@ TFuture<TIssues> TCheckpointStorage::DeleteMarkedCheckpoints(
 
 TFuture<ICheckpointStorage::TGetTotalCheckpointsStateSizeResult> TCheckpointStorage::GetTotalCheckpointsStateSize(const TString& graphId) {
     auto result = MakeIntrusive<TGetTotalCheckpointsStateSizeContext>();
-    auto future = YdbConnection->GetYdbTableClient()->RetryOperation(
+    auto future = YdbConnection->GetTableClient()->RetryOperation(
         [prefix = YdbConnection->GetTablePathPrefix(), graphId, thisPtr = TIntrusivePtr(this), result,
          actorSystem = NActors::TActivationContext::ActorSystem()](ISession::TPtr session) {
         //  NYdb::TParamsBuilder paramsBuilder;

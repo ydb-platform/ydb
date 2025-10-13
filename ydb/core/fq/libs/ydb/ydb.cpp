@@ -283,12 +283,25 @@ TFuture<TIssues> StatusToIssues(const TFuture<TStatus>& future) {
 }
 
 TFuture<TStatus> CreateTable(
+    const TYdbConnectionPtr& ydbConnection,
+    const TString& name,
+    TTableDescription&& description)
+{
+    auto tablePath = JoinPath(ydbConnection->TablePathPrefix, name.c_str());
+
+    return ydbConnection->TableClient.RetryOperation(
+        [tablePath = std::move(tablePath), description = std::move(description)] (TSession session) mutable {
+            return session.CreateTable(tablePath, TTableDescription(description));
+        });
+}
+
+TFuture<TStatus> CreateTable(
     const IYdbConnection::TPtr& ydbConnection,
     const TString& name,
     TTableDescription&& description)
 {
     auto tablePath = JoinPath(ydbConnection->GetTablePathPrefixWithoutDb(), name.c_str());
-    return ydbConnection->GetYdbTableClient()->RetryOperation(
+    return ydbConnection->GetTableClient()->RetryOperation(
         [db = ydbConnection->GetDb(), tablePath = std::move(tablePath), description = std::move(description)] (ISession::TPtr session) mutable {
             return session->CreateTable(db, tablePath, TTableDescription(description));
         });

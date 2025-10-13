@@ -22,8 +22,8 @@ namespace {
 
 class TFixture : public NUnitTest::TBaseFixture {
 public:
-    TYdbConnectionPtr MakeConnection(const char* tablePrefix) {
-        NConfig::TYdbStorageConfig config;
+    IYdbConnection::TPtr MakeConnection(const char* tablePrefix) {
+        NKikimrConfig::TExternalStorage config;
 
         config.SetEndpoint(GetEnv("YDB_ENDPOINT"));
         config.SetDatabase(GetEnv("YDB_DATABASE"));
@@ -31,10 +31,10 @@ public:
         config.SetTablePrefix(tablePrefix);
 
         NYdb::TDriver driver({});
-        Connection = NewYdbConnection(config, NKikimr::CreateYdbCredentialsProviderFactory, driver);
+        Connection = CreateSdkYdbConnection(config, NKikimr::CreateYdbCredentialsProviderFactory, driver);
 
-        auto status = Connection->SchemeClient.MakeDirectory(Connection->TablePathPrefix).GetValueSync();
-        UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+        // auto status = Connection->SchemeClient.MakeDirectory(Connection->TablePathPrefix).GetValueSync();
+        // UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
 
         auto desc = TTableBuilder()
             .AddNullableColumn("id", EPrimitiveType::String)
@@ -42,22 +42,22 @@ public:
             .SetPrimaryKeyColumn("id")
             .Build();
 
-        status = CreateTable(Connection, "test", std::move(desc)).GetValueSync();
+        auto status = CreateTable(Connection, "test", std::move(desc)).GetValueSync();
         UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
         return Connection;
     }
 
     void TearDown(NUnitTest::TTestContext& /*ctx*/) override {
         if (Connection) {
-            auto tablePath = JoinPath(Connection->TablePathPrefix, "test");
-            Connection->TableClient.RetryOperation(
-                [tablePath = std::move(tablePath)] (TSession session) mutable {
-                    return session.DropTable(tablePath);
+            auto tablePath = JoinPath(Connection->GetTablePathPrefix(), "test");
+            Connection->GetTableClient()->RetryOperation(
+                [tablePath = std::move(tablePath)] (ISession::TPtr session) mutable {
+                    return session->DropTable(tablePath);
                 }).GetValueSync();;
         }
     }
 
-    TYdbConnectionPtr Connection;
+    IYdbConnection::TPtr Connection;
 };
 
 TFuture<TStatus> CheckTransactionClosed(const TFuture<TStatus>& future, const TGenerationContextPtr& context) {
@@ -92,7 +92,7 @@ TFuture<TStatus> UpsertDummyInTransaction(const TFuture<TStatus>& future, const 
             )", context->TablePathPrefix.c_str());
 
             auto ttxControl = TTxControl::Tx(*context->Transaction).CommitTx();
-            return context->Session.ExecuteDataQuery(query, ttxControl).Apply(
+            return context->Session->ExecuteDataQuery(query, nullptr, ttxControl).Apply(
                 [] (const TFuture<TDataQueryResult>& future) {
                     TStatus status = future.GetValue();
                     return status;
@@ -109,8 +109,8 @@ Y_UNIT_TEST_SUITE(TRegisterCheckTest) {
     {
         auto connection = MakeConnection("ShouldRegisterCheckNewGeneration");
 
-        auto future = connection->TableClient.RetryOperation(
-            [prefix = connection->TablePathPrefix] (TSession session) {
+        auto future = connection->GetTableClient()->RetryOperation(
+            [prefix = connection->GetTablePathPrefix()] (ISession::TPtr session) {
                 auto context = MakeIntrusive<TGenerationContext>(
                     session,
                     true,
@@ -133,8 +133,8 @@ Y_UNIT_TEST_SUITE(TRegisterCheckTest) {
     {
         auto connection = MakeConnection("ShouldRegisterCheckSameGeneration");
 
-        auto future = connection->TableClient.RetryOperation(
-            [prefix = connection->TablePathPrefix] (TSession session) {
+        auto future = connection->GetTableClient()->RetryOperation(
+            [prefix = connection->GetTablePathPrefix()] (ISession::TPtr session) {
                 auto context = MakeIntrusive<TGenerationContext>(
                     session,
                     true,
@@ -151,8 +151,8 @@ Y_UNIT_TEST_SUITE(TRegisterCheckTest) {
         auto status = future.GetValueSync();
         UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
 
-        future = connection->TableClient.RetryOperation(
-            [prefix = connection->TablePathPrefix] (TSession session) {
+        future = connection->GetTableClient()->RetryOperation(
+            [prefix = connection->GetTablePathPrefix()] (ISession::TPtr session) {
                 auto context = MakeIntrusive<TGenerationContext>(
                     session,
                     true,
@@ -175,8 +175,8 @@ Y_UNIT_TEST_SUITE(TRegisterCheckTest) {
     {
         auto connection = MakeConnection("ShouldRegisterCheckNextGeneration");
 
-        auto future = connection->TableClient.RetryOperation(
-            [prefix = connection->TablePathPrefix] (TSession session) {
+        auto future = connection->GetTableClient()->RetryOperation(
+            [prefix = connection->GetTablePathPrefix()] (ISession::TPtr session) {
                 auto context = MakeIntrusive<TGenerationContext>(
                     session,
                     true,
@@ -193,8 +193,8 @@ Y_UNIT_TEST_SUITE(TRegisterCheckTest) {
         auto status = future.GetValueSync();
         UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
 
-        future = connection->TableClient.RetryOperation(
-            [prefix = connection->TablePathPrefix] (TSession session) {
+        future = connection->GetTableClient()->RetryOperation(
+            [prefix = connection->GetTablePathPrefix()] (ISession::TPtr session) {
                 auto context = MakeIntrusive<TGenerationContext>(
                     session,
                     true,
@@ -216,8 +216,8 @@ Y_UNIT_TEST_SUITE(TRegisterCheckTest) {
     {
         auto connection = MakeConnection("ShouldNotRegisterCheckPrevGeneration");
 
-        auto future = connection->TableClient.RetryOperation(
-            [prefix = connection->TablePathPrefix] (TSession session) {
+        auto future = connection->GetTableClient()->RetryOperation(
+            [prefix = connection->GetTablePathPrefix()] (ISession::TPtr session) {
                 auto context = MakeIntrusive<TGenerationContext>(
                     session,
                     true,
@@ -234,8 +234,8 @@ Y_UNIT_TEST_SUITE(TRegisterCheckTest) {
         auto status = future.GetValueSync();
         UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
 
-        future = connection->TableClient.RetryOperation(
-            [prefix = connection->TablePathPrefix] (TSession session) {
+        future = connection->GetTableClient()->RetryOperation(
+            [prefix = connection->GetTablePathPrefix()] (ISession::TPtr session) {
                 auto context = MakeIntrusive<TGenerationContext>(
                     session,
                     true,
@@ -258,8 +258,8 @@ Y_UNIT_TEST_SUITE(TRegisterCheckTest) {
     {
         auto connection = MakeConnection("ShouldNotRegisterCheckPrevGeneration2");
 
-        auto future = connection->TableClient.RetryOperation(
-            [prefix = connection->TablePathPrefix] (TSession session) {
+        auto future = connection->GetTableClient()->RetryOperation(
+            [prefix = connection->GetTablePathPrefix()] (ISession::TPtr session) {
                 auto context = MakeIntrusive<TGenerationContext>(
                     session,
                     true,
@@ -276,8 +276,8 @@ Y_UNIT_TEST_SUITE(TRegisterCheckTest) {
         auto status = future.GetValueSync();
         UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
 
-        future = connection->TableClient.RetryOperation(
-            [prefix = connection->TablePathPrefix] (TSession session) {
+        future = connection->GetTableClient()->RetryOperation(
+            [prefix = connection->GetTablePathPrefix()] (ISession::TPtr session) {
                 auto context = MakeIntrusive<TGenerationContext>(
                     session,
                     false, // the only difference with ShouldNotRegisterCheckPrevGeneration
@@ -308,8 +308,8 @@ Y_UNIT_TEST_SUITE(TRegisterCheckTest) {
         auto status = CreateTable(connection, "dummy", std::move(desc)).GetValueSync();
         UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
 
-        auto future = connection->TableClient.RetryOperation(
-            [prefix = connection->TablePathPrefix] (TSession session) {
+        auto future = connection->GetTableClient()->RetryOperation(
+            [prefix = connection->GetTablePathPrefix()] (ISession::TPtr session) {
                 auto context = MakeIntrusive<TGenerationContext>(
                     session,
                     false,
@@ -340,8 +340,8 @@ Y_UNIT_TEST_SUITE(TRegisterCheckTest) {
         auto status = CreateTable(connection, "dummy", std::move(desc)).GetValueSync();
         UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
 
-        auto future = connection->TableClient.RetryOperation(
-            [prefix = connection->TablePathPrefix] (TSession session) {
+        auto future = connection->GetTableClient()->RetryOperation(
+            [prefix = connection->GetTablePathPrefix()] (ISession::TPtr session) {
                 auto context = MakeIntrusive<TGenerationContext>(
                     session,
                     true,
@@ -358,8 +358,8 @@ Y_UNIT_TEST_SUITE(TRegisterCheckTest) {
         status = future.GetValueSync();
         UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
 
-        future = connection->TableClient.RetryOperation(
-            [prefix = connection->TablePathPrefix] (TSession session) {
+        future = connection->GetTableClient()->RetryOperation(
+            [prefix = connection->GetTablePathPrefix()] (ISession::TPtr session) {
                 auto context = MakeIntrusive<TGenerationContext>(
                     session,
                     false,
@@ -387,8 +387,8 @@ Y_UNIT_TEST_SUITE(TCheckGenerationTest) {
     {
         auto connection = MakeConnection("ShouldRollbackTransactionWhenCheckFails");
 
-        auto future = connection->TableClient.RetryOperation(
-            [prefix = connection->TablePathPrefix] (TSession session) {
+        auto future = connection->GetTableClient()->RetryOperation(
+            [prefix = connection->GetTablePathPrefix()] (ISession::TPtr session) {
                 auto context = MakeIntrusive<TGenerationContext>(
                     session,
                     true,
@@ -405,8 +405,8 @@ Y_UNIT_TEST_SUITE(TCheckGenerationTest) {
         auto status = future.GetValueSync();
         UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
 
-        future = connection->TableClient.RetryOperation(
-            [prefix = connection->TablePathPrefix] (TSession session) {
+        future = connection->GetTableClient()->RetryOperation(
+            [prefix = connection->GetTablePathPrefix()] (ISession::TPtr session) {
                 auto context = MakeIntrusive<TGenerationContext>(
                     session,
                     false,
@@ -429,8 +429,8 @@ Y_UNIT_TEST_SUITE(TCheckGenerationTest) {
     {
         auto connection = MakeConnection("ShouldRollbackTransactionWhenCheckFails2");
 
-        auto future = connection->TableClient.RetryOperation(
-            [prefix = connection->TablePathPrefix] (TSession session) {
+        auto future = connection->GetTableClient()->RetryOperation(
+            [prefix = connection->GetTablePathPrefix()] (ISession::TPtr session) {
                 auto context = MakeIntrusive<TGenerationContext>(
                     session,
                     true,
@@ -447,8 +447,8 @@ Y_UNIT_TEST_SUITE(TCheckGenerationTest) {
         auto status = future.GetValueSync();
         UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
 
-        future = connection->TableClient.RetryOperation(
-            [prefix = connection->TablePathPrefix] (TSession session) {
+        future = connection->GetTableClient()->RetryOperation(
+            [prefix = connection->GetTablePathPrefix()] (ISession::TPtr session) {
                 auto context = MakeIntrusive<TGenerationContext>(
                     session,
                     true, // the only difference with ShouldRollbackTransactionWhenCheckFails

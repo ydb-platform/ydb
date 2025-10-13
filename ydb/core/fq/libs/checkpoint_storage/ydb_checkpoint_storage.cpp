@@ -15,7 +15,6 @@
 #include <fmt/format.h>
 #include <ydb/library/query_actor/query_actor.h>
 
-#include <ydb/core/fq/libs/ydb/ydb_gateway.h>
 #include <ydb/library/table_creator/table_creator.h>
 
 namespace NFq {
@@ -366,8 +365,6 @@ TFuture<TStatus> UpdateCheckpoint(const TCheckpointContextPtr& context) {
     const auto& generationContext = context->GenerationContext;
     const auto& graphDescContext = context->CheckpointGraphDescriptionContext;
 
-    Cerr << "SelectGraphDescId  0" << Endl;
-
     auto query = Sprintf(R"(
         --!syntax_v1
         PRAGMA TablePathPrefix("%s");
@@ -386,10 +383,7 @@ TFuture<TStatus> UpdateCheckpoint(const TCheckpointContextPtr& context) {
             .String(graphDescContext->GraphDescId)
             .Build();
 
-    Cerr << "SelectGraphDescId  1" << Endl;
-
     auto f = generationContext->Session->ExecuteDataQuery(query, std::move(params), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), /*TTxControl::Tx(*generationContext->Transaction)*/ generationContext->ExecDataQuerySettings);
-    Cerr << "SelectGraphDescId  2" << Endl;
     return f;
 //    return generationContext->Session.ExecuteDataQuery(query, TTxControl::Tx(*generationContext->Transaction), params.Build(), generationContext->ExecDataQuerySettings);
 }
@@ -403,18 +397,11 @@ TFuture<TStatus> GenerateGraphDescId(const TCheckpointContextPtr& context) {
         return MakeFuture(TStatus(EStatus::SUCCESS, NYdb::NIssue::TIssues()));
     }
 
-    Cerr << "GenerateGraphDescId  0" << Endl;
-
-
     Y_ABORT_UNLESS(context->EntityIdGenerator);
-    Cerr << "GenerateGraphDescId  1" << Endl;
     context->CheckpointGraphDescriptionContext->GraphDescId = context->EntityIdGenerator->Generate(EEntityType::CHECKPOINT_GRAPH_DESCRIPTION);
-    Cerr << "GenerateGraphDescId  2" << Endl;
     return SelectGraphDescId(context)
         .Apply(
             [context](const TFuture<TDataQueryResult>& result) {
-
-                Cerr << "GenerateGraphDescId  3" << Endl;
 
                 if (!result.GetValue().IsSuccess()) {
                     return MakeFuture<TStatus>(result.GetValue());
@@ -436,12 +423,10 @@ TFuture<TStatus> CreateCheckpointWrapper(
     return generationFuture.Apply(
         [context] (const TFuture<TStatus>& generationFuture) {
             auto generationSelect = generationFuture.GetValue();
-            Cerr << "CreateCheckpointWrapper  0" << Endl;
             if (!generationSelect.IsSuccess()) {
                 return MakeFuture(generationSelect);
             }
 
-            Cerr << "CreateCheckpointWrapper  1" << Endl;
             return GenerateGraphDescId(context)
                 .Apply(
                     [context](const TFuture<TStatus>& result) {
@@ -728,7 +713,6 @@ public:
     // )
     // void Bootstrap() {
     //     Become(&TCheckpointStorage::DispatchEvent);
-    //     Cerr << "Bootstrap111" << Endl;
     // }
 
     TFuture<TIssues> RegisterGraphCoordinator(const TCoordinatorId& coordinator) override;
@@ -879,13 +863,9 @@ TFuture<TIssues> TCheckpointStorage::Init()
 
 TFuture<TIssues> TCheckpointStorage::RegisterGraphCoordinator(const TCoordinatorId& coordinator)
 {
-    //YdbGateway->RetryOperation
-    //auto future = YdbConnection->TableClient.RetryOperation(
-    Cerr << "RegisterGraphCoordinator" << Endl;
     auto future = YdbConnection->GetTableClient()->RetryOperation(
         [prefix = YdbConnection->GetTablePathPrefix(), coordinator,
          execDataQuerySettings = DefaultExecDataQuerySettings()] (ISession::TPtr session) {
-            Cerr << "RegisterGraphCoordinator 1" << Endl;
 
             auto context = MakeIntrusive<TGenerationContext>(
                 session,

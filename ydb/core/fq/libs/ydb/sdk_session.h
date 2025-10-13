@@ -23,8 +23,6 @@ struct TSdkSession : public ISession {
         std::shared_ptr<NYdb::TParamsBuilder> paramsBuilder,
         NYdb::NTable::TTxControl txControl,
         NYdb::NTable::TExecDataQuerySettings execDataQuerySettings = NYdb::NTable::TExecDataQuerySettings()) override {
-        Cerr << "TLocalSession::ExecuteDataQuery" << Endl;
-        //return QueryActor->ExecuteDataQuery(sql, params,txControl);
         auto params = paramsBuilder->Build();
         return Session.ExecuteDataQuery(sql, txControl, params, execDataQuerySettings);
     }

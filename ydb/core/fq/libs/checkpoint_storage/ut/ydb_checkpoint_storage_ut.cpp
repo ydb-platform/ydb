@@ -6,7 +6,6 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/system/env.h>
-#include <ydb/core/fq/libs/ydb/ydb_gateway.h>
 #include <deque>
 #include <ydb/core/testlib/actors/test_runtime.h>
 #include <ydb/core/testlib/basics/appdata.h>
@@ -40,19 +39,9 @@ public:
         checkpointStorageConfig.SetTablePrefix(tablePrefix);
         checkpointStorageConfig.SetTableClientMaxActiveSessions(20);
 
-        //auto credFactory = NKikimr::CreateYdbCredentialsProviderFactory;
+        auto credFactory = NKikimr::CreateYdbCredentialsProviderFactory;
         NYdb::TDriver driver(NYdb::TDriverConfig{});
-        auto ydbConnectionPtr = CreateLocalYdbConnection("", "");
-        //NewYdbConnection(checkpointStorageConfig, credFactory, driver);
-       // IYdbTableGateway::TPtr ydbGateway;
-        // if (UseSdk) {
-        //     ydbGateway = MakeIntrusive<YdbSdkTableGateway>(ydbConnectionPtr->TableClient, ydbConnectionPtr->DB, ydbConnectionPtr->TablePathPrefix);
-        // } else {
-        //     ydbGateway = MakeIntrusive<YdbLocalTableGateway>(ydbConnectionPtr->DB, ydbConnectionPtr->TablePathPrefix);
-        // }
-
-      //  auto [storage, actor] = NewYdbCheckpointStorage(checkpointStorageConfig, entityIdGenerator, ydbConnectionPtr, ydbGateway);
-       // Register(actor);
+        auto ydbConnectionPtr = CreateSdkYdbConnection(checkpointStorageConfig, credFactory, driver);
         auto storage = NewYdbCheckpointStorage(checkpointStorageConfig, entityIdGenerator, ydbConnectionPtr);
 
         auto issues = storage->Init().GetValueSync();

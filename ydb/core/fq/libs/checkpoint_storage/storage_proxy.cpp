@@ -11,7 +11,6 @@
 
 #include <ydb/core/fq/libs/actors/logging/log.h>
 #include <ydb/core/fq/libs/ydb/ydb.h>
-#include <ydb/core/fq/libs/ydb/ydb_gateway.h>
 #include <ydb/core/fq/libs/ydb/util.h>
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>

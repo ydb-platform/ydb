@@ -57,19 +57,13 @@ TFuture<TStatus> CheckGeneration(
     const TDataQueryResult& selectResult,
     const TGenerationContextPtr& context)
 {
-    Cerr << "CheckGeneration" << Endl;
-
     if (!selectResult.IsSuccess()) {
-        Cerr << "CheckGeneration !IsSuccess" << Endl;
         return MakeFuture<TStatus>(selectResult);
     }
 
-    Cerr << "CheckGeneration 1" << Endl;
     TResultSetParser parser(selectResult.GetResultSet(0));
     if (parser.TryNextRow()) {
-        Cerr << "CheckGeneration TryNextRow" << Endl;
         context->GenerationRead = parser.ColumnParser(context->GenerationColumn).GetOptionalUint64().value_or(0);
-        Cerr << "GenerationRead " << context->GenerationRead<< Endl;
     }
 
     bool isOk = false;
@@ -96,8 +90,6 @@ TFuture<TStatus> CheckGeneration(
         break;
     }
     }
-
-    Cerr << "CheckGeneration isOk " << isOk << Endl;
 
     // TODO
     // context->Transaction = selectResult.GetTransaction();
@@ -137,7 +129,6 @@ TFuture<TStatus> SelectGenerationWithCheck(const TGenerationContextPtr& context)
     auto future = SelectGeneration(context);
     return future.Apply(
         [context] (const TFuture<TDataQueryResult>& future) {
-            Cerr << "SelectGeneration end" << Endl;
             return CheckGeneration(future.GetValue(), context);
         });
 }
@@ -331,16 +322,13 @@ TFuture<TStatus> RegisterCheckGeneration(const TGenerationContextPtr& context) {
 
     return future.Apply(
         [context] (const TFuture<TStatus>& future) {
-            Cerr << "SelectGenerationWithCheck end" << Endl;
             if (future.HasException()) {
                 return future;
             }
             const auto& status = future.GetValue();
             if (!status.IsSuccess()) {
-                Cerr << "SelectGenerationWithCheck failed" << Endl;
                 return future;
             }
-             Cerr << "SelectGenerationWithCheck ok" << Endl;
 
             // check successful, which means that either:
             // - generation in DB is same as in context

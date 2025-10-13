@@ -14,7 +14,6 @@
 #include <util/system/env.h>
 
 #include <ydb/core/protos/config.pb.h>
-//#include <ydb/core/fq/libs/ydb/ydb_gateway.h>
 #include <ydb/core/fq/libs/ydb/generation_context.h>
 #include <ydb/core/fq/libs/ydb/ydb_connection.h>
 

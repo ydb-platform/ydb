@@ -462,7 +462,6 @@ namespace Tests {
         }
 
         if (init) {
-            Cerr << "TServer::TServer" << Endl;
             Initialize();
         }
     }

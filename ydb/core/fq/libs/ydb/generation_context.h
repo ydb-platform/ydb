@@ -16,11 +16,8 @@
 #include <util/system/env.h>
 
 #include <ydb/core/protos/config.pb.h>
-#include <ydb/core/fq/libs/ydb/ydb_gateway.h>
 #include <functional>
-//#include <ydb/core/fq/libs/ydb/query_actor.h>
 #include <ydb/core/fq/libs/ydb/session.h>
-//#include <ydb/core/fq/libs/ydb/table_client.h>
 
 namespace NFq {
 

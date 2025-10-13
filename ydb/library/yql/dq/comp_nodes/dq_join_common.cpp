@@ -7,8 +7,7 @@ TKeyTypes KeyTypesFromColumns(const std::vector<TType*>& types, const std::vecto
     std::ranges::copy(keyIndexes | std::views::transform([&types](ui32 typeIndex) {
                           const TType* type = types[typeIndex];
                           MKQL_ENSURE(type->IsData(), "exepected data type");
-                          AS_TYPE(TDataType, type)->GetDataSlot();
-                          return std::pair{*static_cast<const TDataType*>(type)->GetDataSlot(), false};
+                          return std::pair{*AS_TYPE(TDataType, type)->GetDataSlot(), false};
                       }), std::back_inserter(kt));
     return kt;
 }
@@ -33,14 +32,8 @@ TTypedJoinKind TypifyJoinKind(EJoinKind kind) {
         return TJoinKindTag<EJoinKind::LeftSemi>{};
     case EJoinKind::RightSemi:
         return TJoinKindTag<EJoinKind::RightSemi>{};
-    case EJoinKind::SemiMask:
-        return TJoinKindTag<EJoinKind::SemiMask>{};
-    case EJoinKind::SemiSide:
-        return TJoinKindTag<EJoinKind::SemiSide>{};
-    case EJoinKind::Cross:
-        return TJoinKindTag<EJoinKind::Cross>{};
     default:
-        MKQL_ENSURE(false, "unreachable");
+        MKQL_ENSURE(false, "unsupported join kind");
     }
 }
 } // namespace NKikimr::NMiniKQL

@@ -1,8 +1,7 @@
 #include "type_utils.h"
 
 namespace NKikimr::NMiniKQL {
-bool UnwrapBlockTypes(const TArrayRef<TType* const>& typeComponents, std::vector<TType*>& result)
-{
+bool UnwrapBlockTypes(const TArrayRef<TType* const>& typeComponents, std::vector<TType*>& result) {
     bool hasBlock = false;
     bool hasNonBlock = false;
 
@@ -20,8 +19,7 @@ bool UnwrapBlockTypes(const TArrayRef<TType* const>& typeComponents, std::vector
     return hasBlock;
 }
 
-void WrapArrayBlockTypes(std::vector<TType*>& types, const TProgramBuilder& pb)
-{
+void WrapArrayBlockTypes(std::vector<TType*>& types, const TProgramBuilder& pb) {
     std::transform(types.begin(), types.end(), types.begin(),
                    [&](TType* type) { return pb.NewBlockType(type, TBlockType::EShape::Many); });
 }

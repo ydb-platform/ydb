@@ -46,7 +46,7 @@ class TStdJoinTable {
         }
     }
 
-    void Lookup(TTuple key, std::function<void(TTuple)> produce) {
+    void Lookup(TTuple key, std::invocable<TTuple> auto produce) {
         auto it = BuiltTable.find(key);
         if (it != BuiltTable.end()) {
             it->second.Used = true;

@@ -25,10 +25,10 @@ TJoinTestData BasicInnerJoinTestData() {
     TJoinTestData td;
     auto& setup = *td.Setup;
     TVector<ui64> leftKeys = {1, 2, 3, 4, 5};
-    TVector<TString> leftValues = {"a", "b1", "c1", "d1", "e1"};
+    TVector<TString> leftValues = {"a1", "b1", "c1", "d1", "e1"};
 
     TVector<ui64> rightKeys = {2, 3, 4, 5, 6};
-    TVector<TString> rightValues = {"b2", "c2", "d2", "e2", "f"};
+    TVector<TString> rightValues = {"b2", "c2", "d2", "e2", "f2"};
 
     TVector<ui64> expectedKeysLeft = {2, 3, 4, 5};
     TVector<TString> expectedValuesLeft = {"b1", "c1", "d1", "e1"};

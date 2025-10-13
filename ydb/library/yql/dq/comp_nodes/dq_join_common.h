@@ -24,16 +24,15 @@ template <EJoinKind Kind> struct TJoinKindTag {
 };
 
 using TTypedJoinKind =
-    std::variant<TJoinKindTag<EJoinKind::Inner>, TJoinKindTag<EJoinKind::Full>, TJoinKindTag<EJoinKind::Left>,
+    std::variant<TJoinKindTag<EJoinKind::Inner>, 
+                 TJoinKindTag<EJoinKind::Left>,
                  TJoinKindTag<EJoinKind::Right>,
                  TJoinKindTag<EJoinKind::LeftOnly>,
                  TJoinKindTag<EJoinKind::RightOnly>,
                  TJoinKindTag<EJoinKind::LeftSemi>,
                  TJoinKindTag<EJoinKind::RightSemi>,
-                 TJoinKindTag<EJoinKind::Exclusion>,
-                 TJoinKindTag<EJoinKind::Cross>,
-                 TJoinKindTag<EJoinKind::SemiSide>,
-                 TJoinKindTag<EJoinKind::SemiMask>>;
+                 TJoinKindTag<EJoinKind::Full>,
+                 TJoinKindTag<EJoinKind::Exclusion>>;
 
 TTypedJoinKind TypifyJoinKind(EJoinKind kind);
 
@@ -52,18 +51,23 @@ constexpr bool SemiOrOnlyJoin(EJoinKind kind) {
     }
 }
 
-constexpr bool IsInner(EJoinKind kind) {
+constexpr bool ContainsRowsFromInnerJoin(EJoinKind kind) { // true if kind is a join that contains all rows from inner join output.
     switch (kind) {
         using enum EJoinKind;
     case Inner:
     case Full:
     case Left:
     case Right:
+    case Cross:
         return true;
     default:
         return false;
     }
 }
+
+// Some joins produce concatenation of 2 tuples, some produce one tuple(effectively)
+template<typename Fun>
+concept JoinMatchFun = std::invocable<Fun, NJoinTable::TTuple> || std::invocable<Fun, NJoinTable::TTuple, NJoinTable::TTuple>;
 
 template <typename Source, EJoinKind Kind> class TJoin : public TComputationValue<TJoin<Source, Kind>> {
     using TBase = TComputationValue<TJoin>;
@@ -97,7 +101,8 @@ template <typename Source, EJoinKind Kind> class TJoin : public TComputationValu
         return Build_.UserDataSize();
     }
 
-    EFetchResult MatchRows(TComputationContext& ctx, auto consume) {
+
+    EFetchResult MatchRows(TComputationContext& ctx, JoinMatchFun auto consumeOneOrTwoTuples) { 
         while (!Build_.Finished()) {
             auto res = Build_.ForEachRow(ctx, [&](auto tuple) { Table_.Add({tuple, tuple + Build_.UserDataSize()}); });
             switch (res) {
@@ -119,22 +124,22 @@ template <typename Source, EJoinKind Kind> class TJoin : public TComputationValu
             auto result = Probe_.ForEachRow(ctx, [&](NJoinTable::TTuple probeTuple) {
                 bool found = false;
                 Table_.Lookup(probeTuple, [&](NJoinTable::TTuple matchedBuildTuple) {
-                    if constexpr (IsInner(Kind)) {
-                        consume(probeTuple, matchedBuildTuple);
+                    if constexpr (ContainsRowsFromInnerJoin(Kind)) {
+                        consumeOneOrTwoTuples(probeTuple, matchedBuildTuple);
                     }
                     found = true;
                 });
                 if (!found) {
                     if constexpr (Kind == EJoinKind::Exclusion || Kind == EJoinKind::Left || Kind == EJoinKind::Full) {
-                        consume(probeTuple, nullptr);
+                        consumeOneOrTwoTuples(probeTuple, nullptr);
                     }
                     if constexpr (Kind == EJoinKind::LeftOnly) {
-                        consume(probeTuple);
+                        consumeOneOrTwoTuples(probeTuple);
                     }
                 }
                 if constexpr (Kind == EJoinKind::LeftSemi) {
                     if (found) {
-                        consume(probeTuple);
+                        consumeOneOrTwoTuples(probeTuple);
                     }
                 }
             });
@@ -145,18 +150,18 @@ template <typename Source, EJoinKind Kind> class TJoin : public TComputationValu
                         for (auto& v : Table_.MapView()) {
                             if (v.second.Used) {
                                 for (NJoinTable::TTuple used : v.second.Tuples) {
-                                    consume(used);
+                                    consumeOneOrTwoTuples(used);
                                 }
                             }
                         }
                     }
                     Table_.ForEachUnused([&](NJoinTable::TTuple unused) {
                         if constexpr (Kind == EJoinKind::RightOnly) {
-                            consume(unused);
+                            consumeOneOrTwoTuples(unused);
                         }
                         if constexpr (Kind == EJoinKind::Exclusion || Kind == EJoinKind::Right ||
                                       Kind == EJoinKind::Full) {
-                            consume(nullptr, unused);
+                            consumeOneOrTwoTuples(nullptr, unused);
                         }
                     });
                 }

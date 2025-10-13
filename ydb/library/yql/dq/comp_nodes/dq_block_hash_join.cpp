@@ -42,7 +42,7 @@ class TBlockRowSource : public NNonCopyable::TMoveOnly {
         return Buff_.size() - 1;
     }
 
-    NYql::NUdf::EFetchStatus ForEachRow(TComputationContext& ctx, auto consume) {
+    NYql::NUdf::EFetchStatus ForEachRow(TComputationContext& ctx, std::invocable<NJoinTable::TTuple> auto consume) {
         auto res = Values_.WideFetch(Buff_.data(), Buff_.size());
         if (res != NYql::NUdf::EFetchStatus::Ok) {
             if (res == NYql::NUdf::EFetchStatus::Finish) {
@@ -173,14 +173,12 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
             auto consumeOneOrTwo = [&] {
                 if constexpr (SemiOrOnlyJoin(Kind)) {
                     return [&](NJoinTable::TTuple tuple) {
-                        if (!tuple) {
-                            tuple = NullTuples_.data();
-                        }
+                        MKQL_ENSURE(tuple != nullptr, "null output row in semi/only join?");
                         std::copy_n(tuple, Join_.ProbeSize(), out);
                     };
                 } else {
                     return [&](NJoinTable::TTuple probe, NJoinTable::TTuple build) {
-                        if (!probe) {
+                        if (!probe) { // todo: remove nullptr checks for some join types.
                             probe = NullTuples_.data();
                         }
                         std::copy_n(probe, Join_.ProbeSize(), out);

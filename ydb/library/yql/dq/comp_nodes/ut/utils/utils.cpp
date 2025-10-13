@@ -152,12 +152,7 @@ TRuntimeNode ToWideStream(TProgramBuilder& pgmBuilder, TRuntimeNode list) {
 TRuntimeNode FromWideStream(TProgramBuilder& pgmBuilder, TRuntimeNode stream) {
     return pgmBuilder.Collect(
         pgmBuilder.NarrowMap(pgmBuilder.ToFlow(stream), [&](TRuntimeNode::TList items) -> TRuntimeNode {
-            TVector<TRuntimeNode> tupleElements;
-            tupleElements.reserve(items.size());
-            for (size_t i = 0; i < items.size(); i++) {
-                tupleElements.emplace_back(items[i]);
-            }
-            return pgmBuilder.NewTuple(tupleElements);
+            return pgmBuilder.NewTuple(items);
         }));
 }
 
@@ -178,12 +173,7 @@ TRuntimeNode ToWideFlow(TProgramBuilder& pgmBuilder, TRuntimeNode list) {
 // WideFlow -> List<Tuple<...>>
 TRuntimeNode FromWideFlow(TProgramBuilder& pgmBuilder, TRuntimeNode wideFlow) {
     return pgmBuilder.Collect(pgmBuilder.NarrowMap(wideFlow, [&](TRuntimeNode::TList items) -> TRuntimeNode {
-        TVector<TRuntimeNode> tupleElements;
-        tupleElements.reserve(items.size());
-        for (size_t i = 0; i < items.size(); i++) {
-            tupleElements.emplace_back(items[i]);
-        }
-        return pgmBuilder.NewTuple(tupleElements);
+        return pgmBuilder.NewTuple(items);
     }));
 }
 

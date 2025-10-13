@@ -34,7 +34,7 @@ class TScalarRowSource : public NNonCopyable::TMoveOnly {
         return ConsumeBuff_.size();
     }
 
-    NYql::NUdf::EFetchStatus ForEachRow(TComputationContext& ctx, auto consume) {
+    NYql::NUdf::EFetchStatus ForEachRow(TComputationContext& ctx, std::invocable<NJoinTable::TTuple> auto consume) {
         auto res = Flow_->FetchValues(ctx, Pointers_.data());
         switch (res) {
         case EFetchResult::Finish: {

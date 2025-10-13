@@ -89,9 +89,9 @@ protected:
         AsDerived()->LwProbe(success);
 
         for (const auto& issue : event->Issues) {
-            NYql::WalkThroughIssues(issue, true, [this](const NYql::TIssue& err, ui16 level) {
+            NYql::WalkThroughIssues(issue, true, [issuesCounters=RequestCounters.Common->Issues](const NYql::TIssue& err, ui16 level) {
                 Y_UNUSED(level);
-                RequestCounters.Common->Issues->GetCounter(ToString(err.GetCode()), true)->Inc();
+                issuesCounters->GetCounter(ToString(err.GetCode()), true)->Inc();
             });
         }
 

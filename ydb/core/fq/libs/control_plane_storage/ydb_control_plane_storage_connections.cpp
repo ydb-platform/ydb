@@ -503,7 +503,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyConne
     );
 
     std::shared_ptr<std::pair<FederatedQuery::ModifyConnectionResult, TAuditDetails<FederatedQuery::Connection>>> response = std::make_shared<std::pair<FederatedQuery::ModifyConnectionResult, TAuditDetails<FederatedQuery::Connection>>>();
-    auto prepareParams = [=, this, config=Config, commonCounters=requestCounters.Common](const std::vector<TResultSet>& resultSets) {
+    auto prepareParams = [Config=Config, commonCounters=requestCounters.Common, response, user, request, scope, connectionId, idempotencyKey, tablePathPrefix=YdbConnection->TablePathPrefix](const std::vector<TResultSet>& resultSets) {
         if (resultSets.size() != 1) {
             ythrow NKikimr::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets.size() << ". Please contact internal support";
         }
@@ -559,7 +559,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyConne
         response->second.After.ConstructInPlace().CopyFrom(connection);
         response->second.CloudId = connectionInternal.cloud_id();
 
-        TSqlQueryBuilder writeQueryBuilder(YdbConnection->TablePathPrefix, "ModifyConnection(write)");
+        TSqlQueryBuilder writeQueryBuilder(tablePathPrefix, "ModifyConnection(write)");
         writeQueryBuilder.AddString("scope", scope);
         writeQueryBuilder.AddString("connection_id", connectionId);
         writeQueryBuilder.AddInt64("visibility", connection.content().acl().visibility());

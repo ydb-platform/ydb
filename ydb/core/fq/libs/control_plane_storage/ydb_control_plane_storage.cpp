@@ -341,7 +341,12 @@ void TYdbControlPlaneStorageActor::AfterTablesCreated() {
 
 bool TControlPlaneStorageUtils::IsSuperUser(const TString& user) const
 {
-    return AnyOf(Config->Proto.GetSuperUsers(), [&user](const auto& superUser) {
+    return IsSuperUser(Config, user);
+}
+
+bool TControlPlaneStorageUtils::IsSuperUser(const std::shared_ptr<::NFq::TControlPlaneStorageConfig>& config, const TString& user)
+{
+    return AnyOf(config->Proto.GetSuperUsers(), [&user](const auto& superUser) {
         return superUser == user;
     });
 }
@@ -428,7 +433,7 @@ TAsyncStatus TDbRequester::Validate(
     const TValidationQuery& validatonItem = validators[item];
     CollectDebugInfo(validatonItem.Query, validatonItem.Params, session, debugInfo);
     auto result = session.ExecuteDataQuery(validatonItem.Query, item == 0 ? TTxControl::BeginTx(transactionMode) : TTxControl::Tx(**transaction), validatonItem.Params, NYdb::NTable::TExecDataQuerySettings().KeepInQueryCache(true));
-    return result.Apply([=, this, validator=validatonItem.Validator, query=validatonItem.Query] (const TFuture<TDataQueryResult>& future) {
+    return result.Apply([transaction, actorSystem, successFinish, item, session, debugInfo, validator=validatonItem.Validator, query=validatonItem.Query, validators] (const TFuture<TDataQueryResult>& future) {
         NYdb::NTable::TDataQueryResult result = future.GetValue();
         *transaction = result.GetTransaction();
         auto status = static_cast<TStatus>(result);
@@ -459,9 +464,9 @@ TAsyncStatus TDbRequester::Write(
     NActors::TActorSystem* const actorSystem = TActivationContext::ActorSystem();
     std::shared_ptr<int> retryCount = std::make_shared<int>();
     auto transaction = std::make_shared<std::optional<TTransaction>>();
-    auto writeHandler = [=, retryOnTli=retryOnTli] (TSession session) {
+    auto writeHandler = [query, transaction, params, debugInfo, hasValidators=!validators.empty(), transactionMode, actorSystem, retryOnTli=retryOnTli] (TSession session) {
         CollectDebugInfo(query, params, session, debugInfo);
-        auto result = session.ExecuteDataQuery(query, validators ? TTxControl::Tx(**transaction).CommitTx() : TTxControl::BeginTx(transactionMode).CommitTx(), params, NYdb::NTable::TExecDataQuerySettings().KeepInQueryCache(true));
+        auto result = session.ExecuteDataQuery(query, hasValidators ? TTxControl::Tx(**transaction).CommitTx() : TTxControl::BeginTx(transactionMode).CommitTx(), params, NYdb::NTable::TExecDataQuerySettings().KeepInQueryCache(true));
         return result.Apply([=] (const TFuture<TDataQueryResult>& future) {
             NYdb::NTable::TDataQueryResult result = future.GetValue();
             auto status = static_cast<TStatus>(result);
@@ -478,7 +483,7 @@ TAsyncStatus TDbRequester::Write(
         });
     };
 
-    auto handler = [=, this, requestCounters=requestCounters] (TSession session) mutable {
+    auto handler = [actorSystem, writeHandler, validators, transaction, debugInfo, retryCount, requestCounters=requestCounters] (TSession session) mutable {
         if (*retryCount != 0) {
             requestCounters.IncRetry();
         }
@@ -525,7 +530,7 @@ NThreading::TFuture<void> TYdbControlPlaneStorageActor::PickTask(
 {
     return ReadModifyWrite(taskParams.ReadQuery, taskParams.ReadParams,
         taskParams.PrepareParams, requestCounters, debugInfo, validators, transactionMode, taskParams.RetryOnTli)
-            .Apply([=, responseTasks=responseTasks, queryId = taskParams.QueryId](const auto& future) {
+            .Apply([=, responseTasks=responseTasks, queryId=taskParams.QueryId](const auto& future) {
                 const auto status = future.GetValue();
                 if (responseTasks && !status.IsSuccess()) {
                     responseTasks->SafeEraseTaskBlocking(queryId);
@@ -622,7 +627,7 @@ TAsyncStatus TDbRequester::ReadModifyWrite(
         });
     };
 
-    auto handler = [=, this, requestCounters=requestCounters] (TSession session) mutable {
+    auto handler = [actorSystem, transaction, validators, retryCount, debugInfo, requestCounters=requestCounters, readModifyWriteHandler] (TSession session) mutable {
         if (*retryCount != 0) {
             requestCounters.IncRetry();
         }

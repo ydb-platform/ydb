@@ -4703,5 +4703,46 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
     }
+
+    Y_UNIT_TEST(PredicateWithLimitLostRecords) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        TKikimrRunner kikimr(settings);
+
+        auto queryClient = kikimr.GetQueryClient();
+        {
+            auto status = queryClient.ExecuteQuery(R"(
+                    CREATE TABLE IF NOT EXISTS `olap_table` (
+                        id Uint64 NOT NULL,
+                        message Utf8,
+                        PRIMARY KEY (id)
+                    )
+                    WITH (
+                        STORE = COLUMN,
+                        PARTITION_COUNT = 1
+                    );
+                )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+        }
+
+        {
+            TString query = "UPSERT INTO `olap_table` (id, message) VALUES (1, '2'), (2, '2');";
+            auto status = queryClient.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+        }
+
+        {
+            auto status = queryClient.ExecuteQuery(R"(
+                SELECT id FROM `olap_table`
+                WHERE id = 2 AND message = '2'
+                LIMIT 1;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+            TString result = FormatResultSetYson(status.GetResultSet(0));
+
+            CompareYson(result, R"([[2u]])");
+        }
+    }
 }
 }

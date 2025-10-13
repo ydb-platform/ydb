@@ -195,6 +195,7 @@ public:
         TMaybe<TGroupStat::EKind> LatencyQueueKind = {};
 
         std::optional<ui32> ForceGroupGeneration; // work only with this specific group generation and nothing else
+        bool DoSendDeathNote = true; // unschedules DSProxy timeout on termination, be careful with disabling
     };
 
     struct TTypeSpecificParameters {
@@ -222,6 +223,7 @@ public:
         , RacingDomains(&Info->GetTopology())
         , ExecutionRelay(std::move(params.Common.ExecutionRelay))
         , ForceGroupGeneration(params.Common.ForceGroupGeneration)
+        , DoSendDeathNote(params.Common.DoSendDeathNote)
     {
         if (ParentSpan) {
             const NWilson::TTraceId& parentTraceId = ParentSpan.GetTraceId();
@@ -327,6 +329,7 @@ private:
     bool FirstResponse = true;
     std::optional<ui32> ForceGroupGeneration;
     ui32 RacingGeneration = 0;
+    bool DoSendDeathNote;
 };
 
 void Encrypt(char *destination, const char *source, size_t shift, size_t sizeBytes, const TLogoBlobID &id,

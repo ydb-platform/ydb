@@ -377,7 +377,7 @@ public:
             if (TempTablesState) {
                 auto tempTableInfoIt = TempTablesState->FindInfo(table, false);
                 if (tempTableInfoIt != TempTablesState->TempTables.end()) {
-                    table = NKikimr::NKqp::GetTempTablePath(TempTablesState->Database, TempTablesState->SessionId, tempTableInfoIt->first);
+                    table = NKikimr::NKqp::GetTempTablePath(TempTablesState->Database, TempTablesState->TempDirName, tempTableInfoIt->first);
                 }
             }
 
@@ -523,10 +523,6 @@ public:
         return DatabaseId;
     }
 
-    const TString& GetSessionId() const {
-        return SessionId;
-    }
-
     void SetCluster(const TString& cluster) {
         Cluster = cluster;
     }
@@ -537,10 +533,6 @@ public:
 
     void SetDatabaseId(const TString& databaseId) {
         DatabaseId = databaseId;
-    }
-
-    void SetSessionId(const TString& sessionId) {
-        SessionId = sessionId;
     }
 
     NKikimr::NKqp::TKqpTempTablesState::TConstPtr GetTempTablesState() const {
@@ -578,7 +570,6 @@ private:
     TString Cluster;
     TString Database;
     TString DatabaseId;
-    TString SessionId;
     TKikimrConfiguration::TPtr Configuration;
     TIntrusivePtr<TKikimrTablesData> TablesData;
     TIntrusivePtr<TKikimrQueryContext> QueryCtx;

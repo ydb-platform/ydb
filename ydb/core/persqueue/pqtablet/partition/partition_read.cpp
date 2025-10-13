@@ -45,17 +45,23 @@ ui64 TPartition::GetReadOffset(ui64 offset, TMaybe<TInstant> readTimestamp) cons
     if (!readTimestamp) {
         return offset;
     }
-    auto estimatedOffset = GetOffsetEstimate(CompactionBlobEncoder.DataKeysBody, *readTimestamp, Max<ui64>());
-    if (estimatedOffset == Max<ui64>()) {
-        estimatedOffset = GetOffsetEstimate(BlobEncoder.DataKeysBody, *readTimestamp, Max<ui64>());
+    if (AppData()->FeatureFlags.GetEnableSkipMessagesWithObsoleteTimestamp()) {
+        // round timestamp down, because timestamps are stored with second precision in the kv-tablet
+        readTimestamp = TInstant::Seconds(readTimestamp->Seconds());
     }
-    if (estimatedOffset == Max<ui64>() && AppData()->FeatureFlags.GetEnableSkipMessagesWithObsoleteTimestamp()) {
-        estimatedOffset = GetOffsetEstimate(CompactionBlobEncoder.HeadKeys, *readTimestamp, Max<ui64>());
+    TMaybe<ui64> estimatedOffset = GetOffsetEstimate(CompactionBlobEncoder.DataKeysBody, *readTimestamp);
+
+    if (!estimatedOffset.Defined()) {
+        estimatedOffset = GetOffsetEstimate(CompactionBlobEncoder.HeadKeys, *readTimestamp);
     }
-    if (estimatedOffset == Max<ui64>()) {
-        estimatedOffset = Min(BlobEncoder.Head.Offset, GetEndOffset() - 1);
+    if (!estimatedOffset.Defined()) {
+        estimatedOffset = GetOffsetEstimate(BlobEncoder.DataKeysBody, *readTimestamp);
     }
-    return Max(estimatedOffset, offset);
+
+    if (!estimatedOffset.Defined()) {
+        estimatedOffset = Min(BlobEncoder.Head.Offset, BlobEncoder.EndOffset - 1);
+    }
+    return Max(*estimatedOffset, offset);
 }
 
 void TPartition::SendReadingFinished(const TString& consumer) {

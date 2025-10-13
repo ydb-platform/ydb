@@ -96,7 +96,7 @@ struct TMetric {
 };
 
 template <typename TCoord>
-struct TCosineSimilarity : TMetric<TCoord> {
+struct TCosineDistance : TMetric<TCoord> {
     using TSum = typename TMetric<TCoord>::TSum;
     // double used to avoid precision issues
     using TRes = double;
@@ -109,7 +109,7 @@ struct TCosineSimilarity : TMetric<TCoord> {
     static auto Distance(const TStringBuf cluster, const TStringBuf embedding)
     {
         const TRes similarity = KnnDistance<TRes>::CosineSimilarity(cluster, embedding).value();
-        return -similarity;
+        return 1 - similarity;
     }
 };
 
@@ -432,7 +432,7 @@ std::unique_ptr<IClusters> CreateClusters(const Ydb::Table::VectorIndexSettings&
             case Ydb::Table::VectorIndexSettings::DISTANCE_COSINE:
                 // We don't need to have separate implementation for distance,
                 // because clusters will be same as for similarity
-                return std::make_unique<TClusters<TCosineSimilarity<T>>>(dim, maxRounds, formatByte);
+                return std::make_unique<TClusters<TCosineDistance<T>>>(dim, maxRounds, formatByte);
             case Ydb::Table::VectorIndexSettings::DISTANCE_MANHATTAN:
                 return std::make_unique<TClusters<TL1Distance<T>>>(dim, maxRounds, formatByte);
             case Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN:

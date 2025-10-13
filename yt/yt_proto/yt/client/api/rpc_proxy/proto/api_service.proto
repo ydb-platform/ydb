@@ -1094,6 +1094,7 @@ message TReqBuildSnapshot
     optional NYT.NProto.TGuid cell_id = 1;
     optional bool set_read_only = 2 [default = false];
     optional bool wait_for_snapshot_completion = 3 [default = true];
+    optional bool enable_automaton_read_only_barrier = 4 [default = true];
 }
 
 message TRspBuildSnapshot

@@ -912,7 +912,6 @@ TIncompatibilityRules ParseIncompatibilityRules(const NFyaml::TNodeRef& root) {
 }
 
 void CombineForEach(
-    TVector<TVector<TLabel>>& labelCombinations,
     TVector<TLabel>& combination,
     const TVector<std::pair<TString, TSet<TLabel>>>& labels,
     size_t offset,
@@ -926,29 +925,6 @@ void CombineForEach(
     for (auto& label : labels[offset].second) {
         combination[offset] = label;
         CombineForEach(combination, labels, offset + 1, process);
-    }
-}
-
-void CombineWithRules(
-    TVector<TVector<TLabel>>& labelCombinations,
-    TVector<TLabel>& combination,
-    const TVector<std::pair<TString, TSet<TLabel>>>& labels,
-    const TIncompatibilityRules& rules,
-    size_t offset,
-    size_t& prunedCount)
-{
-    if (offset == labels.size()) {
-        if (rules.IsCompatible(combination, labels)) {
-            labelCombinations.push_back(combination);
-        } else {
-            ++prunedCount;
-        }
-        return;
-    }
-
-    for (auto& label : labels[offset].second) {
-        combination[offset] = label;
-        CombineWithRules(labelCombinations, combination, labels, rules, offset + 1, prunedCount);
     }
 }
 
@@ -1099,11 +1075,16 @@ TResolvedConfig ResolveAll(NFyaml::TDocument& doc)
 
     TVector<TLabel> combination(ctx.Labels.size());
 
+    const bool checkRules = ctx.Model.IncompatibilityRules.HasRules();
+
     CombineForEach(
         combination,
         ctx.Labels,
         0,
         [&](const TVector<TLabel>& current) {
+            if (checkRules && !ctx.Model.IncompatibilityRules.IsCompatible(current, ctx.Labels)) {
+                return;
+            }
             TSimpleSharedPtr<TDocumentConfig> cur = rootPtr;
             TTriePath path({0});
 
@@ -1173,12 +1154,17 @@ void ResolveUniqueDocs(
 
     THashSet<size_t> seenHashes;
 
+    const bool checkRules = ctx.Model.IncompatibilityRules.HasRules();
+
     // for each combination of labels, we build a path of selectors
     CombineForEach(
         combination,
         ctx.Labels,
         0,
         [&](const TVector<TLabel>& current) {
+            if (checkRules && !ctx.Model.IncompatibilityRules.IsCompatible(current, ctx.Labels)) {
+                return;
+            }
             currentPath.clear();
             // for each selector, we check if it fits the combination of labels
             // if it does, we add the selector index to the current path

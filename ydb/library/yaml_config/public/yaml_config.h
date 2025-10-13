@@ -144,6 +144,8 @@ public:
     size_t GetRuleCount() const { return RulesByName.size(); }
     size_t GetDisabledCount() const { return DisabledRules.size(); }
 
+    bool HasRules() const { return !RulesByName.empty() || !DisabledRules.empty(); }
+
 private:
     TMap<TString, TIncompatibilityRule> RulesByName;
     THashSet<TString> DisabledRules;

@@ -30,7 +30,7 @@ void AddRowToData(TBufferData& buffer, TClusterId parent, TArrayRef<const TCell>
 
 TTags MakeScanTags(const TUserTable& table, const TProtoStringType& embedding,
     const google::protobuf::RepeatedPtrField<TProtoStringType>& data, ui32& embeddingPos,
-    ui32& dataPos, NTable::TTag& embeddingTag);
+    ui32& dataPos);
 
 std::shared_ptr<NTxProxy::TUploadTypes> MakeOutputTypes(const TUserTable& table, NKikimrTxDataShard::EKMeansState uploadState,
     const TProtoStringType& embedding, const google::protobuf::RepeatedPtrField<TProtoStringType>& data,

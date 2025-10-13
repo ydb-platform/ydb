@@ -62,12 +62,12 @@ void AddRowToData(TBufferData& buffer, TClusterId parent, TArrayRef<const TCell>
 
 TTags MakeScanTags(const TUserTable& table, const TProtoStringType& embedding, 
     const google::protobuf::RepeatedPtrField<TProtoStringType>& data, ui32& embeddingPos,
-    ui32& dataPos, NTable::TTag& embeddingTag)
+    ui32& dataPos)
 {
     auto tags = GetAllTags(table);
     TTags result;
     result.reserve(1 + data.size());
-    embeddingTag = tags.at(embedding);
+    auto embeddingTag = tags.at(embedding);
     if (auto it = std::find(data.begin(), data.end(), embedding); it != data.end()) {
         embeddingPos = it - data.begin();
         dataPos = 0;

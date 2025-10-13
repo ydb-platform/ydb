@@ -85,7 +85,6 @@ protected:
 
     const TIndexBuildScanSettings ScanSettings;
 
-    NTable::TTag EmbeddingTag;
     TTags ScanTags;
 
     TUploadStatus UploadStatus;
@@ -141,7 +140,7 @@ public:
 
         const auto& embedding = request.GetEmbeddingColumn();
         const auto& data = request.GetDataColumns();
-        ScanTags = MakeScanTags(table, embedding, data, EmbeddingPos, DataPos, EmbeddingTag);
+        ScanTags = MakeScanTags(table, embedding, data, EmbeddingPos, DataPos);
         Lead.SetTags(ScanTags);
         {
             Ydb::Type type;

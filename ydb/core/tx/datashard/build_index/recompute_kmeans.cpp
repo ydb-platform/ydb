@@ -81,9 +81,8 @@ public:
         LOG_I("Create " << Debug());
 
         const auto& embedding = request.GetEmbeddingColumn();
-        NTable::TTag embeddingTag;
         ui32 dataPos = 0;
-        ScanTags = MakeScanTags(table, embedding, {}, EmbeddingPos, dataPos, embeddingTag);
+        ScanTags = MakeScanTags(table, embedding, {}, EmbeddingPos, dataPos);
         Lead.SetTags(ScanTags);
     }
 

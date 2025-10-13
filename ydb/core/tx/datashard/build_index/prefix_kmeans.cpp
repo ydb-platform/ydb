@@ -88,7 +88,6 @@ protected:
 
     const TIndexBuildScanSettings ScanSettings;
 
-    NTable::TTag EmbeddingTag;
     TTags ScanTags;
 
     TActorId ResponseActorId;
@@ -145,7 +144,7 @@ public:
         for (auto & col: request.GetSourcePrimaryKeyColumns()) {
             data.push_back(col);
         }
-        ScanTags = MakeScanTags(table, embedding, {data.begin(), data.end()}, EmbeddingPos, DataPos, EmbeddingTag);
+        ScanTags = MakeScanTags(table, embedding, {data.begin(), data.end()}, EmbeddingPos, DataPos);
         Lead.To(ScanTags, {}, NTable::ESeek::Lower);
         {
             Ydb::Type type;

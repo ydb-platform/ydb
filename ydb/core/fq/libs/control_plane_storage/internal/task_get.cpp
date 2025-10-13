@@ -134,7 +134,8 @@ std::tuple<TString, NYdb::TParams, std::function<std::pair<TString, NYdb::TParam
     const TDuration& resultSetsTtl,
     std::shared_ptr<TTenantInfo> tenantInfo,
     const TRequestCommonCountersPtr& commonCounters,
-    ui32 requestNodeId)
+    ui32 requestNodeId,
+    std::weak_ptr<bool>& Alive)
 {
     const auto& task = taskInternal.Task;
 
@@ -153,7 +154,10 @@ std::tuple<TString, NYdb::TParams, std::function<std::pair<TString, NYdb::TParam
         "WHERE `" TENANT_COLUMN_NAME "` = $tenant AND `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id AND `" ASSIGNED_UNTIL_COLUMN_NAME "` < $now;\n"
     );
 
-    auto prepareParams = [commonCounters=commonCounters, nowTimestamp=nowTimestamp, taskLeaseUntil=taskLeaseUntil, automaticQueriesTtl=automaticQueriesTtl, resultSetsTtl=resultSetsTtl, disableCurrentIam, requestNodeId, taskInternal=taskInternal, responseTasks=responseTasks, tenantInfo=tenantInfo](const std::vector<TResultSet>& resultSets) mutable {
+    auto prepareParams = [commonCounters=commonCounters, nowTimestamp=nowTimestamp, taskLeaseUntil=taskLeaseUntil, automaticQueriesTtl=automaticQueriesTtl, resultSetsTtl=resultSetsTtl, disableCurrentIam, requestNodeId, taskInternal=taskInternal, responseTasks=responseTasks, tenantInfo=tenantInfo, alive=std::weak_ptr(Alive)](const std::vector<TResultSet>& resultSets) mutable {
+        if (alive.expired()) {
+            throw yexception() << "Actor died";
+        }
         auto& task = taskInternal.Task;
         const auto shouldAbortTask = taskInternal.ShouldAbortTask;
         constexpr size_t expectedResultSetsSize = 2;
@@ -420,8 +424,12 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetTaskRequ
                              tenantInfo=ev->Get()->TenantInfo,
                              owner, hostName, tenantName, tasksBatchSize, requestNodeId,
                              numTasksProportion, Config=Config,
-                             tablePathPrefix=YdbConnection->TablePathPrefix
+                             tablePathPrefix=YdbConnection->TablePathPrefix,
+                             alive=std::weak_ptr(Alive)
                         ](const std::vector<TResultSet>& resultSets) mutable {
+        if (alive.expired()) {
+            throw yexception() << "Actor died";
+        }
         TVector<TTaskInternal> tasks;
         TVector<TPickTaskParams> pickTaskParams;
         const auto now = TInstant::Now();
@@ -472,7 +480,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetTaskRequ
         for (size_t i = 0; i < numTasks; ++i) {
             auto tupleParams = MakeGetTaskUpdateQuery(tasks[i],
                 responseTasks, now, now + Config->TaskLeaseTtl, Config->Proto.GetDisableCurrentIam(),
-                Config->AutomaticQueriesTtl, Config->ResultSetsTtl, tenantInfo, commonCounters, requestNodeId); // using for win32 build
+                Config->AutomaticQueriesTtl, Config->ResultSetsTtl, tenantInfo, commonCounters, requestNodeId, alive); // using for win32 build
             auto readQuery = std::get<0>(tupleParams);
             auto readParams = std::get<1>(tupleParams);
             auto prepareParams = std::get<2>(tupleParams);

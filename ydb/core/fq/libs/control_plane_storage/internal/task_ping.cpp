@@ -70,7 +70,10 @@ TYdbControlPlaneStorageActor::TPingTaskParams TYdbControlPlaneStorageActor::Cons
     );
 
     auto meteringRecords = std::make_shared<std::vector<TString>>();
-    auto prepareParams = [meteringRecords, commonCounters=commonCounters, leaseLeftMs=Counters.LeaseLeftMs, config=Config, tablePathPrefix=YdbConnection->TablePathPrefix, finalStatus=finalStatus, response=response, counters=counters, actorSystem=NActors::TActivationContext::ActorSystem(), request=request](const std::vector<TResultSet>& resultSets) mutable {
+    auto prepareParams = [meteringRecords, commonCounters=commonCounters, leaseLeftMs=Counters.LeaseLeftMs, config=Config, tablePathPrefix=YdbConnection->TablePathPrefix, finalStatus=finalStatus, response=response, counters=counters, actorSystem=NActors::TActivationContext::ActorSystem(), request=request, alive=std::weak_ptr(Alive)](const std::vector<TResultSet>& resultSets) mutable {
+        if (alive.expired()) {
+            throw yexception() << "Actor died";
+        }
         TString jobId;
         FederatedQuery::Query query;
         FederatedQuery::Internal::QueryInternal internal;
@@ -257,7 +260,10 @@ TYdbControlPlaneStorageActor::TPingTaskParams TYdbControlPlaneStorageActor::Cons
         "FROM `" PENDING_SMALL_TABLE_NAME "` WHERE `" TENANT_COLUMN_NAME "` = $tenant AND `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id;\n"
     );
 
-    auto prepareParams = [request=request, leaseLeftMs=Counters.LeaseLeftMs, config=Config, tablePathPrefix=YdbConnection->TablePathPrefix, response, commonCounters=commonCounters](const std::vector<TResultSet>& resultSets) {
+    auto prepareParams = [request=request, leaseLeftMs=Counters.LeaseLeftMs, config=Config, tablePathPrefix=YdbConnection->TablePathPrefix, response, commonCounters=commonCounters, alive=std::weak_ptr(Alive)](const std::vector<TResultSet>& resultSets) {
+        if (alive.expired()) {
+            throw yexception() << "Actor died";
+        }
         TString owner;
         FederatedQuery::Internal::QueryInternal internal;
 

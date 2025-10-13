@@ -844,8 +844,6 @@ class TestFullCycleLocalBackupRestoreWIncr(TestFullCycleLocalBackupRestore):
         restored_rows = self.wait_for_table_rows(t_orders, snapshot_rows[snap_inc1], timeout_s=90)
         assert self.normalize_rows(restored_rows) == self.normalize_rows(snapshot_rows[snap_inc1]), "Verify data in backup (2) failed"
 
-        time.sleep(1.1)
-
         # Restore to incremental 2 (full1 + inc1 + inc2)
         col_inc2 = f"restore_inc2_{int(time.time())}"
         ts_inc2 = self.extract_ts(snap_inc2)
@@ -908,7 +906,6 @@ class TestFullCycleLocalBackupRestoreWIncr(TestFullCycleLocalBackupRestore):
         self._remove_tables([full_orders, full_products])
         rest_full2 = self._execute_yql(f"RESTORE `{col_full2}`;")
         assert rest_full2.exit_code == 0, f"RESTORE full2 failed: {rest_full2.std_err}"
-        restored_rows = self._capture_snapshot(t_orders)
         restored_rows = self.wait_for_table_rows(t_orders, snapshot_rows[snap_full2], timeout_s=90)
         assert self.normalize_rows(restored_rows) == self.normalize_rows(snapshot_rows[snap_full2]), "Verify data in backup (4) failed"
 

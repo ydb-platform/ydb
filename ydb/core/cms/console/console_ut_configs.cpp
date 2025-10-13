@@ -772,7 +772,7 @@ selector_config:
   selector:
     tenant: /slice
   config:
-    self_management_config: {enabled: true}
+    self_management_config: {enabled: true, erasure_species: block-4-2}
     yaml_config_enabled: true
     cms_config:
       sentinel_config:
@@ -802,7 +802,6 @@ metadata:
   database: "/dc-1/users/tenant-1"
   version: 0
 config:
-  self_management_config: {enabled: true, erasure_species: block-4-2}
   feature_flags:
     some_removed_feature_flag_example: true
 )";
@@ -814,7 +813,6 @@ metadata:
   database: "/dc-1/users/tenant-1"
   version: 1
 config:
-  self_management_config: {enabled: true, erasure_species: block-4-2}
   feature_flags:
     some_removed_feature_flag_example: true
 )";
@@ -826,7 +824,6 @@ metadata:
   database: "/dc-1/users/tenant-1"
   version: 1
 config:
-  self_management_config: {enabled: true, erasure_species: block-4-2}
   feature_flags:
     some_removed_feature_flag_example: true
 )";
@@ -838,7 +835,6 @@ metadata:
   database: "/dc-1/users/tenant-1"
   version: 2
 config:
-  self_management_config: {enabled: true, erasure_species: block-4-2}
   feature_flags:
     some_removed_feature_flag_example: true
 )";
@@ -850,7 +846,6 @@ metadata:
   database: "/dc-1/users/tenant-2"
   version: 0
 config:
-  self_management_config: {enabled: true, erasure_species: block-4-2}
   feature_flags:
     some_removed_feature_flag_example: true
 )";
@@ -862,7 +857,6 @@ metadata:
   database: "/dc-1/users/tenant-2"
   version: 1
 config:
-  self_management_config: {enabled: true, erasure_species: block-4-2}
   feature_flags:
     some_removed_feature_flag_example: true
 )";
@@ -874,7 +868,6 @@ metadata:
   database: "/dc-1/users/tenant-2"
   version: 0
 config:
-  self_management_config: {enabled: true, erasure_species: block-4-2}
   feature_flags:
     some_removed_feature_flag_example: true
 )";
@@ -886,7 +879,6 @@ metadata:
   database: "/dc-1/users/tenant-2"
   version: 1
 config:
-  self_management_config: {enabled: true, erasure_species: block-4-2}
   feature_flags:
     some_removed_feature_flag_example: true
 )";

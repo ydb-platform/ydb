@@ -23,13 +23,9 @@ TString MakeHash(const TString& str) {
 
 TString SerializeResult(const TVector<TUrlListEntry>& result) {
     auto node = NYT::TNode::CreateList();
-    for (auto &e: result) {
+    for (auto& e : result) {
         node.Add(
-            NYT::TNode::CreateMap()
-                ("name", e.Name)
-                ("type", int(e.Type))
-                ("url", e.Url)
-        );
+            NYT::TNode::CreateMap()("name", e.Name)("type", int(e.Type))("url", e.Url));
     }
     return NodeToYsonString(node, NYT::NYson::EYsonFormat::Binary);
 }
@@ -38,27 +34,33 @@ TVector<TUrlListEntry> DeserializeResult(const TString& inp) {
     auto node = NYT::NodeFromYsonString(inp);
     TVector<TUrlListEntry> result;
     result.reserve(node.Size());
-    for (const auto& e: node.AsList()) {
+    for (const auto& e : node.AsList()) {
         result.emplace_back(TUrlListEntry{
             .Url = e["url"].AsString(),
             .Name = e["name"].AsString(),
-            .Type = EUrlListEntryType(e["type"].AsInt64())
-        });
+            .Type = EUrlListEntryType(e["type"].AsInt64())});
     }
     return result;
 }
 
-class TQPlayerUrlListerManager : public IUrlListerManager {
+class TQPlayerUrlListerManager: public IUrlListerManager {
 public:
     TQPlayerUrlListerManager(IUrlListerManagerPtr underlying, TQContext qContext)
         : Underlying_(underlying)
         , QContext_(qContext)
-        {}
+    {
+    }
 
     TVector<TUrlListEntry> ListUrl(const TString& url, const TString& tokenName) const override {
         TMaybe<TString> key;
         if (QContext_) {
-            key = MakeHash(NodeToCanonicalYsonString(NYT::TNode()("url", url)("token", tokenName), NYT::NYson::EYsonFormat::Binary));
+            key = MakeHash(NodeToCanonicalYsonString(
+                // clang-format off
+                NYT::TNode()
+                        ("url", url)
+                        ("token", tokenName),
+                // clang-format on
+                NYT::NYson::EYsonFormat::Binary));
         }
         if (QContext_.CanRead()) {
             auto val = QContext_.GetReader()->Get({UrlListerManager_ListUrl, *key}).GetValueSync();
@@ -78,12 +80,14 @@ public:
         TMaybe<TString> key;
         if (QContext_) {
             key = MakeHash(NodeToCanonicalYsonString(
+                // clang-format off
                 NYT::TNode()
                     ("url", url)
                     ("token", tokenName)
                     ("separator", separator)
-                    ("foldersLimit", foldersLimit)
-                , NYT::NYson::EYsonFormat::Binary));
+                    ("foldersLimit", foldersLimit),
+                // clang-format on
+                NYT::NYson::EYsonFormat::Binary));
         }
         if (QContext_.CanRead()) {
             auto val = QContext_.GetReader()->Get({UrlListerManager_ListUrlRecursive, *key}).GetValueSync();
@@ -128,10 +132,10 @@ private:
     IUrlListerManagerPtr Underlying_;
     const TQContext QContext_;
 };
-}
+} // namespace
 
 namespace NYql::NCommon {
 IUrlListerManagerPtr WrapUrlListerManagerWithQContext(IUrlListerManagerPtr underlying, const TQContext& qContext) {
     return MakeIntrusive<TQPlayerUrlListerManager>(underlying, qContext);
 }
-}
+} // namespace NYql::NCommon

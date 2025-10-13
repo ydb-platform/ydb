@@ -453,6 +453,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
     TFileStoragePtr FileStorage;
     TQContext QContext;
     ECostBasedOptimizerType CostBasedOptimizer = ECostBasedOptimizerType::Disable;
+    ui32 CostBasedOptimizerVersion = 0;
     bool MatchRecognize = false;
     EMatchRecognizeStreamingMode MatchRecognizeStreaming = EMatchRecognizeStreamingMode::Force;
     i64 TimeOrderRecoverDelay = -10'000'000; //microseconds
@@ -471,6 +472,8 @@ struct TTypeAnnotationContext: public TThrRefBase {
     ui32 AndOverOrExpansionLimit = 100;
     bool EarlyExpandSeq = true;
     bool DirectRowDependsOn = true;
+    bool EnableLineage = false;
+    bool CorrectLineage = true;
 
     TMaybe<TColumnOrder> LookupColumnOrder(const TExprNode& node) const;
     IGraphTransformer::TStatus SetColumnOrder(const TExprNode& node, const TColumnOrder& columnOrder, TExprContext& ctx);

@@ -78,6 +78,8 @@ TString ToTextMateGroup(EUnitKind kind) {
             return "string.interpolated";
         case EUnitKind::BindParameterIdentifier:
             return "variable.parameter";
+        case EUnitKind::OptionIdentifier:
+            return "support.constant";
         case EUnitKind::TypeIdentifier:
             return "entity.name.type";
         case EUnitKind::FunctionIdentifier:

@@ -45,8 +45,6 @@ public:
         // TODO(cherepashka): remove default value and move upper.
         const IInvokerPtr& invoker = NYT::NRpc::TDispatcher::Get()->GetHeavyInvoker());
 
-    void EnsureStarted();
-
     TFuture<TValue> Get(const TKey& key);
     TExtendedGetResult GetExtended(const TKey& key);
     TFuture<std::vector<TErrorOr<TValue>>> GetMany(const std::vector<TKey>& keys);
@@ -110,6 +108,8 @@ private:
     const NConcurrency::TPeriodicExecutorPtr ExpirationExecutor_;
     const NConcurrency::TPeriodicExecutorPtr RefreshExecutor_;
 
+    std::atomic<bool> Started_ = false;
+
     struct TEntry
         : public TRefCounted
     {
@@ -145,6 +145,8 @@ private:
     NProfiling::TCounter HitCounter_;
     NProfiling::TCounter MissedCounter_;
     NProfiling::TGauge SizeCounter_;
+
+    void EnsureStarted();
 
     void SetResult(
         const TWeakPtr<TEntry>& weakEntry,

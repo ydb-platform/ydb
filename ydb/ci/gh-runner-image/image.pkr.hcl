@@ -79,6 +79,11 @@ apt-get install -y nodejs
 printf '%s\n' '#!/bin/bash' 'rdma link add rxe_lo type rxe netdev lo' 'ibv_devinfo -vvv' 'exit 0' | tee -a /etc/rc.local
 chmod +x /etc/rc.local
 
+echo "DefaultLimitMEMLOCK=8589934592" >> /etc/systemd/user.conf
+echo "DefaultLimitMEMLOCK=8589934592" >> /etc/systemd/system.conf
+echo "*  hard memlock  8388608" >> /etc/security/limits.conf
+echo "*  soft memlock  8388608" >> /etc/security/limits.conf
+
 npm install -g @testmo/testmo-cli
 EOF
     destination = "/tmp/install-packages.sh"

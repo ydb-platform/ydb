@@ -1164,6 +1164,11 @@ private:
     bool WasTheLastBlobBig = true;
 
     void DumpKeysForBlobsCompaction() const;
+
+    void TryProcessGetWriteInfoRequest(const TActorContext& ctx);
+
+    std::unique_ptr<TEvPQ::TEvGetWriteInfoRequest> PendingGetWriteInfoRequest;
+    bool StopCompaction = false;
 };
 
 inline ui64 TPartition::GetStartOffset() const {

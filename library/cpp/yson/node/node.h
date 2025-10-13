@@ -137,6 +137,9 @@ public:
     TNode(bool b);
     TNode(TMapType map);
 
+    // Note that copy- and move- assignment operators don't check that the new value has the same type as the current
+    // so the type could be changed as a result of these operations
+
     TNode(const TNode& rhs);
     TNode& operator=(const TNode& rhs);
 

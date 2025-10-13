@@ -41,26 +41,25 @@ public:
         }
 
         while (pos < text.size() && errors < maxErrors) {
-            TMaybe<TGenericToken> prev;
             TGenericToken next = Match(TStringBuf(text, pos));
 
             size_t skipped = next.Begin;
             next.Begin = skipped + pos;
 
-            if (skipped != 0) {
-                prev = Match(TStringBuf(text, pos, skipped));
-                prev->Begin = pos;
+            const size_t matchPos = pos;
+            while (pos < matchPos + skipped) {
+                TGenericToken prev = Match(TStringBuf(text, pos, skipped));
+                prev.Begin = pos;
+                pos += prev.Content.size();
+                onNext(std::move(prev));
             }
 
-            pos += skipped + next.Content.size();
+            pos += next.Content.size();
 
             if (next.Name == TGenericToken::Error) {
                 errors += 1;
             }
 
-            if (prev) {
-                onNext(std::move(*prev));
-            }
             onNext(std::move(next));
         }
 
@@ -81,7 +80,7 @@ private:
     TGenericToken Match(TStringBuf prefix) const {
         TMaybe<TGenericToken> max;
         Match(prefix, [&](TGenericToken&& token) {
-            if (max.Empty() || max->Content.size() < token.Content.size()) {
+            if (max.Empty() || (max->Begin + max->Content.size()) < (token.Begin + token.Content.size())) {
                 max = std::move(token);
             }
         });

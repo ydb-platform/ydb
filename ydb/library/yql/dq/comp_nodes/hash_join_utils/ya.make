@@ -17,6 +17,7 @@ PEERDIR(
 
 SRCS(
     tuple.cpp
+    accumulator.cpp
 )
 
 CFLAGS(

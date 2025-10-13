@@ -91,6 +91,11 @@ using NYql::GetMethodIndex;
 
 using namespace llvm;
 
+// This macro is needed to mark calls as "calls to LLVM functions".
+// This prevents false positive UBSan triggers at the C++ <-> JIT interface layer.
+// The root cause of these triggers has not been identified.
+#define MKQL_NO_SANITIZE_LLVM_CALL Y_NO_SANITIZE("undefined")
+
 Type* GetCompContextType(LLVMContext &context);
 Type* GetStringRefType(LLVMContext &context);
 Type* GetSourcePosType(LLVMContext &context);
@@ -963,7 +968,7 @@ protected:
         return false;
     }
 
-    NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override {
+    NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override MKQL_NO_SANITIZE_LLVM_CALL {
         return FetchFunc(Ctx, static_cast<const NUdf::TUnboxedValuePod&>(Stream), result);
     }
 
@@ -987,7 +992,7 @@ public:
     {}
 
 private:
-    NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) final {
+    NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) final MKQL_NO_SANITIZE_LLVM_CALL {
         if (FirstCall) {
             FirstCall = false;
             return FetchFuncOne(Ctx, static_cast<const NUdf::TUnboxedValuePod&>(Stream), result);
@@ -1019,7 +1024,7 @@ public:
     {}
 
 protected:
-    NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override Y_NO_SANITIZE("undefined") {
+    NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override MKQL_NO_SANITIZE_LLVM_CALL {
         return FetchFunc(Ctx, static_cast<const NUdf::TUnboxedValuePod&>(Stream), State, result);
     }
 
@@ -1046,7 +1051,7 @@ public:
     {}
 
 private:
-    NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override {
+    NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override MKQL_NO_SANITIZE_LLVM_CALL {
         return FetchFunc(Ctx, static_cast<const NUdf::TUnboxedValuePod&>(Stream), this, result);
     }
 
@@ -1070,7 +1075,7 @@ public:
     {}
 
 private:
-    NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override {
+    NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override MKQL_NO_SANITIZE_LLVM_CALL {
         return FetchFunc(Ctx, static_cast<const NUdf::TUnboxedValuePod&>(Stream), this, State, result);
     }
 

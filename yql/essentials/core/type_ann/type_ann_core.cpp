@@ -6999,7 +6999,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
 
         auto param = input->HeadPtr();
         const auto type = input->Child(1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
-        const ui32 idx = IsSameAnnotation(*param->GetTypeAnn(), *type) ? 2 : 3;
+        const ui32 idx = param->GetTypeAnn() && IsSameAnnotation(*param->GetTypeAnn(), *type) ? 2 : 3;
         const auto selected = input->Child(idx);
 
         if (!EnsureLambda(*selected, ctx.Expr)) {

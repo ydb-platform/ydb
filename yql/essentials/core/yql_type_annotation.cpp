@@ -40,6 +40,8 @@ bool TTypeAnnotationContext::DoInitialize(TExprContext& ctx) {
     Y_ENSURE(UserDataStorage);
     UserDataStorage->FillUserDataUrls();
 
+    DisableConstraintCheck.emplace(TUniqueConstraintNode::Name());
+    DisableConstraintCheck.emplace(TDistinctConstraintNode::Name());
 
     return true;
 }

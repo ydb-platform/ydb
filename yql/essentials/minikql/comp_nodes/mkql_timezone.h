@@ -8,5 +8,5 @@ IComputationNode* WrapTimezoneId(TCallable& callable, const TComputationNodeFact
 IComputationNode* WrapTimezoneName(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 IComputationNode* WrapAddTimezone(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

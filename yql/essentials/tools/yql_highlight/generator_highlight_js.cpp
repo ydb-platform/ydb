@@ -18,6 +18,8 @@ TString ToHighlightJSClass(EUnitKind kind) {
             return "symbol";
         case EUnitKind::BindParameterIdentifier:
             return "variable";
+        case EUnitKind::OptionIdentifier:
+            return "variable.constant";
         case EUnitKind::TypeIdentifier:
             return "type";
         case EUnitKind::FunctionIdentifier:

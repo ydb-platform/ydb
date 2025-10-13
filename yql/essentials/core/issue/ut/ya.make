@@ -1,5 +1,7 @@
 UNITTEST_FOR(yql/essentials/core/issue)
 
+ENABLE(YQL_STYLE_CPP)
+
 FORK_SUBTESTS()
 
 SRCS(

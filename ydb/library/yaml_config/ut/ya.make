@@ -5,6 +5,7 @@ SRCS(
     yaml_config_ut.cpp
     yaml_config_parser_ut.cpp
     yaml_config_proto2yaml_ut.cpp
+    incompatibility_rules_ut.cpp
 )
 
 END()

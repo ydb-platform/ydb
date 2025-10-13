@@ -328,6 +328,7 @@ public:
     bool DqEngineEnable = false;
     bool DqEngineForce = false;
     TString CostBasedOptimizer;
+    TMaybe<ui32> CostBasedOptimizerVersion;
     TMaybe<bool> JsonQueryReturnsJsonDocument;
     TMaybe<bool> AnsiInForEmptyOrNullableItemsCollections;
     TMaybe<bool> AnsiRankForNullableKeys = true;

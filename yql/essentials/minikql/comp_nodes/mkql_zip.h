@@ -7,5 +7,5 @@ namespace NMiniKQL {
 template <bool All>
 IComputationNode* WrapZip(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

@@ -16,6 +16,7 @@ enum class EStatus {
     SUCCESS,
     NOT_FOUND,
     NOT_TOPIC,
+    UNAUTHORIZED,
     UNKNOWN_ERROR
 };
 
@@ -31,16 +32,27 @@ struct TTopicInfo {
 
 struct TEvDescribeTopicsResponse : public NActors::TEventLocal<TEvDescribeTopicsResponse, EEv::EvDescribeTopicsResponse> {
 
-    TEvDescribeTopicsResponse(std::unordered_map<TString, TTopicInfo>&& topics)
+    TEvDescribeTopicsResponse(std::unordered_map<TString, TTopicInfo>&& topics, bool usedSyncVersion)
         : Topics(std::move(topics))
+        , UsedSyncVersion(usedSyncVersion)
     {
     }
 
     // The original topic path (from request) -> TopicInfo
     std::unordered_map<TString, TTopicInfo> Topics;
+    bool UsedSyncVersion = false;
 };
 
-NActors::IActor* CreateDescriberActor(const NActors::TActorId& parent, const TString& databasePath, const std::unordered_set<TString>&& topicPaths);
+struct TDescribeSettings {
+    TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
+    NACLib::EAccessRights AccessRights;
+};
+
+NActors::IActor* CreateDescriberActor(const NActors::TActorId& parent,
+                                      const TString& databasePath,
+                                      const std::unordered_set<TString>&& topicPaths,
+                                      const TDescribeSettings& settings = {});
+
 TString Description(const TString& topicPath, const EStatus status);
 
 }

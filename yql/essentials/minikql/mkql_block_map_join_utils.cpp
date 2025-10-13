@@ -4,7 +4,7 @@
 namespace NKikimr {
 namespace NMiniKQL {
 
-ui64 EstimateBlockMapJoinIndexSize(ui64 rowsCount)  {
+ui64 EstimateBlockMapJoinIndexSize(ui64 rowsCount) {
     return CalculateRHHashTableCapacity(rowsCount) * BlockMapJoinIndexEntrySize;
 }
 

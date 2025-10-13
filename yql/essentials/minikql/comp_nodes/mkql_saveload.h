@@ -74,7 +74,7 @@ Y_FORCE_INLINE void WriteString(TString& out, std::string_view str) {
     out.AppendNoAlias(str.data(), str.size());
 }
 
-template<class>
+template <class>
 inline constexpr bool always_false_v = false;
 
 enum class EMkqlStateType {
@@ -94,7 +94,7 @@ public:
         return NMiniKQL::MakeString(strRef);
     }
 
-    template<typename TContainer>
+    template <typename TContainer>
     static NUdf::TUnboxedValue MakeSnapshotState(TContainer& items, ui32 stateVersion) {
         TString out;
         WriteUi32(out, static_cast<ui32>(EMkqlStateType::SNAPSHOT));
@@ -108,18 +108,18 @@ public:
         return NMiniKQL::MakeString(strRef);
     }
 
-    template<typename TContainer, typename TContainer2>
+    template <typename TContainer, typename TContainer2>
     static NUdf::TUnboxedValue MakeIncrementState(TContainer& createdOrChanged, TContainer2& deleted, ui32 stateVersion) {
         TString out;
         WriteUi32(out, static_cast<ui32>(EMkqlStateType::INCREMENT));
         WriteUi32(out, stateVersion);
         WriteUi32(out, static_cast<ui32>(createdOrChanged.size()));
         WriteUi32(out, static_cast<ui32>(deleted.size()));
-        for(const auto& [key, value] : createdOrChanged) {
+        for (const auto& [key, value] : createdOrChanged) {
             WriteString(out, key);
             WriteString(out, value);
         }
-        for(const auto& key : deleted) {
+        for (const auto& key : deleted) {
             WriteString(out, key);
         }
         auto strRef = NUdf::TStringRef(out);
@@ -128,7 +128,8 @@ public:
 
 public:
     TOutputSerializer(EMkqlStateType stateType, ui32 stateVersion, TComputationContext& ctx)
-        : Ctx(ctx) {
+        : Ctx(ctx)
+    {
         Write(static_cast<ui32>(stateType));
         Write(stateVersion);
     }
@@ -138,12 +139,12 @@ public:
         (Write(std::forward<Ts>(args)), ...);
     }
 
-    template<typename Type>
-    void Write(const Type& value ) {
+    template <typename Type>
+    void Write(const Type& value) {
         if constexpr (std::is_same_v<std::remove_cv_t<Type>, TString>) {
             WriteString(Buf, value);
         } else if constexpr (std::is_same_v<std::remove_cv_t<Type>, ui64>) {
-            WriteUi64(Buf, value); 
+            WriteUi64(Buf, value);
         } else if constexpr (std::is_same_v<std::remove_cv_t<Type>, i64>) {
             WriteUi64(Buf, value);
         } else if constexpr (std::is_same_v<std::remove_cv_t<Type>, bool>) {
@@ -152,20 +153,20 @@ public:
             WriteByte(Buf, value);
         } else if constexpr (std::is_same_v<std::remove_cv_t<Type>, ui32>) {
             WriteUi32(Buf, value);
-        } else if constexpr (std::is_empty_v<Type>){
+        } else if constexpr (std::is_empty_v<Type>) {
             // Empty struct is not saved/loaded.
         } else {
             static_assert(always_false_v<Type>, "Not supported type / not implemented");
         }
     }
 
-    template<class Type1, class Type2>
+    template <class Type1, class Type2>
     void Write(const std::pair<Type1, Type2>& value) {
         Write(value.first);
         Write(value.second);
     }
 
-    template<class Type, class Allocator>
+    template <class Type, class Allocator>
     void Write(const std::vector<Type, Allocator>& value) {
         Write(value.size());
         for (size_t i = 0; i < value.size(); ++i) {
@@ -181,9 +182,9 @@ public:
 
     static NUdf::TUnboxedValue MakeArray(TComputationContext& ctx, const TStringBuf& buf) {
         const size_t MaxItemLen = 1048576;
-        
+
         size_t count = buf.size() / MaxItemLen + (buf.size() % MaxItemLen ? 1 : 0);
-        NUdf::TUnboxedValue *items = nullptr;
+        NUdf::TUnboxedValue* items = nullptr;
         auto array = ctx.HolderFactory.CreateDirectArrayHolder(count, items);
 
         size_t pos = 0;
@@ -200,6 +201,7 @@ public:
     NUdf::TUnboxedValue MakeState() {
         return MakeArray(Ctx, Buf);
     }
+
 protected:
     TString Buf;
     TComputationContext& Ctx;
@@ -207,18 +209,20 @@ protected:
 
 struct TInputSerializer {
 public:
-    TInputSerializer(const TStringBuf& state, TMaybe<EMkqlStateType> expectedType = Nothing()) 
-        : Buf(state) {
+    TInputSerializer(const TStringBuf& state, TMaybe<EMkqlStateType> expectedType = Nothing())
+        : Buf(state)
+    {
         Type = static_cast<EMkqlStateType>(Read<ui32>());
         Read(StateVersion);
         if (expectedType) {
             MKQL_ENSURE(Type == *expectedType, "state type is not expected");
         }
     }
-   
+
     TInputSerializer(const NUdf::TUnboxedValue& state, TMaybe<EMkqlStateType> expectedType = Nothing())
         : State(StateToString(state))
-        , Buf(State) {
+        , Buf(State)
+    {
         Type = static_cast<EMkqlStateType>(Read<ui32>());
         Read(StateVersion);
         if (expectedType) {
@@ -239,7 +243,7 @@ public:
         (Read(args), ...);
     }
 
-    template<typename Type, typename ReturnType = Type>
+    template <typename Type, typename ReturnType = Type>
     ReturnType Read() {
         if constexpr (std::is_same_v<std::remove_cv_t<Type>, TString>) {
             return ReturnType(ReadString(Buf));
@@ -253,7 +257,7 @@ public:
             return ReadByte(Buf);
         } else if constexpr (std::is_same_v<std::remove_cv_t<Type>, ui32>) {
             return ReadUi32(Buf);
-        } else if constexpr (std::is_empty_v<Type>){
+        } else if constexpr (std::is_empty_v<Type>) {
             // Empty struct is not saved/loaded.
             return ReturnType{};
         } else {
@@ -269,18 +273,18 @@ public:
         return value;
     }
 
-    template<typename Type>
+    template <typename Type>
     void Read(Type& value) {
         value = Read<Type, Type>();
     }
 
-    template<class Type1, class Type2>
+    template <class Type1, class Type2>
     void Read(std::pair<Type1, Type2>& value) {
         Read(value.first);
         Read(value.second);
     }
 
-    template<class Type, class Allocator>
+    template <class Type, class Allocator>
     void Read(std::vector<Type, Allocator>& value) {
         using TVector = std::vector<Type, Allocator>;
         auto size = Read<typename TVector::size_type>();
@@ -291,7 +295,7 @@ public:
         }
     }
 
-    template<class TCallbackUpdate, class TCallbackDelete>
+    template <class TCallbackUpdate, class TCallbackDelete>
     void ReadItems(TCallbackUpdate updateItem, TCallbackDelete deleteKey) {
         MKQL_ENSURE(Buf.size(), "Serialized state is corrupted");
         ui32 itemsCount = ReadUi32(Buf);
@@ -309,7 +313,7 @@ public:
             deleteKey(key);
         }
     }
-    
+
     bool Empty() const {
         return Buf.empty();
     }
@@ -332,7 +336,6 @@ protected:
     EMkqlStateType Type{EMkqlStateType::SIMPLE_BLOB};
     ui32 StateVersion{0};
 };
-
 
 class TNodeStateHelper {
 public:

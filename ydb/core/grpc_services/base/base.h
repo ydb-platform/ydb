@@ -400,7 +400,6 @@ private:
     virtual void ReplyWithYdbStatus(Ydb::StatusIds::StatusCode status) = 0;
 public:
     virtual ~IRequestProxyCtx() = default;
-    // virtual void ReplyWithYdbStatus(Ydb::StatusIds::StatusCode status) = 0;
 
     // auth
     virtual const TMaybe<TString> GetYdbToken() const = 0;

@@ -46,6 +46,9 @@ void TColumnShard::OverloadWriteFail(const EOverloadStatus overloadReason, const
         case EOverloadStatus::ShardWritesSizeInFly:
             Counters.OnWriteOverloadShardWritesSize(writeSize);
             break;
+        case EOverloadStatus::RejectProbability:
+            Counters.OnWriteOverloadRejectProbability(writeSize);
+            break;
         case EOverloadStatus::None:
             Y_ABORT("invalid function usage");
     }
@@ -348,18 +351,6 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
     std::optional<TDuration> writeTimeout;
     if (record.HasTimeoutSeconds()) {
         writeTimeout = TDuration::Seconds(record.GetTimeoutSeconds());
-    }
-
-    const float rejectProbabilty = Executor()->GetRejectProbability();
-    if (rejectProbabilty > 0) {
-        const float rnd = AppData(ctx)->RandomProvider->GenRandReal2();
-        if (rnd < rejectProbabilty) {
-            LWPROBE(EvWrite, TabletID(), source.ToString(), cookie, record.GetTxId(), writeTimeout.value_or(TDuration::Max()), 0, "", false, false, ToString(NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED), "decided to reject due to given RejectProbability");
-            auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(
-                TabletID(), 0, NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED, "decided to reject due to given RejectProbability");
-            ctx.Send(source, result.release(), 0, cookie);
-            return;
-        }
     }
 
     if (!TablesManager.GetPrimaryIndex()) {

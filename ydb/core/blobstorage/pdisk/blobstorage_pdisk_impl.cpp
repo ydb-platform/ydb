@@ -913,13 +913,7 @@ bool TPDisk::ChunkWritePieceEncrypted(TChunkWritePiece *piece, TChunkWriter& wri
                 evChunkWrite->BytesWritten += sizeToWrite;
                 piece->PartOffset = 0;
             }
-            if (HasEncryptionThreads()) {
-                writer.Flush(evChunkWrite->ReqId, &traceId, piece->Completion.Release());
-            } else {
-                auto raw = piece->Completion.Release();
-                //deletes raw
-                raw->Exec(PCtx->ActorSystem);
-            }
+            writer.Flush(evChunkWrite->ReqId, &traceId, piece->Completion.Release());
             piece->MarkReady(PCtx->PDiskLogPrefix);
             return false;
         } else {
@@ -2547,7 +2541,6 @@ void TPDisk::ProcessChunkWriteQueue() {
         }
 
         // One more flush is sent to BlockDevice from TSectorWriter destructor.
-        Y_VERIFY(piece->Completion == nullptr, "Completion should be released from TChunkWritePiece and freed in completion thread");
         delete piece;
 
         // prevent the thread from being stuck for long
@@ -3880,10 +3873,6 @@ void TPDisk::EnqueueAll() {
     LWTRACK(PDiskEnqueueAllDetails, UpdateCycleOrbit, PCtx->PDiskId, initialQueueSize, processedReqs, pushedToSchedulerReqs, spentTimeMs);
 }
 
-// namespace {
-//     int64_t cycles = 0, sleeps = 0;
-// }
-
 void TPDisk::GetJobsFromForsetti() {
     // Prepare
     UpdateMinLogCostNs();
@@ -4120,14 +4109,10 @@ void TPDisk::Update() {
     }
 
     // Wait for something to do
-    // cycles++;
-    // Cerr << "PDisk stats:\n" << isNothingToDo << ' ' << InputQueue.GetWaitingSize() << ' ' << ForsetiScheduler.IsEmpty() << Endl;
     if (isNothingToDo && InputQueue.GetWaitingSize() == 0 && ForsetiScheduler.IsEmpty()) {
         // use deadline to be able to wakeup in situation of pdisk destruction
-        // sleeps++;
         InputQueue.ProducedWait(TDuration::MilliSeconds(10));
     }
-    // Cerr << "cycles, sleeps " << cycles << " " << sleeps << Endl;
 
     auto entireUpdateMs = Mon.UpdateDurationTracker.UpdateEnded();
     LWTRACK(PDiskUpdateEnded, UpdateCycleOrbit, PCtx->PDiskId, entireUpdateMs);

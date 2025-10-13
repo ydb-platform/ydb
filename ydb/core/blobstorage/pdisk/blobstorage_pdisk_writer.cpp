@@ -17,7 +17,6 @@ TBufferedWriter::TBlockDeviceWrite::TBlockDeviceWrite(const TReqId& ReqId, TBuff
 }
 
 void TBufferedWriter::TBlockDeviceWrite::DoCall(IBlockDevice &BlockDevice) {
-    // TODO: do not mock writes one-by-one, do a huge PwriteAsync
     ui8 *source = Buffer->Data() + DirtyFrom - StartOffset;
     ui32 sizeToWrite = (ui32)(DirtyTo - DirtyFrom);
     BlockDevice.PwriteAsync(source, sizeToWrite, DirtyFrom, Buffer.release(), ReqId, &TraceId);
@@ -111,8 +110,7 @@ TBufferedWriter::TBufferedWriter(ui64 sectorSize, IBlockDevice &blockDevice, TDi
 }
 
 void TBufferedWriter::SetupWithBuffer(ui64 startOffset, ui64 currentOffset, TBuffer *buffer, ui32 count, TReqId reqId) {
-    //TODO: replace with Y_VERIFY?
-    Y_ENSURE(!WithDelayedFlush);
+    Y_VERIFY_S(!WithDelayedFlush, "SetupWithBuffer should not have DelayedFlush");
     CurrentBuffer.Reset(buffer);
     CurrentSector = CurrentBuffer->Data() + (currentOffset - startOffset);
 

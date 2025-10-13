@@ -1789,7 +1789,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
                 Cerr << "testCase# " << testCase << Endl;
                 auto cfg = testCtx.GetPDiskConfig();
                 cfg->PlainDataChunks = testCase & 1;
-                cfg->EncryptionThreadsCount = 1 + 2 * (testCase & 2);
+                cfg->EncryptionThreadsCount = testCase & 2;
                 Cerr << "plainDataChunk# " << cfg->PlainDataChunks  << Endl;
                 Cerr << "encryptionThreadsCount# " << cfg->EncryptionThreadsCount << Endl;
                 testCtx.UpdateConfigRecreatePDisk(cfg);

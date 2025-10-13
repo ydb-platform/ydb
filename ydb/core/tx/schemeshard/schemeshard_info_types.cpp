@@ -1838,9 +1838,13 @@ void TTableAggregatedStats::UpdateShardStats(TShardIdx datashardIdx, const TPart
     Aggregated.LocksWholeShard += (newStats.LocksWholeShard - oldStats.LocksWholeShard);
     Aggregated.LocksBroken += (newStats.LocksBroken - oldStats.LocksBroken);
 
-    auto topUsage = oldStats.TopUsage.Update(newStats.TopUsage);
+    // NOTE: Updating the CPU usage buckets is essentially taking the maximum
+    //       of the latest update time for each bucket. Thus, updating new -> old
+    //       and old -> new are equivalent: the result is the same.
+    const auto oldTopCpuUsage = oldStats.TopCpuUsage;
     oldStats = newStats;
-    oldStats.TopUsage = std::move(topUsage);
+    oldStats.TopCpuUsage.Update(oldTopCpuUsage); // The left is new stats now!
+
     PartitionStatsUpdated++;
 
     // Rescan stats for aggregations only once in a while

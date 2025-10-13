@@ -1,5 +1,6 @@
 #include "column_tables.h"
 #include <ydb/core/tx/columnshard/common/path_id.h>
+#include <ydb/library/actors/core/actor.h>
 
 namespace NKikimr::NColumnShard {
 

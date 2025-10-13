@@ -5,7 +5,6 @@
 #include <ydb/core/protos/counters_columnshard.pb.h>
 #include <ydb/core/protos/counters_datashard.pb.h>
 #include <ydb/core/tx/columnshard/engines/column_engine.h>
-#include <ydb/core/tx/columnshard/engines/insert_table/rt_insertion.h>
 
 namespace NKikimr::NColumnShard {
 
@@ -76,6 +75,12 @@ public:
         IncCounter(NColumnShard::COUNTER_WRITE_SUCCESS);
     }
 
+    void OnBulkWriteSuccess(const ui64 blobsWritten, const ui64 bytesWritten) const {
+        IncCounter(NColumnShard::COUNTER_OPERATIONS_BLOBS_WRITTEN, blobsWritten);
+        IncCounter(NColumnShard::COUNTER_OPERATIONS_BULK_BYTES_WRITTEN, bytesWritten);
+        IncCounter(NColumnShard::COUNTER_WRITE_SUCCESS);
+    }
+
     void OnWriteFailure() const {
         IncCounter(NColumnShard::COUNTER_WRITE_FAIL);
     }
@@ -87,26 +92,18 @@ public:
         IncCounter(NColumnShard::COUNTER_READ_INDEX_BYTES, countersDelta.Bytes);
     }
 
-    void OnWriteCommitted(const NOlap::TInsertionSummary::TCounters& countersDelta) const {
-        IncCounter(COUNTER_BLOBS_COMMITTED, countersDelta.Rows);
-        IncCounter(COUNTER_BYTES_COMMITTED, countersDelta.Bytes);
-        IncCounter(COUNTER_RAW_BYTES_COMMITTED, countersDelta.RawBytes);
-    }
-
     void OnCompactionWriteIndexCompleted(bool success, const ui64 blobsWritten, const ui64 bytesWritten) const {
         IncCounter(success ? NColumnShard::COUNTER_SPLIT_COMPACTION_SUCCESS : NColumnShard::COUNTER_SPLIT_COMPACTION_FAIL);
         IncCounter(NColumnShard::COUNTER_SPLIT_COMPACTION_BLOBS_WRITTEN, blobsWritten);
         IncCounter(NColumnShard::COUNTER_SPLIT_COMPACTION_BYTES_WRITTEN, bytesWritten);
     }
 
-    void OnInsertionWriteIndexCompleted(const ui64 blobsWritten, const ui64 bytesWritten, const TDuration duration) const {
-        IncCounter(NColumnShard::COUNTER_INDEXING_BLOBS_WRITTEN, blobsWritten);
-        IncCounter(NColumnShard::COUNTER_INDEXING_BYTES_WRITTEN, bytesWritten);
-        IncCounter(NColumnShard::COUNTER_INDEXING_TIME, duration.MilliSeconds());
-    }
-
     void OnWritePutBlobsSuccess(const ui64 rowsWritten) const {
         IncCounter(NColumnShard::COUNTER_OPERATIONS_ROWS_WRITTEN, rowsWritten);
+    }
+
+    void OnWritePutBulkBlobsSuccess(const ui64 rowsWritten) const {
+        IncCounter(NColumnShard::COUNTER_OPERATIONS_BULK_ROWS_WRITTEN, rowsWritten);
     }
 
     void OnDropPortionEvent(const ui64 rawBytes, const ui64 blobBytes, const ui64 rows) const {
@@ -116,7 +113,7 @@ public:
     }
 
     void FillStats(::NKikimrTableStats::TTableStats& output) const {
-        output.SetRowUpdates(GetValue(COUNTER_OPERATIONS_ROWS_WRITTEN));
+        output.SetRowUpdates(GetValue(COUNTER_OPERATIONS_ROWS_WRITTEN) + GetValue(COUNTER_OPERATIONS_BULK_ROWS_WRITTEN));
         output.SetRowDeletes(GetValue(COUNTER_ROWS_ERASED));
         output.SetRowReads(0);   // all reads are range reads
         output.SetRangeReadRows(GetValue(COUNTER_READ_INDEX_ROWS));

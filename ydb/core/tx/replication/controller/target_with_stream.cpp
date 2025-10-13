@@ -40,7 +40,7 @@ class TWorkerRegistar: public TActorBootstrapped<TWorkerRegistar> {
             auto ev = MakeRunWorkerEv(
                 ReplicationId, TargetId, Config, partition.GetPartitionId(),
                 ConnectionParams, ConsistencySettings, SrcStreamPath, SrcStreamConsumerName, DstPathId,
-                BatchingSettings);
+                BatchingSettings, Database);
             Send(Parent, std::move(ev));
         }
 
@@ -68,7 +68,8 @@ public:
             const TString& srcStreamConsumerName,
             const TPathId& dstPathId,
             const TReplication::ITarget::IConfig::TPtr& config,
-            const NKikimrReplication::TBatchingSettings& batchingSettings)
+            const NKikimrReplication::TBatchingSettings& batchingSettings,
+            const TString& database)
         : Parent(parent)
         , YdbProxy(proxy)
         , ConnectionParams(connectionParams)
@@ -81,6 +82,7 @@ public:
         , LogPrefix("TableWorkerRegistar", ReplicationId, TargetId)
         , Config(config)
         , BatchingSettings(batchingSettings)
+        , Database(database)
     {
     }
 
@@ -110,6 +112,7 @@ private:
     const TActorLogPrefix LogPrefix;
     const TReplication::ITarget::IConfig::TPtr Config;
     const NKikimrReplication::TBatchingSettings BatchingSettings;
+    const TString Database;
 
 }; // TWorkerRegistar
 
@@ -128,7 +131,7 @@ void TTargetWithStream::Progress(const TActorContext& ctx) {
         }
         return;
     case EStreamState::Removing:
-        if (GetWorkers()) {
+        if (HasWorkers()) {
             RemoveWorkers(ctx);
         } else if (!StreamRemover) {
             StreamRemover = ctx.Register(CreateStreamRemover(replication, GetId(), ctx));
@@ -160,7 +163,7 @@ IActor* TTargetWithStream::CreateWorkerRegistar(const TActorContext& ctx) const 
     return new TWorkerRegistar(ctx.SelfID, replication->GetYdbProxy(),
         config.GetSrcConnectionParams(), config.GetConsistencySettings(),
         replication->GetId(), GetId(), GetStreamPath(), GetStreamConsumerName(), GetDstPathId(), GetConfig(),
-        config.GetTransferSpecific().GetBatching());
+        config.GetTransferSpecific().GetBatching(), replication->GetDatabase());
 }
 
 }

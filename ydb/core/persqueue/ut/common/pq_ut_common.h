@@ -104,6 +104,7 @@ struct TTestContext {
         NActors::NLog::EPriority otherPriority = NLog::PRI_INFO;
 
         runtime.SetLogPriority(NKikimrServices::PERSQUEUE, pqPriority);
+        runtime.SetLogPriority(NKikimrServices::PQ_TX, pqPriority);
         runtime.SetLogPriority(NKikimrServices::PERSQUEUE_READ_BALANCER, pqPriority);
 
         runtime.SetLogPriority(NKikimrServices::SYSTEM_VIEWS, pqPriority);
@@ -260,10 +261,19 @@ struct TTabletPreparationParameters {
     TString databasePath{"/Root/PQ"};
     TString account{"federationAccount"};
     ::NKikimrPQ::TPQTabletConfig_EMeteringMode meteringMode = NKikimrPQ::TPQTabletConfig::METERING_MODE_RESERVED_CAPACITY;
+    bool enableCompactificationByKey{false};
 };
 void PQTabletPrepare(
     const TTabletPreparationParameters& parameters,
     const TVector<std::pair<TString, bool>>& users,
+    TTestActorRuntime& runtime,
+    ui64 tabletId,
+    TActorId edge);
+
+void PQTabletPrepareFromResource(
+    const TTabletPreparationParameters& parameters,
+    const TVector<std::pair<TString, bool>>& users,
+    const TString& resourceName,
     TTestActorRuntime& runtime,
     ui64 tabletId,
     TActorId edge);
@@ -295,6 +305,12 @@ THashSet<TString> GetTabletKeys(TTestActorRuntime& runtime,
 void PQTabletPrepare(
     const TTabletPreparationParameters& parameters,
     const TVector<std::pair<TString, bool>>& users,
+    TTestContext& context);
+
+void PQTabletPrepareFromResource(
+    const TTabletPreparationParameters& parameters,
+    const TVector<std::pair<TString, bool>>& users,
+    const TString& resourceName,
     TTestContext& context);
 
 void PQBalancerPrepare(
@@ -346,6 +362,12 @@ void PQGetPartInfo(
     ui64 startOffset,
     ui64 endOffset,
     TTestContext& tc);
+
+void PQGetPartInfo(
+    std::function<bool(ui64)> firstOffsetMatcher,
+    ui64 endOffset,
+    TTestContext& tc
+);
 
 void ReserveBytes(
     TTestContext& tc,
@@ -493,10 +515,10 @@ std::pair<TString, TActorId> CmdSetOwner(
 
 TActorId CmdCreateSession(const TPQCmdSettings& settings, TTestContext& tc);
 
-void CmdGetOffset(
+i64 CmdGetOffset(
     const ui32 partition,
     const TString& user,
-    i64 expectedOffset,
+    const TMaybe<i64>& expectedOffset,
     TTestContext& tc,
     i64 ctime = -1,
     ui64 writeTime = 0);

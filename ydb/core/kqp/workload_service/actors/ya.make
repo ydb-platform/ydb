@@ -2,7 +2,7 @@ LIBRARY()
 
 SRCS(
     cpu_load_actors.cpp
-    pool_handlers_acors.cpp
+    pool_handlers_actors.cpp
     scheme_actors.cpp
 )
 

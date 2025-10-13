@@ -101,8 +101,17 @@ TConclusion<NArrow::TContainerWithIndexes<arrow::RecordBatch>> ISnapshotSchema::
         if (targetIdx == -1) {
             return TConclusionStatus::Success();
         }
-        const auto hasNull = NArrow::HasNulls(incomingBatch->column(incomingIdx));
-        const std::optional<i32> pkFieldIdx = GetIndexInfo().GetPKColumnIndexByIndexVerified(targetIdx);
+        const auto& incomingColumn = incomingBatch->column(incomingIdx);
+        const auto hasNull = NArrow::HasNulls(incomingColumn);
+        const TColumnFeatures& features = GetIndexInfo().GetColumnFeaturesVerifiedByIndex(targetIdx);
+        const std::optional<i32> pkFieldIdx = features.GetPKColumnIndex();
+        if (!features.GetDataAccessorConstructor()->HasInternalConversion() || !!pkFieldIdx) {
+            if (!features.GetArrowField()->type()->Equals(incomingColumn->type())) {
+                return TConclusionStatus::Fail(
+                    "not equal type for column: " + features.GetColumnName() + ": " + features.GetArrowField()->type()->ToString()
+                    + " vs " + incomingColumn->type()->ToString());
+            }
+        }
         if (pkFieldIdx && hasNull && !AppData()->ColumnShardConfig.GetAllowNullableColumnsInPK()) {
             return TConclusionStatus::Fail("null data for pk column is impossible for '" + dstSchema.field(targetIdx)->name() + "'");
         }
@@ -116,6 +125,7 @@ TConclusion<NArrow::TContainerWithIndexes<arrow::RecordBatch>> ISnapshotSchema::
                     }
                 case NEvWrite::EModificationType::Delete:
                 case NEvWrite::EModificationType::Update:
+                case NEvWrite::EModificationType::Increment:
                     break;
             }
         }
@@ -130,7 +140,7 @@ TConclusion<NArrow::TContainerWithIndexes<arrow::RecordBatch>> ISnapshotSchema::
     const auto nameResolver = [&](const std::string& fieldName) -> i32 {
         return GetIndexInfo().GetColumnIndexOptional(fieldName).value_or(-1);
     };
-    auto batchConclusion = NArrow::TColumnOperator().SkipIfAbsent().ErrorOnDifferentFieldTypes().AdaptIncomingToDestinationExt(
+    auto batchConclusion = NArrow::TColumnOperator().SkipIfAbsent().IgnoreOnDifferentFieldTypes().AdaptIncomingToDestinationExt(
         incomingBatch, dstSchema, pred, nameResolver);
     if (batchConclusion.IsFail()) {
         return batchConclusion;
@@ -304,7 +314,7 @@ public:
     }
 };
 
-TConclusion<TWritePortionInfoWithBlobsResult> ISnapshotSchema::PrepareForWrite(const ISnapshotSchema::TPtr& selfPtr, const ui64 pathId,
+TConclusion<TWritePortionInfoWithBlobsResult> ISnapshotSchema::PrepareForWrite(const ISnapshotSchema::TPtr& selfPtr, const TInternalPathId pathId,
     const std::shared_ptr<arrow::RecordBatch>& incomingBatch, const NEvWrite::EModificationType mType,
     const std::shared_ptr<IStoragesManager>& storagesManager, const std::shared_ptr<NColumnShard::TSplitterCounters>& splitterCounters) const {
     AFL_VERIFY(incomingBatch->num_rows());
@@ -331,6 +341,7 @@ TConclusion<TWritePortionInfoWithBlobsResult> ISnapshotSchema::PrepareForWrite(c
             TConclusion<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> arrToWrite =
                 loader->GetAccessorConstructor()->Construct(accessor, loader->BuildAccessorContext(accessor->GetRecordsCount()));
             if (arrToWrite.IsFail()) {
+                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "cannot build accessor")("reason", arrToWrite.GetErrorMessage());
                 return arrToWrite;
             }
 
@@ -351,19 +362,26 @@ TConclusion<TWritePortionInfoWithBlobsResult> ISnapshotSchema::PrepareForWrite(c
         return TConclusionStatus::Fail("cannot split data for appropriate blobs size");
     }
     auto constructor =
-        TWritePortionInfoWithBlobsConstructor::BuildByBlobs(std::move(blobs), {}, pathId, GetVersion(), GetSnapshot(), storagesManager);
+        TWritePortionInfoWithBlobsConstructor::BuildByBlobs(std::move(blobs), {}, pathId, GetVersion(), GetSnapshot(), storagesManager, EPortionType::Written);
 
     NArrow::TFirstLastSpecialKeys primaryKeys(slice.GetFirstLastPKBatch(GetIndexInfo().GetReplaceKey()));
     const ui32 deletionsCount = (mType == NEvWrite::EModificationType::Delete) ? incomingBatch->num_rows() : 0;
     constructor.GetPortionConstructor().MutablePortionConstructor().AddMetadata(*this, deletionsCount, primaryKeys, std::nullopt);
     constructor.GetPortionConstructor().MutablePortionConstructor().MutableMeta().SetTierName(IStoragesManager::DefaultStorageId);
     constructor.GetPortionConstructor().MutablePortionConstructor().MutableMeta().SetCompactionLevel(0);
-    constructor.GetPortionConstructor().MutablePortionConstructor().MutableMeta().UpdateRecordsMeta(NPortion::EProduced::INSERTED);
     return TWritePortionInfoWithBlobsResult(std::move(constructor));
 }
 
 ui32 ISnapshotSchema::GetIndexesCount() const {
     return GetIndexInfo().GetIndexes().size();
+}
+
+NIndexes::TIndexMetaContainer ISnapshotSchema::GetIndexVerified(const ui32 indexId) const {
+    return GetIndexInfo().GetIndexVerified(indexId);
+}
+
+NIndexes::TIndexMetaContainer ISnapshotSchema::GetIndexOptional(const ui32 indexId) const {
+    return GetIndexInfo().GetIndexOptional(indexId);
 }
 
 }   // namespace NKikimr::NOlap

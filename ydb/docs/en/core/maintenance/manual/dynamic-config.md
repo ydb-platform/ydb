@@ -17,7 +17,7 @@ This configuration is uploaded to the cluster, where it is reliably stored and d
 
 The following tasks should be performed before using the dynamic configuration in the cluster:
 
-1. Enable [database node authentication and authorization](../../devops/manual/node-authorization.md).
+1. Enable [database node authentication and authorization](../../devops/deployment-options/manual/node-authorization.md).
 
 2. Export the current settings from the [CMS](../../concepts/glossary.md#cms) in YAML format using the following command if [CMS-based configuration management](cms.md) has been used in the cluster:
 
@@ -26,7 +26,7 @@ The following tasks should be performed before using the dynamic configuration i
          admin console configs dump-yaml > dynconfig.yaml
     ```
 
-    Before running the command shown above, obtain the authentication token using the `ydb auth get-token` command, as detailed in the [cluster initial deployment procedure](../../devops/manual/initial-deployment.md#initialize-cluster).
+    Before running the command shown above, obtain the authentication token using the `ydb auth get-token` command, as detailed in the [cluster initial deployment procedure](../../devops/deployment-options/manual/initial-deployment.md#initialize-cluster).
 
 3. Prepare the initial dynamic configuration file:
 

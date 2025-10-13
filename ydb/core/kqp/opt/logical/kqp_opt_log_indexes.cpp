@@ -144,12 +144,13 @@ bool CanPushTopSort(const TCoTopBase& node, const TKikimrTableDescription& index
     return IsTableExistsKeySelector(node.KeySelectorLambda(), indexDesc, columns);
 }
 
-bool CanUseVectorIndex(const TIndexDescription& indexDesc, const TExprBase& lambdaBody, const TCoTopBase& top) {
+bool CanUseVectorIndex(const TIndexDescription& indexDesc, const TExprBase& lambdaBody, const TCoTopBase& top, TString& error) {
     Y_ASSERT(indexDesc.Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree);
     // TODO(mbkkt) We need to account top.Count(), but not clear what to if it's value is runtime?
+    const auto& col = indexDesc.KeyColumns.back();
     auto checkMember = [&] (const TExprBase& expr) {
         auto member = expr.Maybe<TCoMember>();
-        return member && member.Cast().Name().Value() == indexDesc.KeyColumns.back();
+        return member && member.Cast().Name().Value() == col;
     };
     auto checkUdf = [&] (const TExprBase& expr, bool checkMembers) {
         auto apply = expr.Maybe<TCoApply>();
@@ -175,32 +176,71 @@ bool CanUseVectorIndex(const TIndexDescription& indexDesc, const TExprBase& lamb
         auto& desc = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(indexDesc.SpecializedIndexDescription);
         switch (desc.settings().settings().metric()) {
             case Ydb::Table::VectorIndexSettings::SIMILARITY_INNER_PRODUCT:
-                return !asc && methodName == "Knn.InnerProductSimilarity";
+                if (!asc && methodName == "Knn.InnerProductSimilarity") {
+                    return true;
+                }
+                error = TStringBuilder() << "Knn::InnerProductSimilarity(" << col << ", ...) DESC";
+                return false;
             case Ydb::Table::VectorIndexSettings::SIMILARITY_COSINE:
             case Ydb::Table::VectorIndexSettings::DISTANCE_COSINE:
-                if (asc) {
-                    return methodName == "Knn.CosineDistance";
-                } else {
-                    return methodName == "Knn.CosineSimilarity";
+                if (asc && methodName == "Knn.CosineDistance" ||
+                    !asc && methodName == "Knn.CosineSimilarity") {
+                    return true;
                 }
+                error = TStringBuilder() << "Knn::CosineSimilarity(" << col << ", ...) DESC or Knn::CosineDistance(" << col << ", ...) ASC";
+                return false;
             case Ydb::Table::VectorIndexSettings::DISTANCE_MANHATTAN:
-                return asc && methodName == "Knn.ManhattanDistance";
+                if (asc && methodName == "Knn.ManhattanDistance") {
+                    return true;
+                }
+                error = TStringBuilder() << "Knn::ManhattanDistance(" << col << ", ...) ASC";
+                return false;
             case Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN:
-                return asc && methodName == "Knn.EuclideanDistance";
+                if (asc && methodName == "Knn.EuclideanDistance") {
+                    return true;
+                }
+                error = TStringBuilder() << "Knn::EuclideanDistance(" << col << ", ...) ASC";
+                return false;
             default:
                 Y_UNREACHABLE();
         }
     };
-    auto flatMap = lambdaBody.Maybe<TCoFlatMap>();
-    if (!flatMap) {
-        return checkUdf(lambdaBody, true);
+    // lambdaBody may be:
+    // 1) Knn::Distance(Member(input row, 'embedding'), expression) where input row = freearg0.
+    // 2) FlatMap(<freearg0>, lambda freearg0: Knn::Distance(Member(freearg0, 'embedding'), <expression>))
+    // 3) FlatMap(<expression>, lambda expr: FlatMap(<freearg0>, lambda freearg0: Knn::Distance(Member(freearg0, 'embedding'), expr)))
+    // In the latter case we should also check the inner lambda.
+    if (lambdaBody.Maybe<TCoFlatMap>()) {
+        auto flatMap = lambdaBody.Cast<TCoFlatMap>();
+        auto flatMapInput = flatMap.Input();
+        auto member = flatMapInput.Maybe<TCoMember>();
+        if (member && member.Cast().Struct().Maybe<TCoArgument>()) {
+            if (member.Cast().Name().Value() == col) {
+                // First case
+                return checkUdf(flatMap.Lambda().Body(), false);
+            } else {
+                // Other column
+                return false;
+            }
+        }
+        // Not a member of incoming argument - check inner lambda
+        auto inner = flatMap.Lambda().Body();
+        if (inner.Maybe<TCoFlatMap>()) {
+            auto innerMap = inner.Cast<TCoFlatMap>();
+            auto innerMapInput = innerMap.Input();
+            auto member = innerMapInput.Maybe<TCoMember>();
+            if (member && member.Cast().Struct().Maybe<TCoArgument>()) {
+                if (member.Cast().Name().Value() == col) {
+                    // Second case
+                    return checkUdf(innerMap.Lambda().Body(), false);
+                } else {
+                    // Other column
+                    return false;
+                }
+            }
+        }
     }
-    auto flatMapInput = flatMap.Cast().Input();
-    if (!checkMember(flatMapInput)) {
-        return false;
-    }
-    auto flatMapLambdaBody = flatMap.Cast().Lambda().Body();
-    return checkUdf(flatMapLambdaBody, false);
+    return checkUdf(lambdaBody, true);
 }
 
 struct TReadMatch {
@@ -414,10 +454,10 @@ auto NewLambdaFrom(TExprContext& ctx, TPositionHandle pos, TNodeOnNodeOwnedMap& 
 }
 
 auto LevelLambdaFrom(
-    const TIndexDescription& indexDesc, TExprContext& ctx, TPositionHandle pos, TNodeOnNodeOwnedMap& replaces, 
-    const TExprNode& fromArgs, const TExprBase& fromBody)
+    const TIndexDescription& indexDesc, TExprContext& ctx, TPositionHandle pos, TNodeOnNodeOwnedMap& replaces,
+    const TExprBase& fromArgs, const TExprBase& fromBody)
 {
-    auto newLambda = NewLambdaFrom(ctx, pos, replaces, fromArgs, fromBody);
+    auto newLambda = NewLambdaFrom(ctx, pos, replaces, *fromArgs.Raw(), fromBody);
     replaces.clear();
     auto args = newLambda.Args().Ptr();
 
@@ -438,6 +478,35 @@ auto LevelLambdaFrom(
         return ctx.NewLambda(pos,
             std::move(args),
             ctx.ReplaceNodes(TExprNode::TListType{apply.Ptr()}, replaces));
+    }
+
+    auto innerMap = flatMap.Cast().Lambda().Body().Maybe<TCoFlatMap>();
+    if (innerMap) {
+        // Handle the FlatMap(<expression>, lambda expr: FlatMap(<freearg0>, lambda freearg0: Knn::Distance(Member(freearg0, 'embedding'), expr))) case
+        // See also CanUseVectorIndex()
+        auto apply = innerMap.Cast().Lambda().Body().Cast<TCoApply>();
+        TVector<TExprBase> newArgs;
+        for (auto arg : apply.Args()) {
+            if (arg.Raw() == apply.Callable().Raw()) {
+                // Skip, callable is also returned in args for some reason
+            } else if (arg.Raw() == innerMap.Cast().Lambda().Args().Arg(0).Raw()) {
+                auto oldMember = innerMap.Cast().Input().Cast<TCoMember>();
+                newArgs.push_back(Build<TCoMember>(ctx, pos)
+                    .Name().Build(NTableIndex::NTableVectorKmeansTreeIndex::CentroidColumn)
+                    .Struct(oldMember.Struct())
+                    .Done());
+            } else {
+                newArgs.push_back(arg);
+            }
+        }
+        auto newApply = Build<TCoApply>(ctx, pos)
+            .Callable(apply.Callable())
+            .FreeArgs()
+                .Add(newArgs)
+                .Build()
+            .Done();
+        replaces.emplace(innerMap.Raw(), newApply.Ptr());
+        return ctx.NewLambda(pos, std::move(args), ctx.ReplaceNodes(newLambda.Body().Ptr(), replaces));
     }
 
     auto apply = flatMap.Cast().Lambda().Body().Cast<TCoApply>();
@@ -563,7 +632,7 @@ void VectorTopMain(TExprContext& ctx, const TCoTopBase& top, TExprNodePtr& read)
 }
 
 TExprBase DoRewriteTopSortOverKMeansTree(
-    const TReadMatch& match, const TMaybeNode<TCoFlatMap>& flatMap, const TExprNode& lambdaArgs, const TExprBase& lambdaBody, const TCoTopBase& top,
+    const TReadMatch& match, const TMaybeNode<TCoFlatMap>& flatMap, const TExprBase& lambdaArgs, const TExprBase& lambdaBody, const TCoTopBase& top,
     TExprContext& ctx, const TKqpOptimizeContext& kqpCtx,
     const TKikimrTableDescription& tableDesc, const TIndexDescription& indexDesc, const TKikimrTableMetadata& implTable)
 {
@@ -628,7 +697,7 @@ TExprBase DoRewriteTopSortOverKMeansTree(
 }
 
 TExprBase DoRewriteTopSortOverPrefixedKMeansTree(
-    const TReadMatch& match, const TCoFlatMap& flatMap, const TExprNode& lambdaArgs, const TExprBase& lambdaBody, const TCoTopBase& top,
+    const TReadMatch& match, const TCoFlatMap& flatMap, const TExprBase& lambdaArgs, const TExprBase& lambdaBody, const TCoTopBase& top,
     TExprContext& ctx, const TKqpOptimizeContext& kqpCtx,
     const TKikimrTableDescription& tableDesc, const TIndexDescription& indexDesc, const TKikimrTableMetadata& implTable)
 {
@@ -1054,23 +1123,25 @@ TExprBase KqpRewriteTopSortOverIndexRead(const TExprBase& node, TExprContext& ct
             ctx.AddWarning(issue);
             return node;
         };
-        const auto* lambdaArgs = topBase.KeySelectorLambda().Args().Raw();
+        auto lambdaArgs = topBase.KeySelectorLambda().Args();
         auto lambdaBody = topBase.KeySelectorLambda().Body();
-        bool canUseVectorIndex = CanUseVectorIndex(*indexDesc, lambdaBody, topBase);
+        TString error;
+        bool canUseVectorIndex = CanUseVectorIndex(*indexDesc, lambdaBody, topBase, error);
         if (indexDesc->KeyColumns.size() > 1) {
             if (!canUseVectorIndex) {
-                return reject("sorting doesn't call distance function, reference distance from projection not supported yet");
+                return reject(TStringBuilder() << "sorting must contain distance: "
+                    << error << ", reference distance from projection not supported yet");
             }
             if (!maybeFlatMap.Lambda().Body().Maybe<TCoOptionalIf>()) {
                 return reject("only simple conditions supported for now");
             }
-            return DoRewriteTopSortOverPrefixedKMeansTree(readTableIndex, maybeFlatMap.Cast(), *lambdaArgs, lambdaBody, topBase,
+            return DoRewriteTopSortOverPrefixedKMeansTree(readTableIndex, maybeFlatMap.Cast(), lambdaArgs, lambdaBody, topBase,
                                                           ctx, kqpCtx, tableDesc, *indexDesc, *implTable);
         }
         if (!canUseVectorIndex) {
             auto argument = lambdaBody.Maybe<TCoMember>().Struct().Maybe<TCoArgument>();
             if (!argument) {
-                return reject("sorting doesn't contain distance");
+                return reject(TStringBuilder() << "sorting must contain distance: " << error);
             }
             auto asStruct = maybeFlatMap.Lambda().Body().Maybe<TCoJust>().Input().Maybe<TCoAsStruct>();
             if (!asStruct) {
@@ -1100,15 +1171,15 @@ TExprBase KqpRewriteTopSortOverIndexRead(const TExprBase& node, TExprContext& ct
                     continue;
                 }
                 lambdaBody = TExprBase{argChildren[1]};
-                canUseVectorIndex = CanUseVectorIndex(*indexDesc, lambdaBody, topBase);
+                canUseVectorIndex = CanUseVectorIndex(*indexDesc, lambdaBody, topBase, error);
                 break;
             }
             if (!canUseVectorIndex) {
-                return reject("neither projection nor sorting contain distance");
+                return reject(TStringBuilder() << "projection or sorting must contain distance: " << error);
             }
-            lambdaArgs = maybeFlatMap.Cast().Lambda().Args().Raw();
+            lambdaArgs = maybeFlatMap.Cast().Lambda().Args();
         }
-        return DoRewriteTopSortOverKMeansTree(readTableIndex, maybeFlatMap, *lambdaArgs, lambdaBody, topBase,
+        return DoRewriteTopSortOverKMeansTree(readTableIndex, maybeFlatMap, lambdaArgs, lambdaBody, topBase,
                                               ctx, kqpCtx, tableDesc, *indexDesc, *implTable);
     }
     const auto& implTableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, implTable->Name);

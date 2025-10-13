@@ -3,6 +3,7 @@
 #include "blob.h"
 #include "header.h"
 #include "partition_id.h"
+#include "utils.h"
 
 #include <ydb/core/tablet/tablet_counters.h>
 #include <ydb/core/base/appdata.h>
@@ -17,6 +18,7 @@ struct TUserInfo;
 struct TReadAnswer {
     ui64 Size = 0;
     THolder<IEventBase> Event;
+    bool IsInternal = false;
 };
 
 struct TReadInfo {
@@ -43,6 +45,7 @@ struct TReadInfo {
     ui64 RealReadOffset = 0;
     ui64 LastOffset = 0;
     bool Error = false;
+    bool IsInternal = false;
 
     TBlobKeyTokens BlobKeyTokens;
 
@@ -59,7 +62,8 @@ struct TReadInfo {
         ui64 readTimestampMs,
         TDuration waitQuotaTime,
         const bool isExternalRead,
-        const TActorId& pipeClient
+        const TActorId& pipeClient,
+        bool isInternal
     )
         : User(user)
         , ClientDC(clientDC)
@@ -76,6 +80,7 @@ struct TReadInfo {
         , CachedOffset(0)
         , PipeClient(pipeClient)
         , LastOffset(lastOffset)
+        , IsInternal(isInternal)
     {}
 
     TReadAnswer FormAnswer(
@@ -89,7 +94,8 @@ struct TReadInfo {
         const ui64 sizeLag,
         const TActorId& tablet,
         const NKikimrPQ::TPQTabletConfig::EMeteringMode meteringMode,
-        const bool isActive
+        const bool isActive,
+        const std::function<void(bool readingFinished, NKikimrClient::TCmdReadResult& r)>& postProcessor
     );
 
     TReadAnswer FormAnswer(
@@ -102,10 +108,11 @@ struct TReadInfo {
         const ui64 sizeLag,
         const TActorId& tablet,
         const NKikimrPQ::TPQTabletConfig::EMeteringMode meteringMode,
-        const bool isActive
+        const bool isActive,
+        const std::function<void(bool readingFinished, NKikimrClient::TCmdReadResult& r)>& postProcessor
     ) {
         TEvPQ::TEvBlobResponse response(0, TVector<TRequestedBlob>());
-        return FormAnswer(ctx, response, startOffset, endOffset, partition, ui, dst, sizeLag, tablet, meteringMode, isActive);
+        return FormAnswer(ctx, response, startOffset, endOffset, partition, ui, dst, sizeLag, tablet, meteringMode, isActive, postProcessor);
     }
 };
 

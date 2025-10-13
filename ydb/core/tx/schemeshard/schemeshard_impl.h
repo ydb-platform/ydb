@@ -404,6 +404,12 @@ public:
 
     THolder<TEvDataShard::TEvProposeTransaction> MakeDataShardProposal(const TPathId& pathId, const TOperationId& opId,
         const TString& body, const TActorContext& ctx) const;
+    THolder<TEvColumnShard::TEvProposeTransaction> MakeColumnShardProposal(const TPathId& pathId, const TOperationId& opId,
+        const TMessageSeqNo& seqNo, const TString& body, const TActorContext& ctx) const;
+
+    THolder<::NActors::IEventBase> MakeShardProposal(const TPath& path, const TOperationId& opId,
+        const TMessageSeqNo& seqNo, const TString& body, const TActorContext& ctx) const;
+
 
     TPathId RootPathId() const {
         return MakeLocalId(TPathElement::RootPathId);
@@ -657,6 +663,7 @@ public:
     void DropPaths(const THashSet<TPathId>& paths, TStepId step, TTxId txId, NIceDb::TNiceDb& db, const TActorContext& ctx);
 
     void DoShardsDeletion(const THashSet<TShardIdx>& shardIdx, const TActorContext& ctx);
+    void DoDeleteSystemShards(const THashSet<TShardIdx>& shards, const TActorContext& ctx);
 
     void SetPartitioning(TPathId pathId, const std::vector<TShardIdx>& partitioning);
     void SetPartitioning(TPathId pathId, TOlapStoreInfo::TPtr storeInfo);
@@ -755,6 +762,7 @@ public:
     void PersistParentDomain(NIceDb::TNiceDb& db, TPathId parentDomain) const;
     void PersistParentDomainEffectiveACL(NIceDb::TNiceDb& db, const TString& owner, const TString& effectiveACL, ui64 effectiveACLVersion) const;
     void PersistShardsToDelete(NIceDb::TNiceDb& db, const THashSet<TShardIdx>& shardsIdxs);
+    void PersistSystemShardsToDelete(NIceDb::TNiceDb& db, const THashSet<TShardIdx>& shardsIdxs);
     void PersistShardDeleted(NIceDb::TNiceDb& db, TShardIdx shardIdx, const TChannelsBindings& bindedChannels);
     void PersistUnknownShardDeleted(NIceDb::TNiceDb& db, TShardIdx shardIdx);
     void PersistTxShardStatus(NIceDb::TNiceDb& db, TOperationId opId, TShardIdx shardIdx, const TTxState::TShardStatus& status);
@@ -1048,8 +1056,8 @@ public:
     struct TTxRunDataErasure;
     NTabletFlatExecutor::ITransaction* CreateTxRunDataErasure(bool isNewDataErasure);
 
-    struct TTxAddEntryToDataErasure;
-    NTabletFlatExecutor::ITransaction* CreateTxAddEntryToDataErasure(const std::vector<TShardIdx>& dataErasureShards);
+    struct TTxAddNewShardToDataErasure;
+    NTabletFlatExecutor::ITransaction* CreateTxAddNewShardToDataErasure(TEvPrivate::TEvAddNewShardToDataErasure::TPtr& ev);
 
     struct TTxCancelDataErasureShards;
     NTabletFlatExecutor::ITransaction* CreateTxCancelDataErasureShards(const std::vector<TShardIdx>& oldShards);
@@ -1179,6 +1187,7 @@ public:
     void Handle(TEvDataShard::TEvForceDataCleanupResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvKeyValue::TEvCleanUpDataResponse__HandlePtr& ev, const TActorContext& ctx);
     void Handle(TEvSchemeShard::TEvTenantDataErasureResponse::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvAddNewShardToDataErasure::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvBlobStorage::TEvControllerShredResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvSchemeShard::TEvDataErasureInfoRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvSchemeShard::TEvDataErasureManualStartupRequest::TPtr& ev, const TActorContext& ctx);
@@ -1418,6 +1427,10 @@ public:
     void PersistBuildIndexBilled(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
 
     void PersistBuildIndexSampleForget(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
+    void PersistBuildIndexSampleToClusters(NIceDb::TNiceDb& db, TIndexBuildInfo& indexInfo);
+    void PersistBuildIndexClustersToSample(NIceDb::TNiceDb& db, TIndexBuildInfo& indexInfo);
+    void PersistBuildIndexClustersUpdate(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
+    void PersistBuildIndexClustersForget(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
     void PersistBuildIndexForget(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
 
     struct TIndexBuilder {
@@ -1441,6 +1454,7 @@ public:
         struct TTxReplyRetry;
         struct TTxReplySampleK;
         struct TTxReplyReshuffleKMeans;
+        struct TTxReplyRecomputeKMeans;
         struct TTxReplyLocalKMeans;
         struct TTxReplyPrefixKMeans;
         struct TTxReplyUploadSample;
@@ -1462,6 +1476,7 @@ public:
     NTabletFlatExecutor::ITransaction* CreateTxReply(TEvDataShard::TEvBuildIndexProgressResponse::TPtr& progress);
     NTabletFlatExecutor::ITransaction* CreateTxReply(TEvDataShard::TEvSampleKResponse::TPtr& sampleK);
     NTabletFlatExecutor::ITransaction* CreateTxReply(TEvDataShard::TEvReshuffleKMeansResponse::TPtr& reshuffle);
+    NTabletFlatExecutor::ITransaction* CreateTxReply(TEvDataShard::TEvRecomputeKMeansResponse::TPtr& recompute);
     NTabletFlatExecutor::ITransaction* CreateTxReply(TEvDataShard::TEvLocalKMeansResponse::TPtr& local);
     NTabletFlatExecutor::ITransaction* CreateTxReply(TEvDataShard::TEvPrefixKMeansResponse::TPtr& prefix);
     NTabletFlatExecutor::ITransaction* CreateTxReply(TEvIndexBuilder::TEvUploadSampleKResponse::TPtr& upload);
@@ -1478,6 +1493,7 @@ public:
     void Handle(TEvDataShard::TEvBuildIndexProgressResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvSampleKResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvReshuffleKMeansResponse::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvRecomputeKMeansResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvLocalKMeansResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvPrefixKMeansResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvIndexBuilder::TEvUploadSampleKResponse::TPtr& ev, const TActorContext& ctx);
@@ -1546,8 +1562,10 @@ public:
     void ChangeDiskSpaceSoftQuotaBytes(i64 delta) override;
     void AddDiskSpaceSoftQuotaBytes(EUserFacingStorageType storageType, ui64 addend) override;
     void ChangePathCount(i64 delta) override;
+    void SetPathCount(ui64 value) override;
     void SetPathsQuota(ui64 value) override;
     void ChangeShardCount(i64 delta) override;
+    void SetShardCount(ui64 value) override;
     void SetShardsQuota(ui64 value) override;
 
     NLogin::TLoginProvider LoginProvider;

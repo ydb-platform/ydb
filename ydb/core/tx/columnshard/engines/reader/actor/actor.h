@@ -2,12 +2,13 @@
 #include <ydb/core/formats/arrow/converter.h>
 #include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
+#include <ydb/core/tx/columnshard/column_fetching/manager.h>
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/columnshard/counters/scan.h>
 #include <ydb/core/tx/columnshard/engines/reader/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/engines/reader/abstract/read_context.h>
 #include <ydb/core/tx/columnshard/engines/reader/abstract/read_metadata.h>
-#include <ydb/core/tx/conveyor/usage/events.h>
+#include <ydb/core/tx/conveyor_composite/usage/config.h>
 #include <ydb/core/tx/tracing/usage/tracing.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -24,13 +25,9 @@ private:
     TActorId ReadCoordinatorActorId;
     const std::shared_ptr<IStoragesManager> StoragesManager;
     const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager> DataAccessorsManager;
+    const std::shared_ptr<NColumnFetching::TColumnDataManager> ColumnDataManager;
     std::optional<TMonotonic> StartInstant;
     std::optional<TMonotonic> FinishInstant;
-
-public:
-    static constexpr auto ActorActivityType() {
-        return NKikimrServices::TActivity::KQP_OLAP_SCAN;
-    }
 
 public:
     virtual void PassAway() override;
@@ -38,19 +35,21 @@ public:
     TColumnShardScan(const TActorId& columnShardActorId, const TActorId& scanComputeActorId,
         const std::shared_ptr<IStoragesManager>& storagesManager,
         const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
-        const TComputeShardingPolicy& computeShardingPolicy, ui32 scanId, ui64 txId, ui32 scanGen, ui64 requestCookie, ui64 tabletId,
-        TDuration timeout, const TReadMetadataBase::TConstPtr& readMetadataRange, NKikimrDataEvents::EDataFormat dataFormat,
-        const NColumnShard::TScanCounters& scanCountersPool);
+        const std::shared_ptr<NColumnFetching::TColumnDataManager>& columnDataManager, const TComputeShardingPolicy& computeShardingPolicy,
+        ui32 scanId, ui64 txId, ui32 scanGen, ui64 requestCookie, ui64 tabletId, TDuration timeout,
+        const TReadMetadataBase::TConstPtr& readMetadataRange, NKikimrDataEvents::EDataFormat dataFormat,
+        const NColumnShard::TScanCounters& scanCountersPool, const NConveyorComposite::TCPULimitsConfig& cpuLimits);
 
     void Bootstrap(const TActorContext& ctx);
 
 private:
     STATEFN(StateScan) {
-        auto g = Stats->MakeGuard("processing");
-        TLogContextGuard gLogging(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_SCAN) ("SelfId", SelfId())(
-            "TabletId", TabletId)("ScanId", ScanId)("TxId", TxId)("ScanGen", ScanGen)("task_identifier", ReadMetadataRange->GetScanIdentifier()));
+        auto g = Stats->MakeGuard("processing", IS_INFO_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN));
+        TLogContextGuard gLogging(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_SCAN) ("SelfId", SelfId())("TabletId",
+                    TabletId)("ScanId", ScanId)("TxId", TxId)("ScanGen", ScanGen)("task_identifier", ReadMetadataRange->GetScanIdentifier()));
         switch (ev->GetTypeRewrite()) {
             hFunc(NKqp::TEvKqpCompute::TEvScanDataAck, HandleScan);
+            hFunc(NKqp::TEvKqpCompute::TEvScanPing, HandleScan);
             hFunc(NKqp::TEvKqp::TEvAbortExecution, HandleScan);
             hFunc(NActors::TEvents::TEvPoison, HandleScan);
             hFunc(TEvents::TEvUndelivered, HandleScan);
@@ -65,6 +64,8 @@ private:
 
     void HandleScan(NKqp::TEvKqpCompute::TEvScanDataAck::TPtr& ev);
 
+    void HandleScan(NKqp::TEvKqpCompute::TEvScanPing::TPtr& ev);
+
     // Returns true if it was able to produce new batch
     bool ProduceResults() noexcept;
 
@@ -78,6 +79,8 @@ private:
     void HandleScan(TEvents::TEvWakeup::TPtr& /*ev*/);
 
 private:
+    void CheckHanging(const bool logging = false) const;
+
     void MakeResult(size_t reserveRows = 0);
 
     void AddRow(const TConstArrayRef<TCell>& row) override;
@@ -112,7 +115,10 @@ private:
 
     void ScheduleWakeup(const TMonotonic deadline);
 
-    TMonotonic GetDeadline() const;
+    TMonotonic GetScanDeadline() const;
+
+    TMonotonic GetComputeDeadline() const;
+    std::optional<TMonotonic> GetComputeDeadlineOptional() const;
 
 private:
     const TActorId ColumnShardActorId;
@@ -127,6 +133,7 @@ private:
     const ui64 RequestCookie;
     const NKikimrDataEvents::EDataFormat DataFormat;
     const ui64 TabletId;
+    const NConveyorComposite::TCPULimitsConfig CPULimits;
 
     TReadMetadataBase::TConstPtr ReadMetadataRange;
     std::unique_ptr<TScanIteratorBase> ScanIterator;
@@ -143,6 +150,7 @@ private:
     THolder<NKqp::TEvKqpCompute::TEvScanData> Result;
     std::shared_ptr<IScanCursor> CurrentLastReadKey;
     bool Finished = false;
+    ui32 BuildResultCounter = 0;
     std::optional<TMonotonic> LastResultInstant;
 
     class TBlobStats {
@@ -189,7 +197,9 @@ private:
     ui64 PacksSum = 0;
     ui64 Bytes = 0;
     ui32 PageFaults = 0;
-    TDuration LastReportedElapsedTime;
+    TInstant StartWaitTime;
+    TDuration WaitTime;
+    TInstant LastSend = TInstant::Now();
 };
 
 }   // namespace NKikimr::NOlap::NReader

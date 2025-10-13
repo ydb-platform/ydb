@@ -19,6 +19,7 @@ TS3Configuration::TS3Configuration()
     REGISTER_SETTING(*this, ArrowRowGroupReordering);
     REGISTER_SETTING(*this, ParallelDownloadCount);
     REGISTER_SETTING(*this, UseBlocksSource);
+    REGISTER_SETTING(*this, UseBlocksSink);
     REGISTER_SETTING(*this, AtomicUploadCommit);
     REGISTER_SETTING(*this, UseConcurrentDirectoryLister);
     REGISTER_SETTING(*this, MaxDiscoveryFilesPerDirectory).Lower(1);
@@ -64,7 +65,7 @@ void TS3Configuration::Init(const TS3GatewayConfig& config, TIntrusivePtr<TTypeA
         config.HasMaxInflightListsPerQuery() ? config.GetMaxInflightListsPerQuery() : 1;
     ListingCallbackThreadCount = config.HasListingCallbackThreadCount()
                                      ? config.GetListingCallbackThreadCount()
-                                     : 1;
+                                     : 0;
     ListingCallbackPerThreadQueueSize = config.HasListingCallbackPerThreadQueueSize()
                                             ? config.GetListingCallbackPerThreadQueueSize()
                                             : 100;

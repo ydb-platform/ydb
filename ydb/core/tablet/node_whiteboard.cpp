@@ -51,8 +51,11 @@ public:
         auto version = GetProgramRevision();
         if (!version.empty()) {
             SystemStateInfo.SetVersion(version);
-            auto versionCounter = GetServiceCounters(AppData(ctx)->Counters, "utils")->GetSubgroup("revision", version);
+            TIntrusivePtr<NMonitoring::TDynamicCounters> utils = GetServiceCounters(AppData(ctx)->Counters, "utils");
+            TIntrusivePtr<NMonitoring::TDynamicCounters> versionCounter = utils->GetSubgroup("revision", version);
             *versionCounter->GetCounter("version", false) = 1;
+            TIntrusivePtr<NMonitoring::TDynamicCounters> nodeCounter = utils->GetSubgroup("NodeCount", version);
+            *nodeCounter->GetCounter("NodeCount", false) = 1;
         }
 
         SystemStateInfo.SetStartTime(ctx.Now().MilliSeconds());
@@ -706,11 +709,6 @@ protected:
         } else {
             SystemStateInfo.ClearMemoryUsed();
         }
-        if (memoryStats.HasHardLimit()) {
-            SystemStateInfo.SetMemoryLimit(memoryStats.GetHardLimit());
-        } else {
-            SystemStateInfo.ClearMemoryLimit();
-        }
         if (memoryStats.HasAllocatedMemory()) {
             SystemStateInfo.SetMemoryUsedInAlloc(memoryStats.GetAllocatedMemory());
         } else {
@@ -772,16 +770,12 @@ protected:
         }
     }
 
-    void UpdateSystemState(const TActorContext &ctx) {
+    void UpdateSystemState() {
         NKikimrWhiteboard::EFlag eFlag = NKikimrWhiteboard::EFlag::Green;
-        NKikimrWhiteboard::EFlag pDiskFlag = NKikimrWhiteboard::EFlag::Green;
-        ui32 yellowFlags = 0;
+        ui32 badDisks = 0;
         double maxDiskUsage = 0;
         for (const auto& pr : PDiskStateInfo) {
-            if (!pr.second.HasState()) {
-                pDiskFlag = std::max(pDiskFlag, NKikimrWhiteboard::EFlag::Yellow);
-                ++yellowFlags;
-            } else {
+            if (pr.second.HasState()) {
                 switch (pr.second.GetState()) {
                 case NKikimrBlobStorage::TPDiskState::InitialFormatReadError:
                 case NKikimrBlobStorage::TPDiskState::InitialSysLogReadError:
@@ -789,11 +783,9 @@ protected:
                 case NKikimrBlobStorage::TPDiskState::InitialCommonLogReadError:
                 case NKikimrBlobStorage::TPDiskState::InitialCommonLogParseError:
                 case NKikimrBlobStorage::TPDiskState::CommonLoggerInitError:
-                    pDiskFlag = std::max(pDiskFlag, NKikimrWhiteboard::EFlag::Red);
-                    break;
                 case NKikimrBlobStorage::TPDiskState::OpenFileError:
-                    pDiskFlag = std::max(pDiskFlag, NKikimrWhiteboard::EFlag::Yellow);
-                    ++yellowFlags;
+                    eFlag = std::max(eFlag, NKikimrWhiteboard::EFlag::Yellow);
+                    ++badDisks;
                     break;
                 default:
                     break;
@@ -801,13 +793,10 @@ protected:
             }
             if (pr.second.HasAvailableSize() && pr.second.GetTotalSize() != 0) {
                 double avail = (double)pr.second.GetAvailableSize() / pr.second.GetTotalSize();
-                if (avail <= 0.06) {
-                    pDiskFlag = std::max(pDiskFlag, NKikimrWhiteboard::EFlag::Red);
+                if (avail <= 0.04) {
+                    eFlag = std::max(eFlag, NKikimrWhiteboard::EFlag::Orange);
                 } else if (avail <= 0.08) {
-                    pDiskFlag = std::max(pDiskFlag, NKikimrWhiteboard::EFlag::Orange);
-                } else if (avail <= 0.15) {
-                    pDiskFlag = std::max(pDiskFlag, NKikimrWhiteboard::EFlag::Yellow);
-                    ++yellowFlags;
+                    eFlag = std::max(eFlag, NKikimrWhiteboard::EFlag::Yellow);
                 }
                 maxDiskUsage = std::max(maxDiskUsage, 1.0 - avail);
             }
@@ -815,29 +804,25 @@ protected:
         if (PDiskStateInfo.size() > 0) {
             SystemStateInfo.SetMaxDiskUsage(maxDiskUsage);
         }
-        if (pDiskFlag == NKikimrWhiteboard::EFlag::Yellow) {
-            switch (yellowFlags) {
-            case 1:
-                break;
-            case 2:
-                pDiskFlag = NKikimrWhiteboard::EFlag::Orange;
-                break;
-            case 3:
-                pDiskFlag = NKikimrWhiteboard::EFlag::Red;
-                break;
-            }
+        if (eFlag == NKikimrWhiteboard::EFlag::Yellow && badDisks > 1) {
+            eFlag = NKikimrWhiteboard::EFlag::Orange;
         }
-        eFlag = std::max(eFlag, pDiskFlag);
         for (const auto& pr : VDiskStateInfo) {
             eFlag = std::max(eFlag, pr.second.GetDiskSpace());
-            eFlag = std::max(eFlag, pr.second.GetSatisfactionRank().GetFreshRank().GetFlag());
-            eFlag = std::max(eFlag, pr.second.GetSatisfactionRank().GetLevelRank().GetFlag());
-        }
-        if (SystemStateInfo.HasMessageBusState()) {
-            eFlag = std::max(eFlag, SystemStateInfo.GetMessageBusState());
+            if (pr.second.GetDiskSpace() >= NKikimrWhiteboard::EFlag::Red) {
+                eFlag = std::max(eFlag, NKikimrWhiteboard::EFlag::Orange);
+            } else if (pr.second.GetDiskSpace() > NKikimrWhiteboard::EFlag::Green) {
+                eFlag = std::max(eFlag, NKikimrWhiteboard::EFlag::Yellow);
+            }
+            if (pr.second.GetSatisfactionRank().GetFreshRank().GetFlag() > NKikimrWhiteboard::EFlag::Green) {
+                eFlag = std::max(eFlag, NKikimrWhiteboard::EFlag::Yellow);
+            }
+            if (pr.second.GetSatisfactionRank().GetLevelRank().GetFlag() > NKikimrWhiteboard::EFlag::Green) {
+                eFlag = std::max(eFlag, NKikimrWhiteboard::EFlag::Yellow);
+            }
         }
         if (SystemStateInfo.HasGRpcState()) {
-            eFlag = std::max(eFlag, SystemStateInfo.GetGRpcState());
+            eFlag = std::max(eFlag, std::max(SystemStateInfo.GetGRpcState(), NKikimrWhiteboard::EFlag::Orange));
         }
         for (const auto& stats : SystemStateInfo.GetPoolStats()) {
             double usage = stats.GetUsage();
@@ -851,11 +836,18 @@ protected:
             } else  {
                 flag = NKikimrWhiteboard::EFlag::Green;
             }
-            eFlag = Max(eFlag, flag);
+            if (stats.GetName() == "User") {
+                flag = std::min(flag, NKikimrWhiteboard::EFlag::Orange);
+            } else if (stats.GetName() == "IO") {
+                flag = std::min(flag, NKikimrWhiteboard::EFlag::Yellow);
+            } else if (stats.GetName() == "Batch") {
+                flag = std::min(flag, NKikimrWhiteboard::EFlag::Green);
+            }
+            eFlag = std::max(eFlag, flag);
         }
         if (!SystemStateInfo.HasSystemState() || SystemStateInfo.GetSystemState() != eFlag) {
             SystemStateInfo.SetSystemState(eFlag);
-            SystemStateInfo.SetChangeTime(ctx.Now().MilliSeconds());
+            SystemStateInfo.SetChangeTime(TActivationContext::Now().MilliSeconds());
         }
     }
 
@@ -1163,7 +1155,7 @@ protected:
                 threadInfo->MutableStates()->emplace(state.first, state.second);
             }
         }
-        UpdateSystemState(ctx);
+        UpdateSystemState();
         ctx.Schedule(UPDATE_PERIOD, new TEvPrivate::TEvUpdateRuntimeStats());
     }
 

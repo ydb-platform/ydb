@@ -266,6 +266,7 @@ domains_config:
          node: [1, 2, 3, 4, 5, 6, 7, 8]
          nto_select: 5
        ssid: 1
+   ```
 
 
 - `block-4-2` + Auth
@@ -291,6 +292,7 @@ domains_config:
        ssid: 1
      security_config:
        enforce_user_token_requirement: true
+   ```
 
 
 - `mirror-3-dc`
@@ -621,6 +623,62 @@ For a configuration located in 3 availability zones, specify 3 rings. For a conf
 
 {{ ydb-short-name }} supports various user authentication methods. The configuration for authentication providers is specified in the `auth_config` section.
 
+### A Password Complexity Policies {#password-complexity}
+
+{{ ydb-short-name }} allows users to be authenticated by login and password. More details can be found in the section [authentication by login and password](../../security/authentication.md#static-credentials). To enhance security in {{ ydb-short-name }} it is possible to configure the complexity of user passwords. You can enable the password complexity policy due include addition section `password_complexity`.
+
+Syntax of the `password_complexity` section:
+
+```yaml
+auth_config:
+  #...
+  password_complexity:
+    min_length: 8
+    min_lower_case_count: 1
+    min_upper_case_count: 1
+    min_numbers_count: 1
+    min_special_chars_count: 1
+    special_chars: "!@#$%^&*()_+{}|<>?="
+    can_contain_username: false
+  #...
+```
+
+| Parameter | Description | Default value |
+|:---|:---|:---:|
+| `min_length` | Minimal length of the password | 0 |
+| `min_lower_case_count` | Minimal count of letters in lower case | 0 |
+| `min_upper_case_count` | Minimal cont of letters in upper case | 0 |
+| `min_numbers_count` | Minimal count of number in the password | 0 |
+| `min_special_chars_count` | Minimal count of special chars in the password from list `special_chars`| 0 |
+| `special_chars` | Special characters which can be used in the password. Allow use chars from list `!@#$%^&*()_+{}\|<>?=` only. Value (`""`) is equivalent to list `!@#$%^&*()_+{}\|<>?=` | Empty list. Equivalent to all allowed characters: `!@#$%^&*()_+{}\|<>?=` |
+| `can_contain_username` | Allow use username in the password | `false` |
+
+{% note info %}
+
+Any changes to the password policy do not affect existing user passwords, so it is not necessary to change current passwords; they will be accepted as they are.
+
+{% endnote %}
+
+### Account lockout after unsuccessful password attempts {#account-lockout}
+
+{{ ydb-short-name }} allows for the blocking of user authentication after unsuccessful password entry attempts. Lockout rules are configured in the `account_lockout` section.
+
+Syntax of the `account_lockout` section:
+
+```yaml
+auth_config:
+  #...
+  account_lockout:
+    attempt_threshold: 4
+    attempt_reset_duration: "1h"
+  #...
+```
+
+| Parameter | Description | Default value |
+| :--- | :--- | :---: |
+| `attempt_threshold` | The maximum number of unsuccessful password entry attempts. After `attempt_threshold` unsuccessful attempts, the user will be locked out for the duration specified in the `attempt_reset_duration` parameter. A zero value for the `attempt_threshold` parameter indicates no restrictions on the number of password entry attempts. After successful authentication (correct username and password), the counter for unsuccessful attempts is reset to 0. | 4 |
+| `attempt_reset_duration` | The duration of the user lockout period. During this period, the user will not be able to authenticate in the system even if the correct username and password are entered. The lockout period starts from the moment of the last incorrect password attempt. If a zero ("0s" - a notation equivalent to 0 seconds) lockout period is set, the user will be considered locked out indefinitely. In this case, the system administrator must lift the lockout.<br/><br/>The minimum lockout duration is 1 second.<br/>Supported time units:<ul><li>Seconds: `30s`</li><li>Minutes: `20m`</li><li>Hours: `5h`</li><li>Days: `3d`</li></ul>It is not allowed to combine time units in one entry. For example, the entry "1d12h" is incorrect. It should be replaced with an equivalent, such as "36h". | "1h" |
+
 ### Configuring LDAP authentication {#ldap-auth-config}
 
 One of the user authentication methods in {{ ydb-short-name }} is with an LDAP directory. More details about this type of authentication can be found in the section on [interacting with the LDAP directory](../../security/authentication.md#ldap-auth-provider). To configure LDAP authentication, the `ldap_authentication` section must be defined.
@@ -696,6 +754,62 @@ By default, the prefix is `slot-`. To override the prefix, add the following to 
 node_broker_config:
   stable_node_name_prefix: <new prefix>
 ```
+
+
+## `feature_flags` configuration section {#feature_flags}
+
+To enable a {{ ydb-short-name }} feature, set the corresponding feature flag in the `feature_flags` section of the cluster configuration. For example, to enable support for vector indexes and auto-partitioning of topics in the CDC, you need to add the following lines to the configuration:
+
+```yaml
+feature_flags:
+  enable_vector_index: true
+  enable_topic_autopartitioning_for_cdc: true
+```
+
+### Feature flags
+
+| Flag          | Feature |
+|---------------------------| ----------------------------------------------------|
+| `enable_vector_index`                                    | Support for [vector indexes](../../dev/vector-indexes.md) for approximate vector similarity search |
+| `enable_batch_updates`                                   | Support for `BATCH UPDATE` and `BATCH DELETE` statements |
+| `enable_kafka_native_balancing`                          | Client balancing of partitions when reading using the [Kafka protocol](https://kafka.apache.org/documentation/#consumerconfigs_partition.assignment.strategy) |
+| `enable_topic_autopartitioning_for_cdc`                  | [Auto-partitioning topics](../../concepts/cdc.md#topic-partitions) for row-oriented tables in CDC |
+| `enable_access_to_index_impl_tables`                     | Support for [followers (read replicas)](../../yql/reference/syntax/alter_table/indexes.md) for covered secondary indexes |
+| `enable_changefeeds_export`, `enable_changefeeds_import` | Support for changefeeds in backup and restore operations |
+| `enable_view_export`                                     | Support for views in backup and restore operations |
+| `enable_export_auto_dropping`                            | Automatic cleanup of temporary tables and directories during export to S3 |
+| `enable_followers_stats`                                 | System views with information about [history of overloaded partitions](../../dev/system-views.md#top-overload-partitions) |
+| `enable_strict_acl_check`                                | Strict ACL checks — do not allow granting rights to non-existent users and delete users with permissions |
+| `enable_strict_user_management`                          | Strict checks for local users — only the cluster or database administrator can administer local users |
+| `enable_database_admin`                                  | The role of a database administrator |
+
+## Configuring Health Check {#healthcheck-config}
+
+This section configures thresholds and timeout settings used by the {{ ydb-short-name }} [health check service](../ydb-sdk/health-check-api.md). These parameters help configure detection of potential [issues](../ydb-sdk/health-check-api.md#issues), such as excessive restarts or time drift between dynamic nodes.
+
+### Syntax
+
+```yaml
+healthcheck_config:
+  thresholds:
+    node_restarts_yellow: 10
+    node_restarts_orange: 30
+    nodes_time_difference_yellow: 5000
+    nodes_time_difference_orange: 25000
+    tablets_restarts_orange: 30
+  timeout: 20000
+```
+
+### Parameters
+
+| Parameter                                 | Default | Description                                                                   |
+|-------------------------------------------|---------|-------------------------------------------------------------------------------|
+| `thresholds.node_restarts_yellow`         | `10`    | Number of node restarts to trigger a `YELLOW` warning                         |
+| `thresholds.node_restarts_orange`         | `30`    | Number of node restarts to trigger an `ORANGE` alert                          |
+| `thresholds.nodes_time_difference_yellow` | `5000`  | Max allowed time difference (in us) between dynamic nodes for `YELLOW` issue  |
+| `thresholds.nodes_time_difference_orange` | `25000` | Max allowed time difference (in us) between dynamic nodes for `ORANGE` issue  |
+| `thresholds.tablets_restarts_orange`      | `30`    | Number of tablet restarts to trigger an `ORANGE` alert                        |
+| `timeout`                                 | `20000` | Maximum health check response time (in ms)                                    |
 
 ## Sample cluster configurations {#examples}
 

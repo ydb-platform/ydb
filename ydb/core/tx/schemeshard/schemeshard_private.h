@@ -42,6 +42,8 @@ namespace TEvPrivate {
         EvRetryNodeSubscribe,
         EvRunDataErasure,
         EvRunTenantDataErasure,
+        EvAddNewShardToDataErasure,
+        EvTestNotifySubdomainCleanup,
         EvEnd
     };
 
@@ -196,6 +198,14 @@ namespace TEvPrivate {
         { }
     };
 
+    struct TEvTestNotifySubdomainCleanup : public TEventLocal<TEvTestNotifySubdomainCleanup, EvTestNotifySubdomainCleanup> {
+        TPathId SubdomainPathId;
+
+        explicit TEvTestNotifySubdomainCleanup(const TPathId& subdomainPathId)
+            : SubdomainPathId(subdomainPathId)
+        { }
+    };
+
     struct TEvCompletePublication: public TEventLocal<TEvCompletePublication, EvCompletePublication> {
         const TOperationId OpId;
         const TPathId PathId;
@@ -263,6 +273,14 @@ namespace TEvPrivate {
         explicit TEvRetryNodeSubscribe(ui32 nodeId)
             : NodeId(nodeId)
         { }
+    };
+
+    struct TEvAddNewShardToDataErasure : public TEventLocal<TEvAddNewShardToDataErasure, EvAddNewShardToDataErasure> {
+        const std::vector<TShardIdx> Shards;
+
+        TEvAddNewShardToDataErasure(std::vector<TShardIdx>&& shards)
+            : Shards(std::move(shards))
+        {}
     };
 }; // TEvPrivate
 

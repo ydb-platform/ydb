@@ -5,7 +5,7 @@
 #include <util/system/info.h>
 #include <util/stream/null.h>
 
-#include "ut_helpers.h"
+#include <ydb/core/blobstorage/ut_blobstorage/lib/ut_helpers.h>
 
 #define SINGLE_THREAD 1
 

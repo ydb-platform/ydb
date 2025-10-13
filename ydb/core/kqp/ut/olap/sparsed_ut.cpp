@@ -16,9 +16,8 @@ Y_UNIT_TEST_SUITE(KqpOlapSparsed) {
 
     class TSparsedDataTest {
     private:
-        const TKikimrSettings Settings = TKikimrSettings()
-            .SetColumnShardAlterObjectEnabled(true)
-            .SetWithSampleTables(false);
+        const TKikimrSettings Settings =
+            TKikimrSettings().SetColumnShardAlterObjectEnabled(true).SetWithSampleTables(false);
         TKikimrRunner Kikimr;
         NKikimr::NYDBTest::TControllers::TGuard<NKikimr::NYDBTest::NColumnShard::TController> CSController;
         const TString StoreName;
@@ -44,7 +43,25 @@ Y_UNIT_TEST_SUITE(KqpOlapSparsed) {
             return GetUint64(rows[0].at("count"));
         }
 
-        ui32 GetDefaultsCount(const TString& fieldName, const TString& defValueStr) const {
+        ui32 GetDefaultsCount(const TString& fieldName, const TString& defValueStr, std::set<ui32>* notDefaultIds = nullptr) const {
+            {
+                auto selectQueryTmpl = TString(R"(SELECT pk_int FROM `/Root/)") + (StoreName.empty() ? "" : StoreName + "/") +
+                                       R"(olapTable`
+                WHERE %s != %s
+                ORDER BY pk_int
+            )";
+
+                auto tableClient = Kikimr.GetTableClient();
+                auto rows = ExecuteScanQuery(tableClient, Sprintf(selectQueryTmpl.c_str(), fieldName.c_str(), defValueStr.c_str()));
+                if (notDefaultIds) {
+                    std::set<ui32> result;
+                    for (auto&& i : rows) {
+                        AFL_VERIFY(result.emplace(GetInt64(i.at("pk_int"))).second);
+                    }
+                    *notDefaultIds = result;
+                }
+
+            }
             auto selectQueryTmpl = TString(R"(
                 SELECT
                     count(*) as count,
@@ -103,6 +120,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSparsed) {
             ui32 grCount = (MultiColumnRepCount + SKIP_GROUPS - 1) / SKIP_GROUPS;
             ui64 defCounts[FIELD_NAMES.size() * grCount];
             const ui32 count = GetCount();
+            AFL_VERIFY(count == countExpectation)("expect", countExpectation)("count", count);
             GetAllDefaultsCount(defCounts, SKIP_GROUPS);
             for (ui32 i = 0; i < FIELD_NAMES.size() * grCount; i++) {
                 if (firstCall) {
@@ -110,18 +128,31 @@ Y_UNIT_TEST_SUITE(KqpOlapSparsed) {
                 } else {
                     AFL_VERIFY(defCountStart[i] == defCounts[i]);
                 }
-                AFL_VERIFY(count == countExpectation)("expect", countExpectation)("count", count);
                 AFL_VERIFY(1.0 * defCounts[i] / count < 0.95)("def", defCounts[i])("count", count);
                 AFL_VERIFY(1.0 * defCounts[i] / count > 0.85)("def", defCounts[i])("count", count);
             }
         }
 
-        void CheckTable(const TString& fieldName, const TString& defValueStr, bool firstCall, ui32 countExpectation, ui32& defCountStart) {
-            const ui32 defCount = GetDefaultsCount(fieldName, defValueStr);
+        void CheckTable(const TString& fieldName, const TString& defValueStr, bool firstCall, ui32 countExpectation, ui32& defCountStart, std::set<ui32>* notDefaultValues = nullptr) {
+            std::set<ui32> ndvLocal;
+            const ui32 defCount = GetDefaultsCount(fieldName, defValueStr, &ndvLocal);
             if (firstCall) {
                 defCountStart = defCount;
+                if (notDefaultValues) {
+                    *notDefaultValues = ndvLocal;
+                }
             } else {
-                AFL_VERIFY(defCountStart == defCount);
+                AFL_VERIFY(defCountStart == defCount)("start", defCountStart)("current", defCount);
+                if (notDefaultValues) {
+                    auto it1 = ndvLocal.begin();
+                    auto it2 = notDefaultValues->begin();
+                    while (it1 != ndvLocal.end() && it2 != notDefaultValues->end()) {
+                        AFL_VERIFY(*it1 == *it2)("local", *it1)("check", *it2)("local_size", ndvLocal.size())("check_size", notDefaultValues->size());
+                        ++it1;
+                        ++it2;
+                    }
+                    AFL_VERIFY(ndvLocal.size() == notDefaultValues->size())("local", ndvLocal.size())("check", notDefaultValues->size());
+                }
             }
             const ui32 count = GetCount();
             AFL_VERIFY(count == countExpectation)("expect", countExpectation)("count", count);
@@ -144,13 +175,6 @@ Y_UNIT_TEST_SUITE(KqpOlapSparsed) {
             checkTable(true);
             printTime("checkTable");
 
-            CSController->EnableBackground(NKikimr::NYDBTest::ICSController::EBackground::Indexation);
-            CSController->WaitIndexation(TDuration::Seconds(5));
-            printTime("wait");
-
-            checkTable(false);
-            printTime("checkTable");
-
             CSController->EnableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
             CSController->WaitCompactions(TDuration::Seconds(5));
             printTime("wait");
@@ -158,13 +182,13 @@ Y_UNIT_TEST_SUITE(KqpOlapSparsed) {
             checkTable(false);
             printTime("checkTable");
 
-            CSController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Indexation);
             CSController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
             printTime("wait");
         }
 
         void FillCircle(const double shiftKff, const ui32 countExpectation) {
             ui32 defCountStart = (ui32)-1;
+            std::set<ui32> notDefaultValues;
             FillCircleImpl([&]() {
                 TTypedLocalHelper helper("Utf8", Kikimr, "olapTable", StoreName);
                 const double frq = 0.9;
@@ -172,7 +196,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSparsed) {
                 helper.FillTable(sPool, shiftKff, 10000);
             },
                 [&](bool firstCall) {
-                CheckTable("field", "'abcde'", firstCall, countExpectation, defCountStart);
+                CheckTable("field", "'abcde'", firstCall, countExpectation, defCountStart, &notDefaultValues);
             });
         }
 
@@ -189,7 +213,6 @@ Y_UNIT_TEST_SUITE(KqpOlapSparsed) {
         }
 
         void Execute() {
-            CSController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Indexation);
             CSController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
             CSController->SetOverridePeriodicWakeupActivationPeriod(TDuration::MilliSeconds(100));
 
@@ -212,7 +235,8 @@ Y_UNIT_TEST_SUITE(KqpOlapSparsed) {
                     )
                     PARTITION BY HASH(pk_int)
                     WITH (
-                        STORE = COLUMN
+                        STORE = COLUMN,
+                        PARTITION_COUNT = 64
                     ))";
                 auto result = session.ExecuteSchemeQuery(query).GetValueSync();
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
@@ -233,7 +257,6 @@ Y_UNIT_TEST_SUITE(KqpOlapSparsed) {
         }
 
         void ExecuteMultiColumn() {
-            CSController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Indexation);
             CSController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
             CSController->SetOverridePeriodicWakeupActivationPeriod(TDuration::MilliSeconds(100));
 
@@ -324,7 +347,6 @@ Y_UNIT_TEST_SUITE(KqpOlapSparsed) {
         Tests::NCommon::TLoggerInit(kikimr).SetComponents({ NKikimrServices::TX_COLUMNSHARD }, "CS").SetPriority(NActors::NLog::PRI_DEBUG).Initialize();
 
         WriteTestData(kikimr, "/Root/olapStore/olapTable", 1000000, 300000000, 10000);
-        csController->WaitIndexation(TDuration::Seconds(3));
 
         {
             auto result = session.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=ALTER_COLUMN, NAME=uid, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SPARSED`)").GetValueSync();

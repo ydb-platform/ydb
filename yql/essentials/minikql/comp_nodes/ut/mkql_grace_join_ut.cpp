@@ -1,11 +1,10 @@
 #include "mkql_computation_node_ut.h"
 #include <yql/essentials/minikql/mkql_runtime_version.h>
 #include <yql/essentials/minikql/comp_nodes/mkql_grace_join_imp.h>
+#include <yql/essentials/minikql/mkql_string_util.h>
 
 #include <yql/essentials/minikql/computation/mock_spiller_factory_ut.h>
 
-#include <chrono>
-#include <iostream>
 #include <cstring>
 #include <vector>
 #include <cassert>
@@ -16,8 +15,6 @@
 #include <util/system/compiler.h>
 #include <util/stream/null.h>
 #include <util/system/mem_info.h>
-
-#include <cstdint>
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -2633,7 +2630,173 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
 
 }
 
+constexpr std::string_view LeftStreamName = "LeftTestStream";
+constexpr std::string_view RightStreamName = "RightTestStream";
 
+struct TTestStreamParams {
+    ui64 MaxAllowedNumberOfFetches;
+    ui64 StreamSize;
+};
+
+class TTestStreamWrapper: public TMutableComputationNode<TTestStreamWrapper> {
+using TBaseComputation = TMutableComputationNode<TTestStreamWrapper>;
+public:
+    class TStreamValue : public TComputationValue<TStreamValue> {
+    public:
+        using TBase = TComputationValue<TStreamValue>;
+
+        TStreamValue(TMemoryUsageInfo* memInfo, TComputationContext& compCtx, TTestStreamParams& params)
+            : TBase(memInfo), CompCtx(compCtx), Params(params)
+        {}
+    private:
+        NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override {
+            ++TotalFetches;
+
+            UNIT_ASSERT_LE(TotalFetches, Params.MaxAllowedNumberOfFetches);
+
+            if (TotalFetches > Params.StreamSize) {
+                return NUdf::EFetchStatus::Finish;
+            }
+
+            NUdf::TUnboxedValue* items = nullptr;
+            result = CompCtx.HolderFactory.CreateDirectArrayHolder(2, items);
+            items[0] = NUdf::TUnboxedValuePod(TotalFetches);
+            items[1] = MakeString(ToString(TotalFetches) * 5);
+
+            return NUdf::EFetchStatus::Ok;
+        }
+
+    private:
+        TComputationContext& CompCtx;
+        TTestStreamParams& Params;
+        ui64 TotalFetches = 0;
+    };
+
+    TTestStreamWrapper(TComputationMutables& mutables, TTestStreamParams& params)
+        : TBaseComputation(mutables)
+        , Params(params)
+    {}
+
+    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
+        return ctx.HolderFactory.Create<TStreamValue>(ctx, Params);
+    }
+private:
+    void RegisterDependencies() const final {}
+
+    TTestStreamParams& Params;
+};
+
+IComputationNode* WrapTestStream(const TComputationNodeFactoryContext& ctx, TTestStreamParams& params) {
+    return new TTestStreamWrapper(ctx.Mutables, params);
+}
+
+TComputationNodeFactory GetNodeFactory(TTestStreamParams& leftParams, TTestStreamParams& rightParams) {
+    return [&leftParams, &rightParams](TCallable& callable, const TComputationNodeFactoryContext& ctx) -> IComputationNode* {
+        if (callable.GetType()->GetName() == LeftStreamName) {
+            return WrapTestStream(ctx, leftParams);
+        } else if (callable.GetType()->GetName() == RightStreamName) {
+            return WrapTestStream(ctx, rightParams);
+        }
+        return GetBuiltinFactory()(callable, ctx);
+    };
+}
+
+TRuntimeNode MakeStream(TSetup<false>& setup, bool isRight) {
+    TProgramBuilder& pb = *setup.PgmBuilder;
+
+    TCallableBuilder callableBuilder(*setup.Env, isRight ? RightStreamName : LeftStreamName,
+            pb.NewStreamType(
+                pb.NewTupleType({
+                    pb.NewDataType(NUdf::TDataType<ui32>::Id),
+                    pb.NewDataType(NUdf::TDataType<char*>::Id)
+                    })
+                ));
+
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
+Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinEmptyInputTest) {
+
+    void RunGraceJoinEmptyCaseTest(EJoinKind joinKind, bool emptyLeft, bool emptyRight) {
+        const ui64 streamSize = 5;
+
+        ui64 leftStreamSize = streamSize;
+        ui64 rightStreamSize = streamSize;
+        ui64 maxExpectedFetchesFromLeftStream = leftStreamSize + 1;
+        ui64 maxExpectedFetchesFromRightStream = rightStreamSize + 1;
+
+        if (emptyLeft) {
+            leftStreamSize = 0;
+            if (GraceJoin::ShouldSkipRightIfLeftEmpty(joinKind)) {
+                maxExpectedFetchesFromRightStream = 1;
+            }
+        }
+
+        if (emptyRight) {
+            rightStreamSize = 0;
+            if (GraceJoin::ShouldSkipLeftIfRightEmpty(joinKind)) {
+                maxExpectedFetchesFromLeftStream = 1;
+            }
+        }
+
+        TTestStreamParams leftParams(maxExpectedFetchesFromLeftStream, leftStreamSize);
+        TTestStreamParams rightParams(maxExpectedFetchesFromRightStream, rightStreamSize);
+        TSetup<false> setup(GetNodeFactory(leftParams, rightParams));
+        TProgramBuilder& pb = *setup.PgmBuilder;
+
+        const auto leftStream = MakeStream(setup, false);
+        const auto rightStream = MakeStream(setup, true);
+
+        const auto resultType = pb.NewFlowType(pb.NewMultiType({
+            pb.NewDataType(NUdf::TDataType<char*>::Id),
+            pb.NewDataType(NUdf::TDataType<char*>::Id)
+        }));
+
+        const auto joinFlow = pb.GraceJoin(
+            pb.ExpandMap(pb.ToFlow(leftStream), [&](TRuntimeNode item) -> TRuntimeNode::TList {
+                return {pb.Nth(item, 0U), pb.Nth(item, 1U)};
+            }),
+            pb.ExpandMap(pb.ToFlow(rightStream), [&](TRuntimeNode item) -> TRuntimeNode::TList {
+                return {pb.Nth(item, 0U), pb.Nth(item, 1U)};
+            }),
+            joinKind,
+            {0U}, {0U},
+            {1U, 0U}, {1U, 1U},
+            resultType);
+
+        const auto pgmReturn = pb.Collect(pb.NarrowMap(joinFlow, [&](TRuntimeNode::TList items) -> TRuntimeNode {
+            return pb.NewTuple(items);
+        }));
+
+        const auto graph = setup.BuildGraph(pgmReturn);
+        const auto iterator = graph->GetValue().GetListIterator();
+
+        NUdf::TUnboxedValue tuple;
+        while (iterator.Next(tuple)) {
+            // Consume results if any
+        }
+    }
+
+#define ADD_JOIN_TESTS_FOR_KIND(Kind)                               \
+    Y_UNIT_TEST(Kind##_EmptyLeft) {                                 \
+        RunGraceJoinEmptyCaseTest(EJoinKind::Kind, true, false);    \
+    }                                                               \
+    Y_UNIT_TEST(Kind##_EmptyRight) {                                \
+        RunGraceJoinEmptyCaseTest(EJoinKind::Kind, false, true);    \
+    }                                                               \
+
+    ADD_JOIN_TESTS_FOR_KIND(Inner)
+    ADD_JOIN_TESTS_FOR_KIND(Left)
+    ADD_JOIN_TESTS_FOR_KIND(LeftOnly)
+    ADD_JOIN_TESTS_FOR_KIND(LeftSemi)
+    ADD_JOIN_TESTS_FOR_KIND(Right)
+    ADD_JOIN_TESTS_FOR_KIND(RightOnly)
+    ADD_JOIN_TESTS_FOR_KIND(RightSemi)
+    ADD_JOIN_TESTS_FOR_KIND(Full)
+    ADD_JOIN_TESTS_FOR_KIND(Exclusion)
+
+#undef ADD_JOIN_TESTS_FOR_KIND
+}
 }
 
 }

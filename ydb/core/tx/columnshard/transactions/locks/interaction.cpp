@@ -7,7 +7,7 @@ TIntervalPoint TIntervalPoint::From(
     i32 shift = container.IsInclude() ? 0 : 1;
     if (!container.GetReplaceKey()) {
         shift = -1;
-    } else if (container.GetReplaceKey()->Size() < (ui32)pkSchema->num_fields()) {
+    } else if (container.GetReplaceKey()->GetColumnsCount() < (ui32)pkSchema->num_fields()) {
         shift = 1;
     }
     return TIntervalPoint(container.GetReplaceKey(), shift);
@@ -16,7 +16,7 @@ TIntervalPoint TIntervalPoint::From(
 TIntervalPoint TIntervalPoint::To(
     const TPredicateContainer& container, const std::shared_ptr<arrow::Schema>& pkSchema) {
     i32 shift = container.IsInclude() ? 0 : -1;
-    if (!container.GetReplaceKey() || container.GetReplaceKey()->Size() < (ui32)pkSchema->num_fields()) {
+    if (!container.GetReplaceKey() || container.GetReplaceKey()->GetColumnsCount() < (ui32)pkSchema->num_fields()) {
         shift = Max<i32>();
     }
 

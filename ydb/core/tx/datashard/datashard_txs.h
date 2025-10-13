@@ -110,7 +110,7 @@ public:
              NWilson::TSpan &&datashardTransactionSpan);
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
     void Complete(const TActorContext& ctx) override;
-    
+    TTxType GetTxType() const override { return TXTYPE_WRITE; }
 protected:
     TOperation::TPtr Op;
     NEvents::TDataEvents::TEvWrite::TPtr Ev;

@@ -1,10 +1,11 @@
 #include "columnshard_impl.h"
 #include "columnshard_schema.h"
 #include "inflight_request_tracker.h"
-#include "tablet/ext_tx_base.h"
+
 #include "engines/column_engine.h"
 #include "engines/reader/plain_reader/constructor/read_metadata.h"
 #include "hooks/abstract/abstract.h"
+#include "tablet/ext_tx_base.h"
 
 namespace NKikimr::NColumnShard {
 
@@ -16,20 +17,9 @@ NOlap::NReader::TReadMetadataBase::TConstPtr TInFlightReadsTracker::ExtractInFli
     const NOlap::NReader::TReadMetadataBase::TConstPtr readMetaBase = it->second;
 
     {
-        {
-            auto it = SnapshotsLive.find(readMetaBase->GetRequestSnapshot());
-            AFL_VERIFY(it != SnapshotsLive.end());
-            Y_UNUSED(it->second.DelRequest(cookie, now));
-        }
-
-        if (NOlap::NReader::NPlain::TReadMetadata::TConstPtr readMeta =
-                std::dynamic_pointer_cast<const NOlap::NReader::NPlain::TReadMetadata>(readMetaBase)) {
-            auto insertStorage = StoragesManager->GetInsertOperator();
-            auto tracker = insertStorage->GetBlobsTracker();
-            for (const auto& committedBlob : readMeta->CommittedBlobs) {
-                tracker->FreeBlob(committedBlob.GetBlobRange().GetBlobId());
-            }
-        }
+        auto it = SnapshotsLive.find(readMetaBase->GetRequestSnapshot());
+        AFL_VERIFY(it != SnapshotsLive.end());
+        Y_UNUSED(it->second.DelRequest(cookie, now));
     }
     Counters->OnSnapshotsInfo(SnapshotsLive.size(), GetSnapshotToClean());
 
@@ -45,16 +35,6 @@ void TInFlightReadsTracker::AddToInFlightRequest(
 
     if (!readMeta) {
         return;
-    }
-
-    auto selectInfo = readMeta->SelectInfo;
-    Y_ABORT_UNLESS(selectInfo);
-    SelectStatsDelta += selectInfo->Stats();
-
-    auto insertStorage = StoragesManager->GetInsertOperator();
-    auto tracker = insertStorage->GetBlobsTracker();
-    for (const auto& committedBlob : readMeta->CommittedBlobs) {
-        tracker->UseBlob(committedBlob.GetBlobRange().GetBlobId());
     }
 }
 
@@ -139,8 +119,7 @@ bool TInFlightReadsTracker::LoadFromDatabase(NTable::TDatabase& tableDB) {
     return true;
 }
 
-ui64 TInFlightReadsTracker::AddInFlightRequest(
-    NOlap::NReader::TReadMetadataBase::TConstPtr readMeta, const NOlap::TVersionedIndex* index) {
+ui64 TInFlightReadsTracker::AddInFlightRequest(NOlap::NReader::TReadMetadataBase::TConstPtr readMeta, const NOlap::TVersionedIndex* index) {
     const ui64 cookie = NextCookie++;
     auto it = SnapshotsLive.find(readMeta->GetRequestSnapshot());
     if (it == SnapshotsLive.end()) {

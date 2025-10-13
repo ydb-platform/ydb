@@ -77,7 +77,9 @@ void TReplicationSettings::TStaticCredentials::Serialize(NKikimrReplication::TSt
 }
 
 void TReplicationSettings::TGlobalConsistency::Serialize(NKikimrReplication::TConsistencySettings_TGlobalConsistency& proto) const {
-    proto.SetCommitIntervalMilliSeconds(CommitInterval.MilliSeconds());
+    if (CommitInterval) {
+        proto.SetCommitIntervalMilliSeconds(CommitInterval.MilliSeconds());
+    }
 }
 
 TFuture<IKikimrGateway::TGenericResult> IKikimrGateway::CreatePath(const TString& path, TCreateDirFunc createDir) {

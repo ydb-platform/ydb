@@ -1,5 +1,6 @@
 #pragma once
 #include "abstract/abstract.h"
+#include <ydb/core/tx/columnshard/common/path_id.h>
 
 namespace NKikimr::NOlap {
 
@@ -43,7 +44,7 @@ public:
 
     }
 
-    THashSet<ui64> TablesToDrop;
+    THashSet<TInternalPathId> TablesToDrop;
 
     virtual ui32 GetWritePortionsCount() const override {
         return 0;

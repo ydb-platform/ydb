@@ -108,6 +108,8 @@ public:
         }
         if (DatabaseBoardInfoResponse && DatabaseBoardInfoResponse->IsOk()) {
             TBase::RequestSettings.FilterNodeIds = TBase::GetNodesFromBoardReply(DatabaseBoardInfoResponse->GetRef());
+        } else if (ResourceBoardInfoResponse && ResourceBoardInfoResponse->IsOk()) {
+            TBase::RequestSettings.FilterNodeIds = TBase::GetNodesFromBoardReply(ResourceBoardInfoResponse->GetRef());
         } else if (Database || SharedDatabase) {
             RequestStateStorageEndpointsLookup(SharedDatabase ? SharedDatabase : Database);
             Become(&TThis::StateRequestedLookup, TDuration::MilliSeconds(TBase::RequestSettings.Timeout), new TEvents::TEvWakeup());

@@ -80,7 +80,12 @@ private:
         }
         virtual void DoComplete(const NActors::TActorContext& ctx) override {
             if (NeedContinueFlag) {
-                Self->EnqueueProgressTx(ctx, TxId);
+                if (TxId && Self->ProgressTxInFlight && TxId != Self->ProgressTxInFlight) {
+                    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("issue #23402", "TxId != ProgressTxInFlight")("TxId", TxId)("ProgressTxInFlight", Self->ProgressTxInFlight);
+                }
+                else {
+                    Self->EnqueueProgressTx(ctx, TxId);
+                }
             }
         }
 
@@ -150,7 +155,7 @@ private:
     void SendBrokenFlagAck(TColumnShard& owner) {
         owner.Send(MakePipePerNodeCacheID(EPipePerNodeCache::Persistent),
             new TEvPipeCache::TEvForward(
-                new TEvTxProcessing::TEvReadSetAck(0, GetTxId(), owner.TabletID(), ArbiterTabletId, owner.TabletID(), 0), ArbiterTabletId, true),
+                new TEvTxProcessing::TEvReadSetAck(GetStep(), GetTxId(), owner.TabletID(), ArbiterTabletId, owner.TabletID(), 0), ArbiterTabletId, true),
             IEventHandle::FlagTrackDelivery, GetTxId());
     }
 

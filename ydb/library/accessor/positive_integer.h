@@ -1,19 +1,21 @@
 #pragma once
-#include <util/system/types.h>
-#include <util/stream/output.h>
+#include <ydb/library/actors/core/log.h>
+
 #include <util/generic/typetraits.h>
+#include <util/stream/output.h>
+#include <util/system/types.h>
 
 namespace NKikimr {
 
 class TPositiveControlInteger {
 private:
     TAtomicCounter Value = 0;
+
 public:
     TPositiveControlInteger() = default;
     TPositiveControlInteger(const ui64 value);
     TPositiveControlInteger(const ui32 value)
         : Value(value) {
-
     }
     TPositiveControlInteger(const i64 value);
     ui64 Add(const ui64 value);
@@ -26,6 +28,17 @@ public:
     }
     ui64 GetDec() const;
     ui64 Val() const;
+
+    TPositiveControlInteger& operator=(const ui64 val) {
+        Value = val;
+        return *this;
+    }
+
+    TPositiveControlInteger& operator+=(const ui64 val) {
+        Value.Add(val);
+        return *this;
+    }
+
     bool operator!() const {
         return !Value.Val();
     }
@@ -40,4 +53,27 @@ public:
     }
 };
 
-}
+class TPositiveIncreasingControlInteger {
+private:
+    ui64 Value = 0;
+
+public:
+    constexpr TPositiveIncreasingControlInteger() = default;
+    explicit constexpr TPositiveIncreasingControlInteger(const ui64 value)
+        : Value(value) {
+    }
+    TPositiveIncreasingControlInteger(const TPositiveIncreasingControlInteger&) = default;
+    TPositiveIncreasingControlInteger& operator=(const TPositiveIncreasingControlInteger& v);
+
+    TPositiveIncreasingControlInteger operator+(ui64 v) const {
+        return TPositiveIncreasingControlInteger(Value + v);
+    }
+    TPositiveIncreasingControlInteger operator-(const ui64 v) const {
+        AFL_VERIFY(v <= Value);
+        return TPositiveIncreasingControlInteger(Value - v);
+    }
+    ui64 Val() const {
+        return Value;
+    }
+};
+}   // namespace NKikimr

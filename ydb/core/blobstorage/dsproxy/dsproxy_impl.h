@@ -153,6 +153,8 @@ class TBlobStorageGroupProxy : public TActorBootstrapped<TBlobStorageGroupProxy>
             Mon->EventPatch->Inc();
         } else if constexpr (std::is_same_v<TEvent, TEvBlobStorage::TEvAssimilate>) {
             Mon->EventAssimilate->Inc();
+        } else if constexpr (std::is_same_v<TEvent, TEvBlobStorage::TEvCheckIntegrity>) {
+            Mon->EventCheckIntegrity->Inc();
         }
     }
 
@@ -270,6 +272,7 @@ class TBlobStorageGroupProxy : public TActorBootstrapped<TBlobStorageGroupProxy>
     void HandleNormal(TEvBlobStorage::TEvCollectGarbage::TPtr &ev);
     void HandleNormal(TEvBlobStorage::TEvStatus::TPtr &ev);
     void HandleNormal(TEvBlobStorage::TEvAssimilate::TPtr &ev);
+    void HandleNormal(TEvBlobStorage::TEvCheckIntegrity::TPtr &ev);
     void Handle(TEvBlobStorage::TEvBunchOfEvents::TPtr ev);
     void Handle(TEvDeathNote::TPtr ev);
     void Handle(TEvGetQueuesInfo::TPtr ev);
@@ -380,6 +383,7 @@ public:
     hFunc(TEvBlobStorage::TEvStatus, HANDLER); \
     hFunc(TEvBlobStorage::TEvPatch, HANDLER); \
     hFunc(TEvBlobStorage::TEvAssimilate, HANDLER); \
+    hFunc(TEvBlobStorage::TEvCheckIntegrity, HANDLER); \
     /**/
 
     STFUNC(StateUnconfigured) {

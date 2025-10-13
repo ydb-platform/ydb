@@ -3,6 +3,7 @@
 #include <ydb/core/protos/table_stats.pb.h>
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
 #include <ydb/core/tx/columnshard/counters/counters_manager.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/engines/column_engine.h>
 
 namespace NKikimr::NColumnShard {
@@ -14,11 +15,6 @@ private:
 
     void FillPortionStats(::NKikimrTableStats::TTableStats& to, const NOlap::TSimplePortionsGroupInfo& from) const {
         to.SetRowCount(from.GetRecordsCount());
-        for (const auto& [channel, bytes] : from.GetBytesByChannel()) {
-            auto item = to.AddChannels();
-            item->SetChannel(channel);
-            item->SetDataSize(bytes);
-        }
         to.SetDataSize(from.GetBlobBytes());
     }
 
@@ -28,7 +24,7 @@ public:
         , Executor(*executor) {
     }
 
-    void FillTableStats(ui64 pathId, ::NKikimrTableStats::TTableStats& tableStats) {
+    void FillTableStats(TInternalPathId pathId, ::NKikimrTableStats::TTableStats& tableStats) {
         Counters.FillTableStats(pathId, tableStats);
 
         auto activeStats = Counters.GetPortionIndexCounters()->GetTableStats(pathId, TPortionIndexStats::TActivePortions());

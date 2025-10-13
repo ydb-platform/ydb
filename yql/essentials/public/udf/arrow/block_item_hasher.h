@@ -76,6 +76,14 @@ public:
     }
 };
 
+class TSingularTypeBlockItemHaser : public TBlockItemHasherBase<TSingularTypeBlockItemHaser, /*Nullable=*/false> {
+public:
+    ui64 DoHash(TBlockItem value) const {
+        Y_UNUSED(value);
+        return 0;
+    }
+};
+
 template <bool Nullable>
 class TTupleBlockItemHasher : public TBlockItemHasherBase<TTupleBlockItemHasher<Nullable>, Nullable> {
 public:

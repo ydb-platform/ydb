@@ -88,7 +88,7 @@ namespace NActors {
     void TExecutorThread::UnregisterActor(TMailbox* mailbox, TActorId actorId) {
         Y_DEBUG_ABORT_UNLESS(actorId.PoolID() == ThreadCtx.PoolId() && ThreadCtx.Pool()->ResolveMailbox(actorId.Hint()) == mailbox);
         IActor* actor = mailbox->DetachActor(actorId.LocalId());
-        ExecutionStats.DecrementActorsAliveByActivity(actor->GetActivityType());
+        ExecutionStats.DecrementActorsAliveByActivity(actor->GetActivityType().GetIndex());
         DyingActors.push_back(THolder(actor));
     }
 
@@ -258,7 +258,7 @@ namespace NActors {
 
                     ui32 evTypeForTracing = ev->Type;
 
-                    ui32 activityType = actor->GetActivityType();
+                    ui32 activityType = actor->GetActivityType().GetIndex();
                     if (activityType != prevActivityType) {
                         prevActivityType = activityType;
                         NProfiling::TMemoryTagScope::Reset(activityType);
@@ -548,10 +548,12 @@ namespace NActors {
             ExecutionStats.SetCurrentActivationTime(0, 0);
         } else {
             ExecutionStats.AddElapsedCycles(activityType, hpnow - hpprev);
+            ExecutionStats.AddOveraddedCpuUs(Ts2Us(hpnow - hpprev));
             NHPTimer::STime activationStart = ThreadCtx.ActivityContext.ActivationStartTS.load(std::memory_order_acquire);
             NHPTimer::STime passedTime = Max<i64>(hpnow - activationStart, 0);
             ExecutionStats.SetCurrentActivationTime(activityType, Ts2Us(passedTime));
         }
+        ExecutionStats.CopySafeTicks();
     }
 
     void TExecutorThread::GetCurrentStats(TExecutorThreadStats& statsCopy) {
@@ -566,6 +568,7 @@ namespace NActors {
     }
 
     void TExecutorThread::GetCurrentStatsForHarmonizer(TExecutorThreadStats& statsCopy) {
+        UpdateThreadStats();
         statsCopy.SafeElapsedTicks = RelaxedLoad(&ExecutionStats.Stats->SafeElapsedTicks);
         statsCopy.SafeParkedTicks = RelaxedLoad(&ExecutionStats.Stats->SafeParkedTicks);
         statsCopy.CpuUs = RelaxedLoad(&ExecutionStats.Stats->CpuUs);
@@ -573,6 +576,7 @@ namespace NActors {
     }
 
     void TExecutorThread::GetSharedStatsForHarmonizer(i16 poolId, TExecutorThreadStats &stats) {
+        UpdateThreadStats();
         stats.SafeElapsedTicks = RelaxedLoad(&Stats[poolId].SafeElapsedTicks);
         stats.SafeParkedTicks = RelaxedLoad(&Stats[poolId].SafeParkedTicks);
         stats.CpuUs = RelaxedLoad(&Stats[poolId].CpuUs);

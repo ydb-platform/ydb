@@ -1,6 +1,8 @@
 #include "auth_helpers.h"
 #include "signature.h"
 
+#include <ydb/library/http_proxy/error/error.h>
+
 #include <library/cpp/http/io/stream.h>
 #include <library/cpp/http/misc/parsed_request.h>
 
@@ -11,6 +13,7 @@
 #include <util/generic/algorithm.h>
 #include <util/generic/map.h>
 #include <util/generic/vector.h>
+#include <util/stream/buffer.h>
 #include <util/stream/str.h>
 #include <util/string/builder.h>
 #include <library/cpp/cgiparam/cgiparam.h>
@@ -67,9 +70,13 @@ TAwsRequestSignV4::TAwsRequestSignV4(const TString& request) {
     if (parsed.Method == "POST") {
         if (input.GetContentLength(contentLength)) {
             inputData.ConstructInPlace();
-            inputData->Resize(contentLength);
-            if (input.Load(inputData->Data(), (size_t)contentLength) != contentLength) {
-                Y_ABORT_UNLESS(false);
+            inputData->Reserve(contentLength);
+            TBufferOutput bufOut{*inputData};
+            try {
+                TransferData(&input, &bufOut);
+            } catch (const std::exception& e) {
+                throw NKikimr::NSQS::TSQSException(NKikimr::NSQS::NErrors::INTERNAL_FAILURE)
+                    << "Failed to decode POST body";
             }
         }
     }

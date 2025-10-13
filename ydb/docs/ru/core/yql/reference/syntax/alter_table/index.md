@@ -12,7 +12,7 @@ ALTER TABLE table_name action1, action2, ..., actionN;
 * [Переименование таблицы](rename.md).
 * Работа с [колонками](columns.md) строковой и колоночной таблиц.
 * Добавление или удаление [потока изменений](changefeed.md).
-* Работа со [вторичным индексом](secondary_index.md).
+* Работа с [индексами](indexes.md).
 * Работа с [группами колонок](family.md) строковой таблицы.
 {% if backend_name == "YDB" and oss == true %}
 * Изменение [дополнительных параметров таблиц](set.md).

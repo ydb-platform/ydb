@@ -15,7 +15,7 @@ PEERDIR(
     ydb/apps/version
     yql/essentials/parser/pg_wrapper
     yql/essentials/sql/pg
-    yql/essentials/minikql/comp_nodes/llvm14
+    yql/essentials/minikql/comp_nodes/llvm16
 )
 
 END()

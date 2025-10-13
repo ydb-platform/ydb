@@ -98,7 +98,8 @@ void InferStatisticsForReadTable(const TExprNode::TPtr& input, TTypeAnnotationCo
         keyColumns,
         inputStats->ColumnStatistics,
         inputStats->StorageType);
-    stats->SortColumns = sortedPrefixPtr;
+    stats->SortColumns = sortedPrefixPtr; 
+    stats->ShuffledByColumns = inputStats->ShuffledByColumns;
 
     YQL_CLOG(TRACE, CoreDq) << "Infer statistics for read table" << stats->ToString();
 
@@ -123,7 +124,7 @@ void InferStatisticsForKqpTable(const TExprNode::TPtr& input, TTypeAnnotationCon
     const auto& tableData = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, path.Value());
     if (!tableData.Metadata->StatsLoaded && !kqpCtx.Config->OptOverrideStatistics.Get()) {
         YQL_CLOG(TRACE, CoreDq) << "Cannot infer statistics for table: " << path.Value();
-        //return;
+        return;
     }
 
     double nRows = tableData.Metadata->RecordsCount;
@@ -174,6 +175,17 @@ void InferStatisticsForKqpTable(const TExprNode::TPtr& input, TTypeAnnotationCon
     }
 
     stats->SortColumns = sortedPrefixPtr;
+
+    if (!tableData.Metadata->PartitionedByColumns.empty()) {
+        TVector<TJoinColumn> shuffledByColumns;
+        for (const auto& columnName: tableData.Metadata->PartitionedByColumns) {
+            shuffledByColumns.emplace_back(path.StringValue(), columnName);
+        }
+
+        stats->ShuffledByColumns = TIntrusivePtr<TOptimizerStatistics::TShuffledByColumns>(
+            new TOptimizerStatistics::TShuffledByColumns(std::move(shuffledByColumns))
+        );
+    }
 
     YQL_CLOG(TRACE, CoreDq) << "Infer statistics for table: " << path.Value() << ": " << stats->ToString();
 
@@ -308,6 +320,7 @@ void InferStatisticsForRowsSourceSettings(const TExprNode::TPtr& input, TTypeAnn
         inputStats->ColumnStatistics,
         inputStats->StorageType);
     outputStats->SortColumns = std::move(sortedPrefixPtr);
+    outputStats->ShuffledByColumns = inputStats->ShuffledByColumns;
 
     YQL_CLOG(TRACE, CoreDq) << "Infer statistics for source settings: " << outputStats->ToString();
 
@@ -374,6 +387,7 @@ void InferStatisticsForReadTableIndexRanges(const TExprNode::TPtr& input, TTypeA
         inputStats->ColumnStatistics,
         inputStats->StorageType);
     stats->SortColumns = sortedPrefixPtr;
+    stats->ShuffledByColumns = inputStats->ShuffledByColumns;
 
     typeCtx->SetStats(input.Get(), stats);
 
@@ -464,6 +478,8 @@ public:
                 tmpSelectivity *= Compute(andNode.Cast().Arg(i));
             }
             resSelectivity = tmpSelectivity;
+        } else if (auto olapApply = input.Maybe<TKqpOlapApply>()) {
+            resSelectivity = TPredicateSelectivityComputer::Compute(olapApply.Cast().Lambda().Body());
         } else if (auto orNode = input.Maybe<TKqpOlapOr>()) {
             double tmpSelectivity = 0.0;
             for (size_t i = 0; i < orNode.Cast().ArgCount(); i++) {

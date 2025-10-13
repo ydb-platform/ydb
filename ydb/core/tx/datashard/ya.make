@@ -222,6 +222,7 @@ SRCS(
     build_index/local_kmeans.cpp
     build_index/sample_k.cpp
     build_index/secondary_index.cpp
+    build_index/recompute_kmeans.cpp
     build_index/reshuffle_kmeans.cpp
     build_index/unique_index.cpp
 )
@@ -253,9 +254,6 @@ PEERDIR(
     library/cpp/monlib/service/pages
     library/cpp/string_utils/base64
     library/cpp/string_utils/quote
-    library/cpp/dot_product
-    library/cpp/l1_distance
-    library/cpp/l2_distance
     ydb/core/actorlib_impl
     ydb/core/backup/common
     ydb/core/base
@@ -288,6 +286,7 @@ PEERDIR(
     yql/essentials/parser/pg_wrapper/interface
     ydb/services/lib/sharding
     yql/essentials/types/uuid
+    ydb/core/io_formats/cell_maker
 )
 
 YQL_LAST_ABI_VERSION()

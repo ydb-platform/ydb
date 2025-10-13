@@ -1,4 +1,7 @@
 #pragma once
+#include <ydb/core/tx/columnshard/common/path_id.h>
+
+#include <ydb/library/accessor/accessor.h>
 #include <ydb/library/accessor/positive_integer.h>
 #include <ydb/library/actors/core/monotonic.h>
 
@@ -13,9 +16,10 @@ class TGranuleMeta;
 
 class TPlanCompactionInfo {
 private:
-    ui64 PathId = 0;
+    TInternalPathId PathId;
     TMonotonic StartTime = TMonotonic::Now();
     TPositiveControlInteger Count;
+    YDB_READONLY_DEF(TString, TaskId);
 
 public:
     void Start() {
@@ -29,11 +33,12 @@ public:
         return StartTime;
     }
 
-    TPlanCompactionInfo(const ui64 pathId)
-        : PathId(pathId) {
+    explicit TPlanCompactionInfo(const TInternalPathId pathId, const TString& taskId)
+        : PathId(pathId)
+        , TaskId(taskId) {
     }
 
-    ui64 GetPathId() const {
+    TInternalPathId GetPathId() const {
         return PathId;
     }
 };

@@ -83,7 +83,7 @@ public:
 
 public:
     TDqComputeActorChannels(NActors::TActorId owner, const TTxId& txId, const TDqTaskSettings& task, bool retryOnUndelivery,
-        NDqProto::EDqStatsMode statsMode, ui64 channelBufferSize, ICallbacks* cbs, ui32 actorActivityType);
+        NDqProto::EDqStatsMode statsMode, ui64 channelBufferSize, ICallbacks* cbs, NActors::TActorActivityType actorActivityType);
 
 private:
     STATEFN(WorkState);
@@ -103,7 +103,6 @@ private:
     void HandlePoison(NActors::TEvents::TEvPoison::TPtr&);
 
 private:
-    TInstant Now() const;
     void RuntimeError(const TString& message);
     void InternalError(const TString& message);
     void PassAway() override;
@@ -123,6 +122,9 @@ public:
     const TPeerState& GetOutputChannelInFlightState(ui64 channelId);
     const TInputChannelStats* GetInputChannelStats(ui64 channelId);
     const TOutputChannelStats* GetOutputChannelStats(ui64 channelId);
+    TInstant GetLastOutputMessageTime() const {
+        return LastOutputMessageTime;
+    }
 
 private:
     struct TChannelRetryState {
@@ -229,6 +231,7 @@ private:
     THashSet<ui32> TrackingNodes;
     THashMap<ui64, TInputChannelState> InputChannelsMap;
     THashMap<ui64, TOutputChannelState> OutputChannelsMap;
+    TInstant LastOutputMessageTime;
 };
 
 } // namespace NYql::NDq

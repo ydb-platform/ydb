@@ -24,7 +24,7 @@ To import data to the table, use the [YQL `REPLACE` command](../../../../yql/ref
 
 `--restore-data VAL`: Enables/disables data import, 1 (yes) or 0 (no), defaults to 1. If set to 0, the import only creates items in the schema without populating them with data. If there's no data in the file system (only the schema has been exported), it doesn't make sense to change this option.
 
-`--restore-indexes VAL`: Enables/disables import of indexes, 1 (yes) or 0 (no), defaults to 1. If set to 0, the import won't either register secondary indexes in the data schema or populate them with data.
+`--restore-indexes VAL`: Enables/disables import of indexes, 1 (yes) or 0 (no), defaults to 1. If set to 0, the import won't either register indexes in the data schema or populate them with data.
 
 `--restore-acl VAL`: Enables/disables import of ACL, 1 (yes) or 0 (no), defaults to 1. If set to 0, the import creates items in the schema with an empty ACL, and their owner will be the user who started the import.
 
@@ -35,7 +35,7 @@ To import data to the table, use the [YQL `REPLACE` command](../../../../yql/ref
 
 `--save-partial-result`: Save the partial import result. If disabled, an import error results in reverting to the database state before the import.
 
-`--import-data`: Use ImportData – a more efficient way to upload data than the default one. This method sends data to the server partitioned by client and in a lighter format. However, it will return an error when attempting to import the exported data into an existing table that already has secondary indexes or is in the process of building them. Therefore, if you need to restore a table with secondary indexes, make sure they're not already present in the scheme (for example, using the [`ydb scheme ls`](https://ydb.tech/docs/en/reference/ydb-cli/commands/scheme-ls) command). By default ImportData is disabled.
+`--import-data`: Use ImportData – a more efficient way to upload data than the default one. This method sends data to the server partitioned by client and in a lighter format. However, it will return an error when attempting to import the exported data into an existing table that already has indexes or is in the process of building them. Therefore, if you need to restore a table with indexes, make sure they're not already present in the scheme (for example, using the [`ydb scheme ls`](https://ydb.tech/docs/en/reference/ydb-cli/commands/scheme-ls) command). By default ImportData is disabled.
 
 ### Workload restriction parameters {#limiters}
 

@@ -89,6 +89,7 @@
                                                                 "PlanNodeId": 3,
                                                                 "Plans": [
                                                                     {
+                                                                        "HashFunc": "HashV1",
                                                                         "KeyColumns": [
                                                                             "WindowClientHeight",
                                                                             "WindowClientWidth"
@@ -307,8 +308,7 @@
                                                                                                         ]
                                                                                                     }
                                                                                                 }
-                                                                                            ],
-                                                                                            "Version": 5
+                                                                                            ]
                                                                                         },
                                                                                         "Table": "clickbench/plans/column/hits"
                                                                                     }

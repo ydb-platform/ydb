@@ -109,7 +109,7 @@ Y_UNIT_TEST_SUITE(Splitter) {
                 auto blobsLocal = slice.GroupChunksByBlobs(groups);
                 internalSplitsCount += slice.GetInternalSplitsCount();
                 blobsCount += blobsLocal.size();
-                THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>> entityChunks;
+                THashMap<ui32, std::map<ui32, std::shared_ptr<IPortionDataChunk>>> entityChunks;
                 ui32 portionSize = 0;
                 for (auto&& b : blobsLocal) {
                     chunksCount += b.GetChunks().size();
@@ -117,16 +117,17 @@ Y_UNIT_TEST_SUITE(Splitter) {
                     for (auto&& c : b.GetChunks()) {
                         bSize += c->GetData().size();
                         AFL_VERIFY(c->GetEntityId());
-                        auto& v = entityChunks[c->GetEntityId()];
-                        if (v.size()) {
-                            AFL_VERIFY(v.back()->GetChunkIdxVerified() + 1 == c->GetChunkIdxVerified());
-                        }
-                        entityChunks[c->GetEntityId()].emplace_back(c);
+//                        auto& v = entityChunks[c->GetEntityId()];
+//                        if (v.size()) {
+//                            AFL_VERIFY(v.back()->GetChunkIdxVerified() + 1 == c->GetChunkIdxVerified())("v", v.back()->GetChunkIdxVerified())(
+//                                                                              "c", c->GetChunkIdxVerified());
+//                        }
+                        AFL_VERIFY(entityChunks[c->GetEntityId()].emplace(c->GetChunkIdxVerified(), c).second);
                     }
                     portionSize += bSize;
                     AFL_VERIFY(bSize < (ui64)settings.GetMaxBlobSize());
-                    AFL_VERIFY(bSize * 1.01 > (ui64)settings.GetMinBlobSize() || (packs.size() == 1 && blobsLocal.size() == 1))(
-                                                                                                           "blob_size", bSize);
+                    AFL_VERIFY(bSize * 1.01 > (ui64)settings.GetMinBlobSize() || (packs.size() == 1 && blobsLocal.size() == 1))("blob_size", bSize)(
+                                                                                                 "min", settings.GetMinBlobSize());
                 }
                 AFL_VERIFY(portionSize >= settings.GetExpectedPortionSize() || packs.size() == 1)("size", portionSize)(
                                                                                    "limit", settings.GetMaxPortionSize());
@@ -137,7 +138,10 @@ Y_UNIT_TEST_SUITE(Splitter) {
                     const std::shared_ptr<arrow::Array> arr = batch->GetColumnByName(Schema->GetColumnName(e.first));
                     AFL_VERIFY(arr);
                     ui32 count = 0;
-                    for (auto&& c : e.second) {
+                    i32 idx = -1;
+                    for (auto&& [idxC, c] : e.second) {
+                        AFL_VERIFY((i32)idxC == idx + 1);
+                        idx = idxC;
                         auto slice = arr->Slice(count + portionShift, c->GetRecordsCountVerified());
                         auto readBatchArray = Schema->GetColumnLoader(e.first).ApplyVerified(c->GetData(), c->GetRecordsCountVerified());
                         std::shared_ptr<arrow::ChunkedArray> chunkedArray = readBatchArray->GetChunkedArray();
@@ -156,7 +160,7 @@ Y_UNIT_TEST_SUITE(Splitter) {
                 }
                 AFL_VERIFY(entitiesByRecordsCount.size() >= i.size());
                 AFL_VERIFY(pagesRestore == pagesOriginal || batch->num_columns() == 1)("restore", pagesRestore)("original", pagesOriginal);
-                for (auto&& c : entityChunks.begin()->second) {
+                for (auto&& [_, c] : entityChunks.begin()->second) {
                     portionShift += c->GetRecordsCountVerified();
                 }
             }

@@ -12,7 +12,7 @@
 #include <ydb/library/yql/providers/generic/actors/yql_generic_provider_factories.h>
 #include <ydb/library/formats/arrow/protos/ssa.pb.h>
 #include <ydb/library/yql/dq/proto/dq_tasks.pb.h>
-#include <ydb/library/yql/providers/solomon/async_io/dq_solomon_read_actor.h>
+#include <ydb/library/yql/providers/solomon/actors/dq_solomon_read_actor.h>
 
 
 namespace NKikimr {
@@ -126,6 +126,20 @@ void TShardsScanningPolicy::FillRequestScanFeatures(const NKikimrTxDataShard::TK
         maxInFlight = ProtoConfig.GetScanLimit();
     }
 }
+
+TConclusionStatus TCPULimits::DeserializeFromProto(const NKikimrKqp::TEvStartKqpTasksRequest& config) {
+    const auto share = config.GetPoolMaxCpuShare();
+    if (share <= 0 || 1 < share) {
+        return TConclusionStatus::Fail("cpu share have to be in (0, 1] interval");
+    }
+    NActors::TExecutorPoolStats poolStats;
+    TVector<NActors::TExecutorThreadStats> threadsStats;
+    TActivationContext::ActorSystem()->GetPoolStats(TActivationContext::AsActorContext().SelfID.PoolID(), poolStats, threadsStats);
+    CPUGroupThreadsLimit = Max<ui64>(poolStats.MaxThreadCount, 1) * share;
+    CPUGroupName = config.GetSchedulerGroup();
+    return TConclusionStatus::Success();
+}
+
 }
 } // namespace NKikimr
 
@@ -145,9 +159,11 @@ IActor* CreateKqpScanComputeActor(const TActorId& executerId, ui64 txId,
 }
 
 IActor* CreateKqpScanFetcher(const NKikimrKqp::TKqpSnapshot& snapshot, std::vector<NActors::TActorId>&& computeActors,
-    const NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta& meta, const NYql::NDq::TComputeRuntimeSettings& settings,
-    const ui64 txId, TMaybe<ui64> lockTxId, ui32 lockNodeId, TMaybe<NKikimrDataEvents::ELockMode> lockMode, const TShardsScanningPolicy& shardsScanningPolicy, TIntrusivePtr<TKqpCounters> counters, NWilson::TTraceId traceId) {
-    return new NScanPrivate::TKqpScanFetcherActor(snapshot, settings, std::move(computeActors), txId, lockTxId, lockNodeId, lockMode, meta, shardsScanningPolicy, counters, std::move(traceId));
+    const NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta& meta, const NYql::NDq::TComputeRuntimeSettings& settings, const ui64 txId,
+    TMaybe<ui64> lockTxId, ui32 lockNodeId, TMaybe<NKikimrDataEvents::ELockMode> lockMode, const TShardsScanningPolicy& shardsScanningPolicy,
+    TIntrusivePtr<TKqpCounters> counters, NWilson::TTraceId traceId, const TCPULimits& cpuLimits) {
+    return new NScanPrivate::TKqpScanFetcherActor(snapshot, settings, std::move(computeActors), txId, lockTxId, lockNodeId, lockMode, meta,
+        shardsScanningPolicy, counters, std::move(traceId), cpuLimits);
 }
 
 }

@@ -1,0 +1,18 @@
+package NKikimrConfig;
+option java_package = "ru.yandex.kikimr.proto";
+
+message TWorkloadManagerConfig {
+    optional bool Enabled = 1 [default = false];
+    // Inflight
+    optional int32 ConcurrentQueryLimit = 2;
+    optional int32 QueueSize = 3;
+    optional double DatabaseLoadCpuThreshold = 4;
+
+    // Cpu
+    optional double TotalCpuLimitPercentPerNode = 5;
+    optional double QueryCpuLimitPercentPerNode = 6;
+    optional double ResourceWeight = 7;
+
+    // Memory
+    optional double QueryMemoryLimitPercentPerNode = 8;
+};

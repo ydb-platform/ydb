@@ -182,62 +182,11 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
         runtime.GetAppData().FeatureFlags.SetEnableAddUniqueIndex(true);
         ui64 txId = 100;
 
-        TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot",
-                               "Name: \"ResourceDB\"");
-        env.TestWaitNotification(runtime, txId);
-
-        TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot",
-                              "StoragePools { "
-                              "  Name: \"pool-1\" "
-                              "  Kind: \"pool-kind-1\" "
-                              "} "
-                              "StoragePools { "
-                              "  Name: \"pool-2\" "
-                              "  Kind: \"pool-kind-2\" "
-                              "} "
-                              "PlanResolution: 50 "
-                              "Coordinators: 1 "
-                              "Mediators: 1 "
-                              "TimeCastBucketsPerMediator: 2 "
-                              "ExternalSchemeShard: true "
-                              "Name: \"ResourceDB\"");
-        env.TestWaitNotification(runtime, txId);
-
-        const auto attrs = AlterUserAttrs({
-            {"cloud_id", "CLOUD_ID_VAL"},
-            {"folder_id", "FOLDER_ID_VAL"},
-            {"database_id", "DATABASE_ID_VAL"}
-        });
-
-        TestCreateExtSubDomain(runtime, ++txId, "/MyRoot", Sprintf(R"(
-            Name: "ServerLessDB"
-            ResourcesDomainKey {
-                SchemeShard: %lu
-                PathId: 2
-            }
-        )", TTestTxConfig::SchemeShard), attrs);
-        env.TestWaitNotification(runtime, txId);
-
-        TString alterData = TStringBuilder()
-            << "PlanResolution: 50 "
-            << "Coordinators: 1 "
-            << "Mediators: 1 "
-            << "TimeCastBucketsPerMediator: 2 "
-            << "ExternalSchemeShard: true "
-            << "ExternalHive: false "
-            << "Name: \"ServerLessDB\" "
-            << "StoragePools { "
-            << "  Name: \"pool-1\" "
-            << "  Kind: \"pool-kind-1\" "
-            << "} ";
-        TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot", alterData);
-        env.TestWaitNotification(runtime, txId);
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
 
         ui64 tenantSchemeShard = 0;
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/ServerLessDB"),
-                           {NLs::PathExist,
-                            NLs::IsExternalSubDomain("ServerLessDB"),
-                            NLs::ExtractTenantSchemeshard(&tenantSchemeShard)});
+        TestCreateServerLessDb(runtime, env, txId, tenantSchemeShard);
 
         // Just create main table
         TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB", R"(
@@ -268,9 +217,6 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
             // What is TTestTxConfig::FakeHiveTablets + 6?
             fnWriteRow(TTestTxConfig::FakeHiveTablets + 6, 1 + delta, 1000 + delta, "aaaa", "Table");
         }
-
-        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
-        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
 
         TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table"),
                            {NLs::PathExist,
@@ -446,6 +392,9 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
         runtime.GetAppData().FeatureFlags.SetEnableAddUniqueIndex(true);
         ui64 txId = 100;
 
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
         SetSplitMergePartCountLimit(&runtime, -1);
 
         // Just create main table
@@ -477,8 +426,6 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
         for (ui32 delta = 0; delta < 1000; ++delta) {
             fnWriteRow(TTestTxConfig::FakeHiveTablets, 1 + delta, 1000 + delta, longString, "Table");
         }
-
-        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
                            {NLs::PathExist,
@@ -1322,6 +1269,9 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
         runtime.GetAppData().FeatureFlags.SetEnableAddUniqueIndex(true);
         ui64 txId = 100;
 
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
         // Just create main table
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
               Name: "Table"
@@ -1350,8 +1300,6 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
         for (ui32 delta = 0; delta < 101; ++delta) {
             fnWriteRow(TTestTxConfig::FakeHiveTablets, 1 + delta, 1000 + delta, "aaaa", "Table");
         }
-
-        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
                            {NLs::PathExist,
@@ -1396,6 +1344,9 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
         runtime.GetAppData().FeatureFlags.SetEnableAddUniqueIndex(true);
         ui64 txId = 100;
 
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
         // Just create main table
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
               Name: "Table"
@@ -1424,8 +1375,6 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
         for (ui32 delta = 0; delta < 101; ++delta) {
             fnWriteRow(TTestTxConfig::FakeHiveTablets, 1 + delta, 1000 + delta, "aaaa", "Table");
         }
-
-        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
                            {NLs::PathExist,

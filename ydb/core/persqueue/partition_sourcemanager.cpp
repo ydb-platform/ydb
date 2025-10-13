@@ -25,6 +25,7 @@ const TPartitionSourceManager::TSourceInfo TPartitionSourceManager::Get(const TS
         result.Offset = value.Offset;
         result.Explicit = value.Explicit;
         result.WriteTimestamp = value.WriteTimestamp;
+        result.ProducerEpoch = value.ProducerEpoch;
 
         return result;
     }
@@ -109,6 +110,7 @@ TPartitionSourceManager::TSourceInfo Convert(TSourceIdInfo value) {
     result.Offset = value.Offset;
     result.Explicit = value.Explicit;
     result.WriteTimestamp = value.WriteTimestamp;
+    result.ProducerEpoch = value.ProducerEpoch;
     return result;
 }
 
@@ -135,6 +137,10 @@ std::optional<ui64> TPartitionSourceManager::TSourceManager::SeqNo() const {
     return Info.State == TSourceIdInfo::EState::Unknown ? std::nullopt : std::optional(Info.SeqNo);
 }
 
+std::optional<TMaybe<i16>> TPartitionSourceManager::TSourceManager::ProducerEpoch() const {
+    return Info.State == TSourceIdInfo::EState::Unknown ? std::nullopt : std::optional(Info.ProducerEpoch);
+}
+
 bool TPartitionSourceManager::TSourceManager::Explicit() const {
     return Info.Explicit;
 }
@@ -147,11 +153,11 @@ std::optional<ui64> TPartitionSourceManager::TSourceManager::UpdatedSeqNo() cons
     return InWriter == WriteStorage().end() ? std::nullopt : std::optional(InWriter->second.SeqNo);
 }
 
-void TPartitionSourceManager::TSourceManager::Update(ui64 seqNo, ui64 offset, TInstant timestamp) {
+void TPartitionSourceManager::TSourceManager::Update(ui64 seqNo, ui64 offset, TInstant timestamp, TMaybe<i16> producerEpoch) {
     if (InMemory == MemoryStorage().end()) {
-        Batch.SourceIdWriter.RegisterSourceId(SourceId, seqNo, offset, timestamp);
+        Batch.SourceIdWriter.RegisterSourceId(SourceId, seqNo, offset, timestamp, producerEpoch);
     } else {
-        Batch.SourceIdWriter.RegisterSourceId(SourceId, InMemory->second.Updated(seqNo, offset, timestamp));
+        Batch.SourceIdWriter.RegisterSourceId(SourceId, InMemory->second.Updated(seqNo, offset, timestamp, producerEpoch));
     }
 }
 

@@ -75,6 +75,8 @@ namespace NTable {
     class IDriver {
     public:
         virtual void Touch(EScan) noexcept = 0;
+
+        virtual ui64 GetTotalCpuTimeUs() const = 0;
     };
 
 

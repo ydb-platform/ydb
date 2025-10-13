@@ -47,6 +47,7 @@ def compose_gateways_config(solomon_endpoint):
     solomon_cluster = config_message.Solomon.ClusterMapping.add()
     solomon_cluster.Name = "local_solomon"
     solomon_cluster.Cluster = solomon_endpoint
+    solomon_cluster.UseSsl = False
 
     return text_format.MessageToString(config_message)
 

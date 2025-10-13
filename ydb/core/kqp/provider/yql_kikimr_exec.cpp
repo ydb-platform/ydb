@@ -726,13 +726,15 @@ namespace {
             } else if (name == "password_secret_name") {
                 dstSettings.EnsureStaticCredentials().PasswordSecretName =
                     setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
+            } else if (name == "ca_cert") {
+                dstSettings.CaCert = setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
             } else if (name == "state") {
                 auto value = ToString(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
                 if (to_lower(value) == "done") {
                     dstSettings.EnsureStateDone();
                 } else if (to_lower(value) == "paused") {
                     dstSettings.StatePaused = true;
-                } else if (to_lower(value) == "standby") {
+                } else if (to_lower(value) == "standby" || to_lower(value) == "active") {
                     dstSettings.StateStandBy = true;
                 } else {
                     ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
@@ -870,6 +872,14 @@ namespace {
                 }
 
                 dstSettings.ConsumerName = value;
+            } else if (name == "directory") {
+                auto value = ToString(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
+                if (value.empty()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
+                        TStringBuilder() << name << " must be not empty"));
+                    return false;
+                }
+                dstSettings.DirectoryPath = value;
             }
         }
 
@@ -2350,9 +2360,9 @@ public:
                 return SyncError();
             }
 
-            if (const auto& x = settings.Settings.StaticCredentials; x && (!x->Password || !x->PasswordSecretName)) {
+            if (const auto& x = settings.Settings.StaticCredentials; x && !x->Password && !x->PasswordSecretName) {
                 ctx.AddError(TIssue(ctx.GetPosition(createReplication.Pos()),
-                    "PASSWORD or PASSWORD_SECRET_NAME are not provided"));
+                    "Neither PASSWORD nor PASSWORD_SECRET_NAME are provided"));
                 return SyncError();
             }
 
@@ -2437,7 +2447,7 @@ public:
                 return SyncError();
             }
 
-            if (!settings.Settings.ConnectionString && (!settings.Settings.Endpoint || !settings.Settings.Database)) {
+            if (!settings.Settings.Endpoint ^ !settings.Settings.Database) {
                 ctx.AddError(TIssue(ctx.GetPosition(createTransfer.Pos()),
                     "Neither CONNECTION_STRING nor ENDPOINT/DATABASE are provided"));
                 return SyncError();
@@ -2449,9 +2459,9 @@ public:
                 return SyncError();
             }
 
-            if (const auto& x = settings.Settings.StaticCredentials; x && (!x->Password || !x->PasswordSecretName)) {
+            if (const auto& x = settings.Settings.StaticCredentials; x && !x->Password && !x->PasswordSecretName) {
                 ctx.AddError(TIssue(ctx.GetPosition(createTransfer.Pos()),
-                    "PASSWORD or PASSWORD_SECRET_NAME are not provided"));
+                    "Neither PASSWORD nor PASSWORD_SECRET_NAME are provided"));
                 return SyncError();
             }
 

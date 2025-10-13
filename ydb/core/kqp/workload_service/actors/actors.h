@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/kqp/common/events/workload_service.h>
+#include <ydb/core/protos/workload_manager_config.pb.h>
 
 
 namespace NKikimr::NKqp::NWorkload {
@@ -9,10 +10,10 @@ namespace NKikimr::NKqp::NWorkload {
 NActors::IActor* CreatePoolHandlerActor(const TString& databaseId, const TString& poolId, const NResourcePool::TPoolSettings& poolConfig, NMonitoring::TDynamicCounterPtr counters);
 
 // Fetch pool and create default pool if needed
-NActors::IActor* CreatePoolResolverActor(TEvPlaceRequestIntoPool::TPtr event, bool defaultPoolExists);
+NActors::IActor* CreatePoolResolverActor(TEvPlaceRequestIntoPool::TPtr event, bool defaultPoolExists, const NKikimrConfig::TWorkloadManagerConfig& workloadManagerConfig);
 
 // Fetch and create pool in scheme shard
-NActors::IActor* CreatePoolFetcherActor(const NActors::TActorId& replyActorId, const TString& databaseId, const TString& poolId, TIntrusiveConstPtr<NACLib::TUserToken> userToken);
+NActors::IActor* CreatePoolFetcherActor(const NActors::TActorId& replyActorId, const TString& databaseId, const TString& poolId, TIntrusiveConstPtr<NACLib::TUserToken> userToken, const NKikimrConfig::TWorkloadManagerConfig& workloadManagerConfig);
 NActors::IActor* CreatePoolCreatorActor(const NActors::TActorId& replyActorId, const TString& databaseId, const TString& poolId, const NResourcePool::TPoolSettings& poolConfig, TIntrusiveConstPtr<NACLib::TUserToken> userToken, NACLibProto::TDiffACL diffAcl);
 
 // Checks that database is serverless and return database id

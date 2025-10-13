@@ -647,13 +647,25 @@ void ApplyServiceConfig(TKikimrConfiguration& kqpConfig, const TTableServiceConf
     kqpConfig.BlockChannelsMode = serviceConfig.GetBlockChannelsMode();
     kqpConfig.IdxLookupJoinsPrefixPointLimit = serviceConfig.GetIdxLookupJoinPointsLimit();
     kqpConfig.DefaultCostBasedOptimizationLevel = serviceConfig.GetDefaultCostBasedOptimizationLevel();
+    kqpConfig.DefaultEnableShuffleElimination = serviceConfig.GetDefaultEnableShuffleElimination();
     kqpConfig.EnableConstantFolding = serviceConfig.GetEnableConstantFolding();
+    kqpConfig.EnableFoldUdfs = serviceConfig.GetEnableFoldUdfs();
     kqpConfig.SetDefaultEnabledSpillingNodes(serviceConfig.GetEnableSpillingNodes());
     kqpConfig.EnableSnapshotIsolationRW = serviceConfig.GetEnableSnapshotIsolationRW();
     kqpConfig.EnableSpilling = serviceConfig.GetEnableQueryServiceSpilling();
+    kqpConfig.EnableSpillingInHashJoinShuffleConnections = serviceConfig.GetEnableSpillingInHashJoinShuffleConnections();
+    kqpConfig.EnableOlapScalarApply = serviceConfig.GetEnableOlapScalarApply();
+    kqpConfig.EnableOlapSubstringPushdown = serviceConfig.GetEnableOlapSubstringPushdown();
+    kqpConfig.EnableTempTablesForUser = serviceConfig.GetEnableTempTablesForUser();
 
     if (const auto limit = serviceConfig.GetResourceManager().GetMkqlHeavyProgramMemoryLimit()) {
         kqpConfig._KqpYqlCombinerMemoryLimit = std::max(1_GB, limit - (limit >> 2U));
+    }
+
+    if (serviceConfig.GetFilterPushdownOverJoinOptionalSide()) {
+        kqpConfig.FilterPushdownOverJoinOptionalSide = true;
+        kqpConfig.YqlCoreOptimizerFlags.insert("fuseequijoinsinputmultilabels");
+        kqpConfig.YqlCoreOptimizerFlags.insert("pullupflatmapoverjoinmultiplelabels");
     }
 }
 

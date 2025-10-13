@@ -445,6 +445,12 @@ void TTenantDataErasureManager::HandleNewPartitioning(const std::vector<TShardId
         << ", Status# " << static_cast<ui32>(Status));
 }
 
+void TTenantDataErasureManager::SyncBscGeneration(NIceDb::TNiceDb&, ui64) {
+    auto ctx = SchemeShard->ActorContext();
+    LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+        "[TenantDataErasureManager] [SyncBscGeneration] Cannot execute in tenant schemeshard: " << SchemeShard->TabletID());
+}
+
 void TTenantDataErasureManager::UpdateMetrics() {
     SchemeShard->TabletCounters->Simple()[COUNTER_TENANT_DATA_ERASURE_QUEUE_SIZE].Set(Queue->Size());
     SchemeShard->TabletCounters->Simple()[COUNTER_TENANT_DATA_ERASURE_QUEUE_RUNNING].Set(Queue->RunningSize());
@@ -625,13 +631,13 @@ NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxCompleteDataErasureShar
 template NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxCompleteDataErasureShard<TEvDataShard::TEvForceDataCleanupResult::TPtr>(TEvDataShard::TEvForceDataCleanupResult::TPtr& ev);
 template NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxCompleteDataErasureShard<TEvKeyValue::TEvCleanUpDataResponse::TPtr>(TEvKeyValue::TEvCleanUpDataResponse::TPtr& ev);
 
-struct TSchemeShard::TTxAddEntryToDataErasure : public TSchemeShard::TRwTxBase {
-    const std::vector<TShardIdx> DataErasureShards;
+struct TSchemeShard::TTxAddNewShardToDataErasure : public TSchemeShard::TRwTxBase {
+    TEvPrivate::TEvAddNewShardToDataErasure::TPtr Ev;
     bool NeedResponseComplete = false;
 
-    TTxAddEntryToDataErasure(TSelf *self, const std::vector<TShardIdx>& dataErasureShards)
+    TTxAddNewShardToDataErasure(TSelf *self, TEvPrivate::TEvAddNewShardToDataErasure::TPtr& ev)
         : TRwTxBase(self)
-        , DataErasureShards(std::move(dataErasureShards))
+        , Ev(std::move(ev))
     {}
 
     TTxType GetTxType() const override { return TXTYPE_ADD_SHARDS_DATA_ERASURE; }
@@ -641,7 +647,7 @@ struct TSchemeShard::TTxAddEntryToDataErasure : public TSchemeShard::TRwTxBase {
             "TTxAddEntryToDataErasure Execute at schemestard: " << Self->TabletID());
 
         NIceDb::TNiceDb db(txc.DB);
-        Self->DataErasureManager->HandleNewPartitioning(DataErasureShards, db);
+        Self->DataErasureManager->HandleNewPartitioning(Ev->Get()->Shards, db);
         if (Self->DataErasureManager->GetStatus() == EDataErasureStatus::COMPLETED) {
             if (Self->DataErasureManager->IsRunning()) {
                 NeedResponseComplete = true;
@@ -658,8 +664,8 @@ struct TSchemeShard::TTxAddEntryToDataErasure : public TSchemeShard::TRwTxBase {
     }
 };
 
-NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxAddEntryToDataErasure(const std::vector<TShardIdx>& dataErasureShards) {
-    return new TTxAddEntryToDataErasure(this, dataErasureShards);
+NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxAddNewShardToDataErasure(TEvPrivate::TEvAddNewShardToDataErasure::TPtr& ev) {
+    return new TTxAddNewShardToDataErasure(this, ev);
 }
 
 struct TSchemeShard::TTxCancelDataErasureShards : public TSchemeShard::TRwTxBase {

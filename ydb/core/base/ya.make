@@ -30,6 +30,7 @@ SRCS(
     group_stat.h
     hive.h
     interconnect_channels.h
+    kmeans_clusters.cpp
     local_user_token.cpp
     local_user_token.h
     localdb.cpp
@@ -88,6 +89,9 @@ PEERDIR(
     ydb/library/actors/wilson
     ydb/library/aclib
     library/cpp/deprecated/enum_codegen
+    library/cpp/dot_product
+    library/cpp/l1_distance
+    library/cpp/l2_distance
     library/cpp/logger
     library/cpp/lwtrace
     library/cpp/lwtrace/mon

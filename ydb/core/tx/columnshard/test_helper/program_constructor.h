@@ -1,4 +1,6 @@
 #pragma once
+#include "kernels_wrapper.h"
+
 #include <ydb/core/formats/arrow/program/aggr_common.h>
 
 #include <ydb/library/formats/arrow/protos/ssa.pb.h>
@@ -23,6 +25,7 @@ public:
     ui32 AddConstant(const TString& bytes);
     ui32 AddOperation(const NYql::TKernelRequestBuilder::EBinaryOp op, const std::vector<ui32>& arguments);
     ui32 AddOperation(const NKikimrSSA::TProgram::TAssignment::EFunction op, const std::vector<ui32>& arguments);
+    ui32 AddOperation(const TString& kernelName, const std::vector<ui32>& arguments);
     ui32 AddAggregation(
         const NArrow::NSSA::NAggregation::EAggregate op, const std::vector<ui32>& arguments, const std::vector<ui32>& groupByKeys);
     void AddFilter(const ui32 colId);

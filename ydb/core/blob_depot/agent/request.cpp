@@ -108,6 +108,7 @@ namespace NKikimr::NBlobDepot {
 
     template void TBlobDepotAgent::HandleOtherResponse(TEvBlobStorage::TEvGetResult::TPtr ev);
     template void TBlobDepotAgent::HandleOtherResponse(TEvBlobStorage::TEvPutResult::TPtr ev);
+    template void TBlobDepotAgent::HandleOtherResponse(TEvBlobStorage::TEvCheckIntegrityResult::TPtr ev);
 
     void TBlobDepotAgent::OnRequestComplete(ui64 id, TResponse response, TRequestsInFlight& map,
             std::shared_ptr<TEvBlobStorage::TExecutionRelay> executionRelay) {

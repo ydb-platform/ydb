@@ -13,6 +13,7 @@ namespace NSysView {
 constexpr TStringBuf PartitionStatsName = "partition_stats";
 constexpr TStringBuf NodesName = "nodes";
 constexpr TStringBuf QuerySessions = "query_sessions";
+constexpr TStringBuf ResourcePoolsName = "resource_pools";
 
 constexpr TStringBuf TopQueriesByDuration1MinuteName = "top_queries_by_duration_one_minute";
 constexpr TStringBuf TopQueriesByDuration1HourName = "top_queries_by_duration_one_hour";
@@ -34,10 +35,12 @@ constexpr TStringBuf TabletsName = "hive_tablets";
 constexpr TStringBuf QueryMetricsName = "query_metrics_one_minute";
 
 constexpr TStringBuf StorePrimaryIndexStatsName = "store_primary_index_stats";
+constexpr TStringBuf StorePrimaryIndexSchemaStatsName = "store_primary_index_schema_stats";
 constexpr TStringBuf StorePrimaryIndexPortionStatsName = "store_primary_index_portion_stats";
 constexpr TStringBuf StorePrimaryIndexGranuleStatsName = "store_primary_index_granule_stats";
 constexpr TStringBuf StorePrimaryIndexOptimizerStatsName = "store_primary_index_optimizer_stats";
 constexpr TStringBuf TablePrimaryIndexStatsName = "primary_index_stats";
+constexpr TStringBuf TablePrimaryIndexSchemaStatsName = "primary_index_schema_stats";
 constexpr TStringBuf TablePrimaryIndexPortionStatsName = "primary_index_portion_stats";
 constexpr TStringBuf TablePrimaryIndexGranuleStatsName = "primary_index_granule_stats";
 constexpr TStringBuf TablePrimaryIndexOptimizerStatsName = "primary_index_optimizer_stats";
@@ -453,7 +456,8 @@ struct Schema : NIceDb::Schema {
         struct BlobRangeSize : Column<12, NScheme::NTypeIds::Uint64> {};
         struct Activity : Column<13, NScheme::NTypeIds::Uint8> {};
         struct TierName: Column<14, NScheme::NTypeIds::Utf8> {};
-        struct EntityType: Column<15, NScheme::NTypeIds::Utf8> {};
+        struct EntityType : Column<15, NScheme::NTypeIds::Utf8> {};
+        struct ChunkDetails : Column<16, NScheme::NTypeIds::Utf8> {};
 
         using TKey = TableKey<PathId, TabletId, PortionId, InternalEntityId, ChunkIdx>;
         using TColumns = TableColumns<
@@ -471,7 +475,8 @@ struct Schema : NIceDb::Schema {
             BlobRangeSize,
             Activity,
             TierName,
-            EntityType
+            EntityType,
+            ChunkDetails
             >;
     };
 
@@ -596,6 +601,7 @@ struct Schema : NIceDb::Schema {
         struct PortionsCount: Column<3, NScheme::NTypeIds::Uint64> {};
         struct HostName: Column<4, NScheme::NTypeIds::Utf8> {};
         struct NodeId: Column<5, NScheme::NTypeIds::Uint64> {};
+        struct InternalPathId: Column<6, NScheme::NTypeIds::Uint64> {};
 
         using TKey = TableKey<PathId, TabletId>;
         using TColumns = TableColumns<
@@ -603,7 +609,8 @@ struct Schema : NIceDb::Schema {
             TabletId,
             PortionsCount,
             HostName,
-            NodeId
+            NodeId,
+            InternalPathId
         >;
     };
 
@@ -716,16 +723,40 @@ struct Schema : NIceDb::Schema {
         std::unordered_map<TString, TVector<PgColumn>> columnsStorage;
     };
 
+    struct ResourcePools : Table<22> {
+        struct Name: Column<1, NScheme::NTypeIds::Utf8> {};
+        struct ConcurrentQueryLimit: Column<2, NScheme::NTypeIds::Int32> {};
+        struct QueueSize: Column<3, NScheme::NTypeIds::Int32> {};
+        struct DatabaseLoadCpuThreshold: Column<4, NScheme::NTypeIds::Double> {};
+        struct ResourceWeight: Column<5, NScheme::NTypeIds::Double> {};
+        struct TotalCpuLimitPercentPerNode: Column<6, NScheme::NTypeIds::Double> {};
+        struct QueryCpuLimitPercentPerNode: Column<7, NScheme::NTypeIds::Double> {};
+        struct QueryMemoryLimitPercentPerNode: Column<8, NScheme::NTypeIds::Double> {};
+
+        using TKey = TableKey<Name>;
+        using TColumns = TableColumns<
+            Name,
+            ConcurrentQueryLimit,
+            QueueSize,
+            DatabaseLoadCpuThreshold,
+            ResourceWeight,
+            TotalCpuLimitPercentPerNode,
+            QueryCpuLimitPercentPerNode,
+            QueryMemoryLimitPercentPerNode>;
+    };
+
     struct ResourcePoolClassifiers : Table<20> {
-        struct Name    : Column<1, NScheme::NTypeIds::Utf8> {};
-        struct Rank    : Column<2, NScheme::NTypeIds::Int64> {};
-        struct Config  : Column<3, NScheme::NTypeIds::JsonDocument> {};
+        struct Name: Column<1, NScheme::NTypeIds::Utf8> {};
+        struct Rank: Column<2, NScheme::NTypeIds::Int64> {};
+        struct MemberName: Column<4, NScheme::NTypeIds::Utf8> {};
+        struct ResourcePool: Column<5, NScheme::NTypeIds::Utf8> {};
 
         using TKey = TableKey<Name>;
         using TColumns = TableColumns<
             Name,
             Rank,
-            Config>;
+            MemberName,
+            ResourcePool>;
     };
 
     struct TopPartitionsTli : Table<23> {
@@ -756,6 +787,25 @@ struct Schema : NIceDb::Schema {
             RowCount,
             IndexSize,
             FollowerId>;
+    };
+
+    struct PrimaryIndexSchemaStats : Table<24> {
+        struct TabletId : Column<1, NScheme::NTypeIds::Uint64> {};
+        struct PresetId : Column<2, NScheme::NTypeIds::Uint64> {};
+        struct SchemaVersion : Column<3, NScheme::NTypeIds::Uint64> {};
+        struct SchemaSnapshotPlanStep : Column<4, NScheme::NTypeIds::Uint64> {};
+        struct SchemaSnapshotTxId : Column<5, NScheme::NTypeIds::Uint64> {};
+        struct SchemaDetails : Column<6, NScheme::NTypeIds::Utf8> {};
+
+        using TKey = TableKey<TabletId, PresetId, SchemaVersion>;
+        using TColumns = TableColumns<
+            TabletId,
+            PresetId,
+            SchemaVersion,
+            SchemaSnapshotPlanStep,
+            SchemaSnapshotTxId,
+            SchemaDetails
+        >;
     };
 };
 

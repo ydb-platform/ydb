@@ -40,7 +40,7 @@ void EatPartialString(TIntrusivePtr<HttpType>& request, const TString& data) {
 Y_UNIT_TEST_SUITE(HttpProxy) {
     Y_UNIT_TEST(BasicParsing) {
         NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest();
-        EatWholeString(request, "GET /test HTTP/1.1\r\nHost: test\r\nSome-Header: 32344\r\n\r\n");
+        EatPartialString(request, "GET /test HTTP/1.1\r\nHost: test\r\nSome-Header: 32344\r\n\r\n");
         UNIT_ASSERT_EQUAL(request->Stage, NHttp::THttpIncomingRequest::EParseStage::Done);
         UNIT_ASSERT_EQUAL(request->Method, "GET");
         UNIT_ASSERT_EQUAL(request->URL, "/test");
@@ -52,21 +52,21 @@ Y_UNIT_TEST_SUITE(HttpProxy) {
 
     Y_UNIT_TEST(HeaderParsingError_Request) {
         NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest();
-        EatWholeString(request, "GET /test HTTP/1.1\r\nHost: test\r\nHeader-Without-A-Colon\r\n\r\n");
+        EatPartialString(request, "GET /test HTTP/1.1\r\nHost: test\r\nHeader-Without-A-Colon\r\n\r\n");
         UNIT_ASSERT_C(request->IsError(), static_cast<int>(request->Stage));
         UNIT_ASSERT_EQUAL_C(request->GetErrorText(), "Invalid http header", static_cast<int>(request->LastSuccessStage));
     }
 
     Y_UNIT_TEST(HeaderParsingError_Response) {
         NHttp::THttpIncomingResponsePtr response = new NHttp::THttpIncomingResponse(nullptr);
-        EatWholeString(response, "HTTP/1.1 200 OK\r\nConnection: close\r\nHeader-Without-A-Colon\r\n\r\n");
+        EatPartialString(response, "HTTP/1.1 200 OK\r\nConnection: close\r\nHeader-Without-A-Colon\r\n\r\n");
         UNIT_ASSERT_C(response->IsError(), static_cast<int>(response->Stage));
         UNIT_ASSERT_EQUAL_C(response->GetErrorText(), "Invalid http header", static_cast<int>(response->LastSuccessStage));
     }
 
     Y_UNIT_TEST(GetWithSpecifiedContentType) {
         NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest();
-        EatWholeString(request, "GET /test HTTP/1.1\r\nHost: test\r\nContent-Type: application/json\r\nSome-Header: 32344\r\n\r\n");
+        EatPartialString(request, "GET /test HTTP/1.1\r\nHost: test\r\nContent-Type: application/json\r\nSome-Header: 32344\r\n\r\n");
         UNIT_ASSERT_EQUAL(request->Stage, NHttp::THttpIncomingRequest::EParseStage::Done);
         UNIT_ASSERT_EQUAL(request->Method, "GET");
         UNIT_ASSERT_EQUAL(request->URL, "/test");
@@ -78,7 +78,7 @@ Y_UNIT_TEST_SUITE(HttpProxy) {
 
     Y_UNIT_TEST(BasicParsingChunkedBodyRequest) {
         NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest();
-        EatWholeString(request, "POST /Url HTTP/1.1\r\nConnection: close\r\nTransfer-Encoding: chunked\r\n\r\n4\r\nthis\r\n4\r\n is \r\n5\r\ntest.\r\n0\r\n\r\n");
+        EatPartialString(request, "POST /Url HTTP/1.1\r\nConnection: close\r\nTransfer-Encoding: chunked\r\n\r\n4\r\nthis\r\n4\r\n is \r\n5\r\ntest.\r\n0\r\n\r\n");
         UNIT_ASSERT_EQUAL(request->Stage, NHttp::THttpIncomingRequest::EParseStage::Done);
         UNIT_ASSERT_EQUAL(request->Method, "POST");
         UNIT_ASSERT_EQUAL(request->URL, "/Url");
@@ -89,9 +89,55 @@ Y_UNIT_TEST_SUITE(HttpProxy) {
         UNIT_ASSERT_EQUAL(request->Body, "this is test.");
     }
 
+    Y_UNIT_TEST(BasicParsingChunkedBigBodyRequest) {
+        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest();
+        TString bigChunk = TString(NHttp::THttpConfig::BUFFER_MIN_STEP, 'a');
+        TString testBody;
+        EatPartialString(request, "POST /Url HTTP/1.1\r\nConnection: close\r\nTransfer-Encoding: chunked\r\n\r\n");
+        for (size_t size = 0; size < NHttp::THttpConfig::BUFFER_SIZE; size += bigChunk.size()) {
+            EatPartialString(request, (std::ostringstream() << std::hex << bigChunk.size() << "\r\n").str());
+            EatPartialString(request, bigChunk);
+            EatPartialString(request, "\r\n");
+            testBody += bigChunk;
+        }
+        EatPartialString(request, "0\r\n\r\n");
+        UNIT_ASSERT_EQUAL(request->Stage, NHttp::THttpIncomingRequest::EParseStage::Done);
+        UNIT_ASSERT_EQUAL(request->Method, "POST");
+        UNIT_ASSERT_EQUAL(request->URL, "/Url");
+        UNIT_ASSERT_EQUAL(request->Connection, "close");
+        UNIT_ASSERT_EQUAL(request->Protocol, "HTTP");
+        UNIT_ASSERT_EQUAL(request->Version, "1.1");
+        UNIT_ASSERT_EQUAL(request->TransferEncoding, "chunked");
+        UNIT_ASSERT_EQUAL(request->Body, testBody);
+    }
+
+    Y_UNIT_TEST(BasicParsingBigHeadersRequest) {
+        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest();
+        EatPartialString(request, "POST /Url HTTP/1.1\r\nConnection: close\r\n");
+        UNIT_ASSERT_EQUAL(request->Stage, NHttp::THttpIncomingRequest::EParseStage::Header);
+        TString bigChunk = TString(NHttp::THttpIncomingRequest::MaxHeaderSize * 2, 'a');
+        EatPartialString(request, bigChunk);
+        UNIT_ASSERT_VALUES_EQUAL(int(request->Stage), int(NHttp::THttpIncomingRequest::EParseStage::Error));
+        UNIT_ASSERT_EQUAL(request->LastSuccessStage, NHttp::THttpIncomingRequest::EParseStage::Header);
+    }
+
+    Y_UNIT_TEST(BrokenParsingMethod) {
+        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest();
+        EatPartialString(request, "POSTPOSTPOSTPOSTPOSTPOSTPOST /Url HTTP/1.1\r\nConnection: close\r\nTransfer-Encoding: chunked\r\n\r\n12345678901234567890\r\n");
+        UNIT_ASSERT_EQUAL(request->Stage, NHttp::THttpIncomingRequest::EParseStage::Error);
+        UNIT_ASSERT_EQUAL(request->LastSuccessStage, NHttp::THttpIncomingRequest::EParseStage::Method);
+    }
+
+    Y_UNIT_TEST(BrokenParsingChunkedBodyRequest) {
+        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest();
+        EatPartialString(request, "POST /Url HTTP/1.1\r\nConnection: close\r\nTransfer-Encoding: chunked\r\n\r\n12345678901234567890\r\n");
+        UNIT_ASSERT_EQUAL(request->Stage, NHttp::THttpIncomingRequest::EParseStage::Error);
+        UNIT_ASSERT_EQUAL(request->LastSuccessStage, NHttp::THttpIncomingRequest::EParseStage::ChunkLength);
+    }
+
     Y_UNIT_TEST(BasicPost) {
         NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest();
-        EatWholeString(request, "POST /Url HTTP/1.1\r\nConnection: close\r\nContent-Length: 13\r\n\r\nthis is test.");
+        EatPartialString(request, "POST /Url HTTP/1.1\r\nConnection: close\r\nContent-Length: 13\r\n\r\nthis is test.");
         UNIT_ASSERT_EQUAL(request->Stage, NHttp::THttpIncomingRequest::EParseStage::Done);
         UNIT_ASSERT_EQUAL(request->Method, "POST");
         UNIT_ASSERT_EQUAL(request->URL, "/Url");
@@ -105,7 +151,7 @@ Y_UNIT_TEST_SUITE(HttpProxy) {
     Y_UNIT_TEST(BasicParsingChunkedBodyResponse) {
         NHttp::THttpOutgoingRequestPtr request = nullptr; //new NHttp::THttpOutgoingRequest();
         NHttp::THttpIncomingResponsePtr response = new NHttp::THttpIncomingResponse(request);
-        EatWholeString(response, "HTTP/1.1 200 OK\r\nConnection: close\r\nTransfer-Encoding: chunked\r\n\r\n4\r\nthis\r\n4\r\n is \r\n5\r\ntest.\r\n0\r\n\r\n");
+        EatPartialString(response, "HTTP/1.1 200 OK\r\nConnection: close\r\nTransfer-Encoding: chunked\r\n\r\n4\r\nthis\r\n4\r\n is \r\n5\r\ntest.\r\n0\r\n\r\n");
         UNIT_ASSERT_EQUAL(response->Stage, NHttp::THttpIncomingResponse::EParseStage::Done);
         UNIT_ASSERT_EQUAL(response->Status, "200");
         UNIT_ASSERT_EQUAL(response->Connection, "close");
@@ -118,14 +164,14 @@ Y_UNIT_TEST_SUITE(HttpProxy) {
     Y_UNIT_TEST(InvalidParsingChunkedBody) {
         NHttp::THttpOutgoingRequestPtr request = nullptr; //new NHttp::THttpOutgoingRequest();
         NHttp::THttpIncomingResponsePtr response = new NHttp::THttpIncomingResponse(request);
-        EatWholeString(response, "HTTP/1.1 200 OK\r\nConnection: close\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nthis\r\n4\r\n is \r\n5\r\ntest.\r\n0\r\n\r\n");
+        EatPartialString(response, "HTTP/1.1 200 OK\r\nConnection: close\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nthis\r\n4\r\n is \r\n5\r\ntest.\r\n0\r\n\r\n");
         UNIT_ASSERT(response->IsError());
     }
 
     Y_UNIT_TEST(AdvancedParsingChunkedBody) {
         NHttp::THttpOutgoingRequestPtr request = nullptr; //new NHttp::THttpOutgoingRequest();
         NHttp::THttpIncomingResponsePtr response = new NHttp::THttpIncomingResponse(request);
-        EatWholeString(response, "HTTP/1.1 200 OK\r\nConnection: close\r\nTransfer-Encoding: chunked\r\n\r\n6\r\nthis\r\n\r\n4\r\n is \r\n5\r\ntest.\r\n0\r\n\r\n");
+        EatPartialString(response, "HTTP/1.1 200 OK\r\nConnection: close\r\nTransfer-Encoding: chunked\r\n\r\n6\r\nthis\r\n\r\n4\r\n is \r\n5\r\ntest.\r\n0\r\n\r\n");
         UNIT_ASSERT_EQUAL(response->Stage, NHttp::THttpIncomingResponse::EParseStage::Done);
         UNIT_ASSERT_EQUAL(response->Status, "200");
         UNIT_ASSERT_EQUAL(response->Connection, "close");
@@ -137,7 +183,7 @@ Y_UNIT_TEST_SUITE(HttpProxy) {
 
     Y_UNIT_TEST(CreateCompressedResponse) {
         NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest();
-        EatWholeString(request, "GET /Url HTTP/1.1\r\nConnection: close\r\nAccept-Encoding: gzip, deflate\r\n\r\n");
+        EatPartialString(request, "GET /Url HTTP/1.1\r\nConnection: close\r\nAccept-Encoding: gzip, deflate\r\n\r\n");
         NHttp::THttpOutgoingResponsePtr response = new NHttp::THttpOutgoingResponse(request, "HTTP", "1.1", "200", "OK");
         TString compressedBody = "something very long to compress with deflate algorithm. something very long to compress with deflate algorithm.";
         response->EnableCompression();
@@ -491,6 +537,37 @@ CRA/5XcX13GJwHHj6LCoc3sL7mt8qV9HKY2AOZ88mpObzISZxgPpdKCfjsrdm63V
         Sleep(TDuration::Minutes(60));
     }*/
 
+    Y_UNIT_TEST(TooLongURL) {
+        NActors::TTestActorRuntimeBase actorSystem(1, true);
+        TPortManager portManager;
+        TIpPort port = portManager.GetTcpPort();
+        TAutoPtr<NActors::IEventHandle> handle;
+        actorSystem.Initialize();
+#ifndef NDEBUG
+        actorSystem.SetLogPriority(NActorsServices::HTTP, NActors::NLog::PRI_TRACE);
+#endif
+
+        NActors::IActor* proxy = NHttp::CreateHttpProxy();
+        NActors::TActorId proxyId = actorSystem.Register(proxy);
+        actorSystem.Send(new NActors::IEventHandle(proxyId, actorSystem.AllocateEdgeActor(), new NHttp::TEvHttpProxy::TEvAddListeningPort(port)), 0, true);
+        actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvConfirmListen>(handle);
+
+        NActors::TActorId serverId = actorSystem.AllocateEdgeActor();
+        actorSystem.Send(new NActors::IEventHandle(proxyId, serverId, new NHttp::TEvHttpProxy::TEvRegisterHandler("/test", serverId)), 0, true);
+
+        NActors::TActorId clientId = actorSystem.AllocateEdgeActor();
+        TString longUrl;
+        longUrl.append(9000, 'X');
+        NHttp::THttpOutgoingRequestPtr httpRequest = NHttp::THttpOutgoingRequest::CreateRequestGet("http://[::1]:" + ToString(port) + "/" + longUrl);
+        httpRequest->Set("Connection", "close");
+        actorSystem.Send(new NActors::IEventHandle(proxyId, clientId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(httpRequest)), 0, true);
+
+        NHttp::TEvHttpProxy::TEvHttpIncomingResponse* response = actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingResponse>(handle);
+
+        UNIT_ASSERT_EQUAL(response->Response->Status, "400");
+        UNIT_ASSERT_EQUAL(response->Response->Body, "Invalid url");
+    }
+
     Y_UNIT_TEST(TooLongHeader) {
         NActors::TTestActorRuntimeBase actorSystem(1, true);
         TPortManager portManager;
@@ -745,8 +822,403 @@ CRA/5XcX13GJwHHj6LCoc3sL7mt8qV9HKY2AOZ88mpObzISZxgPpdKCfjsrdm63V
 
         NHttp::TEvHttpProxy::TEvHttpIncomingResponse* response = actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingResponse>(handle);
 
-        UNIT_ASSERT_EQUAL(response->Error, "ConnectionClosed");
         UNIT_ASSERT(response->Response->IsError());
+        UNIT_ASSERT_EQUAL(response->Error, "ConnectionClosed");
+    }
+
+    Y_UNIT_TEST(StreamingResponse1) {
+        NActors::TTestActorRuntimeBase actorSystem(1, true);
+        TPortManager portManager;
+        TIpPort port = portManager.GetTcpPort();
+        TAutoPtr<NActors::IEventHandle> handle;
+        actorSystem.Initialize();
+#ifndef NDEBUG
+        actorSystem.SetLogPriority(NActorsServices::HTTP, NActors::NLog::PRI_DEBUG);
+#endif
+
+        NActors::IActor* proxy = NHttp::CreateHttpProxy();
+        NActors::TActorId proxyId = actorSystem.Register(proxy);
+        actorSystem.Send(new NActors::IEventHandle(proxyId, actorSystem.AllocateEdgeActor(), new NHttp::TEvHttpProxy::TEvAddListeningPort(port)), 0, true);
+        actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvConfirmListen>(handle);
+
+        NActors::TActorId serverId = actorSystem.AllocateEdgeActor();
+        actorSystem.Send(new NActors::IEventHandle(proxyId, serverId, new NHttp::TEvHttpProxy::TEvRegisterHandler("/test", serverId)), 0, true);
+
+        NActors::TActorId clientId = actorSystem.AllocateEdgeActor();
+        NHttp::THttpOutgoingRequestPtr httpRequest = NHttp::THttpOutgoingRequest::CreateRequestGet("http://127.0.0.1:" + ToString(port) + "/test");
+        NHttp::TEvHttpProxy::TEvHttpOutgoingRequest* event = new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(httpRequest);
+        event->StreamContentTypes = {"text/plain"};
+        actorSystem.Send(new NActors::IEventHandle(proxyId, clientId, event), 0, true);
+
+        NHttp::TEvHttpProxy::TEvHttpIncomingRequest* request = actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingRequest>(handle);
+
+        UNIT_ASSERT_EQUAL(request->Request->URL, "/test");
+
+        NHttp::THttpOutgoingResponsePtr httpResponse = request->Request->CreateResponseString("HTTP/1.1 200 Found\r\nConnection: Close\r\nContent-Type: text/plain\r\nTransfer-Encoding: chunked\r\n\r\n");
+        actorSystem.Send(new NActors::IEventHandle(handle->Sender, serverId, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(httpResponse)), 0, true);
+
+        NHttp::THttpOutgoingDataChunkPtr httpDataChunk1 = httpResponse->CreateDataChunk("pas");
+        actorSystem.Send(new NActors::IEventHandle(handle->Sender, serverId, new NHttp::TEvHttpProxy::TEvHttpOutgoingDataChunk(httpDataChunk1)), 0, true);
+
+        NHttp::THttpOutgoingDataChunkPtr httpDataChunk2 = httpResponse->CreateDataChunk("sed");
+        actorSystem.Send(new NActors::IEventHandle(handle->Sender, serverId, new NHttp::TEvHttpProxy::TEvHttpOutgoingDataChunk(httpDataChunk2)), 0, true);
+
+        NHttp::THttpOutgoingDataChunkPtr httpDataChunk3 = httpResponse->CreateDataChunk(); // end of data
+        actorSystem.Send(new NActors::IEventHandle(handle->Sender, serverId, new NHttp::TEvHttpProxy::TEvHttpOutgoingDataChunk(httpDataChunk3)), 0, true);
+
+        NHttp::TEvHttpProxy::TEvHttpIncompleteIncomingResponse* response = actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncompleteIncomingResponse>(handle);
+
+        UNIT_ASSERT_EQUAL(response->Response->Status, "200");
+
+        NHttp::TEvHttpProxy::TEvHttpIncomingDataChunk* dataChunk1 = actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingDataChunk>(handle);
+
+        UNIT_ASSERT(!dataChunk1->Error);
+        UNIT_ASSERT_EQUAL(dataChunk1->Data, "pas");
+        UNIT_ASSERT_EQUAL(dataChunk1->IsEndOfData(), false);
+
+        NHttp::TEvHttpProxy::TEvHttpIncomingDataChunk* dataChunk2 = actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingDataChunk>(handle);
+
+        UNIT_ASSERT(!dataChunk2->Error);
+        UNIT_ASSERT_EQUAL(dataChunk2->Data, "sed");
+        UNIT_ASSERT_EQUAL(dataChunk2->IsEndOfData(), false);
+
+        NHttp::TEvHttpProxy::TEvHttpIncomingDataChunk* dataChunk3 = actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingDataChunk>(handle);
+
+        UNIT_ASSERT(!dataChunk3->Error);
+        UNIT_ASSERT(!dataChunk3->Data);
+        UNIT_ASSERT(dataChunk3->IsEndOfData());
+    }
+
+    Y_UNIT_TEST(StreamingResponse2) {
+        NActors::TTestActorRuntimeBase actorSystem(1, true);
+        TPortManager portManager;
+        TIpPort port = portManager.GetTcpPort();
+        TAutoPtr<NActors::IEventHandle> handle;
+        actorSystem.Initialize();
+#ifndef NDEBUG
+        actorSystem.SetLogPriority(NActorsServices::HTTP, NActors::NLog::PRI_DEBUG);
+#endif
+
+        NActors::IActor* proxy = NHttp::CreateHttpProxy();
+        NActors::TActorId proxyId = actorSystem.Register(proxy);
+        actorSystem.Send(new NActors::IEventHandle(proxyId, actorSystem.AllocateEdgeActor(), new NHttp::TEvHttpProxy::TEvAddListeningPort(port)), 0, true);
+        actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvConfirmListen>(handle);
+
+        NActors::TActorId serverId = actorSystem.AllocateEdgeActor();
+        actorSystem.Send(new NActors::IEventHandle(proxyId, serverId, new NHttp::TEvHttpProxy::TEvRegisterHandler("/test", serverId)), 0, true);
+
+        NActors::TActorId clientId = actorSystem.AllocateEdgeActor();
+        NHttp::THttpOutgoingRequestPtr httpRequest = NHttp::THttpOutgoingRequest::CreateRequestGet("http://127.0.0.1:" + ToString(port) + "/test");
+        NHttp::TEvHttpProxy::TEvHttpOutgoingRequest* event = new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(httpRequest);
+        event->StreamContentTypes = {"text/plain"};
+        actorSystem.Send(new NActors::IEventHandle(proxyId, clientId, event), 0, true);
+
+        NHttp::TEvHttpProxy::TEvHttpIncomingRequest* request = actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingRequest>(handle);
+
+        UNIT_ASSERT_EQUAL(request->Request->URL, "/test");
+
+        NHttp::THttpOutgoingResponsePtr httpResponse = request->Request->CreateResponseString("HTTP/1.1 200 Found\r\nConnection: Close\r\nContent-Type: text/plain\r\nTransfer-Encoding: chunked\r\n\r\n");
+        actorSystem.Send(new NActors::IEventHandle(handle->Sender, serverId, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(httpResponse)), 0, true);
+
+        NHttp::THttpOutgoingDataChunkPtr httpDataChunk1 = httpResponse->CreateDataChunk("pas");
+        actorSystem.Send(new NActors::IEventHandle(handle->Sender, serverId, new NHttp::TEvHttpProxy::TEvHttpOutgoingDataChunk(httpDataChunk1)), 0, true);
+
+        NHttp::THttpOutgoingDataChunkPtr httpDataChunk2 = httpResponse->CreateDataChunk("sed");
+        httpDataChunk2->SetEndOfData(); // end of data
+        actorSystem.Send(new NActors::IEventHandle(handle->Sender, serverId, new NHttp::TEvHttpProxy::TEvHttpOutgoingDataChunk(httpDataChunk2)), 0, true);
+
+        NHttp::TEvHttpProxy::TEvHttpIncompleteIncomingResponse* response = actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncompleteIncomingResponse>(handle);
+
+        UNIT_ASSERT_EQUAL(response->Response->Status, "200");
+
+        NHttp::TEvHttpProxy::TEvHttpIncomingDataChunk* dataChunk1 = actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingDataChunk>(handle);
+
+        UNIT_ASSERT(!dataChunk1->Error);
+        UNIT_ASSERT_EQUAL(dataChunk1->Data, "pas");
+        UNIT_ASSERT_EQUAL(dataChunk1->IsEndOfData(), false);
+
+        NHttp::TEvHttpProxy::TEvHttpIncomingDataChunk* dataChunk2 = actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingDataChunk>(handle);
+
+        UNIT_ASSERT(!dataChunk2->Error);
+        UNIT_ASSERT_EQUAL(dataChunk2->Data, "sed");
+        UNIT_ASSERT_EQUAL(dataChunk2->IsEndOfData(), false);
+
+        NHttp::TEvHttpProxy::TEvHttpIncomingDataChunk* dataChunk3 = actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingDataChunk>(handle);
+
+        UNIT_ASSERT(!dataChunk3->Error);
+        UNIT_ASSERT(!dataChunk3->Data);
+        UNIT_ASSERT(dataChunk3->IsEndOfData());
+    }
+
+    Y_UNIT_TEST(StreamingResponse3) {
+        NActors::TTestActorRuntimeBase actorSystem(1, true);
+        TPortManager portManager;
+        TIpPort port = portManager.GetTcpPort();
+        TAutoPtr<NActors::IEventHandle> handle;
+        actorSystem.Initialize();
+#ifndef NDEBUG
+        actorSystem.SetLogPriority(NActorsServices::HTTP, NActors::NLog::PRI_DEBUG);
+#else
+        actorSystem.SetLogPriority(NActorsServices::HTTP, NActors::NLog::PRI_CRIT);
+#endif
+
+        NActors::IActor* proxy = NHttp::CreateHttpProxy();
+        NActors::TActorId proxyId = actorSystem.Register(proxy);
+        actorSystem.Send(new NActors::IEventHandle(proxyId, actorSystem.AllocateEdgeActor(), new NHttp::TEvHttpProxy::TEvAddListeningPort(port)), 0, true);
+        actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvConfirmListen>(handle);
+
+        NActors::TActorId serverId = actorSystem.AllocateEdgeActor();
+        actorSystem.Send(new NActors::IEventHandle(proxyId, serverId, new NHttp::TEvHttpProxy::TEvRegisterHandler("/test", serverId)), 0, true);
+
+        NActors::TActorId clientId = actorSystem.AllocateEdgeActor();
+        NHttp::THttpOutgoingRequestPtr httpRequest = NHttp::THttpOutgoingRequest::CreateRequestGet("http://127.0.0.1:" + ToString(port) + "/test");
+        NHttp::TEvHttpProxy::TEvHttpOutgoingRequest* event = new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(httpRequest);
+        event->StreamContentTypes = {"text/plain"};
+        actorSystem.Send(new NActors::IEventHandle(proxyId, clientId, event), 0, true);
+
+        NHttp::TEvHttpProxy::TEvHttpIncomingRequest* request = actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingRequest>(handle);
+
+        UNIT_ASSERT_EQUAL(request->Request->URL, "/test");
+
+        NHttp::THttpOutgoingResponsePtr httpResponse = request->Request->CreateResponseString("HTTP/1.1 200 Found\r\nConnection: Close\r\nContent-Type: text/plain\r\nTransfer-Encoding: chunked\r\n\r\n");
+        actorSystem.Send(new NActors::IEventHandle(handle->Sender, serverId, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(httpResponse)), 0, true);
+
+        NHttp::THttpOutgoingDataChunkPtr httpDataChunk1 = httpResponse->CreateDataChunk("pas");
+        actorSystem.Send(new NActors::IEventHandle(handle->Sender, serverId, new NHttp::TEvHttpProxy::TEvHttpOutgoingDataChunk(httpDataChunk1)), 0, true);
+
+        NHttp::THttpOutgoingDataChunkPtr httpDataChunk2 = httpResponse->CreateDataChunk("sed");
+        actorSystem.Send(new NActors::IEventHandle(handle->Sender, serverId, new NHttp::TEvHttpProxy::TEvHttpOutgoingDataChunk(httpDataChunk2)), 0, true);
+
+        actorSystem.Send(new NActors::IEventHandle(handle->Sender, serverId, new NHttp::TEvHttpProxy::TEvHttpOutgoingDataChunk("error")), 0, true);
+
+        NHttp::TEvHttpProxy::TEvHttpIncompleteIncomingResponse* response = actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncompleteIncomingResponse>(handle);
+
+        UNIT_ASSERT_EQUAL(response->Response->Status, "200");
+
+        NHttp::TEvHttpProxy::TEvHttpIncomingDataChunk* dataChunk1 = actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingDataChunk>(handle);
+
+        UNIT_ASSERT(!dataChunk1->Error);
+        UNIT_ASSERT_EQUAL(dataChunk1->Data, "pas");
+        UNIT_ASSERT_EQUAL(dataChunk1->IsEndOfData(), false);
+
+        NHttp::TEvHttpProxy::TEvHttpIncomingDataChunk* dataChunk2 = actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingDataChunk>(handle);
+
+        UNIT_ASSERT(!dataChunk2->Error);
+        UNIT_ASSERT_EQUAL(dataChunk2->Data, "sed");
+        UNIT_ASSERT_EQUAL(dataChunk2->IsEndOfData(), false);
+
+        NHttp::TEvHttpProxy::TEvHttpIncomingDataChunk* dataChunk3 = actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingDataChunk>(handle);
+
+        UNIT_ASSERT_VALUES_EQUAL(dataChunk3->Error, "ConnectionClosed");
+        UNIT_ASSERT(!dataChunk3->Data);
+    }
+
+    Y_UNIT_TEST(StreamingFatResponse1) {
+        constexpr size_t ChunkSize = 65536; // 64K
+        constexpr int ChunkCount = 10; // 10 chunks
+        constexpr size_t TotalSize = ChunkSize * ChunkCount; // 640K
+        NActors::TTestActorRuntimeBase actorSystem(1, true);
+        TPortManager portManager;
+        TIpPort port = portManager.GetTcpPort();
+        TAutoPtr<NActors::IEventHandle> handle;
+        actorSystem.Initialize();
+#ifndef NDEBUG
+        actorSystem.SetLogPriority(NActorsServices::HTTP, NActors::NLog::PRI_DEBUG);
+#endif
+
+        NActors::IActor* proxy = NHttp::CreateHttpProxy();
+        NActors::TActorId proxyId = actorSystem.Register(proxy);
+        actorSystem.Send(new NActors::IEventHandle(proxyId, actorSystem.AllocateEdgeActor(), new NHttp::TEvHttpProxy::TEvAddListeningPort(port)), 0, true);
+        actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvConfirmListen>(handle);
+
+        NActors::TActorId serverId = actorSystem.AllocateEdgeActor();
+        actorSystem.Send(new NActors::IEventHandle(proxyId, serverId, new NHttp::TEvHttpProxy::TEvRegisterHandler("/test", serverId)), 0, true);
+
+        NActors::TActorId clientId = actorSystem.AllocateEdgeActor();
+        NHttp::THttpOutgoingRequestPtr httpRequest = NHttp::THttpOutgoingRequest::CreateRequestGet("http://127.0.0.1:" + ToString(port) + "/test");
+        NHttp::TEvHttpProxy::TEvHttpOutgoingRequest* event = new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(httpRequest);
+        event->StreamContentTypes = {"text/plain"};
+        actorSystem.Send(new NActors::IEventHandle(proxyId, clientId, event), 0, true);
+
+        NHttp::TEvHttpProxy::TEvHttpIncomingRequest* request = actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingRequest>(handle);
+
+        UNIT_ASSERT_EQUAL(request->Request->URL, "/test");
+
+        NHttp::THttpOutgoingResponsePtr httpResponse = request->Request->CreateResponseString("HTTP/1.1 200 Found\r\nConnection: Close\r\nContent-Type: text/plain\r\nTransfer-Encoding: chunked\r\n\r\n");
+        actorSystem.Send(new NActors::IEventHandle(handle->Sender, serverId, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(httpResponse)), 0, true);
+
+        TString originalBody;
+
+        for (int i = 0; i < ChunkCount; ++i) {
+            TString longChunk;
+            longChunk.append(ChunkSize, 'X');
+            originalBody += longChunk;
+            NHttp::THttpOutgoingDataChunkPtr httpDataChunk = httpResponse->CreateDataChunk(longChunk);
+            actorSystem.Send(new NActors::IEventHandle(handle->Sender, serverId, new NHttp::TEvHttpProxy::TEvHttpOutgoingDataChunk(httpDataChunk)), 0, true);
+        }
+
+        NHttp::THttpOutgoingDataChunkPtr httpDataChunk = httpResponse->CreateDataChunk(); // end of data
+        actorSystem.Send(new NActors::IEventHandle(handle->Sender, serverId, new NHttp::TEvHttpProxy::TEvHttpOutgoingDataChunk(httpDataChunk)), 0, true);
+
+        NHttp::TEvHttpProxy::TEvHttpIncompleteIncomingResponse* response = actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncompleteIncomingResponse>(handle);
+
+        UNIT_ASSERT_EQUAL(response->Response->Status, "200");
+
+        TString responseBody;
+        for (int i = 0; i < ChunkCount; ++i) {
+            NHttp::TEvHttpProxy::TEvHttpIncomingDataChunk* dataChunk = actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingDataChunk>(handle);
+            UNIT_ASSERT(!dataChunk->Error);
+            UNIT_ASSERT_EQUAL(dataChunk->IsEndOfData(), false);
+            responseBody.append(dataChunk->Data);
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(responseBody.size(), TotalSize);
+        UNIT_ASSERT_EQUAL(responseBody, originalBody);
+
+        NHttp::TEvHttpProxy::TEvHttpIncomingDataChunk* dataChunk = actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingDataChunk>(handle);
+        UNIT_ASSERT(!dataChunk->Error);
+        UNIT_ASSERT(!dataChunk->Data);
+        UNIT_ASSERT(dataChunk->IsEndOfData());
+    }
+
+    Y_UNIT_TEST(StreamingCompressedFatResponse1) {
+        constexpr size_t ChunkSize = 65536; // 64K
+        constexpr int ChunkCount = 10; // 10 chunks
+        constexpr size_t TotalSize = ChunkSize * ChunkCount; // 640K
+        NActors::TTestActorRuntimeBase actorSystem(1, true);
+        TPortManager portManager;
+        TIpPort port = portManager.GetTcpPort();
+        TAutoPtr<NActors::IEventHandle> handle;
+        actorSystem.Initialize();
+#ifndef NDEBUG
+        actorSystem.SetLogPriority(NActorsServices::HTTP, NActors::NLog::PRI_DEBUG);
+#endif
+
+        NActors::IActor* proxy = NHttp::CreateHttpProxy();
+        NActors::TActorId proxyId = actorSystem.Register(proxy);
+        actorSystem.Send(new NActors::IEventHandle(proxyId, actorSystem.AllocateEdgeActor(), new NHttp::TEvHttpProxy::TEvAddListeningPort(port)), 0, true);
+        actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvConfirmListen>(handle);
+
+        NActors::TActorId serverId = actorSystem.AllocateEdgeActor();
+        actorSystem.Send(new NActors::IEventHandle(proxyId, serverId, new NHttp::TEvHttpProxy::TEvRegisterHandler("/test", serverId)), 0, true);
+
+        NActors::TActorId clientId = actorSystem.AllocateEdgeActor();
+        NHttp::THttpOutgoingRequestPtr httpRequest = NHttp::THttpOutgoingRequest::CreateHttpRequest("GET", "127.0.0.1:" + ToString(port), "/test");
+        httpRequest->Set("Accept-Encoding", "gzip, deflate");
+        NHttp::TEvHttpProxy::TEvHttpOutgoingRequest* event = new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(httpRequest);
+        event->StreamContentTypes = {"text/plain"};
+        actorSystem.Send(new NActors::IEventHandle(proxyId, clientId, event), 0, true);
+
+        NHttp::TEvHttpProxy::TEvHttpIncomingRequest* request = actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingRequest>(handle);
+
+        UNIT_ASSERT_EQUAL(request->Request->URL, "/test");
+
+        NHttp::THttpOutgoingResponsePtr httpResponse = request->Request->CreateResponseString("HTTP/1.1 200 Found\r\nConnection: Close\r\nContent-Type: text/plain\r\nContent-Encoding: deflate\r\nTransfer-Encoding: chunked\r\n\r\n");
+        actorSystem.Send(new NActors::IEventHandle(handle->Sender, serverId, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(httpResponse)), 0, true);
+
+        TString originalBody;
+
+        for (int i = 0; i < ChunkCount; ++i) {
+            TString longChunk;
+            longChunk.append(ChunkSize, 'X');
+            originalBody += longChunk;
+            NHttp::THttpOutgoingDataChunkPtr httpDataChunk = httpResponse->CreateDataChunk(longChunk);
+            actorSystem.Send(new NActors::IEventHandle(handle->Sender, serverId, new NHttp::TEvHttpProxy::TEvHttpOutgoingDataChunk(httpDataChunk)), 0, true);
+        }
+
+        NHttp::THttpOutgoingDataChunkPtr httpDataChunk = httpResponse->CreateDataChunk(); // end of data
+        actorSystem.Send(new NActors::IEventHandle(handle->Sender, serverId, new NHttp::TEvHttpProxy::TEvHttpOutgoingDataChunk(httpDataChunk)), 0, true);
+
+        NHttp::TEvHttpProxy::TEvHttpIncompleteIncomingResponse* response = actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncompleteIncomingResponse>(handle);
+
+        UNIT_ASSERT_EQUAL(response->Response->Status, "200");
+
+        TString responseBody;
+        for (int i = 0; i < ChunkCount; ++i) {
+            NHttp::TEvHttpProxy::TEvHttpIncomingDataChunk* dataChunk = actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingDataChunk>(handle);
+            UNIT_ASSERT(!dataChunk->Error);
+            UNIT_ASSERT_EQUAL(dataChunk->IsEndOfData(), false);
+            responseBody.append(dataChunk->Data);
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(responseBody.size(), TotalSize);
+        UNIT_ASSERT_EQUAL(responseBody, originalBody);
+
+        NHttp::TEvHttpProxy::TEvHttpIncomingDataChunk* dataChunk = actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingDataChunk>(handle);
+        UNIT_ASSERT(!dataChunk->Error);
+        UNIT_ASSERT(!dataChunk->Data);
+        UNIT_ASSERT(dataChunk->IsEndOfData());
+    }
+
+    Y_UNIT_TEST(StreamingCompressedFatRandomResponse1) {
+        constexpr size_t ChunkSize = 65536; // 64K
+        constexpr int ChunkCount = 10; // 10 chunks
+        constexpr size_t TotalSize = ChunkSize * ChunkCount; // 640K
+        NActors::TTestActorRuntimeBase actorSystem(1, true);
+        TPortManager portManager;
+        TIpPort port = portManager.GetTcpPort();
+        TAutoPtr<NActors::IEventHandle> handle;
+        actorSystem.Initialize();
+#ifndef NDEBUG
+        actorSystem.SetLogPriority(NActorsServices::HTTP, NActors::NLog::PRI_DEBUG);
+#endif
+
+        NActors::IActor* proxy = NHttp::CreateHttpProxy();
+        NActors::TActorId proxyId = actorSystem.Register(proxy);
+        actorSystem.Send(new NActors::IEventHandle(proxyId, actorSystem.AllocateEdgeActor(), new NHttp::TEvHttpProxy::TEvAddListeningPort(port)), 0, true);
+        actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvConfirmListen>(handle);
+
+        NActors::TActorId serverId = actorSystem.AllocateEdgeActor();
+        actorSystem.Send(new NActors::IEventHandle(proxyId, serverId, new NHttp::TEvHttpProxy::TEvRegisterHandler("/test", serverId)), 0, true);
+
+        NActors::TActorId clientId = actorSystem.AllocateEdgeActor();
+        NHttp::THttpOutgoingRequestPtr httpRequest = NHttp::THttpOutgoingRequest::CreateHttpRequest("GET", "127.0.0.1:" + ToString(port), "/test");
+        httpRequest->Set("Accept-Encoding", "gzip, deflate");
+        NHttp::TEvHttpProxy::TEvHttpOutgoingRequest* event = new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(httpRequest);
+        event->StreamContentTypes = {"text/plain"};
+        actorSystem.Send(new NActors::IEventHandle(proxyId, clientId, event), 0, true);
+
+        NHttp::TEvHttpProxy::TEvHttpIncomingRequest* request = actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingRequest>(handle);
+
+        UNIT_ASSERT_EQUAL(request->Request->URL, "/test");
+
+        NHttp::THttpOutgoingResponsePtr httpResponse = request->Request->CreateResponseString("HTTP/1.1 200 Found\r\nConnection: Close\r\nContent-Type: text/plain\r\nContent-Encoding: deflate\r\nTransfer-Encoding: chunked\r\n\r\n");
+        actorSystem.Send(new NActors::IEventHandle(handle->Sender, serverId, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(httpResponse)), 0, true);
+
+        TString originalBody;
+
+        for (int i = 0; i < ChunkCount; ++i) {
+            TString longChunk;
+            for (size_t j = 0; j < ChunkSize; ++j) {
+                longChunk.append(1, 'A' + (rand() % 26)); // random character from A-Z
+            }
+            originalBody += longChunk;
+            NHttp::THttpOutgoingDataChunkPtr httpDataChunk = httpResponse->CreateDataChunk(longChunk);
+            actorSystem.Send(new NActors::IEventHandle(handle->Sender, serverId, new NHttp::TEvHttpProxy::TEvHttpOutgoingDataChunk(httpDataChunk)), 0, true);
+        }
+
+        NHttp::THttpOutgoingDataChunkPtr httpDataChunk = httpResponse->CreateDataChunk(); // end of data
+        actorSystem.Send(new NActors::IEventHandle(handle->Sender, serverId, new NHttp::TEvHttpProxy::TEvHttpOutgoingDataChunk(httpDataChunk)), 0, true);
+
+        NHttp::TEvHttpProxy::TEvHttpIncompleteIncomingResponse* response = actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncompleteIncomingResponse>(handle);
+
+        UNIT_ASSERT_EQUAL(response->Response->Status, "200");
+
+        TString responseBody;
+        for (int i = 0; i < ChunkCount; ++i) {
+            NHttp::TEvHttpProxy::TEvHttpIncomingDataChunk* dataChunk = actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingDataChunk>(handle);
+            UNIT_ASSERT(!dataChunk->Error);
+            UNIT_ASSERT_EQUAL(dataChunk->IsEndOfData(), false);
+            responseBody.append(dataChunk->Data);
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(responseBody.size(), TotalSize);
+        UNIT_ASSERT_EQUAL(responseBody, originalBody);
+
+        NHttp::TEvHttpProxy::TEvHttpIncomingDataChunk* dataChunk = actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingDataChunk>(handle);
+        UNIT_ASSERT(!dataChunk->Error);
+        UNIT_ASSERT(!dataChunk->Data);
+        UNIT_ASSERT(dataChunk->IsEndOfData());
     }
 
     Y_UNIT_TEST(RequestAfter307) {

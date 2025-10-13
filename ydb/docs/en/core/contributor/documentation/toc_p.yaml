@@ -1,0 +1,9 @@
+items:
+- name: Review process
+  href: review.md
+- name: Style guide
+  href: style-guide.md
+- name: Structure
+  href: structure.md
+- name: Genres
+  href: genres.md

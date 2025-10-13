@@ -1,6 +1,7 @@
 #include "container.h"
 
 #include <ydb/core/formats/arrow/accessor/plain/accessor.h>
+#include <ydb/core/formats/arrow/arrow_filter.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 
 #include <ydb/library/actors/core/log.h>
@@ -154,23 +155,24 @@ std::shared_ptr<NKikimr::NArrow::TGeneralContainer> TGeneralContainer::BuildEmpt
 std::shared_ptr<arrow::Table> TGeneralContainer::BuildTableOptional(const TTableConstructionContext& context) const {
     std::vector<std::shared_ptr<arrow::ChunkedArray>> columns;
     std::vector<std::shared_ptr<arrow::Field>> fields;
+    std::optional<ui32> count;
     for (i32 i = 0; i < Schema->num_fields(); ++i) {
         if (context.GetColumnNames() && !context.GetColumnNames()->contains(Schema->field(i)->name())) {
             continue;
         }
-        if (context.GetRecordsCount() || context.GetStartIndex()) {
-            columns.emplace_back(Columns[i]->Slice(context.GetStartIndex().value_or(0),
-                context.GetRecordsCount().value_or(GetRecordsCount() - context.GetStartIndex().value_or(0))));
+        columns.emplace_back(Columns[i]->GetChunkedArray(context));
+        if (!count) {
+            count = columns.back()->length();
         } else {
-            columns.emplace_back(Columns[i]->GetChunkedArray());
+            AFL_VERIFY(*count == columns.back()->length())("count", count)("local", columns.back()->length());
         }
         fields.emplace_back(Schema->field(i));
     }
     if (fields.empty()) {
         return nullptr;
     }
-    AFL_VERIFY(RecordsCount);
-    return arrow::Table::Make(std::make_shared<arrow::Schema>(fields), columns, context.GetRecordsCount().value_or(*RecordsCount));
+    AFL_VERIFY(count);
+    return arrow::Table::Make(std::make_shared<arrow::Schema>(fields), columns, *count);
 }
 
 std::shared_ptr<arrow::Table> TGeneralContainer::BuildTableVerified(const TTableConstructionContext& context) const {
@@ -238,6 +240,18 @@ NJson::TJsonValue TGeneralContainer::DebugJson(const bool withData) const {
         }
     }
     return result;
+}
+
+TGeneralContainer TGeneralContainer::ApplyFilter(const TColumnFilter& filter) const {
+    if (!Columns.size()) {
+        return *BuildEmptySame();
+    } else {
+        std::vector<std::shared_ptr<NAccessor::IChunkedArray>> columns;
+        for (auto&& i : Columns) {
+            columns.emplace_back(filter.Apply(i));
+        }
+        return TGeneralContainer(Schema->GetFields(), std::move(columns));
+    }
 }
 
 TConclusion<std::shared_ptr<arrow::Scalar>> IFieldsConstructor::GetDefaultColumnElementValue(

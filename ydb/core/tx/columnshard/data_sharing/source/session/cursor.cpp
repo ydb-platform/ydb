@@ -9,7 +9,7 @@
 namespace NKikimr::NOlap::NDataSharing {
 
 void TSourceCursor::BuildSelection(const std::shared_ptr<IStoragesManager>& storagesManager, const TVersionedIndex& index) {
-    THashMap<ui64, NEvents::TPathIdData> result;
+    THashMap<TInternalPathId, NEvents::TPathIdData> result;
     auto itCurrentPath = PortionsForSend.find(StartPathId);
     AFL_VERIFY(itCurrentPath != PortionsForSend.end());
     auto itPortion = itCurrentPath->second.find(StartPortionId);
@@ -18,7 +18,7 @@ void TSourceCursor::BuildSelection(const std::shared_ptr<IStoragesManager>& stor
     ui32 chunksCount = 0;
     bool selectMore = true;
     for (; itCurrentPath != PortionsForSend.end() && selectMore; ++itCurrentPath) {
-        std::vector<TPortionDataAccessor> portions;
+        std::vector<std::shared_ptr<TPortionDataAccessor>> portions;
         for (; itPortion != itCurrentPath->second.end(); ++itPortion) {
             selectMore = (count < 10000 && chunksCount < 1000000);
             if (!selectMore) {
@@ -26,8 +26,8 @@ void TSourceCursor::BuildSelection(const std::shared_ptr<IStoragesManager>& stor
                 NextPortionId = itPortion->first;
             } else {
                 portions.emplace_back(itPortion->second);
-                chunksCount += portions.back().GetRecordsVerified().size();
-                chunksCount += portions.back().GetIndexesVerified().size();
+                chunksCount += portions.back()->GetRecordsVerified().size();
+                chunksCount += portions.back()->GetIndexesVerified().size();
                 ++count;
             }
         }
@@ -105,12 +105,12 @@ bool TSourceCursor::Next(const std::shared_ptr<IStoragesManager>& storagesManage
 
 NKikimrColumnShardDataSharingProto::TSourceSession::TCursorDynamic TSourceCursor::SerializeDynamicToProto() const {
     NKikimrColumnShardDataSharingProto::TSourceSession::TCursorDynamic result;
-    result.SetStartPathId(StartPathId);
+    result.SetStartPathId(StartPathId.GetRawValue());
     result.SetStartPortionId(StartPortionId);
     result.SetNextSchemasIntervalBegin(NextSchemasIntervalBegin);
     result.SetNextSchemasIntervalEnd(NextSchemasIntervalEnd);
     if (NextPathId) {
-        result.SetNextPathId(*NextPathId);
+        result.SetNextPathId(NextPathId->GetRawValue());
     }
     if (NextPortionId) {
         result.SetNextPortionId(*NextPortionId);
@@ -127,7 +127,7 @@ NKikimrColumnShardDataSharingProto::TSourceSession::TCursorStatic TSourceCursor:
     NKikimrColumnShardDataSharingProto::TSourceSession::TCursorStatic result;
     for (auto&& i : PathPortionHashes) {
         auto* pathHash = result.AddPathHashes();
-        pathHash->SetPathId(i.first);
+        pathHash->SetPathId(i.first.GetRawValue());
         pathHash->SetHash(i.second);
     }
 
@@ -139,7 +139,7 @@ NKikimrColumnShardDataSharingProto::TSourceSession::TCursorStatic TSourceCursor:
 
 NKikimr::TConclusionStatus TSourceCursor::DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TSourceSession::TCursorDynamic& proto,
     const NKikimrColumnShardDataSharingProto::TSourceSession::TCursorStatic& protoStatic) {
-    StartPathId = proto.GetStartPathId();
+    StartPathId = TInternalPathId::FromRawValue(proto.GetStartPathId());
     StartPortionId = proto.GetStartPortionId();
     PackIdx = proto.GetPackIdx();
     NextSchemasIntervalBegin = proto.GetNextSchemasIntervalBegin();
@@ -148,7 +148,7 @@ NKikimr::TConclusionStatus TSourceCursor::DeserializeFromProto(const NKikimrColu
         return TConclusionStatus::Fail("Incorrect proto cursor PackIdx value: " + proto.DebugString());
     }
     if (proto.HasNextPathId()) {
-        AFL_VERIFY(proto.GetNextPathId() == *NextPathId)("next_local", *NextPathId)("proto", proto.GetNextPathId());
+        AFL_VERIFY(proto.GetNextPathId() == NextPathId->GetRawValue())("next_local", *NextPathId)("proto", proto.GetNextPathId());
     }
     if (proto.HasNextPortionId()) {
         AFL_VERIFY(proto.GetNextPortionId() == *NextPortionId)("next_local", *NextPortionId)("proto", proto.GetNextPortionId());
@@ -162,7 +162,7 @@ NKikimr::TConclusionStatus TSourceCursor::DeserializeFromProto(const NKikimrColu
         LinksModifiedTablets.emplace((TTabletId)i);
     }
     for (auto&& i : protoStatic.GetPathHashes()) {
-        PathPortionHashes.emplace(i.GetPathId(), i.GetHash());
+        PathPortionHashes.emplace(TInternalPathId::FromRawValue(i.GetPathId()), i.GetHash());
     }
 
     for (auto&& i : protoStatic.GetSchemeHistory()) {
@@ -176,7 +176,7 @@ NKikimr::TConclusionStatus TSourceCursor::DeserializeFromProto(const NKikimrColu
     return TConclusionStatus::Success();
 }
 
-TSourceCursor::TSourceCursor(const TTabletId selfTabletId, const std::set<ui64>& pathIds, const TTransferContext transferContext)
+TSourceCursor::TSourceCursor(const TTabletId selfTabletId, const std::set<TInternalPathId>& pathIds, const TTransferContext transferContext)
     : SelfTabletId(selfTabletId)
     , TransferContext(transferContext)
     , PathIds(pathIds) {
@@ -194,16 +194,16 @@ void TSourceCursor::SaveToDatabase(NIceDb::TNiceDb& db, const TString& sessionId
 }
 
 bool TSourceCursor::Start(const std::shared_ptr<IStoragesManager>& storagesManager,
-    THashMap<ui64, std::vector<TPortionDataAccessor>>&& portions, std::vector<NOlap::TSchemaPresetVersionInfo>&& schemeHistory, const TVersionedIndex& index) {
+    THashMap<TInternalPathId, std::vector<std::shared_ptr<TPortionDataAccessor>>>&& portions, std::vector<NOlap::TSchemaPresetVersionInfo>&& schemeHistory, const TVersionedIndex& index) {
     SchemeHistory = std::move(schemeHistory);
     AFL_VERIFY(!IsStartedFlag);
-    std::map<ui64, std::map<ui32, TPortionDataAccessor>> local;
+    std::map<TInternalPathId, std::map<ui32, std::shared_ptr<TPortionDataAccessor>>> local;
     NArrow::NHash::NXX64::TStreamStringHashCalcer hashCalcer(0);
     for (auto&& i : portions) {
         hashCalcer.Start();
-        std::map<ui32, TPortionDataAccessor> portionsMap;
+        std::map<ui32, std::shared_ptr<TPortionDataAccessor>> portionsMap;
         for (auto&& p : i.second) {
-            const ui64 portionId = p.GetPortionInfo().GetPortionId();
+            const ui64 portionId = p->GetPortionInfo().GetPortionId();
             hashCalcer.Update((ui8*)&portionId, sizeof(portionId));
             AFL_VERIFY(portionsMap.emplace(portionId, p).second);
         }

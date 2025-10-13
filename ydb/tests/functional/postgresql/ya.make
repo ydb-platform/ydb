@@ -5,13 +5,12 @@ DATA(
 )
 
 DEPENDS(
-    ydb/apps/ydbd
     ydb/tests/functional/postgresql/psql
 )
 
 
 ENV(PYTHONWARNINGS="ignore")
-ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
 ENV(YDB_TABLE_ENABLE_PREPARED_DDL=true)
 ENV(YDB_USE_IN_MEMORY_PDISKS=true)
 ENV(YDB_ALLOCATE_PGWIRE_PORT=true)

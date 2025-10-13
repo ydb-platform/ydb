@@ -12,6 +12,13 @@
 
 namespace NKafka {
 
+    struct TTopicNameToIndex {
+        TString TopicName;
+        ui32 TopicIndex;
+    };
+
+TActorId MakeKafkaDiscoveryCacheID();
+
 class TKafkaMetadataActor: public NActors::TActorBootstrapped<TKafkaMetadataActor> {
 public:
     TKafkaMetadataActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TMetadataRequestData>& message,
@@ -63,6 +70,7 @@ private:
             hFunc(NKikimr::TEvDiscovery::TEvDiscoveryData, HandleDiscoveryData);
             hFunc(NKikimr::TEvDiscovery::TEvError, HandleDiscoveryError);
             hFunc(NKikimr::TEvPQ::TEvListAllTopicsResponse, HandleListTopics);
+            HFunc(TEvKafka::TEvResponse, Handle);
         }
     }
 
@@ -70,15 +78,17 @@ private:
 
 private:
     const TContext::TPtr Context;
+    TContext::TPtr ContextForTopicCreation;
     const ui64 CorrelationId;
     const TMessagePtr<TMetadataRequestData> Message;
     const bool WithProxy;
 
     ui64 PendingResponses = 0;
+    ui64 InflyCreateTopics = 0;
 
     TMetadataResponseData::TPtr Response;
     THashMap<TActorId, TVector<ui64>> TopicIndexes;
-    THashSet<ui64> AllClusterNodes;
+    THashSet<ui64> AddedNodes;
     EKafkaErrors ErrorCode = EKafkaErrors::NONE_ERROR;
 
     TActorId DiscoveryCacheActor;
@@ -86,8 +96,13 @@ private:
     bool HaveError = false;
     bool FallbackToIcDiscovery = false;
     TMap<ui64, TSimpleSharedPtr<TEvLocationResponse>> PendingTopicResponses;
+    TSet<TString> TopicСreationAttempts;
+    TMap<TActorId, TTopicNameToIndex> CreateTopicRequests;
 
-    THashMap<ui64, TNodeInfo> Nodes;
+    void Handle(const TEvKafka::TEvResponse::TPtr& ev, const TActorContext& ctx);
+    void SendCreateTopicsRequest(const TString& topicName, ui32 index, const TActorContext& ctx);
+
+    TMap<ui64, TNodeInfo> Nodes;
     THashMap<TString, TActorId> PartitionActors;
     THashSet<ui64> HaveBrokers;
 

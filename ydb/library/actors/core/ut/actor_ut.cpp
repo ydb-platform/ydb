@@ -24,6 +24,96 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
     using TSettings = TActorBenchmark::TSettings;
     using TSendReceiveActorParams = TActorBenchmark::TSendReceiveActorParams;
 
+    class TLongRunningActor : public TActorBootstrapped<TLongRunningActor> {
+        public:
+            TLongRunningActor(std::atomic<bool>& stop, ui64 seconds, TThreadParkPad* startPad)
+                : Seconds(seconds)
+                , StartPad(startPad)
+                , StopFlag(stop)
+            {}
+
+            void Bootstrap() {
+                Cerr << "Unpark startPad" << Endl;
+                StartPad->Unpark();
+                constexpr ui64 BufferSize = 10000;
+                TInstant start = TActivationContext::Now();
+                ui64 counter = 0;
+                Buffer.resize(BufferSize);
+                while (!StopFlag && TActivationContext::Now() - start < TDuration::Seconds(Seconds)) {
+                    counter++;
+                    ui64 sum = counter;
+                    for (ui64 i = 0; i < BufferSize; i++) {
+                        sum += Buffer[i];
+                    }
+                    Buffer[counter % BufferSize] = sum;
+                }
+                PassAway();
+            }
+        private:
+            TVector<ui64> Buffer;
+            ui64 Seconds;
+            TThreadParkPad* StartPad;
+            std::atomic<bool>& StopFlag;
+    };
+
+    Y_UNIT_TEST(GetStatisticsWithLongRunningActor) {
+        THolder<TActorSystemSetup> setup =  TActorBenchmark::GetActorSystemSetup();
+        TActorBenchmark::AddBasicPool(setup, 1, true, false);
+
+        TActorSystem actorSystem(setup);
+        actorSystem.Start();
+
+        TThreadParkPad startPad;
+        TThreadParkPad stopPad;
+        TAtomic actorsAlive = 0;
+        std::atomic<bool> stop = false;
+
+        THolder<IActor> longRunningActor{
+            new TTestEndDecorator(THolder(new TLongRunningActor(stop, 1, &startPad)), &stopPad, &actorsAlive)
+        };
+        actorSystem.Register(longRunningActor.Release(), TMailboxType::HTSwap, 0);
+
+        Cerr << "Park startPad" << Endl;
+        startPad.Park();
+
+        ui64 CpuUs = 0;
+        ui64 ElapsedUs = 0;
+        ui64 SafeElapsedUs= 0;
+        for (ui32 i = 0; i < 10; ++i) {
+            NanoSleep(1'000'000);
+            TVector<TExecutorThreadStats> executorThreadStats;
+            TExecutorPoolStats poolStats;
+            actorSystem.GetPoolStats(0, poolStats, executorThreadStats);
+
+            ui64 newCpuUs = 0;
+            ui64 newElapsedUs = 0;
+            ui64 newSafeElapsedUs = 0;
+            for (auto &thread : executorThreadStats) {
+                newCpuUs += thread.CpuUs;
+                newElapsedUs += Ts2Us(thread.ElapsedTicks);
+                newSafeElapsedUs += Ts2Us(thread.SafeElapsedTicks);
+            }
+
+            Cerr << "Iteration " << i << " completed" << Endl;
+            Cerr << "CpuUs: " << CpuUs << " new: " << newCpuUs << Endl;
+            Cerr << "ElapsedUs: " << ElapsedUs << " new: " << newElapsedUs << Endl;
+            Cerr << "SafeElapsedUs: " << SafeElapsedUs << " new: " << newSafeElapsedUs << Endl;
+
+            UNIT_ASSERT_VALUES_UNEQUAL(CpuUs, newCpuUs);
+            UNIT_ASSERT_VALUES_UNEQUAL(ElapsedUs, newElapsedUs);
+            UNIT_ASSERT_VALUES_UNEQUAL(SafeElapsedUs, newSafeElapsedUs);
+
+            CpuUs = newCpuUs;
+            ElapsedUs = newElapsedUs;
+            SafeElapsedUs = newSafeElapsedUs;
+        }
+        stop = true;
+
+        Cerr << "Park stopPad" << Endl;
+        stopPad.Park();
+        actorSystem.Stop();
+    }
+
     Y_UNIT_TEST(WithOnlyOneSharedExecutors) {
         THolder<TActorSystemSetup> setup =  TActorBenchmark::GetActorSystemSetup();
         TActorBenchmark::AddBasicPool(setup, 1, 1, true);
@@ -480,7 +570,7 @@ Y_UNIT_TEST_SUITE(TestDecorator) {
 
         void Bootstrap()
         {
-            const auto& activityTypeIndex = GetActivityType();
+            auto activityTypeIndex = GetActivityType().GetIndex();
             Y_ENSURE(activityTypeIndex < GetActivityTypeCount());
             Y_ENSURE(GetActivityTypeName(activityTypeIndex) == "TestActor");
             PassAway();

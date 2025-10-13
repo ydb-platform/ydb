@@ -56,6 +56,7 @@ struct TEvScanData: public NActors::TEventLocal<TEvScanData, TKqpComputeEvents::
     NKikimrKqp::TEvKqpScanCursor LastCursorProto;
     TDuration CpuTime;
     TDuration WaitTime;
+    ui64 RawBytes = 0;
     ui32 PageFaults = 0; // number of page faults occurred when filling in this message
     bool RequestedBytesLimitReached = false;
     bool Finished = false;
@@ -250,16 +251,22 @@ struct TEvKqpCompute {
         }
     };
 
+    struct TEvScanPing : public NActors::TEventPB<TEvScanPing, NKikimrKqp::TEvScanPing,
+        TKqpComputeEvents::EvScanPing>
+    {
+    };
+
     struct TEvScanInitActor : public NActors::TEventPB<TEvScanInitActor, NKikimrKqp::TEvScanInitActor,
         TKqpComputeEvents::EvScanInitActor>
     {
         TEvScanInitActor() = default;
 
-        TEvScanInitActor(ui64 scanId, const NActors::TActorId& scanActor, ui32 generation, const ui64 tabletId) {
+        TEvScanInitActor(ui64 scanId, const NActors::TActorId& scanActor, ui32 generation, const ui64 tabletId, bool allowPings = false) {
             Record.SetScanId(scanId);
             ActorIdToProto(scanActor, Record.MutableScanActorId());
             Record.SetGeneration(generation);
             Record.SetTabletId(tabletId);
+            Record.SetAllowPings(allowPings);
         }
     };
 

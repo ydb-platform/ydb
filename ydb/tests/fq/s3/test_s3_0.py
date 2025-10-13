@@ -1152,7 +1152,7 @@ Pear,15,33'''
         client.wait_query_status(query_id, fq.QueryMeta.FAILED)
         issues = str(client.describe_query(query_id).result.query.issue)
 
-        assert "Double optional types are not supported" in issues, "Incorrect issues: " + issues
+        assert "double optional types are not supported" in issues, "Incorrect issues: " + issues
 
         sql = f'''
             INSERT INTO `{storage_connection_name}`.`insert/`
@@ -1166,4 +1166,101 @@ Pear,15,33'''
         client.wait_query_status(query_id, fq.QueryMeta.FAILED)
         issues = str(client.describe_query(query_id).result.query.issue)
 
-        assert "Double optional types are not supported" in issues, "Incorrect issues: " + issues
+        assert "double optional types are not supported" in issues, "Incorrect issues: " + issues
+
+    @yq_all
+    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
+    def test_json_list_validation(self, kikimr, s3, client, unique_prefix):
+        resource = boto3.resource(
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
+        )
+
+        bucket = resource.Bucket("fbucket")
+        bucket.create(ACL='public-read-write')
+        bucket.objects.all().delete()
+
+        s3_client = boto3.client(
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
+        )
+        fruits = '''Fruit,Price,Weight
+Banana,3,100
+Apple,2,22
+Pear,15,33'''
+        s3_client.put_object(Body=fruits, Bucket='fbucket', Key='fruits.csv', ContentType='text/plain')
+
+        storage_connection_name = unique_prefix + "ibucket"
+        client.create_storage_connection(storage_connection_name, "fbucket")
+
+        sql = f'''
+            SELECT * FROM `{storage_connection_name}`.`fruits.csv`
+            WITH (
+                FORMAT='json_list',
+                SCHEMA (
+                    Value Dict<Int32, String>,
+                )
+            );
+        '''
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.FAILED)
+        issues = str(client.describe_query(query_id).result.query.issue)
+        assert "unsupported dict key type, it should be String or Utf8" in issues, "Incorrect issues: " + issues
+
+        sql = f"INSERT INTO `{storage_connection_name}`.`/test/`\n" + '''
+            WITH (FORMAT = 'json_list')
+            SELECT * FROM AS_TABLE([
+                <|foo:{123: "abc"}, bar:"xxx"u|>
+            ]);
+        '''
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.FAILED)
+        issues = str(client.describe_query(query_id).result.query.issue)
+        assert "unsupported dict key type, it should be String or Utf8" in issues, "Incorrect Issues: " + issues
+
+    @yq_all
+    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
+    def test_schema_validation(self, kikimr, s3, client, unique_prefix):
+        resource = boto3.resource(
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
+        )
+
+        bucket = resource.Bucket("fbucket")
+        bucket.create(ACL='public-read-write')
+        bucket.objects.all().delete()
+
+        s3_client = boto3.client(
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
+        )
+        fruits = '''Fruit,Price,Weight
+Banana,3,100
+Apple,2,22
+Pear,15,33'''
+        s3_client.put_object(Body=fruits, Bucket='fbucket', Key='fruits.csv', ContentType='text/plain')
+
+        storage_connection_name = unique_prefix + "ibucket"
+        client.create_storage_connection(storage_connection_name, "fbucket")
+
+        sql = f'''
+            SELECT * FROM `{storage_connection_name}`.`fruits.csv`
+            WITH (
+                FORMAT='csv_with_names',
+                SCHEMA (
+                    Value Date32,
+                )
+            );
+        '''
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.FAILED)
+        issues = str(client.describe_query(query_id).result.query.issue)
+        assert "big dates is not supported" in issues, "Incorrect issues: " + issues
+
+        sql = f'''
+            INSERT INTO `{storage_connection_name}`.`/test/`
+            WITH (FORMAT = 'csv_with_names')
+            SELECT * FROM AS_TABLE([
+                <|foo:CAST(CurrentUtcDate() AS Date32), bar:"xxx"u|>
+            ]);
+        '''
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.FAILED)
+        issues = str(client.describe_query(query_id).result.query.issue)
+        assert "big dates is not supported" in issues, "Incorrect Issues: " + issues

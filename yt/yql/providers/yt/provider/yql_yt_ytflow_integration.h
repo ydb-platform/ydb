@@ -9,6 +9,6 @@
 
 namespace NYql {
 
-THolder<IYtflowIntegration> CreateYtYtflowIntegration(TYtState* state);
+THolder<IYtflowIntegration> CreateYtYtflowIntegration(TYtState::TWeakPtr state);
 
 } // namespace NYql

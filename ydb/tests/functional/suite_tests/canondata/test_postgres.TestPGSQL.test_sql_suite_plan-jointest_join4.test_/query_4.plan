@@ -149,6 +149,7 @@
                                                                         "PlanNodeId": 9,
                                                                         "Plans": [
                                                                             {
+<<<<<<< HEAD
                                                                                 "Node Type": "TableFullScan",
                                                                                 "Operators": [
                                                                                     {
@@ -165,6 +166,11 @@
                                                                                         "Scan": "Parallel",
                                                                                         "Table": "postgres_jointest/join4.test_plan/a"
                                                                                     }
+=======
+                                                                                "HashFunc": "HashV1",
+                                                                                "KeyColumns": [
+                                                                                    "a"
+>>>>>>> 1fa4fef39c6 ([KQP] Splitted hashfunc into hashv1 and columnshardhashv1 (#19578))
                                                                                 ],
                                                                                 "PlanNodeId": 8,
                                                                                 "Tables": [

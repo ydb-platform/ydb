@@ -5,6 +5,11 @@ items:
   href: build-ya.md
 - name: Релизы
   href: manage-releases.md
+- name: Документация
+  href: documentation/index.md
+  include:
+    mode: link
+    path: documentation/toc_p.yaml
 - name: Ядро
   items:
   - name: Общая схема

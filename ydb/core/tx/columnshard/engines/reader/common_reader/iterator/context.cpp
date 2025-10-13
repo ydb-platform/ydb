@@ -10,7 +10,6 @@ namespace NKikimr::NOlap::NReader::NCommon {
 TSpecialReadContext::TSpecialReadContext(const std::shared_ptr<TReadContext>& commonContext)
     : CommonContext(commonContext) {
     ReadMetadata = CommonContext->GetReadMetadataPtrVerifiedAs<TReadMetadata>();
-    Y_ABORT_UNLESS(ReadMetadata->SelectInfo);
 
     double kffAccessors = 0.01;
     double kffFilter = 0.45;
@@ -41,12 +40,10 @@ TSpecialReadContext::TSpecialReadContext(const std::shared_ptr<TReadContext>& co
         NGroupedMemoryManager::TScanMemoryLimiterOperator::BuildStageFeatures(stagePrefix + "::MERGE", kffMerge * TGlobalLimits::ScanMemoryLimit)
     };
     ProcessMemoryGuard = NGroupedMemoryManager::TScanMemoryLimiterOperator::BuildProcessGuard(ReadMetadata->GetTxId(), stages);
-    ProcessScopeGuard =
-        NGroupedMemoryManager::TScanMemoryLimiterOperator::BuildScopeGuard(ReadMetadata->GetTxId(), GetCommonContext()->GetScanId());
+    ProcessScopeGuard = ProcessMemoryGuard->BuildScopeGuard(GetCommonContext()->GetScanId());
 
     auto readSchema = ReadMetadata->GetResultSchema();
     SpecColumns = std::make_shared<TColumnsSet>(TIndexInfo::GetSnapshotColumnIdsSet(), readSchema);
-    IndexChecker = ReadMetadata->GetProgram().GetIndexChecker();
     {
         auto predicateColumns = ReadMetadata->GetPKRangesFilter().GetColumnIds(ReadMetadata->GetIndexInfo());
         if (predicateColumns.size()) {

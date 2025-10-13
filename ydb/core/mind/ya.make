@@ -21,6 +21,7 @@ SRCS(
     node_broker__extend_lease.cpp
     node_broker__init_scheme.cpp
     node_broker__load_state.cpp
+    node_broker__migrate_state.cpp
     node_broker__register_node.cpp
     node_broker__scheme.h
     node_broker__update_config.cpp

@@ -694,9 +694,14 @@ void NO_INLINE Aggregator::convertToBlockImplFinal(
     PaddedPODArray<AggregateDataPtr> places;
     places.reserve(data.size());
 
+    std::vector<arrow::Type::type> typeIds;
+    for (auto&& i : key_columns) {
+        typeIds.emplace_back(i->type()->id());
+    }
+
     data.forEachValue([&](const auto & key, auto & mapped)
     {
-        method.insertKeyIntoColumns(key, key_columns, key_sizes_ref);
+        method.insertKeyIntoColumns(key, key_columns, key_sizes_ref, typeIds);
         places.emplace_back(mapped);
 
         /// Mark the cell as destroyed so it will not be destroyed in destructor.
@@ -760,9 +765,14 @@ void NO_INLINE Aggregator::convertToBlockImplNotFinal(
 #endif
     const auto & key_sizes_ref = key_sizes;
 
+    std::vector<arrow::Type::type> typeIds;
+    for (auto&& i : key_columns) {
+        typeIds.emplace_back(i->type()->id());
+    }
+
     data.forEachValue([&](const auto & key, auto & mapped)
     {
-        method.insertKeyIntoColumns(key, key_columns, key_sizes_ref);
+        method.insertKeyIntoColumns(key, key_columns, key_sizes_ref, typeIds);
 
         /// reserved, so push_back does not throw exceptions
         for (size_t i = 0; i < params.aggregates_size; ++i)

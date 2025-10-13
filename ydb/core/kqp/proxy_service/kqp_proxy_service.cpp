@@ -30,6 +30,7 @@
 #include <ydb/core/kqp/compute_actor/kqp_compute_actor.h>
 #include <ydb/core/mon/mon.h>
 #include <ydb/library/ydb_issue/issue_helpers.h>
+#include <ydb/core/protos/workload_manager_config.pb.h>
 #include <ydb/core/sys_view/common/schema.h>
 
 #include <ydb/library/yql/utils/actor_log/log.h>
@@ -202,6 +203,7 @@ public:
         , TableServiceConfig(tableServiceConfig)
         , QueryServiceConfig(queryServiceConfig)
         , FeatureFlags()
+        , WorkloadManagerConfig()
         , KqpSettings(std::make_shared<const TKqpSettings>(std::move(settings)))
         , FederatedQuerySetupFactory(federatedQuerySetupFactory)
         , QueryReplayFactory(std::move(queryReplayFactory))
@@ -216,6 +218,7 @@ public:
         NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(KQP_PROVIDER));
         Counters = MakeIntrusive<TKqpCounters>(AppData()->Counters, &TlsActivationContext->AsActorContext());
         FeatureFlags = AppData()->FeatureFlags;
+        WorkloadManagerConfig = AppData()->WorkloadManagerConfig;
         // NOTE: some important actors are constructed within next call
         FederatedQuerySetup = FederatedQuerySetupFactory->Make(ctx.ActorSystem());
         AsyncIoFactory = CreateKqpAsyncIoFactory(Counters, FederatedQuerySetup, S3ActorsFactory);
@@ -240,13 +243,14 @@ public:
         ui32 tableServiceConfigKind = (ui32)NKikimrConsole::TConfigItem::TableServiceConfigItem;
         ui32 logConfigKind = (ui32)NKikimrConsole::TConfigItem::LogConfigItem;
         ui32 featureFlagsKind = (ui32)NKikimrConsole::TConfigItem::FeatureFlagsItem;
+        ui32 workloadManagerKind = (ui32)NKikimrConsole::TConfigItem::WorkloadManagerConfigItem;
         Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()),
             new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest(
-                {tableServiceConfigKind, logConfigKind, featureFlagsKind}),
+                {tableServiceConfigKind, logConfigKind, featureFlagsKind, workloadManagerKind}),
             IEventHandle::FlagTrackDelivery);
 
         WhiteBoardService = NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId());
-        ResourcePoolsCache.UpdateFeatureFlags(FeatureFlags, ActorContext());
+        ResourcePoolsCache.UpdateConfig(FeatureFlags, WorkloadManagerConfig, ActorContext());
 
         if (auto& cfg = TableServiceConfig.GetSpillingServiceConfig().GetLocalFileConfig(); cfg.GetEnable()) {
             TString spillingRoot = cfg.GetRoot();
@@ -517,7 +521,8 @@ public:
         UpdateYqlLogLevels();
 
         FeatureFlags.Swap(event.MutableConfig()->MutableFeatureFlags());
-        ResourcePoolsCache.UpdateFeatureFlags(FeatureFlags, ActorContext());
+        WorkloadManagerConfig.Swap(event.MutableConfig()->MutableWorkloadManagerConfig());
+        ResourcePoolsCache.UpdateConfig(FeatureFlags, WorkloadManagerConfig, ActorContext());
 
         auto responseEv = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationResponse>(event);
         Send(ev->Sender, responseEv.Release(), IEventHandle::FlagTrackDelivery, ev->Cookie);
@@ -1598,10 +1603,10 @@ private:
     }
 
     bool TryFillPoolInfoFromCache(TEvKqp::TEvQueryRequest::TPtr& ev, ui64 requestId) {
-        ResourcePoolsCache.UpdateFeatureFlags(FeatureFlags, ActorContext());
+        ResourcePoolsCache.UpdateConfig(FeatureFlags, WorkloadManagerConfig, ActorContext());
 
         const auto& databaseId = ev->Get()->GetDatabaseId();
-        if (!ResourcePoolsCache.ResourcePoolsEnabled(databaseId)) {
+        if (!ResourcePoolsCache.ResourcePoolsEnabled(databaseId) || ev->Get()->IsInternalCall()) {
             ev->Get()->SetPoolId("");
             return true;
         }
@@ -1894,6 +1899,7 @@ private:
     NKikimrConfig::TTableServiceConfig TableServiceConfig;
     NKikimrConfig::TQueryServiceConfig QueryServiceConfig;
     NKikimrConfig::TFeatureFlags FeatureFlags;
+    NKikimrConfig::TWorkloadManagerConfig WorkloadManagerConfig;
     TKqpSettings::TConstPtr KqpSettings;
     IKqpFederatedQuerySetupFactory::TPtr FederatedQuerySetupFactory;
     std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;

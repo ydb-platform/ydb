@@ -93,7 +93,7 @@ private:
 
         TExprNode::TPtr format = ExtractFormat(settings);
         if (!format) {
-            ctx.AddError(TIssue(ctx.GetPosition(write->Pos()), "Missing format - please use WITH FORMAT when writing into S3"));
+            ctx.AddError(TIssue(ctx.GetPosition(write->Pos()), "No write format specified. Please use WITH FORMAT for writing into S3"));
             return nullptr;
         }
 

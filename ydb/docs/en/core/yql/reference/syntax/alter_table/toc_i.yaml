@@ -1,6 +1,6 @@
 items:
  - { name: Overview,    href: index.md                                          }
- - { name: INDEX,       href: secondary_index.md, when: feature_secondary_index }
+ - { name: INDEX,       href: indexes.md, when: feature_secondary_index }
  - { name: COLUMN,      href: columns.md                                        }
  - { name: SET,         href: set.md,             when: backend_name == "YDB"   }
  - { name: CHANGEFEED,  href: changefeed.md,      when: feature_changefeed      }

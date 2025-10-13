@@ -1,6 +1,5 @@
 #include "kqp_executer.h"
 #include "kqp_executer_impl.h"
-#include "kqp_partition_helper.h"
 #include "kqp_tasks_graph.h"
 #include "kqp_tasks_validate.h"
 
@@ -49,7 +48,7 @@ public:
         TPreparedQueryHolder::TConstPtr preparedQuery,
         const TIntrusivePtr<TUserRequestContext>& userRequestContext,
         ui32 statementResultIndex, const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings)
-        : TBase(std::move(request), std::move(asyncIoFactory), federatedQuerySetup, GUCSettings, database, userToken, counters, tableServiceConfig,
+        : TBase(std::move(request), std::move(asyncIoFactory), federatedQuerySetup, GUCSettings, {}, database, userToken, counters, tableServiceConfig,
             userRequestContext, statementResultIndex, TWilsonKqp::ScanExecuter, "ScanExecuter",
             false
         )
@@ -196,7 +195,7 @@ private:
                     BuildSysViewScanTasks(stageInfo);
                 } else if (stageInfo.Meta.IsOlap() || stageInfo.Meta.IsDatashard()) {
                     HasOlapTable = true;
-                    BuildScanTasksFromShards(stageInfo);
+                    BuildScanTasksFromShards(stageInfo, tx.Body->EnableShuffleElimination());
                 } else {
                     YQL_ENSURE(false, "Unexpected stage type " << (int) stageInfo.Meta.TableKind);
                 }
@@ -219,7 +218,7 @@ private:
                 }
 
                 TasksGraph.GetMeta().AllowWithSpilling |= stage.GetAllowWithSpilling();
-                BuildKqpStageChannels(TasksGraph, stageInfo, TxId, /* enableSpilling */ TasksGraph.GetMeta().AllowWithSpilling);
+                BuildKqpStageChannels(TasksGraph, stageInfo, TxId, /* enableSpilling */ TasksGraph.GetMeta().AllowWithSpilling, tx.Body->EnableShuffleElimination());
             }
 
             ResponseEv->InitTxResult(tx.Body);

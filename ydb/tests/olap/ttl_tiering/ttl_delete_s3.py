@@ -80,6 +80,12 @@ class TestDeleteS3Ttl(TllTieringTestBase):
             """
         )
 
+        self.ydb_client.query(
+            f"""
+            ALTER OBJECT `{table_path}` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`l-buckets`)
+            """
+        )
+
         logger.info(f"Table {table_path} created")
 
         self.ydb_client.query(f"CREATE OBJECT {access_key_id_secret_name} (TYPE SECRET) WITH value='{self.s3_client.key_id}'")

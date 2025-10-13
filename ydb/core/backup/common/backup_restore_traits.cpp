@@ -1,6 +1,5 @@
 #include "backup_restore_traits.h"
 
-#include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
 #include <util/generic/hash.h>

@@ -336,12 +336,7 @@ public:
         }
         virtual ~TCommandOptsParseResult() = default;
 
-        void HandleError() const override {
-            if (ThrowOnParseError) {
-                throw;
-            }
-            NLastGetopt::TOptsParseResult::HandleError();
-        }
+        void HandleError() const override;
 
     protected:
         TCommandOptsParseResult(bool throwOnParseError)

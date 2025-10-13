@@ -583,7 +583,6 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TKeepAliveHttpClient::THeaders headers;
         headers["Content-Type"] = "application/json";
         headers["Authorization"] = token;
-        Cerr << "Doing PostOffsetCommit" << Endl;
         const TKeepAliveHttpClient::THttpCode statusCode = httpClient.DoPost("/viewer/commit_offset", NJson::WriteJson(jsonRequest, false), &responseStream, headers);
         return statusCode;
     }
@@ -2043,14 +2042,14 @@ Y_UNIT_TEST_SUITE(Viewer) {
         auto res = topicClient.CreateTopic(topicPath, NYdb::NTopic::TCreateTopicSettings()
                         .BeginAddConsumer(consumerName).EndAddConsumer().RetentionPeriod(TDuration::Seconds(1))).GetValueSync();
         UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
-        auto writeData = [&](NYdb::NPersQueue::ECodec codec, ui64 count, const TString& producerId, ui64 size = 100u) {
+        auto writeData = [&](NYdb::NPersQueue::ECodec codec, ui64 count, const TString& producerId) {
             NYdb::NPersQueue::TWriteSessionSettings wsSettings;
             wsSettings.Path(topicPath);
             wsSettings.MessageGroupId(producerId);
             wsSettings.Codec(codec);
 
             auto writer = TPersQueueClient(ydbDriver).CreateSimpleBlockingWriteSession(TWriteSessionSettings(wsSettings).ClusterDiscoveryMode(EClusterDiscoveryMode::Off));
-            TString dataFiller{size, 'a'};
+            TString dataFiller{400u, 'a'};
 
             for (auto i = 0u; i < count; ++i) {
                 writer->Write(TStringBuilder() << "Message " << i << " : " << dataFiller);
@@ -2058,30 +2057,32 @@ Y_UNIT_TEST_SUITE(Viewer) {
             writer->Close();
         };
 
-        writeData(ECodec::GZIP, 50000, "producer1");
+        writeData(ECodec::RAW, 20000, "producer1");
 
 
         TKeepAliveHttpClient httpClient("localhost", monPort);
         NKikimr::NViewerTests::WaitForHttpReady(httpClient);
 
-
-        auto postReturnCode1 = PostOffsetCommit(httpClient, VALID_TOKEN);
+        // checking that user with correct token but no rights cannot commit to the topic
+        auto postReturnCode1 = PostOffsetCommit(httpClient, "root@builtin");
         UNIT_ASSERT_EQUAL(postReturnCode1, HTTP_FORBIDDEN);
 
         TClient client1(settings);
         client1.InitRootScheme();
         GrantConnect(client1);
 
+        // checking that user with rights and correct token can commit successfully
         auto postReturnCode2 = PostOffsetCommit(httpClient, VALID_TOKEN);
         UNIT_ASSERT_EQUAL(postReturnCode2, HTTP_OK);
 
+        // checking that user with invalid token cannot commit
         TString invalid_token = "abracadabra";
         auto postReturnCode10 = PostOffsetCommit(httpClient, invalid_token);
         UNIT_ASSERT_EQUAL(postReturnCode10, HTTP_FORBIDDEN);
 
+        // checking that commiting with consumer without read rule is forbidden
         auto postReturnCode3 = PostOffsetCommit(httpClient, VALID_TOKEN, "/Root", "/Root/topic1", "consumer2", 0, 55000);
         UNIT_ASSERT_EQUAL(postReturnCode3, HTTP_BAD_REQUEST);
-
 
         auto describeTopicResult = topicClient.DescribeTopic(topicPath).GetValueSync();
         UNIT_ASSERT(describeTopicResult.IsSuccess());
@@ -2089,14 +2090,16 @@ Y_UNIT_TEST_SUITE(Viewer) {
         UNIT_ASSERT_EQUAL(consumers.size(), 1);
         UNIT_ASSERT_EQUAL(consumers[0].GetConsumerName(), consumerName);
 
-        writeData(ECodec::RAW, 50000, "producer2");
+        writeData(ECodec::RAW, 20000, "producer2");
 
         Sleep(TDuration::Seconds(1));
-        
+
         // now messages are deleted because of retention
+        // check that if we commit offset less than start offset in strict mode, start offset is committed
         auto postReturnCode4 = PostOffsetCommit(httpClient, VALID_TOKEN, "/Root", "/Root/topic1", "consumer1", 0, 1000);
         UNIT_ASSERT_EQUAL(postReturnCode4, HTTP_OK);
-        auto postReturnCode5 = PostOffsetCommit(httpClient, VALID_TOKEN, "/Root", "/Root/topic1", "consumer1", 0, 55000);
+        // check that offset commit works correctly if start offset is non-zero and offset is greater that start offset
+        auto postReturnCode5 = PostOffsetCommit(httpClient, VALID_TOKEN, "/Root", "/Root/topic1", "consumer1", 0, 15000);
         UNIT_ASSERT_EQUAL(postReturnCode5, HTTP_OK);
 
     }

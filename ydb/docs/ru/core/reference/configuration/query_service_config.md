@@ -1,4 +1,4 @@
-# Конфигурация внешних источников
+# query_service_config
 
 Секция `query_service_config` описывает параметры работы {{ ydb-short-name }} с внешними источниками данных с помощью функциональности [федеративных запросов](../../concepts/federated_query/index.md)
 

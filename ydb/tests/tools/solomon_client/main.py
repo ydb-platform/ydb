@@ -116,4 +116,6 @@ def parse_args():
 
 def main():
     args = parse_args()
-    args.command(args)
+    result = args.command(args)
+
+    print(result)

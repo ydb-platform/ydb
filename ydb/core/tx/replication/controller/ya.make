@@ -4,6 +4,8 @@ PEERDIR(
     ydb/core/base
     ydb/core/discovery
     ydb/core/engine/minikql
+    ydb/core/kqp/common/events
+    ydb/core/kqp/federated_query
     ydb/core/protos
     ydb/core/tablet
     ydb/core/tablet_flat

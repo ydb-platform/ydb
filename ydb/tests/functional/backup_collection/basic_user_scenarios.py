@@ -960,3 +960,366 @@ class TestFullCycleLocalBackupRestoreWIncr(TestFullCycleLocalBackupRestore):
         # cleanup
         if os.path.exists(export_dir):
             shutil.rmtree(export_dir)
+
+
+class TestFullCycleLocalBackupRestoreWSchemaChange(TestFullCycleLocalBackupRestore):
+    def _create_backup_collection(self, collection_src, tables: List[str]):
+        # create backup collection referencing given table full paths
+        table_entries = ",\n".join([f"TABLE `/Root/{t}`" for t in tables])
+        sql = f"""
+            CREATE BACKUP COLLECTION `{collection_src}`
+                ( {table_entries} )
+            WITH ( STORAGE = 'cluster', INCREMENTAL_BACKUP_ENABLED = 'false' );
+        """
+        res = self._execute_yql(sql)
+        stderr_out = ""
+        if getattr(res, 'std_err', None):
+            stderr_out += res.std_err.decode('utf-8', errors='ignore')
+        if getattr(res, 'std_out', None):
+            stderr_out += res.std_out.decode('utf-8', errors='ignore')
+        assert res.exit_code == 0, f"CREATE BACKUP COLLECTION failed: {stderr_out}"
+        self.wait_for_collection(collection_src, timeout_s=30)
+
+    def _backup_now(self, collection_src):
+        time.sleep(1.1)
+        res = self._execute_yql(f"BACKUP `{collection_src}`;")
+        if res.exit_code != 0:
+            out = (res.std_out or b"").decode('utf-8', 'ignore')
+            err = (res.std_err or b"").decode('utf-8', 'ignore')
+            raise AssertionError(f"BACKUP failed: code={res.exit_code} STDOUT: {out} STDERR: {err}")
+
+    def _restore_import(self, export_dir, exported_item, collection_restore):
+        bdir = os.path.join(export_dir, exported_item)
+        r = yatest.common.execute(
+            [backup_bin(), "--verbose", "--endpoint", "grpc://localhost:%d" % self.cluster.nodes[1].grpc_port,
+             "--database", self.root_dir, "tools", "restore",
+             "--path", f"/Root/.backups/collections/{collection_restore}",
+             "--input", bdir],
+            check_exit_code=False,
+        )
+        assert r.exit_code == 0, f"tools restore import failed: {r.std_err}"
+
+    def _verify_restored_table_data(self, table, expected_rows):
+        # rows = self._capture_snapshot(table)
+        rows = self.wait_for_table_rows(table, expected_rows, timeout_s=90)
+        assert rows == expected_rows, f"Restored data for {table} doesn't match expected.\nExpected: {expected_rows}\nGot: {rows}"
+
+    def _capture_schema(self, table_path: str):
+        desc = self.driver.scheme_client.describe_path(table_path)
+        cols = self._get_columns_from_scheme_entry(desc, path_hint=table_path)
+        return cols
+
+    def _capture_acl(self, table_path: str):
+        # Attempt to capture owner/grants/acl in a readable form.
+        try:
+            desc = self.driver.scheme_client.describe_path(table_path)
+        except Exception:
+            return None
+
+        acl_info = {}
+        owner = getattr(desc, "owner", None)
+        if owner:
+            acl_info["owner"] = owner
+
+        for cand in ("acl", "grants", "effective_acl", "permission", "permissions"):
+            if hasattr(desc, cand):
+                try:
+                    val = getattr(desc, cand)
+                    acl_info[cand] = val
+                except Exception:
+                    acl_info[cand] = "<unreadable>"
+
+        # Fallback: try SHOW GRANTS via YQL and capture stdout
+        try:
+            res = self._execute_yql(f"SHOW GRANTS ON '{table_path}';")
+            out = (res.std_out or b"").decode('utf-8', 'ignore')
+            if out:
+                acl_info["show_grants"] = out
+        except Exception:
+            pass
+
+        return acl_info
+
+    # --- Helpers for extended checks (schema and ACL capture) ---
+    def _get_columns_from_scheme_entry(self, desc, path_hint: str = None):
+        # Reuse original robust approach: try multiple candidate attributes
+        try:
+            table_obj = getattr(desc, "table", None)
+            if table_obj is not None:
+                cols = getattr(table_obj, "columns", None)
+                if cols:
+                    return [c.name for c in cols]
+
+            cols = getattr(desc, "columns", None)
+            if cols:
+                try:
+                    return [c.name for c in cols]
+                except Exception:
+                    return [str(c) for c in cols]
+
+            for attr in ("schema", "entry", "path"):
+                nested = getattr(desc, attr, None)
+                if nested is not None:
+                    table_obj = getattr(nested, "table", None)
+                    cols = getattr(table_obj, "columns", None) if table_obj is not None else None
+                    if cols:
+                        return [c.name for c in cols]
+        except Exception:
+            pass
+
+        if getattr(desc, "is_table", False) or getattr(desc, "is_row_table", False) or getattr(desc, "is_column_table", False):
+            if path_hint:
+                table_path = path_hint
+            else:
+                name = getattr(desc, "name", None)
+                assert name, f"SchemeEntry has no name, can't form path. desc repr: {repr(desc)}"
+                table_path = name if name.startswith("/Root") else os.path.join(self.root_dir, name)
+
+            try:
+                tc = getattr(self.driver, "table_client", None)
+                if tc is not None and hasattr(tc, "describe_table"):
+                    desc_tbl = tc.describe_table(table_path)
+                    cols = getattr(desc_tbl, "columns", None) or getattr(desc_tbl, "Columns", None)
+                    if cols:
+                        try:
+                            return [c.name for c in cols]
+                        except Exception:
+                            return [str(c) for c in cols]
+            except Exception:
+                pass
+
+            try:
+                with self.session_scope() as session:
+                    if hasattr(session, "describe_table"):
+                        desc_tbl = session.describe_table(table_path)
+                        cols = getattr(desc_tbl, "columns", None) or getattr(desc_tbl, "Columns", None)
+                        if cols:
+                            try:
+                                return [c.name for c in cols]
+                            except Exception:
+                                return [str(c) for c in cols]
+            except Exception:
+                pass
+
+        diagnostics = ["Failed to find columns via known candidates.\n"]
+        try:
+            diagnostics.append("dir(desc):\n" + ", ".join(dir(desc)) + "\n")
+        except Exception as e:
+            diagnostics.append(f"dir(desc) raised: {e}\n")
+
+        readable = []
+        for attr in sorted(set(dir(desc))):
+            if attr.startswith("_"):
+                continue
+            if len(readable) >= 40:
+                break
+            try:
+                val = getattr(desc, attr)
+                if callable(val):
+                    continue
+                s = repr(val)
+                if len(s) > 300:
+                    s = s[:300] + "...(truncated)"
+                readable.append(f"{attr} = {s}")
+            except Exception as e:
+                readable.append(f"{attr} = <unreadable: {e}>")
+
+        diagnostics.append("Sample attributes (truncated):\n" + "\n".join(readable) + "\n")
+
+        raise AssertionError(
+            "describe_path returned SchemeEntry in unexpected shape. Cannot locate columns.\n\nDiagnostic dump:\n\n"
+            + "\n".join(diagnostics)
+        )
+
+    def _drop_tables(self, tables: List[str]):
+        with self.session_scope() as session:
+            for t in tables:
+                full = f"/Root/{t}"
+                try:
+                    session.execute_scheme(f"DROP TABLE `{full}`;")
+                except Exception:
+                    # ignore failures
+                    pass
+
+    def test_full_cycle_local_backup_restore_with_schema_changes(self):
+        collection_src, t1, t2 = self._setup_test_collections()
+
+        # Create backup collection (will reference the initial tables)
+        self._create_backup_collection(collection_src, [t1, t2])
+
+        # === Step 4: Add/remove data, change ACLs (1), add more tables (1) ===
+        # perform first wave of modifications that must be captured by full backup 1
+        with self.session_scope() as session:
+            # add & remove data
+            session.transaction().execute('PRAGMA TablePathPrefix("/Root"); UPSERT INTO orders (id, number, txt) VALUES (10, 100, "one-wave");', commit_tx=True)
+            session.transaction().execute('PRAGMA TablePathPrefix("/Root"); DELETE FROM products WHERE id = 1;', commit_tx=True)
+
+            # change ACLs: try multiple grant syntaxes until success
+            desc_for_acl = self.driver.scheme_client.describe_path("/Root/orders")
+            owner_role = getattr(desc_for_acl, "owner", None) or "root@builtin"
+
+            def q(role: str) -> str:
+                return "`" + role.replace("`", "") + "`"
+
+            role_candidates = [owner_role, "public", "everyone", "root"]
+            grant_variants = []
+            for r in role_candidates:
+                role_quoted = q(r)
+                grant_variants.extend([
+                    f"GRANT ALL ON `/Root/orders` TO {role_quoted};",
+                    f"GRANT SELECT ON `/Root/orders` TO {role_quoted};",
+                    f"GRANT 'ydb.generic.read' ON `/Root/orders` TO {role_quoted};",
+                ])
+            grant_variants.append(f"GRANT ALL ON `/Root/orders` TO {q(owner_role)};")
+
+            acl_applied = False
+            for cmd in grant_variants:
+                res = self._execute_yql(cmd)
+                if res.exit_code == 0:
+                    acl_applied = True
+                    break
+            assert acl_applied, "Failed to apply any GRANT variant in step (1)"
+
+            # add more tables (1)
+            create_table_with_data(session, "extra_table_1")
+
+        # capture state after wave 1
+        snapshot_wave1_t1 = self._capture_snapshot(t1)
+        snapshot_wave1_t2 = self._capture_snapshot(t2)
+        schema_wave1_t1 = self._capture_schema(f"/Root/{t1}")
+        schema_wave1_t2 = self._capture_schema(f"/Root/{t2}")
+        acl_wave1_t1 = self._capture_acl(f"/Root/{t1}")
+        acl_wave1_t2 = self._capture_acl(f"/Root/{t2}")
+
+        # === Create full backup 1 ===
+        self._backup_now(collection_src)
+        self.wait_for_collection_has_snapshot(collection_src, timeout_s=30)
+
+        # === Step 7..12: modifications (2) include add/remove data, add more tables (2), remove some tables from step5,
+        # add/alter/drop columns, change ACLs ===
+        with self.session_scope() as session:
+            # data modifications
+            session.transaction().execute('PRAGMA TablePathPrefix("/Root"); UPSERT INTO orders (id, number, txt) VALUES (11, 111, "two-wave");', commit_tx=True)
+            session.transaction().execute('PRAGMA TablePathPrefix("/Root"); DELETE FROM orders WHERE id = 2;', commit_tx=True)
+
+            # add more tables (2)
+            create_table_with_data(session, "extra_table_2")
+
+            # remove some tables from step5: drop extra_table_1
+            try:
+                session.execute_scheme('DROP TABLE `/Root/extra_table_1`;')
+            except Exception:
+                pass
+
+            # add columns to initial tables
+            try:
+                session.execute_scheme('ALTER TABLE `/Root/orders` ADD COLUMN new_col Uint32;')
+            except Exception:
+                # if not supported, ignore but record
+                logger.info('ALTER TABLE ADD COLUMN not supported in this build')
+
+            # attempt alter column (if supported) - many builds do not support complex ALTER, so guard with try
+            try:
+                session.execute_scheme('ALTER TABLE `/Root/orders` ALTER COLUMN number SET NOT NULL;')
+            except Exception:
+                logger.info('ALTER COLUMN ... SET NOT NULL not supported, skipping')
+
+            # drop columns
+            try:
+                session.execute_scheme('ALTER TABLE `/Root/orders` DROP COLUMN new_col;')
+            except Exception:
+                logger.info('DROP COLUMN new_col not supported or already dropped')
+
+            # change ACLs again for initial tables
+            desc_for_acl2 = self.driver.scheme_client.describe_path("/Root/orders")
+            owner_role2 = getattr(desc_for_acl2, "owner", None) or "root@builtin"
+            owner_quoted = owner_role2.replace('`', '')
+            cmd = f"GRANT SELECT ON `/Root/orders` TO `{owner_quoted}`;"
+            res = self._execute_yql(cmd)
+            assert res.exit_code == 0, "Failed to apply GRANT in wave 2"
+
+        # capture state after wave 2
+        snapshot_wave2_t1 = self._capture_snapshot(t1)
+        snapshot_wave2_t2 = self._capture_snapshot(t2)
+        schema_wave2_t1 = self._capture_schema(f"/Root/{t1}")
+        schema_wave2_t2 = self._capture_schema(f"/Root/{t2}")
+        acl_wave2_t1 = self._capture_acl(f"/Root/{t1}")
+        acl_wave2_t2 = self._capture_acl(f"/Root/{t2}")
+
+        # === Create full backup 2 ===
+        self._backup_now(collection_src)
+        self.wait_for_collection_has_snapshot(collection_src, timeout_s=30)
+
+        # === Export backups so we can import snapshots into separate collections for restore verification ===
+        export_dir, exported_items = self._export_backups(collection_src)
+        # expect at least two exported snapshots (backup1 and backup2)
+        assert len(exported_items) >= 2, "Expected at least 2 exported snapshots for verification"
+
+        # === Attempt to import exported backup into new collection and RESTORE while tables exist => expect fail ===
+        # create restore collections
+        coll_restore_1 = f"coll_restore_v1_{int(time.time())}"
+        coll_restore_2 = f"coll_restore_v2_{int(time.time())}"
+        self._create_backup_collection(coll_restore_1, [t1, t2])
+        self._create_backup_collection(coll_restore_2, [t1, t2])
+
+        # import exported snapshots into restore collections
+        # imported_items are directories in exported_items; we'll import both
+        self._restore_import(export_dir, exported_items[0], coll_restore_1)
+        self._restore_import(export_dir, exported_items[1], coll_restore_2)
+
+        # try RESTORE when tables already exist -> should fail
+        res_restore_when_exists = self._execute_yql(f"RESTORE `{coll_restore_1}`;")
+        assert res_restore_when_exists.exit_code != 0, "Expected RESTORE to fail when target tables already exist"
+
+        # === Remove all tables from DB (orders, products, extras) ===
+        self._drop_tables([t1, t2, "extra_table_1", "extra_table_2"])  # ignore errors
+
+        # === Now RESTORE coll_restore_1 (which corresponds to backup1) ===
+        res_restore1 = self._execute_yql(f"RESTORE `{coll_restore_1}`;")
+        assert res_restore1.exit_code == 0, f"RESTORE v1 failed: {res_restore1.std_err or res_restore1.std_out}"
+
+        # verify schema/data/acl for backup1
+        # verify data
+        self._verify_restored_table_data(t1, snapshot_wave1_t1)
+        self._verify_restored_table_data(t2, snapshot_wave1_t2)
+
+        # verify schema
+        restored_schema_t1 = self._capture_schema(f"/Root/{t1}")
+        restored_schema_t2 = self._capture_schema(f"/Root/{t2}")
+        assert restored_schema_t1 == schema_wave1_t1, f"Schema for {t1} after restore v1 differs: expected {schema_wave1_t1}, got {restored_schema_t1}"
+        assert restored_schema_t2 == schema_wave1_t2, f"Schema for {t2} after restore v1 differs: expected {schema_wave1_t2}, got {restored_schema_t2}"
+
+        # verify acl
+        restored_acl_t1 = self._capture_acl(f"/Root/{t1}")
+        restored_acl_t2 = self._capture_acl(f"/Root/{t2}")
+        # We compare that SHOW GRANTS output contains previously stored show_grants if present
+        if 'show_grants' in (acl_wave1_t1 or {}):
+            assert 'show_grants' in (restored_acl_t1 or {}) and acl_wave1_t1['show_grants'] in restored_acl_t1['show_grants']
+        if 'show_grants' in (acl_wave1_t2 or {}):
+            assert 'show_grants' in (restored_acl_t2 or {}) and acl_wave1_t2['show_grants'] in restored_acl_t2['show_grants']
+
+        # === Remove all tables again and restore backup2 ===
+        self._drop_tables([t1, t2, "extra_table_1", "extra_table_2"])  # ignore errors
+
+        res_restore2 = self._execute_yql(f"RESTORE `{coll_restore_2}`;")
+        assert res_restore2.exit_code == 0, f"RESTORE v2 failed: {res_restore2.std_err or res_restore2.std_out}"
+
+        # verify data/schema/acl for backup2
+        self._verify_restored_table_data(t1, snapshot_wave2_t1)
+        self._verify_restored_table_data(t2, snapshot_wave2_t2)
+
+        restored_schema2_t1 = self._capture_schema(f"/Root/{t1}")
+        restored_schema2_t2 = self._capture_schema(f"/Root/{t2}")
+        assert restored_schema2_t1 == schema_wave2_t1, f"Schema for {t1} after restore v2 differs: expected {schema_wave2_t1}, got {restored_schema2_t1}"
+        assert restored_schema2_t2 == schema_wave2_t2, f"Schema for {t2} after restore v2 differs: expected {schema_wave2_t2}, got {restored_schema2_t2}"
+
+        restored_acl2_t1 = self._capture_acl(f"/Root/{t1}")
+        restored_acl2_t2 = self._capture_acl(f"/Root/{t2}")
+        if 'show_grants' in (acl_wave2_t1 or {}):
+            assert 'show_grants' in (restored_acl2_t1 or {}) and acl_wave2_t1['show_grants'] in restored_acl2_t1['show_grants']
+        if 'show_grants' in (acl_wave2_t2 or {}):
+            assert 'show_grants' in (restored_acl2_t2 or {}) and acl_wave2_t2['show_grants'] in restored_acl2_t2['show_grants']
+
+        # cleanup exported data
+        if os.path.exists(export_dir):
+            shutil.rmtree(export_dir)

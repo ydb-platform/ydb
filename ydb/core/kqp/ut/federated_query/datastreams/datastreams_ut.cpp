@@ -699,11 +699,14 @@ public:
             .TypeMappingSettings(typeMappingSettings);
 
         auto listSplitsBuilder = mockClient->ExpectListSplits();
-        listSplitsBuilder
+        auto fillListSplitExpectation = listSplitsBuilder
             .ValidateArgs(settings.ValidateListSplitsArgs)
             .Select()
                 .DataSourceInstance(GetMockConnectorSourceInstance())
-                .Table(settings.TableName);
+                .Table(settings.TableName)
+                .What();
+
+        FillMockConnectorRequestColumns(fillListSplitExpectation, settings.Columns);
 
         for (ui64 i = 0; i < settings.DescribeCount; ++i) {
             auto responseBuilder = describeTableBuilder.Response();
@@ -1944,6 +1947,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         ));
 
         {   // Prepare connector mock
+
             const std::vector<TColumn> columns = {
                 {"fqdn", Ydb::Type::STRING},
                 {"payload", Ydb::Type::STRING}
@@ -1952,7 +1956,10 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                 .TableName = ydbTable,
                 .Columns = columns,
                 .DescribeCount = 2,
-                .ListSplitsCount = 2
+                // For stream queries type annotation is executed twice, but
+                // now List Split is done after type annotation optimization.
+                // That is why only single call to List Split is expected.
+                .ListSplitsCount = 1
             });
 
             const std::vector<std::string> fqdnColumn = {"host1.example.com", "host2.example.com", "host3.example.com"};
@@ -2054,7 +2061,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                 .TableName = ydbTable,
                 .Columns = columns,
                 .DescribeCount = 2,
-                .ListSplitsCount = 5,
+                // Now List Split is done after type annotation, that is the
+                // reason why this value equal to 4 not 5
+                .ListSplitsCount = 4,
                 .ValidateListSplitsArgs = false
             });
 

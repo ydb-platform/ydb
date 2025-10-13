@@ -38,21 +38,22 @@ class ResourcePool:
         return result
 
     def get_create_sql(self) -> str:
-        params = ','.join([f'\n    {k.upper()} = {v}' for k, v in self.params.items()])
-        result = f'CREATE RESOURCE POOL {self.name} WITH({params}\n);\n'
-        if len(self.users) == 0:
-            return result
-        if len(self.users) == 1:
-            member = self.users[0]
-        else:
-            member = f'{self.name}_users'
-        result += f'''
-            CREATE RESOURCE POOL CLASSIFIER {self.name} WITH (
-                RESOURCE_POOL = '{self.name}',
-                MEMBER_NAME = '{member}'
-            );
-        '''
-        return result
+        return ''
+        # params = ','.join([f'\n    {k.upper()} = {v}' for k, v in self.params.items()])
+        # result = f'CREATE RESOURCE POOL {self.name} WITH({params}\n);\n'
+        # if len(self.users) == 0:
+        #     return result
+        # if len(self.users) == 1:
+        #     member = self.users[0]
+        # else:
+        #     member = f'{self.name}_users'
+        # result += f'''
+        #     CREATE RESOURCE POOL CLASSIFIER {self.name} WITH (
+        #         RESOURCE_POOL = '{self.name}',
+        #         MEMBER_NAME = '{member}'
+        #     );
+        # '''
+        # return result
 
 
 class WorkloadManagerBase(LoadSuiteBase):
@@ -112,7 +113,7 @@ class WorkloadManagerBase(LoadSuiteBase):
                 sessions_pool.execute_with_retries(f'DROP RESOURCE POOL {pool.name}')
 
             sessions_pool.execute_with_retries(pool.get_create_users_sql())
-            sessions_pool.execute_with_retries(pool.get_create_sql())
+            # sessions_pool.execute_with_retries(pool.get_create_sql())
 
     @classmethod
     def before_workload(cls, result: YdbCliHelper.WorkloadRunResult):
@@ -238,9 +239,12 @@ class WorkloadManagerComputeScheduler(WorkloadManagerBase):
     @classmethod
     def get_resource_pools(cls) -> list[ResourcePool]:
         return [
-            ResourcePool('test_pool_30', ['testuser1'], total_cpu_limit_percent_per_node=30, resource_weight=4),
-            ResourcePool('test_pool_40', ['testuser2'], total_cpu_limit_percent_per_node=40, resource_weight=4),
-            ResourcePool('test_pool_50', ['testuser3'], total_cpu_limit_percent_per_node=50, resource_weight=4),
+            # ResourcePool('test_pool_30', ['testuser1'], total_cpu_limit_percent_per_node=30, resource_weight=4),
+            # ResourcePool('test_pool_40', ['testuser2'], total_cpu_limit_percent_per_node=40, resource_weight=4),
+            # ResourcePool('test_pool_50', ['testuser3'], total_cpu_limit_percent_per_node=50, resource_weight=4),
+            ResourcePool('test_pool_30', ['testuser1']),
+            ResourcePool('test_pool_40', ['testuser2']),
+            ResourcePool('test_pool_50', ['testuser3']),
         ]
 
     @classmethod

@@ -9,7 +9,7 @@ namespace NKikimr::NMiniKQL {
 
 namespace {
 
-TRuntimeNode BuildBlockJoin(TProgramBuilder& pgmBuilder, EJoinKind joinKind, TRuntimeNode leftList,
+TRuntimeNode BuildBlockJoin(TDqProgramBuilder& pgmBuilder, EJoinKind joinKind, TRuntimeNode leftList,
                             TArrayRef<const ui32> leftKeyColumns, const TVector<ui32>& leftKeyDrops,
                             TRuntimeNode rightList,
                             TArrayRef<const ui32> rightKeyColumns, const TVector<ui32>& rightKeyDrops, bool rightAny) {
@@ -202,7 +202,7 @@ THolder<IComputationGraph> ConstructJoinGraphStream(EJoinKind joinKind, ETestedJ
         case ETestedJoinAlgo::kBlockMap: {
             TVector<ui32> kEmptyColumnDrops;
 
-            return BuildBlockJoin(pb, joinKind, args.Left, descr.LeftSource.KeyColumnIndexes, kEmptyColumnDrops,
+            return BuildBlockJoin(dqPb, joinKind, args.Left, descr.LeftSource.KeyColumnIndexes, kEmptyColumnDrops,
                                   args.Right, descr.RightSource.KeyColumnIndexes, kEmptyColumnDrops, false);
         }
         case ETestedJoinAlgo::kBlockHash: {
@@ -210,7 +210,7 @@ THolder<IComputationGraph> ConstructJoinGraphStream(EJoinKind joinKind, ETestedJ
             for (TType* type : resultTypesArr) {
                 blockResultTypes.push_back(pb.NewBlockType(type, TBlockType::EShape::Many));
             }
-            blockResultTypes.push_back(LastScalarIndexBlock(dqPb));
+            blockResultTypes.push_back(dqPb.LastScalarIndexBlock());
             return dqPb.DqBlockHashJoin(ToWideStream(dqPb, args.Left), ToWideStream(dqPb, args.Right), joinKind,
                                         descr.LeftSource.KeyColumnIndexes, descr.RightSource.KeyColumnIndexes,
                                         pb.NewStreamType(pb.NewMultiType(blockResultTypes)));

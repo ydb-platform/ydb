@@ -19,7 +19,7 @@ NUdf::TUnboxedValuePod ToBlocks(TComputationContext& ctx, size_t blockSize, cons
                                 const NUdf::TUnboxedValuePod& values);
 
 TType* MakeBlockTupleType(TProgramBuilder& pgmBuilder, TType* tupleType, bool scalar);
-TType* MakeJoinType(TProgramBuilder& pgmBuilder, EJoinKind joinKind, TType* leftStreamType,
+TType* MakeJoinType(TDqProgramBuilder& pgmBuilder, EJoinKind joinKind, TType* leftStreamType,
                     const TVector<ui32>& leftKeyDrops, TType* rightListType, const TVector<ui32>& rightKeyDrops);
 
 // List<Tuple<...>> -> Stream<Multi<...>>
@@ -41,7 +41,6 @@ TVector<NUdf::TUnboxedValue> ConvertListToVector(const NUdf::TUnboxedValue& list
 
 TVector<NUdf::TUnboxedValue> ConvertWideStreamToTupleVector(IComputationGraph& wideStream, size_t tupleSize);
 
-TType* LastScalarIndexBlock(TProgramBuilder& pb);
 
 struct TypeAndValue {
     TType* Type;

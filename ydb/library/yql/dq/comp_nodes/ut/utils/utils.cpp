@@ -93,11 +93,7 @@ TType* MakeBlockTupleType(TProgramBuilder& pgmBuilder, TType* tupleType, bool sc
     return pgmBuilder.NewTupleType(blockItemTypes);
 }
 
-TType* LastScalarIndexBlock(TProgramBuilder& pb) {
-    return pb.NewBlockType(pb.NewDataType(NUdf::TDataType<ui64>::Id), TBlockType::EShape::Scalar);
-}
-
-TType* MakeJoinType(TProgramBuilder& pgmBuilder, EJoinKind joinKind, TType* leftStreamType,
+TType* MakeJoinType(TDqProgramBuilder& pgmBuilder, EJoinKind joinKind, TType* leftStreamType,
                     const TVector<ui32>& leftKeyDrops, TType* rightListType, const TVector<ui32>& rightKeyDrops) {
     const auto leftStreamItems = ValidateBlockStreamType(leftStreamType);
     const auto rightListItemType = AS_TYPE(TListType, rightListType)->GetItemType();
@@ -130,7 +126,7 @@ TType* MakeJoinType(TProgramBuilder& pgmBuilder, EJoinKind joinKind, TType* left
         }
     }
 
-    joinReturnItems.push_back(LastScalarIndexBlock(pgmBuilder));
+    joinReturnItems.push_back(pgmBuilder.LastScalarIndexBlock());
     return pgmBuilder.NewStreamType(pgmBuilder.NewMultiType(joinReturnItems));
 }
 

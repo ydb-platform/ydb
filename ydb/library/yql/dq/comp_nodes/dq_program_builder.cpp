@@ -182,7 +182,6 @@ TType* TDqProgramBuilder::LastScalarIndexBlock() {
     return NewBlockType(NewDataType(NUdf::TDataType<ui64>::Id), TBlockType::EShape::Scalar);
 }
 
-}
 
 } // namespace NMiniKQL
 } // namespace NKikimr

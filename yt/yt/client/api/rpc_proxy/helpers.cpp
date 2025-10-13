@@ -1458,8 +1458,6 @@ void FromProto(
     }
     if (protoQuery.has_secrets()) {
         query->Secrets = TYsonString(protoQuery.secrets());
-    } else if (query->Secrets) {
-        query->Secrets = TYsonString{};
     }
     if (protoQuery.has_is_indexed()) {
         query->IsIndexed = protoQuery.is_indexed();

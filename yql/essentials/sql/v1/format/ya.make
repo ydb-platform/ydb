@@ -20,6 +20,10 @@ PEERDIR(
 
 END()
 
+RECURSE(
+    check
+)
+
 RECURSE_FOR_TESTS(
     ut
     ut_antlr4

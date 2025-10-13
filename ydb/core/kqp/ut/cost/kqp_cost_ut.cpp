@@ -1703,6 +1703,46 @@ Y_UNIT_TEST_SUITE(KqpCost) {
                     .Deletes = 0,
                 });
         }
+
+        {
+            // INSERT duplicates
+            auto query = Q_(R"(
+                INSERT INTO `/Root/TestTable2` (Group, Name, Amount, Comment) VALUES
+                    (999997u, "Anna", 3500u, "None"),
+                    (999998u, "Anna", 3500u, "None"),
+                    (999999u, "Anna", 3500u, "None"),
+                    (999998u, "Anna", 3500u, "None");
+            )");
+
+            auto txControl = NYdb::NQuery::TTxControl::BeginTx().CommitTx();
+
+            auto result = session.ExecuteQuery(query, txControl, GetQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
+
+            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+
+            Cerr << stats.DebugString() << Endl;
+            if (isSink) {
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases_size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access_size(), 1);
+
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().rows(), 3);
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().bytes(), 60);
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().bytes(), 8);
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).reads().rows(), 0);
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).reads().bytes(), 0);
+            }
+
+            Check(
+                FromProto(stats),
+                TTotalStats{
+                    .Writes = isSink ? 3 : 0, // EvWrite writes before next read
+                    .Reads = isSink ? 1 : 0,
+                    .Deletes = 0,
+                });
+        }
     }
 
 }

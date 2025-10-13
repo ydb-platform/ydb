@@ -1970,10 +1970,12 @@ public:
                 : OptionalLogicalType(SimpleLogicalType(ESimpleLogicalValueType::Any));
             auto denullifiedColumnType = DenullifyLogicalType(columnType);
             try {
+                const auto& column = batch->column(columnIndex);
+                ThrowOnError(column->ValidateFull());
                 PrepareArray(
                     denullifiedColumnType,
                     bufferForStringLikeValues,
-                    batch->column(columnIndex),
+                    column,
                     batch->schema()->field(columnIndex),
                     rowsValues[columnIndex],
                     columnId);

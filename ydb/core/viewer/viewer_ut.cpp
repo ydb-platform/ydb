@@ -50,11 +50,7 @@ using namespace NMonitoring;
 using namespace NMonitoring::NTests;
 using namespace NKikimr::NViewerTests;
 using TNavigate = NSchemeCache::TSchemeCacheNavigate;
-
-// using namespace NKikimr;
-using namespace Tests;
 using namespace NYdb::NPersQueue;
-// using namespace NHttp;
 using namespace NJson;
 
 #ifdef NDEBUG
@@ -2017,7 +2013,9 @@ Y_UNIT_TEST_SUITE(Viewer) {
         writeData(ECodec::RAW, 50000, "producer2");
 
         Sleep(TDuration::Seconds(1));
-        auto postReturnCode4 = PostOffsetCommit(httpClient, VALID_TOKEN, "/Root", "/Root/topic1", "consumer1", 0, 1000); // сообщения удалились по retention
+        
+        // now messages are deleted because of retention
+        auto postReturnCode4 = PostOffsetCommit(httpClient, VALID_TOKEN, "/Root", "/Root/topic1", "consumer1", 0, 1000);
         UNIT_ASSERT_EQUAL(postReturnCode4, HTTP_OK);
         auto postReturnCode5 = PostOffsetCommit(httpClient, VALID_TOKEN, "/Root", "/Root/topic1", "consumer1", 0, 55000);
         UNIT_ASSERT_EQUAL(postReturnCode5, HTTP_OK);

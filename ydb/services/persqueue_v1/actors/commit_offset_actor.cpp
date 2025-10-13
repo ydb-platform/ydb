@@ -77,7 +77,7 @@ void TCommitOffsetActor::Bootstrap(const TActorContext& ctx) {
 
     if (TopicsHandler == nullptr) {
         TopicConverterFactory = std::make_shared<NPersQueue::TTopicNamesConverterFactory>(
-                AppData(ctx)->PQConfig, ""
+            NKikimrPQ::TPQConfig(), ""
         );
         TopicsHandler = std::make_unique<NPersQueue::TTopicsListController>(
                 TopicConverterFactory

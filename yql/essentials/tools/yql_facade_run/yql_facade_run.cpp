@@ -42,6 +42,7 @@
 #include <yql/essentials/sql/settings/translation_settings.h>
 #include <yql/essentials/sql/v1/complete/check/check_complete.h>
 #include <yql/essentials/sql/v1/format/sql_format.h>
+#include <yql/essentials/sql/v1/format/check/check_format.h>
 #include <yql/essentials/sql/v1/sql.h>
 #include <yql/essentials/sql/sql.h>
 #include <yql/essentials/sql/v1/lexer/check/check_lexers.h>
@@ -579,9 +580,14 @@ int TFacadeRunner::DoMain(int argc, const char* argv[]) {
     }
     IModuleResolver::TPtr moduleResolver;
     TModuleResolver::TModuleChecker moduleChecker;
-    if (RunOptions_.TestLexers || RunOptions_.TestComplete || RunOptions_.TestSyntaxAmbiguities) {
+    if (RunOptions_.TestLexers ||
+        RunOptions_.TestSqlFormat ||
+        RunOptions_.TestComplete ||
+        RunOptions_.TestSyntaxAmbiguities)
+    {
         moduleChecker = [lexers, parsers,
                          testLexers = RunOptions_.TestLexers,
+                         testFormat = RunOptions_.TestSqlFormat,
                          testComplete = RunOptions_.TestComplete,
                          testSyntaxAmbiguities = RunOptions_.TestSyntaxAmbiguities,
                          clusters = ClusterMapping_](const TString& query, const TString& fileName, TExprContext& ctx) {
@@ -598,7 +604,7 @@ int TFacadeRunner::DoMain(int argc, const char* argv[]) {
                 }
             }
 
-            if (testComplete || testSyntaxAmbiguities) {
+            if (testComplete || testSyntaxAmbiguities || testFormat) {
                 google::protobuf::Arena arena;
 
                 NSQLTranslation::TTranslationSettings settings;
@@ -618,9 +624,19 @@ int TFacadeRunner::DoMain(int argc, const char* argv[]) {
                     return false;
                 }
 
-                TIssues issues;
-                if (!NSQLComplete::CheckComplete(query, *ast.Root, issues)) {
+                if (TIssues issues; testComplete && !NSQLComplete::CheckComplete(query, *ast.Root, issues)) {
                     auto issue = TIssue(TPosition(0, 0, fileName), "Completion failed");
+                    for (const auto& i : issues) {
+                        issue.AddSubIssue(MakeIntrusive<TIssue>(i));
+                    }
+
+                    ctx.AddError(issue);
+                    return false;
+                }
+
+                constexpr bool isIdempotencyChecked = true;
+                if (TIssues issues; testFormat && !NSQLFormat::CheckedFormat(query, settings, issues, isIdempotencyChecked)) {
+                    auto issue = TIssue(TPosition(0, 0, fileName), "Format failed");
                     for (const auto& i : issues) {
                         issue.AddSubIssue(MakeIntrusive<TIssue>(i));
                     }
@@ -785,33 +801,11 @@ int TFacadeRunner::DoRun(TProgramFactory& factory) {
             fail = true;
         }
         if (!fail && RunOptions_.TestSqlFormat && 1 == RunOptions_.SyntaxVersion) {
-            TString formattedProgramText;
-            NYql::TIssues issues;
-            NSQLTranslationV1::TLexers lexers;
-            lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
-            lexers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory();
-            NSQLTranslationV1::TParsers parsers;
-            parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory();
-            parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory();
-            auto formatter = NSQLFormat::MakeSqlFormatter(lexers, parsers, settings);
-            if (!formatter->Format(program->GetSourceCode(), formattedProgramText, issues)) {
+            TIssues issues;
+            constexpr bool isIdempotencyChecked = true;
+            if (!NSQLFormat::CheckedFormat(program->GetSourceCode(), settings, issues, isIdempotencyChecked)) {
                 *RunOptions_.ErrStream << "Format failed" << Endl;
                 issues.PrintTo(*RunOptions_.ErrStream);
-                return -1;
-            }
-
-            auto frmProgram = factory.Create("formatted SQL", formattedProgramText);
-            if (!frmProgram->ParseSql(settings)) {
-                frmProgram->PrintErrorsTo(*RunOptions_.ErrStream);
-                return -1;
-            }
-
-            TStringStream srcQuery, frmQuery;
-
-            program->AstRoot()->PrettyPrintTo(srcQuery, PRETTY_FLAGS);
-            frmProgram->AstRoot()->PrettyPrintTo(frmQuery, PRETTY_FLAGS);
-            if (srcQuery.Str() != frmQuery.Str()) {
-                *RunOptions_.ErrStream << "source query's AST and formatted query's AST are not same" << Endl;
                 return -1;
             }
         }
@@ -825,11 +819,7 @@ int TFacadeRunner::DoRun(TProgramFactory& factory) {
         }
         if (!fail && RunOptions_.TestComplete && 1 == RunOptions_.SyntaxVersion) {
             TIssues issues;
-            if (!NSQLComplete::CheckComplete(
-                    program->GetSourceCode(),
-                    program->ExprRoot(),
-                    program->ExprCtx(),
-                    issues)) {
+            if (!NSQLComplete::CheckComplete(program->GetSourceCode(), *program->AstRoot(), issues)) {
                 *RunOptions_.ErrStream << "Completion failed" << Endl;
                 issues.PrintTo(*RunOptions_.ErrStream);
                 return -1;

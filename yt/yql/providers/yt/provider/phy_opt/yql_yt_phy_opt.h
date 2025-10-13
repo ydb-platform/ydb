@@ -106,6 +106,7 @@ private:
 
     NNodes::TMaybeNode<NNodes::TExprBase> EquiJoin(NNodes::TExprBase node, TExprContext& ctx, const TGetParents& getParents) const;
 
+    template <class TNodeType>
     NNodes::TMaybeNode<NNodes::TExprBase> ConvertDynamicTablesToStatic(NNodes::TExprBase node, TExprContext& ctx) const;
 
     NNodes::TMaybeNode<NNodes::TExprBase> EarlyMergeJoin(NNodes::TExprBase node, TExprContext& ctx) const;

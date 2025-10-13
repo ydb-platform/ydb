@@ -73,10 +73,12 @@ public:
     virtual void Push(TDataChunk&& data) = 0;
     virtual bool IsEarlyFinished() = 0;
     virtual bool IsFlushed() = 0;
+    virtual void PushTerminated() {}
 
     virtual bool IsEmpty() = 0;
     virtual bool Pop(TDataChunk& data) = 0;
     virtual void EarlyFinish() = 0;
+    virtual void PopTerminated() {}
 
     void SendFinish();
 };

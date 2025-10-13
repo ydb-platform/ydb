@@ -155,11 +155,13 @@ public:
     }
 };
 
+class TLocalBufferRegistry;
+
 class TLocalBuffer : public IChannelBuffer {
 public:
-    TLocalBuffer(const TChannelInfo& info, NActors::TActorSystem* actorSystem, ui64 maxInflightBytes, ui64 minInflightBytes)
-        : OutputActorId(info.OutputActorId)
-        , InputActorId(info.InputActorId)
+    TLocalBuffer(const std::shared_ptr<TLocalBufferRegistry> registry, const TChannelInfo& info, NActors::TActorSystem* actorSystem, ui64 maxInflightBytes, ui64 minInflightBytes)
+        : Registry(registry)
+        , Info(info)
         , ActorSystem(actorSystem)
         , InflightBytes(0)
         , MaxInflightBytes(maxInflightBytes)
@@ -170,8 +172,7 @@ public:
         PushStats.ChannelId = info.ChannelId;
     }
 
-    ~TLocalBuffer() override {
-    }
+    ~TLocalBuffer() override;
 
     EDqFillLevel GetFillLevel() const override;
     void SetFillAggregator(std::shared_ptr<TDqFillAggregator> aggregator) override;
@@ -183,8 +184,8 @@ public:
     bool Pop(TDataChunk& data) override;
     void EarlyFinish() override;
 
-    NActors::TActorId OutputActorId;
-    NActors::TActorId InputActorId;
+    std::shared_ptr<TLocalBufferRegistry> Registry;
+    TChannelInfo Info;
     NActors::TActorSystem* ActorSystem;
     mutable std::mutex Mutex;
     std::queue<TDataChunk> Queue;
@@ -434,12 +435,29 @@ public:
     std::atomic<bool> ChannelAckPaused;
 };
 
+class TLocalBufferRegistry {
+public:
+    TLocalBufferRegistry(NActors::TActorSystem* actorSystem, ui64 maxInflightBytes, ui64 minInflightBytes)
+        : ActorSystem(actorSystem), MaxInflightBytes(maxInflightBytes), MinInflightBytes(minInflightBytes)
+    {}
+
+    std::shared_ptr<TLocalBuffer> GetOrCreateLocalBuffer(const std::shared_ptr<TLocalBufferRegistry>& registry, const TChannelInfo& info);
+    void DeleteLocalBufferInfo(const TChannelInfo& info);
+
+    NActors::TActorSystem* ActorSystem;
+    const ui64 MaxInflightBytes;
+    const ui64 MinInflightBytes;
+    std::unordered_map<TChannelInfo, std::weak_ptr<TLocalBuffer>> LocalBuffers;
+    mutable std::mutex Mutex;
+};
+
 class TDqChannelService : public IDqChannelService {
 public:
     TDqChannelService(NActors::TActorSystem* actorSystem, ui32 nodeId, const TDqChannelLimits& limits)
         : ActorSystem(actorSystem)
         , NodeId(nodeId)
         , Limits(limits) {
+        LocalBufferRegistry = std::make_shared<TLocalBufferRegistry>(actorSystem, Limits.LocalChannelInflightBytes, Limits.LocalChannelInflightBytes * 8 / 10);
     }
 
     std::shared_ptr<TNodeState> GetOrCreateNodeState(ui32 nodeId);
@@ -464,7 +482,7 @@ public:
     ui32 NodeId;
     const TDqChannelLimits Limits;
     std::weak_ptr<TDqChannelService> Self;
-    std::unordered_map<TChannelInfo, std::weak_ptr<IChannelBuffer>> LocalBuffers;
+    std::shared_ptr<TLocalBufferRegistry> LocalBufferRegistry;
     std::unordered_map<ui32, std::shared_ptr<TNodeState>> NodeStates;
     mutable std::mutex Mutex;
 };
@@ -474,6 +492,13 @@ class TFastDqOutputChannel : public IDqOutputChannel {
 public:
     TFastDqOutputChannel(std::weak_ptr<TDqChannelService> service, const TDqChannelParams& params, std::shared_ptr<IChannelBuffer> buffer, bool localChannel)
         : Service(service), Serializer(CreateSerializer(params, buffer, localChannel)), Desc(params.Desc) {
+    }
+
+    ~TFastDqOutputChannel() {
+        if (!Finished) {
+            Serializer->Flush(false);
+        }
+        Serializer->Buffer->PushTerminated();
     }
 
 // IDqOutput
@@ -596,6 +621,10 @@ public:
     TFastDqInputChannel(std::weak_ptr<TDqChannelService> service, const TDqChannelParams& params, std::shared_ptr<IChannelBuffer> buffer)
         : Service(service), Buffer(buffer), Desc(params.Desc) {
         Deserializer = CreateDeserializer(params.RowType, params.TransportVersion, params.PackerVersion, *params.HolderFactory);
+    }
+
+    ~TFastDqInputChannel() {
+        Buffer->PopTerminated();
     }
 
 // IDqInput

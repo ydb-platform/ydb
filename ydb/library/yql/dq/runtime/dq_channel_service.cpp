@@ -14,6 +14,10 @@ EDqFillLevel TLocalBuffer::GetFillLevel() const {
     return FillLevel;
 }
 
+TLocalBuffer::~TLocalBuffer() {
+    Registry->DeleteLocalBufferInfo(Info);
+}
+
 void TLocalBuffer::SetFillAggregator(std::shared_ptr<TDqFillAggregator> aggregator) {
     std::lock_guard lock(Mutex);
     Aggregator = aggregator;
@@ -39,7 +43,7 @@ void TLocalBuffer::Push(TDataChunk&& data) {
     }
     if (NeedToNotifyInput) {
         NeedToNotifyInput = false;
-        ActorSystem->Send(InputActorId, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback});
+        ActorSystem->Send(Info.InputActorId, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback});
     }
 }
 
@@ -86,11 +90,11 @@ bool TLocalBuffer::Pop(TDataChunk& data) {
             }
             if (NeedToNotifyOutput) {
                 NeedToNotifyOutput = false;
-                ActorSystem->Send(OutputActorId, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback});
+                ActorSystem->Send(Info.OutputActorId, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback});
             }
         } else if (Queue.empty() && NeedToNotifyOutput) {
             NeedToNotifyOutput = false;
-            ActorSystem->Send(OutputActorId, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback});
+            ActorSystem->Send(Info.OutputActorId, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback});
         }
 
         return true;
@@ -241,6 +245,29 @@ bool TInputBuffer::Pop(TDataChunk& data) {
 void TInputBuffer::EarlyFinish() {
     EarlyFinished = true;
     ActorSystem->Send(NodeActorId, new TEvPrivate::TEvEarlyFinish(Info));
+}
+
+std::shared_ptr<TLocalBuffer> TLocalBufferRegistry::GetOrCreateLocalBuffer(const std::shared_ptr<TLocalBufferRegistry>& registry, const TChannelInfo& info) {
+    std::lock_guard lock(Mutex);
+
+    auto it = LocalBuffers.find(info);
+    if (it != LocalBuffers.end()) {
+        auto result = it->second.lock();
+        if (result) {
+            return result;
+        } else {
+            LocalBuffers.erase(it);
+        }
+    }
+    auto result = std::make_shared<TLocalBuffer>(registry, info, ActorSystem, MaxInflightBytes, MinInflightBytes);
+    LocalBuffers.emplace(info, result);
+
+    return result;
+}
+
+void TLocalBufferRegistry::DeleteLocalBufferInfo(const TChannelInfo& info) {
+    std::lock_guard lock(Mutex);
+    LocalBuffers.erase(info);
 }
 
 void TNodeState::Push(TDataChunk&& data, std::shared_ptr<TOutputDescriptor> descriptor) {
@@ -555,22 +582,7 @@ std::shared_ptr<IChannelBuffer> TDqChannelService::GetRemoteInputBuffer(const TC
 std::shared_ptr<IChannelBuffer> TDqChannelService::GetLocalBuffer(const TChannelInfo& info) {
     Y_ENSURE(info.OutputActorId.NodeId() == NodeId);
     Y_ENSURE(info.InputActorId.NodeId() == NodeId);
-
-    std::lock_guard lock(Mutex);
-
-    auto it = LocalBuffers.find(info);
-    if (it != LocalBuffers.end()) {
-        auto result = it->second.lock();
-        if (result) {
-            return result;
-        } else {
-            LocalBuffers.erase(it);
-        }
-    }
-    auto result = std::make_shared<TLocalBuffer>(info, ActorSystem, Limits.LocalChannelInflightBytes, Limits.LocalChannelInflightBytes * 8 / 10);
-    LocalBuffers.emplace(info, result);
-
-    return result;
+    return LocalBufferRegistry->GetOrCreateLocalBuffer(LocalBufferRegistry, info);
 }
 
 // unbinded channels

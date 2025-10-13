@@ -3,6 +3,7 @@
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/protos/kqp_stats.pb.h>
 #include <ydb/core/protos/kqp_physical.pb.h>
+#include <ydb/library/aclib/aclib.h>
 #include <yql/essentials/public/issue/yql_issue.h>
 #include <ydb/public/api/protos/ydb_operation.pb.h>
 #include <ydb/public/api/protos/ydb_query.pb.h>
@@ -281,7 +282,7 @@ struct TEvSaveScriptExternalEffectRequest : public TEventLocal<TEvSaveScriptExte
         TString Database;
 
         TString CustomerSuppliedId;
-        TString UserToken;
+        TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
         std::vector<NKqpProto::TKqpExternalSink> Sinks;
         std::vector<TString> SecretNames;
     };
@@ -386,7 +387,7 @@ struct TEvSaveScriptFinalStatusResponse : public TEventLocal<TEvSaveScriptFinalS
     bool OperationAlreadyFinalized = false;
     bool WaitRetry = false;
     TString CustomerSuppliedId;
-    TString UserToken;
+    TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     std::vector<NKqpProto::TKqpExternalSink> Sinks;
     std::vector<TString> SecretNames;
     Ydb::StatusIds::StatusCode Status;

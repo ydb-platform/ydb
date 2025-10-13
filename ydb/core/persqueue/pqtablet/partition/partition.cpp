@@ -3673,6 +3673,7 @@ void TPartition::EmulatePostProcessUserAct(const TEvPQ::TEvSetClientInfo& act,
     ui32 generation = act.Generation;
     ui32 step = act.Step;
     const ui64 readRuleGeneration = act.ReadRuleGeneration;
+    const bool strictCommitOffset = (act.Type == TEvPQ::TEvSetClientInfo::ESCI_OFFSET && act.Strict);
 
     bool createSession = act.Type == TEvPQ::TEvSetClientInfo::ESCI_CREATE_SESSION;
     bool dropSession = act.Type == TEvPQ::TEvSetClientInfo::ESCI_DROP_SESSION;
@@ -3737,8 +3738,12 @@ void TPartition::EmulatePostProcessUserAct(const TEvPQ::TEvSetClientInfo& act,
                     << (createSession || dropSession ? " session" : " offset")
                     << " is set to " << offset << " (startOffset " << GetStartOffset() << ") session " << session
         );
+        if (strictCommitOffset) {
+            userInfo.Offset = std::max(offset, GetStartOffset());
+        } else {
+            userInfo.Offset = offset;
+        }
 
-        userInfo.Offset = std::max(offset, GetStartOffset());
         userInfo.CommittedMetadata = committedMetadata;
         userInfo.AnyCommits = userInfo.Offset > (i64)GetStartOffset();
 

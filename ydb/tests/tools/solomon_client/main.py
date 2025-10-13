@@ -20,7 +20,7 @@ def _do_request_inner(method, url, json, headers):
 
 
 def _do_request(method, url, json=None, headers=None):
-    return retry_call(_do_request_inner, fkwargs={"method": method, "url": url, "json": json, "headers": headers}, tries=max_tries, delay=2)
+    return retry_call(_do_request_inner, fkwargs={"method": method, "url": url, "json": json, "headers": headers}, tries=max_tries, delay=retry_delay)
 
 
 def _build_headers():

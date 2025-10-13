@@ -153,7 +153,7 @@ std::tuple<TString, NYdb::TParams, std::function<std::pair<TString, NYdb::TParam
         "WHERE `" TENANT_COLUMN_NAME "` = $tenant AND `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id AND `" ASSIGNED_UNTIL_COLUMN_NAME "` < $now;\n"
     );
 
-    auto prepareParams = [=, taskInternal=taskInternal, responseTasks=responseTasks, tenantInfo=tenantInfo](const std::vector<TResultSet>& resultSets) mutable {
+    auto prepareParams = [commonCounters=commonCounters, nowTimestamp=nowTimestamp, taskLeaseUntil=taskLeaseUntil, automaticQueriesTtl=automaticQueriesTtl, resultSetsTtl=resultSetsTtl, disableCurrentIam, requestNodeId, taskInternal=taskInternal, responseTasks=responseTasks, tenantInfo=tenantInfo](const std::vector<TResultSet>& resultSets) mutable {
         auto& task = taskInternal.Task;
         const auto shouldAbortTask = taskInternal.ShouldAbortTask;
         constexpr size_t expectedResultSetsSize = 2;
@@ -273,7 +273,7 @@ NYql::TIssues TControlPlaneStorageBase::ValidateRequest(TEvControlPlaneStorage::
     return issues;
 }
 
-void TControlPlaneStorageBase::FillGetTaskResult(Fq::Private::GetTaskResult& result, const TVector<TTask>& tasks) const
+void TControlPlaneStorageBase::FillGetTaskResult(Fq::Private::GetTaskResult& result, const TVector<TTask>& tasks)
 {
     for (const auto& task : tasks) {
         const auto& queryType = task.Query.content().type();
@@ -414,10 +414,13 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetTaskRequ
 
     auto responseTasks = std::make_shared<TResponseTasks>();
 
-    auto prepareParams = [=, this, commonCounters=requestCounters.Common,
+    auto prepareParams = [commonCounters=requestCounters.Common,
                              actorSystem=NActors::TActivationContext::ActorSystem(),
                              responseTasks=responseTasks,
-                             tenantInfo=ev->Get()->TenantInfo
+                             tenantInfo=ev->Get()->TenantInfo,
+                             owner, hostName, tenantName, tasksBatchSize, requestNodeId,
+                             numTasksProportion, Config=Config,
+                             tablePathPrefix=YdbConnection->TablePathPrefix
                         ](const std::vector<TResultSet>& resultSets) mutable {
         TVector<TTaskInternal> tasks;
         TVector<TPickTaskParams> pickTaskParams;
@@ -432,7 +435,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetTaskRequ
             taskInternal.Owner = owner;
             taskInternal.HostName = hostName;
             taskInternal.TenantName = tenantName;
-            taskInternal.TablePathPrefix = YdbConnection->TablePathPrefix;
+            taskInternal.TablePathPrefix = tablePathPrefix;
 
             auto& task = taskInternal.Task;
 
@@ -481,7 +484,8 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetTaskRequ
     const auto query = queryBuilder.Build();
     auto [readStatus, resultSets] = Read(query.Sql, query.Params, requestCounters, debugInfo, TTxSettings::StaleRO());
     auto result = readStatus.Apply(
-        [=, this,
+        [this, // TODO used for PickTasks, try to avoid
+        prepareParams, Config=Config, response, owner,
         resultSets=resultSets,
         requestCounters=requestCounters,
         debugInfo=debugInfo,
@@ -513,7 +517,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetTaskRequ
         }
 
         auto allFuture = NThreading::WaitExceptionOrAll(futures);
-        return allFuture.Apply([=, responseTasks=responseTasks](const auto& future) mutable {
+        return allFuture.Apply([debugInfos, debugInfo, owner, response, responseTasks=responseTasks](const auto& future) mutable {
             if (debugInfo) {
                 for (const auto& info: *debugInfos) {
                     debugInfo->insert(debugInfo->end(), info->begin(), info->end());
@@ -536,7 +540,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetTaskRequ
         });
     });
 
-    auto prepare = [this, response] {
+    auto prepare = [response] {
         Fq::Private::GetTaskResult result;
         FillGetTaskResult(result, std::get<0>(*response));
         return result;
@@ -552,7 +556,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetTaskRequ
         prepare,
         debugInfo);
 
-    success.Apply([=](const auto& future) {
+    success.Apply([owner, startTime, hostName](const auto& future) {
             TDuration delta = TInstant::Now() - startTime;
             LWPROBE(GetTaskRequest, owner, hostName, delta, future.GetValue());
         });

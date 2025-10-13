@@ -123,6 +123,7 @@ struct TTransferTestConfig {
     TString TablePath = "/Root/test_table";
     TString TopicPath = "/Root/test_topic";
     TString TransferPath = "/Root/test_transfer";
+    bool FakeTopicPath = false;
     bool UseSecret = true;
     bool UseUserLogin = false;
     ui64 BatchSizeBytes = 1024;
@@ -1356,11 +1357,21 @@ void WaitTransferInit(TReplicationClient& client, const TString& path) {
     UNIT_ASSERT(retry < 10);
 }
 
-const TString GetTransformationLambdaCreateQuery(TReplicationClient& client, const TString& path) {
+TString GetTransformationLambdaCreateQuery(TReplicationClient& client, const TString& path) {
     auto result = client.DescribeTransfer(path).ExtractValueSync();
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
     const auto& desc = result.GetTransferDescription();
     return desc.GetTransformationLambda().c_str();
+}
+
+TString MakeAbsolutePath(const TString& path, const TString& db = "/Root") {
+    if (path.empty()) {
+        return db;
+    }
+    if (path.StartsWith('/')) {
+        return path;
+    }
+    return TStringBuilder() << db << (db.EndsWith('/') ? "" : "/") << path;
 }
 
 void TestTransferSettingsArePreserved(
@@ -1399,7 +1410,7 @@ void TestTransferSettingsArePreserved(
         Sprintf("CREATE TABLE `%s` (k Uint32, v Utf8, PRIMARY KEY (k));", config.TablePath.c_str())
         , true);
     ExecuteQuery(session, Sprintf("CREATE TOPIC `%s`;", config.TopicPath.c_str()), true);
-    ExecuteQuery(session, Sprintf(R"(
+    const auto createTransferResult = session.ExecuteQuery(Sprintf(R"(
                 %s
                 CREATE TRANSFER `%s` FROM `%s` TO `%s` USING %s
                 WITH (
@@ -1410,25 +1421,39 @@ void TestTransferSettingsArePreserved(
                 );
             )",
             lambdaBodyQuery.c_str(),
-            config.TransferPath.c_str(), config.TopicPath.c_str(), config.TablePath.c_str(),
+            config.TransferPath.c_str(),
+            ((config.FakeTopicPath ? "/Fake" : "") + config.TopicPath).c_str(),
+            config.TablePath.c_str(),
             (config.LambdaInsideUsing ? "($msg) -> { return $test_lambda($msg); }" : "$test_lambda"),
             (config.UseConnectionString ? Sprintf("CONNECTION_STRING = 'grpc://%s/?database=/Root',", endpoint.c_str()).c_str() : ""),
             config.BatchSizeBytes,
             config.FlushInterval.Seconds(),
             (config.UseSecret ? ", TOKEN_SECRET_NAME = 'transfer_secret_name'" :
             (config.UseUserLogin ? ", USER = 'transferuser', PASSWORD_SECRET_NAME = 'transfer_secret_name'" : ""))
-        ), true
-    );
+        ), NQuery::TTxControl::NoTx()
+    ).ExtractValueSync();
 
-    WaitTransferInit(client, config.TransferPath.c_str());
-    const TString& originalLambdaCanonized = CanonizeString(GetTransformationLambdaCreateQuery(client, config.TransferPath.c_str()));
+    if (config.FakeTopicPath) {
+        UNIT_ASSERT_C(!createTransferResult.IsSuccess(), createTransferResult.GetIssues().ToOneLineString());
+        UNIT_ASSERT_STRING_CONTAINS_C(createTransferResult.GetIssues().ToOneLineString().c_str(), "not in database", "Fake topic path");
+        return;
+    }
+
+    const TString& absoluteTopicPath = MakeAbsolutePath(config.TopicPath);
+    const TString& absoluteTransferPath = MakeAbsolutePath(config.TransferPath);
+    const TString& absoluteTablePath = MakeAbsolutePath(config.TablePath);
+
+    WaitTransferInit(client, absoluteTransferPath);
+    const TString& originalLambdaCanonized = CanonizeString(GetTransformationLambdaCreateQuery(client, absoluteTransferPath));
 
     auto checkDescription = [&]() {
-        auto result = client.DescribeTransfer(config.TransferPath.c_str()).ExtractValueSync();
+        auto result = client.DescribeTransfer(absoluteTransferPath).ExtractValueSync();
         const auto& desc = result.GetTransferDescription();
         const auto& params = desc.GetConnectionParams();
-        UNIT_ASSERT_VALUES_EQUAL(params.GetDatabase(), "/Root");
-        UNIT_ASSERT_VALUES_EQUAL(params.GetDiscoveryEndpoint(), endpoint);
+        if (config.UseConnectionString) {
+            UNIT_ASSERT_VALUES_EQUAL(params.GetDatabase(), "/Root");
+            UNIT_ASSERT_VALUES_EQUAL(params.GetDiscoveryEndpoint(), endpoint);
+        }
         if (config.UseSecret) {
             UNIT_ASSERT_VALUES_EQUAL(params.GetOAuthCredentials().TokenSecretName, "transfer_secret_name");
         }
@@ -1436,12 +1461,10 @@ void TestTransferSettingsArePreserved(
             UNIT_ASSERT_VALUES_EQUAL(params.GetStaticCredentials().User, "transferuser");
             UNIT_ASSERT_VALUES_EQUAL(params.GetStaticCredentials().PasswordSecretName, "transfer_secret_name");
         }
-
-        UNIT_ASSERT_VALUES_EQUAL(desc.GetSrcPath(), config.TopicPath.c_str());
-        UNIT_ASSERT_VALUES_EQUAL(desc.GetDstPath(), config.TablePath.c_str());
+        UNIT_ASSERT_VALUES_EQUAL(desc.GetSrcPath(), config.TopicPath);
+        UNIT_ASSERT_VALUES_EQUAL(desc.GetDstPath(), absoluteTablePath);
         UNIT_ASSERT_VALUES_EQUAL(desc.GetBatchingSettings().SizeBytes, config.BatchSizeBytes);
         UNIT_ASSERT_VALUES_EQUAL(desc.GetBatchingSettings().FlushInterval, config.FlushInterval);
-
         UNIT_ASSERT_VALUES_EQUAL(CanonizeString(desc.GetTransformationLambda().c_str()), originalLambdaCanonized.c_str());
     };
 
@@ -1460,15 +1483,15 @@ void TestTransferSettingsArePreserved(
         backup();
 
         if (!config.Replace) {
-            ExecuteQuery(session, Sprintf("DROP TRANSFER `%s`;", config.TransferPath.c_str()), true);
+            ExecuteQuery(session, Sprintf("DROP TRANSFER `%s`;", absoluteTransferPath.c_str()), true);
             // we MUST drop topic, because consumer will be dropped during droping transfer
             // to do: create transfer's option to enable dropping transfer witout dropping consumer
-            ExecuteQuery(session, Sprintf("DROP TOPIC `%s`;", config.TopicPath.c_str()), true);
+            ExecuteQuery(session, Sprintf("DROP TOPIC `%s`;", absoluteTopicPath.c_str()), true);
         }
 
         restore();
 
-        WaitTransferInit(client, config.TransferPath.c_str());
+        WaitTransferInit(client, absoluteTransferPath.c_str());
         checkDescription();
 
         cleanBackupFolder();
@@ -2870,7 +2893,49 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         });
     }
 
-    Y_UNIT_TEST(BackupRestoreTransfer_NoConnectionString) {
+    Y_UNIT_TEST(BackupRestoreTransfer_NoConnectionStringFakeTopicPath) {
+        TestTransferBackupRestore(TTransferTestConfig {
+            .FakeTopicPath = true,
+            .UseConnectionString = false,
+        });
+    }
+
+    Y_UNIT_TEST(BackupRestoreTransfer_WithConnectionStringFakeTopicPath) {
+        TestTransferBackupRestore(TTransferTestConfig {
+            .FakeTopicPath = true,
+            .UseConnectionString = true,
+        });
+    }
+
+    Y_UNIT_TEST(BackupRestoreTransfer_NoConnectionStringRelativeTableTopicTransferPath) {
+        TestTransferBackupRestore(TTransferTestConfig {
+            .TablePath = "test_table",
+            .TopicPath = "test_topic",
+            .TransferPath = "test_transfer",
+            .UseConnectionString = false,
+            .BackupRestoreAttemptsCount = 3,
+        });
+    }
+
+    Y_UNIT_TEST(BackupRestoreTransfer_NoConnectionStringRelativeTopicAbsoluteTransferPath) {
+        TestTransferBackupRestore(TTransferTestConfig {
+            .TopicPath = "test_topic",
+            .TransferPath = "/Root/test_transfer",
+            .UseConnectionString = false,
+            .BackupRestoreAttemptsCount = 3,
+        });
+    }
+
+    Y_UNIT_TEST(BackupRestoreTransfer_NoConnectionStringAbsoluteTopicRelativeTransferPath) {
+        TestTransferBackupRestore(TTransferTestConfig {
+            .TopicPath = "/Root/test_topic",
+            .TransferPath = "test_transfer",
+            .UseConnectionString = false,
+            .BackupRestoreAttemptsCount = 3,
+        });
+    }
+
+    Y_UNIT_TEST(BackupRestoreTransfer_NoConnectionStringAbsolutePath) {
         TestTransferBackupRestore(TTransferTestConfig {
             .UseConnectionString = false,
             .BackupRestoreAttemptsCount = 3,

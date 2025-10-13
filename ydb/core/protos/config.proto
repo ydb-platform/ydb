@@ -1958,6 +1958,7 @@ message TColumnShardConfig {
     optional bool OnlyBulkUpsertWritingBuffer = 50 [default = true];
     optional uint64 BadPortionSizeLimit = 51 [default = 524288];
     optional uint64 BadPortionsLimit = 52;
+    optional bool CombineChunksInResult = 54 [default = true];
 }
 
 message TSchemeShardConfig {

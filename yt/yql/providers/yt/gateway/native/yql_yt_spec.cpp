@@ -483,10 +483,11 @@ void FillSpec(NYT::TNode& spec,
         spec["user_file_columnar_statistics"]["enabled"] = settings->TableContentColumnarStatistics.Get(cluster).GetOrElse(true);
     }
 
+    if (layerPaths.size() && settings->LayerPaths.Get(cluster)) {
+        throw yexception() << "Can't use both pragma Layer and yt.LayerPaths";
+    }
+
     if (auto val = settings->LayerPaths.Get(cluster)) {
-        if (!layerPaths.empty()) {
-            throw yexception() << "Can't use both pragma Layer and yt.LayerPaths";
-        }
         if (opProps.HasFlags(EYtOpProp::WithMapper)) {
             NYT::TNode& layersNode = spec["mapper"]["layer_paths"];
             for (auto& path: *val) {
@@ -500,17 +501,18 @@ void FillSpec(NYT::TNode& spec,
             }
         }
     }
+
     if (layerPaths.size()) {
         if (opProps.HasFlags(EYtOpProp::WithMapper)) {
             NYT::TNode& layersNode = spec["mapper"]["layer_paths"];
             for (auto& path: layerPaths) {
-                layersNode.Add(NYT::AddPathPrefix(path, NYT::TConfig::Get()->Prefix));
+                layersNode.Add(path); // already snapshoted files, no prefix needed
             }
         }
         if (opProps.HasFlags(EYtOpProp::WithReducer)) {
             NYT::TNode& layersNode = spec["reducer"]["layer_paths"];
             for (auto& path: layerPaths) {
-                layersNode.Add(NYT::AddPathPrefix(path, NYT::TConfig::Get()->Prefix));
+                layersNode.Add(path); // already snapshoted files, no prefix needed
             }
         }
     }

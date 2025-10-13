@@ -98,9 +98,12 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         std::string_view direction,
         std::string_view left,
         std::string_view right,
-        bool covered = false
+        bool covered = false,
+        bool bitVector = false
     ) {
-        constexpr std::string_view target = "$target = \"\x67\x71\x02\";";
+        constexpr std::string_view uint8Target = "$target = \"\x67\x71\x02\";";
+        constexpr std::string_view bitTarget = "$target = \"\x3F\x02\x0A\";";
+        const std::string_view target = bitVector ? bitTarget : uint8Target;
         std::string metric = std::format("Knn::{}({}, {})", function, left, right);
         // no metric in result
         {
@@ -156,23 +159,25 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         TTxSettings txSettings,
         std::string_view function,
         std::string_view direction,
-        bool covered = false) {
+        bool covered = false,
+        bool bitVector = false) {
         // target is left, member is right
-        DoPositiveQueriesVectorIndexOrderBy(session, txSettings, function, direction, "$target", "emb", covered);
+        DoPositiveQueriesVectorIndexOrderBy(session, txSettings, function, direction, "$target", "emb", covered, bitVector);
         // target is right, member is left
-        DoPositiveQueriesVectorIndexOrderBy(session, txSettings, function, direction, "emb", "$target", covered);
+        DoPositiveQueriesVectorIndexOrderBy(session, txSettings, function, direction, "emb", "$target", covered, bitVector);
     }
 
     void DoPositiveQueriesVectorIndexOrderByCosine(
         TSession& session,
         TTxSettings txSettings = TTxSettings::SerializableRW(),
-        bool covered = false) {
+        bool covered = false,
+        bool bitVector = false) {
         // distance, default direction
-        DoPositiveQueriesVectorIndexOrderBy(session, txSettings, "CosineDistance", "", covered);
+        DoPositiveQueriesVectorIndexOrderBy(session, txSettings, "CosineDistance", "", covered, bitVector);
         // distance, asc direction
-        DoPositiveQueriesVectorIndexOrderBy(session, txSettings, "CosineDistance", "ASC", covered);
+        DoPositiveQueriesVectorIndexOrderBy(session, txSettings, "CosineDistance", "ASC", covered, bitVector);
         // similarity, desc direction
-        DoPositiveQueriesVectorIndexOrderBy(session, txSettings, "CosineSimilarity", "DESC", covered);
+        DoPositiveQueriesVectorIndexOrderBy(session, txSettings, "CosineSimilarity", "DESC", covered, bitVector);
     }
 
     TSession DoOnlyCreateTableForVectorIndex(TTableClient& db, bool nullable, const TString& dataCol = "data", bool partitioned = true) {
@@ -252,6 +257,25 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         return session;
     }
 
+    TSession DoCreateTableForVectorIndexWithBitQuantization(TTableClient& db, bool nullable, const TString& dataCol = "data") {
+        auto session = DoOnlyCreateTableForVectorIndex(db, nullable, dataCol);
+        {
+            const TString query1 = TStringBuilder()
+                << "UPSERT INTO `/Root/TestTable` (pk, emb, " << dataCol << ") VALUES "
+                << "(1, Untag(Knn::ToBinaryStringBit([1.f, 0.f, 0.f, 0.f, 0.f, 0.f]), \"BitVector\"), \"1\"),"
+                    "(2, Untag(Knn::ToBinaryStringBit([1.f, 1.f, 0.f, 0.f, 0.f, 0.f]), \"BitVector\"), \"2\"),"
+                    "(3, Untag(Knn::ToBinaryStringBit([1.f, 1.f, 1.f, 0.f, 0.f, 0.f]), \"BitVector\"), \"3\"),"
+                    "(4, Untag(Knn::ToBinaryStringBit([1.f, 1.f, 1.f, 1.f, 0.f, 0.f]), \"BitVector\"), \"4\"),"
+                    "(5, Untag(Knn::ToBinaryStringBit([1.f, 1.f, 1.f, 1.f, 1.f, 0.f]), \"BitVector\"), \"5\"),"
+                    "(6, Untag(Knn::ToBinaryStringBit([1.f, 1.f, 1.f, 1.f, 1.f, 1.f]), \"BitVector\"), \"6\");";
+
+            auto result = session.ExecuteDataQuery(Q_(query1), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                .ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        return session;
+    }
+
     Y_UNIT_TEST_QUAD(OrderByCosineLevel1, Nullable, UseSimilarity) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableVectorIndex(true);
@@ -303,6 +327,53 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
             auto result = session.ExecuteSchemeQuery(dropIndex).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
+    }
+
+    Y_UNIT_TEST_QUAD(OrderByCosineLevel1WithBitQuantization, Nullable, UseSimilarity) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableVectorIndex(true);
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetFeatureFlags(featureFlags)
+            .SetKqpSettings({setting});
+
+        TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+
+        auto db = kikimr.GetTableClient();
+        auto session = DoCreateTableForVectorIndexWithBitQuantization(db, Nullable);
+        {
+            const TString createIndex(Q_(Sprintf(R"(
+                ALTER TABLE `/Root/TestTable`
+                    ADD INDEX index
+                    GLOBAL USING vector_kmeans_tree
+                    ON (emb)
+                    WITH (%s=cosine, vector_type="bit", vector_dimension=6, levels=1, clusters=2);
+            )", UseSimilarity ? "similarity" : "distance")));
+
+            auto result = session.ExecuteSchemeQuery(createIndex)
+                          .ExtractValueSync();
+
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            auto result = session.DescribeTable("/Root/TestTable").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
+            const auto& indexes = result.GetTableDescription().GetIndexDescriptions();
+            UNIT_ASSERT_EQUAL(indexes.size(), 1);
+            UNIT_ASSERT_EQUAL(indexes[0].GetIndexName(), "index");
+            UNIT_ASSERT_EQUAL(indexes[0].GetIndexColumns(), std::vector<std::string>{"emb"});
+            const auto& settings = std::get<TKMeansTreeSettings>(indexes[0].GetIndexSettings());
+            UNIT_ASSERT_EQUAL(settings.Settings.Metric, UseSimilarity
+                ? NYdb::NTable::TVectorIndexSettings::EMetric::CosineSimilarity
+                : NYdb::NTable::TVectorIndexSettings::EMetric::CosineDistance);
+            UNIT_ASSERT_EQUAL(settings.Settings.VectorType, NYdb::NTable::TVectorIndexSettings::EVectorType::Bit);
+            UNIT_ASSERT_EQUAL(settings.Settings.VectorDimension, 6);
+            UNIT_ASSERT_EQUAL(settings.Levels, 1);
+            UNIT_ASSERT_EQUAL(settings.Clusters, 2);
+        }
+        DoPositiveQueriesVectorIndexOrderByCosine(session, TTxSettings::SerializableRW(), false, true);
     }
 
     Y_UNIT_TEST_QUAD(OrderByCosineLevel2, Nullable, UseSimilarity) {
@@ -370,7 +441,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         {
             const TString query1(Q1_(R"(
                 pragma ydb.KMeansTreeSearchTopSize = "1";
-                $TargetEmbedding = String::HexDecode("677103");
+                $TargetEmbedding = String::HexDecode("677102");
                 SELECT * FROM `/Root/TestTable` VIEW index1
                 ORDER BY Knn::CosineDistance(emb, $TargetEmbedding)
                 LIMIT 3;

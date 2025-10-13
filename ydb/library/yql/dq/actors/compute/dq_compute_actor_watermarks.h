@@ -11,8 +11,8 @@ class TDqComputeActorWatermarks
 public:
     TDqComputeActorWatermarks(const TString& logPrefix);
 
-    void RegisterAsyncInput(ui64 inputId);
-    void RegisterInputChannel(ui64 inputId);
+    void RegisterAsyncInput(ui64 inputId, TDuration idleDelay = TDuration::Max());
+    void RegisterInputChannel(ui64 inputId, TDuration idleDelay = TDuration::Max());
 
     void UnregisterAsyncInput(ui64 inputId);
     void UnregisterInputChannel(ui64 inputId);
@@ -35,18 +35,48 @@ public:
     // Should be only called only when HasPendingWatermark() is true
     TDuration GetWatermarkDiscrepancy() const;
 
+    TMaybe<TInstant> HandleIdleness(TInstant systemTime);
+    TMaybe<TInstant> GetNextIdlenessCheckAt() const;
+
     void SetLogPrefix(const TString& logPrefix);
 
 private:
-    void RecalcPendingWatermark();
-    bool UpdateAndRecalcPendingWatermark(TMaybe<TInstant>& storedWatermark, TInstant watermark);
-    bool MaybePopPendingWatermark();
+    void RegisterInput(ui64 inputId, bool isChannel, TDuration idleDelay);
+    void UnregisterInput(ui64 inputId, bool isChannel);
+    bool NotifyInputWatermarkReceived(ui64 inputId, bool isChannel, TInstant watermark);
 
 private:
     TString LogPrefix;
 
-    std::unordered_map<ui64, TMaybe<TInstant>> AsyncInputsWatermarks;
-    std::unordered_map<ui64, TMaybe<TInstant>> InputChannelsWatermarks;
+    struct TWatermarkState {
+        TMaybe<TInstant> Watermark;
+        TInstant ExpiresAt;
+        TDuration IdleDelay = TDuration::Max();
+    };
+    THashMap<std::pair<ui64, bool>, TWatermarkState> InputWatermarks;
+    template <typename TTimeType, typename TMapType>
+    struct TTimeState {
+        using TDataIterator = typename TMapType::iterator;
+        TTimeType Time;
+        TDataIterator Iterator;
+        bool operator< (const TTimeState& other) const noexcept {
+            // assumes iterator returns stable references
+            return Time < other.Time ||
+                ( Time == other.Time &&
+                  (uintptr_t)&*Iterator < (uintptr_t)&*other.Iterator );
+            // 1) there are no `operator<` for hashmap iterator (ForwardIterator);
+            // 2) comparing pointers belonging to different allocations is UB;
+            // Hence, we use node addresses
+            // (we don't actually care about actual ordering of Iterator's, the only
+            // requirement it would be stable, unique and passes strict weak ordering;
+            // node addresses comparison qualifies)
+        }
+    };
+
+    using TWatermarksQueueItem = TTimeState<TMaybe<TInstant>, decltype(InputWatermarks)>;
+    std::set<TWatermarksQueueItem> WatermarksQueue; // attention: back-references InputWatermarks, must be adjusted with InputWatermarks entries
+    using TExpiresQueueItem = TTimeState<TInstant, decltype(InputWatermarks)>;
+    std::set<TExpiresQueueItem> ExpiresQueue; // attention: back-references InputWatermarks, must be adjusted with InputWatermarks entries
 
     TMaybe<TInstant> PendingWatermark;
     TMaybe<TInstant> LastWatermark;

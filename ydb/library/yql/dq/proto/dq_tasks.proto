@@ -84,6 +84,7 @@ message TChannel {
     bool InMemory = 8;
     ECheckpointingMode CheckpointingMode = 9;
     EWatermarksMode WatermarksMode = 10;
+    optional uint64 WatermarksIdleDelayUs = 14;
     bool EnableSpilling = 13;
 }
 
@@ -94,6 +95,7 @@ message TSourceInput {
     string Type = 1;
     google.protobuf.Any Settings = 2;
     EWatermarksMode WatermarksMode = 3;
+    optional uint64 WatermarksIdleDelayUs = 4;
 }
 
 message TSortColumn {

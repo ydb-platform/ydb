@@ -2970,50 +2970,6 @@ void TPartition::CommitWriteOperations(TTransaction& t)
         BlobEncoder.NewHead.Offset = Parameters->CurOffset;
     }
 
-    //if (!t.WriteInfo->BlobsFromHead.empty()) {
-    //    auto& first = t.WriteInfo->BlobsFromHead.front();
-    //    // In one operation, a partition can write blocks of several transactions. Some of them can be broken down
-    //    // into parts. We need to take this division into account.
-    //    BlobEncoder.NewHead.PartNo += first.GetPartNo();
-
-    //    Parameters->HeadCleared = Parameters->HeadCleared || !t.WriteInfo->BodyKeys.empty();
-
-    //    BlobEncoder.NewPartitionedBlob(Partition,
-    //                                BlobEncoder.NewHead.Offset,
-    //                                first.SourceId,
-    //                                first.SeqNo,
-    //                                first.GetTotalParts(),
-    //                                first.GetTotalSize(),
-    //                                Parameters->HeadCleared, // headCleared
-    //                                false,                   // needCompactHead
-    //                                MaxBlobSize,
-    //                                first.GetPartNo());
-
-    //    for (auto& blob : t.WriteInfo->BlobsFromHead) {
-    //        TWriteMsg msg{Max<ui64>(), Nothing(), TEvPQ::TEvWrite::TMsg{
-    //            .SourceId = blob.SourceId,
-    //            .SeqNo = blob.SeqNo,
-    //            .PartNo = (ui16)(blob.PartData ? blob.PartData->PartNo : 0),
-    //            .TotalParts = (ui16)(blob.PartData ? blob.PartData->TotalParts : 1),
-    //            .TotalSize = (ui32)(blob.PartData ? blob.PartData->TotalSize : blob.UncompressedSize),
-    //            .CreateTimestamp = blob.CreateTimestamp.MilliSeconds(),
-    //            .ReceiveTimestamp = blob.CreateTimestamp.MilliSeconds(),
-    //            .DisableDeduplication = false,
-    //            .WriteTimestamp = blob.WriteTimestamp.MilliSeconds(),
-    //            .Data = blob.Data,
-    //            .UncompressedSize = blob.UncompressedSize,
-    //            .PartitionKey = blob.PartitionKey,
-    //            .ExplicitHashKey = blob.ExplicitHashKey,
-    //            .External = false,
-    //            .IgnoreQuotaDeadline = true,
-    //            .HeartbeatVersion = std::nullopt,
-    //        }, std::nullopt};
-    //        msg.Internal = true;
-
-    //        WriteInflightSize += msg.Msg.Data.size();
-    //        ExecRequest(msg, *Parameters, PersistRequest.Get());
-    //    }
-    //}
     for (const auto& [srcId, info] : t.WriteInfo->SrcIdInfo) {
         auto& sourceIdBatch = Parameters->SourceIdBatch;
         auto sourceId = sourceIdBatch.GetSource(srcId);

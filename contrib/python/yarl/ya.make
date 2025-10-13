@@ -26,9 +26,8 @@ PY_SRCS(
     yarl/_quoting_py.py
     yarl/_url.py
     CYTHON_C
-    yarl/_quoting_c.pyx
-    CYTHON_CPP
     yarl/_helpers_c.pyx
+    yarl/_quoting_c.pyx
 )
 
 RESOURCE_FILES(

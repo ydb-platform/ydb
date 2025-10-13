@@ -167,6 +167,18 @@ bool TOutputDescriptor::IsFlushed() {
     }
 }
 
+void TOutputDescriptor::Terminate() {
+    Terminated.store(true);
+}
+
+bool TOutputDescriptor::IsTerminated() {
+    return Terminated.load();
+}
+
+TOutputBuffer::~TOutputBuffer() {
+    NodeState->TerminateDescriptor(Descriptor);
+}
+
 EDqFillLevel TOutputBuffer::GetFillLevel() const {
     std::lock_guard lock(Descriptor->Mutex);
     return Descriptor->FillLevel;
@@ -277,28 +289,25 @@ void TNodeState::Push(TDataChunk&& data, std::shared_ptr<TOutputDescriptor> desc
         return;
     }
 
-    std::shared_ptr<TOutputItem> item;
     {
         std::lock_guard lock(Mutex);
         if (InflightBytes < MaxInflightBytes && Queue.size() < MaxInflightMessages) {
             InflightBytes += data.Bytes;
-            item = std::make_shared<TOutputItem>(std::move(data), descriptor);
+            auto item = std::make_shared<TOutputItem>(std::move(data), descriptor);
             item->UniqueId = ++LastUniqueId;
             Queue.push(item);
+            Send(item);
+            descriptor->AddInflight(bytes);
+            return;
         }
     }
 
-    if (item) {
-        Send(item);
-        descriptor->AddInflight(bytes);
-    } else {
-        auto timestamp = data.Timestamp;
-        descriptor->PushToWaitQueue(std::move(data));
-        {
-            std::lock_guard lock(Mutex);
-            descriptor->WaitTimestamp = timestamp;
-            WaitersQueue.push(descriptor);
-        }
+    auto timestamp = data.Timestamp;
+    descriptor->PushToWaitQueue(std::move(data));
+    {
+        std::lock_guard lock(Mutex);
+        descriptor->WaitTimestamp = timestamp;
+        WaitersQueue.push(descriptor);
     }
 }
 
@@ -311,10 +320,10 @@ void TNodeState::Send(std::shared_ptr<TOutputItem> item) {
         ev->Record.SetPayloadId(ev->AddPayload(MakeReadOnlyRope(item->Data.Buffer)));
         ev->Record.SetTransportVersion(item->Data.TransportVersion);
         ev->Record.SetValuePackerVersion(ToProto(item->Data.PackerVersion));
-        ev->Record.SetRows(item->Data.Rows);
-        ev->Record.SetBytes(item->Data.Buffer.Size());
-        ev->Record.SetSendTime(item->Data.Timestamp.MicroSeconds());
     }
+    ev->Record.SetRows(item->Data.Rows);
+    ev->Record.SetSendTime(item->Data.Timestamp.MicroSeconds());
+    ev->Record.SetBytes(item->Data.Bytes);
     if (item->Data.Finished) {
         ev->Record.SetFinished(true);
     }
@@ -339,6 +348,10 @@ void TNodeState::Handle(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
 
     auto& record = ev->Get()->Record;
 
+    if (record.GetSeqNo() != PeerUniqueId + 1) {
+        Cerr << "record.GetSeqNo() == " << record.GetSeqNo() << ", PeerUniqueId == " << PeerUniqueId << Endl;
+    }
+
     Y_ENSURE(record.GetSeqNo() == PeerUniqueId + 1); // TBD: reconcilation
     PeerUniqueId++;
 
@@ -352,11 +365,11 @@ void TNodeState::Handle(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
     TDataChunk data(TChunkedBuffer(), record.GetRows(), record.GetTransportVersion(), FromProto(record.GetValuePackerVersion()));
     if (ev->Get()->GetPayloadCount() > 0) {
         data.Buffer = MakeChunkedBuffer(ev->Get()->GetPayload(record.GetPayloadId()));
-        data.Bytes = data.Buffer.Size();
         data.Timestamp = TInstant::MicroSeconds(record.GetSendTime());
     }
+    data.Bytes = record.GetBytes();
+    Y_ENSURE(data.Bytes > data.Buffer.Size()); // record.GetBytes() == data.Buffer.Size() + const
     data.Finished = record.GetFinished();
-    Y_ENSURE(record.GetBytes() == data.Buffer.Size());
     buffer->PushDataChunk(std::move(data));
 
     auto evAck = MakeHolder<TEvDqCompute::TEvChannelAckV2>();
@@ -384,7 +397,6 @@ void TNodeState::Handle(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
     TChannelInfo info(record.GetChannelId(), NActors::ActorIdFromProto(record.GetSrcActorId()), NActors::ActorIdFromProto(record.GetDstActorId()));
 
     std::lock_guard lock(Mutex);
-    std::shared_ptr<TOutputDescriptor> desc;
     ui64 deltaBytes = 0;
 
     if (record.GetStatus() == NYql::NDqProto::TEvChannelAckV2::OK) {
@@ -394,18 +406,20 @@ void TNodeState::Handle(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
         Y_ENSURE(item->State.load() == TOutputItem::EState::Sent);
         deltaBytes += item->Data.Bytes;
         Queue.pop();
-    } else {
-        auto it = OutputDescriptors.find(info);
-        Y_ENSURE(it != OutputDescriptors.end());
-        desc = it->second;
-    }
+    };
 
-    if (record.GetPopBytes()) {
-        desc->UpdatePopBytes(record.GetPopBytes());
-    }
+    auto it = OutputDescriptors.find(info);
+    if (it != OutputDescriptors.end()) {
+        auto desc = it->second;
+        if (!desc->IsTerminated()) {
+            if (record.GetPopBytes()) {
+                desc->UpdatePopBytes(record.GetPopBytes());
+            }
 
-    if (record.GetEarlyFinished() && desc->EarlyFinished.exchange(true)) {
-        ActorSystem->Send(desc->Info.OutputActorId, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback});
+            if (record.GetEarlyFinished() && desc->EarlyFinished.exchange(true)) {
+                ActorSystem->Send(desc->Info.OutputActorId, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback});
+            }
+        }
     }
 
     Y_ENSURE(InflightBytes >= deltaBytes);
@@ -414,6 +428,10 @@ void TNodeState::Handle(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
         auto waiter = WaitersQueue.top();
         WaitersQueue.pop();
         Y_ENSURE(!waiter->WaitQueue.empty());
+
+        if (waiter->IsTerminated()) {
+            continue;
+        }
 
         auto& data = waiter->WaitQueue.front();
         InflightBytes += data.Bytes;
@@ -495,6 +513,12 @@ std::shared_ptr<TInputBuffer> TNodeState::GetOrCreateInputBuffer(const TChannelI
     auto result = std::make_shared<TInputBuffer>(NodeActorId, info, ActorSystem);
     InputBuffers.emplace(info, result);
     return result;
+}
+
+void TNodeState::TerminateDescriptor(const std::shared_ptr<TOutputDescriptor>& descriptor) {
+    descriptor->Terminate();
+    std::lock_guard lock(Mutex);
+    OutputDescriptors.erase(descriptor->Info);
 }
 
 void TDebugNodeState::PauseChannelData() {

@@ -212,6 +212,7 @@ public:
         , MaxInflightBytes(maxInflightBytes)
         , MinInflightBytes(minInflightBytes)
         , EarlyFinished(false)
+        , Terminated(false)
     {}
     void AddPushBytes(ui64 bytes);
     void UpdatePopBytes(ui64 bytes);
@@ -219,6 +220,8 @@ public:
     void AddInflight(ui64 bytes);
     void PushToWaitQueue(TDataChunk&& data);
     bool IsFlushed();
+    void Terminate();
+    bool IsTerminated();
 
     TChannelInfo Info;
     NActors::TActorSystem* ActorSystem;
@@ -233,6 +236,7 @@ public:
     const ui64 MinInflightBytes; // HardLimit => NoLimit
     bool NeedToNotifyOutput = false;
     std::atomic<bool> EarlyFinished;
+    std::atomic<bool> Terminated;
     TInstant WaitTimestamp;
 };
 
@@ -270,9 +274,7 @@ public:
         PopStats.ChannelId = descriptor->Info.ChannelId;
     }
 
-    ~TOutputBuffer() override {
-    }
-
+    ~TOutputBuffer() override;
     EDqFillLevel GetFillLevel() const override;
     void SetFillAggregator(std::shared_ptr<TDqFillAggregator>aggregator) override;
     void Push(TDataChunk&& data) override;
@@ -401,6 +403,7 @@ public:
     void Handle(TEvPrivate::TEvUpdatePopBytes::TPtr& ev);
     std::shared_ptr<TOutputBuffer> CreateOutputBuffer(const TChannelInfo& info, ui64 maxInflightBytes, ui64 minInflightBytes);
     std::shared_ptr<TInputBuffer> GetOrCreateInputBuffer(const TChannelInfo& info);
+    void TerminateDescriptor(const std::shared_ptr<TOutputDescriptor>& descriptor);
 
     NActors::TActorId NodeActorId;
     NActors::TActorId PeerActorId;

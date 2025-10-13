@@ -46,11 +46,11 @@ public:
         NKikimr::NMiniKQL::EValuePackerVersion packerVersion = NKikimr::NMiniKQL::EValuePackerVersion::V1,
         bool finished = false)
         : Buffer(buffer), Rows(rows), TransportVersion(transportVersion), PackerVersion(packerVersion), Finished(finished) {
-        Bytes = Buffer.Size();
+        Bytes = Buffer.Size() + 1;
         Timestamp = TInstant::Now();
     }
 
-    TDataChunk(bool finished) : Finished(finished) {}
+    TDataChunk(bool finished) : Bytes(1), Finished(finished) {}
 
     TChunkedBuffer Buffer;
     ui64 Rows = 0;

@@ -60,6 +60,7 @@ int main(int argc, char** argv) {
         });
     opts.AddLongOption("samples").Help("number representing how much to repeat single case. useful for noise reduction.").DefaultValue(1).StoreResult(&samples);
     opts.AddLongOption("scale").Help("size of smallest table in case").DefaultValue(1).StoreResult(&scale);
+    opts.AddLongOption("seed").Help("seed for keys generation").DefaultValue(123).StoreResult(&params.Seed);
     params.Algorithms = {
         NKikimr::NMiniKQL::ETestedJoinAlgo::kBlockMap,
         NKikimr::NMiniKQL::ETestedJoinAlgo::kBlockHash,

@@ -69,11 +69,11 @@ TVector<TBenchmarkCaseResult> NKikimr::NMiniKQL::RunJoinsBench(const TBenchmarkS
                     switch (keyType) {
 
                     case kString: {
-                        return PrepareDescription(&setup, GenerateStringKeyColumn(sizes.Left, 123),
+                        return PrepareDescription(&setup, GenerateStringKeyColumn(sizes.Left, params.Seed),
                                                   GenerateStringKeyColumn(sizes.Right, 111));
                     }
                     case kInteger: {
-                        return PrepareDescription(&setup, GenerateIntegerKeyColumn(sizes.Left, 123),
+                        return PrepareDescription(&setup, GenerateIntegerKeyColumn(sizes.Left, params.Seed),
                                                   GenerateIntegerKeyColumn(sizes.Right, 111));
                     }
                     default:
@@ -86,7 +86,7 @@ TVector<TBenchmarkCaseResult> NKikimr::NMiniKQL::RunJoinsBench(const TBenchmarkS
 
                     TBenchmarkCaseResult result;
                     result.CaseName = CaseName(algo, keyType, keyPreset, sizes);
-
+                    result.CaseName += Sprintf("_seed:_%i", params.Seed);
                     THolder<NKikimr::NMiniKQL::IComputationGraph> wideStreamGraph =
                         ConstructJoinGraphStream(EJoinKind::Inner, algo, descr);
                     NYql::NUdf::TUnboxedValue wideStream = wideStreamGraph->GetValue();

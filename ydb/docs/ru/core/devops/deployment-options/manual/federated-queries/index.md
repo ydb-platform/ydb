@@ -41,6 +41,7 @@
     feature_flags:
         enable_external_data_sources: true
     ```
+    
 4. [В конфигурационном файле](../../../../reference/configuration/index.md) {{ ydb-short-name }} добавьте настройки внешних источников данных. Полное описание настроек доступно по [ссылке](../../../../reference/configuration/query_service_config.md):
 
 {% list tabs %}

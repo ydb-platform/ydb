@@ -26,12 +26,12 @@ SRCS(
     kqp_olap_stats_ut.cpp
     locks_ut.cpp
     optimizer_ut.cpp
+    simple_reader_ut.cpp
     sparsed_ut.cpp
     statistics_ut.cpp
     sys_view_ut.cpp
     tiering_ut.cpp
     write_ut.cpp
-    kqp_select.cpp
 )
 
 PEERDIR(
@@ -44,6 +44,7 @@ PEERDIR(
     ydb/core/kqp/ut/olap/helpers
     ydb/core/kqp/ut/olap/combinatory
     ydb/core/tx/datashard/ut_common
+    ydb/public/sdk/cpp/src/client/arrow
     ydb/public/sdk/cpp/src/client/operation
 )
 

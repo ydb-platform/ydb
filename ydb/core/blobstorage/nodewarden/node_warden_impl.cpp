@@ -699,9 +699,14 @@ void TNodeWarden::PersistConfig(std::optional<TString> mainYaml, ui64 mainYamlVe
         return;
     }
 
+    auto escape = [&](auto& value) { return value ? std::make_optional('"' + EscapeC(*value) + '"') : std::nullopt; };
+
     STLOG(PRI_DEBUG, BS_NODE, NW63, "persisting new configurations",
-        (MainYaml, mainYaml), (MainYamlVersion, mainYamlVersion), (StorageYaml, storageYaml),
-        (StorageYamlVersion, storageYamlVersion), (YamlConfig, YamlConfig));
+        (MainYaml, escape(mainYaml)),
+        (MainYamlVersion, mainYamlVersion),
+        (StorageYaml, escape(storageYaml)),
+        (StorageYamlVersion, storageYamlVersion),
+        (YamlConfig, YamlConfig));
 
     const bool updateMain = mainYaml && (!YamlConfig || !YamlConfig->HasMainConfigVersion() ||
         YamlConfig->GetMainConfigVersion() < mainYamlVersion);

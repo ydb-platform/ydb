@@ -343,7 +343,7 @@ void TPartition::RenameCompactedBlob(TDataKey& k,
 
     if (!CompactionBlobEncoder.PartitionedBlob.IsInited()) {
         CompactionBlobEncoder.NewPartitionedBlob(Partition,
-                                                 CompactionBlobEncoder.NewHead.Offset,
+                                                 parameters.CurOffset,
                                                  "",                      // SourceId
                                                  0,                       // SeqNo
                                                  0,                       // TotalParts

@@ -65,7 +65,7 @@ public:
         checkpointConfig.SetEndpoint(GetEnv("YDB_ENDPOINT"));
         checkpointConfig.SetDatabase(GetEnv("YDB_DATABASE"));
         checkpointConfig.SetToken("");
-        checkpointConfig.SetTablePrefix("tablePrefix");
+        checkpointConfig.SetTablePrefix(CreateGuidAsString());
 
         auto& gcConfig = *config.MutableCheckpointGarbageConfig();
         gcConfig.SetEnabled(true);
@@ -160,7 +160,7 @@ public:
         if (expectFailure) {
             UNIT_ASSERT(!event->Issues.Empty());
         } else {
-            UNIT_ASSERT(event->Issues.Empty());
+            UNIT_ASSERT_C(event->Issues.Empty(), event->Issues.ToOneLineString());
             UNIT_ASSERT_VALUES_EQUAL(event->CheckpointId, checkpointId);
         }
     }

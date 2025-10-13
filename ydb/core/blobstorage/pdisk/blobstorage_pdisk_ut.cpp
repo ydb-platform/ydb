@@ -557,11 +557,11 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
     }
 
     Y_UNIT_TEST(TestFakeErrorPDiskManyChunkWrite) {
-        for (int encryptionThreadsCount : {1, 3}) {
+        for (int encryptionThreadsCount : {0, 1, 3}) {
             TActorTestContext testCtx{{}};
             testCtx.TestCtx.SectorMap->IoErrorEveryNthRequests = 1000;
 
-            if (encryptionThreadsCount > 1) {
+            if (encryptionThreadsCount) {
                 auto pdiskConfig = testCtx.GetPDiskConfig();
                 pdiskConfig->EncryptionThreadsCount = encryptionThreadsCount;
                 Cerr << "encryptionThreadsCount# " << pdiskConfig->EncryptionThreadsCount << Endl;

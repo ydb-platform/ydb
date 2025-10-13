@@ -212,6 +212,7 @@ class TCompletionChunkWritePiece : public TCompletionAction {
     TChunkWritePiece* Piece;
     TCompletionChunkWrite* CumulativeCompletion;
     NWilson::TSpan Span;
+    TActorSystem* ActorSystem;
 public:
     TCompletionChunkWritePiece(NKikimr::NPDisk::TChunkWritePiece* piece, TCompletionChunkWrite* cumulativeCompletion);
     void Exec(TActorSystem *actorSystem) override;

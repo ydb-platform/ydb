@@ -583,6 +583,7 @@ public:
     ui32 PartOffset = 0;
     THolder<TChunkWriteResult> ChunkWriteResult;
     THolder<TCompletionChunkWritePiece> Completion;
+    bool Processed = false;
 
     TChunkWritePiece(TPDisk *pdisk, TIntrusivePtr<TChunkWrite> &write, ui32 pieceShift, ui32 pieceSize, NWilson::TSpan span);
     ~TChunkWritePiece();

@@ -84,7 +84,7 @@ public:
 
     TVector<TRequestBase*> JointLogReads;
     std::queue<TIntrusivePtr<TRequestBase>> JointChunkReads;
-    THolder<IThreadPool> ChunkEncoder;
+    std::queue<TChunkWritePiece*> JointChunkWriteRequests;
     TChunkWritePieceQueue JointChunkWrites;
     std::queue<TLogWrite*> JointLogWrites;
     TVector<TChunkTrim*> JointChunkTrims;
@@ -92,6 +92,7 @@ public:
     TVector<std::unique_ptr<TRequestBase>> FastOperationsQueue;
     TDeque<TRequestBase*> PausedQueue;
     std::set<std::unique_ptr<TYardInit>> PendingYardInits;
+    THolder<IThreadPool> ChunkEncoder;
     ui64 LastFlushId = 0;
     bool IsQueuePaused = false;
     bool IsQueueStep = false;
@@ -333,6 +334,7 @@ public:
     void ChunkWritePiecePlain(TChunkWritePiece *piece);
     bool ChunkWritePieceEncrypted(TChunkWritePiece *piece, TChunkWriter &writer, ui32 bytesAvailable);
     void SendChunkWriteError(TChunkWrite &evChunkWrite, const TString &errorReason, NKikimrProto::EReplyStatus status);
+    bool HasEncryptionThreads() const;
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Chunk reading
     enum EChunkReadPieceResult {

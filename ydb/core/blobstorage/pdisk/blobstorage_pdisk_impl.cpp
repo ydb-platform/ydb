@@ -109,11 +109,14 @@ TPDisk::TPDisk(std::shared_ptr<TPDiskCtx> pCtx, const TIntrusivePtr<TPDiskConfig
     JointLogReads.reserve(16 << 10);
     JointChunkForgets.reserve(16 << 10);
 
-    ChunkEncoder = CreateThreadPool(
-        cfg->EncryptionThreadsCount,
-        0/*QueueSizeLimit*/,
-        TThreadPoolParams().SetThreadNamePrefix("PdEncrypt")
-    );
+    THolder<IThreadPool> queue;
+    if (HasEncryptionThreads()) {
+        queue.Reset(new TThreadPool(TThreadPoolParams().SetThreadNamePrefix("PdEncrypt_")));
+    } else {
+        queue.Reset(new TFakeThreadPool());
+    }
+    queue->Start(cfg->EncryptionThreadsCount, 0);
+    ChunkEncoder = std::move(queue);
 
     DebugInfoGenerator = [id = cfg->PDiskId, type = PDiskCategory]() {
         return TStringBuilder() << "PDisk DebugInfo# { Id# " << id << " Type# " << type.TypeStrLong() << " }";
@@ -814,6 +817,10 @@ ui32 TPDisk::AskVDisksToCutLogs(TOwner ownerFilter, bool doForce) {
 // Chunk writing
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+bool TPDisk::HasEncryptionThreads() const {
+    return Cfg->EncryptionThreadsCount > 0;
+}
+
 void TPDisk::ChunkWritePiecePlain(TChunkWritePiece *piece) {
     auto& evChunkWrite = piece->ChunkWrite;
     ui32 chunkIdx = evChunkWrite->ChunkIdx;
@@ -906,7 +913,13 @@ bool TPDisk::ChunkWritePieceEncrypted(TChunkWritePiece *piece, TChunkWriter& wri
                 evChunkWrite->BytesWritten += sizeToWrite;
                 piece->PartOffset = 0;
             }
-            writer.Flush(evChunkWrite->ReqId, &traceId, piece->Completion.Release());
+            if (HasEncryptionThreads()) {
+                writer.Flush(evChunkWrite->ReqId, &traceId, piece->Completion.Release());
+            } else {
+                auto raw = piece->Completion.Release();
+                //deletes raw
+                raw->Exec(PCtx->ActorSystem);
+            }
             piece->MarkReady(PCtx->PDiskLogPrefix);
             return false;
         } else {
@@ -942,7 +955,21 @@ bool TPDisk::ChunkWritePieceEncrypted(TChunkWritePiece *piece, TChunkWriter& wri
     }
 
     auto traceId = evChunkWrite->Span.GetTraceId();
+
     writer.Flush(evChunkWrite->ReqId, &traceId, piece->Completion.Release());
+
+    if (!HasEncryptionThreads()) {
+        P_LOG(PRI_DEBUG, BPD11, "Performing TChunkWritePiece write to block device",
+                (ReqId, piece->ChunkWrite->ReqId),
+                (chunkIdx, piece->ChunkWrite->ChunkIdx),
+                (PieceShift, piece->PieceShift),
+                (PieceSize, piece->PieceSize),
+        );
+        LWTRACK(PDiskChunkWritePieceSendToDevice,
+            piece->Orbit, PCtx->PDiskId, piece->ChunkWrite->Owner, piece->ChunkWrite->ChunkIdx,
+            piece->PieceShift, piece->PieceSize
+        );
+    }
     piece->MarkReady(PCtx->PDiskLogPrefix);
 
     return true;
@@ -1002,11 +1029,11 @@ TChunkWriteResult TPDisk::ChunkWritePiece(TChunkWritePiece *piece) {
         ui32 dataChunkSizeSectors = Format.ChunkSize / Format.SectorSize;
         auto writer = MakeHolder<TChunkWriter>(Mon, *BlockDevice.Get(), Format, currentNonce, Format.ChunkKey, BufferPool.Get(),
                 desiredSectorIdx, dataChunkSizeSectors, Format.MagicDataChunk, chunkIdx, nullptr, desiredSectorIdx,
-                nullptr, PCtx, &DriveModel, Cfg->EnableSectorEncryption, true);
+                nullptr, PCtx, &DriveModel, Cfg->EnableSectorEncryption, HasEncryptionThreads());
 
         piece->Span.Event("PDisk.ChunkWritePiece.EncryptionStart");
         bool end = ChunkWritePieceEncrypted(piece, writer.GetRef(), piece->PieceSize);
-        return {std::move(writer), end};
+        return {HasEncryptionThreads() ? std::move(writer) : nullptr, end};
     } else {
         ChunkWritePiecePlain(piece);
         return {nullptr, true};
@@ -2491,6 +2518,15 @@ void TPDisk::ProcessChunkWriteQueue() {
 
     while (!JointChunkWrites.IsEmpty()) {
         auto piece = JointChunkWrites.Dequeue();
+        if (!piece->Processed) {
+            if (HasEncryptionThreads()) {
+                auto res = ChunkEncoder->Add(piece);
+                Y_VERIFY(res, "failed to schedule TChunkWritePiece");
+                continue; //not counts as processed; it is only scheduled
+            }
+            piece->ChunkWriteResult = MakeHolder<TChunkWriteResult>(ChunkWritePiece(piece));
+        }
+
         processed++;
         processedBytes += piece->PieceSize;
         processedCostMs += piece->GetCostMs();
@@ -2511,6 +2547,7 @@ void TPDisk::ProcessChunkWriteQueue() {
         }
 
         // One more flush is sent to BlockDevice from TSectorWriter destructor.
+        Y_VERIFY(piece->Completion == nullptr, "Completion should be released from TChunkWritePiece and freed in completion thread");
         delete piece;
 
         // prevent the thread from being stuck for long
@@ -3502,7 +3539,7 @@ void TPDisk::PushRequestToScheduler(TRequestBase *request) {
         whole->Completion->Pieces = jobCount;
         ui32 remainingSize = whole->TotalSize;
 
-        TVector<TChunkWritePiece*> chunkWritePieces(jobCount);
+        TStackVec<TChunkWritePiece*, 64> ChunkWritePiecesBuffer;
         for (ui32 idx = 0; idx < jobCount; ++idx) {
             auto span = request->Span.CreateChild(TWilson::PDiskDetailed, "PDisk.ChunkWritePiece", NWilson::EFlags::AUTO_END);
             span.Attribute("small_job_idx", idx)
@@ -3511,21 +3548,19 @@ void TPDisk::PushRequestToScheduler(TRequestBase *request) {
             auto piece = new TChunkWritePiece(this, whole, idx * jobSizeLimit, jobSize, std::move(span));
             piece->EstimateCost(DriveModel);
             remainingSize -= jobSize;
-            chunkWritePieces[idx] = std::move(piece);
+            ChunkWritePiecesBuffer.emplace_back(std::move(piece));
         }
 
         //to register all pieces first, then schedule
-        for (size_t idx = 0; idx < chunkWritePieces.size(); idx++) {
-            auto& piece = chunkWritePieces[idx];
+        for (ui32 idx = 0; idx < jobCount; idx++) {
+            auto& piece = ChunkWritePiecesBuffer[idx];
             P_LOG(PRI_INFO, BPD01, "PDiskChunkWritePieceAddToScheduler", (idx, idx), (jobSizeLimit, jobSizeLimit),
                 (pieceShift, piece->PieceShift), (pieceSize, piece->PieceSize));
             LWTRACK(PDiskChunkWritePieceAddToScheduler, whole->Orbit, PCtx->PDiskId, idx, piece->PieceShift,
                     piece->PieceSize);
-
             AddJobToScheduler(piece, request->JobKind);
         }
-        chunkWritePieces.clear();
-
+        ChunkWritePiecesBuffer.clear();
         Y_VERIFY_S(remainingSize == 0, PCtx->PDiskLogPrefix << "remainingSize# " << remainingSize);
     } else if (request->GetType() == ERequestType::RequestChunkRead) {
         TIntrusivePtr<TChunkRead> read = std::move(static_cast<TChunkRead*>(request)->SelfPointer);
@@ -3670,11 +3705,7 @@ void TPDisk::RouteRequest(TRequestBase *request) {
 
                 TChunkWritePiece *piece = static_cast<TChunkWritePiece*>(request);
 
-                bool res = ChunkEncoder->Add(piece);
-
-                //TODO: when adding max queue size for ChunkEncoder,
-                //do not forget error handling here
-                Y_ENSURE(res);
+                JointChunkWrites.Enqueue(piece);
             }
 
             break;
@@ -3948,7 +3979,6 @@ void TPDisk::Update() {
         ForsetiOpPieceSizeCached = PDiskCategory.IsSolidState() ? ForsetiOpPieceSizeSsd : ForsetiOpPieceSizeRot;
         ForsetiOpPieceSizeCached = Min<i64>(ForsetiOpPieceSizeCached, Cfg->BufferPoolBufferSizeBytes);
         ForsetiOpPieceSizeCached = AlignDown<i64>(ForsetiOpPieceSizeCached, Format.SectorSize);
-
         auto prev = UseNoopSchedulerCached;
         UseNoopSchedulerCached = PDiskCategory.IsSolidState() ? UseNoopSchedulerSSD : UseNoopSchedulerHDD;
         // if we are going to start using noop scheduler then drain Forseti scheduler

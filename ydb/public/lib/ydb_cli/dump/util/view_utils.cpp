@@ -7,9 +7,7 @@
 #include <yql/essentials/sql/settings/translation_settings.h>
 #include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
 #include <yql/essentials/sql/v1/lexer/antlr4_ansi/lexer.h>
-#include <yql/essentials/sql/v1/proto_parser/antlr4/proto_parser.h>
-#include <yql/essentials/sql/v1/proto_parser/antlr4_ansi/proto_parser.h>
-#include <yql/essentials/sql/v1/sql.h>
+#include <yql/essentials/sql/v1/lexer/lexer.h>
 
 #include <util/string/builder.h>
 
@@ -106,13 +104,6 @@ TLexers BuildLexers() {
     return lexers;
 }
 
-TParsers BuildParsers() {
-    TParsers parsers;
-    parsers.Antlr4 = MakeAntlr4ParserFactory();
-    parsers.Antlr4Ansi = MakeAntlr4AnsiParserFactory();
-    return parsers;
-}
-
 } // anonymous
 
 TViewQuerySplit::TViewQuerySplit(const TVector<TString>& statements) {
@@ -125,9 +116,10 @@ TViewQuerySplit::TViewQuerySplit(const TVector<TString>& statements) {
     Select = statements.back();
 }
 
-bool SplitViewQuery(const TString& query, const TLexers& lexers, const TParsers& parsers, const TTranslationSettings& translationSettings, TViewQuerySplit& split, NYql::TIssues& issues) {
+bool SplitViewQuery(const TString& query, const TLexers& lexers, const TTranslationSettings& translationSettings, TViewQuerySplit& split, NYql::TIssues& issues) {
     TVector<TString> statements;
-    if (!SplitQueryToStatements(lexers, parsers, query, statements, issues, translationSettings)) {
+    auto lexer = NSQLTranslationV1::MakeLexer(lexers, translationSettings.AnsiLexer, translationSettings.Antlr4Parser);
+    if (!SplitQueryToStatements(query, lexer, statements, issues)) {
         return false;
     }
     if (statements.empty()) {
@@ -145,8 +137,7 @@ bool SplitViewQuery(const TString& query, TViewQuerySplit& split, NYql::TIssues&
         return false;
     }
     auto lexers = BuildLexers();
-    auto parsers = BuildParsers();
-    return SplitViewQuery(query, lexers, parsers, translationSettings, split, issues);
+    return SplitViewQuery(query, lexers, translationSettings, split, issues);
 }
 
 TString BuildCreateViewQuery(

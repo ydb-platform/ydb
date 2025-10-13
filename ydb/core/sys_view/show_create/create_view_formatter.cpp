@@ -137,7 +137,7 @@ TFormatResult TCreateViewFormatter::Format(const TString& viewRelativePath, cons
     auto lexers = BuildLexers();
     auto parsers = BuildParsers();
     NYdb::NDump::TViewQuerySplit split;
-    if (!SplitViewQuery(query, lexers, parsers, translationSettings, split, issues)) {
+    if (!SplitViewQuery(query, lexers, translationSettings, split, issues)) {
         return TFormatResult(Ydb::StatusIds::SCHEME_ERROR, issues);
     }
 

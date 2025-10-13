@@ -5,7 +5,6 @@
 
 namespace NSQLTranslationV1 {
     struct TLexers;
-    struct TParsers;
 }
 
 namespace NSQLTranslation {
@@ -28,7 +27,7 @@ struct TViewQuerySplit {
 
 bool SplitViewQuery(const TString& query, TViewQuerySplit& split, NYql::TIssues& issues);
 bool SplitViewQuery(
-    const TString& query, const NSQLTranslationV1::TLexers& lexers, const NSQLTranslationV1::TParsers& parsers, const NSQLTranslation::TTranslationSettings& translationSettings,
+    const TString& query, const NSQLTranslationV1::TLexers& lexers, const NSQLTranslation::TTranslationSettings& translationSettings,
     TViewQuerySplit& split, NYql::TIssues& issues
 );
 

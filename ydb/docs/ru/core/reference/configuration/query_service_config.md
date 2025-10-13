@@ -1,40 +1,41 @@
 # Конфигурация внешних источников
 
-Секция `query_service_config` описываем параметры работы {{ ydb-short-name }} с внешними источниками данных с помощью функциональности [федеративных запросов](../../concepts/federated_query/index.md)
+Секция `query_service_config` описывает параметры работы {{ ydb-short-name }} с внешними источниками данных с помощью функциональности [федеративных запросов](../../concepts/federated_query/index.md)
 
 Если для доступа к нужному вам источнику требуется развернуть коннектор, необходимо также настроить [Коннектор](../../concepts/federated_query/architecture.md#connectors) по [инструкции](../../devops/deployment-options/manual/federated-queries/connector-deployment.md).
 
-Параметры `query_service_config.all_external_data_sources_are_available` и `query_service_config.available_external_data_sources` используются в случаях, когда требуется подключить только некоторые из внешних источников данных.
+Параметры `all_external_data_sources_are_available` и `available_external_data_sources` используются в случаях, когда требуется подключить только некоторые из внешних источников данных.
 
 ## Описание параметров
 
 #|
-|| `query_service_config.generic.connector.endpoint.host`
+|| **Параметр** | **Значение по умолчанию** | **Описание**  ||
+|| `generic.connector.endpoint.host`
 | `localhost`
-| `Коннектор` - имя хоста.
+|  Имя хоста коннектора.
 ||
-|| `query_service_config.generic.connector.endpoint.port`
+|| `generic.connector.endpoint.port`
 | `2130`
-| `Коннектор` - TCP порт.
+| TCP порт коннектора.
 ||
-|| `query_service_config.generic.connector.use_ssl`
+|| `generic.connector.use_ssl`
 | `false`
-| `Коннектор` — необходимость использования шифрования. При размещении коннектора и динамического узла {{ ydb-short-name }} на одном сервере шифрованное соединение между ними не требуется, но при необходимости его можно включить.
+| Использовать ли шифрование соединения. При размещении коннектора и динамического узла {{ ydb-short-name }} на одном сервере шифрованное соединение между ними не требуется, но при необходимости его можно включить.
 ||
-|| `query_service_config.generic.connector.ssl_ca_crt`
+|| `generic.connector.ssl_ca_crt`
 |
-| `Коннектор` — путь к сертификату CA, используемому для шифрования.
+| Путь к сертификату CA, который используется для шифрования.
 ||
-|| `query_service_config.generic.default_settings.name.UsePredicatePushdown`
+|| `generic.default_settings.name.UsePredicatePushdown`
 | `false`
 | Включает пушдаун предикатов во внешние источники данных: некоторые части SQL-запросов (например, фильтры) будут переданы на исполнение во внешний источник. Это позволит существенно снизить объёмы данных, передаваемых по сети источником данных в сторону федеративной YDB, сэкономить её вычислительные ресурсы и значительно уменьшить время обработки федеративного запроса.
 ||
-|| `query_service_config.available_external_data_sources`
+|| `available_external_data_sources`
 | пустой список
-| Список с разрешенными типами внешними источниками. Возможные значения: ObjectStorage, ClickHouse, PostgreSQL, MySQL, Greenplum, MsSQLServer, Ydb
+| Список с разрешенными типами внешних источников. Возможные значения: ObjectStorage, ClickHouse, PostgreSQL, MySQL, Greenplum, MsSQLServer, Ydb.
 Применяется при `all_external_data_sources_are_available: false`.
 ||
-|| `query_service_config.all_external_data_sources_are_available`
+|| `all_external_data_sources_are_available`
 | `false`
 | Включение всех типов внешних источников.
 При true значение `available_external_data_sources` не используется.

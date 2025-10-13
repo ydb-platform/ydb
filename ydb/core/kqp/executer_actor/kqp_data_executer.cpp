@@ -2891,9 +2891,9 @@ private:
             graphParams,
             stateLoadMode,
             streamingDisposition).Release());
-        LOG_D("Created new CheckpointCoordinator (" << CheckpointCoordinatorId << "), execution id "
-            << context->CurrentExecutionId << ", checkpoint id "
-            << checkpointId << ", generation " << Generation
+        LOG_D("Created new CheckpointCoordinator (" << CheckpointCoordinatorId << ")"
+            << ", execution id " << context->CurrentExecutionId
+            << ", checkpoint id " << checkpointId << ", generation " << Generation
             << ", state load mode " << FederatedQuery::StateLoadMode_Name(stateLoadMode)
             << ", streaming disposition " << streamingDisposition.ShortDebugString());
     }

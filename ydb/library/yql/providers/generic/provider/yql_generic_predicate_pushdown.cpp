@@ -341,6 +341,10 @@ namespace NYql {
             MATCH_ATOM(Utf8, UTF8, text, TString);
             MATCH_ATOM(Timestamp, TIMESTAMP, int64, i64);
             MATCH_ATOM(Interval, INTERVAL, int64, i64);
+            // Arrow vector holds value with ui16 type
+            // Proto value does not have ability to store
+            // ui16 type that's why uint32 is used
+            MATCH_ATOM(Date, DATE, uint32, ui16);
             MATCH_ARITHMETICAL(Sub, SUB);
             MATCH_ARITHMETICAL(Add, ADD);
             MATCH_ARITHMETICAL(Mul, MUL);
@@ -683,6 +687,8 @@ namespace NYql {
                 return "Utf8";
             case Ydb::Type::JSON:
                 return "Json";
+            case Ydb::Type::DATE:
+                return "Date";
             default:
                 throw yexception() << "Failed to format primitive type, type case " << static_cast<ui64>(typeId) << " is not supported";
         }
@@ -712,6 +718,16 @@ namespace NYql {
                     const auto duration = TDuration::MicroSeconds(value.int64_value());
                     return TStringBuilder() << FormatType(typedValue.type()) << "(\"" << ToIso8601(duration) << "\")";
                 }
+                default:
+                    [[fallthrough]];
+                }
+            }
+            case Ydb::Type::DATE: {
+                const auto& value = typedValue.value();
+                switch (value.value_case()) {
+                case Ydb::Value::kUint32Value:
+                    return TStringBuilder() << FormatType(typedValue.type()) << "(\""
+                        << TInstant::Days(value.uint32_value()).FormatLocalTime("%Y-%m-%d") << "\")";
                 default:
                     [[fallthrough]];
                 }

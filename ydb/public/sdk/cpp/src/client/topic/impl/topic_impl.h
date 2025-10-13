@@ -49,7 +49,7 @@ public:
         if (settings.SetAvailabilityPeriod_) {
             if (settings.SetAvailabilityPeriod_ != TDuration::Zero()) {
                 consumerProto.mutable_set_availability_period()->set_seconds(settings.SetAvailabilityPeriod_->Seconds());
-                consumerProto.mutable_set_availability_period()->set_nanos((settings.SetAvailabilityPeriod_->MicroSeconds() % 1'000'000) * 1'000);
+                consumerProto.mutable_set_availability_period()->set_nanos(settings.SetAvailabilityPeriod_->NanoSecondsOfSecond());
             } else {
                 consumerProto.mutable_reset_availability_period();
             }

@@ -651,7 +651,7 @@ void TConsumerSettings<TSettings>::SerializeTo(Ydb::Topic::Consumer& proto) cons
     proto.set_important(Important_);
     if (AvailabilityPeriod_ != TDuration::Zero()) {
         proto.mutable_availability_period()->set_seconds(AvailabilityPeriod_.Seconds());
-        proto.mutable_availability_period()->set_nanos((AvailabilityPeriod_.MicroSeconds() % 1'000'000) * 1'000);
+        proto.mutable_availability_period()->set_nanos(AvailabilityPeriod_.NanoSecondsOfSecond());
     } else {
         proto.clear_availability_period();
     }

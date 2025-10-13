@@ -16,11 +16,11 @@ namespace NKikimr::NPQ::NMLP {
 class TStorage {
 
     // Имеет смысл ограничить 100К сообщений на партицию. Надо больше - увеличивайте кол-во партиции.
-    // В худшем случае на 100000 сообщений надо ~5MB памяти
+    // В худшем случае на 100000 сообщений надо ~3MB памяти
     static constexpr size_t MaxMessages = 100000;
 
-    // Максимальное время блокировки сообщения (Message visibility timeout). Предлагаю ограничить 8 часами (в SQS 12 часов).
-    static constexpr size_t MaxDeadlineDelta = 1 << 16;
+    // Максимальное время блокировки сообщения (Message visibility timeout). (в SQS 12 часов).
+    static constexpr size_t MaxDeadlineDelta = Max<ui16>();
 
     // Оптимизация. Кол-во сообщений, которые вернулись по timeout-у обратно для обработки, которые будут храниться в быстрой
     // зоне (их выборка будет происходить очень быстро, без поиска по списку всех Messages).
@@ -29,49 +29,32 @@ class TStorage {
     enum EMessageStatus {
         Unprocessed = 0,
         Locked = 1,
-        Committed = 2
+        Committed = 2,
+        DLQ = 3
     };
 
     // sizeof(TMessage) == 8
     struct TMessage {
         // Статус сообщения. EMessageStatus
-        ui32 Status: 2;
-        ui32 HasMessageGroupId: 1;
+        ui64 Status: 3 = EMessageStatus::Unprocessed;
+        ui64 Reserve: 2;
+        ui64 HasMessageGroupId: 1 = false;
+        // Сколько раз отдавали сообщение для чтения. В SQS максимальное значение 1000 (интернеты про это пишут, но в документации не нашел)
+        ui64 ReceiveCount: 10 = 0;
         // Для заблокированных сообщений время, после которого сообщение должно вернуться в очередь.
-        ui32 DeadlineDelta: 15;
-        // Cookie для заблокированных для исключения коммита из умерших сессий. Если не нужно, то можно
-        // уменьшить размер требуемой памяти на хранение сообщений в 2 раза (MessageGroupIdHash будем хранить только 14 бит)
-        ui32 Cookie: 14;
+        ui64 DeadlineDelta: 16 = 0;
         // Hash группы сообщений (храним hash т.к. нас устраивает вероятность блокироки разных групп - главно
         // не отдавать сообщения из одной группы параллельно)
-        ui32 MessageGroupIdHash;
+        ui64 MessageGroupIdHash: 32 = 0;
     };
 
-    // sizeof(LockedMessage) == 4
-    struct LockedMessage {
-        // Дельта от FirstOffset (надо будет обновлять все дельты при изменении FirstOffset)
-        // 0 <= OffsetDelta <= MaxMessages
-        ui32 OffsetDelta : 17;
-        // Дельта от BaseDeadline (надо будет обновлять все дельты при изменении BaseDeadline)
-        // В секундах. В SQS задается в секундах, по умолчанию 30 сек, максимум 12 часов.
-        // 0 << DeadlineDelta << MaxDeadlineDelta
-        ui32 DeadlineDelta : 15;
-
-        LockedMessage(ui32 offsetDelta, ui32 deadlineDelta)
-            : OffsetDelta(offsetDelta)
-            , DeadlineDelta(deadlineDelta)
-        {
-        }
-    };
+    static_assert(sizeof(TMessage) == sizeof(ui64));
 
 public:
 
     // Идентификатор сообщения.
     struct TMessageId {
         ui64 Offset;
-        // Cookie используется для возможности исключить коммит из умерших сессии.
-        // С другой стороны, ChangeMessageVisisbility в SQS можно вообще вызывать из консоли и там ничего не проверяется.
-        ui64 Cookie;
     };
 
     // Return next message for client processing.
@@ -89,15 +72,15 @@ public:
 
 private:
     // offsetDelte, TMessage
-    std::pair<ui64, TMessage*> GetMessage(ui64 offset, ui64 cookie, EMessageStatus expectedStatus);
+    std::pair<ui64, TMessage*> GetMessage(ui64 offset, EMessageStatus expectedStatus);
     ui64 NormalizeDeadline(TInstant deadline);
 
     TMessageId DoLock(ui64 offsetDelta, TInstant deadline);
-    bool DoCommit(ui64 offset, ui64 cookie);
-    bool DoUnlock(ui64 offset, ui64 cookie);
+    bool DoCommit(ui64 offset);
+    bool DoUnlock(ui64 offset);
     void DoUnlock(TMessage& message, ui64 offset);
 
-    void UpdateDeltas(const ui64 newFirstOffset);
+    void UpdateDeltas();
     void UpdateFirstUncommittedOffset();
 
 private:
@@ -119,11 +102,6 @@ private:
     // Для больших очередей стараемся размер подобрать оптимально, например, в зависимости от одновременно обрабатываемых
     // клиентом сообщений (умножаем их на 2)
     std::deque<TMessage> Messages;
-
-    // Список сообщений отданных клиенту.
-    // В худшем случае MaxMessages * 4 * {накладные расходы хранения в map} ~ 2MB
-    // Set упорядочен по (DeadlineDelta, OffsetDelta)
-    std::set<LockedMessage> LockedMessages;
 
     // Список обрабатываемых MessageGroupId. Нельзя отдавать в обработку несколько сообщений с одной MessageGroup параллельно.
     // В худшем случае (все сообщений содержать разные message group id и все сообщения отданы клиенту) MaxMessages * 4 * {накладные расходы хранения в map} ~ 2MB

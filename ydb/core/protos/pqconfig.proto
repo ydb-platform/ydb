@@ -1246,8 +1246,20 @@ message TEvBalancingSubscribeNotify {
     optional EStatus Status = 5;
 }
 
+message TMLPMessageId {
+    optional uint32 PartitionId = 1;
+    optional uint64 Offset = 2;
+}
+
 message TMLPMessageMeta {
-    optional uint64 Offset = 1;
+    optional string MessageGroupId = 1;
+    optional uint64 SentTimestamp = 2;
+};
+
+message TMLPMessage {
+    optional TMLPMessageId Id = 1;
+    optional bytes Data = 2;
+    optional TMLPMessageMeta Meta = 3;
 }
 
 // To PQRB
@@ -1268,8 +1280,10 @@ message TEvMLPReadRequest {
     optional string Topic = 1; // PathId? Нужен для возможности в одной таблетке хранить несколько топиков
     optional string Consumer = 2;
     optional uint32 PartitionId = 3;
-    optional uint64 ReadTimeout = 4; // Максимальное время ожидания данных, если в партиции их нет.
-    optional uint64 ProcessingTimeout = 4; // Если к указанному времени не произойдет подтверждения обработки сообщения, то сообщение вернется в очередь (может указывать в настройках консьюмера?)
+    optional uint64 WaitTimeSeconds = 4; // Максимальное время ожидания данных, если в партиции их нет.
+    optional uint64 VisibilityTimeout = 4; // Если к указанному времени не произойдет подтверждения обработки сообщения, то сообщение вернется в очередь (может указывать в настройках консьюмера?)
+    // The maximum number of messages to return.
+    optional uint32 MaxNumberOfMessages = 5;
 }
 
 // From PQTablet
@@ -1281,9 +1295,7 @@ message TEvMLPReadResponse {
     }
 
     optional EStatus Status = 1;
-    optional string MessageId = 2; // уникальный идентификатор сообщения с учетом его взятия в работу. PartitionId/OffsetId/Assigment
-    optional TMLPMessageMeta Meta = 3;
-    optional string Data = 4;
+    repeated TMLPMessage Message = 2; // уникальный идентификатор сообщения с учетом его взятия в работу. PartitionId/OffsetId/Assigment
 }
 
 // To PQTablet

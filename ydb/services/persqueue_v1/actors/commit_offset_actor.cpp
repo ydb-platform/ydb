@@ -50,8 +50,6 @@ TCommitOffsetActor::TCommitOffsetActor(NKikimr::NGRpcService::IRequestOpCtx * ct
     , AuthInitActor()
     , Counters(nullptr)
 {
-    // TopicConverterFactory = NPersQueue::TTopicNamesConverterFactory(AppData(ActorContext())->PQConfig, "");
-    // TopicsHandler = NPersQueue::TTopicsListController(TopicConverterFactory);
 }
 
 TCommitOffsetActor::TCommitOffsetActor(NGRpcService::TEvCommitOffsetRequest* request)

@@ -42,7 +42,7 @@ public:
      TCommitOffsetActor(NKikimr::NGRpcService::IRequestOpCtx* ctx);
 
      TCommitOffsetActor(NGRpcService::TEvCommitOffsetRequest* request);
-     // добавить второй конструктор
+     
     ~TCommitOffsetActor();
 
     void Bootstrap(const NActors::TActorContext& ctx);

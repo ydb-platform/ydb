@@ -26,14 +26,6 @@ public:
         if (params.Has("database")) {
             Database = params.Get("database");
         }
-        if (Params.Get("mode")) {
-            Mode = std::stoul(Params.Get("mode"));
-        }
-        if (Mode == 1) {
-            TString topicPath = Params.Get("path");
-            InflyDescribeRequests++;
-            Cerr << topicPath << Endl;
-        }
         TBase::Bootstrap();
     }
 
@@ -82,10 +74,5 @@ public:
         yaml.SetResponseSchema(TProtoToYaml::ProtoToYamlSchema<Ydb::Topic::CommitOffsetResult>());
         return yaml;
     }
-
-private:
-    ui32 Mode = 0;
-    ui32 InflyDescribeRequests = 0;
 };
-
 }

@@ -68,13 +68,22 @@ void TStatisticsAggregator::Handle(TEvStatistics::TEvDeleteStatisticsQueryRespon
 }
 void TStatisticsAggregator::Handle(TEvStatistics::TEvFinishTraversal::TPtr& ev) {
     using EStatus = TEvStatistics::TEvFinishTraversal::EStatus;
-    if (ev->Get()->Status == EStatus::TableNotFound) {
+    switch (ev->Get()->Status) {
+    case EStatus::Success:
+        std::move(
+            ev->Get()->Statistics.begin(), ev->Get()->Statistics.end(),
+            std::back_inserter(StatisticsToSave));
+        SaveStatisticsToTable();
+        return;
+    case EStatus::TableNotFound:
         DeleteStatisticsFromTable();
         return;
+    case EStatus::InternalError:
+        Execute(
+            new TTxFinishTraversal(this, false),
+            TActivationContext::AsActorContext());
+        return;
     }
-    Execute(
-        new TTxFinishTraversal(this, ev->Get()->Status == EStatus::Success), 
-        TActivationContext::AsActorContext());
 }
 
 } // NKikimr::NStat

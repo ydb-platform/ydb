@@ -608,25 +608,23 @@ void TStatisticsAggregator::SaveStatisticsToTable() {
 
     PendingSaveStatistics = false;
 
-    std::vector<ui32> columnTags;
-    std::vector<TString> data;
-    auto count = CountMinSketches.size();
-    if (count == 0) {
+    std::vector<TStatisticsItem> items = std::exchange(StatisticsToSave, {});
+
+    for (auto& [tag, sketch] : CountMinSketches) {
+        if (!ColumnNames.contains(tag)) {
+            continue;
+        }
+        TString strSketch(sketch->AsStringBuf());
+        items.emplace_back(tag, EStatType::COUNT_MIN_SKETCH, std::move(strSketch));
+    }
+
+    if (items.empty()) {
         Send(SelfId(), new TEvStatistics::TEvSaveStatisticsQueryResponse(
             Ydb::StatusIds::SUCCESS, {}, TraversalPathId));
         return;
     }
-    columnTags.reserve(count);
-    data.reserve(count);
 
-    for (auto& [tag, sketch] : CountMinSketches) {
-        columnTags.push_back(tag);
-        TString strSketch(sketch->AsStringBuf());
-        data.push_back(strSketch);
-    }
-
-    Register(CreateSaveStatisticsQuery(SelfId(), Database,
-        TraversalPathId, EStatType::COUNT_MIN_SKETCH, std::move(columnTags), std::move(data)));
+    Register(CreateSaveStatisticsQuery(SelfId(), Database, TraversalPathId, std::move(items)));
 }
 
 void TStatisticsAggregator::DeleteStatisticsFromTable() {

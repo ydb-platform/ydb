@@ -280,27 +280,29 @@ void TAnalyzeActor::Handle(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev) {
         return;
     }
 
-    auto response = std::make_unique<TEvStatistics::TEvAggregateStatisticsResponse>();
-    auto& record = response->Record;
+    std::vector<TStatisticsItem> items;
     for (const auto& col : Columns) {
-        auto* column = record.AddColumns();
-        column->SetTag(col.Tag);
+        TString data;
 
-        auto* stat = column->AddStatistics();
-        stat->SetType(NKikimr::NStat::COUNT_MIN_SKETCH);
         NYdb::TValueParser val(result.AggColumns.at(col.Seq));
         val.OpenOptional();
         if (!val.IsNull()) {
             const auto& bytes = val.GetBytes();
-            stat->SetData(bytes.data(), bytes.size());
+            data.assign(bytes.data(), bytes.size());
         } else {
             auto defaultVal = std::unique_ptr<TCountMinSketch>(
                 TCountMinSketch::Create(CMS_WIDTH, CMS_DEPTH));
             auto bytes = defaultVal->AsStringBuf();
-            stat->SetData(bytes.data(), bytes.size());
+            data.assign(bytes.data(), bytes.size());
         }
+
+        items.emplace_back(
+            col.Tag,
+            NKikimr::NStat::COUNT_MIN_SKETCH,
+            data);
     }
 
+    auto response = std::make_unique<TEvStatistics::TEvFinishTraversal>(std::move(items));
     Send(Parent, response.release());
     PassAway();
 }

@@ -21,6 +21,9 @@ struct TCmsSentinelConfig {
         TDuration WaitForConfigStep;
         TDuration RelaxTime;
         bool PileupReplicas;
+        ui32 OverrideReplicasInRingCount;
+        ui32 OverrideRingsCount;
+        ui32 ReplicasSpecificVolume;
 
         void Serialize(NKikimrCms::TCmsConfig::TSentinelConfig::TStateStorageSelfHealConfig &config) const {
             config.SetEnable(Enable);
@@ -30,6 +33,9 @@ struct TCmsSentinelConfig {
             config.SetWaitForConfigStep(WaitForConfigStep.GetValue());
             config.SetRelaxTime(RelaxTime.GetValue());
             config.SetPileupReplicas(PileupReplicas);
+            config.SetOverrideReplicasInRingCount(OverrideReplicasInRingCount);
+            config.SetOverrideRingsCount(OverrideRingsCount);
+            config.SetReplicasSpecificVolume(ReplicasSpecificVolume);
         }
 
         void Deserialize(const NKikimrCms::TCmsConfig::TSentinelConfig::TStateStorageSelfHealConfig &config) {
@@ -40,6 +46,9 @@ struct TCmsSentinelConfig {
             WaitForConfigStep = TDuration::MicroSeconds(config.GetWaitForConfigStep());
             RelaxTime = TDuration::MicroSeconds(config.GetRelaxTime());
             PileupReplicas = config.GetPileupReplicas();
+            OverrideReplicasInRingCount = config.GetOverrideReplicasInRingCount();
+            OverrideRingsCount = config.GetOverrideRingsCount();
+            ReplicasSpecificVolume = config.GetReplicasSpecificVolume();
         }
     };
 

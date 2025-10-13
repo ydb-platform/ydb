@@ -1187,6 +1187,9 @@ message TopicSettings {
     }
     // remote mirror rule for this topic.
     RemoteMirrorRule remote_mirror_rule = 11;
+
+    // Set or reset metrics level.
+    optional uint32 metrics_level = 16;
 }
 
 message AutoPartitioningSettings {

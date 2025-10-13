@@ -38,6 +38,7 @@ static const ui32 MAX_INLINE_SIZE = 1000;
 using TPartitionLabeledCounters = TProtobufTabletLabeledCounters<EPartitionLabeledCounters_descriptor>;
 
 ui64 GetOffsetEstimate(const std::deque<TDataKey>& container, TInstant timestamp, ui64 headOffset);
+TMaybe<ui64> GetOffsetEstimate(const std::deque<TDataKey>& container, TInstant timestamp);
 
 
 class TKeyLevel;
@@ -194,7 +195,7 @@ private:
     void SendReadingFinished(const TString& consumer);
 
     void AddNewFastWriteBlob(std::pair<TKey, ui32>& res, TEvKeyValue::TEvRequest* request, const TActorContext& ctx);
-    void AddNewCompactionWriteBlob(std::pair<TKey, ui32>& res, TEvKeyValue::TEvRequest* request, ui64 blobCreationUnixTime, const TActorContext& ctx);
+    void AddNewCompactionWriteBlob(std::pair<TKey, ui32>& res, TEvKeyValue::TEvRequest* request, TInstant blobCreationUnixTime, const TActorContext& ctx);
     void AnswerCurrentWrites(const TActorContext& ctx);
     void AnswerCurrentReplies(const TActorContext& ctx);
     void CancelOneWriteOnWrite(const TActorContext& ctx,
@@ -296,6 +297,7 @@ private:
 
     void AddMetaKey(TEvKeyValue::TEvRequest* request);
     void CheckHeadConsistency() const;
+    void CheckTimestampsOrderInZones(TStringBuf validateReason = {}) const;
     void HandlePendingRequests(const TActorContext& ctx);
     void HandleQuotaWaitingRequests(const TActorContext& ctx);
     void RequestQuotaForWriteBlobRequest(size_t dataSize, ui64 cookie);
@@ -496,6 +498,7 @@ private:
     ui64 GetReadOffset(ui64 offset, TMaybe<TInstant> readTimestamp) const;
 
     TConsumerSnapshot CreateSnapshot(TUserInfo& userInfo) const;
+    bool IsKeyCompactionEnabled() const;
     void CreateCompacter();
     void SendCompacterWriteRequest(THolder<TEvKeyValue::TEvRequest>&& request);
 
@@ -835,7 +838,7 @@ private:
     void EndHandleRequests(TEvKeyValue::TEvRequest* request, const TActorContext& ctx);
     void BeginProcessWrites(const TActorContext& ctx);
     void EndProcessWrites(TEvKeyValue::TEvRequest* request, const TActorContext& ctx);
-    void EndProcessWritesForCompaction(TEvKeyValue::TEvRequest* request, ui64 blobCreationUnixTime, const TActorContext& ctx);
+    void EndProcessWritesForCompaction(TEvKeyValue::TEvRequest* request, TInstant blobCreationUnixTime, const TActorContext& ctx);
     void BeginAppendHeadWithNewWrites(const TActorContext& ctx);
     void EndAppendHeadWithNewWrites(const TActorContext& ctx);
 
@@ -914,12 +917,15 @@ private:
     TTabletCountersBase TabletCounters;
     THolder<TPartitionLabeledCounters> PartitionCountersLabeled;
 
+    THolder<TPartitionKeyCompactionCounters> PartitionCompactionCounters;
+
     // Per partition counters
     NMonitoring::TDynamicCounters::TCounterPtr WriteTimeLagMsByLastWritePerPartition;
     NMonitoring::TDynamicCounters::TCounterPtr SourceIdCountPerPartition;
     NMonitoring::TDynamicCounters::TCounterPtr TimeSinceLastWriteMsPerPartition;
     NMonitoring::TDynamicCounters::TCounterPtr BytesWrittenPerPartition;
     NMonitoring::TDynamicCounters::TCounterPtr MessagesWrittenPerPartition;
+
 
     TInstant LastCountersUpdate;
 
@@ -1000,6 +1006,9 @@ private:
     TMultiCounter CompactionUnprocessedBytes;
     TMultiCounter CompactionTimeLag;
 
+    // NKikimr::NPQ::TMultiCounter KeyCompactionReadCyclesTotal;
+    // NKikimr::NPQ::TMultiCounter KeyCompactionWriteCyclesTotal;
+
     // Writing blob with topic quota variables
     ui64 TopicQuotaRequestCookie = 0;
     ui64 NextTopicWriteQuotaRequestCookie = 1;
@@ -1072,13 +1081,19 @@ private:
 
     void AddCmdWrite(const std::optional<TPartitionedBlob::TFormedBlobInfo>& newWrite,
                      TEvKeyValue::TEvRequest* request,
-                     ui64 creationUnixTime,
+                     TInstant creationUnixTime,
                      const TActorContext& ctx,
                      bool includeToWriteCycle = true);
-    void AddCmdWrite(const std::optional<TPartitionedBlob::TFormedBlobInfo>& newWrite,
+    void AddCmdWriteWithDeferredTimestamp(const std::optional<TPartitionedBlob::TFormedBlobInfo>& newWrite,
                      TEvKeyValue::TEvRequest* request,
                      const TActorContext& ctx,
                      bool includeToWriteCycle = true);
+    void AddCmdWriteImpl(const std::optional<TPartitionedBlob::TFormedBlobInfo>& newWrite,
+                     TEvKeyValue::TEvRequest* request,
+                     TInstant creationUnixTime,
+                     const TActorContext& ctx,
+                     bool includeToWriteCycle,
+                     struct TPartitionsPrivateAddCmdWriteTag);
     void RenameFormedBlobs(const std::deque<TPartitionedBlob::TRenameFormedBlobInfo>& formedBlobs,
                            TProcessParametersBase& parameters,
                            ui32 curWrites,
@@ -1105,9 +1120,10 @@ private:
     void BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& blobs);
     void BlobsForCompactionWereWrite();
     ui64 NextReadCookie();
-    bool ExecRequestForCompaction(TWriteMsg& p, TProcessParametersBase& parameters, TEvKeyValue::TEvRequest* request, ui64 blobCreationUnixTime);
+    bool ExecRequestForCompaction(TWriteMsg& p, TProcessParametersBase& parameters, TEvKeyValue::TEvRequest* request, TInstant blobCreationUnixTime);
 
     bool CompactionInProgress = false;
+    TVector<std::pair<TDataKey, size_t>> KeysForCompaction;
     size_t CompactionBlobsCount = 0;
 
     void DumpZones(const char* file = nullptr, unsigned line = 0) const;
@@ -1131,6 +1147,28 @@ private:
     TDeque<NWilson::TSpan> TxForPersistSpans;
 
     bool CanProcessUserActionAndTransactionEvents() const;
+    ui64 GetCompactedBlobSizeLowerBound() const;
+
+    bool CompactRequestedBlob(const TRequestedBlob& requestedBlob,
+                              TProcessParametersBase& parameters,
+                              bool needToCompactiHead,
+                              TEvKeyValue::TEvRequest* compactionRequest,
+                              TInstant& blobCreationUnixTime,
+                              bool wasThePreviousBlobBig);
+    void RenameCompactedBlob(TDataKey& k,
+                             const size_t size,
+                             const bool needToCompactHead,
+                             TProcessParametersBase& parameters,
+                             TEvKeyValue::TEvRequest* compactionRequest);
+
+    bool WasTheLastBlobBig = true;
+
+    void DumpKeysForBlobsCompaction() const;
+
+    void TryProcessGetWriteInfoRequest(const TActorContext& ctx);
+
+    std::unique_ptr<TEvPQ::TEvGetWriteInfoRequest> PendingGetWriteInfoRequest;
+    bool StopCompaction = false;
 };
 
 inline ui64 TPartition::GetStartOffset() const {

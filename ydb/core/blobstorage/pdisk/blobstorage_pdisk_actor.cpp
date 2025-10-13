@@ -32,6 +32,7 @@
 #include <util/generic/algorithm.h>
 #include <util/string/split.h>
 #include <util/system/sanitizers.h>
+#include <util/generic/variant.h>
 
 namespace NKikimr {
 namespace NPDisk {
@@ -56,46 +57,12 @@ void CreatePDiskActor(TExecutorThread& executorThread,
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 class TPDiskActor : public TActorBootstrapped<TPDiskActor> {
-    struct TInitQueueItem {
-        TOwnerRound OwnerRound = 0;
-        TVDiskID VDisk = TVDiskID::InvalidId;
-        ui32 SlotSizeInUnits = 0;
-        ui64 PDiskGuid = 0;
-        TActorId Sender;
-        TActorId CutLogId;
-        TActorId WhiteboardProxyId;
-        ui32 SlotId = 0;
-        bool IsShred = false;
-        ui64 ShredGeneration = 0;
-        ui64 Cookie;
-
-        TInitQueueItem(const TActorId sender, const ui64 shredGeneration, ui64 cookie)
-            : Sender(sender)
-            , IsShred(true)
-            , ShredGeneration(shredGeneration)
-            , Cookie(cookie)
-        {}
-
-        TInitQueueItem(
-                TOwnerRound ownerRound,
-                TVDiskID vDisk,
-                ui32 slotSizeInUnits,
-                ui64 pDiskGuid,
-                TActorId sender,
-                TActorId cutLogId,
-                TActorId whiteboardProxyId,
-                ui32 slotId
-        )
-            : OwnerRound(ownerRound)
-            , VDisk(vDisk)
-            , SlotSizeInUnits(slotSizeInUnits)
-            , PDiskGuid(pDiskGuid)
-            , Sender(sender)
-            , CutLogId(cutLogId)
-            , WhiteboardProxyId(whiteboardProxyId)
-            , SlotId(slotId)
-        {}
-    };
+    using TInitQueueItem = std::variant<
+        NPDisk::TEvYardInit::TPtr,
+        NPDisk::TEvShredPDisk::TPtr,
+        NPDisk::TEvYardResize::TPtr,
+        NPDisk::TEvChangeExpectedSlotCount::TPtr
+    >;
 
     TString StateErrorReason;
     TIntrusivePtr<TPDiskConfig> Cfg;
@@ -313,17 +280,30 @@ public:
     void InitError(const TString &errorReason, bool allowMetadataHandling = false) {
         Become(&TThis::StateError);
         for (TList<TInitQueueItem>::iterator it = InitQueue.begin(); it != InitQueue.end(); ++it) {
-            if (it->IsShred) {
-                Send(it->Sender, new NPDisk::TEvShredPDiskResult(NKikimrProto::CORRUPTED, it->ShredGeneration, errorReason), 0, it->Cookie);
-                if (PDisk) {
-                    PDisk->Mon.ShredPDisk.CountResponse();
+            std::visit([this, &errorReason](const auto& ev) {
+                using T = std::decay_t<decltype(ev)>;
+                if constexpr (std::is_same_v<T, NPDisk::TEvShredPDisk::TPtr>) {
+                    Send(ev->Sender, new NPDisk::TEvShredPDiskResult(NKikimrProto::CORRUPTED, ev->Get()->ShredGeneration, errorReason), 0, ev->Cookie);
+                    if (PDisk) {
+                        PDisk->Mon.ShredPDisk.CountResponse();
+                    }
+                } else if constexpr (std::is_same_v<T, NPDisk::TEvYardInit::TPtr>) {
+                    Send(ev->Sender, new NPDisk::TEvYardInitResult(NKikimrProto::CORRUPTED, errorReason));
+                    if (PDisk) {
+                        PDisk->Mon.YardInit.CountResponse();
+                    }
+                } else if constexpr (std::is_same_v<T, NPDisk::TEvYardResize::TPtr>) {
+                    Send(ev->Sender, new NPDisk::TEvYardResizeResult(NKikimrProto::CORRUPTED, {}, errorReason));
+                    if (PDisk) {
+                        PDisk->Mon.YardResize.CountResponse();
+                    }
+                } else if constexpr (std::is_same_v<T, NPDisk::TEvChangeExpectedSlotCount::TPtr>) {
+                    Send(ev->Sender, new NPDisk::TEvChangeExpectedSlotCountResult(NKikimrProto::CORRUPTED, errorReason));
+                    if (PDisk) {
+                        PDisk->Mon.ChangeExpectedSlotCount.CountResponse();
+                    }
                 }
-            } else {
-                Send(it->Sender, new NPDisk::TEvYardInitResult(NKikimrProto::CORRUPTED, errorReason));
-                if (PDisk) {
-                    PDisk->Mon.YardInit.CountResponse();
-                }
-            }
+            }, *it);
         }
         InitQueue.clear();
         TStringStream str;
@@ -633,17 +613,23 @@ public:
     void InitSuccess() {
         Become(&TThis::StateOnline);
         for (TList<TInitQueueItem>::iterator it = InitQueue.begin(); it != InitQueue.end(); ++it) {
-            if (it->IsShred) {
-                NPDisk::TEvShredPDisk evShredPDisk(it->ShredGeneration);
-                auto* request = PDisk->ReqCreator.CreateFromEv<NPDisk::TShredPDisk>(evShredPDisk, it->Sender);
-                request->Cookie = it->Cookie;
-                PDisk->InputRequest(request);
-            } else {
-                NPDisk::TEvYardInit evInit(it->OwnerRound, it->VDisk, it->PDiskGuid, it->CutLogId, it->WhiteboardProxyId,
-                    it->SlotId, it->SlotSizeInUnits);
-                auto* request = PDisk->ReqCreator.CreateFromEv<TYardInit>(evInit, it->Sender);
-                PDisk->InputRequest(request);
-            }
+            std::visit([this](const auto& ev) {
+                using T = std::decay_t<decltype(ev)>;
+                if constexpr (std::is_same_v<T, NPDisk::TEvShredPDisk::TPtr>) {
+                    auto* request = PDisk->ReqCreator.CreateFromEv<NPDisk::TShredPDisk>(*ev->Get(), ev->Sender);
+                    request->Cookie = ev->Cookie;
+                    PDisk->InputRequest(request);
+                } else if constexpr (std::is_same_v<T, NPDisk::TEvYardInit::TPtr>) {
+                    auto* request = PDisk->ReqCreator.CreateFromEv<TYardInit>(*ev->Get(), ev->Sender);
+                    PDisk->InputRequest(request);
+                } else if constexpr (std::is_same_v<T, NPDisk::TEvYardResize::TPtr>) {
+                    auto* request = PDisk->ReqCreator.CreateFromEv<TYardResize>(*ev->Get(), ev->Sender);
+                    PDisk->InputRequest(request);
+                } else if constexpr (std::is_same_v<T, NPDisk::TEvChangeExpectedSlotCount::TPtr>) {
+                    auto* request = PDisk->ReqCreator.CreateFromEv<TChangeExpectedSlotCount>(*ev->Get(), ev->Sender);
+                    PDisk->InputRequest(request);
+                }
+            }, *it);
         }
         InitQueue.clear();
         if (ControledStartResult) {
@@ -653,9 +639,7 @@ public:
     }
 
     void InitHandle(NPDisk::TEvYardInit::TPtr &ev) {
-        const NPDisk::TEvYardInit &evYardInit = *ev->Get();
-        InitQueue.emplace_back(evYardInit.OwnerRound, evYardInit.VDisk, evYardInit.GroupSizeInUnits, evYardInit.PDiskGuid,
-            ev->Sender, evYardInit.CutLogID, evYardInit.WhiteboardProxyId, evYardInit.SlotId);
+        InitQueue.emplace_back(ev);
     }
 
     void OnPDiskStop(TActorId &sender, void *cookie) {
@@ -700,19 +684,16 @@ public:
 
     void InitHandle(NPDisk::TEvYardResize::TPtr &ev) {
         PDisk->Mon.YardResize.CountRequest();
-        Send(ev->Sender, new NPDisk::TEvYardResizeResult(NKikimrProto::CORRUPTED, {}, StateErrorReason));
-        PDisk->Mon.YardResize.CountResponse();
+        InitQueue.emplace_back(ev);
     }
 
     void InitHandle(NPDisk::TEvChangeExpectedSlotCount::TPtr &ev) {
         PDisk->Mon.ChangeExpectedSlotCount.CountRequest();
-        Send(ev->Sender, new NPDisk::TEvChangeExpectedSlotCountResult(NKikimrProto::CORRUPTED, StateErrorReason));
-        PDisk->Mon.ChangeExpectedSlotCount.CountResponse();
+        InitQueue.emplace_back(ev);
     }
 
     void InitHandle(NPDisk::TEvShredPDisk::TPtr &ev) {
-        const NPDisk::TEvShredPDisk &evShredPDisk = *ev->Get();
-        InitQueue.emplace_back(ev->Sender, evShredPDisk.ShredGeneration, ev->Cookie);
+        InitQueue.emplace_back(ev);
     }
 
     void InitHandle(NPDisk::TEvPreShredCompactVDiskResult::TPtr &ev) {

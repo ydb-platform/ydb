@@ -583,7 +583,11 @@ namespace NKikimr::NStorage {
 
     bool TDistributedConfigKeeper::GenerateStateStorageConfig(NKikimrConfig::TDomainsConfig::TStateStorage *ss
             , const NKikimrBlobStorage::TStorageConfig& baseConfig, std::unordered_set<ui32>& usedNodes
-            , const NKikimrConfig::TDomainsConfig::TStateStorage& oldConfig) {
+            , const NKikimrConfig::TDomainsConfig::TStateStorage& oldConfig
+            , ui32 overrideReplicasInRingCount
+            , ui32 overrideRingsCount
+            , ui32 replicasSpecificVolume
+        ) {
         std::map<TBridgePileId, THashMap<TString, std::vector<std::tuple<ui32, TNodeLocation>>>> nodes;
         bool goodConfig = true;
         for (const auto& node : baseConfig.GetAllNodes()) {
@@ -592,7 +596,7 @@ namespace NKikimr::NStorage {
             nodes[pileId][location.GetDataCenterId()].emplace_back(node.GetNodeId(), location);
         }
         for (auto& [pileId, nodesByDataCenter] : nodes) {
-            TStateStoragePerPileGenerator generator(nodesByDataCenter, SelfHealNodesState, pileId, usedNodes, oldConfig);
+            TStateStoragePerPileGenerator generator(nodesByDataCenter, SelfHealNodesState, pileId, usedNodes, oldConfig, overrideReplicasInRingCount, overrideRingsCount, replicasSpecificVolume);
             generator.AddRingGroup(ss);
             goodConfig &= generator.IsGoodConfig();
         }

@@ -487,7 +487,7 @@ namespace NKikimr::NPQ {
 
             AFL_ENSURE(data->DataSize() == it->second.DataSize)
                 ("data->DataSize()", data->DataSize())
-                ("data->DataSize()", data->DataSize());
+                ("it->second.DataSize", it->second.DataSize);
 
             const TBlobId& blob = it->first;
             LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Got data from cache. Partition "

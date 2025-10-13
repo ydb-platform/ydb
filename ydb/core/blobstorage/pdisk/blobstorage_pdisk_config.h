@@ -137,7 +137,7 @@ struct TPDiskConfig : public TThrRefBase {
     bool UseSpdkNvmeDriver;
 
     // Next 2 are either user-defined or inferred from drive size
-    ui64 ExpectedSlotCount = 0;
+    ui32 ExpectedSlotCount = 0;
     ui32 SlotSizeInUnits = 0;
 
     // Free chunk permille that triggers Cyan color (e.g. 100 is 10%). Between 130 (default) and 13.

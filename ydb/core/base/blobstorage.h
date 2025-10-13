@@ -496,6 +496,8 @@ struct TEvBlobStorage {
         EvGetBlock,
         EvCheckIntegrity,
 
+        EvExplicitMultiPut, // for debugging purposes
+
         //
         EvPutResult = EvPut + 512,                              /// 268 632 576
         EvGetResult,

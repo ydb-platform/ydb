@@ -1,6 +1,7 @@
 #include <ydb/core/keyvalue/keyvalue_events.h>
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/persqueue/pqtablet/partition/partition.h>
+#include <ydb/core/persqueue/pqtablet/partition/blob_key_filter.h>
 #include <ydb/core/persqueue/ut/common/pq_ut_common.h>
 #include <ydb/core/protos/counters_keyvalue.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
@@ -3680,6 +3681,161 @@ Y_UNIT_TEST_F(TEvTxCalcPredicate_With_Conflicts, TPartitionTxTestHelper)
     SendTxCommit(tx1);
 
     WaitTxPredicateReply(tx2);
+}
+
+Y_UNIT_TEST(BlobKeyFilfer)
+{
+    auto filterKeys = [](const TVector<TString>& keys, const TPartitionId& partitionId) -> THashSet<TString> {
+        NKikimrClient::TKeyValueResponse::TReadRangeResult result;
+        for (const auto& k : keys) {
+            auto* pair = result.AddPair();
+            pair->SetStatus(NKikimrProto::OK);
+            pair->SetKey(k);
+        }
+        return FilterBlobsMetaData(result, partitionId);
+    };
+
+    TVector<TString> actualKeys{
+        "d0000000000_00000000000000000000_00000_0000000001_00000?",
+        "d0000000000_00000000000000000001_00000_0000000001_00000?"
+    };
+    THashSet<TString> expectedKeys{
+        "d0000000000_00000000000000000000_00000_0000000001_00000?",
+        "d0000000000_00000000000000000001_00000_0000000001_00000?"
+    };
+    auto filteredKeys = filterKeys(actualKeys, TPartitionId(0));
+
+    UNIT_ASSERT_EQUAL(filteredKeys, expectedKeys);
+
+    actualKeys = {
+        "d0000000000_00000000000000000000_00000_0000000001_00000?",
+        "d0000000000_00000000000000000000_00000_0000000002_00000|",
+        "d0000000000_00000000000000000001_00000_0000000001_00000?"
+    };
+    expectedKeys = {
+        "d0000000000_00000000000000000000_00000_0000000002_00000|"
+    };
+    filteredKeys = filterKeys(actualKeys, TPartitionId(0));
+
+    UNIT_ASSERT_EQUAL(filteredKeys, expectedKeys);
+
+    actualKeys = {
+        "d0000000000_00000000000000000000_00000_0000000001_00000?",
+        "d0000000000_00000000000000000000_00000_0000000001_00000|",
+        "d0000000000_00000000000000000001_00000_0000000001_00000?",
+        "d0000000000_00000000000000000001_00000_0000000002_00000|",
+        "d0000000000_00000000000000000002_00000_0000000001_00000?"
+    };
+    expectedKeys = {
+        "d0000000000_00000000000000000000_00000_0000000001_00000|",
+        "d0000000000_00000000000000000001_00000_0000000002_00000|"
+    };
+    filteredKeys = filterKeys(actualKeys, TPartitionId(0));
+
+    UNIT_ASSERT_EQUAL(filteredKeys, expectedKeys);
+
+    actualKeys = {
+        "d0000000000_00000000000000000000_00000_0000000000_00002|",
+        "d0000000000_00000000000000000000_00002_0000000001_00002|"
+    };
+    expectedKeys = {
+        "d0000000000_00000000000000000000_00000_0000000000_00002|",
+        "d0000000000_00000000000000000000_00002_0000000001_00002|"
+    };
+    filteredKeys = filterKeys(actualKeys, TPartitionId(0));
+
+    UNIT_ASSERT_EQUAL(filteredKeys, expectedKeys);
+
+    actualKeys = {
+        "d0000000000_00000000000000000000_00000_0000000001_00000?",
+        "d0000000000_00000000000000000000_00000_0000000003_00000|",
+        "d0000000000_00000000000000000001_00000_0000000002_00000?",
+        "d0000000000_00000000000000000003_00000_0000000001_00000?",
+        "d0000000000_00000000000000000003_00000_0000000001_00000|"
+    };
+    expectedKeys = {
+        "d0000000000_00000000000000000000_00000_0000000003_00000|",
+        "d0000000000_00000000000000000003_00000_0000000001_00000|"
+    };
+    filteredKeys = filterKeys(actualKeys, TPartitionId(0));
+
+    UNIT_ASSERT_EQUAL(filteredKeys, expectedKeys);
+
+    actualKeys = {
+        "d0000000000_00000000000000000000_00000_0000000000_00002?",
+        "d0000000000_00000000000000000000_00000_0000000000_00002|",
+        "d0000000000_00000000000000000000_00002_0000000001_00002?",
+        "d0000000000_00000000000000000000_00002_0000000001_00002|"
+    };
+    expectedKeys = {
+        "d0000000000_00000000000000000000_00000_0000000000_00002|",
+        "d0000000000_00000000000000000000_00002_0000000001_00002|"
+    };
+    filteredKeys = filterKeys(actualKeys, TPartitionId(0));
+
+    UNIT_ASSERT_EQUAL(filteredKeys, expectedKeys);
+
+    actualKeys = {
+        "d0000000000_00000000000000000000_00000_0000000002_00000|",
+        "d0000000000_00000000000000000000_00000_0000000003_00000|"
+    };
+    expectedKeys = {
+        "d0000000000_00000000000000000000_00000_0000000003_00000|"
+    };
+    filteredKeys = filterKeys(actualKeys, TPartitionId(0));
+
+    UNIT_ASSERT_EQUAL(filteredKeys, expectedKeys);
+
+    actualKeys = {
+        "d0000000000_00000000000000000000_00000_0000000002_00000?",
+        "d0000000000_00000000000000000000_00000_0000000003_00000|",
+        "d0000000000_00000000000000000002_00000_0000000001_00000?",
+    };
+    expectedKeys = {
+        "d0000000000_00000000000000000000_00000_0000000003_00000|"
+    };
+    filteredKeys = filterKeys(actualKeys, TPartitionId(0));
+
+    UNIT_ASSERT_EQUAL(filteredKeys, expectedKeys);
+
+    actualKeys = {
+        "d0000000000_00000000000000000000_00000_0000000002_00004?",
+        "d0000000000_00000000000000000000_00000_0000000002_00005?",
+        "d0000000000_00000000000000000002_00000_0000000001_00002?"
+    };
+    expectedKeys = {
+        "d0000000000_00000000000000000000_00000_0000000002_00005?",
+        "d0000000000_00000000000000000002_00000_0000000001_00002?"
+    };
+    filteredKeys = filterKeys(actualKeys, TPartitionId(0));
+
+    UNIT_ASSERT_EQUAL(filteredKeys, expectedKeys);
+
+    actualKeys = {
+        "d0000000000_00000000000000000000_00000_0000000002_00004?",
+        "d0000000000_00000000000000000000_00000_0000000002_00005|",
+        "d0000000000_00000000000000000002_00000_0000000001_00002?"
+    };
+    expectedKeys = {
+        "d0000000000_00000000000000000000_00000_0000000002_00005|",
+        "d0000000000_00000000000000000002_00000_0000000001_00002?"
+    };
+    filteredKeys = filterKeys(actualKeys, TPartitionId(0));
+
+    UNIT_ASSERT_EQUAL(filteredKeys, expectedKeys);
+
+    actualKeys = {
+        "d0000000000_00000000000000000000_00000_0000000002_00004?",
+        "d0000000000_00000000000000000000_00000_0000000002_00004|",
+        "d0000000000_00000000000000000002_00000_0000000001_00002?"
+    };
+    expectedKeys = {
+        "d0000000000_00000000000000000000_00000_0000000002_00004|",
+        "d0000000000_00000000000000000002_00000_0000000001_00002?"
+    };
+    filteredKeys = filterKeys(actualKeys, TPartitionId(0));
+
+    UNIT_ASSERT_EQUAL(filteredKeys, expectedKeys);
 }
 
 } // End of suite

@@ -55,7 +55,7 @@ TMessageFlags InitFlags(const TClientBlob& blob) {
     flags.F.HasWriteTimestamp = 1;
     flags.F.HasPartData = !blob.PartData.Empty();
     flags.F.HasUncompressedSize = blob.UncompressedSize != 0;
-    flags.F.HasKinesisData = !blob.PartitionKey.empty() || !blob.ExplicitHashKey.empty();
+    flags.F.HasKinesisData = !blob.PartitionKey.empty();
     return flags;
 }
 
@@ -181,14 +181,14 @@ TClientBlob DeserializeClientBlob(const char* data, ui32 size) {
     AFL_ENSURE(data < end);
     ui16 sz = ReadUnaligned<ui16>(data);
     data += sizeof(ui16);
-    AFL_ENSURE(data + sz < end);
+    AFL_ENSURE(data + sz <= end);
     TString sourceId(data, sz);
     data += sz;
 
-    AFL_ENSURE(data < end)("size", size)("SeqNo", seqNo)("SourceId", sourceId);
-
-    TString dt(data, end - data);
-
+    TString dt;
+    if (data != end) {
+        dt = TString(data, end - data);
+    }
     return TClientBlob(std::move(sourceId), seqNo, std::move(dt), partData, writeTimestamp, createTimestamp, uncompressedSize, std::move(partitionKey), std::move(explicitHashKey));
 }
 

@@ -1,86 +1,77 @@
-#include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
-#include <ydb/core/kqp/host/kqp_host.h>
-#include <ydb/core/ydb_convert/ydb_convert.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
-#include <ydb/library/yql/dq/common/dq_value.h>
-#include <yql/essentials/core/services/mounts/yql_mounts.h>
+#include <ydb/core/kqp/common/events/events.h>
+#include <ydb/core/kqp/executer_actor/kqp_executer.h>
+#include <ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler_service.h>
 
-#include <library/cpp/protobuf/util/pb_io.h>
-#include <ydb/core/protos/config.pb.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status_codes.h>
 
-namespace NKikimr {
-namespace NKqp {
+namespace NKikimr::NKqp {
 
-using namespace NYql;
-using namespace NYql::NNodes;
+using namespace NYdb;
 using namespace NYdb::NTable;
 
-namespace {
-
-[[maybe_unused]]
-NKqpProto::TKqpPhyTx BuildTxPlan(const TString& sql, TIntrusivePtr<IKqpGateway> gateway,
-    const TKikimrConfiguration::TPtr& config, NActors::TActorId* actorSystem)
-{
-    auto cluster = TString(DefaultKikimrClusterName);
-
-    TExprContext moduleCtx;
-    IModuleResolver::TPtr moduleResolver;
-    UNIT_ASSERT(GetYqlDefaultModuleResolver(moduleCtx, moduleResolver));
-
-    auto qp = CreateKqpHost(gateway, cluster, "/Root", config, moduleResolver, NYql::IHTTPGateway::Make(), nullptr, nullptr, NKikimrConfig::TQueryServiceConfig(), Nothing(), nullptr, nullptr, false, false, nullptr, actorSystem, nullptr);
-    auto result = qp->SyncPrepareDataQuery(sql, IKqpHost::TPrepareSettings());
-    result.Issues().PrintTo(Cerr);
-    UNIT_ASSERT(result.Success());
-
-    auto& phyQuery = result.PreparedQuery.GetPhysicalQuery();
-    UNIT_ASSERT(phyQuery.TransactionsSize() == 1);
-    return phyQuery.GetTransactions(0);
-}
-
-[[maybe_unused]]
-TIntrusivePtr<IKqpGateway> MakeIcGateway(const TKikimrRunner& kikimr) {
-    auto actorSystem = kikimr.GetTestServer().GetRuntime()->GetAnyNodeActorSystem();
-    return CreateKikimrIcGateway(TString(DefaultKikimrClusterName), "/Root", "/Root", TKqpGatewaySettings(),
-        actorSystem, kikimr.GetTestServer().GetRuntime()->GetNodeId(0),
-        TAlignedPagePoolCounters(), kikimr.GetTestServer().GetSettings().AppConfig->GetQueryServiceConfig());
-}
-
-[[maybe_unused]]
-TKikimrParamsMap GetParamsMap(const NYdb::TParams& params) {
-    TKikimrParamsMap paramsMap;
-
-    auto paramValues = params.GetValues();
-    for (auto& pair : paramValues) {
-        Ydb::TypedValue protoParam;
-        protoParam.mutable_type()->CopyFrom(NYdb::TProtoAccessor::GetProto(pair.second.GetType()));
-        protoParam.mutable_value()->CopyFrom(NYdb::TProtoAccessor::GetProto(pair.second));
-
-        NKikimrMiniKQL::TParams mkqlParam;
-        ConvertYdbTypeToMiniKQLType(protoParam.type(), *mkqlParam.MutableType());
-        ConvertYdbValueToMiniKQLValue(protoParam.type(), protoParam.value(), *mkqlParam.MutableValue());
-
-        paramsMap.insert(std::make_pair(pair.first, mkqlParam));
-    }
-
-    return paramsMap;
-}
-
-[[maybe_unused]]
-TKqpParamsRefMap GetParamRefsMap(const TKikimrParamsMap& paramsMap) {
-    TKqpParamsRefMap refsMap;
-
-    for (auto& pair : paramsMap) {
-        refsMap.emplace(std::make_pair(pair.first, NDq::TMkqlValueRef(pair.second)));
-    }
-
-    return refsMap;
-}
-
-} // namespace
-
 Y_UNIT_TEST_SUITE(KqpExecuter) {
+
+    /* Scenario:
+        - Start query execution and receive TEvTxRequest.
+        - When sending TEvAddQuery from executer to scheduler, immediately receive TEvAbortExecution.
+        - Imitate receiving TEvQueryResponse before receiving self TEvPoison by executer.
+        - Do not crash or get undefined behavior.
+     */
+    Y_UNIT_TEST(TestSuddenAbortAfterReady) {
+        TKikimrSettings settings = TKikimrSettings().SetUseRealThreads(false);
+        settings.AppConfig.MutableTableServiceConfig()->MutableComputeSchedulerSettings()->SetAccountDefaultPool(true);
+
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); } );
+        auto session = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); } );
+
+        auto prepareResult = kikimr.RunCall([&] { return session.PrepareDataQuery(Q_(R"(
+                SELECT COUNT(*) FROM `/Root/TwoShard`;
+            )")).GetValueSync();
+        });
+        UNIT_ASSERT_VALUES_EQUAL_C(prepareResult.GetStatus(), EStatus::SUCCESS, prepareResult.GetIssues().ToString());
+        auto dataQuery = prepareResult.GetQuery();
+
+        TActorId executerId, targetId;
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            {
+                TStringStream ss;
+                ss << "Got " << ev->GetTypeName() << " " << ev->Recipient << " " << ev->Sender << Endl;
+                Cerr << ss.Str();
+            }
+
+            if (ev->GetTypeRewrite() == TEvKqpExecuter::TEvTxRequest::EventType) {
+                targetId = ActorIdFromProto(ev->Get<TEvKqpExecuter::TEvTxRequest>()->Record.GetTarget());
+            }
+
+            if (ev->GetTypeRewrite() == NScheduler::TEvAddQuery::EventType) {
+                executerId = ev->Sender;
+                auto* abortExecution = new TEvKqp::TEvAbortExecution(NYql::NDqProto::StatusIds::UNSPECIFIED, NYql::TIssues());
+                runtime.Send(new IEventHandle(ev->Sender, targetId, abortExecution));
+            }
+
+            if (ev->GetTypeRewrite() == NActors::TEvents::TEvPoison::EventType && ev->Sender == executerId && ev->Recipient == executerId) {
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        auto future = kikimr.RunInThreadPool([&] { return dataQuery.Execute(TTxControl::BeginTx().CommitTx(), TExecDataQuerySettings()).GetValueSync(); });
+
+        TDispatchOptions opts;
+        opts.FinalEvents.emplace_back([&](IEventHandle& ev) {
+            return ev.GetTypeRewrite() == TEvKqpExecuter::TEvTxResponse::EventType;
+        });
+        runtime.DispatchEvents(opts);
+
+        auto result = runtime.WaitFuture(future);
+        UNIT_ASSERT(!result.IsSuccess());
+    }
+
     // TODO: Test shard write shuffle.
     /*
     Y_UNIT_TEST(BlindWriteDistributed) {
@@ -150,5 +141,4 @@ Y_UNIT_TEST_SUITE(KqpExecuter) {
     */
 }
 
-} // namspace NKqp
 } // namespace NKikimr

@@ -307,6 +307,8 @@ protected:
     virtual EClientType GetClientType() const = 0;
     virtual ~TFixture() = default;
 
+    void TestWriteAndReadMessages(size_t count, size_t size, bool restart);
+
 private:
     class TTableSession : public ISession {
     public:
@@ -2466,68 +2468,6 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_47_Query, TFixtureQuery)
     TestWriteToTopic47();
 }
 
-void TFixture::TestWriteToTopic50()
-{
-    // TODO(abcdef): temporarily deleted
-    return;
-
-    // We write to the topic in the transaction. When a transaction is committed, the keys in the blob
-    // cache are renamed.
-    CreateTopic("topic_A", TEST_CONSUMER);
-    CreateTopic("topic_B", TEST_CONSUMER);
-
-    std::string message(128_KB, 'x');
-
-    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_1, message);
-    WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID_1);
-
-    auto session = CreateSession();
-
-    // tx #1
-    // After the transaction commit, there will be no large blobs in the batches.  The number of renames
-    // will not change in the cache.
-    auto tx = session->BeginTx();
-
-    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_2, message, tx.get());
-    WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID_3, message, tx.get());
-
-    UNIT_ASSERT_VALUES_EQUAL(GetPQCacheRenameKeysCount(), 0);
-
-    session->CommitTx(*tx, EStatus::SUCCESS);
-
-    std::this_thread::sleep_for(5s);
-
-    UNIT_ASSERT_VALUES_EQUAL(GetPQCacheRenameKeysCount(), 0);
-
-    // tx #2
-    // After the commit, the party will rename one big blob
-    tx = session->BeginTx();
-
-    for (unsigned i = 0; i < 80; ++i) {
-        WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_2, message, tx.get());
-    }
-
-    WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID_3, message, tx.get());
-
-    UNIT_ASSERT_VALUES_EQUAL(GetPQCacheRenameKeysCount(), 0);
-
-    session->CommitTx(*tx, EStatus::SUCCESS);
-
-    std::this_thread::sleep_for(5s);
-
-    UNIT_ASSERT_VALUES_EQUAL(GetPQCacheRenameKeysCount(), 1);
-}
-
-Y_UNIT_TEST_F(WriteToTopic_Demo_50_Table, TFixtureTable)
-{
-    TestWriteToTopic50();
-}
-
-Y_UNIT_TEST_F(WriteToTopic_Demo_50_Query, TFixtureQuery)
-{
-    TestWriteToTopic50();
-}
-
 void TFixture::TestWriteRandomSizedMessagesInWideTransactions()
 {
     // The test verifies the simultaneous execution of several transactions. There is a topic
@@ -3357,6 +3297,123 @@ Y_UNIT_TEST_F(The_Transaction_Starts_On_One_Version_And_Ends_On_The_Other, TFixt
 
     RestartPQTablet("topic_A", 0);
     RestartPQTablet("topic_A", 1);
+}
+
+void TFixture::TestWriteAndReadMessages(size_t count, size_t size, bool restart)
+{
+    CreateTopic("topic_A");
+
+    SetPartitionWriteSpeed("topic_A", 50'000'000);
+
+    for (size_t i = 0; i < count; ++i) {
+        WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, std::string(size, 'x'), nullptr);
+    }
+    CloseTopicWriteSession("topic_A", TEST_MESSAGE_GROUP_ID);
+
+    if (restart) {
+        RestartPQTablet("topic_A", 0);
+    }
+
+    auto messages = Read_Exactly_N_Messages_From_Topic("topic_A", TEST_CONSUMER, count);
+    UNIT_ASSERT_VALUES_EQUAL(messages.size(), count);
+}
+
+Y_UNIT_TEST_F(Write_And_Read_Small_Messages_1, TFixtureNoClient)
+{
+    TestWriteAndReadMessages(320, 64'000, false);
+}
+
+Y_UNIT_TEST_F(Write_And_Read_Small_Messages_2, TFixtureNoClient)
+{
+    TestWriteAndReadMessages(320, 64'000, true);
+}
+
+Y_UNIT_TEST_F(Write_And_Read_Big_Messages_1, TFixtureNoClient)
+{
+    TestWriteAndReadMessages(27, 64'000 * 12, false);
+}
+
+Y_UNIT_TEST_F(Write_And_Read_Big_Messages_2, TFixtureNoClient)
+{
+    TestWriteAndReadMessages(27, 64'000 * 12, true);
+}
+
+Y_UNIT_TEST_F(Write_And_Read_Huge_Messages_1, TFixtureNoClient)
+{
+    TestWriteAndReadMessages(4, 9'000'000, false);
+}
+
+Y_UNIT_TEST_F(Write_And_Read_Huge_Messages_2, TFixtureNoClient)
+{
+    TestWriteAndReadMessages(4, 9'000'000, true);
+}
+
+Y_UNIT_TEST_F(Write_And_Read_Gigant_Messages_1, TFixtureNoClient)
+{
+    TestWriteAndReadMessages(4, 61'000'000, false);
+}
+
+Y_UNIT_TEST_F(Write_And_Read_Gigant_Messages_2, TFixtureNoClient)
+{
+    TestWriteAndReadMessages(4, 61'000'000, true);
+}
+
+Y_UNIT_TEST_F(Write_50k_100times_50tx, TFixtureTable)
+{
+    // 100 transactions. Write 100 50KB messages in each folder. Call the commit at the same time.
+    // As a result, there will be a lot of small blobs in the FastWrite zone of the main batch,
+    // which will be picked up by a compact. The scenario is similar to the work of Ya.Metrika.
+
+    const std::size_t PARTITIONS_COUNT = 2;
+    const std::size_t TXS_COUNT = 50;
+
+    auto makeSourceId = [](unsigned txId, unsigned partitionId) {
+        std::string sourceId = TEST_MESSAGE_GROUP_ID;
+        sourceId += "_";
+        sourceId += ToString(txId);
+        sourceId += "_";
+        sourceId += ToString(partitionId);
+        return sourceId;
+    };
+
+    CreateTopic("topic_A", TEST_CONSUMER, PARTITIONS_COUNT);
+
+    SetPartitionWriteSpeed("topic_A", 50'000'000);
+
+    std::vector<std::unique_ptr<TFixture::ISession>> sessions;
+    std::vector<std::unique_ptr<TTransactionBase>> transactions;
+
+    for (std::size_t i = 0; i < TXS_COUNT; ++i) {
+        sessions.push_back(CreateSession());
+        auto& session = sessions.back();
+
+        transactions.push_back(session->BeginTx());
+        auto& tx = transactions.back();
+
+        auto sourceId = makeSourceId(i, 0);
+        for (size_t j = 0; j < 100; ++j) {
+            WriteToTopic("topic_A", sourceId, std::string(50'000, 'x'), tx.get(), 0);
+        }
+        WaitForAcks("topic_A", sourceId);
+
+        sourceId = makeSourceId(i, 1);
+        WriteToTopic("topic_A", sourceId, std::string(50'000, 'x'), tx.get(), 1);
+        WaitForAcks("topic_A", sourceId);
+    }
+
+    // We are doing an asynchronous commit of transactions. They will be executed simultaneously.
+    std::vector<TAsyncStatus> futures;
+
+    for (std::size_t i = 0; i < TXS_COUNT; ++i) {
+        futures.push_back(sessions[i]->AsyncCommitTx(*transactions[i]));
+    }
+
+    // All transactions must be completed successfully.
+    for (std::size_t i = 0; i < TXS_COUNT; ++i) {
+        futures[i].Wait();
+        const auto& result = futures[i].GetValueSync();
+        UNIT_ASSERT_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
 }
 
 }

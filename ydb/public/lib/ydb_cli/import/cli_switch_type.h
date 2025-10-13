@@ -13,76 +13,77 @@ struct TTypeWrapper
 };
 
 template <typename TFunc, bool EnableNull = false>
-bool SwitchType(arrow::Type::type typeId, TFunc&& f) {
+bool SwitchType(arrow20::Type::type typeId, TFunc&& f) {
     switch (typeId) {
-        case arrow::Type::NA: {
+        case arrow20::Type::NA: {
             if constexpr (EnableNull) {
-                return f(TTypeWrapper<arrow::NullType>());
+                return f(TTypeWrapper<arrow20::NullType>());
             }
             break;
         }
-        case arrow::Type::BOOL:
-            return f(TTypeWrapper<arrow::BooleanType>());
-        case arrow::Type::UINT8:
-            return f(TTypeWrapper<arrow::UInt8Type>());
-        case arrow::Type::INT8:
-            return f(TTypeWrapper<arrow::Int8Type>());
-        case arrow::Type::UINT16:
-            return f(TTypeWrapper<arrow::UInt16Type>());
-        case arrow::Type::INT16:
-            return f(TTypeWrapper<arrow::Int16Type>());
-        case arrow::Type::UINT32:
-            return f(TTypeWrapper<arrow::UInt32Type>());
-        case arrow::Type::INT32:
-            return f(TTypeWrapper<arrow::Int32Type>());
-        case arrow::Type::UINT64:
-            return f(TTypeWrapper<arrow::UInt64Type>());
-        case arrow::Type::INT64:
-            return f(TTypeWrapper<arrow::Int64Type>());
-        case arrow::Type::HALF_FLOAT:
-            return f(TTypeWrapper<arrow::HalfFloatType>());
-        case arrow::Type::FLOAT:
-            return f(TTypeWrapper<arrow::FloatType>());
-        case arrow::Type::DOUBLE:
-            return f(TTypeWrapper<arrow::DoubleType>());
-        case arrow::Type::STRING:
-            return f(TTypeWrapper<arrow::StringType>());
-        case arrow::Type::BINARY:
-            return f(TTypeWrapper<arrow::BinaryType>());
-        case arrow::Type::FIXED_SIZE_BINARY:
-            return f(TTypeWrapper<arrow::FixedSizeBinaryType>());
-        case arrow::Type::DATE32:
-            return f(TTypeWrapper<arrow::Date32Type>());
-        case arrow::Type::DATE64:
-            return f(TTypeWrapper<arrow::Date64Type>());
-        case arrow::Type::TIMESTAMP:
-            return f(TTypeWrapper<arrow::TimestampType>());
-        case arrow::Type::TIME32:
-            return f(TTypeWrapper<arrow::Time32Type>());
-        case arrow::Type::TIME64:
-            return f(TTypeWrapper<arrow::Time64Type>());
-        case arrow::Type::INTERVAL_MONTHS:
-            return f(TTypeWrapper<arrow::MonthIntervalType>());
-        case arrow::Type::DECIMAL:
-            return f(TTypeWrapper<arrow::Decimal128Type>());
-        case arrow::Type::DURATION:
-            return f(TTypeWrapper<arrow::DurationType>());
-        case arrow::Type::LARGE_STRING:
-            return f(TTypeWrapper<arrow::LargeStringType>());
-        case arrow::Type::LARGE_BINARY:
-            return f(TTypeWrapper<arrow::LargeBinaryType>());
-        case arrow::Type::DECIMAL256:
-        case arrow::Type::DENSE_UNION:
-        case arrow::Type::DICTIONARY:
-        case arrow::Type::EXTENSION:
-        case arrow::Type::FIXED_SIZE_LIST:
-        case arrow::Type::INTERVAL_DAY_TIME:
-        case arrow::Type::LARGE_LIST:
-        case arrow::Type::LIST:
-        case arrow::Type::MAP:
-        case arrow::Type::MAX_ID:
-        case arrow::Type::SPARSE_UNION:
-        case arrow::Type::STRUCT:
+        case arrow20::Type::BOOL:
+            return f(TTypeWrapper<arrow20::BooleanType>());
+        case arrow20::Type::UINT8:
+            return f(TTypeWrapper<arrow20::UInt8Type>());
+        case arrow20::Type::INT8:
+            return f(TTypeWrapper<arrow20::Int8Type>());
+        case arrow20::Type::UINT16:
+            return f(TTypeWrapper<arrow20::UInt16Type>());
+        case arrow20::Type::INT16:
+            return f(TTypeWrapper<arrow20::Int16Type>());
+        case arrow20::Type::UINT32:
+            return f(TTypeWrapper<arrow20::UInt32Type>());
+        case arrow20::Type::INT32:
+            return f(TTypeWrapper<arrow20::Int32Type>());
+        case arrow20::Type::UINT64:
+            return f(TTypeWrapper<arrow20::UInt64Type>());
+        case arrow20::Type::INT64:
+            return f(TTypeWrapper<arrow20::Int64Type>());
+        case arrow20::Type::HALF_FLOAT:
+            return f(TTypeWrapper<arrow20::HalfFloatType>());
+        case arrow20::Type::FLOAT:
+            return f(TTypeWrapper<arrow20::FloatType>());
+        case arrow20::Type::DOUBLE:
+            return f(TTypeWrapper<arrow20::DoubleType>());
+        case arrow20::Type::STRING:
+            return f(TTypeWrapper<arrow20::StringType>());
+        case arrow20::Type::BINARY:
+            return f(TTypeWrapper<arrow20::BinaryType>());
+        case arrow20::Type::FIXED_SIZE_BINARY:
+            return f(TTypeWrapper<arrow20::FixedSizeBinaryType>());
+        case arrow20::Type::DATE32:
+            return f(TTypeWrapper<arrow20::Date32Type>());
+        case arrow20::Type::DATE64:
+            return f(TTypeWrapper<arrow20::Date64Type>());
+        case arrow20::Type::TIMESTAMP:
+            return f(TTypeWrapper<arrow20::TimestampType>());
+        case arrow20::Type::TIME32:
+            return f(TTypeWrapper<arrow20::Time32Type>());
+        case arrow20::Type::TIME64:
+            return f(TTypeWrapper<arrow20::Time64Type>());
+        case arrow20::Type::INTERVAL_MONTHS:
+            return f(TTypeWrapper<arrow20::MonthIntervalType>());
+        case arrow20::Type::DECIMAL:
+            return f(TTypeWrapper<arrow20::Decimal128Type>());
+        case arrow20::Type::DURATION:
+            return f(TTypeWrapper<arrow20::DurationType>());
+        case arrow20::Type::LARGE_STRING:
+            return f(TTypeWrapper<arrow20::LargeStringType>());
+        case arrow20::Type::LARGE_BINARY:
+            return f(TTypeWrapper<arrow20::LargeBinaryType>());
+        case arrow20::Type::DECIMAL256:
+        case arrow20::Type::DENSE_UNION:
+        case arrow20::Type::DICTIONARY:
+        case arrow20::Type::EXTENSION:
+        case arrow20::Type::FIXED_SIZE_LIST:
+        case arrow20::Type::INTERVAL_DAY_TIME:
+        case arrow20::Type::LARGE_LIST:
+        case arrow20::Type::LIST:
+        case arrow20::Type::MAP:
+        case arrow20::Type::MAX_ID:
+        case arrow20::Type::SPARSE_UNION:
+        case arrow20::Type::STRUCT:
+        default:
             break;
     }
 
@@ -90,7 +91,7 @@ bool SwitchType(arrow::Type::type typeId, TFunc&& f) {
 }
 
 template <typename TFunc>
-bool SwitchTypeWithNull(arrow::Type::type typeId, TFunc&& f) {
+bool SwitchTypeWithNull(arrow20::Type::type typeId, TFunc&& f) {
     return SwitchType<TFunc, true>(typeId, std::move(f));
 }
 }

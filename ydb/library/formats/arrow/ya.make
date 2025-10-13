@@ -18,7 +18,7 @@ RECURSE(
 LIBRARY()
 
 PEERDIR(
-    contrib/libs/apache/arrow
+    contrib/libs/apache/arrow_next
     ydb/library/formats/arrow/simple_builder
     ydb/library/formats/arrow/transformer
     ydb/library/formats/arrow/splitter

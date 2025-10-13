@@ -6,7 +6,7 @@ SRCS(
 
 PEERDIR(
     ydb/public/sdk/cpp/src/client/value
-    contrib/libs/apache/arrow
+    contrib/libs/apache/arrow_next
 )
 
 END()

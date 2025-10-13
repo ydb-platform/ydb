@@ -18,7 +18,7 @@
 
 namespace NKikimr::NArrow {
 
-using TArrayVec = std::vector<std::shared_ptr<arrow::Array>>;
+using TArrayVec = std::vector<std::shared_ptr<arrow20::Array>>;
 
 template <typename TArrayVecPtr>
 class TReplaceKeyTemplate {
@@ -157,14 +157,14 @@ public:
         return Position;
     }
 
-    const arrow::Array& Column(int i) const {
+    const arrow20::Array& Column(int i) const {
         Y_DEBUG_ABORT_UNLESS(Columns);
         Y_DEBUG_ABORT_UNLESS((size_t)i < Columns->size());
         Y_DEBUG_ABORT_UNLESS((*Columns)[i]);
         return *(*Columns)[i];
     }
 
-    std::shared_ptr<arrow::Array> ColumnPtr(int i) const {
+    std::shared_ptr<arrow20::Array> ColumnPtr(int i) const {
         Y_DEBUG_ABORT_UNLESS(Columns);
         Y_DEBUG_ABORT_UNLESS((size_t)i < Columns->size());
         return (*Columns)[i];
@@ -179,21 +179,21 @@ public:
     }
 
     template <typename T = TArrayVecPtr>
-    std::shared_ptr<arrow::RecordBatch> RestoreBatch(const std::shared_ptr<arrow::Schema>& schema) const {
+    std::shared_ptr<arrow20::RecordBatch> RestoreBatch(const std::shared_ptr<arrow20::Schema>& schema) const {
         AFL_VERIFY(GetColumnsCount())("columns", DebugString())("schema", JoinSeq(",", schema->field_names()));
         AFL_VERIFY(GetColumnsCount() == (ui32)schema->num_fields())("columns", DebugString())("schema", JoinSeq(",", schema->field_names()));
         const auto& columns = *Columns;
-        return arrow::RecordBatch::Make(schema, columns[0]->length(), columns);
+        return arrow20::RecordBatch::Make(schema, columns[0]->length(), columns);
     }
 
     template <typename T = TArrayVecPtr>
-    std::vector<std::shared_ptr<arrow::Field>> RestoreFakeFields() const {
+    std::vector<std::shared_ptr<arrow20::Field>> RestoreFakeFields() const {
         AFL_VERIFY(GetColumnsCount())("columns", DebugString());
         return BuildFakeFields(*Columns);
     }
 
     template <typename T = TArrayVecPtr>
-    std::shared_ptr<arrow::RecordBatch> ToBatch(const std::shared_ptr<arrow::Schema>& schema) const {
+    std::shared_ptr<arrow20::RecordBatch> ToBatch(const std::shared_ptr<arrow20::Schema>& schema) const {
         auto batch = RestoreBatch(schema);
         Y_ABORT_UNLESS(Position < (ui64)batch->num_rows());
         return batch->Slice(Position, 1);
@@ -202,7 +202,7 @@ public:
     template <typename T = TArrayVecPtr>
         requires IsOwning
     static TReplaceKeyTemplate<TArrayVecPtr> FromBatch(
-        const std::shared_ptr<arrow::RecordBatch>& batch, const std::shared_ptr<arrow::Schema>& key, int row) {
+        const std::shared_ptr<arrow20::RecordBatch>& batch, const std::shared_ptr<arrow20::Schema>& key, int row) {
         Y_ABORT_UNLESS(key->num_fields() <= batch->num_columns());
 
         TArrayVec columns;
@@ -220,19 +220,19 @@ public:
 
     template <typename T = TArrayVecPtr>
         requires IsOwning
-    static TReplaceKeyTemplate<TArrayVecPtr> FromBatch(const std::shared_ptr<arrow::RecordBatch>& batch, int row) {
+    static TReplaceKeyTemplate<TArrayVecPtr> FromBatch(const std::shared_ptr<arrow20::RecordBatch>& batch, int row) {
         auto columns = std::make_shared<TArrayVec>(batch->columns());
         return TReplaceKeyTemplate<TArrayVecPtr>(columns, row);
     }
 
-    static TReplaceKeyTemplate<TArrayVecPtr> FromScalar(const std::shared_ptr<arrow::Scalar>& s) {
+    static TReplaceKeyTemplate<TArrayVecPtr> FromScalar(const std::shared_ptr<arrow20::Scalar>& s) {
         Y_DEBUG_ABORT_UNLESS(IsGoodScalar(s));
         auto res = MakeArrayFromScalar(*s, 1);
         Y_ABORT_UNLESS(res.status().ok(), "%s", res.status().ToString().c_str());
         return TReplaceKeyTemplate<TArrayVecPtr>(std::make_shared<TArrayVec>(1, *res), 0);
     }
 
-    static std::shared_ptr<arrow::Scalar> ToScalar(const TReplaceKeyTemplate<TArrayVecPtr>& key, int colNumber = 0) {
+    static std::shared_ptr<arrow20::Scalar> ToScalar(const TReplaceKeyTemplate<TArrayVecPtr>& key, int colNumber = 0) {
         Y_DEBUG_ABORT_UNLESS(colNumber < key.GetColumnsCount());
         auto& column = key.Column(colNumber);
         auto res = column.GetScalar(key.GetPosition());
@@ -272,12 +272,12 @@ private:
 public:
     using TBase::TBase;
 
-    TReplaceKeyView(const std::vector<std::shared_ptr<arrow::Array>>& columns, const ui64 position)
+    TReplaceKeyView(const std::vector<std::shared_ptr<arrow20::Array>>& columns, const ui64 position)
         : TBase(&columns, position) {
     }
 
     TReplaceKey GetToStore() const {
-        return TReplaceKey(std::make_shared<std::vector<std::shared_ptr<arrow::Array>>>(*GetColumns()), GetPosition());
+        return TReplaceKey(std::make_shared<std::vector<std::shared_ptr<arrow20::Array>>>(*GetColumns()), GetPosition());
     }
 };
 
@@ -285,7 +285,7 @@ class TReplaceKeyHashable: public TReplaceKeyTemplate<const TArrayVec*> {
 private:
     using TBase = TReplaceKeyTemplate<const TArrayVec*>;
     ui64 HashPrecalculated = 0;
-    const std::vector<arrow::Type::type>* Types = nullptr;
+    const std::vector<arrow20::Type::type>* Types = nullptr;
 
     ui64 CalcHash() const {
         size_t result = 0;
@@ -338,7 +338,7 @@ public:
     TReplaceKeyHashable() = default;
 
     TReplaceKeyHashable(
-        const std::vector<std::shared_ptr<arrow::Array>>& columns, const ui64 position, const std::vector<arrow::Type::type>& types)
+        const std::vector<std::shared_ptr<arrow20::Array>>& columns, const ui64 position, const std::vector<arrow20::Type::type>& types)
         : TBase(&columns, position)
         , HashPrecalculated(CalcHash())
         , Types(&types) {
@@ -346,13 +346,13 @@ public:
     }
 
     TReplaceKey GetToStore() const {
-        return TReplaceKey(std::make_shared<std::vector<std::shared_ptr<arrow::Array>>>(*GetColumns()), GetPosition());
+        return TReplaceKey(std::make_shared<std::vector<std::shared_ptr<arrow20::Array>>>(*GetColumns()), GetPosition());
     }
 };
 
 class TComparablePosition {
 private:
-    std::vector<std::shared_ptr<arrow::Array>> Arrays;
+    std::vector<std::shared_ptr<arrow20::Array>> Arrays;
     std::vector<ui32> Positions;
 
 public:
@@ -369,7 +369,7 @@ public:
         return *result;
     }
 
-    const std::vector<std::shared_ptr<arrow::Array>>& GetArrays() const {
+    const std::vector<std::shared_ptr<arrow20::Array>>& GetArrays() const {
         return Arrays;
     }
 
@@ -383,7 +383,7 @@ public:
         , Positions(Arrays.size(), key.GetPosition()) {
     }
 
-    TComparablePosition(const std::shared_ptr<arrow::Table>& table, const ui32 position) {
+    TComparablePosition(const std::shared_ptr<arrow20::Table>& table, const ui32 position) {
         AFL_VERIFY(position < table->num_rows());
         for (auto&& col : table->columns()) {
             ui32 pos = 0;
@@ -402,7 +402,7 @@ public:
         }
     }
 
-    TComparablePosition(const std::vector<std::shared_ptr<arrow::ChunkedArray>>& tableColumns, const ui32 position) {
+    TComparablePosition(const std::vector<std::shared_ptr<arrow20::ChunkedArray>>& tableColumns, const ui32 position) {
         for (auto&& col : tableColumns) {
             ui32 pos = 0;
             bool found = false;
@@ -420,7 +420,7 @@ public:
         }
     }
 
-    TComparablePosition(const std::shared_ptr<arrow::RecordBatch>& rb, const ui32 position) {
+    TComparablePosition(const std::shared_ptr<arrow20::RecordBatch>& rb, const ui32 position) {
         AFL_VERIFY(position < rb->num_rows());
         for (auto&& col : rb->columns()) {
             Arrays.emplace_back(col);
@@ -525,7 +525,7 @@ public:
 };
 
 template <bool desc, bool uniq>
-static bool IsSelfSorted(const std::shared_ptr<arrow::RecordBatch>& batch) {
+static bool IsSelfSorted(const std::shared_ptr<arrow20::RecordBatch>& batch) {
     if (batch->num_rows() < 2) {
         return true;
     }

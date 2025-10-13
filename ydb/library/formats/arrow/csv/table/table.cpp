@@ -4,7 +4,7 @@
 
 namespace NKikimr::NFormats {
 
-arrow::Result<TArrowCSV> TArrowCSVTable::Create(const std::vector<NYdb::NTable::TTableColumn>& columns, bool header) {
+arrow20::Result<TArrowCSV> TArrowCSVTable::Create(const std::vector<NYdb::NTable::TTableColumn>& columns, bool header) {
     TVector<TString> errors;
     TColummns convertedColumns;
     convertedColumns.reserve(columns.size());
@@ -36,7 +36,7 @@ arrow::Result<TArrowCSV> TArrowCSVTable::Create(const std::vector<NYdb::NTable::
     }
 
     if (!errors.empty()) {
-        return arrow::Status::TypeError(ErrorPrefix() + "columns errors: " + JoinSeq("; ", errors));
+        return arrow20::Status::TypeError(ErrorPrefix() + "columns errors: " + JoinSeq("; ", errors));
     }
 
     return TArrowCSVTable(convertedColumns, header, notNullColumns);
@@ -51,78 +51,78 @@ NYdb::TTypeParser TArrowCSVTable::ExtractType(const NYdb::TType& type) {
     return std::move(tp);
 }
 
-arrow::Result<std::shared_ptr<arrow::DataType>> TArrowCSVTable::GetArrowType(const NYdb::TType& type) {
+arrow20::Result<std::shared_ptr<arrow20::DataType>> TArrowCSVTable::GetArrowType(const NYdb::TType& type) {
     auto tp = ExtractType(type);
     switch (tp.GetKind()) {
     case NYdb::TTypeParser::ETypeKind::Decimal:
-        return std::make_shared<arrow::FixedSizeBinaryType>(NScheme::FSB_SIZE);
+        return std::make_shared<arrow20::FixedSizeBinaryType>(NScheme::FSB_SIZE);
     case NYdb::TTypeParser::ETypeKind::Primitive:
         switch (tp.GetPrimitive()) {
             case NYdb::EPrimitiveType::Bool:
-                return arrow::boolean();
+                return arrow20::boolean();
             case NYdb::EPrimitiveType::Int8:
-                return arrow::int8();
+                return arrow20::int8();
             case NYdb::EPrimitiveType::Uint8:
-                return arrow::uint8();
+                return arrow20::uint8();
             case NYdb::EPrimitiveType::Int16:
-                return arrow::int16();
+                return arrow20::int16();
             case NYdb::EPrimitiveType::Date:
-                return arrow::uint16();
+                return arrow20::uint16();
             case NYdb::EPrimitiveType::Date32:
-                return arrow::int32();
+                return arrow20::int32();
             case NYdb::EPrimitiveType::Datetime:
-                return arrow::uint32();
+                return arrow20::uint32();
             case NYdb::EPrimitiveType::Uint16:
-                return arrow::uint16();
+                return arrow20::uint16();
             case NYdb::EPrimitiveType::Int32:
-                return arrow::int32();
+                return arrow20::int32();
             case NYdb::EPrimitiveType::Uint32:
-                return arrow::uint32();
+                return arrow20::uint32();
             case NYdb::EPrimitiveType::Int64:
-                return arrow::int64();
+                return arrow20::int64();
             case NYdb::EPrimitiveType::Uint64:
-                return arrow::uint64();
+                return arrow20::uint64();
             case NYdb::EPrimitiveType::Float:
-                return arrow::float32();
+                return arrow20::float32();
             case NYdb::EPrimitiveType::Double:
-                return arrow::float64();
+                return arrow20::float64();
             case NYdb::EPrimitiveType::Utf8:
             case NYdb::EPrimitiveType::Json:
-                return arrow::utf8();
+                return arrow20::utf8();
             case NYdb::EPrimitiveType::String:
             case NYdb::EPrimitiveType::Yson:
             case NYdb::EPrimitiveType::DyNumber:
             case NYdb::EPrimitiveType::JsonDocument:
-                return arrow::binary();
+                return arrow20::binary();
             case NYdb::EPrimitiveType::Timestamp:
-                return arrow::timestamp(arrow::TimeUnit::MICRO);
+                return arrow20::timestamp(arrow20::TimeUnit::MICRO);
             case NYdb::EPrimitiveType::Interval:
-                return arrow::duration(arrow::TimeUnit::MILLI);
+                return arrow20::duration(arrow20::TimeUnit::MILLI);
             case NYdb::EPrimitiveType::Datetime64:
             case NYdb::EPrimitiveType::Interval64:
             case NYdb::EPrimitiveType::Timestamp64:
-                return arrow::int64();
+                return arrow20::int64();
             default:
-                return arrow::Status::TypeError(ErrorPrefix() + "Not supported type " + ToString(tp.GetPrimitive()));
+                return arrow20::Status::TypeError(ErrorPrefix() + "Not supported type " + ToString(tp.GetPrimitive()));
         }
     default:
-        return arrow::Status::TypeError(ErrorPrefix() + "Not supported type kind " + ToString(tp.GetKind()));
+        return arrow20::Status::TypeError(ErrorPrefix() + "Not supported type kind " + ToString(tp.GetKind()));
     }
 }
 
-arrow::Result<std::shared_ptr<arrow::DataType>> TArrowCSVTable::GetCSVArrowType(const NYdb::TType& type) {
+arrow20::Result<std::shared_ptr<arrow20::DataType>> TArrowCSVTable::GetCSVArrowType(const NYdb::TType& type) {
     auto tp = ExtractType(type);
     if (tp.GetKind() == NYdb::TTypeParser::ETypeKind::Primitive) {
         switch (tp.GetPrimitive()) {
         case NYdb::EPrimitiveType::Datetime:
         case NYdb::EPrimitiveType::Datetime64:
-            return arrow::timestamp(arrow::TimeUnit::SECOND);
+            return arrow20::timestamp(arrow20::TimeUnit::SECOND);
         case NYdb::EPrimitiveType::Timestamp:
         case NYdb::EPrimitiveType::Timestamp64:
-            return arrow::timestamp(arrow::TimeUnit::MICRO);
+            return arrow20::timestamp(arrow20::TimeUnit::MICRO);
         case NYdb::EPrimitiveType::Date:
         case NYdb::EPrimitiveType::Date32:
-            return arrow::timestamp(arrow::TimeUnit::SECOND);
+            return arrow20::timestamp(arrow20::TimeUnit::SECOND);
         default:
             break;
         }

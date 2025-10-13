@@ -2,10 +2,10 @@
 #include <ydb/library/formats/arrow/validation/validation.h>
 #include <library/cpp/streams/factory/open_by_signature/factory.h>
 #include <ydb/public/lib/ydb_cli/import/cli_arrow_helpers.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/io/api.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/ipc/api.h>
-#include <contrib/libs/apache/arrow/cpp/src/parquet/arrow/reader.h>
-#include <contrib/libs/apache/arrow/cpp/src/parquet/file_reader.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/io/api.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/ipc/api.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/parquet/arrow/reader.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/parquet/file_reader.h>
 
 #include <util/stream/file.h>
 
@@ -187,14 +187,16 @@ class TWorkloadDataInitializerBase::TDataGenerator::TParquetFile final: public T
 public:
     TParquetFile(TDataGenerator& owner, const TString& path)
         : TFile(owner, path)
-        , WriteOptions(arrow::ipc::IpcWriteOptions::Defaults())
+        , WriteOptions(arrow20::ipc::IpcWriteOptions::Defaults())
     {
-        constexpr auto codecType = arrow::Compression::type::ZSTD;
-        WriteOptions.codec = TStatusValidator::GetValid(arrow::util::Codec::Create(codecType));
+        constexpr auto codecType = arrow20::Compression::type::ZSTD;
+        WriteOptions.codec = TStatusValidator::GetValid(arrow20::util::Codec::Create(codecType));
 
-        ReadableFile = TStatusValidator::GetValid(arrow::io::ReadableFile::Open(Path));
-        TStatusValidator::Validate(parquet::arrow::OpenFile(ReadableFile, arrow::default_memory_pool(), &FileReader));
-        auto metadata = parquet::ReadMetaData(ReadableFile);
+        ReadableFile = TStatusValidator::GetValid(arrow20::io::ReadableFile::Open(Path));
+        auto fileReaderResult = parquet20::arrow20::OpenFile(ReadableFile, arrow20::default_memory_pool());
+        TStatusValidator::Validate(fileReaderResult.status());
+        FileReader = std::move(fileReaderResult.ValueOrDie());
+        auto metadata = parquet20::ReadMetaData(ReadableFile);
         const i64 numRowGroups = metadata->num_row_groups();
         Size = metadata->num_rows();
 
@@ -207,7 +209,7 @@ public:
     }
 
     TDataPortionPtr GetPortion() override {
-        std::shared_ptr<arrow::RecordBatch> batchToSend;
+        std::shared_ptr<arrow20::RecordBatch> batchToSend;
         ui64 position = 0;
         with_lock(Lock) {
             if (Owner.Owner.StateProcessor && Owner.Owner.StateProcessor->GetState().contains(Path)) {
@@ -257,11 +259,11 @@ private:
         }
         return !!CurrentBatch;
     }
-    arrow::ipc::IpcWriteOptions WriteOptions;
-    std::shared_ptr<arrow::io::ReadableFile> ReadableFile;
-    std::unique_ptr<parquet::arrow::FileReader> FileReader;
-    std::unique_ptr<arrow::RecordBatchReader> RecordBatchReader;
-    std::shared_ptr<arrow::RecordBatch> CurrentBatch;
+    arrow20::ipc::IpcWriteOptions WriteOptions;
+    std::shared_ptr<arrow20::io::ReadableFile> ReadableFile;
+    std::unique_ptr<parquet20::arrow20::FileReader> FileReader;
+    std::unique_ptr<arrow20::RecordBatchReader> RecordBatchReader;
+    std::shared_ptr<arrow20::RecordBatch> CurrentBatch;
     ui64 PositionInFile = 0;
     ui64 PositionInBatch = 0;
     ui64 Size = 0;

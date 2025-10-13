@@ -195,7 +195,7 @@ message TOlapProgram {
     // Store OLAP program in serialized format in case we do not need to deserialize it in TScanTaskMeta
     // Note: when this message exists the program must be present.
     optional bytes Program = 1;
-    // RecordBatch deserialization require arrow::Schema, thus store it here
+    // RecordBatch deserialization require arrow20::Schema, thus store it here
     optional bytes ParametersSchema = 2;
     optional bytes Parameters = 3;
     reserved 4;

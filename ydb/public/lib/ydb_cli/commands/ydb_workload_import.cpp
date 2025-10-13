@@ -144,17 +144,17 @@ private:
             return NThreading::MakeFuture(TStatus(EStatus::INTERNAL_ERROR, NYdb::NIssue::TIssues({NYdb::NIssue::TIssue("Invalid format string")})));
         };
 
-        auto writeOptions = arrow::ipc::IpcWriteOptions::Defaults();
-        constexpr auto codecType = arrow::Compression::type::ZSTD;
-        writeOptions.codec = *arrow::util::Codec::Create(codecType);
+        auto writeOptions = arrow20::ipc::IpcWriteOptions::Defaults();
+        constexpr auto codecType = arrow20::Compression::type::ZSTD;
+        writeOptions.codec = *arrow20::util::Codec::Create(codecType);
         TString error;
         if (auto batch = arrowCsv->ReadSingleBatch(value->Data, csvSettings, error)) {
             if (error) {
                 return NThreading::MakeFuture(TStatus(EStatus::INTERNAL_ERROR, NYdb::NIssue::TIssues({NYdb::NIssue::TIssue(error)})));
             }
             return Owner.TableClient->RetryOperation([
-                parquet = NYdb_cli::NArrow::SerializeBatch(batch, writeOptions),
-                schema = NYdb_cli::NArrow::SerializeSchema(*batch->schema()),
+                parquet = NYdb_cli::Narrow20::SerializeBatch(batch, writeOptions),
+                schema = NYdb_cli::Narrow20::SerializeSchema(*batch->schema()),
                 portion](NTable::TTableClient& client) {
                 return client.BulkUpsert(portion->GetTable(), NTable::EDataFormat::ApacheArrow, parquet, schema)
                     .Apply(ConvertResult);

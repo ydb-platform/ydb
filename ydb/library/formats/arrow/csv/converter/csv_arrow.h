@@ -1,8 +1,8 @@
 #pragma once
 
 #include <ydb/public/api/protos/ydb_formats.pb.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/csv/api.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/io/api.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/csv/api.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/io/api.h>
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
 #include <set>
@@ -15,9 +15,9 @@ class TArrowCSV {
 public:
     static constexpr ui32 DEFAULT_BLOCK_SIZE = 1024 * 1024;
 
-    std::shared_ptr<arrow::RecordBatch> ReadNext(const TString& csv, TString& errString);
-    std::shared_ptr<arrow::RecordBatch> ReadSingleBatch(const TString& csv, TString& errString);
-    std::shared_ptr<arrow::RecordBatch> ReadSingleBatch(const TString& csv, const Ydb::Formats::CsvSettings& csvSettings, TString& errString);
+    std::shared_ptr<arrow20::RecordBatch> ReadNext(const TString& csv, TString& errString);
+    std::shared_ptr<arrow20::RecordBatch> ReadSingleBatch(const TString& csv, TString& errString);
+    std::shared_ptr<arrow20::RecordBatch> ReadSingleBatch(const TString& csv, const Ydb::Formats::CsvSettings& csvSettings, TString& errString);
 
     void Reset() {
         Reader = {};
@@ -53,8 +53,8 @@ public:
 protected:
     struct TColumnInfo {
         TString Name;
-        std::shared_ptr<arrow::DataType> ArrowType;
-        std::shared_ptr<arrow::DataType>CsvArrowType;
+        std::shared_ptr<arrow20::DataType> ArrowType;
+        std::shared_ptr<arrow20::DataType>CsvArrowType;
         ui32 Precision = 0;
         ui32 Scale = 0;
     };
@@ -66,15 +66,15 @@ protected:
     }
 
 private:
-    arrow::csv::ReadOptions ReadOptions;
-    arrow::csv::ParseOptions ParseOptions;
-    arrow::csv::ConvertOptions ConvertOptions;
-    std::shared_ptr<arrow::csv::StreamingReader> Reader;
+    arrow20::csv::ReadOptions ReadOptions;
+    arrow20::csv::ParseOptions ParseOptions;
+    arrow20::csv::ConvertOptions ConvertOptions;
+    std::shared_ptr<arrow20::csv::StreamingReader> Reader;
     std::vector<TString> ResultColumns;
-    std::unordered_map<std::string, std::shared_ptr<arrow::DataType>> OriginalColumnTypes;
+    std::unordered_map<std::string, std::shared_ptr<arrow20::DataType>> OriginalColumnTypes;
     std::set<std::string> NotNullColumns;
 
-    std::shared_ptr<arrow::RecordBatch> ConvertColumnTypes(std::shared_ptr<arrow::RecordBatch> parsedBatch) const;
+    std::shared_ptr<arrow20::RecordBatch> ConvertColumnTypes(std::shared_ptr<arrow20::RecordBatch> parsedBatch) const;
 };
 
 }

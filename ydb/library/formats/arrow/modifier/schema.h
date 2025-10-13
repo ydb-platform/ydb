@@ -12,23 +12,23 @@ namespace NKikimr::NArrow {
 
 class TSchemaLite {
 private:
-    YDB_READONLY_DEF(std::vector<std::shared_ptr<arrow::Field>>, Fields);
+    YDB_READONLY_DEF(std::vector<std::shared_ptr<arrow20::Field>>, Fields);
 
 public:
     TSchemaLite() = default;
-    TSchemaLite(const std::shared_ptr<arrow::Schema>& schema)
+    TSchemaLite(const std::shared_ptr<arrow20::Schema>& schema)
         : Fields(TValidator::CheckNotNull(schema)->fields()) {
     }
 
-    TSchemaLite(std::vector<std::shared_ptr<arrow::Field>>&& fields)
+    TSchemaLite(std::vector<std::shared_ptr<arrow20::Field>>&& fields)
         : Fields(std::move(fields)) {
     }
 
-    TSchemaLite(const std::vector<std::shared_ptr<arrow::Field>>& fields)
+    TSchemaLite(const std::vector<std::shared_ptr<arrow20::Field>>& fields)
         : Fields(fields) {
     }
 
-    const std::shared_ptr<arrow::Field>& field(const ui32 index) const {
+    const std::shared_ptr<arrow20::Field>& field(const ui32 index) const {
         return GetFieldByIndexVerified(index);
     }
 
@@ -44,7 +44,7 @@ public:
         return true;
     }
 
-    const std::vector<std::shared_ptr<arrow::Field>>& fields() const {
+    const std::vector<std::shared_ptr<arrow20::Field>>& fields() const {
         return Fields;
     }
 
@@ -76,22 +76,22 @@ public:
         return DebugString();
     }
 
-    const std::shared_ptr<arrow::Field>& GetFieldByIndexVerified(const ui32 index) const {
+    const std::shared_ptr<arrow20::Field>& GetFieldByIndexVerified(const ui32 index) const {
         AFL_VERIFY(index < Fields.size());
         return Fields[index];
     }
 
-    const std::shared_ptr<arrow::Field>& GetFieldByIndexOptional(const ui32 index) const {
+    const std::shared_ptr<arrow20::Field>& GetFieldByIndexOptional(const ui32 index) const {
         if (index < Fields.size()) {
             return Fields[index];
         }
-        return Default<std::shared_ptr<arrow::Field>>();
+        return Default<std::shared_ptr<arrow20::Field>>();
     }
 };
 
 class TSchemaLiteView: private TNonCopyable {
 private:
-    using TFields = std::span<const std::shared_ptr<arrow::Field>>;
+    using TFields = std::span<const std::shared_ptr<arrow20::Field>>;
     TFields Fields;
 
     class TIterator: public NUtil::TRandomAccessIteratorClone<TFields::iterator, TIterator> {
@@ -106,11 +106,11 @@ public:
         : Fields(schema.fields()) {
     }
 
-    TSchemaLiteView(const std::span<const std::shared_ptr<arrow::Field>>& fields)
+    TSchemaLiteView(const std::span<const std::shared_ptr<arrow20::Field>>& fields)
         : Fields(fields) {
     }
 
-    std::shared_ptr<arrow::Field> field(const ui32 index) const {
+    std::shared_ptr<arrow20::Field> field(const ui32 index) const {
         return GetFieldByIndexVerified(index);
     }
 
@@ -150,16 +150,16 @@ public:
         return DebugString();
     }
 
-    const std::shared_ptr<arrow::Field>& GetFieldByIndexVerified(const ui32 index) const {
+    const std::shared_ptr<arrow20::Field>& GetFieldByIndexVerified(const ui32 index) const {
         AFL_VERIFY(index < Fields.size());
         return Fields[index];
     }
 
-    const std::shared_ptr<arrow::Field>& GetFieldByIndexOptional(const ui32 index) const {
+    const std::shared_ptr<arrow20::Field>& GetFieldByIndexOptional(const ui32 index) const {
         if (index < Fields.size()) {
             return Fields[index];
         }
-        return Default<std::shared_ptr<arrow::Field>>();
+        return Default<std::shared_ptr<arrow20::Field>>();
     }
 };
 
@@ -170,18 +170,18 @@ class TSchema {
 private:
     bool Initialized = false;
     THashMap<std::string, ui32> IndexByName;
-    std::vector<std::shared_ptr<arrow::Field>> Fields;
+    std::vector<std::shared_ptr<arrow20::Field>> Fields;
     bool Finished = false;
 
-    void Initialize(const std::vector<std::shared_ptr<arrow::Field>>& fields);
+    void Initialize(const std::vector<std::shared_ptr<arrow20::Field>>& fields);
 
 public:
     TSchema() = default;
     TSchema(const std::shared_ptr<TSchema>& schema);
 
-    TSchema(const std::shared_ptr<arrow::Schema>& schema);
+    TSchema(const std::shared_ptr<arrow20::Schema>& schema);
 
-    TSchema(const std::vector<std::shared_ptr<arrow::Field>>& fields) {
+    TSchema(const std::vector<std::shared_ptr<arrow20::Field>>& fields) {
         Initialize(fields);
     }
 
@@ -193,15 +193,15 @@ public:
         return it->second;
     }
 
-    const std::vector<std::shared_ptr<arrow::Field>>& GetFields() const {
+    const std::vector<std::shared_ptr<arrow20::Field>>& GetFields() const {
         return Fields;
     }
 
     TString ToString() const;
 
-    std::shared_ptr<arrow::Schema> Finish();
-    [[nodiscard]] TConclusionStatus AddField(const std::shared_ptr<arrow::Field>& f);
-    const std::shared_ptr<arrow::Field>& GetFieldByName(const std::string& name) const;
+    std::shared_ptr<arrow20::Schema> Finish();
+    [[nodiscard]] TConclusionStatus AddField(const std::shared_ptr<arrow20::Field>& f);
+    const std::shared_ptr<arrow20::Field>& GetFieldByName(const std::string& name) const;
     void DeleteFieldsByIndex(const std::vector<ui32>& idxs);
 
     bool HasField(const std::string& name) const {
@@ -212,9 +212,9 @@ public:
         return Fields.size();
     }
 
-    const std::shared_ptr<arrow::Field>& GetFieldVerified(const ui32 index) const;
+    const std::shared_ptr<arrow20::Field>& GetFieldVerified(const ui32 index) const;
 
-    const std::shared_ptr<arrow::Field>& field(const ui32 index) const;
+    const std::shared_ptr<arrow20::Field>& field(const ui32 index) const;
 
 private:
     class TFieldsErasePolicy {
@@ -226,11 +226,11 @@ private:
             : Owner(owner) {
         }
 
-        void OnEraseItem(const std::shared_ptr<arrow::Field>& item) const {
+        void OnEraseItem(const std::shared_ptr<arrow20::Field>& item) const {
             Owner->IndexByName.erase(item->name());
         }
 
-        void OnMoveItem(const std::shared_ptr<arrow::Field>& item, const ui64 new_index) const {
+        void OnMoveItem(const std::shared_ptr<arrow20::Field>& item, const ui64 new_index) const {
             auto* findField = Owner->IndexByName.FindPtr(item->name());
             AFL_VERIFY(findField);
             *findField = new_index;

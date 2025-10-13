@@ -37,13 +37,13 @@
 #include <util/string/builder.h>
 #include <util/system/thread.h>
 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/io/api.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/ipc/api.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/result.h>
-#include <contrib/libs/apache/arrow/cpp/src/parquet/arrow/reader.h>
-#include <contrib/libs/apache/arrow/cpp/src/parquet/arrow/reader.h>
-#include <contrib/libs/apache/arrow/cpp/src/parquet/file_reader.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/api.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/io/api.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/ipc/api.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/result.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/parquet/arrow/reader.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/parquet/arrow/reader.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/parquet/file_reader.h>
 
 #include <stack>
 
@@ -597,8 +597,8 @@ private:
 
     TAsyncStatus UpsertTValueBufferParquet(
         const TString& dbPath,
-        std::shared_ptr<arrow::RecordBatch> batch,
-        const arrow::ipc::IpcWriteOptions& writeOptions
+        std::shared_ptr<arrow20::RecordBatch> batch,
+        const arrow20::ipc::IpcWriteOptions& writeOptions
     );
 
     TAsyncStatus UpsertTValueBufferOnArena(
@@ -938,8 +938,8 @@ TAsyncStatus TImportFileClient::TImpl::UpsertTValueBuffer(const TString& dbPath,
 
 inline TAsyncStatus TImportFileClient::TImpl::UpsertTValueBufferParquet(
     const TString& dbPath,
-    std::shared_ptr<arrow::RecordBatch> batch,
-    const arrow::ipc::IpcWriteOptions& writeOptions
+    std::shared_ptr<arrow20::RecordBatch> batch,
+    const arrow20::ipc::IpcWriteOptions& writeOptions
 ) {
     if (!RequestsInflight->try_acquire()) {
         if (Settings.Verbose_ && Settings.NewlineDelimited_) {
@@ -953,8 +953,8 @@ inline TAsyncStatus TImportFileClient::TImpl::UpsertTValueBufferParquet(
         RequestsInflight->acquire();
     }
 
-    auto retryFunc = [parquet = NYdb_cli::NArrow::SerializeBatch(batch, writeOptions),
-            schema = NYdb_cli::NArrow::SerializeSchema(*batch->schema()),
+    auto retryFunc = [parquet = NYdb_cli::Narrow20::SerializeBatch(batch, writeOptions),
+            schema = NYdb_cli::Narrow20::SerializeSchema(*batch->schema()),
             dbPath](NTable::TTableClient& client) {
         return client.BulkUpsert(dbPath, NTable::EDataFormat::ApacheArrow, parquet, schema)
             .Apply([](const NTable::TAsyncBulkUpsertResult& result) {
@@ -1112,9 +1112,9 @@ TStatus TImportFileClient::TImpl::UpsertCsv(IInputStream& input,
         return settings;
     }());
 
-    auto writeOptions = arrow::ipc::IpcWriteOptions::Defaults();
-    constexpr auto codecType = arrow::Compression::type::ZSTD;
-    writeOptions.codec = *arrow::util::Codec::Create(codecType);
+    auto writeOptions = arrow20::ipc::IpcWriteOptions::Defaults();
+    constexpr auto codecType = arrow20::Compression::type::ZSTD;
+    writeOptions.codec = *arrow20::util::Codec::Create(codecType);
 
     auto upsertCsvFunc = [&](std::vector<TString>&& buffer, ui64 row, std::shared_ptr<TImportBatchStatus> batchStatus) {
         switch (Settings.SendFormat_) {
@@ -1497,22 +1497,22 @@ TStatus TImportFileClient::TImpl::UpsertParquet([[maybe_unused]] const TString& 
 #if defined(_win32_)
     return MakeStatus(EStatus::BAD_REQUEST, TStringBuilder() << "Not supported on Windows");
 #else
-    std::shared_ptr<arrow::io::ReadableFile> infile;
-    arrow::Result<std::shared_ptr<arrow::io::ReadableFile>> fileResult = arrow::io::ReadableFile::Open(filename);
+    std::shared_ptr<arrow20::io::ReadableFile> infile;
+    arrow20::Result<std::shared_ptr<arrow20::io::ReadableFile>> fileResult = arrow20::io::ReadableFile::Open(filename);
     if (!fileResult.ok()) {
         return MakeStatus(EStatus::BAD_REQUEST, TStringBuilder() << "Unable to open parquet file:" << fileResult.status().ToString());
     }
-    std::shared_ptr<arrow::io::ReadableFile> readableFile = *fileResult;
+    std::shared_ptr<arrow20::io::ReadableFile> readableFile = *fileResult;
 
-    std::unique_ptr<parquet::arrow::FileReader> fileReader;
+    std::unique_ptr<parquet20::arrow20::FileReader> fileReader;
 
-    arrow::Status st;
-    st = parquet::arrow::OpenFile(readableFile, arrow::default_memory_pool(), &fileReader);
+    arrow20::Status st;
+    st = parquet20::arrow20::OpenFile(readableFile, arrow20::default_memory_pool(), &fileReader);
     if (!st.ok()) {
         return MakeStatus(EStatus::BAD_REQUEST, TStringBuilder() << "Error while initializing arrow FileReader: " << st.ToString());
     }
 
-    auto metadata = parquet::ReadMetaData(readableFile);
+    auto metadata = parquet20::ReadMetaData(readableFile);
     const i64 numRows = metadata->num_rows();
     const i64 numRowGroups = metadata->num_row_groups();
 
@@ -1521,7 +1521,7 @@ TStatus TImportFileClient::TImpl::UpsertParquet([[maybe_unused]] const TString& 
         row_group_indices[i] = i;
     }
 
-    std::unique_ptr<arrow::RecordBatchReader> reader;
+    std::unique_ptr<arrow20::RecordBatchReader> reader;
 
     st = fileReader->GetRecordBatchReader(row_group_indices, &reader);
     if (!st.ok()) {
@@ -1540,7 +1540,7 @@ TStatus TImportFileClient::TImpl::UpsertParquet([[maybe_unused]] const TString& 
     std::vector<TAsyncStatus> inFlightRequests;
 
     while (true) {
-        std::shared_ptr<arrow::RecordBatch> batch;
+        std::shared_ptr<arrow20::RecordBatch> batch;
 
         st = reader->ReadNext(&batch);
         if (!st.ok()) {
@@ -1553,14 +1553,14 @@ TStatus TImportFileClient::TImpl::UpsertParquet([[maybe_unused]] const TString& 
         }
 
         auto upsertParquetBatch = [&, batch = std::move(batch)]() {
-            const TString strSchema = NYdb_cli::NArrow::SerializeSchema(*batch->schema());
-            const size_t totalSize = NYdb_cli::NArrow::GetBatchDataSize(batch);
+            const TString strSchema = NYdb_cli::Narrow20::SerializeSchema(*batch->schema());
+            const size_t totalSize = NYdb_cli::Narrow20::GetBatchDataSize(batch);
             const size_t sliceCount =
                 (totalSize / (size_t)Settings.BytesPerRequest_) + (totalSize % Settings.BytesPerRequest_ != 0 ? 1 : 0);
             const i64 rowsInSlice = batch->num_rows() / sliceCount;
 
             for (i64 currentRow = 0; currentRow < batch->num_rows(); currentRow += rowsInSlice) {
-                std::stack<std::shared_ptr<arrow::RecordBatch>> rowsToSendBatches;
+                std::stack<std::shared_ptr<arrow20::RecordBatch>> rowsToSendBatches;
 
                 if (currentRow + rowsInSlice < batch->num_rows()) {
                     rowsToSendBatches.push(batch->Slice(currentRow, rowsInSlice));
@@ -1578,9 +1578,9 @@ TStatus TImportFileClient::TImpl::UpsertParquet([[maybe_unused]] const TString& 
                     }
 
                     // Logarithmic approach to find number of rows fit into the byte limit.
-                    if (rowsBatch->num_rows() == 1 || NYdb_cli::NArrow::GetBatchDataSize(rowsBatch) < Settings.BytesPerRequest_) {
+                    if (rowsBatch->num_rows() == 1 || NYdb_cli::Narrow20::GetBatchDataSize(rowsBatch) < Settings.BytesPerRequest_) {
                         // Single row or fits into the byte limit.
-                        auto value = UpsertParquetBuffer(dbPath, NYdb_cli::NArrow::SerializeBatchNoCompression(rowsBatch), strSchema);
+                        auto value = UpsertParquetBuffer(dbPath, NYdb_cli::Narrow20::SerializeBatchNoCompression(rowsBatch), strSchema);
                         auto status = value.ExtractValueSync();
                         if (!status.IsSuccess())
                             return status;

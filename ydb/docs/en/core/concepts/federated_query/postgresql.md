@@ -48,11 +48,7 @@ When working with PostgreSQL clusters, there are a number of limitations:
 
 1. {% include [!](_includes/supported_requests.md) %}
 1. {% include [!](_includes/datetime_limits.md) %}
-1. {% include [!](_includes/predicate_pushdown_preamble.md) %}
-
-   {% include [!](_includes/predicate_pushdown_examples.md) %}
-
-    Supported data types for filter pushdown:
+1. {% include [!](_includes/predicate_pushdown.md) %}
 
     |{{ ydb-short-name }} Data Type|
     |----|
@@ -63,6 +59,7 @@ When working with PostgreSQL clusters, there are a number of limitations:
     |`Int64`|
     |`Float`|
     |`Double`|
+    |`Decimal`|
 
 ## Supported Data Types
 
@@ -94,4 +91,5 @@ Below is a correspondence table between PostgreSQL and {{ ydb-short-name }} type
 | `character` | `Optional<Utf8>` | [Default collation rules](https://www.postgresql.org/docs/current/collation.html), string padded with spaces to the required length. |
 | `character varying` | `Optional<Utf8>` | [Default collation rules](https://www.postgresql.org/docs/current/collation.html). |
 | `text` | `Optional<Utf8>` | [Default collation rules](https://www.postgresql.org/docs/current/collation.html). |
-|`json`|`Optional<Json>`||
+| `json` | `Optional<Json>` ||
+| `numeric(p,s)` | `Optional<Decimal(p,s)>` | `p` - total number of digits in the number, `s` - number of digits after the decimal point. Unconstrained numbers (`numeric` without parameters), `numeric` types with `p > 35` and `s < 0` are not supported. |

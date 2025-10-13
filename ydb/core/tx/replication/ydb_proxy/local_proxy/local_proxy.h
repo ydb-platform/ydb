@@ -28,9 +28,9 @@ private:
     void Handle(TEvYdbProxy::TEvDescribePathRequest::TPtr& ev);
     void Handle(TEvYdbProxy::TEvDescribeTableRequest::TPtr& ev);
     void Handle(TEvYdbProxy::TEvDescribeTopicRequest::TPtr& ev);
+    TString MakeLocalPath(TString path);
 
     STATEFN(StateWork);
-
 
 private:
     const TString Database;

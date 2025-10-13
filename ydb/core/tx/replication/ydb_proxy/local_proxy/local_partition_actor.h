@@ -70,6 +70,9 @@ protected:
 
     size_t Attempt = 0;
     TString LogPrefix;
+
+private:
+    TString MakeAbsolutePath(TString path);
 };
 
 }

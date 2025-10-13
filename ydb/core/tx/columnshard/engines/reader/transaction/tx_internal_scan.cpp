@@ -30,6 +30,22 @@ void TTxInternalScan::Complete(const TActorContext& ctx) {
     TMemoryProfileGuard mpg("TTxInternalScan::Complete");
 
     auto& request = *InternalScanEvent->Get();
+    auto lockId = request.GetLockId();
+
+    if (lockId.has_value() && Self->IsLocksMemoryLimitExceeded()) {
+        Self->DeleteLock(lockId.value());
+
+        SendError("Overloaded", "flight locks ranges memory limit exceeded", ctx);
+        return;
+    }
+
+    if (lockId.has_value()) {
+        if (Self->IsLockDeleted(lockId.value())) {
+            SendError("Lock invalidated", "lock is already delted", ctx);
+            return;
+        }
+    }
+
     auto scanComputeActor = InternalScanEvent->Sender;
     const TSnapshot snapshot = request.GetSnapshot();
     const NActors::TLogContextGuard gLogging =
@@ -52,7 +68,7 @@ void TTxInternalScan::Complete(const TActorContext& ctx) {
                 read.TableMetadataAccessor = accConclusion.DetachResult();
             }
         }
-        read.LockId = request.GetLockId();
+        read.LockId = lockId;
         read.DeduplicationPolicy = EDeduplicationPolicy::PREVENT_DUPLICATES;
         std::unique_ptr<IScannerConstructor> scannerConstructor(new NPlain::TIndexScannerConstructor(context));
         read.ColumnIds = request.GetColumnIds();
@@ -90,7 +106,7 @@ void TTxInternalScan::Complete(const TActorContext& ctx) {
 
     const ui64 requestCookie = Self->InFlightReadsTracker.AddInFlightRequest(readMetadataRange, index);
     auto scanActorId = ctx.Register(new TColumnShardScan(Self->SelfId(), scanComputeActor, Self->GetStoragesManager(),
-        Self->DataAccessorsManager.GetObjectPtrVerified(), Self->ColumnDataManager.GetObjectPtrVerified(), TComputeShardingPolicy(), ScanId, request.GetLockId().value_or(0), ScanGen, requestCookie,
+        Self->DataAccessorsManager.GetObjectPtrVerified(), Self->ColumnDataManager.GetObjectPtrVerified(), TComputeShardingPolicy(), ScanId, lockId.value_or(0), ScanGen, requestCookie,
         Self->TabletID(), TDuration::Max(), readMetadataRange, NKikimrDataEvents::FORMAT_ARROW, Self->Counters.GetScanCounters(), {}));
 
     Self->InFlightReadsTracker.AddScanActorId(requestCookie, scanActorId);

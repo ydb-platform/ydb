@@ -1067,6 +1067,7 @@ public:
     [[nodiscard]] TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult> MakeRequestSchemeCacheNavigate(const TString& path, ui64 cookie) {
         THolder<TSchemeCacheNavigate> request = MakeHolder<TSchemeCacheNavigate>();
         request->Cookie = cookie;
+        request->DatabaseName = AppData()->DomainsInfo->GetDomain()->Name;
         TSchemeCacheNavigate::TEntry& entry = request->ResultSet.emplace_back();
         entry.Path = NKikimr::SplitPath(path);
         entry.Operation = TSchemeCacheNavigate::EOp::OpPath;
@@ -1080,6 +1081,7 @@ public:
     [[nodiscard]] TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult> MakeRequestSchemeCacheNavigate(const TPathId& pathId, ui64 cookie) {
         THolder<TSchemeCacheNavigate> request = MakeHolder<TSchemeCacheNavigate>();
         request->Cookie = cookie;
+        request->DatabaseName = AppData()->DomainsInfo->GetDomain()->Name;
         TSchemeCacheNavigate::TEntry& entry = request->ResultSet.emplace_back();
         entry.TableId.PathId = pathId;
         entry.RequestType = TSchemeCacheNavigate::TEntry::ERequestType::ByTableId;

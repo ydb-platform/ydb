@@ -162,6 +162,8 @@ private:
 
     void SendDescribeRequest() {
         auto schemeCacheRequest = std::make_unique<NKikimr::NSchemeCache::TSchemeCacheNavigate>();
+        schemeCacheRequest->DatabaseName = PgWireAuthData.DatabasePath;
+
         NKikimr::NSchemeCache::TSchemeCacheNavigate::TEntry entry;
         entry.Path = NKikimr::SplitPath(PgWireAuthData.DatabasePath);
         entry.Operation = NKikimr::NSchemeCache::TSchemeCacheNavigate::OpPath;

@@ -27,8 +27,7 @@ TConclusionStatus TIndexInfo::CheckCompatible(const TIndexInfo& other) const {
 
 ui32 TIndexInfo::GetColumnIdVerified(const std::string& name) const {
     auto id = GetColumnIdOptional(name);
-    AFL_VERIFY(!!id)("column_name", name)("idxs", JoinSeq(",", ColumnIdxSortedByName))(
-        "names", JoinSeq(",", GetColumnNames()));
+    AFL_VERIFY(!!id)("column_name", name)("idxs", JoinSeq(",", ColumnIdxSortedByName))("names", JoinSeq(",", GetColumnNames()));
     return *id;
 }
 
@@ -186,6 +185,10 @@ std::shared_ptr<arrow::Schema> TIndexInfo::GetColumnsSchema(const std::set<ui32>
     return std::make_shared<arrow::Schema>(fields);
 }
 
+std::shared_ptr<arrow::Schema> TIndexInfo::GetColumnSchema(const ui32 columnId) const {
+    return GetColumnsSchema({ columnId });
+}
+
 std::shared_ptr<arrow::Schema> TIndexInfo::GetColumnsSchemaByOrderedIndexes(const std::vector<ui32>& columnIdxs) const {
     AFL_VERIFY(columnIdxs.size());
     std::vector<std::shared_ptr<arrow::Field>> fields;
@@ -198,10 +201,6 @@ std::shared_ptr<arrow::Schema> TIndexInfo::GetColumnsSchemaByOrderedIndexes(cons
         fields.emplace_back(ArrowSchemaWithSpecials()->GetFieldByIndexVerified(i));
     }
     return std::make_shared<arrow::Schema>(fields);
-}
-
-std::shared_ptr<arrow::Schema> TIndexInfo::GetColumnSchema(const ui32 columnId) const {
-    return GetColumnsSchema({ columnId });
 }
 
 void TIndexInfo::DeserializeOptionsFromProto(const NKikimrSchemeOp::TColumnTableSchemeOptions& optionsProto) {
@@ -444,12 +443,14 @@ std::shared_ptr<arrow::Scalar> TIndexInfo::GetColumnExternalDefaultValueVerified
 }
 
 NKikimr::TConclusionStatus TIndexInfo::AppendIndex(const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& originalData,
-    const ui32 indexId, const std::shared_ptr<IStoragesManager>& operators, const ui32 recordsCount, TSecondaryData& result) const {
+    const ui32 indexId, const std::shared_ptr<IStoragesManager>& operators, const ui32 recordsCount, const TString& specialTier,
+    TSecondaryData& result) const {
     auto it = Indexes.find(indexId);
     AFL_VERIFY(it != Indexes.end());
     auto& index = it->second;
     TMemoryProfileGuard mpg("IndexConstruction::" + index->GetIndexName());
-    auto indexChunkConclusion = index->BuildIndexOptional(originalData, recordsCount, *this);
+    TConclusion<std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>>> indexChunkConclusion =
+        index->BuildIndexOptional(originalData, recordsCount, *this);
     if (indexChunkConclusion.IsFail()) {
         return indexChunkConclusion;
     }
@@ -457,7 +458,8 @@ NKikimr::TConclusionStatus TIndexInfo::AppendIndex(const THashMap<ui32, std::vec
         return TConclusionStatus::Success();
     }
     auto chunks = indexChunkConclusion.DetachResult();
-    auto opStorage = operators->GetOperatorVerified(index->GetStorageId());
+    const TString indexStorageId = GetIndexStorageId(indexId, specialTier);
+    auto opStorage = operators->GetOperatorVerified(indexStorageId);
     for (auto&& chunk : chunks) {
         if ((i64)chunk->GetPackedSize() > opStorage->GetBlobSplitSettings().GetMaxBlobSize()) {
             return TConclusionStatus::Fail("blob size for secondary data (" + ::ToString(indexId) + ":" + ::ToString(chunk->GetPackedSize()) +
@@ -465,11 +467,12 @@ NKikimr::TConclusionStatus TIndexInfo::AppendIndex(const THashMap<ui32, std::vec
                                            ::ToString(opStorage->GetBlobSplitSettings().GetMaxBlobSize()) + ")");
         }
     }
-    if (index->GetStorageId() == IStoragesManager::LocalMetadataStorageId) {
+    if (indexStorageId == IStoragesManager::LocalMetadataStorageId) {
         AFL_VERIFY(chunks.size() == 1);
         AFL_VERIFY(result.MutableSecondaryInplaceData().emplace(indexId, chunks.front()).second);
     } else {
-        AFL_VERIFY(result.MutableExternalData().emplace(indexId, std::move(chunks)).second);
+        AFL_VERIFY(indexStorageId == IStoragesManager::DefaultStorageId)("storage", indexStorageId);
+        AFL_VERIFY(result.MutableExternalData().emplace(indexId, std::vector<std::shared_ptr<IPortionDataChunk>>(std::make_move_iterator(chunks.begin()), std::make_move_iterator(chunks.end()))).second);
     }
     return TConclusionStatus::Success();
 }
@@ -536,7 +539,8 @@ std::shared_ptr<arrow::Scalar> TIndexInfo::GetColumnExternalDefaultValueByIndexV
 
 TIndexInfo::TIndexInfo(const TIndexInfo& original, const TSchemaDiffView& diff, const std::shared_ptr<IStoragesManager>& operators,
     const std::shared_ptr<TSchemaObjectsCache>& cache)
-    : PresetId(original.PresetId) {
+    : PresetId(original.PresetId)
+{
     {
         std::vector<std::shared_ptr<arrow::Field>> fields;
         const auto addFromOriginal = [&](const ui32 index) {

@@ -50,7 +50,7 @@ protected:
         }
         return TBase::CheckSameColumnsForModification(newMeta);
     }
-    virtual std::vector<std::shared_ptr<IPortionDataChunk>> DoBuildIndexImpl(
+    virtual std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> DoBuildIndexImpl(
         TChunkedBatchReader& reader, const ui32 recordsCount) const override;
 
     virtual bool DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& proto) override {
@@ -124,7 +124,8 @@ public:
         , NGrammSize(nGrammSize)
         , FilterSizeBytes(filterSizeBytes)
         , RecordsCount(recordsCount)
-        , HashesCount(hashesCount) {
+        , HashesCount(hashesCount)
+    {
         Initialize();
     }
 

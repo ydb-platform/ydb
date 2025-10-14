@@ -52,11 +52,14 @@ public:
     }
 
     virtual const TString& GetColumnStorageId(const ui32 /*columnId*/, const TIndexInfo& /*indexInfo*/) const override {
-        return { NBlobOperations::TGlobal::DefaultStorageId };
+        if (GetMeta().GetTierName()) {
+            return GetMeta().GetTierName();
+        }
+        return NBlobOperations::TGlobal::DefaultStorageId;
     }
 
-    virtual const TString& GetEntityStorageId(const ui32 /*columnId*/, const TIndexInfo& /*indexInfo*/) const override {
-        return { NBlobOperations::TGlobal::DefaultStorageId };
+    virtual const TString& GetEntityStorageId(const ui32 columnId, const TIndexInfo& indexInfo) const override {
+        return GetColumnStorageId(columnId, indexInfo);
     }
 
     virtual const TString& GetIndexStorageId(const ui32 /*indexId*/, const TIndexInfo& /*indexInfo*/) const override {

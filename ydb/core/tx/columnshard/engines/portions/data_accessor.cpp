@@ -102,7 +102,7 @@ void TPortionDataAccessor::FillBlobRangesByStorage(
         if (!entityIds.contains(i.GetEntityId())) {
             continue;
         }
-        const TString& storageId = PortionInfo->GetIndexStorageId(i.GetIndexId(), indexInfo);
+        const TString& storageId = GetEntityStorageId(i.GetIndexId(), indexInfo);
         auto bRange = i.GetBlobRangeVerified();
         AFL_VERIFY(result[i.GetEntityId()][storageId].emplace(RestoreBlobRange(bRange)).second)("blob_id", RestoreBlobRange(bRange).ToString());
     }
@@ -127,7 +127,7 @@ void TPortionDataAccessor::FillBlobRangesByStorage(
         if (entityIds && !entityIds->contains(i.GetIndexId())) {
             continue;
         }
-        const TString& storageId = PortionInfo->GetIndexStorageId(i.GetIndexId(), indexInfo);
+        const TString& storageId = GetEntityStorageId(i.GetIndexId(), indexInfo);
         if (auto bRange = i.GetBlobRangeOptional()) {
             AFL_VERIFY(result[storageId].emplace(RestoreBlobRange(*bRange)).second)("blob_id", RestoreBlobRange(*bRange).ToString());
         }
@@ -161,7 +161,7 @@ void TPortionDataAccessor::FillBlobIdsByStorage(THashMap<TString, THashSet<TUnif
     }
     for (auto&& i : GetIndexesVerified()) {
         if (!lastEntityId || *lastEntityId != i.GetEntityId()) {
-            const TString& storageId = PortionInfo->GetIndexStorageId(i.GetEntityId(), indexInfo);
+            const TString& storageId = GetEntityStorageId(i.GetEntityId(), indexInfo);
             lastEntityId = i.GetEntityId();
             if (storageId != lastStorageId) {
                 currentHashResult = &result[storageId];
@@ -197,7 +197,7 @@ THashMap<TString, THashMap<TChunkAddress, std::shared_ptr<IPortionDataChunk>>> T
         AFL_VERIFY(result[storageId].emplace(c.GetAddress(), chunk).second);
     }
     for (auto&& c : GetIndexesVerified()) {
-        const TString& storageId = indexInfo.GetIndexStorageId(c.GetIndexId());
+        const TString& storageId = GetEntityStorageId(c.GetIndexId(), indexInfo);
         const TString blobData = [&]() -> TString {
             if (auto bRange = c.GetBlobRangeOptional()) {
                 return blobs.ExtractVerified(storageId, RestoreBlobRange(*bRange));
@@ -241,7 +241,7 @@ THashMap<TChunkAddress, TString> TPortionDataAccessor::DecodeBlobAddressesImpl(
             continue;
         }
         std::optional<TString> blob =
-            blobs.ExtractOptional(indexInfo.GetIndexStorageId(record.GetIndexId()), RestoreBlobRange(record.GetBlobRangeVerified()));
+            blobs.ExtractOptional(GetEntityStorageId(record.GetIndexId(), indexInfo), RestoreBlobRange(record.GetBlobRangeVerified()));
         if (blob) {
             result.emplace(record.GetAddress(), std::move(*blob));
         }

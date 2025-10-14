@@ -4,6 +4,7 @@
 #include <ydb/library/actors/core/event_pb.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/actors/interconnect/logging/logging.h>
 #include <ydb/library/actors/interconnect/poller/poller_tcp.h>
 #include <ydb/library/actors/interconnect/poller/poller_actor.h>
 #include <ydb/library/actors/protos/services_common.pb.h>
@@ -25,7 +26,6 @@
 #include "interconnect_impl.h"
 #include "interconnect_zc_processor.h"
 #include "interconnect_channel.h"
-#include "logging.h"
 #include "watchdog_timer.h"
 #include "event_holder_pool.h"
 #include "channel_scheduler.h"

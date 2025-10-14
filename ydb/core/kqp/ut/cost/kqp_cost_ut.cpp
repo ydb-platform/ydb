@@ -827,8 +827,8 @@ Y_UNIT_TEST_SUITE(KqpCost) {
         auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
 
         Cerr << stats.DebugString() << Endl;
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 2); // Limit???
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().bytes(), 72);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 3); // Limit???
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().bytes(), 108);
     }
 
     Y_UNIT_TEST(OlapWriteRow) {

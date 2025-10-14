@@ -93,7 +93,7 @@ TConclusion<NArrow::TContainerWithIndexes<arrow::RecordBatch>> ISnapshotSchema::
     NArrow::TStatusValidator::Validate(incomingBatch->ValidateFull());
 #endif
 
-    NArrow::TSchemaLiteView dstSchema = GetIndexInfo().ArrowSchema();    
+    NArrow::TSchemaLiteView dstSchema = GetIndexInfo().ArrowSchema();
     std::vector<std::shared_ptr<arrow::Array>> pkColumns;
     pkColumns.resize(GetIndexInfo().GetReplaceKey()->num_fields());
     ui32 pkColumnsCount = 0;

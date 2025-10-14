@@ -275,6 +275,7 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
                     if (schema->size() >= 2) {
                         columnName = (*schema)[1].GetName();
                     }
+
                     auto batch = MakeArrowBatchWithColumnName(rows, columnName);
                     helper.BulkUpsert(*col, batch);
                 } else if (load == ELoadKind::YDB_VALUE) {
@@ -282,6 +283,7 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
                     if (schema->size() >= 2) {
                         columnName = (*schema)[1].GetName();
                     }
+
                     BulkUpsertRowTableYdbValueWithColumnName(helper, name, rows, columnName);
                 } else {
                     BulkUpsertRowTableCSV(helper, name, rows);

@@ -323,9 +323,9 @@ class WorkloadManagerComputeScheduler(WorkloadManagerBase):
             pool = pools[p]
             axs[p].set_title(pool.name)
             axs[p].plot(times, [m.get(f'{pool.name} satisfaction') for m in norm_metrics], label='satisfaction')
-            axs[p].plot(times, [m.get(f'{pool.name} adjusted satisfaction d') for m in norm_metrics], label=f'adj satisfaction')
+            axs[p].plot(times, [m.get(f'{pool.name} adjusted satisfaction d') for m in norm_metrics], label='adj satisfaction')
             if last_i is not None:
-                axs[p].plot([datetime.fromtimestamp(cls.metrics[first_i][0]), datetime.fromtimestamp(cls.metrics[last_i][0])], [1, 1], label=f'period')
+                axs[p].plot([datetime.fromtimestamp(cls.metrics[first_i][0]), datetime.fromtimestamp(cls.metrics[last_i][0])], [1, 1], label='period')
             axs[p].set_ylabel('satisfaction')
             axs[p].legend(fontsize=10, loc='lower right')
             axs[p].grid()

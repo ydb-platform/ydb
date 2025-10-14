@@ -350,6 +350,28 @@ public:
     std::queue<TInputItem> Queue;
     bool NeedToNotify = false;
     bool EarlyFinished = false;
+    bool IsBinded = false;
+};
+
+class TInputBufferProxy : public IChannelBuffer {
+public:
+    TInputBufferProxy(const std::shared_ptr<TNodeState>& nodeState, const std::shared_ptr<TInputBuffer>& buffer)
+        : NodeState(nodeState), Buffer(buffer)
+    {}
+
+    ~TInputBufferProxy() override;
+
+    bool IsEmpty() override;
+    EDqFillLevel GetFillLevel() const override;
+    void SetFillAggregator(std::shared_ptr<TDqFillAggregator>) override;
+    void Push(TDataChunk&&) override;
+    bool IsEarlyFinished() override;
+    bool IsFlushed() override;
+    bool Pop(TDataChunk& data) override;
+    void EarlyFinish() override;
+
+    std::shared_ptr<TNodeState> NodeState;
+    std::shared_ptr<TInputBuffer> Buffer;
 };
 
 class TDqChannelService;
@@ -414,8 +436,7 @@ public:
     std::atomic<bool> Subscribed;
     std::unordered_map<TChannelInfo, std::shared_ptr<TOutputDescriptor>> OutputDescriptors;
     std::unordered_map<TChannelInfo, std::shared_ptr<TInputBuffer>> InputBuffers;
-    std::unordered_map<TChannelInfo, TInstant> TerminatedInputs;
-    std::unordered_map<TChannelInfo, TInstant> UnbindedInputs;
+    std::queue<std::pair<TChannelInfo, TInstant>> UnbindedInputs;
     bool Connected = false;
     std::weak_ptr<TNodeState> Self;
     ui64 LastUniqueId = 0;
@@ -424,6 +445,7 @@ public:
     const ui64 MaxInflightBytes;
     const ui64 MaxInflightMessages = 64;
     std::priority_queue<std::shared_ptr<TOutputDescriptor>, std::vector<std::shared_ptr<TOutputDescriptor>>, TOutputDescriptorCompare> WaitersQueue;
+    const TDuration UnbindedWaitPeriod = TDuration::Minutes(10);
 };
 
 class TDebugNodeState : public TNodeState {

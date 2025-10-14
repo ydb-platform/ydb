@@ -259,6 +259,42 @@ void TInputBuffer::EarlyFinish() {
     ActorSystem->Send(NodeActorId, new TEvPrivate::TEvEarlyFinish(Info));
 }
 
+TInputBufferProxy::~TInputBufferProxy() {
+    NodeState->TerminateInputBuffer(Buffer);
+}
+
+bool TInputBufferProxy::IsEmpty() {
+    return Buffer->IsEmpty();
+}
+
+EDqFillLevel TInputBufferProxy::GetFillLevel() const {
+    return Buffer->GetFillLevel();
+}
+
+void TInputBufferProxy::SetFillAggregator(std::shared_ptr<TDqFillAggregator> aggregator) {
+    Buffer->SetFillAggregator(aggregator);
+}
+
+void TInputBufferProxy::Push(TDataChunk&& data) {
+    Buffer->Push(std::move(data));
+}
+
+bool TInputBufferProxy::IsEarlyFinished() {
+    return Buffer->IsEarlyFinished();
+}
+
+bool TInputBufferProxy::IsFlushed() {
+    return Buffer->IsFlushed();
+}
+
+bool TInputBufferProxy::Pop(TDataChunk& data) {
+    return Buffer->Pop(data);
+}
+
+void TInputBufferProxy::EarlyFinish() {
+    Buffer->EarlyFinish();
+}
+
 std::shared_ptr<TLocalBuffer> TLocalBufferRegistry::GetOrCreateLocalBuffer(const std::shared_ptr<TLocalBufferRegistry>& registry, const TChannelInfo& info) {
     std::lock_guard lock(Mutex);
 
@@ -509,14 +545,14 @@ std::shared_ptr<TInputBuffer> TNodeState::GetOrCreateInputBuffer(const TChannelI
         //     result->PopStats.DstStageId = desc.DstStageId;
         // }
         if (binded) {
-            UnbindedInputs.erase(info);
+            result->IsBinded = true;
         }
         return result;
     }
     auto result = std::make_shared<TInputBuffer>(NodeActorId, info, ActorSystem);
     InputBuffers.emplace(info, result);
     if (!binded) {
-        UnbindedInputs.emplace(info, TInstant::Now());
+        UnbindedInputs.emplace(info, TInstant::Now() + UnbindedWaitPeriod);
     }
     return result;
 }
@@ -529,7 +565,6 @@ void TNodeState::TerminateDescriptor(const std::shared_ptr<TOutputDescriptor>& d
 
 void TNodeState::TerminateInputBuffer(const std::shared_ptr<TInputBuffer>& inputBuffer) {
     InputBuffers.erase(inputBuffer->Info);
-    TerminatedInputs.emplace(inputBuffer->Info, TInstant::Now());
 }
 
 void TDebugNodeState::PauseChannelData() {
@@ -609,7 +644,8 @@ std::shared_ptr<IChannelBuffer> TDqChannelService::GetRemoteOutputBuffer(const T
 
 std::shared_ptr<IChannelBuffer> TDqChannelService::GetRemoteInputBuffer(const TChannelInfo& info) {
     Y_ENSURE(info.OutputActorId.NodeId() != NodeId);
-    return GetOrCreateNodeState(info.OutputActorId.NodeId())->GetOrCreateInputBuffer(info, true);
+    auto nodeState = GetOrCreateNodeState(info.OutputActorId.NodeId());
+    return std::make_shared<TInputBufferProxy>(nodeState, nodeState->GetOrCreateInputBuffer(info, true));
 }
 
 // local buffer

@@ -105,6 +105,7 @@ void TColumnShardScan::HandleScan(NColumnShard::TEvPrivate::TEvTaskProcessedResu
 }
 
 void TColumnShardScan::HandleScan(NKqp::TEvKqpCompute::TEvScanDataAck::TPtr& ev) {
+    auto ackProcessingGuard = ScanCountersPool.GetResultsForReplyGuard();
     StartWaitTime = TInstant::Now();
     auto g = Stats->MakeGuard("ack", IS_INFO_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN));
 

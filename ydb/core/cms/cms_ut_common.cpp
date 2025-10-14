@@ -566,7 +566,6 @@ static void SetupServices(TTestBasicRuntime &runtime, const TTestEnvOpts &option
         SetupTabletResolver(runtime, nodeIndex);
 
         NKikimrConfig::TAppConfig appConfig;
-        // guard??
         appConfig.MutableBootstrapConfig()->CopyFrom(TFakeNodeWhiteboardService::BootstrapConfig);
 
         // fake NodeWhiteBoard
@@ -580,7 +579,6 @@ static void SetupServices(TTestBasicRuntime &runtime, const TTestEnvOpts &option
     }
 
     NKikimrConfig::TAppConfig appConfig;
-    // guard??
     appConfig.MutableBootstrapConfig()->CopyFrom(TFakeNodeWhiteboardService::BootstrapConfig);
     appConfig.MutableFeatureFlags()->SetEnableCMSRequestPriorities(options.EnableCMSRequestPriorities);
     appConfig.MutableFeatureFlags()->SetEnableSingleCompositeActionGroup(options.EnableSingleCompositeActionGroup);
@@ -605,7 +603,6 @@ static void SetupServices(TTestBasicRuntime &runtime, const TTestEnvOpts &option
     dnsConfig->MaxDynamicNodeId = 2000;
     runtime.GetAppData().DynamicNameserviceConfig = dnsConfig;
     runtime.GetAppData().DisableCheckingSysNodesCms = true;
-    // guard??
     runtime.GetAppData().BootstrapConfig = TFakeNodeWhiteboardService::BootstrapConfig;
     
     if (options.IsBridgeMode) {

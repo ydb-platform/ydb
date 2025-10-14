@@ -141,7 +141,6 @@ std::shared_ptr<arrow::RecordBatch> TArrowCSV::ConvertColumnTypes(std::shared_pt
             continue;
         }
 
-        Y_ABORT();
         if (fArr->type()->Equals(originalType)) {
             resultColumns.emplace_back(fArr);
         } else if (fArr->type()->id() == arrow::TimestampType::type_id) {

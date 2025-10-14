@@ -180,9 +180,9 @@ void BulkUpsertRowTableYdbValueWithColumnName(TTestHelper& helper, const TString
         TStringBuilder builder;
         for (auto&& r : rows) {
             builder << r.Id << "," << r.IntVal << ",";
-            if (r.B.has_value()) {
-                builder << (*r.B ? "true" : "false");
-            }
+        if (r.B.has_value()) {
+            builder << (*r.B ? "true" : "false");
+        }
 
             builder << '\n';
         }
@@ -194,12 +194,12 @@ void BulkUpsertRowTableYdbValueWithColumnName(TTestHelper& helper, const TString
     std::shared_ptr<arrow::RecordBatch> MakeArrowBatchWithColumnName(const TVector<TRow>& rows, const TString& columnName) {
         arrow::Int32Builder idBuilder;
         arrow::Int64Builder intBuilder;
-        arrow::BooleanBuilder boolBuilder;
+        arrow::UInt8Builder boolBuilder;
         for (auto&& r : rows) {
             Y_ABORT_UNLESS(idBuilder.Append(r.Id).ok());
             Y_ABORT_UNLESS(intBuilder.Append(r.IntVal).ok());
             if (r.B.has_value()) {
-                Y_ABORT_UNLESS(boolBuilder.Append(*r.B).ok());
+                Y_ABORT_UNLESS(boolBuilder.Append(*r.B ? 1 : 0).ok());
             } else {
                 Y_ABORT_UNLESS(boolBuilder.AppendNull().ok());
             }
@@ -212,7 +212,7 @@ void BulkUpsertRowTableYdbValueWithColumnName(TTestHelper& helper, const TString
         std::shared_ptr<arrow::Array> boolArr;
         Y_ABORT_UNLESS(boolBuilder.Finish(&boolArr).ok());
         auto schema = arrow::schema({ arrow::field("id", arrow::int32(), /*nullable*/ false), arrow::field(columnName, arrow::int64()),
-            arrow::field("b", arrow::boolean()) });
+            arrow::field("b", arrow::uint8()) });
         return arrow::RecordBatch::Make(schema, rows.size(), { idArr, intArr, boolArr });
     }
 
@@ -223,12 +223,12 @@ void BulkUpsertRowTableYdbValueWithColumnName(TTestHelper& helper, const TString
     std::shared_ptr<arrow::RecordBatch> MakeArrowBatchWithSecondColumn(const TVector<TRow>& rows, const TString& secondName) {
         arrow::Int32Builder idBuilder;
         arrow::Int64Builder secondBuilder;
-        arrow::BooleanBuilder boolBuilder;
+        arrow::UInt8Builder boolBuilder;
         for (auto&& r : rows) {
             Y_ABORT_UNLESS(idBuilder.Append(r.Id).ok());
             Y_ABORT_UNLESS(secondBuilder.Append(r.IntVal).ok());
             if (r.B.has_value()) {
-                Y_ABORT_UNLESS(boolBuilder.Append(*r.B).ok());
+                Y_ABORT_UNLESS(boolBuilder.Append(*r.B ? 1 : 0).ok());
             } else {
                 Y_ABORT_UNLESS(boolBuilder.AppendNull().ok());
             }
@@ -241,7 +241,7 @@ void BulkUpsertRowTableYdbValueWithColumnName(TTestHelper& helper, const TString
         std::shared_ptr<arrow::Array> boolArr;
         Y_ABORT_UNLESS(boolBuilder.Finish(&boolArr).ok());
         auto schema = arrow::schema({ arrow::field("id", arrow::int32(), /*nullable*/ false), arrow::field(secondName, arrow::int64()),
-            arrow::field("b", arrow::boolean()) });
+            arrow::field("b", arrow::uint8()) });
         return arrow::RecordBatch::Make(schema, rows.size(), { idArr, secondArr, boolArr });
     }
 

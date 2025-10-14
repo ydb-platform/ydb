@@ -4,6 +4,7 @@
 #include <ydb/library/yql/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.main.h>
 #include <ydb/library/yql/sql/settings/translation_settings.h>
 #include <ydb/library/yql/sql/v1/format/sql_format.h>
+#include <ydb/library/yql/sql/v1/lexer/lexer.h>
 #include <ydb/library/yql/sql/v1/proto_parser/proto_parser.h>
 
 #include <library/cpp/protobuf/util/simple_reflection.h>
@@ -15,6 +16,8 @@
 #include <format>
 #include <re2/re2.h>
 
+using namespace NSQLTranslation;
+using namespace NSQLTranslationV1;
 using namespace NSQLv1Generated;
 
 namespace {
@@ -224,21 +227,52 @@ TString RewriteTableRefs(const TRule_sql_query& query, TStringBuf backupRoot, TS
 struct TViewQuerySplit {
     TString ContextRecreation;
     TString Select;
+
+    TViewQuerySplit(const TVector<TString>& statements) {
+        TStringBuilder context;
+        for (int i = 0; i < std::ssize(statements) - 1; ++i) {
+            context << statements[i] << '\n';
+        }
+        ContextRecreation = context;
+        Y_ENSURE(!statements.empty());
+        Select = statements.back();
+    }
 };
 
-TViewQuerySplit SplitViewQuery(TStringInput query) {
-    // to do: make the implementation more versatile
-    TViewQuerySplit split;
+bool BuildTranslationSettings(const TString& query, google::protobuf::Arena& arena, TTranslationSettings& settings, NYql::TIssues& issues) {
+    settings.Arena = &arena;
+    return ParseTranslationSettings(query, settings, issues);
+}
 
-    TString line;
-    while (query.ReadLine(line)) {
-        (line.StartsWith("--") || line.StartsWith("PRAGMA ")
-            ? split.ContextRecreation
-            : split.Select
-        ) += line;
+TLexers BuildLexers() {
+    TLexers lexers;
+    lexers.Antlr4 = MakeAntlr4LexerFactory();
+    lexers.Antlr4Ansi = MakeAntlr4AnsiLexerFactory();
+    return lexers;
+}
+
+bool SplitViewQuery(const TString& query, const TLexers& lexers, const TTranslationSettings& translationSettings, TViewQuerySplit& split, NYql::TIssues& issues) {
+    TVector<TString> statements;
+    auto lexer = NSQLTranslationV1::MakeLexer(lexers, translationSettings.AnsiLexer, translationSettings.Antlr4Parser);
+    if (!SplitQueryToStatements(query, lexer, statements, issues)) {
+        return false;
     }
+    if (statements.empty()) {
+        issues.AddIssue(TStringBuilder() << "No select statement in the view query: " << query.Quote());
+        return false;
+    }
+    split = TViewQuerySplit(statements);
+    return true;
+}
 
-    return split;
+bool SplitViewQuery(const TString& query, TViewQuerySplit& split, NYql::TIssues& issues) {
+    google::protobuf::Arena arena;
+    TTranslationSettings translationSettings;
+    if (!BuildTranslationSettings(query, arena, translationSettings, issues)) {
+        return false;
+    }
+    auto lexers = BuildLexers();
+    return SplitViewQuery(query, lexers, translationSettings, split, issues);
 }
 
 bool SqlToProtoAst(const TString& query, TRule_sql_query& queryProto, NYql::TIssues& issues) {
@@ -286,6 +320,26 @@ void ValidateViewQuery(const TString& query, const TString& dbPath, NYql::TIssue
         }
         issues.AddIssue(std::move(restorabilityIssue));
     }
+}
+
+TString GetToken(TStringInput query, TStringBuf pattern) {
+    TString line;
+    while (query.ReadLine(line)) {
+        StripInPlace(line);
+        if (line.StartsWith(pattern)) {
+            return TString(TStringBuf(line).Skip(pattern.size()).Chop(1 /* last " */));
+        }
+    }
+
+    return "";
+}
+
+TString GetBackupRoot(const TString& query) {
+    return GetToken(query, R"(-- backup root: ")");
+}
+
+TString GetDatabase(const TString& query) {
+    return GetToken(query, R"(-- database: ")");
 }
 
 bool Format(const TString& query, TString& formattedQuery, NYql::TIssues& issues) {
@@ -361,7 +415,10 @@ TString BuildCreateViewQuery(
     const TString& name, const TString& dbPath, const TString& viewQuery, const TString& database, const TString& backupRoot,
     NYql::TIssues& issues
 ) {
-    auto [contextRecreation, select] = SplitViewQuery(viewQuery);
+    TViewQuerySplit split;
+    if (!SplitViewQuery(viewQuery, split, issues)) {
+        return "";
+    }
 
     const TString creationQuery = std::format(
         "-- database: \"{}\"\n"
@@ -371,9 +428,9 @@ TString BuildCreateViewQuery(
         "    {};\n",
         database.data(),
         backupRoot.data(),
-        contextRecreation.data(),
+        split.ContextRecreation.data(),
         name.data(),
-        select.data()
+        split.Select.data()
     );
 
     ValidateViewQuery(creationQuery, dbPath, issues);
@@ -383,26 +440,6 @@ TString BuildCreateViewQuery(
         return "";
     }
     return formattedQuery;
-}
-
-TString GetToken(TStringInput query, TStringBuf pattern) {
-    TString line;
-    while (query.ReadLine(line)) {
-        StripInPlace(line);
-        if (line.StartsWith(pattern)) {
-            return TString(TStringBuf(line).Skip(pattern.size()).Chop(1 /* last " */));
-        }
-    }
-
-    return "";
-}
-
-TString GetBackupRoot(const TString& query) {
-    return GetToken(query, R"(-- backup root: ")");
-}
-
-TString GetDatabase(const TString& query) {
-    return GetToken(query, R"(-- database: ")");
 }
 
 bool RewriteCreateViewQuery(TString& query, const TString& restoreRoot, bool restoreRootIsDatabase,

@@ -125,7 +125,7 @@ void TOutputDescriptor::UpdatePopBytes(ui64 bytes) {
         if (Aggregator) {
             Aggregator->UpdateCount(EDqFillLevel::HardLimit, EDqFillLevel::NoLimit);
         }
-    } else if (PushBytes.load() > PopBytes.load()) {
+    } else if (PushBytes.load() > bytes) {
         return;
     }
 

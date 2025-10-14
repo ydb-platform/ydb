@@ -406,7 +406,7 @@ Y_UNIT_TEST_SUITE(Channels20) {
 
         TKikimrSettings settings;
         settings.SetNodeCount(2);
-        settings.AppConfig.MutableTableServiceConfig()->SetRemoteChannelInflightBytes(8);
+        settings.AppConfig.MutableTableServiceConfig()->SetRemoteChannelInflightBytes(10);
 
         TKikimrRunner kikimr(settings);
         auto& runtime = *kikimr.GetTestServer().GetRuntime();

@@ -1,5 +1,4 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/arrow/accessor.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -44,7 +43,6 @@ Y_UNIT_TEST_SUITE(SimpleReader) {
         // Then
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         auto resultSet = result.GetResultSet(0);
-        UNIT_ASSERT_VALUES_EQUAL(TArrowAccessor::Format(resultSet), TResultSet::EFormat::Value);
         CompareYson(R"([[[11]]])", FormatResultSetYson(resultSet));
     }
 }

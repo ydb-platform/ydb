@@ -44,7 +44,6 @@ PEERDIR(
     ydb/core/kqp/ut/olap/helpers
     ydb/core/kqp/ut/olap/combinatory
     ydb/core/tx/datashard/ut_common
-    ydb/public/sdk/cpp/src/client/arrow
     ydb/public/sdk/cpp/src/client/operation
 )
 

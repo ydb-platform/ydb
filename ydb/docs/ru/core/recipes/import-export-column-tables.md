@@ -4,8 +4,13 @@
 
 Доступны два основных подхода:
 
-1. [Экспорт и импорт через федеративные запросы](#objstorage) к объектным хранилищам (например, {{ objstorage-name }} или другим S3-совместимым).
+1. [Экспорт и импорт через федеративные запросы](#objstorage) к объектным хранилищам (например, {{ objstorage-name }} любое другое S3-совместимое хранилище).
+**Преимущества**: Использование встроенного функционала YDB, отсутствие необходимости в сторонних сервисах или инструментах.
+**Ограничения:** Данный метод позволяет экспортировать данные только в объектные хранилища.
+
 2. [Экспорт и импорт через Apache Spark™](#spark) — гибкий способ для работы с большими объемами данных.
+**Преимущества**: Поддержка широкого спектра целевых хранилищ
+**Ограничения:** Требуется установка и настройка дополнительного ПО (Apache Spark™).
 
 ## Экспорт и импорт через федеративные запросы к {{ objstorage-name }} {#objstorage}
 
@@ -13,9 +18,9 @@
 
 ### Предварительные требования
 
-- {{ objstorage-name }} и статический ключ доступа к нему, например [{{ objstorage-full-name }}](https://yandex.cloud/ru/docs/storage/) и созданный в нём [бакет](https://yandex.cloud/ru/docs/storage/concepts/bucket) с именем `your-bucket`.
-- Сетевой доступ от узлов кластера {{ ydb-short-name }} до {{ objstorage-name }}. В примере используется endpoint storage.yandexcloud.net к которму неоходим доступ по порту 443
-- В руководстве в качестве примера используются данные, созданные с помощью нагрузочного теста TPC-H. Загрузить эти тестовые данные в базу можно по [инструкции](../reference/ydb-cli/workload-tpch.md).
+- Объектное хранилище ({{ objstorage-name }}) и статический ключ доступа, например, [{{ objstorage-full-name }}](https://yandex.cloud/ru/docs/storage/) с заранее созданным бакетом (например, `your-bucket`).
+- Настроенный сетевой доступ с узлов кластера {{ ydb-short-name }} к объектному хранилищу. В примере используется endpoint `storage.yandexcloud.net` — необходимо обеспечить доступ к нему по порту 443.
+- В примерах используются данные теста производительности TPC-H. Инструкция по загрузке тестовых данных доступна в соответствующем [разделе](../reference/ydb-cli/workload-tpch.md) руководства.
 
 ### Создайте секрет для доступа к {{ objstorage-name }}
 
@@ -32,8 +37,8 @@ CREATE OBJECT aws_access_key (TYPE SECRET) WITH (value='<секретный_кл
 - `<ID_ключа>` — идентификатор статического ключа доступа.
 - `aws_access_key` — имя секрета, содержащего секретный ключ.
 - `<секретный_ключ>` — секретная часть ключа доступа.
-- LOCATION - endpoint выбранного {{ objstorage-name }}
-- AWS_REGION - регион выбранного {{ objstorage-name }}
+- LOCATION — endpoint выбранного {{ objstorage-name }}
+- AWS_REGION — регион выбранного {{ objstorage-name }}
 
 ### Настройка подключения
 
@@ -87,7 +92,7 @@ CREATE EXTERNAL TABLE `external/backup/lineitem_sql` (
 Где:
 
 - `LOCATION` — путь к директории с данными внутри бакета.
-- `DATA_SOURCE` - название объекта `EXTERNAL DATA SOURCE`, содержащего параметры подключения.
+- `DATA_SOURCE` — название объекта `EXTERNAL DATA SOURCE`, содержащего параметры подключения.
 - `external/backup/lineitem_sql` — полное имя создаваемой внешней таблицы.
 
 ### Экспорт данных из {{ ydb-short-name }}
@@ -102,6 +107,12 @@ SELECT * FROM `tpch/s10/lineitem`;
 После выполнения этого запроса в бакете `your-bucket` по пути `/ydb-dumps-sql/lineitem/` появятся Parquet-файлы с данными.
 
 ### Импорт данных в {{ ydb-short-name }}
+
+{% note info %}
+
+Команда INSERT может завершиться с ошибкой, если таблица, куда вы восстанавливаете данные, уже содержит записи. В этом случае нужно очистить целевую таблицу и повторить команду INSERT.
+
+{% endnote %}
 
 Для импорта данных из {{ objstorage-name }} в обратно в таблицу `tpch/s10/lineitem` используется `INSERT INTO ... SELECT` из внешней таблицы.
 
@@ -121,8 +132,8 @@ SELECT * FROM `external/backup/lineitem_sql`;
 - Установленный PySpark версии 4.0.1, установить можно по [инструкции](https://spark.apache.org/docs/latest/api/python/getting_started/install.html).
 - Наличие [gRPC-эндпоинта](../concepts/connect.md#эндпоинт-endpoint) для подключения к базе данных {{ ydb-short-name }}.
 - [Реквизиты доступа](../reference/ydb-cli/connect.md#command-line-pars) {{ ydb-short-name }} с правами на чтение/запись.
-- {{ objstorage-name }} и статический ключ доступа к нему, например [{{ objstorage-full-name }}](https://yandex.cloud/ru/docs/storage/) и созданный в нём [бакет](https://yandex.cloud/ru/docs/storage/concepts/bucket) с именем `your-bucket`.
-- В руководстве в качестве примера используются данные, созданные с помощью нагрузочного теста TPC-H. Загрузить эти тестовые данные в базу можно по [инструкции](../reference/ydb-cli/workload-tpch.md).
+- Настроенный сетевой доступ с узлов кластера {{ ydb-short-name }} к объектному хранилищу. В примере используется endpoint `storage.yandexcloud.net` — необходимо обеспечить доступ к нему по порту 443.
+- В примерах используются данные теста производительности TPC-H. Инструкция по загрузке тестовых данных доступна в соответствующем [разделе](../reference/ydb-cli/workload-tpch.md) руководства.
 
 ### Экспорт данных из {{ ydb-short-name }} в Parquet
 
@@ -134,7 +145,7 @@ SELECT * FROM `external/backup/lineitem_sql`;
 - `S3_SECRET_KEY` — секретная часть ключа для доступа к S3.
 - `YDB_HOSTNAME` — хост gRPC-эндпоинта (например, `ydb.serverless.yandexcloud.net`).
 - `YDB_PORT` — порт gRPC-эндпоинта (например, `2135`).
-- `YDB_DATABASE_NAME>` — путь к вашей базе данных (например, `/ru-central1/b1g.../etn...`).
+- `YDB_DATABASE_NAME` — путь к вашей базе данных (например, `/ru-central1/b1g.../etn...`).
 - `YDB_AUTH_TYPE` — параметры для аутентификации в {{ ydb-short-name }}, поддерживаемые [драйвером Apache Spark](https://github.com/ydb-platform/ydb-spark-connector?tab=readme-ov-file#connector-usage).
 - `YDB_SOURCE_TABLE` — Путь к исходной таблице в базе источнике (например, `tpch/s1/lineitem`).
 
@@ -195,7 +206,7 @@ spark.stop()
 - `S3_SECRET_KEY` — секретная часть ключа для доступа к S3.
 - `YDB_HOSTNAME` — хост gRPC-эндпоинта (например, `ydb.serverless.yandexcloud.net`).
 - `YDB_PORT` — порт gRPC-эндпоинта (например, `2135`).
-- `YDB_DATABASE_NAME>` — путь к вашей базе данных (например, `/ru-central1/b1g.../etn...`).
+- `YDB_DATABASE_NAME` — путь к вашей базе данных (например, `/ru-central1/b1g.../etn...`).
 - `YDB_AUTH_TYPE` — параметры для аутентификации в {{ ydb-short-name }}, поддерживаемые [драйвером Apache Spark](https://github.com/ydb-platform/ydb-spark-connector?tab=readme-ov-file#connector-usage).
 - `YDB_TARGET_TABLE` — Путь к таблице в базе назначения (например, `tpch/s1/lineitem`).
 

@@ -559,16 +559,16 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         )
         return self._nodes[node_index]
 
-    def __register_slots(self, database, count=1, encryption_key=None):
-        return [self.__register_slot(database, encryption_key) for _ in range(count)]
+    def __register_slots(self, database, count=1, encryption_key=None, seed_nodes_file=None):
+        return [self.__register_slot(database, encryption_key, seed_nodes_file=seed_nodes_file) for _ in range(count)]
 
-    def register_and_start_slots(self, database, count=1, encryption_key=None):
-        slots = self.__register_slots(database, count, encryption_key)
+    def register_and_start_slots(self, database, count=1, encryption_key=None, seed_nodes_file=None):
+        slots = self.__register_slots(database, count, encryption_key, seed_nodes_file=seed_nodes_file)
         for slot in slots:
             slot.start()
         return slots
 
-    def __register_slot(self, tenant_affiliation=None, encryption_key=None):
+    def __register_slot(self, tenant_affiliation=None, encryption_key=None, seed_nodes_file=None):
         slot_index = next(self._slot_index_allocator)
         node_broker_port = (
             self.nodes[1].grpc_ssl_port if self.__configurator.grpc_ssl_enable
@@ -586,6 +586,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             tenant_affiliation=tenant_affiliation if tenant_affiliation is not None else 'dynamic',
             encryption_key=encryption_key,
             binary_path=self.__configurator.get_binary_path(slot_index),
+            seed_nodes_file=seed_nodes_file,
         )
         return self._slots[slot_index]
 

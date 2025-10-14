@@ -18,6 +18,7 @@ from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
 from ydb.tests.library.harness.util import LogLevels
 
 import ydb.public.api.protos.ydb_config_pb2 as config
+from ydb.tests.oss.ydb_sdk_import import ydb
 
 logger = logging.getLogger(__name__)
 
@@ -200,6 +201,90 @@ class TestKiKiMRDistConfBasic(DistConfKiKiMRTest):
             if 'pdisk_info' in locals():
                 logger.error(f"Viewer API response content: {pdisk_info}")
             raise
+
+    def test_dynamic_slot_start_with_seed_nodes(self):
+        database_path = os.path.join('/', self.cluster.domain_name, f'dyn_seed_db')
+
+        try:
+            self.cluster.remove_database(database_path)
+        except Exception:
+            pass
+        self.cluster.create_database(database_path, storage_pool_units_count={'rot': 1}, timeout_seconds=60)
+
+        endpoint = f"{self.cluster.nodes[1].host}:{self.cluster.nodes[1].grpc_port}"
+        driver = ydb.Driver(ydb.DriverConfig(endpoint, database_path))
+        pool = ydb.SessionPool(driver)
+
+        def create_table(session):
+            session.execute_scheme(
+                f"""
+                create table `{database_path}/t` (
+                    id Uint64,
+                    primary key(id)
+                );
+                """
+            )
+
+        # Without dynamic slots, query should fail
+        failed_without_slots = False
+        try:
+            pool.retry_operation_sync(create_table)
+        except Exception:
+            failed_without_slots = True
+        assert failed_without_slots, 'Query unexpectedly succeeded without dynamic slots'
+
+        # Prepare seed nodes file
+        seed_nodes = [f"grpc://localhost:{node.grpc_port}" for _, node in self.cluster.nodes.items()]
+        seed_nodes_file = tempfile.NamedTemporaryFile(mode='w', prefix='seed_nodes_', suffix='.yaml', delete=False)
+        try:
+            yaml.dump(seed_nodes, seed_nodes_file)
+            seed_nodes_file.close()
+
+            slots = self.cluster.register_and_start_slots(database_path, count=1, seed_nodes_file=seed_nodes_file.name)
+            self.cluster.wait_tenant_up(database_path)
+
+            # Now query should succeed
+            pool.retry_operation_sync(create_table)
+
+            def upsert(session):
+                session.transaction().execute(
+                    f"upsert into `{database_path}/t` (id) values (1);",
+                    commit_tx=True,
+                )
+
+            def select(session):
+                session.transaction().execute(
+                    f"select id from `{database_path}/t`;",
+                    commit_tx=True,
+                )
+
+            pool.retry_operation_sync(upsert)
+            pool.retry_operation_sync(select)
+        except Exception:
+            assert False, 'Query unexpectedly failed with dynamic slots'
+        finally:
+            try:
+                self.cluster.remove_database(database_path)
+            except Exception:
+                pass
+            if 'slots' in locals():
+                try:
+                    self.cluster.unregister_and_stop_slots(slots)
+                except Exception:
+                    pass
+            if os.path.exists(seed_nodes_file.name):
+                try:
+                    os.unlink(seed_nodes_file.name)
+                except Exception:
+                    pass
+            try:
+                pool.stop()
+            except Exception:
+                pass
+            try:
+                driver.stop()
+            except Exception:
+                pass
 
     def test_cluster_expand_with_seed_nodes(self):
         table_path = '/Root/mydb/mytable_with_seed_nodes'

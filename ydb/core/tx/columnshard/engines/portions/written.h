@@ -36,10 +36,6 @@ private:
         return sb;
     }
 
-    virtual bool IsCommitted() const override {
-        return !!CommitSnapshot;
-    }
-
 public:
     virtual void FillDefaultColumn(NAssembling::TColumnAssemblingInfo& column, const std::optional<TSnapshot>& defaultSnapshot) const override;
 
@@ -73,6 +69,11 @@ public:
     bool HasCommitSnapshot() const {
         return !!CommitSnapshot;
     }
+
+    virtual bool IsCommitted() const override {
+        return !!CommitSnapshot;
+    }
+
     const TSnapshot& GetCommitSnapshotVerified() const {
         AFL_VERIFY(!!CommitSnapshot);
         return *CommitSnapshot;

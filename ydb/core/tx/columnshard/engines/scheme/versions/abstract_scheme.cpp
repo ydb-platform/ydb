@@ -93,8 +93,7 @@ TConclusion<NArrow::TContainerWithIndexes<arrow::RecordBatch>> ISnapshotSchema::
     NArrow::TStatusValidator::Validate(incomingBatch->ValidateFull());
 #endif
 
-    NArrow::TSchemaLiteView dstSchema = GetIndexInfo().ArrowSchema();
-    
+    NArrow::TSchemaLiteView dstSchema = GetIndexInfo().ArrowSchema();    
     std::vector<std::shared_ptr<arrow::Array>> pkColumns;
     pkColumns.resize(GetIndexInfo().GetReplaceKey()->num_fields());
     ui32 pkColumnsCount = 0;
@@ -110,7 +109,7 @@ TConclusion<NArrow::TContainerWithIndexes<arrow::RecordBatch>> ISnapshotSchema::
             if (!features.GetArrowField()->type()->Equals(incomingColumn->type())) {
                 return TConclusionStatus::Fail(
                     "not equal type for column: " + features.GetColumnName() + ": " + features.GetArrowField()->type()->ToString()
-                    + " vs " + incomingColumn->type()->ToString());    
+                    + " vs " + incomingColumn->type()->ToString());
             }
         }
         if (pkFieldIdx && hasNull && !AppData()->ColumnShardConfig.GetAllowNullableColumnsInPK()) {

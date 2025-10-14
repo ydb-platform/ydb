@@ -270,16 +270,14 @@ void BulkUpsertRowTableYdbValueWithColumnName(TTestHelper& helper, const TString
             case ETableKind::COLUMN_SHARD: {
                 Y_ABORT_UNLESS(col && schema);
                 if (load == ELoadKind::ARROW) {
-                    // Find the int64 column name from schema (should be the second column after "id")
-                    TString columnName = "int"; // default
+                    TString columnName = "int";
                     if (schema->size() >= 2) {
                         columnName = (*schema)[1].GetName();
                     }
                     auto batch = MakeArrowBatchWithColumnName(rows, columnName);
                     helper.BulkUpsert(*col, batch);
                 } else if (load == ELoadKind::YDB_VALUE) {
-                    // Find the int64 column name from schema (should be the second column after "id")
-                    TString columnName = "int"; // default
+                    TString columnName = "int";
                     if (schema->size() >= 2) {
                         columnName = (*schema)[1].GetName();
                     }
@@ -417,9 +415,6 @@ void BulkUpsertRowTableYdbValueWithColumnName(TTestHelper& helper, const TString
         const auto Scan = Arg<0>();
         const auto Table = Arg<1>();
         const auto Load = Arg<2>();
-        // if (Table == ETableKind::COLUMN_SHARD) {
-        //     return;   // skip until bool is supported in columnshard
-        // }
 
         const TString tableName = "/Root/Table1";
         TTestHelper helper(TKikimrSettings().SetWithSampleTables(false));
@@ -436,9 +431,6 @@ void BulkUpsertRowTableYdbValueWithColumnName(TTestHelper& helper, const TString
         const auto Scan = Arg<0>();
         const auto Table = Arg<1>();
         const auto Load = Arg<2>();
-        // if (Table == ETableKind::COLUMN_SHARD) {
-        //     return;   // skip until bool is supported in columnshard
-        // }
 
         const TString tableName = "/Root/Table1";
         TTestHelper helper(TKikimrSettings().SetWithSampleTables(false));
@@ -454,9 +446,6 @@ void BulkUpsertRowTableYdbValueWithColumnName(TTestHelper& helper, const TString
         const auto Scan = Arg<0>();
         const auto Table = Arg<1>();
         const auto Load = Arg<2>();
-        // if (Table == ETableKind::COLUMN_SHARD) {
-        //     return;   // skip until bool is supported in columnshard
-        // }
 
         const TString tableName = "/Root/Table1";
         TTestHelper helper(TKikimrSettings().SetWithSampleTables(false));
@@ -475,9 +464,6 @@ void BulkUpsertRowTableYdbValueWithColumnName(TTestHelper& helper, const TString
         const auto Scan = Arg<0>();
         const auto Table = Arg<1>();
         const auto Load = Arg<2>();
-        // if (Table == ETableKind::COLUMN_SHARD) {
-        //     return;   // skip until bool is supported in columnshard
-        // }
 
         const TString tableName = "/Root/Table1";
         TTestHelper helper(TKikimrSettings().SetWithSampleTables(false));
@@ -498,9 +484,6 @@ void BulkUpsertRowTableYdbValueWithColumnName(TTestHelper& helper, const TString
         const auto Scan = Arg<0>();
         const auto Table = Arg<1>();
         const auto Load = Arg<2>();
-        // if (Table == ETableKind::COLUMN_SHARD) {
-        //     return;   // skip until bool is supported in columnshard
-        // }
 
         const TString tableName = "/Root/Table1";
         TTestHelper helper(TKikimrSettings().SetWithSampleTables(false));
@@ -516,9 +499,6 @@ void BulkUpsertRowTableYdbValueWithColumnName(TTestHelper& helper, const TString
         const auto Scan = Arg<0>();
         const auto Table = Arg<1>();
         const auto Load = Arg<2>();
-        // if (Table == ETableKind::COLUMN_SHARD) {
-        //     return;   // skip until bool is supported in columnshard
-        // }
 
         const TString tableName = "/Root/Table1";
         TTestHelper helper(TKikimrSettings().SetWithSampleTables(false));
@@ -534,9 +514,6 @@ void BulkUpsertRowTableYdbValueWithColumnName(TTestHelper& helper, const TString
         const auto Scan = Arg<0>();
         const auto Table = Arg<1>();
         const auto Load = Arg<2>();
-        // if (Table == ETableKind::COLUMN_SHARD) {
-        //     return;   // skip until bool is supported in columnshard
-        // }
 
         const TString tableName = "/Root/Table1";
         TTestHelper helper(TKikimrSettings().SetWithSampleTables(false));
@@ -552,9 +529,6 @@ void BulkUpsertRowTableYdbValueWithColumnName(TTestHelper& helper, const TString
         const auto Scan = Arg<0>();
         const auto Table = Arg<1>();
         const auto Load = Arg<2>();
-        // if (Table == ETableKind::COLUMN_SHARD) {
-        //     return;   // skip until bool is supported in columnshard
-        // }
 
         const TString t1 = "/Root/Table1";
         const TString t2 = "/Root/Table2";
@@ -610,9 +584,6 @@ void BulkUpsertRowTableYdbValueWithColumnName(TTestHelper& helper, const TString
         const auto Scan = Arg<0>();
         const auto Table = Arg<1>();
         const auto Load = Arg<2>();
-        // if (Table == ETableKind::COLUMN_SHARD) {
-        //     return;   // skip until bool is supported in columnshard
-        // }
 
         const TString t1 = "/Root/Table1";
         const TString t2 = "/Root/Table2";

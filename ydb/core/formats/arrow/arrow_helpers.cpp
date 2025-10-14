@@ -35,10 +35,10 @@ std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl() {
     return std::make_shared<TType>();
 }
 
-// template <>
-// std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl<arrow::BooleanType>() {
-//     return arrow::uint8();
-// }
+template <>
+std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl<arrow::BooleanType>() {
+    return arrow::uint8();
+}
 
 template <>
 std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl<arrow::Decimal128Type>() {

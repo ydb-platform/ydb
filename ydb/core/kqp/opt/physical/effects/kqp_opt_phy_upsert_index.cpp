@@ -339,11 +339,7 @@ RewriteInputForConstraint(const TExprBase& inputRows, const THashSet<TStringBuf>
         hasUniqIndex |= (indexDesc->Type == TIndexDescription::EType::GlobalSyncUnique);
         for (const auto& indexKeyCol : indexDesc->KeyColumns) {
             if (inputColumns.contains(indexKeyCol)) {
-                if (!usedIndexes.contains(indexDesc->Name) &&
-                    std::find(mainPk.begin(), mainPk.end(), indexKeyCol) == mainPk.end())
-                {
-                    usedIndexes.insert(indexDesc->Name);
-                }
+                usedIndexes.insert(indexDesc->Name);
             } else {
                 // input always contains key columns
                 YQL_ENSURE(std::find(mainPk.begin(), mainPk.end(), indexKeyCol) == mainPk.end());
@@ -351,6 +347,8 @@ RewriteInputForConstraint(const TExprBase& inputRows, const THashSet<TStringBuf>
             }
         }
     }
+
+    AFL_ENSURE(!hasUniqIndex || !usedIndexes.empty());
 
     if (!hasUniqIndex) {
         missedKeyInput.clear();
@@ -920,7 +918,14 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
 
             if (indexDesc->Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
                 if (indexDesc->KeyColumns.size() > 1) {
-                    upsertIndexRows = BuildVectorIndexPrefixRows(table, *prefixTable, true, indexDesc, upsertIndexRows, indexTableColumns, pos, ctx);
+                    if (prefixTable->Metadata->Columns.at(NTableIndex::NKMeans::IdColumn).DefaultKind == NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_SEQUENCE) {
+                        auto res = BuildVectorIndexPrefixRowsWithNew(table, *prefixTable, indexDesc, upsertIndexRows, indexTableColumns, pos, ctx);
+                        upsertIndexRows = std::move(res.first);
+                        effects.emplace_back(std::move(res.second));
+                    } else {
+                        // Handle old prefixed vector index tables without the sequence
+                        upsertIndexRows = BuildVectorIndexPrefixRows(table, *prefixTable, true, indexDesc, upsertIndexRows, indexTableColumns, pos, ctx);
+                    }
                 }
 
                 upsertIndexRows = BuildVectorIndexPostingRows(table, mainTableNode,

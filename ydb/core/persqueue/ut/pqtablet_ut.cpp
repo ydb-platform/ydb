@@ -324,7 +324,7 @@ protected:
         NPersQueue::TTopicConverterPtr TopicConverter;
         NKikimrPQ::TPQTabletConfig PQTabletConfig;
         TPartitionId PartitionId;
-        TTabletCountersBase Counters;
+        std::shared_ptr<TTabletCountersBase> Counters = std::make_shared<TTabletCountersBase>();
         TActorId Quoter;
     };
 
@@ -1145,7 +1145,7 @@ void TPQTabletFixture::StartPQCalcPredicateObserver(size_t& received)
     received = 0;
 
     auto observer = [&received](TAutoPtr<IEventHandle>& event) {
-        if (auto* msg = event->CastAsLocal<TEvPQ::TEvTxCalcPredicate>()) {
+        if (event->CastAsLocal<TEvPQ::TEvTxCalcPredicate>()) {
             ++received;
         }
 
@@ -2495,6 +2495,41 @@ Y_UNIT_TEST_F(Kafka_Transaction_Supportive_Partitions_Should_Be_Deleted_After_Ti
 
     // wait till supportive partition for this kafka transaction is deleted
     WaitForExactSupportivePartitionsCount(0);
+}
+
+Y_UNIT_TEST_F(Kafka_Transaction_Supportive_Partitions_Should_Be_Deleted_With_Delete_Partition_Done_Event_Drop, TPQTabletFixture)
+{
+    NKafka::TProducerInstanceId producerInstanceId = {1, 0};
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+    EnsurePipeExist();
+    TString ownerCookie = CreateSupportivePartitionForKafka(producerInstanceId);
+
+    // send data to create blobs for supportive partitions
+    SendKafkaTxnWriteRequest(producerInstanceId, ownerCookie);
+
+    // validate supportive partition was created
+    WaitForExactSupportivePartitionsCount(1);
+    auto txInfo = GetTxWritesFromKV();
+    UNIT_ASSERT_VALUES_EQUAL(txInfo.TxWritesSize(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(txInfo.GetTxWrites(0).GetKafkaTransaction(), true);
+
+    // increment time till after kafka txn timeout
+    ui64 kafkaTxnTimeoutMs = Ctx->Runtime->GetAppData(0).KafkaProxyConfig.GetTransactionTimeoutMs()
+        + KAFKA_TRANSACTION_DELETE_DELAY_MS;
+    Ctx->Runtime->AdvanceCurrentTime(TDuration::MilliSeconds(kafkaTxnTimeoutMs + 1));
+    SendToPipe(Ctx->Edge, MakeHolder<TEvents::TEvWakeup>().Release());
+    TAutoPtr<TEvPQ::TEvDeletePartitionDone> deleteDoneEvent;
+    bool seenEvent = false;
+    // add observer for TEvPQ::TEvDeletePartitionDone request and skip it
+    AddOneTimeEventObserver<TEvPQ::TEvDeletePartitionDone>(seenEvent, 1, [](TAutoPtr<IEventHandle>&) {
+        return TTestActorRuntimeBase::EEventAction::DROP;
+    });
+    TDispatchOptions options;
+    options.CustomFinalCondition = [&seenEvent]() {return seenEvent;};
+    UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options));
+    PQTabletRestart(*Ctx);
+    ResetPipe();
+    // check that that our expired transaction has been deleted
     WaitForExactTxWritesCount(0);
 }
 

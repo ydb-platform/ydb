@@ -17,6 +17,7 @@ PEERDIR(
 
 SRCS(
     tuple.cpp
+    accumulator.cpp
 )
 
 CFLAGS(
@@ -29,6 +30,10 @@ ENDIF()
 YQL_LAST_ABI_VERSION()
 
 END()
+
+RECURSE(
+    simd
+)
 
 RECURSE_FOR_TESTS(
     ut

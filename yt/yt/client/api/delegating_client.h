@@ -35,6 +35,7 @@ public:
     DELEGATE_METHOD(const NChaosClient::IReplicationCardCachePtr&, GetReplicationCardCache, (), ())
 
     DELEGATE_METHOD(const NTransactionClient::ITimestampProviderPtr&, GetTimestampProvider, (), ())
+    DELEGATE_METHOD(const TClientOptions&, GetOptions, (), ())
 
     // Transactions
     DELEGATE_METHOD(TFuture<ITransactionPtr>, StartTransaction, (
@@ -826,6 +827,10 @@ public:
 
     DELEGATE_METHOD(TFuture<TGetQueryTrackerInfoResult>, GetQueryTrackerInfo, (
         const TGetQueryTrackerInfoOptions& options),
+        (options))
+
+    DELEGATE_METHOD(TFuture<TGetQueryDeclaredParametersInfoResult>, GetQueryDeclaredParametersInfo, (
+        const TGetQueryDeclaredParametersInfoOptions& options),
         (options))
 
     // Bundle Controller

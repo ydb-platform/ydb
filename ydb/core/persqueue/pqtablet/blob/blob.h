@@ -107,6 +107,9 @@ struct TBatch {
 
 };
 
+void Serialize(const TClientBlob& blob, TBuffer& res);
+TClientBlob DeserializeClientBlob(const char *data, ui32 size);
+
 class TBlobIterator {
 public:
     TBlobIterator(const TKey& key, const TString& blob);
@@ -212,7 +215,7 @@ public:
     };
 
     std::optional<TFormedBlobInfo> Add(TClientBlob&& blob);
-    std::optional<TFormedBlobInfo> Add(const TKey& key, ui32 size);
+    std::optional<TFormedBlobInfo> Add(const TKey& key, ui32 size, TInstant timestamp, bool isFastWrite);
 
     bool IsInited() const;
     bool IsComplete() const;
@@ -224,19 +227,24 @@ public:
     bool IsNextPart(const TString& sourceId, const ui64 seqNo, const ui16 partNo, TString *reason) const;
 
     struct TRenameFormedBlobInfo {
-        TRenameFormedBlobInfo() = default;
-        TRenameFormedBlobInfo(const TKey& oldKey, const TKey& newKey, ui32 size);
+        TRenameFormedBlobInfo() = delete;
+        TRenameFormedBlobInfo(const TKey& oldKey, const TKey& newKey, ui32 size, TInstant creationUnixTime);
 
         TKey OldKey;
         TKey NewKey;
         ui32 Size;
+        TInstant CreationUnixTime;
     };
 
     const std::deque<TClientBlob>& GetClientBlobs() const { return Blobs; }
     const std::deque<TRenameFormedBlobInfo>& GetFormedBlobs() const { return FormedBlobs; }
 
 private:
-    TString CompactHead(bool glueHead, THead& head, bool glueNewHead, THead& newHead, ui32 estimatedSize);
+    struct TCompactHeadResult {
+        TString ValueD;
+        TInstant EndWriteTimestamp;
+    };
+    TCompactHeadResult CompactHead(bool glueHead, THead& head, bool glueNewHead, THead& newHead, ui32 estimatedSize);
     std::optional<TFormedBlobInfo> CreateFormedBlob(ui32 size, bool useRename);
 
 private:

@@ -11,13 +11,14 @@ PEERDIR(
     library/cpp/http/simple
     library/cpp/retry
     ydb/core/testlib/basics
+    ydb/library/testlib/solomon_helpers
+    ydb/library/yql/providers/common/ut_helpers
     yql/essentials/minikql/computation/llvm16
     yql/essentials/minikql/comp_nodes/llvm16
+    yql/essentials/providers/common/comp_nodes
     yql/essentials/public/udf/service/exception_policy
     yql/essentials/sql
     yql/essentials/sql/pg_dummy
-    yql/essentials/providers/common/comp_nodes
-    ydb/library/yql/providers/common/ut_helpers
 )
 
 YQL_LAST_ABI_VERSION()

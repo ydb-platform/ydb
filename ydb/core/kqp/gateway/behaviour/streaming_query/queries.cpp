@@ -195,23 +195,6 @@ struct TEvPrivate {
 
 //// Common
 
-NYql::TIssues AddRootIssue(const TString& message, const NYql::TIssues& issues, bool addEmptyRoot = true) {
-    if (!issues && !addEmptyRoot) {
-        return {};
-    }
-
-    NYql::TIssue rootIssue(message);
-    for (const auto& issue : issues) {
-        rootIssue.AddSubIssue(MakeIntrusive<NYql::TIssue>(issue));
-    }
-
-    return {rootIssue};
-}
-
-NOperationId::TOperationId OperationIdFromExecutionId(const TString& executionId) {
-    return NOperationId::TOperationId(ScriptExecutionOperationFromExecutionId(executionId));
-}
-
 TString LogQueryState(const NKikimrKqp::TStreamingQueryState& state) {
     return TStringBuilder()
         << "{Status: " << NKikimrKqp::TStreamingQueryState::EStatus_Name(state.GetStatus())
@@ -325,36 +308,6 @@ private:
 private:
     TProperties& Src;
     TProperties Dst;
-};
-
-// Used for properties parsing after describing streaming query
-class TStreamingQuerySettings {
-public:
-    TStreamingQuerySettings& FromProto(const NKikimrSchemeOp::TStreamingQueryProperties& info) {
-        for (const auto& [name, value] : info.GetProperties()) {
-            if (name == TStreamingQueryConfig::TSqlSettings::QUERY_TEXT_FEATURE) {
-                QueryText = value;
-            } else if (name == TStreamingQueryConfig::TProperties::Run) {
-                Run = value == "true";
-            } else if (name == TStreamingQueryConfig::TProperties::ResourcePool) {
-                ResourcePool = value;
-            } else {
-                LOG_E("Ignored unexpected property: " << name);
-            }
-        }
-
-        return *this;
-    }
-
-private:
-    static TString LogPrefix() {
-        return TStringBuilder() << "[TStreamingQuerySettings] ";
-    }
-
-public:
-    TString QueryText;
-    bool Run = false;
-    TString ResourcePool;
 };
 
 template <typename TDerived>
@@ -491,7 +444,7 @@ protected:
     bool ScheduleRetry(NYql::TIssues issues, bool longDelay = false) {
         if (!RetryState) {
             RetryState = TRetryPolicy::GetExponentialBackoffPolicy(
-                [](bool longDelay){
+                [](bool longDelay) {
                     return longDelay ? ERetryErrorClass::LongRetry : ERetryErrorClass::ShortRetry;
                 },
                 TDuration::MilliSeconds(100),
@@ -889,7 +842,7 @@ protected:
         const TString sql = fmt::format(R"(
                 DECLARE $database_id AS Text;
                 DECLARE $query_path AS Text;
-                DECLARE $state AS JsonDocument;
+                DECLARE $state AS Json;
 
                 UPSERT INTO `{table}` (
                     database_id, query_path, state
@@ -914,7 +867,7 @@ protected:
                 .Utf8(QueryPath)
                 .Build()
             .AddParam("$state")
-                .JsonDocument(stateWriter.Str())
+                .Json(stateWriter.Str())
                 .Build();
 
         ExecuteQuery(__func__, sql, &params, txControl);
@@ -939,7 +892,7 @@ protected:
             return TStatus::Fail(Ydb::StatusIds::NOT_FOUND, "No such steaming query");
         }
 
-        const std::optional<TString>& stateJsonString = result.ColumnParser(TStreamingQueryConfig::TColumns::State).GetOptionalJsonDocument();
+        const std::optional<TString>& stateJsonString = result.ColumnParser(TStreamingQueryConfig::TColumns::State).GetOptionalJson();
         if (!stateJsonString) {
             return TStatus::Fail(Ydb::StatusIds::INTERNAL_ERROR, "Streaming query state not found");
         }

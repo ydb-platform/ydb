@@ -3,8 +3,8 @@
 ---
 
 ### Mute a test if in the last 4 days:
-- **2 or more failures**
-- **OR** 1 failure and runs (pass + fail) not more than 10
+- **3 or more failures AND runs (pass + fail) more than 10**
+- **OR** 2 or more failures AND runs (pass + fail) not more than 10
 
 ### Unmute a test if in the last 7 days:
 - **Runs (pass + fail + mute) >= 4**
@@ -24,6 +24,7 @@
 ---
 
 **Example:**
+- If a test ran 15 times in 3 days with 3 failures — the test will be muted.
 - If a test ran 5 times in 3 days with 2 failures — the test will be muted.
 - If a test ran 4 times in 7 days and all passed successfully — the test will be unmuted.
 - If a test didn't run at all in 7 days — it will be removed from mute.
@@ -87,7 +88,7 @@ For analyzing test status, finding mute/unmute candidates, and tracking stabilit
 
 ### 🔇 [to_mute.txt](mute_update/to_mute.txt)
 **Content:** Mute candidates by new rules  
-**Rules:** In 4 days ≥2 failures **OR** (≥1 failure and runs ≤10)  
+**Rules:** In 4 days (≥3 failures **AND** runs >10) **OR** (≥2 failures **AND** runs ≤10)  
 **Usage:** Main file for mute decisions
 
 ### 🔊 [to_unmute.txt](mute_update/to_unmute.txt)

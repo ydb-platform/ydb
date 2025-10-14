@@ -6,10 +6,12 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/channel_profiles.h>
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/base/tx_processing.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/protos/config.pb.h>
+#include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
@@ -618,8 +620,8 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
 
     if (op.HasTTLSettings()) {
         for (const auto& indexDescription : op.GetTableIndexes()) {
-            if (indexDescription.GetType() == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
-                errStr = "Table with vector indexes doesn't support TTL";
+            if (!DoesIndexSupportTTL(indexDescription.GetType())) {
+                errStr = TStringBuilder() << "Table with " << indexDescription.GetType() << " index doesn't support TTL";
                 return nullptr;
             }
         }
@@ -1836,9 +1838,13 @@ void TTableAggregatedStats::UpdateShardStats(TShardIdx datashardIdx, const TPart
     Aggregated.LocksWholeShard += (newStats.LocksWholeShard - oldStats.LocksWholeShard);
     Aggregated.LocksBroken += (newStats.LocksBroken - oldStats.LocksBroken);
 
-    auto topUsage = oldStats.TopUsage.Update(newStats.TopUsage);
+    // NOTE: Updating the CPU usage buckets is essentially taking the maximum
+    //       of the latest update time for each bucket. Thus, updating new -> old
+    //       and old -> new are equivalent: the result is the same.
+    const auto oldTopCpuUsage = oldStats.TopCpuUsage;
     oldStats = newStats;
-    oldStats.TopUsage = std::move(topUsage);
+    oldStats.TopCpuUsage.Update(oldTopCpuUsage); // The left is new stats now!
+
     PartitionStatsUpdated++;
 
     // Rescan stats for aggregations only once in a while
@@ -2141,17 +2147,26 @@ bool TTableInfo::CheckSplitByLoad(
         }
     }
 
+    // NOTE: Do not suggest splitting-by-load, if the expected number of partitions
+    //       (taking into account all in-flight split operations) already exceeds
+    //       the overall limit on the number of partitions. Using the maximum
+    //       between the current partition count and the expected partition count
+    //       prevents splitting-by-load when there are some in-flight merge
+    //       operations (which reduce the expected partition count).
+    const ui64 effectiveShardCount = Max(ExpectedPartitionCount, Stats.PartitionStats.size());
+
     const auto& stats = *Stats.PartitionStats.FindPtr(shardIdx);
     if (rowCount < MIN_ROWS_FOR_SPLIT_BY_LOAD ||
         dataSize < MIN_SIZE_FOR_SPLIT_BY_LOAD ||
-        Stats.PartitionStats.size() >= maxShards ||
+        effectiveShardCount >= maxShards ||
         stats.GetCurrentRawCpuUsage() < cpuUsageThreshold * 1000000)
     {
         reason = TStringBuilder() << "ConditionsNotMet"
-            << " rowCount: " << rowCount << " minRows: " << MIN_ROWS_FOR_SPLIT_BY_LOAD
-            << " dataSize: " << dataSize << " minSize: " << MIN_SIZE_FOR_SPLIT_BY_LOAD
-            << " shardCount: " << Stats.PartitionStats.size() << " maxShards: " << maxShards
-            << " cpuUsage: " << stats.GetCurrentRawCpuUsage() << " threshold: " << cpuUsageThreshold * 1000000;
+            << " rowCount: " << rowCount << " minRowCount: " << MIN_ROWS_FOR_SPLIT_BY_LOAD
+            << " shardSize: " << dataSize << " minShardSize: " << MIN_SIZE_FOR_SPLIT_BY_LOAD
+            << " shardCount: " << Stats.PartitionStats.size()
+            << " expectedShardCount: " << ExpectedPartitionCount << " maxShardCount: " << maxShards
+            << " cpuUsage: " << stats.GetCurrentRawCpuUsage() << " cpuUsageThreshold: " << cpuUsageThreshold * 1000000;
         return false;
     }
 
@@ -2161,6 +2176,7 @@ bool TTableInfo::CheckSplitByLoad(
         << "shardSize: " << dataSize << ", "
         << "minShardSize: " << MIN_SIZE_FOR_SPLIT_BY_LOAD << ", "
         << "shardCount: " << Stats.PartitionStats.size() << ", "
+        << "expectedShardCount: " << ExpectedPartitionCount << ", "
         << "maxShardCount: " << maxShards << ", "
         << "cpuUsage: " << stats.GetCurrentRawCpuUsage() << ", "
         << "cpuUsageThreshold: " << cpuUsageThreshold * 1000000 << ")";
@@ -2292,8 +2308,22 @@ void TIndexBuildInfo::SerializeToProto(TSchemeShard* ss, NKikimrSchemeOp::TIndex
         ImplTableDescriptions.end()
     };
 
-    if (IndexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
-        *index.MutableVectorIndexKmeansTreeDescription() = std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(SpecializedIndexDescription);
+    switch (IndexType) {
+        case NKikimrSchemeOp::EIndexTypeGlobal:
+        case NKikimrSchemeOp::EIndexTypeGlobalAsync:
+        case NKikimrSchemeOp::EIndexTypeGlobalUnique:
+            // no specialized index description
+            Y_ASSERT(std::holds_alternative<std::monostate>(SpecializedIndexDescription));
+            break;
+        case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
+            *index.MutableVectorIndexKmeansTreeDescription() = std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(SpecializedIndexDescription);
+            break;
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltext:
+            *index.MutableFulltextIndexDescription() = std::get<NKikimrSchemeOp::TFulltextIndexDescription>(SpecializedIndexDescription);
+            break;
+        default:
+            Y_DEBUG_ABORT_S(InvalidIndexType(IndexType));
+            break;
     }
 }
 
@@ -2523,6 +2553,60 @@ void TIndexBuildInfo::AddParent(const TSerializedTableRange& range, TShardIdx sh
 
     // Add the remaining range
     Cluster2Shards.emplace_hint(itFrom, parentTo, TClusterShards{.From = parentFrom, .Shards = {shard}});
+}
+
+bool TIndexBuildInfo::IsValidState(EState value)
+{
+    switch (value) {
+        case EState::Invalid:
+        case EState::AlterMainTable:
+        case EState::Locking:
+        case EState::GatheringStatistics:
+        case EState::Initiating:
+        case EState::Filling:
+        case EState::DropBuild:
+        case EState::CreateBuild:
+        case EState::LockBuild:
+        case EState::Applying:
+        case EState::Unlocking:
+        case EState::AlterSequence:
+        case EState::Done:
+        case EState::Cancellation_Applying:
+        case EState::Cancellation_Unlocking:
+        case EState::Cancellation_DroppingColumns:
+        case EState::Cancelled:
+        case EState::Rejection_Applying:
+        case EState::Rejection_Unlocking:
+        case EState::Rejection_DroppingColumns:
+        case EState::Rejected:
+            return true;
+    }
+    return false;
+}
+
+bool TIndexBuildInfo::IsValidSubState(ESubState value)
+{
+    switch (value) {
+        case ESubState::None:
+        case ESubState::UniqIndexValidation:
+            return true;
+    }
+    return false;
+}
+
+bool TIndexBuildInfo::IsValidBuildKind(EBuildKind value)
+{
+    switch (value) {
+        case EBuildKind::BuildKindUnspecified:
+        case EBuildKind::BuildSecondaryIndex:
+        case EBuildKind::BuildVectorIndex:
+        case EBuildKind::BuildPrefixedVectorIndex:
+        case EBuildKind::BuildSecondaryUniqueIndex:
+        case EBuildKind::BuildColumns:
+        case EBuildKind::BuildFulltext:
+            return true;
+    }
+    return false;
 }
 
 TColumnFamiliesMerger::TColumnFamiliesMerger(NKikimrSchemeOp::TPartitionConfig &container)

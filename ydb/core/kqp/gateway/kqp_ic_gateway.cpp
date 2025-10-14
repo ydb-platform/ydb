@@ -615,7 +615,7 @@ public:
     void Bootstrap() {
         auto ctx = MakeIntrusive<TUserRequestContext>();
         ctx->DatabaseId = DatabaseId;
-        IActor* actor = CreateKqpSchemeExecuter(PhyTx, QueryType, SelfId(), RequestType, Database, UserToken, ClientAddress, false /* temporary */, false /* isCreateTableAs */, TString() /* sessionId */, ctx);
+        IActor* actor = CreateKqpSchemeExecuter(PhyTx, QueryType, SelfId(), RequestType, Database, UserToken, ClientAddress, false /* temporary */, false /* createTmpDir */, false /* isCreateTableAs */, TString() /* sessionId */, ctx);
         Register(actor);
         Become(&TThis::WaitState);
     }
@@ -1297,7 +1297,7 @@ public:
                 }
 
                 auto [dirname, basename] = NSchemeHelpers::SplitPathByDirAndBaseNames(currentPath);
-                if (!dirname.empty() && !IsStartWithSlash(dirname)) {
+                if (!IsStartWithSlash(currentPath)) {
                     dirname = JoinPath({Database, dirname});
                 }
 
@@ -1506,7 +1506,7 @@ public:
             }
 
             auto analyzePromise = NewPromise<TGenericResult>();
-            IActor* analyzeActor = new TAnalyzeActor(settings.TablePath, settings.Columns, analyzePromise);
+            IActor* analyzeActor = new TAnalyzeActor(Database, settings.TablePath, settings.Columns, analyzePromise);
             RegisterActor(analyzeActor);
 
             return analyzePromise.GetFuture();

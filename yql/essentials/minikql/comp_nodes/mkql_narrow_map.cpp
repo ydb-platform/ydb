@@ -1,7 +1,7 @@
 #include "mkql_narrow_map.h"
 
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
-#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
+#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/utils/cast.h>
 
@@ -11,8 +11,9 @@ using NYql::EnsureDynamicCast;
 
 namespace {
 
-class TNarrowMapWrapper : public TStatelessFlowCodegeneratorNode<TNarrowMapWrapper> {
-using TBaseComputation = TStatelessFlowCodegeneratorNode<TNarrowMapWrapper>;
+class TNarrowMapWrapper: public TStatelessFlowCodegeneratorNode<TNarrowMapWrapper> {
+    using TBaseComputation = TStatelessFlowCodegeneratorNode<TNarrowMapWrapper>;
+
 public:
     TNarrowMapWrapper(TComputationMutables& mutables, EValueRepresentation kind, IComputationWideFlowNode* flow, TComputationExternalNodePtrVector&& items, IComputationNode* newItem)
         : TBaseComputation(flow, kind)
@@ -21,17 +22,19 @@ public:
         , NewItem(newItem)
         , PasstroughItem(GetPasstroughtMap(TComputationNodePtrVector{NewItem}, Items).front())
         , WideFieldsIndex(mutables.IncrementWideFieldsIndex(Items.size()))
-    {}
+    {
+    }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         auto** fields = ctx.WideFields.data() + WideFieldsIndex;
 
         for (auto i = 0U; i < Items.size(); ++i) {
-            if (NewItem == Items[i] || Items[i]->GetDependencesCount() > 0U)
+            if (NewItem == Items[i] || Items[i]->GetDependencesCount() > 0U) {
                 fields[i] = &Items[i]->RefValue(ctx);
+            }
         }
 
-        switch (const auto result = Flow->FetchValues(ctx, fields)) {
+        switch (/* const auto result = */ Flow->FetchValues(ctx, fields)) {
             case EFetchResult::Finish:
                 return NUdf::TUnboxedValuePod::MakeFinish();
             case EFetchResult::Yield:
@@ -64,9 +67,11 @@ public:
         if (const auto passtrough = PasstroughItem) {
             result->addIncoming(getres.second[*passtrough](ctx, block), block);
         } else {
-            for (auto i = 0U; i < Items.size(); ++i)
-                if (Items[i]->GetDependencesCount() > 0U)
+            for (auto i = 0U; i < Items.size(); ++i) {
+                if (Items[i]->GetDependencesCount() > 0U) {
                     EnsureDynamicCast<ICodegeneratorExternalNode*>(Items[i])->CreateSetValue(ctx, block, getres.second[i](ctx, block));
+                }
+            }
 
             result->addIncoming(GetNodeValue(NewItem, ctx, block), block);
         }
@@ -93,7 +98,7 @@ private:
     const ui32 WideFieldsIndex;
 };
 
-}
+} // namespace
 
 IComputationNode* WrapNarrowMap(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() > 1U, "Expected two or more args.");
@@ -105,11 +110,11 @@ IComputationNode* WrapNarrowMap(TCallable& callable, const TComputationNodeFacto
 
         TComputationExternalNodePtrVector args(width, nullptr);
         ui32 index = 0U;
-        std::generate(args.begin(), args.end(), [&](){ return LocateExternalNode(ctx.NodeLocator, callable, ++index); });
+        std::generate(args.begin(), args.end(), [&]() { return LocateExternalNode(ctx.NodeLocator, callable, ++index); });
         return new TNarrowMapWrapper(ctx.Mutables, GetValueRepresentation(callable.GetType()->GetReturnType()), wide, std::move(args), newItem);
     }
 
     THROW yexception() << "Expected wide flow.";
 }
 
-}
+} // namespace NKikimr::NMiniKQL

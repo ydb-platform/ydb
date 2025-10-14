@@ -308,6 +308,53 @@ struct TEvYardResizeResult : TEventLocal<TEvYardResizeResult, TEvBlobStorage::Ev
     }
 };
 
+struct TEvChangeExpectedSlotCount : TEventLocal<TEvChangeExpectedSlotCount, TEvBlobStorage::EvChangeExpectedSlotCount> {
+    ui32 ExpectedSlotCount;
+    ui32 SlotSizeInUnits;
+
+    TEvChangeExpectedSlotCount(ui32 expectedSlotCount, ui32 slotSizeInUnits)
+        : ExpectedSlotCount(expectedSlotCount)
+        , SlotSizeInUnits(slotSizeInUnits)
+    {}
+
+    TString ToString() const {
+        return ToString(*this);
+    }
+
+    static TString ToString(const TEvChangeExpectedSlotCount& record) {
+        TStringStream str;
+        str << "{";
+        str << "EvChangeExpectedSlotCount ";
+        str << " ExpectedSlotCount# " << record.ExpectedSlotCount;
+        str << " SlotSizeInUnits# " << record.SlotSizeInUnits;
+        str << "}";
+        return str.Str();
+    }
+};
+
+struct TEvChangeExpectedSlotCountResult : TEventLocal<TEvChangeExpectedSlotCountResult, TEvBlobStorage::EvChangeExpectedSlotCountResult> {
+    NKikimrProto::EReplyStatus Status;
+    TString ErrorReason;
+
+    TEvChangeExpectedSlotCountResult(NKikimrProto::EReplyStatus status, TString errorReason)
+        : Status(status)
+        , ErrorReason(std::move(errorReason))
+    {}
+
+    TString ToString() const {
+        return ToString(*this);
+    }
+
+    static TString ToString(const TEvChangeExpectedSlotCountResult& record) {
+        TStringStream str;
+        str << "{";
+        str << "EvChangeExpectedSlotCountResult Status#" << NKikimrProto::EReplyStatus_Name(record.Status).data();
+        str << " ErrorReason# \"" << record.ErrorReason << "\"";
+        str << "}";
+        return str.Str();
+    }
+};
+
 ////////////////////////////////////////////////////////////////////////////
 // LOG
 ////////////////////////////////////////////////////////////////////////////
@@ -1375,11 +1422,11 @@ struct TEvCheckSpace : TEventLocal<TEvCheckSpace, TEvBlobStorage::EvCheckSpace> 
 struct TEvCheckSpaceResult : TEventLocal<TEvCheckSpaceResult, TEvBlobStorage::EvCheckSpaceResult> {
     NKikimrProto::EReplyStatus Status;
     TStatusFlags StatusFlags;
-    ui32 FreeChunks;
-    ui32 TotalChunks; // contains common limit in shared free space mode, Total != Free + Used
-    ui32 UsedChunks; // number of chunks allocated by requesting owner
-    ui32 NumSlots; // number of VSlots over PDisk
-    ui32 NumActiveSlots; // $ \sum_i{ceil(VSlot[i].SlotSizeInUnits / PDisk.SlotSizeInUnits)} $
+    ui32 FreeChunks; // contains SharedQuota.Free
+    ui32 TotalChunks; // contains OwnerQuota.HardLimit(owner), Total != Free + Used
+    ui32 UsedChunks; // equals OwnerQuota.Used(owner) - a number of chunks allocated by requesting owner
+    ui32 NumSlots; // number of VDisks over PDisk, not their weight
+    ui32 NumActiveSlots; // sum of VDisks weights - $ \sum_i{ceil(VSlot[i].SlotSizeInUnits / PDisk.SlotSizeInUnits)} $
     double Occupancy = 0;
     TString ErrorReason;
     TStatusFlags LogStatusFlags;

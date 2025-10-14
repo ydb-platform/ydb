@@ -24,9 +24,8 @@ SIMPLE_UDF(TRepeat, char*(char*, ui64)) {
 }
 
 SIMPLE_MODULE(TTestImportUdfModule,
-                TConcat,
-                TRepeat
-              )
+              TConcat,
+              TRepeat)
 
 } // namespace
 

@@ -7,6 +7,7 @@ import "ydb/core/protos/blobstorage_disk_color.proto";
 import "ydb/core/protos/blobstorage_pdisk_config.proto";
 import "ydb/core/protos/blob_depot_config.proto";
 import "ydb/library/actors/protos/interconnect.proto";
+import "google/protobuf/any.proto";
 
 package NKikimrBlobStorage;
 
@@ -501,6 +502,13 @@ message TClusterBalancingSettings {
     optional uint64 IterationIntervalMs = 2;
     optional uint32 MaxReplicatingPDisks = 3;
     optional uint32 MaxReplicatingVDisks = 4;
+    optional bool PreferLessOccupiedRack = 5;
+    optional bool WithAttentionToReplication = 6;
+}
+
+message TSelfHealSettings {
+    optional bool PreferLessOccupiedRack = 1;
+    optional bool WithAttentionToReplication = 2;
 }
 
 message TUpdateSettings {
@@ -540,6 +548,7 @@ message TBscConfig {
     optional bool UseSelfHealLocalPolicy = 13;
     optional bool TryToRelocateBrokenDisksLocallyFirst = 14;
     optional TClusterBalancingSettings ClusterBalancingSettings = 15;
+    optional TSelfHealSettings SelfHealSettings = 16;
 }
 
 message TBoxStoragePoolId {
@@ -686,6 +695,9 @@ message TConfigRequest {
 
     // requesting user identifier
     string UserSID = 13;
+
+    // current TStorageConfig against which we are processing this request
+    google.protobuf.Any StorageConfig = 14;
 }
 
 enum ETriStateBool {

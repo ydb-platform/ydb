@@ -23,7 +23,7 @@ TError CheckAceCorrect(const TAce& ace)
     // NB(coteeq): There is an intuitive reasoning behind all these checks:
     // Let's define 'special' ACEs. ACE is special if either is true:
     // 1. it contains full_read permission
-    // 2. it specifies expression
+    // 2. it specifies row_access_predicate
     // 3. it specifies columns.
     //
     // For the sake of simplicity, we do not want to care how these three kinds
@@ -31,7 +31,7 @@ TError CheckAceCorrect(const TAce& ace)
     // from the list are true, ACE is considered to be invalid.
     // Moreover, the only action any special ACE may specify is `allow`.
     //
-    // Lastly, if either expression or columns are specified, the only valid
+    // Lastly, if either row_access_predicate or columns are specified, the only valid
     // permission is `read`.
 
     // Currently, we allow empty permissions with columns. They seem to be no-op.
@@ -49,40 +49,40 @@ TError CheckAceCorrect(const TAce& ace)
             ace.Action);
     }
 
-    if (Any(ace.Permissions & EPermission::FullRead) && (ace.Expression || ace.Columns)) {
+    if (Any(ace.Permissions & EPermission::FullRead) && (ace.RowAccessPredicate || ace.Columns)) {
         return TError(
             "ACE with %Qlv permission may not specify %Qlv or \"columns\"",
             EPermission::FullRead,
-            TSerializableAccessControlEntry::ExpressionKey);
+            TSerializableAccessControlEntry::RowAccessPredicateKey);
     }
 
-    if (ace.Expression && ace.Action != ESecurityAction::Allow) {
+    if (ace.RowAccessPredicate && ace.Action != ESecurityAction::Allow) {
         return TError(
             "ACE specifying %Qlv may have only %Qlv action; found %Qlv",
-            TSerializableAccessControlEntry::ExpressionKey,
+            TSerializableAccessControlEntry::RowAccessPredicateKey,
             ESecurityAction::Allow,
             ace.Action);
     }
 
-    if (ace.Expression && ace.Permissions != EPermission::Read) {
+    if (ace.RowAccessPredicate && ace.Permissions != EPermission::Read) {
         return TError(
             "ACE specifying %Qlv may contain only %Qlv permission; found %Qlv",
-            TSerializableAccessControlEntry::ExpressionKey,
+            TSerializableAccessControlEntry::RowAccessPredicateKey,
             EPermission::Read,
             ace.Permissions);
     }
 
-    if (ace.InapplicableExpressionMode && !ace.Expression) {
+    if (ace.InapplicableRowAccessPredicateMode && !ace.RowAccessPredicate) {
         return TError(
             "%Qlv can only be specified if %Qlv is specified",
-            TSerializableAccessControlEntry::InapplicableExpressionModeKey,
-            TSerializableAccessControlEntry::ExpressionKey);
+            TSerializableAccessControlEntry::InapplicableRowAccessPredicateModeKey,
+            TSerializableAccessControlEntry::RowAccessPredicateKey);
     }
 
-    if (ace.Expression && ace.Columns) {
+    if (ace.RowAccessPredicate && ace.Columns) {
         return TError(
             "Single ACE must not contain both \"columns\" and %Qlv",
-            TSerializableAccessControlEntry::ExpressionKey);
+            TSerializableAccessControlEntry::RowAccessPredicateKey);
     }
 
     bool hasRegisterQueueConsumer = Any(ace.Permissions & EPermission::RegisterQueueConsumer);

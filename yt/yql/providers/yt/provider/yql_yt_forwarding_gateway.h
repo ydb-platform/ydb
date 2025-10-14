@@ -71,9 +71,11 @@ public:
 
     void AddCluster(const TYtClusterConfig& config) override;
 
-    TClusterConnectionResult GetClusterConnection(const TClusterConnectionOptions&& options) override;
+    TClusterConnectionResult GetClusterConnection(const TClusterConnectionOptions&& options) const override;
 
     TMaybe<TString> GetTableFilePath(const TGetTableFilePathOptions&& options) override;
+
+    NThreading::TFuture<TLayersSnapshotResult> SnapshotLayers(TSnapshotLayersOptions&& options) override;
 
 protected:
     IYtGateway::TPtr Slave_;

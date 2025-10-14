@@ -80,8 +80,9 @@ TVector<TRequestedBlob> TPartitionBlobEncoder::GetBlobsFromBody(const ui64 start
     if (!DataKeysBody.empty() && PositionInBody(startOffset, partNo)) { //will read smth from body
         auto it = std::upper_bound(DataKeysBody.begin(), DataKeysBody.end(), std::make_pair(startOffset, partNo),
             [](const std::pair<ui64, ui16>& offsetAndPartNo, const TDataKey& p) { return offsetAndPartNo.first < p.Key.GetOffset() || offsetAndPartNo.first == p.Key.GetOffset() && offsetAndPartNo.second < p.Key.GetPartNo();});
-        if (it == DataKeysBody.begin()) //could be true if data is deleted or gaps are created
+        if (it == DataKeysBody.begin()) { //could be true if data is deleted or gaps are created
             return blobs;
+        }
         AFL_ENSURE(it != DataKeysBody.begin()); //always greater, startoffset can't be less that StartOffset
         AFL_ENSURE(it == DataKeysBody.end() || it->Key.GetOffset() > startOffset || it->Key.GetOffset() == startOffset && it->Key.GetPartNo() > partNo);
         --it;
@@ -106,7 +107,7 @@ TVector<TRequestedBlob> TPartitionBlobEncoder::GetBlobsFromBody(const ui64 start
             size += sz;
             count += cnt;
             TRequestedBlob reqBlob(it->Key.GetOffset(), it->Key.GetPartNo(), it->Key.GetCount(),
-                                   it->Key.GetInternalPartsCount(), it->Size, TString(), it->Key);
+                                   it->Key.GetInternalPartsCount(), it->Size, TString(), it->Key, it->Timestamp.Seconds());
             blobs.push_back(reqBlob);
 
             blobKeyTokens->Append(it->BlobKeyToken);
@@ -134,13 +135,12 @@ TVector<TClientBlob> TPartitionBlobEncoder::GetBlobsFromHead(const ui64 startOff
     TVector<TClientBlob> res;
     std::optional<ui64> firstAddedBlobOffset{};
     ui32 pos = 0;
-    if (PositionInHead(startOffset, partNo)) {
+    if (!Head.GetBatches().empty() && PositionInHead(startOffset, partNo)) {
         pos = Head.FindPos(startOffset, partNo);
         AFL_ENSURE(pos != Max<ui32>());
     }
     ui32 lastBlobSize = 0;
     for (; pos < Head.GetBatches().size(); ++pos) {
-
         TVector<TClientBlob> blobs;
         Head.GetBatch(pos).UnpackTo(&blobs);
         ui32 i = 0;

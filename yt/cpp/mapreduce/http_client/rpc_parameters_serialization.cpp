@@ -575,6 +575,9 @@ TNode SerializeParamsForListJobs(
     if (options.OperationIncarnation_) {
         result["operation_incarnation"] = *options.OperationIncarnation_;
     }
+    if (options.MonitoringDescriptor_) {
+        result["monitoring_descriptor"] = *options.MonitoringDescriptor_;
+    }
     if (options.FromTime_) {
         result["from_time"] = ToString(options.FromTime_);
     }

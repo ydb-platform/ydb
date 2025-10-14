@@ -75,7 +75,7 @@ Y_UNIT_TEST_SUITE(FmrJobTests) {
 
         auto resultTableContent = tableDataServiceClient->Get(tableDataServiceExpectedOutputGroup, talblDataServiceExpectedOutputChunkId).GetValueSync();
         UNIT_ASSERT_C(resultTableContent, "Result table content is empty");
-        UNIT_ASSERT_NO_DIFF(*resultTableContent, GetBinaryYson(TableContent_1));
+        UNIT_ASSERT_NO_DIFF(GetTextYson(*resultTableContent), TableContent_1);
     }
 
     Y_UNIT_TEST(UploadTable) {
@@ -94,7 +94,7 @@ Y_UNIT_TEST_SUITE(FmrJobTests) {
         auto jobLauncher = MakeIntrusive<TFmrUserJobLauncher>(TFmrUserJobLauncherOptions{.RunInSeparateProcess = false});
         IFmrJob::TPtr job = MakeFmrJob(file.Name(), ytJobService, jobLauncher);
 
-        TYtTableRef output = TYtTableRef{.RichPath = NYT::TRichYPath().Path("test_path").Cluster("test_cluster")};
+        TYtTableRef output = TYtTableRef("test_cluster", "test_path", Nothing());
         std::vector<TTableRange> ranges = {{"test_part_id"}};
         TFmrTableInputRef input = TFmrTableInputRef{.TableId = "test_table_id", .TableRanges = ranges};
         auto params = TUploadTaskParams(input, output);
@@ -203,7 +203,7 @@ Y_UNIT_TEST_SUITE(TaskRunTests) {
 
         std::vector<TTableRange> ranges = {{"test_part_id"}};
         TFmrTableInputRef input = TFmrTableInputRef{.TableId = "test_table_id", .TableRanges = ranges};
-        TYtTableRef output = TYtTableRef{.RichPath = NYT::TRichYPath().Path("test_path").Cluster("test_cluster")};
+        TYtTableRef output = TYtTableRef("test_cluster", "test_path", Nothing());
 
         TPortManager pm;
         const ui16 port = pm.GetPort();
@@ -234,7 +234,7 @@ Y_UNIT_TEST_SUITE(TaskRunTests) {
 
         std::vector<TTableRange> ranges = {{"test_part_id"}};
         TFmrTableInputRef input = TFmrTableInputRef{.TableId = "test_table_id", .TableRanges = ranges};
-        TYtTableRef output = TYtTableRef{.RichPath = NYT::TRichYPath().Path("test_path").Cluster("test_cluster")};
+        TYtTableRef output = TYtTableRef("test_cluster", "test_path", Nothing());
 
         TPortManager pm;
         const ui16 port = pm.GetPort();
@@ -251,7 +251,7 @@ Y_UNIT_TEST_SUITE(TaskRunTests) {
         UNIT_ASSERT_EXCEPTION_CONTAINS(
             RunJob(task, file.Name(), ytJobService, jobLauncher, cancelFlag),
             yexception,
-            "No data for chunk:test_table_id_test_part_id"
+            "Error reading chunk: test_table_id_test_part_id:0"
         );
     }
 

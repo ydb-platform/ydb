@@ -2,7 +2,7 @@
 
 `xmltodict` is a Python module that makes working with XML feel like you are working with [JSON](http://docs.python.org/library/json.html), as in this ["spec"](http://www.xml.com/pub/a/2006/05/31/converting-between-xml-and-json.html):
 
-[![Build Status](https://app.travis-ci.com/martinblech/xmltodict.svg?branch=master)](https://app.travis-ci.com/martinblech/xmltodict)
+[![Tests](https://github.com/martinblech/xmltodict/actions/workflows/test.yml/badge.svg)](https://github.com/martinblech/xmltodict/actions/workflows/test.yml)
 
 ```python
 >>> print(json.dumps(xmltodict.parse("""
@@ -194,6 +194,100 @@ Lists that are specified under a key in a dictionary use the key as a tag for ea
 </line>
 ```
 
+## API Reference
+
+### xmltodict.parse()
+
+Parse XML input into a Python dictionary.
+
+- `xml_input`: XML input as a string, file-like object, or generator of strings.
+- `encoding=None`: Character encoding for the input XML.
+- `expat=expat`: XML parser module to use.
+- `process_namespaces=False`: Expand XML namespaces if True.
+- `namespace_separator=':'`: Separator between namespace URI and local name.
+- `disable_entities=True`: Disable entity parsing for security.
+- `process_comments=False`: Include XML comments if True. Comments can be preserved when enabled, but by default they are ignored. Multiple top-level comments may not be preserved in exact order.
+- `xml_attribs=True`: Include attributes in output dict (with `attr_prefix`).
+- `attr_prefix='@'`: Prefix for XML attributes in the dict.
+- `cdata_key='#text'`: Key for text content in the dict.
+- `force_cdata=False`: Force text content to be wrapped as CDATA for specific elements. Can be a boolean (True/False), a tuple of element names to force CDATA for, or a callable function that receives (path, key, value) and returns True/False.
+- `cdata_separator=''`: Separator string to join multiple text nodes. This joins adjacent text nodes. For example, set to a space to avoid concatenation.
+- `postprocessor=None`: Function to modify parsed items.
+- `dict_constructor=dict`: Constructor for dictionaries (e.g., dict).
+- `strip_whitespace=True`: Remove leading/trailing whitespace in text nodes. Default is True; this trims whitespace in text nodes. Set to False to preserve whitespace exactly. When `process_comments=True`, this same flag also trims comment text; disable `strip_whitespace` if you need to preserve comment indentation or padding.
+- `namespaces=None`: Mapping of namespaces to prefixes, or None to keep full URIs.
+- `force_list=None`: Force list values for specific elements. Can be a boolean (True/False), a tuple of element names to force lists for, or a callable function that receives (path, key, value) and returns True/False. Useful for elements that may appear once or multiple times to ensure consistent list output.
+- `item_depth=0`: Depth at which to call `item_callback`.
+- `item_callback=lambda *args: True`: Function called on items at `item_depth`.
+- `comment_key='#comment'`: Key used for XML comments when `process_comments=True`. Only used when `process_comments=True`. Comments can be preserved but multiple top-level comments may not retain order.
+
+### xmltodict.unparse()
+
+Convert a Python dictionary back into XML.
+
+- `input_dict`: Dictionary to convert to XML.
+- `output=None`: File-like object to write XML to; returns string if None.
+- `encoding='utf-8'`: Encoding of the output XML.
+- `full_document=True`: Include XML declaration if True.
+- `short_empty_elements=False`: Use short tags for empty elements (`<tag/>`).
+- `attr_prefix='@'`: Prefix for dictionary keys representing attributes.
+- `cdata_key='#text'`: Key for text content in the dictionary.
+- `pretty=False`: Pretty-print the XML output.
+- `indent='\t'`: Indentation string for pretty printing.
+- `newl='\n'`: Newline character for pretty printing.
+- `expand_iter=None`: Tag name to use for items in nested lists (breaks roundtripping).
+
+> **Note:** When building XML from dictionaries, keys whose values are empty
+> lists are skipped. For example, `{'a': []}` produces no `<a>` element. Add a
+> placeholder child (for example, `{'a': ['']}`) if an explicit empty container
+> element is required in the output.
+
+Note: xmltodict aims to cover the common 90% of cases. It does not preserve every XML nuance (attribute order, mixed content ordering, multiple top-level comments). For exact fidelity, use a full XML library such as lxml.
+
+## Examples
+
+### Selective force_cdata
+
+The `force_cdata` parameter can be used to selectively force CDATA wrapping for specific elements:
+
+```python
+>>> xml = '<a><b>data1</b><c>data2</c><d>data3</d></a>'
+>>> # Force CDATA only for 'b' and 'd' elements
+>>> xmltodict.parse(xml, force_cdata=('b', 'd'))
+{'a': {'b': {'#text': 'data1'}, 'c': 'data2', 'd': {'#text': 'data3'}}}
+
+>>> # Force CDATA for all elements (original behavior)
+>>> xmltodict.parse(xml, force_cdata=True)
+{'a': {'b': {'#text': 'data1'}, 'c': {'#text': 'data2'}, 'd': {'#text': 'data3'}}}
+
+>>> # Use a callable for complex logic
+>>> def should_force_cdata(path, key, value):
+...     return key in ['b', 'd'] and len(value) > 4
+>>> xmltodict.parse(xml, force_cdata=should_force_cdata)
+{'a': {'b': {'#text': 'data1'}, 'c': 'data2', 'd': {'#text': 'data3'}}}
+```
+
+### Selective force_list
+
+The `force_list` parameter can be used to selectively force list values for specific elements:
+
+```python
+>>> xml = '<a><b>data1</b><b>data2</b><c>data3</c></a>'
+>>> # Force lists only for 'b' elements
+>>> xmltodict.parse(xml, force_list=('b',))
+{'a': {'b': ['data1', 'data2'], 'c': 'data3'}}
+
+>>> # Force lists for all elements (original behavior)
+>>> xmltodict.parse(xml, force_list=True)
+{'a': [{'b': ['data1', 'data2'], 'c': ['data3']}]}
+
+>>> # Use a callable for complex logic
+>>> def should_force_list(path, key, value):
+...     return key in ['b'] and isinstance(value, str)
+>>> xmltodict.parse(xml, force_list=should_force_list)
+{'a': {'b': ['data1', 'data2'], 'c': 'data3'}}
+```
+
 ## Ok, how do I get it?
 
 ### Using pypi
@@ -257,6 +351,18 @@ $ zypper in python2-xmltodict
 
 # Python3
 $ zypper in python3-xmltodict
+```
+
+## Type Annotations
+
+For type checking support, install the external types package:
+
+```sh
+# Using pypi
+$ pip install types-xmltodict
+
+# Using conda
+$ conda install -c conda-forge types-xmltodict
 ```
 
 ## Security Notes

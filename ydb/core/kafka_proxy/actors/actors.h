@@ -1,13 +1,12 @@
 #pragma once
 
 #include <ydb/core/base/path.h>
+#include <ydb/core/kafka_proxy/kafka_messages.h>
 #include <ydb/core/persqueue/public/pq_rl_helpers.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/public/api/protos/persqueue_error_codes_v1.pb.h>
 #include <ydb/public/api/protos/draft/persqueue_error_codes.pb.h> // strange
-
-#include <ydb/core/kafka_proxy/kafka_messages.h>
 
 namespace NKafka {
 
@@ -23,6 +22,17 @@ enum EAuthSteps {
     FAILED
 };
 
+enum class EBalancingMode {
+    Server,
+    Native,
+};
+
+struct TReadSession {
+    EBalancingMode BalancingMode = EBalancingMode::Server;
+    std::optional<EBalancingMode> PendingBalancingMode;
+    NActors::TActorId ProxyActorId;
+};
+
 struct TContext {
     using TPtr = std::shared_ptr<TContext>;
 
@@ -30,9 +40,14 @@ struct TContext {
         : Config(config) {
     }
 
+    TContext(const TContext& other)
+        : Config(other.Config)
+    {
+    }
+
     const NKikimrConfig::TKafkaProxyConfig& Config;
 
-    TActorId ConnectionId;
+    NActors::TActorId ConnectionId;
     TString KafkaClient;
 
 
@@ -49,13 +64,13 @@ struct TContext {
     TString ClientDC;
     bool IsServerless = false;
     bool RequireAuthentication = false;
+    TReadSession ReadSession;
 
     NKikimr::NPQ::TRlContext RlContext;
 
+
     bool Authenticated() {
-
         return !RequireAuthentication || AuthenticationStep == SUCCESS;
-
     }
 };
 
@@ -76,6 +91,10 @@ public:
     T* operator->() const {
         return Ptr;
     }
+
+    T& operator*() const {
+        return *Ptr;
+    } 
 
     operator bool() const {
         return nullptr != Ptr;
@@ -120,6 +139,10 @@ inline EKafkaErrors ConvertErrorCode(NPersQueue::NErrorCode::EErrorCode code) {
             return EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION;
         case NPersQueue::NErrorCode::EErrorCode::READ_TIMEOUT:
             return EKafkaErrors::REQUEST_TIMED_OUT;
+        case NPersQueue::NErrorCode::EErrorCode::READ_NOT_DONE:
+            return EKafkaErrors::NONE_ERROR;
+        case NPersQueue::NErrorCode::EErrorCode::TABLET_PIPE_DISCONNECTED:
+            return EKafkaErrors::NOT_LEADER_OR_FOLLOWER;
         default:
             return EKafkaErrors::UNKNOWN_SERVER_ERROR;
     }
@@ -172,8 +195,9 @@ NActors::IActor* CreateKafkaApiVersionsActor(const TContext::TPtr context, const
 NActors::IActor* CreateKafkaInitProducerIdActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TInitProducerIdRequestData>& message);
 NActors::IActor* CreateKafkaMetadataActor(const TContext::TPtr context, const ui64 correlationId,
                                           const TMessagePtr<TMetadataRequestData>& message,
-                                          const TActorId& discoveryCacheActor);
+                                          const NActors::TActorId& discoveryCacheActor);
 NActors::IActor* CreateKafkaProduceActor(const TContext::TPtr context);
+NActors::IActor* CreateKafkaReadSessionProxyActor(const TContext::TPtr context, ui64 cookie);
 NActors::IActor* CreateKafkaReadSessionActor(const TContext::TPtr context, ui64 cookie);
 NActors::IActor* CreateKafkaBalancerActor(const TContext::TPtr context, ui64 cookie);
 NActors::IActor* CreateKafkaSaslHandshakeActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TSaslHandshakeRequestData>& message);

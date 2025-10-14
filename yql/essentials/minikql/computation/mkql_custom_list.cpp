@@ -11,8 +11,10 @@ TForwardListValue::TForwardListValue(TMemoryUsageInfo* memInfo, NUdf::TUnboxedVa
 }
 
 TForwardListValue::TIterator::TIterator(TMemoryUsageInfo* memInfo, NUdf::TUnboxedValue&& stream)
-    : TComputationValue(memInfo), Stream_(std::move(stream))
-{}
+    : TComputationValue(memInfo)
+    , Stream_(std::move(stream))
+{
+}
 
 bool TForwardListValue::TIterator::Next(NUdf::TUnboxedValue& value) {
     const auto status = Stream_.Fetch(value);
@@ -92,7 +94,7 @@ ui64 TExtendListValue::GetListLength() const {
     return *Length_;
 }
 
-bool TExtendListValue::HasListItems() const  {
+bool TExtendListValue::HasListItems() const {
     if (!HasItems_) {
         for (const auto& list : Lists_) {
             if (list.HasListItems()) {
@@ -121,7 +123,7 @@ TExtendStreamValue::~TExtendStreamValue() {
     MKQL_MEM_RETURN(GetMemInfo(), Lists_.data(), Lists_.capacity() * sizeof(NUdf::TUnboxedValue));
 }
 
-NUdf::EFetchStatus TExtendStreamValue::Fetch(NUdf::TUnboxedValue& value)  {
+NUdf::EFetchStatus TExtendStreamValue::Fetch(NUdf::TUnboxedValue& value) {
     for (; Index_ < Lists_.size(); ++Index_) {
         const auto status = Lists_[Index_].Fetch(value);
         if (status != NUdf::EFetchStatus::Finish) {
@@ -131,5 +133,5 @@ NUdf::EFetchStatus TExtendStreamValue::Fetch(NUdf::TUnboxedValue& value)  {
     return NUdf::EFetchStatus::Finish;
 }
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

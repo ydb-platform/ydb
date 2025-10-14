@@ -40,6 +40,8 @@ public:
 
     MOCK_METHOD(IConnectionPtr, GetConnection, (), (override));
 
+    MOCK_METHOD(const TClientOptions&, GetOptions, (), (override));
+
     MOCK_METHOD(TFuture<std::optional<std::string>>, GetClusterName, (bool fetchIfNull), (override));
 
     MOCK_METHOD(TFuture<ITransactionPtr>, StartTransaction, (
@@ -811,6 +813,10 @@ public:
 
     MOCK_METHOD(TFuture<TGetQueryTrackerInfoResult>, GetQueryTrackerInfo, (
         const TGetQueryTrackerInfoOptions& options),
+        (override));
+
+    MOCK_METHOD(TFuture<TGetQueryDeclaredParametersInfoResult>, GetQueryDeclaredParametersInfo, (
+        const TGetQueryDeclaredParametersInfoOptions& options),
         (override));
 
     MOCK_METHOD(TFuture<NBundleControllerClient::TBundleConfigDescriptorPtr>, GetBundleConfig, (

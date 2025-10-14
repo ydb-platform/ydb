@@ -13,7 +13,8 @@ namespace NMiniKQL {
 
 class INodeVisitor {
 public:
-    virtual ~INodeVisitor() {}
+    virtual ~INodeVisitor() {
+    }
     virtual void Visit(TTypeType& node) = 0;
     virtual void Visit(TVoidType& node) = 0;
     virtual void Visit(TNullType& node) = 0;
@@ -51,7 +52,7 @@ public:
     virtual void Visit(TMultiType& node) = 0;
 };
 
-class TThrowingNodeVisitor : public INodeVisitor {
+class TThrowingNodeVisitor: public INodeVisitor {
 public:
     void Visit(TTypeType& node) override;
     void Visit(TVoidType& node) override;
@@ -132,9 +133,10 @@ public:
     void Visit(TMultiType& node) override;
 };
 
-class TExploringNodeVisitor : public INodeVisitor {
+class TExploringNodeVisitor: public INodeVisitor {
 public:
     using TNodesVec = TStackVec<TNode*, 2>;
+
 public:
     void Visit(TTypeType& node) override;
     void Visit(TVoidType& node) override;
@@ -173,7 +175,7 @@ public:
     void Visit(TMultiType& node) override;
 
     void Walk(TNode* root, std::vector<TNode*>& nodeStack, const std::vector<TNode*>& terminalNodes = std::vector<TNode*>(),
-        bool buildConsumersMap = false, size_t nodesCountHint = 0);
+              bool buildConsumersMap = false, size_t nodesCountHint = 0);
     // Deprecated. Should be removed after YDB sync.
     void Walk(TNode* root, const TTypeEnvironment& env, const std::vector<TNode*>& terminalNodes = std::vector<TNode*>(),
               bool buildConsumersMap = false, size_t nodesCountHint = 0);
@@ -193,11 +195,11 @@ private:
 };
 
 class TTypeEnvironment;
-typedef std::function<TRuntimeNode (TCallable& callable, const TTypeEnvironment& env)> TCallableVisitFunc;
-typedef std::function<TCallableVisitFunc (const TInternName& name)> TCallableVisitFuncProvider;
+typedef std::function<TRuntimeNode(TCallable& callable, const TTypeEnvironment& env)> TCallableVisitFunc;
+typedef std::function<TCallableVisitFunc(const TInternName& name)> TCallableVisitFuncProvider;
 
 TRuntimeNode SinglePassVisitCallables(TRuntimeNode root, TExploringNodeVisitor& explorer,
-    const TCallableVisitFuncProvider& funcProvider, const TTypeEnvironment& env, bool inPlace, bool& wereChanges);
+                                      const TCallableVisitFuncProvider& funcProvider, const TTypeEnvironment& env, bool inPlace, bool& wereChanges);
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

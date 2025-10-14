@@ -211,7 +211,9 @@ IYtGateway::TPtr TYtRunTool::CreateYtGateway() {
     fmrServices.FmrOperationSpecFilePath = FmrOperationSpecFilePath_;
     fmrServices.JobLauncher = MakeIntrusive<NFmr::TFmrUserJobLauncher>(NFmr::TFmrUserJobLauncherOptions{
         .RunInSeparateProcess = true,
-        .FmrJobBinaryPath = FmrJobBin_
+        .FmrJobBinaryPath = FmrJobBin_,
+        .TableDataServiceDiscoveryFilePath = TableDataServiceDiscoveryFilePath_,
+        .GatewayType = "native"
     });
 
     auto [fmrGateway, worker] = NFmr::InitializeFmrGateway(ytGateway, MakeIntrusive<NFmr::TFmrServices>(fmrServices));

@@ -31,6 +31,7 @@
 # pylint:disable=no-value-for-parameter
 import unittest
 
+import zope.interface.interface
 from __tests__.tests import CleanUp
 from __tests__.tests import MissingSomeAttrs
 from __tests__.tests import OptimizationTestMixin
@@ -38,6 +39,7 @@ from __tests__.tests import SubclassableMixin
 
 
 _marker = object()
+HashMe = zope.interface.interface.InterfaceClass('HashMe')
 
 
 class Test_invariant(unittest.TestCase):
@@ -1172,7 +1174,7 @@ class InterfaceClassTests(unittest.TestCase):
         self.assertEqual(iface.__reduce__(), 'PickleMe')
 
     def test___hash___normal(self):
-        iface = self._makeOne('HashMe')
+        from __tests__.tests.test_interface import HashMe as iface
         self.assertEqual(
             hash(iface),
             hash(('HashMe', '__tests__.tests.test_interface'))

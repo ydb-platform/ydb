@@ -73,6 +73,7 @@ enum class EYtSettingType: ui64 {
     StatColumns              /* "statcolumns" */,
     SysColumns               /* "syscolumns" */,
     IgnoreTypeV3             /* "ignore_type_v3" "ignoretypev3" */,
+    ExtraColumns             /* "extraColumns" */,
     // Table content
     MemUsage                 /* "memUsage" */,
     ItemsCount               /* "itemsCount" */,

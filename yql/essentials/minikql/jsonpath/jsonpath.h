@@ -17,4 +17,4 @@ TResult ExecuteJsonPath(
     const TVariablesMap& variables,
     const NUdf::IValueBuilder* valueBuilder);
 
-}
+} // namespace NYql::NJsonPath

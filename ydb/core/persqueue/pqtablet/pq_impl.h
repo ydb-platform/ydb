@@ -238,7 +238,7 @@ private:
     NKikimrPQ::ETabletState TabletState;
     TSet<TChangeNotification> TabletStateRequests;
 
-    TAutoPtr<TTabletCountersBase> Counters;
+    std::shared_ptr<TTabletCountersBase> Counters;
     TEvPQ::TEvTabletCacheCounters::TCacheCounters CacheCounters;
     TMap<TString, NKikimr::NPQ::TMultiCounter> BytesWrittenFromDC;
 
@@ -603,6 +603,7 @@ private:
 
     void ResendSplitMergeRequests(const TActorContext& ctx);
 
+    void Handle(TEvPQ::TEvForceCompaction::TPtr& ev, const TActorContext& ctx);
 
     TIntrusivePtr<NJaegerTracing::TSamplingThrottlingControl> SamplingControl;
     NWilson::TSpan WriteTxsSpan;

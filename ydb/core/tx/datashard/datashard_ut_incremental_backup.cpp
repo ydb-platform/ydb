@@ -2181,6 +2181,35 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
         }
     }
 
+    Y_UNIT_TEST(IncrementalBackupNonExistentTable) {
+        TPortManager portManager;
+        auto settings = TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false)
+            .SetDomainName("Root");
+        
+        settings.SetEnableBackupService(true);
+        
+        TServer::TPtr server = new TServer(settings);
+        auto& runtime = *server->GetRuntime();
+        const auto edgeActor = runtime.AllocateEdgeActor();
+
+        InitRoot(server, edgeActor);
+        
+        ExecSQL(server, edgeActor, R"(
+            CREATE BACKUP COLLECTION `MixedCollection`
+              ( TABLE `/Root/NonExistentTable`
+              )
+            WITH ( 
+                STORAGE = 'cluster',
+                INCREMENTAL_BACKUP_ENABLED = 'true'
+            );
+        )", false, Ydb::StatusIds::SUCCESS);
+
+        ExecSQL(server, edgeActor, R"(BACKUP `MixedCollection` INCREMENTAL;)", false, Ydb::StatusIds::SCHEME_ERROR);
+        
+        ExecSQL(server, edgeActor, "SELECT 1;");
+    }
+
 } // Y_UNIT_TEST_SUITE(IncrementalBackup)
 
 } // NKikimr

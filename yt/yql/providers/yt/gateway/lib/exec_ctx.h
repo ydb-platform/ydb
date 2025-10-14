@@ -22,6 +22,7 @@ struct TYtBaseServices: public TThrRefBase {
 
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry = nullptr;
     TYtGatewayConfigPtr Config;
+    bool NeedToTransformTmpTablePaths = true;
 };
 
 struct TInputInfo {
@@ -64,6 +65,7 @@ struct TOutputInfo {
     NYT::TNode AttrSpec;
     NYT::TSortColumns SortedBy;
     NYT::TNode ColumnGroups;
+    TMaybe<TString> FilePath; // Needed for fileGateway
 };
 
 struct TExecContextBaseSimple: public TThrRefBase {
@@ -103,6 +105,8 @@ protected:
     virtual void FillRichPathForInput(NYT::TRichYPath& path, const TYtPathInfo& pathInfo, const TString& newPath, bool localChainTest);
     virtual bool IsLocalChainTest() const;
 
+    TString GetTransformedPath(const TString& path, const TString& cluster, bool isTemp, const TYtSettings::TConstPtr& config);
+
 public:
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry_ = nullptr;
     TYtGatewayConfigPtr Config_;
@@ -115,6 +119,7 @@ public:
     bool YamrInput = false;
     TMaybe<TSampleParams> Sampling;
     const TSessionBase::TPtr BaseSession_;
+    const bool NeedToTransformTmpTablePaths_;
 };
 
 

@@ -5,7 +5,6 @@
 #include <util/system/getpid.h>
 #include <ydb/core/sys_view/service/query_history.h>
 #include <ydb/public/sdk/cpp/src/client/impl/internal/grpc_connections/grpc_connections.h>
-
 namespace NKikimr {
 namespace NKqp {
 
@@ -13,6 +12,25 @@ using namespace NYdb;
 using namespace NYdb::NTable;
 using namespace NYdb::NScheme;
 
+namespace {
+    ui64 SelectCompileCacheCount(TTableClient& tableClient) {
+        auto session = tableClient.CreateSession().GetValueSync();
+        UNIT_ASSERT_C(session.IsSuccess(), session.GetIssues().ToString());
+
+        const TString query = R"(SELECT COUNT(*) AS cnt FROM `/Root/.sys/compile_cache_queries`;)";
+
+        auto result = session.GetSession().ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetStatus()); //result.GetIssues().ToString());
+
+        auto resultSet = result.GetResultSet(0);
+        NYdb::TResultSetParser parser(resultSet);
+        UNIT_ASSERT(parser.TryNextRow());
+        auto value = parser.ColumnParser("cnt").GetUint64();
+        return value;
+    }
+
+
+} // namespace
 Y_UNIT_TEST_SUITE(KqpSystemView) {
 
     Y_UNIT_TEST(Join) {
@@ -837,7 +855,104 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
 
         Y_FAIL("Timeout waiting for from partition_stats");
     }
+
+    Y_UNIT_TEST_TWIN(CompileCacheBasic, EnableCompileCacheView) {
+        auto serverSettings = TKikimrSettings().SetKqpSettings({ NKikimrKqp::TKqpSetting() });
+        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableImplicitQueryParameterTypes(true);
+        TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->GetAppData().FeatureFlags.SetEnableCompileCacheView(EnableCompileCacheView);
+        auto tableClient = kikimr.GetTableClient();
+        ui64 initial = SelectCompileCacheCount(tableClient);
+        UNIT_ASSERT_EQUAL_C(initial, 0, "Compile cache is not empty at the beginning");
+        {
+            auto query = R"(DECLARE $k AS Uint64;
+            SELECT COUNT(*) FROM `/Root/EightShard` WHERE Key = $k;
+            )";
+
+            for (ui32 i = 0; i < 3; ++i) {
+                auto session = tableClient.CreateSession().GetValueSync().GetSession();
+                auto paramsBuilder = TParamsBuilder();
+                paramsBuilder.AddParam("$k").Uint64(i).Build();
+                auto preparedResult = session.PrepareDataQuery(query).GetValueSync();
+                auto executedResult = session.ExecuteDataQuery(
+                    query,
+                    TTxControl::BeginTx().CommitTx(),
+                    paramsBuilder.Build()
+                ).GetValueSync();
+                UNIT_ASSERT_C(executedResult.IsSuccess(), executedResult.GetIssues().ToString());
+            }
+            ui64 afterQuery = SelectCompileCacheCount(tableClient);
+            UNIT_ASSERT_EQUAL_C(afterQuery, 2, "Got " << afterQuery << " instead"); // first for sys_view call, second for sum
+        }
+        TString query = R"(
+                SELECT * FROM `/Root/.sys/compile_cache_queries`;
+            )";
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+
+        auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), TExecDataQuerySettings().KeepInQueryCache(true)).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+        auto resultSet = result.GetResultSet(0);
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 3);
+
+        NYdb::TResultSetParser parser(resultSet);
+        while(parser.TryNextRow()) {
+            auto maybeDuration = parser.ColumnParser("CompilationDuration").GetOptionalUint64();
+            UNIT_ASSERT(maybeDuration);
+            auto duration = maybeDuration.value();
+            UNIT_ASSERT_C(duration > 0, "duration is " << duration);
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(CompileCacheCheckWarnings, EnableCompileCacheView) {
+        TKikimrRunner kikimr;
+        kikimr.GetTestServer().GetRuntime()->GetAppData().FeatureFlags.SetEnableCompileCacheView(EnableCompileCacheView);
+        auto client = kikimr.GetQueryClient();
+        auto db = kikimr.GetTableClient();
+        {
+            auto session = db.CreateSession().GetValueSync().GetSession();
+
+            auto createResult = session.ExecuteSchemeQuery(R"(
+                CREATE TABLE TestTable (
+                    Key Int32?,
+                    Value String,
+                    PRIMARY KEY (Key)
+                );
+            )").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(createResult.GetStatus(), EStatus::SUCCESS, createResult.GetIssues());
+            
+            auto insertResult = session.ExecuteDataQuery(R"(
+                INSERT INTO TestTable (Key, Value) VALUES
+                (42, "val"), (NULL, "val1");
+                )", TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(insertResult.IsSuccess(), insertResult.GetIssues().ToString());
+        }
+        
+    
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        TString query = R"(
+            SELECT * FROM TestTable WHERE Key in [42, NULL];
+        )";
+
+        auto compileResult = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), TExecDataQuerySettings().KeepInQueryCache(true)).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(compileResult.GetStatus(), EStatus::SUCCESS);
+
+        TString sysViewQuery = R"(SELECT * FROM `/Root/.sys/compile_cache_queries`;)";
+        auto result = session.ExecuteDataQuery(sysViewQuery,TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+        auto resultSet = result.GetResultSet(0);
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnsCount(), 10);
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 1);
+
+        NYdb::TResultSetParser parser(resultSet);
+        UNIT_ASSERT(parser.TryNextRow());
+        auto value = parser.ColumnParser("Warnings").GetOptionalUtf8();
+        UNIT_ASSERT(value);
+        UNIT_ASSERT_VALUES_EQUAL_C(value, compileResult.GetIssues().ToOneLineString(), "one the one side we have: " << value << " on the other " << compileResult.GetIssues().ToOneLineString());
+
+    }
 }
 
-} // namspace NKqp
+} // namespace NKqp
 } // namespace NKikimr

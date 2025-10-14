@@ -26,6 +26,14 @@ namespace NKikimr::NTable {
             TArrayRef<const TRawTypeValue> key,
             TArrayRef<const TUpdateOp> ops,
             ui64 txId) = 0;
+
+        /**
+         * Called when a new lock is added to the table
+         */
+        virtual void OnLockRowTx(
+            ELockMode mode,
+            TArrayRef<const TRawTypeValue> key,
+            ui64 txId) = 0;
     };
 
 } // namespace NKikimr::NTable

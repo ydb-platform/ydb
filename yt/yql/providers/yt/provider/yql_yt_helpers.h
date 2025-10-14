@@ -53,7 +53,7 @@ TExprNode::TPtr ValidateAndUpdateTablesMeta(const TExprNode::TPtr& input, TStrin
     const TYtTablesData::TPtr& tablesData, bool updateRowSpecType, bool useNativeYtDefaultColumnOrder, ERuntimeClusterSelectionMode mode, TExprContext& ctx);
 TExprNode::TPtr ResetTablesMeta(const TExprNode::TPtr& input, TExprContext& ctx, bool resetTmpOnly, bool isEvaluationInProgress);
 NNodes::TExprBase GetOutTable(NNodes::TExprBase ytOutput);
-std::pair<NNodes::TExprBase, TString> GetOutTableWithCluster(NNodes::TExprBase ytOutput);
+std::pair<NNodes::TExprBase, TString> GetOutTableWithCluster(NNodes::TExprBase ytOutput, bool takeFirstInHybrid = false);
 NNodes::TMaybeNode<NNodes::TCoFlatMapBase> GetFlatMapOverInputStream(NNodes::TCoLambda opLambda, const TParentsMap& parentsMap);
 NNodes::TMaybeNode<NNodes::TCoFlatMapBase> GetFlatMapOverInputStream(NNodes::TCoLambda opLambda);
 IGraphTransformer::TStatus SubstTables(TExprNode::TPtr& input, const TYtState::TPtr& state, bool anonOnly, TExprContext& ctx);
@@ -122,7 +122,7 @@ TExprNode::TPtr GetFlowSettings(TPositionHandle pos, const TYtState& state, TExp
 TVector<TStringBuf> GetKeyFilterColumns(const NNodes::TYtSection& section, EYtSettingTypes kind);
 bool HasNonEmptyKeyFilter(const NNodes::TYtSection& section);
 
-NNodes::TYtOutputOpBase GetOutputOp(NNodes::TYtOutput output);
+NNodes::TYtOutputOpBase GetOutputOp(NNodes::TYtOutput output, bool takeFirstInHybrid = false);
 
 inline bool IsUnorderedOutput(NNodes::TYtOutput out) {
     return out.Mode() && FromString<EYtSettingType>(out.Mode().Cast().Value()) == EYtSettingType::Unordered;
@@ -157,4 +157,6 @@ bool IsYtTableSuitableForArrowInput(NNodes::TExprBase table, std::function<void(
 
 NNodes::TMaybeNode<NNodes::TCoLambda> GetMapLambda(const NNodes::TYtWithUserJobsOpBase& op);
 
+TMaybe<TVector<TString>> BuildLayersPaths(const TExprNode::TPtr& input, const TString& cluster, const NLayers::ILayersRegistryPtr& layersRegistry,
+    const NLayers::ILayersIntegrationPtr& integration, const TYtSettings::TConstPtr& conf, TExprContext& ctx);
 }

@@ -992,6 +992,10 @@ void ToProto(NProto::TJob* protoJob, const NApi::TJob& job)
     YT_OPTIONAL_TO_PROTO(protoJob, pool_tree, job.PoolTree);
     YT_OPTIONAL_TO_PROTO(protoJob, pool, job.Pool);
     YT_OPTIONAL_SET_PROTO(protoJob, job_cookie, job.JobCookie);
+    YT_OPTIONAL_SET_PROTO(protoJob, job_cookie_group_index, job.JobCookieGroupIndex);
+    if (job.MainJobId) {
+        ToProto(protoJob->mutable_main_job_id(), job.MainJobId);
+    }
     if (job.ArchiveFeatures) {
         protoJob->set_archive_features(ToProto(job.ArchiveFeatures));
     }
@@ -1061,6 +1065,11 @@ void FromProto(NApi::TJob* job, const NProto::TJob& protoJob)
     } else {
         job->CoreInfos = TYsonString();
     }
+    if (protoJob.has_main_job_id()) {
+        FromProto(&job->MainJobId, protoJob.main_job_id());
+    } else {
+        job->MainJobId = {};
+    }
     if (protoJob.has_job_competition_id()) {
         FromProto(&job->JobCompetitionId, protoJob.job_competition_id());
     } else {
@@ -1090,6 +1099,7 @@ void FromProto(NApi::TJob* job, const NProto::TJob& protoJob)
     job->PoolTree = YT_OPTIONAL_FROM_PROTO(protoJob, pool_tree);
     job->Pool = YT_OPTIONAL_FROM_PROTO(protoJob, pool);
     job->JobCookie = YT_OPTIONAL_FROM_PROTO(protoJob, job_cookie);
+    job->JobCookieGroupIndex = YT_OPTIONAL_FROM_PROTO(protoJob, job_cookie_group_index);
     if (protoJob.has_archive_features()) {
         job->ArchiveFeatures = TYsonString(protoJob.archive_features());
     } else {
@@ -1404,6 +1414,9 @@ void ToProto(
     if (query.Secrets) {
         protoQuery->set_secrets(ToProto(*query.Secrets));
     }
+    if (query.IsIndexed) {
+        protoQuery->set_is_indexed(*query.IsIndexed);
+    }
 }
 
 void FromProto(
@@ -1447,6 +1460,9 @@ void FromProto(
         query->Secrets = TYsonString(protoQuery.secrets());
     } else if (query->Secrets) {
         query->Secrets = TYsonString{};
+    }
+    if (protoQuery.has_is_indexed()) {
+        query->IsIndexed = protoQuery.is_indexed();
     }
 }
 
@@ -1966,9 +1982,8 @@ void ParseRequest(
 void FillRequest(
     TReqPingDistributedWriteSession* req,
     const TSignedDistributedWriteSessionPtr session,
-    const TDistributedWriteSessionPingOptions& options)
+    const TDistributedWriteSessionPingOptions& /*options*/)
 {
-    Y_UNUSED(options);
     req->set_signed_session(ToProto(ConvertToYsonString(session)));
 }
 

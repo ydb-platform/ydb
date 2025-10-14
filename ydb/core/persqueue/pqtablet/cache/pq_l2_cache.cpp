@@ -95,7 +95,11 @@ void TPersQueueCacheL2::AddBlobs(const TActorContext& ctx, ui64 tabletId, const 
             continue;
         }
 
-        AFL_ENSURE(CurrentSize <= Cache.Size() * MAX_BLOB_SIZE);
+        AFL_ENSURE(CurrentSize <= Cache.Size() * MAX_BLOB_SIZE)
+            ("Key", key.ToString())
+            ("CurrentSize", CurrentSize)
+            ("Cache.Size", Cache.Size())
+            ("MAX_BLOB_SIZE", MAX_BLOB_SIZE);
 
         CurrentSize += blob.Value->DataSize();
 

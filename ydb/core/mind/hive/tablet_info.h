@@ -310,7 +310,7 @@ public:
         return std::get<NMetrics::EResource::Counter>(GetResourceCurrentValues()) > 0;
     }
 
-    void NotifyOnRestart(TString status, TSideEffects& sideEffects);
+    void NotifyOnRestart(const TString& status, TSideEffects& sideEffects);
 };
 
 

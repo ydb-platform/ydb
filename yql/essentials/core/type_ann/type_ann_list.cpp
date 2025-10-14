@@ -26,22 +26,6 @@ namespace {
         return x->GetTypeAnn() && x->GetTypeAnn()->GetKind() == ETypeAnnotationKind::EmptyList;
     };
 
-    bool IsFieldSubset(const TStructExprType& structType, const TStructExprType& sourceStructType) {
-        for (auto& item : structType.GetItems()) {
-            auto name = item->GetName();
-            auto type = item->GetItemType();
-            if (auto idx = sourceStructType.FindItem(name)) {
-                if (sourceStructType.GetItems()[*idx]->GetItemType() == type) {
-                    continue;
-                }
-            }
-
-            return false;
-        }
-
-        return true;
-    }
-
     TExprNode::TPtr RewriteMultiAggregate(const TExprNode& node, TExprContext& ctx) {
         auto exprLambda = node.Child(1);
         const TStructExprType* structType = nullptr;
@@ -1363,11 +1347,6 @@ namespace {
 
     template IGraphTransformer::TStatus MultiMapWrapper<true>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
     template IGraphTransformer::TStatus MultiMapWrapper<false>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
-
-    TExprNodeBuilder& AddChildren(TExprNodeBuilder& builder, ui32 index, const TExprNode::TPtr& input) {
-        const auto i = index;
-        return i >= input->ChildrenSize() ? builder : AddChildren(builder.Add(i, input->ChildPtr(i)), ++index, input);
-    }
 
     template<ui32 MinArgsCount = 2U, ui32 MaxArgsCount = MinArgsCount, bool UseFlatMap = false>
     IGraphTransformer::TStatus OptListWrapperImpl(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx,

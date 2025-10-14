@@ -56,6 +56,7 @@ class TCompilePhysicalQueryTransformer : public TSyncTransformerBase {
 public:
     TCompilePhysicalQueryTransformer(
         const TString& cluster,
+        const TString& database,
         TKqlTransformContext& transformCtx,
         TKqpOptimizeContext& optimizeCtx,
         TTypeAnnotationContext& typesCtx,
@@ -63,6 +64,7 @@ public:
         const TKikimrConfiguration::TPtr& config
     )
         : Cluster(cluster)
+        , Database(database)
         , TransformCtx(transformCtx)
         , OptimizeCtx(optimizeCtx)
         , TypesCtx(typesCtx)
@@ -80,7 +82,7 @@ public:
             TKqpPhysicalQuery physicalQuery(input);
 
             YQL_ENSURE(TransformCtx.DataQueryBlocks);
-            auto compiler = CreateKqpQueryCompiler(Cluster, OptimizeCtx.Tables, FuncRegistry, TypesCtx, Config);
+            auto compiler = CreateKqpQueryCompiler(Cluster, Database, OptimizeCtx.Tables, FuncRegistry, TypesCtx, Config);
             auto ret = compiler->CompilePhysicalQuery(physicalQuery, *TransformCtx.DataQueryBlocks, *preparedQuery.MutablePhysicalQuery(), ctx);
             if (!ret) {
                 ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), "Failed to compile physical query."));
@@ -99,6 +101,7 @@ public:
 
 private:
     const TString Cluster;
+    const TString Database;
     TKqlTransformContext& TransformCtx;
     TKqpOptimizeContext& OptimizeCtx;
     TTypeAnnotationContext& TypesCtx;
@@ -333,6 +336,7 @@ private:
             .Add(CreateKqpFinalizingOptTransformer(OptimizeCtx), "FinalizingOptimize")
             .Add(CreateKqpQueryPhasesTransformer(), "QueryPhases")
             .Add(CreateKqpQueryEffectsTransformer(OptimizeCtx), "QueryEffects")
+            .Add(CreateKqpSinkPrecomputeTransformer(OptimizeCtx), "KqpSinkPrecompute")
             .Add(CreateKqpCheckPhysicalQueryTransformer(), "CheckKqlPhysicalQuery")
             .Build(false));
 
@@ -372,16 +376,6 @@ private:
             //.Add(CreateKqpQueryEffectsTransformer(OptimizeCtx), "QueryEffects")
             //.Add(CreateKqpCheckPhysicalQueryTransformer(), "CheckKqlPhysicalQuery")
             .Build(false);
-
-        auto physicalKqpSinkPrecomputeTransformer = CreateKqpQueryBlocksTransformer(TTransformationPipeline(typesCtx)
-            .AddServiceTransformers()
-            .Add(Log("KqpSinkPrecompute"), "LogKqpSinkPrecompute")
-            .AddTypeAnnotationTransformer(CreateKqpTypeAnnotationTransformer(Cluster, sessionCtx->TablesPtr(), *typesCtx, Config))
-            .AddPostTypeAnnotation(/* forSubgraph */ true)
-            .Add(
-                CreateKqpSinkPrecomputeTransformer(OptimizeCtx),
-                "KqpSinkPrecompute")
-            .Build(false));
 
         auto physicalBuildTxsTransformer = CreateKqpQueryBlocksTransformer(TTransformationPipeline(typesCtx)
             .AddServiceTransformers()
@@ -458,6 +452,7 @@ private:
             .Build(false);
 
         TAutoPtr<IGraphTransformer> compilePhysicalQuery(new TCompilePhysicalQueryTransformer(Cluster,
+            SessionCtx->GetDatabase(),
             *TransformCtx,
             *OptimizeCtx,
             *typesCtx,
@@ -465,6 +460,7 @@ private:
             Config));
 
         TAutoPtr<IGraphTransformer> newRBOCompilePhysicalQuery(new TCompilePhysicalQueryTransformer(Cluster,
+            SessionCtx->GetDatabase(),
             *TransformCtx,
             *OptimizeCtx,
             *typesCtx,
@@ -495,8 +491,6 @@ private:
         Transformer = CreateCompositeGraphTransformer(
             {
                 TTransformStage{ physicalOptimizeTransformer, "PhysicalOptimize", TIssuesIds::DEFAULT_ERROR },
-                LogStage("PhysicalBuildSinkPrecompute"),
-                TTransformStage{ physicalKqpSinkPrecomputeTransformer, "PhysicalBuildSinkPrecompute", TIssuesIds::DEFAULT_ERROR },
                 LogStage("PhysicalOptimize"),
                 TTransformStage{ physicalBuildTxsTransformer, "PhysicalBuildTxs", TIssuesIds::DEFAULT_ERROR },
                 LogStage("PhysicalBuildTxs"),

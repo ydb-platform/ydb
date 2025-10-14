@@ -47,6 +47,7 @@ public:
         , SchemeCacheRequestTimeout(SCHEME_CACHE_REQUEST_TIMEOUT)
         , LookupStrategy(settings.GetLookupStrategy())
         , StreamLookupWorker(CreateStreamLookupWorker(std::move(settings), args.TypeEnv, args.HolderFactory, args.InputDesc))
+        , IsolationLevel(settings.GetIsolationLevel())
         , Counters(counters)
         , LookupActorSpan(TWilsonKqp::LookupActor, std::move(args.TraceId), "LookupActor")
     {
@@ -305,8 +306,12 @@ private:
         ReadRowsCount += replyResultStats.ReadRowsCount;
         ReadBytesCount += replyResultStats.ReadBytesCount;
 
-        if (!StreamLookupWorker->IsOverloaded()) {
+        auto overloaded = StreamLookupWorker->IsOverloaded();
+        if (!overloaded.has_value()) {
             FetchInputRows();
+        } else {
+            CA_LOG_N("Pausing stream lookup because it's overloaded by reason: "
+                << overloaded.value_or("empty"));
         }
 
         if (Partitioning) {
@@ -316,9 +321,10 @@ private:
         const bool inputRowsFinished = LastFetchStatus == NUdf::EFetchStatus::Finish;
         const bool allReadsFinished = AllReadsFinished();
         const bool allRowsProcessed = StreamLookupWorker->AllRowsProcessed();
+        const bool hasPendingResults = StreamLookupWorker->HasPendingResults();
 
-        if (inputRowsFinished && allReadsFinished && !allRowsProcessed) {
-            // all reads are completed, but we have unprocessed rows
+        if (hasPendingResults) {
+            // has more results
             Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
         }
 
@@ -379,6 +385,9 @@ private:
             return RuntimeError(errorMsg, NYql::NDqProto::StatusIds::SCHEME_ERROR);
         }
 
+        if (IsolationLevel == NKikimrKqp::EIsolationLevel::ISOLATION_LEVEL_SNAPSHOT_RO) {
+            YQL_ENSURE(!LockTxId, "SnapshotReadOnly should not take locks");
+        }
         LookupActorStateSpan.EndOk();
 
         auto& resultSet = ev->Get()->Request->ResultSet;
@@ -811,6 +820,7 @@ private:
     size_t TotalRetryAttempts = 0;
     size_t TotalResolveShardsAttempts = 0;
     bool ResolveShardsInProgress = false;
+    NKikimrKqp::EIsolationLevel IsolationLevel;
 
     // stats
     ui64 ReadRowsCount = 0;

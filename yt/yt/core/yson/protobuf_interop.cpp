@@ -149,7 +149,7 @@ TString ToUnderscoreCase(const TString& protobufName)
 
 TString DeriveYsonName(const TString& protobufName, const google::protobuf::FileDescriptor* fileDescriptor)
 {
-    if (fileDescriptor->options().GetExtension(NYT::NYson::NProto::derive_underscore_case_names)
+    if (fileDescriptor->options().GetExtension(NYson::NProto::derive_underscore_case_names)
         || GetProtobufInteropConfig()->ForceSnakeCaseNames)
     {
         return ToUnderscoreCase(protobufName);
@@ -276,7 +276,7 @@ public:
 
         return GetYsonNameFromDescriptor(
             descriptor,
-            FromProto<TString>(descriptor->options().GetExtension(NYT::NYson::NProto::field_name)));
+            FromProto<TString>(descriptor->options().GetExtension(NYson::NProto::field_name)));
     }
 
     //! This method is called while reflecting types.
@@ -285,7 +285,7 @@ public:
         YT_ASSERT_SPINLOCK_AFFINITY(Lock_);
 
         std::vector<TStringBuf> aliases;
-        const auto& extensions = descriptor->options().GetRepeatedExtension(NYT::NYson::NProto::field_name_alias);
+        const auto& extensions = descriptor->options().GetRepeatedExtension(NYson::NProto::field_name_alias);
         for (const auto& alias : extensions) {
             aliases.push_back(InternString(FromProto<TString>(alias)));
         }
@@ -299,7 +299,7 @@ public:
 
         return GetYsonNameFromDescriptor(
             descriptor,
-            FromProto<TString>(descriptor->options().GetExtension(NYT::NYson::NProto::enum_value_name)));
+            FromProto<TString>(descriptor->options().GetExtension(NYson::NProto::enum_value_name)));
     }
 
     const TProtobufMessageType* ReflectMessageType(const Descriptor* descriptor)
@@ -465,12 +465,12 @@ public:
             descriptor->message_type()) : nullptr)
         , EnumType_(descriptor->type() == FieldDescriptor::TYPE_ENUM ? registry->ReflectEnumTypeInternal(
             descriptor->enum_type()) : nullptr)
-        , YsonString_(descriptor->options().GetExtension(NYT::NYson::NProto::yson_string))
-        , YsonMap_(descriptor->options().GetExtension(NYT::NYson::NProto::yson_map))
-        , Required_(descriptor->options().GetExtension(NYT::NYson::NProto::required))
+        , YsonString_(descriptor->options().GetExtension(NYson::NProto::yson_string))
+        , YsonMap_(descriptor->options().GetExtension(NYson::NProto::yson_map))
+        , Required_(descriptor->options().GetExtension(NYson::NProto::required))
         , Converter_(registry->FindMessageBytesFieldConverter(descriptor->containing_type(), descriptor->index()))
-        , EnumYsonStorageType_(TryGetExtension(descriptor, NYT::NYson::NProto::enum_yson_storage_type))
-        , StrictEnumValueCheck_(TryGetExtension(descriptor, NYT::NYson::NProto::strict_enum_value_check))
+        , EnumYsonStorageType_(TryGetExtension(descriptor, NYson::NProto::enum_yson_storage_type))
+        , StrictEnumValueCheck_(TryGetExtension(descriptor, NYson::NProto::strict_enum_value_check))
     {
         if (YsonMap_ && !descriptor->is_map()) {
             THROW_ERROR_EXCEPTION("Field %v is not a map and cannot be annotated with \"yson_map\" option",
@@ -585,9 +585,9 @@ public:
     {
         if (EnumYsonStorageType_) {
             switch (*EnumYsonStorageType_) {
-                case NYT::NYson::NProto::EEnumYsonStorageType::EYST_STRING:
+                case NYson::NProto::EEnumYsonStorageType::EYST_STRING:
                     return EEnumYsonStorageType::String;
-                case NYT::NYson::NProto::EEnumYsonStorageType::EYST_INT:
+                case NYson::NProto::EEnumYsonStorageType::EYST_INT:
                     return EEnumYsonStorageType::Int;
             }
         }
@@ -741,7 +741,7 @@ private:
     const bool YsonMap_;
     const bool Required_;
     const std::optional<TProtobufMessageBytesFieldConverter> Converter_;
-    const std::optional<NYT::NYson::NProto::EEnumYsonStorageType> EnumYsonStorageType_;
+    const std::optional<NYson::NProto::EEnumYsonStorageType> EnumYsonStorageType_;
     const std::optional<bool> StrictEnumValueCheck_;
 };
 
@@ -753,7 +753,8 @@ public:
     TProtobufMessageType(TProtobufTypeRegistry* registry, const Descriptor* descriptor)
         : Registry_(registry)
         , Underlying_(descriptor)
-        , AttributeDictionary_(descriptor->options().GetExtension(NYT::NYson::NProto::attribute_dictionary))
+        , AttributeDictionary_(descriptor->options().GetExtension(NYson::NProto::attribute_dictionary))
+        , UnknownFieldNumber_(descriptor->options().GetExtension(NYson::NProto::unknown_yson_field_number))
         , FullName_(FromProto<TString>(Underlying_->full_name()))
         , Converter_(registry->FindMessageTypeConverter(descriptor))
     { }
@@ -785,6 +786,11 @@ public:
     bool IsAttributeDictionary() const
     {
         return AttributeDictionary_;
+    }
+
+    int GetUnknownFieldNumber() const
+    {
+        return UnknownFieldNumber_;
     }
 
     const TString& GetFullName() const
@@ -878,6 +884,7 @@ private:
     TProtobufTypeRegistry* const Registry_;
     const Descriptor* const Underlying_;
     const bool AttributeDictionary_;
+    const int UnknownFieldNumber_;
 
     const TString FullName_;
 
@@ -1576,9 +1583,18 @@ private:
         if (!field) {
             auto path = NYPath::YPathJoin(YPathStack_.GetPath(), key);
             auto unknownYsonFieldsMode = Options_.UnknownYsonFieldModeResolver(path);
-            auto onFinishForwarding = [this] (auto& writer) {
+            auto onFinishForwarding = [this, type, unknownYsonFieldsMode] (auto& writer) {
+                auto unknownFieldNumber = type->GetUnknownFieldNumber();
+                THROW_ERROR_EXCEPTION_IF(type->FindFieldByNumber(unknownFieldNumber),
+                    "Cannot use %Qlv unknown fields mode "
+                    "because message %Qv already has field with unknown field number %v; "
+                    "try using `NYT.NYson.NProto.unknown_yson_field_number` message option",
+                    unknownYsonFieldsMode,
+                    type->GetFullName(),
+                    unknownFieldNumber);
+
                 writer.Flush();
-                BodyCodedStream_.WriteTag(google::protobuf::internal::WireFormatLite::MakeTag(UnknownYsonFieldNumber, WireFormatLite::WIRETYPE_LENGTH_DELIMITED));
+                BodyCodedStream_.WriteTag(google::protobuf::internal::WireFormatLite::MakeTag(unknownFieldNumber, WireFormatLite::WIRETYPE_LENGTH_DELIMITED));
                 WriteKeyValuePair(UnknownYsonFieldKey_, UnknownYsonFieldValueString_);
             };
             if (unknownYsonFieldsMode == EUnknownYsonFieldsMode::Keep) {
@@ -2469,21 +2485,23 @@ private:
 
         auto wireType = WireFormatLite::GetTagWireType(tag);
         auto fieldNumber = WireFormatLite::GetTagFieldNumber(tag);
-        if (fieldNumber == UnknownYsonFieldNumber) {
-            if (wireType != WireFormatLite::WIRETYPE_LENGTH_DELIMITED) {
-                THROW_ERROR_EXCEPTION("Invalid wire type %v while parsing unknown field at %v",
-                    static_cast<int>(wireType),
-                    YPathStack_.GetHumanReadablePath())
-                    << TErrorAttribute("ypath", YPathStack_.GetPath());
-            }
-
-            handleRepeated();
-            ParseKeyValuePair();
-            return true;
-        }
-
         const auto* field = type->FindFieldByNumber(fieldNumber);
+
+        // NB: If field with number equal to `UnknownFieldNumber` exists, treat it just like every other field.
+        // Serialization layer already disallows such mismatches.
         if (!field) {
+            if (fieldNumber == type->GetUnknownFieldNumber()) {
+                if (wireType != WireFormatLite::WIRETYPE_LENGTH_DELIMITED) {
+                    THROW_ERROR_EXCEPTION("Invalid wire type %v while parsing unknown field at %v",
+                        static_cast<int>(wireType),
+                        YPathStack_.GetHumanReadablePath())
+                        << TErrorAttribute("ypath", YPathStack_.GetPath());
+                }
+
+                handleRepeated();
+                ParseKeyValuePair();
+                return true;
+            }
             if (Options_.SkipUnknownFields || type->IsReservedFieldNumber(fieldNumber)) {
                 switch (wireType) {
                     case WireFormatLite::WIRETYPE_VARINT: {

@@ -8,7 +8,7 @@ LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
 SUBSCRIBER(g:cpp-contrib)
 
-VERSION(21.1.0)
+VERSION(21.1.2)
 
 PEERDIR(
     contrib/libs/afl/llvm_mode

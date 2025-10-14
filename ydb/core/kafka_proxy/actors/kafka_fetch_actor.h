@@ -9,10 +9,12 @@
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/library/aclib/aclib.h>
 
-
 namespace NKafka {
 
+struct TestAccessor;    
+
 class TKafkaFetchActor: public NActors::TActorBootstrapped<TKafkaFetchActor> {
+    friend struct TestAccessor;
 public:
     TKafkaFetchActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TFetchRequestData>& message)
         : Context(context)
@@ -35,7 +37,7 @@ private:
     void Handle(NKikimr::TEvPQ::TEvFetchResponse::TPtr& ev, const TActorContext& ctx);
 
     void SendFetchRequests(const TActorContext& ctx);
-    void PrepareFetchRequestData(const size_t topicIndex, TVector<NKikimr::NPQ::TPartitionFetchRequest>& partPQRequests);
+    TVector<NKikimr::NPQ::TPartitionFetchRequest> PrepareFetchRequestData(const size_t topicIndex);
     void HandleErrorResponse(const NKikimr::TEvPQ::TEvFetchResponse::TPtr& ev, TFetchResponseData::TFetchableTopicResponse& topicResponse);
     void HandleSuccessResponse(const NKikimr::TEvPQ::TEvFetchResponse::TPtr& ev, TFetchResponseData::TFetchableTopicResponse& topicResponse, const TActorContext& ctx);
     void FillRecordsBatch(const NKikimrClient::TPersQueueFetchResponse_TPartResult& partPQResponse, TKafkaRecordBatch& recordsBatch, const TActorContext& ctx);

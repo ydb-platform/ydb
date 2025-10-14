@@ -157,6 +157,7 @@ enum class ETableKind {
     KindSyncIndexTable = 2,
     KindAsyncIndexTable = 3,
     KindVectorIndexTable = 4,
+    KindFulltextIndexTable = 5,
 };
 
 struct TSchemeCacheNavigate {

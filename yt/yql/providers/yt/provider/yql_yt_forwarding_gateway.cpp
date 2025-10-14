@@ -137,12 +137,17 @@ void TYtForwardingGatewayBase::AddCluster(const TYtClusterConfig& config) {
     Slave_->AddCluster(config);
 }
 
-IYtGateway::TClusterConnectionResult TYtForwardingGatewayBase::GetClusterConnection(const TClusterConnectionOptions&& options) {
+IYtGateway::TClusterConnectionResult TYtForwardingGatewayBase::GetClusterConnection(const TClusterConnectionOptions&& options) const {
     return Slave_->GetClusterConnection(std::move(options));
 }
 
 TMaybe<TString> TYtForwardingGatewayBase::GetTableFilePath(const TGetTableFilePathOptions&& options) {
     return Slave_->GetTableFilePath(std::move(options));
 }
+
+NThreading::TFuture<IYtGateway::TLayersSnapshotResult> TYtForwardingGatewayBase::SnapshotLayers(TSnapshotLayersOptions&& options) {
+    return Slave_->SnapshotLayers(std::move(options));
+}
+
 
 } // namspace NYql

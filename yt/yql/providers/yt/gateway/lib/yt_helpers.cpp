@@ -99,7 +99,7 @@ TString TransformPath(TStringBuf tmpFolder, TStringBuf name, bool isTempTable, T
         return path.substr(2);
     }
 
-    if (isTempTable && !tmpFolder && path.StartsWith("tmp/")) {
+    if (isTempTable && !tmpFolder && path.StartsWith("tmp/") && !path.StartsWith("tmp/yql/")) {
         TStringBuilder builder;
         builder << "tmp/yql/";
         if (userName) {

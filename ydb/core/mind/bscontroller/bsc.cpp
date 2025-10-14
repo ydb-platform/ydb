@@ -299,7 +299,7 @@ void TBlobStorageController::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
     const bool isFirstStorageConfig = !StorageConfig;
     Y_DEBUG_ABORT_UNLESS(!isFirstStorageConfig || CurrentStateFunc() == &TThis::StateInit);
 
-    StorageConfig = std::move(ev->Get()->Config);
+    auto prevStorageConfig = std::exchange(StorageConfig, std::move(ev->Get()->Config));
     auto prevBridgeInfo = std::exchange(BridgeInfo, std::move(ev->Get()->BridgeInfo));
     SelfManagementEnabled = ev->Get()->SelfManagementEnabled;
 
@@ -397,6 +397,13 @@ void TBlobStorageController::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
 
     ApplyStaticGroupUpdateForSyncers(prevStaticGroups);
     UpdateWaitingGroups(groupsToCheck);
+
+    if (Loaded && BridgeInfo && (!prevStorageConfig || prevStorageConfig->GetClusterState().GetGeneration() <
+            StorageConfig->GetClusterState().GetGeneration())) {
+        // cluster state has changed -- we need to recheck groups
+        RecheckUnsyncedBridgePiles = true;
+        CheckUnsyncedBridgePiles();
+    }
 }
 
 void TBlobStorageController::Handle(TEvents::TEvUndelivered::TPtr ev) {
@@ -493,7 +500,6 @@ void TBlobStorageController::ApplyBscSettings(const NKikimrConfig::TBlobStorageC
 
 std::unique_ptr<TEvBlobStorage::TEvControllerConfigRequest> TBlobStorageController::BuildConfigRequestFromStorageConfig(
         const NKikimrBlobStorage::TStorageConfig& storageConfig, const THostRecordMap& hostRecords, bool validationMode) {
-
     if (Boxes.size() > 1 || !storageConfig.HasBlobStorageConfig()) {
         return nullptr;
     }
@@ -593,6 +599,8 @@ std::unique_ptr<TEvBlobStorage::TEvControllerConfigRequest> TBlobStorageControll
         request->SetRollback(true);
     }
 
+    request->MutableStorageConfig()->PackFrom(storageConfig);
+
     if (request->CommandSize()) {
         return ev;
     }
@@ -601,8 +609,6 @@ std::unique_ptr<TEvBlobStorage::TEvControllerConfigRequest> TBlobStorageControll
 }
 
 void TBlobStorageController::ApplyStorageConfig(bool ignoreDistconf) {
-    CheckUnsyncedBridgePiles();
-
     if (!StorageConfig->HasBlobStorageConfig()) {
         return;
     }
@@ -757,21 +763,24 @@ void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerDistconfRequest
                 break;
             }
 
-            const TString& effectiveConfig = storageYaml ? *storageYaml : *mainYaml;
             NKikimrBlobStorage::TStorageConfig storageConfig;
-
-            try {
-                NKikimrConfig::TAppConfig appConfig = NYaml::Parse(effectiveConfig);
-                TString errorReason;
-                if (!NKikimr::NStorage::DeriveStorageConfig(appConfig, &storageConfig, &errorReason)) {
+            if (record.HasStorageConfig()) {
+                record.GetStorageConfig().UnpackTo(&storageConfig);
+            } else {
+                const TString& effectiveConfig = storageYaml ? *storageYaml : *mainYaml;
+                try {
+                    NKikimrConfig::TAppConfig appConfig = NYaml::Parse(effectiveConfig);
+                    TString errorReason;
+                    if (!NKikimr::NStorage::DeriveStorageConfig(appConfig, &storageConfig, &errorReason)) {
+                        rr.SetStatus(NKikimrBlobStorage::TEvControllerDistconfResponse::Error);
+                        rr.SetErrorReason("failed to derive storage config: " + errorReason);
+                        break;
+                    }
+                } catch (const std::exception& ex) {
                     rr.SetStatus(NKikimrBlobStorage::TEvControllerDistconfResponse::Error);
-                    rr.SetErrorReason("failed to derive storage config: " + errorReason);
+                    rr.SetErrorReason(TStringBuilder() << "failed to parse YAML: " << ex.what());
                     break;
                 }
-            } catch (const std::exception& ex) {
-                rr.SetStatus(NKikimrBlobStorage::TEvControllerDistconfResponse::Error);
-                rr.SetErrorReason(TStringBuilder() << "failed to parse YAML: " << ex.what());
-                break;
             }
 
             const ui64 cookie = NextValidationCookie++;
@@ -829,12 +838,16 @@ void TBlobStorageController::SetHostRecords(THostRecordMap hostRecords) {
     }
 
     // there were no host records, this is the first call, so we must initialize SelfHeal now and start booting tablet
-    if (auto *appData = AppData(); appData && appData->Icb) {
-        EnableSelfHealWithDegraded = std::make_shared<TControlWrapper>(0, 0, 1);
-        appData->Icb->RegisterSharedControl(*EnableSelfHealWithDegraded,
-            "BlobStorageControllerControls.EnableSelfHealWithDegraded");
+    if (auto *appData = AppData()) {
+        if (appData->Icb) {
+            EnableSelfHealWithDegraded = std::make_shared<TControlWrapper>(0, 0, 1);
+            TControlBoard::RegisterSharedControl(*EnableSelfHealWithDegraded,
+                appData->Icb->BlobStorageControllerControls.EnableSelfHealWithDegraded);
+        }
     }
     Y_ABORT_UNLESS(!SelfHealId);
+
+    SelfHealSettings = ParseSelfHealSettings(StorageConfig);
     SelfHealId = Register(CreateSelfHealActor());
 
     ClusterBalancingSettings = ParseClusterBalancingSettings(StorageConfig);
@@ -997,6 +1010,9 @@ STFUNC(TBlobStorageController::StateWork) {
             }
         break;
     }
+
+    // start any pending bridge syncers
+    ProcessSyncers();
 
     if (const TDuration time = TDuration::Seconds(timer.Passed()); time >= TDuration::MilliSeconds(100)) {
         STLOG(PRI_ERROR, BS_CONTROLLER, BSC00, "StateWork event processing took too much time", (Type, type),

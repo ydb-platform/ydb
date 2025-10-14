@@ -203,7 +203,7 @@ namespace NKikimr::NPersQueueTests {
                 } else if (auto* e = std::get_if<NYdb::NTopic::TReadSessionEvent::TEndPartitionSessionEvent>(&*event)) {
                     e->Confirm();
                     return {};
-                } else if (auto* e = std::get_if<NYdb::NTopic::TReadSessionEvent::TPartitionSessionClosedEvent>(&*event)) {
+                } else if (std::get_if<NYdb::NTopic::TReadSessionEvent::TPartitionSessionClosedEvent>(&*event)) {
                     return {};
                 } else if (std::get_if<NYdb::NTopic::TSessionClosedEvent>(&*event)) {
                     return {};

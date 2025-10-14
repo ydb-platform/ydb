@@ -2239,6 +2239,7 @@ TRestoreResult TRestoreClient::RestoreConsumers(const TString& topicPath, const 
                 .BeginAddConsumer()
                     .ConsumerName(consumer.GetConsumerName())
                     .Important(consumer.GetImportant())
+                    .AvailabilityPeriod(consumer.GetAvailabilityPeriod())
                     .Attributes(consumer.GetAttributes())
                 .EndAddConsumer()
         ).GetValueSync();

@@ -514,6 +514,7 @@ void TCreateTableFormatter::Format(const TableIndex& index) {
     Stream << "\tINDEX ";
     EscapeName(index.name(), Stream);
     std::optional<KMeansTreeSettings> kMeansTreeSettings;
+    std::optional<FulltextIndexSettings> fulltextIndexSettings;
     switch (index.type_case()) {
         case TableIndex::kGlobalIndex: {
             Stream << " GLOBAL SYNC ON ";
@@ -530,6 +531,11 @@ void TCreateTableFormatter::Format(const TableIndex& index) {
         case TableIndex::kGlobalVectorKmeansTreeIndex: {
             Stream << " GLOBAL USING vector_kmeans_tree ON ";
             kMeansTreeSettings = index.global_vector_kmeans_tree_index().vector_settings();
+            break;
+        }
+        case Ydb::Table::TableIndex::kGlobalFulltextIndex: {
+            Stream << " GLOBAL USING fulltext ON ";
+            fulltextIndexSettings = index.global_fulltext_index().fulltext_settings();
             break;
         }
         case Ydb::Table::TableIndex::TYPE_NOT_SET:
@@ -622,6 +628,10 @@ void TCreateTableFormatter::Format(const TableIndex& index) {
 
         Stream << ")";
     }
+
+    if (fulltextIndexSettings) {
+        Y_ENSURE("todo not implemented");
+    }
 }
 
 bool TCreateTableFormatter::Format(const TFamilyDescription& familyDesc) {
@@ -665,8 +675,20 @@ bool TCreateTableFormatter::Format(const TFamilyDescription& familyDesc) {
         }
     }
 
+    TString cacheMode;
+    if (familyDesc.HasColumnCacheMode()) {
+        switch (familyDesc.GetColumnCacheMode()) {
+            case NKikimrSchemeOp::ColumnCacheModeRegular:
+                cacheMode = "regular";
+                break;
+            case NKikimrSchemeOp::ColumnCacheModeTryKeepInMemory:
+                cacheMode = "in_memory";
+                break;
+        }
+    }
+
     if (familyName == "default") {
-        if (!dataName && !compression) {
+        if (!dataName && !compression && !cacheMode) {
             return false;
         }
     }
@@ -685,6 +707,11 @@ bool TCreateTableFormatter::Format(const TFamilyDescription& familyDesc) {
 
     if (compression) {
         Stream << del << "COMPRESSION = " << "\"" << compression << "\"";
+        del = ", ";
+    }
+
+    if (cacheMode) {
+        Stream << del << "CACHE_MODE = " << "\"" << cacheMode << "\"";
     }
 
     Stream << ")";

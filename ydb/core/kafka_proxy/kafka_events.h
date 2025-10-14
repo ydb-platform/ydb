@@ -42,6 +42,7 @@ struct TEvKafka {
         EvTransactionActorDied,
         EvGetCountersRequest,
         EvGetCountersResponse,
+        EvFetchRequest,
         EvResponse = EvRequest + 256,
         EvInternalEvents = EvResponse + 256,
         EvEnd
@@ -100,6 +101,16 @@ struct TEvKafka {
 
         ui64 CorrelationId;
         const TMessagePtr<THeartbeatRequestData> Request;
+    };
+
+    struct TEvFetchRequest : public TEventLocal<TEvFetchRequest, EvFetchRequest> {
+        TEvFetchRequest(const ui64 correlationId, const TMessagePtr<TFetchRequestData>& request)
+        : CorrelationId(correlationId)
+        , Request(request)
+        {}
+
+        ui64 CorrelationId;
+        const TMessagePtr<TFetchRequestData> Request;
     };
 
     struct TEvResponse : public TEventLocal<TEvResponse, EvResponse> {

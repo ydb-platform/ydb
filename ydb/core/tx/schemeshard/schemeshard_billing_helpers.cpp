@@ -44,14 +44,6 @@ TMeteringStats& operator -= (TMeteringStats& value, const TMeteringStats& other)
     return value;
 }
 
-void TMeteringStatsHelper::TryFixOldFormat(TMeteringStats& value) {
-    // old format: assign upload to read
-    if (value.GetReadRows() == 0 && value.GetUploadRows() != 0) {
-        value.SetReadRows(value.GetUploadRows());
-        value.SetReadBytes(value.GetUploadBytes());
-    }
-}
-
 TMeteringStats TMeteringStatsHelper::ZeroValue() {
     // this method the only purpose is to beautifully print zero stats instead of empty protobuf or with missing fields
     TMeteringStats value;

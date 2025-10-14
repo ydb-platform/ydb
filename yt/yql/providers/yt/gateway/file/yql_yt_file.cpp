@@ -1613,13 +1613,18 @@ private:
         return res;
     }
 
-    TClusterConnectionResult GetClusterConnection(const TClusterConnectionOptions&& /*options*/) override {
+    TClusterConnectionResult GetClusterConnection(const TClusterConnectionOptions&& /*options*/) const override {
         return TClusterConnectionResult();
     }
 
     TMaybe<TString> GetTableFilePath(const TGetTableFilePathOptions&& options) override {
         return Services_->GetTablePath(options.Cluster(), options.Path(), options.IsTemp());
     }
+
+    NThreading::TFuture<IYtGateway::TLayersSnapshotResult> SnapshotLayers(TSnapshotLayersOptions&&) override {
+        return MakeFuture<IYtGateway::TLayersSnapshotResult>();
+    }
+
 
 private:
     TYtFileServices::TPtr Services_;

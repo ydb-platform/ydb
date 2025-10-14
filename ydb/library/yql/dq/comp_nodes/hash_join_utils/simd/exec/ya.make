@@ -29,6 +29,7 @@ END()
 RECURSE(
     add_columns
     pack_tuple
+    runtime_dispatching
     stream_store
     tuples_to_bucket
 )

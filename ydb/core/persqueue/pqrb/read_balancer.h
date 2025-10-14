@@ -104,6 +104,11 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>,
     void Handle(TEvPersQueue::TEvGetReadSessionsInfo::TPtr &ev, const TActorContext& ctx);
     // End balancing
 
+    // Begin kafka integration
+    void Handle(TEvPersQueue::TEvBalancingSubscribe::TPtr &ev, const TActorContext& ctx);
+    void Handle(TEvPersQueue::TEvBalancingUnsubscribe::TPtr &ev, const TActorContext& ctx);
+    // End kafka integration
+
     TStringBuilder LogPrefix() const;
 
     TActorId GetPipeClient(const ui64 tabletId, const TActorContext&);
@@ -205,6 +210,7 @@ private:
     std::unordered_set<ui64> PipesRequested;
 
     std::vector<::NMonitoring::TDynamicCounters::TCounterPtr> AggregatedCounters;
+    std::vector<::NMonitoring::TDynamicCounters::TCounterPtr> AggregatedCompactionCounters;
 
     NMonitoring::TDynamicCounterPtr DynamicCounters;
     NMonitoring::TDynamicCounters::TCounterPtr ActivePartitionCountCounter;
@@ -290,6 +296,9 @@ public:
             HFunc(NSchemeShard::TEvSchemeShard::TEvSubDomainPathIdFound, Handle);
             HFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
             HFunc(TEvPersQueue::TEvGetPartitionsLocation, HandleOnInit);
+            // From kafka
+            HFunc(TEvPersQueue::TEvBalancingSubscribe, Handle);
+            HFunc(TEvPersQueue::TEvBalancingUnsubscribe, Handle);
             default:
                 StateInitImpl(ev, SelfId());
                 break;
@@ -322,6 +331,9 @@ public:
             HFunc(TEvPersQueue::TEvReadingPartitionFinishedRequest, Handle);
             HFunc(TEvPQ::TEvWakeupReleasePartition, Handle);
             HFunc(TEvPQ::TEvBalanceConsumer, Handle);
+            // From kafka
+            HFunc(TEvPersQueue::TEvBalancingSubscribe, Handle);
+            HFunc(TEvPersQueue::TEvBalancingUnsubscribe, Handle);
             // from PQ
             HFunc(TEvPQ::TEvPartitionScaleStatusChanged, Handle);
             // from TPartitionScaleRequest

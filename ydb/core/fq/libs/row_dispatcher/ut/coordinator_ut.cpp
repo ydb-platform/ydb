@@ -46,7 +46,8 @@ public:
             LocalRowDispatcherId,
             config,
             "Tenant",
-            MakeIntrusive<NMonitoring::TDynamicCounters>()
+            MakeIntrusive<NMonitoring::TDynamicCounters>(),
+            {}
             ).release());
 
         Runtime.EnableScheduleForActor(Coordinator);

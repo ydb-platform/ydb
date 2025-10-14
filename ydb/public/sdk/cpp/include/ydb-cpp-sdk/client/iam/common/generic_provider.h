@@ -127,6 +127,8 @@ private:
                 }
                 NeedStop_ = true;
             }
+            Stub_.reset();
+            Channel_.reset();
         }
 
     private:

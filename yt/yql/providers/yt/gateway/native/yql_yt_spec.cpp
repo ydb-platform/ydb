@@ -85,7 +85,8 @@ void FillSpec(NYT::TNode& spec,
     double extraCpu,
     const TMaybe<double>& secondExtraCpu,
     EYtOpProps opProps,
-    const TSet<TString>& addSecTags)
+    const TSet<TString>& addSecTags,
+    const TVector<TString>& layerPaths)
 {
     auto& cluster = execCtx.Cluster_;
 
@@ -483,6 +484,9 @@ void FillSpec(NYT::TNode& spec,
     }
 
     if (auto val = settings->LayerPaths.Get(cluster)) {
+        if (!layerPaths.empty()) {
+            throw yexception() << "Can't use both pragma Layer and yt.LayerPaths";
+        }
         if (opProps.HasFlags(EYtOpProp::WithMapper)) {
             NYT::TNode& layersNode = spec["mapper"]["layer_paths"];
             for (auto& path: *val) {
@@ -492,6 +496,20 @@ void FillSpec(NYT::TNode& spec,
         if (opProps.HasFlags(EYtOpProp::WithReducer)) {
             NYT::TNode& layersNode = spec["reducer"]["layer_paths"];
             for (auto& path: *val) {
+                layersNode.Add(NYT::AddPathPrefix(path, NYT::TConfig::Get()->Prefix));
+            }
+        }
+    }
+    if (layerPaths.size()) {
+        if (opProps.HasFlags(EYtOpProp::WithMapper)) {
+            NYT::TNode& layersNode = spec["mapper"]["layer_paths"];
+            for (auto& path: layerPaths) {
+                layersNode.Add(NYT::AddPathPrefix(path, NYT::TConfig::Get()->Prefix));
+            }
+        }
+        if (opProps.HasFlags(EYtOpProp::WithReducer)) {
+            NYT::TNode& layersNode = spec["reducer"]["layer_paths"];
+            for (auto& path: layerPaths) {
                 layersNode.Add(NYT::AddPathPrefix(path, NYT::TConfig::Get()->Prefix));
             }
         }

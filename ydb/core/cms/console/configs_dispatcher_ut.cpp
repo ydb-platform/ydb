@@ -884,6 +884,39 @@ selector_config:
         UNIT_ASSERT(notifications > 0);
         UNIT_ASSERT_VALUES_EQUAL(expectedConfig.ShortDebugString(), reply->Config.ShortDebugString());
     }
-}
 
+    Y_UNIT_TEST(TestYamlConfigAndIcb) {
+        NKikimrConfig::TAppConfig config;
+        auto *label = config.AddLabels();
+        label->SetName("test");
+        label->SetValue("true");
+
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig(), config);
+        InitConfigsDispatcher(runtime);
+
+        TString yamlConfig1 = R"(
+---
+metadata:
+  cluster: ""
+  version: 0
+config:
+  log_config:
+    cluster_name: cluster3
+  yaml_config_enabled: true
+  immediate_controls_config:
+    data_shard_controls:
+      enable_leader_leases: 1
+      enable_locked_writes: 1
+)";
+        CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, yamlConfig1);
+        auto& icb = *runtime.GetAppData().Icb;
+        TAtomic controlValue;
+        UNIT_ASSERT(!!icb.DataShardControls.EnableLeaderLeases.AtomicLoad());
+        controlValue = icb.DataShardControls.EnableLeaderLeases.AtomicLoad()->Get();
+        UNIT_ASSERT_VALUES_EQUAL(controlValue, 1);
+        UNIT_ASSERT(!!icb.DataShardControls.EnableLockedWrites.AtomicLoad());
+        controlValue = icb.DataShardControls.EnableLockedWrites.AtomicLoad()->Get();
+        UNIT_ASSERT_VALUES_EQUAL(controlValue, 1);
+    }
+}
 } // namespace NKikimr

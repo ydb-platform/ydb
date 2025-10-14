@@ -275,9 +275,9 @@ private:
         Ydb::Query::SchemaInclusionMode schemaInclusionMode = req->schema_inclusion_mode();
         Ydb::ResultSet::Format resultSetFormat = req->result_set_format();
 
-        std::optional<NKqp::TArrowFormatSettings> arrowFormatSettings;
+        std::optional<NKqp::NFormats::TArrowFormatSettings> arrowFormatSettings;
         if (req->has_arrow_format_settings()) {
-            arrowFormatSettings = NKqp::TArrowFormatSettings::ImportFromProto(req->arrow_format_settings());
+            arrowFormatSettings = NKqp::NFormats::TArrowFormatSettings::ImportFromProto(req->arrow_format_settings());
         }
 
         AuditContextAppend(Request_.get(), *req);

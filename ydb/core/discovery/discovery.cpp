@@ -281,8 +281,11 @@ namespace NDiscoveryPrivate {
 
     class TDiscoveryCache: public TActorBootstrapped<TDiscoveryCache> {
         THashMap<TString, std::shared_ptr<NDiscovery::TCachedMessageData>> CurrentCachedMessages;
+        THashMap<TString, std::shared_ptr<NDiscovery::TCachedMessageData>> DirtyCachedMessages;
+
         THashMap<TString, std::shared_ptr<NDiscovery::TCachedMessageData>> OldCachedMessages; // when subscriptions are disabled
         THashMap<TString, std::shared_ptr<NDiscovery::TCachedMessageData>> CachedNotAvailable; // for subscriptions
+
         THolder<TEvInterconnect::TEvNodeInfo> NameserviceResponse;
         TBridgeInfo::TPtr BridgeInfo;
 
@@ -354,7 +357,10 @@ namespace NDiscoveryPrivate {
             auto& currentCachedMessage = CurrentCachedMessages[path];
             Y_ABORT_UNLESS(currentCachedMessage);
 
-            currentCachedMessage->UpdateEntries(std::move(msg->Updates));
+            if (!msg->Updates.empty()) {
+                currentCachedMessage->UpdateEntries(std::move(msg->Updates));
+                DirtyCachedMessages[path] = currentCachedMessage;
+            }
 
             auto it = Requested.find(path);
             Y_ABORT_UNLESS(it == Requested.end());
@@ -381,6 +387,8 @@ namespace NDiscoveryPrivate {
                 NDiscovery::TCachedMessageData(std::move(msg->InfoEntries), NameserviceResponse, BridgeInfo,
                 EndpointId.GetOrElse({}), {}, msg->Status)
             );
+
+            DirtyCachedMessages.erase(path);
 
             if (AppData()->FeatureFlags.GetEnableSubscriptionsInDiscovery()) {
                 if (msg->Status != TEvStateStorage::TEvBoardInfo::EStatus::Ok) {
@@ -416,9 +424,11 @@ namespace NDiscoveryPrivate {
             Y_ABORT_UNLESS(NameserviceResponse);
             Y_ABORT_UNLESS(!IsBridgeMode(ActorContext()) || BridgeInfo);
 
-            for (auto& [_, cachedData] : CurrentCachedMessages) {
+            for (auto& [_, cachedData] : DirtyCachedMessages) {
                 cachedData->UpdateCache(NameserviceResponse, BridgeInfo, EndpointId.GetOrElse({}));
             }
+
+            DirtyCachedMessages.clear();
 
             Schedule(TDuration::Seconds(1), new TEvents::TEvWakeup());
         }
@@ -741,6 +751,7 @@ public:
             << ": path# " << id);
 
         auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+        request->DatabaseName = AppData()->DomainsInfo->GetDomain()->Name;
 
         auto& entry = request->ResultSet.emplace_back();
         entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;

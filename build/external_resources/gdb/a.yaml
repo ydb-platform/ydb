@@ -76,23 +76,6 @@ ci:
       - service: ya_make
 
   releases:
-    release-gdb:
-      title: "Release gdb14"
-      flow: build-and-release-gdb
-      flow-vars:
-        ix_package: gdb/14
-        toolchain_name: gdb14
-        mapping_path: build/external_resources/gdb/resources.json
-      flow-vars-ui:
-        schema:
-          <<: *ui-vars
-      filters:
-        - discovery: dir
-          abs-paths:
-            - devtools/gdb/**
-            - toolchains/ynd/bin/gdb/**
-            - toolchains/ynd/gdb/**
-
     release-gdb-16:
       title: "Release gdb16"
       flow: build-and-release-gdb

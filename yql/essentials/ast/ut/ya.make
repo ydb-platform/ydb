@@ -1,7 +1,5 @@
 UNITTEST_FOR(yql/essentials/ast)
 
-ENABLE(YQL_STYLE_CPP)
-
 FORK_SUBTESTS()
 
 SRCS(

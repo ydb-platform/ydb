@@ -1,7 +1,5 @@
 UNITTEST_FOR(yql/essentials/core)
 
-ENABLE(YQL_STYLE_CPP)
-
 SRCS(
     yql_column_order_ut.cpp
     yql_default_valid_value_ut.cpp

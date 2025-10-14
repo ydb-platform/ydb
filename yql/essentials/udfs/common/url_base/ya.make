@@ -6,8 +6,6 @@ YQL_UDF_CONTRIB(url_udf)
         0
     )
 
-    ENABLE(YQL_STYLE_CPP)
-    
     SRCS(
         url_base.cpp
     )

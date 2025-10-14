@@ -321,10 +321,13 @@ class WorkloadManagerComputeScheduler(WorkloadManagerBase):
         fig, axs = pyplot.subplots(len(pools), 1, layout='constrained', figsize=(6.4, 3.2 * len(pools)))
         for p in range(len(pools)):
             pool = pools[p]
-            axs[p].plot(times, [m.get(f'{pool.name} satisfaction') for m in norm_metrics], label=pool.name)
-            axs[p].plot(times, [m.get(f'{pool.name} adjusted satisfaction d') for m in norm_metrics], label=f'adj {pool.name}')
+            axs[p].set_title(pool.name)
+            axs[p].plot(times, [m.get(f'{pool.name} satisfaction') for m in norm_metrics], label='satisfaction')
+            axs[p].plot(times, [m.get(f'{pool.name} adjusted satisfaction d') for m in norm_metrics], label=f'adj satisfaction')
+            if last_i is not None:
+                axs[p].plot([datetime.fromtimestamp(cls.metrics[first_i][0]), datetime.fromtimestamp(cls.metrics[last_i][0])], [1, 1], label=f'period')
             axs[p].set_ylabel('satisfaction')
-            axs[p].legend()
+            axs[p].legend(fontsize=10, loc='lower right')
             axs[p].grid()
             axs[p].xaxis.set_major_formatter(
                 dates.ConciseDateFormatter(axs[p].xaxis.get_major_locator())
@@ -333,13 +336,14 @@ class WorkloadManagerComputeScheduler(WorkloadManagerBase):
         pyplot.savefig('satisfaction.plot.svg', format='svg')
         with open('satisfaction.plot.svg') as s:
             allure.attach(s.read(), 'satisfaction.plot.svg', allure.attachment_type.SVG)
-        for pool in pools:
-            last_t, last_v = cls.metrics[last_i]
-            first_t, first_v = cls.metrics[first_i]
-            sat = last_v.get(f'{pool.name} adjusted satisfaction d', 0.) - first_v.get(f'{pool.name} adjusted satisfaction d', 0.)
-            if last_t > first_t:
-                sat /= last_t - first_t
-            result.add_stat('test', f'satisfaction_avg_{pool.name}', sat)
+        if last_i is not None:
+            for pool in pools:
+                last_t, last_v = cls.metrics[last_i]
+                first_t, first_v = cls.metrics[first_i]
+                sat = last_v.get(f'{pool.name} adjusted satisfaction d', 0.) - first_v.get(f'{pool.name} adjusted satisfaction d', 0.)
+                if last_t > first_t:
+                    sat /= last_t - first_t
+                result.add_stat('test', f'satisfaction_avg_{pool.name}', sat)
 
     @classmethod
     def check_signals(cls) -> str:
@@ -361,7 +365,7 @@ class WorkloadManagerComputeScheduler(WorkloadManagerBase):
                     count[k] += 1
                 cls.metrics_keys.add(k)
         for k in sum.keys():
-            if not k.endswith(' d') and count[k] > 0:
+            if count[k] > 0:
                 sum[k] /= count[k]
             if k.find('satisfaction') >= 0:
                 sum[k] /= 1.e6

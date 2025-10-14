@@ -168,6 +168,47 @@ Y_UNIT_TEST(InsertRow) {
     ])", NYdb::FormatResultSetYson(index));
 }
 
+Y_UNIT_TEST(InsertRowReturning) {
+    auto kikimr = Kikimr();
+    auto db = kikimr.GetQueryClient();
+    
+    CreateTexts(db);
+    UpsertSomeTexts(db);
+    AddIndex(db);
+    auto index = ReadIndex(db);
+    CompareYson(R"([
+        [[100u];"cats"];
+        [[200u];"dogs"];
+        [[200u];"foxes"];
+        [[100u];"love"];
+        [[200u];"love"]
+    ])", NYdb::FormatResultSetYson(index));
+
+    { // InsertRow
+        TString query = R"sql(
+            INSERT INTO `/Root/Texts` (Key, Text, Data) VALUES
+                (150, "Foxes love cats.", "foxes data")
+            RETURNING *
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([
+            [["foxes data"];[150u];["Foxes love cats."]]
+        ])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
+    }
+    index = ReadIndex(db);
+    CompareYson(R"([
+        [[100u];"cats"];
+        [[150u];"cats"];
+        [[200u];"dogs"];
+        [[150u];"foxes"];
+        [[200u];"foxes"];
+        [[100u];"love"];
+        [[150u];"love"];
+        [[200u];"love"]
+    ])", NYdb::FormatResultSetYson(index));
+}
+
 Y_UNIT_TEST(InsertRowCovered) {
     auto kikimr = Kikimr();
     auto db = kikimr.GetQueryClient();
@@ -191,6 +232,47 @@ Y_UNIT_TEST(InsertRowCovered) {
         )sql";
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+    index = ReadIndex(db);
+    CompareYson(R"([
+        [["cats data"];[100u];"cats"];
+        [["foxes data"];[150u];"cats"];
+        [["cats data"];[200u];"dogs"];
+        [["foxes data"];[150u];"foxes"];
+        [["cats data"];[200u];"foxes"];
+        [["cats data"];[100u];"love"];
+        [["foxes data"];[150u];"love"];
+        [["cats data"];[200u];"love"]
+    ])", NYdb::FormatResultSetYson(index));
+}
+
+Y_UNIT_TEST(InsertRowCoveredReturning) {
+    auto kikimr = Kikimr();
+    auto db = kikimr.GetQueryClient();
+    
+    CreateTexts(db);
+    UpsertSomeTexts(db);
+    AddIndexCovered(db);
+    auto index = ReadIndex(db);
+    CompareYson(R"([
+        [["cats data"];[100u];"cats"];
+        [["cats data"];[200u];"dogs"];
+        [["cats data"];[200u];"foxes"];
+        [["cats data"];[100u];"love"];
+        [["cats data"];[200u];"love"]
+    ])", NYdb::FormatResultSetYson(index));
+
+    { // InsertRow
+        TString query = R"sql(
+            INSERT INTO `/Root/Texts` (Key, Text, Data) VALUES
+                (150, "Foxes love cats.", "foxes data")
+            RETURNING *
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([
+            [["foxes data"];[150u];["Foxes love cats."]]
+        ])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
     }
     index = ReadIndex(db);
     CompareYson(R"([

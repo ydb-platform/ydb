@@ -31,7 +31,8 @@ class TestBase(Query):
                                                    extra_feature_flags=["enable_resource_pools",
                                                                         "enable_external_data_sources",
                                                                         "enable_tiering_in_column_shard",
-                                                                        "enable_add_unique_index"],
+                                                                        "enable_parameterized_decimal",
+                                                                        "enable_table_datetime64"],
                                                    column_shard_config={
                                                        'disabled_on_scheme_shard': False,
                                                        'lag_for_compaction_before_tierings_ms': 0,

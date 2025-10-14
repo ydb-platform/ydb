@@ -312,7 +312,13 @@ bool TArrowToYdbConverter::Process(const arrow::RecordBatch& batch, TString& err
                     if (column->IsNull(realRow)) {
                         cells[i][col] = TCell();
                     } else {
-                        cells[i][col] = MakeCell<typename arrow::TypeTraits<TType>::ArrayType>(column, realRow);
+                        if (colType.GetTypeId() == NScheme::NTypeIds::Bool && column->type()->id() == arrow::Type::BOOL) {
+                            auto boolArr = std::static_pointer_cast<arrow::BooleanArray>(column);
+                            ui8 v = boolArr->Value(realRow) ? 1 : 0;
+                            cells[i][col] = TCell::Make(v);
+                        } else {
+                            cells[i][col] = MakeCell<typename arrow::TypeTraits<TType>::ArrayType>(column, realRow);
+                        }
                     }
                 }
                 return true;
@@ -361,7 +367,13 @@ bool TArrowToYdbConverter::Process(const arrow::RecordBatch& batch, TString& err
 
             bool success = SwitchYqlTypeToArrowType(colType, [&]<typename TType>(TTypeWrapper<TType> typeHolder) {
                 Y_UNUSED(typeHolder);
-                curCell = MakeCell<typename arrow::TypeTraits<TType>::ArrayType>(column, row);
+                if (colType.GetTypeId() == NScheme::NTypeIds::Bool && column->type()->id() == arrow::Type::BOOL) {
+                    auto boolArr = std::static_pointer_cast<arrow::BooleanArray>(column);
+                    ui8 v = boolArr->Value(row) ? 1 : 0;
+                    curCell = TCell::Make(v);
+                } else {
+                    curCell = MakeCell<typename arrow::TypeTraits<TType>::ArrayType>(column, row);
+                }
                 return true;
             });
 

@@ -94,6 +94,50 @@ TConclusion<NArrow::TContainerWithIndexes<arrow::RecordBatch>> ISnapshotSchema::
 #endif
 
     NArrow::TSchemaLiteView dstSchema = GetIndexInfo().ArrowSchema();
+    
+    auto convertedBatch = incomingBatch;
+    std::vector<std::shared_ptr<arrow::Array>> convertedColumns;
+    std::vector<std::shared_ptr<arrow::Field>> convertedFields;
+    bool needsConversion = false;
+    
+    for (i32 i = 0; i < incomingBatch->num_columns(); ++i) {
+        const auto& field = incomingBatch->schema()->field(i);
+        const auto& column = incomingBatch->column(i);
+        
+        if (column->type()->id() == arrow::Type::BOOL) {
+            auto targetFieldIdx = GetIndexInfo().GetColumnIndexOptional(field->name());
+            if (targetFieldIdx && targetFieldIdx.value() >= 0) {
+                const auto& targetField = dstSchema.field(targetFieldIdx.value());
+                if (targetField->type()->id() == arrow::Type::UINT8) {
+                    arrow::UInt8Builder builder;
+                    for (int64_t j = 0; j < column->length(); ++j) {
+                        if (column->IsNull(j)) {
+                            Y_ABORT_UNLESS(builder.AppendNull().ok());
+                        } else {
+                            auto boolArray = std::static_pointer_cast<arrow::BooleanArray>(column);
+                            Y_ABORT_UNLESS(builder.Append(boolArray->Value(j) ? 1 : 0).ok());
+                        }
+                    }
+
+                    std::shared_ptr<arrow::Array> uint8Array;
+                    Y_ABORT_UNLESS(builder.Finish(&uint8Array).ok());
+                    convertedColumns.push_back(uint8Array);
+                    convertedFields.push_back(arrow::field(field->name(), arrow::uint8(), field->nullable()));
+                    needsConversion = true;
+                    continue;
+                }
+            }
+        }
+
+        convertedColumns.push_back(column);
+        convertedFields.push_back(field);
+    }
+    
+    if (needsConversion) {
+        auto convertedSchema = arrow::schema(convertedFields);
+        convertedBatch = arrow::RecordBatch::Make(convertedSchema, incomingBatch->num_rows(), convertedColumns);
+    }
+    
     std::vector<std::shared_ptr<arrow::Array>> pkColumns;
     pkColumns.resize(GetIndexInfo().GetReplaceKey()->num_fields());
     ui32 pkColumnsCount = 0;
@@ -101,15 +145,24 @@ TConclusion<NArrow::TContainerWithIndexes<arrow::RecordBatch>> ISnapshotSchema::
         if (targetIdx == -1) {
             return TConclusionStatus::Success();
         }
-        const auto& incomingColumn = incomingBatch->column(incomingIdx);
+        const auto& incomingColumn = convertedBatch->column(incomingIdx);
         const auto hasNull = NArrow::HasNulls(incomingColumn);
         const TColumnFeatures& features = GetIndexInfo().GetColumnFeaturesVerifiedByIndex(targetIdx);
         const std::optional<i32> pkFieldIdx = features.GetPKColumnIndex();
         if (!features.GetDataAccessorConstructor()->HasInternalConversion() || !!pkFieldIdx) {
             if (!features.GetArrowField()->type()->Equals(incomingColumn->type())) {
-                return TConclusionStatus::Fail(
-                    "not equal type for column: " + features.GetColumnName() + ": " + features.GetArrowField()->type()->ToString()
-                    + " vs " + incomingColumn->type()->ToString());
+                // Special case: Arrow boolean is compatible with uint8 for Bool columns
+                bool isCompatible = false;
+                if (features.GetArrowField()->type()->id() == arrow::Type::UINT8 && 
+                    incomingColumn->type()->id() == arrow::Type::BOOL) {
+                    isCompatible = true;
+                }
+                
+                if (!isCompatible) {
+                    return TConclusionStatus::Fail(
+                        "not equal type for column: " + features.GetColumnName() + ": " + features.GetArrowField()->type()->ToString()
+                        + " vs " + incomingColumn->type()->ToString());
+                }
             }
         }
         if (pkFieldIdx && hasNull && !AppData()->ColumnShardConfig.GetAllowNullableColumnsInPK()) {
@@ -132,7 +185,7 @@ TConclusion<NArrow::TContainerWithIndexes<arrow::RecordBatch>> ISnapshotSchema::
         if (pkFieldIdx) {
             AFL_VERIFY(*pkFieldIdx < (i32)pkColumns.size());
             AFL_VERIFY(!pkColumns[*pkFieldIdx]);
-            pkColumns[*pkFieldIdx] = incomingBatch->column(incomingIdx);
+            pkColumns[*pkFieldIdx] = convertedBatch->column(incomingIdx);
             ++pkColumnsCount;
         }
         return TConclusionStatus::Success();
@@ -141,7 +194,7 @@ TConclusion<NArrow::TContainerWithIndexes<arrow::RecordBatch>> ISnapshotSchema::
         return GetIndexInfo().GetColumnIndexOptional(fieldName).value_or(-1);
     };
     auto batchConclusion = NArrow::TColumnOperator().SkipIfAbsent().IgnoreOnDifferentFieldTypes().AdaptIncomingToDestinationExt(
-        incomingBatch, dstSchema, pred, nameResolver);
+        convertedBatch, dstSchema, pred, nameResolver);
     if (batchConclusion.IsFail()) {
         return batchConclusion;
     }

@@ -133,11 +133,11 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
         UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), NYdb::EStatus::SUCCESS);
     }
 
-    void BulkUpsertRowTableYdbValue(TTestHelper& helper, const TString& name, const TVector<TRow>& rows) {
+    void BulkUpsertRowTableYdbValueWithColumnName(TTestHelper& helper, const TString& name, const TVector<TRow>& rows, const TString& columnName) {
         TValueBuilder builder;
         builder.BeginList();
         for (auto&& r : rows) {
-            builder.AddListItem().BeginStruct().AddMember("id").Int32(r.Id).AddMember("int").Int64(r.IntVal).AddMember("b");
+            builder.AddListItem().BeginStruct().AddMember("id").Int32(r.Id).AddMember(columnName).Int64(r.IntVal).AddMember("b");
             if (r.B.has_value()) {
                 builder.BeginOptional().Bool(*r.B).EndOptional();
             } else {
@@ -150,6 +150,10 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
         builder.EndList();
         auto result = helper.GetKikimr().GetTableClient().BulkUpsert(name, builder.Build()).GetValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    }
+
+    void BulkUpsertRowTableYdbValue(TTestHelper& helper, const TString& name, const TVector<TRow>& rows) {
+        BulkUpsertRowTableYdbValueWithColumnName(helper, name, rows, "int");
     }
 
     void BulkUpsertRowTableYdbValueWithSecondColumn(
@@ -187,7 +191,7 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
     }
 
-    std::shared_ptr<arrow::RecordBatch> MakeArrowBatch(const TVector<TRow>& rows) {
+    std::shared_ptr<arrow::RecordBatch> MakeArrowBatchWithColumnName(const TVector<TRow>& rows, const TString& columnName) {
         arrow::Int32Builder idBuilder;
         arrow::Int64Builder intBuilder;
         arrow::BooleanBuilder boolBuilder;
@@ -207,9 +211,13 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
         Y_ABORT_UNLESS(intBuilder.Finish(&intArr).ok());
         std::shared_ptr<arrow::Array> boolArr;
         Y_ABORT_UNLESS(boolBuilder.Finish(&boolArr).ok());
-        auto schema = arrow::schema({ arrow::field("id", arrow::int32(), /*nullable*/ false), arrow::field("int", arrow::int64()),
+        auto schema = arrow::schema({ arrow::field("id", arrow::int32(), /*nullable*/ false), arrow::field(columnName, arrow::int64()),
             arrow::field("b", arrow::boolean()) });
         return arrow::RecordBatch::Make(schema, rows.size(), { idArr, intArr, boolArr });
+    }
+
+    std::shared_ptr<arrow::RecordBatch> MakeArrowBatch(const TVector<TRow>& rows) {
+        return MakeArrowBatchWithColumnName(rows, "int");
     }
 
     std::shared_ptr<arrow::RecordBatch> MakeArrowBatchWithSecondColumn(const TVector<TRow>& rows, const TString& secondName) {
@@ -262,10 +270,20 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
             case ETableKind::COLUMN_SHARD: {
                 Y_ABORT_UNLESS(col && schema);
                 if (load == ELoadKind::ARROW) {
-                    auto batch = MakeArrowBatch(rows);
+                    // Find the int64 column name from schema (should be the second column after "id")
+                    TString columnName = "int"; // default
+                    if (schema->size() >= 2) {
+                        columnName = (*schema)[1].GetName();
+                    }
+                    auto batch = MakeArrowBatchWithColumnName(rows, columnName);
                     helper.BulkUpsert(*col, batch);
                 } else if (load == ELoadKind::YDB_VALUE) {
-                    BulkUpsertRowTableYdbValue(helper, name, rows);
+                    // Find the int64 column name from schema (should be the second column after "id")
+                    TString columnName = "int"; // default
+                    if (schema->size() >= 2) {
+                        columnName = (*schema)[1].GetName();
+                    }
+                    BulkUpsertRowTableYdbValueWithColumnName(helper, name, rows, columnName);
                 } else {
                     BulkUpsertRowTableCSV(helper, name, rows);
                 }
@@ -399,9 +417,9 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
         const auto Scan = Arg<0>();
         const auto Table = Arg<1>();
         const auto Load = Arg<2>();
-        if (Table == ETableKind::COLUMN_SHARD) {
-            return;   // skip until bool is supported in columnshard
-        }
+        // if (Table == ETableKind::COLUMN_SHARD) {
+        //     return;   // skip until bool is supported in columnshard
+        // }
 
         const TString tableName = "/Root/Table1";
         TTestHelper helper(TKikimrSettings().SetWithSampleTables(false));
@@ -418,9 +436,9 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
         const auto Scan = Arg<0>();
         const auto Table = Arg<1>();
         const auto Load = Arg<2>();
-        if (Table == ETableKind::COLUMN_SHARD) {
-            return;   // skip until bool is supported in columnshard
-        }
+        // if (Table == ETableKind::COLUMN_SHARD) {
+        //     return;   // skip until bool is supported in columnshard
+        // }
 
         const TString tableName = "/Root/Table1";
         TTestHelper helper(TKikimrSettings().SetWithSampleTables(false));
@@ -436,9 +454,9 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
         const auto Scan = Arg<0>();
         const auto Table = Arg<1>();
         const auto Load = Arg<2>();
-        if (Table == ETableKind::COLUMN_SHARD) {
-            return;   // skip until bool is supported in columnshard
-        }
+        // if (Table == ETableKind::COLUMN_SHARD) {
+        //     return;   // skip until bool is supported in columnshard
+        // }
 
         const TString tableName = "/Root/Table1";
         TTestHelper helper(TKikimrSettings().SetWithSampleTables(false));
@@ -457,9 +475,9 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
         const auto Scan = Arg<0>();
         const auto Table = Arg<1>();
         const auto Load = Arg<2>();
-        if (Table == ETableKind::COLUMN_SHARD) {
-            return;   // skip until bool is supported in columnshard
-        }
+        // if (Table == ETableKind::COLUMN_SHARD) {
+        //     return;   // skip until bool is supported in columnshard
+        // }
 
         const TString tableName = "/Root/Table1";
         TTestHelper helper(TKikimrSettings().SetWithSampleTables(false));
@@ -480,9 +498,9 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
         const auto Scan = Arg<0>();
         const auto Table = Arg<1>();
         const auto Load = Arg<2>();
-        if (Table == ETableKind::COLUMN_SHARD) {
-            return;   // skip until bool is supported in columnshard
-        }
+        // if (Table == ETableKind::COLUMN_SHARD) {
+        //     return;   // skip until bool is supported in columnshard
+        // }
 
         const TString tableName = "/Root/Table1";
         TTestHelper helper(TKikimrSettings().SetWithSampleTables(false));
@@ -498,9 +516,9 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
         const auto Scan = Arg<0>();
         const auto Table = Arg<1>();
         const auto Load = Arg<2>();
-        if (Table == ETableKind::COLUMN_SHARD) {
-            return;   // skip until bool is supported in columnshard
-        }
+        // if (Table == ETableKind::COLUMN_SHARD) {
+        //     return;   // skip until bool is supported in columnshard
+        // }
 
         const TString tableName = "/Root/Table1";
         TTestHelper helper(TKikimrSettings().SetWithSampleTables(false));
@@ -516,9 +534,9 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
         const auto Scan = Arg<0>();
         const auto Table = Arg<1>();
         const auto Load = Arg<2>();
-        if (Table == ETableKind::COLUMN_SHARD) {
-            return;   // skip until bool is supported in columnshard
-        }
+        // if (Table == ETableKind::COLUMN_SHARD) {
+        //     return;   // skip until bool is supported in columnshard
+        // }
 
         const TString tableName = "/Root/Table1";
         TTestHelper helper(TKikimrSettings().SetWithSampleTables(false));
@@ -534,9 +552,9 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
         const auto Scan = Arg<0>();
         const auto Table = Arg<1>();
         const auto Load = Arg<2>();
-        if (Table == ETableKind::COLUMN_SHARD) {
-            return;   // skip until bool is supported in columnshard
-        }
+        // if (Table == ETableKind::COLUMN_SHARD) {
+        //     return;   // skip until bool is supported in columnshard
+        // }
 
         const TString t1 = "/Root/Table1";
         const TString t2 = "/Root/Table2";
@@ -592,9 +610,9 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
         const auto Scan = Arg<0>();
         const auto Table = Arg<1>();
         const auto Load = Arg<2>();
-        if (Table == ETableKind::COLUMN_SHARD) {
-            return;   // skip until bool is supported in columnshard
-        }
+        // if (Table == ETableKind::COLUMN_SHARD) {
+        //     return;   // skip until bool is supported in columnshard
+        // }
 
         const TString t1 = "/Root/Table1";
         const TString t2 = "/Root/Table2";

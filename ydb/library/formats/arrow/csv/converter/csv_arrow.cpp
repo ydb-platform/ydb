@@ -158,6 +158,20 @@ std::shared_ptr<arrow::RecordBatch> TArrowCSV::ConvertColumnTypes(std::shared_pt
                     Y_ABORT_UNLESS(false);
                 }
             }());
+        } else if (fArr->type()->id() == arrow::BooleanType::type_id && originalType->id() == arrow::UInt8Type::type_id) {
+            auto boolArray = std::static_pointer_cast<arrow::BooleanArray>(fArr);
+            arrow::UInt8Builder builder;
+            Y_ABORT_UNLESS(builder.Reserve(boolArray->length()).ok());
+            for (int64_t i = 0; i < boolArray->length(); ++i) {
+                if (boolArray->IsNull(i)) {
+                    Y_ABORT_UNLESS(builder.AppendNull().ok());
+                } else {
+                    builder.UnsafeAppend(boolArray->Value(i) ? static_cast<uint8_t>(1) : static_cast<uint8_t>(0));
+                }
+            }
+            std::shared_ptr<arrow::Array> out;
+            Y_ABORT_UNLESS(builder.Finish(&out).ok());
+            resultColumns.emplace_back(out);
         } else if (fArr->type()->id() == arrow::Decimal128Type::type_id && originalType->id() == arrow::FixedSizeBinaryType::type_id) {
             auto fixedSizeBinaryType = std::static_pointer_cast<arrow::FixedSizeBinaryType>(originalType);
             const auto& decData = fArr->data();

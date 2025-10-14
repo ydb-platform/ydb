@@ -124,7 +124,7 @@ bool GetUserGroupSids(const std::string& serializedUserGroupSids, TVector<NACLib
     return true;
 }
 
-TString CheckSCriptExecutionAccess(std::optional<TString>& userSID) {
+TString CheckScriptExecutionAccess(std::optional<TString>& userSID) {
     if (!AppData()->FeatureFlags.GetEnableSecureScriptExecutions()) {
         userSID = std::nullopt;
         return "";
@@ -2007,7 +2007,7 @@ public:
 
     void Bootstrap() {
         auto userSID = Request->Get()->UserSID;
-        if (const auto& error = CheckSCriptExecutionAccess(userSID)) {
+        if (const auto& error = CheckScriptExecutionAccess(userSID)) {
             return Reply(Ydb::StatusIds::UNAUTHORIZED, error);
         }
 
@@ -2366,7 +2366,7 @@ public:
 
     void OnBootstrap() override {
         auto userSID = Request->Get()->UserSID;
-        if (const auto& error = CheckSCriptExecutionAccess(userSID)) {
+        if (const auto& error = CheckScriptExecutionAccess(userSID)) {
             return Reply(Ydb::StatusIds::UNAUTHORIZED, error);
         }
 
@@ -2680,7 +2680,7 @@ public:
 
     void Bootstrap() {
         auto userSID = Request->Get()->UserSID;
-        if (const auto& error = CheckSCriptExecutionAccess(userSID)) {
+        if (const auto& error = CheckScriptExecutionAccess(userSID)) {
             KQP_PROXY_LOG_W("Token validation failed: " << error);
             Send(Request->Sender, new TEvListScriptExecutionOperationsResponse(Ydb::StatusIds::UNAUTHORIZED, {NYql::TIssue(error)}));
             return;
@@ -2929,7 +2929,7 @@ public:
 
     void Bootstrap() {
         auto userSID = Request->Get()->UserSID;
-        if (const auto& error = CheckSCriptExecutionAccess(userSID)) {
+        if (const auto& error = CheckScriptExecutionAccess(userSID)) {
             return Reply(Ydb::StatusIds::UNAUTHORIZED, error);
         }
 
@@ -3622,7 +3622,7 @@ public:
     {}
 
     void Bootstrap() {
-        if (const auto& error = CheckSCriptExecutionAccess(UserSID)) {
+        if (const auto& error = CheckScriptExecutionAccess(UserSID)) {
             return Reply(Ydb::StatusIds::UNAUTHORIZED, error);
         }
 

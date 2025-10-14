@@ -282,8 +282,8 @@ class WorkloadManagerComputeScheduler(WorkloadManagerBase):
                   ''.join([f'<th style="padding-left: 10; padding-right: 10">{k[:-2] if k.endswith(' d') else k}</th>' for k in keys]) +
                   '</tr>\n')
         norm_metrics = []
-        sum_satisfaction = {}
-        count_satisfaction = {}
+        first_i = None
+        last_i = None
         for r in range(len(cls.metrics)):
             record: dict[str, float] = {}
             cur_t, cur_m = cls.metrics[r]
@@ -297,12 +297,11 @@ class WorkloadManagerComputeScheduler(WorkloadManagerBase):
                 elif not k.endswith('satisfaction') or v >= 0.:
                     record[k] = v
             for p in pools:
-                sum_satisfaction.setdefault(p.name, 0.)
-                count_satisfaction.setdefault(p.name, 0.)
                 s = record.get(f'{p.name} satisfaction', -1.)
                 if s >= 0.:
-                    sum_satisfaction[p.name] += s
-                    count_satisfaction[p.name] += 1
+                    if first_i is None:
+                        first_i = r
+                    last_i = r
             norm_metrics.append(record)
             line = f'<tr><th style="padding-left: 10; padding-right: 10">{datetime.fromtimestamp(cur_t)}</th>'
             empty = True
@@ -321,6 +320,7 @@ class WorkloadManagerComputeScheduler(WorkloadManagerBase):
         for p in range(len(pools)):
             pool = pools[p]
             axs[p].plot(times, [m.get(f'{pool.name} satisfaction') for m in norm_metrics], label=pool.name)
+            axs[p].plot(times, [m.get(f'{pool.name} adjusted satisfaction d') for m in norm_metrics], label=f'adj {pool.name}')
             axs[p].set_ylabel('satisfaction')
             axs[p].legend()
             axs[p].grid()
@@ -331,10 +331,13 @@ class WorkloadManagerComputeScheduler(WorkloadManagerBase):
         pyplot.savefig('satisfaction.plot.svg', format='svg')
         with open('satisfaction.plot.svg') as s:
             allure.attach(s.read(), 'satisfaction.plot.svg', allure.attachment_type.SVG)
-        for pool, sum_s in sum_satisfaction.items():
-            count = count_satisfaction[pool]
-            value = sum_s / count if count > 0 else -1.
-            result.add_stat('test', f'satisfaction_avg_{pool}', value)
+        for pool in pools:
+            last_t, last_v = cls.metrics[last_i]
+            first_t, first_v = cls.metrics[first_i]
+            sat = last_v.get(f'{pool.name} adjusted satisfaction d', 0.) - first_v.get(f'{pool.name} adjusted satisfaction d', 0.)
+            if last_t > first_t:
+                sat /= last_t - first_t
+            result.add_stat('test', f'satisfaction_avg_{pool.name}', sat)
 
     @classmethod
     def check_signals(cls) -> str:
@@ -342,6 +345,7 @@ class WorkloadManagerComputeScheduler(WorkloadManagerBase):
         for pool in cls.get_resource_pools():
             metrics_request.update({
                 f'{pool.name} satisfaction': {'scheduler/pool': pool.name, 'sensor': 'Satisfaction'},
+                f'{pool.name} adjusted satisfaction d': {'scheduler/pool': pool.name, 'sensor': 'AdjustedSatisfaction'},
             })
         metrics = YdbCluster.get_metrics(db_only=True, counters='kqp', metrics=metrics_request)
         sum = {}
@@ -357,7 +361,7 @@ class WorkloadManagerComputeScheduler(WorkloadManagerBase):
         for k in sum.keys():
             if not k.endswith(' d') and count[k] > 0:
                 sum[k] /= count[k]
-            if k.endswith('satisfaction'):
+            if k.find('satisfaction') >= 0:
                 sum[k] /= 1.e6
         cls.metrics.append((time.time(), sum))
         return ''

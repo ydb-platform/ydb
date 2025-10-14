@@ -174,8 +174,11 @@ void TStorageProxy::Bootstrap() {
     }
     CheckpointStorage = NewYdbCheckpointStorage(StorageConfig, CreateEntityIdGenerator(IdsPrefix), ydbConnection);
     StateStorage = NewYdbStateStorage(Config, ydbConnection);
-    const auto& gcConfig = Config.GetCheckpointGarbageConfig();
-    ActorGC = Register(NewGC(gcConfig, CheckpointStorage, StateStorage).release());
+    bool enableGc = !Config.HasCheckpointGarbageConfig() || Config.GetCheckpointGarbageConfig().GetEnabled();
+    if (enableGc) {
+        const auto& gcConfig = Config.GetCheckpointGarbageConfig();
+        ActorGC = Register(NewGC(gcConfig, CheckpointStorage, StateStorage).release());
+    }
     Initialize();
     
 

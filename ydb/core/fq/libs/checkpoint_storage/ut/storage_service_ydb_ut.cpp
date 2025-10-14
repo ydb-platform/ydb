@@ -41,18 +41,19 @@ using TRuntimePtr = std::unique_ptr<TTestActorRuntime>;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-template <bool UseYdbSdk>
+template <bool UseYdbSdk, bool EnableGc = false>
 class TFixture : public NUnitTest::TBaseFixture {
 public:
     void SetUp(NUnitTest::TTestContext& /* context */) override {
+        Prepare();
+    }
+
+    void Prepare() {
         if constexpr (UseYdbSdk) {
             InitSdkConnection();
         } else {
             InitLocalConnection();
         }
-    }
-
-    void TearDown(NUnitTest::TTestContext& /*ctx*/) override {
     }
 
     void InitSdkConnection() {
@@ -68,7 +69,7 @@ public:
         checkpointConfig.SetTablePrefix(CreateGuidAsString());
 
         auto& gcConfig = *config.MutableCheckpointGarbageConfig();
-        gcConfig.SetEnabled(true);
+        gcConfig.SetEnabled(EnableGc);
 
         auto driverConfig = NYdb::TDriverConfig();
         NYdb::TDriver driver(driverConfig);
@@ -342,11 +343,14 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-using TSdkFixture = TFixture<true>; 
-using TLocalFixture = TFixture<false>;
+constexpr bool EnableGC = true;
+constexpr bool DisableGC = false;
+using TSdkFixture = TFixture<true, DisableGC>; 
+using TLocalFixture = TFixture<false, DisableGC>;
 
-Y_UNIT_TEST_SUITE_F(TStorageServiceTest, TSdkFixture) {
-    Y_UNIT_TEST(ShouldRegister111)
+
+Y_UNIT_TEST_SUITE(TStorageServiceTest) {
+    Y_UNIT_TEST_F(ShouldRegister, TSdkFixture)
     {
         RegisterDefaultCoordinator();
     }
@@ -355,7 +359,7 @@ Y_UNIT_TEST_SUITE_F(TStorageServiceTest, TSdkFixture) {
  *  We weakened registration condition at while, registration with the same generation
  *  is not possible
  *
-    Y_UNIT_TEST(ShouldNotRegisterSameTwice)
+    Y_UNIT_TEST_F(ShouldNotRegisterSameTwice)
     {
         auto runtime = PrepareTestActorRuntime("TStorageServiceTestShouldNotRegisterSameTwice");
 
@@ -364,7 +368,7 @@ Y_UNIT_TEST_SUITE_F(TStorageServiceTest, TSdkFixture) {
         RegisterCoordinator(runtime, coordinator1, true);
     }
 */
-    Y_UNIT_TEST(ShouldNotRegisterPrevGeneration)
+    Y_UNIT_TEST_F(ShouldNotRegisterPrevGeneration, TSdkFixture)
     {
         TCoordinatorId coordinator1(GraphId, Generation);
         RegisterCoordinator(coordinator1);
@@ -373,7 +377,7 @@ Y_UNIT_TEST_SUITE_F(TStorageServiceTest, TSdkFixture) {
         RegisterCoordinator(coordinator2, true);
     }
 
-    Y_UNIT_TEST(ShouldRegisterNextGeneration)
+    Y_UNIT_TEST_F(ShouldRegisterNextGeneration, TSdkFixture)
     {
         TCoordinatorId coordinator1(GraphId, Generation);
         RegisterCoordinator(coordinator1);
@@ -385,25 +389,25 @@ Y_UNIT_TEST_SUITE_F(TStorageServiceTest, TSdkFixture) {
         RegisterCoordinator(coordinator1, true);
     }
 
-    Y_UNIT_TEST(ShouldCreateCheckpoint1)
+    Y_UNIT_TEST_F(ShouldCreateCheckpoint1, TSdkFixture)
     {
         RegisterDefaultCoordinator();
         CreateCheckpoint(GraphId, Generation, CheckpointId1, false);
     }
 
-    Y_UNIT_TEST(ShouldNotCreateCheckpointWhenUnregistered)
+    Y_UNIT_TEST_F(ShouldNotCreateCheckpointWhenUnregistered, TSdkFixture)
     {
         CreateCheckpoint(GraphId, Generation, CheckpointId1, true);
     }
 
-    Y_UNIT_TEST(ShouldNotCreateCheckpointTwice)
+    Y_UNIT_TEST_F(ShouldNotCreateCheckpointTwice, TSdkFixture)
     {
         RegisterDefaultCoordinator();
         CreateCheckpoint(GraphId, Generation, CheckpointId1, false);
         CreateCheckpoint(GraphId, Generation, CheckpointId1, true);
     }
 
-    Y_UNIT_TEST(ShouldNotCreateCheckpointAfterGenerationChanged)
+    Y_UNIT_TEST_F(ShouldNotCreateCheckpointAfterGenerationChanged, TSdkFixture)
     {
         TCoordinatorId coordinator1(GraphId, Generation);
         RegisterCoordinator(coordinator1);
@@ -416,7 +420,7 @@ Y_UNIT_TEST_SUITE_F(TStorageServiceTest, TSdkFixture) {
         CreateCheckpoint(GraphId, Generation, CheckpointId2, true);
     }
 
-    Y_UNIT_TEST(ShouldGetCheckpoints)
+    Y_UNIT_TEST_F(ShouldGetCheckpoints, TSdkFixture)
     {
         RegisterDefaultCoordinator();
         CreateCheckpoint(GraphId, Generation, CheckpointId1, false);
@@ -437,7 +441,7 @@ Y_UNIT_TEST_SUITE_F(TStorageServiceTest, TSdkFixture) {
         UNIT_ASSERT(checkpoinIds.contains(CheckpointId3));
     }
 
-    Y_UNIT_TEST(ShouldPendingAndCompleteCheckpoint)
+    Y_UNIT_TEST_F(ShouldPendingAndCompleteCheckpoint, TSdkFixture)
     {
         RegisterDefaultCoordinator();
         CreateCheckpoint(GraphId, Generation, CheckpointId1, false);
@@ -461,7 +465,7 @@ Y_UNIT_TEST_SUITE_F(TStorageServiceTest, TSdkFixture) {
         }
     }
 
-    Y_UNIT_TEST(ShouldAbortCheckpoint)
+    Y_UNIT_TEST_F(ShouldAbortCheckpoint, TSdkFixture)
     {
         RegisterDefaultCoordinator();
         CreateCheckpoint(GraphId, Generation, CheckpointId1, false);
@@ -482,7 +486,7 @@ Y_UNIT_TEST_SUITE_F(TStorageServiceTest, TSdkFixture) {
         }
     }
 
-    Y_UNIT_TEST(ShouldNotPendingCheckpointWithoutCreation)
+    Y_UNIT_TEST_F(ShouldNotPendingCheckpointWithoutCreation, TSdkFixture)
     {
         TCoordinatorId coordinator1(GraphId, Generation);
         RegisterCoordinator(coordinator1);
@@ -490,7 +494,7 @@ Y_UNIT_TEST_SUITE_F(TStorageServiceTest, TSdkFixture) {
         PendingCommitCheckpoint(GraphId, Generation, CheckpointId1, true);
     }
 
-    Y_UNIT_TEST(ShouldNotCompleteCheckpointWithoutCreation)
+    Y_UNIT_TEST_F(ShouldNotCompleteCheckpointWithoutCreation, TSdkFixture)
     {
         TCoordinatorId coordinator1(GraphId, Generation);
         RegisterCoordinator(coordinator1);
@@ -498,7 +502,7 @@ Y_UNIT_TEST_SUITE_F(TStorageServiceTest, TSdkFixture) {
         CompleteCheckpoint(GraphId, Generation, CheckpointId1, true);
     }
 
-    Y_UNIT_TEST(ShouldNotAbortCheckpointWithoutCreation)
+    Y_UNIT_TEST_F(ShouldNotAbortCheckpointWithoutCreation, TSdkFixture)
     {
         TCoordinatorId coordinator1(GraphId, Generation);
         RegisterCoordinator(coordinator1);
@@ -506,7 +510,7 @@ Y_UNIT_TEST_SUITE_F(TStorageServiceTest, TSdkFixture) {
         AbortCheckpoint(GraphId, Generation, CheckpointId1, true);
     }
 
-    Y_UNIT_TEST(ShouldNotCompleteCheckpointWithoutPending)
+    Y_UNIT_TEST_F(ShouldNotCompleteCheckpointWithoutPending, TSdkFixture)
     {
         TCoordinatorId coordinator1(GraphId, Generation);
         RegisterCoordinator(coordinator1);
@@ -515,7 +519,7 @@ Y_UNIT_TEST_SUITE_F(TStorageServiceTest, TSdkFixture) {
         CompleteCheckpoint(GraphId, Generation, CheckpointId1, true);
     }
 
-    Y_UNIT_TEST(ShouldNotPendingCheckpointGenerationChanged)
+    Y_UNIT_TEST_F(ShouldNotPendingCheckpointGenerationChanged, TSdkFixture)
     {
         TCoordinatorId coordinator1(GraphId, Generation);
         RegisterCoordinator(coordinator1);
@@ -528,7 +532,7 @@ Y_UNIT_TEST_SUITE_F(TStorageServiceTest, TSdkFixture) {
         PendingCommitCheckpoint(GraphId, Generation, CheckpointId1, true);
     }
 
-    Y_UNIT_TEST(ShouldNotCompleteCheckpointGenerationChanged)
+    Y_UNIT_TEST_F(ShouldNotCompleteCheckpointGenerationChanged, TSdkFixture)
     {
         TCoordinatorId coordinator1(GraphId, Generation);
         RegisterCoordinator(coordinator1);
@@ -542,7 +546,7 @@ Y_UNIT_TEST_SUITE_F(TStorageServiceTest, TSdkFixture) {
         CompleteCheckpoint(GraphId, Generation, CheckpointId1, true);
     }
 
-    Y_UNIT_TEST(ShouldSaveState)
+    Y_UNIT_TEST_F(ShouldSaveState, TSdkFixture)
     {
         NKikimr::NMiniKQL::TScopedAlloc Alloc(__LOCATION__);
 
@@ -552,7 +556,7 @@ Y_UNIT_TEST_SUITE_F(TStorageServiceTest, TSdkFixture) {
         SaveState(1317, CheckpointId1, MakeState("some random state"));
     }
 
-    Y_UNIT_TEST(ShouldGetState)
+    Y_UNIT_TEST_F(ShouldGetState, TSdkFixture)
     {
         NKikimr::NMiniKQL::TScopedAlloc Alloc(__LOCATION__);
 
@@ -565,7 +569,9 @@ Y_UNIT_TEST_SUITE_F(TStorageServiceTest, TSdkFixture) {
         UNIT_ASSERT_VALUES_EQUAL(state, actual);
     }
 
-    Y_UNIT_TEST(ShouldUseGc)
+    using TEnableGCFixture = TFixture<true, EnableGC>;
+
+    Y_UNIT_TEST_F(ShouldUseGc, TEnableGCFixture)
     {
         RegisterDefaultCoordinator();
         CreateCompletedCheckpoint(GraphId, Generation, CheckpointId1);
@@ -583,8 +589,8 @@ Y_UNIT_TEST_SUITE_F(TStorageServiceTest, TSdkFixture) {
     }
 };
 
-Y_UNIT_TEST_SUITE_F(TStorageServiceLocalTest, TLocalFixture) {
-    Y_UNIT_TEST(ShouldRegister111)
+Y_UNIT_TEST_SUITE(TStorageServiceLocalTest) {
+    Y_UNIT_TEST_F(ShouldRegister, TLocalFixture)
     {
         RegisterDefaultCoordinator();
     }
@@ -593,7 +599,7 @@ Y_UNIT_TEST_SUITE_F(TStorageServiceLocalTest, TLocalFixture) {
  *  We weakened registration condition at while, registration with the same generation
  *  is not possible
  *
-    Y_UNIT_TEST(ShouldNotRegisterSameTwice)
+    Y_UNIT_TEST_F(ShouldNotRegisterSameTwice)
     {
         auto runtime = PrepareTestActorRuntime("TStorageServiceTestShouldNotRegisterSameTwice");
 
@@ -602,7 +608,7 @@ Y_UNIT_TEST_SUITE_F(TStorageServiceLocalTest, TLocalFixture) {
         RegisterCoordinator(runtime, coordinator1, true);
     }
 */
-    Y_UNIT_TEST(ShouldNotRegisterPrevGeneration)
+    Y_UNIT_TEST_F(ShouldNotRegisterPrevGeneration, TLocalFixture)
     {
         TCoordinatorId coordinator1(GraphId, Generation);
         RegisterCoordinator(coordinator1);
@@ -611,7 +617,7 @@ Y_UNIT_TEST_SUITE_F(TStorageServiceLocalTest, TLocalFixture) {
         RegisterCoordinator(coordinator2, true);
     }
 
-    Y_UNIT_TEST(ShouldRegisterNextGeneration)
+    Y_UNIT_TEST_F(ShouldRegisterNextGeneration, TLocalFixture)
     {
         TCoordinatorId coordinator1(GraphId, Generation);
         RegisterCoordinator(coordinator1);
@@ -623,25 +629,25 @@ Y_UNIT_TEST_SUITE_F(TStorageServiceLocalTest, TLocalFixture) {
         RegisterCoordinator(coordinator1, true);
     }
 
-    Y_UNIT_TEST(ShouldCreateCheckpoint1)
+    Y_UNIT_TEST_F(ShouldCreateCheckpoint1, TLocalFixture)
     {
         RegisterDefaultCoordinator();
         CreateCheckpoint(GraphId, Generation, CheckpointId1, false);
     }
 
-    Y_UNIT_TEST(ShouldNotCreateCheckpointWhenUnregistered)
+    Y_UNIT_TEST_F(ShouldNotCreateCheckpointWhenUnregistered, TLocalFixture)
     {
         CreateCheckpoint(GraphId, Generation, CheckpointId1, true);
     }
 
-    Y_UNIT_TEST(ShouldNotCreateCheckpointTwice)
+    Y_UNIT_TEST_F(ShouldNotCreateCheckpointTwice, TLocalFixture)
     {
         RegisterDefaultCoordinator();
         CreateCheckpoint(GraphId, Generation, CheckpointId1, false);
         CreateCheckpoint(GraphId, Generation, CheckpointId1, true);
     }
 
-    Y_UNIT_TEST(ShouldNotCreateCheckpointAfterGenerationChanged)
+    Y_UNIT_TEST_F(ShouldNotCreateCheckpointAfterGenerationChanged, TLocalFixture)
     {
         TCoordinatorId coordinator1(GraphId, Generation);
         RegisterCoordinator(coordinator1);
@@ -654,7 +660,7 @@ Y_UNIT_TEST_SUITE_F(TStorageServiceLocalTest, TLocalFixture) {
         CreateCheckpoint(GraphId, Generation, CheckpointId2, true);
     }
 
-    Y_UNIT_TEST(ShouldGetCheckpoints)
+    Y_UNIT_TEST_F(ShouldGetCheckpoints, TLocalFixture)
     {
         RegisterDefaultCoordinator();
         CreateCheckpoint(GraphId, Generation, CheckpointId1, false);
@@ -675,7 +681,7 @@ Y_UNIT_TEST_SUITE_F(TStorageServiceLocalTest, TLocalFixture) {
         UNIT_ASSERT(checkpoinIds.contains(CheckpointId3));
     }
 
-    Y_UNIT_TEST(ShouldPendingAndCompleteCheckpoint)
+    Y_UNIT_TEST_F(ShouldPendingAndCompleteCheckpoint, TLocalFixture)
     {
         RegisterDefaultCoordinator();
         CreateCheckpoint(GraphId, Generation, CheckpointId1, false);
@@ -699,7 +705,7 @@ Y_UNIT_TEST_SUITE_F(TStorageServiceLocalTest, TLocalFixture) {
         }
     }
 
-    Y_UNIT_TEST(ShouldAbortCheckpoint)
+    Y_UNIT_TEST_F(ShouldAbortCheckpoint, TLocalFixture)
     {
         RegisterDefaultCoordinator();
         CreateCheckpoint(GraphId, Generation, CheckpointId1, false);
@@ -720,7 +726,7 @@ Y_UNIT_TEST_SUITE_F(TStorageServiceLocalTest, TLocalFixture) {
         }
     }
 
-    Y_UNIT_TEST(ShouldNotPendingCheckpointWithoutCreation)
+    Y_UNIT_TEST_F(ShouldNotPendingCheckpointWithoutCreation, TLocalFixture)
     {
         TCoordinatorId coordinator1(GraphId, Generation);
         RegisterCoordinator(coordinator1);
@@ -728,7 +734,7 @@ Y_UNIT_TEST_SUITE_F(TStorageServiceLocalTest, TLocalFixture) {
         PendingCommitCheckpoint(GraphId, Generation, CheckpointId1, true);
     }
 
-    Y_UNIT_TEST(ShouldNotCompleteCheckpointWithoutCreation)
+    Y_UNIT_TEST_F(ShouldNotCompleteCheckpointWithoutCreation, TLocalFixture)
     {
         TCoordinatorId coordinator1(GraphId, Generation);
         RegisterCoordinator(coordinator1);
@@ -736,7 +742,7 @@ Y_UNIT_TEST_SUITE_F(TStorageServiceLocalTest, TLocalFixture) {
         CompleteCheckpoint(GraphId, Generation, CheckpointId1, true);
     }
 
-    Y_UNIT_TEST(ShouldNotAbortCheckpointWithoutCreation)
+    Y_UNIT_TEST_F(ShouldNotAbortCheckpointWithoutCreation, TLocalFixture)
     {
         TCoordinatorId coordinator1(GraphId, Generation);
         RegisterCoordinator(coordinator1);
@@ -744,7 +750,7 @@ Y_UNIT_TEST_SUITE_F(TStorageServiceLocalTest, TLocalFixture) {
         AbortCheckpoint(GraphId, Generation, CheckpointId1, true);
     }
 
-    Y_UNIT_TEST(ShouldNotCompleteCheckpointWithoutPending)
+    Y_UNIT_TEST_F(ShouldNotCompleteCheckpointWithoutPending, TLocalFixture)
     {
         TCoordinatorId coordinator1(GraphId, Generation);
         RegisterCoordinator(coordinator1);
@@ -753,7 +759,7 @@ Y_UNIT_TEST_SUITE_F(TStorageServiceLocalTest, TLocalFixture) {
         CompleteCheckpoint(GraphId, Generation, CheckpointId1, true);
     }
 
-    Y_UNIT_TEST(ShouldNotPendingCheckpointGenerationChanged)
+    Y_UNIT_TEST_F(ShouldNotPendingCheckpointGenerationChanged, TLocalFixture)
     {
         TCoordinatorId coordinator1(GraphId, Generation);
         RegisterCoordinator(coordinator1);
@@ -766,7 +772,7 @@ Y_UNIT_TEST_SUITE_F(TStorageServiceLocalTest, TLocalFixture) {
         PendingCommitCheckpoint(GraphId, Generation, CheckpointId1, true);
     }
 
-    Y_UNIT_TEST(ShouldNotCompleteCheckpointGenerationChanged)
+    Y_UNIT_TEST_F(ShouldNotCompleteCheckpointGenerationChanged, TLocalFixture)
     {
         TCoordinatorId coordinator1(GraphId, Generation);
         RegisterCoordinator(coordinator1);
@@ -780,7 +786,7 @@ Y_UNIT_TEST_SUITE_F(TStorageServiceLocalTest, TLocalFixture) {
         CompleteCheckpoint(GraphId, Generation, CheckpointId1, true);
     }
 
-    Y_UNIT_TEST(ShouldSaveState)
+    Y_UNIT_TEST_F(ShouldSaveState, TLocalFixture)
     {
         NKikimr::NMiniKQL::TScopedAlloc Alloc(__LOCATION__);
 
@@ -790,7 +796,7 @@ Y_UNIT_TEST_SUITE_F(TStorageServiceLocalTest, TLocalFixture) {
         SaveState(1317, CheckpointId1, MakeState("some random state"));
     }
 
-    Y_UNIT_TEST(ShouldGetState)
+    Y_UNIT_TEST_F(ShouldGetState, TLocalFixture)
     {
         NKikimr::NMiniKQL::TScopedAlloc Alloc(__LOCATION__);
 
@@ -803,7 +809,9 @@ Y_UNIT_TEST_SUITE_F(TStorageServiceLocalTest, TLocalFixture) {
         UNIT_ASSERT_VALUES_EQUAL(state, actual);
     }
 
-    Y_UNIT_TEST(ShouldUseGc)
+    using TEnableGCFixture = TFixture<false, EnableGC>;
+
+    Y_UNIT_TEST_F(ShouldUseGc, TEnableGCFixture)
     {
         RegisterDefaultCoordinator();
         CreateCompletedCheckpoint(GraphId, Generation, CheckpointId1);

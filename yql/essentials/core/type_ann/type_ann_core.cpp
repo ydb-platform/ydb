@@ -13697,6 +13697,11 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         ColumnOrderFunctions["PgSetItem"] = &OrderForPgSetItem;
         ColumnOrderFunctions["PgIterate"] = &OrderFromFirst;
         ColumnOrderFunctions["PgIterateAll"] = &OrderFromFirst;
+
+        ColumnOrderFunctions["YqlSetItem"] = &OrderForPgSetItem;
+        ColumnOrderFunctions["YqlIterate"] = &OrderFromFirst;
+        ColumnOrderFunctions["YqlIterateAll"] = &OrderFromFirst;
+
         ColumnOrderFunctions["AssumeColumnOrder"] = &OrderForAssumeColumnOrder;
 
         ColumnOrderFunctions["SqlProject"] = ColumnOrderFunctions["OrderedSqlProject"] = &OrderForSqlProject;
@@ -13714,6 +13719,12 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             ColumnOrderFunctions["Filter"] = ColumnOrderFunctions["OrderedFilter"] = &OrderFromFirst;
         ColumnOrderFunctions["AssumeSorted"] = ColumnOrderFunctions["Unordered"] =
             ColumnOrderFunctions["UnorderedSubquery"] = ColumnOrderFunctions["AssumeUniq"] = &OrderFromFirst;
+
+        ExtFunctions["YqlSelect"] = &PgSelectWrapper;
+        ExtFunctions["YqlSetItem"] = &PgSetItemWrapper;
+        ExtFunctions["YqlResultItem"] = &PgResultItemWrapper;
+        ExtFunctions["YqlValuesList"] = &PgValuesListWrapper;
+        Functions["YqlColumnRef"] = &PgColumnRefWrapper;
 
         for (ui32 i = 0; i < NKikimr::NUdf::DataSlotCount; ++i) {
             auto name = TString(NKikimr::NUdf::GetDataTypeInfo((EDataSlot)i).Name);

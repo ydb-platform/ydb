@@ -24,7 +24,7 @@ class TGrpcIamCredentialsProvider : public ICredentialsProvider {
 protected:
     using TRequestFiller = std::function<void(TRequest&)>;
     using TAsyncInterface = typename TService::Stub::async_interface;
-    using TAsyncRpc = void (TAsyncInterface::*)(grpc::ClientContext*, const TRequest*, TResponse*, std::function<void(grpc::Status)>);
+    using TAsyncRpc = std::function<void(typename TService::Stub*, grpc::ClientContext*, const TRequest*, TResponse*, std::function<void(grpc::Status)>)>;
 
 private:
     class TImpl : public std::enable_shared_from_this<TGrpcIamCredentialsProvider<TRequest, TResponse, TService>::TImpl> {
@@ -96,7 +96,7 @@ private:
                 context->AddMetadata("authorization", "Bearer " + AuthTokenProvider_->GetAuthInfo());
             }
 
-            (Stub_->async()->*Rpc_)(context.get(), &req, response.get(), std::move(cb));
+            Rpc_(Stub_.get(), context.get(), &req, response.get(), std::move(cb));
 
             if (sync) {
                 resultPromise.GetFuture().Wait(2 * IamEndpoint_.RequestTimeout);
@@ -217,7 +217,9 @@ public:
         : TGrpcIamCredentialsProvider<TRequest, TResponse, TService>(params,
             [jwtParams = params.JwtParams](TRequest& req) {
                 req.set_jwt(MakeSignedJwt(jwtParams));
-            }, &TService::Stub::async_interface::Create) {}
+            }, [](typename TService::Stub* stub, grpc::ClientContext* context, const TRequest* request, TResponse* response, std::function<void(grpc::Status)> cb) {
+                stub->async()->Create(context, request, response, std::move(cb));
+            }) {}
 };
 
 template<typename TRequest, typename TResponse, typename TService>
@@ -227,7 +229,9 @@ public:
         : TGrpcIamCredentialsProvider<TRequest, TResponse, TService>(params,
             [token = params.OAuthToken](TRequest& req) {
                 req.set_yandex_passport_oauth_token(TStringType{token});
-            }, &TService::Stub::async_interface::Create) {}
+            }, [](typename TService::Stub* stub, grpc::ClientContext* context, const TRequest* request, TResponse* response, std::function<void(grpc::Status)> cb) {
+                stub->async()->Create(context, request, response, std::move(cb));
+            }) {}
 };
 
 template<typename TRequest, typename TResponse, typename TService>

@@ -1,12 +1,12 @@
-#include "benchmark_settings.h"
+#include <ydb/core/kqp/tools/join_perf/benchmark_settings.h>
 
-#include "ydb/core/kqp/tools/combiner_perf/fs_utils.h"
+#include <ydb/core/kqp/tools/combiner_perf/fs_utils.h>
 #include <library/cpp/getopt/small/last_getopt.h>
 #include <library/cpp/getopt/small/last_getopt_opts.h>
 #include <library/cpp/getopt/small/last_getopt_parse_result.h>
 #include <library/cpp/getopt/small/last_getopt_parser.h>
 
-#include "joins.h"
+#include <ydb/core/kqp/tools/join_perf/joins.h>
 #include <filesystem>
 #include <util/string/printf.h>
 
@@ -40,7 +40,7 @@ int main(int argc, char** argv) {
     int samples = 1;
     int scale = 1;
     opts.AddHelpOption().Help("visit NBenchmarkSizes namespace in benchmark_settings.cpp for explanation");
-    opts.AddLongOption('c', "case")
+    opts.AddLongOption('p', "preset")
         .Help("left and right table sizes to choose for joins benchmark.")
         .Choices({"exp", "linear", "small"})
         .DefaultValue("small")
@@ -58,13 +58,14 @@ int main(int argc, char** argv) {
                 }
             }();
         });
-    opts.AddLongOption('s', "samples").Help("number representing how much to repeat single case. useful for noise reduction.").DefaultValue(1).StoreResult(&samples);
-    opts.AddLongOption("scale").Help("size of smallest table in case").DefaultValue(1<<18).StoreResult(&scale);
+    opts.AddLongOption("samples").Help("number representing how much to repeat single case. useful for noise reduction.").DefaultValue(1).StoreResult(&samples);
+    opts.AddLongOption("scale").Help("size of smallest table in case").DefaultValue(1).StoreResult(&scale);
+    opts.AddLongOption("seed").Help("seed for keys generation").DefaultValue(123).StoreResult(&params.Seed);
     params.Algorithms = {
         NKikimr::NMiniKQL::ETestedJoinAlgo::kBlockMap,
-        // NKikimr::NMiniKQL::ETestedJoinAlgo::kBlockHash,
-        NKikimr::NMiniKQL::ETestedJoinAlgo::kScalarMap,
-        // NKikimr::NMiniKQL::ETestedJoinAlgo::kScalarHash,
+        NKikimr::NMiniKQL::ETestedJoinAlgo::kBlockHash,
+        // NKikimr::NMiniKQL::ETestedJoinAlgo::kScalarMap, // slow
+        NKikimr::NMiniKQL::ETestedJoinAlgo::kScalarHash,
         NKikimr::NMiniKQL::ETestedJoinAlgo::kScalarGrace,
     };
     params.KeyTypes = {

@@ -1,4 +1,4 @@
-LIBRARY()
+PROGRAM(join_perf)
 
 YQL_LAST_ABI_VERSION()
 
@@ -10,6 +10,7 @@ ENDIF()
 
 PEERDIR(
     ydb/core/kqp/tools/combiner_perf
+    ydb/core/kqp/tools/join_perf    
     library/cpp/lfalloc/alloc_profiler
     library/cpp/dwarf_backtrace
     library/cpp/dwarf_backtrace/registry
@@ -19,9 +20,7 @@ PEERDIR(
 )
 
 SRCS(
-    construct_join_graph.cpp
-    joins.cpp
-    benchmark_settings.cpp
+    main.cpp
 )
 
 END()

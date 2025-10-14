@@ -18,6 +18,8 @@ public:
     TRuntimeNode DqScalarHashJoin(TRuntimeNode leftFlow, TRuntimeNode rightFlow, EJoinKind joinKind,
         const TArrayRef<const ui32>& leftKeyColumns, const TArrayRef<const ui32>& rightKeyColumns, TType* returnType);
 
+    TType* LastScalarIndexBlock();
+
 protected:
     TCallableBuilder BuildCommonCombinerParams(
         const TStringBuf operatorName,

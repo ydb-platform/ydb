@@ -297,8 +297,8 @@ public:
         });
 
         if (sort) {
-            std::sort(expectedMessages.begin(), expectedMessages.end());
-            std::sort(received.begin(), received.end());
+            Sort(expectedMessages);
+            Sort(received);
         }
 
         UNIT_ASSERT_VALUES_EQUAL(received.size(), expectedMessages.size());

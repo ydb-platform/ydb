@@ -567,6 +567,19 @@ void TNodeState::TerminateInputBuffer(const std::shared_ptr<TInputBuffer>& input
     InputBuffers.erase(inputBuffer->Info);
 }
 
+void TNodeState::CleanupUnbindedInputs() {
+    std::lock_guard lock(Mutex);
+    auto now = TInstant::Now();
+    while (!UnbindedInputs.empty()) {
+        auto& front = UnbindedInputs.front();
+        if (front.second > now) {
+            break;
+        }
+        InputBuffers.erase(front.first);
+        UnbindedInputs.pop();
+    }
+}
+
 void TDebugNodeState::PauseChannelData() {
     ChannelDataPaused.store(true);
 }
@@ -668,6 +681,13 @@ IDqInputChannel::TPtr TDqChannelService::GetInputChannel(const TDqChannelParams&
     Y_ENSURE(params.TransportVersion == NDqProto::EDataTransportVersion::DATA_TRANSPORT_UV_FAST_PICKLE_1_0
             || params.TransportVersion == NDqProto::EDataTransportVersion::DATA_TRANSPORT_OOB_FAST_PICKLE_1_0);
     return new TFastDqInputChannel(Self, params, GetInputBuffer(params.Desc.ChannelId));
+}
+
+void TDqChannelService::CleanupUnbindedInputs() {
+    std::lock_guard lock(Mutex);
+    for (auto& [_, nodeState] : NodeStates) {
+        nodeState->CleanupUnbindedInputs();
+    }
 }
 
 // TFastDqOutputChannel::

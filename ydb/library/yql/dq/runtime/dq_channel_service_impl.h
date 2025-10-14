@@ -427,6 +427,7 @@ public:
     std::shared_ptr<TInputBuffer> GetOrCreateInputBuffer(const TChannelInfo& info, bool binded);
     void TerminateDescriptor(const std::shared_ptr<TOutputDescriptor>& descriptor);
     void TerminateInputBuffer(const std::shared_ptr<TInputBuffer>& inputBuffer);
+    void CleanupUnbindedInputs();
 
     NActors::TActorId NodeActorId;
     NActors::TActorId PeerActorId;
@@ -505,6 +506,8 @@ public:
     // unbinded channels
     IDqOutputChannel::TPtr GetOutputChannel(const TDqChannelParams& params) final;
     IDqInputChannel::TPtr GetInputChannel(const TDqChannelParams& params) final;
+    // extrs
+    void CleanupUnbindedInputs();
 
     NActors::TActorSystem* ActorSystem;
     ui32 NodeId;
@@ -753,18 +756,26 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvDqCompute::TEvChannelDataV2, Handle);
             hFunc(TEvPrivate::TEvServiceLookup, Handle);
+            cFunc(NActors::TEvents::TEvWakeup::EventType, HandleWakeup);
         }
     }
 
     void Handle(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
         auto state = ChannelService->GetOrCreateNodeState(ev->Sender.NodeId());
         Send(ev->Forward(state->NodeActorId));
+        // we need no cleanup until very first incoming msg
+        Schedule(TDuration::Seconds(30), new NActors::TEvents::TEvWakeup());
     }
 
     void Handle(TEvPrivate::TEvServiceLookup::TPtr& ev) {
         auto evReply = MakeHolder<TEvPrivate::TEvServiceReply>();
         evReply->Service = ChannelService;
         Send(ev->Sender, evReply.Release());
+    }
+
+    void HandleWakeup() {
+        ChannelService->CleanupUnbindedInputs();
+        Schedule(TDuration::Seconds(30), new NActors::TEvents::TEvWakeup());
     }
 
     std::shared_ptr<TDqChannelService> ChannelService;

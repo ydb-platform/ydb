@@ -428,10 +428,17 @@ public:
                 .WatermarksLateArrivalDelayMs
                 .GetOrElse(TDqSettings::TDefault::WatermarksLateArrivalDelayMs));
             Add(props, WatermarksLateArrivalDelayUsSetting, ToString(lateArrivalDelay.MicroSeconds()), pos, ctx);
+
         }
 
         if (wrSettings.WatermarksEnableIdlePartitions.GetOrElse(false)) {
             Add(props, WatermarksIdlePartitionsSetting, ToString(true), pos, ctx);
+#if 0
+            const auto idleDelay = TDuration::MilliSeconds(wrSettings
+                .WatermarksIdleDelayMs
+                .GetOrElse(TDqSettings::TDefault::WatermarksIdleDelayMs));
+            Add(props, WatermarksIdleDelayUsSetting, ToString(idleDelay.MicroSeconds()), pos, ctx);
+#endif
         }
 
         return Build<TCoNameValueTupleList>(ctx, pos)

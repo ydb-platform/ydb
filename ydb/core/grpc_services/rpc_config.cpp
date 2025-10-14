@@ -25,7 +25,6 @@ using TEvFetchStorageConfigRequest =
 using TEvBootstrapClusterRequest =
     TGrpcRequestOperationCall<Ydb::Config::BootstrapClusterRequest,
         Ydb::Config::BootstrapClusterResponse,
-        TYdbGrpcMethodAccessorTraits<Ydb::Config::BootstrapClusterRequest, Ydb::Config::BootstrapClusterResponse, true>,
         NRuntimeEvents::EType::BOOTSTRAP_CLUSTER>;
 
 using namespace NActors;

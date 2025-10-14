@@ -34,10 +34,10 @@ void TConfigGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     #undef SETUP_BS_METHOD
 
 
-    #define SETUP_BS_METHOD_WITH_TYPE(methodName, method, rlMode, requestType, auditModeFlags, runtimeEventType) \
-        SETUP_METHOD_WITH_TYPE(methodName, method, rlMode, requestType, Config, config, auditModeFlags, runtimeEventType)
+    #define SETUP_BOOTSTRAP_CLUSTER_METHOD(methodName, method, rlMode, requestType, auditModeFlags) \
+        SETUP_RUNTIME_EVENT_METHOD(methodName, method, rlMode, requestType, Config, config, auditModeFlags, BOOTSTRAP_CLUSTER)
 
-    SETUP_BS_METHOD_WITH_TYPE(BootstrapCluster, DoBootstrapCluster, Rps, CONFIG_BOOTSTRAP, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin), BOOTSTRAP_CLUSTER);
+    SETUP_BOOTSTRAP_CLUSTER_METHOD(BootstrapCluster, DoBootstrapCluster, Rps, CONFIG_BOOTSTRAP, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
 
     #undef SETUP_BS_METHOD_WITH_TYPE
 }

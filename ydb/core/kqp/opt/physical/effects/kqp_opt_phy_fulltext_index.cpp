@@ -100,11 +100,6 @@ TExprBase BuildFulltextIndexRows(const TKikimrTableDescription& table, const TIn
         settingsLiteral
     });
     
-    // Convert list to stream for FlatMap
-    auto analyzeStream = Build<TCoToStream>(ctx, pos)
-        .Input(analyzeCallable)
-        .Done();
-    
     auto analyzeStage = Build<TDqStage>(ctx, pos)
         .Inputs()
             .Add(inputRows)
@@ -117,7 +112,7 @@ TExprBase BuildFulltextIndexRows(const TKikimrTableDescription& table, const TIn
                     .Lambda()
                         .Args({inputRowArg})
                         .Body<TCoFlatMap>()
-                            .Input(analyzeStream)
+                            .Input(analyzeCallable)
                             .Lambda(tokenRowsLambda)
                             .Build()
                         .Build()

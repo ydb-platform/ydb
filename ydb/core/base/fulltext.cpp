@@ -1,5 +1,6 @@
 #include "fulltext.h"
-#include <regex>
+#include <util/charset/utf8.h>
+#include <util/generic/xrange.h>
 
 namespace NKikimr::NFulltext {
 
@@ -45,35 +46,66 @@ namespace {
         return result;
     }
 
-    // Note: written by llm, can be optimized a lot later
+    inline bool IsNonStandard(wchar32 c) {
+        if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')) {
+            return false; // Latin
+        }
+        if ((c >= '0' && c <= '9')) {
+            return false; // Digit
+        }
+        if ((c >= 0x0410 && c <= 0x044F) || c == 0x0401 || c == 0x0451) {
+            return false; // Cyrillic
+        }
+        return true;
+    }
+
+    void Tokenize(const TString& text, TVector<TString>& tokens, auto isDelimiter) {
+        const unsigned char* ptr = (const unsigned char*)text.data();
+        const unsigned char* end = ptr + text.size();
+
+        while (ptr < end) {
+            wchar32 symbol;
+            size_t symbolBytes = 0;
+
+            while (ptr < end) { // skip delimiters
+                Y_ENSURE(SafeReadUTF8Char(symbol, symbolBytes, ptr, end) == RECODE_OK);
+                if (!isDelimiter(symbol)) {
+                    break;
+                }
+                ptr += symbolBytes;
+            }
+            if (ptr >= end) {
+                break;
+            }
+
+            const unsigned char* tokenPtr = ptr;
+            while (ptr < end) { // read token
+                Y_ENSURE(SafeReadUTF8Char(symbol, symbolBytes, ptr, end) == RECODE_OK);
+                if (isDelimiter(symbol)) {
+                    break;
+                }
+                ptr += symbolBytes;
+            }
+            tokens.emplace_back((const char*)tokenPtr, ptr - tokenPtr);
+        }
+    }
+
+
     TVector<TString> Tokenize(const TString& text, const Ydb::Table::FulltextIndexSettings::Tokenizer& tokenizer) {
         TVector<TString> tokens;
         switch (tokenizer) {
-            case Ydb::Table::FulltextIndexSettings::WHITESPACE: {
-                std::istringstream stream(text);
-                TString token;
-                while (stream >> token) {
-                    tokens.push_back(token);
-                }
+            case Ydb::Table::FulltextIndexSettings::WHITESPACE:
+                Tokenize(text, tokens, IsWhitespace);
                 break;
-            }
-            case Ydb::Table::FulltextIndexSettings::STANDARD: {
-                std::regex word_regex(R"(\b\w+\b)"); // match alphanumeric words
-                std::sregex_iterator it(text.begin(), text.end(), word_regex);
-                std::sregex_iterator end;
-                while (it != end) {
-                    tokens.push_back(it->str());
-                    ++it;
-                }
+            case Ydb::Table::FulltextIndexSettings::STANDARD:
+                Tokenize(text, tokens, IsNonStandard);
                 break;
-            }
             case Ydb::Table::FulltextIndexSettings::KEYWORD:
                 tokens.push_back(text);
                 break;
             default:
                 Y_ENSURE(TStringBuilder() << "Invalid tokenizer: " << static_cast<int>(tokenizer));
         }
-
         return tokens;
     }
 
@@ -131,8 +163,8 @@ TVector<TString> Analyze(const TString& text, const Ydb::Table::FulltextIndexSet
     TVector<TString> tokens = Tokenize(text, settings.tokenizer());
 
     if (settings.use_filter_lowercase()) {
-        for (auto& token : tokens) {
-            token.to_lower();
+        for (auto i : xrange(tokens.size())) {
+            tokens[i] = ToLowerUTF8(tokens[i]);
         }
     }
 

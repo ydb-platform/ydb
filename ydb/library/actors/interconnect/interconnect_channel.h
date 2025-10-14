@@ -4,6 +4,7 @@
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/event_load.h>
 #include <ydb/library/actors/util/rope.h>
+#include <ydb/library/actors/interconnect/logging/logging.h>
 #include <util/generic/deque.h>
 #include <util/generic/vector.h>
 #include <util/generic/map.h>

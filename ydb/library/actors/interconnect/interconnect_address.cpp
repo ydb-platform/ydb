@@ -103,4 +103,29 @@ namespace NInterconnect {
         const char *p = inet_ntop(Addr.Generic.sa_family, const_cast<void*>(src), buffer, size);
         return p ? TString(p) : TString();
     }
+
+    TAddress::TV6Addr TAddress::GetV6CompatAddr() const {
+        switch (GetFamily()) {
+            case AF_INET: {
+                TV6Addr addr;
+                addr.s6_addr16[0] = 0;
+                addr.s6_addr16[1] = 0;
+                addr.s6_addr16[2] = 0;
+                addr.s6_addr16[3] = 0;
+                addr.s6_addr16[4] = 0;
+                addr.s6_addr16[5] = Max<ui16>();
+                addr.s6_addr16[6] = Max<ui16>();
+                addr.s6_addr32[3] = Addr.Ipv4.sin_addr.s_addr;
+                return addr;
+            }
+            case AF_INET6:
+                return Addr.Ipv6.sin6_addr;
+            default: {
+                TV6Addr addr;
+                memset(&addr, 0, sizeof(addr));
+                return addr;
+            }
+            break;
+        }
+    }
 }

@@ -1,6 +1,7 @@
 #include "ut_common.h"
 
 #include <ydb/public/lib/ydb_cli/dump/util/query_utils.h>
+#include <ydb/public/lib/ydb_cli/dump/util/view_utils.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_scripting.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
 
@@ -24,8 +25,9 @@ namespace NKikimr {
 namespace NSysView {
 
 using namespace NYdb;
-using namespace NYdb::NTable;
+using namespace NYdb::NDump;
 using namespace NYdb::NScheme;
+using namespace NYdb::NTable;
 
 namespace {
 
@@ -2767,11 +2769,11 @@ R"(CREATE TABLE `test_show_create` (
         check.Uint64(1u); // LastTtlRowsProcessed
         check.Uint64(1u); // LastTtlRowsErased
     }
-    
+
     Y_UNIT_TEST(PartitionStatsAfterRemoveColumnTable) {
         TTestEnv env;
         NQuery::TQueryClient client(env.GetDriver());
-        
+
         {
             auto result = client.ExecuteQuery(R"(
                 CREATE TABLE `/Root/test_table` (
@@ -2780,10 +2782,10 @@ R"(CREATE TABLE `test_show_create` (
                     PRIMARY KEY(key)
                 ) WITH (STORE=COLUMN);
             )", NQuery::TTxControl::NoTx()).GetValueSync();
-            
+
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
-        
+
         {
             auto result = client.ExecuteQuery(R"(
                 SELECT Path FROM `/Root/.sys/partition_stats`
@@ -2802,15 +2804,15 @@ R"(CREATE TABLE `test_show_create` (
             }
             UNIT_ASSERT_C(existsPath, "Path /Root/test_table not found");
         }
-        
+
         {
             auto result = client.ExecuteQuery(R"(
                 DROP TABLE `/Root/test_table`
             )", NQuery::TTxControl::NoTx()).GetValueSync();
-            
+
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
-        
+
         {
             auto result = client.ExecuteQuery(R"(
                 SELECT Path FROM `/Root/.sys/partition_stats`

@@ -120,7 +120,18 @@ public:
         YDB_READONLY_DEF(TBlobChunks, Chunks);
         std::optional<TUnifiedBlobId> BlobId;
         const TString ResultBlob;
-        YDB_READONLY_DEF(std::shared_ptr<IBlobsStorageOperator>, Operator);
+
+    private:
+    private:
+        std ::shared_ptr<IBlobsStorageOperator> Operator = std ::shared_ptr<IBlobsStorageOperator>();
+
+    public:
+        NYDBAccessor ::TReturnTypeDetector<std ::shared_ptr<IBlobsStorageOperator>> GetOperator() const noexcept {
+            return Operator;
+        }
+
+    private:
+        ;
 
     public:
         const TUnifiedBlobId& GetBlobIdVerified() const {

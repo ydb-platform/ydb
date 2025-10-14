@@ -527,13 +527,9 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         
         {
             auto alterQuery =
-                R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_ngramm_uid, TYPE=BLOOM_NGRAMM_FILTER,
-                    FEATURES=`{"column_name" : "resource_id", "ngramm_size" : 3, "hashes_count" : 2, "filter_size_bytes" : 512, "records_count" : 1024}`);
+                R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_ngramm_uid, TYPE=MAX,
+                    FEATURES=`{"inherit_portion_storage" : true, "column_name" : "level"}`);
                 )";
-            // auto alterQuery =
-            //     R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_ngramm_uid, TYPE=BLOOM_NGRAMM_FILTER,
-            //         FEATURES=`{"inherit_portion_storage" : false, "column_name" : "resource_id", "ngramm_size" : 3, "hashes_count" : 2, "filter_size_bytes" : 512, "records_count" : 1024}`);
-            //     )";
             auto session = tableClient.CreateSession().GetValueSync().GetSession();
             auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
@@ -542,10 +538,10 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         tieringHelper.WriteSampleData();
         csController->WaitCompactions(TDuration::Seconds(5));
         csController->WaitActualization(TDuration::Seconds(5));
-        // testHelper.SetTiering(DEFAULT_TABLE_PATH, DEFAULT_TIER_PATH, DEFAULT_COLUMN_NAME);
-        // csController->WaitCompactions(TDuration::Seconds(5));
-        // csController->WaitActualization(TDuration::Seconds(5));
-        // tieringHelper.CheckAllDataInTier(DEFAULT_TIER_PATH);
+        testHelper.SetTiering(DEFAULT_TABLE_PATH, DEFAULT_TIER_PATH, DEFAULT_COLUMN_NAME);
+        csController->WaitCompactions(TDuration::Seconds(5));
+        csController->WaitActualization(TDuration::Seconds(5));
+        tieringHelper.CheckAllDataInTier(DEFAULT_TIER_PATH);
 
         Cerr << "aboba=s3 "
              << "buckets=" << Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetBucket("olap-tier1").GetSize() << Endl;
@@ -577,6 +573,9 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
                 // UNIT_ASSERT_VALUES_EQUAL(*NYdb::TValueParser(row.find("TierName")->second).GetOptionalUtf8(), "/Root/tier1");
             }
         }
+
+        auto rows = ExecuteScanQuery(tableClient, "SELECT *  FROM `/Root/olapStore/olapTable`");
+
         AFL_VERIFY(false);
     }
 }

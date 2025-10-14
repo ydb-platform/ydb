@@ -22,6 +22,9 @@ bool TSourceData::DoStartFetchingAccessor(
 }
 
 std::shared_ptr<arrow::Array> TSourceData::BuildArrayAccessor(const ui64 columnId, const ui32 recordsCount) const {
+    AFL_VERIFY(GetPortion()->GetTierNameDef(IStoragesManager::DefaultStorageId) == GetPortionAccessor().GetPortionInfo().GetTierNameDef(IStoragesManager::DefaultStorageId));
+    // AFL_VERIFY(GetPortion()->GetPortionType() == EPortionType::Compacted);
+    // AFL_VERIFY(GetPortionAccessor().GetPortionInfo().GetPortionType() == EPortionType::Compacted);
     if (columnId == NKikimr::NSysView::Schema::PrimaryIndexStats::PathId::ColumnId) {
         return NArrow::TStatusValidator::GetValid(
             arrow::MakeArrayFromScalar(arrow::UInt64Scalar(GetUnifiedPathId().GetSchemeShardLocalPathId().GetRawValue()), recordsCount));

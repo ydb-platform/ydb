@@ -6,6 +6,7 @@
 #include <ydb/core/formats/arrow/transformer/dictionary.h>
 #include <ydb/core/tx/columnshard/engines/scheme/column_index_accessor.h>
 #include <ydb/core/tx/columnshard/engines/storage/chunks/column.h>
+#include <ydb/core/tx/columnshard/engines/storage/chunks/data.h>   // todo remove
 #include <ydb/core/tx/columnshard/engines/storage/indexes/count_min_sketch/meta.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/max/meta.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/portions/meta.h>
@@ -451,7 +452,8 @@ NKikimr::TConclusionStatus TIndexInfo::AppendIndex(const THashMap<ui32, std::vec
     AFL_VERIFY(it != Indexes.end());
     auto& index = it->second;
     TMemoryProfileGuard mpg("IndexConstruction::" + index->GetIndexName());
-    auto indexChunkConclusion = index->BuildIndexOptional(originalData, recordsCount, *this);
+    TConclusion<std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>>> indexChunkConclusion =
+        index->BuildIndexOptional(originalData, recordsCount, *this);
     if (indexChunkConclusion.IsFail()) {
         return indexChunkConclusion;
     }
@@ -469,10 +471,16 @@ NKikimr::TConclusionStatus TIndexInfo::AppendIndex(const THashMap<ui32, std::vec
         }
     }
     if (indexStorageId == IStoragesManager::LocalMetadataStorageId) {
+        // S InheritPortionStorage == true
         AFL_VERIFY(chunks.size() == 1);
         AFL_VERIFY(result.MutableSecondaryInplaceData().emplace(indexId, chunks.front()).second);
     } else {
-        AFL_VERIFY(result.MutableExternalData().emplace(indexId, std::move(chunks)).second);
+        for (const auto& chunk : chunks) {
+            AFL_VERIFY(indexStorageId == IStoragesManager::DefaultStorageId || chunk->GetInheritPortionStorage())("storage", indexStorageId);
+        }
+        std::vector<std::shared_ptr<IPortionDataChunk>> convertedChunks(
+            std::make_move_iterator(chunks.begin()), std::make_move_iterator(chunks.end()));
+        AFL_VERIFY(result.MutableExternalData().emplace(indexId, std::move(convertedChunks)).second);
     }
     return TConclusionStatus::Success();
 }

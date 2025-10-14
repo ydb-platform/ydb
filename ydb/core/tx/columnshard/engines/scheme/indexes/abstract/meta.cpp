@@ -2,6 +2,7 @@
 #include "meta.h"
 
 #include <ydb/core/tx/columnshard/engines/portions/index_chunk.h>
+#include <ydb/core/tx/columnshard/engines/storage/chunks/data.h>
 
 namespace NKikimr::NOlap::NIndexes {
 
@@ -53,7 +54,7 @@ std::optional<ui64> IIndexMeta::CalcCategory(const TString& subColumnName) const
     return DoCalcCategory(subColumnName);
 }
 
-TConclusion<std::vector<std::shared_ptr<IPortionDataChunk>>> IIndexMeta::BuildIndexOptional(
+TConclusion<std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>>> IIndexMeta::BuildIndexOptional(
     const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, const ui32 recordsCount, const TIndexInfo& indexInfo) const {
     auto conclusion = DoBuildIndexOptional(data, recordsCount, indexInfo);
     if (conclusion.IsFail()) {

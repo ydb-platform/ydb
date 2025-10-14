@@ -9,7 +9,7 @@ private:
     const ui32 RecordsCount;
     const ui64 RawBytes;
     const TString Data;
-    const bool InheritPortionStorage;
+    YDB_READONLY_DEF(bool, InheritPortionStorage);
 protected:
     virtual const TString& DoGetData() const override {
         return Data;

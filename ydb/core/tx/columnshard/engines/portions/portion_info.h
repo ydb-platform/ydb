@@ -331,6 +331,7 @@ public:
             return NPortion::INACTIVE;
         }
         if (GetTierNameDef(NBlobOperations::TGlobal::DefaultStorageId) != NBlobOperations::TGlobal::DefaultStorageId) {
+            AFL_VERIFY(GetPortionType() == EPortionType::Compacted);
             return NPortion::EVICTED;
         }
         return GetPortionType() == EPortionType::Compacted ? NPortion::EProduced::SPLIT_COMPACTED : NPortion::EProduced::INSERTED;

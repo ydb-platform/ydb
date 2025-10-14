@@ -4,6 +4,7 @@
 #include "collection.h"
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/tx/columnshard/engines/storage/chunks/data.h>
 #include <ydb/core/tx/columnshard/splitter/chunks.h>
 
 #include <ydb/library/conclusion/status.h>
@@ -60,7 +61,7 @@ private:
     }
 
 protected:
-    virtual TConclusion<std::vector<std::shared_ptr<IPortionDataChunk>>> DoBuildIndexOptional(
+    virtual TConclusion<std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>>> DoBuildIndexOptional(
         const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, const ui32 recordsCount,
         const TIndexInfo& indexInfo) const = 0;
     virtual bool DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& proto) = 0;
@@ -90,8 +91,10 @@ public:
     }
 
     bool IsInplaceData(const TString& specialTier) const {
-        return DefaultStorageId == NBlobOperations::TGlobal::LocalMetadataStorageId &&
-               !(InheritPortionStorage && specialTier && specialTier != NBlobOperations::TGlobal::DefaultStorageId);
+        if (InheritPortionStorage && specialTier && specialTier != NBlobOperations::TGlobal::DefaultStorageId) {
+            return false;
+        }
+        return DefaultStorageId == NBlobOperations::TGlobal::LocalMetadataStorageId;
     }
 
     IIndexMeta() = default;
@@ -118,9 +121,8 @@ public:
 
     virtual ~IIndexMeta() = default;
 
-    TConclusion<std::vector<std::shared_ptr<IPortionDataChunk>>> BuildIndexOptional(
-        const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, const ui32 recordsCount,
-        const TIndexInfo& indexInfo) const;
+    TConclusion<std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>>> BuildIndexOptional(
+        const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, const ui32 recordsCount, const TIndexInfo& indexInfo) const;
 
     bool DeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& proto);
     void SerializeToProto(NKikimrSchemeOp::TOlapIndexDescription& proto) const;

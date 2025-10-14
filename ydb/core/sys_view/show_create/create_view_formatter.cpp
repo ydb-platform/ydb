@@ -2,7 +2,7 @@
 
 #include <ydb/public/lib/ydb_cli/dump/util/query_utils.h>
 
-#include <yql/essentials/parser/proto_ast/gen/v1/SQLv1Lexer.h>
+#include <yql/essentials/parser/proto_ast/gen/v1_antlr4/SQLv1Antlr4Lexer.h>
 #include <yql/essentials/sql/settings/translation_settings.h>
 #include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
 #include <yql/essentials/sql/v1/lexer/antlr4_ansi/lexer.h>
@@ -62,7 +62,7 @@ struct TTokenCollector {
     void operator()(const NProtoBuf::Message& message) const {
         if (const auto* token = dynamic_cast<const TToken*>(&message)) {
             const auto& value = token->GetValue();
-            if (token->GetId() != NALPDefault::SQLv1LexerTokens::TOKEN_EOF) {
+            if (token->GetValue() != "<EOF>") {
                 if (!Tokens.empty()) {
                     Tokens << ' ';
                 }

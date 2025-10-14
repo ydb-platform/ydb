@@ -45,12 +45,6 @@ Currently {{ ydb-short-name }} does not support storing `Tagged`, so before stor
 
 {% endnote %}
 
-{% note info %}
-
-Currently {{ ydb-short-name }} does not support building an index for vectors with bit quantization `BitVector`.
-
-{% endnote %}
-
 {% endif %}
 
 #### Function signatures {#functions-convert-signature}

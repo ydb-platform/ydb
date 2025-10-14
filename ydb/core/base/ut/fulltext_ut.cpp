@@ -100,20 +100,20 @@ Y_UNIT_TEST_SUITE(NFulltext) {
 
     Y_UNIT_TEST(Analyze) {
         Ydb::Table::FulltextIndexSettings::Analyzers analyzers;
-        TString text = "apple WaLLet  spaced-dog_cat";
+        TString text = "apple WaLLet  spaced-dog_cat 0123,456@";
         
         analyzers.set_tokenizer(Ydb::Table::FulltextIndexSettings::WHITESPACE);
-        UNIT_ASSERT_VALUES_EQUAL(Analyze(text, analyzers), (TVector<TString>{"apple", "WaLLet", "spaced-dog_cat"}));
+        UNIT_ASSERT_VALUES_EQUAL(Analyze(text, analyzers), (TVector<TString>{"apple", "WaLLet", "spaced-dog_cat", "0123,456@"}));
 
         analyzers.set_tokenizer(Ydb::Table::FulltextIndexSettings::STANDARD);
-        UNIT_ASSERT_VALUES_EQUAL(Analyze(text, analyzers), (TVector<TString>{"apple", "WaLLet", "spaced", "dog", "cat"}));
+        UNIT_ASSERT_VALUES_EQUAL(Analyze(text, analyzers), (TVector<TString>{"apple", "WaLLet", "spaced", "dog", "cat", "0123", "456"}));
 
         analyzers.set_tokenizer(Ydb::Table::FulltextIndexSettings::KEYWORD);
         UNIT_ASSERT_VALUES_EQUAL(Analyze(text, analyzers), (TVector<TString>{text}));
 
         analyzers.set_tokenizer(Ydb::Table::FulltextIndexSettings::WHITESPACE);
         analyzers.set_use_filter_lowercase(true);
-        UNIT_ASSERT_VALUES_EQUAL(Analyze(text, analyzers), (TVector<TString>{"apple", "wallet", "spaced-dog_cat"}));
+        UNIT_ASSERT_VALUES_EQUAL(Analyze(text, analyzers), (TVector<TString>{"apple", "wallet", "spaced-dog_cat", "0123,456@"}));
     }
 
     Y_UNIT_TEST(AnalyzeRu) {

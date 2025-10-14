@@ -330,8 +330,8 @@ public:
         });
 
         if (sort) {
-            std::sort(receivedMessages.begin(), receivedMessages.end());
-            std::sort(messages.begin(), messages.end());
+            Sort(receivedMessages);
+            Sort(messages);
         }
 
         UNIT_ASSERT_VALUES_EQUAL(messages.size(), receivedMessages.size());

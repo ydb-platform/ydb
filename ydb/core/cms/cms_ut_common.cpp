@@ -53,169 +53,189 @@ using namespace NKikimrBlobStorage;
 void TFakeNodeWhiteboardService::Handle(TEvConfigsDispatcher::TEvGetConfigRequest::TPtr &ev,
                                         const TActorContext &ctx)
 {
+    TGuard<TMutex> guard(Mutex);
+    Y_UNUSED(ev);
+    NKikimrConfig::TAppConfig appConfig;
+    appConfig.MutableBootstrapConfig()->CopyFrom(BootstrapConfig);
     auto resp = MakeHolder<TEvConfigsDispatcher::TEvGetConfigResponse>();
+    resp->Config = std::make_shared<NKikimrConfig::TAppConfig>(appConfig);
     {
-        TGuard<TMutex> guard(Mutex);
-        Y_UNUSED(ev);
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableBootstrapConfig()->CopyFrom(BootstrapConfig);
-        resp->Config = std::make_shared<NKikimrConfig::TAppConfig>(appConfig);
+        auto unguard = Unguard(guard);
+        ctx.Send(ev->Sender, resp.Release(), 0, ev->Cookie);
     }
-    ctx.Send(ev->Sender, resp.Release(), 0, ev->Cookie);
 }
 
 void TFakeNodeWhiteboardService::Handle(TEvBlobStorage::TEvControllerConfigRequest::TPtr &ev,
                                         const TActorContext &ctx)
 {
-    Mutex.lock();
+    TGuard<TMutex> guard(Mutex);
     auto &rec = ev->Get()->Record;
-    if (rec.GetRequest().CommandSize() && rec.GetRequest().GetCommand(0).HasUpdateDriveStatus()) {
+    auto resp = MakeHolder<TEvBlobStorage::TEvControllerConfigResponse>();
+    if (rec.GetRequest().CommandSize() && rec.GetRequest().GetCommand(0).HasQueryBaseConfig()) {
+        resp->Record.CopyFrom(Config);
+    } else if (rec.GetRequest().CommandSize() && rec.GetRequest().GetCommand(0).HasReadDriveStatus()) {
+        auto &drive = rec.GetRequest().GetCommand(0).GetReadDriveStatus();
+        auto &status = *resp->Record.MutableResponse()->AddStatus();
+        resp->Record.MutableResponse()->SetSuccess(true);
+        status.SetSuccess(true);
+        auto &driveStatus = *status.AddDriveStatus();
+        driveStatus.MutableHostKey()->SetFqdn(drive.GetHostKey().GetFqdn());
+        driveStatus.MutableHostKey()->SetIcPort(drive.GetHostKey().GetIcPort());
+        driveStatus.SetPath(drive.GetPath());
+        driveStatus.SetStatus(NKikimrBlobStorage::ACTIVE);
+    } else if (rec.GetRequest().CommandSize() && rec.GetRequest().GetCommand(0).HasUpdateDriveStatus()) {
+        // assume that all commands are UpdateDriveStatus
         if (NoisyBSCPipe && ++NoisyBSCPipeCounter % 3) {
-            Mutex.unlock();
-            ctx.Send(ev->Sender, new TEvSentinel::TEvBSCPipeDisconnected, 0);
+            {
+                auto unguard = Unguard(guard);
+                ctx.Send(ev->Sender, new TEvSentinel::TEvBSCPipeDisconnected, 0);
+            }
             return;
         }
-    }
-    Mutex.unlock();
-    auto resp = MakeHolder<TEvBlobStorage::TEvControllerConfigResponse>();
-    {
-        TGuard<TMutex> guard(Mutex);
-    
-        if (rec.GetRequest().CommandSize() && rec.GetRequest().GetCommand(0).HasQueryBaseConfig()) {
-            resp->Record.CopyFrom(Config);
-        } else if (rec.GetRequest().CommandSize() && rec.GetRequest().GetCommand(0).HasReadDriveStatus()) {
-            auto &drive = rec.GetRequest().GetCommand(0).GetReadDriveStatus();
-            auto &status = *resp->Record.MutableResponse()->AddStatus();
-            resp->Record.MutableResponse()->SetSuccess(true);
-            status.SetSuccess(true);
-            auto &driveStatus = *status.AddDriveStatus();
-            driveStatus.MutableHostKey()->SetFqdn(drive.GetHostKey().GetFqdn());
-            driveStatus.MutableHostKey()->SetIcPort(drive.GetHostKey().GetIcPort());
-            driveStatus.SetPath(drive.GetPath());
-            driveStatus.SetStatus(NKikimrBlobStorage::ACTIVE);
-        } else if (rec.GetRequest().CommandSize() && rec.GetRequest().GetCommand(0).HasUpdateDriveStatus()) {
-            bool success = true;
-            for (ui32 i = 0; i < rec.GetRequest().CommandSize(); ++i) {
-                const auto &cmd = rec.GetRequest().GetCommand(i).GetUpdateDriveStatus();
-                const auto id = NCms::TPDiskID(cmd.GetHostKey().GetNodeId(), cmd.GetPDiskId());
-                if (auto& pattern = BSControllerResponsePatterns[id]; !pattern.empty()) {
-                    success = success && pattern[0];
-                    resp->Record.MutableResponse()->AddStatus()->SetSuccess(pattern[0]);
-                    pattern.erase(pattern.begin());
-                    if (!success) {
-                        break;
-                    }
-                } else {
-                    resp->Record.MutableResponse()->AddStatus()->SetSuccess(true);
+        bool success = true;
+        for (ui32 i = 0; i < rec.GetRequest().CommandSize(); ++i) {
+            const auto &cmd = rec.GetRequest().GetCommand(i).GetUpdateDriveStatus();
+            const auto id = NCms::TPDiskID(cmd.GetHostKey().GetNodeId(), cmd.GetPDiskId());
+            if (auto& pattern = BSControllerResponsePatterns[id]; !pattern.empty()) {
+                success = success && pattern[0];
+                resp->Record.MutableResponse()->AddStatus()->SetSuccess(pattern[0]);
+                pattern.erase(pattern.begin());
+                if (!success) {
+                    break;
                 }
+            } else {
+                resp->Record.MutableResponse()->AddStatus()->SetSuccess(true);
             }
-            resp->Record.MutableResponse()->SetSuccess(success);
         }
+        resp->Record.MutableResponse()->SetSuccess(success);
     }
-    ctx.Send(ev->Sender, std::move(resp), 0, ev->Cookie);
+    {
+        auto unguard = Unguard(guard);
+        ctx.Send(ev->Sender, std::move(resp), 0, ev->Cookie);
+    }
 }
 
 void TFakeNodeWhiteboardService::Handle(TEvWhiteboard::TEvTabletStateRequest::TPtr &ev,
                                         const TActorContext &ctx)
 {
-    TAutoPtr<TEvWhiteboard::TEvTabletStateResponse> response = new TEvWhiteboard::TEvTabletStateResponse();
-    {
-        TGuard<TMutex> guard(Mutex);
-        const auto &node = Info[ctx.SelfID.NodeId()];
-        if (!node.Connected) {
+    TGuard<TMutex> guard(Mutex);
+    const auto &node = Info[ctx.SelfID.NodeId()];
+    if (!node.Connected) {
+        {
+            auto unguard = Unguard(guard);
             ctx.Send(ev->Sender, new TEvents::TEvUndelivered(ev->GetTypeRewrite(), TEvents::TEvUndelivered::Disconnected), 0, ev->Cookie);
-            return;
         }
-        auto& record = response->Record;
-        for (const auto& pr : node.TabletStateInfo) {
-            NKikimrWhiteboard::TTabletStateInfo &tabletStateInfo = *record.AddTabletStateInfo();
-            tabletStateInfo.CopyFrom(pr.second);
-        }
+        return;
     }
-    response->Record.SetResponseTime(ctx.Now().MilliSeconds());
-    ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
+    TAutoPtr<TEvWhiteboard::TEvTabletStateResponse> response = new TEvWhiteboard::TEvTabletStateResponse();
+    auto& record = response->Record;
+    for (const auto& pr : node.TabletStateInfo) {
+        NKikimrWhiteboard::TTabletStateInfo &tabletStateInfo = *record.AddTabletStateInfo();
+        tabletStateInfo.CopyFrom(pr.second);
+    }
+    {
+        auto unguard = Unguard(guard);
+        response->Record.SetResponseTime(ctx.Now().MilliSeconds());
+        ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
+    }
 }
 
 void TFakeNodeWhiteboardService::Handle(TEvWhiteboard::TEvNodeStateRequest::TPtr &ev,
                                         const TActorContext &ctx)
 {
-    TAutoPtr<TEvWhiteboard::TEvNodeStateResponse> response = new TEvWhiteboard::TEvNodeStateResponse();
-    {
-        TGuard<TMutex> guard(Mutex);
-        const auto &node = Info[ctx.SelfID.NodeId()];
-        if (!node.Connected) {
+    TGuard<TMutex> guard(Mutex);
+    const auto &node = Info[ctx.SelfID.NodeId()];
+    if (!node.Connected) {
+        {
+            auto unguard = Unguard(guard);
             ctx.Send(ev->Sender, new TEvents::TEvUndelivered(ev->GetTypeRewrite(), TEvents::TEvUndelivered::Disconnected), 0, ev->Cookie);
-            return;
         }
-        auto& record = response->Record;
-        for (const auto& pr : node.NodeStateInfo) {
-            NKikimrWhiteboard::TNodeStateInfo &nodeStateInfo = *record.AddNodeStateInfo();
-            nodeStateInfo.CopyFrom(pr.second);
-        }
+        return;
     }
-    response->Record.SetResponseTime(ctx.Now().MilliSeconds());
-    ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
+    TAutoPtr<TEvWhiteboard::TEvNodeStateResponse> response = new TEvWhiteboard::TEvNodeStateResponse();
+    auto& record = response->Record;
+    for (const auto& pr : node.NodeStateInfo) {
+        NKikimrWhiteboard::TNodeStateInfo &nodeStateInfo = *record.AddNodeStateInfo();
+        nodeStateInfo.CopyFrom(pr.second);
+    }
+    {
+        auto unguard = Unguard(guard);
+        response->Record.SetResponseTime(ctx.Now().MilliSeconds());
+        ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
+    }
 }
 
 void TFakeNodeWhiteboardService::Handle(TEvWhiteboard::TEvPDiskStateRequest::TPtr &ev,
                                         const TActorContext &ctx)
 {
-    TAutoPtr<TEvWhiteboard::TEvPDiskStateResponse> response = new TEvWhiteboard::TEvPDiskStateResponse();
-    {
-        TGuard<TMutex> guard(Mutex);
-        const auto &node = Info[ctx.SelfID.NodeId()];
-        if (!node.Connected) {
+    TGuard<TMutex> guard(Mutex);
+    const auto &node = Info[ctx.SelfID.NodeId()];
+    if (!node.Connected) {
+        {
+            auto unguard = Unguard(guard);
             ctx.Send(ev->Sender, new TEvents::TEvUndelivered(ev->GetTypeRewrite(), TEvents::TEvUndelivered::Disconnected), 0, ev->Cookie);
-            return;
         }
-        auto& record = response->Record;
-        for (const auto& pr : node.PDiskStateInfo) {
-            NKikimrWhiteboard::TPDiskStateInfo &pDiskStateInfo = *record.AddPDiskStateInfo();
-            pDiskStateInfo.CopyFrom(pr.second);
-        }
+        return;
     }
-    response->Record.SetResponseTime(ctx.Now().MilliSeconds());
-    ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
+    TAutoPtr<TEvWhiteboard::TEvPDiskStateResponse> response = new TEvWhiteboard::TEvPDiskStateResponse();
+    auto& record = response->Record;
+    for (const auto& pr : node.PDiskStateInfo) {
+        NKikimrWhiteboard::TPDiskStateInfo &pDiskStateInfo = *record.AddPDiskStateInfo();
+        pDiskStateInfo.CopyFrom(pr.second);
+    }
+    {
+        auto unguard = Unguard(guard);
+        response->Record.SetResponseTime(ctx.Now().MilliSeconds());
+        ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
+    }
 }
 
 void TFakeNodeWhiteboardService::Handle(TEvWhiteboard::TEvVDiskStateRequest::TPtr &ev,
                                         const TActorContext &ctx)
 {
-    TAutoPtr<TEvWhiteboard::TEvVDiskStateResponse> response = new TEvWhiteboard::TEvVDiskStateResponse();
-    {
-        TGuard<TMutex> guard(Mutex);
-        const auto &node = Info[ctx.SelfID.NodeId()];
-        if (!node.Connected) {
+    TGuard<TMutex> guard(Mutex);
+    const auto &node = Info[ctx.SelfID.NodeId()];
+    if (!node.Connected) {
+        {
+            auto unguard = Unguard(guard);
             ctx.Send(ev->Sender, new TEvents::TEvUndelivered(ev->GetTypeRewrite(), TEvents::TEvUndelivered::Disconnected), 0, ev->Cookie);
-            return;
         }
-        auto& record = response->Record;
-        for (const auto& pr : node.VDiskStateInfo) {
-            NKikimrWhiteboard::TVDiskStateInfo &vDiskStateInfo = *record.AddVDiskStateInfo();
-            vDiskStateInfo.CopyFrom(pr.second);
-        }
+        return;
     }
-    response->Record.SetResponseTime(ctx.Now().MilliSeconds());
-    ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
+    TAutoPtr<TEvWhiteboard::TEvVDiskStateResponse> response = new TEvWhiteboard::TEvVDiskStateResponse();
+    auto& record = response->Record;
+    for (const auto& pr : node.VDiskStateInfo) {
+        NKikimrWhiteboard::TVDiskStateInfo &vDiskStateInfo = *record.AddVDiskStateInfo();
+        vDiskStateInfo.CopyFrom(pr.second);
+    }
+    {
+        auto unguard = Unguard(guard);
+        response->Record.SetResponseTime(ctx.Now().MilliSeconds());
+        ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
+    }
 }
 
 void TFakeNodeWhiteboardService::Handle(TEvWhiteboard::TEvSystemStateRequest::TPtr &ev,
                                         const TActorContext &ctx)
 {
-    TAutoPtr<TEvWhiteboard::TEvSystemStateResponse> response = new TEvWhiteboard::TEvSystemStateResponse();
-    {
-        TGuard<TMutex> guard(Mutex);
-        const auto &node = Info[ctx.SelfID.NodeId()];
-        if (!node.Connected) {
+    TGuard<TMutex> guard(Mutex);
+    const auto &node = Info[ctx.SelfID.NodeId()];
+    if (!node.Connected) {
+        {
+            auto unguard = Unguard(guard);
             ctx.Send(ev->Sender, new TEvents::TEvUndelivered(ev->GetTypeRewrite(), TEvents::TEvUndelivered::Disconnected), 0, ev->Cookie);
-            return;
         }
-        auto& record = response->Record;
-        NKikimrWhiteboard::TSystemStateInfo &systemStateInfo = *record.AddSystemStateInfo();
-        systemStateInfo.CopyFrom(node.SystemStateInfo);
+        return;
     }
-    response->Record.SetResponseTime(ctx.Now().MilliSeconds());
-    ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
+    TAutoPtr<TEvWhiteboard::TEvSystemStateResponse> response = new TEvWhiteboard::TEvSystemStateResponse();
+    auto& record = response->Record;
+    NKikimrWhiteboard::TSystemStateInfo &systemStateInfo = *record.AddSystemStateInfo();
+    systemStateInfo.CopyFrom(node.SystemStateInfo);
+    {
+        auto unguard = Unguard(guard);
+        response->Record.SetResponseTime(ctx.Now().MilliSeconds());
+        ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
+    }
 }
 
 namespace {

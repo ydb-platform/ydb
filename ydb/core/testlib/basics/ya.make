@@ -10,7 +10,6 @@ SRCS(
 PEERDIR(
     library/cpp/regex/pcre
     library/cpp/testing/unittest
-    ydb/library/actors/dnsresolver
     ydb/core/base
     ydb/core/blobstorage
     ydb/core/blobstorage/crypto
@@ -29,6 +28,7 @@ PEERDIR(
     ydb/core/tx/scheme_board
     ydb/core/tx/schemeshard
     ydb/core/util
+    ydb/library/actors/dnsresolver
     ydb/library/keys
     ydb/services/kesus
     ydb/services/persqueue_cluster_discovery

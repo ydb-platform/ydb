@@ -354,6 +354,10 @@ namespace NKikimr::TEvPersQueue {
             Record.SetErrorCode(errorCode);
         }
 
+        NPersQueue::NErrorCode::EErrorCode GetErrorCode() const {
+            return Record.GetErrorCode();
+        }
+
         // The partition which is ready for reading.
         ui32 GetPartitionId() const {
             return Record.GetPartitionId();

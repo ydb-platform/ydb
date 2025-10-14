@@ -26,7 +26,7 @@ private:
 
 protected:
     virtual TConclusionStatus DoCheckModificationCompatibility(const IIndexMeta& newMeta) const override;
-    virtual std::vector<std::shared_ptr<IPortionDataChunk>> DoBuildIndexImpl(
+    virtual std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> DoBuildIndexImpl(
         TChunkedBatchReader& reader, const ui32 recordsCount) const override;
 
     virtual bool DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& proto) override;
@@ -40,7 +40,8 @@ public:
     TBloomIndexMeta(const ui32 indexId, const TString& indexName, const TString& storageId, const ui32 columnId, const double fpProbability,
         const TReadDataExtractorContainer& dataExtractor, const std::shared_ptr<IBitsStorageConstructor>& bitsStorageConstructor)
         : TBase(indexId, indexName, columnId, storageId, dataExtractor, bitsStorageConstructor)
-        , FalsePositiveProbability(fpProbability) {
+        , FalsePositiveProbability(fpProbability)
+    {
         Initialize();
     }
 

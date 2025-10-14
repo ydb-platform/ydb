@@ -560,6 +560,14 @@ public:
     };
 
     std::vector<TReadPage> BuildReadPages(const ui64 memoryLimit, const std::set<ui32>& entityIds) const;
+
+    TString GetEntityStorageId(const ui64 entityId, const TIndexInfo& indexInfo) const {
+        return PortionInfo->GetEntityStorageId(entityId, indexInfo);
+    }
+    NSplitter::TEntityGroups GetEntityGroupsByStorageId(
+        const TString& specialTier, const IStoragesManager& storages, const TIndexInfo& indexInfo) const {
+        return PortionInfo->GetEntityGroupsByStorageId(specialTier, storages, indexInfo);
+    }
 };
 
 }   // namespace NKikimr::NOlap

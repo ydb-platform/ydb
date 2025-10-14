@@ -4,7 +4,8 @@
 
 namespace NKikimr::NMiniKQL {
 
-TString CaseName(ETestedJoinAlgo algo, ETestedJoinKeyType keyType, ETestedInputFlavour inputFlavour, const TBenchmarkSettings& benchSettings, TTableSizes sizes) {
+TString CaseName(ETestedJoinAlgo algo, ETestedJoinKeyType keyType, ETestedInputFlavour inputFlavour,
+                 const TBenchmarkSettings& benchSettings, TTableSizes sizes) {
     TString algoName = [&] {
         switch (algo) {
 
@@ -40,27 +41,29 @@ TString CaseName(ETestedJoinAlgo algo, ETestedJoinKeyType keyType, ETestedInputF
             return "SameSize";
         case ETestedInputFlavour::kLittleRightTable:
             return "LittleRight";
-        break;
+            break;
         }
     }();
 
-    return algoName + "_" + keyTypeName + "_" + benchSettings.Preset.PresetName + "_" + std::to_string(benchSettings.Seed) + "_" + flavourName + "_" + std::to_string(sizes.Left) + "_" +
+    return algoName + "_" + keyTypeName + "_" + benchSettings.Preset.PresetName + "_" +
+           std::to_string(benchSettings.Seed) + "_" + flavourName + "_" + std::to_string(sizes.Left) + "_" +
            std::to_string(sizes.Right);
 }
 
-TVector<TPreset> ParsePresetsFile(const TString& path){
+TVector<TPreset> ParsePresetsFile(const TString& path) {
     TVector<TPreset> ret;
     auto inputFile = TMappedFileInput{path};
     auto json = NJson::ReadJsonFastTree(inputFile.ReadAll());
     const auto& map = json.GetMapSafe();
-    for(auto& kv: map) {
+    for (auto& kv : map) {
         ret.emplace_back();
         ret.back().PresetName = kv.first;
         auto arr = kv.second.GetArraySafe();
-        for(auto& val : arr) {
+        for (auto& val : arr) {
             ret.back().Sizes.emplace_back(val[0].GetInteger(), val[1].GetInteger());
         }
-    } 
+    }
     return ret;
 }
+
 } // namespace NKikimr::NMiniKQL

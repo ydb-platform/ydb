@@ -29,7 +29,8 @@ struct TBenchmarkSettings {
     TSet<ETestedInputFlavour> Flavours;
 };
 
-TString CaseName(ETestedJoinAlgo algo, ETestedJoinKeyType keyType, ETestedInputFlavour inputFlavour, const TBenchmarkSettings& preset, TTableSizes sizes);
+TString CaseName(ETestedJoinAlgo algo, ETestedJoinKeyType keyType, ETestedInputFlavour inputFlavour,
+                 const TBenchmarkSettings& preset, TTableSizes sizes);
 
 TVector<TPreset> ParsePresetsFile(const TString& path);
 

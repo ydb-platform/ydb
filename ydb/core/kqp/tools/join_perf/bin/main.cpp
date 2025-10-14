@@ -23,14 +23,9 @@ int main(int argc, char** argv) {
     opts.AddHelpOption('h');
 
     NKikimr::NMiniKQL::TBenchmarkSettings params;
-    params.KeyTypes = {
-        NKikimr::NMiniKQL::ETestedJoinKeyType::kString,
-        NKikimr::NMiniKQL::ETestedJoinKeyType::kInteger
-    };
-    params.Flavours = {
-        NKikimr::NMiniKQL::ETestedInputFlavour::kLittleRightTable,
-        NKikimr::NMiniKQL::ETestedInputFlavour::kSameSizeTable
-    };
+    params.KeyTypes = {NKikimr::NMiniKQL::ETestedJoinKeyType::kString, NKikimr::NMiniKQL::ETestedJoinKeyType::kInteger};
+    params.Flavours = {NKikimr::NMiniKQL::ETestedInputFlavour::kLittleRightTable,
+                       NKikimr::NMiniKQL::ETestedInputFlavour::kSameSizeTable};
     params.Algorithms = {
         // NKikimr::NMiniKQL::ETestedJoinAlgo::kBlockMap,
         NKikimr::NMiniKQL::ETestedJoinAlgo::kBlockHash,
@@ -70,8 +65,10 @@ int main(int argc, char** argv) {
                 }
             }());
         });
-    opts.AddLongOption("preset-flavour").Help("specific preset, do not specify for all").Choices({"same-size",
-    "little-right"}).Handler1([&](const NLastGetopt::TOptsParser* option) {
+    opts.AddLongOption("preset-flavour")
+        .Help("specific preset, do not specify for all")
+        .Choices({"same-size", "little-right"})
+        .Handler1([&](const NLastGetopt::TOptsParser* option) {
             auto val = TStringBuf(option->CurVal());
             params.Flavours.clear();
             params.Flavours.emplace([&]() {
@@ -87,12 +84,8 @@ int main(int argc, char** argv) {
     opts.AddLongOption("seed").Help("seed for keys generation").DefaultValue(123).StoreResult(&params.Seed);
     NLastGetopt::TOptsParseResult parsedOptions(&opts, argc, argv);
 
-
-
     TVector<NKikimr::NMiniKQL::TPreset> presets = NKikimr::NMiniKQL::ParsePresetsFile(presetsPath + "/presets.json");
-    auto it = std::ranges::find_if(presets, [&](const auto& preset) {
-        return preset.PresetName == presetName;
-    });
+    auto it = std::ranges::find_if(presets, [&](const auto& preset) { return preset.PresetName == presetName; });
     if (it == presets.end()) {
         throw std::runtime_error{"no " + presetName + " in presets"};
     }
@@ -102,7 +95,6 @@ int main(int argc, char** argv) {
         params.Flavours.clear();
         params.Flavours.insert(NKikimr::NMiniKQL::ETestedInputFlavour::kSameSizeTable);
     }
-
 
     auto benchmarkResults = NKikimr::NMiniKQL::RunJoinsBench(params);
     TFixedBufferFileOutput file{MakeJoinPerfPath()};

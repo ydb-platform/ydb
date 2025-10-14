@@ -658,6 +658,7 @@ metadata:
   cluster: ""
   version: 0
 config:
+  self_management_config: {enabled: true, erasure_species: block-4-2}
   log_config:
     cluster_name: cluster1
 allowed_labels:
@@ -676,6 +677,7 @@ metadata:
   cluster: ""
   version: 1
 config:
+  self_management_config: {enabled: true, erasure_species: block-4-2}
   log_config:
     cluster_name: cluster1
 allowed_labels:
@@ -693,6 +695,7 @@ metadata:
   cluster: ""
   version: 0
 config:
+  self_management_config: {enabled: true, erasure_species: block-4-2}
   log_config:
     cluster_name: cluster1
 )";
@@ -704,6 +707,7 @@ metadata:
   cluster: ""
   version: 1
 config:
+  self_management_config: {enabled: true, erasure_species: block-4-2}
   log_config:
     cluster_name: cluster1
 )";
@@ -714,6 +718,7 @@ metadata:
   cluster: ""
   version: 1
 config:
+  self_management_config: {enabled: true, erasure_species: block-4-2}
   log_config:
     cluster_name: cluster2
 allowed_labels:
@@ -732,6 +737,7 @@ metadata:
   cluster: ""
   version: 2
 config:
+  self_management_config: {enabled: true, erasure_species: block-4-2}
   log_config:
     cluster_name: cluster2
 allowed_labels:
@@ -748,6 +754,7 @@ const TString VOLATILE_YAML_CONFIG_1_1 = R"(
   selector:
     tenant: /slice
   config:
+    self_management_config: {enabled: true, erasure_species: block-4-2}
     yaml_config_enabled: true
     cms_config:
       sentinel_config:
@@ -765,6 +772,7 @@ selector_config:
   selector:
     tenant: /slice
   config:
+    self_management_config: {enabled: true, erasure_species: block-4-2}
     yaml_config_enabled: true
     cms_config:
       sentinel_config:
@@ -778,6 +786,7 @@ const TString VOLATILE_YAML_CONFIG_1_2 = R"(
   selector:
     tenant: /slice/test
   config:
+    self_management_config: {enabled: true, erasure_species: block-4-2}
     yaml_config_enabled: false
     cms_config:
       sentinel_config:

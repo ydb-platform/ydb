@@ -953,8 +953,8 @@ inline TAsyncStatus TImportFileClient::TImpl::UpsertTValueBufferParquet(
         RequestsInflight->acquire();
     }
 
-    auto retryFunc = [parquet = NYdb_cli::Narrow20::SerializeBatch(batch, writeOptions),
-            schema = NYdb_cli::Narrow20::SerializeSchema(*batch->schema()),
+    auto retryFunc = [parquet = NYdb_cli::NArrow::SerializeBatch(batch, writeOptions),
+            schema = NYdb_cli::NArrow::SerializeSchema(*batch->schema()),
             dbPath](NTable::TTableClient& client) {
         return client.BulkUpsert(dbPath, NTable::EDataFormat::ApacheArrow, parquet, schema)
             .Apply([](const NTable::TAsyncBulkUpsertResult& result) {
@@ -1506,11 +1506,11 @@ TStatus TImportFileClient::TImpl::UpsertParquet([[maybe_unused]] const TString& 
 
     std::unique_ptr<parquet20::arrow20::FileReader> fileReader;
 
-    arrow20::Status st;
-    st = parquet20::arrow20::OpenFile(readableFile, arrow20::default_memory_pool(), &fileReader);
-    if (!st.ok()) {
-        return MakeStatus(EStatus::BAD_REQUEST, TStringBuilder() << "Error while initializing arrow FileReader: " << st.ToString());
+    auto fileReaderResult = parquet20::arrow20::OpenFile(readableFile, arrow20::default_memory_pool());
+    if (!fileReaderResult.ok()) {
+        return MakeStatus(EStatus::BAD_REQUEST, TStringBuilder() << "Error while initializing arrow FileReader: " << fileReaderResult.status().ToString());
     }
+    fileReader = std::move(fileReaderResult.ValueOrDie());
 
     auto metadata = parquet20::ReadMetaData(readableFile);
     const i64 numRows = metadata->num_rows();
@@ -1523,10 +1523,11 @@ TStatus TImportFileClient::TImpl::UpsertParquet([[maybe_unused]] const TString& 
 
     std::unique_ptr<arrow20::RecordBatchReader> reader;
 
-    st = fileReader->GetRecordBatchReader(row_group_indices, &reader);
-    if (!st.ok()) {
-        return MakeStatus(EStatus::BAD_REQUEST, TStringBuilder() << "Error while getting RecordBatchReader: " << st.ToString());
+    auto readerResult = fileReader->GetRecordBatchReader(row_group_indices);
+    if (!readerResult.ok()) {
+        return MakeStatus(EStatus::BAD_REQUEST, TStringBuilder() << "Error while getting RecordBatchReader: " << readerResult.status().ToString());
     }
+    reader = std::move(readerResult.ValueOrDie());
 
     std::atomic<ui64> uploadedRows = 0;
     auto uploadedRowsCallback = [&](ui64 rows) {
@@ -1542,7 +1543,7 @@ TStatus TImportFileClient::TImpl::UpsertParquet([[maybe_unused]] const TString& 
     while (true) {
         std::shared_ptr<arrow20::RecordBatch> batch;
 
-        st = reader->ReadNext(&batch);
+        auto st = reader->ReadNext(&batch);
         if (!st.ok()) {
             return MakeStatus(EStatus::BAD_REQUEST, TStringBuilder() << "Error while reading next RecordBatch" << st.ToString());
         }
@@ -1553,8 +1554,8 @@ TStatus TImportFileClient::TImpl::UpsertParquet([[maybe_unused]] const TString& 
         }
 
         auto upsertParquetBatch = [&, batch = std::move(batch)]() {
-            const TString strSchema = NYdb_cli::Narrow20::SerializeSchema(*batch->schema());
-            const size_t totalSize = NYdb_cli::Narrow20::GetBatchDataSize(batch);
+            const TString strSchema = NYdb_cli::NArrow::SerializeSchema(*batch->schema());
+            const size_t totalSize = NYdb_cli::NArrow::GetBatchDataSize(batch);
             const size_t sliceCount =
                 (totalSize / (size_t)Settings.BytesPerRequest_) + (totalSize % Settings.BytesPerRequest_ != 0 ? 1 : 0);
             const i64 rowsInSlice = batch->num_rows() / sliceCount;
@@ -1578,9 +1579,9 @@ TStatus TImportFileClient::TImpl::UpsertParquet([[maybe_unused]] const TString& 
                     }
 
                     // Logarithmic approach to find number of rows fit into the byte limit.
-                    if (rowsBatch->num_rows() == 1 || NYdb_cli::Narrow20::GetBatchDataSize(rowsBatch) < Settings.BytesPerRequest_) {
+                    if (rowsBatch->num_rows() == 1 || NYdb_cli::NArrow::GetBatchDataSize(rowsBatch) < Settings.BytesPerRequest_) {
                         // Single row or fits into the byte limit.
-                        auto value = UpsertParquetBuffer(dbPath, NYdb_cli::Narrow20::SerializeBatchNoCompression(rowsBatch), strSchema);
+                        auto value = UpsertParquetBuffer(dbPath, NYdb_cli::NArrow::SerializeBatchNoCompression(rowsBatch), strSchema);
                         auto status = value.ExtractValueSync();
                         if (!status.IsSuccess())
                             return status;

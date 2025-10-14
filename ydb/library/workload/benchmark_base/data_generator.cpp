@@ -204,8 +204,9 @@ public:
         for (i64 i = 0; i < numRowGroups; i++) {
             row_group_indices[i] = i;
         }
-
-        TStatusValidator::Validate(FileReader->GetRecordBatchReader(row_group_indices, &RecordBatchReader));
+        auto recordBatchReaderResult = FileReader->GetRecordBatchReader(row_group_indices);
+        TStatusValidator::Validate(recordBatchReaderResult.status());
+        RecordBatchReader = std::move(recordBatchReaderResult.ValueOrDie());
     }
 
     TDataPortionPtr GetPortion() override {

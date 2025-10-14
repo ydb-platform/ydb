@@ -18,7 +18,9 @@ public:
     TimestampIntParser() {}
 
     bool operator()(const char* s, size_t length, arrow20::TimeUnit::type out_unit,
-        int64_t* out) const override {
+        int64_t* out,
+        bool* out_zone_offset_present = NULLPTR) const override {
+        Y_UNUSED(out_zone_offset_present);
         int64_t unitsCount;
         if (!TryFromString(TString(s, length), unitsCount)) {
             return false;
@@ -186,7 +188,7 @@ std::shared_ptr<arrow20::RecordBatch> TArrowCSV::ReadNext(const TString& csv, TS
             return {};
         }
 
-        auto buffer = std::make_shared<arrow20::Buffer>(arrow20::util::string_view(csv.c_str(), csv.length()));
+        auto buffer = std::make_shared<arrow20::Buffer>(std::string_view(csv.c_str(), csv.length()));
         auto input = std::make_shared<arrow20::io::BufferReader>(buffer);
         auto res = arrow20::csv::StreamingReader::Make(arrow20::io::default_io_context(), input,
                                                      ReadOptions, ParseOptions, ConvertOptions);

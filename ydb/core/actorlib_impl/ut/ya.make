@@ -19,8 +19,8 @@ PEERDIR(
     ydb/library/actors/core
     ydb/library/actors/interconnect
     yql/essentials/minikql/comp_nodes/llvm16
-    yt/yql/providers/yt/comp_nodes/llvm16
     yt/yql/providers/yt/comp_nodes/dq/llvm16
+    yt/yql/providers/yt/comp_nodes/llvm16
 )
 
 SRCS(

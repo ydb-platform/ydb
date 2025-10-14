@@ -27,8 +27,8 @@ PEERDIR(
     yql/essentials/public/udf
     yql/essentials/public/udf/service/exception_policy
     yql/essentials/sql/pg
-    yt/yql/providers/yt/comp_nodes/llvm16
     yt/yql/providers/yt/comp_nodes/dq/llvm16
+    yt/yql/providers/yt/comp_nodes/llvm16
 )
 
 ADDINCL(

@@ -17,8 +17,8 @@ PEERDIR(
     yql/essentials/minikql/comp_nodes/llvm16
     yql/essentials/parser/pg_wrapper
     yql/essentials/sql/pg
-    yt/yql/providers/yt/comp_nodes/llvm16
     yt/yql/providers/yt/comp_nodes/dq/llvm16
+    yt/yql/providers/yt/comp_nodes/llvm16
 )
 
 SRCS(

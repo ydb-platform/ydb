@@ -54,74 +54,6 @@ using TCheckpointGraphDescriptionContextPtr = TIntrusivePtr<TCheckpointGraphDesc
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TTablesCreator : public NKikimr::NTableCreator::TMultiTableCreator {
-    using TBase = NKikimr::NTableCreator::TMultiTableCreator;
-
-public:
-    explicit TTablesCreator(NThreading::TPromise<TIssues> promise)
-        : TBase({
-            GetCoordinatorsSyncTableCreator(),
-            GetCheckpointsMetadataTableCreator(),
-            GetCheckpointsGraphsDescriptionTableCreator()
-        })
-        , Promise(promise)
-    {}
-
-private:
-    static IActor* GetCoordinatorsSyncTableCreator() {
-        return CreateTableCreator(
-            { ".metadata", "checkpoints", CoordinatorsSyncTable },
-            {
-                Col("graph_id", NKikimr::NScheme::NTypeIds::String),
-                Col("generation", NKikimr::NScheme::NTypeIds::Uint64)
-            },
-            { "graph_id" },
-            NKikimrServices::KQP_PROXY
-        );
-    }
-    static IActor* GetCheckpointsMetadataTableCreator() {
-        return CreateTableCreator(
-            { ".metadata", "checkpoints", CheckpointsMetadataTable },
-            {
-                Col("graph_id", NKikimr::NScheme::NTypeIds::String),
-                Col("coordinator_generation", NKikimr::NScheme::NTypeIds::Uint64),
-                Col("seq_no", NKikimr::NScheme::NTypeIds::Uint64),
-                Col("status", NKikimr::NScheme::NTypeIds::Uint8),
-                Col("created_by", NKikimr::NScheme::NTypeIds::Timestamp),
-                Col("modified_by", NKikimr::NScheme::NTypeIds::Timestamp),
-                Col("state_size", NKikimr::NScheme::NTypeIds::Uint64),
-                Col("graph_description_id", NKikimr::NScheme::NTypeIds::String),
-            },
-            { "graph_id", "coordinator_generation", "seq_no" },
-            NKikimrServices::KQP_PROXY
-        );
-    }
-
-    static IActor* GetCheckpointsGraphsDescriptionTableCreator() {
-        return CreateTableCreator(
-            { ".metadata", "checkpoints", CheckpointsGraphsDescriptionTable},
-            {
-                Col("id", NKikimr::NScheme::NTypeIds::String),
-                Col("ref_count", NKikimr::NScheme::NTypeIds::Uint64),
-                Col("graph_description", NKikimr::NScheme::NTypeIds::String)
-            },
-            { "id" },
-            NKikimrServices::KQP_PROXY
-        );
-    }
-
-    void OnTablesCreated(bool success, NYql::TIssues issues) override  {
-        if (success) {
-            Promise.SetValue(NYql::TIssues{});
-        } else {
-            Promise.SetValue(issues);
-        }
-    }
-private:
-
-    NThreading::TPromise<TIssues> Promise;
-};
-
 struct TCheckpointContext : public TThrRefBase {
     const TCheckpointId CheckpointId;
     const ECheckpointStatus Status; // optional new status
@@ -294,11 +226,8 @@ TFuture<TStatus> CreateCheckpoint(const TCheckpointContextPtr& context) {
         query << graphDescriptionPart;
     }
 
-    // auto ttxControl = TTxControl::Tx(*generationContext->Transaction).CommitTx();
-    auto ttxControl = TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx();
-    return generationContext->Session->ExecuteDataQuery(query, std::move(params), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), generationContext->ExecDataQuerySettings).Apply(
-
-   // return generationContext->Session.ExecuteDataQuery(query, ttxControl, params.Build(), generationContext->ExecDataQuerySettings).Apply(
+    auto ttxControl = TTxControl::Tx(*generationContext->Transaction).CommitTx();
+    return generationContext->Session->ExecuteDataQuery(query, std::move(params), ttxControl, generationContext->ExecDataQuerySettings).Apply(
         [] (const TFuture<TDataQueryResult>& future) {
             TStatus status = future.GetValue();
             return status;
@@ -348,18 +277,15 @@ TFuture<TStatus> UpdateCheckpoint(const TCheckpointContextPtr& context) {
             .Timestamp(TInstant::Now())
             .Build();
 
- //   auto ttxControl = TTxControl::Tx(*generationContext->Transaction).CommitTx();
-    auto ttxControl = TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx();
+    auto ttxControl = TTxControl::Tx(*generationContext->Transaction).CommitTx();
     return generationContext->Session->ExecuteDataQuery(query, std::move(params), ttxControl, generationContext->ExecDataQuerySettings).Apply(
-
-    //return generationContext->Session.ExecuteDataQuery(query, ttxControl, params.Build(), generationContext->ExecDataQuerySettings).Apply(
         [] (const TFuture<TDataQueryResult>& future) {
             TStatus status = future.GetValue();
             return status;
         });
 }
 
-[[maybe_unused]] TFuture<TDataQueryResult> SelectGraphDescId(const TCheckpointContextPtr& context) {
+TFuture<TDataQueryResult> SelectGraphDescId(const TCheckpointContextPtr& context) {
     const auto& generationContext = context->GenerationContext;
     const auto& graphDescContext = context->CheckpointGraphDescriptionContext;
 
@@ -379,12 +305,11 @@ TFuture<TStatus> UpdateCheckpoint(const TCheckpointContextPtr& context) {
             .String(graphDescContext->GraphDescId)
             .Build();
 
-    auto f = generationContext->Session->ExecuteDataQuery(
+    return generationContext->Session->ExecuteDataQuery(
         query,
         std::move(params),
-        TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), /*TTxControl::Tx(*generationContext->Transaction)*/ generationContext->ExecDataQuerySettings);
-    return f;
-//    return generationContext->Session.ExecuteDataQuery(query, TTxControl::Tx(*generationContext->Transaction), params.Build(), generationContext->ExecDataQuerySettings);
+        TTxControl::Tx(*generationContext->Transaction),
+        generationContext->ExecDataQuerySettings);
 }
 
 [[maybe_unused]] bool GraphDescIdExists(const TFuture<TDataQueryResult>& result) {
@@ -439,8 +364,6 @@ TFuture<TStatus> CreateCheckpointWrapper(
 TFuture<TDataQueryResult> SelectGraphCheckpoints(const TGenerationContextPtr& context, const TVector<ECheckpointStatus>& statuses, ui64 limit, bool loadGraphDescription)
 {
     auto paramsBuilder = std::make_shared<NYdb::TParamsBuilder>();
-
-   // NYdb::TParamsBuilder paramsBuilder;
     if (statuses) {
         auto& statusesParam = paramsBuilder->AddParam("$statuses").BeginList();
         for (const auto& status : statuses) {
@@ -581,16 +504,8 @@ TFuture<TDataQueryResult> SelectCheckpoint(const TCheckpointContextPtr& context)
     return generationContext->Session->ExecuteDataQuery(
         query,
         std::move(params),
-        TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
-        //TTxControl::Tx(*generationContext->Transaction),
+        TTxControl::Tx(*generationContext->Transaction),
         generationContext->ExecDataQuerySettings);
-
-
-    // return generationContext->Session.ExecuteDataQuery(
-    //     query,
-    //     TTxControl::Tx(*generationContext->Transaction),
-    //     params.Build(),
-    //     generationContext->ExecDataQuerySettings);
 }
 
 TFuture<TStatus> CheckCheckpoint(

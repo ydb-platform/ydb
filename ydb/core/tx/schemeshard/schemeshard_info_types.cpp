@@ -278,6 +278,31 @@ void TSubDomainInfo::AggrDiskSpaceUsage(IQuotaCounters* counters, const TPartiti
     }
 }
 
+void TSubDomainInfo::AggrDiskSpaceUsage(IQuotaCounters* counters, const TDiskSpaceUsageDelta& diskSpaceUsageDelta) {
+    // see filling of diskSpaceUsageDelta in UpdateShardStats()
+    for (const auto& [poolKind, delta] : diskSpaceUsageDelta) {
+        if (poolKind.empty()) {
+            // total space
+            DiskSpaceUsage.Tables.DataSize += delta.DataSize;
+            counters->ChangeDiskSpaceTablesDataBytes(delta.DataSize);
+
+            DiskSpaceUsage.Tables.IndexSize += delta.IndexSize;
+            counters->ChangeDiskSpaceTablesIndexBytes(delta.IndexSize);
+
+            i64 oldTotalBytes = DiskSpaceUsage.Tables.TotalSize;
+            DiskSpaceUsage.Tables.TotalSize = DiskSpaceUsage.Tables.DataSize + DiskSpaceUsage.Tables.IndexSize;
+            i64 newTotalBytes = DiskSpaceUsage.Tables.TotalSize;
+            counters->ChangeDiskSpaceTablesTotalBytes(newTotalBytes - oldTotalBytes);
+        } else {
+            // space separated by storage pool kinds
+            auto& r = DiskSpaceUsage.StoragePoolsUsage[poolKind];
+            r.DataSize += delta.DataSize;
+            r.IndexSize += delta.IndexSize;
+            counters->AddDiskSpaceTables(GetUserFacingStorageType(poolKind), delta.DataSize, delta.IndexSize);
+        }
+    }
+}
+
 void TSubDomainInfo::AggrDiskSpaceUsage(const TTopicStats& newAggr, const TTopicStats& oldAggr) {
     auto& topics = DiskSpaceUsage.Topics;
     topics.DataSize += (newAggr.DataSize - oldAggr.DataSize);
@@ -1755,11 +1780,11 @@ void TTableInfo::SetPartitioning(TVector<TTableShardInfo>&& newPartitioning) {
     }
 }
 
-void TTableInfo::UpdateShardStats(TShardIdx datashardIdx, const TPartitionStats& newStats, TInstant now) {
-    Stats.UpdateShardStats(datashardIdx, newStats, now);
+void TTableInfo::UpdateShardStats(TDiskSpaceUsageDelta* diskSpaceUsageDelta, TShardIdx datashardIdx, const TPartitionStats& newStats, TInstant now) {
+    Stats.UpdateShardStats(diskSpaceUsageDelta, datashardIdx, newStats, now);
 }
 
-void TTableAggregatedStats::UpdateShardStats(TShardIdx datashardIdx, const TPartitionStats& newStats, TInstant now) {
+void TTableAggregatedStats::UpdateShardStats(TDiskSpaceUsageDelta* diskSpaceUsageDelta, TShardIdx datashardIdx, const TPartitionStats& newStats, TInstant now) {
     auto found = PartitionStats.find(datashardIdx);
     // Ignore stats from unknown datashard (it could have been split)
     if (found == PartitionStats.end()) {
@@ -1786,29 +1811,52 @@ void TTableAggregatedStats::UpdateShardStats(TShardIdx datashardIdx, const TPart
         oldStats.RangeReadRows = 0;
     }
 
-    Aggregated.RowCount += (newStats.RowCount - oldStats.RowCount);
-    Aggregated.DataSize += (newStats.DataSize - oldStats.DataSize);
-    Aggregated.IndexSize += (newStats.IndexSize - oldStats.IndexSize);
-    Aggregated.ByKeyFilterSize += (newStats.ByKeyFilterSize - oldStats.ByKeyFilterSize);
+    // disk space related stuff
+    // first, total space aggregation
+    {
+        TStoragePoolStatsDelta delta{
+            .DataSize = (static_cast<i64>(newStats.DataSize) - static_cast<i64>(oldStats.DataSize)),
+            .IndexSize = (static_cast<i64>(newStats.IndexSize) - static_cast<i64>(oldStats.IndexSize)),
+        };
+        diskSpaceUsageDelta->emplace_back(TString(), delta);
+        Aggregated.DataSize += delta.DataSize;
+        Aggregated.IndexSize += delta.IndexSize;
+    }
+    // second, aggregation of space separated by storage pool kinds
     for (const auto& [poolKind, newStoragePoolStats] : newStats.StoragePoolsStats) {
-        auto& [dataSize, indexSize] = Aggregated.StoragePoolsStats[poolKind];
         const auto* oldStoragePoolStats = oldStats.StoragePoolsStats.FindPtr(poolKind);
         // Missing old stats for a particular storage pool are interpreted as if this data
         // has just been written to the datashard and we need to increment the aggregate by the entire new stats' sizes.
-        dataSize += newStoragePoolStats.DataSize - (oldStoragePoolStats ? oldStoragePoolStats->DataSize : 0u);
-        indexSize += newStoragePoolStats.IndexSize - (oldStoragePoolStats ? oldStoragePoolStats->IndexSize : 0u);
+        TStoragePoolStatsDelta delta{
+            .DataSize = (static_cast<i64>(newStoragePoolStats.DataSize) - (oldStoragePoolStats ? static_cast<i64>(oldStoragePoolStats->DataSize) : 0)),
+            .IndexSize = (static_cast<i64>(newStoragePoolStats.IndexSize) - (oldStoragePoolStats ? static_cast<i64>(oldStoragePoolStats->IndexSize) : 0)),
+        };
+        diskSpaceUsageDelta->emplace_back(poolKind, delta);
     }
     for (const auto& [poolKind, oldStoragePoolStats] : oldStats.StoragePoolsStats) {
         if (const auto* newStoragePoolStats = newStats.StoragePoolsStats.FindPtr(poolKind);
             !newStoragePoolStats
         ) {
-            auto& [dataSize, indexSize] = Aggregated.StoragePoolsStats[poolKind];
             // Missing new stats for a particular storage pool are interpreted as if this data
             // has been removed from the datashard and we need to subtract the old stats' sizes from the aggregate.
-            dataSize -= oldStoragePoolStats.DataSize;
-            indexSize -= oldStoragePoolStats.IndexSize;
+            TStoragePoolStatsDelta delta{
+                .DataSize = -static_cast<i64>(oldStoragePoolStats.DataSize),
+                .IndexSize = -static_cast<i64>(oldStoragePoolStats.IndexSize),
+            };
+            diskSpaceUsageDelta->emplace_back(poolKind, delta);
         }
     }
+    for (const auto& [poolKind, delta] : *diskSpaceUsageDelta) {
+        if (poolKind.empty()) {
+            continue;
+        }
+        auto& r = Aggregated.StoragePoolsStats[poolKind];
+        r.DataSize += delta.DataSize;
+        r.IndexSize += delta.IndexSize;
+    }
+
+    Aggregated.RowCount += (newStats.RowCount - oldStats.RowCount);
+    Aggregated.ByKeyFilterSize += (newStats.ByKeyFilterSize - oldStats.ByKeyFilterSize);
     Aggregated.LastAccessTime = Max(Aggregated.LastAccessTime, newStats.LastAccessTime);
     Aggregated.LastUpdateTime = Max(Aggregated.LastUpdateTime, newStats.LastUpdateTime);
     Aggregated.ImmediateTxCompleted += (newStats.ImmediateTxCompleted - oldStats.ImmediateTxCompleted);
@@ -1860,10 +1908,10 @@ void TTableAggregatedStats::UpdateShardStats(TShardIdx datashardIdx, const TPart
     UpdatedStats.insert(datashardIdx);
 }
 
-void TAggregatedStats::UpdateTableStats(TShardIdx shardIdx, const TPathId& pathId, const TPartitionStats& newStats, TInstant now) {
+void TAggregatedStats::UpdateTableStats(TDiskSpaceUsageDelta* diskSpaceUsageDelta, TShardIdx shardIdx, const TPathId& pathId, const TPartitionStats& newStats, TInstant now) {
     auto& tableStats = TableStats[pathId];
     tableStats.PartitionStats[shardIdx]; // insert if none
-    tableStats.UpdateShardStats(shardIdx, newStats, now);
+    tableStats.UpdateShardStats(diskSpaceUsageDelta, shardIdx, newStats, now);
 }
 
 void TTableInfo::RegisterSplitMergeOp(TOperationId opId, const TTxState& txState) {

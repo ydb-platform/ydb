@@ -394,6 +394,12 @@ private:
     ui64 CPU = 0;
 };
 
+struct TStoragePoolStatsDelta {
+    i64 DataSize = 0;
+    i64 IndexSize = 0;
+};
+using TDiskSpaceUsageDelta = TVector<std::pair<TString, TStoragePoolStatsDelta>>;
+
 struct TTableAggregatedStats {
     TPartitionStats Aggregated;
     THashMap<TShardIdx, TPartitionStats> PartitionStats;
@@ -405,13 +411,13 @@ struct TTableAggregatedStats {
         return Aggregated.PartCount && UpdatedStats.size() == Aggregated.PartCount;
     }
 
-    void UpdateShardStats(TShardIdx datashardIdx, const TPartitionStats& newStats, TInstant now);
+    void UpdateShardStats(TDiskSpaceUsageDelta* diskSpaceUsageDelta, TShardIdx datashardIdx, const TPartitionStats& newStats, TInstant now);
 };
 
 struct TAggregatedStats : public TTableAggregatedStats {
     THashMap<TPathId, TTableAggregatedStats> TableStats;
 
-    void UpdateTableStats(TShardIdx datashardIdx, const TPathId& pathId, const TPartitionStats& newStats, TInstant now);
+    void UpdateTableStats(TDiskSpaceUsageDelta* diskSpaceUsageDelta, TShardIdx datashardIdx, const TPathId& pathId, const TPartitionStats& newStats, TInstant now);
 };
 
 struct TSubDomainInfo;
@@ -731,7 +737,7 @@ public:
         ShardsStatsDetached = true;
     }
 
-    void UpdateShardStats(TShardIdx datashardIdx, const TPartitionStats& newStats, TInstant now);
+    void UpdateShardStats(TDiskSpaceUsageDelta* diskSpaceUsageDelta, TShardIdx datashardIdx, const TPartitionStats& newStats, TInstant now);
 
     void RegisterSplitMergeOp(TOperationId txId, const TTxState& txState);
 
@@ -2027,6 +2033,7 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
     }
 
     void AggrDiskSpaceUsage(IQuotaCounters* counters, const TPartitionStats& newAggr, const TPartitionStats& oldAggr = {});
+    void AggrDiskSpaceUsage(IQuotaCounters* counters, const TDiskSpaceUsageDelta& delta);
 
     void AggrDiskSpaceUsage(const TTopicStats& newAggr, const TTopicStats& oldAggr = {});
 

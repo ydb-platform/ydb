@@ -286,8 +286,6 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
     NIceDb::TNiceDb db(txc.DB);
 
     TTableInfo::TPtr table;
-    TPartitionStats oldAggrStats;
-    TPartitionStats newAggrStats;
     bool updateSubdomainInfo = false;
 
     TMaybe<ui32> nodeId;
@@ -308,10 +306,11 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
         return true;
     }
 
+    TDiskSpaceUsageDelta diskSpaceUsageDelta;
+
     if (isDataShard) {
         table = Self->Tables[pathId];
-        oldAggrStats = table->GetStats().Aggregated;
-        table->UpdateShardStats(shardIdx, newStats, now);
+        table->UpdateShardStats(&diskSpaceUsageDelta, shardIdx, newStats, now);
 
         if (!table->IsBackup) {
             Self->UpdateBackgroundCompaction(shardIdx, newStats);
@@ -327,16 +326,13 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
         }
 
         if (!table->IsBackup && !table->IsShardsStatsDetached()) {
-            newAggrStats = table->GetStats().Aggregated;
             updateSubdomainInfo = true;
         }
 
         Self->PersistTablePartitionStats(db, pathId, shardIdx, table);
     } else if (isOlapStore) {
         TOlapStoreInfo::TPtr olapStore = Self->OlapStores[pathId];
-        oldAggrStats = olapStore->GetStats().Aggregated;
-        olapStore->UpdateShardStats(shardIdx, newStats, now);
-        newAggrStats = olapStore->GetStats().Aggregated;
+        olapStore->UpdateShardStats(&diskSpaceUsageDelta, shardIdx, newStats, now);
         updateSubdomainInfo = true;
 
         const auto tables = rec.GetTables();
@@ -351,26 +347,36 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
                 LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                             "add stats for exists table with pathId=" << tablePathId);
 
-                Self->ColumnTables.GetVerifiedPtr(tablePathId)->UpdateTableStats(shardIdx, tablePathId, newTableStats, now);
+                Self->ColumnTables.GetVerifiedPtr(tablePathId)->UpdateTableStats(&diskSpaceUsageDelta, shardIdx, tablePathId, newTableStats, now);
             } else {
                 LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                            "failed add stats for table with pathId=" << tablePathId);
             }
         }
 
+        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+            "Aggregated stats for pathId " << pathId.LocalPathId
+            << ": RowCount " << olapStore->Stats.Aggregated.RowCount
+            << ", DataSize " << olapStore->Stats.Aggregated.DataSize
+        );
+
     } else if (isColumnTable) {
         LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                    "PersistSingleStats: ColumnTable rec.GetColumnTables() size=" << rec.GetTables().size());
 
         auto columnTable = Self->ColumnTables.GetVerifiedPtr(pathId);
-        oldAggrStats = columnTable->GetStats().Aggregated;
-        columnTable->UpdateShardStats(shardIdx, newStats, now);
-        newAggrStats = columnTable->GetStats().Aggregated;
+        columnTable->UpdateShardStats(&diskSpaceUsageDelta, shardIdx, newStats, now);
         updateSubdomainInfo = true;
+
+        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+            "Aggregated stats for pathId " << pathId.LocalPathId
+            << ": RowCount " << columnTable->Stats.Aggregated.RowCount
+            << ", DataSize " << columnTable->Stats.Aggregated.DataSize
+        );
     }
 
     if (updateSubdomainInfo) {
-        subDomainInfo->AggrDiskSpaceUsage(Self, newAggrStats, oldAggrStats);
+        subDomainInfo->AggrDiskSpaceUsage(Self, diskSpaceUsageDelta);
         if (subDomainInfo->CheckDiskSpaceQuotas(Self)) {
             auto subDomainId = Self->ResolvePathIdForDomain(pathElement);
             Self->PersistSubDomainState(db, subDomainId, *subDomainInfo);
@@ -382,9 +388,6 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
     }
 
     if (isOlapStore || isColumnTable) {
-        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "Aggregated stats for pathId " << pathId.LocalPathId
-                    << ": RowCount " << newAggrStats.RowCount << ", DataSize " << newAggrStats.DataSize);
         return true;
     }
 

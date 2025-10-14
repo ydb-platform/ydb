@@ -359,7 +359,7 @@ void TNodeState::Handle(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
         TChannelInfo(record.GetChannelId(),
             NActors::ActorIdFromProto(record.GetSrcActorId()),
             NActors::ActorIdFromProto(record.GetDstActorId())
-        )
+        ), false
     );
 
     TDataChunk data(TChunkedBuffer(), record.GetRows(), record.GetTransportVersion(), FromProto(record.GetValuePackerVersion()));
@@ -497,7 +497,7 @@ std::shared_ptr<TOutputBuffer> TNodeState::CreateOutputBuffer(const TChannelInfo
     return result;
 }
 
-std::shared_ptr<TInputBuffer> TNodeState::GetOrCreateInputBuffer(const TChannelInfo& info) {
+std::shared_ptr<TInputBuffer> TNodeState::GetOrCreateInputBuffer(const TChannelInfo& info, bool binded) {
     std::lock_guard lock(Mutex);
     auto it = InputBuffers.find(info);
     if (it != InputBuffers.end()) {
@@ -508,10 +508,16 @@ std::shared_ptr<TInputBuffer> TNodeState::GetOrCreateInputBuffer(const TChannelI
         // if (desc.DstStageId) {
         //     result->PopStats.DstStageId = desc.DstStageId;
         // }
+        if (binded) {
+            UnbindedInputs.erase(info);
+        }
         return result;
     }
     auto result = std::make_shared<TInputBuffer>(NodeActorId, info, ActorSystem);
     InputBuffers.emplace(info, result);
+    if (!binded) {
+        UnbindedInputs.emplace(info, TInstant::Now());
+    }
     return result;
 }
 
@@ -519,6 +525,11 @@ void TNodeState::TerminateDescriptor(const std::shared_ptr<TOutputDescriptor>& d
     descriptor->Terminate();
     std::lock_guard lock(Mutex);
     OutputDescriptors.erase(descriptor->Info);
+}
+
+void TNodeState::TerminateInputBuffer(const std::shared_ptr<TInputBuffer>& inputBuffer) {
+    InputBuffers.erase(inputBuffer->Info);
+    TerminatedInputs.emplace(inputBuffer->Info, TInstant::Now());
 }
 
 void TDebugNodeState::PauseChannelData() {
@@ -598,7 +609,7 @@ std::shared_ptr<IChannelBuffer> TDqChannelService::GetRemoteOutputBuffer(const T
 
 std::shared_ptr<IChannelBuffer> TDqChannelService::GetRemoteInputBuffer(const TChannelInfo& info) {
     Y_ENSURE(info.OutputActorId.NodeId() != NodeId);
-    return GetOrCreateNodeState(info.OutputActorId.NodeId())->GetOrCreateInputBuffer(info);
+    return GetOrCreateNodeState(info.OutputActorId.NodeId())->GetOrCreateInputBuffer(info, true);
 }
 
 // local buffer

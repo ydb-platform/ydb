@@ -402,8 +402,9 @@ public:
     void Handle(TEvPrivate::TEvEarlyFinish::TPtr& ev);
     void Handle(TEvPrivate::TEvUpdatePopBytes::TPtr& ev);
     std::shared_ptr<TOutputBuffer> CreateOutputBuffer(const TChannelInfo& info, ui64 maxInflightBytes, ui64 minInflightBytes);
-    std::shared_ptr<TInputBuffer> GetOrCreateInputBuffer(const TChannelInfo& info);
+    std::shared_ptr<TInputBuffer> GetOrCreateInputBuffer(const TChannelInfo& info, bool binded);
     void TerminateDescriptor(const std::shared_ptr<TOutputDescriptor>& descriptor);
+    void TerminateInputBuffer(const std::shared_ptr<TInputBuffer>& inputBuffer);
 
     NActors::TActorId NodeActorId;
     NActors::TActorId PeerActorId;
@@ -413,6 +414,8 @@ public:
     std::atomic<bool> Subscribed;
     std::unordered_map<TChannelInfo, std::shared_ptr<TOutputDescriptor>> OutputDescriptors;
     std::unordered_map<TChannelInfo, std::shared_ptr<TInputBuffer>> InputBuffers;
+    std::unordered_map<TChannelInfo, TInstant> TerminatedInputs;
+    std::unordered_map<TChannelInfo, TInstant> UnbindedInputs;
     bool Connected = false;
     std::weak_ptr<TNodeState> Self;
     ui64 LastUniqueId = 0;

@@ -391,6 +391,8 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false);
+        serverSettings.AppConfig->MutableDataShardConfig()
+            ->SetStatsReportIntervalSeconds(0);
 
         TServer::TPtr server = new TServer(serverSettings);
         auto& runtime = *server->GetRuntime();
@@ -401,8 +403,6 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
         runtime.SetLogPriority(NKikimrServices::TABLET_SAUSAGECACHE, NLog::PRI_TRACE);
 
         InitRoot(server, sender);
-
-        NDataShard::gDbStatsReportInterval = TDuration::Seconds(0);
 
         NLocalDb::TCompactionPolicyPtr policy = NLocalDb::CreateDefaultUserTablePolicy();
         policy->InMemForceStepsToSnapshot = 1;

@@ -578,13 +578,19 @@ public:
     }
 };
 
+TDuration TDataShard::GetStatsReportInterval(const TAppData& appData) const {
+    return TDuration::Seconds(
+        appData.DataShardConfig.GetStatsReportIntervalSeconds());
+}
+
 void TDataShard::UpdateTableStats(const TActorContext &ctx) {
     if (StatisticsDisabled)
         return;
 
-    TInstant now = AppData(ctx)->TimeProvider->Now();
+    auto* appData = AppData(ctx);
+    TInstant now = appData->TimeProvider->Now();
 
-    if (LastDbStatsUpdateTime + gDbStatsReportInterval > now)
+    if (LastDbStatsUpdateTime + GetStatsReportInterval(*appData) > now)
         return;
 
     if (State != TShardState::Ready && State != TShardState::Readonly)

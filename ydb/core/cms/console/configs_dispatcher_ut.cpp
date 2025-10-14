@@ -495,6 +495,7 @@ metadata:
   version: 0
 
 config:
+  self_management_config: {enabled: true, erasure_species: block-4-2}
   log_config:
     cluster_name: cluster2
   net_classifier_distributable_config:
@@ -538,7 +539,9 @@ metadata:
   cluster: ""
   version: 1
 
-config: {yaml_config_enabled: false}
+config:
+  yaml_config_enabled: false
+  self_management_config: {enabled: true, erasure_species: block-4-2}
 allowed_labels: {}
 selector_config: []
 )";
@@ -608,6 +611,7 @@ metadata:
   version: 0
 
 config:
+  self_management_config: {enabled: true, erasure_species: block-4-2}
   log_config:
     cluster_name: cluster1
 allowed_labels:
@@ -628,6 +632,7 @@ metadata:
   version: 1
 
 config:
+  self_management_config: {enabled: true, erasure_species: block-4-2}
   log_config:
     cluster_name: cluster1
   yaml_config_enabled: true
@@ -656,6 +661,7 @@ metadata:
   version: 2
 
 config:
+  self_management_config: {enabled: true, erasure_species: block-4-2}
   log_config:
     cluster_name: cluster3
   yaml_config_enabled: true
@@ -689,6 +695,7 @@ metadata:
   version: 3
 
 config:
+  self_management_config: {enabled: true, erasure_species: block-4-2}
   log_config:
     cluster_name: cluster3
   cms_config:
@@ -715,6 +722,7 @@ metadata:
   version: 4
 
 config:
+  self_management_config: {enabled: true, erasure_species: block-4-2}
   log_config:
     cluster_name: cluster3
   cms_config:
@@ -762,6 +770,7 @@ metadata:
   version: 5
 
 config:
+  self_management_config: {enabled: true, erasure_species: block-4-2}
   log_config:
     cluster_name: cluster3
   cms_config:
@@ -808,6 +817,7 @@ metadata:
   cluster: ""
   version: 6
 config:
+  self_management_config: {enabled: true, erasure_species: block-4-2}
   log_config:
     cluster_name: cluster3
   cms_config:
@@ -854,6 +864,7 @@ metadata:
   version: 7
 
 config:
+  self_management_config: {enabled: true, erasure_species: block-4-2}
   log_config:
     cluster_name: cluster3
   yaml_config_enabled: true
@@ -899,7 +910,9 @@ selector_config:
 metadata:
   cluster: ""
   version: 0
+  kind: MainConfig
 config:
+  self_management_config: {enabled: true, erasure_species: block-4-2}
   log_config:
     cluster_name: cluster3
   yaml_config_enabled: true

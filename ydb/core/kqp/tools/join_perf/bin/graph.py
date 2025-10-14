@@ -14,17 +14,21 @@ j = pd.read_json(path_or_buf=sys.argv[1], lines=True)
 
 j = j.reset_index()
 only_needed = []
+seed = 0
 for _, obj in j.iterrows():
     run_name = obj["testName"]
     name_parts = run_name.split('_')
+    seed = int(name_parts[3])
     only_needed.append({
             'run_name': run_name,
             'time': int(obj["resultTime"]),
             'join_algorithm': name_parts[0],
-            'input_data_flavour': name_parts[2],
-            'left_table_size': int(name_parts[3]),
-            'right_table_size': int(name_parts[4]),
-            'key_type': name_parts[1]
+            'key_type': name_parts[1],
+            'preset': name_parts[2],
+            'seed': int(name_parts[3]),
+            'input_data_flavour': name_parts[4],
+            'left_table_size': int(name_parts[5]),
+            'right_table_size': int(name_parts[6]),
         }
     )
 # is_time_sampled = only_needed[0]["input_data_flavour"].startswith("Sampling")
@@ -48,14 +52,14 @@ Path(simple_images).mkdir(parents=True, exist_ok=True)
 Path(log_images).mkdir(parents=True, exist_ok=True)
 pd.set_option('display.max_rows', 500)
 
-data_flovours = df['input_data_flavour'].unique()
+data_flavours = df['input_data_flavour'].unique()
 key_types = df['key_type'].unique()
-for data_flavour in data_flovours:
+for data_flavour in data_flavours:
     for key_type in key_types:
-        graph_name = data_flavour + "_" + key_type
-        print(graph_name)
         subset = df[(df["input_data_flavour"] == data_flavour) & 
             (df["key_type"] == key_type)]
+        print(subset['preset'].iloc[0])
+        graph_name = str(subset['preset'].iloc[0]) + "_" + data_flavour + "_" + key_type
         fig, axes = plt.subplots(nrows=1, ncols=1, figsize=(10, 8), sharex=True)
         
         for name, group in subset.groupby('join_algorithm'):

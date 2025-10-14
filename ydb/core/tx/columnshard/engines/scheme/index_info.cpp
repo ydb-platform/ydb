@@ -186,6 +186,10 @@ std::shared_ptr<arrow::Schema> TIndexInfo::GetColumnsSchema(const std::set<ui32>
     return std::make_shared<arrow::Schema>(fields);
 }
 
+std::shared_ptr<arrow::Schema> TIndexInfo::GetColumnSchema(const ui32 columnId) const {
+    return GetColumnsSchema({ columnId });
+}
+
 std::shared_ptr<arrow::Schema> TIndexInfo::GetColumnsSchemaByOrderedIndexes(const std::vector<ui32>& columnIdxs) const {
     AFL_VERIFY(columnIdxs.size());
     std::vector<std::shared_ptr<arrow::Field>> fields;
@@ -198,10 +202,6 @@ std::shared_ptr<arrow::Schema> TIndexInfo::GetColumnsSchemaByOrderedIndexes(cons
         fields.emplace_back(ArrowSchemaWithSpecials()->GetFieldByIndexVerified(i));
     }
     return std::make_shared<arrow::Schema>(fields);
-}
-
-std::shared_ptr<arrow::Schema> TIndexInfo::GetColumnSchema(const ui32 columnId) const {
-    return GetColumnsSchema({ columnId });
 }
 
 void TIndexInfo::DeserializeOptionsFromProto(const NKikimrSchemeOp::TColumnTableSchemeOptions& optionsProto) {

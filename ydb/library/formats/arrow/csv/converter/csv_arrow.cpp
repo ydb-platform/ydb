@@ -141,6 +141,7 @@ std::shared_ptr<arrow::RecordBatch> TArrowCSV::ConvertColumnTypes(std::shared_pt
             continue;
         }
 
+        Y_ABORT();
         if (fArr->type()->Equals(originalType)) {
             resultColumns.emplace_back(fArr);
         } else if (fArr->type()->id() == arrow::TimestampType::type_id) {
@@ -169,6 +170,7 @@ std::shared_ptr<arrow::RecordBatch> TArrowCSV::ConvertColumnTypes(std::shared_pt
                     builder.UnsafeAppend(boolArray->Value(i) ? static_cast<uint8_t>(1) : static_cast<uint8_t>(0));
                 }
             }
+
             std::shared_ptr<arrow::Array> out;
             Y_ABORT_UNLESS(builder.Finish(&out).ok());
             resultColumns.emplace_back(out);

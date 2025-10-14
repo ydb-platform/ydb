@@ -133,7 +133,7 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
         UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), NYdb::EStatus::SUCCESS);
     }
 
-    void BulkUpsertRowTableYdbValueWithColumnName(TTestHelper& helper, const TString& name, const TVector<TRow>& rows, const TString& columnName) {
+void BulkUpsertRowTableYdbValueWithColumnName(TTestHelper& helper, const TString& name, const TVector<TRow>& rows, const TString& columnName) {
         TValueBuilder builder;
         builder.BeginList();
         for (auto&& r : rows) {

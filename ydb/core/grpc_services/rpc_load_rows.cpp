@@ -84,8 +84,6 @@ bool ConvertArrowToYdbPrimitive(const arrow::DataType& type, Ydb::Type& toType, 
             break;
         }
         case arrow::Type::BOOL:
-            toType.set_type_id(Ydb::Type::UINT8);
-            return true;
         case arrow::Type::NA:
         case arrow::Type::HALF_FLOAT:
         case arrow::Type::DATE32:

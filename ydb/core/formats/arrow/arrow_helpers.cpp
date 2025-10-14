@@ -35,6 +35,11 @@ std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl() {
     return std::make_shared<TType>();
 }
 
+// template <>
+// std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl<arrow::BooleanType>() {
+//     return arrow::uint8();
+// }
+
 template <>
 std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl<arrow::Decimal128Type>() {
     return arrow::fixed_size_binary(NScheme::FSB_SIZE);
@@ -62,6 +67,7 @@ arrow::Result<std::shared_ptr<arrow::DataType>> GetArrowType(NScheme::TTypeInfo 
         result = CreateEmptyArrowImpl<TType>();
         return true;
     });
+
     if (success) {
         return result;
     }
@@ -73,7 +79,7 @@ arrow::Result<std::shared_ptr<arrow::DataType>> GetCSVArrowType(NScheme::TTypeIn
     std::shared_ptr<arrow::DataType> result;
     switch (typeId.GetTypeId()) {
         case NScheme::NTypeIds::Bool:
-            return std::make_shared<arrow::BooleanType>();
+            return std::make_shared<arrow::UInt8Type>();
         case NScheme::NTypeIds::Datetime:
         case NScheme::NTypeIds::Datetime64:
             return std::make_shared<arrow::TimestampType>(arrow::TimeUnit::SECOND);

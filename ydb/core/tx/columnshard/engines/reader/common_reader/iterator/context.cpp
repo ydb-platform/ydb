@@ -122,6 +122,7 @@ TPortionStateAtScanStart TSpecialReadContext::GetPortionStateAtScanStart(const T
     if (portionInfo.GetPortionType() == EPortionType::Compacted) {
         // compacted portions are stable and not conflicting,
         // they have max snapshot less or equal to the request snapshot
+        AFL_VERIFY(portionInfo.RecordSnapshotMax() <= GetReadMetadata()->GetRequestSnapshot())("portion_info", portionInfo.DebugString())("request_snapshot", GetReadMetadata()->GetRequestSnapshot().DebugString());
         committed = true;
         conflicting = false;
         maxRecordSnapshot = portionInfo.RecordSnapshotMax();

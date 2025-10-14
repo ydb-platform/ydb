@@ -124,6 +124,23 @@ bool GetUserGroupSids(const std::string& serializedUserGroupSids, TVector<NACLib
     return true;
 }
 
+TString CheckSCriptExecutionAccess(std::optional<TString>& userSID) {
+    if (!AppData()->FeatureFlags.GetEnableSecureScriptExecutions()) {
+        userSID = std::nullopt;
+        return "";
+    }
+
+    if (!userSID) {
+        return "Access to script execution operations without user token is not allowed";
+    }
+
+    if (NACLib::TUserToken(*userSID, {}).IsSystemUser()) {
+        userSID = std::nullopt;
+    }
+
+    return "";
+}
+
 class TQueryBase : public NKikimr::TQueryBase {
 public:
     struct TSettings {
@@ -1990,11 +2007,8 @@ public:
 
     void Bootstrap() {
         auto userSID = Request->Get()->UserSID;
-        if (!AppData()->FeatureFlags.GetEnableSecureScriptExecutions()) {
-            userSID = std::nullopt;
-        } else if (!userSID) {
-            KQP_PROXY_LOG_W("Secure script executions are enabled, but user SID is not provided");
-            return Reply(Ydb::StatusIds::UNAUTHORIZED, "Access to script execution operations without user token is not allowed");
+        if (const auto& error = CheckSCriptExecutionAccess(userSID)) {
+            return Reply(Ydb::StatusIds::UNAUTHORIZED, error);
         }
 
         TString error;
@@ -2352,11 +2366,8 @@ public:
 
     void OnBootstrap() override {
         auto userSID = Request->Get()->UserSID;
-        if (!AppData()->FeatureFlags.GetEnableSecureScriptExecutions()) {
-            userSID = std::nullopt;
-        } else if (!userSID) {
-            KQP_PROXY_LOG_W("Secure script executions are enabled, but user SID is not provided");
-            return Reply(Ydb::StatusIds::UNAUTHORIZED, "Access to script execution operations without user token is not allowed");
+        if (const auto& error = CheckSCriptExecutionAccess(userSID)) {
+            return Reply(Ydb::StatusIds::UNAUTHORIZED, error);
         }
 
         TString error;
@@ -2669,11 +2680,9 @@ public:
 
     void Bootstrap() {
         auto userSID = Request->Get()->UserSID;
-        if (!AppData()->FeatureFlags.GetEnableSecureScriptExecutions()) {
-            userSID = std::nullopt;
-        } else if (!userSID) {
-            KQP_PROXY_LOG_W("Secure script executions are enabled, but user SID is not provided");
-            Send(Request->Sender, new TEvListScriptExecutionOperationsResponse(Ydb::StatusIds::UNAUTHORIZED, {NYql::TIssue("Access to script execution operations without user token is not allowed")}));
+        if (const auto& error = CheckSCriptExecutionAccess(userSID)) {
+            KQP_PROXY_LOG_W("Token validation failed: " << error);
+            Send(Request->Sender, new TEvListScriptExecutionOperationsResponse(Ydb::StatusIds::UNAUTHORIZED, {NYql::TIssue(error)}));
             return;
         }
 
@@ -2920,11 +2929,8 @@ public:
 
     void Bootstrap() {
         auto userSID = Request->Get()->UserSID;
-        if (!AppData()->FeatureFlags.GetEnableSecureScriptExecutions()) {
-            userSID = std::nullopt;
-        } else if (!userSID) {
-            KQP_PROXY_LOG_W("Secure script executions are enabled, but user SID is not provided");
-            return Reply(Ydb::StatusIds::UNAUTHORIZED, "Access to script execution operations without user token is not allowed");
+        if (const auto& error = CheckSCriptExecutionAccess(userSID)) {
+            return Reply(Ydb::StatusIds::UNAUTHORIZED, error);
         }
 
         TString error;
@@ -3616,16 +3622,13 @@ public:
     {}
 
     void Bootstrap() {
-        if (!AppData()->FeatureFlags.GetEnableSecureScriptExecutions()) {
-            UserSID = std::nullopt;
-        } else if (!UserSID) {
-            KQP_PROXY_LOG_W("Secure script executions are enabled, but user SID is not provided");
-            return Fail(Ydb::StatusIds::UNAUTHORIZED, "Access to script execution operations without user token is not allowed");
+        if (const auto& error = CheckSCriptExecutionAccess(UserSID)) {
+            return Reply(Ydb::StatusIds::UNAUTHORIZED, error);
         }
 
         if (RowsLimit < 0 || SizeLimit < 0) {
             KQP_PROXY_LOG_W("Invalid fetch result limits, RowsLimit: " << RowsLimit << ", SizeLimit: " << SizeLimit);
-            return Fail(Ydb::StatusIds::BAD_REQUEST, "Result rows limit and size limit should not be negative");
+            return Reply(Ydb::StatusIds::BAD_REQUEST, "Result rows limit and size limit should not be negative");
         }
 
         const auto& fetcherId = Register(new TGetScriptExecutionResultQueryActor::TRetry(SelfId(), Database, ExecutionId, UserSID, ResultSetIndex, Offset, RowsLimit, SizeLimit, OperationDeadline));
@@ -3644,7 +3647,7 @@ public:
     }
 
 private:
-    void Fail(Ydb::StatusIds::StatusCode status, const TString& message) {
+    void Reply(Ydb::StatusIds::StatusCode status, const TString& message) {
         KQP_PROXY_LOG_W("Failed with status " << status << ", message: " << message);
         Send(ReplyActorId, new TEvFetchScriptResultsResponse(status, std::nullopt, true, {NYql::TIssue(message)}));
         PassAway();

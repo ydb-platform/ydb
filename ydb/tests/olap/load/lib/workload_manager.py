@@ -308,6 +308,8 @@ class WorkloadManagerComputeScheduler(WorkloadManagerBase):
             for k in keys:
                 v = record.get(k)
                 empty = empty and v is None
+                if k.find('satisfaction') and v is not None and v < 0:
+                    v = None
                 v = f'{v:.3f}' if v is not None else ''
                 line += f'<td style="padding-left: 10; padding-right: 10">{v}</td>'
             line += '</tr>\n'
@@ -352,9 +354,9 @@ class WorkloadManagerComputeScheduler(WorkloadManagerBase):
         count = {}
         for slot, values in metrics.items():
             for k, v in values.items():
-                sum.setdefault(k, 0.)
-                count.setdefault(k, 0)
                 if not k.endswith('satisfaction') or v >= 0.:
+                    sum.setdefault(k, 0.)
+                    count.setdefault(k, 0)
                     sum[k] += v
                     count[k] += 1
                 cls.metrics_keys.add(k)

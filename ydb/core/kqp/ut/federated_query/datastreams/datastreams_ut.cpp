@@ -2146,6 +2146,71 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         });
     }
 
+    Y_UNIT_TEST_F(StreamingQueryUnderSecureScriptExecutions, TStreamingTestFixture) {
+        SetupAppConfig().MutableFeatureFlags()->SetEnableSecureScriptExecutions(true);
+        GetRuntime().GetAppData().FeatureFlags.SetEnableSecureScriptExecutions(true);
+
+        constexpr char inputTopicName[] = "streamingQueryUnderSecureScriptExecutionsInputTopic";
+        constexpr char outputTopicName[] = "streamingQueryUnderSecureScriptExecutionsOutputTopic";
+        CreateTopic(inputTopicName);
+        CreateTopic(outputTopicName);
+
+        constexpr char pqSourceName[] = "sourceName";
+        CreatePqSource(pqSourceName);
+
+        constexpr char queryName[] = "streamingQuery";
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                INSERT INTO `{pq_source}`.`{output_topic}`
+                SELECT * FROM `{pq_source}`.`{input_topic}`
+            END DO;)",
+            "query_name"_a = queryName,
+            "pq_source"_a = pqSourceName,
+            "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName
+        ));
+
+        Sleep(TDuration::Seconds(1));
+        WriteTopicMessage(inputTopicName, R"({"key": "key1", "value": "value1"})");
+        ReadTopicMessage(outputTopicName, R"({"key": "key1", "value": "value1"})");
+
+        NOperation::TOperationClient rootClient(*GetInternalDriver(), TCommonClientSettings().AuthToken(BUILTIN_ACL_ROOT));
+        {
+            const auto result = rootClient.List<TScriptExecutionOperation>(10).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetList().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetList()[0].Metadata().ExecStatus, EExecStatus::Running);
+        }
+
+        NOperation::TOperationClient testClient(*GetInternalDriver(), TCommonClientSettings().AuthToken("test@" BUILTIN_ACL_DOMAIN));
+        {
+            const auto result = testClient.List<TScriptExecutionOperation>(10).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetList().size(), 0);
+        }
+
+        ExecQuery(fmt::format(R"(
+            ALTER STREAMING QUERY `{query_name}` SET (
+                RUN = FALSE
+            ))",
+            "query_name"_a = queryName
+        ));
+
+        {
+            const auto result = rootClient.List<TScriptExecutionOperation>(10).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetList().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetList()[0].Metadata().ExecStatus, EExecStatus::Canceled);
+        }
+
+        {
+            const auto result = testClient.List<TScriptExecutionOperation>(10).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetList().size(), 0);
+        }
+    }
+
     Y_UNIT_TEST_F(OffsetsAndStateRecoveryOnInternalRetry, TStreamingTestFixture) {
         // Join with S3 used for introducing temporary failure and force retry on specific key
 

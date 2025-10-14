@@ -26,6 +26,7 @@ RECURSE(
     scheme_tests
     script_execution
     sdk/cpp/sdk_credprovider
+    secrets
     security
     serializable
     serverless

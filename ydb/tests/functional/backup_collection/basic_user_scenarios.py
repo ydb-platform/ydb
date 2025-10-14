@@ -718,7 +718,7 @@ class TestFullCycleLocalBackupRestoreWIncr(TestFullCycleLocalBackupRestore):
 
         def record_last_snapshot():
             kids = sorted(self.get_collection_children(collection_src))
-            assert kids, "No snapshots found after backup"
+            assert kids, "no snapshots found after backup"
             last = kids[-1]
             created_snapshots.append(last)
             return last

@@ -579,8 +579,20 @@ public:
 };
 
 TDuration TDataShard::GetStatsReportInterval(const TAppData& appData) const {
-    return TDuration::Seconds(
-        appData.DataShardConfig.GetStatsReportIntervalSeconds());
+    const auto& userTables = GetUserTables();
+    const bool isBackup = !userTables.empty() && std::all_of(userTables.begin(), userTables.end(),
+        [](const auto& kv) { return kv.second->IsBackup; });
+
+    if (isBackup) {
+        // Clamp the interval for backup tables to the value for ordinary tables, as it
+        // makes no sense for the latter to be longer than the former.
+        auto interval = std::max(
+            appData.DataShardConfig.GetBackupTableStatsReportIntervalSeconds(),
+            appData.DataShardConfig.GetStatsReportIntervalSeconds());
+        return TDuration::Seconds(interval);
+    } else {
+        return TDuration::Seconds(appData.DataShardConfig.GetStatsReportIntervalSeconds());
+    }
 }
 
 void TDataShard::UpdateTableStats(const TActorContext &ctx) {

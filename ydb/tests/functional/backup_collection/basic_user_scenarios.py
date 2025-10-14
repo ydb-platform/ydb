@@ -324,6 +324,36 @@ class BaseTestBackupInFiles(object):
             except Exception:
                 pass
 
+    def wait_for_table_rows(self,
+                            table: str,
+                            expected_rows,
+                            timeout_s: int = 60,
+                            poll_interval: float = 0.5):
+        # helper to get current rows safely
+        deadline = time.time() + timeout_s
+        last_exc = None
+
+        while time.time() < deadline:
+            try:
+                cur_rows = None
+                try:
+                    cur_rows = self._capture_snapshot(table)
+                except Exception as e:
+                    # table might not exist yet or select could fail — record and retry
+                    last_exc = e
+                    time.sleep(poll_interval)
+                    continue
+
+                if cur_rows == expected_rows:
+                    return cur_rows
+
+            except Exception as e:
+                last_exc = e
+
+            time.sleep(poll_interval)
+
+        raise AssertionError(f"Timeout waiting for table '{table}' rows to match expected (timeout {timeout_s}s). Last error: {last_exc}")
+
 
 class TestFullCycleLocalBackupRestore(BaseTestBackupInFiles):
     def _execute_yql(self, script, verbose=False):
@@ -688,7 +718,7 @@ class TestFullCycleLocalBackupRestoreWIncr(TestFullCycleLocalBackupRestore):
 
         def record_last_snapshot():
             kids = sorted(self.get_collection_children(collection_src))
-            assert kids, "No snapshots found after backup"
+            assert kids, "no snapshots found after backup"
             last = kids[-1]
             created_snapshots.append(last)
             return last
@@ -800,38 +830,28 @@ class TestFullCycleLocalBackupRestoreWIncr(TestFullCycleLocalBackupRestore):
         self.import_exported_up_to_timestamp(col_full1, ts_full1, export_dir, full_orders, full_products)
         rest_full1 = self._execute_yql(f"RESTORE `{col_full1}`;")
         assert rest_full1.exit_code == 0, f"RESTORE full1 failed: {rest_full1.std_err}"
-        restored_rows = self._capture_snapshot(t_orders)
-        time.sleep(1.1)
+        restored_rows = self.wait_for_table_rows(t_orders, snapshot_rows[snap_full1], timeout_s=90)
         assert self.normalize_rows(restored_rows) == self.normalize_rows(snapshot_rows[snap_full1]), "Verify data in backup (1) failed"
 
         # Restore to incremental 1 (full1 + inc1)
         col_inc1 = f"restore_inc1_{int(time.time())}"
-        time.sleep(1.1)
         ts_inc1 = self.extract_ts(snap_inc1)
         self.import_exported_up_to_timestamp(col_inc1, ts_inc1, export_dir, full_orders, full_products)
         # ensure target tables absent
         self._remove_tables([full_orders, full_products])
-        time.sleep(1.1)
         rest_inc1 = self._execute_yql(f"RESTORE `{col_inc1}`;")
-        time.sleep(1.1)
         assert rest_inc1.exit_code == 0, f"RESTORE inc1 failed: {rest_inc1.std_err}"
-        restored_rows = self._capture_snapshot(t_orders)
+        restored_rows = self.wait_for_table_rows(t_orders, snapshot_rows[snap_inc1], timeout_s=90)
         assert self.normalize_rows(restored_rows) == self.normalize_rows(snapshot_rows[snap_inc1]), "Verify data in backup (2) failed"
-
-        time.sleep(1.1)
 
         # Restore to incremental 2 (full1 + inc1 + inc2)
         col_inc2 = f"restore_inc2_{int(time.time())}"
         ts_inc2 = self.extract_ts(snap_inc2)
         self.import_exported_up_to_timestamp(col_inc2, ts_inc2, export_dir, full_orders, full_products)
-        time.sleep(1.1)
         self._remove_tables([full_orders, full_products])
-        time.sleep(1.1)
         rest_inc2 = self._execute_yql(f"RESTORE `{col_inc2}`;")
-        time.sleep(1.1)
         assert rest_inc2.exit_code == 0, f"RESTORE inc2 failed: {rest_inc2.std_err}"
-        restored_rows = self._capture_snapshot(t_orders)
-        time.sleep(1.1)
+        restored_rows = self.wait_for_table_rows(t_orders, snapshot_rows[snap_inc2], timeout_s=90)
         assert self.normalize_rows(restored_rows) == self.normalize_rows(snapshot_rows[snap_inc2]), "Verify data in backup (3) failed"
 
         # Remove all tables (2)
@@ -886,7 +906,7 @@ class TestFullCycleLocalBackupRestoreWIncr(TestFullCycleLocalBackupRestore):
         self._remove_tables([full_orders, full_products])
         rest_full2 = self._execute_yql(f"RESTORE `{col_full2}`;")
         assert rest_full2.exit_code == 0, f"RESTORE full2 failed: {rest_full2.std_err}"
-        restored_rows = self._capture_snapshot(t_orders)
+        restored_rows = self.wait_for_table_rows(t_orders, snapshot_rows[snap_full2], timeout_s=90)
         assert self.normalize_rows(restored_rows) == self.normalize_rows(snapshot_rows[snap_full2]), "Verify data in backup (4) failed"
 
         # Restore to most-relevant incremental after full2
@@ -934,9 +954,8 @@ class TestFullCycleLocalBackupRestoreWIncr(TestFullCycleLocalBackupRestore):
             self._remove_tables([full_orders, full_products])
             rest_post = self._execute_yql(f"RESTORE `{col_post_full2}`;")
             assert rest_post.exit_code == 0, f"RESTORE post-full2 failed: {rest_post.std_err}"
-            restored_rows = self._capture_snapshot(t_orders)
-            expected_rows = snapshot_rows[chosen_inc_after_full2]
-            assert self.normalize_rows(restored_rows) == self.normalize_rows(expected_rows), "Verify data in backup (5) failed"
+            restored_rows = self.wait_for_table_rows(t_orders, snapshot_rows[chosen_inc_after_full2], timeout_s=90)
+            assert self.normalize_rows(restored_rows) == self.normalize_rows(snapshot_rows[chosen_inc_after_full2]), "Verify data in backup (5) failed"
 
         # cleanup
         if os.path.exists(export_dir):

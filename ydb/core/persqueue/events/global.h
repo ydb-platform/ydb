@@ -345,8 +345,13 @@ namespace NKikimr::TEvPersQueue {
         TEvMLPGetPartitionResponse() = default;
 
         TEvMLPGetPartitionResponse(ui32 partitionId, ui64 tabletId) {
+            Record.SetErrorCode(NPersQueue::NErrorCode::EErrorCode::OK);
             Record.SetPartitionId(partitionId);
             Record.SetTabletId(tabletId);
+        }
+
+        TEvMLPGetPartitionResponse(NPersQueue::NErrorCode::EErrorCode errorCode) {
+            Record.SetErrorCode(errorCode);
         }
 
         // The partition which is ready for reading.

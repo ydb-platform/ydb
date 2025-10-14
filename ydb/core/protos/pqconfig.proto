@@ -1269,8 +1269,9 @@ message TEvMLPGetPartitionRequest {
 
 // From PQRB
 message TEvMLPGetPartitionResponse {
-    optional uint32 PartitionId = 1;
-    optional uint64 TabletId = 2;
+    optional NPersQueue.NErrorCode.EErrorCode ErrorCode = 1;
+    optional uint32 PartitionId = 2;
+    optional uint64 TabletId = 3;
 }
 
 // To PQTablet

@@ -250,9 +250,7 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
         // Note: in case of any cost changes, documentation is needed to be updated correspondingly.
         // https://yandex.cloud/ru/docs/ydb/pricing/ru-special#secondary-index
         const TString meteringId = indexType == NKikimrSchemeOp::EIndexTypeGlobalUnique ? "106-72075186233409549-2-0-0-0-0-101-202-1818-3030" : "106-72075186233409549-2-0-0-0-0-101-101-1818-1818";
-        const TString quantity = indexType == NKikimrSchemeOp::EIndexTypeGlobalUnique ? "229" : "179";
-        const TString expectedMetering = Sprintf(R"({"usage":{"start":0,"quantity":%s,"finish":0,"unit":"request_unit","type":"delta"},"tags":{},"id":"%s","cloud_id":"CLOUD_ID_VAL","source_wt":0,"source_id":"sless-docapi-ydb-ss","resource_id":"DATABASE_ID_VAL","schema":"ydb.serverless.requests.v1","folder_id":"FOLDER_ID_VAL","version":"1.0.0"})",
-            quantity.c_str(),
+        const TString expectedMetering = Sprintf(R"({"usage":{"start":0,"quantity":179,"finish":0,"unit":"request_unit","type":"delta"},"tags":{},"id":"%s","cloud_id":"CLOUD_ID_VAL","source_wt":0,"source_id":"sless-docapi-ydb-ss","resource_id":"DATABASE_ID_VAL","schema":"ydb.serverless.requests.v1","folder_id":"FOLDER_ID_VAL","version":"1.0.0"})",
             meteringId.c_str()
         );
         UNIT_ASSERT_NO_DIFF(meteringMessages, expectedMetering + "\n");

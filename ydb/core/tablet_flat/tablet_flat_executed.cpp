@@ -28,7 +28,7 @@ bool TTabletExecutedFlat::OnUnhandledException(const std::exception& e) {
                 "Tablet " << TabletID() << " unhandled exception " << TypeName(e) << ": " << e.what()
                 << '\n' << TBackTrace::FromCurrentException().PrintToString());
 
-            GetServiceCounters(AppData(ctx)->Counters, "tablets")->GetCounter("alerts_broken", true)->Inc();
+            GetServiceCounters(AppData(ctx)->Counters, "tablets")->GetCounter("alerts_exception", true)->Inc();
 
             HandlePoison(ctx);
             return true;

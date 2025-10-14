@@ -2,6 +2,7 @@
 
 #include <ydb/library/actors/core/actorid.h>
 #include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/actors/interconnect/logging/logging.h>
 #include <ydb/library/actors/interconnect/poller/poller_tcp.h>
 #include <ydb/library/actors/util/datetime.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
@@ -10,7 +11,6 @@
 #include <util/generic/set.h>
 #include <util/system/datetime.h>
 
-#include "logging.h"
 #include "event_filter.h"
 
 #include <atomic>

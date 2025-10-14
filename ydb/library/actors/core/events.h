@@ -27,6 +27,7 @@ namespace NActors {
             ES_YF = 10,
             ES_HTTP = 11,
             ES_PGWIRE = 12,
+            ES_INTERCONNECT_RDMA = 13,
 
             ES_USERSPACE = 4096,
 

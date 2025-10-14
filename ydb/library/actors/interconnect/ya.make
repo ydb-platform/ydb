@@ -41,7 +41,6 @@ SRCS(
     interconnect_zc_processor.h
     load.cpp
     load.h
-    logging.h
     packet.cpp
     packet.h
     profiler.h

@@ -25,12 +25,14 @@ TColumnShard::EOverloadStatus TColumnShard::CheckOverloadedImmediate(const TInte
         return EOverloadStatus::ShardTxInFly;
     }
 
-    const float rejectProbabilty = Executor()->GetRejectProbability();
-    if (rejectProbabilty > 0) {
-        const float rnd = TAppData::RandomProvider->GenRandReal2();
-        if (rnd < rejectProbabilty) {
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "shard_overload")("reason", "reject_probality")("RP", rejectProbabilty);
-            return EOverloadStatus::RejectProbability;
+    if (AppData()->FeatureFlags.GetEnableOlapRejectProbability()) {
+        const float rejectProbabilty = Executor()->GetRejectProbability();
+        if (rejectProbabilty > 0) {
+            const float rnd = TAppData::RandomProvider->GenRandReal2();
+            if (rnd < rejectProbabilty) {
+                AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "shard_overload")("reason", "reject_probality")("RP", rejectProbabilty);
+                return EOverloadStatus::RejectProbability;
+            }
         }
     }
 

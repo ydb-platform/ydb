@@ -60,9 +60,11 @@ TArrowCSV::TArrowCSV(const TColummns& columns, bool header, const std::set<std::
     ReadOptions.block_size = DEFAULT_BLOCK_SIZE;
     ReadOptions.use_threads = false;
     ReadOptions.autogenerate_column_names = false;
-    auto SetOptionsForColumns = [&](const auto& col) {
+    auto SetOptionsForColumns = [&](const auto& col) -> decltype(auto) {
         if (col.Precision > 0) {
             ConvertOptions.column_types[col.Name] = arrow::decimal128(static_cast<int32_t>(col.Precision), static_cast<int32_t>(col.Scale));
+        } else if (col.ArrowType->id() == arrow::UInt8Type::type_id && col.CsvArrowType->id() == arrow::UInt8Type::type_id) {
+            ConvertOptions.column_types[col.Name] = arrow::boolean();
         } else {
             ConvertOptions.column_types[col.Name] = col.CsvArrowType;
         }

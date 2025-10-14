@@ -204,6 +204,13 @@ public:
         // Do not increment AlterVersion: restore only copies data without schema changes
         NIceDb::TNiceDb db(context.GetDB());
 
+        // Increment parent directory version to trigger republishing
+        auto parentDir = context.SS->PathsById.at(path->ParentPathId);
+        ++parentDir->DirAlterVersion;
+        context.SS->PersistPathDirAlterVersion(db, parentDir);
+        context.SS->ClearDescribePathCaches(parentDir);
+        context.OnComplete.PublishToSchemeBoard(OperationId, parentDir->PathId);
+
         context.SS->ClearDescribePathCaches(path);
         context.OnComplete.PublishToSchemeBoard(OperationId, pathId);
 
@@ -261,23 +268,15 @@ public:
             context.OnComplete.ReleasePathState(OperationId, txState->TargetPathId, TPathElement::EPathState::EPathStateNoChanges);
         }
 
-        // Release source table path states without republishing to avoid schema version conflicts
         if (RestoreOp.SrcTablePathsSize() > 0) {
             for (const auto& srcTablePathStr : RestoreOp.GetSrcTablePaths()) {
                 const auto srcTablePath = TPath::Resolve(srcTablePathStr, context.SS);
                 if (srcTablePath.IsResolved()) {
-                    srcTablePath.Base()->PathState = TPathElement::EPathState::EPathStateNoChanges;
-                    srcTablePath.Base()->LastTxId = OperationId.GetTxId();
-                    context.DbChanges.PersistPath(srcTablePath.Base()->PathId);
+                    context.OnComplete.ReleasePathState(OperationId, srcTablePath.Base()->PathId, TPathElement::EPathState::EPathStateNoChanges);
                 }
             }
         } else if (txState->SourcePathId != InvalidPathId) {
-            TPath srcPath = TPath::Init(txState->SourcePathId, context.SS);
-            if (srcPath.IsResolved()) {
-                srcPath.Base()->PathState = TPathElement::EPathState::EPathStateNoChanges;
-                srcPath.Base()->LastTxId = OperationId.GetTxId();
-                context.DbChanges.PersistPath(txState->SourcePathId);
-            }
+            context.OnComplete.ReleasePathState(OperationId, txState->SourcePathId, TPathElement::EPathState::EPathStateNoChanges);
         }
 
         context.OnComplete.DoneOperation(OperationId);

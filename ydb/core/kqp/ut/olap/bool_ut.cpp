@@ -20,8 +20,8 @@
 #include <yql/essentials/types/binary_json/write.h>
 #include <yql/essentials/types/uuid/uuid.h>
 
-#include <tuple>
 #include <functional>
+#include <tuple>
 
 template <class... Es>
 static TString BuildParamTestName(const char* base, const Es&... es) {
@@ -133,7 +133,8 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
         UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), NYdb::EStatus::SUCCESS);
     }
 
-void BulkUpsertRowTableYdbValueWithColumnName(TTestHelper& helper, const TString& name, const TVector<TRow>& rows, const TString& columnName) {
+    void BulkUpsertRowTableYdbValueWithColumnName(
+        TTestHelper& helper, const TString& name, const TVector<TRow>& rows, const TString& columnName) {
         TValueBuilder builder;
         builder.BeginList();
         for (auto&& r : rows) {
@@ -180,9 +181,9 @@ void BulkUpsertRowTableYdbValueWithColumnName(TTestHelper& helper, const TString
         TStringBuilder builder;
         for (auto&& r : rows) {
             builder << r.Id << "," << r.IntVal << ",";
-        if (r.B.has_value()) {
-            builder << (*r.B ? "true" : "false");
-        }
+            if (r.B.has_value()) {
+                builder << (*r.B ? "true" : "false");
+            }
 
             builder << '\n';
         }

@@ -659,6 +659,11 @@ bool HasNestedOptionalTypeInMetadata(const std::shared_ptr<arrow20::Field>& sche
     return GetYtTypeFromMetadata(schemaField) == YtTypeMetadataValueNestedOptional;
 }
 
+bool HasYsonTypeInMetadata(const std::shared_ptr<arrow20::Field>& schemaField)
+{
+    return GetYtTypeFromMetadata(schemaField) == YtTypeMetadataValueYson;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 class TArraySimpleVisitor
@@ -669,11 +674,13 @@ public:
         std::optional<ESimpleLogicalValueType> columnType,
         int columnId,
         std::shared_ptr<arrow20::Array> array,
+        std::shared_ptr<arrow20::Field> schemaField,
         std::shared_ptr<TChunkedOutputStream> bufferForStringLikeValues,
         TUnversionedRowValues* rowValues)
         : ColumnType_(columnType)
         , ColumnId_(columnId)
         , Array_(std::move(array))
+        , SchemaField_(std::move(schemaField))
         , BufferForStringLikeValues_(std::move(bufferForStringLikeValues))
         , RowValues_(rowValues)
     { }
@@ -848,6 +855,7 @@ private:
     const i64 ColumnId_;
 
     std::shared_ptr<arrow20::Array> Array_;
+    std::shared_ptr<arrow20::Field> SchemaField_;
     std::shared_ptr<TChunkedOutputStream> BufferForStringLikeValues_;
     TUnversionedRowValues* RowValues_;
 
@@ -1016,7 +1024,7 @@ private:
         // which leads to a "too few arguments" in the point of its invocation if we try to pass
         // it directly to ParseStringLikeArray.
         return ParseStringLikeArray<ArrayType>([this] (TStringBuf value, i64 columnId) {
-            if (ColumnType_  && *ColumnType_ == ESimpleLogicalValueType::Any) {
+            if (HasYsonTypeInMetadata(SchemaField_)) {
                 return MakeUnversionedAnyValue(value, columnId);
             } else {
                 return MakeUnversionedStringValue(value, columnId);
@@ -1730,11 +1738,12 @@ void PrepareArrayForSimpleLogicalType(
     ESimpleLogicalValueType columnType,
     const std::shared_ptr<TChunkedOutputStream>&  bufferForStringLikeValues,
     const std::shared_ptr<arrow20::Array>& column,
+    const std::shared_ptr<arrow20::Field>& schemaField,
     TUnversionedRowValues& rowValues,
     int columnId)
 {
     CheckArrowTypeMatch(columnType, column);
-    TArraySimpleVisitor visitor(columnType, columnId, column, bufferForStringLikeValues, &rowValues);
+    TArraySimpleVisitor visitor(columnType, columnId, column, schemaField, bufferForStringLikeValues, &rowValues);
     ThrowOnError(column->type()->Accept(&visitor));
 }
 
@@ -1817,7 +1826,7 @@ void PrepareArrayForComplexType(
         column->type()->id() == arrow20::Type::DECIMAL256)
     {
         TUnversionedRowValues stringValues(rowValues.size());
-        TArraySimpleVisitor visitor(/*columnType*/ std::nullopt, columnId, column, bufferForStringLikeValues, &stringValues);
+        TArraySimpleVisitor visitor(/*columnType*/ std::nullopt, columnId, column, schemaField, bufferForStringLikeValues, &stringValues);
         ThrowOnError(column->type()->Accept(&visitor));
         for (int offset = 0; offset < std::ssize(rowValues); ++offset) {
             if (column->IsNull(offset)) {
@@ -1825,8 +1834,16 @@ void PrepareArrayForComplexType(
             } else if (column->type()->id() == arrow20::Type::DECIMAL128 || column->type()->id() == arrow20::Type::DECIMAL256) {
                 rowValues[offset] = MakeUnversionedStringValue(stringValues[offset].AsStringBuf(), columnId);
             } else {
-                // TODO(max): is it even correct? Binary is not necessarily a correct YSON...
                 rowValues[offset] = MakeUnversionedCompositeValue(stringValues[offset].AsStringBuf(), columnId);
+                if (HasYsonTypeInMetadata(schemaField)) {
+                    rowValues[offset] = MakeUnversionedCompositeValue(stringValues[offset].AsStringBuf(), columnId);
+                } else {
+                    THROW_ERROR_EXCEPTION(
+                        "Unexpected arrow type in complex type %Qv, there was no metadata found with the key \'%v\' and the value \'%v\'",
+                        column->type()->name(),
+                        YtTypeMetadataKey,
+                        YtTypeMetadataValueYson);
+                }
             }
         }
     } else {
@@ -1889,6 +1906,7 @@ void PrepareArray(
                     denullifiedLogicalType->AsSimpleTypeRef().GetElement(),
                     bufferForStringLikeValues,
                     column,
+                    schemaField,
                     rowValues,
                     columnId);
 

@@ -466,8 +466,6 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
     Y_UNIT_TEST(ReconfigureTier) {
         TTieringTestHelper tieringHelper;
         auto& csController = tieringHelper.GetCsController();
-        csController->SetOverrideMaxReadStaleness(TDuration::Seconds(1));
-        csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
         auto& olapHelper = tieringHelper.GetOlapHelper();
         auto& testHelper = tieringHelper.GetTestHelper();
         NYdb::NTable::TTableClient tableClient = testHelper.GetKikimr().GetTableClient();

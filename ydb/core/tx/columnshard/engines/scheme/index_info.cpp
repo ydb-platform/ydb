@@ -6,7 +6,6 @@
 #include <ydb/core/formats/arrow/transformer/dictionary.h>
 #include <ydb/core/tx/columnshard/engines/scheme/column_index_accessor.h>
 #include <ydb/core/tx/columnshard/engines/storage/chunks/column.h>
-#include <ydb/core/tx/columnshard/engines/storage/chunks/data.h>   // todo remove
 #include <ydb/core/tx/columnshard/engines/storage/indexes/count_min_sketch/meta.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/max/meta.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/portions/meta.h>
@@ -29,8 +28,7 @@ TConclusionStatus TIndexInfo::CheckCompatible(const TIndexInfo& other) const {
 
 ui32 TIndexInfo::GetColumnIdVerified(const std::string& name) const {
     auto id = GetColumnIdOptional(name);
-    AFL_VERIFY(!!id)("column_name", name)("idxs", JoinSeq(",", ColumnIdxSortedByName))(
-        "names", JoinSeq(",", GetColumnNames()));
+    AFL_VERIFY(!!id)("column_name", name)("idxs", JoinSeq(",", ColumnIdxSortedByName))("names", JoinSeq(",", GetColumnNames()));
     return *id;
 }
 
@@ -418,7 +416,8 @@ void TIndexInfo::InitializeCaches(const std::shared_ptr<IStoragesManager>& opera
     }
 }
 
-NSplitter::TEntityGroups TIndexInfo::GetEntityGroupsByStorageId(const TString& specialTier, const IStoragesManager& storages, const IColumnIndexAccessor& indexAccessor) const {
+NSplitter::TEntityGroups TIndexInfo::GetEntityGroupsByStorageId(
+    const TString& specialTier, const IStoragesManager& storages, const IColumnIndexAccessor& indexAccessor) const {
     NSplitter::TEntityGroups groups(storages.GetDefaultOperator()->GetBlobSplitSettings(), IStoragesManager::DefaultStorageId);
     for (auto&& i : GetEntityIds()) {
         auto storageId = GetEntityStorageId(i, specialTier, indexAccessor);
@@ -471,16 +470,13 @@ NKikimr::TConclusionStatus TIndexInfo::AppendIndex(const THashMap<ui32, std::vec
         }
     }
     if (indexStorageId == IStoragesManager::LocalMetadataStorageId) {
-        // S InheritPortionStorage == true
         AFL_VERIFY(chunks.size() == 1);
         AFL_VERIFY(result.MutableSecondaryInplaceData().emplace(indexId, chunks.front()).second);
     } else {
         for (const auto& chunk : chunks) {
             AFL_VERIFY(indexStorageId == IStoragesManager::DefaultStorageId || chunk->GetInheritPortionStorage())("storage", indexStorageId);
         }
-        std::vector<std::shared_ptr<IPortionDataChunk>> convertedChunks(
-            std::make_move_iterator(chunks.begin()), std::make_move_iterator(chunks.end()));
-        AFL_VERIFY(result.MutableExternalData().emplace(indexId, std::move(convertedChunks)).second);
+        AFL_VERIFY(result.MutableExternalData().emplace(indexId, std::vector<std::shared_ptr<IPortionDataChunk>>(std::make_move_iterator(chunks.begin()), std::make_move_iterator(chunks.end()))).second);
     }
     return TConclusionStatus::Success();
 }
@@ -547,7 +543,8 @@ std::shared_ptr<arrow::Scalar> TIndexInfo::GetColumnExternalDefaultValueByIndexV
 
 TIndexInfo::TIndexInfo(const TIndexInfo& original, const TSchemaDiffView& diff, const std::shared_ptr<IStoragesManager>& operators,
     const std::shared_ptr<TSchemaObjectsCache>& cache)
-    : PresetId(original.PresetId) {
+    : PresetId(original.PresetId)
+{
     {
         std::vector<std::shared_ptr<arrow::Field>> fields;
         const auto addFromOriginal = [&](const ui32 index) {

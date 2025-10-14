@@ -20,6 +20,12 @@ namespace {
     };
 
     constexpr TDuration kDefaultUpdateFairSharePeriod = TDuration::MilliSeconds(500);
+
+    void SetDemand(NHdrf::NDynamic::TQueryPtr query, ui64 demand) {
+        query->Demand = demand;
+        query->Usage = demand - 1;
+        query->UpdateActualDemand();
+    }
 }
 
     Y_UNIT_TEST(SingleDatabasePoolQueryStructure) {
@@ -44,7 +50,7 @@ namespace {
         std::vector<NHdrf::NDynamic::TQueryPtr> queries;
         for (NHdrf::TQueryId queryId = 0; queryId < 3; ++queryId) {
             auto query = queries.emplace_back(scheduler.AddOrUpdateQuery(databaseId, poolId, queryId, {}));
-            query->Demand = 2;
+            SetDemand(query, 2);
         }
 
         scheduler.UpdateFairShare();
@@ -85,7 +91,7 @@ namespace {
         std::vector<NHdrf::NDynamic::TQueryPtr> queries;
         for (NHdrf::TQueryId queryId = 0; queryId < 5; ++queryId) {
             auto query = queries.emplace_back(scheduler.AddOrUpdateQuery(databaseId, poolId, queryId, {}));
-            query->Demand = 1;
+            SetDemand(query, 1);
         }
 
         scheduler.UpdateFairShare(AllowOverlimit);
@@ -135,7 +141,7 @@ namespace {
         for (const auto& poolId : poolIds) {
             for (size_t i = 0; i < 3; ++i, ++queryId) {
                 auto query = queries.emplace_back(scheduler.AddOrUpdateQuery(databaseId, poolId, queryId, {}));
-                query->Demand = 4;
+                SetDemand(query, 4);
             }
         }
 
@@ -177,7 +183,7 @@ namespace {
         std::vector<NHdrf::NDynamic::TQueryPtr> queries;
         for (NHdrf::TQueryId queryId = 0; queryId < 3; ++queryId) {
             auto query = queries.emplace_back(scheduler.AddOrUpdateQuery(databaseId, poolId, queryId, {}));
-            query->Demand = 4;
+            SetDemand(query, 4);
         }
 
         scheduler.UpdateFairShare();
@@ -225,7 +231,7 @@ namespace {
             scheduler.AddOrUpdatePool(databaseIds[i], poolId, {});
 
             auto query = queries.emplace_back(scheduler.AddOrUpdateQuery(databaseIds[i], poolId, i, {}));
-            query->Demand = queryDemands[i];
+            SetDemand(query, queryDemands[i]);
         }
 
         scheduler.UpdateFairShare();
@@ -282,7 +288,7 @@ namespace {
             auto query = queries.emplace_back(
                 scheduler.AddOrUpdateQuery(databaseId, pools[queryId], queryId, {.Weight = weights[queryId]})
             );
-            query->Demand = demands[queryId];  
+            SetDemand(query, demands[queryId]);
         }
 
         scheduler.UpdateFairShare();
@@ -328,7 +334,7 @@ namespace {
         std::vector<NHdrf::NDynamic::TQueryPtr> queries;
         for (NHdrf::TQueryId queryId = 0; queryId < 3; ++queryId) {
             auto query = queries.emplace_back(scheduler.AddOrUpdateQuery(databaseId, poolId, queryId, {.Weight = weights[queryId]}));
-            query->Demand = demands[queryId];
+            SetDemand(query, demands[queryId]);
         }
 
         scheduler.UpdateFairShare();
@@ -388,7 +394,7 @@ namespace {
                 const auto& poolId = poolIds[i][j];
                 for (size_t k = 0; k < demands[j].size(); ++k, ++queryId) {
                     auto query = queries.emplace_back(scheduler.AddOrUpdateQuery(databaseId, poolId, queryId, {}));
-                    query->Demand = demands[poolIndex][k];
+                    SetDemand(query, demands[poolIndex][k]);
                 }
             }
         }
@@ -466,7 +472,7 @@ namespace {
         std::vector<NHdrf::NDynamic::TQueryPtr> queries;
         for (NHdrf::TQueryId queryId = 0; queryId < 3; ++queryId) {
             auto query = queries.emplace_back(scheduler.AddOrUpdateQuery(databaseId, poolId, queryId, {}));
-            query->Demand = 2;
+            SetDemand(query, 2);
         }
 
         scheduler.UpdateFairShare();
@@ -507,7 +513,7 @@ namespace {
         std::vector<NHdrf::NDynamic::TQueryPtr> queries;
         for (NHdrf::TQueryId queryId = 0; queryId < 3; ++queryId) {
             auto query = queries.emplace_back(scheduler.AddOrUpdateQuery(databaseId, poolId, queryId, {}));
-            query->Demand = 3;
+            SetDemand(query, 3);
         }
 
         scheduler.UpdateFairShare();
@@ -573,7 +579,7 @@ namespace {
         std::vector<NHdrf::NDynamic::TQueryPtr> queries;
         for (NHdrf::TQueryId queryId = 1; queryId <= 3; ++queryId) {
             auto query = queries.emplace_back(scheduler.AddOrUpdateQuery(databaseId, poolId, queryId, {}));
-            query->Demand = 5;
+            SetDemand(query, 5);
         }
 
         scheduler.UpdateFairShare();
@@ -587,7 +593,10 @@ namespace {
         }
 
         NHdrf::NDynamic::TQueryPtr new_query = queries.emplace_back(scheduler.AddOrUpdateQuery(databaseId, poolId, 4, {}));
-        new_query->Demand = 5;
+        SetDemand(new_query, 5);
+        for (auto& query : queries) {
+            query->UpdateActualDemand();
+        }
         scheduler.UpdateFairShare();
 
         // distribution in FIFO ordering
@@ -599,7 +608,10 @@ namespace {
             UNIT_ASSERT_VALUES_EQUAL(querySnapshot->FairShare, fairShares[queryId]);
         }
 
-        queries[0]->Demand = 2;
+        SetDemand(queries[0], 2);
+        for (auto& query : queries) {
+            query->UpdateActualDemand();
+        }
         scheduler.UpdateFairShare();
 
         fairShares = {2, 5, 2, 1};
@@ -640,7 +652,7 @@ namespace {
         std::vector<NHdrf::NDynamic::TQueryPtr> queries;
         for (NHdrf::TQueryId queryId = 0; queryId < 3; ++queryId) {
             auto query = queries.emplace_back(scheduler.AddOrUpdateQuery(databaseId, poolId, queryId, {}));
-            query->Demand = 5;
+            SetDemand(query, 5);
         }
 
         scheduler.UpdateFairShare();
@@ -662,6 +674,10 @@ namespace {
         UNIT_ASSERT_VALUES_EQUAL(databaseSnapshot->FairShare, 10);
 
         scheduler.RemoveQuery(queries[0]);
+
+        for (auto& query : queries) {
+            query->UpdateActualDemand();
+        }
 
         scheduler.UpdateFairShare();
 
@@ -704,7 +720,7 @@ namespace {
         std::vector<NHdrf::NDynamic::TQueryPtr> queries;
         for (NHdrf::TQueryId queryId = 1; queryId <= 3; ++queryId) {
             auto query = queries.emplace_back(scheduler.AddOrUpdateQuery(databaseId, pools[queryId - 1], queryId, {}));
-            query->Demand = 3;
+            SetDemand(query, 3);
         }
 
         scheduler.UpdateFairShare();
@@ -728,8 +744,11 @@ namespace {
         pools.emplace_back("pool4");
 
         NHdrf::NDynamic::TQueryPtr new_query = queries.emplace_back(scheduler.AddOrUpdateQuery(databaseId, "pool4", 4, {}));
-        new_query->Demand = 3;
+        SetDemand(new_query, 3);
 
+        for (auto& query : queries) {
+            query->UpdateActualDemand();
+        }
         scheduler.UpdateFairShare();
 
         for (size_t queryId = 0; queryId < queries.size(); ++queryId) {
@@ -749,6 +768,9 @@ namespace {
         UNIT_ASSERT_VALUES_EQUAL(databaseSnapshot->FairShare, 10);
 
         scheduler.AddOrUpdatePool(databaseId, "pool1", {.Weight = 2});
+        for (auto& query : queries) {
+            query->UpdateActualDemand();
+        }
         scheduler.UpdateFairShare();
 
         const std::vector<ui64> queriesFairShares = {3, 2, 2, 2};

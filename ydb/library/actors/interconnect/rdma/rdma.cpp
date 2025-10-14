@@ -100,7 +100,7 @@ int TQueuePair::ToResetState() noexcept {
     return ibv_modify_qp(Qp, &qpAttr, IBV_QP_STATE);
 }
 
-int TQueuePair::ToRtsState(TRdmaCtx* ctx, ui32 qpNum, const ibv_gid& gid, int mtuIndex) noexcept {
+int TQueuePair::ToRtsState(ui32 qpNum, const ibv_gid& gid, int mtuIndex) noexcept {
     // ibv_modify_qp() returns 0 on success, or the value of errno on
     //  failure (which indicates the failure reason).
     {   // modify QP to INIT
@@ -110,7 +110,7 @@ int TQueuePair::ToRtsState(TRdmaCtx* ctx, ui32 qpNum, const ibv_gid& gid, int mt
         qpAttr.qp_state = IBV_QPS_INIT;
         qpAttr.qp_access_flags = IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ | IBV_ACCESS_REMOTE_WRITE;
         qpAttr.pkey_index = 0;
-        qpAttr.port_num = ctx->GetPortNum();
+        qpAttr.port_num = Ctx->GetPortNum();
 
         int err = ibv_modify_qp(Qp, &qpAttr, IBV_QP_STATE | IBV_QP_PKEY_INDEX | IBV_QP_PORT | IBV_QP_ACCESS_FLAGS);
         if (err) {
@@ -126,10 +126,10 @@ int TQueuePair::ToRtsState(TRdmaCtx* ctx, ui32 qpNum, const ibv_gid& gid, int mt
         qpAttr.path_mtu = (ibv_mtu)mtuIndex;
         qpAttr.dest_qp_num = qpNum;
         qpAttr.ah_attr.grh.dgid = gid;
-        qpAttr.ah_attr.grh.sgid_index = ctx->GetGidIndex();
+        qpAttr.ah_attr.grh.sgid_index = Ctx->GetGidIndex();
         qpAttr.ah_attr.grh.hop_limit = 1;
         qpAttr.ah_attr.is_global = 1;
-        qpAttr.ah_attr.port_num = ctx->GetPortNum();
+        qpAttr.ah_attr.port_num = Ctx->GetPortNum();
         qpAttr.max_dest_rd_atomic = 1;
         qpAttr.min_rnr_timer = 12;
 
@@ -233,8 +233,8 @@ void TIbVerbsBuilderImpl::AddReadVerb(void* mrAddr, ui32 mrlKey, void* dstAddr, 
 }
 
 ibv_send_wr* TIbVerbsBuilderImpl::BuildListOfVerbs(std::vector<TWr*>& wr) noexcept {
-    Y_DEBUG_ABORT_UNLESS(wr.size() == WorkBuf.size());
-    Y_DEBUG_ABORT_UNLESS(wr.size());
+    Y_ABORT_UNLESS(wr.size() == WorkBuf.size());
+    Y_ABORT_UNLESS(wr.size());
 
     WorkBuf[0].Wr.sg_list = &WorkBuf[0].Sg;
     WorkBuf[0].Wr.wr_id = wr[0]->GetId();

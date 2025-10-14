@@ -141,12 +141,12 @@ TEST_F(TRdmaLow, ReadInOneProcessWithQpInterruption) {
             auto qp1num = rdma->Qp1->GetQpNum();
 
             {
-                int err = rdma->Qp2->ToRtsState(rdma->Ctx, qp1num, rdma->Ctx->GetGid(), rdma->Ctx->GetPortAttr().active_mtu);
+                int err = rdma->Qp2->ToRtsState(qp1num, rdma->Ctx->GetGid(), rdma->Ctx->GetPortAttr().active_mtu);
                 EXPECT_TRUE(err == 0);
             }
 
             {
-                int err = rdma->Qp1->ToRtsState(rdma->Ctx, rdma->Qp2->GetQpNum(), rdma->Ctx->GetGid(), rdma->Ctx->GetPortAttr().active_mtu);
+                int err = rdma->Qp1->ToRtsState(rdma->Qp2->GetQpNum(), rdma->Ctx->GetGid(), rdma->Ctx->GetPortAttr().active_mtu);
                 EXPECT_TRUE(err == 0);
             }
         }

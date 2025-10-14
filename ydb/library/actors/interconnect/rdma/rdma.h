@@ -31,6 +31,10 @@ struct TEvRdmaIoDone;
 class TQueuePair;
 class IIbVerbsBuilder;
 
+
+// Wrapper for ibv Completion Queue
+// Hides logic to controll work request count
+// https://www.rdmamojo.com/2012/11/03/ibv_create_cq/ 
 class ICq {
     ICq() {};
     friend class TCqCommon;
@@ -56,9 +60,6 @@ public:
         ui32 Ready; // Number of work requests ready to allocate
     };
 
-    // Alloc ibv work request and set callback to notify complition.
-    // returns TBusy in case of no prepare requests
-    // returns TErr in case of fatal CQ error. NOTE!!! The callback might be called in this case with TCqErr 
     virtual std::optional<TErr> DoWrBatchAsync(std::shared_ptr<TQueuePair> qp, std::unique_ptr<IIbVerbsBuilder> builder) noexcept = 0;
     virtual TWrStats GetWrStats() const noexcept = 0;
 
@@ -77,6 +78,8 @@ private:
 
 ICq::TPtr CreateSimpleCq(const TRdmaCtx* ctx, NActors::TActorSystem* as, int maxCqe, int maxWr, NMonitoring::TDynamicCounters* counter) noexcept;
 
+// Wrapper for ibv Queue Pair
+// https://www.rdmamojo.com/2012/12/21/ibv_create_qp/
 class TQueuePair: public NNonCopyable::TMoveOnly {
 public:
     struct TQpS {
@@ -91,7 +94,9 @@ public:
     int Init(TRdmaCtx* ctx, ICq* cq, int maxWr) noexcept;
     int ToErrorState() noexcept;
     int ToResetState() noexcept;
-    int ToRtsState(TRdmaCtx* ctx, ui32 qpNum, const ibv_gid& gid, int mtuIndex) noexcept;
+    // IBV_QPS_RTS - Ready To Send state
+    // https://www.rdmamojo.com/2013/01/12/ibv_modify_qp/
+    int ToRtsState(ui32 qpNum, const ibv_gid& gid, int mtuIndex) noexcept;
     int PostSend(struct ::ibv_send_wr *wr, struct ::ibv_send_wr **bad_wr) noexcept;
     ui32 GetQpNum() const noexcept;
     void Output(IOutputStream&) const noexcept;

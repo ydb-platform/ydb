@@ -82,12 +82,12 @@ std::shared_ptr<TLocalRdmaStuff> InitLocalRdmaStuff(TString bindTo) {
     {
         int err = rdma->Qp2->Init(rdma->Ctx, rdma->CqPtr.get(), 16);
         RDMA_UT_EXPECT_TRUE(err == 0);
-        err = rdma->Qp2->ToRtsState(rdma->Ctx, qp1num, rdma->Ctx->GetGid(), rdma->Ctx->GetPortAttr().active_mtu);
+        err = rdma->Qp2->ToRtsState(qp1num, rdma->Ctx->GetGid(), rdma->Ctx->GetPortAttr().active_mtu);
         RDMA_UT_EXPECT_TRUE(err == 0);
     }
 
     {
-        int err = rdma->Qp1->ToRtsState(rdma->Ctx, rdma->Qp2->GetQpNum(), rdma->Ctx->GetGid(), rdma->Ctx->GetPortAttr().active_mtu);
+        int err = rdma->Qp1->ToRtsState(rdma->Qp2->GetQpNum(), rdma->Ctx->GetGid(), rdma->Ctx->GetPortAttr().active_mtu);
         RDMA_UT_EXPECT_TRUE(err == 0);
     }
 

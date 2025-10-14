@@ -136,9 +136,6 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         csController->WaitActualization(TDuration::Seconds(5));
         tieringHelper.CheckAllDataInTier(DEFAULT_TIER_PATH);
 
-        Cerr << "aboba=s3 "
-             << "buckets=" << Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetBucket("olap-tier1").GetSize() << Endl;
-
         testHelper.ResetTiering(DEFAULT_TABLE_PATH);
         csController->WaitCompactions(TDuration::Seconds(5));
         tieringHelper.CheckAllDataInTier("__DEFAULT");
@@ -521,7 +518,6 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         auto& testHelper = tieringHelper.GetTestHelper();
         olapHelper.CreateTestOlapTable();
         testHelper.CreateTier(DEFAULT_TIER_NAME);
-        // testHelper.SetTiering(DEFAULT_TABLE_PATH, DEFAULT_TIER_PATH, DEFAULT_COLUMN_NAME);
 
         NYdb::NTable::TTableClient tableClient = testHelper.GetKikimr().GetTableClient();
         
@@ -543,23 +539,6 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         csController->WaitActualization(TDuration::Seconds(5));
         tieringHelper.CheckAllDataInTier(DEFAULT_TIER_PATH);
 
-        Cerr << "aboba=s3 "
-             << "buckets=" << Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetBucket("olap-tier1").GetSize() << Endl;
-
-        {
-            auto selectQuery = TStringBuilder() << R"(
-                SELECT *
-                FROM `/Root/olapStore/olapTable/.sys/primary_index_stats`
-                WHERE Activity == 1
-            )";
-
-            auto rows = ExecuteScanQuery(tableClient, selectQuery);
-            // for (auto& row: rows) {
-            //     Cerr << "aboba " << *NYdb::TValueParser(row.find("TierName")->second).GetOptionalUtf8() << Endl;
-            //     // UNIT_ASSERT_VALUES_EQUAL(*NYdb::TValueParser(row.find("TierName")->second).GetOptionalUtf8(), "/Root/tier1");
-            // }
-        }
-
         {
             auto selectQuery = TStringBuilder() << R"(
                 SELECT *
@@ -569,14 +548,11 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
 
             auto rows = ExecuteScanQuery(tableClient, selectQuery);
             for (auto& row: rows) {
-                Cerr << "aboba " << *NYdb::TValueParser(row.find("TierName")->second).GetOptionalUtf8() << Endl;
-                // UNIT_ASSERT_VALUES_EQUAL(*NYdb::TValueParser(row.find("TierName")->second).GetOptionalUtf8(), "/Root/tier1");
+                UNIT_ASSERT_VALUES_EQUAL(*NYdb::TValueParser(row.find("TierName")->second).GetOptionalUtf8(), DEFAULT_TIER_PATH);
             }
         }
 
-        auto rows = ExecuteScanQuery(tableClient, "SELECT *  FROM `/Root/olapStore/olapTable`");
-
-        AFL_VERIFY(false);
+        ExecuteScanQuery(tableClient, "SELECT *  FROM `/Root/olapStore/olapTable`");
     }
 }
 

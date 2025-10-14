@@ -629,7 +629,7 @@ Y_UNIT_TEST_SUITE(TStorageServiceLocalTest) {
         RegisterCoordinator(coordinator1, true);
     }
 
-    Y_UNIT_TEST_F(ShouldCreateCheckpoint1, TLocalFixture)
+    Y_UNIT_TEST_F(ShouldCreateCheckpoint, TLocalFixture)
     {
         RegisterDefaultCoordinator();
         CreateCheckpoint(GraphId, Generation, CheckpointId1, false);

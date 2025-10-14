@@ -16,7 +16,8 @@ struct TEvQueryActor {
     enum EEv : ui32 {
         EvBegin = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
         EvExecuteDataQuery = EvBegin + 20,
-        EvFinish,
+        EvCommit,
+        EvRollback,
         EvEnd
     };
 
@@ -41,12 +42,11 @@ struct TEvQueryActor {
         NYdb::NTable::TExecDataQuerySettings ExecDataQuerySettings;
         NThreading::TPromise<NYdb::NTable::TDataQueryResult> Promise;
     };
-    struct TEvFinish : public NActors::TEventLocal<TEvFinish, EvFinish> {
-        TEvFinish(bool needRollback)
-        : NeedRollback(needRollback) {
-        }
-        bool NeedRollback = false;
+    struct TEvCommitTransaction : public NActors::TEventLocal<TEvCommitTransaction, EvCommit> {
     };
+    struct TEvRollbackTransaction : public NActors::TEventLocal<TEvRollbackTransaction, EvRollback> {
+    };
+    
 };
 
 class TQueryActor final : public NKikimr::TQueryBase {
@@ -83,21 +83,24 @@ public:
         
         IsExecuting = false;
         
-        if (IsFinishing) {
-            if (NeedRollback) {
-                LOG_STREAMS_STORAGE_SERVICE_INFO("TQueryActor::Call Rollback");
-                Finish(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected database response");
-            } else {
-                LOG_STREAMS_STORAGE_SERVICE_INFO("TQueryActor::Call finish");
-                Finish();
-            }
-
+        
+        if (NeedRollback) {
+         //   LOG_STREAMS_STORAGE_SERVICE_INFO("TQueryActor::Call RollbackTransaction()");
+         //   RollbackTransaction();
+            //LOG_STREAMS_STORAGE_SERVICE_INFO("TQueryActor::Call Rollback");
+            //Finish(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected database response");
+        } else {
+            // LOG_STREAMS_STORAGE_SERVICE_INFO("TQueryActor::Call finish");
+            // Finish();
         }
         LOG_STREAMS_STORAGE_SERVICE_INFO("TQueryActor::SetValue begin...");
 
 
         promise.SetValue(NYdb::NTable::TDataQueryResult(std::move(status), std::move(ResultSets), std::nullopt, std::nullopt, false, std::nullopt));
         LOG_STREAMS_STORAGE_SERVICE_INFO("TQueryActor::SetValue end");
+        if (IsFinishing) {
+            Finish();
+        }
     }
 
     void OnFinish(Ydb::StatusIds::StatusCode statusCode, NYql::TIssues&& issues) final {
@@ -116,36 +119,40 @@ public:
         NYdb::NTable::TTxControl txControl,
         NThreading::TPromise<NYdb::NTable::TDataQueryResult> promise) {
         Y_ABORT_UNLESS(!IsExecuting);
+        Y_ABORT_UNLESS(!DataQuery);
 
         LOG_STREAMS_STORAGE_SERVICE_INFO("TQueryActor::ExecuteDataQuery()");
-
-        TDataQuery q{sql, params, txControl, promise};
-        DataQuery = std::move(q);
+        DataQuery = TDataQuery{sql, params, txControl, promise};
         ProcessQueries();
     }
 
+    void Commit() {
+        LOG_STREAMS_STORAGE_SERVICE_INFO("TQueryActor::Commit()");
+        CommitTransaction();
+    }
+    void Rollback() {
+        LOG_STREAMS_STORAGE_SERVICE_INFO("TQueryActor::Rollback()");
+        Y_ABORT_UNLESS(!IsExecuting);
+        Finish(Ydb::StatusIds::INTERNAL_ERROR, "Rollback transaction", true);
 
-     void Finish222(bool needRollback) {
-        LOG_STREAMS_STORAGE_SERVICE_INFO("TQueryActor::Finish222()");
+        // NeedRollback = true;
+        // if (needRollback) {
+        //     NeedRollback = true;
+        // }
+        // if (IsExecuting || DataQuery) {
+        //     LOG_STREAMS_STORAGE_SERVICE_INFO("TQueryActor::Ignore finish");
+        //     return;
+        // }
+        // if (needRollback) {
+        //     LOG_STREAMS_STORAGE_SERVICE_INFO("TQueryActor::call rollback");
 
-        IsFinishing = true;
-        if (needRollback) {
-            NeedRollback = true;
-        }
-        if (IsExecuting || DataQuery) {
-            LOG_STREAMS_STORAGE_SERVICE_INFO("TQueryActor::Ignore finish");
-            return;
-        }
-        if (needRollback) {
-            LOG_STREAMS_STORAGE_SERVICE_INFO("TQueryActor::call rollback");
+        //     Finish(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected database response");
+        // } else {
+        //     LOG_STREAMS_STORAGE_SERVICE_INFO("TQueryActor::call finish");
 
-            Finish(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected database response");
-        } else {
-            LOG_STREAMS_STORAGE_SERVICE_INFO("TQueryActor::call finish");
-
-            Finish();
-        }
-     }
+        //     Finish();
+        // }
+    }
 
     void ProcessQueries() {
 
@@ -159,6 +166,12 @@ public:
         RunDataQuery(DataQuery->Sql, DataQuery->Params.get()/*TxContro NKikimr::TQueryBase::TTxControl::BeginAndCommitTx*/);
     }
 
+    void DeleteSession() {
+        if (IsExecuting) {
+            IsFinishing = true;
+        }
+        Finish();
+    }
 private:
 
     std::optional<TDataQuery> DataQuery;
@@ -168,14 +181,10 @@ private:
     bool NeedRollback = false;
 };
 
-
 struct TQuerySession : public NActors::TActorBootstrapped<TQuerySession> {
 
-    TQuerySession() {
-    }
-
     void Bootstrap(const NActors::TActorContext &ctx) {
-        LOG_STREAMS_STORAGE_SERVICE_INFO("TQuerySession::Bootstrap ");
+        LOG_STREAMS_STORAGE_SERVICE_INFO("TQuerySession::Bootstrap");
         Become(&TThis::StateFunc);
         QueryActor = new TQueryActor();
         QueryActorId = ctx.RegisterWithSameMailbox(QueryActor);
@@ -184,36 +193,47 @@ struct TQuerySession : public NActors::TActorBootstrapped<TQuerySession> {
     STFUNC(StateFunc) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvQueryActor::TEvExecuteDataQuery, Handle);
-            hFunc(TEvQueryActor::TEvFinish, Handle);
+            hFunc(TEvQueryActor::TEvRollbackTransaction, Handle);
+            hFunc(TEvQueryActor::TEvCommitTransaction, Handle);
             sFunc(NActors::TEvents::TEvPoison, PassAway);
         }
     }
 
     void PassAway() {
         LOG_STREAMS_STORAGE_SERVICE_INFO("TQuerySession::PassAway ");
-        if (!FinishSent) {
+        if (!RollbackSent && QueryActor) {
             LOG_STREAMS_STORAGE_SERVICE_INFO("TQuerySession send Finish ");
-            QueryActor->Finish222(false);
+            QueryActor->DeleteSession();
         }
         NActors::TActor<TQuerySession>::PassAway();
     }
 
     void Handle(TEvQueryActor::TEvExecuteDataQuery::TPtr& ev) {
-        LOG_STREAMS_STORAGE_SERVICE_INFO("TQuerySession::TEvExecuteDataQuery ");
+        Y_ABORT_UNLESS(QueryActor);
+        LOG_STREAMS_STORAGE_SERVICE_INFO("TQuerySession::TEvExecuteDataQuery");
         QueryActor->ExecuteDataQuery(ev->Get()->Sql, ev->Get()->Params, ev->Get()->TxControl, ev->Get()->Promise);
     }
+    
+    void Handle(TEvQueryActor::TEvCommitTransaction::TPtr& /*ev*/) {
+        Y_ABORT_UNLESS(QueryActor);
+        LOG_STREAMS_STORAGE_SERVICE_INFO("TQuerySession::TEvCommitTransaction");
+        QueryActor->Commit();
+        // RollbackSent = true;
+        // QueryActor = nullptr;
+    }
 
-    void Handle(TEvQueryActor::TEvFinish::TPtr& ev) {
-
-        LOG_STREAMS_STORAGE_SERVICE_INFO("TQuerySession::TEvFinish ");
-        QueryActor->Finish222(ev->Get()->NeedRollback);
-        FinishSent = true;
+    void Handle(TEvQueryActor::TEvRollbackTransaction::TPtr& /*ev*/) {
+        Y_ABORT_UNLESS(QueryActor);
+        LOG_STREAMS_STORAGE_SERVICE_INFO("TQuerySession::TEvRollbackTransaction");
+        QueryActor->Rollback();
+        RollbackSent = true;
+        QueryActor = nullptr;
     }
 
 private: 
     TQueryActor* QueryActor = nullptr;
     NActors::TActorId QueryActorId;
-    bool FinishSent = false;
+    bool RollbackSent = false;
 };
 
 std::unique_ptr<TQuerySession> MakeQueryActor();

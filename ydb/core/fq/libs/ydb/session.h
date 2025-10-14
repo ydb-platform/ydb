@@ -15,8 +15,9 @@ struct ISession : public TThrRefBase{
         std::shared_ptr<NYdb::TParamsBuilder> params,
         NYdb::NTable::TTxControl txControl,
         NYdb::NTable::TExecDataQuerySettings execDataQuerySettings = NYdb::NTable::TExecDataQuerySettings()) = 0;
-
-    virtual void Finish(bool needRollback) = 0;
+    
+    virtual void CommitTransaction() = 0;
+    virtual NYdb::TAsyncStatus RollbackTransaction() = 0;
 
     virtual NYdb::TAsyncStatus CreateTable(const std::string& db, const std::string& path, NYdb::NTable::TTableDescription&& tableDesc
         /*const TCreateTableSettings& settings = TCreateTableSettings()*/) = 0;

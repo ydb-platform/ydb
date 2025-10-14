@@ -27,7 +27,13 @@ struct TSdkSession : public ISession {
         return Session.ExecuteDataQuery(sql, txControl, params, execDataQuerySettings);
     }
 
-    void Finish(bool /*needRollback*/) override {
+    void CommitTransaction() override {
+        // TODO
+    }
+
+    NYdb::TAsyncStatus RollbackTransaction() override {
+        // TODO
+        return NThreading::MakeFuture(NYdb::TStatus{NYdb::EStatus::SUCCESS, {}});
     }
 
     NYdb::TAsyncStatus CreateTable(const std::string& /*db*/, const std::string& path, NYdb::NTable::TTableDescription&& tableDesc) override {

@@ -36,9 +36,8 @@ TFuture<TDataQueryResult> SelectGeneration(const TGenerationContextPtr& context)
         context->Table.c_str(),
         context->PrimaryKeyColumn.c_str());
 
-  //  NYdb::TParamsBuilder params;
     auto params = std::make_unique<NYdb::TParamsBuilder>();
-    params.get()->
+    params->
          AddParam("$pk")
         .String(context->PrimaryKey)
         .Build();
@@ -49,8 +48,6 @@ TFuture<TDataQueryResult> SelectGeneration(const TGenerationContextPtr& context)
     }
 
     return context->Session->ExecuteDataQuery(query, std::move(params), ttxControl);
-
- //   return context->Session.ExecuteDataQuery(query, ttxControl, params.Build(), context->ExecDataQuerySettings);
 }
 
 TFuture<TStatus> CheckGeneration(
@@ -91,13 +88,11 @@ TFuture<TStatus> CheckGeneration(
     }
     }
 
-    // TODO
-    // context->Transaction = selectResult.GetTransaction();
-    // selectResult.GetTransaction().reset();
+    context->Transaction = selectResult.GetTransaction();
+    selectResult.GetTransaction().reset();
 
     if (!isOk) {
-        context->Session->Finish(true);
-    //     RollbackTransaction(context); // don't care about result
+        RollbackTransaction(context); // don't care about result
 
         TStringStream ss;
         ss << "Table: " << JoinPath(context->TablePathPrefix, context->Table)
@@ -109,18 +104,18 @@ TFuture<TStatus> CheckGeneration(
         return MakeFuture(MakeErrorStatus(EStatus::ALREADY_EXISTS, ss.Str()));
     }
 
-    // if (requiresTransaction && !context->Transaction) {
-    //     // just sanity check, normally should not happen.
-    //     // note that we use retriable error
-    //     TStringStream ss;
-    //     ss << "Table: " << JoinPath(context->TablePathPrefix, context->Table)
-    //        << ", pk: " << context->PrimaryKey
-    //        << ", current generation: " << context->GenerationRead
-    //        << ", expected/new generation: " << context->Generation
-    //        << ", failed to get transaction after select";
+    if (requiresTransaction && !context->Transaction) {
+        // just sanity check, normally should not happen.
+        // note that we use retriable error
+        TStringStream ss;
+        ss << "Table: " << JoinPath(context->TablePathPrefix, context->Table)
+           << ", pk: " << context->PrimaryKey
+           << ", current generation: " << context->GenerationRead
+           << ", expected/new generation: " << context->Generation
+           << ", failed to get transaction after select";
 
-    //     return MakeFuture(MakeErrorStatus(EStatus::ABORTED, ss.Str(), NYql::TSeverityIds::S_WARNING));
-    //}
+        return MakeFuture(MakeErrorStatus(EStatus::ABORTED, ss.Str(), NYql::TSeverityIds::S_WARNING));
+    }
 
     return MakeFuture<TStatus>(selectResult);
 }
@@ -147,9 +142,8 @@ TFuture<TStatus> UpsertGeneration(const TGenerationContextPtr& context) {
         context->PrimaryKeyColumn.c_str(),
         context->GenerationColumn.c_str());
 
-    //NYdb::TParamsBuilder params;
     auto params = std::make_unique<NYdb::TParamsBuilder>();
-    params.get()->
+    params->
          AddParam("$pk")
         .String(context->PrimaryKey)
         .Build()
@@ -157,19 +151,13 @@ TFuture<TStatus> UpsertGeneration(const TGenerationContextPtr& context) {
         .Uint64(context->Generation)
         .Build();
 
-        // TODO
-    // auto ttxControl = TTxControl::Tx(*context->Transaction);
-    // if (context->CommitTx) {
-    //     ttxControl.CommitTx();
-    //     context->Transaction.reset();
-    // }
-
-    auto ttxControl = TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx();
+    auto ttxControl = TTxControl::Tx(*context->Transaction);
+    if (context->CommitTx) {
+        ttxControl.CommitTx();
+        context->Transaction.reset();
+    }
 
     return context->Session->ExecuteDataQuery(query, std::move(params), ttxControl, context->ExecDataQuerySettings).Apply(
-
-
-   // return context->Session.ExecuteDataQuery(query, ttxControl, params.Build(), context->ExecDataQuerySettings).Apply(
         [] (const TFuture<TDataQueryResult>& future) {
             TStatus status = future.GetValue();
             return status;
@@ -342,9 +330,8 @@ TFuture<TStatus> RegisterCheckGeneration(const TGenerationContextPtr& context) {
                 // we need to finish it (rare case, nobody probably needs check
                 // without transaction)
                 if (context->CommitTx) {
-                    // we don't check result of rollback, because don't care
-                    // TODO
-               //     RollbackTransaction(context);
+                    // we don't check result of rollback, because don't care                   
+                    RollbackTransaction(context);
                     return future;
                 }
                 return future;
@@ -358,12 +345,15 @@ TFuture<TStatus> CheckGeneration(const TGenerationContextPtr& context) {
 }
 
 TFuture<TStatus> RollbackTransaction(const TGenerationContextPtr& context) {
+
     if (!context->Transaction || !context->Transaction->IsActive()) {
         auto status = MakeErrorStatus(EStatus::INTERNAL_ERROR, "trying to rollback non-active transaction");
         return MakeFuture(status);
     }
 
-    auto future = context->Transaction->Rollback();
+    auto future = context->Session->RollbackTransaction();
+
+    //auto future = context->Transaction->Rollback();
     context->Transaction.reset();
     return future;
 }

@@ -183,12 +183,11 @@ TFuture<TDataQueryResult> SelectGraphCoordinators(const TGenerationContextPtr& c
     )", context->TablePathPrefix.c_str(), CoordinatorsSyncTable);
 
     auto params = std::make_shared<NYdb::TParamsBuilder>();
-    return context->Session->ExecuteDataQuery(query, params, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), context->ExecDataQuerySettings);
-
-    // return context->Session.ExecuteDataQuery(
-    //     query,
-    //     TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
-    //     context->ExecDataQuerySettings);
+    return context->Session->ExecuteDataQuery(
+        query,
+        params,
+        TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
+        context->ExecDataQuerySettings);
 }
 
 TFuture<TStatus> ProcessCoordinators(
@@ -240,9 +239,8 @@ TFuture<TStatus> CreateCheckpoint(const TCheckpointContextPtr& context) {
 
     query << firstPart;
 
-    //NYdb::TParamsBuilder params;
     auto params = std::make_shared<NYdb::TParamsBuilder>();
-    params.get()->
+    params->
          AddParam("$graph_id")
             .String(generationContext->PrimaryKey)
             .Build()
@@ -330,7 +328,7 @@ TFuture<TStatus> UpdateCheckpoint(const TCheckpointContextPtr& context) {
 
    // NYdb::TParamsBuilder params;
     auto params = std::make_shared<NYdb::TParamsBuilder>();
-    params.get()->
+    params->
          AddParam("$graph_id")
             .String(generationContext->PrimaryKey)
             .Build()
@@ -375,15 +373,16 @@ TFuture<TStatus> UpdateCheckpoint(const TCheckpointContextPtr& context) {
         WHERE id = $graph_desc_id;
     )", generationContext->TablePathPrefix.c_str(),
         CheckpointsGraphsDescriptionTable);
-    //NYdb::TParamsBuilder params;
     auto params = std::make_shared<NYdb::TParamsBuilder>();
     params->
-    //params
          AddParam("$graph_desc_id")
             .String(graphDescContext->GraphDescId)
             .Build();
 
-    auto f = generationContext->Session->ExecuteDataQuery(query, std::move(params), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), /*TTxControl::Tx(*generationContext->Transaction)*/ generationContext->ExecDataQuerySettings);
+    auto f = generationContext->Session->ExecuteDataQuery(
+        query,
+        std::move(params),
+        TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), /*TTxControl::Tx(*generationContext->Transaction)*/ generationContext->ExecDataQuerySettings);
     return f;
 //    return generationContext->Session.ExecuteDataQuery(query, TTxControl::Tx(*generationContext->Transaction), params.Build(), generationContext->ExecDataQuerySettings);
 }
@@ -402,7 +401,6 @@ TFuture<TStatus> GenerateGraphDescId(const TCheckpointContextPtr& context) {
     return SelectGraphDescId(context)
         .Apply(
             [context](const TFuture<TDataQueryResult>& result) {
-
                 if (!result.GetValue().IsSuccess()) {
                     return MakeFuture<TStatus>(result.GetValue());
                 }
@@ -456,8 +454,6 @@ TFuture<TDataQueryResult> SelectGraphCheckpoints(const TGenerationContextPtr& co
         paramsBuilder->AddParam("$limit").Uint64(limit).Build();
     }
 
-    //auto params = paramsBuilder.Build();
-
     using namespace fmt::literals;
     TString join;
     if (loadGraphDescription) {
@@ -507,13 +503,6 @@ TFuture<TDataQueryResult> SelectGraphCheckpoints(const TGenerationContextPtr& co
         std::move(paramsBuilder),
         TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
         context->ExecDataQuerySettings);
-
-
-    // //return context->Session.ExecuteDataQuery(
-    //     query,
-    //     TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
-    //     params,
-    //     context->ExecDataQuerySettings);
 }
 
 TFuture<TStatus> ProcessCheckpoints(
@@ -577,9 +566,8 @@ TFuture<TDataQueryResult> SelectCheckpoint(const TCheckpointContextPtr& context)
     )", generationContext->TablePathPrefix.c_str(),
         CheckpointsMetadataTable);
 
-    //NYdb::TParamsBuilder params;
     auto params = std::make_shared<NYdb::TParamsBuilder>();
-    params.get()->
+    params->
          AddParam("$graph_id")
             .String(generationContext->PrimaryKey)
             .Build()
@@ -707,13 +695,6 @@ public:
     ~TCheckpointStorage() = default;
 
     TFuture<TIssues> Init() override;
-
-    // STRICT_STFUNC(DispatchEvent,
-    //     sFunc(NActors::TEvents::TEvPoison, PassAway)
-    // )
-    // void Bootstrap() {
-    //     Become(&TCheckpointStorage::DispatchEvent);
-    // }
 
     TFuture<TIssues> RegisterGraphCoordinator(const TCoordinatorId& coordinator) override;
 
@@ -1084,7 +1065,7 @@ TFuture<TIssues> TCheckpointStorage::DeleteGraph(const TString& graphId) {
                 CheckpointsMetadataTable);
 
             auto params = std::make_shared<NYdb::TParamsBuilder>();
-            params.get()->
+            params->
                  AddParam("$graph_id")
                     .String(graphId)
                     .Build();
@@ -1105,12 +1086,6 @@ TFuture<TIssues> TCheckpointStorage::DeleteGraph(const TString& graphId) {
                 std::move(params),
                 TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
                 settings);
-                
-            // auto future = session.ExecuteDataQuery(
-            //     query,
-            //     TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
-            //     params.Build(),
-            //     settings);
 
             return future.Apply(
                 [] (const TFuture<TDataQueryResult>& future) {
@@ -1147,7 +1122,7 @@ TFuture<TIssues> TCheckpointStorage::MarkCheckpointsGC(
                 CheckpointsMetadataTable);
 
     auto params = std::make_shared<NYdb::TParamsBuilder>();
-    params.get()->
+    params->
          AddParam("$graph_id")
             .String(graphId)
             .Build()
@@ -1180,12 +1155,6 @@ TFuture<TIssues> TCheckpointStorage::MarkCheckpointsGC(
                 std::move(params),
                 TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
                 thisPtr->DefaultExecDataQuerySettings());
-
-            // auto future = session.ExecuteDataQuery(
-            //     query,
-            //     TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
-            //     params.Build(),
-            //     thisPtr->DefaultExecDataQuerySettings());
 
             return future.Apply(
                 [] (const TFuture<TDataQueryResult>& future) {
@@ -1248,7 +1217,7 @@ TFuture<TIssues> TCheckpointStorage::DeleteMarkedCheckpoints(
             );
 
             auto params = std::make_shared<NYdb::TParamsBuilder>();
-            params.get()->
+            params->
                  AddParam("$graph_id")
                     .String(graphId)
                     .Build()
@@ -1265,10 +1234,6 @@ TFuture<TIssues> TCheckpointStorage::DeleteMarkedCheckpoints(
                 TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
                 settings);
 
-            // auto future = session.ExecuteDataQuery(
-            //     query,
-            //     TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), params.Build(), settings);
-
             return future.Apply(
                 [] (const TFuture<TDataQueryResult>& future) {
                     TStatus status = future.GetValue();
@@ -1284,14 +1249,11 @@ TFuture<ICheckpointStorage::TGetTotalCheckpointsStateSizeResult> TCheckpointStor
     auto future = YdbConnection->GetTableClient()->RetryOperation(
         [prefix = YdbConnection->GetTablePathPrefix(), graphId, thisPtr = TIntrusivePtr(this), result,
          actorSystem = NActors::TActivationContext::ActorSystem()](ISession::TPtr session) {
-        //  NYdb::TParamsBuilder paramsBuilder;
 
-        auto paramsBuilder = std::make_shared<NYdb::TParamsBuilder>();
+            auto paramsBuilder = std::make_shared<NYdb::TParamsBuilder>();
+            paramsBuilder->AddParam("$graph_id").String(graphId).Build();
 
-          paramsBuilder->AddParam("$graph_id").String(graphId).Build();
-          //auto params = paramsBuilder.Build();
-
-          auto query = Sprintf(R"(
+            auto query = Sprintf(R"(
                 --!syntax_v1
                 PRAGMA TablePathPrefix("%s");
 
@@ -1318,13 +1280,6 @@ TFuture<ICheckpointStorage::TGetTotalCheckpointsStateSizeResult> TCheckpointStor
                 std::move(paramsBuilder),
                 TTxControl::BeginTx(TTxSettings::OnlineRO()).CommitTx(),
                 thisPtr->DefaultExecDataQuerySettings())
-
-
-        //   return session.ExecuteDataQuery(
-        //           query,
-        //           TTxControl::BeginTx(TTxSettings::OnlineRO()).CommitTx(),
-        //           params,
-        //           thisPtr->DefaultExecDataQuerySettings())
               .Apply(
                   [graphId, result, actorSystem](const TFuture<TDataQueryResult>& future) {
                         const auto& queryResult = future.GetValue();
@@ -1372,12 +1327,6 @@ TCheckpointStoragePtr NewYdbCheckpointStorage(
 {
     Y_ABORT_UNLESS(entityIdGenerator);
         return new TCheckpointStorage(config, entityIdGenerator, ydbConnection);
-
-    // auto* actor = new TCheckpointStorage(config, entityIdGenerator, ydbConnection, ydbGateway);
-    // return std::make_tuple(
-    //     static_cast<TCheckpointStoragePtr>(actor),
-    //     static_cast<NActors::IActor*>(actor)
-    //     );
 }
 
 } // namespace NFq

@@ -94,10 +94,13 @@ private:
 struct TLocalSession : public ISession { 
 
     TLocalSession() {
-      //  QuerySession = MakeQueryActor().release();
         QuerySessionId = NActors::TActivationContext::AsActorContext().RegisterWithSameMailbox(MakeQueryActor().release());
         LOG_STREAMS_STORAGE_SERVICE_INFO("TLocalSession()");
+    }
 
+    ~TLocalSession() {
+        LOG_STREAMS_STORAGE_SERVICE_INFO("~TLocalSession()");
+        NActors::TActivationContext::AsActorContext().Send(QuerySessionId, new NActors::TEvents::TEvPoison());
     }
 
     NThreading::TFuture<NYdb::NTable::TDataQueryResult> ExecuteDataQuery(
@@ -108,23 +111,19 @@ struct TLocalSession : public ISession {
         LOG_STREAMS_STORAGE_SERVICE_INFO("TLocalSession::ExecuteDataQuery()");
 
         auto p = NThreading::NewPromise<NYdb::NTable::TDataQueryResult>();
-
         NActors::TActivationContext::AsActorContext().Send(QuerySessionId, new TEvQueryActor::TEvExecuteDataQuery(sql, params, txControl, execDataQuerySettings, p));
         return p.GetFuture();
     }
 
-    void Finish(bool needRollback) override {
-        LOG_STREAMS_STORAGE_SERVICE_INFO("TLocalSession::Finish()");
-        NActors::TActivationContext::AsActorContext().Send(QuerySessionId, new TEvQueryActor::TEvFinish(needRollback));
+    void CommitTransaction() override {
+        LOG_STREAMS_STORAGE_SERVICE_INFO("TLocalSession::CommitTransaction()");
+        NActors::TActivationContext::AsActorContext().Send(QuerySessionId, new TEvQueryActor::TEvCommitTransaction());
     }
 
-    ~TLocalSession() {
-        // if (QueryActor) {
-        //     Cerr << "TLocalSession::call finish" << Endl;
-        //     Finish(false);
-        // }
-        LOG_STREAMS_STORAGE_SERVICE_INFO("~TLocalSession()");
-        NActors::TActivationContext::AsActorContext().Send(QuerySessionId, new NActors::TEvents::TEvPoison());
+    NYdb::TAsyncStatus RollbackTransaction() override {
+        LOG_STREAMS_STORAGE_SERVICE_INFO("TLocalSession::Rollback()");
+        NActors::TActivationContext::AsActorContext().Send(QuerySessionId, new TEvQueryActor::TEvRollbackTransaction());
+        return NThreading::MakeFuture(NYdb::TStatus{NYdb::EStatus::SUCCESS, {}});
     }
 
     NYdb::TAsyncStatus CreateTable(const std::string& db, const std::string& path, NYdb::NTable::TTableDescription&& tableDesc) override {
@@ -134,7 +133,6 @@ struct TLocalSession : public ISession {
         NActors::TActivationContext::Register(new TTableCreator(db, path, std::move(tableDesc), promise));
         return promise.GetFuture();
     }
-
 
     NYdb::TAsyncStatus DropTable( const std::string& /*path*/) override {
         Y_ABORT("Not implemented");

@@ -464,7 +464,7 @@ public:
         return RunKqpProxyRequest<NKikimr::NKqp::TEvGetScriptExecutionOperation, NKikimr::NKqp::TEvGetScriptExecutionOperationResponse>(std::move(event), database);
     }
 
-    NKikimr::NKqp::TEvFetchScriptResultsResponse::TPtr FetchScriptExecutionResultsRequest(const TString& database, const TString& operation, i32 resultSetId, const TString& userSID) const {
+    NKikimr::NKqp::TEvFetchScriptResultsResponse::TPtr FetchScriptExecutionResultsRequest(const TString& database, const TString& operation, const TString& userSID, i32 resultSetId) const {
         TString error;
         const auto executionId = NKikimr::NKqp::ScriptExecutionIdFromOperation(operation, error);
         Y_ENSURE(executionId, error);
@@ -743,7 +743,7 @@ TRequestResult TYdbSetup::GetScriptExecutionOperationRequest(const TString& data
 }
 
 TRequestResult TYdbSetup::FetchScriptExecutionResultsRequest(const TString& database, const TString& operation, const TString& userSID, i32 resultSetId, Ydb::ResultSet& resultSet) const {
-    auto scriptExecutionResults = Impl_->FetchScriptExecutionResultsRequest(database, operation, resultSetId, userSID);
+    auto scriptExecutionResults = Impl_->FetchScriptExecutionResultsRequest(database, operation, userSID, resultSetId);
 
     resultSet = scriptExecutionResults->Get()->ResultSet.value_or(Ydb::ResultSet());
 

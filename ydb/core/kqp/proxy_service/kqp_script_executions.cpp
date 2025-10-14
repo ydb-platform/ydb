@@ -1535,7 +1535,7 @@ public:
         }
 
         if (const auto ownerUser = executionsResult.ColumnParser("user_token").GetOptionalUtf8(); UserSID && ownerUser && *ownerUser != *UserSID) {
-            KQP_PROXY_LOG_W("Access denied for user " << *UserSID << ", actual script execution operation owner: " << *ownerUser);
+            KQP_PROXY_LOG_W("Access denied for user " << *UserSID);
             Finish(Ydb::StatusIds::UNAUTHORIZED, "User is not owner of script execution operation");
             return;
         }
@@ -2194,7 +2194,7 @@ public:
             }
 
             if (const auto ownerUser = result.ColumnParser("user_token").GetOptionalUtf8(); UserSID && ownerUser && *ownerUser != *UserSID) {
-                KQP_PROXY_LOG_W("Access denied for user " << *UserSID << ", actual script execution operation owner: " << *ownerUser);
+                KQP_PROXY_LOG_W("Access denied for user " << *UserSID);
                 Finish(Ydb::StatusIds::UNAUTHORIZED, "User is not owner of script execution operation");
                 return;
             }
@@ -3378,7 +3378,7 @@ public:
         }
 
         if (const auto ownerUser = result.ColumnParser("user_token").GetOptionalUtf8(); UserSID && ownerUser && *ownerUser != *UserSID) {
-            KQP_PROXY_LOG_W("Access denied for user " << *UserSID << ", actual script execution operation owner: " << *ownerUser);
+            KQP_PROXY_LOG_W("Access denied for user " << *UserSID);
             Finish(Ydb::StatusIds::UNAUTHORIZED, "User is not owner of script execution operation");
             return;
         }

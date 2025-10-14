@@ -8,9 +8,9 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/library/actors/dnsresolver
     library/cpp/regex/pcre
     library/cpp/testing/unittest
+    ydb/library/actors/dnsresolver
     ydb/core/base
     ydb/core/blobstorage
     ydb/core/blobstorage/crypto
@@ -29,12 +29,14 @@ PEERDIR(
     ydb/core/tx/scheme_board
     ydb/core/tx/schemeshard
     ydb/core/util
-    yql/essentials/minikql/invoke_builtins/llvm16
-    yql/essentials/public/udf/service/exception_policy
     ydb/library/keys
     ydb/services/kesus
     ydb/services/persqueue_cluster_discovery
     ydb/services/ydb
+    yql/essentials/minikql/invoke_builtins/llvm16
+    yql/essentials/public/udf/service/exception_policy
+    yt/yql/providers/yt/comp_nodes/dq/llvm16
+    yt/yql/providers/yt/comp_nodes/llvm16
 )
 
 YQL_LAST_ABI_VERSION()

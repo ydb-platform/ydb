@@ -452,6 +452,74 @@ Y_UNIT_TEST_SUITE(KqpRbo) {
         }
     }
 
+    Y_UNIT_TEST(OrderBy) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/t1` (
+                a Int64 NOT NULL,
+	            b String,
+                c Int64,
+                primary key(a)
+            );
+
+            CREATE TABLE `/Root/t2` (
+                a Int64	NOT NULL,
+	            b String,
+                c Int64,
+                primary key(a)
+            );
+        )").GetValueSync();
+
+
+        db = kikimr.GetTableClient();
+        auto session2 = db.CreateSession().GetValueSync().GetSession();
+        std::vector<std::pair<std::string, int>> tables{{"/Root/t1", 4}, {"/Root/t2", 3}};
+        for (const auto &[table, rowsNum] : tables) {
+            InsertIntoSchema0(db, table, rowsNum);
+        }
+
+        std::vector<std::string> queries = {
+            R"(
+                --!syntax_pg
+                SET TablePathPrefix = "/Root/";
+                SELECT a FROM t1
+                ORDER BY a DESC;
+            )",
+            R"(
+                --!syntax_pg
+                SET TablePathPrefix = "/Root/";
+                SELECT a,c FROM t1
+                ORDER BY a DESC, c ASC;
+            )",
+            R"(
+                --!syntax_pg
+                SET TablePathPrefix = "/Root/";
+                SELECT a FROM t1
+                UNION ALL
+                SELECT a FROM t2
+                ORDER BY a DESC;
+            )"
+        };
+
+        std::vector<std::string> results = {
+            R"([["3"];["2"];["1"];["0"]])",
+            R"([["3";"4"];["2";"3"];["1";"2"];["0";"1"]])",
+            R"([["3"];["2"];["2"];["1"];["1"];["0"];["0"]])"
+        };
+
+        for (ui32 i = 0; i < queries.size(); ++i) {
+            const auto &query = queries[i];
+            auto result = session2.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), results[i]);
+        }
+    }
+
     Y_UNIT_TEST(LeftJoinToKqpOpJoin) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);

@@ -1,7 +1,5 @@
 LIBRARY()
 
-ENABLE(YQL_STYLE_CPP)
-
 PEERDIR(
     yql/essentials/utils
     yql/essentials/parser/proto_ast/collect_issues

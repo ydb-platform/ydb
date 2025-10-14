@@ -18,7 +18,7 @@ struct TPreset {
 };
 
 struct TBenchmarkSettings {
-
+    int Seed;
     TVector<TPreset> Presets;
     TSet<ETestedJoinKeyType> KeyTypes;
     TSet<ETestedJoinAlgo> Algorithms;

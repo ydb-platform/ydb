@@ -21,32 +21,25 @@
 #include <yql/essentials/types/uuid/uuid.h>
 
 #include <tuple>
+#include <functional>
 
 template <class... Es>
 static TString BuildParamTestName(const char* base, const Es&... es) {
     TString s = base;
-    auto append = [&](const auto& e) {
-        s += "-";
-        s += ToString(e);
-    };
-
-    (append(es), ...);
+    ((s += "-", s += ToString(es)), ...);
     return s;
 }
 
 template <class F>
 static void ForEachProductRanges(F&& f) {
-    f();
+    std::invoke(std::forward<F>(f));
 }
 
 template <class F, class FirstRange, class... RestRanges>
 static void ForEachProductRanges(F&& f, const FirstRange& first, const RestRanges&... rest) {
     for (auto&& x : first) {
-        ForEachProductRanges(
-            [&](auto&&... tail) {
-                f(x, tail...);
-            },
-            rest...);
+        auto bound = std::bind_front(std::forward<F>(f), x);
+        ForEachProductRanges(std::move(bound), rest...);
     }
 }
 

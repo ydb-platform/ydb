@@ -1,1 +1,9 @@
+# This file are using reintrepret_cast<void(void*, const void*, size_t>)(...)
+# for function with void(char*, const char*, size_t) signature. This is UB.
+# Just ignore it instead of fixing since it is third party library.
+# It might be fixed in future versions of Postgres.
 function:pg_wrapper/postgresql/src/backend/utils/hash/dynahash.c
+# Here simple integer overflow in third_party library. 
+# Just ignore it instead of fixing since it is third party library. 
+# It might be fixed in future versions of Postgres.
+signed-integer-overflow:utils/adt/numeric.c

@@ -274,6 +274,9 @@ public:
                                 res = ctx.ChangeChild(*node, 3, ctx.RenameNode(*node->Child(3), Types_.PureResultDataSource));
                             }
                         }
+                        if (command == "Layer") {
+                            res = ctx.ChangeChild(*node, 2, ctx.RenameNode(*node->Child(2), "ProcessedLayer"));
+                        }
                     }
 
                     return res;
@@ -1086,6 +1089,15 @@ private:
                 return false;
             }
             Types_.EnableLineage = ("EnableLineage" == name);
+        } else if (name == "Layer") {
+            if (args.size() != 1) {
+                ctx.AddError(TIssue(pos, TStringBuilder() << "Expected exatly 1 argument, but got " << args.size()));
+                return false;
+            }
+            if (!Types_.LayersRegistry->AddLayerFromJson(args[0], ctx)) {
+                return false;
+            }
+        } else if (name == "ProcessedLayer") {
         } else {
             ctx.AddError(TIssue(pos, TStringBuilder() << "Unsupported command: " << name));
             return false;

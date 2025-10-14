@@ -6,8 +6,6 @@ YQL_UDF_CONTRIB(stat_udf)
         0
     )
 
-    ENABLE(YQL_STYLE_CPP)
-    
     SRCS(
         stat_udf.cpp
     )

@@ -154,6 +154,32 @@ TExprNode::TPtr ReplacePgOps(TExprNode::TPtr input, TExprContext &ctx) {
     }
 }
 
+TExprNode::TPtr BuildSort(TExprNode::TPtr input, TExprNode::TPtr sort, TExprContext &ctx) {
+    TVector<TExprNode::TPtr> sortElements;
+
+    for (auto sortItem : sort->Child(1)->Children()) {
+        auto sortLambda = sortItem->Child(1);
+        auto direction = sortItem->Child(2);
+        auto nullsFirst = sortItem->Child(3);
+
+        // clang-format off
+        sortElements.push_back(Build<TKqpOpSortElement>(ctx, input->Pos())
+            .Input(input)
+            .Direction(direction)
+            .NullsFirst(nullsFirst)
+            .Lambda(sortLambda)
+            .Done().Ptr());
+        // clang-format on
+    }
+
+    // clang-format off
+    return Build<TKqpOpSort>(ctx, input->Pos())
+        .Input(input)
+        .SortExpressions().Add(sortElements).Build()
+        .Done().Ptr();
+    // clang-format off
+}
+
 TExprNode::TPtr RewritePgSelect(const TExprNode::TPtr &node, TExprContext &ctx, const TTypeAnnotationContext &typeCtx) {
     Y_UNUSED(typeCtx);
 
@@ -416,7 +442,7 @@ TExprNode::TPtr RewritePgSelect(const TExprNode::TPtr &node, TExprContext &ctx, 
         }
 
         // clang-format off
-        auto kqpMapPtr = Build<TKqpOpMap>(ctx, node->Pos())
+        auto setItemPtr = Build<TKqpOpMap>(ctx, node->Pos())
             .Input(resultExpr)
             .MapElements()
                 .Add(resultElements)
@@ -425,9 +451,14 @@ TExprNode::TPtr RewritePgSelect(const TExprNode::TPtr &node, TExprContext &ctx, 
                 .Value("true")
             .Build()
         .Done().Ptr();
-        // clang-format on
+        // clang-format onto
 
-        setItemsResults.push_back(kqpMapPtr);
+        auto sort = GetSetting(setItem->Tail(), "sort");
+        if (sort) {
+            setItemPtr = BuildSort(setItemPtr, sort, ctx);
+        }
+
+        setItemsResults.push_back(setItemPtr);
     }
 
     auto setOps = GetSetting(node->Head(), "set_ops");
@@ -464,6 +495,11 @@ TExprNode::TPtr RewritePgSelect(const TExprNode::TPtr &node, TExprContext &ctx, 
 
         // Count again.
         opsInputCount = 0;
+    }
+
+    auto sort = GetSetting(node->Head(), "sort");
+    if (sort) {
+        opResult = BuildSort(opResult, sort, ctx);
     }
 
     // clang-format off

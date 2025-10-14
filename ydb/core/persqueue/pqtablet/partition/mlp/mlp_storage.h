@@ -113,8 +113,6 @@ private:
     // начиная от FirstUnlockedOffset и ищем сообщение, которое можно отдать для чтения.
     // В худшем случае список содержит 1000 * 16 = ~16Kb
     std::deque<ui64> ReleasedMessages;
-
-    size_t LockCookie = 0;
 };
 
 

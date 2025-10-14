@@ -265,6 +265,19 @@ private:
     void HandleWakeup(const TActorContext& ctx);
     void HandleWriteResponse(const TActorContext& ctx);
 
+    void HandleOnInit(TEvPersQueue::TEvMLPReadRequest::TPtr&);
+    void HandleOnInit(TEvPersQueue::TEvMLPCommitRequest::TPtr&);
+    void HandleOnInit(TEvPersQueue::TEvMLPReleaseRequest::TPtr&);
+    void HandleOnInit(TEvPersQueue::TEvMLPChangeMessageDeadlineRequest::TPtr&);
+    void Handle(TEvPersQueue::TEvMLPReadRequest::TPtr&);
+    void Handle(TEvPersQueue::TEvMLPCommitRequest::TPtr&);
+    void Handle(TEvPersQueue::TEvMLPReleaseRequest::TPtr&);
+    void Handle(TEvPersQueue::TEvMLPChangeMessageDeadlineRequest::TPtr&);
+
+    template<typename TEventHandle>
+    void ForwardToMLPConsumer(const TString& consumer, TAutoPtr<TEventHandle>& ev);
+
+
     void InitComplete(const TActorContext& ctx);
     void InitUserInfoForImportantClients(const TActorContext& ctx);
 
@@ -1045,7 +1058,11 @@ private:
         std::unique_ptr<TEvPQ::TEvGetWriteInfoRequest>,
         std::unique_ptr<TEvPQ::TEvGetWriteInfoResponse>,
         std::unique_ptr<TEvPQ::TEvGetWriteInfoError>,
-        std::unique_ptr<TEvPQ::TEvDeletePartition>
+        std::unique_ptr<TEvPQ::TEvDeletePartition>,
+        std::unique_ptr<TEvPersQueue::TEvMLPReadRequest>,
+        std::unique_ptr<TEvPersQueue::TEvMLPCommitRequest>,
+        std::unique_ptr<TEvPersQueue::TEvMLPReleaseRequest>,
+        std::unique_ptr<TEvPersQueue::TEvMLPChangeMessageDeadlineRequest>
     >;
 
     TDeque<TPendingEvent> PendingEvents;
@@ -1172,6 +1189,12 @@ private:
 
     std::unique_ptr<TEvPQ::TEvGetWriteInfoRequest> PendingGetWriteInfoRequest;
     bool StopCompaction = false;
+
+private:
+    struct TMLPConsumerInfo {
+        TActorId ActorId;
+    };
+    std::unordered_map<TString, TMLPConsumerInfo> MLPConsumers;
 };
 
 inline ui64 TPartition::GetStartOffset() const {

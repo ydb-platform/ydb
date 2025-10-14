@@ -5255,6 +5255,33 @@ void TPersQueue::Handle(TEvPQ::TEvForceCompaction::TPtr& ev, const TActorContext
              new TEvPQ::TEvForceCompaction(event.PartitionId));
 }
 
+void TPersQueue::Handle(TEvPersQueue::TEvMLPReadRequest::TPtr& ev) {
+    ForwardToPartition(ev->Get()->GetPartitionId(), ev);
+}
+
+void TPersQueue::Handle(TEvPersQueue::TEvMLPCommitRequest::TPtr& ev) {
+    ForwardToPartition(ev->Get()->GetPartitionId(), ev);
+}
+
+void TPersQueue::Handle(TEvPersQueue::TEvMLPReleaseRequest::TPtr& ev) {
+    ForwardToPartition(ev->Get()->GetPartitionId(), ev);
+}
+
+void TPersQueue::Handle(TEvPersQueue::TEvMLPChangeMessageDeadlineRequest::TPtr& ev) {
+    ForwardToPartition(ev->Get()->GetPartitionId(), ev);
+}
+
+template<typename TEventHandle>
+void TPersQueue::ForwardToPartition(ui32 partitionId, TAutoPtr<TEventHandle>& ev) {
+    auto it = Partitions.find(TPartitionId{partitionId});
+    if (it == Partitions.end()) {
+        // TODO reply error
+    }
+
+    auto& partitionInfo = it->second;
+    Forward(ev, partitionInfo.Actor);
+}
+
 bool TPersQueue::HandleHook(STFUNC_SIG)
 {
     TRACE_EVENT(NKikimrServices::PERSQUEUE);
@@ -5303,6 +5330,10 @@ bool TPersQueue::HandleHook(STFUNC_SIG)
         HFuncTraced(TEvPQ::TEvDeletePartitionDone, Handle);
         HFuncTraced(TEvPQ::TEvTransactionCompleted, Handle);
         HFuncTraced(TEvPQ::TEvForceCompaction, Handle);
+        hFuncTraced(TEvPersQueue::TEvMLPReadRequest, Handle);
+        hFuncTraced(TEvPersQueue::TEvMLPCommitRequest, Handle);
+        hFuncTraced(TEvPersQueue::TEvMLPReleaseRequest, Handle);
+        hFuncTraced(TEvPersQueue::TEvMLPChangeMessageDeadlineRequest, Handle);
         default:
             return false;
     }

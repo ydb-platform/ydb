@@ -517,6 +517,18 @@ namespace NKikimr::TEvPersQueue {
             Record.SetPartitionId(partitionId);
             Record.SetDeadlineTimestampSeconds(deadlineTimestamp.Seconds());
         }
+
+        const TString& GetTopic() const {
+            return Record.GetTopic();
+        }
+
+        const TString& GetConsumer() const {
+            return Record.GetConsumer();
+        }
+
+        ui32 GetPartitionId() const {
+            return Record.GetPartitionId();
+        }
     };
 
     //

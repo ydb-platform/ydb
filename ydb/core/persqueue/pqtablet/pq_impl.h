@@ -93,6 +93,14 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
     void Handle(TEvPQ::TEvSubDomainStatus::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvReadingPartitionStatusRequest::TPtr& ev, const TActorContext& ctx);
 
+    void Handle(TEvPersQueue::TEvMLPReadRequest::TPtr&);
+    void Handle(TEvPersQueue::TEvMLPCommitRequest::TPtr&);
+    void Handle(TEvPersQueue::TEvMLPReleaseRequest::TPtr&);
+    void Handle(TEvPersQueue::TEvMLPChangeMessageDeadlineRequest::TPtr&);
+
+    template<typename TEventHandle>
+    void ForwardToPartition(ui32 partitionId, TAutoPtr<TEventHandle>& ev);
+
     bool OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext& ctx) override;
     bool OnRenderAppHtmlPageTx(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext& ctx);
     bool OnSendReadSetToYourself(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx);

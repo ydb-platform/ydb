@@ -4228,6 +4228,38 @@ void TPartition::ProcessPendingEvent(std::unique_ptr<TEvPQ::TEvDeletePartition> 
     ProcessTxsAndUserActs(ctx);
 }
 
+template <>
+void TPartition::ProcessPendingEvent(std::unique_ptr<TEvPersQueue::TEvMLPReadRequest> ev, const TActorContext& ctx)
+{
+    Y_UNUSED(ctx);
+    TAutoPtr<TEvPersQueue::TEvMLPReadRequest> e = ev.release();
+    ForwardToMLPConsumer(e->GetConsumer(), e);
+}
+
+template <>
+void TPartition::ProcessPendingEvent(std::unique_ptr<TEvPersQueue::TEvMLPCommitRequest> ev, const TActorContext& ctx)
+{
+    Y_UNUSED(ctx);
+    TAutoPtr<TEvPersQueue::TEvMLPCommitRequest> e = ev.release();
+    ForwardToMLPConsumer(e->GetConsumer(), e);
+}
+
+template <>
+void TPartition::ProcessPendingEvent(std::unique_ptr<TEvPersQueue::TEvMLPReleaseRequest> ev, const TActorContext& ctx)
+{
+    Y_UNUSED(ctx);
+    TAutoPtr<TEvPersQueue::TEvMLPReleaseRequest> e = ev.release();
+    ForwardToMLPConsumer(e->GetConsumer(), e);
+}
+
+template <>
+void TPartition::ProcessPendingEvent(std::unique_ptr<TEvPersQueue::TEvMLPChangeMessageDeadlineRequest> ev, const TActorContext& ctx)
+{
+    Y_UNUSED(ctx);
+    TAutoPtr<TEvPersQueue::TEvMLPChangeMessageDeadlineRequest> e = ev.release();
+    ForwardToMLPConsumer(e->GetConsumer(), e);
+}
+
 void TPartition::Handle(TEvPQ::TEvDeletePartition::TPtr& ev, const TActorContext& ctx)
 {
     LOG_D("Handle TEvPQ::TEvDeletePartition");
@@ -4449,6 +4481,50 @@ void TPartition::ResetDetailedMetrics() {
     TimeSinceLastWriteMsPerPartition.Reset();
     BytesWrittenPerPartition.Reset();
     MessagesWrittenPerPartition.Reset();
+}
+
+void TPartition::HandleOnInit(TEvPersQueue::TEvMLPReadRequest::TPtr& ev) {
+   AddPendingEvent(ev);
+}
+
+void TPartition::HandleOnInit(TEvPersQueue::TEvMLPCommitRequest::TPtr& ev) {
+   AddPendingEvent(ev);
+}
+
+void TPartition::HandleOnInit(TEvPersQueue::TEvMLPReleaseRequest::TPtr& ev) {
+   AddPendingEvent(ev);
+}
+
+void TPartition::HandleOnInit(TEvPersQueue::TEvMLPChangeMessageDeadlineRequest::TPtr& ev) {
+   AddPendingEvent(ev);
+}
+
+void TPartition::Handle(TEvPersQueue::TEvMLPReadRequest::TPtr& ev) {
+    ForwardToMLPConsumer(ev->Get()->GetConsumer(), ev);
+}
+
+void TPartition::Handle(TEvPersQueue::TEvMLPCommitRequest::TPtr& ev) {
+    ForwardToMLPConsumer(ev->Get()->GetConsumer(), ev);
+}
+
+void TPartition::Handle(TEvPersQueue::TEvMLPReleaseRequest::TPtr& ev) {
+    ForwardToMLPConsumer(ev->Get()->GetConsumer(), ev);
+}
+
+void TPartition::Handle(TEvPersQueue::TEvMLPChangeMessageDeadlineRequest::TPtr& ev) {
+    ForwardToMLPConsumer(ev->Get()->GetConsumer(), ev);
+}
+
+template<typename TEventHandle>
+void TPartition::ForwardToMLPConsumer(const TString& consumer, TAutoPtr<TEventHandle>& ev) {
+    auto it = MLPConsumers.find(consumer);
+    if (it == MLPConsumers.end()) {
+        // TODO reply error
+        return;
+    }
+
+    auto& consumerInfo = it->second;
+    Forward(ev, consumerInfo.ActorId);
 }
 
 } // namespace NKikimr::NPQ

@@ -20,6 +20,7 @@ void ExportValueToProto(TType* type, const NUdf::TUnboxedValuePod& value, Ydb::V
 
 
 TType* ImportTypeFromProto(const NKikimrMiniKQL::TType& type, const TTypeEnvironment& env);
+bool IsValidDecimal(ui8 precision, NYql::NDecimal::TInt128 v);
 
 std::pair<TType*, NUdf::TUnboxedValue> ImportValueFromProto(const Ydb::Type& type, const Ydb::Value& value,
     const TTypeEnvironment& env, const THolderFactory& factory);

@@ -12,8 +12,10 @@ struct TTableSizes {
     int Left;
     int Right;
 };
+
 struct TPreset {
-    TVector<TTableSizes> Cases;
+    TTableSizes Size;
+    int Samples;
     TString PresetName;
 };
 
@@ -24,13 +26,13 @@ struct TBenchmarkSettings {
     TSet<ETestedJoinAlgo> Algorithms;
 };
 
-TString CaseName(ETestedJoinAlgo algo, ETestedJoinKeyType keyType, const TPreset& preset,
-                 TTableSizes size);
+TString CaseName(ETestedJoinAlgo algo, ETestedJoinKeyType keyType, const TPreset& preset);
 
 namespace NBenchmarkSizes {
-TPreset ExponentialSizeIncrease(int samples, int scale);
-TPreset LinearSizeIncrease(int samples, int scale);
-TPreset VerySmallSizes(int samples, int scale);
+TVector<TPreset> ExponentialSizeIncrease(int samples, int scale);
+TVector<TPreset> LinearSizeIncrease8Points(int samples, int scale);
+TVector<TPreset> LinearSizeIncrease16Points(int samples, int scale);
+TVector<TPreset> VerySmallSizes(int samples, int scale);
 } // namespace NBenchmarkSizes
 
 } // namespace NKikimr::NMiniKQL

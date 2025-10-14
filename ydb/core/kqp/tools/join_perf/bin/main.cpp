@@ -1,14 +1,14 @@
 #include <ydb/core/kqp/tools/join_perf/benchmark_settings.h>
 
-#include <ydb/core/kqp/tools/combiner_perf/fs_utils.h>
 #include <library/cpp/getopt/small/last_getopt.h>
 #include <library/cpp/getopt/small/last_getopt_opts.h>
 #include <library/cpp/getopt/small/last_getopt_parse_result.h>
 #include <library/cpp/getopt/small/last_getopt_parser.h>
+#include <ydb/core/kqp/tools/combiner_perf/fs_utils.h>
 
-#include <ydb/core/kqp/tools/join_perf/joins.h>
 #include <filesystem>
 #include <util/string/printf.h>
+#include <ydb/core/kqp/tools/join_perf/joins.h>
 
 std::filesystem::path MakeJoinPerfPath() {
     auto p = std::filesystem::path{std::getenv("HOME")} / ".join_perf" / "json";
@@ -19,16 +19,22 @@ std::filesystem::path MakeJoinPerfPath() {
 }
 
 void AddLittleLeftTablePreset(NKikimr::NMiniKQL::TBenchmarkSettings& settings) {
-    Y_ABORT_UNLESS(settings.Presets.size() == 1, "should be only 1 preset with same sizes");
-    settings.Presets.push_back(settings.Presets[0]);
-    settings.Presets[0].PresetName += "SameSizeTables";
-    settings.Presets[1].PresetName += "LittleRightTable";
-    for (auto& tableSizes : settings.Presets[1].Cases) {
-        tableSizes.Right /= 128;
-        if (tableSizes.Right == 0) {
-            tableSizes.Right = 1;
-        }
+    TVector<NKikimr::NMiniKQL::TPreset> littleRight;
+    for(auto& preset: settings.Presets) {
+        littleRight.push_back(preset);
+        littleRight.back().PresetName += "LittleRightTable";
+        littleRight.back().Size.Right /= 128;
+        Y_ABORT_UNLESS(littleRight.back().Size.Right != 0, "right was too small");
+        preset.PresetName += "SameSizeTables";
     }
+    std::copy(littleRight.begin(), littleRight.end(), std::back_inserter(settings.Presets));
+}
+
+void MinusOne(NKikimr::NMiniKQL::TBenchmarkSettings& settings) {
+    for(auto& preset: settings.Presets) {
+        preset.Size.Right -= 1;
+    }
+
 }
 
 int main(int argc, char** argv) {
@@ -36,21 +42,27 @@ int main(int argc, char** argv) {
     opts.AddHelpOption('h');
 
     NKikimr::NMiniKQL::TBenchmarkSettings params;
-    NKikimr::NMiniKQL::TPreset(*presetWithSamples)(int, int);
+    params.KeyTypes = {
+        NKikimr::NMiniKQL::ETestedJoinKeyType::kString,
+        NKikimr::NMiniKQL::ETestedJoinKeyType::kInteger,
+    };
+    TVector<NKikimr::NMiniKQL::TPreset> (*presetWithSamples)(int, int);
     int samples = 1;
     int scale = 1;
     opts.AddHelpOption().Help("visit NBenchmarkSizes namespace in benchmark_settings.cpp for explanation");
     opts.AddLongOption('p', "preset")
         .Help("left and right table sizes to choose for joins benchmark.")
-        .Choices({"exp", "linear", "small"})
+        .Choices({"exp", "linear8", "linear16", "small"})
         .DefaultValue("small")
         .Handler1([&](const NLastGetopt::TOptsParser* option) {
             auto val = TStringBuf(option->CurVal());
             presetWithSamples = [&]() {
                 if (val == "exp") {
                     return &NKikimr::NMiniKQL::NBenchmarkSizes::ExponentialSizeIncrease;
-                } else if (val == "linear") {
-                    return &NKikimr::NMiniKQL::NBenchmarkSizes::LinearSizeIncrease;
+                } else if (val == "linear8") {
+                    return &NKikimr::NMiniKQL::NBenchmarkSizes::LinearSizeIncrease8Points;
+                } else if (val == "linear16") {
+                    return &NKikimr::NMiniKQL::NBenchmarkSizes::LinearSizeIncrease16Points;
                 } else if (val == "small") {
                     return &NKikimr::NMiniKQL::NBenchmarkSizes::VerySmallSizes;
                 } else {
@@ -58,24 +70,56 @@ int main(int argc, char** argv) {
                 }
             }();
         });
-    opts.AddLongOption("samples").Help("number representing how much to repeat single case. useful for noise reduction.").DefaultValue(1).StoreResult(&samples);
+    opts.AddLongOption("samples")
+        .Help("number representing how much to repeat single case. useful for noise reduction.")
+        .DefaultValue(1)
+        .StoreResult(&samples);
     opts.AddLongOption("scale").Help("size of smallest table in case").DefaultValue(1).StoreResult(&scale);
+    opts.AddLongOption("key_type")
+        .Help("specific key type, do not specify for all")
+        .Choices({"string", "int"})
+        .Handler1([&](const NLastGetopt::TOptsParser* option) {
+            auto val = TStringBuf(option->CurVal());
+            params.KeyTypes.clear();
+            params.KeyTypes.emplace([&]() {
+                if (val == "string") {
+                    return NKikimr::NMiniKQL::ETestedJoinKeyType::kString;
+                } else if (val == "int") {
+                    return NKikimr::NMiniKQL::ETestedJoinKeyType::kInteger;
+                } else {
+                    Y_ABORT("unknown option for benchmark_sizes");
+                }
+            }());
+        });
+    // opts.AddLongOption("preset-flavour").Help("specific preset, do not specify for all").Choices({"same-size",
+    // "little-right"}).Handler1([&](const NLastGetopt::TOptsParser* option) {
+    //         auto val = TStringBuf(option->CurVal());
+    //         params.KeyTypes.clear();
+    //         params.KeyTypes.emplace([&]() {
+    //             if (val == "string") {
+    //                 return NKikimr::NMiniKQL::ETestedJoinKeyType::kString;
+    //             } else if (val == "int") {
+    //                 return NKikimr::NMiniKQL::ETestedJoinKeyType::kInteger;
+    //             } else {
+    //                 Y_ABORT("unknown option for benchmark_sizes");
+    //             }
+    //         }());
+    //     });
+
     opts.AddLongOption("seed").Help("seed for keys generation").DefaultValue(123).StoreResult(&params.Seed);
     params.Algorithms = {
-        NKikimr::NMiniKQL::ETestedJoinAlgo::kBlockMap,
+        // NKikimr::NMiniKQL::ETestedJoinAlgo::kBlockMap,
         NKikimr::NMiniKQL::ETestedJoinAlgo::kBlockHash,
         // NKikimr::NMiniKQL::ETestedJoinAlgo::kScalarMap, // slow
         NKikimr::NMiniKQL::ETestedJoinAlgo::kScalarHash,
-        NKikimr::NMiniKQL::ETestedJoinAlgo::kScalarGrace,
-    };
-    params.KeyTypes = {
-        NKikimr::NMiniKQL::ETestedJoinKeyType::kString,
-        NKikimr::NMiniKQL::ETestedJoinKeyType::kInteger,
+        // NKikimr::NMiniKQL::ETestedJoinAlgo::kScalarGrace,
     };
 
     NLastGetopt::TOptsParseResult parsedOptions(&opts, argc, argv);
-    params.Presets.push_back(presetWithSamples(samples, scale));
+    params.Presets = presetWithSamples(samples, scale);
     AddLittleLeftTablePreset(params);
+    params.Presets.erase(params.Presets.begin(), params.Presets.begin() + std::ssize(params.Presets) / 2);
+    // MinusOne(params);
 
     auto benchmarkResults = NKikimr::NMiniKQL::RunJoinsBench(params);
     TFixedBufferFileOutput file{MakeJoinPerfPath()};

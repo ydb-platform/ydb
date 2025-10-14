@@ -2,8 +2,7 @@
 
 namespace NKikimr::NMiniKQL {
 
-TString CaseName(ETestedJoinAlgo algo, ETestedJoinKeyType keyType, const TPreset& preset,
-                 TTableSizes size) {
+TString CaseName(ETestedJoinAlgo algo, ETestedJoinKeyType keyType, const TPreset& preset) {
     TString algoName = [&] {
         switch (algo) {
 
@@ -32,45 +31,58 @@ TString CaseName(ETestedJoinAlgo algo, ETestedJoinKeyType keyType, const TPreset
         }
     }();
 
-    return algoName + "_" + keyTypeName + "_" + preset.PresetName + "_" + std::to_string(size.Left) + "_" +
-           std::to_string(size.Right);
+    return algoName + "_" + keyTypeName + "_" + preset.PresetName + "_" + std::to_string(preset.Size.Left) + "_" +
+           std::to_string(preset.Size.Right);
 }
 
 namespace NBenchmarkSizes {
-TPreset ExponentialSizeIncrease(int samples, int scale) {
-    TPreset ret;
-    ret.PresetName = "ExpGrowth";
+TVector<TPreset> ExponentialSizeIncrease(int samples, int scale) {
+    TVector<TPreset> ret;
+    TPreset preset;
+    preset.PresetName = "ExpGrowth";
+    preset.Samples = samples;
     int init = 1 << 18;
     init *= scale;
     for (int index = 0; index < 8; index++) {
         int thisNum = init * (1 << index);
-        for (int _ = 0; _ < samples; ++_){
-            ret.Cases.emplace_back(thisNum, thisNum);
-        }
+        preset.Size = {thisNum, thisNum};
+        ret.push_back(preset);
     }
     return ret;
 }
 
-TPreset LinearSizeIncrease(int samples, int scale) {
-    TPreset ret;
-    ret.PresetName = "LinearGrowth";
+TVector<TPreset> LinearSizeIncrease8Points(int samples, int scale) {
+    TVector<TPreset> ret;
+    TPreset preset;
+    preset.PresetName = "LinearGrowth";
+    preset.Samples = samples;
     int init = 1 << 18;
-    init *= scale; 
+    init *= scale;
     for (int index = 1; index < 9; index++) {
         int thisNum = init * index;
-        for (int _ = 0; _ < samples; ++_){
-            ret.Cases.emplace_back(thisNum, thisNum);
-        }
+        preset.Size = {thisNum, thisNum};
+        ret.emplace_back(preset);
     }
     return ret;
 }
 
-TPreset VerySmallSizes(int, int) {
-    TPreset ret;
-    ret.PresetName = "VerySmall";
-    ret.Cases.emplace_back(512, 512);
-    ret.Cases.emplace_back(1024, 1024);
+TVector<TPreset> LinearSizeIncrease16Points(int samples, int scale) {
+    TVector<TPreset> ret;
+    TPreset preset;
+    preset.PresetName = "LinearGrowth";
+    preset.Samples = samples;
+    int init = 1 << 18;
+    init *= scale;
+    for (int index = 1; index < 17; index++) {
+        int thisNum = init * index;
+        preset.Size = {thisNum, thisNum};
+        ret.emplace_back(preset);
+    }
     return ret;
+}
+
+TVector<TPreset> VerySmallSizes(int, int) {
+    return {{{512, 512}, 1, "VerySmall"}, {{1024, 1024}, 1, "VerySmall"}};
 }
 } // namespace NBenchmarkSizes
 

@@ -62,30 +62,32 @@ TVector<TBenchmarkCaseResult> NKikimr::NMiniKQL::RunJoinsBench(const TBenchmarkS
 
     for (auto keyType : params.KeyTypes) {
         for (auto keyPreset : params.Presets) {
-            for (auto sizes : keyPreset.Cases) {
-                NKikimr::NMiniKQL::TDqSetup<false> setup{NKikimr::NMiniKQL::GetPerfTestFactory()};
-                TJoinDescription descr = [&] {
-                    using enum ETestedJoinKeyType;
-                    switch (keyType) {
+            // for (auto sizes : keyPreset.Cases) {
+            NKikimr::NMiniKQL::TDqSetup<false> setup{NKikimr::NMiniKQL::GetPerfTestFactory()};
+            TJoinDescription descr = [&] {
+                using enum ETestedJoinKeyType;
+                switch (keyType) {
 
-                    case kString: {
-                        return PrepareDescription(&setup, GenerateStringKeyColumn(sizes.Left, params.Seed),
-                                                  GenerateStringKeyColumn(sizes.Right, 111));
-                    }
-                    case kInteger: {
-                        return PrepareDescription(&setup, GenerateIntegerKeyColumn(sizes.Left, params.Seed),
-                                                  GenerateIntegerKeyColumn(sizes.Right, 111));
-                    }
-                    default:
-                        Y_ABORT("unreachable");
-                    }
-                }();
-                descr.LeftSource.KeyColumnIndexes = keyColumns;
-                descr.RightSource.KeyColumnIndexes = keyColumns;
+                case kString: {
+                    return PrepareDescription(&setup, GenerateStringKeyColumn(keyPreset.Size.Left, params.Seed),
+                                              GenerateStringKeyColumn(keyPreset.Size.Right, 111));
+                }
+                case kInteger: {
+                    return PrepareDescription(&setup, GenerateIntegerKeyColumn(keyPreset.Size.Left, params.Seed),
+                                              GenerateIntegerKeyColumn(keyPreset.Size.Right, 111));
+                }
+                default:
+                    Y_ABORT("unreachable");
+                }
+            }();
+            descr.LeftSource.KeyColumnIndexes = keyColumns;
+            descr.RightSource.KeyColumnIndexes = keyColumns;
+            for (int sample = 0; sample < keyPreset.Samples; ++sample) {
+
                 for (auto algo : params.Algorithms) {
 
                     TBenchmarkCaseResult result;
-                    result.CaseName = CaseName(algo, keyType, keyPreset, sizes);
+                    result.CaseName = CaseName(algo, keyType, keyPreset);
                     result.CaseName += Sprintf("_seed:_%i", params.Seed);
                     THolder<NKikimr::NMiniKQL::IComputationGraph> wideStreamGraph =
                         ConstructJoinGraphStream(EJoinKind::Inner, algo, descr);
@@ -107,7 +109,9 @@ TVector<TBenchmarkCaseResult> NKikimr::NMiniKQL::RunJoinsBench(const TBenchmarkS
                     }
 
                     result.RunDuration = TDuration::MicroSeconds(ThreadCPUTime() - timeStartMicroSeconds);
-                    Cerr << Sprintf(". output line count: %i, time took: %ims.", lineCount, result.RunDuration.MilliSeconds()) << Endl;
+                    Cerr << Sprintf(". output line count: %i, time took: %ims.", lineCount,
+                                    result.RunDuration.MilliSeconds())
+                         << Endl;
                     ret.push_back(result);
                 }
             }

@@ -223,7 +223,7 @@ class TestParametrizedQueries(TestBase):
             {" ".join([f"DECLARE $col_{cleanup_type_name(type_name)} AS {type_name};" for type_name in all_types.keys()])}
             {" ".join([f"DECLARE $col_index_{cleanup_type_name(type_name)} AS {type_name};" for type_name in index.keys()])}
             {f"DECLARE $ttl_{ttl} AS {ttl};" if ttl != "" else ""}
-        
+
             INSERT INTO {table_name}(
                 {", ".join(["pk_" + cleanup_type_name(type_name) for type_name in pk_types.keys()])}{", " if len(all_types) != 0 else ""}
                 {", ".join(["col_" + cleanup_type_name(type_name) for type_name in all_types.keys()])}{", " if len(index) != 0 else ""}
@@ -269,8 +269,8 @@ class TestParametrizedQueries(TestBase):
                 {" ".join(create_all_type_declare)}
                 {" ".join([f"DECLARE $col_index_{cleanup_type_name(type_name)} AS {type_name};" for type_name in index.keys()])}
                 {f"DECLARE $ttl_{ttl} AS {ttl};" if ttl != "" else ""}
-            
-                SELECT COUNT(*) as count FROM `{table_name}` WHERE 
+
+                SELECT COUNT(*) as count FROM `{table_name}` WHERE
                 {" and ".join([f"pk_{cleanup_type_name(type_name)}=$pk_{cleanup_type_name(type_name)}" for type_name in pk_types.keys()])}
                 {" and " if len(index) != 0 else ""}
                 {" and ".join([f"col_index_{cleanup_type_name(type_name)}=$col_index_{cleanup_type_name(type_name)}" for type_name in index.keys()])}

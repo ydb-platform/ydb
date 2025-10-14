@@ -246,8 +246,8 @@ class TestSecondaryIndex(TestBase):
             if len(index_colums[prefix]) != 0:
                 create_index.append(
                     ", ".join(
-                        f"""INDEX idx_{prefix}{cleanup_type_name(type_name)} GLOBAL {unique} {sync} ON 
-                        ({prefix}{cleanup_type_name(type_name)}) 
+                        f"""INDEX idx_{prefix}{cleanup_type_name(type_name)} GLOBAL {unique} {sync} ON
+                        ({prefix}{cleanup_type_name(type_name)})
                         COVER ({", ".join([f"col_{cleanup_type_name(type_name_all_types)}" for type_name_all_types in columns["col_"]])})"""
                         for type_name in index_colums[prefix]
                     )

@@ -69,7 +69,7 @@ def create_ttl_sql_request(ttl: str, inteval: dict[str, str], time: str, table_n
         create_ttl.append(
             f"""Interval("{pt}") {inteval[pt] if inteval[pt] == "" or inteval[pt] == "DELETE" else f"TO EXTERNAL DATA SOURCE {inteval[pt]}"}""")
     sql_ttl = f"""
-         ALTER TABLE {table_name} SET ( TTL = 
+         ALTER TABLE {table_name} SET ( TTL =
          {", ".join(create_ttl)}
          ON {ttl} {f"AS {time}" if time != "" else ""} )
     """

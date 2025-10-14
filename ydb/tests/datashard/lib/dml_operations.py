@@ -150,7 +150,7 @@ class DMLOperations():
         self.query(update_sql)
 
     def create_update_unique(self, value: int, search: int, index: dict[str, str], table_name: str):
-        update_sql = f""" UPDATE `{table_name}` SET 
+        update_sql = f""" UPDATE `{table_name}` SET
             {", ".join([f"col_index_{cleanup_type_name(type_name)} = {format_sql_value(index[type_name](value), type_name)}" for type_name in index.keys()])}
             WHERE
             {" and ".join(f"col_index_{cleanup_type_name(type_name)} = {format_sql_value(index[type_name](search), type_name)}" for type_name in index.keys())}
@@ -194,7 +194,7 @@ class DMLOperations():
                     create_index.append(
                         f"col_index_{cleanup_type_name(type_name)}={format_sql_value(index[type_name](count), type_name)}")
             sql_select = f"""
-                SELECT COUNT(*) as count FROM `{table_name}` WHERE 
+                SELECT COUNT(*) as count FROM `{table_name}` WHERE
                 {" and ".join(create_pk)}
                 {" and " if len(create_index) != 0 else ""}
                 {" and ".join(create_index)}
@@ -296,7 +296,7 @@ class DMLOperations():
     def select_all_type(self, table_name: str, all_types: dict[str, str], pk_types: dict[str, str], index: dict[str, str], ttl: str):
         statements = self.create_statements(pk_types, all_types, index, ttl)
 
-        rows = self.query(f"select {", ".join(statements)} from {table_name}")
+        rows = self.query(f"select {', '.join(statements)} from {table_name}")
         count = 0
         for data_type in all_types.keys():
             for i in range(len(rows)):
@@ -330,7 +330,7 @@ class DMLOperations():
     def assert_type(self, key, data_type: str, values: int, values_from_rows):
         if data_type == "String" or data_type == "Yson":
             assert values_from_rows.decode(
-                "utf-8") == key[data_type](values), f"{data_type}, expected {key[data_type](values)}, received {values_from_rows.decode("utf-8")}"
+                "utf-8") == key[data_type](values), f"{data_type}, expected {key[data_type](values)}, received {values_from_rows.decode('utf-8')}"
         elif data_type == "Float" or data_type == "DyNumber":
             assert math.isclose(float(values_from_rows), float(
                 key[data_type](values)), rel_tol=1e-3), f"{data_type}, expected {key[data_type](values)}, received {values_from_rows}"
@@ -354,7 +354,7 @@ class DMLOperations():
                 create_all_type.append(
                     f"col_{cleanup_type_name(type_name)}={format_sql_value(all_types[type_name](all_types_value), type_name)}")
         sql_select = f"""
-                SELECT COUNT(*) as count FROM `{table_name}` WHERE 
+                SELECT COUNT(*) as count FROM `{table_name}` WHERE
                 {" and ".join([f"pk_{cleanup_type_name(type_name)}={format_sql_value(pk_types[type_name](pk_types_value), type_name)}" for type_name in pk_types.keys()])}
                 {" and " if len(index) != 0 else ""}
                 {" and ".join([f"col_index_{cleanup_type_name(type_name)}={format_sql_value(index[type_name](index_value), type_name)}" for type_name in index.keys()])}

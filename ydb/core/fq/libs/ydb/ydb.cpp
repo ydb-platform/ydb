@@ -42,7 +42,7 @@ TFuture<TDataQueryResult> SelectGeneration(const TGenerationContextPtr& context)
         .String(context->PrimaryKey)
         .Build();
 
-    auto ttxControl = TTxControl::BeginTx(TTxSettings::SerializableRW());
+    auto ttxControl = NFq::ISession::TTxControl::BeginTx();
     if (context->OperationType == TGenerationContext::Check && context->CommitTx) {
         ttxControl.CommitTx();
     }
@@ -88,7 +88,8 @@ TFuture<TStatus> CheckGeneration(
     }
     }
 
-    context->Transaction = selectResult.GetTransaction();
+    context->Session->UpdateTransaction(selectResult.GetTransaction());
+    Cerr << "UpdateTransaction " << Endl;
     selectResult.GetTransaction().reset();
 
     if (!isOk) {
@@ -104,7 +105,7 @@ TFuture<TStatus> CheckGeneration(
         return MakeFuture(MakeErrorStatus(EStatus::ALREADY_EXISTS, ss.Str()));
     }
 
-    if (requiresTransaction && !context->Transaction) {
+    if (requiresTransaction && !context->Session->GetTransaction()) {
         // just sanity check, normally should not happen.
         // note that we use retriable error
         TStringStream ss;
@@ -151,13 +152,17 @@ TFuture<TStatus> UpsertGeneration(const TGenerationContextPtr& context) {
         .Uint64(context->Generation)
         .Build();
 
-    auto ttxControl = TTxControl::Tx(*context->Transaction);
+    auto ttxControl = NFq::ISession::TTxControl::ContinueTx();
     if (context->CommitTx) {
-        ttxControl.CommitTx();
-        context->Transaction.reset();
+        ttxControl = NFq::ISession::TTxControl::ContinueAndCommitTx();
     }
 
-    return context->Session->ExecuteDataQuery(query, std::move(params), ttxControl, context->ExecDataQuerySettings).Apply(
+    auto f = context->Session->ExecuteDataQuery(query, std::move(params), ttxControl, context->ExecDataQuerySettings);
+    if (context->CommitTx) {
+        context->Session->UpdateTransaction(std::nullopt);
+    }
+
+    return f.Apply(
         [] (const TFuture<TDataQueryResult>& future) {
             TStatus status = future.GetValue();
             return status;
@@ -346,15 +351,12 @@ TFuture<TStatus> CheckGeneration(const TGenerationContextPtr& context) {
 
 TFuture<TStatus> RollbackTransaction(const TGenerationContextPtr& context) {
 
-    if (!context->Transaction || !context->Transaction->IsActive()) {
+    if (!context->Session->GetTransaction() || !context->Session->GetTransaction()->IsActive()) {
         auto status = MakeErrorStatus(EStatus::INTERNAL_ERROR, "trying to rollback non-active transaction");
         return MakeFuture(status);
     }
 
-    auto future = context->Session->RollbackTransaction();
-
-    //auto future = context->Transaction->Rollback();
-    context->Transaction.reset();
+    auto future = context->Session->Rollback();
     return future;
 }
 

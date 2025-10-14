@@ -21,19 +21,38 @@ struct TSdkSession : public ISession {
     NThreading::TFuture<NYdb::NTable::TDataQueryResult> ExecuteDataQuery(
         const TString& sql,
         std::shared_ptr<NYdb::TParamsBuilder> paramsBuilder,
-        NYdb::NTable::TTxControl txControl,
+        NFq::ISession::TTxControl txControl,
         NYdb::NTable::TExecDataQuerySettings execDataQuerySettings = NYdb::NTable::TExecDataQuerySettings()) override {
         auto params = paramsBuilder->Build();
-        return Session.ExecuteDataQuery(sql, txControl, params, execDataQuerySettings);
+
+        NYdb::NTable::TTxControl tx = NYdb::NTable::TTxControl::BeginTx(NYdb::NTable::TTxSettings::SerializableRW());
+        if (txControl.SnapshotRead_) {
+            tx = NYdb::NTable::TTxControl::BeginTx(NYdb::NTable::TTxSettings::SnapshotRO());
+        }
+        if (txControl.Continue_) {
+            tx = NYdb::NTable::TTxControl::Tx(*Transaction);
+        }
+        if (txControl.Commit_) {
+            tx = tx.CommitTx();
+        }
+
+        Cerr << "ExecuteDataQuery " << sql << Endl;
+        Cerr << "Begin_ " << txControl.Begin_ << Endl;
+        Cerr << "Continue_ " << txControl.Continue_ << Endl;
+        Cerr << "Commit_ " << txControl.Commit_ << Endl;
+
+
+        return Session.ExecuteDataQuery(sql, tx, params, execDataQuerySettings);
     }
 
-    void CommitTransaction() override {
-        // TODO
-    }
+    // void CommitTransaction() override {
+    //     // TODO
+    // }
 
-    NYdb::TAsyncStatus RollbackTransaction() override {
-        // TODO
-        return NThreading::MakeFuture(NYdb::TStatus{NYdb::EStatus::SUCCESS, {}});
+    NYdb::TAsyncStatus Rollback() override {
+        auto future = Transaction->Rollback();
+        Transaction = std::nullopt;
+        return future;
     }
 
     NYdb::TAsyncStatus CreateTable(const std::string& /*db*/, const std::string& path, NYdb::NTable::TTableDescription&& tableDesc) override {
@@ -44,8 +63,17 @@ struct TSdkSession : public ISession {
         return Session.DropTable(path);
     }
 
+    void UpdateTransaction(std::optional<NYdb::NTable::TTransaction> transaction) override {
+        Transaction = transaction;
+    }
+
+    std::optional<NYdb::NTable::TTransaction>& GetTransaction() override {
+        return Transaction;
+    }
+
 private: 
     NYdb::NTable::TSession Session;
+    std::optional<NYdb::NTable::TTransaction> Transaction;
 };
 
 } // namespace NFq

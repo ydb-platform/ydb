@@ -17,6 +17,7 @@ namespace NFq {
 using namespace NThreading;
 using namespace NYdb;
 using namespace NYdb::NTable;
+using TTxControl = NFq::ISession::TTxControl;
 
 using NYql::TIssues;
 
@@ -566,7 +567,6 @@ TFuture<IStateStorage::TCountStatesResult> TStateStorage::CountStates(
         [prefix = YdbConnection->GetTablePathPrefix(), graphId, checkpointId, context, thisPtr = TIntrusivePtr(this)] (ISession::TPtr session) {
 
             // publish nodes
-           // NYdb::TParamsBuilder paramsBuilder;
             auto paramsBuilder = std::make_shared<NYdb::TParamsBuilder>();
 
             paramsBuilder->AddParam("$graph_id").String(graphId).Build();
@@ -592,7 +592,7 @@ TFuture<IStateStorage::TCountStatesResult> TStateStorage::CountStates(
             auto future = session->ExecuteDataQuery(
                 query,
                 paramsBuilder,
-                TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
+                TTxControl::BeginAndCommitTx(),
                 thisPtr->GetExecDataQuerySettings());
 
             return future.Apply(
@@ -620,7 +620,6 @@ TFuture<IStateStorage::TCountStatesResult> TStateStorage::CountStates(
 TFuture<TStatus> TStateStorage::ListStates(const TContextPtr& context) {
     return YdbConnection->GetTableClient()->RetryOperation(
         [prefix = YdbConnection->GetTablePathPrefix(), context, thisPtr = TIntrusivePtr(this)] (ISession::TPtr session) {
-           // NYdb::TParamsBuilder paramsBuilder;
             auto paramsBuilder = std::make_shared<NYdb::TParamsBuilder>();
 
             paramsBuilder->AddParam("$graph_id").String(context->GraphId).Build();
@@ -659,7 +658,7 @@ TFuture<TStatus> TStateStorage::ListStates(const TContextPtr& context) {
             auto future = session->ExecuteDataQuery(
                 query,
                 paramsBuilder,
-                TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
+                TTxControl::BeginAndCommitTx(),
                 thisPtr->GetExecDataQuerySettings());
 
             return future.Apply(
@@ -714,7 +713,6 @@ TFuture<TIssues> TStateStorage::DeleteGraph(const TString& graphId) {
         [prefix = YdbConnection->GetTablePathPrefix(), graphId, thisPtr = TIntrusivePtr(this)] (ISession::TPtr session) {
 
             // publish nodes
-           // NYdb::TParamsBuilder paramsBuilder;
             auto paramsBuilder = std::make_shared<NYdb::TParamsBuilder>();
 
             paramsBuilder->AddParam("$graph_id").String(graphId).Build();
@@ -735,7 +733,7 @@ TFuture<TIssues> TStateStorage::DeleteGraph(const TString& graphId) {
             auto future = session->ExecuteDataQuery(
                 query,
                 paramsBuilder,
-                TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
+                TTxControl::BeginAndCommitTx(),
                 thisPtr->GetExecDataQuerySettings(DeleteStateTimeoutMultiplier));
 
             return future.Apply(
@@ -784,7 +782,7 @@ TFuture<TIssues> TStateStorage::DeleteCheckpoints(
             auto future = session->ExecuteDataQuery(
                 query,
                 paramsBuilder,
-                TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
+                TTxControl::BeginAndCommitTx(),
                 thisPtr->GetExecDataQuerySettings(DeleteStateTimeoutMultiplier));
 
             return future.Apply(
@@ -854,7 +852,7 @@ TFuture<TDataQueryResult> TStateStorage::SelectState(const TContextPtr& context)
     return (*context->Session)->ExecuteDataQuery(
         query,
         paramsBuilder,
-        TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
+        TTxControl::BeginAndCommitTx(),
         GetExecDataQuerySettings());
 }
 
@@ -900,7 +898,7 @@ TFuture<TStatus> TStateStorage::UpsertRow(const TContextPtr& context) {
             auto future = (*context->Session)->ExecuteDataQuery(
                 query,
                 paramsBuilder,
-                TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
+                TTxControl::BeginAndCommitTx(),
                 thisPtr->GetExecDataQuerySettings());
 
             return future.Apply(

@@ -68,7 +68,7 @@ struct TGenerationContext : public TThrRefBase {
     // it with Transaction (must have CommitTx = false)
     const ui64 Generation;
 
-    std::optional<NYdb::NTable::TTransaction> Transaction;
+   // std::optional<NYdb::NTable::TTransaction> Transaction;
 
     // result of Select
     ui64 GenerationRead = 0;

@@ -1,6 +1,7 @@
 import abc
 from abc import abstractmethod
-from .. import issues, operation, _apis
+from . import _apis
+from .. import issues, operation
 
 
 class IDynamicConfigClient(abc.ABC):
@@ -70,7 +71,9 @@ def _get_node_labels_request_factory(node_id):
 
 def _wrap_dynamic_config(config_pb, dynamic_config_cls=None, *args, **kwargs):
     dynamic_config_cls = DynamicConfig if dynamic_config_cls is None else dynamic_config_cls
-    return dynamic_config_cls(config_pb.identity.version, config_pb.identity.cluster, config_pb.config, *args, **kwargs)
+    return dynamic_config_cls(
+        config_pb.identity[0].version, config_pb.identity[0].cluster, config_pb.config[0], *args, **kwargs
+    )
 
 
 def _wrap_get_config_response(rpc_state, response):

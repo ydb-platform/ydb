@@ -6,6 +6,7 @@ import concurrent.futures
 import contextvars
 import datetime
 import functools
+import logging
 import typing
 from typing import (
     Optional,
@@ -24,7 +25,8 @@ from google.protobuf.message import Message
 from google.protobuf.duration_pb2 import Duration as ProtoDuration
 from google.protobuf.timestamp_pb2 import Timestamp as ProtoTimeStamp
 
-import ydb.aio
+from ...driver import Driver
+from ...aio.driver import Driver as DriverIO
 
 try:
     from ydb.public.api.protos import ydb_topic_pb2, ydb_issue_message_pb2
@@ -32,6 +34,10 @@ except ImportError:
     from contrib.ydb.public.api.protos import ydb_topic_pb2, ydb_issue_message_pb2
 
 from ... import issues, connection
+from ...settings import BaseRequestSettings
+from ..._constants import DEFAULT_LONG_STREAM_TIMEOUT
+
+logger = logging.getLogger(__name__)
 
 
 class IFromProto(abc.ABC):
@@ -129,7 +135,7 @@ class SyncToAsyncIterator:
 
 class IGrpcWrapperAsyncIO(abc.ABC):
     @abc.abstractmethod
-    async def receive(self) -> Any:
+    async def receive(self, timeout: Optional[int] = None) -> Any:
         ...
 
     @abc.abstractmethod
@@ -141,7 +147,7 @@ class IGrpcWrapperAsyncIO(abc.ABC):
         ...
 
 
-SupportedDriverType = Union[ydb.Driver, ydb.aio.Driver]
+SupportedDriverType = Union[Driver, DriverIO]
 
 
 class GrpcWrapperAsyncIO(IGrpcWrapperAsyncIO):
@@ -158,6 +164,13 @@ class GrpcWrapperAsyncIO(IGrpcWrapperAsyncIO):
         self._connection_state = "new"
         self._stream_call = None
         self._wait_executor = None
+
+        self._stream_settings: BaseRequestSettings = (
+            BaseRequestSettings()
+            .with_operation_timeout(DEFAULT_LONG_STREAM_TIMEOUT)
+            .with_cancel_after(DEFAULT_LONG_STREAM_TIMEOUT)
+            .with_timeout(DEFAULT_LONG_STREAM_TIMEOUT)
+        )
 
     def __del__(self):
         self._clean_executor(wait=False)
@@ -180,28 +193,44 @@ class GrpcWrapperAsyncIO(IGrpcWrapperAsyncIO):
         if self._wait_executor:
             self._wait_executor.shutdown(wait)
 
-    async def _start_asyncio_driver(self, driver: ydb.aio.Driver, stub, method):
+    async def _start_asyncio_driver(self, driver: DriverIO, stub, method):
         requests_iterator = QueueToIteratorAsyncIO(self.from_client_grpc)
         stream_call = await driver(
             requests_iterator,
             stub,
             method,
+            settings=self._stream_settings,
         )
         self._stream_call = stream_call
         self.from_server_grpc = stream_call.__aiter__()
 
-    async def _start_sync_driver(self, driver: ydb.Driver, stub, method):
+    async def _start_sync_driver(self, driver: Driver, stub, method):
         requests_iterator = AsyncQueueToSyncIteratorAsyncIO(self.from_client_grpc)
         self._wait_executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
 
-        stream_call = await to_thread(driver, requests_iterator, stub, method, executor=self._wait_executor)
+        stream_call = await to_thread(
+            driver,
+            requests_iterator,
+            stub,
+            method,
+            executor=self._wait_executor,
+            settings=self._stream_settings,
+        )
         self._stream_call = stream_call
         self.from_server_grpc = SyncToAsyncIterator(stream_call.__iter__(), self._wait_executor)
 
-    async def receive(self) -> Any:
+    async def receive(self, timeout: Optional[int] = None) -> Any:
         # todo handle grpc exceptions and convert it to internal exceptions
         try:
-            grpc_message = await self.from_server_grpc.__anext__()
+            if timeout is None:
+                grpc_message = await self.from_server_grpc.__anext__()
+            else:
+
+                async def get_response():
+                    return await self.from_server_grpc.__anext__()
+
+                grpc_message = await asyncio.wait_for(get_response(), timeout)
+
         except (grpc.RpcError, grpc.aio.AioRpcError) as e:
             raise connection._rpc_error_handler(self._connection_state, e)
 

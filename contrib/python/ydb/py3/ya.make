@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(3.12.3)
+VERSION(3.21.12)
 
 LICENSE(Apache-2.0)
 
@@ -24,11 +24,14 @@ PY_SRCS(
     TOP_LEVEL
     ydb/__init__.py
     ydb/_apis.py
+    ydb/_constants.py
     ydb/_errors.py
     ydb/_grpc/__init__.py
     ydb/_grpc/common/__init__.py
     ydb/_grpc/grpcwrapper/__init__.py
     ydb/_grpc/grpcwrapper/common_utils.py
+    ydb/_grpc/grpcwrapper/ydb_query.py
+    ydb/_grpc/grpcwrapper/ydb_query_public_types.py
     ydb/_grpc/grpcwrapper/ydb_scheme.py
     ydb/_grpc/grpcwrapper/ydb_topic.py
     ydb/_grpc/grpcwrapper/ydb_topic_public_types.py
@@ -38,6 +41,7 @@ PY_SRCS(
     ydb/_topic_common/common.py
     ydb/_topic_reader/__init__.py
     ydb/_topic_reader/datatypes.py
+    ydb/_topic_reader/events.py
     ydb/_topic_reader/topic_reader.py
     ydb/_topic_reader/topic_reader_asyncio.py
     ydb/_topic_reader/topic_reader_sync.py
@@ -55,6 +59,11 @@ PY_SRCS(
     ydb/aio/iam.py
     ydb/aio/oauth2_token_exchange.py
     ydb/aio/pool.py
+    ydb/aio/query/__init__.py
+    ydb/aio/query/base.py
+    ydb/aio/query/pool.py
+    ydb/aio/query/session.py
+    ydb/aio/query/transaction.py
     ydb/aio/resolver.py
     ydb/aio/scheme.py
     ydb/aio/table.py
@@ -68,6 +77,7 @@ PY_SRCS(
     ydb/dbapi/errors.py
     ydb/default_pem.py
     ydb/draft/__init__.py
+    ydb/draft/_apis.py
     ydb/draft/dynamic_config.py
     ydb/driver.py
     ydb/export.py
@@ -82,7 +92,13 @@ PY_SRCS(
     ydb/oauth2_token_exchange/token_source.py
     ydb/operation.py
     ydb/pool.py
+    ydb/query/__init__.py
+    ydb/query/base.py
+    ydb/query/pool.py
+    ydb/query/session.py
+    ydb/query/transaction.py
     ydb/resolver.py
+    ydb/retries.py
     ydb/scheme.py
     ydb/scripting.py
     ydb/settings.py

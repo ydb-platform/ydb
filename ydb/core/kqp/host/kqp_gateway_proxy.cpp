@@ -2496,7 +2496,7 @@ public:
         }
     }
 
-    TString AdjustPath(const TString& path, const TString& database) {
+    TString AdjustPath(const TString& path, const TString& database) const {
         if (path.StartsWith('/')) {
             if (database.empty() && !path.StartsWith(GetDatabase())) {
                 throw yexception() << "Path '" << path << "' not in database '" << GetDatabase() << "'";

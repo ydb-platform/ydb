@@ -27,7 +27,7 @@ TActorId TLocalProxyActor::RegisterActor(IActor* actor) const {
     return RegisterWithSameMailbox(actor);
 }
 
-TString TLocalProxyActor::MakeLocalPath(TString path) {
+TString TLocalProxyActor::MakeLocalPath(TString path) const {
     if (path.StartsWith(Database + "/")) {
         return path.substr(Database.length() + 1);
     }
@@ -39,7 +39,7 @@ void TLocalProxyActor::Handle(TEvYdbProxy::TEvAlterTopicRequest::TPtr& ev) {
     LOG_T("Handle " << ev->Get()->ToString());
 
     auto args = std::move(ev->Get()->GetArgs());
-    const auto& localPath = MakeLocalPath(std::get<TString>(args));
+    const auto localPath = MakeLocalPath(std::get<TString>(args));
     auto& settings = std::get<NYdb::NTopic::TAlterTopicSettings>(args);
 
     auto request = std::make_unique<Ydb::Topic::AlterTopicRequest>();
@@ -67,7 +67,7 @@ void TLocalProxyActor::Handle(TEvYdbProxy::TEvDescribeTopicRequest::TPtr& ev) {
     LOG_T("Handle " << ev->Get()->ToString());
 
     auto args = std::move(ev->Get()->GetArgs());
-    const auto& localPath = MakeLocalPath(std::get<TString>(args));
+    const auto localPath = MakeLocalPath(std::get<TString>(args));
     auto& settings = std::get<NYdb::NTopic::TDescribeTopicSettings>(args);
     Y_UNUSED(settings);
 
@@ -99,7 +99,7 @@ void TLocalProxyActor::Handle(TEvYdbProxy::TEvDescribePathRequest::TPtr& ev) {
     LOG_T("Handle " << ev->Get()->ToString());
 
     auto args = std::move(ev->Get()->GetArgs());
-    const auto& localPath = MakeLocalPath(std::get<TString>(args));
+    const auto localPath = MakeLocalPath(std::get<TString>(args));
     auto& settings = std::get<NYdb::NScheme::TDescribePathSettings>(args);
     Y_UNUSED(settings);
 

@@ -60,6 +60,9 @@ protected:
 protected:
     void PassAway();
 
+private:
+    TString MakeAbsolutePath(TString path) const;
+
 protected:
     const std::string Database;
     const TString TopicPath;
@@ -70,9 +73,6 @@ protected:
 
     size_t Attempt = 0;
     TString LogPrefix;
-
-private:
-    TString MakeAbsolutePath(TString path);
 };
 
 }

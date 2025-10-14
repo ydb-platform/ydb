@@ -15,7 +15,7 @@ void TBaseLocalTopicPartitionActor::Bootstrap() {
     DoDescribe(TopicPath);
 }
 
-TString TBaseLocalTopicPartitionActor::MakeAbsolutePath(TString path) {
+TString TBaseLocalTopicPartitionActor::MakeAbsolutePath(TString path) const {
     if (path.StartsWith(Database + "/")) {
         return path;
     }

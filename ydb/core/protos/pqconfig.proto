@@ -1262,9 +1262,6 @@ message TMLPMessage {
     optional TMLPMessageMeta Meta = 3;
 }
 
-// To PQRB
-// Спрашивает у координатора в какую партицию идти за данными. PQRB roundroubin-ом выдает партицию в 
-// которой могут быть данные (исключаются неактивные партиции, дочитанные до конца)
 message TEvMLPGetPartitionRequest {
     optional string Topic = 1; // PathId? Нужен для возможности в одной таблетке хранить несколько топиков
     optional string Consumer = 2;
@@ -1273,6 +1270,7 @@ message TEvMLPGetPartitionRequest {
 // From PQRB
 message TEvMLPGetPartitionResponse {
     optional uint32 PartitionId = 1;
+    optional uint64 TabletId = 2;
 }
 
 // To PQTablet
@@ -1281,21 +1279,15 @@ message TEvMLPReadRequest {
     optional string Consumer = 2;
     optional uint32 PartitionId = 3;
     optional uint64 WaitTimeSeconds = 4; // Максимальное время ожидания данных, если в партиции их нет.
-    optional uint64 VisibilityTimeout = 4; // Если к указанному времени не произойдет подтверждения обработки сообщения, то сообщение вернется в очередь (может указывать в настройках консьюмера?)
+    optional uint64 VisibilityTimeoutSeconds = 5; // Если к указанному времени не произойдет подтверждения обработки сообщения, то сообщение вернется в очередь (может указывать в настройках консьюмера?)
     // The maximum number of messages to return.
-    optional uint32 MaxNumberOfMessages = 5;
+    optional uint32 MaxNumberOfMessages = 6;
 }
 
 // From PQTablet
 message TEvMLPReadResponse {
-    enum EStatus {
-        SUCCESS = 0; // Сообщение получено
-        TIMEOUT = 1; // В партиции нет доступных сообщений за указанное время ожидания (ReadTimeout)
-        ERROR = 2;   // Поизошла ошибка
-    }
-
-    optional EStatus Status = 1;
-    repeated TMLPMessage Message = 2; // уникальный идентификатор сообщения с учетом его взятия в работу. PartitionId/OffsetId/Assigment
+    optional NPersQueue.NErrorCode.EErrorCode ErrorCode = 1;
+    repeated TMLPMessage Message = 2;
 }
 
 // To PQTablet
@@ -1304,19 +1296,12 @@ message TEvMLPCommitRequest {
     optional string Topic = 1; // PathId? Нужен для возможности в одной таблетке хранить несколько топиков
     optional string Consumer = 2;
     optional uint32 PartitionId = 3;
-    optional string MessageId = 4;
+    repeated uint64 Offset = 4;
 }
 
 // From PQTablet
 message TEvMLPCommitResponse {
-    enum EStatus {
-        SUCCESS = 0; // Сообщение получено
-        MESSAGE_NOT_FOUND = 1; // MessageId не найден или его в обработку уже взял кто-то другой ? (как обрабатыывать ситуацию, что сообщение взяли в работу, за таймаут не закоммитили, мы отдали это сообщение другому клиента, а потом от первого пришел коммит)
-        ERROR = 2;   // Поизошла ошибка
-    }
-
-    optional EStatus Status = 1;
-    optional string MessageId = 2;
+    optional NPersQueue.NErrorCode.EErrorCode ErrorCode = 1;
 }
 
 // To PQTablet
@@ -1325,19 +1310,12 @@ message TEvMLPReleaseRequest {
     optional string Topic = 1; // PathId? Нужен для возможности в одной таблетке хранить несколько топиков
     optional string Consumer = 2;
     optional uint32 PartitionId = 3;
-    optional string MessageId = 4;
+    repeated uint64 Offset = 4;
 }
 
 // From PQTablet
-message TEvMLPReleaesResponse {
-    enum EStatus {
-        SUCCESS = 0; // Сообщение получено
-        MESSAGE_NOT_FOUND = 1; // MessageId не найден или его в обработку уже взял кто-то другой ? (как обрабатыывать ситуацию, что сообщение взяли в работу, за таймаут не закоммитили, мы отдали это сообщение другому клиента, а потом от первого пришел коммит)
-        ERROR = 2;   // Поизошла ошибка
-    }
-
-    optional EStatus Status = 1;
-    optional string MessageId = 2;
+message TEvMLPReleaseResponse {
+    optional NPersQueue.NErrorCode.EErrorCode ErrorCode = 1;
 }
 
 // To PQTablet
@@ -1346,18 +1324,12 @@ message TEvMLPChangeMessageDeadlineRequest {
     optional string Topic = 1; // PathId? Нужен для возможности в одной таблетке хранить несколько топиков
     optional string Consumer = 2;
     optional uint32 PartitionId = 3;
-    optional string MessageId = 4;
-    optional uint64 DeadlineTimestamp = 5;
+    optional uint64 DeadlineTimestampSeconds = 4;
+    repeated uint64 Offset = 5;
 }
 
 // From PQTablet
 message TEvMLPChangeMessageDeadlineResponse {
-    enum EStatus {
-        SUCCESS = 0; // Сообщение получено
-        ERROR = 1;   // Поизошла ошибка
-    }
-
-    optional EStatus Status = 1;
-    optional string MessageId = 2;
+    optional NPersQueue.NErrorCode.EErrorCode ErrorCode = 1;
 }
 

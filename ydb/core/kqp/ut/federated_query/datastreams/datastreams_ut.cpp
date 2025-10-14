@@ -109,6 +109,7 @@ public:
 
             auto& featureFlags = *AppConfig->MutableFeatureFlags();
             featureFlags.SetEnableStreamingQueries(true);
+            featureFlags.SetEnableSchemaSecrets(UseSchemaSecrets());
 
             auto& queryServiceConfig = *AppConfig->MutableQueryServiceConfig();
             queryServiceConfig.SetEnableMatchRecognize(true);

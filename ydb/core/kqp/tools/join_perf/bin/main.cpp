@@ -18,25 +18,6 @@ std::filesystem::path MakeJoinPerfPath() {
     return p;
 }
 
-// void AddLittleLeftTablePreset(NKikimr::NMiniKQL::TBenchmarkSettings& settings) {
-//     TVector<NKikimr::NMiniKQL::TPreset> littleRight;
-//     for(auto& preset: settings.Presets) {
-//         littleRight.push_back(preset);
-//         littleRight.back().PresetName += "LittleRightTable";
-//         littleRight.back().Size.Right /= 128;
-//         Y_ABORT_UNLESS(littleRight.back().Size.Right != 0, "right was too small");
-//         preset.PresetName += "SameSizeTables";
-//     }
-//     std::copy(littleRight.begin(), littleRight.end(), std::back_inserter(settings.Presets));
-// }
-
-// void MinusOne(NKikimr::NMiniKQL::TBenchmarkSettings& settings) {
-//     for(auto& preset: settings.Presets) {
-//         preset.Size.Right -= 1;
-//     }
-
-// }
-
 int main(int argc, char** argv) {
     NLastGetopt::TOpts opts;
     opts.AddHelpOption('h');
@@ -58,8 +39,6 @@ int main(int argc, char** argv) {
         // NKikimr::NMiniKQL::ETestedJoinAlgo::kScalarGrace,
     };
 
-    // TVector<NKikimr::NMiniKQL::TPreset> (*presetWithSamples)(int, int);
-    // int samples = 1;
     TString presetName;
     TString presetsPath;
     opts.AddLongOption("preset")

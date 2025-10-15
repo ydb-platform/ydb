@@ -354,6 +354,86 @@ class BaseTestBackupInFiles(object):
 
         raise AssertionError(f"Timeout waiting for table '{table}' rows to match expected (timeout {timeout_s}s). Last error: {last_exc}")
 
+    def _create_backup_collection(self, collection_src, tables: List[str]):
+        # create backup collection referencing given table full paths
+        table_entries = ",\n".join([f"TABLE `/Root/{t}`" for t in tables])
+        sql = f"""
+            CREATE BACKUP COLLECTION `{collection_src}`
+                ( {table_entries} )
+            WITH ( STORAGE = 'cluster', INCREMENTAL_BACKUP_ENABLED = 'false' );
+        """
+        res = self._execute_yql(sql)
+        stderr_out = ""
+        if getattr(res, 'std_err', None):
+            stderr_out += res.std_err.decode('utf-8', errors='ignore')
+        if getattr(res, 'std_out', None):
+            stderr_out += res.std_out.decode('utf-8', errors='ignore')
+        assert res.exit_code == 0, f"CREATE BACKUP COLLECTION failed: {stderr_out}"
+        self.wait_for_collection(collection_src, timeout_s=30)
+
+    def _backup_now(self, collection_src):
+        time.sleep(1.1)
+        res = self._execute_yql(f"BACKUP `{collection_src}`;")
+        if res.exit_code != 0:
+            out = (res.std_out or b"").decode('utf-8', 'ignore')
+            err = (res.std_err or b"").decode('utf-8', 'ignore')
+            raise AssertionError(f"BACKUP failed: code={res.exit_code} STDOUT: {out} STDERR: {err}")
+
+    def _restore_import(self, export_dir, exported_item, collection_restore):
+        bdir = os.path.join(export_dir, exported_item)
+        r = yatest.common.execute(
+            [backup_bin(), "--verbose", "--endpoint", "grpc://localhost:%d" % self.cluster.nodes[1].grpc_port,
+             "--database", self.root_dir, "tools", "restore",
+             "--path", f"/Root/.backups/collections/{collection_restore}",
+             "--input", bdir],
+            check_exit_code=False,
+        )
+        assert r.exit_code == 0, f"tools restore import failed: {r.std_err}"
+
+    def _verify_restored_table_data(self, table, expected_rows):
+        rows = self.wait_for_table_rows(table, expected_rows, timeout_s=90)
+        assert rows == expected_rows, f"Restored data for {table} doesn't match expected.\nExpected: {expected_rows}\nGot: {rows}"
+
+    def _capture_acl(self, table_path: str):
+        # Attempt to capture owner/grants/acl in a readable form.
+        try:
+            desc = self.driver.scheme_client.describe_path(table_path)
+        except Exception:
+            return None
+
+        acl_info = {}
+        owner = getattr(desc, "owner", None)
+        if owner:
+            acl_info["owner"] = owner
+
+        for cand in ("acl", "grants", "effective_acl", "permission", "permissions"):
+            if hasattr(desc, cand):
+                try:
+                    val = getattr(desc, cand)
+                    acl_info[cand] = val
+                except Exception:
+                    acl_info[cand] = "<unreadable>"
+
+        # Fallback: try SHOW GRANTS via YQL and capture stdout
+        try:
+            res = self._execute_yql(f"SHOW GRANTS ON '{table_path}';")
+            out = (res.std_out or b"").decode('utf-8', 'ignore')
+            if out:
+                acl_info["show_grants"] = out
+        except Exception:
+            pass
+
+        return acl_info
+
+    def _drop_tables(self, tables: List[str]):
+        with self.session_scope() as session:
+            for t in tables:
+                full = f"/Root/{t}"
+                try:
+                    session.execute_scheme(f"DROP TABLE `{full}`;")
+                except Exception:
+                    raise AssertionError("Drop failed")
+
 
 class TestFullCycleLocalBackupRestore(BaseTestBackupInFiles):
     def _execute_yql(self, script, verbose=False):
@@ -963,84 +1043,6 @@ class TestFullCycleLocalBackupRestoreWIncr(TestFullCycleLocalBackupRestore):
 
 
 class TestFullCycleLocalBackupRestoreWSchemaChange(TestFullCycleLocalBackupRestore):
-    def _create_backup_collection(self, collection_src, tables: List[str]):
-        # create backup collection referencing given table full paths
-        table_entries = ",\n".join([f"TABLE `/Root/{t}`" for t in tables])
-        sql = f"""
-            CREATE BACKUP COLLECTION `{collection_src}`
-                ( {table_entries} )
-            WITH ( STORAGE = 'cluster', INCREMENTAL_BACKUP_ENABLED = 'false' );
-        """
-        res = self._execute_yql(sql)
-        stderr_out = ""
-        if getattr(res, 'std_err', None):
-            stderr_out += res.std_err.decode('utf-8', errors='ignore')
-        if getattr(res, 'std_out', None):
-            stderr_out += res.std_out.decode('utf-8', errors='ignore')
-        assert res.exit_code == 0, f"CREATE BACKUP COLLECTION failed: {stderr_out}"
-        self.wait_for_collection(collection_src, timeout_s=30)
-
-    def _backup_now(self, collection_src):
-        time.sleep(1.1)
-        res = self._execute_yql(f"BACKUP `{collection_src}`;")
-        if res.exit_code != 0:
-            out = (res.std_out or b"").decode('utf-8', 'ignore')
-            err = (res.std_err or b"").decode('utf-8', 'ignore')
-            raise AssertionError(f"BACKUP failed: code={res.exit_code} STDOUT: {out} STDERR: {err}")
-
-    def _restore_import(self, export_dir, exported_item, collection_restore):
-        bdir = os.path.join(export_dir, exported_item)
-        r = yatest.common.execute(
-            [backup_bin(), "--verbose", "--endpoint", "grpc://localhost:%d" % self.cluster.nodes[1].grpc_port,
-             "--database", self.root_dir, "tools", "restore",
-             "--path", f"/Root/.backups/collections/{collection_restore}",
-             "--input", bdir],
-            check_exit_code=False,
-        )
-        assert r.exit_code == 0, f"tools restore import failed: {r.std_err}"
-
-    def _verify_restored_table_data(self, table, expected_rows):
-        # rows = self._capture_snapshot(table)
-        rows = self.wait_for_table_rows(table, expected_rows, timeout_s=90)
-        assert rows == expected_rows, f"Restored data for {table} doesn't match expected.\nExpected: {expected_rows}\nGot: {rows}"
-
-    def _capture_schema(self, table_path: str):
-        desc = self.driver.scheme_client.describe_path(table_path)
-        cols = self._get_columns_from_scheme_entry(desc, path_hint=table_path)
-        return cols
-
-    def _capture_acl(self, table_path: str):
-        # Attempt to capture owner/grants/acl in a readable form.
-        try:
-            desc = self.driver.scheme_client.describe_path(table_path)
-        except Exception:
-            return None
-
-        acl_info = {}
-        owner = getattr(desc, "owner", None)
-        if owner:
-            acl_info["owner"] = owner
-
-        for cand in ("acl", "grants", "effective_acl", "permission", "permissions"):
-            if hasattr(desc, cand):
-                try:
-                    val = getattr(desc, cand)
-                    acl_info[cand] = val
-                except Exception:
-                    acl_info[cand] = "<unreadable>"
-
-        # Fallback: try SHOW GRANTS via YQL and capture stdout
-        try:
-            res = self._execute_yql(f"SHOW GRANTS ON '{table_path}';")
-            out = (res.std_out or b"").decode('utf-8', 'ignore')
-            if out:
-                acl_info["show_grants"] = out
-        except Exception:
-            pass
-
-        return acl_info
-
-    # --- Helpers for extended checks (schema and ACL capture) ---
     def _get_columns_from_scheme_entry(self, desc, path_hint: str = None):
         # Reuse original robust approach: try multiple candidate attributes
         try:
@@ -1131,15 +1133,48 @@ class TestFullCycleLocalBackupRestoreWSchemaChange(TestFullCycleLocalBackupResto
             + "\n".join(diagnostics)
         )
 
-    def _drop_tables(self, tables: List[str]):
+    def _capture_schema(self, table_path: str):
+        desc = self.driver.scheme_client.describe_path(table_path)
+        cols = self._get_columns_from_scheme_entry(desc, path_hint=table_path)
+        return cols
+
+    def _create_table_with_data(self, session, path, not_null=False):
+        full_path = "/Root/" + path
+        session.create_table(
+            full_path,
+            ydb.TableDescription()
+            .with_column(
+                ydb.Column(
+                    "id",
+                    ydb.PrimitiveType.Uint32 if not_null else ydb.OptionalType(ydb.PrimitiveType.Uint32),
+                )
+            )
+            .with_column(ydb.Column("number", ydb.OptionalType(ydb.PrimitiveType.Uint64)))
+            .with_column(ydb.Column("txt", ydb.OptionalType(ydb.PrimitiveType.String)))
+            .with_column(ydb.Column("expire_at", ydb.OptionalType(ydb.PrimitiveType.Timestamp)))
+            .with_primary_keys("id"),
+        )
+
+        path_prefix, table = os.path.split(full_path)
+        session.transaction().execute(
+            (
+                f'PRAGMA TablePathPrefix("{path_prefix}"); '
+                f'UPSERT INTO {table} (id, number, txt, expire_at) VALUES '
+                f'(1, 10, "one", CurrentUtcTimestamp()), (2, 20, "two", CurrentUtcTimestamp()), (3, 30, "three", CurrentUtcTimestamp());'
+            ),
+            commit_tx=True,
+        )
+
+    def _setup_test_collections(self):
+        collection_src = f"coll_src_{int(time.time())}"
+        t1 = "orders"
+        t2 = "products"
+
         with self.session_scope() as session:
-            for t in tables:
-                full = f"/Root/{t}"
-                try:
-                    session.execute_scheme(f"DROP TABLE `{full}`;")
-                except Exception:
-                    # ignore failures
-                    pass
+            self._create_table_with_data(session, t1)
+            self._create_table_with_data(session, t2)
+
+        return collection_src, t1, t2
 
     def test_full_cycle_local_backup_restore_with_schema_changes(self):
         collection_src, t1, t2 = self._setup_test_collections()
@@ -1147,11 +1182,11 @@ class TestFullCycleLocalBackupRestoreWSchemaChange(TestFullCycleLocalBackupResto
         # Create backup collection (will reference the initial tables)
         self._create_backup_collection(collection_src, [t1, t2])
 
-        # === Step 4: Add/remove data, change ACLs (1), add more tables (1) ===
-        # perform first wave of modifications that must be captured by full backup 1
+        # Add/remove data, change ACLs, add more tables
+        # perform first stage of modifications that must be captured by full backup 1
         with self.session_scope() as session:
             # add & remove data
-            session.transaction().execute('PRAGMA TablePathPrefix("/Root"); UPSERT INTO orders (id, number, txt) VALUES (10, 100, "one-wave");', commit_tx=True)
+            session.transaction().execute('PRAGMA TablePathPrefix("/Root"); UPSERT INTO orders (id, number, txt) VALUES (10, 100, "one-stage");', commit_tx=True)
             session.transaction().execute('PRAGMA TablePathPrefix("/Root"); DELETE FROM products WHERE id = 1;', commit_tx=True)
 
             # change ACLs: try multiple grant syntaxes until success
@@ -1180,55 +1215,54 @@ class TestFullCycleLocalBackupRestoreWSchemaChange(TestFullCycleLocalBackupResto
                     break
             assert acl_applied, "Failed to apply any GRANT variant in step (1)"
 
-            # add more tables (1)
+            # add more tables
             create_table_with_data(session, "extra_table_1")
 
-        # capture state after wave 1
-        snapshot_wave1_t1 = self._capture_snapshot(t1)
-        snapshot_wave1_t2 = self._capture_snapshot(t2)
-        schema_wave1_t1 = self._capture_schema(f"/Root/{t1}")
-        schema_wave1_t2 = self._capture_schema(f"/Root/{t2}")
-        acl_wave1_t1 = self._capture_acl(f"/Root/{t1}")
-        acl_wave1_t2 = self._capture_acl(f"/Root/{t2}")
+        # capture state after stage 1
+        snapshot_stage1_t1 = self._capture_snapshot(t1)
+        snapshot_stage1_t2 = self._capture_snapshot(t2)
+        schema_stage1_t1 = self._capture_schema(f"/Root/{t1}")
+        schema_stage1_t2 = self._capture_schema(f"/Root/{t2}")
+        acl_stage1_t1 = self._capture_acl(f"/Root/{t1}")
+        acl_stage1_t2 = self._capture_acl(f"/Root/{t2}")
 
-        # === Create full backup 1 ===
+        # Create full backup 1
         self._backup_now(collection_src)
         self.wait_for_collection_has_snapshot(collection_src, timeout_s=30)
 
-        # === Step 7..12: modifications (2) include add/remove data, add more tables (2), remove some tables from step5,
-        # add/alter/drop columns, change ACLs ===
+        # modifications include add/remove data, add more tables, remove some tables,
+        # add/alter/drop columns, change ACLs
         with self.session_scope() as session:
             # data modifications
-            session.transaction().execute('PRAGMA TablePathPrefix("/Root"); UPSERT INTO orders (id, number, txt) VALUES (11, 111, "two-wave");', commit_tx=True)
+            session.transaction().execute('PRAGMA TablePathPrefix("/Root"); UPSERT INTO orders (id, number, txt) VALUES (11, 111, "two-stage");', commit_tx=True)
             session.transaction().execute('PRAGMA TablePathPrefix("/Root"); DELETE FROM orders WHERE id = 2;', commit_tx=True)
 
-            # add more tables (2)
+            # add more tables
             create_table_with_data(session, "extra_table_2")
 
             # remove some tables from step5: drop extra_table_1
             try:
                 session.execute_scheme('DROP TABLE `/Root/extra_table_1`;')
             except Exception:
-                pass
+                raise AssertionError("DROP failed")
 
             # add columns to initial tables
             try:
                 session.execute_scheme('ALTER TABLE `/Root/orders` ADD COLUMN new_col Uint32;')
             except Exception:
-                # if not supported, ignore but record
-                logger.info('ALTER TABLE ADD COLUMN not supported in this build')
+                raise AssertionError("ADD COLUMN failed")
 
             # attempt alter column (if supported) - many builds do not support complex ALTER, so guard with try
             try:
-                session.execute_scheme('ALTER TABLE `/Root/orders` ALTER COLUMN number SET NOT NULL;')
+                session.execute_scheme('ALTER TABLE `/Root/orders` SET (TTL = Interval("PT0S") ON expire_at);')
             except Exception:
-                logger.info('ALTER COLUMN ... SET NOT NULL not supported, skipping')
+                raise AssertionError("SET TTL failed")
 
             # drop columns
             try:
                 session.execute_scheme('ALTER TABLE `/Root/orders` DROP COLUMN new_col;')
             except Exception:
-                logger.info('DROP COLUMN new_col not supported or already dropped')
+                raise AssertionError("DROP COLUMN failed")
 
             # change ACLs again for initial tables
             desc_for_acl2 = self.driver.scheme_client.describe_path("/Root/orders")
@@ -1236,26 +1270,26 @@ class TestFullCycleLocalBackupRestoreWSchemaChange(TestFullCycleLocalBackupResto
             owner_quoted = owner_role2.replace('`', '')
             cmd = f"GRANT SELECT ON `/Root/orders` TO `{owner_quoted}`;"
             res = self._execute_yql(cmd)
-            assert res.exit_code == 0, "Failed to apply GRANT in wave 2"
+            assert res.exit_code == 0, "Failed to apply GRANT in stage 2"
 
-        # capture state after wave 2
-        snapshot_wave2_t1 = self._capture_snapshot(t1)
-        snapshot_wave2_t2 = self._capture_snapshot(t2)
-        schema_wave2_t1 = self._capture_schema(f"/Root/{t1}")
-        schema_wave2_t2 = self._capture_schema(f"/Root/{t2}")
-        acl_wave2_t1 = self._capture_acl(f"/Root/{t1}")
-        acl_wave2_t2 = self._capture_acl(f"/Root/{t2}")
+        # capture state after stage 2
+        snapshot_stage2_t1 = self._capture_snapshot(t1)
+        snapshot_stage2_t2 = self._capture_snapshot(t2)
+        schema_stage2_t1 = self._capture_schema(f"/Root/{t1}")
+        schema_stage2_t2 = self._capture_schema(f"/Root/{t2}")
+        acl_stage2_t1 = self._capture_acl(f"/Root/{t1}")
+        acl_stage2_t2 = self._capture_acl(f"/Root/{t2}")
 
-        # === Create full backup 2 ===
+        # Create full backup 2
         self._backup_now(collection_src)
         self.wait_for_collection_has_snapshot(collection_src, timeout_s=30)
 
-        # === Export backups so we can import snapshots into separate collections for restore verification ===
+        # Export backups so we can import snapshots into separate collections for restore verification
         export_dir, exported_items = self._export_backups(collection_src)
         # expect at least two exported snapshots (backup1 and backup2)
         assert len(exported_items) >= 2, "Expected at least 2 exported snapshots for verification"
 
-        # === Attempt to import exported backup into new collection and RESTORE while tables exist => expect fail ===
+        # Attempt to import exported backup into new collection and RESTORE while tables exist -> expect fail
         # create restore collections
         coll_restore_1 = f"coll_restore_v1_{int(time.time())}"
         coll_restore_2 = f"coll_restore_v2_{int(time.time())}"
@@ -1271,54 +1305,54 @@ class TestFullCycleLocalBackupRestoreWSchemaChange(TestFullCycleLocalBackupResto
         res_restore_when_exists = self._execute_yql(f"RESTORE `{coll_restore_1}`;")
         assert res_restore_when_exists.exit_code != 0, "Expected RESTORE to fail when target tables already exist"
 
-        # === Remove all tables from DB (orders, products, extras) ===
-        self._drop_tables([t1, t2, "extra_table_1", "extra_table_2"])  # ignore errors
+        # Remove all tables from DB (orders, products, extras)
+        self._drop_tables([t1, t2, "extra_table_2"])
 
-        # === Now RESTORE coll_restore_1 (which corresponds to backup1) ===
+        # Now RESTORE coll_restore_1 (which corresponds to backup1)
         res_restore1 = self._execute_yql(f"RESTORE `{coll_restore_1}`;")
         assert res_restore1.exit_code == 0, f"RESTORE v1 failed: {res_restore1.std_err or res_restore1.std_out}"
 
         # verify schema/data/acl for backup1
         # verify data
-        self._verify_restored_table_data(t1, snapshot_wave1_t1)
-        self._verify_restored_table_data(t2, snapshot_wave1_t2)
+        self._verify_restored_table_data(t1, snapshot_stage1_t1)
+        self._verify_restored_table_data(t2, snapshot_stage1_t2)
 
         # verify schema
         restored_schema_t1 = self._capture_schema(f"/Root/{t1}")
         restored_schema_t2 = self._capture_schema(f"/Root/{t2}")
-        assert restored_schema_t1 == schema_wave1_t1, f"Schema for {t1} after restore v1 differs: expected {schema_wave1_t1}, got {restored_schema_t1}"
-        assert restored_schema_t2 == schema_wave1_t2, f"Schema for {t2} after restore v1 differs: expected {schema_wave1_t2}, got {restored_schema_t2}"
+        assert restored_schema_t1 == schema_stage1_t1, f"Schema for {t1} after restore v1 differs: expected {schema_stage1_t1}, got {restored_schema_t1}"
+        assert restored_schema_t2 == schema_stage1_t2, f"Schema for {t2} after restore v1 differs: expected {schema_stage1_t2}, got {restored_schema_t2}"
 
         # verify acl
         restored_acl_t1 = self._capture_acl(f"/Root/{t1}")
         restored_acl_t2 = self._capture_acl(f"/Root/{t2}")
         # We compare that SHOW GRANTS output contains previously stored show_grants if present
-        if 'show_grants' in (acl_wave1_t1 or {}):
-            assert 'show_grants' in (restored_acl_t1 or {}) and acl_wave1_t1['show_grants'] in restored_acl_t1['show_grants']
-        if 'show_grants' in (acl_wave1_t2 or {}):
-            assert 'show_grants' in (restored_acl_t2 or {}) and acl_wave1_t2['show_grants'] in restored_acl_t2['show_grants']
+        if 'show_grants' in (acl_stage1_t1 or {}):
+            assert 'show_grants' in (restored_acl_t1 or {}) and acl_stage1_t1['show_grants'] in restored_acl_t1['show_grants']
+        if 'show_grants' in (acl_stage1_t2 or {}):
+            assert 'show_grants' in (restored_acl_t2 or {}) and acl_stage1_t2['show_grants'] in restored_acl_t2['show_grants']
 
         # === Remove all tables again and restore backup2 ===
-        self._drop_tables([t1, t2, "extra_table_1", "extra_table_2"])  # ignore errors
+        self._drop_tables([t1, t2])  # ignore errors
 
         res_restore2 = self._execute_yql(f"RESTORE `{coll_restore_2}`;")
         assert res_restore2.exit_code == 0, f"RESTORE v2 failed: {res_restore2.std_err or res_restore2.std_out}"
 
         # verify data/schema/acl for backup2
-        self._verify_restored_table_data(t1, snapshot_wave2_t1)
-        self._verify_restored_table_data(t2, snapshot_wave2_t2)
+        self._verify_restored_table_data(t1, snapshot_stage2_t1)
+        self._verify_restored_table_data(t2, snapshot_stage2_t2)
 
         restored_schema2_t1 = self._capture_schema(f"/Root/{t1}")
         restored_schema2_t2 = self._capture_schema(f"/Root/{t2}")
-        assert restored_schema2_t1 == schema_wave2_t1, f"Schema for {t1} after restore v2 differs: expected {schema_wave2_t1}, got {restored_schema2_t1}"
-        assert restored_schema2_t2 == schema_wave2_t2, f"Schema for {t2} after restore v2 differs: expected {schema_wave2_t2}, got {restored_schema2_t2}"
+        assert restored_schema2_t1 == schema_stage2_t1, f"Schema for {t1} after restore v2 differs: expected {schema_stage2_t1}, got {restored_schema2_t1}"
+        assert restored_schema2_t2 == schema_stage2_t2, f"Schema for {t2} after restore v2 differs: expected {schema_stage2_t2}, got {restored_schema2_t2}"
 
         restored_acl2_t1 = self._capture_acl(f"/Root/{t1}")
         restored_acl2_t2 = self._capture_acl(f"/Root/{t2}")
-        if 'show_grants' in (acl_wave2_t1 or {}):
-            assert 'show_grants' in (restored_acl2_t1 or {}) and acl_wave2_t1['show_grants'] in restored_acl2_t1['show_grants']
-        if 'show_grants' in (acl_wave2_t2 or {}):
-            assert 'show_grants' in (restored_acl2_t2 or {}) and acl_wave2_t2['show_grants'] in restored_acl2_t2['show_grants']
+        if 'show_grants' in (acl_stage2_t1 or {}):
+            assert 'show_grants' in (restored_acl2_t1 or {}) and acl_stage2_t1['show_grants'] in restored_acl2_t1['show_grants']
+        if 'show_grants' in (acl_stage2_t2 or {}):
+            assert 'show_grants' in (restored_acl2_t2 or {}) and acl_stage2_t2['show_grants'] in restored_acl2_t2['show_grants']
 
         # cleanup exported data
         if os.path.exists(export_dir):

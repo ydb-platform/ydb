@@ -16,25 +16,7 @@ namespace NKikimr {
 namespace NMiniKQL {
 
 TComputationNodeFactory GetKqpBaseComputeFactory(const TKqpComputeContextBase* computeCtx) {
-    auto dqFactory = NYql::NDq::GetDqBaseComputeFactory(computeCtx);
-    
-    return [dqFactory](TCallable& callable, const TComputationNodeFactoryContext& ctx) -> IComputationNode* {
-        // Try KQP-specific callables first
-        if (callable.GetType()->GetName() == "FulltextAnalyze") {
-            return WrapFulltextAnalyze(callable, ctx);
-        }
-        
-        if (callable.GetType()->GetName() == "KqpEnsure") {
-            return WrapKqpEnsure(callable, ctx);
-        }
-        
-        if (callable.GetType()->GetName() == "KqpIndexLookupJoin") {
-            return WrapKqpIndexLookupJoin(callable, ctx);
-        }
-        
-        // Fall back to DQ factory
-        return dqFactory(callable, ctx);
-    };
+    return NYql::NDq::GetDqBaseComputeFactory(computeCtx);
 }
 
 namespace {

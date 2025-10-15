@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import warnings
-from functools import lru_cache, partial, update_wrapper
+from functools import partial, update_wrapper
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -38,7 +38,7 @@ from .helpers import DEBUG, AppKey
 from .http_parser import RawRequestMessage
 from .log import web_logger
 from .streams import StreamReader
-from .typedefs import Handler, Middleware
+from .typedefs import Middleware
 from .web_exceptions import NotAppKeyWarning
 from .web_log import AccessLogger
 from .web_middlewares import _fix_request_current_app
@@ -76,18 +76,6 @@ else:
 
 _T = TypeVar("_T")
 _U = TypeVar("_U")
-_Resource = TypeVar("_Resource", bound=AbstractResource)
-
-
-@lru_cache(None)
-def _build_middlewares(
-    handler: Handler, apps: Tuple["Application", ...]
-) -> Callable[[Request], Awaitable[StreamResponse]]:
-    """Apply middlewares to handler."""
-    for app in apps[::-1]:
-        for m, _ in app._middlewares_handlers:  # type: ignore[union-attr]
-            handler = update_wrapper(partial(m, handler=handler), handler)  # type: ignore[misc]
-    return handler
 
 
 class Application(MutableMapping[Union[str, AppKey[Any]], Any]):
@@ -100,7 +88,6 @@ class Application(MutableMapping[Union[str, AppKey[Any]], Any]):
             "_handler_args",
             "_middlewares",
             "_middlewares_handlers",
-            "_has_legacy_middlewares",
             "_run_middlewares",
             "_state",
             "_frozen",
@@ -155,7 +142,6 @@ class Application(MutableMapping[Union[str, AppKey[Any]], Any]):
         self._middlewares_handlers: _MiddlewaresHandlers = None
         # initialized on freezing
         self._run_middlewares: Optional[bool] = None
-        self._has_legacy_middlewares: bool = True
 
         self._state: Dict[Union[AppKey[Any], str], object] = {}
         self._frozen = False
@@ -197,10 +183,12 @@ class Application(MutableMapping[Union[str, AppKey[Any]], Any]):
         return self is other
 
     @overload  # type: ignore[override]
-    def __getitem__(self, key: AppKey[_T]) -> _T: ...
+    def __getitem__(self, key: AppKey[_T]) -> _T:
+        ...
 
     @overload
-    def __getitem__(self, key: str) -> Any: ...
+    def __getitem__(self, key: str) -> Any:
+        ...
 
     def __getitem__(self, key: Union[str, AppKey[_T]]) -> Any:
         return self._state[key]
@@ -214,10 +202,12 @@ class Application(MutableMapping[Union[str, AppKey[Any]], Any]):
             )
 
     @overload  # type: ignore[override]
-    def __setitem__(self, key: AppKey[_T], value: _T) -> None: ...
+    def __setitem__(self, key: AppKey[_T], value: _T) -> None:
+        ...
 
     @overload
-    def __setitem__(self, key: str, value: Any) -> None: ...
+    def __setitem__(self, key: str, value: Any) -> None:
+        ...
 
     def __setitem__(self, key: Union[str, AppKey[_T]], value: Any) -> None:
         self._check_frozen()
@@ -241,17 +231,17 @@ class Application(MutableMapping[Union[str, AppKey[Any]], Any]):
     def __iter__(self) -> Iterator[Union[str, AppKey[Any]]]:
         return iter(self._state)
 
-    def __hash__(self) -> int:
-        return id(self)
-
     @overload  # type: ignore[override]
-    def get(self, key: AppKey[_T], default: None = ...) -> Optional[_T]: ...
+    def get(self, key: AppKey[_T], default: None = ...) -> Optional[_T]:
+        ...
 
     @overload
-    def get(self, key: AppKey[_T], default: _U) -> Union[_T, _U]: ...
+    def get(self, key: AppKey[_T], default: _U) -> Union[_T, _U]:
+        ...
 
     @overload
-    def get(self, key: str, default: Any = ...) -> Any: ...
+    def get(self, key: str, default: Any = ...) -> Any:
+        ...
 
     def get(self, key: Union[str, AppKey[_T]], default: Any = None) -> Any:
         return self._state.get(key, default)
@@ -300,9 +290,6 @@ class Application(MutableMapping[Union[str, AppKey[Any]], Any]):
         self._on_shutdown.freeze()
         self._on_cleanup.freeze()
         self._middlewares_handlers = tuple(self._prepare_middleware())
-        self._has_legacy_middlewares = any(
-            not new_style for _, new_style in self._middlewares_handlers
-        )
 
         # If current app and any subapp do not have middlewares avoid run all
         # of the code footprint that it implies, which have a middleware
@@ -347,7 +334,7 @@ class Application(MutableMapping[Union[str, AppKey[Any]], Any]):
         reg_handler("on_shutdown")
         reg_handler("on_cleanup")
 
-    def add_subapp(self, prefix: str, subapp: "Application") -> PrefixedSubAppResource:
+    def add_subapp(self, prefix: str, subapp: "Application") -> AbstractResource:
         if not isinstance(prefix, str):
             raise TypeError("Prefix must be str")
         prefix = prefix.rstrip("/")
@@ -357,8 +344,8 @@ class Application(MutableMapping[Union[str, AppKey[Any]], Any]):
         return self._add_subapp(factory, subapp)
 
     def _add_subapp(
-        self, resource_factory: Callable[[], _Resource], subapp: "Application"
-    ) -> _Resource:
+        self, resource_factory: Callable[[], AbstractResource], subapp: "Application"
+    ) -> AbstractResource:
         if self.frozen:
             raise RuntimeError("Cannot add sub application to frozen application")
         if subapp.frozen:
@@ -372,7 +359,7 @@ class Application(MutableMapping[Union[str, AppKey[Any]], Any]):
             subapp._set_loop(self._loop)
         return resource
 
-    def add_domain(self, domain: str, subapp: "Application") -> MatchedSubAppResource:
+    def add_domain(self, domain: str, subapp: "Application") -> AbstractResource:
         if not isinstance(domain, str):
             raise TypeError("Domain must be str")
         elif "*" in domain:
@@ -533,30 +520,29 @@ class Application(MutableMapping[Union[str, AppKey[Any]], Any]):
 
         match_info.freeze()
 
+        resp = None
         request._match_info = match_info
-
-        if request.headers.get(hdrs.EXPECT):
+        expect = request.headers.get(hdrs.EXPECT)
+        if expect:
             resp = await match_info.expect_handler(request)
             await request.writer.drain()
-            if resp is not None:
-                return resp
 
-        handler = match_info.handler
+        if resp is None:
+            handler = match_info.handler
 
-        if self._run_middlewares:
-            if not self._has_legacy_middlewares:
-                handler = _build_middlewares(handler, match_info.apps)
-            else:
+            if self._run_middlewares:
                 for app in match_info.apps[::-1]:
                     for m, new_style in app._middlewares_handlers:  # type: ignore[union-attr]
                         if new_style:
                             handler = update_wrapper(
-                                partial(m, handler=handler), handler  # type: ignore[misc]
+                                partial(m, handler=handler), handler
                             )
                         else:
                             handler = await m(app, handler)  # type: ignore[arg-type,assignment]
 
-        return await handler(request)
+            resp = await handler(request)
+
+        return resp
 
     def __call__(self) -> "Application":
         """gunicorn compatibility"""
@@ -599,7 +585,7 @@ class CleanupContext(_CleanupContextBase):
                 await it.__anext__()
             except StopAsyncIteration:
                 pass
-            except (Exception, asyncio.CancelledError) as exc:
+            except Exception as exc:
                 errors.append(exc)
             else:
                 errors.append(RuntimeError(f"{it!r} has more than one 'yield'"))

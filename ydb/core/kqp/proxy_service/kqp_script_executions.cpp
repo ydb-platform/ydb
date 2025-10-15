@@ -246,7 +246,7 @@ private:
             NKikimrServices::KQP_PROXY,
             TtlCol("expire_at", DEADLINE_OFFSET, BRO_RUN_INTERVAL),
             {},
-            /* isSystemUser */ true,
+            /* isSystemUser */ featureFlags.GetEnableSecureScriptExecutions(),
             Nothing(),
             GetTableACL(featureFlags)
         );
@@ -267,7 +267,7 @@ private:
             NKikimrServices::KQP_PROXY,
             TtlCol("expire_at", DEADLINE_OFFSET, BRO_RUN_INTERVAL),
             {},
-            /* isSystemUser */ true,
+            /* isSystemUser */ featureFlags.GetEnableSecureScriptExecutions(),
             Nothing(),
             GetTableACL(featureFlags)
         );
@@ -289,7 +289,7 @@ private:
             NKikimrServices::KQP_PROXY,
             TtlCol("expire_at", DEADLINE_OFFSET, BRO_RUN_INTERVAL),
             {},
-            /* isSystemUser */ true,
+            /* isSystemUser */ featureFlags.GetEnableSecureScriptExecutions(),
             Nothing(),
             GetTableACL(featureFlags)
         );

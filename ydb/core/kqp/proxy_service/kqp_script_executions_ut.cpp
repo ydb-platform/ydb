@@ -20,6 +20,7 @@ namespace NKikimr::NKqp {
 
 using namespace Tests;
 using namespace NSchemeShard;
+using namespace fmt::literals;
 
 namespace  {
 
@@ -118,6 +119,12 @@ struct TScriptExecutionsYdbSetup {
         auto createSessionResult = TableClient->CreateSession().ExtractValueSync();
         UNIT_ASSERT_C(createSessionResult.IsSuccess(), createSessionResult.GetIssues().ToString());
         TableClientSession = MakeHolder<NYdb::NTable::TSession>(createSessionResult.GetSession());
+
+        const auto result = TableClientSession->ExecuteSchemeQuery(fmt::format(R"(
+                GRANT ALL ON `/dc-1` TO `{user}`;
+            )", "user"_a = BUILTIN_ACL_ROOT
+        )).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToOneLineString());
 
         Cerr << "\n\n\n--------------------------- INIT FINISHED ---------------------------\n\n\n";
     }
@@ -636,8 +643,6 @@ Y_UNIT_TEST_SUITE(ScriptExecutionsTest) {
     }
 
     Y_UNIT_TEST(TestSecureScriptExecutions) {
-        using namespace fmt::literals;
-
         TScriptExecutionsYdbSetup ydb(false, /* secureScriptExecutions */ true);
         ydb.CreateQueryInDb();
 

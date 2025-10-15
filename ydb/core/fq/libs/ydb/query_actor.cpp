@@ -40,7 +40,6 @@ private:
     }
     
     STATEFN(StateWork) {
-        Cerr << "StateFunc 777" << Endl;
         switch (ev->GetTypeRewrite()) {
             cFunc(NActors::TEvents::TEvBootstrap::EventType, DoBootstrap);
             hFunc(TEvQuerySession::TEvExecuteDataQuery, Handle);
@@ -121,7 +120,7 @@ private:
         if (DataQuery->TxControl.SnapshotRead) {
             tx.SnapshotRead(true);
         }
-        Cerr << "Run query " << DataQuery->Sql << " tx.Begin " << tx.Begin_ << " tx.Commit " << tx.Commit_ << Endl; 
+        LOG_T("Run query " << DataQuery->Sql << " tx.Begin " << tx.Begin_ << " tx.Commit " << tx.Commit_); 
         RunDataQuery(DataQuery->Sql, DataQuery->Params.get()/*, tx*/);
     }
 

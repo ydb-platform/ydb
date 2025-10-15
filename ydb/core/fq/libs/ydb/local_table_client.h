@@ -137,7 +137,6 @@ struct TLocalYdbTableClient : public IYdbTableClient {
     NYdb::TAsyncStatus RetryOperation(
         TOperationFunc&& operation,
         const NYdb::NRetry::TRetryOperationSettings& settings = NYdb::NRetry::TRetryOperationSettings()) override {
-        LOG_STREAMS_STORAGE_SERVICE_INFO("TLocalYdbTableClient::RetryOperation()");
         auto promise = NThreading::NewPromise<NYdb::TStatus>();
         NActors::TActivationContext::Register(new TRetryOperationActor(promise, std::move(operation), settings));
         return promise.GetFuture();

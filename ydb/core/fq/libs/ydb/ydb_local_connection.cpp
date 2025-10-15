@@ -9,7 +9,6 @@ struct TLocalYdbConnection : public IYdbConnection {
     : TablePathPrefix(tablePathPrefix)
     , Db(db)
     , TableClient(CreateLocalTableClient()) {
-        LOG_STREAMS_STORAGE_SERVICE_INFO("TLocalYdbConnection()");
     }
 
     IYdbTableClient::TPtr GetTableClient() override {

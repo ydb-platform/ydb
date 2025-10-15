@@ -10,6 +10,7 @@
 
 #include <util/system/env.h>
 #include <ydb/core/testlib/test_client.h>
+#include <ydb/core/base/backtrace.h>
 
 namespace NFq {
 
@@ -21,18 +22,19 @@ using TTxControl = NFq::ISession::TTxControl;
 
 namespace {
 
-////////////////////////////////////////////////////////////////////////////////
+template<typename TValue>
+class TProxyActor : public TActorBootstrapped<TProxyActor<TValue>> {
+public:
+    TProxyActor(NThreading::TPromise<TValue> p, std::function<TValue()> operation)
+        : Promise(p)
+        , Operation(operation) { }
 
-TFuture<TStatus> CheckTransactionClosed(const TFuture<TStatus>& future, const TGenerationContextPtr& context) {
-    return future.Apply(
-        [context] (const TFuture<TStatus>& future) {
-            if (context->Session->HasActiveTransaction()) {
-                auto status = MakeErrorStatus(EStatus::INTERNAL_ERROR, "unfinished transaction");
-                return MakeFuture(status);
-            }
-            return future;
-        });
-}
+    void Bootstrap() { Promise.SetValue(Operation()); }
+    NThreading::TPromise<TValue> Promise;
+    std::function<TValue()> Operation;
+};
+
+////////////////////////////////////////////////////////////////////////////////
 
 TFuture<TStatus> UpsertDummyInTransaction(const TFuture<TStatus>& future, const TGenerationContextPtr& context) {
     return future.Apply(
@@ -80,20 +82,19 @@ class TRegisterCheckTestBase: public NUnitTest::TTestBase/*, public TMyFixture<U
     THolder<Tests::TClient> Client;
 public:
 
-    IYdbConnection::TPtr MakeConnection(const char* tablePrefix) {
+    IYdbConnection::TPtr MakeConnection() {
         NKikimrConfig::TExternalStorage config;
 
         config.SetEndpoint(GetEnv("YDB_ENDPOINT"));
         config.SetDatabase(GetEnv("YDB_DATABASE"));
         config.SetToken("");
-        config.SetTablePrefix(tablePrefix);
+        config.SetTablePrefix(CreateGuidAsString());
 
         NYdb::TDriver driver({});
         if (UseSdkConnection) {
             Connection = CreateSdkYdbConnection(config, NKikimr::CreateYdbCredentialsProviderFactory, driver);
         } else {
-            InitLocalConnection();
-            Connection = CreateLocalYdbConnection("db", "test/checkpoints");
+            Connection = CreateLocalYdbConnection(Server->GetRuntime()->GetAppData().TenantName, ".metadata/checkpoints");
         }
 
         // auto status = Connection->SchemeClient.MakeDirectory(Connection->TablePathPrefix).GetValueSync();
@@ -105,48 +106,92 @@ public:
             .SetPrimaryKeyColumn("id")
             .Build();
 
-        auto status = CreateTable(Connection, "test", std::move(desc)).GetValueSync();
+        auto status = CreateTable("test", std::move(desc)).GetValueSync();
         UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
         return Connection;
     }
 
+    void SetUp() override {
+        if (!UseSdkConnection) {
+            InitRuntime();
+        }
+        Connection = MakeConnection();
+    }
+
     void TearDown() override {
+        if (!UseSdkConnection) {
+            return; // DropTable is not supported
+        }
         if (Connection) {
             auto tablePath = JoinPath(Connection->GetTablePathPrefix(), "test");
-            Connection->GetTableClient()->RetryOperation(
+            RetryOperation(
                 [tablePath = std::move(tablePath)] (ISession::TPtr session) mutable {
                     return session->DropTable(tablePath);
                 }).GetValueSync();;
         }
     }
 
-    void InitLocalConnection() {
+     static void BackTraceSignalHandler(int signal) {
+        NColorizer::TColors colors = NColorizer::AutoColors(Cerr);
+        Cerr << colors.Red() << "======= " << signal << " call stack ========" << colors.Default() << Endl;
+        FormatBackTrace(&Cerr);
+        Cerr << colors.Red() << "===============================================" << colors.Default() << Endl;
+        abort();
+    }
+
+    void InitRuntime() {
+        EnableYDBBacktraceFormat();
+        for (auto sig : {SIGILL, SIGSEGV}) {
+            signal(sig, &TSelf::BackTraceSignalHandler);
+        }
+
         MsgBusPort = PortManager.GetPort(2134);
-        GrpcPort = PortManager.GetPort(2135);
         NKikimrProto::TAuthConfig authConfig;
-        authConfig.SetUseBuiltinDomain(true);
         ServerSettings = MakeHolder<Tests::TServerSettings>(MsgBusPort, authConfig);
-        ServerSettings->AppConfig->MutableQueryServiceConfig()->MutableCheckpointsConfig()->SetEnabled(true);
-        ServerSettings->AppConfig->MutableFeatureFlags()->SetEnableStreamingQueries(true);
-
-        NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableStreamingQueries(true);
-        ServerSettings->SetFeatureFlags(featureFlags);
-
-        ServerSettings->SetEnableScriptExecutionOperations(true);
-        ServerSettings->SetInitializeFederatedQuerySetupFactory(true);
-        ServerSettings->SetGrpcPort(GrpcPort);
         ServerSettings->NodeCount = 1;
         Server = MakeHolder<Tests::TServer>(*ServerSettings);
         Client = MakeHolder<Tests::TClient>(*ServerSettings);
-     //   Server->GetRuntime()->SetLogPriority(NKikimrServices::KQP_PROXY, NActors::NLog::PRI_DEBUG);
-        Server->GetRuntime()->SetLogPriority(NKikimrServices::STREAMS_STORAGE_SERVICE, NActors::NLog::PRI_DEBUG);
-       // Server->GetRuntime()->SetDispatchTimeout(TestTimeout);
-        Server->EnableGRpc(GrpcPort);
         Client->InitRootScheme();
 
         Sleep(TDuration::Seconds(5));
         Cerr << "\n\n\n--------------------------- INIT FINISHED ---------------------------\n\n\n";
+    }
+
+    TFuture<TStatus> CheckTransactionClosed(const TFuture<TStatus>& future, const TGenerationContextPtr& context) {
+        if (!UseSdkConnection) {
+            return future;  // HasActiveTransaction in local connection is not fully supported
+        }
+        return future.Apply(
+            [context] (const TFuture<TStatus>& future) {
+                if (context->Session->HasActiveTransaction()) {
+                    auto status = MakeErrorStatus(EStatus::INTERNAL_ERROR, "unfinished transaction");
+                    return MakeFuture(status);
+                }
+                return future;
+            });
+    }
+
+    template<typename TValue>
+    auto Call(std::function<TValue()> operation) {
+        if (UseSdkConnection) {
+            return operation();     
+        }
+        auto promise = NThreading::NewPromise<TValue>();
+        Server->GetRuntime()->Register(new TProxyActor<TValue>(promise, operation));
+        return promise.GetFuture().GetValueSync();
+    }
+
+    NYdb::TAsyncStatus RetryOperation(
+        std::function<NYdb::TAsyncStatus(ISession::TPtr)> operation) {
+        auto f = [&](){ return Connection->GetTableClient()->RetryOperation(std::move(operation)); };
+        return Call<NYdb::TAsyncStatus>(f);
+    }
+
+    NYdb::TAsyncStatus CreateTable(
+        const TString& name,
+        NYdb::NTable::TTableDescription&& description) {
+        auto f = [&]() { return NFq::CreateTable(Connection, name, std::move(description));};
+        return Call<NYdb::TAsyncStatus>(f);
     }
 
    // static constexpr char const* SuiteName = "TRegisterCheckTestBase";//#UseSdkConnection;
@@ -165,10 +210,8 @@ public:
     UNIT_TEST_SUITE_END();
 
     void ShouldRegisterCheckNewGeneration() {
-        auto connection = MakeConnection("ShouldRegisterCheckNewGeneration");
-
-        auto future = connection->GetTableClient()->RetryOperation(
-            [prefix = connection->GetTablePathPrefix()] (ISession::TPtr session) {
+        auto future = RetryOperation(
+            [prefix = Connection->GetTablePathPrefix(), this] (ISession::TPtr session) {
                 auto context = MakeIntrusive<TGenerationContext>(
                     session,
                     true,
@@ -189,10 +232,8 @@ public:
 
     void ShouldRegisterCheckSameGeneration()
     {
-        auto connection = MakeConnection("ShouldRegisterCheckSameGeneration");
-
-        auto future = connection->GetTableClient()->RetryOperation(
-            [prefix = connection->GetTablePathPrefix()] (ISession::TPtr session) {
+        auto future = RetryOperation(
+            [prefix = Connection->GetTablePathPrefix()] (ISession::TPtr session) {
                 auto context = MakeIntrusive<TGenerationContext>(
                     session,
                     true,
@@ -209,8 +250,8 @@ public:
         auto status = future.GetValueSync();
         UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
 
-        future = connection->GetTableClient()->RetryOperation(
-            [prefix = connection->GetTablePathPrefix()] (ISession::TPtr session) {
+        future = RetryOperation(
+            [prefix = Connection->GetTablePathPrefix(), this] (ISession::TPtr session) {
                 auto context = MakeIntrusive<TGenerationContext>(
                     session,
                     true,
@@ -231,10 +272,8 @@ public:
 
     void ShouldRegisterCheckNextGeneration()
     {
-        auto connection = MakeConnection("ShouldRegisterCheckNextGeneration");
-
-        auto future = connection->GetTableClient()->RetryOperation(
-            [prefix = connection->GetTablePathPrefix()] (ISession::TPtr session) {
+        auto future = RetryOperation(
+            [prefix = Connection->GetTablePathPrefix()] (ISession::TPtr session) {
                 auto context = MakeIntrusive<TGenerationContext>(
                     session,
                     true,
@@ -251,8 +290,8 @@ public:
         auto status = future.GetValueSync();
         UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
 
-        future = connection->GetTableClient()->RetryOperation(
-            [prefix = connection->GetTablePathPrefix()] (ISession::TPtr session) {
+        future = RetryOperation(
+            [prefix = Connection->GetTablePathPrefix()] (ISession::TPtr session) {
                 auto context = MakeIntrusive<TGenerationContext>(
                     session,
                     true,
@@ -272,10 +311,8 @@ public:
 
     void ShouldNotRegisterCheckPrevGeneration()
     {
-        auto connection = MakeConnection("ShouldNotRegisterCheckPrevGeneration");
-
-        auto future = connection->GetTableClient()->RetryOperation(
-            [prefix = connection->GetTablePathPrefix()] (ISession::TPtr session) {
+        auto future = RetryOperation(
+            [prefix = Connection->GetTablePathPrefix()] (ISession::TPtr session) {
                 auto context = MakeIntrusive<TGenerationContext>(
                     session,
                     true,
@@ -292,8 +329,8 @@ public:
         auto status = future.GetValueSync();
         UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
 
-        future = connection->GetTableClient()->RetryOperation(
-            [prefix = connection->GetTablePathPrefix()] (ISession::TPtr session) {
+        future = RetryOperation(
+            [prefix = Connection->GetTablePathPrefix(), this] (ISession::TPtr session) {
                 auto context = MakeIntrusive<TGenerationContext>(
                     session,
                     true,
@@ -314,10 +351,8 @@ public:
 
     void ShouldNotRegisterCheckPrevGeneration2()
     {
-        auto connection = MakeConnection("ShouldNotRegisterCheckPrevGeneration2");
-
-        auto future = connection->GetTableClient()->RetryOperation(
-            [prefix = connection->GetTablePathPrefix()] (ISession::TPtr session) {
+        auto future = RetryOperation(
+            [prefix = Connection->GetTablePathPrefix()] (ISession::TPtr session) {
                 auto context = MakeIntrusive<TGenerationContext>(
                     session,
                     true,
@@ -334,8 +369,8 @@ public:
         auto status = future.GetValueSync();
         UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
 
-        future = connection->GetTableClient()->RetryOperation(
-            [prefix = connection->GetTablePathPrefix()] (ISession::TPtr session) {
+        future = RetryOperation(
+            [prefix = Connection->GetTablePathPrefix(), this] (ISession::TPtr session) {
                 auto context = MakeIntrusive<TGenerationContext>(
                     session,
                     false, // the only difference with ShouldNotRegisterCheckPrevGeneration
@@ -356,18 +391,16 @@ public:
 
     void ShouldRegisterCheckNewGenerationAndTransact()
     {
-        auto connection = MakeConnection("ShouldRegisterCheckNewGenerationAndTransact");
-
         auto desc = TTableBuilder()
             .AddNullableColumn("id", EPrimitiveType::String)
             .SetPrimaryKeyColumn("id")
             .Build();
 
-        auto status = CreateTable(connection, "dummy", std::move(desc)).GetValueSync();
+        auto status = CreateTable("dummy", std::move(desc)).GetValueSync();
         UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
 
-        auto future = connection->GetTableClient()->RetryOperation(
-            [prefix = connection->GetTablePathPrefix()] (ISession::TPtr session) {
+        auto future = RetryOperation(
+            [prefix = Connection->GetTablePathPrefix()] (ISession::TPtr session) {
                 auto context = MakeIntrusive<TGenerationContext>(
                     session,
                     false,
@@ -388,18 +421,16 @@ public:
 
     void ShouldRegisterCheckSameGenerationAndTransact()
     {
-        auto connection = MakeConnection("ShouldRegisterCheckNewGenerationAndTransact");
-
         auto desc = TTableBuilder()
             .AddNullableColumn("id", EPrimitiveType::String)
             .SetPrimaryKeyColumn("id")
             .Build();
 
-        auto status = CreateTable(connection, "dummy", std::move(desc)).GetValueSync();
+        auto status = CreateTable("dummy", std::move(desc)).GetValueSync();
         UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
 
-        auto future = connection->GetTableClient()->RetryOperation(
-            [prefix = connection->GetTablePathPrefix()] (ISession::TPtr session) {
+        auto future = RetryOperation(
+            [prefix = Connection->GetTablePathPrefix()] (ISession::TPtr session) {
                 auto context = MakeIntrusive<TGenerationContext>(
                     session,
                     true,
@@ -416,8 +447,8 @@ public:
         status = future.GetValueSync();
         UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
 
-        future = connection->GetTableClient()->RetryOperation(
-            [prefix = connection->GetTablePathPrefix()] (ISession::TPtr session) {
+        future = RetryOperation(
+            [prefix = Connection->GetTablePathPrefix()] (ISession::TPtr session) {
                 auto context = MakeIntrusive<TGenerationContext>(
                     session,
                     false,
@@ -434,14 +465,13 @@ public:
 
         status = future.GetValueSync();
         UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+
     }
 
     void ShouldRollbackTransactionWhenCheckFails()
     {
-        auto connection = MakeConnection("ShouldRollbackTransactionWhenCheckFails");
-
-        auto future = connection->GetTableClient()->RetryOperation(
-            [prefix = connection->GetTablePathPrefix()] (ISession::TPtr session) {
+        auto future = RetryOperation(
+            [prefix = Connection->GetTablePathPrefix()] (ISession::TPtr session) {
                 auto context = MakeIntrusive<TGenerationContext>(
                     session,
                     true,
@@ -458,8 +488,8 @@ public:
         auto status = future.GetValueSync();
         UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
 
-        future = connection->GetTableClient()->RetryOperation(
-            [prefix = connection->GetTablePathPrefix()] (ISession::TPtr session) {
+        future = RetryOperation(
+            [prefix = Connection->GetTablePathPrefix(), this] (ISession::TPtr session) {
                 auto context = MakeIntrusive<TGenerationContext>(
                     session,
                     false,
@@ -480,10 +510,8 @@ public:
 
     void ShouldRollbackTransactionWhenCheckFails2()
     {
-        auto connection = MakeConnection("ShouldRollbackTransactionWhenCheckFails2");
-
-        auto future = connection->GetTableClient()->RetryOperation(
-            [prefix = connection->GetTablePathPrefix()] (ISession::TPtr session) {
+        auto future = RetryOperation(
+            [prefix = Connection->GetTablePathPrefix()] (ISession::TPtr session) {
                 auto context = MakeIntrusive<TGenerationContext>(
                     session,
                     true,
@@ -500,8 +528,8 @@ public:
         auto status = future.GetValueSync();
         UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
 
-        future = connection->GetTableClient()->RetryOperation(
-            [prefix = connection->GetTablePathPrefix()] (ISession::TPtr session) {
+        future = RetryOperation(
+            [prefix = Connection->GetTablePathPrefix(), this] (ISession::TPtr session) {
                 auto context = MakeIntrusive<TGenerationContext>(
                     session,
                     true, // the only difference with ShouldRollbackTransactionWhenCheckFails

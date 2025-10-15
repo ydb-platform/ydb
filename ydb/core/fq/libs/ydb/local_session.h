@@ -115,6 +115,12 @@ struct TLocalSession : public ISession {
             TEvQuerySession::TTxControl{txControl.Begin_, txControl.Commit_, txControl.Continue_, txControl.SnapshotRead_},
             execDataQuerySettings,
             promise));
+
+        if (txControl.Begin_) {
+            HasTransaction = true;
+        } else if (txControl.Commit_) {
+            HasTransaction = false;
+        }
         return promise.GetFuture();
     }
 
@@ -142,11 +148,12 @@ struct TLocalSession : public ISession {
     }
     
     bool HasActiveTransaction() override {
-        return true;
+        return HasTransaction;
     }
 
 private: 
     NActors::TActorId QuerySessionId;
+    bool HasTransaction = false;
 };
 
 } // namespace NFq

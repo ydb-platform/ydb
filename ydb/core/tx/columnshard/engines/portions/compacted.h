@@ -33,11 +33,13 @@ public:
         NAssembling::TColumnAssemblingInfo& /*column*/, const std::optional<TSnapshot>& /*defaultSnapshot*/) const override {
 //        AFL_VERIFY(false);
     }
-    virtual NSplitter::TEntityGroups GetEntityGroupsByStorageId(
-        const TString& specialTier, const IStoragesManager& storages, const TIndexInfo& indexInfo) const override;
+    virtual NSplitter::TEntityGroups GetEntityGroupsByStorageId(const TString& specialTier, const IStoragesManager& storages,
+        const TIndexInfo& indexInfo, const IColumnIndexAccessor& indexAccessor) const override;
     virtual const TString& GetColumnStorageId(const ui32 columnId, const TIndexInfo& indexInfo) const override;
-    virtual const TString& GetEntityStorageId(const ui32 columnId, const TIndexInfo& indexInfo) const override;
-    virtual const TString& GetIndexStorageId(const ui32 indexId, const TIndexInfo& indexInfo) const override;
+    virtual const TString& GetEntityStorageId(
+        const ui32 columnId, const TIndexInfo& indexInfo, const IColumnIndexAccessor& indexAccessor) const override;
+    virtual const TString& GetIndexStorageId(
+        const ui32 indexId, const TIndexInfo& indexInfo, const IColumnIndexAccessor& indexAccessor) const override;
     virtual std::unique_ptr<TPortionInfoConstructor> BuildConstructor(const bool withMetadata) const override;
     virtual const TSnapshot& RecordSnapshotMin(const std::optional<TSnapshot>& /*snapshotDefault*/) const override;
     virtual const TSnapshot& RecordSnapshotMax(const std::optional<TSnapshot>& /*snapshotDefault*/) const override;

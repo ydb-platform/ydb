@@ -2,6 +2,7 @@
 #include "read_with_blobs.h"
 #include "write_with_blobs.h"
 
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
 #include <ydb/core/tx/columnshard/engines/scheme/versions/filtered_scheme.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
@@ -123,10 +124,13 @@ std::optional<TWritePortionInfoWithBlobsResult> TReadPortionInfoWithBlobs::SyncP
     TIndexInfo::TSecondaryData secondaryData;
     secondaryData.MutableExternalData() = entityChunksNew;
     for (auto&& i : to->GetIndexInfo().GetIndexes()) {
-        to->GetIndexInfo().AppendIndex(entityChunksNew, i.first, storages, source.PortionInfo.GetPortionInfo().GetRecordsCount(), secondaryData).Validate();
+        to->GetIndexInfo()
+            .AppendIndex(entityChunksNew, i.first, storages, source.PortionInfo.GetPortionInfo().GetRecordsCount(), targetTier, secondaryData)
+            .Validate();
     }
 
-    const NSplitter::TEntityGroups groups = source.PortionInfo.GetPortionInfo().GetEntityGroupsByStorageId(targetTier, *storages, to->GetIndexInfo());
+    const NSplitter::TEntityGroups groups = source.PortionInfo.GetPortionInfo().GetEntityGroupsByStorageId(
+        targetTier, *storages, to->GetIndexInfo(), TFreshColumnIndexAccessor(to->GetIndexInfo()));
     auto schemaTo = std::make_shared<TDefaultSchemaDetails>(to, std::make_shared<NArrow::NSplitter::TSerializationStats>());
     TGeneralSerializedSlice slice(secondaryData.GetExternalData(), schemaTo, counters);
 

@@ -415,9 +415,11 @@ struct Schema : NIceDb::Schema {
         struct RawBytes: Column<9, NScheme::NTypeIds::Uint64> {};
         struct BlobData: Column<10, NScheme::NTypeIds::String> {};
         struct BlobIdx: Column<11, NScheme::NTypeIds::Uint32> {};
+        struct InheritPortionStorage: Column<12, NScheme::NTypeIds::Bool> {};
 
         using TKey = TableKey<PathId, PortionId, IndexId, ChunkIdx>;
-        using TColumns = TableColumns<PathId, PortionId, IndexId, ChunkIdx, Blob, Offset, Size, RecordsCount, RawBytes, BlobData, BlobIdx>;
+        using TColumns = TableColumns<PathId, PortionId, IndexId, ChunkIdx, Blob, Offset, Size, RecordsCount, RawBytes, BlobData, BlobIdx,
+            InheritPortionStorage>;
     };
 
     struct SharedBlobIds: NIceDb::Schema::Table<SharedBlobIdsTableId> {
@@ -1072,6 +1074,7 @@ private:
     YDB_READONLY_DEF(std::optional<TString>, BlobData);
     YDB_READONLY_DEF(TInternalPathId, PathId);
     YDB_READONLY(ui64, PortionId, 0);
+    YDB_READONLY(bool, InheritPortionStorage, false);
     TChunkAddress Address;
     const ui32 RecordsCount;
     const ui32 RawBytes;
@@ -1093,15 +1096,16 @@ public:
 
     TIndexChunk BuildIndexChunk(const TBlobRangeLink16::TLinkId blobLinkId) const {
         AFL_VERIFY(BlobRangeAddress);
-        return TIndexChunk(Address.GetColumnId(), Address.GetChunkIdx(), RecordsCount, RawBytes, BlobRangeAddress->BuildLink(blobLinkId));
+        return TIndexChunk(Address.GetColumnId(), Address.GetChunkIdx(), RecordsCount, RawBytes, InheritPortionStorage,
+            BlobRangeAddress->BuildLink(blobLinkId));
     }
 
     TIndexChunk BuildIndexChunk() const {
         if (BlobRangeLink16) {
-            return TIndexChunk(Address.GetColumnId(), Address.GetChunkIdx(), RecordsCount, RawBytes, *BlobRangeLink16);
+            return TIndexChunk(Address.GetColumnId(), Address.GetChunkIdx(), RecordsCount, RawBytes, InheritPortionStorage, *BlobRangeLink16);
         } else {
             AFL_VERIFY(BlobData);
-            return TIndexChunk(Address.GetColumnId(), Address.GetChunkIdx(), RecordsCount, RawBytes, *BlobData);
+            return TIndexChunk(Address.GetColumnId(), Address.GetChunkIdx(), RecordsCount, RawBytes, InheritPortionStorage, *BlobData);
         }
     }
 
@@ -1126,7 +1130,9 @@ public:
     TIndexChunkLoadContext(const TSource& rowset, const IBlobGroupSelector* dsGroupSelector)
         : PathId(TInternalPathId::FromRawValue(rowset.template GetValue<NColumnShard::Schema::IndexIndexes::PathId>()))
         , PortionId(rowset.template GetValue<NColumnShard::Schema::IndexIndexes::PortionId>())
-        , Address(rowset.template GetValue<NColumnShard::Schema::IndexIndexes::IndexId>(), rowset.template GetValue<NColumnShard::Schema::IndexIndexes::ChunkIdx>())
+        , InheritPortionStorage(rowset.template GetValue<NColumnShard::Schema::IndexIndexes::InheritPortionStorage>())
+        , Address(rowset.template GetValue<NColumnShard::Schema::IndexIndexes::IndexId>(),
+              rowset.template GetValue<NColumnShard::Schema::IndexIndexes::ChunkIdx>())
         , RecordsCount(rowset.template GetValue<NColumnShard::Schema::IndexIndexes::RecordsCount>())
         , RawBytes(rowset.template GetValue<NColumnShard::Schema::IndexIndexes::RawBytes>())
     {

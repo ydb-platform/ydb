@@ -12,7 +12,7 @@
 
 namespace NKikimr::NOlap::NIndexes {
 
-std::vector<std::shared_ptr<IPortionDataChunk>> TBloomIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader, const ui32 recordsCount) const {
+std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TBloomIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader, const ui32 recordsCount) const {
     std::deque<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> dataOwners;
     ui32 indexHitsCount = 0;
     for (reader.Start(); reader.IsCorrect();) {
@@ -61,7 +61,8 @@ std::vector<std::shared_ptr<IPortionDataChunk>> TBloomIndexMeta::DoBuildIndexImp
         dataOwners.pop_front();
     }
     const TString indexData = GetBitsStorageConstructor()->Build(std::move(filterBits))->SerializeToString();
-    return { std::make_shared<NChunks::TPortionIndexChunk>(TChunkAddress(GetIndexId(), 0), recordsCount, indexData.size(), indexData) };
+    return { std::make_shared<NChunks::TPortionIndexChunk>(
+        TChunkAddress(GetIndexId(), 0), recordsCount, indexData.size(), GetInheritPortionStorage(), indexData) };
 }
 
 bool TBloomIndexMeta::DoCheckValueImpl(const IBitsStorage& data, const std::optional<ui64> category, const std::shared_ptr<arrow::Scalar>& value,

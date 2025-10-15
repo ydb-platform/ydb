@@ -89,8 +89,9 @@ public:
     }
 };
 
-std::vector<std::shared_ptr<IPortionDataChunk>> TIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader, const ui32 /*recordsCount*/) const {
-    std::vector<std::shared_ptr<IPortionDataChunk>> result;
+std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildIndexImpl(
+    TChunkedBatchReader& reader, const ui32 /*recordsCount*/) const {
+    std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> result;
     ui32 chunkIdx = 0;
     for (reader.Start(); reader.IsCorrect(); reader.ReadNext(reader.begin()->GetCurrentChunk()->GetRecordsCount())) {
         std::deque<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> dataOwners;
@@ -151,8 +152,8 @@ std::vector<std::shared_ptr<IPortionDataChunk>> TIndexMeta::DoBuildIndexImpl(TCh
                 so.Write(i.data(), i.size());
             }
         }
-        result.emplace_back(std::make_shared<NChunks::TPortionIndexChunk>(
-            TChunkAddress(GetIndexId(), chunkIdx++), reader.begin()->GetCurrentChunk()->GetRecordsCount(), indexData.size(), indexData));
+        result.emplace_back(std::make_shared<NChunks::TPortionIndexChunk>(TChunkAddress(GetIndexId(), chunkIdx++),
+            reader.begin()->GetCurrentChunk()->GetRecordsCount(), indexData.size(), GetInheritPortionStorage(), indexData));
     }
     return result;
 }

@@ -13,7 +13,7 @@
 
 namespace NKikimr::NOlap::NIndexes::NCountMinSketch {
 
-std::vector<std::shared_ptr<IPortionDataChunk>> TIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader, const ui32 recordsCount) const {
+std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader, const ui32 recordsCount) const {
     auto sketch = std::unique_ptr<TCountMinSketch>(TCountMinSketch::Create());
 
     for (auto& colReader : reader) {
@@ -47,7 +47,8 @@ std::vector<std::shared_ptr<IPortionDataChunk>> TIndexMeta::DoBuildIndexImpl(TCh
     }
 
     TString indexData(sketch->AsStringBuf());
-    return { std::make_shared<NChunks::TPortionIndexChunk>(TChunkAddress(GetIndexId(), 0), recordsCount, indexData.size(), indexData) };
+    return { std::make_shared<NChunks::TPortionIndexChunk>(
+        TChunkAddress(GetIndexId(), 0), recordsCount, indexData.size(), GetInheritPortionStorage(), indexData) };
 }
 
 }   // namespace NKikimr::NOlap::NIndexes::NCountMinSketch

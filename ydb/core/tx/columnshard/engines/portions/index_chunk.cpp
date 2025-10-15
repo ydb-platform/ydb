@@ -25,6 +25,7 @@ NKikimr::TConclusionStatus TIndexChunk::DeserializeFromProto(const NKikimrColumn
     } else {
         return TConclusionStatus::Fail("incorrect blob info - neither BlobData nor BlobRange");
     }
+    InheritPortionStorage = proto.GetInheritPortionStorage();
     return TConclusionStatus::Success();
 }
 
@@ -57,6 +58,7 @@ NKikimrColumnShardDataSharingProto::TIndexChunk TIndexChunk::SerializeToProto() 
         meta->SetRawBytes(RawBytes);
     }
     std::visit(TBlobInfoSerializer(result), Data);
+    result.SetInheritPortionStorage(InheritPortionStorage);
     return result;
 }
 

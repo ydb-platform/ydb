@@ -11,7 +11,7 @@
 
 namespace NKikimr::NOlap::NIndexes::NMax {
 
-std::vector<std::shared_ptr<IPortionDataChunk>> TIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader, const ui32 recordsCount) const {
+std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader, const ui32 recordsCount) const {
     std::shared_ptr<arrow::Scalar> result;
     AFL_VERIFY(reader.GetColumnsCount() == 1)("count", reader.GetColumnsCount());
     {
@@ -25,7 +25,8 @@ std::vector<std::shared_ptr<IPortionDataChunk>> TIndexMeta::DoBuildIndexImpl(TCh
         }
     }
     const TString indexData = NArrow::NScalar::TSerializer::SerializePayloadToString(result).DetachResult();
-    return { std::make_shared<NChunks::TPortionIndexChunk>(TChunkAddress(GetIndexId(), 0), recordsCount, indexData.size(), indexData) };
+    return { std::make_shared<NChunks::TPortionIndexChunk>(
+        TChunkAddress(GetIndexId(), 0), recordsCount, indexData.size(), GetInheritPortionStorage(), indexData) };
 }
 
 std::shared_ptr<arrow::Scalar> TIndexMeta::GetMaxScalarVerified(

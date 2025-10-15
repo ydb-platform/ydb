@@ -9,6 +9,7 @@ private:
     const ui32 RecordsCount;
     const ui64 RawBytes;
     const TString Data;
+    YDB_READONLY_DEF(bool, InheritPortionStorage);
 protected:
     virtual const TString& DoGetData() const override {
         return Data;
@@ -41,13 +42,13 @@ protected:
     virtual void DoAddInplaceIntoPortion(TPortionAccessorConstructor& portionInfo) const override;
 
 public:
-    TPortionIndexChunk(const TChunkAddress& address, const ui32 recordsCount, const ui64 rawBytes, const TString& data)
+    TPortionIndexChunk(const TChunkAddress& address, const ui32 recordsCount, const ui64 rawBytes, const bool inheritPortionStorage, const TString& data)
         : TBase(address.GetColumnId(), address.GetChunkIdx())
         , RecordsCount(recordsCount)
         , RawBytes(rawBytes)
         , Data(data)
+        , InheritPortionStorage(inheritPortionStorage)
     {
     }
-
 };
 }   // namespace NKikimr::NOlap::NChunks

@@ -145,7 +145,7 @@ void DoDescribeTopicRequest(std::unique_ptr<IRequestOpCtx> ctx, const NKikimr::N
     auto* p = ctx.release();
     Y_VERIFY_DEBUG(dynamic_cast<const Ydb::Topic::DescribeTopicRequest*>(p->GetRequest()));
 
-    LOG_ERROR_S(TActivationContext::AsActorContext(), NKikimrServices::PQ_READ_PROXY, "new Describe topic request");
+    LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::PQ_READ_PROXY, "new Describe topic request");
     f.RegisterActor(new NGRpcProxy::V1::TDescribeTopicActor(p));
 }
 

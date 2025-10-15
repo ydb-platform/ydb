@@ -12,10 +12,10 @@
 
 namespace NKikimr::NArrow {
 
-using TArrayVec = std::vector<std::shared_ptr<arrow::Array>>;
+using TArrayVec = std::vector<std::shared_ptr<arrow20::Array>>;
 
 template <typename T>
-inline bool ArrayEqualValue(const std::shared_ptr<arrow::Array>& x, const std::shared_ptr<arrow::Array>& y) {
+inline bool ArrayEqualValue(const std::shared_ptr<arrow20::Array>& x, const std::shared_ptr<arrow20::Array>& y) {
     auto& arrX = static_cast<const T&>(*x);
     auto& arrY = static_cast<const T&>(*y);
     for (int i = 0; i < x->length(); ++i) {
@@ -27,7 +27,7 @@ inline bool ArrayEqualValue(const std::shared_ptr<arrow::Array>& x, const std::s
 }
 
 template <typename T>
-inline bool ArrayEqualView(const std::shared_ptr<arrow::Array>& x, const std::shared_ptr<arrow::Array>& y) {
+inline bool ArrayEqualView(const std::shared_ptr<arrow20::Array>& x, const std::shared_ptr<arrow20::Array>& y) {
     auto& arrX = static_cast<const T&>(*x);
     auto& arrY = static_cast<const T&>(*y);
     for (int i = 0; i < x->length(); ++i) {
@@ -40,83 +40,83 @@ inline bool ArrayEqualView(const std::shared_ptr<arrow::Array>& x, const std::sh
 
 struct TSortDescription;
 
-TString SerializeSchema(const arrow::Schema& schema);
+TString SerializeSchema(const arrow20::Schema& schema);
 
-std::shared_ptr<arrow::RecordBatch> MakeEmptyBatch(const std::shared_ptr<arrow::Schema>& schema, const ui32 rowsCount = 0);
-std::shared_ptr<arrow::Table> ToTable(const std::shared_ptr<arrow::RecordBatch>& batch);
+std::shared_ptr<arrow20::RecordBatch> MakeEmptyBatch(const std::shared_ptr<arrow20::Schema>& schema, const ui32 rowsCount = 0);
+std::shared_ptr<arrow20::Table> ToTable(const std::shared_ptr<arrow20::RecordBatch>& batch);
 
-std::shared_ptr<arrow::RecordBatch> ToBatch(const std::shared_ptr<arrow::Table>& combinedTable);
-std::shared_ptr<arrow::RecordBatch> CombineBatches(const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches);
-std::shared_ptr<arrow::RecordBatch> MergeColumns(const std::vector<std::shared_ptr<arrow::RecordBatch>>& rb);
-std::vector<std::shared_ptr<arrow::RecordBatch>> ShardingSplit(
-    const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<ui32>& sharding, ui32 numShards);
-std::vector<std::shared_ptr<arrow::RecordBatch>> ShardingSplit(
-    const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<std::vector<ui32>>& shardRows, const ui32 numShards);
-THashMap<ui64, std::shared_ptr<arrow::RecordBatch>> ShardingSplit(
-    const std::shared_ptr<arrow::RecordBatch>& batch, const THashMap<ui64, std::vector<ui32>>& shardRows, arrow::MemoryPool* memoryPool);
+std::shared_ptr<arrow20::RecordBatch> ToBatch(const std::shared_ptr<arrow20::Table>& combinedTable);
+std::shared_ptr<arrow20::RecordBatch> CombineBatches(const std::vector<std::shared_ptr<arrow20::RecordBatch>>& batches);
+std::shared_ptr<arrow20::RecordBatch> MergeColumns(const std::vector<std::shared_ptr<arrow20::RecordBatch>>& rb);
+std::vector<std::shared_ptr<arrow20::RecordBatch>> ShardingSplit(
+    const std::shared_ptr<arrow20::RecordBatch>& batch, const std::vector<ui32>& sharding, ui32 numShards);
+std::vector<std::shared_ptr<arrow20::RecordBatch>> ShardingSplit(
+    const std::shared_ptr<arrow20::RecordBatch>& batch, const std::vector<std::vector<ui32>>& shardRows, const ui32 numShards);
+THashMap<ui64, std::shared_ptr<arrow20::RecordBatch>> ShardingSplit(
+    const std::shared_ptr<arrow20::RecordBatch>& batch, const THashMap<ui64, std::vector<ui32>>& shardRows, arrow20::MemoryPool* memoryPool);
 
-std::unique_ptr<arrow::ArrayBuilder> MakeBuilder(
-    const std::shared_ptr<arrow::Field>& field, const ui32 reserveItems = 0, const ui32 reserveSize = 0);
-std::unique_ptr<arrow::ArrayBuilder> MakeBuilder(
-    const std::shared_ptr<arrow::DataType>& type, const ui32 reserveItems = 0, const ui32 reserveSize = 0);
+std::unique_ptr<arrow20::ArrayBuilder> MakeBuilder(
+    const std::shared_ptr<arrow20::Field>& field, const ui32 reserveItems = 0, const ui32 reserveSize = 0);
+std::unique_ptr<arrow20::ArrayBuilder> MakeBuilder(
+    const std::shared_ptr<arrow20::DataType>& type, const ui32 reserveItems = 0, const ui32 reserveSize = 0);
 
-std::vector<std::unique_ptr<arrow::ArrayBuilder>> MakeBuilders(
-    const std::shared_ptr<arrow::Schema>& schema, size_t reserve = 0, const std::map<std::string, ui64>& sizeByColumn = {});
-std::vector<std::shared_ptr<arrow::Array>> Finish(std::vector<std::unique_ptr<arrow::ArrayBuilder>>&& builders);
-std::vector<std::shared_ptr<arrow::Array>> FinishBuilders(std::vector<std::unique_ptr<arrow::ArrayBuilder>>&& builders);
-std::shared_ptr<arrow::Array> FinishBuilder(std::unique_ptr<arrow::ArrayBuilder>&& builders);
+std::vector<std::unique_ptr<arrow20::ArrayBuilder>> MakeBuilders(
+    const std::shared_ptr<arrow20::Schema>& schema, size_t reserve = 0, const std::map<std::string, ui64>& sizeByColumn = {});
+std::vector<std::shared_ptr<arrow20::Array>> Finish(std::vector<std::unique_ptr<arrow20::ArrayBuilder>>&& builders);
+std::vector<std::shared_ptr<arrow20::Array>> FinishBuilders(std::vector<std::unique_ptr<arrow20::ArrayBuilder>>&& builders);
+std::shared_ptr<arrow20::Array> FinishBuilder(std::unique_ptr<arrow20::ArrayBuilder>&& builders);
 
-std::shared_ptr<arrow::UInt64Array> MakeUI64Array(const ui64 value, const i64 size);
-std::shared_ptr<arrow::StringArray> MakeStringArray(const TString& value, const i64 size);
-std::vector<TString> ColumnNames(const std::shared_ptr<arrow::Schema>& schema);
-bool ReserveData(arrow::ArrayBuilder& builder, const size_t size);
-bool MergeBatchColumns(const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches, std::shared_ptr<arrow::RecordBatch>& result,
+std::shared_ptr<arrow20::UInt64Array> MakeUI64Array(const ui64 value, const i64 size);
+std::shared_ptr<arrow20::StringArray> MakeStringArray(const TString& value, const i64 size);
+std::vector<TString> ColumnNames(const std::shared_ptr<arrow20::Schema>& schema);
+bool ReserveData(arrow20::ArrayBuilder& builder, const size_t size);
+bool MergeBatchColumns(const std::vector<std::shared_ptr<arrow20::RecordBatch>>& batches, std::shared_ptr<arrow20::RecordBatch>& result,
     const std::vector<std::string>& columnsOrder = {}, const bool orderFieldsAreNecessary = true);
-bool MergeBatchColumns(const std::vector<std::shared_ptr<arrow::Table>>& batches, std::shared_ptr<arrow::Table>& result,
+bool MergeBatchColumns(const std::vector<std::shared_ptr<arrow20::Table>>& batches, std::shared_ptr<arrow20::Table>& result,
     const std::vector<std::string>& columnsOrder = {}, const bool orderFieldsAreNecessary = true);
 
-bool HasAllColumns(const std::shared_ptr<arrow::RecordBatch>& batch, const std::shared_ptr<arrow::Schema>& schema);
+bool HasAllColumns(const std::shared_ptr<arrow20::RecordBatch>& batch, const std::shared_ptr<arrow20::Schema>& schema);
 
-std::pair<int, int> FindMinMaxPosition(const std::shared_ptr<arrow::Array>& column);
+std::pair<int, int> FindMinMaxPosition(const std::shared_ptr<arrow20::Array>& column);
 
-std::shared_ptr<arrow::Scalar> DefaultScalar(const std::shared_ptr<arrow::DataType>& type);
-std::shared_ptr<arrow::Scalar> MinScalar(const std::shared_ptr<arrow::DataType>& type);
-std::shared_ptr<arrow::Scalar> GetScalar(const std::shared_ptr<arrow::Array>& array, int position);
-bool IsGoodScalar(const std::shared_ptr<arrow::Scalar>& x);
-TConclusion<bool> ScalarIsFalse(const arrow::Scalar& x);
-TConclusion<bool> ScalarIsTrue(const arrow::Scalar& x);
-TConclusion<bool> ScalarIsFalse(const std::shared_ptr<arrow::Scalar>& x);
-TConclusion<bool> ScalarIsTrue(const std::shared_ptr<arrow::Scalar>& x);
-int ScalarCompare(const arrow::Scalar& x, const arrow::Scalar& y);
-int ScalarCompare(const std::shared_ptr<arrow::Scalar>& x, const std::shared_ptr<arrow::Scalar>& y);
-int ScalarCompareNullable(const std::shared_ptr<arrow::Scalar>& x, const std::shared_ptr<arrow::Scalar>& y);
+std::shared_ptr<arrow20::Scalar> DefaultScalar(const std::shared_ptr<arrow20::DataType>& type);
+std::shared_ptr<arrow20::Scalar> MinScalar(const std::shared_ptr<arrow20::DataType>& type);
+std::shared_ptr<arrow20::Scalar> GetScalar(const std::shared_ptr<arrow20::Array>& array, int position);
+bool IsGoodScalar(const std::shared_ptr<arrow20::Scalar>& x);
+TConclusion<bool> ScalarIsFalse(const arrow20::Scalar& x);
+TConclusion<bool> ScalarIsTrue(const arrow20::Scalar& x);
+TConclusion<bool> ScalarIsFalse(const std::shared_ptr<arrow20::Scalar>& x);
+TConclusion<bool> ScalarIsTrue(const std::shared_ptr<arrow20::Scalar>& x);
+int ScalarCompare(const arrow20::Scalar& x, const arrow20::Scalar& y);
+int ScalarCompare(const std::shared_ptr<arrow20::Scalar>& x, const std::shared_ptr<arrow20::Scalar>& y);
+int ScalarCompareNullable(const std::shared_ptr<arrow20::Scalar>& x, const std::shared_ptr<arrow20::Scalar>& y);
 std::partial_ordering ColumnsCompare(
-    const std::vector<std::shared_ptr<arrow::Array>>& x, const ui32 xRow, const std::vector<std::shared_ptr<arrow::Array>>& y, const ui32 yRow);
-bool ColumnEqualsScalar(const std::shared_ptr<arrow::Array>& c, const ui32 position, const std::shared_ptr<arrow::Scalar>& s);
-bool ScalarLess(const std::shared_ptr<arrow::Scalar>& x, const std::shared_ptr<arrow::Scalar>& y);
-bool ScalarLess(const arrow::Scalar& x, const arrow::Scalar& y);
+    const std::vector<std::shared_ptr<arrow20::Array>>& x, const ui32 xRow, const std::vector<std::shared_ptr<arrow20::Array>>& y, const ui32 yRow);
+bool ColumnEqualsScalar(const std::shared_ptr<arrow20::Array>& c, const ui32 position, const std::shared_ptr<arrow20::Scalar>& s);
+bool ScalarLess(const std::shared_ptr<arrow20::Scalar>& x, const std::shared_ptr<arrow20::Scalar>& y);
+bool ScalarLess(const arrow20::Scalar& x, const arrow20::Scalar& y);
 
-bool HasNulls(const std::shared_ptr<arrow::Array>& column);
+bool HasNulls(const std::shared_ptr<arrow20::Array>& column);
 
-std::vector<std::shared_ptr<arrow::RecordBatch>> SliceToRecordBatches(const std::shared_ptr<arrow::Table>& t);
+std::vector<std::shared_ptr<arrow20::RecordBatch>> SliceToRecordBatches(const std::shared_ptr<arrow20::Table>& t);
 
-bool ArrayScalarsEqual(const std::shared_ptr<arrow::Array>& lhs, const std::shared_ptr<arrow::Array>& rhs);
-std::shared_ptr<arrow::Array> BoolVecToArray(const std::vector<bool>& vec);
+bool ArrayScalarsEqual(const std::shared_ptr<arrow20::Array>& lhs, const std::shared_ptr<arrow20::Array>& rhs);
+std::shared_ptr<arrow20::Array> BoolVecToArray(const std::vector<bool>& vec);
 
-NJson::TJsonValue DebugJson(std::shared_ptr<arrow::Array> array, const ui32 head, const ui32 tail);
-NJson::TJsonValue DebugJson(std::shared_ptr<arrow::RecordBatch> batch, const ui32 head, const ui32 tail);
+NJson::TJsonValue DebugJson(std::shared_ptr<arrow20::Array> array, const ui32 head, const ui32 tail);
+NJson::TJsonValue DebugJson(std::shared_ptr<arrow20::RecordBatch> batch, const ui32 head, const ui32 tail);
 
-NJson::TJsonValue DebugJson(std::shared_ptr<arrow::Array> array, const ui32 position);
-TString DebugString(std::shared_ptr<arrow::Array> array, const ui32 position);
-NJson::TJsonValue DebugJson(std::shared_ptr<arrow::RecordBatch> array, const ui32 position);
+NJson::TJsonValue DebugJson(std::shared_ptr<arrow20::Array> array, const ui32 position);
+TString DebugString(std::shared_ptr<arrow20::Array> array, const ui32 position);
+NJson::TJsonValue DebugJson(std::shared_ptr<arrow20::RecordBatch> array, const ui32 position);
 
-std::shared_ptr<arrow::RecordBatch> Reorder(
-    const std::shared_ptr<arrow::RecordBatch>& batch,
-    const std::shared_ptr<arrow::UInt64Array>& permutation,
+std::shared_ptr<arrow20::RecordBatch> Reorder(
+    const std::shared_ptr<arrow20::RecordBatch>& batch,
+    const std::shared_ptr<arrow20::UInt64Array>& permutation,
     const bool canRemove,
-    arrow::MemoryPool* pool = arrow::default_memory_pool());
+    arrow20::MemoryPool* pool = arrow20::default_memory_pool());
 
-// Deep-copies all internal arrow::buffers - and makes sure that new buffers don't have any parents.
-std::shared_ptr<arrow::Table> DeepCopy(const std::shared_ptr<arrow::Table>& table, arrow::MemoryPool* pool = arrow::default_memory_pool());
+// Deep-copies all internal arrow20::buffers - and makes sure that new buffers don't have any parents.
+std::shared_ptr<arrow20::Table> DeepCopy(const std::shared_ptr<arrow20::Table>& table, arrow20::MemoryPool* pool = arrow20::default_memory_pool());
 
 }   // namespace NKikimr::NArrow

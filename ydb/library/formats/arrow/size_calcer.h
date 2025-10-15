@@ -13,10 +13,10 @@ namespace NKikimr::NArrow {
 
 class TRowSizeCalculator {
 private:
-    std::shared_ptr<arrow::RecordBatch> Batch;
+    std::shared_ptr<arrow20::RecordBatch> Batch;
     ui32 CommonSize = 0;
-    std::vector<const arrow::BinaryArray*> BinaryColumns;
-    std::vector<const arrow::StringArray*> StringColumns;
+    std::vector<const arrow20::BinaryArray*> BinaryColumns;
+    std::vector<const arrow20::StringArray*> StringColumns;
     bool Prepared = false;
     const ui32 AlignBitsCount = 1;
 
@@ -40,24 +40,24 @@ public:
     TRowSizeCalculator(const ui32 alignBitsCount)
         : AlignBitsCount(alignBitsCount) {
     }
-    bool InitBatch(const std::shared_ptr<arrow::RecordBatch>& batch);
+    bool InitBatch(const std::shared_ptr<arrow20::RecordBatch>& batch);
     ui32 GetRowBitWidth(const ui32 row) const;
     ui32 GetRowBytesSize(const ui32 row) const;
 };
 
 // Return size in bytes including size of bitmap mask
-ui64 GetBatchDataSize(const std::shared_ptr<arrow::RecordBatch>& batch);
-ui64 GetBatchDataSize(const std::vector<std::shared_ptr<arrow::Array>>& batch);
-ui64 GetTableDataSize(const std::shared_ptr<arrow::Table>& batch);
+ui64 GetBatchDataSize(const std::shared_ptr<arrow20::RecordBatch>& batch);
+ui64 GetBatchDataSize(const std::vector<std::shared_ptr<arrow20::Array>>& batch);
+ui64 GetTableDataSize(const std::shared_ptr<arrow20::Table>& batch);
 // Return size in bytes including size of bitmap mask
-ui64 GetArrayMemorySize(const std::shared_ptr<arrow::ChunkedArray>& data);
-ui64 GetArrayMemorySize(const std::shared_ptr<arrow::ArrayData>& data);
-ui64 GetBatchMemorySize(const std::shared_ptr<arrow::RecordBatch>& batch);
-ui64 GetBatchMemorySize(const std::vector<std::shared_ptr<arrow::Array>>& batch);
-ui64 GetTableMemorySize(const std::shared_ptr<arrow::Table>& batch);
+ui64 GetArrayMemorySize(const std::shared_ptr<arrow20::ChunkedArray>& data);
+ui64 GetArrayMemorySize(const std::shared_ptr<arrow20::ArrayData>& data);
+ui64 GetBatchMemorySize(const std::shared_ptr<arrow20::RecordBatch>& batch);
+ui64 GetBatchMemorySize(const std::vector<std::shared_ptr<arrow20::Array>>& batch);
+ui64 GetTableMemorySize(const std::shared_ptr<arrow20::Table>& batch);
 // Return size in bytes *not* including size of bitmap mask
-ui64 GetArrayDataSize(const std::shared_ptr<arrow::Array>& column);
+ui64 GetArrayDataSize(const std::shared_ptr<arrow20::Array>& column);
 
-ui64 GetDictionarySize(const std::shared_ptr<arrow::DictionaryArray>& data);
+ui64 GetDictionarySize(const std::shared_ptr<arrow20::DictionaryArray>& data);
 
 }   // namespace NKikimr::NArrow

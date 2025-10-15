@@ -19,27 +19,27 @@ class TTypeWrapper {
 private:
     template <typename T, bool IsCType>
     struct ValueTypeSelector {
-        using type = typename arrow::TypeTraits<T>::CType;
+        using type = typename arrow20::TypeTraits<T>::CType;
     };
 
     template <typename T>
     struct ValueTypeSelector<T, false> {
-        using type = arrow::util::string_view;
+        using type = arrow20::util::string_view;
     };
 
 public:
     using T = TType;
-    static constexpr bool IsCType = arrow::has_c_type<T>() && !std::is_same_v<arrow::HalfFloatType, T>;
-    static constexpr bool IsStringView = arrow::has_string_view<T>();
+    static constexpr bool IsCType = arrow20::has_c_type<T>() && !std::is_same_v<arrow20::HalfFloatType, T>;
+    static constexpr bool IsStringView = arrow20::has_string_view<T>();
     static_assert(!IsCType || !IsStringView);
     static constexpr bool IsAppropriate = IsCType || IsStringView;
     static constexpr bool IsIndexType() {
-        return std::is_same_v<arrow::UInt32Type, T> || std::is_same_v<arrow::UInt16Type, T> || std::is_same_v<arrow::UInt8Type, T>;
+        return std::is_same_v<arrow20::UInt32Type, T> || std::is_same_v<arrow20::UInt16Type, T> || std::is_same_v<arrow20::UInt8Type, T>;
     }
     using ValueType = ValueTypeSelector<T, IsCType>::type;
-    using TArray = typename arrow::TypeTraits<T>::ArrayType;
-    using TBuilder = typename arrow::TypeTraits<T>::BuilderType;
-    using TScalar = typename arrow::TypeTraits<T>::ScalarType;
+    using TArray = typename arrow20::TypeTraits<T>::ArrayType;
+    using TBuilder = typename arrow20::TypeTraits<T>::BuilderType;
+    using TScalar = typename arrow20::TypeTraits<T>::ScalarType;
 
     template <class TExt>
     static TBuilder* CastBuilder(TExt* builder) {
@@ -76,7 +76,7 @@ public:
         Y_FAIL();
     }
 
-    void AppendValue(arrow::ArrayBuilder& builder, const ValueType val) const {
+    void AppendValue(arrow20::ArrayBuilder& builder, const ValueType val) const {
         if constexpr (IsCType) {
             TStatusValidator::Validate(static_cast<TBuilder&>(builder).Append(val));
             return;
@@ -89,30 +89,30 @@ public:
     }
 
     template <class TValue>
-    std::shared_ptr<arrow::Scalar> BuildScalar(const TValue val, const std::shared_ptr<arrow::DataType>& dType) const {
+    std::shared_ptr<arrow20::Scalar> BuildScalar(const TValue val, const std::shared_ptr<arrow20::DataType>& dType) const {
         if constexpr (IsCType) {
-            if constexpr (arrow::is_parameter_free_type<TType>::value) {
+            if constexpr (arrow20::is_parameter_free_type<TType>::value) {
                 return std::make_shared<TScalar>(val);
             }
-            if constexpr (!arrow::is_parameter_free_type<TType>::value) {
+            if constexpr (!arrow20::is_parameter_free_type<TType>::value) {
                 return std::make_shared<TScalar>(val, dType);
             }
         }
         if constexpr (IsStringView) {
-            if constexpr (std::is_same<TValue, arrow::util::string_view>::value) {
-                if constexpr (arrow::is_parameter_free_type<TType>::value) {
-                    return std::make_shared<TScalar>(arrow::Buffer::FromString(std::string(val.data(), val.size())));
+            if constexpr (std::is_same<TValue, arrow20::util::string_view>::value) {
+                if constexpr (arrow20::is_parameter_free_type<TType>::value) {
+                    return std::make_shared<TScalar>(arrow20::Buffer::FromString(std::string(val.data(), val.size())));
                 }
-                if constexpr (!arrow::is_parameter_free_type<TType>::value) {
-                    return std::make_shared<TScalar>(arrow::Buffer::FromString(std::string(val.data(), val.size())), dType);
+                if constexpr (!arrow20::is_parameter_free_type<TType>::value) {
+                    return std::make_shared<TScalar>(arrow20::Buffer::FromString(std::string(val.data(), val.size())), dType);
                 }
             }
-            if constexpr (!std::is_same<TValue, arrow::util::string_view>::value) {
-                if constexpr (arrow::is_parameter_free_type<TType>::value) {
-                    return std::make_shared<TScalar>(arrow::Buffer::FromString(val));
+            if constexpr (!std::is_same<TValue, arrow20::util::string_view>::value) {
+                if constexpr (arrow20::is_parameter_free_type<TType>::value) {
+                    return std::make_shared<TScalar>(arrow20::Buffer::FromString(val));
                 }
-                if constexpr (!arrow::is_parameter_free_type<TType>::value) {
-                    return std::make_shared<TScalar>(arrow::Buffer::FromString(val), dType);
+                if constexpr (!arrow20::is_parameter_free_type<TType>::value) {
+                    return std::make_shared<TScalar>(arrow20::Buffer::FromString(val), dType);
                 }
             }
         }
@@ -136,7 +136,7 @@ public:
             return scalar.value;
         }
         if constexpr (IsStringView) {
-            return (arrow::util::string_view)*scalar.value;
+            return (arrow20::util::string_view)*scalar.value;
         }
         Y_FAIL();
         return ValueType{};
@@ -155,76 +155,76 @@ public:
 };
 
 template <class TResult, TResult defaultValue, typename TFunc, bool EnableNull = false>
-TResult SwitchTypeImpl(arrow::Type::type typeId, TFunc&& f) {
+TResult SwitchTypeImpl(arrow20::Type::type typeId, TFunc&& f) {
     switch (typeId) {
-        case arrow::Type::NA: {
+        case arrow20::Type::NA: {
             if constexpr (EnableNull) {
-                return f(TTypeWrapper<arrow::NullType>());
+                return f(TTypeWrapper<arrow20::NullType>());
             }
             break;
         }
-        case arrow::Type::BOOL:
-            return f(TTypeWrapper<arrow::BooleanType>());
-        case arrow::Type::UINT8:
-            return f(TTypeWrapper<arrow::UInt8Type>());
-        case arrow::Type::INT8:
-            return f(TTypeWrapper<arrow::Int8Type>());
-        case arrow::Type::UINT16:
-            return f(TTypeWrapper<arrow::UInt16Type>());
-        case arrow::Type::INT16:
-            return f(TTypeWrapper<arrow::Int16Type>());
-        case arrow::Type::UINT32:
-            return f(TTypeWrapper<arrow::UInt32Type>());
-        case arrow::Type::INT32:
-            return f(TTypeWrapper<arrow::Int32Type>());
-        case arrow::Type::UINT64:
-            return f(TTypeWrapper<arrow::UInt64Type>());
-        case arrow::Type::INT64:
-            return f(TTypeWrapper<arrow::Int64Type>());
-        case arrow::Type::HALF_FLOAT:
-            return f(TTypeWrapper<arrow::HalfFloatType>());
-        case arrow::Type::FLOAT:
-            return f(TTypeWrapper<arrow::FloatType>());
-        case arrow::Type::DOUBLE:
-            return f(TTypeWrapper<arrow::DoubleType>());
-        case arrow::Type::STRING:
-            return f(TTypeWrapper<arrow::StringType>());
-        case arrow::Type::BINARY:
-            return f(TTypeWrapper<arrow::BinaryType>());
-        case arrow::Type::FIXED_SIZE_BINARY:
-            return f(TTypeWrapper<arrow::FixedSizeBinaryType>());
-        case arrow::Type::DATE32:
-            return f(TTypeWrapper<arrow::Date32Type>());
-        case arrow::Type::DATE64:
-            return f(TTypeWrapper<arrow::Date64Type>());
-        case arrow::Type::TIMESTAMP:
-            return f(TTypeWrapper<arrow::TimestampType>());
-        case arrow::Type::TIME32:
-            return f(TTypeWrapper<arrow::Time32Type>());
-        case arrow::Type::TIME64:
-            return f(TTypeWrapper<arrow::Time64Type>());
-        case arrow::Type::INTERVAL_MONTHS:
-            return f(TTypeWrapper<arrow::MonthIntervalType>());
-        case arrow::Type::DECIMAL:
-            return f(TTypeWrapper<arrow::Decimal128Type>());
-        case arrow::Type::DURATION:
-            return f(TTypeWrapper<arrow::DurationType>());
-        case arrow::Type::LARGE_STRING:
-            return f(TTypeWrapper<arrow::LargeStringType>());
-        case arrow::Type::LARGE_BINARY:
-            return f(TTypeWrapper<arrow::LargeBinaryType>());
-        case arrow::Type::DECIMAL256:
-        case arrow::Type::DENSE_UNION:
-        case arrow::Type::DICTIONARY:
-        case arrow::Type::EXTENSION:
-        case arrow::Type::FIXED_SIZE_LIST:
-        case arrow::Type::INTERVAL_DAY_TIME:
-        case arrow::Type::LARGE_LIST:
-        case arrow::Type::LIST:
-        case arrow::Type::MAP:
-        case arrow::Type::MAX_ID:
-        case arrow::Type::SPARSE_UNION:
-        case arrow::Type::STRUCT:
+        case arrow20::Type::BOOL:
+            return f(TTypeWrapper<arrow20::BooleanType>());
+        case arrow20::Type::UINT8:
+            return f(TTypeWrapper<arrow20::UInt8Type>());
+        case arrow20::Type::INT8:
+            return f(TTypeWrapper<arrow20::Int8Type>());
+        case arrow20::Type::UINT16:
+            return f(TTypeWrapper<arrow20::UInt16Type>());
+        case arrow20::Type::INT16:
+            return f(TTypeWrapper<arrow20::Int16Type>());
+        case arrow20::Type::UINT32:
+            return f(TTypeWrapper<arrow20::UInt32Type>());
+        case arrow20::Type::INT32:
+            return f(TTypeWrapper<arrow20::Int32Type>());
+        case arrow20::Type::UINT64:
+            return f(TTypeWrapper<arrow20::UInt64Type>());
+        case arrow20::Type::INT64:
+            return f(TTypeWrapper<arrow20::Int64Type>());
+        case arrow20::Type::HALF_FLOAT:
+            return f(TTypeWrapper<arrow20::HalfFloatType>());
+        case arrow20::Type::FLOAT:
+            return f(TTypeWrapper<arrow20::FloatType>());
+        case arrow20::Type::DOUBLE:
+            return f(TTypeWrapper<arrow20::DoubleType>());
+        case arrow20::Type::STRING:
+            return f(TTypeWrapper<arrow20::StringType>());
+        case arrow20::Type::BINARY:
+            return f(TTypeWrapper<arrow20::BinaryType>());
+        case arrow20::Type::FIXED_SIZE_BINARY:
+            return f(TTypeWrapper<arrow20::FixedSizeBinaryType>());
+        case arrow20::Type::DATE32:
+            return f(TTypeWrapper<arrow20::Date32Type>());
+        case arrow20::Type::DATE64:
+            return f(TTypeWrapper<arrow20::Date64Type>());
+        case arrow20::Type::TIMESTAMP:
+            return f(TTypeWrapper<arrow20::TimestampType>());
+        case arrow20::Type::TIME32:
+            return f(TTypeWrapper<arrow20::Time32Type>());
+        case arrow20::Type::TIME64:
+            return f(TTypeWrapper<arrow20::Time64Type>());
+        case arrow20::Type::INTERVAL_MONTHS:
+            return f(TTypeWrapper<arrow20::MonthIntervalType>());
+        case arrow20::Type::DECIMAL:
+            return f(TTypeWrapper<arrow20::Decimal128Type>());
+        case arrow20::Type::DURATION:
+            return f(TTypeWrapper<arrow20::DurationType>());
+        case arrow20::Type::LARGE_STRING:
+            return f(TTypeWrapper<arrow20::LargeStringType>());
+        case arrow20::Type::LARGE_BINARY:
+            return f(TTypeWrapper<arrow20::LargeBinaryType>());
+        case arrow20::Type::DECIMAL256:
+        case arrow20::Type::DENSE_UNION:
+        case arrow20::Type::DICTIONARY:
+        case arrow20::Type::EXTENSION:
+        case arrow20::Type::FIXED_SIZE_LIST:
+        case arrow20::Type::INTERVAL_DAY_TIME:
+        case arrow20::Type::LARGE_LIST:
+        case arrow20::Type::LIST:
+        case arrow20::Type::MAP:
+        case arrow20::Type::MAX_ID:
+        case arrow20::Type::SPARSE_UNION:
+        case arrow20::Type::STRUCT:
             break;
     }
 
@@ -232,32 +232,32 @@ TResult SwitchTypeImpl(arrow::Type::type typeId, TFunc&& f) {
 }
 
 template <typename TFunc, bool EnableNull = false>
-bool SwitchType(arrow::Type::type typeId, TFunc&& f) {
+bool SwitchType(arrow20::Type::type typeId, TFunc&& f) {
     return SwitchTypeImpl<bool, false, TFunc, EnableNull>(typeId, std::move(f));
 }
 
 template <typename TFunc>
-bool SwitchTypeWithNull(arrow::Type::type typeId, TFunc&& f) {
+bool SwitchTypeWithNull(arrow20::Type::type typeId, TFunc&& f) {
     return SwitchType<TFunc, true>(typeId, std::move(f));
 }
 
 template <typename TFunc>
-bool SwitchArrayType(const arrow::Datum& column, TFunc&& f) {
+bool SwitchArrayType(const arrow20::Datum& column, TFunc&& f) {
     auto type = column.type();
     Y_ABORT_UNLESS(type);
     return SwitchType(type->id(), std::forward<TFunc>(f));
 }
 
 template <typename T>
-bool Append(arrow::ArrayBuilder& builder, const typename T::c_type& value) {
-    using TBuilder = typename arrow::TypeTraits<T>::BuilderType;
+bool Append(arrow20::ArrayBuilder& builder, const typename T::c_type& value) {
+    using TBuilder = typename arrow20::TypeTraits<T>::BuilderType;
     TStatusValidator::Validate(static_cast<TBuilder&>(builder).Append(value));
     return true;
 }
 
 template <typename T>
-bool AppendValues(arrow::ArrayBuilder& builder, const typename T::c_type& value, const ui32 count) {
-    using TBuilder = typename arrow::TypeTraits<T>::BuilderType;
+bool AppendValues(arrow20::ArrayBuilder& builder, const typename T::c_type& value, const ui32 count) {
+    using TBuilder = typename arrow20::TypeTraits<T>::BuilderType;
     for (ui32 i = 0; i < count; ++i) {
         TStatusValidator::Validate(static_cast<TBuilder&>(builder).Append(value));
     }
@@ -265,37 +265,37 @@ bool AppendValues(arrow::ArrayBuilder& builder, const typename T::c_type& value,
 }
 
 template <typename T>
-bool Append(arrow::ArrayBuilder& builder, arrow::util::string_view value) {
-    using TBuilder = typename arrow::TypeTraits<T>::BuilderType;
+bool Append(arrow20::ArrayBuilder& builder, arrow20::util::string_view value) {
+    using TBuilder = typename arrow20::TypeTraits<T>::BuilderType;
 
     TStatusValidator::Validate(static_cast<TBuilder&>(builder).Append(value));
     return true;
 }
 
 template <typename T>
-bool Append(arrow::ArrayBuilder& builder, const typename T::c_type* values, size_t size) {
-    using TBuilder = typename arrow::NumericBuilder<T>;
+bool Append(arrow20::ArrayBuilder& builder, const typename T::c_type* values, size_t size) {
+    using TBuilder = typename arrow20::NumericBuilder<T>;
 
     TStatusValidator::Validate(static_cast<TBuilder&>(builder).AppendValues(values, size));
     return true;
 }
 
 template <typename T>
-bool Append(arrow::ArrayBuilder& builder, const std::vector<typename T::c_type>& values) {
-    using TBuilder = typename arrow::NumericBuilder<T>;
+bool Append(arrow20::ArrayBuilder& builder, const std::vector<typename T::c_type>& values) {
+    using TBuilder = typename arrow20::NumericBuilder<T>;
 
     TStatusValidator::Validate(static_cast<TBuilder&>(builder).AppendValues(values.data(), values.size()));
     return true;
 }
 
 template <typename T>
-[[nodiscard]] bool Append(T& builder, const arrow::Type::type typeId, const arrow::Array& array, int position, ui64* recordSize = nullptr) {
+[[nodiscard]] bool Append(T& builder, const arrow20::Type::type typeId, const arrow20::Array& array, int position, ui64* recordSize = nullptr) {
     Y_DEBUG_ABORT_UNLESS(builder.type()->id() == array.type_id());
     Y_DEBUG_ABORT_UNLESS(typeId == array.type_id());
     return SwitchType(typeId, [&](const auto& type) {
         using TWrap = std::decay_t<decltype(type)>;
-        using TArray = typename arrow::TypeTraits<typename TWrap::T>::ArrayType;
-        using TBuilder = typename arrow::TypeTraits<typename TWrap::T>::BuilderType;
+        using TArray = typename arrow20::TypeTraits<typename TWrap::T>::ArrayType;
+        using TBuilder = typename arrow20::TypeTraits<typename TWrap::T>::BuilderType;
 
         auto& typedArray = static_cast<const TArray&>(array);
         auto& typedBuilder = static_cast<TBuilder&>(builder);
@@ -307,14 +307,14 @@ template <typename T>
             }
             return true;
         } else {
-            if constexpr (!arrow::has_string_view<typename TWrap::T>::value) {
+            if constexpr (!arrow20::has_string_view<typename TWrap::T>::value) {
                 TStatusValidator::Validate(typedBuilder.Append(typedArray.GetView(position)));
                 if (recordSize) {
                     *recordSize += sizeof(typedArray.GetView(position));
                 }
                 return true;
             }
-            if constexpr (arrow::has_string_view<typename TWrap::T>::value) {
+            if constexpr (arrow20::has_string_view<typename TWrap::T>::value) {
                 TStatusValidator::Validate(typedBuilder.Append(typedArray.GetView(position)));
                 if (recordSize) {
                     *recordSize += typedArray.GetView(position).size();
@@ -328,7 +328,7 @@ template <typename T>
 }
 
 template <typename T>
-[[nodiscard]] bool Append(T& builder, const arrow::Array& array, int position, ui64* recordSize = nullptr) {
+[[nodiscard]] bool Append(T& builder, const arrow20::Array& array, int position, ui64* recordSize = nullptr) {
     return Append<T>(builder, array.type_id(), array, position, recordSize);
 }
 

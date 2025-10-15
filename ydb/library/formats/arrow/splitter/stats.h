@@ -225,8 +225,8 @@ public:
         }
     }
 
-    std::optional<TBatchSerializationStat> GetStatsForRecordBatch(const std::shared_ptr<arrow::RecordBatch>& rb) const;
-    std::optional<TBatchSerializationStat> GetStatsForRecordBatch(const std::shared_ptr<arrow::Schema>& schema) const;
+    std::optional<TBatchSerializationStat> GetStatsForRecordBatch(const std::shared_ptr<arrow20::RecordBatch>& rb) const;
+    std::optional<TBatchSerializationStat> GetStatsForRecordBatch(const std::shared_ptr<arrow20::Schema>& schema) const;
 
     template <class TContainer>
     std::optional<TBatchSerializationStat> GetStatsForColumns(const TContainer& ids, const bool fieldsRequired) const {

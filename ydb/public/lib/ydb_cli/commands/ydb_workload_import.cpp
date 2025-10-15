@@ -144,9 +144,9 @@ private:
             return NThreading::MakeFuture(TStatus(EStatus::INTERNAL_ERROR, NYdb::NIssue::TIssues({NYdb::NIssue::TIssue("Invalid format string")})));
         };
 
-        auto writeOptions = arrow::ipc::IpcWriteOptions::Defaults();
-        constexpr auto codecType = arrow::Compression::type::ZSTD;
-        writeOptions.codec = *arrow::util::Codec::Create(codecType);
+        auto writeOptions = arrow20::ipc::IpcWriteOptions::Defaults();
+        constexpr auto codecType = arrow20::Compression::type::ZSTD;
+        writeOptions.codec = *arrow20::util::Codec::Create(codecType);
         TString error;
         if (auto batch = arrowCsv->ReadSingleBatch(value->Data, csvSettings, error)) {
             if (error) {

@@ -12,11 +12,11 @@ private:
     YDB_READONLY_DEF(TString, FieldName);
     YDB_ACCESSOR(bool, Nullable, true);
 protected:
-    virtual std::shared_ptr<arrow::Array> DoBuildArray(const ui32 recordsCount) const = 0;
+    virtual std::shared_ptr<arrow20::Array> DoBuildArray(const ui32 recordsCount) const = 0;
 public:
     using TPtr = std::shared_ptr<IArrayBuilder>;
     virtual ~IArrayBuilder() = default;
-    std::shared_ptr<arrow::Array> BuildArray(const ui32 recordsCount) const {
+    std::shared_ptr<arrow20::Array> BuildArray(const ui32 recordsCount) const {
         return DoBuildArray(recordsCount);
     }
 
@@ -30,18 +30,18 @@ public:
 template <class TValue>
 class TFillerBuilderConstructor {
 public:
-    using TBuilder = typename arrow::TypeTraits<TValue>::BuilderType;
+    using TBuilder = typename arrow20::TypeTraits<TValue>::BuilderType;
     static TBuilder Construct() {
         return TBuilder();
     }
 };
 
 template <>
-class TFillerBuilderConstructor<arrow::TimestampType> {
+class TFillerBuilderConstructor<arrow20::TimestampType> {
 public:
-    using TBuilder = arrow::TypeTraits<arrow::TimestampType>::BuilderType;
+    using TBuilder = arrow20::TypeTraits<arrow20::TimestampType>::BuilderType;
     static TBuilder Construct() {
-        return arrow::TimestampBuilder(arrow::timestamp(arrow::TimeUnit::TimeUnit::MICRO), arrow::default_memory_pool());
+        return arrow20::TimestampBuilder(arrow20::timestamp(arrow20::TimeUnit::TimeUnit::MICRO), arrow20::default_memory_pool());
     }
 };
 
@@ -50,7 +50,7 @@ class TSimpleArrayConstructor: public IArrayBuilder {
 private:
     using TBase = IArrayBuilder;
     using TSelf = TSimpleArrayConstructor<TFiller>;
-    using TBuilder = typename arrow::TypeTraits<typename TFiller::TValue>::BuilderType;
+    using TBuilder = typename arrow20::TypeTraits<typename TFiller::TValue>::BuilderType;
     const TFiller Filler;
     ui32 ShiftValue = 0;
 
@@ -61,7 +61,7 @@ private:
     {
     }
 protected:
-    virtual std::shared_ptr<arrow::Array> DoBuildArray(const ui32 recordsCount) const override {
+    virtual std::shared_ptr<arrow20::Array> DoBuildArray(const ui32 recordsCount) const override {
         TBuilder fBuilder = TFillerBuilderConstructor<typename TFiller::TValue>::Construct();
         Y_ABORT_UNLESS(fBuilder.Reserve(recordsCount).ok());
         for (ui32 i = 0; i < recordsCount; ++i) {
@@ -88,10 +88,10 @@ template <class TFiller>
 class TBinaryArrayConstructor: public IArrayBuilder {
 private:
     using TBase = IArrayBuilder;
-    using TBuilder = typename arrow::TypeTraits<typename TFiller::TValue>::BuilderType;
+    using TBuilder = typename arrow20::TypeTraits<typename TFiller::TValue>::BuilderType;
     const TFiller Filler;
 protected:
-    virtual std::shared_ptr<arrow::Array> DoBuildArray(const ui32 recordsCount) const override {
+    virtual std::shared_ptr<arrow20::Array> DoBuildArray(const ui32 recordsCount) const override {
         TBuilder fBuilder = TBuilder();
         std::vector<const char*> values;
         values.reserve(recordsCount);
@@ -119,8 +119,8 @@ private:
     using TBase = IArrayBuilder;
     const TFiller Filler;
 protected:
-    virtual std::shared_ptr<arrow::Array> DoBuildArray(const ui32 recordsCount) const override {
-        auto fBuilder = std::make_shared<arrow::DictionaryBuilder<typename TFiller::TValue>>(std::make_shared<typename TFiller::TValue>());
+    virtual std::shared_ptr<arrow20::Array> DoBuildArray(const ui32 recordsCount) const override {
+        auto fBuilder = std::make_shared<arrow20::DictionaryBuilder<typename TFiller::TValue>>(std::make_shared<typename TFiller::TValue>());
         Y_ABORT_UNLESS(fBuilder->Reserve(recordsCount).ok());
         for (ui32 i = 0; i < recordsCount; ++i) {
             Y_ABORT_UNLESS(fBuilder->Append(Filler.GetValue(i)).ok());
@@ -139,15 +139,15 @@ class TStaticArrayConstructor: public IArrayBuilder {
 private:
     using TBase = IArrayBuilder;
 
-    const std::shared_ptr<arrow::Array> Array;
+    const std::shared_ptr<arrow20::Array> Array;
 
 protected:
-    virtual std::shared_ptr<arrow::Array> DoBuildArray(const ui32 /*recordsCount*/) const override {
+    virtual std::shared_ptr<arrow20::Array> DoBuildArray(const ui32 /*recordsCount*/) const override {
         return Array;
     }
 
 public:
-    TStaticArrayConstructor(const TString& fieldName, std::shared_ptr<arrow::Array> array)
+    TStaticArrayConstructor(const TString& fieldName, std::shared_ptr<arrow20::Array> array)
         : TBase(fieldName)
         , Array(array)
     {}

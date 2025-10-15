@@ -114,12 +114,12 @@ namespace {
 
 int TCommandToolsInferCsv::Run(TConfig& config) {
     Y_UNUSED(config);
-    std::vector<std::shared_ptr<arrow::io::InputStream>> inputs;
+    std::vector<std::shared_ptr<arrow20::io::InputStream>> inputs;
     if (ReadingFromStdin) {
-        inputs.push_back(std::make_shared<arrow::io::StdinStream>());
+        inputs.push_back(std::make_shared<arrow20::io::StdinStream>());
     } else {
         for (const auto& filePath : FilePaths) {
-            auto maybeFile = arrow::io::ReadableFile::Open(filePath.c_str());
+            auto maybeFile = arrow20::io::ReadableFile::Open(filePath.c_str());
             if (!maybeFile.ok()) {
                 throw TMisuseException() << "Failed to open file: " << filePath;
             }

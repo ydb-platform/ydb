@@ -1,40 +1,42 @@
 #include "csv_arrow.h"
 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/array.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_primitive.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_binary.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/util/value_parsing.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/array.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/array/builder_primitive.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/array/builder_binary.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/record_batch.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/util/value_parsing.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/compute/api.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/type.h>
 #include <util/string/join.h>
 
 
 namespace NKikimr::NFormats {
 
 namespace {
-class TimestampIntParser: public arrow::TimestampParser {
+class TimestampIntParser: public arrow20::TimestampParser {
 public:
     TimestampIntParser() {}
 
-    bool operator()(const char* s, size_t length, arrow::TimeUnit::type out_unit,
-        int64_t* out) const override {
+    bool operator()(const char* s, size_t length, arrow20::TimeUnit::type out_unit,
+        int64_t* out,
+        bool* out_zone_offset_present = NULLPTR) const override {
+        Y_UNUSED(out_zone_offset_present);
         int64_t unitsCount;
         if (!TryFromString(TString(s, length), unitsCount)) {
             return false;
         }
         *out = unitsCount;
         switch (out_unit) {
-            case arrow::TimeUnit::NANO:
+            case arrow20::TimeUnit::NANO:
                 *out *= 1000000000;
                 break;
-            case arrow::TimeUnit::MICRO:
+            case arrow20::TimeUnit::MICRO:
                 *out *= 1000000;
                 break;
-            case arrow::TimeUnit::MILLI:
+            case arrow20::TimeUnit::MILLI:
                 *out *= 1000;
                 break;
-            case arrow::TimeUnit::SECOND:
+            case arrow20::TimeUnit::SECOND:
                 *out *= 1;
                 break;
         }
@@ -47,14 +49,14 @@ public:
 }
 
 TArrowCSV::TArrowCSV(const TColummns& columns, bool header, const std::set<std::string>& notNullColumns)
-    : ReadOptions(arrow::csv::ReadOptions::Defaults())
-    , ParseOptions(arrow::csv::ParseOptions::Defaults())
-    , ConvertOptions(arrow::csv::ConvertOptions::Defaults())
+    : ReadOptions(arrow20::csv::ReadOptions::Defaults())
+    , ParseOptions(arrow20::csv::ParseOptions::Defaults())
+    , ConvertOptions(arrow20::csv::ConvertOptions::Defaults())
     , NotNullColumns(notNullColumns)
 {
     ConvertOptions.check_utf8 = false;
     ConvertOptions.timestamp_parsers.clear();
-    ConvertOptions.timestamp_parsers.emplace_back(arrow::TimestampParser::MakeISO8601());
+    ConvertOptions.timestamp_parsers.emplace_back(arrow20::TimestampParser::MakeISO8601());
     ConvertOptions.timestamp_parsers.emplace_back(std::make_shared<TimestampIntParser>());
 
     ReadOptions.block_size = DEFAULT_BLOCK_SIZE;
@@ -62,7 +64,7 @@ TArrowCSV::TArrowCSV(const TColummns& columns, bool header, const std::set<std::
     ReadOptions.autogenerate_column_names = false;
     auto SetOptionsForColumns = [&](const auto& col) {
         if (col.Precision > 0) {
-            ConvertOptions.column_types[col.Name] = arrow::decimal128(static_cast<int32_t>(col.Precision), static_cast<int32_t>(col.Scale));
+            ConvertOptions.column_types[col.Name] = arrow20::decimal128(static_cast<int32_t>(col.Precision), static_cast<int32_t>(col.Scale));
         } else {
             ConvertOptions.column_types[col.Name] = col.CsvArrowType;
         }
@@ -98,7 +100,7 @@ TArrowCSV::TArrowCSV(const TColummns& columns, bool header, const std::set<std::
 namespace {
 
     template<class TBuilder, class TOriginalArray>
-    std::shared_ptr<arrow::Array> ConvertArray(std::shared_ptr<arrow::ArrayData> data, ui64 dev) {
+    std::shared_ptr<arrow20::Array> ConvertArray(std::shared_ptr<arrow20::ArrayData> data, ui64 dev) {
         auto originalArr = std::make_shared<TOriginalArray>(data);
         TBuilder aBuilder;
         Y_ABORT_UNLESS(aBuilder.Reserve(originalArr->length()).ok());
@@ -116,59 +118,59 @@ namespace {
 
 }
 
-std::shared_ptr<arrow::RecordBatch> TArrowCSV::ConvertColumnTypes(std::shared_ptr<arrow::RecordBatch> parsedBatch) const {
+std::shared_ptr<arrow20::RecordBatch> TArrowCSV::ConvertColumnTypes(std::shared_ptr<arrow20::RecordBatch> parsedBatch) const {
     if (!parsedBatch) {
         return nullptr;
     }
 
     const auto& schema = parsedBatch->schema();
 
-    std::vector<std::shared_ptr<arrow::Array>> resultColumns;
+    std::vector<std::shared_ptr<arrow20::Array>> resultColumns;
     std::set<std::string> columnsFilter(ResultColumns.begin(), ResultColumns.end());
-    arrow::SchemaBuilder sBuilderFixed;
+    arrow20::SchemaBuilder sBuilderFixed;
 
     for (const auto& f : schema->fields()) {
         auto fArr = parsedBatch->GetColumnByName(f->name());
         Y_ABORT_UNLESS(fArr);
-        std::shared_ptr<arrow::DataType> originalType;
+        std::shared_ptr<arrow20::DataType> originalType;
         if (columnsFilter.contains(f->name()) || columnsFilter.empty()) {
             auto it = OriginalColumnTypes.find(f->name());
             Y_ABORT_UNLESS(it != OriginalColumnTypes.end());
             originalType = it->second;
             bool nullable = !NotNullColumns.contains(f->name());
-            Y_ABORT_UNLESS(sBuilderFixed.AddField(std::make_shared<arrow::Field>(f->name(), originalType, nullable)).ok());
+            Y_ABORT_UNLESS(sBuilderFixed.AddField(std::make_shared<arrow20::Field>(f->name(), originalType, nullable)).ok());
         } else {
             continue;
         }
 
         if (fArr->type()->Equals(originalType)) {
             resultColumns.emplace_back(fArr);
-        } else if (fArr->type()->id() == arrow::TimestampType::type_id) {
+        } else if (fArr->type()->id() == arrow20::TimestampType::type_id) {
             resultColumns.emplace_back([originalType, fArr]() {
                 switch (originalType->id()) {
-                case arrow::UInt16Type::type_id: // Date
-                    return ConvertArray<arrow::UInt16Builder, arrow::TimestampArray>(fArr->data(), 86400);
-                case arrow::UInt32Type::type_id: // Datetime
-                    return ConvertArray<arrow::UInt32Builder, arrow::TimestampArray>(fArr->data(), 1);
-                case arrow::Int32Type::type_id: // Date32
-                    return ConvertArray<arrow::Int32Builder, arrow::TimestampArray>(fArr->data(), 86400);
-                case arrow::Int64Type::type_id:// Datetime64, Timestamp64
-                    return ConvertArray<arrow::Int64Builder, arrow::TimestampArray>(fArr->data(), 1);
+                case arrow20::UInt16Type::type_id: // Date
+                    return ConvertArray<arrow20::UInt16Builder, arrow20::TimestampArray>(fArr->data(), 86400);
+                case arrow20::UInt32Type::type_id: // Datetime
+                    return ConvertArray<arrow20::UInt32Builder, arrow20::TimestampArray>(fArr->data(), 1);
+                case arrow20::Int32Type::type_id: // Date32
+                    return ConvertArray<arrow20::Int32Builder, arrow20::TimestampArray>(fArr->data(), 86400);
+                case arrow20::Int64Type::type_id:// Datetime64, Timestamp64
+                    return ConvertArray<arrow20::Int64Builder, arrow20::TimestampArray>(fArr->data(), 1);
                 default:
                     Y_ABORT_UNLESS(false);
                 }
             }());
-        } else if (fArr->type()->id() == arrow::Decimal128Type::type_id && originalType->id() == arrow::FixedSizeBinaryType::type_id) {
-            auto fixedSizeBinaryType = std::static_pointer_cast<arrow::FixedSizeBinaryType>(originalType);
+        } else if (fArr->type()->id() == arrow20::Decimal128Type::type_id && originalType->id() == arrow20::FixedSizeBinaryType::type_id) {
+            auto fixedSizeBinaryType = std::static_pointer_cast<arrow20::FixedSizeBinaryType>(originalType);
             const auto& decData = fArr->data();
-            auto viewData = arrow::ArrayData::Make(
+            auto viewData = arrow20::ArrayData::Make(
                 fixedSizeBinaryType,
                 decData->length,
                 decData->buffers,
                 decData->null_count,
                 decData->offset
             );
-            resultColumns.emplace_back(arrow::MakeArray(viewData));
+            resultColumns.emplace_back(arrow20::MakeArray(viewData));
         } else {
             Y_ABORT_UNLESS(false);
         }
@@ -176,19 +178,19 @@ std::shared_ptr<arrow::RecordBatch> TArrowCSV::ConvertColumnTypes(std::shared_pt
 
     auto resultSchemaFixed = sBuilderFixed.Finish();
     Y_ABORT_UNLESS(resultSchemaFixed.ok());
-    return arrow::RecordBatch::Make(*resultSchemaFixed, parsedBatch->num_rows(), resultColumns);
+    return arrow20::RecordBatch::Make(*resultSchemaFixed, parsedBatch->num_rows(), resultColumns);
 }
 
-std::shared_ptr<arrow::RecordBatch> TArrowCSV::ReadNext(const TString& csv, TString& errString) {
+std::shared_ptr<arrow20::RecordBatch> TArrowCSV::ReadNext(const TString& csv, TString& errString) {
     if (!Reader) {
         if (ConvertOptions.column_types.empty()) {
             errString = ErrorPrefix() + "no columns specified";
             return {};
         }
 
-        auto buffer = std::make_shared<arrow::Buffer>(arrow::util::string_view(csv.c_str(), csv.length()));
-        auto input = std::make_shared<arrow::io::BufferReader>(buffer);
-        auto res = arrow::csv::StreamingReader::Make(arrow::io::default_io_context(), input,
+        auto buffer = std::make_shared<arrow20::Buffer>(std::string_view(csv.c_str(), csv.length()));
+        auto input = std::make_shared<arrow20::io::BufferReader>(buffer);
+        auto res = arrow20::csv::StreamingReader::Make(arrow20::io::default_io_context(), input,
                                                      ReadOptions, ParseOptions, ConvertOptions);
         if (!res.ok()) {
             errString = ErrorPrefix() + res.status().ToString();
@@ -202,7 +204,7 @@ std::shared_ptr<arrow::RecordBatch> TArrowCSV::ReadNext(const TString& csv, TStr
         return {};
     }
 
-    std::shared_ptr<arrow::RecordBatch> batchParsed;
+    std::shared_ptr<arrow20::RecordBatch> batchParsed;
     auto res = Reader->ReadNext(&batchParsed);
     if (!res.ok()) {
         errString = ErrorPrefix() + res.ToString();
@@ -225,7 +227,7 @@ std::shared_ptr<arrow::RecordBatch> TArrowCSV::ReadNext(const TString& csv, TStr
         }
     }
 
-    std::shared_ptr<arrow::RecordBatch> batch = ConvertColumnTypes(batchParsed);
+    std::shared_ptr<arrow20::RecordBatch> batch = ConvertColumnTypes(batchParsed);
     if (batch && !batch->Validate().ok()) {
         errString = ErrorPrefix() + batch->Validate().ToString();
         return {};
@@ -240,7 +242,7 @@ void TArrowCSV::SetNullValue(const TString& null) {
     ConvertOptions.quoted_strings_can_be_null = false;
 }
 
-std::shared_ptr<arrow::RecordBatch> TArrowCSV::ReadSingleBatch(const TString& csv, TString& errString) {
+std::shared_ptr<arrow20::RecordBatch> TArrowCSV::ReadSingleBatch(const TString& csv, TString& errString) {
     auto batch = ReadNext(csv, errString);
     if (!batch) {
         if (errString.empty()) {
@@ -255,7 +257,7 @@ std::shared_ptr<arrow::RecordBatch> TArrowCSV::ReadSingleBatch(const TString& cs
     }
     return batch;
 }
-std::shared_ptr<arrow::RecordBatch> TArrowCSV::ReadSingleBatch(const TString& csv, const Ydb::Formats::CsvSettings& csvSettings, TString& errString) {
+std::shared_ptr<arrow20::RecordBatch> TArrowCSV::ReadSingleBatch(const TString& csv, const Ydb::Formats::CsvSettings& csvSettings, TString& errString) {
     const auto& quoting = csvSettings.quoting();
     if (quoting.quote_char().length() > 1) {
         errString = ErrorPrefix() + "Wrong quote char '" + quoting.quote_char() + "'";

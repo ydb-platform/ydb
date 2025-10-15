@@ -317,8 +317,12 @@ public:
     void ExpectMessages(std::vector<TString> messages, bool sort) final {
         std::vector<TString> receivedMessages;
         WaitFor(OperationTimeout, "read message from mock pq gateway", [&](TString& errorString) {
-            const auto data = ExtractData();
-            receivedMessages.insert(receivedMessages.end(), data.begin(), data.end());
+            auto data = ExtractData();
+            receivedMessages.insert(
+                receivedMessages.end(),
+                std::make_move_iterator(data.begin()),
+                std::make_move_iterator(data.end())
+            );
 
             UNIT_ASSERT_C(messages.size() >= receivedMessages.size(), TStringBuilder()
                 << "expected #" << messages.size() << " messages ("

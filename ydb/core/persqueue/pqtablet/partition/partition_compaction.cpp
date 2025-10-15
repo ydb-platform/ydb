@@ -816,12 +816,13 @@ void TPartition::CheckTimestampsOrderInZones(TStringBuf validateReason) const {
 
 void TPartition::InitFirstCompactionPart()
 {
-    LOG_D("TPartition::InitFirstCompactionPart");
+    if (CompactionBlobEncoder.HeadKeys.empty()) {
+        return;
+    }
     CompactionBlobEncoder.Head.MutableLastBatch().Unpack();
     const auto& batch = CompactionBlobEncoder.Head.GetLastBatch();
     FirstCompactionPart = std::make_pair(batch.GetOffset(), batch.Blobs.back().GetPartNo());
     CompactionBlobEncoder.Head.MutableLastBatch().Pack();
-    LOG_D("FirstCompactionPart=" << FirstCompactionPart->first << "." << FirstCompactionPart->second);
 }
 
 }

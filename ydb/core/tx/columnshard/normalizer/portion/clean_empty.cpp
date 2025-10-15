@@ -2,12 +2,14 @@
 
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
+#include <util/string/join.h>
 
 namespace NKikimr::NOlap::NSyncChunksWithPortions {
 
 class IDBModifier {
 public:
     virtual void Apply(NIceDb::TNiceDb& db) = 0;
+    virtual TString GetId() const = 0;
     virtual ~IDBModifier() = default;
 };
 
@@ -15,6 +17,10 @@ class TRemoveV0: public IDBModifier {
 private:
     const TPortionAddress PortionAddress;
     std::vector<TColumnChunkLoadContext> Chunks;
+    virtual TString GetId() const override {
+        return "V0";
+    }
+
     virtual void Apply(NIceDb::TNiceDb& db) override {
         for (auto&& i : Chunks) {
             AFL_CRIT(NKikimrServices::TX_COLUMNSHARD)("event", "remove_portion_v0")("path_id", PortionAddress.GetPathId())(
@@ -37,12 +43,16 @@ class TRemoveV1: public IDBModifier {
 private:
     const TPortionAddress PortionAddress;
     std::vector<TChunkAddress> Chunks;
+    virtual TString GetId() const override {
+        return "V1";
+    }
+
     virtual void Apply(NIceDb::TNiceDb& db) override {
         for (auto&& i : Chunks) {
             AFL_CRIT(NKikimrServices::TX_COLUMNSHARD)("event", "remove_portion_v1")("path_id", PortionAddress.GetPathId())(
                 "portion_id", PortionAddress.GetPortionId())("chunk", i.DebugString());
             db.Table<NColumnShard::Schema::IndexColumnsV1>()
-                .Key(PortionAddress.GetPathId(), PortionAddress.GetPortionId(), i.GetColumnId(), i.GetChunkIdx())
+                .Key(PortionAddress.GetPathId().GetRawValue(), PortionAddress.GetPortionId(), i.GetColumnId(), i.GetChunkIdx())
                 .Delete();
         }
     }
@@ -58,10 +68,14 @@ class TRemoveV2: public IDBModifier {
 private:
     const TPortionAddress PortionAddress;
     std::vector<TChunkAddress> Chunks;
+    virtual TString GetId() const override {
+        return "V2";
+    }
+
     virtual void Apply(NIceDb::TNiceDb& db) override {
         AFL_CRIT(NKikimrServices::TX_COLUMNSHARD)("event", "remove_portion_v2")("path_id", PortionAddress.GetPathId())(
             "portion_id", PortionAddress.GetPortionId());
-        db.Table<NColumnShard::Schema::IndexColumnsV2>().Key(PortionAddress.GetPathId(), PortionAddress.GetPortionId()).Delete();
+        db.Table<NColumnShard::Schema::IndexColumnsV2>().Key(PortionAddress.GetPathId().GetRawValue(), PortionAddress.GetPortionId()).Delete();
     }
 
 public:
@@ -73,16 +87,23 @@ public:
 class TRemovePortion: public IDBModifier {
 private:
     const TPortionAddress PortionAddress;
+    const ui64 PlanStep = 0;
     std::vector<TChunkAddress> Chunks;
+    virtual TString GetId() const override {
+        return TString("P::") + (PlanStep ? "DEL" : "EXIST");
+    }
+
     virtual void Apply(NIceDb::TNiceDb& db) override {
         AFL_CRIT(NKikimrServices::TX_COLUMNSHARD)("event", "remove_portion")("path_id", PortionAddress.GetPathId())(
             "portion_id", PortionAddress.GetPortionId());
-        db.Table<NColumnShard::Schema::IndexPortions>().Key(PortionAddress.GetPathId(), PortionAddress.GetPortionId()).Delete();
+        db.Table<NColumnShard::Schema::IndexPortions>().Key(PortionAddress.GetPathId().GetRawValue(), PortionAddress.GetPortionId()).Delete();
     }
 
 public:
-    TRemovePortion(const TPortionAddress& portionAddress)
-        : PortionAddress(portionAddress) {
+    TRemovePortion(const TPortionAddress& portionAddress, const ui64 planStep)
+        : PortionAddress(portionAddress)
+        , PlanStep(planStep)
+    {
     }
 };
 
@@ -133,7 +154,7 @@ bool GetColumnPortionAddresses(NTabletFlatExecutor::TTransactionContext& txc, st
             return false;
         }
         while (!rowset.EndOfSet()) {
-            TPortionAddress address(rowset.GetValue<Schema::IndexColumnsV1::PathId>(), rowset.GetValue<Schema::IndexColumnsV1::PortionId>());
+            TPortionAddress address(TInternalPathId::FromRawValue(rowset.GetValue<Schema::IndexColumnsV1::PathId>()), rowset.GetValue<Schema::IndexColumnsV1::PortionId>());
             TChunkAddress cAddress(rowset.GetValue<Schema::IndexColumnsV1::SSColumnId>(), rowset.GetValue<Schema::IndexColumnsV1::ChunkIdx>());
             usedPortions[address].emplace_back(cAddress);
             if (!rowset.Next()) {
@@ -154,7 +175,7 @@ bool GetColumnPortionAddresses(NTabletFlatExecutor::TTransactionContext& txc, st
         }
         while (!rowset.EndOfSet()) {
             TPortionAddress portionAddress(
-                rowset.GetValue<Schema::IndexColumnsV2::PathId>(), rowset.GetValue<Schema::IndexColumnsV2::PortionId>());
+                TInternalPathId::FromRawValue(rowset.GetValue<Schema::IndexColumnsV2::PathId>()), rowset.GetValue<Schema::IndexColumnsV2::PortionId>());
             usedPortions.emplace(portionAddress, std::make_shared<TRemoveV2>(portionAddress));
             if (!rowset.Next()) {
                 return false;
@@ -164,14 +185,17 @@ bool GetColumnPortionAddresses(NTabletFlatExecutor::TTransactionContext& txc, st
     }
     {
         std::map<TPortionAddress, std::shared_ptr<IDBModifier>> usedPortions;
-        auto rowset = db.Table<Schema::IndexPortions>().Select<Schema::IndexPortions::PathId, Schema::IndexPortions::PortionId>();
+        auto rowset = db.Table<Schema::IndexPortions>()
+                          .Select<Schema::IndexPortions::PathId, Schema::IndexPortions::PortionId, Schema::IndexPortions::XPlanStep>();
         if (!rowset.IsReady()) {
             return false;
         }
         while (!rowset.EndOfSet()) {
             TPortionAddress portionAddress(
-                rowset.GetValue<Schema::IndexPortions::PathId>(), rowset.GetValue<Schema::IndexPortions::PortionId>());
-            usedPortions.emplace(portionAddress, std::make_shared<TRemovePortion>(portionAddress));
+                TInternalPathId::FromRawValue(rowset.GetValue<Schema::IndexPortions::PathId>()), rowset.GetValue<Schema::IndexPortions::PortionId>());
+            usedPortions.emplace(portionAddress,
+                std::make_shared<TRemovePortion>(portionAddress,
+                    rowset.HaveValue<Schema::IndexPortions::XPlanStep>() ? rowset.GetValue<Schema::IndexPortions::XPlanStep>() : 0));
             if (!rowset.Next()) {
                 return false;
             }
@@ -261,12 +285,15 @@ std::optional<std::vector<std::vector<std::shared_ptr<IDBModifier>>>> GetPortion
     std::vector<std::vector<std::shared_ptr<IDBModifier>>> result;
     std::vector<std::shared_ptr<IDBModifier>> modificationsPack;
     ui32 countPortionsForRemove = 0;
+    THashMap<TString, ui32> reportCount;
     while (iteration.size()) {
         auto v = iteration.begin()->second;
         const bool isCorrect = (v.size() == SourcesCount);
         iteration.erase(iteration.begin());
+        std::set<TString> problemId;
         for (auto&& i : v) {
             if (!isCorrect) {
+                problemId.emplace(i.GetModification()->GetId());
                 modificationsPack.emplace_back(i.GetModification());
                 if (modificationsPack.size() == 100) {
                     result.emplace_back(std::vector<std::shared_ptr<IDBModifier>>());
@@ -278,12 +305,23 @@ std::optional<std::vector<std::vector<std::shared_ptr<IDBModifier>>>> GetPortion
                 iteration[i.GetPortionAddress()].emplace_back(i);
             }
         }
+        if (isCorrect) {
+            ++reportCount["normal"];
+        } else {
+            ++reportCount[JoinSeq(",", problemId)];
+        }
     }
-    if (modificationsPack.size()) {
-        countPortionsForRemove += modificationsPack.size();
-        result.emplace_back(std::move(modificationsPack));
+    {
+        TStringBuilder sb;
+        for (auto&& i : reportCount) {
+            sb << i.first << ":" << i.second << ";";
+        }
+        if (modificationsPack.size()) {
+            countPortionsForRemove += modificationsPack.size();
+            result.emplace_back(std::move(modificationsPack));
+        }
+        AFL_CRIT(NKikimrServices::TX_COLUMNSHARD)("tasks_for_remove", countPortionsForRemove)("distribution", sb);
     }
-    AFL_CRIT(NKikimrServices::TX_COLUMNSHARD)("tasks_for_remove", countPortionsForRemove);
     return result;
 }
 

@@ -105,12 +105,15 @@ void BuildUnionAllChannels(TGraph& graph, const NNodes::TDqPhyStage& stage, ui32
 template <typename TGraph, typename TKeyColumns>
 void BuildHashShuffleChannels(TGraph& graph, const typename TGraph::TStageInfoType& stageInfo, ui32 inputIndex,
     const typename TGraph::TStageInfoType& inputStageInfo, ui32 outputIndex, const TKeyColumns& keyColumns,
-    bool enableSpilling, const TChannelLogFunc& logFunc)
+    bool enableSpilling, const TChannelLogFunc& logFunc, EHashShuffleFuncType hashKind = EHashShuffleFuncType::HashV1, bool forceSpilling = false)
 {
     for (auto& originTaskId : inputStageInfo.Tasks) {
         auto& originTask = graph.GetTask(originTaskId);
         auto& taskOutput = originTask.Outputs[outputIndex];
+
         taskOutput.Type = TTaskOutputType::HashPartition;
+        taskOutput.HashKind = hashKind;
+
         for (const auto& keyColumn : keyColumns) {
             taskOutput.KeyColumns.push_back(keyColumn);
         }
@@ -127,9 +130,8 @@ void BuildHashShuffleChannels(TGraph& graph, const typename TGraph::TStageInfoTy
             channel.DstStageId = stageInfo.Id;
             channel.DstTask = targetTask.Id;
             channel.DstInputIndex = inputIndex;
-            channel.InMemory = !enableSpilling || inputStageInfo.OutputsCount == 1;
+            channel.InMemory = !enableSpilling || (inputStageInfo.OutputsCount == 1 && !forceSpilling);
             taskOutput.Channels.push_back(channel.Id);
-
             auto& taskInput = targetTask.Inputs[inputIndex];
             taskInput.Channels.push_back(channel.Id);
 

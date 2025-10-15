@@ -3471,9 +3471,7 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
 
             return BuildUdf(ctx, pos, moduleName, name, newArgs);
         }
-    } else if (ns == "datetime2" && (name == "Parse")) {
-        return BuildUdf(ctx, pos, nameSpace, name, args);
-    } else if (MKQL_RUNTIME_VERSION < 51U && ns == "datetime2" && name == "Format") {
+    } else if (MKQL_RUNTIME_VERSION < 51U && ns == "datetime2" && (name == "Format" || name == "Parse")) {
         // FIXME: The condition above is required to untie the
         // Gordian knot with the upgrade, when two MiniKQL
         // runtimes with different versions are being used.

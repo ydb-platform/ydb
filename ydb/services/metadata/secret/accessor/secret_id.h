@@ -1,6 +1,6 @@
 #pragma once
 #include <ydb/core/base/appdata.h>
-
+#include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/library/accessor/accessor.h>
 #include <util/generic/overloaded.h>
 

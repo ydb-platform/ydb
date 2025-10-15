@@ -16,6 +16,7 @@ PEERDIR(
     ydb/core/fq/libs/control_plane_config
     ydb/core/fq/libs/control_plane_proxy
     ydb/core/fq/libs/control_plane_storage
+    ydb/core/fq/libs/db_id_async_resolver_impl
     ydb/core/fq/libs/events
     ydb/core/fq/libs/gateway
     ydb/core/fq/libs/health
@@ -52,7 +53,7 @@ PEERDIR(
     ydb/library/yql/providers/s3/actors
     ydb/library/yql/providers/s3/proto
     ydb/library/yql/providers/s3/provider
-    ydb/library/yql/providers/solomon/async_io
+    ydb/library/yql/providers/solomon/actors
     ydb/library/yql/providers/solomon/gateway
     ydb/library/yql/providers/solomon/proto
     ydb/library/yql/providers/solomon/provider

@@ -111,6 +111,7 @@ enum class ERequestType: size_t {
     TOPIC_DESCRIBECONSUMER,
     TOPIC_ALTERTOPIC,
     TOPIC_DROPTOPIC,
+    TOPIC_PROPOSE_TRANSACTION,
 
     REQUEST_TYPES_CNT, // Add new types above this line
 };

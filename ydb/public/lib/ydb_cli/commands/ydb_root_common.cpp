@@ -80,7 +80,7 @@ void TClientCommandRootCommon::ValidateSettings() {
     } else {
         return;
     }
-    exit(EXIT_FAILURE);
+    throw yexception() << "Invalid client settings";
 }
 
 void TClientCommandRootCommon::FillConfig(TConfig& config) {

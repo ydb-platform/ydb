@@ -8,6 +8,7 @@
 #include <ydb/core/persqueue/write_meta.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/public/api/grpc/ydb_auth_v1.grpc.pb.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/codecs.h>
 
 #include "actors.h"
 #include "kafka_fetch_actor.h"
@@ -166,6 +167,31 @@ void TKafkaFetchActor::FillRecordsBatch(const NKikimrClient::TPersQueueFetchResp
                 record.Headers.push_back(header);
             }
         }
+
+        TKafkaHeader header;
+        header.CodecKeyStr = "__codec";
+        header.Key = header.CodecKeyStr;
+
+        NYdb::NTopic::ECodec codec = static_cast<NYdb::NTopic::ECodec>(record.DataChunk.GetCodec() + 1);
+        switch (codec) {
+            case NYdb::NTopic::ECodec::RAW:
+                header.CodecValueStr = "RAW";
+                break;
+            case NYdb::NTopic::ECodec::GZIP:
+                header.CodecValueStr = "GZIP";
+                break;
+            case NYdb::NTopic::ECodec::LZOP:
+                header.CodecValueStr = "LZOP";
+                break;
+            case NYdb::NTopic::ECodec::ZSTD:
+                header.CodecValueStr = "ZSTD";
+                break;
+            default:
+                header.CodecValueStr = std::to_string(static_cast<uint32_t>(codec));
+        }
+
+        header.Value = header.CodecValueStr;
+        record.Headers.push_back(header);
 
         record.Value = record.DataChunk.GetData();
         record.OffsetDelta = lastOffset - baseOffset;

@@ -64,8 +64,8 @@ int OnMessageBus(const TClientCommand::TConfig& config, const ResponseType& resp
 
 template <typename RequestType, typename ResponseType>
 int MessageBusCall(TClientCommand::TConfig& config, TAutoPtr<RequestType> request, std::function<int(const ResponseType&)> callback) {
-    PrepareRequest(config, request);
     auto handler = [&](NClient::TKikimr& kikimr) {
+        PrepareRequest(config, request);
         NThreading::TFuture<NClient::TResult> future(kikimr.ExecuteRequest(request.Release()));
         return HandleResponse<NClient::TResult>(future, [&](const NClient::TResult& result) -> int {
             if (!result.HaveResponse<ResponseType>()) {

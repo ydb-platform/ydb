@@ -42,16 +42,16 @@ public:
 
         const auto& eraseTx = tx->GetDistributedEraseTx();
         const auto& request = eraseTx->GetRequest();
-        auto [readVersion, writeVersion] = DataShard.GetReadWriteVersions(op.Get());
+        auto mvccVersion = DataShard.GetMvccVersion(op.Get());
 
         if (eraseTx->HasDependents()) {
             NMiniKQL::TEngineHostCounters engineHostCounters;
-            TDataShardUserDb userDb(DataShard, txc.DB, op->GetGlobalTxId(), readVersion, writeVersion, engineHostCounters, TAppData::TimeProvider->Now());
+            TDataShardUserDb userDb(DataShard, txc.DB, op->GetGlobalTxId(), mvccVersion, engineHostCounters, TAppData::TimeProvider->Now());
             TDataShardChangeGroupProvider groupProvider(DataShard, txc.DB, /* distributed tx group */ 0);
             THolder<IDataShardChangeCollector> changeCollector{CreateChangeCollector(DataShard, userDb, groupProvider, txc.DB, request.GetTableId())};
 
             auto presentRows = TDynBitMap().Set(0, request.KeyColumnsSize());
-            if (!Execute(txc, request, presentRows, eraseTx->GetConfirmedRows(), writeVersion, op->GetGlobalTxId(),
+            if (!Execute(txc, request, presentRows, eraseTx->GetConfirmedRows(), mvccVersion, op->GetGlobalTxId(),
                     &userDb, &groupProvider, changeCollector.Get()))
             {
                 return EExecutionStatus::Restart;
@@ -94,7 +94,7 @@ public:
                     Y_ABORT_UNLESS(presentRows.contains(rs.Origin));
 
                     auto confirmedRows = DeserializeBitMap<TDynBitMap>(body.GetConfirmedRows());
-                    if (!Execute(txc, request, presentRows.at(rs.Origin), confirmedRows, writeVersion, op->GetGlobalTxId())) {
+                    if (!Execute(txc, request, presentRows.at(rs.Origin), confirmedRows, mvccVersion, op->GetGlobalTxId())) {
                         return EExecutionStatus::Restart;
                     }
                 }
@@ -119,7 +119,7 @@ public:
     }
 
     bool Execute(TTransactionContext& txc, const NKikimrTxDataShard::TEvEraseRowsRequest& request,
-            const TDynBitMap& presentRows, const TDynBitMap& confirmedRows, const TRowVersion& writeVersion,
+            const TDynBitMap& presentRows, const TDynBitMap& confirmedRows, const TRowVersion& mvccVersion,
             ui64 globalTxId,
             TDataShardUserDb* userDb = nullptr,
             TDataShardChangeGroupProvider* groupProvider = nullptr,
@@ -176,7 +176,7 @@ public:
                         pageFault = true;
                     }
                 } else {
-                    if (!changeCollector->OnUpdate(fullTableId, tableInfo.LocalTid, NTable::ERowOp::Erase, key, {}, writeVersion)) {
+                    if (!changeCollector->OnUpdate(fullTableId, tableInfo.LocalTid, NTable::ERowOp::Erase, key, {}, mvccVersion)) {
                         pageFault = true;
                     }
                 }
@@ -193,11 +193,11 @@ public:
                 DataShard.GetConflictsCache().GetTableCache(tableInfo.LocalTid).AddUncommittedWrite(keyCells.GetCells(), globalTxId, txc.DB);
                 if (!commitAdded && userDb) {
                     // Make sure we see our own changes on further iterations
-                    userDb->AddCommitTxId(fullTableId, globalTxId, writeVersion);
+                    userDb->AddCommitTxId(fullTableId, globalTxId);
                     commitAdded = true;
                 }
             } else {
-                txc.DB.Update(tableInfo.LocalTid, NTable::ERowOp::Erase, key, {}, writeVersion);
+                txc.DB.Update(tableInfo.LocalTid, NTable::ERowOp::Erase, key, {}, mvccVersion);
                 DataShard.GetConflictsCache().GetTableCache(tableInfo.LocalTid).RemoveUncommittedWrites(keyCells.GetCells(), txc.DB);
             }
         }
@@ -209,7 +209,7 @@ public:
         if (!volatileDependencies.empty() || volatileOrdered) {
             DataShard.GetVolatileTxManager().PersistAddVolatileTx(
                 globalTxId,
-                writeVersion,
+                mvccVersion,
                 /* commitTxIds */ { globalTxId },
                 volatileDependencies,
                 /* participants */ { },

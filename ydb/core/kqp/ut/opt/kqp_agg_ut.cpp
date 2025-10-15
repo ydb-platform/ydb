@@ -190,6 +190,60 @@ Y_UNIT_TEST_SUITE(KqpAgg) {
             ])", FormatResultSetYson(result.GetResultSet(0)));
         }
     }
+
+    Y_UNIT_TEST_TWIN(AggHashShuffle, UseSink) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
+        auto settings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetWithSampleTables(true);
+
+        TKikimrRunner kikimr(settings);
+        {
+            const TString query = R"(
+                CREATE TABLE Source (
+                    Key UUID,
+                    Value Uint64,
+                    Value2 String,
+                    PRIMARY KEY (Value)
+                );
+            )";
+
+            auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+            auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            const TString query = R"(
+                $data = RandomUuid(0);
+                INSERT INTO Source (Key, Value, Value2) VALUES ($data, 1u, "testtesttest");
+            )";
+
+            auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+            auto result = session.ExecuteDataQuery(query, NYdb::NTable::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            const TString query = R"(
+                SELECT 
+                    Key,
+                    COUNT(*) AS Cnt
+                FROM Source
+                GROUP BY Key
+            )";
+
+            auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+            auto result = session.ExecuteDataQuery(query, NYdb::NTable::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+            Cerr << FormatResultSetYson(result.GetResultSet(0)) << Endl;
+
+            //UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), "[[2u]]");
+        }
+       
+    }
 }
 
 } // namespace NKikimr::NKqp

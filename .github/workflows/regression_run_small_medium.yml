@@ -1,4 +1,4 @@
-name: Regression-run Small Medium
+name: Regression-run_Small_and_Medium
 
 on:
   schedule:

@@ -359,10 +359,15 @@ bool TTable::TryToPreallocateMemoryForJoin(TTable & t1, TTable & t2, EJoinKind /
                 tableForPreallocation.NumberOfKeyStringColumns != 0, tableForPreallocation.NumberOfKeyIColumns != 0);
         const auto slotSize = ComputeNumberOfSlots(tableForPreallocation.TableBucketsStats[bucket].TuplesNum);
 
+        bool wasException = false;
         try {
             bucketForPreallocation.JoinSlots.reserve(nSlots*slotSize);
             bucketForPreallocationStats.BloomFilter.Reserve(bucketForPreallocationStats.TuplesNum);
         } catch (TMemoryLimitExceededException) {
+            wasException = true;
+        }
+
+        if (wasException || TlsAllocState->IsMemoryYellowZoneEnabled()) {
             for (ui64 i = 0; i < bucket; ++i) {
                 auto& b1 = t1.TableBuckets[i];
                 b1.JoinSlots.resize(0);

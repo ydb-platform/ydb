@@ -5,7 +5,7 @@ items:
     href: install.md
   - name: Configuration
     href: configuration.md
-  - name: Scenarios
-    href: scenarios.md
+  - name: Cluster restart scenario
+    href: rolling-restart-scenario.md
   - name: Reference
     href: reference.md

@@ -3,6 +3,7 @@
 #include "schemeshard__data_erasure_manager.h"
 
 #include <ydb/core/protos/table_stats.pb.h>  // for TStoragePoolsStats
+#include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tablet/tablet_exception.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
@@ -93,7 +94,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                        TStepId, TTxId, TStepId, TTxId,
                        TString, TTxId,
                        ui64, ui64, ui64,
-                       TString> TPathRec;
+                       TString, TActorId> TPathRec;
     typedef TDeque<TPathRec> TPathRows;
 
     template <typename SchemaTable, typename TRowSet>
@@ -111,7 +112,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             rowSet.template GetValueOrDefault<typename SchemaTable::DirAlterVersion>(1),
             rowSet.template GetValueOrDefault<typename SchemaTable::UserAttrsAlterVersion>(1),
             rowSet.template GetValueOrDefault<typename SchemaTable::ACLVersion>(0),
-            rowSet.template GetValueOrDefault<typename SchemaTable::TempDirOwnerActorId>()
+            rowSet.template GetValueOrDefault<typename SchemaTable::TempDirOwnerActorId_Deprecated>(),
+            rowSet.template GetValueOrDefault<typename SchemaTable::TempDirOwnerActorIdRaw>()
         );
     }
 
@@ -137,7 +139,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
         TPathElement::TPtr path = new TPathElement(pathId, parentPathId, domainId, name, owner);
 
-        TString tempDirOwnerActorId;
+        TString tempDirOwnerActorId_Deprecated;
         std::tie(
             std::ignore, //pathId
             std::ignore, //parentPathId
@@ -153,14 +155,17 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             path->DirAlterVersion,
             path->UserAttrs->AlterVersion,
             path->ACLVersion,
-            tempDirOwnerActorId) = rec;
+            tempDirOwnerActorId_Deprecated,
+            path->TempDirOwnerActorId) = rec;
 
         path->PathState = TPathElement::EPathState::EPathStateNoChanges;
         if (path->StepDropped) {
             path->PathState = TPathElement::EPathState::EPathStateNotExist;
         }
 
-        path->TempDirOwnerActorId.Parse(tempDirOwnerActorId.c_str(), tempDirOwnerActorId.size());
+        if (!path->TempDirOwnerActorId) {
+            path->TempDirOwnerActorId.Parse(tempDirOwnerActorId_Deprecated.c_str(), tempDirOwnerActorId_Deprecated.size());
+        }
 
         return path;
     }
@@ -658,6 +663,25 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     rowSet.GetValue<Schema::MigratedShardsToDelete::ShardOwnerId>(),
                     rowSet.GetValue<Schema::MigratedShardsToDelete::ShardLocalIdx>()
                 );
+                shardsToDelete.emplace_back(shardIdx);
+
+                if (!rowSet.Next()) {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
+    bool LoadSystemShardsToDelete(NIceDb::TNiceDb& db, TShardsToDeleteRows& shardsToDelete) const {
+        {
+            auto rowSet = db.Table<Schema::SystemShardsToDelete>().Range().Select();
+            if (!rowSet.IsReady()) {
+                return false;
+            }
+            while (!rowSet.EndOfSet()) {
+                const auto shardIdx = Self->MakeLocalId(rowSet.GetValue<Schema::SystemShardsToDelete::ShardIdx>());
                 shardsToDelete.emplace_back(shardIdx);
 
                 if (!rowSet.Next()) {
@@ -3785,6 +3809,23 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             }
         }
 
+        // Read system shards to delete
+        {
+            TShardsToDeleteRows shardsToDelete;
+            if (!LoadSystemShardsToDelete(db, shardsToDelete)) {
+                return false;
+            }
+
+            LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                         "TTxInit for SystemShardToDelete"
+                             << ", read records: " << shardsToDelete.size()
+                             << ", at schemeshard: " << Self->TabletID());
+
+            for (auto& rec: shardsToDelete) {
+                OnComplete.DeleteSystemShard(std::get<0>(rec));
+            }
+        }
+
         // Read backup settings
         {
             TBackupSettingsRows backupSettings;
@@ -3840,7 +3881,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     auto desc = tableInfo->BackupSettings.MutableTable();
                     Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(*desc, tableDesc));
                 }
-                
+
                 if (changefeedUnderlyingTopics) {
                     NKikimrSchemeOp::TChangefeedUnderlyingTopics wrapperOverTopics;
                     Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(wrapperOverTopics, changefeedUnderlyingTopics));
@@ -4532,12 +4573,12 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 try {
                     fill(buildInfo);
                 } catch (const std::exception& exc) {
-                    LOG_ERROR_S(ctx, NKikimrServices::BUILD_INDEX, 
+                    LOG_ERROR_S(ctx, NKikimrServices::BUILD_INDEX,
                         "Init " << stepName << " unhandled exception, id#" << buildInfo.Id
                         << " " << TypeName(exc) << ": " << exc.what() << Endl
                         << TBackTrace::FromCurrentException().PrintToString()
                         << ", TIndexBuildInfo: " << buildInfo);
-        
+
                     // in-memory volatile state:
                     buildInfo.IsBroken = true;
                     buildInfo.AddIssue(TStringBuilder() << "Init " << stepName << " unhandled exception " << exc.what());
@@ -4548,7 +4589,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 const auto* buildInfoPtr = Self->IndexBuilds.FindPtr(id);
                 Y_ASSERT(buildInfoPtr);
                 if (!buildInfoPtr) {
-                    LOG_ERROR_S(ctx, NKikimrServices::BUILD_INDEX, 
+                    LOG_ERROR_S(ctx, NKikimrServices::BUILD_INDEX,
                         "Init " << stepName << " BuildInfo not found: id#" << id);
                     return;
                 }
@@ -4610,9 +4651,13 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                             rowset.GetValue<Schema::KMeansTreeProgress::ChildBegin>(),
                             rowset.GetValue<Schema::KMeansTreeProgress::Child>(),
                             rowset.GetValue<Schema::KMeansTreeProgress::State>(),
-                            rowset.GetValue<Schema::KMeansTreeProgress::TableSize>()
+                            rowset.GetValue<Schema::KMeansTreeProgress::TableSize>(),
+                            rowset.GetValue<Schema::KMeansTreeProgress::Round>()
                         );
                         buildInfo.Sample.Rows.reserve(buildInfo.KMeans.K * 2);
+                        if (buildInfo.KMeans.State == TIndexBuildInfo::TKMeans::Recompute) {
+                            buildInfo.Clusters->SetRound(buildInfo.KMeans.Round);
+                        }
                     });
 
                     if (!rowset.Next()) {
@@ -4647,6 +4692,65 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                 LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                              "KMeansTreeSample records: " << sampleCount
+                             << ", at schemeshard: " << Self->TabletID());
+            }
+
+            // read kmeans tree aggregated clusters
+            {
+                auto rowset = db.Table<Schema::KMeansTreeClusters>().Range().Select();
+                if (!rowset.IsReady()) {
+                    return false;
+                }
+
+                TVector<TString> clusters;
+                TVector<ui32> sizes, oldSizes;
+                TIndexBuildId lastId;
+                size_t clusterCount = 0;
+                auto fill = [&]() {
+                    if (!clusters.size()) {
+                        return;
+                    }
+                    fillBuildInfoByIdSafe(lastId, "KMeansTreeClusters", [&](TIndexBuildInfo& buildInfo) {
+                        Y_ENSURE(clusters.size() <= buildInfo.KMeans.K);
+                        bool ok = buildInfo.Clusters->SetClusters(std::move(clusters));
+                        Y_ENSURE(ok);
+                        const auto & clusters = buildInfo.Clusters->GetClusters();
+                        for (size_t i = 0; i < clusters.size(); i++) {
+                            buildInfo.Clusters->AggregateToCluster(i, clusters[i], sizes[i]);
+                            buildInfo.Clusters->SetClusterSize(i, oldSizes[i]);
+                        }
+                    });
+                    clusters.clear();
+                    sizes.clear();
+                    oldSizes.clear();
+                };
+                while (!rowset.EndOfSet()) {
+                    TIndexBuildId id = rowset.GetValue<Schema::KMeansTreeClusters::Id>();
+                    if (id != lastId) {
+                        fill();
+                        lastId = id;
+                    }
+                    auto num = rowset.GetValue<Schema::KMeansTreeClusters::Row>();
+                    auto data = rowset.GetValue<Schema::KMeansTreeClusters::Data>();
+                    auto size = rowset.GetValue<Schema::KMeansTreeClusters::Size>();
+                    auto oldSize = rowset.GetValue<Schema::KMeansTreeClusters::OldSize>();
+                    if (clusters.size() <= num) {
+                        clusters.resize(num+1);
+                        sizes.resize(num+1);
+                        oldSizes.resize(num+1);
+                    }
+                    clusters[num] = data;
+                    sizes[num] = size;
+                    oldSizes[num] = oldSize;
+                    clusterCount++;
+                    if (!rowset.Next()) {
+                        return false;
+                    }
+                }
+                fill();
+
+                LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                             "KMeansTreeCluster records: " << clusterCount
                              << ", at schemeshard: " << Self->TabletID());
             }
 

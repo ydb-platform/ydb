@@ -1,0 +1,33 @@
+(
+(let flag (Configure! world (DataSource 'config) 'OptimizerFlags 'PullUpFlatMapOverJoinMultipleLabels))
+(let mr_source (DataSource 'yt 'plato))
+(let t1 (AsList 
+  (AsStruct '('key1 (Int32 '1)) '('value1 (String 'A))) 
+  (AsStruct '('key1 (Int32 '2)) '('value1 (String 'B)))
+))
+
+(let t2 (AsList 
+  (AsStruct '('key2 (Int32 '3)) '('value2 (String 'C))) 
+  (AsStruct '('key2 (Int32 '4)) '('value2 (String 'D)))
+))
+
+(let t3 (AsList 
+  (AsStruct '('key3 (Int32 '4)) '('value3 (String 'E))) 
+  (AsStruct '('key3 (Int32 '5)) '('value3 (String 'F)))
+))
+
+(let t4 (AsList 
+  (AsStruct '('key4 (Int32 '6)) '('value4 (String 'J))) 
+  (AsStruct '('key4 (Int32 '7)) '('value4 (String 'H)))
+))
+
+(let ej1 (EquiJoin '(t1 'a) '((FlatMap t2 (lambda '(row) (OptionalIf (Coalesce (> (Member row 'key2) (Int32 '1)) (Bool 'false)) row))) 'b) '('Inner 'a 'b '('a 'key1) '('b 'key2) '()) '()))
+(let ej2 (EquiJoin '((FlatMap ej1 (lambda '(row) (Just (AsStruct '('a.key1 (Member row 'a.key1)) '('a.value1 (Just (Member row 'a.value1))) '('b.value2 (Member row 'b.value2)))))) '('a 'b)) '(t3 'c) '('Inner 'a 'c '('a 'key1) '('c 'key3) '()) '()))
+(let ej3 (EquiJoin '((FlatMap ej2 (lambda '(row) (Just (AsStruct '('a.key1 (Member row 'a.key1)) '('a.value1 (Just (Member row 'a.value1))) '('b.value2 (Just (Member row 'b.value2))) '('c.key3 (Member row 'c.key3)))))) '('a 'b 'c)) '(t4 'd) '('Inner 'c 'd '('c 'key3) '('d 'key4) '()) '()))
+
+(let res_sink (DataSink 'result))
+(let world (Write! flag res_sink (Key) ej3 '('('type))))
+
+(let world (Commit! world res_sink))
+(return world)
+)

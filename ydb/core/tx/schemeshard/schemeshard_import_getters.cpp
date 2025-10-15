@@ -5,6 +5,7 @@
 #include <ydb/core/backup/common/checksum.h>
 #include <ydb/core/backup/common/encryption.h>
 #include <ydb/core/backup/common/metadata.h>
+#include <ydb/core/wrappers/retry_policy.h>
 #include <ydb/core/wrappers/s3_storage_config.h>
 #include <ydb/core/wrappers/s3_wrapper.h>
 #include <ydb/public/api/protos/ydb_import.pb.h>
@@ -137,11 +138,11 @@ protected:
     }
 
     void MaybeRetry(const Aws::S3::S3Error& error) {
-        if (Attempt < Retries && error.ShouldRetry()) {
+        if (Attempt < Retries && NWrappers::ShouldRetry(error)) {
             Delay = Min(Delay * ++Attempt, MaxDelay);
             this->Schedule(Delay, new TEvents::TEvWakeup());
         } else {
-            Reply(error.ShouldRetry() ? Ydb::StatusIds::EXTERNAL_ERROR : Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "S3 error: " << error.GetMessage().c_str());
+            Reply(NWrappers::ShouldRetry(error) ? Ydb::StatusIds::EXTERNAL_ERROR : Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "S3 error: " << error.GetMessage().c_str());
         }
     }
 

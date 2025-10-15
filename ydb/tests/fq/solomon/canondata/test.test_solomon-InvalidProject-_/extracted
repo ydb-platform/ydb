@@ -1,7 +1,7 @@
 Failed to execute query, reason:
 Request finished with status: EXTERNAL_ERROR
 Issues:
-<main>: Error: Error while sending request to monitoring api: 404 Not Found, response: Project invalid does not exist
+<main>: Error: Error while sending data request to monitoring api: Project invalid does not exist
 
 
 

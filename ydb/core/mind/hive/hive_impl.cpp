@@ -257,7 +257,10 @@ void THive::ExecuteProcessBootQueue(NIceDb::TNiceDb&, TSideEffects& sideEffects)
                 if (std::holds_alternative<TTooManyTabletsStarting>(bestNodeResult)) {
                     delayedTablets.push_back(record);
                     break;
-                } else if (std::holds_alternative<TNoNodeFound>(bestNodeResult)) {
+                } else {
+                    if (std::holds_alternative<TNotEnoughResources>(bestNodeResult)) {
+                        NotEnoughResources = true;
+                    }
                     for (const TActorId actorToNotify : tablet->ActorsToNotifyOnRestart) {
                         sideEffects.Send(actorToNotify, new TEvPrivate::TEvRestartComplete(tablet->GetFullTabletId(), "boot delay"));
                     }
@@ -366,7 +369,7 @@ void THive::ProcessWaitQueue() {
 void THive::AddToBootQueue(TTabletInfo* tablet, TNodeId node) {
     tablet->UpdateWeight();
     tablet->BootState = BootStateBooting;
-    BootQueue.EmplaceToBootQueue(*tablet, node);
+    BootQueue.AddToBootQueue(*tablet, node);
     UpdateCounterBootQueueSize(BootQueue.BootQueue.size());
 }
 
@@ -687,6 +690,7 @@ void THive::BuildCurrentConfig() {
         SpreadNeighbours = false;
         ObjectDistributions.Disable();
     }
+    BootQueue.UpdateTabletBootQueuePriorities(CurrentConfig);
 }
 
 void THive::Cleanup() {
@@ -1412,7 +1416,7 @@ THive::TBestNodeResult THive::FindBestNode(const TTabletInfo& tablet, TNodeId su
         }
         if (debugState.NodesWithoutResources == nodesLeft) {
             tablet.BootState = BootStateNotEnoughResources;
-            return TNoNodeFound();
+            return TNotEnoughResources();
         }
         if (debugState.NodesWithoutLocation == nodesLeft) {
             tablet.BootState = BootStateNodesLocationUnknown;

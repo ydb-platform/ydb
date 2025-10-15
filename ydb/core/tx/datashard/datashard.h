@@ -1513,6 +1513,18 @@ namespace TEvDataShard {
                           TEvDataShard::EvReshuffleKMeansResponse> {
     };
 
+    struct TEvRecomputeKMeansRequest
+        : public TEventPB<TEvRecomputeKMeansRequest,
+                          NKikimrTxDataShard::TEvRecomputeKMeansRequest,
+                          TEvDataShard::EvRecomputeKMeansRequest> {
+    };
+
+    struct TEvRecomputeKMeansResponse
+        : public TEventPB<TEvRecomputeKMeansResponse,
+                          NKikimrTxDataShard::TEvRecomputeKMeansResponse,
+                          TEvDataShard::EvRecomputeKMeansResponse> {
+    };
+
     struct TEvLocalKMeansRequest
         : public TEventPB<TEvLocalKMeansRequest,
                           NKikimrTxDataShard::TEvLocalKMeansRequest,

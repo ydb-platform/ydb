@@ -42,7 +42,7 @@ void MergeMaxTs(TInstant& current, const TInstant value) {
     }
 }
 
-void FillTaskRunnerStats(ui64 taskId, ui32 stageId, const TTaskRunnerStatsBase& taskStats,
+void FillTaskRunnerStats(ui64 taskId, ui32 stageId, const TDqTaskRunnerStats& taskStats,
     NDqProto::TDqTaskStats* protoTask, TCollectStatsLevel level)
 {
     if (StatsLevelCollectNone(level)) {
@@ -66,52 +66,62 @@ void FillTaskRunnerStats(ui64 taskId, ui32 stageId, const TTaskRunnerStatsBase& 
     protoTask->SetWaitInputTimeUs(taskStats.WaitInputTime.MicroSeconds());
     protoTask->SetWaitOutputTimeUs(taskStats.WaitOutputTime.MicroSeconds());
 
-    protoTask->SetSpillingComputeWriteBytes(taskStats.SpillingComputeWriteBytes);
-    protoTask->SetSpillingChannelWriteBytes(taskStats.SpillingChannelWriteBytes);
+    auto now = TInstant::Now();
+    if (taskStats.CurrentWaitInputStartTime) {
+        protoTask->SetCurrentWaitInputTimeUs((now - taskStats.CurrentWaitInputStartTime).MicroSeconds());
+    }
+    if (taskStats.CurrentWaitOutputStartTime) {
+        protoTask->SetCurrentWaitOutputTimeUs((now - taskStats.CurrentWaitOutputStartTime).MicroSeconds());
+    }
 
-    protoTask->SetSpillingComputeReadTimeUs(taskStats.SpillingComputeReadTime.MicroSeconds());
-    protoTask->SetSpillingComputeWriteTimeUs(taskStats.SpillingComputeWriteTime.MicroSeconds());
-    protoTask->SetSpillingChannelReadTimeUs(taskStats.SpillingChannelReadTime.MicroSeconds());
-    protoTask->SetSpillingChannelWriteTimeUs(taskStats.SpillingChannelWriteTime.MicroSeconds());
+    if (StatsLevelCollectFull(level)) {
+        protoTask->SetSpillingComputeWriteBytes(taskStats.SpillingComputeWriteBytes);
+        protoTask->SetSpillingChannelWriteBytes(taskStats.SpillingChannelWriteBytes);
 
-    if (StatsLevelCollectProfile(level)) {
-        if (taskStats.ComputeCpuTimeByRun) {
-            auto snapshot = taskStats.ComputeCpuTimeByRun->Snapshot();
-            for (ui32 i = 0; i < snapshot->Count(); i++) {
-                auto* protoBucket = protoTask->AddComputeCpuTimeByRun();
-                protoBucket->SetBound(snapshot->UpperBound(i));
-                protoBucket->SetValue(snapshot->Value(i));
+        protoTask->SetSpillingComputeReadTimeUs(taskStats.SpillingComputeReadTime.MicroSeconds());
+        protoTask->SetSpillingComputeWriteTimeUs(taskStats.SpillingComputeWriteTime.MicroSeconds());
+        protoTask->SetSpillingChannelReadTimeUs(taskStats.SpillingChannelReadTime.MicroSeconds());
+        protoTask->SetSpillingChannelWriteTimeUs(taskStats.SpillingChannelWriteTime.MicroSeconds());
+
+        if (StatsLevelCollectProfile(level)) {
+            if (taskStats.ComputeCpuTimeByRun) {
+                auto snapshot = taskStats.ComputeCpuTimeByRun->Snapshot();
+                for (ui32 i = 0; i < snapshot->Count(); i++) {
+                    auto* protoBucket = protoTask->AddComputeCpuTimeByRun();
+                    protoBucket->SetBound(snapshot->UpperBound(i));
+                    protoBucket->SetValue(snapshot->Value(i));
+                }
+            }
+
+            for (const auto& stat : taskStats.MkqlStats) {
+                auto* s = protoTask->MutableMkqlStats()->Add();
+                s->SetName(TString(stat.Key.GetName()));
+                s->SetValue(stat.Value);
+                s->SetDeriv(stat.Key.IsDeriv());
             }
         }
 
-        for (const auto& stat : taskStats.MkqlStats) {
-            auto* s = protoTask->MutableMkqlStats()->Add();
-            s->SetName(TString(stat.Key.GetName()));
-            s->SetValue(stat.Value);
-            s->SetDeriv(stat.Key.IsDeriv());
-        }
-    }
-
-    for (const auto& opStat : taskStats.OperatorStat) {
-        auto& op = *protoTask->MutableOperators()->Add();
-        op.SetOperatorId(opStat.OperatorId);
-        op.SetBytes(std::max<i64>(0, opStat.Bytes));
-        op.SetRows(std::max<i64>(0, opStat.Rows));
-        switch (opStat.OperatorType) {
-            case TOperatorType::Join: {
-                    op.MutableJoin();
-                }
-                break;
-            case TOperatorType::Filter: {
-                    op.MutableFilter();
-                }
-                break;
-            case TOperatorType::Aggregation: {
-                    op.MutableAggregation();
-                }
-                break;
-            default:
-                break;
+        for (const auto& opStat : taskStats.OperatorStat) {
+            auto& op = *protoTask->MutableOperators()->Add();
+            op.SetOperatorId(opStat.OperatorId);
+            op.SetBytes(std::max<i64>(0, opStat.Bytes));
+            op.SetRows(std::max<i64>(0, opStat.Rows));
+            switch (opStat.OperatorType) {
+                case TOperatorType::Join: {
+                        op.MutableJoin();
+                    }
+                    break;
+                case TOperatorType::Filter: {
+                        op.MutableFilter();
+                    }
+                    break;
+                case TOperatorType::Aggregation: {
+                        op.MutableAggregation();
+                    }
+                    break;
+                default:
+                    break;
+            }
         }
     }
 
@@ -287,6 +297,7 @@ void FillTaskRunnerStats(ui64 taskId, ui32 stageId, const TTaskRunnerStatsBase& 
     protoTask->SetCreateTimeMs(taskStats.CreateTs.MilliSeconds());
     protoTask->SetStartTimeMs(startTime.MilliSeconds());
     protoTask->SetFinishTimeMs(finishTime.MilliSeconds());
+    protoTask->SetUpdateTimeMs(TInstant::Now().MilliSeconds());
 }
 
 } // namespace NDq

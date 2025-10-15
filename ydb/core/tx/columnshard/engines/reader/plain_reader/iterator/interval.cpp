@@ -20,7 +20,7 @@ void TFetchingInterval::ConstructResult() {
         auto task = std::make_shared<TStartMergeTask>(MergingContext, Context, std::move(Sources));
         task->SetPriority(NConveyor::ITask::EPriority::High);
         NGroupedMemoryManager::TScanMemoryLimiterOperator::SendToAllocation(Context->GetProcessMemoryControlId(),
-            Context->GetCommonContext()->GetScanId(), GetIntervalId(), { task }, (ui32)EStageFeaturesIndexes::Merge);
+            Context->GetCommonContext()->GetScanId(), GetIntervalId(), { task }, (ui32)NArrow::NSSA::IMemoryCalculationPolicy::EStage::Merge);
     }
 }
 
@@ -38,8 +38,7 @@ TFetchingInterval::TFetchingInterval(const NArrow::NMerger::TSortableBatchPositi
     , TaskGuard(Context->GetCommonContext()->GetCounters().GetResourcesAllocationTasksGuard())
     , Sources(sources)
     , IntervalIdx(intervalIdx)
-    , IntervalGroupGuard(NGroupedMemoryManager::TScanMemoryLimiterOperator::BuildGroupGuard(
-          Context->GetProcessMemoryControlId(), context->GetCommonContext()->GetScanId()))
+    , IntervalGroupGuard(Context->GetProcessScopeGuard()->BuildGroupGuard())
     , IntervalStateGuard(Context->GetCommonContext()->GetCounters().CreateIntervalStateGuard()) {
     AFL_VERIFY(Sources.size());
     for (auto&& [_, i] : Sources) {
@@ -83,7 +82,7 @@ void TFetchingInterval::OnPartSendingComplete() {
     auto task = std::make_shared<TContinueMergeTask>(MergingContext, Context, std::move(Merger));
     task->SetPriority(NConveyor::ITask::EPriority::High);
     NGroupedMemoryManager::TScanMemoryLimiterOperator::SendToAllocation(Context->GetProcessMemoryControlId(),
-        Context->GetCommonContext()->GetScanId(), GetIntervalId(), { task }, (ui32)EStageFeaturesIndexes::Merge);
+        Context->GetCommonContext()->GetScanId(), GetIntervalId(), { task }, (ui32)NArrow::NSSA::IMemoryCalculationPolicy::EStage::Merge);
 }
 
 }   // namespace NKikimr::NOlap::NReader::NPlain

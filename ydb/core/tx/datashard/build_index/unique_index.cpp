@@ -74,7 +74,7 @@ public:
         }
 
         ++ReadRows;
-        ReadBytes += CountBytes(key, row);
+        ReadBytes += CountRowCellBytes(key, *row);
 
         TArrayRef<const TCell> rowCells = *row;
         if (!FirstIndexKey) {

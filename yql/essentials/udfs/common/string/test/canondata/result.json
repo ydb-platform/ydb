@@ -4,6 +4,11 @@
             "uri": "file://test.test_AsciiChecks_/results.txt"
         }
     ],
+    "test.test[AsciiCmpIgnoreCase]": [
+        {
+            "uri": "file://test.test_AsciiCmpIgnoreCase_/extracted"
+        }
+    ],
     "test.test[Base32Decode]": [
         {
             "uri": "file://test.test_Base32Decode_/results.txt"

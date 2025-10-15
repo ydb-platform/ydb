@@ -4,12 +4,14 @@
 #include "bit_util.h"
 #include "block_io_buffer.h"
 #include "block_item.h"
+#include "block_type_helper.h"
 #include "dispatch_traits.h"
 
 #include <yql/essentials/public/udf/udf_value.h>
 #include <yql/essentials/public/udf/udf_value_builder.h>
 #include <yql/essentials/public/udf/udf_type_inspection.h>
 
+#include <arrow/array/array_base.h>
 #include <arrow/datum.h>
 #include <arrow/c/bridge.h>
 
@@ -1187,7 +1189,7 @@ class TTzDateArrayBuilder final : public TTupleArrayBuilderBase<Nullable, TTzDat
 public:
     TTzDateArrayBuilder(const TType* type, const ITypeInfoHelper& typeInfoHelper, arrow::MemoryPool& pool, size_t maxLen, const TParams& params = {})
         : TBase(typeInfoHelper, type, pool, maxLen, params)
-        , DateBuilder_(typeInfoHelper, GetArrowType(typeInfoHelper, type), pool, maxLen, params)
+        , DateBuilder_(typeInfoHelper, MakeTzLayoutArrowType<DataSlot>(), pool, maxLen, params)
         , TimezoneBuilder_(typeInfoHelper, arrow::uint16(), pool, maxLen, params)
     {
     }
@@ -1358,6 +1360,53 @@ private:
     std::unique_ptr<TTypedBufferBuilder<ui8>> NullBuilder;
 };
 
+class TSingularBlockBuilder final: public TArrayBuilderBase {
+public:
+    TSingularBlockBuilder(const TType* type, const ITypeInfoHelper& typeInfoHelper, arrow::MemoryPool& pool,
+                      size_t maxLen, const TParams& params = {})
+        : TArrayBuilderBase(typeInfoHelper, type, pool, maxLen, params) {
+        Reserve();
+    }
+
+    void DoAdd(NUdf::TUnboxedValuePod value) final {
+        Y_UNUSED(value);
+    }
+
+    void DoAdd(TBlockItem value) final {
+        Y_UNUSED(value);
+    }
+
+    void DoAdd(TInputBuffer& input) final {
+        Y_UNUSED(input.PopChar());
+    }
+
+    void DoAddDefault() final {}
+
+    void DoAddMany(const arrow::ArrayData& array, const ui8* sparseBitmap, size_t popCount) final {
+        Y_UNUSED(array, sparseBitmap, popCount);
+    }
+
+    void DoAddMany(const arrow::ArrayData& array, ui64 beginIndex, size_t count) final {
+        Y_UNUSED(array, beginIndex, count);
+    }
+
+    void DoAddMany(const arrow::ArrayData& array, const ui64* indexes, size_t count) final {
+        Y_UNUSED(array, indexes, count);
+    }
+
+    TBlockArrayTree::Ptr DoBuildTree(bool finish) final {
+        TBlockArrayTree::Ptr result = std::make_shared<TBlockArrayTree>();
+        Y_UNUSED(finish);
+        result->Payload.push_back(arrow::NullArray(GetCurrLen()).data());
+        return result;
+    }
+
+private:
+    size_t DoReserve() final {
+        return 0;
+    }
+};
+
 using TArrayBuilderParams = TArrayBuilderBase::TParams;
 
 struct TBuilderTraits {
@@ -1373,6 +1422,7 @@ struct TBuilderTraits {
     using TResource = TResourceArrayBuilder<Nullable>;
     template<typename TTzDate, bool Nullable>
     using TTzDateReader = TTzDateArrayBuilder<TTzDate, Nullable>;
+    using TSingular = TSingularBlockBuilder;
 
     constexpr static bool PassType = true;
 
@@ -1411,6 +1461,10 @@ struct TBuilderTraits {
         } else {
             return std::make_unique<TTzDateReader<TTzDate, false>>(type, typeInfoHelper, pool, maxLen, params);
         }
+    }
+
+    static std::unique_ptr<TResult> MakeSingular(const TType* type, const ITypeInfoHelper& typeInfoHelper, arrow::MemoryPool& pool, size_t maxLen, const TArrayBuilderParams& params) {
+        return std::make_unique<TSingular>(type, typeInfoHelper, pool, maxLen, params);
     }
 };
 

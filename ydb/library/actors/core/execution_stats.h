@@ -62,6 +62,13 @@ namespace NActors {
             }
         }
 
+        void AddOveraddedCpuUs(i64 elapsed) {
+            if (Y_LIKELY(elapsed > 0)) {
+                RelaxedStore(&Stats->OveraddedCpuUs, RelaxedLoad(&Stats->OveraddedCpuUs) + elapsed);
+                RelaxedStore(&Stats->CpuUs, (ui64)RelaxedLoad(&Stats->CpuUs) + elapsed);
+            }
+        }
+
         void IncrementSentEvents() {
             RelaxedStore(&Stats->SentEvents, RelaxedLoad(&Stats->SentEvents) + 1);
         }
@@ -137,9 +144,17 @@ namespace NActors {
         }
 
         void UpdateThreadTime() {
-            RelaxedStore(&Stats->SafeElapsedTicks, (ui64)RelaxedLoad(&Stats->ElapsedTicks));
-            RelaxedStore(&Stats->SafeParkedTicks, (ui64)RelaxedLoad(&Stats->ParkedTicks));
-            RelaxedStore(&Stats->CpuUs, (ui64)RelaxedLoad(&Stats->CpuUs) + CpuSensor.GetDiff());
+            ui64 cpuUs = CpuSensor.GetDiff();
+            ui64 overaddedCpuUs = RelaxedLoad(&Stats->OveraddedCpuUs);
+            if (cpuUs < overaddedCpuUs) {
+                RelaxedStore(&Stats->OveraddedCpuUs, overaddedCpuUs - cpuUs);
+            } else if (overaddedCpuUs > 0) {
+                RelaxedStore(&Stats->OveraddedCpuUs, (ui64)0);
+                RelaxedStore(&Stats->CpuUs, (ui64)RelaxedLoad(&Stats->CpuUs) + cpuUs - overaddedCpuUs);
+            } else {
+                RelaxedStore(&Stats->CpuUs, (ui64)RelaxedLoad(&Stats->CpuUs) + cpuUs);
+            }
+            CopySafeTicks();
         }
 
         void IncreaseNotEnoughCpuExecutions() {
@@ -171,6 +186,11 @@ namespace NActors {
         void Switch(TExecutorThreadStats* stats)
         {
             Stats = stats;
+        }
+
+        void CopySafeTicks() {
+            RelaxedStore(&Stats->SafeElapsedTicks, (ui64)RelaxedLoad(&Stats->ElapsedTicks));
+            RelaxedStore(&Stats->SafeParkedTicks, (ui64)RelaxedLoad(&Stats->ParkedTicks));
         }
     };
 }

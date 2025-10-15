@@ -129,7 +129,6 @@ Y_UNIT_TEST_SUITE(KqpDataIntegrityTrails) {
             }
             // check session actor logs
             UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY DEBUG: Component: SessionActor"), 2);
-            // check grpc logs
             UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY TRACE: Component: Grpc"), 2);
             // check columnshard logs
             // ColumnShard doesn't have integrity logs.
@@ -267,10 +266,13 @@ Y_UNIT_TEST_SUITE(KqpDataIntegrityTrails) {
         UNIT_ASSERT_C(!readLock.empty() && readLock == brokenLock, "read lock should be broken");
     }
 
-    Y_UNIT_TEST(BrokenReadLockAbortedTx) {
+    Y_UNIT_TEST_TWIN(BrokenReadLockAbortedTx, UseSink) {
         TStringStream ss;
         {
+            NKikimrConfig::TAppConfig AppConfig;
+            AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
             TKikimrSettings serverSettings;
+            serverSettings.SetAppConfig(AppConfig);
             serverSettings.LogStream = &ss;
             TKikimrRunner kikimr(serverSettings);
             kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::DATA_INTEGRITY, NLog::PRI_TRACE);

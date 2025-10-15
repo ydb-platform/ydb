@@ -70,7 +70,7 @@ private:
 
         if (Settings.MonitoringEnabled) {
             serverSettings.InitKikimrRunConfig();
-            serverSettings.SetMonitoringPortOffset(Settings.MonitoringPortOffset, true);
+            serverSettings.SetMonitoringPortOffset(Settings.FirstMonitoringPort, true);
             serverSettings.SetNeedStatsCollectors(true);
         }
 
@@ -159,7 +159,7 @@ public:
     explicit TImpl(const TFqSetupSettings& settings)
         : Settings(settings)
     {
-        const ui32 grpcPort = Settings.GrpcPort ? Settings.GrpcPort : PortManager.GetPort();
+        const ui32 grpcPort = Settings.FirstGrpcPort ? Settings.FirstGrpcPort : PortManager.GetPort();
         InitializeServer(grpcPort);
         InitializeFqProxy(grpcPort);
 

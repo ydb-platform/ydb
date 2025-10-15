@@ -110,7 +110,7 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         CreateLargeTable(kikimr, 1000, 1_KB, 64_KB);
 
         auto db = kikimr.GetQueryClient();
-        
+
         {
             auto result = db.ExecuteQuery(R"(
                 CREATE TABLE `/Root/DataShard` (
@@ -499,7 +499,7 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
                 UPSERT INTO `/Root/LargeTable`
                 SELECT * FROM AS_TABLE($rows);
             )"), TTxControl::BeginTx().CommitTx(), paramsBuilder.Build()).ExtractValueSync();
- 
+
             switch (result.GetStatus()) {
             case EStatus::SUCCESS:
                 continue;
@@ -699,38 +699,38 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
     Y_UNIT_TEST(AffectedShardsLimit) {
         NKikimrConfig::TAppConfig appConfig;
         auto& queryLimits = *appConfig.MutableTableServiceConfig()->MutableQueryLimits();
-        queryLimits.MutablePhaseLimits()->SetAffectedShardsLimit(23);
+        queryLimits.MutablePhaseLimits()->SetAffectedShardsLimit(26);
 
         TKikimrRunner kikimr(appConfig);
 
         kikimr.GetTestClient().CreateTable("/Root", R"(
-            Name: "ManyShard23"
+            Name: "ManyShard26"
             Columns { Name: "Key", Type: "Uint32" }
             Columns { Name: "Value1", Type: "String" }
             Columns { Name: "Value2", Type: "Int32" }
             KeyColumnNames: ["Key"]
-            UniformPartitionsCount: 23
+            UniformPartitionsCount: 26
         )");
 
         kikimr.GetTestClient().CreateTable("/Root", R"(
-            Name: "ManyShard24"
+            Name: "ManyShard27"
             Columns { Name: "Key", Type: "Uint32" }
             Columns { Name: "Value1", Type: "String" }
             Columns { Name: "Value2", Type: "Int32" }
             KeyColumnNames: ["Key"]
-            UniformPartitionsCount: 24
+            UniformPartitionsCount: 27
         )");
 
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         auto result = session.ExecuteDataQuery(Q_(R"(
-            SELECT COUNT(*) FROM `/Root/ManyShard23`
+            SELECT COUNT(*) FROM `/Root/ManyShard26`
         )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         result = session.ExecuteDataQuery(Q_(R"(
-            SELECT COUNT(*) FROM `/Root/ManyShard24`
+            SELECT COUNT(*) FROM `/Root/ManyShard27`
         )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         result.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
@@ -1010,7 +1010,10 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
     }
 
     Y_UNIT_TEST(CancelAfterRoTxWithFollowerStreamLookupDepededRead) {
+        // test is msan false positive, fixed in main
+#if !defined(_msan_enabled_)
         DoCancelAfterRo(true, true);
+#endif
     }
 
     Y_UNIT_TEST(QueryExecTimeout) {

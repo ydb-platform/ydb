@@ -26,12 +26,13 @@ void TTopicSdkTestSetup::CreateTopicWithAutoscale(const std::string& path, const
     CreateTopic(path, consumer, partitionCount, maxPartitionCount);
 }
 
-void TTopicSdkTestSetup::CreateTopic(const std::string& path, const std::string& consumer, size_t partitionCount, std::optional<size_t> maxPartitionCount)
+void TTopicSdkTestSetup::CreateTopic(const std::string& path, const std::string& consumer, size_t partitionCount, std::optional<size_t> maxPartitionCount, const TDuration retention, bool important)
 {
     TTopicClient client(MakeDriver());
 
     TCreateTopicSettings topics;
     topics
+        .RetentionPeriod(retention)
         .BeginConfigurePartitioningSettings()
         .MinActivePartitions(partitionCount)
         .MaxActivePartitions(maxPartitionCount.value_or(partitionCount));
@@ -44,6 +45,7 @@ void TTopicSdkTestSetup::CreateTopic(const std::string& path, const std::string&
     }
 
     TConsumerSettings<TCreateTopicSettings> consumers(topics, consumer);
+    consumers.Important(important);
     topics.AppendConsumers(consumers);
 
     auto status = client.CreateTopic(path, topics).GetValueSync();
@@ -221,6 +223,7 @@ NKikimr::Tests::TServerSettings TTopicSdkTestSetup::MakeServerSettings()
         runtime.SetLogPriority(NKikimrServices::PQ_MIRRORER, NActors::NLog::PRI_DEBUG);
         runtime.SetLogPriority(NKikimrServices::PQ_METACACHE, NActors::NLog::PRI_DEBUG);
         runtime.SetLogPriority(NKikimrServices::PERSQUEUE, NActors::NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::PQ_TX, NActors::NLog::PRI_DEBUG);
         runtime.SetLogPriority(NKikimrServices::PERSQUEUE_CLUSTER_TRACKER, NActors::NLog::PRI_DEBUG);
     });
 

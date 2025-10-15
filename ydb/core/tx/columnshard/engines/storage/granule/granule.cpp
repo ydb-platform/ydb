@@ -13,14 +13,10 @@
 
 namespace NKikimr::NOlap {
 
-
-
 void TGranuleMeta::AppendPortion(const std::shared_ptr<TPortionInfo>& info) {
-    AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "upsert_portion")("portion", info->DebugString())(
-        "path_id", GetPathId());
+    AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "upsert_portion")("portion", info->DebugString())("path_id", GetPathId());
     AFL_VERIFY(!Portions.contains(info->GetPortionId()));
-    AFL_VERIFY(info->GetPathId() == GetPathId())("event", "incompatible_granule")("portion", info->DebugString())(
-        "path_id", GetPathId());
+    AFL_VERIFY(info->GetPathId() == GetPathId())("event", "incompatible_granule")("portion", info->DebugString())("path_id", GetPathId());
 
     AFL_VERIFY(info->ValidSnapshotInfo())("event", "incorrect_portion_snapshots")("portion", info->DebugString());
 
@@ -29,8 +25,8 @@ void TGranuleMeta::AppendPortion(const std::shared_ptr<TPortionInfo>& info) {
     OnAfterChangePortion(info, nullptr);
 }
 
-void TGranuleMeta::AppendPortion(const TPortionDataAccessor& info) {
-    AppendPortion(info.MutablePortionInfoPtr());
+void TGranuleMeta::AppendPortion(const std::shared_ptr<TPortionDataAccessor>& info) {
+    AppendPortion(info->MutablePortionInfoPtr());
     DataAccessorsManager->AddPortion(info);
 }
 
@@ -133,8 +129,8 @@ const NKikimr::NOlap::TGranuleAdditiveSummary& TGranuleMeta::GetAdditiveSummary(
     return *AdditiveSummaryCache;
 }
 
-TGranuleMeta::TGranuleMeta(
-    const ui64 pathId, const TGranulesStorage& owner, const NColumnShard::TGranuleDataCounters& counters, const TVersionedIndex& versionedIndex)
+TGranuleMeta::TGranuleMeta(const TInternalPathId pathId, const TGranulesStorage& owner, const NColumnShard::TGranuleDataCounters& counters,
+    const TVersionedIndex& versionedIndex)
     : PathId(pathId)
     , DataAccessorsManager(owner.GetDataAccessorsManager())
     , Counters(counters)
@@ -152,10 +148,15 @@ TGranuleMeta::TGranuleMeta(
 }
 
 void TGranuleMeta::UpsertPortionOnLoad(const std::shared_ptr<TPortionInfo>& portion) {
-    if (portion->HasInsertWriteId() && !portion->HasCommitSnapshot()) {
-        const TInsertWriteId insertWriteId = portion->GetInsertWriteIdVerified();
-        AFL_VERIFY(InsertedPortions.emplace(insertWriteId, portion).second);
-        AFL_VERIFY(!Portions.contains(portion->GetPortionId()));
+    if (!portion->IsCommitted()) {
+        const std::shared_ptr<TWrittenPortionInfo> portionImpl = std::static_pointer_cast<TWrittenPortionInfo>(portion);
+        const TInsertWriteId insertWriteId = portionImpl->GetInsertWriteId();
+        if (AtomicGet(LastInsertWriteId) < (i64)portionImpl->GetInsertWriteId()) {
+            AtomicSet(LastInsertWriteId, (i64)portionImpl->GetInsertWriteId());
+        }
+        AFL_VERIFY(InsertedPortions.emplace(insertWriteId, portionImpl).second);
+        AFL_VERIFY(InsertedPortionsById.emplace(portionImpl->GetPortionId(), portionImpl).second);
+        AFL_VERIFY(!Portions.contains(portionImpl->GetPortionId()));
     } else {
         auto portionId = portion->GetPortionId();
         AFL_VERIFY(Portions.emplace(portionId, portion).second);
@@ -175,14 +176,15 @@ void TGranuleMeta::BuildActualizationTasks(NActualizer::TTieringProcessContext& 
 void TGranuleMeta::ResetAccessorsManager(const std::shared_ptr<NDataAccessorControl::IManagerConstructor>& constructor,
     const NDataAccessorControl::TManagerConstructionContext& context) {
     MetadataMemoryManager = constructor->Build(context).DetachResult();
-    DataAccessorsManager->RegisterController(MetadataMemoryManager->BuildCollector(PathId), context.IsUpdate());
 }
 
 void TGranuleMeta::ResetOptimizer(const std::shared_ptr<NStorageOptimizer::IOptimizerPlannerConstructor>& constructor,
     std::shared_ptr<IStoragesManager>& storages, const std::shared_ptr<arrow::Schema>& pkSchema) {
     if (constructor->ApplyToCurrentObject(OptimizerPlanner)) {
+        AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("event", "applied_optimizer")("constructor", constructor->GetClassName());
         return;
     }
+    AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("event", "reset_optimizer")("constructor", constructor->GetClassName());
     NStorageOptimizer::IOptimizerPlannerConstructor::TBuildContext context(PathId, storages, pkSchema);
     OptimizerPlanner = constructor->BuildPlanner(context).DetachResult();
     AFL_VERIFY(!!OptimizerPlanner);
@@ -234,29 +236,27 @@ std::shared_ptr<NKikimr::ITxReader> TGranuleMeta::BuildLoader(
 bool TGranuleMeta::TestingLoad(IDbWrapper& db, const TVersionedIndex& versionedIndex) {
     TInGranuleConstructors constructors;
     {
-        if (!db.LoadPortions(PathId, [&](TPortionInfoConstructor&& portion, const NKikimrTxColumnShard::TIndexPortionMeta& metaProto) {
-                const TIndexInfo& indexInfo = portion.GetSchema(versionedIndex)->GetIndexInfo();
-                AFL_VERIFY(portion.MutableMeta().LoadMetadata(metaProto, indexInfo, db.GetDsGroupSelectorVerified()));
-                AFL_VERIFY(constructors.AddConstructorVerified(std::move(portion)));
-            })) {
+        if (!db.LoadPortions(
+                PathId, [&](std::unique_ptr<TPortionInfoConstructor>&& portion, const NKikimrTxColumnShard::TIndexPortionMeta& metaProto) {
+                    const TIndexInfo& indexInfo = portion->GetSchema(versionedIndex)->GetIndexInfo();
+                    AFL_VERIFY(portion->MutableMeta().LoadMetadata(metaProto, indexInfo, db.GetDsGroupSelectorVerified()));
+                    AFL_VERIFY(constructors.AddConstructorVerified(std::move(portion)));
+                })) {
             return false;
         }
     }
 
     {
-        TPortionInfo::TSchemaCursor schema(versionedIndex);
         if (!db.LoadColumns(PathId, [&](TColumnChunkLoadContextV2&& loadContext) {
                 auto* constructor = constructors.GetConstructorVerified(loadContext.GetPortionId());
-                for (auto&& i : loadContext.BuildRecordsV1()) {
-                    constructor->LoadRecord(std::move(i));
-                }
+                constructor->AddBuildInfo(loadContext.CreateBuildInfo());
             })) {
             return false;
         }
     }
 
     {
-        if (!db.LoadIndexes(PathId, [&](const ui64 /*pathId*/, const ui64 portionId, TIndexChunkLoadContext&& loadContext) {
+        if (!db.LoadIndexes(PathId, [&](const TInternalPathId /*pathId*/, const ui64 portionId, TIndexChunkLoadContext&& loadContext) {
                 auto* constructor = constructors.GetConstructorVerified(portionId);
                 constructor->LoadIndex(std::move(loadContext));
             })) {
@@ -266,21 +266,32 @@ bool TGranuleMeta::TestingLoad(IDbWrapper& db, const TVersionedIndex& versionedI
     for (auto&& [portionId, constructor] : constructors) {
         auto accessor = constructor.Build(false);
         DataAccessorsManager->AddPortion(accessor);
-        UpsertPortionOnLoad(accessor.MutablePortionInfoPtr());
+        UpsertPortionOnLoad(accessor->MutablePortionInfoPtr());
     }
     return true;
 }
 
-void TGranuleMeta::InsertPortionOnComplete(const TPortionDataAccessor& portion, IColumnEngine& /*engine*/) {
-    AFL_VERIFY(InsertedPortions.emplace(portion.GetPortionInfo().GetInsertWriteIdVerified(), portion.MutablePortionInfoPtr()).second);
-    AFL_VERIFY(InsertedAccessors.emplace(portion.GetPortionInfo().GetInsertWriteIdVerified(), portion).second);
-    DataAccessorsManager->AddPortion(portion);
+void TGranuleMeta::InsertPortionOnExecute(
+    NTabletFlatExecutor::TTransactionContext& txc, const std::shared_ptr<TPortionDataAccessor>& portion, const ui64 firstPKColumnId) const {
+    auto portionImpl = portion->MutablePortionInfoPtr();
+    if (portionImpl->GetPortionType() == EPortionType::Written) {
+        auto writtenPortion = std::static_pointer_cast<TWrittenPortionInfo>(portionImpl);
+        AFL_VERIFY(!InsertedPortions.contains(writtenPortion->GetInsertWriteId()));
+    } else {
+        AFL_VERIFY(!InsertedPortions.contains((TInsertWriteId)0));
+    }
+    TDbWrapper wrapper(txc.DB, nullptr);
+    portion->SaveToDatabase(wrapper, firstPKColumnId, false);
 }
 
-void TGranuleMeta::InsertPortionOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TPortionDataAccessor& portion, const ui64 firstPKColumnId) const {
-    AFL_VERIFY(!InsertedPortions.contains(portion.GetPortionInfo().GetInsertWriteIdVerified()));
-    TDbWrapper wrapper(txc.DB, nullptr);
-    portion.SaveToDatabase(wrapper, firstPKColumnId, false);
+void TGranuleMeta::InsertPortionOnComplete(const std::shared_ptr<TPortionDataAccessor>& portion, IColumnEngine& /*engine*/) {
+    auto portionImpl = portion->MutablePortionInfoPtr();
+    AFL_VERIFY(portionImpl->GetPortionType() == EPortionType::Written);
+    auto writtenPortion = std::static_pointer_cast<TWrittenPortionInfo>(portionImpl);
+    AFL_VERIFY(InsertedPortions.emplace(writtenPortion->GetInsertWriteId(), writtenPortion).second);
+    AFL_VERIFY(InsertedPortionsById.emplace(portionImpl->GetPortionId(), writtenPortion).second);
+    AFL_VERIFY(InsertedAccessors.emplace(writtenPortion->GetInsertWriteId(), portion).second);
+    DataAccessorsManager->AddPortion(portion);
 }
 
 void TGranuleMeta::CommitPortionOnExecute(
@@ -289,12 +300,13 @@ void TGranuleMeta::CommitPortionOnExecute(
     AFL_VERIFY(it != InsertedPortions.end());
     it->second->SetCommitSnapshot(snapshot);
     TDbWrapper wrapper(txc.DB, nullptr);
-    it->second->SaveMetaToDatabase(wrapper);
+    it->second->CommitToDatabase(wrapper);
 }
 
 void TGranuleMeta::CommitPortionOnComplete(const TInsertWriteId insertWriteId, IColumnEngine& engine) {
     auto it = InsertedPortions.find(insertWriteId);
     AFL_VERIFY(it != InsertedPortions.end());
+    AFL_VERIFY(InsertedPortionsById.erase(it->second->GetPortionId()));
     (static_cast<TColumnEngineForLogs*>(&engine))->AppendPortion(it->second);
     InsertedPortions.erase(it);
     {
@@ -305,10 +317,14 @@ void TGranuleMeta::CommitPortionOnComplete(const TInsertWriteId insertWriteId, I
     }
 }
 
-void TGranuleMeta::CommitImmediateOnExecute(
-    NTabletFlatExecutor::TTransactionContext& txc, const TSnapshot& snapshot, const TPortionDataAccessor& portion, const ui64 firstPKColumnId) const {
-    AFL_VERIFY(!InsertedPortions.contains(portion.GetPortionInfo().GetInsertWriteIdVerified()));
-    portion.MutablePortionInfo().SetCommitSnapshot(snapshot);
+void TGranuleMeta::CommitImmediateOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TSnapshot& snapshot,
+    const TPortionDataAccessor& portion, const ui64 firstPKColumnId) const {
+    auto portionImpl = portion.MutablePortionInfoPtr();
+    AFL_VERIFY(portionImpl->GetPortionType() == EPortionType::Written);
+    auto writtenPortion = std::static_pointer_cast<TWrittenPortionInfo>(portionImpl);
+
+    AFL_VERIFY(!InsertedPortions.contains(writtenPortion->GetInsertWriteId()));
+    writtenPortion->SetCommitSnapshot(snapshot);
     TDbWrapper wrapper(txc.DB, nullptr);
     portion.SaveToDatabase(wrapper, firstPKColumnId, false);
 }

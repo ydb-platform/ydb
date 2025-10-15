@@ -471,6 +471,10 @@ struct TComplexTypeYsonReaderTraits {
         ythrow yexception() << "Complex type Yson reader not implemented for block resources";
     }
 
+    static std::unique_ptr<TResult> MakeSingular() {
+        ythrow yexception() << "Complex type Yson reader not implemented for singular types.";
+    }
+
     template<typename TTzDate>
     static std::unique_ptr<TResult> MakeTzDate(bool isOptional) {
         if (isOptional) {

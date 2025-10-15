@@ -18,7 +18,8 @@ TValidatedDataTx::TValidatedDataTx(TDataShard *self,
                                    const TStepOrder &stepTxId,
                                    TInstant receivedAt,
                                    const TString &txBody,
-                                   bool usesMvccSnapshot)
+                                   bool usesMvccSnapshot,
+                                   bool isPropose)
     : StepTxId_(stepTxId)
     , TxBody(txBody)
     , EngineBay(self, txc, ctx, stepTxId)
@@ -161,7 +162,7 @@ TValidatedDataTx::TValidatedDataTx(TDataShard *self,
 
             auto& tasksRunner = GetKqpTasksRunner(); // create tasks runner, can throw TMemoryLimitExceededException
 
-            auto allocGuard = tasksRunner.BindAllocator(100_MB); // set big enough limit, decrease/correct later
+            auto allocGuard = tasksRunner.BindAllocator(isPropose ? 100_MB : 1_GB); // set big enough limit, decrease/correct later
 
             auto execCtx = DefaultKqpExecutionContext();
             tasksRunner.Prepare(DefaultKqpDataReqMemoryLimits(), *execCtx);
@@ -404,13 +405,14 @@ void TActiveTransaction::FillVolatileTxData(TDataShard *self,
 
 TValidatedDataTx::TPtr TActiveTransaction::BuildDataTx(TDataShard *self,
                                                        TTransactionContext &txc,
-                                                       const TActorContext &ctx)
+                                                       const TActorContext &ctx,
+                                                       bool isPropose)
 {
     Y_ABORT_UNLESS(IsDataTx() || IsReadTable());
     if (!DataTx) {
         Y_ABORT_UNLESS(TxBody);
         DataTx = std::make_shared<TValidatedDataTx>(self, txc, ctx, GetStepOrder(),
-                                                    GetReceivedAt(), TxBody, IsMvccSnapshotRead());
+                                                    GetReceivedAt(), TxBody, IsMvccSnapshotRead(), isPropose);
         if (DataTx->HasStreamResponse())
             SetStreamSink(DataTx->GetSink());
     }

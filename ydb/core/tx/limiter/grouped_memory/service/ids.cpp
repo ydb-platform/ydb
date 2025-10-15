@@ -36,6 +36,11 @@ ui64 TIdsControl::GetMinInternalIdVerified() const {
     return InternalIdIntoExternalId.begin()->first;
 }
 
+ui64 TIdsControl::GetMinExternalIdVerified() const {
+    AFL_VERIFY(ExternalIdIntoInternalId.size());
+    return ExternalIdIntoInternalId.begin()->first;
+}
+
 ui64 TIdsControl::GetInternalIdVerified(const ui64 externalId) const {
     auto it = ExternalIdIntoInternalId.find(externalId);
     AFL_VERIFY(it != ExternalIdIntoInternalId.end())("external_id", externalId);
@@ -43,7 +48,7 @@ ui64 TIdsControl::GetInternalIdVerified(const ui64 externalId) const {
 }
 
 ui64 TIdsControl::RegisterExternalId(const ui64 externalId) {
-    AFL_VERIFY(ExternalIdIntoInternalId.emplace(externalId, ++CurrentInternalId).second);
+    AFL_VERIFY(ExternalIdIntoInternalId.emplace(externalId, ++CurrentInternalId).second)("ext_id", externalId);
     InternalIdIntoExternalId.emplace(CurrentInternalId, externalId);
     return CurrentInternalId;
 }
@@ -72,6 +77,15 @@ ui64 TIdsControl::GetExternalIdVerified(const ui64 internalId) const {
     auto it = InternalIdIntoExternalId.find(internalId);
     AFL_VERIFY(it != InternalIdIntoExternalId.end());
     return it->second;
+}
+
+ui64 TExternalIdsControl::GetMinExternalIdVerified() const {
+    AFL_VERIFY(ExternalIds.size());
+    return *ExternalIds.begin();
+}
+
+void TExternalIdsControl::RegisterExternalId(const ui64 id) {
+    AFL_VERIFY(ExternalIds.emplace(id).second);
 }
 
 }   // namespace NKikimr::NOlap::NGroupedMemoryManager

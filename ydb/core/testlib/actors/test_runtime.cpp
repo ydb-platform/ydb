@@ -17,11 +17,12 @@
 
 #include <ydb/core/base/wilson_tracing_control.h>
 #include <ydb/core/protos/datashard_config.pb.h>
+#include <ydb/core/protos/feature_flags.pb.h>
 #include <ydb/core/protos/key.pb.h>
 #include <ydb/core/protos/netclassifier.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/protos/stream.pb.h>
-#include <ydb/core/protos/feature_flags.pb.h>
+#include <ydb/core/protos/workload_manager_config.pb.h>
 
 /**** ACHTUNG: Do not make here any new dependecies on kikimr ****/
 
@@ -178,6 +179,7 @@ namespace NActors {
             nodeAppData->EnableMvccSnapshotWithLegacyDomainRoot = app0->EnableMvccSnapshotWithLegacyDomainRoot;
             nodeAppData->IoContextFactory = app0->IoContextFactory;
             nodeAppData->SchemeOperationFactory = app0->SchemeOperationFactory;
+            nodeAppData->WorkloadManagerConfig = app0->WorkloadManagerConfig;
             nodeAppData->TransferWriterFactory = std::make_shared<NKikimr::Tests::MockTransferWriterFactory>();
             if (nodeIndex < egg.Icb.size()) {
                 nodeAppData->Icb = std::move(egg.Icb[nodeIndex]);

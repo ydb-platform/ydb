@@ -23,6 +23,7 @@
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 #include <ydb/library/yql/providers/s3/statistics/yql_s3_statistics.h>
 #include <yql/essentials/core/yql_opt_utils.h>
+#include <yql/essentials/core/yql_type_helpers.h>
 
 
 namespace NKikimr {
@@ -358,7 +359,7 @@ void FillReadRange(const TKqpWideReadTable& read, const TKikimrTableMetadata& ta
         }
     }
 
-    readProto.SetReverse(settings.Reverse);
+    readProto.SetReverse(settings.IsReverse());
 }
 
 template <typename TReader, typename TProto>
@@ -394,10 +395,13 @@ void FillReadRanges(const TReader& read, const TKikimrTableMetadata&, TProto& re
     }
 
     if constexpr (std::is_same_v<TProto, NKqpProto::TKqpPhyOpReadOlapRanges>) {
-        readProto.SetSorted(settings.Sorted);
+        readProto.SetSorted(settings.IsSorted());
+        if (settings.TabletId) {
+            readProto.SetTabletId(*settings.TabletId);
+        }
     }
 
-    readProto.SetReverse(settings.Reverse);
+    readProto.SetReverse(settings.IsReverse());
 }
 
 template <typename TEffectCallable, typename TEffectProto>
@@ -537,6 +541,12 @@ public:
         auto querySettings = TKqpPhyQuerySettings::Parse(query);
         YQL_ENSURE(querySettings.Type);
         queryProto.SetType(GetPhyQueryType(*querySettings.Type));
+
+        queryProto.SetEnableOltpSink(Config->EnableOltpSink);
+        queryProto.SetEnableOlapSink(Config->EnableOlapSink);
+        queryProto.SetEnableHtapTx(Config->EnableHtapTx);
+        queryProto.SetForceImmediateEffectsExecution(
+            Config->KqpForceImmediateEffectsExecution.Get().GetOrElse(false));
 
         for (const auto& queryBlock : dataQueryBlocks) {
             auto queryBlockSettings = TKiDataQueryBlockSettings::Parse(queryBlock);
@@ -692,13 +702,22 @@ private:
         return type;
     }
 
-    void CompileStage(const TDqPhyStage& stage, NKqpProto::TKqpPhyStage& stageProto, TExprContext& ctx,
-        const TMap<ui64, ui32>& stagesMap, TRequestPredictor& rPredictor, THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap)
-    {
+    void CompileStage(
+        const TDqPhyStage& stage,
+        NKqpProto::TKqpPhyStage& stageProto,
+        TExprContext& ctx,
+        const TMap<ui64, ui32>& stagesMap,
+        TRequestPredictor& rPredictor,
+        THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap,
+        THashMap<ui64, NKqpProto::TKqpPhyStage*>& physicalStageByID
+    ) {
         const bool hasEffects = NOpt::IsKqpEffectsStage(stage);
 
         TStagePredictor& stagePredictor = rPredictor.BuildForStage(stage, ctx);
         stagePredictor.Scan(stage.Program().Ptr());
+
+        auto stageSettings = NDq::TDqStageSettings::Parse(stage);
+        stageProto.SetIsShuffleEliminated(stageSettings.IsShuffleEliminated);
 
         for (ui32 inputIndex = 0; inputIndex < stage.Inputs().Size(); ++inputIndex) {
             const auto& input = stage.Inputs().Item(inputIndex);
@@ -712,7 +731,7 @@ private:
                 auto connection = input.Cast<TDqConnection>();
 
                 auto& protoInput = *stageProto.AddInputs();
-                FillConnection(connection, stagesMap, protoInput, ctx, tablesMap);
+                FillConnection(connection, stagesMap, protoInput, ctx, tablesMap, physicalStageByID);
                 protoInput.SetInputIndex(inputIndex);
             }
         }
@@ -876,7 +895,6 @@ private:
 
         stageProto.SetProgramAst(KqpExprToPrettyString(stage.Program(), ctx));
 
-        auto stageSettings = NDq::TDqStageSettings::Parse(stage);
         stageProto.SetStageGuid(stageSettings.Id);
         stageProto.SetIsSinglePartition(NDq::TDqStageSettings::EPartitionMode::Single == stageSettings.PartitionMode);
         stageProto.SetAllowWithSpilling(Config->EnableSpilling);
@@ -890,19 +908,21 @@ private:
         bool hasEffectStage = false;
 
         TMap<ui64, ui32> stagesMap;
+        THashMap<ui64, NKqpProto::TKqpPhyStage*> physicalStageByID;
         THashMap<TStringBuf, THashSet<TStringBuf>> tablesMap;
 
         TRequestPredictor rPredictor;
         for (const auto& stage : tx.Stages()) {
-            auto* protoStage = txProto.AddStages();
-            CompileStage(stage, *protoStage, ctx, stagesMap, rPredictor, tablesMap);
-            hasEffectStage |= protoStage->GetIsEffectsStage();
+            physicalStageByID[stage.Ref().UniqueId()] = txProto.AddStages();
+            CompileStage(stage, *physicalStageByID[stage.Ref().UniqueId()], ctx, stagesMap, rPredictor, tablesMap, physicalStageByID);
+            hasEffectStage |= physicalStageByID[stage.Ref().UniqueId()]->GetIsEffectsStage();
             stagesMap[stage.Ref().UniqueId()] = txProto.StagesSize() - 1;
         }
         for (auto&& i : *txProto.MutableStages()) {
             i.MutableProgram()->MutableSettings()->SetLevelDataPrediction(rPredictor.GetLevelDataVolume(i.GetProgram().GetSettings().GetStageLevel()));
         }
 
+        txProto.SetEnableShuffleElimination(Config->OptShuffleElimination.Get().GetOrElse(Config->DefaultEnableShuffleElimination));
         txProto.SetHasEffects(hasEffectStage);
 
         for (const auto& paramBinding : tx.ParamBindings()) {
@@ -938,7 +958,7 @@ private:
 
             auto& resultProto = *txProto.AddResults();
             auto& connectionProto = *resultProto.MutableConnection();
-            FillConnection(connection, stagesMap, connectionProto, ctx, tablesMap);
+            FillConnection(connection, stagesMap, connectionProto, ctx, tablesMap, physicalStageByID);
 
             const TTypeAnnotationNode* itemType = nullptr;
             switch (connectionProto.GetTypeCase()) {
@@ -1028,8 +1048,8 @@ private:
             }
             auto readSettings = TKqpReadTableSettings::Parse(settings.Settings().Cast());
 
-            readProto.SetReverse(readSettings.Reverse);
-            readProto.SetSorted(readSettings.Sorted);
+            readProto.SetReverse(readSettings.IsReverse());
+            readProto.SetSorted(readSettings.IsSorted());
             YQL_ENSURE(readSettings.SkipNullKeys.empty());
 
             if (readSettings.SequentialInFlight) {
@@ -1223,9 +1243,13 @@ private:
             if (const auto streamWrite = settings.StreamWrite().Cast(); streamWrite.StringValue() == "true") {
                 settingsProto.SetEnableStreamWrite(true);
             }
-          
+
             if (const auto isBatch = settings.IsBatch().Cast(); isBatch.StringValue() == "true") {
                 settingsProto.SetIsBatch(true);
+            }
+
+            if (const auto isIndexImplTable = settings.IsIndexImplTable().Cast(); isIndexImplTable.StringValue() == "true") {
+                settingsProto.SetIsIndexImplTable(true);
             }
 
             if (settings.Mode().Cast().StringValue() == "replace") {
@@ -1281,10 +1305,14 @@ private:
         }
     }
 
-    void FillConnection(const TDqConnection& connection, const TMap<ui64, ui32>& stagesMap,
-        NKqpProto::TKqpPhyConnection& connectionProto, TExprContext& ctx,
-        THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap)
-    {
+    void FillConnection(
+        const TDqConnection& connection,
+        const TMap<ui64, ui32>& stagesMap,
+        NKqpProto::TKqpPhyConnection& connectionProto,
+        TExprContext& ctx,
+        THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap,
+        THashMap<ui64, NKqpProto::TKqpPhyStage*>& physicalStageByID
+    ) {
         auto inputStageIndex = stagesMap.FindPtr(connection.Output().Stage().Ref().UniqueId());
         YQL_ENSURE(inputStageIndex, "stage #" << connection.Output().Stage().Ref().UniqueId() << " not found in stages map: "
             << PrintKqpStageOnly(connection.Output().Stage(), ctx));
@@ -1300,14 +1328,75 @@ private:
         }
 
         if (auto maybeShuffle = connection.Maybe<TDqCnHashShuffle>()) {
+            const auto& shuffle = maybeShuffle.Cast();
             auto& shuffleProto = *connectionProto.MutableHashShuffle();
-            for (const auto& keyColumn : maybeShuffle.Cast().KeyColumns()) {
+            for (const auto& keyColumn : shuffle.KeyColumns()) {
                 shuffleProto.AddKeyColumns(TString(keyColumn));
             }
+
+            NDq::EHashShuffleFuncType hashFuncType = NDq::EHashShuffleFuncType::HashV1;
+            if (shuffle.HashFunc().IsValid()) {
+                hashFuncType = FromString<NDq::EHashShuffleFuncType>(shuffle.HashFunc().Cast().StringValue());
+            }
+
+            switch (hashFuncType) {
+                using enum NDq::EHashShuffleFuncType;
+                case HashV1: {
+                    shuffleProto.MutableHashV1();
+                    break;
+                }
+                case ColumnShardHashV1: {
+                    auto& columnHashV1 = *shuffleProto.MutableColumnShardHashV1();
+
+                    const auto& outputType = NYql::NDq::GetDqConnectionType(connection, ctx);
+                    auto structType = outputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+                    for (const auto& column: shuffle.KeyColumns().Ptr()->Children()) {
+                        auto ty = NYql::NDq::GetColumnType(connection, *structType, column->Content(), column->Pos(), ctx);
+                        if (ty->GetKind() == ETypeAnnotationKind::List) {
+                            ty = ty->Cast<TListExprType>()->GetItemType();
+                        }
+                        NYql::NUdf::EDataSlot slot;
+                        switch (ty->GetKind()) {
+                            case ETypeAnnotationKind::Data: {
+                                slot = ty->Cast<TDataExprType>()->GetSlot();
+                                break;
+                            }
+                            case ETypeAnnotationKind::Optional: {
+                                auto optionalType = ty->Cast<TOptionalExprType>()->GetItemType();
+                                if (optionalType->GetKind() == ETypeAnnotationKind::List) {
+                                    optionalType = optionalType->Cast<TListExprType>()->GetItemType();
+                                }
+                                Y_ENSURE(
+                                    optionalType->GetKind() == ETypeAnnotationKind::Data,
+                                    TStringBuilder{} << "Can't retrieve type from optional" << static_cast<std::int64_t>(optionalType->GetKind()) << "for ColumnHashV1 Shuffling"
+                                );
+                                slot = optionalType->Cast<TDataExprType>()->GetSlot();
+                                break;
+                            }
+                            default: {
+                                Y_ENSURE(false, TStringBuilder{} << "Can't get type for ColumnHashV1 Shuffling: " << static_cast<std::int64_t>(ty->GetKind()));
+                            }
+                        }
+
+                        auto typeId = GetDataTypeInfo(slot).TypeId;
+                        columnHashV1.AddKeyColumnTypes(typeId);
+                    }
+                    break;
+                }
+            };
+
+            if (Config->EnableSpillingInHashJoinShuffleConnections && shuffle.UseSpilling()) {
+                shuffleProto.SetUseSpilling(FromStringWithDefault<bool>(shuffle.UseSpilling().Cast().StringValue(), false));
+            }
+
             return;
         }
 
         if (connection.Maybe<TDqCnMap>()) {
+            auto stageID = connection.Output().Stage().Ref().UniqueId();
+            auto physicalStage = physicalStageByID[stageID];
+            Y_ENSURE(physicalStage != nullptr, TStringBuf{} << "stage#" << stageID);
+            physicalStage->SetIsShuffleEliminated(true);
             connectionProto.MutableMap();
             return;
         }

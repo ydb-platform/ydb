@@ -14,6 +14,9 @@ class TFilteredSnapshotSchema: public ISnapshotSchema {
 
 protected:
     virtual TString DoDebugString() const override;
+
+    virtual NJson::TJsonValue DoDebugJson() const override;
+
 public:
     TFilteredSnapshotSchema(const ISnapshotSchema::TPtr& originalSnapshot, const std::vector<ui32>& columnIds);
     TFilteredSnapshotSchema(const ISnapshotSchema::TPtr& originalSnapshot, const std::set<ui32>& columnIds);

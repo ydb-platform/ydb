@@ -782,6 +782,40 @@ void* GetAlignedPage(ui64 size) {
 }
 
 template<typename TMmap>
+void* GetAlignedPage() {
+    const auto size = TAlignedPagePool::POOL_PAGE_SIZE;
+    auto& globalPool = TGlobalPools<TMmap, false>::Instance();
+
+    if (auto* page = globalPool.Get(0).GetPage()) {
+        return page;
+    }
+
+    auto allocSize = size * 2;
+    void* unalignedPtr = globalPool.DoMmap(allocSize);
+    if (Y_UNLIKELY(MAP_FAILED == unalignedPtr)) {
+        TStringStream mmaps;
+        const auto lastError = LastSystemError();
+        if (lastError == ENOMEM) {
+            mmaps << GetMemoryMapsString();
+        }
+
+        ythrow yexception() << "Mmap failed to allocate " << allocSize << " bytes: "
+            << LastSystemErrorText(lastError) << mmaps.Str();
+    }
+
+    void* page = AlignUp(unalignedPtr, size);
+
+    // Unmap unaligned prefix before offset and tail after aligned page
+    const size_t offset = (intptr_t)page - (intptr_t)unalignedPtr;
+    if (Y_UNLIKELY(offset)) {
+        globalPool.DoMunmap(unalignedPtr, offset);
+        globalPool.DoMunmap((ui8*)page + size, size - offset);
+    }
+
+    return page;
+}
+
+template<typename TMmap>
 void ReleaseAlignedPage(void* mem, ui64 size) {
     size = AlignUp(size, SYS_PAGE_SIZE);
     if (size < TAlignedPagePool::POOL_PAGE_SIZE) {
@@ -797,6 +831,11 @@ void ReleaseAlignedPage(void* mem, ui64 size) {
     }
 
     TGlobalPools<TMmap, true>::Instance().DoMunmap(mem, size);
+}
+
+template<typename TMmap>
+void ReleaseAlignedPage(void* ptr) {
+    TGlobalPools<TMmap, false>::Instance().PushPage(0, ptr);
 }
 
 template<typename TMmap>
@@ -821,9 +860,17 @@ template void* GetAlignedPage<>(ui64);
 template void* GetAlignedPage<TFakeAlignedMmap>(ui64);
 template void* GetAlignedPage<TFakeUnalignedMmap>(ui64);
 
+template void* GetAlignedPage<>();
+template void* GetAlignedPage<TFakeAlignedMmap>();
+template void* GetAlignedPage<TFakeUnalignedMmap>();
+
 template void ReleaseAlignedPage<>(void*,ui64);
 template void ReleaseAlignedPage<TFakeAlignedMmap>(void*,ui64);
 template void ReleaseAlignedPage<TFakeUnalignedMmap>(void*,ui64);
+
+template void ReleaseAlignedPage<>(void*);
+template void ReleaseAlignedPage<TFakeAlignedMmap>(void*);
+template void ReleaseAlignedPage<TFakeUnalignedMmap>(void*);
 
 size_t GetMemoryMapsCount() {
     size_t lineCount = 0;

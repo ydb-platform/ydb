@@ -14,9 +14,9 @@ ENDIF()
 
 SIZE(MEDIUM)
 
-ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
+ENV(YDB_ENABLE_COLUMN_TABLES="true")
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
 DEPENDS(
-    ydb/apps/ydbd
 )
 
 PEERDIR(

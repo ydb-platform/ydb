@@ -1,5 +1,5 @@
 #pragma once
-#include <ydb/core/tx/columnshard/counters/common/owner.h>
+#include <ydb/library/signals/owner.h>
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
@@ -11,6 +11,7 @@ private:
 
 public:
     const ::NMonitoring::TDynamicCounters::TCounterPtr UsedCount;
+    const ::NMonitoring::TDynamicCounters::TCounterPtr Using;
     const ::NMonitoring::TDynamicCounters::TCounterPtr Ask;
     const ::NMonitoring::TDynamicCounters::TCounterPtr AskMax;
     const ::NMonitoring::TDynamicCounters::TCounterPtr Free;

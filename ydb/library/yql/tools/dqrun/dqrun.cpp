@@ -43,7 +43,7 @@
 #include <ydb/library/yql/providers/function/provider/dq_function_provider.h>
 #include <ydb/library/yql/providers/s3/provider/yql_s3_provider.h>
 #include <ydb/library/yql/providers/s3/actors/yql_s3_actors_factory_impl.h>
-#include <ydb/library/yql/providers/solomon/async_io/dq_solomon_read_actor.h>
+#include <ydb/library/yql/providers/solomon/actors/dq_solomon_read_actor.h>
 #include <ydb/library/yql/providers/solomon/gateway/yql_solomon_gateway.h>
 #include <ydb/library/yql/providers/solomon/provider/yql_solomon_provider.h>
 #include <yql/essentials/providers/pg/provider/yql_pg_provider.h>
@@ -84,7 +84,7 @@
 #include <yql/essentials/public/result_format/yql_result_format_type.h>
 #include <yql/essentials/public/result_format/yql_result_format_data.h>
 
-#include <ydb/core/fq/libs/actors/database_resolver.h>
+#include <ydb/core/fq/libs/db_id_async_resolver_impl/database_resolver.h>
 #include <ydb/core/fq/libs/config/protos/fq_config.pb.h>
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/db_async_resolver_impl.h>
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/mdb_endpoint_generator.h>
@@ -1089,7 +1089,7 @@ int RunMain(int argc, const char* argv[])
         auto solomonConfig = gatewaysConfig.GetSolomon();
         auto solomonGateway = CreateSolomonGateway(solomonConfig);
 
-        dataProvidersInit.push_back(NYql::GetSolomonDataProviderInitializer(solomonGateway, false));
+        dataProvidersInit.push_back(NYql::GetSolomonDataProviderInitializer(solomonGateway, nullptr, false));
         for (const auto& cluster: gatewaysConfig.GetSolomon().GetClusterMapping()) {
             clusters.emplace(to_lower(cluster.GetName()), TString{NYql::SolomonProviderName});
         }

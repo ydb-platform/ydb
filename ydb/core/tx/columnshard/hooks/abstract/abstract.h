@@ -3,6 +3,7 @@
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
 #include <ydb/core/tx/columnshard/common/limits.h>
 #include <ydb/core/tx/columnshard/common/snapshot.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/engines/writer/write_controller.h>
 #include <ydb/core/tx/columnshard/splitter/settings.h>
 #include <ydb/core/tx/tiering/tier/identifier.h>
@@ -64,11 +65,11 @@ public:
 class ICSController {
 public:
     enum class EBackground {
-        Indexation,
         Compaction,
         TTL,
         Cleanup,
-        GC
+        GC,
+        CleanupSchemas
     };
     YDB_ACCESSOR(bool, InterruptionOnLockedTransactions, false);
 
@@ -163,6 +164,9 @@ public:
             return AppDataVerified().ColumnShardConfig;
         }
         return DefaultConfig;
+    }
+
+    virtual void OnCleanupSchemasFinished() {
     }
 
     const NOlap::NSplitter::TSplitSettings& GetBlobSplitSettings(
@@ -300,6 +304,9 @@ public:
     bool OnWriteIndexStart(const ui64 tabletId, NOlap::TColumnEngineChanges& change) {
         return DoOnWriteIndexStart(tabletId, change);
     }
+    virtual void OnHeaderSelectProcessed(const std::optional<bool> /*result*/) {
+    }
+
     virtual void OnIndexSelectProcessed(const std::optional<bool> /*result*/) {
     }
     TDuration GetMaxReadStaleness() const {
@@ -353,11 +360,50 @@ public:
     virtual THashMap<TString, std::shared_ptr<NKikimr::NOlap::NDataLocks::ILock>> GetExternalDataLocks() const {
         return {};
     }
+
+    virtual bool IsForcedGenerateInternalPathId() const {
+        return false;
+    }
+
+    virtual void OnAddPathId(const ui64 /* tabletId */, const NColumnShard::TUnifiedPathId& /* pathId */) {
+    }
+    virtual void OnDeletePathId(const ui64 /* tabletId */, const NColumnShard::TUnifiedPathId& /* pathId */) {
+    }
+
+};
+
+class IKqpController {
+public:
+    using TPtr = std::shared_ptr<IKqpController>;
+
+    virtual ~IKqpController() = default;
+
+    virtual void OnInitTabletScan(const ui64 /*tabletId*/) {
+    }
+
+    virtual void OnInitTabletResolving(const ui64 /*tabletId*/) {
+    }
+};
+
+class TTestKqpController: public IKqpController {
+private:
+    YDB_READONLY_DEF(TAtomicCounter, InitScanCounter);
+    YDB_READONLY_DEF(TAtomicCounter, ResolvingCounter);
+
+public:
+    virtual void OnInitTabletScan(const ui64 /*tabletId*/) override {
+        InitScanCounter.Inc();
+    }
+
+    virtual void OnInitTabletResolving(const ui64 /*tabletId*/) override {
+        ResolvingCounter.Inc();
+    }
 };
 
 class TControllers {
 private:
     ICSController::TPtr CSController = std::make_shared<ICSController>();
+    IKqpController::TPtr KqpController = std::make_shared<IKqpController>();
 
 public:
     template <class TController>
@@ -404,6 +450,23 @@ public:
     template <class T>
     static T* GetControllerAs() {
         auto controller = Singleton<TControllers>()->CSController;
+        return dynamic_cast<T*>(controller.get());
+    }
+
+    template <class T, class... Types>
+    static TGuard<T> RegisterKqpControllerGuard(Types... args) {
+        auto result = std::make_shared<T>(args...);
+        Singleton<TControllers>()->KqpController = result;
+        return result;
+    }
+
+    static IKqpController::TPtr GetKqpController() {
+        return Singleton<TControllers>()->KqpController;
+    }
+
+    template <class T>
+    static T* GetKqpControllerAs() {
+        auto controller = Singleton<TControllers>()->KqpController;
         return dynamic_cast<T*>(controller.get());
     }
 };

@@ -10,7 +10,7 @@
 
 {% include [conn_options_ref.md](conn_options_ref.md) %}
 
-Также добавить или удалить вторичный индекс можно с помощью директив [ADD INDEX и DROP INDEX](../../../../yql/reference/syntax/alter_table/secondary_index.md) операции YQL ALTER TABLE.
+Также добавить или удалить вторичный индекс можно с помощью директив [ADD INDEX и DROP INDEX](../../../../yql/reference/syntax/alter_table/indexes.md) операции YQL ALTER TABLE.
 
 О назначении и применении вторичных индексов при разработке приложений можно прочитать в статье [Вторичные индексы](../../../../dev/secondary-indexes.md).
 
@@ -91,9 +91,9 @@
 {{ ydb-cli }} -p quickstart operation forget ydb://buildindex/7?id=2814749869
 ```
 
-## Удаление вторичного индекса {#drop}
+## Удаление индекса {#drop}
 
-Удаление вторичного индекса выполняется командой `table index drop`:
+Удаление индекса выполняется командой `table index drop`:
 
 ```bash
 {{ ydb-cli }} [connection options] table index drop <table> --index-name STR

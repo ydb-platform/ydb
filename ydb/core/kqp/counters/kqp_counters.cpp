@@ -762,6 +762,8 @@ TKqpCounters::TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, co
     CompileQueryCacheSize = YdbGroup->GetNamedCounter("name", "table.query.compilation.cached_query_count", false);
     CompileQueryCacheBytes = YdbGroup->GetNamedCounter("name", "table.query.compilation.cache_size_bytes", false);
     CompileQueryCacheEvicted = YdbGroup->GetNamedCounter("name", "table.query.compilation.cache_evictions", true);
+    CompileQueueWaitTime = KqpGroup->GetHistogram(
+        "Compilation/QueueWaitTimeMs", NMonitoring::ExponentialHistogram(20, 2, 1));
 
     CompileQueueSize = KqpGroup->GetCounter("Compilation/QueueSize", false);
 
@@ -876,6 +878,7 @@ TKqpCounters::TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, co
     SchedulerDelays = KqpGroup->GetHistogram("NodeScheduler/Delay", NMonitoring::ExponentialHistogram(20, 2, 1));
 
     RowsDuplicationsFound = KqpGroup->GetCounter("RowsDuplicationFound", true);
+    ForcedImmediateEffectsExecution = KqpGroup->GetCounter("ForcedImmediateEffectsExecution", true);
 
     TotalSingleNodeReqCount = KqpGroup->GetCounter("TotalSingleNodeReqCount", true);
     NonLocalSingleNodeReqCount = KqpGroup->GetCounter("NonLocalSingleNodeReqCount", true);
@@ -1084,6 +1087,10 @@ void TKqpCounters::ReportTransaction(TKqpDbCountersPtr dbCounters, const TKqpTra
     if (txInfo.Status == TKqpTransactionInfo::EStatus::Committed) {
         UpdateTxCounters(txInfo, TxByKind);
     }
+}
+
+void TKqpCounters::ReportCompileQueueWaitTime(const TDuration& duration) {
+    CompileQueueWaitTime->Collect(duration.MilliSeconds());
 }
 
 void TKqpCounters::ReportLeaseUpdateLatency(const TDuration& duration) {

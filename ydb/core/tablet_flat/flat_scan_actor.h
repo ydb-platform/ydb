@@ -438,7 +438,7 @@ namespace NOps {
         void SendStat(const TStatState& stat)
         {
             ui64 elapsedUs = 1000000. * NHPTimer::GetSeconds(stat.ElapsedCycles());
-
+            TotalCpuTimeUs += elapsedUs;
             SendToOwner(new TEvScanStat(elapsedUs, stat.Seen, stat.Skipped));
         }
 
@@ -474,9 +474,9 @@ namespace NOps {
                 processed += stat.UpdateRows(Seen, Skipped);
 
                 if (ready == NTable::EReady::Gone) {
-                    Terminate(EAbort::None);
                     stat.UpdateCycles();
                     SendStat(stat);
+                    Terminate(EAbort::None);
                     return;
                 }
 
@@ -493,9 +493,9 @@ namespace NOps {
                 if (!MayProgress()) {
                     // We must honor EReady::Gone from an implicit callback
                     if (ImplicitPageFault() == NTable::EReady::Gone) {
-                        Terminate(EAbort::None);
                         stat.UpdateCycles();
                         SendStat(stat);
+                        Terminate(EAbort::None);
                         return;
                     }
 
@@ -695,6 +695,11 @@ namespace NOps {
             Send(Owner, event.Release(), flags);
         }
 
+        ui64 GetTotalCpuTimeUs() const override
+        {
+            return TotalCpuTimeUs;
+        }
+
     private:
         struct TBlobQueueRequest {
             TActorId Sender;
@@ -724,6 +729,7 @@ namespace NOps {
 
         const NHPTimer::STime MaxCyclesPerIteration;
         static constexpr ui64 MinRowsPerCheck = 1000;
+        ui64 TotalCpuTimeUs = 0;
     };
 
 }

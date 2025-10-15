@@ -10,34 +10,38 @@ const TSubColumnsMerger::TSettings& TSubColumnsMerger::GetSettings() const {
 }
 
 void TSubColumnsMerger::DoStart(const std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>>& input, TMergingContext& /*mergeContext*/) {
-    ui32 inputRecordsCount = 0;
     for (auto&& i : input) {
         OrderedIterators.emplace_back(NSubColumns::TChunksIterator(i, Context.GetLoader(), RemapKeyIndex, OrderedIterators.size()));
-        inputRecordsCount += i ? i->GetRecordsCount() : 0;
     }
     std::vector<const TDictStats*> stats;
+    ui32 statRecordsCount = 0;
     for (auto&& i : OrderedIterators) {
         if (i.GetCurrentSubColumnsArray()) {
             stats.emplace_back(&i.GetCurrentSubColumnsArray()->GetColumnsData().GetStats());
             stats.emplace_back(&i.GetCurrentSubColumnsArray()->GetOthersData().GetStats());
+            statRecordsCount += i.GetCurrentSubColumnsArray()->GetRecordsCount();
         }
     }
-    auto commonStats = TDictStats::Merge(stats, GetSettings(), inputRecordsCount);
-    auto splitted = commonStats.SplitByVolume(GetSettings(), inputRecordsCount);
+    AFL_VERIFY(stats.size());
+    AFL_VERIFY(statRecordsCount);
+    auto commonStats = TDictStats::Merge(stats, GetSettings(), statRecordsCount);
+    auto splitted = commonStats.SplitByVolume(GetSettings(), statRecordsCount);
     ResultColumnStats = splitted.ExtractColumns();
+//    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("columns", ResultColumnStats->DebugJson())("others", splitted.ExtractOthers().DebugJson());
     RemapKeyIndex.RegisterColumnStats(*ResultColumnStats);
     for (auto&& i : OrderedIterators) {
         i.Start();
     }
 }
 
-std::vector<TColumnPortionResult> TSubColumnsMerger::DoExecute(const TChunkMergeContext& context, TMergingContext& mergeContext) {
+TColumnPortionResult TSubColumnsMerger::DoExecute(const TChunkMergeContext& context, TMergingContext& /*mergeContext*/) {
     AFL_VERIFY(ResultColumnStats);
-    auto& mergeChunkContext = mergeContext.GetChunk(context.GetBatchIdx());
     NSubColumns::TMergedBuilder builder(*ResultColumnStats, context, GetSettings(), RemapKeyIndex);
-    for (ui32 i = 0; i < context.GetRecordsCount(); ++i) {
-        const ui32 sourceIdx = mergeChunkContext.GetIdxArray().Value(i);
-        const ui32 recordIdx = mergeChunkContext.GetRecordIdxArray().Value(i);
+    NColumnShard::TSubColumnsStat columnStats;
+    NColumnShard::TSubColumnsStat otherStats;
+    for (ui32 i = 0; i < context.GetRemapper().GetRecordsCount(); ++i) {
+        const ui32 sourceIdx = context.GetRemapper().GetIdxArray().Value(i);
+        const ui32 recordIdx = context.GetRemapper().GetRecordIdxArray().Value(i);
         const auto startRecord = [&](const ui32 /*sourceRecordIndex*/) {
             builder.StartRecord();
         };
@@ -45,8 +49,10 @@ std::vector<TColumnPortionResult> TSubColumnsMerger::DoExecute(const TChunkMerge
             auto commonKeyInfo = RemapKeyIndex.RemapIndex(sourceIdx, sourceKeyIndex, isColumnKey);
             if (commonKeyInfo.GetIsColumnKey()) {
                 builder.AddColumnKV(commonKeyInfo.GetCommonKeyIndex(), value);
+                columnStats.Add(value.size());
             } else {
                 builder.AddOtherKV(commonKeyInfo.GetCommonKeyIndex(), value);
+                otherStats.Add(value.size());
             }
         };
         const auto finishRecord = [&]() {
@@ -54,6 +60,8 @@ std::vector<TColumnPortionResult> TSubColumnsMerger::DoExecute(const TChunkMerge
         };
         OrderedIterators[sourceIdx].ReadRecord(recordIdx, startRecord, addKV, finishRecord);
     }
+    context.GetCounters().SubColumnCounters->GetColumnCounters().OnWrite(columnStats);
+    context.GetCounters().SubColumnCounters->GetOtherCounters().OnWrite(otherStats);
     return builder.Finish(Context);
 }
 

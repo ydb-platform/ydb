@@ -31,8 +31,10 @@ namespace {
 bool IsStreamLookup(const TCoEquiJoinTuple& joinTuple) {
     for (const auto& outer: joinTuple.Options()) {
         for (const auto& inner: outer.Cast<TExprList>()) {
-            if (inner.Cast<TCoAtom>().StringValue() == "forceStreamLookup") {
-                return true;
+            if (auto maybeForceStreamLookupOption = inner.Maybe<TCoAtom>()) {
+                if (maybeForceStreamLookupOption.Cast().StringValue() == "forceStreamLookup") {
+                    return true;
+                } 
             }
         }
     }
@@ -55,7 +57,13 @@ struct TDqCBOProviderContext : public NYql::TBaseProviderContext {
         const TVector<TJoinColumn>& leftJoinKeys, const TVector<TJoinColumn>& rightJoinKeys,
         NYql::EJoinAlgoType joinAlgo,  NYql::EJoinKind joinKind) override;
 
-    virtual double ComputeJoinCost(const NYql::TOptimizerStatistics& leftStats, const NYql::TOptimizerStatistics& rightStats, const double outputRows, const double outputByteSize, NYql::EJoinAlgoType joinAlgo) const override;
+    virtual double ComputeJoinCost(
+        const NYql::TOptimizerStatistics& leftStats, 
+        const NYql::TOptimizerStatistics& rightStats, 
+        const double outputRows, 
+        const double outputByteSize, 
+        NYql::EJoinAlgoType joinAlgo
+    ) const override;
 
     TDqConfiguration::TPtr Config;
     TTypeAnnotationContext& TypesCtx;
@@ -91,7 +99,13 @@ bool TDqCBOProviderContext::IsJoinApplicable(const std::shared_ptr<NYql::IBaseOp
 }
 
 
-double TDqCBOProviderContext::ComputeJoinCost(const TOptimizerStatistics& leftStats, const TOptimizerStatistics& rightStats, const double outputRows, const double outputByteSize, EJoinAlgoType joinAlgo) const  {
+double TDqCBOProviderContext::ComputeJoinCost(
+    const TOptimizerStatistics& leftStats, 
+    const TOptimizerStatistics& rightStats, 
+    const double outputRows, 
+    const double outputByteSize, 
+    EJoinAlgoType joinAlgo
+) const  {
     Y_UNUSED(outputByteSize);
 
     switch(joinAlgo) {

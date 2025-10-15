@@ -10,7 +10,7 @@ IF (NOT OS_WINDOWS)
         ydb/library/yql/dq/comp_nodes
         yql/essentials/core/dq_integration/transform
         ydb/library/yql/dq/transform
-        yql/essentials/minikql/comp_nodes/llvm14
+        yql/essentials/minikql/comp_nodes/llvm16
         ydb/library/yql/providers/clickhouse/actors
         yql/essentials/providers/common/comp_nodes
         ydb/library/yql/providers/dq/runtime
@@ -31,8 +31,8 @@ IF (NOT OS_WINDOWS)
         yql/essentials/utils/failure_injector
         yql/essentials/utils/backtrace
         yql/essentials/utils/network
-        yt/yql/providers/yt/comp_nodes/dq/llvm14
-        yt/yql/providers/yt/comp_nodes/llvm14
+        yt/yql/providers/yt/comp_nodes/dq/llvm16
+        yt/yql/providers/yt/comp_nodes/llvm16
         yt/yql/providers/yt/codec/codegen
         yt/yql/providers/yt/mkql_dq
         ydb/library/yql/providers/dq/actors/yt

@@ -197,6 +197,7 @@ At the moment, not all functionality of column-oriented tables is implemented. T
 
 * Reading from replicas.
 * Secondary indexes.
+* Vector indexes.
 * Bloom filters.
 * Change Data Capture.
 * Table renaming.

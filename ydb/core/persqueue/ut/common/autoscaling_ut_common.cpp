@@ -113,6 +113,7 @@ TTopicSdkTestSetup CreateSetup() {
     setup.GetRuntime().GetAppData().PQConfig.SetTopicsAreFirstClassCitizen(true);
     setup.GetRuntime().GetAppData().PQConfig.SetUseSrcIdMetaMappingInFirstClass(true);
     setup.GetRuntime().GetAppData().PQConfig.SetBalancerWakeupIntervalSec(1);
+    setup.GetRuntime().GetAppData().PQConfig.SetACLRetryTimeoutSec(1);
 
     return setup;
 }

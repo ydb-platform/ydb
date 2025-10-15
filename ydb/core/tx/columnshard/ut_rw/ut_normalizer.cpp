@@ -47,59 +47,7 @@ public:
     }
 };
 
-class TColumnChunksCleaner: public NYDBTest::ILocalDBModifier {
-public:
-    virtual void Apply(NTabletFlatExecutor::TTransactionContext& txc) const override {
-        using namespace NColumnShard;
-        NIceDb::TNiceDb db(txc.DB);
-
-        std::vector<TPortionRecord> portion2Key;
-        std::optional<ui64> pathId;
-        {
-            auto rowset = db.Table<Schema::IndexColumns>().Select();
-            UNIT_ASSERT(rowset.IsReady());
-
-            while (!rowset.EndOfSet()) {
-                TPortionRecord key;
-                key.Index = rowset.GetValue<Schema::IndexColumns::Index>();
-                key.Granule = rowset.GetValue<Schema::IndexColumns::Granule>();
-                key.ColumnIdx = rowset.GetValue<Schema::IndexColumns::ColumnIdx>();
-                key.PlanStep = rowset.GetValue<Schema::IndexColumns::PlanStep>();
-                key.TxId = rowset.GetValue<Schema::IndexColumns::TxId>();
-                key.Portion = rowset.GetValue<Schema::IndexColumns::Portion>();
-                key.Chunk = rowset.GetValue<Schema::IndexColumns::Chunk>();
-
-                key.XPlanStep = rowset.GetValue<Schema::IndexColumns::XPlanStep>();
-                key.XTxId = rowset.GetValue<Schema::IndexColumns::XTxId>();
-                key.Blob = rowset.GetValue<Schema::IndexColumns::Blob>();
-                key.Metadata = rowset.GetValue<Schema::IndexColumns::Metadata>();
-                key.Offset = rowset.GetValue<Schema::IndexColumns::Offset>();
-                key.Size = rowset.GetValue<Schema::IndexColumns::Size>();
-
-                pathId = rowset.GetValue<Schema::IndexColumns::PathId>();
-
-                portion2Key.emplace_back(std::move(key));
-
-                UNIT_ASSERT(rowset.Next());
-            }
-        }
-
-        UNIT_ASSERT(pathId.has_value());
-
-        for (auto&& key : portion2Key) {
-            NKikimrTxColumnShard::TIndexColumnMeta metaProto;
-            UNIT_ASSERT(metaProto.ParseFromArray(key.Metadata.data(), key.Metadata.size()));
-//            metaProto.ClearNumRows();
-            metaProto.ClearRawBytes();
-
-            db.Table<Schema::IndexColumns>()
-                .Key(key.Index, key.Granule, key.ColumnIdx, key.PlanStep, key.TxId, key.Portion, key.Chunk)
-                .Update(NIceDb::TUpdate<Schema::IndexColumns::Metadata>(metaProto.SerializeAsString()));
-        }
-    }
-};
-
-class TSchemaVersionsCleaner : public NYDBTest::ILocalDBModifier {
+class TSchemaVersionsCleaner: public NYDBTest::ILocalDBModifier {
 public:
     virtual void Apply(NTabletFlatExecutor::TTransactionContext& txc) const override {
         using namespace NColumnShard;
@@ -127,7 +75,7 @@ public:
     }
 };
 
-class TPortionsCleaner : public NYDBTest::ILocalDBModifier {
+class TPortionsCleaner: public NYDBTest::ILocalDBModifier {
 public:
     virtual void Apply(NTabletFlatExecutor::TTransactionContext& txc) const override {
         using namespace NColumnShard;
@@ -139,15 +87,15 @@ public:
             UNIT_ASSERT(rowset.IsReady());
 
             while (!rowset.EndOfSet()) {
-                NOlap::TPortionAddress addr(
-                    rowset.GetValue<Schema::IndexPortions::PathId>(), rowset.GetValue<Schema::IndexPortions::PortionId>());
+                NOlap::TPortionAddress addr(TInternalPathId::FromRawValue(rowset.GetValue<Schema::IndexPortions::PathId>()),
+                    rowset.GetValue<Schema::IndexPortions::PortionId>());
                 portions.emplace_back(addr);
                 UNIT_ASSERT(rowset.Next());
             }
         }
 
         for (auto&& key : portions) {
-            db.Table<Schema::IndexPortions>().Key(key.GetPathId(), key.GetPortionId()).Delete();
+            db.Table<Schema::IndexPortions>().Key(key.GetPathId().GetRawValue(), key.GetPortionId()).Delete();
         }
     }
 };
@@ -163,8 +111,8 @@ public:
                 metaProto.SetDeletionsCount(0);
                 metaProto.SetIsInserted(true);
 
-                const auto schema = std::make_shared<arrow::Schema>(
-                    arrow::FieldVector({ std::make_shared<arrow::Field>("key1", arrow::uint64()), std::make_shared<arrow::Field>("key2", arrow::uint64()) }));
+                const auto schema = std::make_shared<arrow::Schema>(arrow::FieldVector(
+                    { std::make_shared<arrow::Field>("key1", arrow::uint64()), std::make_shared<arrow::Field>("key2", arrow::uint64()) }));
                 auto batch = NArrow::MakeEmptyBatch(schema, 1);
                 NArrow::TFirstLastSpecialKeys keys(batch);
                 metaProto.SetPrimaryKeyBorders(keys.SerializePayloadToString());
@@ -189,24 +137,24 @@ public:
         using namespace NColumnShard;
         NIceDb::TNiceDb db(txc.DB);
 
-        std::vector<ui64> tables;
+        std::vector<TInternalPathId> tables;
         {
             auto rowset = db.Table<Schema::TableInfo>().Select();
             UNIT_ASSERT(rowset.IsReady());
 
             while (!rowset.EndOfSet()) {
-                const auto pathId = rowset.GetValue<Schema::TableInfo::PathId>();
+                const auto pathId = TInternalPathId::FromRawValue(rowset.GetValue<Schema::TableInfo::PathId>());
                 tables.emplace_back(pathId);
                 UNIT_ASSERT(rowset.Next());
             }
         }
 
         for (auto&& key : tables) {
-            db.Table<Schema::TableInfo>().Key(key).Delete();
+            db.Table<Schema::TableInfo>().Key(key.GetRawValue()).Delete();
         }
 
         struct TKey {
-            ui64 PathId;
+            TInternalPathId PathId;
             ui64 Step;
             ui64 TxId;
         };
@@ -218,7 +166,7 @@ public:
 
             while (!rowset.EndOfSet()) {
                 TKey key;
-                key.PathId = rowset.GetValue<Schema::TableVersionInfo::PathId>();
+                key.PathId = TInternalPathId::FromRawValue(rowset.GetValue<Schema::TableVersionInfo::PathId>());
                 key.Step = rowset.GetValue<Schema::TableVersionInfo::SinceStep>();
                 key.TxId = rowset.GetValue<Schema::TableVersionInfo::SinceTxId>();
                 versions.emplace_back(key);
@@ -227,7 +175,25 @@ public:
         }
 
         for (auto&& key : versions) {
-            db.Table<Schema::TableVersionInfo>().Key(key.PathId, key.Step, key.TxId).Delete();
+            db.Table<Schema::TableVersionInfo>().Key(key.PathId.GetRawValue(), key.Step, key.TxId).Delete();
+        }
+    }
+};
+
+class TEraseMetaFromChunksV0: public NYDBTest::ILocalDBModifier {
+public:
+    virtual void Apply(NTabletFlatExecutor::TTransactionContext& txc) const override {
+        using namespace NColumnShard;
+        NIceDb::TNiceDb db(txc.DB);
+        auto rowset = db.Table<Schema::IndexColumns>().Select();
+        UNIT_ASSERT(rowset.IsReady());
+
+        while (!rowset.EndOfSet()) {
+            NKikimrTxColumnShard::TIndexColumnMeta metaProto;
+            UNIT_ASSERT(metaProto.ParseFromString(rowset.GetValue<Schema::IndexColumns::Metadata>()));
+            metaProto.ClearPortionMeta();
+            db.Table<Schema::IndexColumns>().Key(rowset.GetKey()).Update<Schema::IndexColumns::Metadata>(metaProto.SerializeAsString());
+            UNIT_ASSERT(rowset.Next());
         }
     }
 };
@@ -243,6 +209,57 @@ public:
     }
 };
 
+class TTrashUnusedInjector: public NYDBTest::ILocalDBModifier {
+public:
+    void Apply(NTabletFlatExecutor::TTransactionContext& txc) const override {
+        using namespace NColumnShard;
+
+        NIceDb::TNiceDb db(txc.DB);
+
+        if (db.HaveTable<Schema::IndexColumns>()) {
+            for (size_t i = 0; i < 100; ++i) {
+                db.Table<Schema::IndexColumns>().Key(1 + i, 2 + i, 3 + i, 4 + i, 5 + i, 6 + i, 7 + i).Update();
+            }
+        }
+    }
+};
+
+template <ui64 ColumnId>
+class TExtraColumnsInjector: public NYDBTest::ILocalDBModifier {
+public:
+    void Apply(NTabletFlatExecutor::TTransactionContext& txc) const override {
+        using namespace NColumnShard;
+
+        NIceDb::TNiceDb db(txc.DB);
+
+        THashMap<NOlap::TPortionAddress, NKikimrTxColumnShard::TIndexPortionAccessor> portions;
+
+        auto rowset = db.Table<Schema::IndexColumnsV2>().Select();
+        UNIT_ASSERT(rowset.IsReady());
+
+        while (!rowset.EndOfSet()) {
+            auto metadataString = rowset.GetValue<NColumnShard::Schema::IndexColumnsV2::Metadata>();
+            NKikimrTxColumnShard::TIndexPortionAccessor metaProto;
+            AFL_VERIFY(metaProto.ParseFromArray(metadataString.data(), metadataString.size()))("event", "cannot parse metadata as protobuf");
+            {
+                auto chunk = metaProto.AddChunks();
+                chunk->SetSSColumnId(ColumnId);
+                chunk->MutableBlobRangeLink()->SetSize(1);
+                chunk->MutableChunkMetadata()->SetNumRows(20048);
+                chunk->MutableChunkMetadata()->SetRawBytes(1);
+            }
+            AFL_VERIFY(portions.emplace(NOlap::TPortionAddress(TInternalPathId::FromRawValue(rowset.GetValue<NColumnShard::Schema::IndexColumnsV2::PathId>()), rowset.GetValue<NColumnShard::Schema::IndexColumnsV2::PortionId>()), std::move(metaProto)).second);
+            UNIT_ASSERT(rowset.Next());
+        }
+
+        for (auto&& [key, metadata] : portions) {
+            db.Table<Schema::IndexColumnsV2>()
+                .Key(key.GetPathId().GetRawValue(), key.GetPortionId())
+                .Update(NIceDb::TUpdate<Schema::IndexColumnsV2::Metadata>(metadata.SerializeAsString()));
+        }
+    }
+};
+
 Y_UNIT_TEST_SUITE(Normalizers) {
     template <class TLocalDBModifier>
     void TestNormalizerImpl(const TNormalizerChecker& checker = TNormalizerChecker()) {
@@ -251,15 +268,16 @@ Y_UNIT_TEST_SUITE(Normalizers) {
 
         TTestBasicRuntime runtime;
         TTester::Setup(runtime);
+        runtime.GetAppData().ColumnShardConfig.SetColumnChunksV0Usage(false);
 
-        checker.CorrectConfigurationOnStart(runtime.GetAppData().ColumnShardConfig); 
-        checker.CorrectFeatureFlagsOnStart(runtime.GetAppData().FeatureFlags); 
+        checker.CorrectConfigurationOnStart(runtime.GetAppData().ColumnShardConfig);
+        checker.CorrectFeatureFlagsOnStart(runtime.GetAppData().FeatureFlags);
 
         const ui64 tableId = 1;
         const std::vector<NArrow::NTest::TTestColumn> schema = { NArrow::NTest::TTestColumn("key1", TTypeInfo(NTypeIds::Uint64)),
             NArrow::NTest::TTestColumn("key2", TTypeInfo(NTypeIds::Uint64)), NArrow::NTest::TTestColumn("field", TTypeInfo(NTypeIds::Utf8)) };
         const std::vector<ui32> columnsIds = { 1, 2, 3 };
-        PrepareTablet(runtime, tableId, schema, 2);
+        auto planStep = PrepareTablet(runtime, tableId, schema, 2);
         const ui64 txId = 111;
 
         NConstruction::IArrayBuilder::TPtr key1Column =
@@ -272,23 +290,19 @@ Y_UNIT_TEST_SUITE(Normalizers) {
         auto batch = NConstruction::TRecordBatchConstructor({ key1Column, key2Column, column }).BuildBatch(20048);
         NTxUT::TShardWriter writer(runtime, TTestTxConfig::TxTablet0, tableId, 222);
         AFL_VERIFY(writer.Write(batch, {1, 2, 3}, txId) == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
-        AFL_VERIFY(writer.StartCommit(txId) == NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED);
-        PlanWriteTx(runtime, writer.GetSender(), NOlap::TSnapshot(11, txId));
+        planStep = writer.StartCommit(txId);
+        PlanWriteTx(runtime, writer.GetSender(), NOlap::TSnapshot(planStep, txId));
 
         {
-            auto readResult = ReadAllAsBatch(runtime, tableId, NOlap::TSnapshot(11, txId), schema);
+            auto readResult = ReadAllAsBatch(runtime, tableId, NOlap::TSnapshot(planStep, txId), schema);
             UNIT_ASSERT_VALUES_EQUAL(readResult->num_rows(), 20048);
         }
         RebootTablet(runtime, TTestTxConfig::TxTablet0, writer.GetSender());
 
         {
-            auto readResult = ReadAllAsBatch(runtime, tableId, NOlap::TSnapshot(11, txId), schema);
+            auto readResult = ReadAllAsBatch(runtime, tableId, NOlap::TSnapshot(planStep, txId), schema);
             UNIT_ASSERT_VALUES_EQUAL(readResult->num_rows(), checker.RecordsCountAfterReboot(20048));
         }
-    }
-
-    Y_UNIT_TEST(ColumnChunkNormalizer) {
-        TestNormalizerImpl<TColumnChunksCleaner>();
     }
 
     Y_UNIT_TEST(PortionsNormalizer) {
@@ -297,7 +311,7 @@ Y_UNIT_TEST_SUITE(Normalizers) {
             virtual ui64 RecordsCountAfterReboot(const ui64 /*initialRecodsCount*/) const override {
                 return 0;
             }
-            virtual void CorrectFeatureFlagsOnStart(TFeatureFlags & featuresFlags) const override{
+            virtual void CorrectFeatureFlagsOnStart(TFeatureFlags& featuresFlags) const override {
                 featuresFlags.SetEnableWritePortionsOnInsert(true);
             }
             virtual void CorrectConfigurationOnStart(NKikimrConfig::TColumnShardConfig& columnShardConfig) const override {
@@ -343,7 +357,6 @@ Y_UNIT_TEST_SUITE(Normalizers) {
         TestNormalizerImpl<TEmptyPortionsCleaner>(TLocalNormalizerChecker());
     }
 
-
     Y_UNIT_TEST(EmptyTablesNormalizer) {
         class TLocalNormalizerChecker: public TNormalizerChecker {
         public:
@@ -359,6 +372,60 @@ Y_UNIT_TEST_SUITE(Normalizers) {
         TLocalNormalizerChecker checker;
         TestNormalizerImpl<TTablesCleaner>(checker);
     }
-}
 
+    Y_UNIT_TEST(ChunksV0MetaNormalizer) {
+        class TLocalNormalizerChecker: public TNormalizerChecker {
+        public:
+            virtual void CorrectConfigurationOnStart(NKikimrConfig::TColumnShardConfig& columnShardConfig) const override {
+                auto* repair = columnShardConfig.MutableRepairs()->Add();
+                repair->SetClassName("RestoreV0ChunksMeta");
+                repair->SetDescription("Restoring PortionMeta in IndexColumns");
+            }
+        };
+        TLocalNormalizerChecker checker;
+        TestNormalizerImpl<TEraseMetaFromChunksV0>(checker);
+    }
+
+    Y_UNIT_TEST(CleanUnusedTablesNormalizer) {
+        class TTtlPresetsChecker: public TNormalizerChecker {
+        public:
+            virtual void CorrectConfigurationOnStart(NKikimrConfig::TColumnShardConfig& columnShardConfig) const override {
+                auto* repair = columnShardConfig.MutableRepairs()->Add();
+                repair->SetClassName("CleanIndexColumns");
+                repair->SetDescription("Cleaning old table");
+            }
+        };
+
+        TTtlPresetsChecker checker;
+        TestNormalizerImpl<TTrashUnusedInjector>(checker);
+    }
+
+    Y_UNIT_TEST(RemoveDeleteFlagNormalizer) {
+        class TChecker: public TNormalizerChecker {
+        public:
+            virtual void CorrectConfigurationOnStart(NKikimrConfig::TColumnShardConfig& columnShardConfig) const override {
+                auto* repair = columnShardConfig.MutableRepairs()->Add();
+                repair->SetClassName("RemoveDeleteFlag");
+                repair->SetDescription("normalizer");
+            }
+        };
+
+        TChecker checker;
+        TestNormalizerImpl<TExtraColumnsInjector<NOlap::NPortion::TSpecialColumns::SPEC_COL_DELETE_FLAG_INDEX>>(checker);
+    }
+
+    Y_UNIT_TEST(RemoveWriteIdNormalizer) {
+        class TChecker: public TNormalizerChecker {
+        public:
+            virtual void CorrectConfigurationOnStart(NKikimrConfig::TColumnShardConfig& columnShardConfig) const override {
+                auto* repair = columnShardConfig.MutableRepairs()->Add();
+                repair->SetClassName("RemoveWriteId");
+                repair->SetDescription("normalizer");
+            }
+        };
+
+        TChecker checker;
+        TestNormalizerImpl<TExtraColumnsInjector<NOlap::NPortion::TSpecialColumns::SPEC_COL_WRITE_ID_INDEX>>(checker);
+    }
+}
 }   // namespace NKikimr

@@ -1,7 +1,9 @@
 #pragma once
+#include "compacted.h"
 #include "constructor_meta.h"
-#include "portion_info.h"
+#include "written.h"
 
+#include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/engines/scheme/versions/abstract_scheme.h>
 
 #include <ydb/library/accessor/accessor.h>
@@ -13,20 +15,16 @@ class TIndexChunkLoadContext;
 class TPortionAccessorConstructor;
 
 class TPortionInfoConstructor {
-private:
+protected:
     bool Constructed = false;
-    YDB_ACCESSOR(ui64, PathId, 0);
+    YDB_ACCESSOR_DEF(TInternalPathId, PathId);
     std::optional<ui64> PortionId;
 
     TPortionMetaConstructor MetaConstructor;
 
-    std::optional<TSnapshot> MinSnapshotDeprecated;
     std::optional<TSnapshot> RemoveSnapshot;
     std::optional<ui64> SchemaVersion;
     std::optional<ui64> ShardingVersion;
-
-    std::optional<TSnapshot> CommitSnapshot;
-    std::optional<TInsertWriteId> InsertWriteId;
 
     TPortionInfoConstructor(const TPortionInfoConstructor&) = default;
     TPortionInfoConstructor& operator=(const TPortionInfoConstructor&) = default;
@@ -34,44 +32,39 @@ private:
     TPortionInfoConstructor(TPortionInfo&& portion)
         : PathId(portion.GetPathId())
         , PortionId(portion.GetPortionId())
-        , MinSnapshotDeprecated(portion.GetMinSnapshotDeprecated())
         , RemoveSnapshot(portion.GetRemoveSnapshotOptional())
-        , SchemaVersion(portion.GetSchemaVersionOptional())
+        , SchemaVersion(portion.GetSchemaVersionVerified())
         , ShardingVersion(portion.GetShardingVersionOptional()) {
-        MetaConstructor = TPortionMetaConstructor(std::move(portion.Meta), true);
+        MetaConstructor = TPortionMetaConstructor(std::move(portion.Meta));
     }
+
+    virtual std::shared_ptr<TPortionInfo> BuildPortionImpl(TPortionMeta&& meta) = 0;
+
     friend class TPortionAccessorConstructor;
 
 public:
     TPortionInfoConstructor(TPortionInfoConstructor&&) noexcept = default;
     TPortionInfoConstructor& operator=(TPortionInfoConstructor&&) noexcept = default;
 
-    TPortionInfoConstructor(const TPortionInfo& portion, const bool withMetadata, const bool withMetadataBlobs)
+    virtual ~TPortionInfoConstructor() = default;
+
+    virtual EPortionType GetType() const = 0;
+
+    TPortionInfoConstructor(const TPortionInfo& portion, const bool withMetadata)
         : PathId(portion.GetPathId())
         , PortionId(portion.GetPortionId())
-        , MinSnapshotDeprecated(portion.GetMinSnapshotDeprecated())
         , RemoveSnapshot(portion.GetRemoveSnapshotOptional())
-        , SchemaVersion(portion.GetSchemaVersionOptional())
-        , ShardingVersion(portion.GetShardingVersionOptional())
-        , CommitSnapshot(portion.GetCommitSnapshotOptional())
-        , InsertWriteId(portion.GetInsertWriteIdOptional()) {
+        , SchemaVersion(portion.GetSchemaVersionVerified())
+        , ShardingVersion(portion.GetShardingVersionOptional()) {
         if (withMetadata) {
-            MetaConstructor = TPortionMetaConstructor(portion.Meta, withMetadataBlobs);
-        } else {
-            AFL_VERIFY(!withMetadataBlobs);
+            MetaConstructor = TPortionMetaConstructor(portion.Meta);
         }
-    }
-
-    bool HaveBlobsData() {
-        return MetaConstructor.GetBlobIdsCount();
     }
 
     void SetPortionId(const ui64 value) {
         AFL_VERIFY(value);
         PortionId = value;
     }
-
-    void AddMetadata(const ISnapshotSchema& snapshotSchema, const std::shared_ptr<arrow::RecordBatch>& batch);
 
     void AddMetadata(const ISnapshotSchema& snapshotSchema, const ui32 deletionsCount, const NArrow::TFirstLastSpecialKeys& firstLastRecords,
         const std::optional<NArrow::TMinMaxSpecialKeys>& minMaxSpecial) {
@@ -92,11 +85,6 @@ public:
         return MetaConstructor;
     }
 
-    TInsertWriteId GetInsertWriteIdVerified() const {
-        AFL_VERIFY(InsertWriteId);
-        return *InsertWriteId;
-    }
-
     TPortionAddress GetAddress() const {
         return TPortionAddress(PathId, GetPortionIdVerified());
     }
@@ -105,46 +93,28 @@ public:
         return !!RemoveSnapshot;
     }
 
-    TPortionInfoConstructor(const ui64 pathId, const ui64 portionId)
+    TPortionInfoConstructor(const TInternalPathId pathId, const ui64 portionId)
         : PathId(pathId)
         , PortionId(portionId) {
         AFL_VERIFY(PathId);
         AFL_VERIFY(PortionId);
     }
 
-    TPortionInfoConstructor(const ui64 pathId)
+    TPortionInfoConstructor(const TInternalPathId pathId)
         : PathId(pathId) {
         AFL_VERIFY(PathId);
     }
 
-    const TSnapshot& GetMinSnapshotDeprecatedVerified() const {
-        AFL_VERIFY(!!MinSnapshotDeprecated);
-        return *MinSnapshotDeprecated;
-    }
-
     std::shared_ptr<ISnapshotSchema> GetSchema(const TVersionedIndex& index) const;
 
-    void SetCommitSnapshot(const TSnapshot& snap) {
-        AFL_VERIFY(!!InsertWriteId);
-        AFL_VERIFY(!CommitSnapshot);
-        AFL_VERIFY(snap.Valid());
-        CommitSnapshot = snap;
-    }
-
-    void SetInsertWriteId(const TInsertWriteId value) {
-        AFL_VERIFY(!InsertWriteId);
-        AFL_VERIFY((ui64)value);
-        InsertWriteId = value;
-    }
-
-    void SetMinSnapshotDeprecated(const TSnapshot& snap) {
-        Y_ABORT_UNLESS(snap.Valid());
-        MinSnapshotDeprecated = snap;
-    }
-
     void SetSchemaVersion(const ui64 version) {
-        //        AFL_VERIFY(version);
+        AFL_VERIFY(version);
         SchemaVersion = version;
+    }
+
+    ui64 GetSchemaVersionVerified() const {
+        AFL_VERIFY(SchemaVersion);
+        return *SchemaVersion;
     }
 
     void SetShardingVersion(const ui64 version) {
@@ -170,6 +140,71 @@ public:
     }
 
     std::shared_ptr<TPortionInfo> Build();
+};
+
+class TCompactedPortionInfoConstructor: public TPortionInfoConstructor {
+private:
+    using TBase = TPortionInfoConstructor;
+    YDB_READONLY_DEF(std::optional<TSnapshot>, AppearanceSnapshot);
+
+public:
+    using TBase::TBase;
+
+    void SetAppearanceSnapshot(const TSnapshot snapshot) {
+        AFL_VERIFY(!AppearanceSnapshot);
+        AppearanceSnapshot = snapshot;
+    }
+
+    TCompactedPortionInfoConstructor(const TCompactedPortionInfo& portion, const bool withMetadata)
+        : TBase(portion, withMetadata)
+        , AppearanceSnapshot(portion.AppearanceSnapshot) {
+    }
+
+    virtual EPortionType GetType() const override {
+        return EPortionType::Compacted;
+    }
+
+    virtual std::shared_ptr<TPortionInfo> BuildPortionImpl(TPortionMeta&& meta) override;
+};
+
+class TWrittenPortionInfoConstructor: public TPortionInfoConstructor {
+private:
+    using TBase = TPortionInfoConstructor;
+    std::optional<TSnapshot> CommitSnapshot;
+    std::optional<TInsertWriteId> InsertWriteId;
+
+    virtual std::shared_ptr<TPortionInfo> BuildPortionImpl(TPortionMeta&& meta) override;
+
+public:
+    using TBase::TBase;
+
+    virtual EPortionType GetType() const override {
+        return EPortionType::Written;
+    }
+
+    TWrittenPortionInfoConstructor(const TWrittenPortionInfo& portion, const bool withMetadata)
+        : TBase(portion, withMetadata)
+        , CommitSnapshot(portion.GetCommitSnapshotOptional())
+        , InsertWriteId(portion.GetInsertWriteId()) {
+    }
+
+    TInsertWriteId GetInsertWriteIdVerified() const {
+        AFL_VERIFY(InsertWriteId);
+        return *InsertWriteId;
+    }
+
+    void SetCommitSnapshot(const TSnapshot& snap) {
+        AFL_VERIFY(!!InsertWriteId);
+        AFL_VERIFY(!CommitSnapshot);
+        AFL_VERIFY(snap.Valid());
+        CommitSnapshot = snap;
+    }
+
+    void SetInsertWriteId(const TInsertWriteId value) {
+        AFL_VERIFY(!InsertWriteId);
+        AFL_VERIFY((ui64)value);
+        InsertWriteId = value;
+    }
 };
 
 }   // namespace NKikimr::NOlap

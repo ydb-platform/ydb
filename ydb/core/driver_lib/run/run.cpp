@@ -62,9 +62,13 @@
 #include <ydb/core/protos/datashard_config.pb.h>
 #include <ydb/core/protos/node_broker.pb.h>
 #include <ydb/core/protos/bootstrap.pb.h>
-#include <ydb/core/protos/stream.pb.h>
 #include <ydb/core/protos/cms.pb.h>
+#include <ydb/core/protos/datashard_config.pb.h>
+#include <ydb/core/protos/http_config.pb.h>
+#include <ydb/core/protos/node_broker.pb.h>
 #include <ydb/core/protos/replication.pb.h>
+#include <ydb/core/protos/stream.pb.h>
+#include <ydb/core/protos/workload_manager_config.pb.h>
 
 #include <ydb/core/mind/local.h>
 #include <ydb/core/mind/tenant_pool.h>
@@ -79,6 +83,8 @@
 #include <ydb/core/tablet/tablet_list_renderer.h>
 #include <ydb/core/tablet/tablet_monitoring_proxy.h>
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
+
+#include <ydb/core/transfer/transfer_writer.h>
 
 #include <ydb/core/tx/tx.h>
 #include <ydb/core/tx/datashard/datashard.h>
@@ -152,6 +158,7 @@
 #include <ydb/library/actors/util/memory_track.h>
 #include <ydb/library/actors/prof/tag.h>
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
+#include <ydb/library/signal_backtrace/signal_backtrace.h>
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 
 #include <util/charset/wide.h>
@@ -477,6 +484,9 @@ void TKikimrRunner::InitializeMonitoring(const TKikimrRunConfig& runConfig, bool
         const auto& securityConfig(runConfig.AppConfig.GetDomainsConfig().GetSecurityConfig());
         if (securityConfig.MonitoringAllowedSIDsSize() > 0) {
             monConfig.AllowedSIDs.assign(securityConfig.GetMonitoringAllowedSIDs().begin(), securityConfig.GetMonitoringAllowedSIDs().end());
+        }
+        if (securityConfig.AdministrationAllowedSIDsSize() > 0) {
+            monConfig.AllowedSIDs.insert(monConfig.AllowedSIDs.end(), securityConfig.GetAdministrationAllowedSIDs().begin(), securityConfig.GetAdministrationAllowedSIDs().end());
         }
         monConfig.AllowOrigin = appConfig.GetMonitoringConfig().GetAllowOrigin();
 
@@ -1117,8 +1127,19 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
     const auto& cfg = runConfig.AppConfig;
 
     bool useAutoConfig = !cfg.HasActorSystemConfig() || (cfg.GetActorSystemConfig().HasUseAutoConfig() && cfg.GetActorSystemConfig().GetUseAutoConfig());
+    bool useSharedThreads = cfg.HasActorSystemConfig() && cfg.GetActorSystemConfig().HasUseSharedThreads() && cfg.GetActorSystemConfig().GetUseSharedThreads();
     NAutoConfigInitializer::TASPools pools = NAutoConfigInitializer::GetASPools(cfg.GetActorSystemConfig(), useAutoConfig);
     TMap<TString, ui32> servicePools = NAutoConfigInitializer::GetServicePools(cfg.GetActorSystemConfig(), useAutoConfig);
+
+    if (useSharedThreads) {
+        pools.SystemPoolId = 0;
+        pools.UserPoolId = 1;
+        pools.BatchPoolId = 2;
+        pools.IOPoolId = 3;
+        pools.ICPoolId = 4;
+        servicePools.clear();
+        servicePools["Interconnect"] = 4;
+    }
 
     AppData.Reset(new TAppData(pools.SystemPoolId, pools.UserPoolId, pools.IOPoolId, pools.BatchPoolId,
                                servicePools,
@@ -1135,9 +1156,9 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
     AppData->SchemeOperationFactory = ModuleFactories ? ModuleFactories->SchemeOperationFactory.get() : nullptr;
     AppData->ConfigSwissKnife = ModuleFactories ? ModuleFactories->ConfigSwissKnife.get() : nullptr;
 
-    AppData->TransferWriterFactory = ModuleFactories
+    AppData->TransferWriterFactory = ModuleFactories && ModuleFactories->TransferWriterFactory
         ? ModuleFactories->TransferWriterFactory
-        : nullptr;
+        : std::make_shared<NKikimr::NReplication::NTransfer::TTransferWriterFactory>();
 
     AppData->SqsAuthFactory = ModuleFactories
         ? ModuleFactories->SqsAuthFactory.get()
@@ -1168,6 +1189,11 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
     if (runConfig.AppConfig.HasPQClusterDiscoveryConfig()) {
         AppData->PQClusterDiscoveryConfig.CopyFrom(runConfig.AppConfig.GetPQClusterDiscoveryConfig());
     }
+
+    if (runConfig.AppConfig.HasKafkaProxyConfig()) {
+        AppData->KafkaProxyConfig.CopyFrom(runConfig.AppConfig.GetKafkaProxyConfig());
+    }
+
 
     if (runConfig.AppConfig.HasNetClassifierConfig()) {
         AppData->NetClassifierConfig.CopyFrom(runConfig.AppConfig.GetNetClassifierConfig());
@@ -1253,6 +1279,10 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
 
     if (runConfig.AppConfig.HasHealthCheckConfig()) {
         AppData->HealthCheckConfig = runConfig.AppConfig.GetHealthCheckConfig();
+    }
+
+    if (runConfig.AppConfig.HasWorkloadManagerConfig()) {
+        AppData->WorkloadManagerConfig = runConfig.AppConfig.GetWorkloadManagerConfig();
     }
 
     if (runConfig.AppConfig.HasMetricsConfig()) {
@@ -1695,23 +1725,25 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
     }
 
     if (serviceMask.EnableGroupedMemoryLimiter) {
-        sil->AddServiceInitializer(new TGroupedMemoryLimiterInitializer(runConfig));
-    }
-
-    if (serviceMask.EnableScanConveyor) {
-        sil->AddServiceInitializer(new TScanConveyorInitializer(runConfig));
+        sil->AddServiceInitializer(new TScanGroupedMemoryLimiterInitializer(runConfig));
+        sil->AddServiceInitializer(new TCompGroupedMemoryLimiterInitializer(runConfig));
+        sil->AddServiceInitializer(new TDeduplicationGroupedMemoryLimiterInitializer(runConfig));
     }
 
     if (serviceMask.EnableCompPriorities) {
         sil->AddServiceInitializer(new TCompPrioritiesInitializer(runConfig));
     }
 
-    if (serviceMask.EnableCompConveyor) {
-        sil->AddServiceInitializer(new TCompConveyorInitializer(runConfig));
+    if (serviceMask.EnableCompConveyor || serviceMask.EnableInsertConveyor || serviceMask.EnableScanConveyor) {
+        sil->AddServiceInitializer(new TCompositeConveyorInitializer(runConfig));
     }
 
-    if (serviceMask.EnableInsertConveyor) {
-        sil->AddServiceInitializer(new TInsertConveyorInitializer(runConfig));
+    if (serviceMask.EnableGeneralCachePortionsMetadata) {
+        sil->AddServiceInitializer(new TGeneralCachePortionsMetadataInitializer(runConfig));
+    }
+
+    if (serviceMask.EnableGeneralCacheColumnData) {
+        sil->AddServiceInitializer(new TGeneralCacheColumnDataInitializer(runConfig));
     }
 
     if (serviceMask.EnableCms) {
@@ -1807,6 +1839,9 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
 }
 
 void TKikimrRunner::KikimrStart() {
+    for (auto plugin: Plugins) {
+        plugin->Start();
+    }
 
     if (!!PollerThreads) {
         PollerThreads->Start();
@@ -1832,6 +1867,17 @@ void TKikimrRunner::KikimrStart() {
             endpoint += Sprintf(":%d", server.second->GetPort());
             ActorSystem->Send(NNodeWhiteboard::MakeNodeWhiteboardServiceId(ActorSystem->NodeId),
                               new NNodeWhiteboard::TEvWhiteboard::TEvSystemStateAddEndpoint(server.first, endpoint));
+            if (ProcessMemoryInfoProvider) {
+                auto memInfo = ProcessMemoryInfoProvider->Get();
+                NKikimrWhiteboard::TSystemStateInfo systemStateInfo;
+                if (memInfo.CGroupLimit) {
+                    systemStateInfo.SetMemoryLimit(*memInfo.CGroupLimit);
+                } else if (memInfo.MemTotal) {
+                    systemStateInfo.SetMemoryLimit(*memInfo.MemTotal);
+                }
+                ActorSystem->Send(NNodeWhiteboard::MakeNodeWhiteboardServiceId(ActorSystem->NodeId),
+                              new NNodeWhiteboard::TEvWhiteboard::TEvSystemStateUpdate(systemStateInfo));
+            }
         }
     }
 
@@ -1969,6 +2015,9 @@ void TKikimrRunner::KikimrStop(bool graceful) {
     if (YdbDriver) {
         YdbDriver->Stop(true);
     }
+    for (auto plugin: Plugins) {
+        plugin->Stop();
+    }
 }
 
 void TKikimrRunner::BusyLoop() {
@@ -1993,6 +2042,10 @@ void TKikimrRunner::SetSignalHandlers() {
 #endif
     signal(SIGINT, &TKikimrRunner::OnTerminate);
     signal(SIGTERM, &TKikimrRunner::OnTerminate);
+
+    if (IsTrue(GetEnv("YDB_ENABLE_SIGNAL_BACKTRACE"))) {
+        Singleton<TTraceCollector>(TTraceCollector::DEFAULT_SIGNALS);
+    }
 
 #if !defined(_win_)
     SetAsyncSignalHandler(SIGHUP, [](int) {
@@ -2035,6 +2088,14 @@ void TKikimrRunner::InitializeRegistries(const TKikimrRunConfig& runConfig) {
     NKikHouse::RegisterFormat(*FormatFactory);
 }
 
+void TKikimrRunner::InitializePlugins(const TKikimrRunConfig& runConfig) {
+    for (const auto& initializer: runConfig.Plugins) {
+        if (auto plugin = initializer->CreatePlugin()) {
+            Plugins.push_back(plugin);
+        }
+    }
+}
+
 TIntrusivePtr<TKikimrRunner> TKikimrRunner::CreateKikimrRunner(
         const TKikimrRunConfig& runConfig,
         std::shared_ptr<TModuleFactories> factories) {
@@ -2051,6 +2112,7 @@ TIntrusivePtr<TKikimrRunner> TKikimrRunner::CreateKikimrRunner(
     runner->InitializeKqpController(runConfig);
     runner->InitializeGracefulShutdown(runConfig);
     runner->InitializeGRpc(runConfig);
+    runner->InitializePlugins(runConfig);
     return runner;
 }
 

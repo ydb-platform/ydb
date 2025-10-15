@@ -152,4 +152,8 @@ extern const TString KqpResourceManagerTaskName;
 extern const TString KqpResourceManagerQueue;
 extern const TString LegacyQueueIdTaskNamePrefix;
 
+extern const TString ColumnShardCompactionIndexationQueue;
+extern const TString ColumnShardCompactionTtlQueue;
+extern const TString ColumnShardCompactionGeneralQueue;
+extern const TString ColumnShardCompactionNormalizerQueue;
 }}

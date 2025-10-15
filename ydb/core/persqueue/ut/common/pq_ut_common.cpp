@@ -12,6 +12,8 @@
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/public/lib/base/msgbus.h>
 
+#include <library/cpp/string_utils/base64/base64.h>
+#include <library/cpp/streams/bzip2/bzip2.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 
@@ -88,6 +90,9 @@ void PQTabletPrepare(const TTabletPreparationParameters& parameters,
             partitionConfig->SetMaxWriteInflightSize(90'000'000);
             partitionConfig->SetLowWatermark(parameters.lowWatermark);
 
+            if (parameters.enableCompactificationByKey) {
+                tabletConfig->SetEnableCompactification(true);
+            }
             for (auto& u : users) {
                 if (u.second)
                     partitionConfig->AddImportantClientId(u.first);
@@ -138,11 +143,74 @@ void PQTabletPrepare(const TTabletPreparationParameters& parameters,
 }
 
 
-void CmdGetOffset(const ui32 partition, const TString& user, i64 expectedOffset, TTestContext& tc, i64 ctime,
+// Allows you to create a topic with the required set of keys. The keys and values are taken from the resource file.
+// The values are expected to be BZIP2 compressed and BASE64 encoded.
+void PQTabletPrepareFromResource(const TTabletPreparationParameters& parameters,
+                                 const TVector<std::pair<TString, bool>>& users,
+                                 const TString& resourceName,
+                                 TTestActorRuntime& runtime,
+                                 ui64 tabletId,
+                                 TActorId edge)
+{
+    PQTabletPrepare(parameters,
+                    users,
+                    runtime,
+                    tabletId,
+                    edge);
+
+    auto request = MakeHolder<TEvKeyValue::TEvRequest>();
+    size_t count = 0;
+
+    for (TStringStream stream(NResource::Find(resourceName)); true; ++count) {
+        TString key, encoded;
+
+        stream >> key >> encoded;
+        if (key.empty() || encoded.empty()) {
+            break;
+        }
+
+        auto decoded = Base64Decode(encoded);
+        TStringInput decodedStream(decoded);
+        TBZipDecompress decompressor(&decodedStream);
+
+        auto* cmd = request->Record.AddCmdWrite();
+        cmd->SetKey(key);
+        cmd->SetValue(decompressor.ReadAll());
+    }
+
+    runtime.SendToPipe(tabletId, edge, request.Release(), 0, GetPipeConfigWithRetries());
+
+    TAutoPtr<IEventHandle> handle;
+    auto* response = runtime.GrabEdgeEvent<TEvKeyValue::TEvResponse>(handle);
+    UNIT_ASSERT(response);
+    UNIT_ASSERT(response->Record.HasStatus());
+    UNIT_ASSERT_EQUAL(response->Record.GetStatus(), NMsgBusProxy::MSTATUS_OK);
+
+    UNIT_ASSERT_VALUES_EQUAL(response->Record.WriteResultSize(), count);
+
+    for (size_t i = 0; i < response->Record.WriteResultSize(); ++i) {
+        const auto &result = response->Record.GetWriteResult(i);
+        UNIT_ASSERT(result.HasStatus());
+        UNIT_ASSERT_EQUAL(result.GetStatus(), NKikimrProto::OK);
+    }
+
+    PQTabletRestart(runtime, tabletId, edge);
+}
+
+void PQTabletPrepareFromResource(const TTabletPreparationParameters& parameters,
+                                 const TVector<std::pair<TString, bool>>& users,
+                                 const TString& resourceName,
+                                 TTestContext& context)
+{
+    PQTabletPrepareFromResource(parameters, users, resourceName, *context.Runtime, context.TabletId, context.Edge);
+}
+
+i64 CmdGetOffset(const ui32 partition, const TString& user, const TMaybe<i64>& expectedOffset, TTestContext& tc, i64 ctime,
                   ui64 writeTime) {
     TAutoPtr<IEventHandle> handle;
     TEvPersQueue::TEvResponse *result;
     THolder<TEvPersQueue::TEvRequest> request;
+    i64 ret = -1;
     for (i32 retriesLeft = 2; retriesLeft > 0; --retriesLeft) {
         try {
             tc.Runtime->ResetScheduledCount();
@@ -176,8 +244,12 @@ void CmdGetOffset(const ui32 partition, const TString& user, i64 expectedOffset,
                     }
                 }
             }
-            UNIT_ASSERT_C((expectedOffset == -1 && !resp.HasOffset()) || (i64)resp.GetOffset() == expectedOffset,
-                    "expectedOffset=" << expectedOffset << " resp.HasOffset()=" << resp.HasOffset() << " resp.GetOffset()=" << resp.GetOffset());
+            Cerr << "Got offset = " << resp.GetOffset() << " for user " << user << Endl;
+            ret = resp.GetOffset();
+            if (expectedOffset.Defined()) {
+                UNIT_ASSERT_C((expectedOffset == -1 && !resp.HasOffset()) || (i64)resp.GetOffset() == expectedOffset,
+                        "expectedOffset=" << expectedOffset << " resp.HasOffset()=" << resp.HasOffset() << " resp.GetOffset()=" << resp.GetOffset());
+            }
             if (writeTime > 0) {
                 UNIT_ASSERT(resp.HasWriteTimestampEstimateMS());
                 UNIT_ASSERT(resp.GetWriteTimestampEstimateMS() >= writeTime);
@@ -187,6 +259,7 @@ void CmdGetOffset(const ui32 partition, const TString& user, i64 expectedOffset,
             UNIT_ASSERT_VALUES_EQUAL(retriesLeft, 2);
         }
     }
+    return ret;
 }
 
 void PQBalancerPrepare(const TString topic, const TVector<std::pair<ui32, std::pair<ui64, ui32>>>& map, const ui64 ssId,
@@ -257,7 +330,7 @@ void PQBalancerPrepare(const TString topic, const TVector<std::pair<ui32, std::p
     }
 }
 
-void PQGetPartInfo(ui64 startOffset, ui64 endOffset, TTestContext& tc) {
+void PQGetPartInfo(std::function<bool(ui64)> firstOffsetMatcher, ui64 endOffset, TTestContext& tc) {
     TAutoPtr<IEventHandle> handle;
     TEvPersQueue::TEvOffsetsResponse *result;
     THolder<TEvPersQueue::TEvOffsets> request;
@@ -280,13 +353,18 @@ void PQGetPartInfo(ui64 startOffset, ui64 endOffset, TTestContext& tc) {
             }
 
             UNIT_ASSERT(result->Record.PartResultSize());
-            UNIT_ASSERT_VALUES_EQUAL((ui64)result->Record.GetPartResult(0).GetStartOffset(), startOffset);
+            Cerr << "Got start offset = " << result->Record.GetPartResult(0).GetStartOffset() << Endl;
+            UNIT_ASSERT_C(firstOffsetMatcher((ui64)result->Record.GetPartResult(0).GetStartOffset()), result->Record.GetPartResult(0).GetStartOffset());
             UNIT_ASSERT_VALUES_EQUAL((ui64)result->Record.GetPartResult(0).GetEndOffset(), endOffset);
             retriesLeft = 0;
         } catch (NActors::TSchedulingLimitReachedException) {
             UNIT_ASSERT(retriesLeft > 0);
         }
     }
+}
+
+void PQGetPartInfo(ui64 startOffset, ui64 endOffset, TTestContext& tc) {
+    return PQGetPartInfo([=](ui64 offset) { return offset == startOffset; }, endOffset, tc);
 }
 
 void PQTabletRestart(TTestContext& tc) {

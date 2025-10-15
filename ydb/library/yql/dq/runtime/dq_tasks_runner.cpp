@@ -187,7 +187,14 @@ IDqOutputConsumer::TPtr DqBuildOutputConsumer(const NDqProto::TTaskOutput& outpu
             GetColumnsInfo(type, outputDesc.GetHashPartition().GetKeyColumns(), keyColumns);
             YQL_ENSURE(!keyColumns.empty());
             YQL_ENSURE(outputDesc.GetHashPartition().GetPartitionsCount() == outputDesc.ChannelsSize());
-            return CreateOutputHashPartitionConsumer(std::move(outputs), std::move(keyColumns), type, holderFactory, minFillPercentage, pgBuilder);
+            return CreateOutputHashPartitionConsumer(
+                std::move(outputs), 
+                std::move(keyColumns), 
+                type, holderFactory, 
+                minFillPercentage,
+                outputDesc.GetHashPartition(),
+                pgBuilder
+            );
         }
 
         case NDqProto::TTaskOutput::kBroadcast: {
@@ -517,6 +524,7 @@ public:
         const IDqTaskRunnerExecutionContext& execCtx) override
     {
         TaskId = task.GetId();
+        StageId = task.GetStageId();
         auto entry = BuildTask(task);
 
         LOG(TStringBuilder() << "Prepare task: " << TaskId);
@@ -662,11 +670,18 @@ public:
                     settings.MaxStoredBytes = memoryLimits.ChannelBufferSize;
                     settings.MaxChunkBytes = memoryLimits.OutputChunkMaxSize;
                     settings.ChunkSizeLimit = memoryLimits.ChunkSizeLimit;
+                    settings.ArrayBufferMinFillPercentage = memoryLimits.ArrayBufferMinFillPercentage;
                     settings.TransportVersion = outputChannelDesc.GetTransportVersion();
                     settings.Level = StatsModeToCollectStatsLevel(Settings.StatsMode);
 
                     if (!outputChannelDesc.GetInMemory()) {
                         settings.ChannelStorage = execCtx.CreateChannelStorage(channelId, outputChannelDesc.GetEnableSpilling());
+                    }
+
+                    if (outputChannelDesc.GetSrcEndpoint().HasActorId() && outputChannelDesc.GetDstEndpoint().HasActorId()) {
+                        const auto srcNodeId = NActors::ActorIdFromProto(outputChannelDesc.GetSrcEndpoint().GetActorId()).NodeId();
+                        const auto dstNodeId = NActors::ActorIdFromProto(outputChannelDesc.GetDstEndpoint().GetActorId()).NodeId();
+                        settings.MutableSettings.IsLocalChannel = srcNodeId == dstNodeId;
                     }
 
                     auto outputChannel = CreateDqOutputChannel(channelId, outputChannelDesc.GetDstStageId(), *taskOutputType, holderFactory, settings, LogFunc);
@@ -770,17 +785,34 @@ public:
         }
 
         if (Y_LIKELY(CollectBasic())) {
+            auto now = TInstant::Now();
             switch (runStatus) {
                 case ERunStatus::Finished:
-                    Stats->FinishTs = TInstant::Now();
+                    // finished => waiting for nothing
+                    Stats->CurrentWaitInputStartTime = TInstant::Zero();
+                    Stats->CurrentWaitOutputStartTime = TInstant::Zero();
+                    Stats->FinishTs = now;
                     break;
                 case ERunStatus::PendingInput:
-                    if (!InputConsumed) {
+                    // output is checked first => not waiting for output
+                    Stats->CurrentWaitOutputStartTime = TInstant::Zero();
+                    if (Y_LIKELY(InputConsumed)) {
+                        // did smth => waiting for nothing
+                        Stats->CurrentWaitInputStartTime = TInstant::Zero();
+                    } else {
                         StartWaitingInput();
+                        if (Y_LIKELY(!Stats->CurrentWaitInputStartTime)) {
+                            Stats->CurrentWaitInputStartTime = now;
+                        }
                     }
                     break;
                 case ERunStatus::PendingOutput:
+                    // waiting for output => not waiting for input
+                    Stats->CurrentWaitInputStartTime = TInstant::Zero();
                     StartWaitingOutput();
+                    if (Y_LIKELY(!Stats->CurrentWaitOutputStartTime)) {
+                        Stats->CurrentWaitOutputStartTime = now;
+                    }
                     break;
             }
         }
@@ -977,6 +1009,7 @@ private:
     TIntrusivePtr<TSpillingTaskCounters> SpillingTaskCounters;
 
     ui64 TaskId = 0;
+    ui32 StageId = 0;
     TDqTaskRunnerContext Context;
     TDqTaskRunnerSettings Settings;
     TLogFunc LogFunc;
@@ -1041,28 +1074,42 @@ private:
     std::unique_ptr<NUdf::IPgBuilder> PgBuilder_ = CreatePgBuilder();
 
     void StartWaitingInput() {
-        if (!StartWaitInputTime) {
-            StartWaitInputTime = TInstant::Now();
+        auto now = TInstant::Now();
+        if (Y_LIKELY(StartWaitInputTime)) {
+            auto delta = now - *StartWaitInputTime;
+            if (Y_LIKELY(Stats->StartTs)) {
+                Stats->WaitInputTime += delta;
+            } else {
+                Stats->WaitStartTime += delta;
+            }
         }
+        StartWaitInputTime = now;
     }
 
     void StartWaitingOutput() {
-        if (!StartWaitOutputTime) {
-            StartWaitOutputTime = TInstant::Now();
+        auto now = TInstant::Now();
+        if (Y_LIKELY(StartWaitOutputTime)) {
+            auto delta = now - *StartWaitOutputTime;
+            Stats->WaitOutputTime += delta;
         }
+        StartWaitOutputTime = now;
     }
 
     void StopWaiting() {
+        auto now = TInstant::Now();
         if (StartWaitInputTime) {
+            auto delta = now - *StartWaitInputTime;
             if (Y_LIKELY(Stats->StartTs)) {
-                Stats->WaitInputTime += (TInstant::Now() - *StartWaitInputTime);
+                Stats->WaitInputTime += delta;
             } else {
-                Stats->WaitStartTime += (TInstant::Now() - *StartWaitInputTime);
+                Stats->WaitStartTime += delta;
             }
             StartWaitInputTime.reset();
+            TDuration::Zero();
         }
         if (StartWaitOutputTime) {
-            Stats->WaitOutputTime += (TInstant::Now() - *StartWaitOutputTime);
+            auto delta = now - *StartWaitOutputTime;
+            Stats->WaitOutputTime += delta;
             StartWaitOutputTime.reset();
         }
     }

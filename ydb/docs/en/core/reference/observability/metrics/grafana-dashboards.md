@@ -1,6 +1,6 @@
 # Grafana dashboards for {{ ydb-short-name }}
 
-This page describes Grafana dashboards for {{ ydb-short-name }}. For information about how to install dashboards, see [{#T}](../../../devops/manual/monitoring.md#prometheus-grafana).
+This page describes Grafana dashboards for {{ ydb-short-name }}. For information about how to install dashboards, see [{#T}](../../../devops/observability/monitoring.md#prometheus-grafana).
 
 ## DB status {#dbstatus}
 

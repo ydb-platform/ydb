@@ -1,5 +1,6 @@
 #include "cell_maker.h"
 
+#include <ydb/library/yverify_stream/yverify_stream.h>
 #include <yql/essentials/types/binary_json/write.h>
 #include <yql/essentials/types/dynumber/dynumber.h>
 #include <yql/essentials/types/uuid/uuid.h>
@@ -281,6 +282,63 @@ namespace {
     }
 
 } // anonymous
+
+void AddTwoCells(TCell& result, const TCell& cell1, const TCell& cell2, const NScheme::TTypeId& typeId) {
+
+    Y_ENSURE(cell1.Size() == NScheme::GetFixedSize(typeId));
+    Y_ENSURE(cell2.Size() == NScheme::GetFixedSize(typeId));
+
+    switch (typeId) {
+    case NScheme::NTypeIds::Int8:
+        result = TCell::Make(i8(cell1.AsValue<i8>() + cell2.AsValue<i8>()));
+        break;
+    case NScheme::NTypeIds::Uint8:
+        result = TCell::Make(ui8(cell1.AsValue<ui8>() + cell2.AsValue<ui8>()));
+        break;
+    case NScheme::NTypeIds::Int16:
+        result = TCell::Make(i16(cell1.AsValue<i16>() + cell2.AsValue<i16>()));
+        break;
+    case NScheme::NTypeIds::Uint16:
+        result = TCell::Make(ui16(cell1.AsValue<ui16>() + cell2.AsValue<ui16>()));
+        break;
+    case NScheme::NTypeIds::Int32:
+        result = TCell::Make(i32(cell1.AsValue<i32>() + cell2.AsValue<i32>()));
+        break;
+    case NScheme::NTypeIds::Uint32:
+        result = TCell::Make(ui32(cell1.AsValue<ui32>() + cell2.AsValue<ui32>()));
+        break;
+    case NScheme::NTypeIds::Int64:
+        result = TCell::Make(i64(cell1.AsValue<i64>() + cell2.AsValue<i64>()));
+        break;
+    case NScheme::NTypeIds::Uint64:
+        result = TCell::Make(ui64(cell1.AsValue<ui64>() + cell2.AsValue<ui64>()));
+        break;
+    case NScheme::NTypeIds::Float:
+    case NScheme::NTypeIds::Double:
+    case NScheme::NTypeIds::Date:
+    case NScheme::NTypeIds::Datetime:
+    case NScheme::NTypeIds::Timestamp:
+    case NScheme::NTypeIds::Interval:
+    case NScheme::NTypeIds::Date32:
+    case NScheme::NTypeIds::Datetime64:
+    case NScheme::NTypeIds::Timestamp64:
+    case NScheme::NTypeIds::Interval64:
+    case NScheme::NTypeIds::String:
+    case NScheme::NTypeIds::String4k:
+    case NScheme::NTypeIds::String2m:
+    case NScheme::NTypeIds::Utf8:
+    case NScheme::NTypeIds::Yson:
+    case NScheme::NTypeIds::Json:
+    case NScheme::NTypeIds::JsonDocument:
+    case NScheme::NTypeIds::DyNumber:
+    case NScheme::NTypeIds::Decimal:
+    case NScheme::NTypeIds::Pg:
+    case NScheme::NTypeIds::Uuid:
+        Y_ENSURE(false);
+    default:
+        Y_ENSURE(false);
+    }
+}
 
 bool MakeCell(TCell& cell, TStringBuf value, const NScheme::TTypeInfo& typeInfo, TMemoryPool& pool, TString& err) {
     if (value == "null") {

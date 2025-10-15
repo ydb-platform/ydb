@@ -38,7 +38,8 @@ protected:
     virtual void DoAddInplaceIntoPortion(TPortionAccessorConstructor& /*portionInfo*/) const {
         AFL_VERIFY(false)("problem", "implemented only in index chunks");
     }
-    virtual std::shared_ptr<IPortionDataChunk> DoCopyWithAnotherBlob(TString&& /*data*/, const TSimpleColumnInfo& /*columnInfo*/) const {
+    virtual std::shared_ptr<IPortionDataChunk> DoCopyWithAnotherBlob(
+        TString&& /*data*/, const ui32 /*rawBytes*/, const TSimpleColumnInfo& /*columnInfo*/) const {
         AFL_VERIFY(false);
         return nullptr;
     }
@@ -99,8 +100,8 @@ public:
         ChunkIdx = value;
     }
 
-    std::shared_ptr<IPortionDataChunk> CopyWithAnotherBlob(TString&& data, const TSimpleColumnInfo& columnInfo) const {
-        return DoCopyWithAnotherBlob(std::move(data), columnInfo);
+    std::shared_ptr<IPortionDataChunk> CopyWithAnotherBlob(TString&& data, const ui32 rawBytes, const TSimpleColumnInfo& columnInfo) const {
+        return DoCopyWithAnotherBlob(std::move(data), rawBytes, columnInfo);
     }
 
     std::shared_ptr<arrow::Scalar> GetFirstScalar() const {

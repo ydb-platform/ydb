@@ -217,6 +217,8 @@ inline std::shared_ptr<arrow::DataType> GetPrimitiveDataType() {
 
 using NYql::NUdf::TTypedBufferBuilder;
 
+std::shared_ptr<arrow::Buffer> MakeEmptyBuffer();
+
 }
 
 namespace arrow {

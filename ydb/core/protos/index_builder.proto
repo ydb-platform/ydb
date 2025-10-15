@@ -148,6 +148,6 @@ message TEvUploadSampleKResponse {
     optional Ydb.StatusIds.StatusCode UploadStatus = 2;
     repeated Ydb.Issue.IssueMessage Issues = 3;
 
-    optional uint64 UploadRows = 4;
-    optional uint64 UploadBytes = 5;
+    reserved 4 to 5;
+    optional NKikimrIndexBuilder.TMeteringStats MeteringStats = 6;
 }

@@ -64,7 +64,7 @@ template <typename TFunc>
         case NScheme::NTypeIds::Interval:
             return callback(TTypeWrapper<arrow::DurationType>());
         case NScheme::NTypeIds::Decimal:
-            return callback(TTypeWrapper<arrow::Decimal128Type>());
+            return callback(TTypeWrapper<arrow::FixedSizeBinaryType>());
 
         case NScheme::NTypeIds::Datetime64:
         case NScheme::NTypeIds::Timestamp64:

@@ -8,7 +8,7 @@
 
 namespace NKikimr::NTxUT {
 
-NKikimrDataEvents::TEvWriteResult::EStatus TShardWriter::StartCommit(const ui64 txId) {
+NKikimrDataEvents::TEvWriteResult TShardWriter::StartCommitImpl(const ui64 txId) {
     auto evCommit = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(txId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
     evCommit->Record.MutableLocks()->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
     auto* lock = evCommit->Record.MutableLocks()->AddLocks();
@@ -18,12 +18,27 @@ NKikimrDataEvents::TEvWriteResult::EStatus TShardWriter::StartCommit(const ui64 
     TAutoPtr<NActors::IEventHandle> handle;
     auto event = Runtime.GrabEdgeEvent<NKikimr::NEvents::TDataEvents::TEvWriteResult>(handle);
     AFL_VERIFY(event);
-
-    return event->Record.GetStatus();
+    AFL_VERIFY(event->Record.GetTxId() == txId);
+    return event->Record;
 }
 
-NKikimrDataEvents::TEvWriteResult::EStatus TShardWriter::Abort(const ui64 txId) {
-    auto evCommit = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(txId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
+void TShardWriter::StartCommitFail(const ui64 txId) {
+    auto event = StartCommitImpl(txId);
+    AFL_VERIFY(event.GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
+}
+
+TPlanStep TShardWriter::StartCommit(const ui64 txId) {
+    const auto now = Runtime.GetTimeProvider()->Now();
+    auto event = StartCommitImpl(txId);
+    AFL_VERIFY(event.GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED);
+    AFL_VERIFY(now.MilliSeconds() <= event.GetMinStep());
+    AFL_VERIFY(event.GetMinStep() <= event.GetMaxStep());
+    AFL_VERIFY(event.GetMaxStep() < Max<ui64>());
+    return TPlanStep{event.GetMinStep()};
+}
+
+NKikimrDataEvents::TEvWriteResult::EStatus TShardWriter::Abort() {
+    auto evCommit = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
     evCommit->Record.MutableLocks()->SetOp(NKikimrDataEvents::TKqpLocks::Rollback);
     auto* lock = evCommit->Record.MutableLocks()->AddLocks();
     lock->SetLockId(LockId);

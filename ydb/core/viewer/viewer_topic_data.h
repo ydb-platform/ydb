@@ -41,7 +41,7 @@ private:
     void HandlePQResponse(TEvPersQueue::TEvResponse::TPtr& ev);
     void FillProtoResponse(ui64 maxTotalSize = 10_MB);
     NYdb::NTopic::ICodec* GetCodec(NPersQueueCommon::ECodec codec);
-
+    bool ProcessCdc(const NSchemeCache::TSchemeCacheNavigate::TEntry& response);
     STATEFN(StateRequestedDescribe);
 
 

@@ -8,7 +8,7 @@
 
 namespace NYql {
 
-TAutoPtr<IGraphTransformer> CreateCommonOptTransformer(TTypeAnnotationContext* typeCtx);
+TAutoPtr<IGraphTransformer> CreateCommonOptTransformer(bool forPeephole, TTypeAnnotationContext* typeCtx);
 TAutoPtr<IGraphTransformer> CreateCommonOptFinalTransformer(TTypeAnnotationContext* typeCtx);
 
 }

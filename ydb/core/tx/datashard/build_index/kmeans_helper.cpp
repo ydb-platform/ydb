@@ -42,7 +42,7 @@ void AddRowToLevel(TBufferData& buffer, TClusterId parent, TClusterId child, con
     std::array<TCell, 1> data;
     data[0] = TCell{embedding};
 
-    buffer.AddRow(TSerializedCellVec{pk}, TSerializedCellVec::Serialize(data));
+    buffer.AddRow(pk, data);
 }
 
 void AddRowToData(TBufferData& buffer, TClusterId parent, TArrayRef<const TCell> sourcePk,
@@ -53,14 +53,11 @@ void AddRowToData(TBufferData& buffer, TClusterId parent, TArrayRef<const TCell>
         EnsureNoPostingParentFlag(parent);
     }
 
-    std::array<TCell, 1> cells;
-    cells[0] = TCell::Make(parent);
-    auto pk = TSerializedCellVec::Serialize(cells);
-    TSerializedCellVec::UnsafeAppendCells(sourcePk, pk);
+    TVector<TCell> pk(::Reserve(sourcePk.size() + 1));
+    pk.push_back(TCell::Make(parent));
+    pk.insert(pk.end(), sourcePk.begin(), sourcePk.end());
 
-    buffer.AddRow(TSerializedCellVec{std::move(pk)},
-        TSerializedCellVec::Serialize(dataColumns),
-        TSerializedCellVec{origKey});
+    buffer.AddRow(pk, dataColumns, origKey);
 }
 
 TTags MakeScanTags(const TUserTable& table, const TProtoStringType& embedding, 

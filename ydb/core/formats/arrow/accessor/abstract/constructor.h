@@ -33,17 +33,17 @@ private:
         const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& originalArray, const TChunkConstructionData& externalInfo) const = 0;
 
 public:
+    virtual bool HasInternalConversion() const {
+        return false;
+    }
+
     IConstructor(const IChunkedArray::EType type)
         : Type(type) {
     }
 
     virtual ~IConstructor() = default;
 
-    TString SerializeToString(const std::shared_ptr<IChunkedArray>& columnData, const TChunkConstructionData& externalInfo) const {
-        AFL_VERIFY(columnData);
-        AFL_VERIFY(columnData->GetType() == Type)("column", columnData->GetType())("current", Type);
-        return DoSerializeToString(columnData, externalInfo);
-    }
+    TString SerializeToString(const std::shared_ptr<IChunkedArray>& columnData, const TChunkConstructionData& externalInfo) const;
 
     bool IsEqualWithSameTypeTo(const IConstructor& item) const {
         return DoIsEqualWithSameTypeTo(item);
@@ -68,7 +68,13 @@ public:
         if (originalArray->GetType() == GetType()) {
             return originalArray;
         } else {
-            return DoConstruct(originalArray, externalInfo);
+            auto result = DoConstruct(originalArray, externalInfo);
+            if (result.IsFail()) {
+                return result;
+            }
+            AFL_VERIFY(result.GetResult()->GetRecordsCount() == originalArray->GetRecordsCount())("result", result.GetResult()->GetRecordsCount())(
+                                                      "original", originalArray->GetRecordsCount());
+            return result;
         }
     }
 

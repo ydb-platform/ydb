@@ -29,3 +29,8 @@ items:
   include:
     mode: link
     path: orm/toc-orm.yaml
+- name: Vector search
+  href: vectorsearch/index.md
+  include:
+    mode: link
+    path: vectorsearch/toc-vectorsearch.yaml

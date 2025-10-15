@@ -104,6 +104,8 @@ TString EntryTypeToString(NScheme::ESchemeEntryType entry) {
         return "view";
     case NScheme::ESchemeEntryType::Replication:
         return "replication";
+    case NScheme::ESchemeEntryType::Transfer:
+        return "transfer";
     case NScheme::ESchemeEntryType::ResourcePool:
         return "resource-pool";
     case NScheme::ESchemeEntryType::Unknown:

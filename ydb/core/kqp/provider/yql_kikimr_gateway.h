@@ -517,6 +517,8 @@ struct TKikimrTableMetadata : public TThrRefBase {
     TExternalSource ExternalSource;
     TViewPersistedData ViewPersistedData;
 
+    TVector<TString> PartitionedByColumns;
+
     TKikimrTableMetadata(const TString& cluster, const TString& table)
         : Cluster(cluster)
         , Name(table)
@@ -840,6 +842,7 @@ struct TReplicationSettingsBase {
     TMaybe<TString> Database;
     TMaybe<TOAuthToken> OAuthToken;
     TMaybe<TStaticCredentials> StaticCredentials;
+    TMaybe<TString> CaCert;
     TMaybe<TStateDone> StateDone;
     bool StatePaused = false;
     bool StateStandBy = false;
@@ -935,6 +938,8 @@ struct TTransferSettings : public TReplicationSettingsBase {
 
         return *Batching;
     }
+
+    TMaybe<TString> DirectoryPath;
 };
 
 struct TCreateTransferSettings {

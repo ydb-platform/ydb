@@ -90,16 +90,17 @@ Technically, tablets are [actors](#actor) with a persistent state reliably saved
 
 [Tablet implementation details](#tablet-implementation) and related terms, as well as [main tablet types](#tablet-types), are covered below in the advanced section.
 
-### Distributed transactions {#distributed-transaction}
+### Transactions {#transactions}
 
 {{ ydb-short-name }} implements **transactions** on two main levels:
 
 * [Local database](#local-database) and the rest of [tablet infrastructure](#tablet-implementation) allow [tablets](#tablet) to manipulate their state using **local transactions** with [serializable isolation level](https://en.wikipedia.org/wiki/Isolation_%28database_systems%29#Serializable). Technically, they aren't really local to a single node as such a state persists remotely in [Distributed Storage](#distributed-storage).
 * In the context of {{ ydb-short-name }}, the term **distributed transactions** usually refers to transactions involving multiple tablets. For example, cross-table or even cross-row transactions are often distributed.
+* **Single-shard** transactions span a single tablet and are faster to complete. For example, transactions between rows in the same table partition are often single-shard.
 
 Together, these mechanisms allow {{ ydb-short-name }} to provide [strict consistency](https://en.wikipedia.org/wiki/Consistency_model#Strict_consistency).
 
-The implementation of distributed transactions is covered in a separate article [{#T}](../contributor/datashard-distributed-txs.md), while below there's a list of several [related terms](#distributed-transaction-implementation).
+The implementation of distributed transactions is covered in a separate article [{#T}](../contributor/datashard-distributed-txs.md), while below there's a list of several [related terms](#deterministic-transactions).
 
 ### Interactive transactions {#interactive-transaction}
 
@@ -156,6 +157,16 @@ A **primary index** or **primary key index** is the main data structure used to 
 #### Secondary index {#secondary-index}
 
 A **secondary index** is an additional data structure used to locate rows in a table, typically when it can't be done efficiently using the [primary index](#primary-index). Unlike the primary index, secondary indexes are managed independently from the main table data. Thus, a table might have multiple secondary indexes for different use cases. {{ ydb-short-name }}'s capabilities in terms of secondary indexes are covered in a separate article [{#T}](secondary_indexes.md). Secondary indexes can be either unique or non-unique.
+
+A special type of **secondary index** is singled out separately - [vector index](#vector-index).
+
+#### Vector Index {#vector-index}
+
+**Vector index** is an additional data structure used to speed up the [vector search](vector_search.md) when there is a large amount of data, and the [exact vector search without an index](../yql/reference/udf/list/knn.md) does not perform satisfactorily.
+The capabilities of {{ ydb-short-name }} regarding **ANN search** (approximate nearest neighbor search) with vector indexes are described in a separate article [{#T}](../dev/vector-indexes.md).
+
+**Vector index** is distinct from a [secondary index](#secondary-index) as it solves other tasks.
+
 
 #### Column family {#column-family}
 
@@ -279,6 +290,10 @@ An access subject can be a [user](#access-user) or a [group](#access-group).
 ### Access right {#access-right}
 
 An **[access right](../security/authorization.md#right)** is an entity that represents permission for an [access subject](#access-subject) to perform a specific set of operations in a cluster or database on a specific [access object](#access-object).
+
+### Access right inheritance {#access-right-inheritance}
+
+**Access rights inheritance** is a mechanism by which [access rights](#access-right) granted on parent [access objects](#access-object) are inherited by child objects in the hierarchical structure of the database. This ensures that permissions granted at a higher level in the hierarchy are applied to all sub-levels beneath it, unless [explicitly overridden](../reference/ydb-cli/commands/scheme-permissions.md#clear-inheritance).
 
 ### Access control list {#access-control-list}
 
@@ -593,7 +608,7 @@ A **channel** is a logical connection between a [tablet](#tablet) and [Distribut
 
 ### Distributed transactions implementation {#distributed-transaction-implementation}
 
-Terms related to the implementation of [distributed transactions](#distributed-transaction) are explained below. The implementation itself is described in a separate article [{#T}](../contributor/datashard-distributed-txs.md).
+Terms related to the implementation of [distributed transactions](#transactions) are explained below. The implementation itself is described in a separate article [{#T}](../contributor/datashard-distributed-txs.md).
 
 #### Deterministic transactions {#deterministic-transactions}
 
@@ -619,7 +634,7 @@ In the case of read-only transactions, similar to "read uncommitted" in other da
 
 #### Read-write set {#rw-set}
 
-The **read-write set** or **RW set** is a set of data that will participate in executing a [distributed transaction](#distributed-transaction). It combines the read set, the data that will be read, and the write set, the data modifications to be carried out.
+The **read-write set** or **RW set** is a set of data that will participate in executing a [distributed transaction](#transactions). It combines the read set, the data that will be read, and the write set, the data modifications to be carried out.
 
 #### Read set {#read-set}
 
@@ -627,7 +642,7 @@ The **read set** or **ReadSet data** is what participating shards forward during
 
 #### Transaction proxy {#transaction-proxy}
 
-The **transaction proxy** or `TX_PROXY` is a service that orchestrates the execution of many [distributed transactions](#distributed-transaction): sequential phases, phase execution, planning, and aggregation of results. In the case of direct orchestration by other actors (for example, KQP data transactions), it is used for caching and allocation of unique [TxIDs](#txid).
+The **transaction proxy** or `TX_PROXY` is a service that orchestrates the execution of many [distributed transactions](#transactions): sequential phases, phase execution, planning, and aggregation of results. In the case of direct orchestration by other actors (for example, KQP data transactions), it is used for caching and allocation of unique [TxIDs](#txid).
 
 #### Transaction flags {#txflags}
 

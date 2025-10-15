@@ -5,7 +5,6 @@
 namespace NKikimr::NKqp {
 
 NActors::IActor* CreateKqpTableResolver(const TActorId& owner, ui64 txId,
-    const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
-    const TVector<IKqpGateway::TPhysicalTxData>& transactions, TKqpTasksGraph& tasksGraph);
+    const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TKqpTasksGraph& tasksGraph);
 
 } // namespace NKikimr::NKqp

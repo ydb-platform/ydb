@@ -6,6 +6,7 @@
 #include <ydb/core/base/event_filter.h>
 #include <ydb/core/config/init/init.h>
 #include <ydb/core/driver_lib/cli_config_base/config_base.h>
+#include <ydb/library/global_plugins/abstract.h>
 
 #include <util/generic/hash.h>
 
@@ -26,6 +27,8 @@ struct TKikimrRunConfig {
     TString ClusterName;
 
     NConfig::TConfigsDispatcherInitInfo ConfigsDispatcherInitInfo;
+
+    TVector<TAtomicSharedPtr<NYdb::NGlobalPlugins::IPluginInitilizer>> Plugins;
 
     TKikimrRunConfig(NKikimrConfig::TAppConfig& appConfig,
                      ui32 nodeId = 0, const TKikimrScopeId& scopeId = {});

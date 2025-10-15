@@ -137,21 +137,6 @@ public:
     virtual void OnFinished(TDataShard* self) = 0;
 };
 
-struct TReadWriteVersions {
-    TReadWriteVersions(const TRowVersion& readVersion, const TRowVersion& writeVersion)
-        : ReadVersion(readVersion)
-        , WriteVersion(writeVersion)
-    {}
-
-    TReadWriteVersions(const TRowVersion& version)
-        : ReadVersion(version)
-        , WriteVersion(version)
-    {}
-
-    const TRowVersion ReadVersion;
-    const TRowVersion WriteVersion;
-};
-
 class TDataShardEngineHost;
 struct TSetupSysLocks;
 
@@ -253,6 +238,7 @@ class TDataShard
     class TTxHandleSafeLocalKMeansScan;
     class TTxHandleSafePrefixKMeansScan;
     class TTxHandleSafeReshuffleKMeansScan;
+    class TTxHandleSafeRecomputeKMeansScan;
     class TTxHandleSafeStatisticsScan;
 
     class TTxMediatorStateRestored;
@@ -1339,6 +1325,8 @@ class TDataShard
     void HandleSafe(TEvDataShard::TEvSampleKRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvReshuffleKMeansRequest::TPtr& ev, const TActorContext& ctx);
     void HandleSafe(TEvDataShard::TEvReshuffleKMeansRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvRecomputeKMeansRequest::TPtr& ev, const TActorContext& ctx);
+    void HandleSafe(TEvDataShard::TEvRecomputeKMeansRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const TActorContext& ctx);
     void HandleSafe(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvPrefixKMeansRequest::TPtr& ev, const TActorContext& ctx);
@@ -1490,7 +1478,7 @@ class TDataShard
     NTabletFlatExecutor::ITransaction* CreateTxCheckInReadSets();
     NTabletFlatExecutor::ITransaction* CreateTxRemoveOldInReadSets();
 
-    TReadWriteVersions GetLocalReadWriteVersions() const;
+    TRowVersion GetLocalMvccVersion() const;
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -2059,7 +2047,7 @@ public:
         bool WaitCompletion = false;
     };
 
-    TReadWriteVersions GetReadWriteVersions(TOperation* op = nullptr) const;
+    TRowVersion GetMvccVersion(TOperation* op = nullptr) const;
     TPromotePostExecuteEdges PromoteImmediatePostExecuteEdges(
             const TRowVersion& version, EPromotePostExecuteEdges mode, TTransactionContext& txc);
     ui64 GetMaxObservedStep() const;
@@ -3212,6 +3200,7 @@ protected:
             HFuncTraced(TEvDataShard::TEvValidateUniqueIndexRequest, Handle);
             HFunc(TEvDataShard::TEvSampleKRequest, Handle);
             HFunc(TEvDataShard::TEvReshuffleKMeansRequest, Handle);
+            HFunc(TEvDataShard::TEvRecomputeKMeansRequest, Handle);
             HFunc(TEvDataShard::TEvLocalKMeansRequest, Handle);
             HFunc(TEvDataShard::TEvPrefixKMeansRequest, Handle);
             HFunc(TEvDataShard::TEvCdcStreamScanRequest, Handle);

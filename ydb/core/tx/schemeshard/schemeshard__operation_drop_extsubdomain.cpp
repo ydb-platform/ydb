@@ -10,12 +10,45 @@ namespace {
 using namespace NKikimr;
 using namespace NSchemeShard;
 
-class TDeletePrivateShards: public TDeleteParts {
+class TDeleteSubdomainSystemShards: public TSubOperationState {
+protected:
+    const TOperationId OperationId;
+
+    TString DebugHint() const override {
+        return TStringBuilder() << "TDeleteSubdomainSystemShards" << " opId# " << OperationId << " ";
+    }
+
 public:
-    explicit TDeletePrivateShards(const TOperationId& id)
-        : TDeleteParts(id, TTxState::Done)
+    explicit TDeleteSubdomainSystemShards(const TOperationId& id)
+        : OperationId(id)
     {
         IgnoreMessages(DebugHint(), AllIncomingEvents());
+    }
+
+    bool ProgressState(TOperationContext& context) override {
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->SelfTabletId() << "] " << DebugHint() << "ProgressState");
+
+        const auto* txState = context.SS->FindTx(OperationId);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxForceDropExtSubDomain);
+
+        auto subdomain = context.SS->SubDomains.at(txState->TargetPathId);
+        Y_ABORT_UNLESS(subdomain);
+
+        // Initiate asynchronous deletion of system shards
+        if (subdomain->GetSharedHive()) {
+            for (const auto& shard : txState->Shards) {
+                context.OnComplete.DeleteShard(shard.Idx);
+            }
+        } else {
+            for (const auto& shard : txState->Shards) {
+                context.OnComplete.DeleteSystemShard(shard.Idx);
+            }
+        }
+
+        NIceDb::TNiceDb db(context.GetDB());
+        context.SS->ChangeTxState(db, OperationId, TTxState::Done);
+        return true;
     }
 };
 
@@ -237,7 +270,7 @@ class TDropExtSubdomain: public TSubOperation {
         case TTxState::DeleteExternalShards:
             return MakeHolder<TDeleteExternalShards>(OperationId);
         case TTxState::DeletePrivateShards:
-            return MakeHolder<TDeletePrivateShards>(OperationId);
+            return MakeHolder<TDeleteSubdomainSystemShards>(OperationId);
         case TTxState::Done:
             return MakeHolder<TDone>(OperationId);
         default:

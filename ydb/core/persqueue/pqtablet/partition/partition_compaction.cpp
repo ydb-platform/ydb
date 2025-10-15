@@ -269,11 +269,13 @@ bool TPartition::CompactRequestedBlob(const TRequestedBlob& requestedBlob,
                                       bool wasThePreviousBlobBig,
                                       bool& newHeadIsInitialized)
 {
+    LOG_D("requestedBlob.Key=" << requestedBlob.Key.ToString() << ", parameters.CurOffset=" << parameters.CurOffset);
+
+    ui64 offset = parameters.CurOffset;
+
     for (TBlobIterator it(requestedBlob.Key, requestedBlob.Value); it.IsValid(); it.Next()) {
         TBatch batch = it.GetBatch();
         batch.Unpack();
-
-        ui64 offset = batch.GetOffset();
 
         for (const auto& blob : batch.Blobs) {
             LOG_D("Try append part " << offset << "." << blob.GetPartNo() << "/" << blob.GetTotalParts());

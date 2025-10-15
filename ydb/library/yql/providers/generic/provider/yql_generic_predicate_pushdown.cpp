@@ -11,6 +11,8 @@ namespace NYql {
     using namespace NConnector::NApi;
 
     TString FormatColumn(const TString& value);
+    TString FormatType(const Ydb::Type& type);
+    TString FormatTypedValue(const Ydb::TypedValue& typedValue);
     TString FormatValue(const Ydb::TypedValue& value);
     TString FormatNull(const TExpression_TNull&);
     TString FormatExpression(const TExpression& expression);
@@ -27,6 +29,21 @@ namespace NYql {
     TString FormatIfExpression(const TExpression::TIf& sqlIf);
 
     namespace {
+        TString ToIso8601(TDuration duration) {
+            if (duration == TDuration::Zero()) {
+                return "PT0S";
+            }
+            TStringBuilder result;
+            result << "PT" << duration.Seconds();
+            auto fraction = duration.MicroSecondsOfSecond();
+            if (fraction != 0) {
+                result << ".";
+                result << Sprintf("%06d", fraction);
+            }
+            result << "S";
+            return result;
+        }
+
         struct TSerializationContext {
             const TCoArgument& Arg;
             TStringBuilder& Err;
@@ -577,28 +594,28 @@ namespace NYql {
         return NFq::EncloseAndEscapeString(value, '`');
     }
 
-    TString FormatValue(const Ydb::TypedValue& value) {
-        switch (value.value().value_case()) {
+    TString FormatValue(const Ydb::Value& value) {
+        switch (value.value_case()) {
             case  Ydb::Value::kBoolValue:
-                return value.value().bool_value() ? "TRUE" : "FALSE";
+                return value.bool_value() ? "TRUE" : "FALSE";
             case Ydb::Value::kInt32Value:
-                return ToString(value.value().int32_value());
+                return ToString(value.int32_value());
             case Ydb::Value::kUint32Value:
-                return ToString(value.value().uint32_value());
+                return ToString(value.uint32_value());
             case Ydb::Value::kInt64Value:
-                return ToString(value.value().int64_value());
+                return ToString(value.int64_value());
             case Ydb::Value::kUint64Value:
-                return ToString(value.value().uint64_value());
+                return ToString(value.uint64_value());
             case Ydb::Value::kFloatValue:
-                return ToString(value.value().float_value());
+                return ToString(value.float_value());
             case Ydb::Value::kDoubleValue:
-                return ToString(value.value().double_value());
+                return ToString(value.double_value());
             case Ydb::Value::kBytesValue:
-                return NFq::EncloseAndEscapeString(value.value().bytes_value(), '"');
+                return NFq::EncloseAndEscapeString(value.bytes_value(), '"');
             case Ydb::Value::kTextValue:
-                return NFq::EncloseAndEscapeString(value.value().text_value(), '"');
+                return NFq::EncloseAndEscapeString(value.text_value(), '"');
             default:
-                throw yexception() << "Failed to format ydb typed vlaue, value case " << static_cast<ui64>(value.value().value_case()) << " is not supported";
+                throw yexception() << "Failed to format ydb value, value case " << static_cast<ui64>(value.value_case()) << " is not supported";
         }
     }
 
@@ -702,7 +719,7 @@ namespace NYql {
             case TExpression::kColumn:
                 return FormatColumn(expression.column());
             case TExpression::kTypedValue:
-                return FormatValue(expression.typed_value());
+                return FormatTypedValue(expression.typed_value());
             case TExpression::kArithmeticalExpression:
                 return FormatArithmeticalExpression(expression.arithmetical_expression());
             case TExpression::kNull:

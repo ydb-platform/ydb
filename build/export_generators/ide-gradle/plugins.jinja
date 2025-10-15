@@ -41,10 +41,19 @@ plugins {
 }
 
 {%- if jdk_version %}
-
 java {
+{%-     if jdk11_compatibility_mode and proto_template %}
+
+    toolchain {
+        languageVersion = JavaLanguageVersion.of("11")
+    }
+
+{%-     else %}
+
     toolchain {
         languageVersion = JavaLanguageVersion.of("{{ jdk_version }}")
     }
+
+{%-     endif %}
 }
 {%  endif -%}

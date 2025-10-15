@@ -1,0 +1,12 @@
+# This patch is revert commit dd5bb073107caa1c764158b87fb8482124aad6c1
+--- contrib/python/aiohttp/aiohttp/web_response.py	(index)
++++ contrib/python/aiohttp/aiohttp/web_response.py	(working tree)
+@@ -147,8 +147,6 @@ class StreamResponse(BaseClass, HeadersMixin):
+         self._status = int(status)
+         if reason is None:
+             reason = REASON_PHRASES.get(self._status, "")
+-        elif "\n" in reason:
+-            raise ValueError("Reason cannot contain \\n")
+         self._reason = reason
+ 
+     @property

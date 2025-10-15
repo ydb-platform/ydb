@@ -374,7 +374,7 @@ class TreeNode(Generic[TreeDataType]):
             before: Optional index or `TreeNode` to add the node before.
             after: Optional index or `TreeNode` to add the node after.
             expand: Node should be expanded.
-            allow_expand: Allow use to expand the node via keyboard or mouse.
+            allow_expand: Allow user to expand the node via keyboard or mouse.
 
         Returns:
             A new Tree node
@@ -1525,6 +1525,8 @@ class Tree(Generic[TreeDataType], ScrollView, can_focus=True):
             will cause both an expand/collapse event to occur, as well as a
             selected event.
         """
+        if self.cursor_line < 0:
+            return
         try:
             line = self._tree_lines[self.cursor_line]
         except IndexError:

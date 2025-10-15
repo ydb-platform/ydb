@@ -24,6 +24,7 @@ EdgeType = Literal[
     "hkey",
     "vkey",
     "tall",
+    "tab",
     "panel",
     "wide",
 ]
@@ -38,6 +39,7 @@ EdgeStyle = Tuple[EdgeType, Color]
 TextAlign = Literal["left", "start", "center", "right", "end", "justify"]
 Constrain = Literal["none", "inflect", "inside"]
 Overlay = Literal["none", "screen"]
+Position = Literal["relative", "absolute"]
 
 Specificity3 = Tuple[int, int, int]
 Specificity6 = Tuple[int, int, int, int, int, int]

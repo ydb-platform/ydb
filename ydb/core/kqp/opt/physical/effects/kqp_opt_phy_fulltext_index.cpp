@@ -85,14 +85,16 @@ TExprBase BuildFulltextIndexRows(const TKikimrTableDescription& table, const TIn
     
     // Create callable for fulltext tokenization
     // Format: FulltextAnalyze(text: String, settings: String) -> List<String>
-    auto settingsLiteral = ctx.NewCallable(pos, "String", {
-        ctx.NewAtom(pos, settingsProto)
-    });
+    auto settingsLiteral = Build<TCoString>(ctx, pos)
+        .Literal().Build(settingsProto)
+        .Done();
     
-    auto analyzeCallable = ctx.NewCallable(pos, "FulltextAnalyze", {
-        textMember.Ptr(),
-        settingsLiteral
-    });
+    auto analyzeCallable = ctx.Builder(pos)
+        .Callable("FulltextAnalyze")
+            .Add(0, textMember.Ptr())
+            .Add(1, settingsLiteral.Ptr())
+        .Seal()
+        .Build();
     
     auto analyzeStage = Build<TDqStage>(ctx, pos)
         .Inputs()

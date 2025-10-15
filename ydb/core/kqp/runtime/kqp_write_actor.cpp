@@ -1536,7 +1536,6 @@ private:
         }
 
         if (auto lookupInfoIt = PathLookupInfo.find(PathId); lookupInfoIt != PathLookupInfo.end()) {
-            AFL_ENSURE(false);
             // Need to lookup main table
             std::swap(BufferedBatches, ProcessBatches);
 
@@ -1579,11 +1578,12 @@ private:
         AFL_ENSURE(!ProcessCells.empty());
 
         auto& lookupInfo = PathLookupInfo.at(PathId);
-        if (lookupInfo.Lookup->HasResult(Cookie)) {
+        if (!lookupInfo.Lookup->HasResult(Cookie)) {
             return false;
         }
 
-        auto rowsBatcher = CreateRowsBatcher(ProcessCells.size() + lookupInfo.Lookup->LookupColumnsCount(Cookie), Alloc);
+        const size_t lookupColumnsCount = lookupInfo.Lookup->LookupColumnsCount(Cookie);
+        auto rowsBatcher = CreateRowsBatcher(ProcessCells[0].size() + lookupColumnsCount, Alloc);
 
         const auto& keyColumnTypes = lookupInfo.Lookup->GetKeyColumnTypes();
         lookupInfo.Lookup->ExtractResult(Cookie, [&](TConstArrayRef<TCell> cells) {
@@ -1591,9 +1591,12 @@ private:
             const auto key = cells.first(keyColumnTypes.size());
             const auto readCells = cells.last(cells.size() - keyColumnTypes.size());
 
-            const auto index = KeyToIndex.at(key);
-            Y_UNUSED(readCells);
-            Y_UNUSED(key);
+            AFL_ENSURE(lookupColumnsCount == readCells.size());
+
+            auto it = KeyToIndex.find(key);
+            AFL_ENSURE(it != KeyToIndex.end());
+            const auto index = it->second;
+            KeyToIndex.erase(it);
 
             const auto& inputCells = ProcessCells[index];
             Y_UNUSED(inputCells);
@@ -1601,11 +1604,26 @@ private:
             for (const auto& cell : inputCells) {
                 rowsBatcher->AddCell(cell);
             }
+
+            Memory += EstimateSize(readCells);
             for (const auto& cell : readCells) {
                 rowsBatcher->AddCell(cell);
             }
             rowsBatcher->AddRow();
         });
+
+        for (const auto& [key, index] : KeyToIndex) {
+            const auto& inputCells = ProcessCells[index];
+            Y_UNUSED(inputCells);
+            for (const auto& cell : inputCells) {
+                rowsBatcher->AddCell(cell);
+            }
+            for (size_t i = 0; i < lookupColumnsCount; ++i) {
+                rowsBatcher->AddCell(TCell{});
+                Memory += sizeof(TCell);
+            }
+            rowsBatcher->AddRow();
+        }
 
         KeyToIndex.clear();
 
@@ -1618,6 +1636,9 @@ private:
             // Write
             FlushWritesToActors();
             State = EState::BUFFERING;
+
+            ProcessBatches.clear();
+            ProcessCells.clear();
         }
         return true;
     }
@@ -2329,13 +2350,13 @@ public:
             }
 
             if (!settings.LookupColumns.empty()) {
-                auto lookupInfo = LookupInfos[settings.TableId.PathId];
+                auto& lookupInfo = LookupInfos[settings.TableId.PathId];
                 if (!lookupInfo.Actors.contains(settings.TableId.PathId)) {
                     const auto [ptr, id] = createLookupActor(settings.TableId, settings.TablePath);
-                    lookupInfo.Actors.emplace(settings.TableId.PathId, TLookupInfo::TActorInfo{
+                    AFL_ENSURE(lookupInfo.Actors.emplace(settings.TableId.PathId, TLookupInfo::TActorInfo{
                         .LookupActor = ptr,
                         .Id = id,
-                    });
+                    }).second);
                 } else {
                     if (!checkSchemaVersion(
                             lookupInfo.Actors.at(settings.TableId.PathId).LookupActor,

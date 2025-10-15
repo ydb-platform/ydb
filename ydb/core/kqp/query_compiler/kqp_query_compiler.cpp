@@ -1329,10 +1329,44 @@ private:
                 settingsProto.SetInconsistentTx(false);
 
                 if (Config->EnableIndexStreamWrite) {
-                    // TODO: collect columns
+                    AFL_ENSURE(tableMeta->Indexes.size() == tableMeta->ImplTables.size());
+                    // collect lookup columns
+                    TVector<TStringBuf> lookupColumns;
+                    {
+                        THashSet<TStringBuf> columnsSet;
+                        for (const auto& columnName : columns) {
+                            columnsSet.insert(columnName);
+                        }
+                        THashSet<TStringBuf> lookupColumnsSet;
+                        for (size_t index = 0; index < tableMeta->Indexes.size(); ++index) {
+                            const auto& indexDescription = tableMeta->Indexes[index];
+
+                            if (indexDescription.Type != TIndexDescription::EType::GlobalSync
+                                && indexDescription.Type != TIndexDescription::EType::GlobalSyncUnique) {
+                                continue;
+                            }
+                            const auto& implTable = tableMeta->ImplTables[index];
+
+                            AFL_ENSURE(indexDescription.Type == TIndexDescription::EType::GlobalSync);
+                            AFL_ENSURE(implTable->Kind == EKikimrTableKind::Datashard);
+
+                            for (const auto& [columnName, _] : implTable->Columns) {
+                                if (!columnsSet.contains(columnName) && lookupColumnsSet.insert(columnName).second) {
+                                    lookupColumns.push_back(columnName);
+                                }
+                            }
+                        }
+
+                        for (const auto& columnName : lookupColumns) {
+                            const auto columnMeta = tableMeta->Columns.FindPtr(columnName);
+                            YQL_ENSURE(columnMeta != nullptr, "Unknown column in sink: \"" + TString(columnName) + "\"");
+
+                            auto columnProto = settingsProto.AddLookupColumns();
+                            fillColumnProto(columnName, columnMeta, columnProto);
+                        }
+                    }
 
                     // Fill indexes write settings
-                    AFL_ENSURE(tableMeta->Indexes.size() == tableMeta->ImplTables.size());
                     for (size_t index = 0; index < tableMeta->Indexes.size(); ++index) {
                         const auto& indexDescription = tableMeta->Indexes[index];
 
@@ -1361,13 +1395,15 @@ private:
                         TVector<TStringBuf> indexColumns;
                         indexColumns.reserve(implTable->Columns.size());
 
-                        for (const auto& columnName : columns) {
-                            const auto columnMeta = implTable->Columns.FindPtr(columnName);
-                            if (columnMeta) {
-                                indexColumns.emplace_back(columnName);
+                        for (const auto& columnsList : {columns, lookupColumns}) {
+                            for (const auto& columnName : columnsList) {
+                                const auto columnMeta = implTable->Columns.FindPtr(columnName);
+                                if (columnMeta) {
+                                    indexColumns.emplace_back(columnName);
 
-                                auto columnProto = indexSettings->AddColumns();
-                                fillColumnProto(columnName, columnMeta, columnProto);
+                                    auto columnProto = indexSettings->AddColumns();
+                                    fillColumnProto(columnName, columnMeta, columnProto);
+                                }
                             }
                         }
 

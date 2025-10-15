@@ -790,6 +790,8 @@ public:
             return ReplyPrepareResult();
         }
 
+        Cerr << "COMPILED " << QueryState->CompileResult->PreparedQuery->GetPhysicalQuery().GetQueryAst() << Endl;
+
         if (!PrepareQueryContext()) {
             return;
         }

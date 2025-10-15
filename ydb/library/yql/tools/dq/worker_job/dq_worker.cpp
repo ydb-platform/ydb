@@ -250,6 +250,11 @@ namespace NYql::NDq::NWorker {
             YQL_LOG(DEBUG) << "deterministicMode On";
             pfOptions.Env["YQL_DETERMINISTIC_MODE"] = "1";
         }
+        if (backendConfig.HasEnforceRegexpProbabilityFail()) {
+            pfOptions.Env["YQL_RE2_REGEXP_PROBABILITY_FAIL"] = TString(std::to_string(backendConfig.GetEnforceRegexpProbabilityFail()));
+        } else {
+            pfOptions.Env["YQL_RE2_REGEXP_PROBABILITY_FAIL"] = "0";
+        }
         if (backendConfig.GetEnforceJobUtc()) {
             pfOptions.Env["TZ"] = "UTC0";
         }

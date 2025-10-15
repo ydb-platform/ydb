@@ -421,7 +421,7 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
     TVector<TShardIdx> shardsToMerge;
     TString mergeReason;
     if ((!index || index->State == NKikimrSchemeOp::EIndexStateReady)
-        && Self->CheckInFlightLimit(NKikimrSchemeOp::ESchemeOpSplitMergeTablePartitions, errStr)
+        && Self->CheckInFlightLimit(TTxState::ETxType::TxSplitTablePartition, errStr)
         && table->CheckCanMergePartitions(Self->SplitSettings, forceShardSplitSettings, shardIdx, Self->ShardInfos[shardIdx].TabletID, shardsToMerge, mainTableForIndex, now, mergeReason)
     ) {
         TTxId txId = Self->GetCachedTxId(ctx);

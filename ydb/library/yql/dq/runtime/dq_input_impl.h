@@ -379,6 +379,9 @@ public:
     // p2            w11               p.w = w11                @11
     //                    | idle event
     void AddWatermark(TInstant watermark) override {
+        if (watermark > TBarrier::MaxValidWatermark) {
+            watermark = TBarrier::MaxValidWatermark;
+        }
         Y_ABORT_UNLESS(PendingBarriers.empty() || PendingBarriers.back().IsCheckpoint() || PendingBarriers.back().Barrier <= watermark);
         if (!PendingBarriers.empty() && PendingBarriers.back().Barrier >= watermark) {
             // must be idle channel; TODO verify
@@ -447,6 +450,7 @@ protected:
     struct TBarrier {
         static constexpr TInstant NoBarrier = TInstant::Zero();
         static constexpr TInstant CheckpointBarrier = TInstant::Max();
+        static constexpr TInstant MaxValidWatermark = TInstant::Max() - TDuration::MicroSeconds(1);
         TInstant Barrier = CheckpointBarrier;
         ui64 Batches = 0;
         ui64 Bytes = 0;

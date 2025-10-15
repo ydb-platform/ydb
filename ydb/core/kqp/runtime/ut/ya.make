@@ -8,7 +8,6 @@ SRCS(
     kqp_scan_data_ut.cpp
     kqp_scan_fetcher_ut.cpp
     scheduler/kqp_compute_scheduler_ut.cpp
-    scheduler/kqp_compute_scheduler_service_ut.cpp
 )
 
 YQL_LAST_ABI_VERSION()

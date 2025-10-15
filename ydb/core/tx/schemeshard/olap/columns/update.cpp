@@ -320,7 +320,7 @@ bool TOlapColumnBase::IsAllowedPkType(ui32 typeId) {
     switch (typeId) {
         case NYql::NProto::Bool:
         case NYql::NProto::Int8:
-        case NYql::NProto::Uint8:  // Byte
+        case NYql::NProto::Uint8:  // Byte, Bool
         case NYql::NProto::Int16:
         case NYql::NProto::Uint16:
         case NYql::NProto::Int32:

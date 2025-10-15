@@ -47,16 +47,7 @@ namespace {
     }
 
     inline bool IsNonStandard(wchar32 c) {
-        if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')) {
-            return false; // Latin
-        }
-        if ((c >= '0' && c <= '9')) {
-            return false; // Digit
-        }
-        if ((c >= 0x0410 && c <= 0x044F) || c == 0x0401 || c == 0x0451) {
-            return false; // Cyrillic
-        }
-        return true;
+        return !IsAlphabetic(c) && !IsDecdigit(c);
     }
 
     void Tokenize(const TString& text, TVector<TString>& tokens, auto isDelimiter) {

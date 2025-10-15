@@ -308,7 +308,6 @@ private:
     IFederatedTopicClient::TPtr FederatedTopicClient;
     const i64 MaxBufferSize;
     i64 ReadyBufferSizeBytes = 0;
-    TDuration LateArrivalDelay;
     // Set on Parent
     ui64 NextGeneration = 0;
     ui64 NextEventQueueId = 0;
@@ -530,7 +529,6 @@ TDqPqRdReadActor::TDqPqRdReadActor(
         , Driver(std::move(driver))
         , CredentialsProviderFactory(std::move(credentialsProviderFactory))
         , MaxBufferSize(bufferSize)
-        , LateArrivalDelay(TDuration::MicroSeconds(SourceParams.GetWatermarks().GetLateArrivalDelayUs()))
 {
 
     SRC_LOG_I("Start read actor, local row dispatcher " << LocalRowDispatcherActorId.ToString() << ", metadatafields: " << JoinSeq(',', SourceParams.GetMetadataFields())

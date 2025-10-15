@@ -79,7 +79,7 @@ public:
 
             metricsReporter.ReportAsyncInputData(Index, batch.RowCount(), space, watermark);
 
-            if (watermark) {
+            if (watermark && !finished) {
                 const auto inputWatermarkChanged = watermarksTracker.NotifyAsyncInputWatermarkReceived(
                     Index,
                     *watermark);

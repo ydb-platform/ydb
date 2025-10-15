@@ -280,7 +280,26 @@ public:
     }
 
     TMaybe<bool> CanWrite(const TExprNode& write, TExprContext&) override {
-        return TSoWrite::Match(&write);
+        if (!State_->WriteThroughDqIntegration) {
+            return TSoWrite::Match(&write);
+        }
+
+        return TSoWriteToShard::Match(&write);
+    }
+
+    TExprNode::TPtr WrapWrite(const TExprNode::TPtr& writeNode, TExprContext& ctx) override {
+        if (!State_->WriteThroughDqIntegration) {
+            return writeNode;
+        }
+
+        const auto write = TMaybeNode<TSoWriteToShard>(writeNode).Cast();
+        return Build<TSoInsert>(ctx, write.Pos())
+            .World(write.World())
+            .DataSink(write.DataSink())
+            .Shard(write.Shard())
+            .Input(write.Input())
+            .Done()
+            .Ptr();
     }
 
     void FillSourceSettings(const TExprNode& node, ::google::protobuf::Any& protoSettings, TString& sourceType, size_t maxTasksPerStage, TExprContext&) override {

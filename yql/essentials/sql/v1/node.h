@@ -878,6 +878,7 @@ public:
     void SetUseSource();
     void ResetAsReliable();
     void SetAsNotReliable();
+    void SetAsYqlRef();
     bool IsReliable() const;
     bool IsUseSourceAsColumn() const;
     bool IsUseSource() const;
@@ -901,6 +902,7 @@ private:
     bool UseSource_ = false;
     bool UseSourceAsColumn_ = false;
     bool MaybeType_ = false;
+    bool IsYqlRef_ = false;
 };
 
 class TArgPlaceholderNode final: public INode {
@@ -1523,6 +1525,7 @@ TNodePtr BuildColumn(TPosition pos, const TString& column = TString(), const TSt
 TNodePtr BuildColumn(TPosition pos, const TNodePtr& column, const TString& source = TString());
 TNodePtr BuildColumn(TPosition pos, const TDeferredAtom& column, const TString& source = TString());
 TNodePtr BuildColumnOrType(TPosition pos, const TString& column = TString());
+TNodePtr BuildYqlColumnRef(TPosition pos);
 TNodePtr BuildAccess(TPosition pos, const TVector<INode::TIdPart>& ids, bool isLookup);
 TNodePtr BuildBind(TPosition pos, const TString& module, const TString& alias);
 TNodePtr BuildLambda(TPosition pos, TNodePtr params, TNodePtr body, const TString& resName = TString());

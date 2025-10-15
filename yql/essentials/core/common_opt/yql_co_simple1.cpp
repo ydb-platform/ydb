@@ -7095,6 +7095,9 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
     map["PgIterate"] = &ExpandPgIterate;
     map["PgIterateAll"] = &ExpandPgIterate;
 
+    map["YqlSelect"] = &ExpandPgSelect;
+    map["YqlIterate"] = &ExpandPgIterate;
+
     map["PgLike"] = &ExpandPgLike;
     map["PgILike"] = &ExpandPgLike;
 

@@ -61,6 +61,3 @@ class K8sApiHostsInformationProvider(HostsInformationProvider):
     def get_body(self, hostname):
         hash = hashlib.sha256(hostname.encode())
         return int(hash.hexdigest(), 16) % (2**32)
-
-    def get_module(self, hostname):
-        return ""

@@ -11,6 +11,7 @@ SRCS(
     partition_compactification.cpp
     partition_compaction.cpp
     partition_init.cpp
+    partition_mlp.cpp
     partition_monitoring.cpp
     partition_read.cpp
     partition_sourcemanager.cpp

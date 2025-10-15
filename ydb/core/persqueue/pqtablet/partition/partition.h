@@ -1191,6 +1191,8 @@ private:
     template<typename TEventHandle>
     void ForwardToMLPConsumer(const TString& consumer, TAutoPtr<TEventHandle>& ev);
 
+    void InitializeMLPConsumers();
+
     struct TMLPConsumerInfo {
         TActorId ActorId;
     };

@@ -1338,7 +1338,7 @@ void TPersQueue::UpdateConsumers(NKikimrPQ::TPQTabletConfig& cfg)
             c.SetId(it->second.GetId());
         } else {
             c.SetGeneration(curConfigVersion);
-            c.SetId(++nextConsumerId);
+            c.SetId(++nextConsumerId); // TODO check < Max<ui32>()
         }
     }
     cfg.SetNextConsumerId(nextConsumerId);

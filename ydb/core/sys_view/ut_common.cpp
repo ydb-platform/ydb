@@ -77,6 +77,11 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, const TTestEnvSettings& 
 
     Settings->AppConfig->MutableHiveConfig()->AddBalancerIgnoreTabletTypes(NKikimrTabletBase::TTabletTypes::SysViewProcessor);
 
+    if (settings.DataShardStatsReportIntervalSeconds) {
+        Settings->AppConfig->MutableDataShardConfig()
+            ->SetStatsReportIntervalSeconds(*settings.DataShardStatsReportIntervalSeconds);
+    }
+
     Server = new Tests::TServer(*Settings);
     Server->EnableGRpc(grpcPort);
 

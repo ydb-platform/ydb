@@ -1,7 +1,7 @@
 #include "dq_scalar_hash_join.h"
-
 #include "dq_join_common.h"
 #include <dq_hash_join_table.h>
+#include <ranges>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders_codegen.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_impl.h>
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
@@ -63,60 +63,20 @@ template <EJoinKind Kind> class TScalarHashJoinState : public TComputationValue<
     TScalarHashJoinState(TMemoryUsageInfo* memInfo, IComputationWideFlowNode* leftFlow,
                          IComputationWideFlowNode* rightFlow, const std::vector<ui32>& leftKeyColumns,
                          const std::vector<ui32>& rightKeyColumns, const std::vector<TType*>& leftColumnTypes,
-                         const std::vector<TType*>& rightColumnTypes, NUdf::TLoggerPtr logger, TString componentName)
+                         const std::vector<TType*>& rightColumnTypes, NUdf::TLoggerPtr logger, TString componentName,
+                         TDqRenames renames)
         : NKikimr::NMiniKQL::TComputationValue<TScalarHashJoinState>(memInfo)
         , Join_(memInfo, TScalarRowSource{leftFlow, leftColumnTypes}, TScalarRowSource{rightFlow, rightColumnTypes},
                 TJoinMetadata{TColumnsMetadata{rightKeyColumns, rightColumnTypes},
                               TColumnsMetadata{leftKeyColumns, leftColumnTypes},
                               KeyTypesFromColumns(leftColumnTypes, leftKeyColumns)}, logger, componentName)
+        , Output_(std::move(renames), leftColumnTypes, rightColumnTypes)
     {}
 
-    int TupleSize() const {
-        if constexpr (Kind == EJoinKind::LeftOnly || Kind == EJoinKind::LeftSemi) {
-            return Join_.ProbeSize();
-        } else {
-            if constexpr (Kind == EJoinKind::RightOnly || Kind == EJoinKind::RightSemi) {
-                return Join_.BuildSize();
-            } else {
-                return Join_.BuildSize() + Join_.ProbeSize();
-            }
-        }
-    }
-
-    int SizeTuples() const {
-        MKQL_ENSURE(OutputBuffer_.size() % TupleSize() == 0, "buffer contains tuple parts??");
-        return OutputBuffer_.size() / TupleSize();
-    }
-
     EFetchResult FetchValues(TComputationContext& ctx, NUdf::TUnboxedValue* const* output) {
-        while (SizeTuples() == 0) {
-            auto consumeOneOrTwo = [&] {
-                if constexpr (SemiOrOnlyJoin(Kind)) {
-                    return [&](NJoinTable::TTuple tuple) {
-                        auto out = std::back_inserter(OutputBuffer_);
-                        if (!tuple) {
-                            tuple = NullTuples_.data();
-                        }
-                        std::copy_n(tuple, Join_.ProbeSize(), out);
-                    };
-                } else {
-                    return [&](NJoinTable::TTuple probe, NJoinTable::TTuple build) {
-                        auto out = std::back_inserter(OutputBuffer_);
-                        if (!probe) {
-                            probe = NullTuples_.data();
-                        }
-                        std::copy_n(probe, Join_.ProbeSize(), out);
-
-                        if (!build) {
-                            build = NullTuples_.data();
-                        }
-                        std::copy_n(build, Join_.BuildSize(), out);
-                    };
-                }
-            }();
-            auto res = Join_.MatchRows(ctx, consumeOneOrTwo);
+        while (Output_.SizeTuples() == 0) {
+            auto res = Join_.MatchRows(ctx, Output_.MakeConsumeFn());
             switch (res) {
-
             case EFetchResult::Finish:
                 return res;
             case EFetchResult::Yield:
@@ -125,22 +85,24 @@ template <EJoinKind Kind> class TScalarHashJoinState : public TComputationValue<
                 break;
             }
         }
-        const int outputTupleSize = TupleSize();
-        MKQL_ENSURE(std::ssize(OutputBuffer_) >= outputTupleSize, "Output_ must contain at least one tuple");
+        const int outputTupleSize = Output_.TupleSize();
+        MKQL_ENSURE(std::ssize(Output_.OutputBuffer) >= outputTupleSize, "Output_ must contain at least one tuple");
         for (int index = 0; index < outputTupleSize; ++index) {
-            int myIndex = std::ssize(OutputBuffer_) - outputTupleSize + index;
+            int myIndex = std::ssize(Output_.OutputBuffer) - outputTupleSize + index;
             int theirIndex = index;
-            *output[theirIndex] = OutputBuffer_[myIndex];
+            *output[theirIndex] = Output_.OutputBuffer[myIndex];
         }
-        OutputBuffer_.resize(std::ssize(OutputBuffer_) - outputTupleSize);
+        Output_.OutputBuffer.resize(std::ssize(Output_.OutputBuffer) - outputTupleSize);
         return EFetchResult::One;
     }
 
   private:
     TJoin<TScalarRowSource, Kind> Join_;
-    std::vector<NUdf::TUnboxedValue> OutputBuffer_;
-    const std::vector<NYql::NUdf::TUnboxedValue> NullTuples_{
-        static_cast<size_t>(std::max(Join_.BuildSize(), Join_.ProbeSize())), NYql::NUdf::TUnboxedValuePod{}};
+    TRenamedOutput<Kind> Output_;
+    // std::vector<NUdf::TUnboxedValue> OutputBuffer_;
+    // const TDqRenames Renames_;
+    // const std::vector<NYql::NUdf::TUnboxedValue> NullTuples_{
+    // static_cast<size_t>(std::max(Join_.BuildSize(), Join_.ProbeSize())), NYql::NUdf::TUnboxedValuePod{}};
 };
 
 template <EJoinKind Kind>
@@ -155,7 +117,7 @@ class TScalarHashJoinWrapper : public TStatefulWideFlowComputationNode<TScalarHa
                            TVector<TType*>&& leftColumnTypes,
                            TVector<ui32>&& leftKeyColumns,
                            TVector<TType*>&& rightColumnTypes,
-                           TVector<ui32>&& rightKeyColumns)
+                           TVector<ui32>&& rightKeyColumns, TDqRenames renames)
         : TBaseComputation(mutables, nullptr, EValueRepresentation::Boxed)
         , LeftFlow_(leftFlow)
         , RightFlow_(rightFlow)
@@ -164,6 +126,7 @@ class TScalarHashJoinWrapper : public TStatefulWideFlowComputationNode<TScalarHa
         , LeftKeyColumns_(std::move(leftKeyColumns))
         , RightColumnTypes_(std::move(rightColumnTypes))
         , RightKeyColumns_(std::move(rightKeyColumns))
+        , Renames_(std::move(renames))
     {}
 
     EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx,
@@ -178,9 +141,9 @@ class TScalarHashJoinWrapper : public TStatefulWideFlowComputationNode<TScalarHa
     void MakeState(TComputationContext& ctx, NUdf::TUnboxedValue& state) const {
         NYql::NUdf::TLoggerPtr logger = ctx.MakeLogger();
 
-        state = ctx.HolderFactory.Create<TScalarHashJoinState<Kind>>(LeftFlow_, RightFlow_, LeftKeyColumns_,
-                                                                     RightKeyColumns_, LeftColumnTypes_,
-                                                                     RightColumnTypes_, logger, "ScalarHashJoin");
+        state = ctx.HolderFactory.Create<TScalarHashJoinState<Kind>>(
+            LeftFlow_, RightFlow_, LeftKeyColumns_, RightKeyColumns_, LeftColumnTypes_, RightColumnTypes_, logger,
+            "ScalarHashJoin", Renames_);
     }
 
     void RegisterDependencies() const final {
@@ -196,12 +159,13 @@ class TScalarHashJoinWrapper : public TStatefulWideFlowComputationNode<TScalarHa
     const TVector<ui32> LeftKeyColumns_;
     const TVector<TType*> RightColumnTypes_;
     const TVector<ui32> RightKeyColumns_;
+    const TDqRenames Renames_;
 };
 
 } // namespace
 
 IComputationWideFlowNode* WrapDqScalarHashJoin(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-    MKQL_ENSURE(callable.GetInputsCount() == 5, "Expected 5 args");
+    MKQL_ENSURE(callable.GetInputsCount() == 7, "Expected 7 args");
 
     const auto joinType = callable.GetType()->GetReturnType();
     MKQL_ENSURE(joinType->IsFlow(), "Expected WideFlow as a resulting flow");
@@ -254,10 +218,13 @@ IComputationWideFlowNode* WrapDqScalarHashJoin(TCallable& callable, const TCompu
 
     MKQL_ENSURE(leftFlow, "Expected WideFlow as a left input");
     MKQL_ENSURE(rightFlow, "Expected WideFlow as a right input");
-    return std::visit([&](auto kind) -> IComputationWideFlowNode* {
-        return new TScalarHashJoinWrapper<decltype(kind)::Kind_>(
-            ctx.Mutables, leftFlow, rightFlow, std::move(joinItems), std::move(leftFlowItems),
-            std::move(leftKeyColumns), std::move(rightFlowItems), std::move(rightKeyColumns));
-    }, TypifyJoinKind(joinKind));
+    MKQL_ENSURE(joinKind == EJoinKind::Inner, "Only inner is supported, see gh#26780 for details.");
+
+    TDqRenames renames =
+        FromGraceFormat(TGraceJoinRenames::FromRuntimeNodes(callable.GetInput(5), callable.GetInput(6)));
+    ValidateRenames(renames, joinKind);
+    return new TScalarHashJoinWrapper<EJoinKind::Inner>(ctx.Mutables, leftFlow, rightFlow, std::move(joinItems),
+                                                        std::move(leftFlowItems), std::move(leftKeyColumns),
+                                                        std::move(rightFlowItems), std::move(rightKeyColumns), renames);
 }
 } // namespace NKikimr::NMiniKQL

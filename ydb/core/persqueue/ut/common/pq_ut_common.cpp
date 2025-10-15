@@ -1250,4 +1250,19 @@ THolder<TEvPersQueue::TEvPeriodicTopicStats> GetReadBalancerPeriodicTopicStats(T
     return runtime.GrabEdgeEvent<TEvPersQueue::TEvPeriodicTopicStats>(TDuration::Seconds(2));
 }
 
+void CmdRunCompaction(TTestActorRuntime& runtime,
+                      ui64 tabletId,
+                      const TActorId& sender,
+                      const ui32 partition)
+{
+    auto event = MakeHolder<TEvPQ::TEvForceCompaction>(partition);
+    runtime.SendToPipe(tabletId, sender, event.Release(), 0, GetPipeConfigWithRetries());
+}
+
+void CmdRunCompaction(const ui32 partition,
+                      TTestContext& tc)
+{
+    CmdRunCompaction(*tc.Runtime, tc.TabletId, tc.Edge, partition);
+}
+
 } // namespace NKikimr::NPQ

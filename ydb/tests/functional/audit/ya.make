@@ -6,7 +6,7 @@ FORK_TEST_FILES()
 # in separate chunks because our
 # audit log capture method is unreliable
 # and therefore some tests may affect neighbouring ones
-SPLIT_FACTOR(100)
+SPLIT_FACTOR(20)
 SIZE(MEDIUM)
 
 ENV(YDB_USE_IN_MEMORY_PDISKS=true)

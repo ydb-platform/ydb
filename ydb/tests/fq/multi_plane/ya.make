@@ -2,6 +2,8 @@ PY3TEST()
 
 FORK_TEST_FILES()
 
+REQUIREMENTS(cpu:4)
+
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/fq_runner/ydb_runner_with_datastreams.inc)
 
 PEERDIR(

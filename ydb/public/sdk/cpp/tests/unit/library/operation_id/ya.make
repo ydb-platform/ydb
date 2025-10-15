@@ -1,4 +1,4 @@
-UNITTEST()
+GTEST()
 
 INCLUDE(${ARCADIA_ROOT}/ydb/public/sdk/cpp/sdk_common.inc)
 
@@ -13,7 +13,6 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/testing/unittest
     ydb/public/sdk/cpp/src/library/operation_id
 )
 

@@ -599,7 +599,7 @@ private:
     void InitWatermarkTracker() override {
         auto lateArrivalDelayUs = SourceParams.GetWatermarks().GetLateArrivalDelayUs();
         auto idleDelayUs = lateArrivalDelayUs; // TODO disentangle
-        TDqPqReadActorBase::InitWatermarkTracker(lateArrivalDelayUs, idleDelayUs);
+        TDqPqReadActorBase::InitWatermarkTracker(TDuration::MicroSeconds(lateArrivalDelayUs), TDuration::MicroSeconds(idleDelayUs));
     }
 
     void ScheduleSourcesCheck(TInstant at) override {

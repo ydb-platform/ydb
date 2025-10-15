@@ -143,11 +143,12 @@ const NYql::NDq::TDqAsyncStats& TDqPqReadActorBase::GetIngressStats() const {
     return IngressStats;
 }
 
-void TDqPqReadActorBase::InitWatermarkTracker(ui64 lateArrivalDelayUs, ui64 idleDelayUs) {
-    SRC_LOG_D("SessionId: " << GetSessionId() << " Watermarks enabled: " << SourceParams.GetWatermarks().GetEnabled() << " granularity: "
-        << SourceParams.GetWatermarks().GetGranularityUs() << " microseconds"
-        << " idle delay: " << idleDelayUs << " microseconds"
+void TDqPqReadActorBase::InitWatermarkTracker(TDuration lateArrivalDelay, TDuration idleDelay) {
+    const auto granularity = TDuration::MicroSeconds(SourceParams.GetWatermarks().GetGranularityUs());
+    SRC_LOG_D("SessionId: " << GetSessionId() << " Watermarks enabled: " << SourceParams.GetWatermarks().GetEnabled() << " granularity: " << granularity
+        << " late arrival delay: " << lateArrivalDelay
         << " idle: " << SourceParams.GetWatermarks().GetIdlePartitionsEnabled()
+        << " idle delay: " << idleDelay
         );
 
     if (!SourceParams.GetWatermarks().GetEnabled()) {
@@ -155,10 +156,10 @@ void TDqPqReadActorBase::InitWatermarkTracker(ui64 lateArrivalDelayUs, ui64 idle
     }
 
     WatermarkTracker.ConstructInPlace(
-        TDuration::MicroSeconds(SourceParams.GetWatermarks().GetGranularityUs()),
+        granularity,
         SourceParams.GetWatermarks().GetIdlePartitionsEnabled(),
-        TDuration::MicroSeconds(lateArrivalDelayUs),
-        TDuration::MicroSeconds(idleDelayUs),
+        lateArrivalDelay,
+        idleDelay,
         TInstant::Now()
     );
 }

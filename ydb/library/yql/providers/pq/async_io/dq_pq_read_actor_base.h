@@ -45,7 +45,7 @@ public:
     virtual void ScheduleSourcesCheck(TInstant) = 0;
 
     virtual void InitWatermarkTracker() = 0;
-    void InitWatermarkTracker(ui64, ui64);
+    void InitWatermarkTracker(TDuration, TDuration);
     void MaybeScheduleNextIdleCheck(TInstant systemTime);
 
     virtual TString GetSessionId() const {

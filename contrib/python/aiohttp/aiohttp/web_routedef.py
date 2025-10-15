@@ -162,10 +162,12 @@ class RouteTableDef(Sequence[AbstractRouteDef]):
         return f"<RouteTableDef count={len(self._items)}>"
 
     @overload
-    def __getitem__(self, index: int) -> AbstractRouteDef: ...
+    def __getitem__(self, index: int) -> AbstractRouteDef:
+        ...
 
     @overload
-    def __getitem__(self, index: slice) -> List[AbstractRouteDef]: ...
+    def __getitem__(self, index: slice) -> List[AbstractRouteDef]:
+        ...
 
     def __getitem__(self, index):  # type: ignore[no-untyped-def]
         return self._items[index]

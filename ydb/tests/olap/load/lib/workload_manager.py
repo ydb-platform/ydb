@@ -392,7 +392,7 @@ class TestWorkloadManagerClickbenchComputeScheduler(WorkloadManagerClickbenchBas
     pass
 
 
-class TestWorkloadManagerClickbenchConcurrentQueryLimit(WorkloadManagerClickbenchBase, WorkloadManagerComputeSchedulerP3):
+class TestWorkloadManagerClickbenchConcurrentQueryLimit(WorkloadManagerClickbenchBase, WorkloadManagerConcurrentQueryLimit):
     pass
 
 

@@ -30,10 +30,12 @@ void TDqComputeActorWatermarks::RegisterInputChannel(ui64 inputId, TDuration idl
 }
 
 void TDqComputeActorWatermarks::UnregisterInputChannel(ui64 inputId) {
+    LOG_D("Unregister input channel " << inputId);
     UnregisterInput(inputId, true);
 }
 
 void TDqComputeActorWatermarks::UnregisterAsyncInput(ui64 inputId) {
+    LOG_D("Unregister async input " << inputId);
     UnregisterInput(inputId, false);
 }
 

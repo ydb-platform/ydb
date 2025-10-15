@@ -29,6 +29,8 @@ ydb/core/tx/schemeshard/ut_index unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.BaseCase+Prefixed[TabletReboots]
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.BaseCase-Prefixed[TabletReboots]
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots unittest.[*/*] chunk
+ydb/core/viewer/tests test.py.test_topic_data
+ydb/core/viewer/tests test.py.test_topic_data_cdc
 ydb/library/actors/interconnect/ut_huge_cluster HugeCluster.AllToAll
 ydb/library/actors/interconnect/ut_huge_cluster unittest.sole chunk
 ydb/library/yql/dq/actors/compute/ut TAsyncComputeActorTest.InputTransformMultichannel

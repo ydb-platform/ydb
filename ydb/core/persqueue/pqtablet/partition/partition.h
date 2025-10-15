@@ -265,19 +265,6 @@ private:
     void HandleWakeup(const TActorContext& ctx);
     void HandleWriteResponse(const TActorContext& ctx);
 
-    void HandleOnInit(TEvPersQueue::TEvMLPReadRequest::TPtr&);
-    void HandleOnInit(TEvPersQueue::TEvMLPCommitRequest::TPtr&);
-    void HandleOnInit(TEvPersQueue::TEvMLPReleaseRequest::TPtr&);
-    void HandleOnInit(TEvPersQueue::TEvMLPChangeMessageDeadlineRequest::TPtr&);
-    void Handle(TEvPersQueue::TEvMLPReadRequest::TPtr&);
-    void Handle(TEvPersQueue::TEvMLPCommitRequest::TPtr&);
-    void Handle(TEvPersQueue::TEvMLPReleaseRequest::TPtr&);
-    void Handle(TEvPersQueue::TEvMLPChangeMessageDeadlineRequest::TPtr&);
-
-    template<typename TEventHandle>
-    void ForwardToMLPConsumer(const TString& consumer, TAutoPtr<TEventHandle>& ev);
-
-
     void InitComplete(const TActorContext& ctx);
     void InitUserInfoForImportantClients(const TActorContext& ctx);
 
@@ -1191,10 +1178,30 @@ private:
     bool StopCompaction = false;
 
 private:
+    void HandleOnInit(TEvPersQueue::TEvMLPReadRequest::TPtr&);
+    void HandleOnInit(TEvPersQueue::TEvMLPCommitRequest::TPtr&);
+    void HandleOnInit(TEvPersQueue::TEvMLPReleaseRequest::TPtr&);
+    void HandleOnInit(TEvPersQueue::TEvMLPChangeMessageDeadlineRequest::TPtr&);
+    void Handle(TEvPersQueue::TEvMLPReadRequest::TPtr&);
+    void Handle(TEvPersQueue::TEvMLPCommitRequest::TPtr&);
+    void Handle(TEvPersQueue::TEvMLPReleaseRequest::TPtr&);
+    void Handle(TEvPersQueue::TEvMLPChangeMessageDeadlineRequest::TPtr&);
+
+    void ProcessMLPPendingEvents();
+    template<typename TEventHandle>
+    void ForwardToMLPConsumer(const TString& consumer, TAutoPtr<TEventHandle>& ev);
+
     struct TMLPConsumerInfo {
         TActorId ActorId;
     };
     std::unordered_map<TString, TMLPConsumerInfo> MLPConsumers;
+    using TMLPPendingEvent = std::variant<
+        TEvPersQueue::TEvMLPReadRequest::TPtr,
+        TEvPersQueue::TEvMLPCommitRequest::TPtr,
+        TEvPersQueue::TEvMLPReleaseRequest::TPtr,
+        TEvPersQueue::TEvMLPChangeMessageDeadlineRequest::TPtr
+    >;
+    std::vector<TMLPPendingEvent> MLPPendingEvents;
 };
 
 inline ui64 TPartition::GetStartOffset() const {

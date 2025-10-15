@@ -5,6 +5,7 @@
 #include "partition_util.h"
 #include <ydb/core/persqueue/pqtablet/common/logging.h>
 #include <ydb/core/persqueue/pqtablet/common/constants.h>
+#include <ydb/core/persqueue/pqtablet/partition/mlp/mlp.h>
 
 #include <memory>
 
@@ -995,6 +996,16 @@ void TInitFieldsStep::Execute(const TActorContext &ctx) {
     auto& config = Partition()->Config;
 
     Partition()->AutopartitioningManager.reset(CreateAutopartitioningManager(config, Partition()->Partition));
+
+    for (auto& consumer : Partition()->Config.GetConsumers()) {
+        if (consumer.GetType() == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP) {
+            auto actorId = Partition()->RegisterWithSameMailbox(NMLP::CreateConsumerActor(
+                Partition()->TabletActorId,
+                Partition()->SelfId()
+            ));
+            Partition()->MLPConsumers.emplace(consumer.GetName(), actorId);
+        }
+    }
 
     return Done(ctx);
 }

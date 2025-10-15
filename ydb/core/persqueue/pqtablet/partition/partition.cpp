@@ -757,6 +757,8 @@ void TPartition::InitComplete(const TActorContext& ctx) {
         CreateMirrorerActor();
     }
 
+    ProcessMLPPendingEvents();
+
     ReportCounters(ctx, true);
 }
 
@@ -4229,38 +4231,6 @@ void TPartition::ProcessPendingEvent(std::unique_ptr<TEvPQ::TEvDeletePartition> 
     ProcessTxsAndUserActs(ctx);
 }
 
-template <>
-void TPartition::ProcessPendingEvent(std::unique_ptr<TEvPersQueue::TEvMLPReadRequest> ev, const TActorContext& ctx)
-{
-    Y_UNUSED(ctx);
-    TAutoPtr<TEvPersQueue::TEvMLPReadRequest> e = ev.release();
-    ForwardToMLPConsumer(e->GetConsumer(), e);
-}
-
-template <>
-void TPartition::ProcessPendingEvent(std::unique_ptr<TEvPersQueue::TEvMLPCommitRequest> ev, const TActorContext& ctx)
-{
-    Y_UNUSED(ctx);
-    TAutoPtr<TEvPersQueue::TEvMLPCommitRequest> e = ev.release();
-    ForwardToMLPConsumer(e->GetConsumer(), e);
-}
-
-template <>
-void TPartition::ProcessPendingEvent(std::unique_ptr<TEvPersQueue::TEvMLPReleaseRequest> ev, const TActorContext& ctx)
-{
-    Y_UNUSED(ctx);
-    TAutoPtr<TEvPersQueue::TEvMLPReleaseRequest> e = ev.release();
-    ForwardToMLPConsumer(e->GetConsumer(), e);
-}
-
-template <>
-void TPartition::ProcessPendingEvent(std::unique_ptr<TEvPersQueue::TEvMLPChangeMessageDeadlineRequest> ev, const TActorContext& ctx)
-{
-    Y_UNUSED(ctx);
-    TAutoPtr<TEvPersQueue::TEvMLPChangeMessageDeadlineRequest> e = ev.release();
-    ForwardToMLPConsumer(e->GetConsumer(), e);
-}
-
 void TPartition::Handle(TEvPQ::TEvDeletePartition::TPtr& ev, const TActorContext& ctx)
 {
     LOG_D("Handle TEvPQ::TEvDeletePartition");
@@ -4485,19 +4455,19 @@ void TPartition::ResetDetailedMetrics() {
 }
 
 void TPartition::HandleOnInit(TEvPersQueue::TEvMLPReadRequest::TPtr& ev) {
-   AddPendingEvent(ev);
+   MLPPendingEvents.emplace_back(ev);
 }
 
 void TPartition::HandleOnInit(TEvPersQueue::TEvMLPCommitRequest::TPtr& ev) {
-   AddPendingEvent(ev);
+   MLPPendingEvents.emplace_back(ev);
 }
 
 void TPartition::HandleOnInit(TEvPersQueue::TEvMLPReleaseRequest::TPtr& ev) {
-   AddPendingEvent(ev);
+   MLPPendingEvents.emplace_back(ev);
 }
 
 void TPartition::HandleOnInit(TEvPersQueue::TEvMLPChangeMessageDeadlineRequest::TPtr& ev) {
-   AddPendingEvent(ev);
+   MLPPendingEvents.emplace_back(ev);
 }
 
 void TPartition::Handle(TEvPersQueue::TEvMLPReadRequest::TPtr& ev) {
@@ -4514,6 +4484,22 @@ void TPartition::Handle(TEvPersQueue::TEvMLPReleaseRequest::TPtr& ev) {
 
 void TPartition::Handle(TEvPersQueue::TEvMLPChangeMessageDeadlineRequest::TPtr& ev) {
     ForwardToMLPConsumer(ev->Get()->GetConsumer(), ev);
+}
+
+void TPartition::ProcessMLPPendingEvents() {
+    LOG_D("Process MLP pending events. Count " << MLPPendingEvents.size());
+
+    auto visitor = [this](auto& v) {
+        Handle(v);
+    };
+
+    while (!MLPPendingEvents.empty()) {
+        auto& ev = MLPPendingEvents.front();
+        std::visit(visitor, ev);
+        PendingEvents.pop_front();
+    }
+
+    PendingEvents = {};
 }
 
 template<typename TEventHandle>

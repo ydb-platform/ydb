@@ -382,6 +382,7 @@ message TPQTabletConfig {
         optional bool Important = 9 [default = false];
         optional uint64 AvailabilityPeriodMs = 10 [default = 0];
         optional EConsumerType Type = 11 [default = CONSUMER_TYPE_STREAMING];
+        optional uint64 Id = 12;
     }
 
     repeated TConsumer Consumers = 37;

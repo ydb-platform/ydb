@@ -1320,26 +1320,25 @@ void TPersQueue::CreateTopicConverter(const NKikimrPQ::TPQTabletConfig& config,
     AFL_ENSURE(topicConverter->IsValid())("reason", topicConverter->GetReason());
 }
 
-void TPersQueue::UpdateReadRuleGenerations(NKikimrPQ::TPQTabletConfig& cfg) const
+void TPersQueue::UpdateConsumers(NKikimrPQ::TPQTabletConfig& cfg)
 {
     PQ_ENSURE(cfg.HasVersion());
     const int curConfigVersion = cfg.GetVersion();
 
-    // set rr generation for provided read rules
-    THashMap<TString, std::pair<ui64, ui64>> existed; // map name -> rrVersion, rrGeneration
+    THashMap<TString, NKikimrPQ::TPQTabletConfig::TConsumer> existed;
     for (const auto& c : Config.GetConsumers()) {
-        existed[c.GetName()] = std::make_pair(c.GetVersion(), c.GetGeneration());
+        existed[c.GetName()] = c;
     }
 
     for (auto& c : *cfg.MutableConsumers()) {
         auto it = existed.find(c.GetName());
-        ui64 generation = 0;
-        if (it != existed.end() && it->second.first == c.GetVersion()) {
-            generation = it->second.second;
+        if (it != existed.end() && it->second.GetVersion() == c.GetVersion()) {
+            c.SetGeneration(it->second.GetGeneration());
+            c.SetId(it->second.GetId());
         } else {
-            generation = curConfigVersion;
+            c.SetGeneration(curConfigVersion);
+            c.SetId(++MaxConsumerId);
         }
-        c.SetGeneration(generation);
     }
 }
 
@@ -1448,7 +1447,7 @@ void TPersQueue::ProcessUpdateConfigRequest(TAutoPtr<TEvPersQueue::TEvUpdateConf
 
     Migrate(cfg);
 
-    UpdateReadRuleGenerations(cfg);
+    UpdateConsumers(cfg);
 
     PQ_LOG_TX_D("Config update version " << cfg.GetVersion() << "(current " << Config.GetVersion() << ") received from actor " << sender
                 << " txId " << record.GetTxId() << " config:\n" << cfg.DebugString());
@@ -3637,7 +3636,7 @@ void TPersQueue::ProcessProposeTransactionQueue(const TActorContext& ctx)
             PQ_LOG_TX_I("Propose TxId " << tx.TxId << ", WriteId " << tx.WriteId);
 
             if (tx.Kind == NKikimrPQ::TTransaction::KIND_CONFIG) {
-                UpdateReadRuleGenerations(tx.TabletConfig);
+                UpdateConsumers(tx.TabletConfig);
             }
 
             if (tx.WriteId.Defined()) {

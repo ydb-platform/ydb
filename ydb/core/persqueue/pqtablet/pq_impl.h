@@ -242,6 +242,7 @@ private:
     bool IsServerless = false;
     TVector<NScheme::TTypeInfo> KeySchema;
     NKikimrPQ::TPQTabletConfig Config;
+    ui64 MaxConsumerId = 0;
 
     NKikimrPQ::ETabletState TabletState;
     TSet<TChangeNotification> TabletStateRequests;
@@ -591,7 +592,7 @@ private:
     bool AllSupportivePartitionsHaveBeenDeleted(const TMaybe<TWriteId>& writeId) const;
     void DeleteWriteId(const TMaybe<TWriteId>& writeId);
 
-    void UpdateReadRuleGenerations(NKikimrPQ::TPQTabletConfig& cfg) const;
+    void UpdateConsumers(NKikimrPQ::TPQTabletConfig& cfg);
 
     void ResendEvReadSetToReceivers(const TActorContext& ctx);
     void ResendEvReadSetToReceiversForState(const TActorContext& ctx, NKikimrPQ::TTransaction::EState state);

@@ -610,7 +610,7 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         names["object_storage"] = &hasObjectStorage;
         TServiceCfg hasClickhouseInternal = services.empty();
         names["clickhouse_internal"] = &hasClickhouseInternal;
-        TServiceCfg hasRateLimiter = false;
+        TServiceCfg hasRateLimiter = services.empty();
         names["rate_limiter"] = &hasRateLimiter;
         TServiceCfg hasExport = services.empty();
         names["export"] = &hasExport;

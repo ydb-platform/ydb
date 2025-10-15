@@ -52,6 +52,10 @@ message TDescribeTableRequest {
 message TTypeMappingSettings {
     // Determines the format of date or time representation
     EDateTimeFormat date_time_format = 1;
+
+    // Defines YDB type that will be used to map numeric (decimal) type with arbitrary precision.
+    // Unconstrained numerics are supported by PostgreSQL-like databases.
+    Ydb.Type uncostrained_numeric = 2;
 }
 
 enum EDateTimeFormat {

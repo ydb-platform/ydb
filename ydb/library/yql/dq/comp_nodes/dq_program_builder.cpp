@@ -121,12 +121,9 @@ TRuntimeNode TDqProgramBuilder::DqHashAggregate(TRuntimeNode flow, const bool sp
 
 TRuntimeNode TDqProgramBuilder::AsTuple(TArrayRef<const ui32> nums) {
     TRuntimeNode::TList tupleNodes;
-    Cout << "As tuple:\n";
     std::transform(nums.cbegin(), nums.cend(), std::back_inserter(tupleNodes), [this](const ui32 idx) {
-        Cout << idx << " ";
         return NewDataLiteral(idx);
     });
-    Cout << Endl;
     return NewTuple(tupleNodes);
 }
 

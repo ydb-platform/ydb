@@ -362,7 +362,11 @@ bool RewriteTablePathPrefix(TString& query, TStringBuf backupRoot, TStringBuf re
 ) {
     restorePathPrefix = restoreRoot;
 
-    if (!re2::RE2::PartialMatch(query, R"(PRAGMA TablePathPrefix = '(\S+)';)", &backupPathPrefix)) {
+    re2::RE2::Options options;
+    options.set_case_sensitive(false);
+    re2::RE2 pattern(R"(PRAGMA TablePathPrefix = '(\S+)';)", options);
+
+    if (!re2::RE2::PartialMatch(query, pattern, &backupPathPrefix)) {
         if (!restoreRootIsDatabase) {
             // Initially, the view relied on the implicit table path prefix;
             // however, this approach is now incorrect because the requested restore root differs from the database root.
@@ -387,12 +391,11 @@ bool RewriteTablePathPrefix(TString& query, TStringBuf backupRoot, TStringBuf re
         return true;
     }
 
-    constexpr TStringBuf pattern = "PRAGMA TablePathPrefix = \"\\S+\";";
     if (!re2::RE2::Replace(&query, pattern,
         std::format(R"(PRAGMA TablePathPrefix = '{}';)", restorePathPrefix.c_str())
     )) {
         issues.AddIssue(TStringBuilder() << "query: " << query.Quote()
-            << " does not contain the pattern: \"" << pattern << "\""
+            << " does not contain the pattern: \"" << pattern.pattern() << "\""
         );
         return false;
     }

@@ -446,6 +446,8 @@ void TPartition::BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& 
     AFL_ENSURE(CompactionInProgress);
     AFL_ENSURE(blobs.size() == CompactionBlobsCount);
 
+    CompactionBlobEncoder.ClearPartitionedBlob(Partition, MaxBlobSize);
+
     // Empty partition may will be filling from offset great than zero from mirror actor if source partition old and was clean by retantion time
     if (!CompactionBlobEncoder.Head.GetCount() &&
         !CompactionBlobEncoder.NewHead.GetCount() &&
@@ -457,7 +459,7 @@ void TPartition::BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& 
     bool newHeadIsInitialized = InitNewHeadForCompaction();
 
     TProcessParametersBase parameters;
-    parameters.CurOffset = CompactionBlobEncoder.PartitionedBlob.IsInited() ? CompactionBlobEncoder.PartitionedBlob.GetOffset() : CompactionBlobEncoder.EndOffset;
+    parameters.CurOffset = CompactionBlobEncoder.EndOffset;
     parameters.HeadCleared = (CompactionBlobEncoder.Head.PackedSize == 0);
 
     auto compactionRequest = MakeHolder<TEvKeyValue::TEvRequest>();
@@ -529,8 +531,6 @@ void TPartition::BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& 
     } else {
         FirstCompactionPart = Nothing();
     }
-
-    CompactionBlobEncoder.ClearPartitionedBlob(Partition, MaxBlobSize);
 
     PQBC_LOG_I("Send request to KV");
     // for debugging purposes

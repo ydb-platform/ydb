@@ -68,7 +68,10 @@ namespace {
             size_t symbolBytes = 0;
 
             while (ptr < end) { // skip delimiters
-                Y_ENSURE(SafeReadUTF8Char(symbol, symbolBytes, ptr, end) == RECODE_OK);
+                if (SafeReadUTF8Char(symbol, symbolBytes, ptr, end) != RECODE_OK) {
+                    tokens.clear();
+                    return;
+                }
                 if (!isDelimiter(symbol)) {
                     break;
                 }
@@ -80,7 +83,10 @@ namespace {
 
             const unsigned char* tokenPtr = ptr;
             while (ptr < end) { // read token
-                Y_ENSURE(SafeReadUTF8Char(symbol, symbolBytes, ptr, end) == RECODE_OK);
+                if (SafeReadUTF8Char(symbol, symbolBytes, ptr, end) != RECODE_OK) {
+                    tokens.clear();
+                    return;
+                }
                 if (isDelimiter(symbol)) {
                     break;
                 }
@@ -101,7 +107,9 @@ namespace {
                 Tokenize(text, tokens, IsNonStandard);
                 break;
             case Ydb::Table::FulltextIndexSettings::KEYWORD:
-                tokens.push_back(text);
+                if (UTF8Detect(text) != NotUTF8) {
+                    tokens.push_back(text);
+                }
                 break;
             default:
                 Y_ENSURE(TStringBuilder() << "Invalid tokenizer: " << static_cast<int>(tokenizer));

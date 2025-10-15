@@ -1,6 +1,7 @@
 #include "fulltext.h"
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <util/generic/xrange.h>
 
 namespace NKikimr::NFulltext {
 
@@ -132,6 +133,36 @@ Y_UNIT_TEST_SUITE(NFulltext) {
         analyzers.set_tokenizer(Ydb::Table::FulltextIndexSettings::STANDARD);
         analyzers.set_use_filter_lowercase(true);
         UNIT_ASSERT_VALUES_EQUAL(Analyze(text, analyzers), (TVector<TString>{"привет", "это", "test123", "и", "слово", "ёлка", "ёль"}));
+    }
+
+    Y_UNIT_TEST(AnalyzeInvalid) {
+        Ydb::Table::FulltextIndexSettings::Analyzers analyzers;
+
+        TVector<TString> texts = {
+            "\xC2\x41", // Invalid continuation byte
+            "\xC0\x81", // Overlong encoding
+            "\x80", // Lone continuation byte
+            "\xF4\x90\x80\x80", // Outside Unicode range
+            "\xE3\x81", // Truncated (incomplete)
+        };
+
+        for (auto i : xrange(texts.size())) {
+            TString testCase = TStringBuilder() << "case #" << i;
+            auto& text = texts[i];
+
+            analyzers.set_tokenizer(Ydb::Table::FulltextIndexSettings::WHITESPACE);
+            UNIT_ASSERT_VALUES_EQUAL_C(Analyze(text, analyzers), (TVector<TString>{}), testCase);
+
+            analyzers.set_tokenizer(Ydb::Table::FulltextIndexSettings::STANDARD);
+            UNIT_ASSERT_VALUES_EQUAL_C(Analyze(text, analyzers), (TVector<TString>{}), testCase);
+
+            analyzers.set_tokenizer(Ydb::Table::FulltextIndexSettings::KEYWORD);
+            UNIT_ASSERT_VALUES_EQUAL_C(Analyze(text, analyzers), (TVector<TString>{}), testCase);
+
+            analyzers.set_tokenizer(Ydb::Table::FulltextIndexSettings::KEYWORD);
+            analyzers.set_use_filter_lowercase(true);
+            UNIT_ASSERT_VALUES_EQUAL_C(Analyze(text, analyzers), (TVector<TString>{}), testCase);
+        }
     }
 }
 

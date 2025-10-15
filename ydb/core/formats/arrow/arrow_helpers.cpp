@@ -79,7 +79,7 @@ arrow::Result<std::shared_ptr<arrow::DataType>> GetCSVArrowType(NScheme::TTypeIn
     std::shared_ptr<arrow::DataType> result;
     switch (typeId.GetTypeId()) {
         case NScheme::NTypeIds::Bool:
-            return std::make_shared<arrow::BooleanType>();
+            return std::make_shared<arrow::UInt8Type>();
         case NScheme::NTypeIds::Datetime:
         case NScheme::NTypeIds::Datetime64:
             return std::make_shared<arrow::TimestampType>(arrow::TimeUnit::SECOND);

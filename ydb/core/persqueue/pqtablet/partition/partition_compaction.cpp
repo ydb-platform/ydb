@@ -271,7 +271,7 @@ bool TPartition::CompactRequestedBlob(const TRequestedBlob& requestedBlob,
 {
     LOG_D("requestedBlob.Key=" << requestedBlob.Key.ToString() << ", parameters.CurOffset=" << parameters.CurOffset);
 
-    ui64 offset = parameters.CurOffset;
+    ui64 offset = requestedBlob.Key.GetOffset();
 
     for (TBlobIterator it(requestedBlob.Key, requestedBlob.Value); it.IsValid(); it.Next()) {
         TBatch batch = it.GetBatch();

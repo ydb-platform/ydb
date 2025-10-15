@@ -2,9 +2,11 @@
 
 #include "fwd.h"
 #include "tree/dynamic.h"
+#include "tree/snapshot.h"
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/library/testlib/helpers.h>
+#include <ydb/core/kqp/runtime/scheduler/kqp_schedulable_task.h>
 
 namespace NKikimr::NKqp::NScheduler {
 
@@ -21,10 +23,14 @@ namespace {
 
     constexpr TDuration kDefaultUpdateFairSharePeriod = TDuration::MilliSeconds(500);
 
-    void SetDemand(NHdrf::NDynamic::TQueryPtr query, ui64 demand) {
-        query->Demand = demand;
-        query->Usage = demand - 1;
-        query->UpdateActualDemand();
+    std::vector<TSchedulableTaskPtr> CreateDemandTasks(NHdrf::NDynamic::TQueryPtr query, ui64 demand) {
+        std::vector<TSchedulableTaskPtr> tasks;
+
+        for (ui64 i = 0; i < 2 * demand; ++i) {
+            tasks.emplace_back(std::make_shared<TSchedulableTask>(query));
+        }
+
+        return tasks;
     }
 }
 
@@ -48,9 +54,10 @@ namespace {
         scheduler.AddOrUpdatePool(databaseId, poolId, {});
 
         std::vector<NHdrf::NDynamic::TQueryPtr> queries;
+        std::vector<std::vector<TSchedulableTaskPtr>> tasks;
         for (NHdrf::TQueryId queryId = 0; queryId < 3; ++queryId) {
             auto query = queries.emplace_back(scheduler.AddOrUpdateQuery(databaseId, poolId, queryId, {}));
-            SetDemand(query, 2);
+            tasks.emplace_back(CreateDemandTasks(query, 2));
         }
 
         scheduler.UpdateFairShare();
@@ -89,9 +96,10 @@ namespace {
         scheduler.AddOrUpdatePool(databaseId, poolId, {});
 
         std::vector<NHdrf::NDynamic::TQueryPtr> queries;
+        std::vector<std::vector<TSchedulableTaskPtr>> tasks;
         for (NHdrf::TQueryId queryId = 0; queryId < 5; ++queryId) {
             auto query = queries.emplace_back(scheduler.AddOrUpdateQuery(databaseId, poolId, queryId, {}));
-            SetDemand(query, 1);
+            tasks.emplace_back(CreateDemandTasks(query, 1));
         }
 
         scheduler.UpdateFairShare(AllowOverlimit);
@@ -137,11 +145,12 @@ namespace {
         }
     
         std::vector<NHdrf::NDynamic::TQueryPtr> queries;
+        std::vector<std::vector<TSchedulableTaskPtr>> tasks;
         NHdrf::TQueryId queryId = 0;
         for (const auto& poolId : poolIds) {
             for (size_t i = 0; i < 3; ++i, ++queryId) {
                 auto query = queries.emplace_back(scheduler.AddOrUpdateQuery(databaseId, poolId, queryId, {}));
-                SetDemand(query, 4);
+                tasks.emplace_back(CreateDemandTasks(query, 4));
             }
         }
 
@@ -181,9 +190,10 @@ namespace {
         scheduler.AddOrUpdatePool(databaseId, poolId, {});
 
         std::vector<NHdrf::NDynamic::TQueryPtr> queries;
+        std::vector<std::vector<TSchedulableTaskPtr>> tasks;
         for (NHdrf::TQueryId queryId = 0; queryId < 3; ++queryId) {
             auto query = queries.emplace_back(scheduler.AddOrUpdateQuery(databaseId, poolId, queryId, {}));
-            SetDemand(query, 4);
+            tasks.emplace_back(CreateDemandTasks(query, 4));
         }
 
         scheduler.UpdateFairShare();
@@ -225,13 +235,14 @@ namespace {
         }
 
         std::vector<NHdrf::NDynamic::TQueryPtr> queries;
+        std::vector<std::vector<TSchedulableTaskPtr>> tasks;
         std::vector<ui64> queryDemands = {6, 3, 3};
         for (size_t i = 0; i < databaseIds.size(); ++i) {
             const TString poolId = "pool" + ToString(i + 1);
             scheduler.AddOrUpdatePool(databaseIds[i], poolId, {});
 
             auto query = queries.emplace_back(scheduler.AddOrUpdateQuery(databaseIds[i], poolId, i, {}));
-            SetDemand(query, queryDemands[i]);
+            tasks.emplace_back(CreateDemandTasks(query, queryDemands[i]));
         }
 
         scheduler.UpdateFairShare();
@@ -280,6 +291,7 @@ namespace {
         }
 
         std::vector<NHdrf::NDynamic::TQueryPtr> queries;
+        std::vector<std::vector<TSchedulableTaskPtr>> tasks;
 
         // to not face integer rounding errors, each will get 4 fair-share
         std::vector<ui64> demands = {6, 3, 3};
@@ -288,7 +300,7 @@ namespace {
             auto query = queries.emplace_back(
                 scheduler.AddOrUpdateQuery(databaseId, pools[queryId], queryId, {.Weight = weights[queryId]})
             );
-            SetDemand(query, demands[queryId]);
+            tasks.emplace_back(CreateDemandTasks(query, demands[queryId]));
         }
 
         scheduler.UpdateFairShare();
@@ -328,13 +340,14 @@ namespace {
         const TString poolId = "pool1";
         scheduler.AddOrUpdatePool(databaseId, poolId, {});
 
+        std::vector<std::vector<TSchedulableTaskPtr>> tasks;
         const std::vector<double> weights = {1, 2, 3};
         const std::vector<ui64> demands = {6, 3, 2};
 
         std::vector<NHdrf::NDynamic::TQueryPtr> queries;
         for (NHdrf::TQueryId queryId = 0; queryId < 3; ++queryId) {
             auto query = queries.emplace_back(scheduler.AddOrUpdateQuery(databaseId, poolId, queryId, {.Weight = weights[queryId]}));
-            SetDemand(query, demands[queryId]);
+            tasks.emplace_back(CreateDemandTasks(query, demands[queryId]));
         }
 
         scheduler.UpdateFairShare();
@@ -384,6 +397,7 @@ namespace {
         }
 
         std::vector<NHdrf::NDynamic::TQueryPtr> queries;
+        std::vector<std::vector<TSchedulableTaskPtr>> tasks;
         std::vector<std::vector<ui64>> demands = {{2, 2}, {2}, {2}, {2, 3}, {1}};
         NHdrf::TQueryId queryId = 0;
         size_t poolIndex = 0;
@@ -394,7 +408,7 @@ namespace {
                 const auto& poolId = poolIds[i][j];
                 for (size_t k = 0; k < demands[j].size(); ++k, ++queryId) {
                     auto query = queries.emplace_back(scheduler.AddOrUpdateQuery(databaseId, poolId, queryId, {}));
-                    SetDemand(query, demands[poolIndex][k]);
+                    tasks.emplace_back(CreateDemandTasks(query, demands[poolIndex][k]));
                 }
             }
         }
@@ -470,9 +484,10 @@ namespace {
         scheduler.AddOrUpdatePool(databaseId, poolId, {.Limit = 0});
 
         std::vector<NHdrf::NDynamic::TQueryPtr> queries;
+        std::vector<std::vector<TSchedulableTaskPtr>> tasks;
         for (NHdrf::TQueryId queryId = 0; queryId < 3; ++queryId) {
             auto query = queries.emplace_back(scheduler.AddOrUpdateQuery(databaseId, poolId, queryId, {}));
-            SetDemand(query, 2);
+            tasks.emplace_back(CreateDemandTasks(query, 2));
         }
 
         scheduler.UpdateFairShare();
@@ -511,9 +526,10 @@ namespace {
         scheduler.AddOrUpdatePool(databaseId, poolId, {});
 
         std::vector<NHdrf::NDynamic::TQueryPtr> queries;
+        std::vector<std::vector<TSchedulableTaskPtr>> tasks;
         for (NHdrf::TQueryId queryId = 0; queryId < 3; ++queryId) {
             auto query = queries.emplace_back(scheduler.AddOrUpdateQuery(databaseId, poolId, queryId, {}));
-            SetDemand(query, 3);
+            tasks.emplace_back(CreateDemandTasks(query, 3));
         }
 
         scheduler.UpdateFairShare();
@@ -577,9 +593,10 @@ namespace {
         scheduler.AddOrUpdatePool(databaseId, poolId, {});
 
         std::vector<NHdrf::NDynamic::TQueryPtr> queries;
+        std::vector<std::vector<TSchedulableTaskPtr>> tasks;
         for (NHdrf::TQueryId queryId = 1; queryId <= 3; ++queryId) {
             auto query = queries.emplace_back(scheduler.AddOrUpdateQuery(databaseId, poolId, queryId, {}));
-            SetDemand(query, 5);
+            tasks.emplace_back(CreateDemandTasks(query, 5));
         }
 
         scheduler.UpdateFairShare();
@@ -593,7 +610,7 @@ namespace {
         }
 
         NHdrf::NDynamic::TQueryPtr new_query = queries.emplace_back(scheduler.AddOrUpdateQuery(databaseId, poolId, 4, {}));
-        SetDemand(new_query, 5);
+        tasks.emplace_back(CreateDemandTasks(new_query, 5));
         for (auto& query : queries) {
             query->UpdateActualDemand();
         }
@@ -608,7 +625,7 @@ namespace {
             UNIT_ASSERT_VALUES_EQUAL(querySnapshot->FairShare, fairShares[queryId]);
         }
 
-        SetDemand(queries[0], 2);
+        tasks[0].resize(3);
         for (auto& query : queries) {
             query->UpdateActualDemand();
         }
@@ -650,9 +667,10 @@ namespace {
         scheduler.AddOrUpdatePool(databaseId, poolId, {});
 
         std::vector<NHdrf::NDynamic::TQueryPtr> queries;
+        std::vector<std::vector<TSchedulableTaskPtr>> tasks;
         for (NHdrf::TQueryId queryId = 0; queryId < 3; ++queryId) {
             auto query = queries.emplace_back(scheduler.AddOrUpdateQuery(databaseId, poolId, queryId, {}));
-            SetDemand(query, 5);
+            tasks.emplace_back(CreateDemandTasks(query, 5));
         }
 
         scheduler.UpdateFairShare();
@@ -718,9 +736,10 @@ namespace {
         }
 
         std::vector<NHdrf::NDynamic::TQueryPtr> queries;
+        std::vector<std::vector<TSchedulableTaskPtr>> tasks;
         for (NHdrf::TQueryId queryId = 1; queryId <= 3; ++queryId) {
             auto query = queries.emplace_back(scheduler.AddOrUpdateQuery(databaseId, pools[queryId - 1], queryId, {}));
-            SetDemand(query, 3);
+            tasks.emplace_back(CreateDemandTasks(query, 3));
         }
 
         scheduler.UpdateFairShare();
@@ -744,7 +763,7 @@ namespace {
         pools.emplace_back("pool4");
 
         NHdrf::NDynamic::TQueryPtr new_query = queries.emplace_back(scheduler.AddOrUpdateQuery(databaseId, "pool4", 4, {}));
-        SetDemand(new_query, 3);
+        tasks.emplace_back(CreateDemandTasks(new_query, 3));
 
         for (auto& query : queries) {
             query->UpdateActualDemand();

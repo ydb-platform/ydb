@@ -114,8 +114,6 @@ arrow::Result<std::shared_ptr<arrow::DataType>> TArrowCSVTable::GetCSVArrowType(
     auto tp = ExtractType(type);
     if (tp.GetKind() == NYdb::TTypeParser::ETypeKind::Primitive) {
         switch (tp.GetPrimitive()) {
-        case NYdb::EPrimitiveType::Bool:
-            return arrow::boolean();
         case NYdb::EPrimitiveType::Datetime:
         case NYdb::EPrimitiveType::Datetime64:
             return arrow::timestamp(arrow::TimeUnit::SECOND);

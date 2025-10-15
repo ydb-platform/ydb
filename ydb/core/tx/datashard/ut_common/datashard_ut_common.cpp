@@ -1319,12 +1319,14 @@ ui64 AsyncCreateCopyTable(
         TActorId sender,
         const TString &root,
         const TString &name,
-        const TString &from)
+        const TString &from,
+        bool isBackup)
 {
     auto request = SchemeTxTemplate(NKikimrSchemeOp::ESchemeOpCreateTable, root);
     auto& desc = *request->Record.MutableTransaction()->MutableModifyScheme()->MutableCreateTable();
     desc.SetName(name);
     desc.SetCopyFromTable(from);
+    desc.SetIsBackup(isBackup);
 
     return RunSchemeTx(*server->GetRuntime(), std::move(request), sender);
 }

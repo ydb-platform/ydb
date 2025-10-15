@@ -151,12 +151,12 @@ TTableId ResolveTableId(TTestActorRuntime& runtime, const TString& path) {
 Y_UNIT_TEST_SUITE(TSchemeshardStatsBatchingTest) {
     Y_UNIT_TEST(ShouldNotBatchWhenDisabled) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnvOptions opts;
+        opts.DataShardStatsReportIntervalSeconds(1);
+        TTestEnv env(runtime, opts);
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
-
-        NDataShard::gDbStatsReportInterval = TDuration::Seconds(1);
 
         auto& appData = runtime.GetAppData();
 
@@ -186,12 +186,13 @@ Y_UNIT_TEST_SUITE(TSchemeshardStatsBatchingTest) {
 
     Y_UNIT_TEST(ShouldPersistByBatchSize) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnvOptions opts;
+        opts.DataShardStatsReportIntervalSeconds(1);
+        TTestEnv env(runtime, opts);
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
 
-        NDataShard::gDbStatsReportInterval = TDuration::Seconds(1);
         const ui32 batchSize = 2;
 
         auto& appData = runtime.GetAppData();
@@ -247,12 +248,13 @@ Y_UNIT_TEST_SUITE(TSchemeshardStatsBatchingTest) {
 
     Y_UNIT_TEST(ShouldPersistByBatchTimeout) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnvOptions opts;
+        opts.DataShardStatsReportIntervalSeconds(1);
+        TTestEnv env(runtime, opts);
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
 
-        NDataShard::gDbStatsReportInterval = TDuration::Seconds(1);
         TDuration dsWakeupInterval = TDuration::Seconds(5); // hardcoded in DS
         TDuration batchTimeout = dsWakeupInterval;
 
@@ -591,9 +593,9 @@ Y_UNIT_TEST_SUITE(TStoragePoolsStatsPersistence) {
         opts.DisableStatsBatching(true);
         opts.EnablePersistentPartitionStats(true);
         opts.EnableBackgroundCompaction(false);
+        opts.DataShardStatsReportIntervalSeconds(0);
         TTestEnv env(runtime, opts);
 
-        NDataShard::gDbStatsReportInterval = TDuration::Seconds(0);
         NDataShard::gDbStatsDataSizeResolution = 1;
         NDataShard::gDbStatsRowCountResolution = 1;
 

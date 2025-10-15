@@ -29,6 +29,7 @@ struct TTestEnvSettings {
     bool EnableTableCacheModes = false;
     TMaybe<bool> EnableRealSystemViewPaths;
     NKikimrProto::TAuthConfig AuthConfig = {};
+    TMaybe<ui32> DataShardStatsReportIntervalSeconds;
 };
 
 class TTestEnv {

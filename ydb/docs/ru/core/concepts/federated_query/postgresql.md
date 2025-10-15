@@ -96,4 +96,4 @@ SELECT * FROM postgresql_datasource.<table_name>
 |`character varying`|`Optional<Utf8>`|[Правила сортировки](https://www.postgresql.org/docs/current/collation.html) по умолчанию.|
 |`text`|`Optional<Utf8>`|[Правила сортировки](https://www.postgresql.org/docs/current/collation.html) по умолчанию.|
 |`json`|`Optional<Json>`||
-|`numeric(p,s)`|`Optional<Decimal(p,s)>`|`p` (precision) - общее количество знаков в числе, `s` (scale) - количество знаков после запятой.  «Неограниченные» (unconstrained) числа (`numeric` без параметров) отображаются в `Optional<Decimal(35, 0)>`. Не поддерживаются типы `numeric` с `p > 35` и `s < 0`.|
+|`numeric(p,s)`|`Optional<Decimal(p,s)>`|`p` (precision) - общее количество знаков в числе, `s` (scale) - количество знаков после запятой.  «Неограниченные» (unconstrained) числа (`numeric` без параметров) отображаются в `Optional<Decimal(35, 0)>`. Не поддерживаются типы `numeric` с `p > 35` или `s < 0`.|

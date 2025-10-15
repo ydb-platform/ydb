@@ -23,7 +23,8 @@ public:
 
 public:
     TTestEnv(ui32 staticNodes = 1, ui32 dynamicNodes = 4, ui32 storagePools = 0,
-        ui32 pqTabletsN = 0, bool enableSVP = false, bool disableSources = false);
+        ui32 pqTabletsN = 0, bool enableSVP = false, bool disableSources = false,
+        std::optional<ui32> dataShardStatsReportIntervalSeconds = std::nullopt);
 
     template<typename... Args>
     TTestEnv(TDisableSourcesTag, Args&&... args)

@@ -144,7 +144,7 @@ Y_UNIT_TEST_SUITE(YdbTableSplit) {
         Cerr << "Table has " << shardsBefore << " shards" << Endl;
         UNIT_ASSERT_VALUES_EQUAL(shardsBefore, 1);
 
-        NDataShard::gDbStatsReportInterval = TDuration::Seconds(0);
+        server.Server_->GetRuntime()->GetAppData().DataShardConfig.SetStatsReportIntervalSeconds(0);
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_INFO);
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_INFO);
 
@@ -282,7 +282,7 @@ Y_UNIT_TEST_SUITE(YdbTableSplit) {
         Cerr << "Table has " << shardsBefore << " shards" << Endl;
         UNIT_ASSERT_VALUES_EQUAL(shardsBefore, 1);
 
-        NDataShard::gDbStatsReportInterval = TDuration::Seconds(0);
+        server.Server_->GetRuntime()->GetAppData().DataShardConfig.SetStatsReportIntervalSeconds(0);
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_INFO);
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_INFO);
 
@@ -429,7 +429,6 @@ Y_UNIT_TEST_SUITE(YdbTableSplit) {
     Y_UNIT_TEST(RenameTablesAndSplit) {
         // KIKIMR-14636
 
-        NDataShard::gDbStatsReportInterval = TDuration::Seconds(2);
         NDataShard::gDbStatsDataSizeResolution = 10;
         NDataShard::gDbStatsRowCountResolution = 10;
 
@@ -437,7 +436,10 @@ Y_UNIT_TEST_SUITE(YdbTableSplit) {
         TIntrusivePtr<TTestTimeProvider> testTimeProvider = new TTestTimeProvider(originalTimeProvider);
         NKikimr::TAppData::TimeProvider = testTimeProvider;
 
-        TKikimrWithGrpcAndRootSchemaNoSystemViews server;
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableDataShardConfig()->SetStatsReportIntervalSeconds(2);
+
+        TKikimrWithGrpcAndRootSchemaNoSystemViews server(appConfig);
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_NOTICE);
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::GRPC_SERVER, NActors::NLog::PRI_NOTICE);
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::TX_PROXY, NActors::NLog::PRI_NOTICE);

@@ -67,8 +67,11 @@ inline constexpr const char* BuildSuffix1 = "1build";
 
 // Prefix table
 inline constexpr const char* PrefixTable = "indexImplPrefixTable";
+inline constexpr const char* IdColumnSequence = "__ydb_id_sequence";
 
 inline constexpr const int DefaultKMeansRounds = 3;
+
+inline constexpr TClusterId PostingParentFlag = (1ull << 63ull);
 
 bool HasPostingParentFlag(TClusterId parent);
 void EnsureNoPostingParentFlag(TClusterId parent);

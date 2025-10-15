@@ -73,7 +73,9 @@ void ProcTitleInit(int argc, const char* argv[])
 
 void SetProcTitle(const char* title)
 {
-    if (!g_OriginalArgv) return;
+    if (!g_OriginalArgv) {
+        return;
+    }
 
     char* p = g_OriginalArgv[0];
     p += strlcpy(p, "yqlworker: ", g_OriginalArgvLast - p);
@@ -88,7 +90,9 @@ void SetProcTitle(const char* title)
 
 void AddProcTitleSuffix(const char* suffix)
 {
-    if (!g_OriginalArgv) return;
+    if (!g_OriginalArgv) {
+        return;
+    }
 
     char* p = g_OriginalArgv[0];
     p += strlcat(p, " ", g_OriginalArgvLast - p);

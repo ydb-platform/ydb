@@ -336,6 +336,8 @@ public:
 
     const NTransactionClient::ITimestampProviderPtr& GetTimestampProvider() override;
 
+    const TClientOptions& GetOptions() override;
+
     ITransactionPtr AttachTransaction(NTransactionClient::TTransactionId, const TTransactionAttachOptions&) override;
 
     IPrerequisitePtr AttachPrerequisite(NPrerequisiteClient::TPrerequisiteId, const TPrerequisiteAttachOptions&) override;
@@ -484,7 +486,7 @@ public:
     UNIMPLEMENTED_METHOD(TFuture<TListQueriesResult>, ListQueries, (const TListQueriesOptions&));
     UNIMPLEMENTED_METHOD(TFuture<void>, AlterQuery, (NQueryTrackerClient::TQueryId, const TAlterQueryOptions&));
     UNIMPLEMENTED_METHOD(TFuture<TGetQueryTrackerInfoResult>, GetQueryTrackerInfo, (const TGetQueryTrackerInfoOptions&));
-    UNIMPLEMENTED_METHOD(TFuture<TGetDeclaredParametersInfoResult>, GetDeclaredParametersInfo, (const TGetDeclaredParametersInfoOptions&));
+    UNIMPLEMENTED_METHOD(TFuture<TGetQueryDeclaredParametersInfoResult>, GetQueryDeclaredParametersInfo, (const TGetQueryDeclaredParametersInfoOptions&));
     UNIMPLEMENTED_METHOD(TFuture<NBundleControllerClient::TBundleConfigDescriptorPtr>, GetBundleConfig, (const std::string&, const NBundleControllerClient::TGetBundleConfigOptions&));
     UNIMPLEMENTED_METHOD(TFuture<void>, SetBundleConfig, (const std::string&, const NBundleControllerClient::TBundleTargetConfigPtr&, const NBundleControllerClient::TSetBundleConfigOptions&));
     UNIMPLEMENTED_METHOD(TFuture<ITableReaderPtr>, CreateTableReader, (const NYPath::TRichYPath&, const TTableReaderOptions&));
@@ -761,6 +763,12 @@ const NTransactionClient::ITimestampProviderPtr& TClient::GetTimestampProvider()
 {
     auto [client, _] = GetActiveClient();
     return client->GetTimestampProvider();
+}
+
+const TClientOptions& TClient::GetOptions()
+{
+    auto [client, _] = GetActiveClient();
+    return client->GetOptions();
 }
 
 ITransactionPtr TClient::AttachTransaction(

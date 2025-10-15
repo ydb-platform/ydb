@@ -108,7 +108,7 @@ struct TGetJobTraceOptions
     , public TMasterReadOptions
 {
     std::optional<NJobTrackerClient::TJobId> JobId;
-    std::optional<NScheduler::TJobTraceId> TraceId;
+    std::optional<NJobTrackerClient::TJobTraceId> TraceId;
     std::optional<i64> FromTime;
     std::optional<i64> ToTime;
     std::optional<i64> FromEventIndex;
@@ -233,6 +233,7 @@ struct TListJobsOptions
 {
     // NB(bystrovserg): Do not forget to add new options to continuation token serializer!
     NJobTrackerClient::TJobId JobCompetitionId;
+    NJobTrackerClient::TJobId MainJobId;
     std::optional<NJobTrackerClient::EJobType> Type;
     std::optional<NJobTrackerClient::EJobState> State;
     std::optional<std::string> Address;
@@ -410,6 +411,7 @@ struct TJob
     std::optional<bool> HasSpec;
     std::optional<bool> HasCompetitors;
     std::optional<bool> HasProbingCompetitors;
+    NJobTrackerClient::TJobId MainJobId;
     NJobTrackerClient::TJobId JobCompetitionId;
     NJobTrackerClient::TJobId ProbingJobCompetitionId;
     NYson::TYsonString Error;
@@ -425,6 +427,7 @@ struct TJob
     std::optional<TString> Pool;
     std::optional<TString> MonitoringDescriptor;
     std::optional<ui64> JobCookie;
+    std::optional<ui64> JobCookieGroupIndex;
     NYson::TYsonString ArchiveFeatures;
     std::optional<std::string> OperationIncarnation;
     std::optional<NScheduler::TAllocationId> AllocationId;
@@ -444,9 +447,9 @@ struct TJobTraceEvent
 {
     NJobTrackerClient::TOperationId OperationId;
     NJobTrackerClient::TJobId JobId;
-    NScheduler::TJobTraceId TraceId;
+    NJobTrackerClient::TJobTraceId TraceId;
     i64 EventIndex;
-    TString Event;
+    std::string Event;
     TInstant EventTime;
 };
 

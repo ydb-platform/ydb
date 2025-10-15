@@ -969,6 +969,13 @@ public:
         return Inner_->GetTableFilePath(std::move(options));
     }
 
+    NThreading::TFuture<TLayersSnapshotResult> SnapshotLayers(TSnapshotLayersOptions&& options) final {
+        if (QContext_.CanRead()) {
+            throw yexception() << "Can't replay SnapshotLayers";
+        }
+
+        return Inner_->SnapshotLayers(std::move(options));
+    }
 private:
     const IYtGateway::TPtr Inner_;
     const TQContext QContext_;

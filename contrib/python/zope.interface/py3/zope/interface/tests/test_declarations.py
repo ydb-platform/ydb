@@ -26,6 +26,7 @@ from __tests__.tests.test_interface import \
 # pylint:disable=inherit-non-class,too-many-lines,protected-access
 # pylint:disable=blacklisted-name,attribute-defined-outside-init
 
+IBar = InterfaceClass('IBar')
 IFoo = InterfaceClass('IFoo')
 
 
@@ -1373,9 +1374,8 @@ class TestProvidesClassRepr(unittest.TestCase):
         from zope.interface.declarations import alsoProvides
         from zope.interface.declarations import directlyProvides
         from __tests__.tests import dummy
+        from __tests__.tests.test_declarations import IBar
         from __tests__.tests.test_declarations import IFoo
-
-        IBar = InterfaceClass('IBar')
 
         orig_provides = dummy.__provides__  # pylint:disable=no-member
         del dummy.__provides__  # pylint:disable=no-member
@@ -1401,7 +1401,7 @@ class TestProvidesClassRepr(unittest.TestCase):
 
         # If we make this module also provide IFoo and IBar, then the repr
         # lists both names.
-        my_module = sys.modules[__name__]
+        from __tests__.tests import test_declarations as my_module
         assert not hasattr(my_module, '__provides__')
 
         directlyProvides(my_module, IFoo, IBar)

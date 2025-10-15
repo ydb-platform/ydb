@@ -1111,6 +1111,7 @@ TFuture<TSelectRowsResult> TClientBase::SelectRows(
     req->set_verbose_logging(options.VerboseLogging);
     req->set_new_range_inference(options.NewRangeInference);
     YT_OPTIONAL_SET_PROTO(req, execution_backend, options.ExecutionBackend);
+    YT_OPTIONAL_SET_PROTO(req, optimization_level, options.OptimizationLevel);
     req->set_enable_code_cache(options.EnableCodeCache);
     req->set_memory_limit_per_node(options.MemoryLimitPerNode);
     ToProto(req->mutable_suppressable_access_tracking_options(), options);
@@ -1120,7 +1121,7 @@ TFuture<TSelectRowsResult> TClientBase::SelectRows(
     ToProto(req->mutable_versioned_read_options(), options.VersionedReadOptions);
     YT_OPTIONAL_SET_PROTO(req, use_lookup_cache, options.UseLookupCache);
     req->set_expression_builder_version(options.ExpressionBuilderVersion);
-    req->set_use_order_by_in_join_subqueries(options.UseOrderByInJoinSubqueries);
+    YT_OPTIONAL_SET_PROTO(req, use_order_by_in_join_subqueries, options.UseOrderByInJoinSubqueries);
     YT_OPTIONAL_SET_PROTO(req, statistics_aggregation, options.StatisticsAggregation);
     req->set_read_from(ToProto(options.ReadFrom));
 

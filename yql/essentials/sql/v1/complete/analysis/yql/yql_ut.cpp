@@ -25,7 +25,7 @@ public:
         Settings_.SyntaxVersion = 1;
 
         Lexers_.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
-        Parsers_.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory();
+        Parsers_.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory(/*isAmbiguityError=*/true);
     }
 
     NYql::TAstParseResult Parse(const TString& query) {
@@ -52,8 +52,8 @@ TYqlContext Analyze(const TString& query) {
 
 Y_UNIT_TEST_SUITE(YqlAnalysisTests) {
 
-    Y_UNIT_TEST(NamesAreCollected) {
-        TString input = R"(
+Y_UNIT_TEST(NamesAreCollected) {
+    TString input = R"(
             USE yt:socrates;
 
             SELECT * FROM Input;
@@ -63,12 +63,12 @@ Y_UNIT_TEST_SUITE(YqlAnalysisTests) {
             INSERT INTO plato.Input (id) VALUES (1);
         )";
 
-        THashMap<TString, THashSet<TString>> expected = {
-            {"socrates", {"Input", "Newbie"}},
-            {"plato", {"Input"}},
-        };
+    THashMap<TString, THashSet<TString>> expected = {
+        {"socrates", {"Input", "Newbie"}},
+        {"plato", {"Input"}},
+    };
 
-        UNIT_ASSERT_VALUES_EQUAL(Analyze(input).TablesByCluster, expected);
-    }
+    UNIT_ASSERT_VALUES_EQUAL(Analyze(input).TablesByCluster, expected);
+}
 
 } // Y_UNIT_TEST_SUITE(YqlAnalysisTests)

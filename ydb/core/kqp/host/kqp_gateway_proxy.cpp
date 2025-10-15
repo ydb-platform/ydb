@@ -2590,6 +2590,10 @@ public:
                 consistency->Serialize(*config.MutableConsistencySettings()->MutableGlobal());
             }
 
+            if (params.GetDatabase().empty()) {
+                return MakeFuture(ResultFromError<TGenericResult>("Database is not specified"));
+            }
+
             auto& targets = *config.MutableSpecific();
             for (const auto& [src, dst] : settings.Targets) {
                 auto& target = *targets.AddTargets();
@@ -2665,6 +2669,10 @@ public:
                     params.SetEndpoint(TString{parseResult.Endpoint});
                     params.SetDatabase(TString{parseResult.Database});
                     params.SetEnableSsl(parseResult.EnableSsl);
+
+                    if (params.GetDatabase().empty()) {
+                        return MakeFuture(ResultFromError<TGenericResult>("Database is not specified"));
+                    }
                 }
                 if (const auto& endpoint = settings.Settings.Endpoint) {
                     params.SetEndpoint(*endpoint);
@@ -2797,6 +2805,10 @@ public:
                 params.SetCaCert(*caCert);
             }
 
+            if (!params.GetEndpoint().empty() && params.GetDatabase().empty()) {
+                return MakeFuture(ResultFromError<TGenericResult>("Database is not specified"));
+            }
+
             {
                 const auto& [src, dst, lambda] = settings.Target;
                 auto& target = *config.MutableTransferSpecific()->MutableTarget();
@@ -2900,6 +2912,10 @@ public:
                     params.SetEndpoint(TString{parseResult.Endpoint});
                     params.SetDatabase(TString{parseResult.Database});
                     params.SetEnableSsl(parseResult.EnableSsl);
+
+                    if (params.GetDatabase().empty()) {
+                        return MakeFuture(ResultFromError<TGenericResult>("Database is not specified"));
+                    }
                 }
                 if (const auto& endpoint = settings.Settings.Endpoint) {
                     params.SetEndpoint(*endpoint);

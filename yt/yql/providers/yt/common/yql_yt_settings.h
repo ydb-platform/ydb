@@ -209,6 +209,7 @@ public:
     NCommon::TConfSetting<TString, Dynamic> PublishedAutoMerge;
     NCommon::TConfSetting<TString, Dynamic> TemporaryAutoMerge;
     NCommon::TConfSetting<TVector<TString>, Dynamic> LayerPaths;
+    NCommon::TConfSetting<THashMap<TString, TVector<TString>>, StaticPerCluster> LayerCaches;
     NCommon::TConfSetting<TString, Dynamic> DockerImage;
     NCommon::TConfSetting<NYT::TNode, Dynamic> JobEnv;
     NCommon::TConfSetting<NYT::TNode, Dynamic> OperationSpec;

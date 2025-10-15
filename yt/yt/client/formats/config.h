@@ -425,6 +425,9 @@ struct TArrowFormatConfig
     //! Return the timezone as index.
     bool EnableTzIndex;
 
+    //! Write YSON-encoded complex types as Arrow types.
+    bool EnableComplexTypes;
+
     REGISTER_YSON_STRUCT(TArrowFormatConfig);
 
     static void Register(TRegistrar registrar);

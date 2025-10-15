@@ -8,10 +8,10 @@
 
 #include <yql/essentials/public/decimal/yql_decimal.h>
 
-#include <util/system/yassert.h> // FAIL, VERIFY_DEBUG
-#include <util/generic/utility.h> // Min, Max
+#include <util/system/yassert.h>     // FAIL, VERIFY_DEBUG
+#include <util/generic/utility.h>    // Min, Max
 #include <util/generic/yexception.h> // Y_ENSURE
-#include <util/system/compiler.h> // Y_FORCE_INLINE
+#include <util/system/compiler.h>    // Y_FORCE_INLINE
 
 #include <algorithm>
 #include <type_traits>
@@ -26,7 +26,7 @@ class TUnboxedValuePod;
 class TOpaqueListRepresentation;
 class IValueBuilder;
 
-enum class EFetchStatus : ui32 {
+enum class EFetchStatus: ui32 {
     Ok,
     Finish,
     Yield
@@ -48,9 +48,9 @@ UDF_ASSERT_TYPE_SIZE(IApplyContext, 8);
 class IBoxedValue;
 using IBoxedValuePtr = TRefCountedPtr<IBoxedValue>;
 
-class IBoxedValue1
-{
-friend struct TBoxedValueAccessor;
+class IBoxedValue1 {
+    friend struct TBoxedValueAccessor;
+
 public:
     inline bool IsCompatibleTo(ui16 compatibilityVersion) const {
         return AbiCompatibility_ >= compatibilityVersion;
@@ -79,7 +79,7 @@ private:
     // Dict accessors
     virtual ui64 GetDictLength() const = 0;
     virtual TUnboxedValue GetDictIterator() const = 0;
-    virtual TUnboxedValue GetKeysIterator() const = 0; // May return empty.
+    virtual TUnboxedValue GetKeysIterator() const = 0;     // May return empty.
     virtual TUnboxedValue GetPayloadsIterator() const = 0; // May return empty.
     virtual bool Contains(const TUnboxedValuePod& key) const = 0;
     virtual TUnboxedValue Lookup(const TUnboxedValuePod& key) const = 0;
@@ -133,8 +133,9 @@ private:
 };
 
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 3)
-class IBoxedValue2 : public IBoxedValue1 {
-friend struct TBoxedValueAccessor;
+class IBoxedValue2: public IBoxedValue1 {
+    friend struct TBoxedValueAccessor;
+
 private:
     // Save/Load state
     virtual ui32 GetTraverseCount() const = 0;
@@ -145,24 +146,27 @@ private:
 #endif
 
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 11)
-class IBoxedValue3 : public IBoxedValue2 {
-friend struct TBoxedValueAccessor;
+class IBoxedValue3: public IBoxedValue2 {
+    friend struct TBoxedValueAccessor;
+
 private:
     virtual void Push(const TUnboxedValuePod& value) = 0;
 };
 #endif
 
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 12)
-class IBoxedValue4 : public IBoxedValue3 {
-friend struct TBoxedValueAccessor;
+class IBoxedValue4: public IBoxedValue3 {
+    friend struct TBoxedValueAccessor;
+
 private:
     virtual bool IsSortedDict() const = 0;
 };
 #endif
 
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 19)
-class IBoxedValue5 : public IBoxedValue4 {
-friend struct TBoxedValueAccessor;
+class IBoxedValue5: public IBoxedValue4 {
+    friend struct TBoxedValueAccessor;
+
 private:
     virtual void Unused1() = 0;
     virtual void Unused2() = 0;
@@ -174,53 +178,55 @@ private:
 #endif
 
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 30)
-class IBoxedValue6 : public IBoxedValue5 {
-friend struct TBoxedValueAccessor;
+class IBoxedValue6: public IBoxedValue5 {
+    friend struct TBoxedValueAccessor;
+
 private:
     virtual EFetchStatus WideFetch(TUnboxedValue* result, ui32 width) = 0;
 };
 #endif
 
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 36)
-class IBoxedValue7 : public IBoxedValue6 {
-friend struct TBoxedValueAccessor;
+class IBoxedValue7: public IBoxedValue6 {
+    friend struct TBoxedValueAccessor;
+
 private:
     virtual bool Load2(const TUnboxedValue& state) = 0;
 };
 #endif
 
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 36)
-class IBoxedValue : public IBoxedValue7 {
+class IBoxedValue: public IBoxedValue7 {
 protected:
     IBoxedValue();
 };
 #elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 30)
-class IBoxedValue : public IBoxedValue6 {
+class IBoxedValue: public IBoxedValue6 {
 protected:
     IBoxedValue();
 };
 #elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 19)
-class IBoxedValue : public IBoxedValue5 {
+class IBoxedValue: public IBoxedValue5 {
 protected:
     IBoxedValue();
 };
 #elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 12)
-class IBoxedValue : public IBoxedValue4 {
+class IBoxedValue: public IBoxedValue4 {
 protected:
     IBoxedValue();
 };
 #elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 11)
-class IBoxedValue : public IBoxedValue3 {
+class IBoxedValue: public IBoxedValue3 {
 protected:
     IBoxedValue();
 };
 #elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 3)
-class IBoxedValue : public IBoxedValue2 {
+class IBoxedValue: public IBoxedValue2 {
 protected:
     IBoxedValue();
 };
 #else
-class IBoxedValue : public IBoxedValue1 {
+class IBoxedValue: public IBoxedValue1 {
 protected:
     IBoxedValue();
 };
@@ -233,302 +239,304 @@ UDF_ASSERT_TYPE_SIZE(IBoxedValuePtr, 8);
 ///////////////////////////////////////////////////////////////////////////////
 // TBoxedValueAccessor
 ///////////////////////////////////////////////////////////////////////////////
-struct TBoxedValueAccessor
-{
+struct TBoxedValueAccessor {
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 36)
-
-#define METHOD_MAP(xx) \
-    xx(HasFastListLength) \
-    xx(GetListLength) \
-    xx(GetEstimatedListLength) \
-    xx(GetListIterator) \
-    xx(GetListRepresentation) \
-    xx(ReverseListImpl) \
-    xx(SkipListImpl) \
-    xx(TakeListImpl) \
-    xx(ToIndexDictImpl) \
-    xx(GetDictLength) \
-    xx(GetDictIterator) \
-    xx(GetKeysIterator) \
-    xx(GetPayloadsIterator) \
-    xx(Contains) \
-    xx(Lookup) \
-    xx(GetElement) \
-    xx(GetElements) \
-    xx(Run) \
-    xx(GetResourceTag) \
-    xx(GetResource) \
-    xx(HasListItems) \
-    xx(HasDictItems) \
-    xx(GetVariantIndex) \
-    xx(GetVariantItem) \
-    xx(Fetch) \
-    xx(Skip) \
-    xx(Next) \
-    xx(NextPair) \
-    xx(Apply) \
-    xx(GetTraverseCount) \
-    xx(GetTraverseItem) \
-    xx(Save) \
-    xx(Load) \
-    xx(Push) \
-    xx(IsSortedDict) \
-    xx(Unused1) \
-    xx(Unused2) \
-    xx(Unused3) \
-    xx(Unused4) \
-    xx(Unused5) \
-    xx(Unused6) \
-    xx(WideFetch) \
-    xx(Load2)
+    // clang-format off
+    #define METHOD_MAP(xx)          \
+        xx(HasFastListLength)       \
+        xx(GetListLength)           \
+        xx(GetEstimatedListLength)  \
+        xx(GetListIterator)         \
+        xx(GetListRepresentation)   \
+        xx(ReverseListImpl)         \
+        xx(SkipListImpl)            \
+        xx(TakeListImpl)            \
+        xx(ToIndexDictImpl)         \
+        xx(GetDictLength)           \
+        xx(GetDictIterator)         \
+        xx(GetKeysIterator)         \
+        xx(GetPayloadsIterator)     \
+        xx(Contains)                \
+        xx(Lookup)                  \
+        xx(GetElement)              \
+        xx(GetElements)             \
+        xx(Run)                     \
+        xx(GetResourceTag)          \
+        xx(GetResource)             \
+        xx(HasListItems)            \
+        xx(HasDictItems)            \
+        xx(GetVariantIndex)         \
+        xx(GetVariantItem)          \
+        xx(Fetch)                   \
+        xx(Skip)                    \
+        xx(Next)                    \
+        xx(NextPair)                \
+        xx(Apply)                   \
+        xx(GetTraverseCount)        \
+        xx(GetTraverseItem)         \
+        xx(Save)                    \
+        xx(Load)                    \
+        xx(Push)                    \
+        xx(IsSortedDict)            \
+        xx(Unused1)                 \
+        xx(Unused2)                 \
+        xx(Unused3)                 \
+        xx(Unused4)                 \
+        xx(Unused5)                 \
+        xx(Unused6)                 \
+        xx(WideFetch)               \
+        xx(Load2)
+    // clang-format on
 
 #elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 30)
-
-#define METHOD_MAP(xx) \
-    xx(HasFastListLength) \
-    xx(GetListLength) \
-    xx(GetEstimatedListLength) \
-    xx(GetListIterator) \
-    xx(GetListRepresentation) \
-    xx(ReverseListImpl) \
-    xx(SkipListImpl) \
-    xx(TakeListImpl) \
-    xx(ToIndexDictImpl) \
-    xx(GetDictLength) \
-    xx(GetDictIterator) \
-    xx(GetKeysIterator) \
-    xx(GetPayloadsIterator) \
-    xx(Contains) \
-    xx(Lookup) \
-    xx(GetElement) \
-    xx(GetElements) \
-    xx(Run) \
-    xx(GetResourceTag) \
-    xx(GetResource) \
-    xx(HasListItems) \
-    xx(HasDictItems) \
-    xx(GetVariantIndex) \
-    xx(GetVariantItem) \
-    xx(Fetch) \
-    xx(Skip) \
-    xx(Next) \
-    xx(NextPair) \
-    xx(Apply) \
-    xx(GetTraverseCount) \
-    xx(GetTraverseItem) \
-    xx(Save) \
-    xx(Load) \
-    xx(Push) \
-    xx(IsSortedDict) \
-    xx(Unused1) \
-    xx(Unused2) \
-    xx(Unused3) \
-    xx(Unused4) \
-    xx(Unused5) \
-    xx(Unused6) \
-    xx(WideFetch) \
+    // clang-format off
+    #define METHOD_MAP(xx)          \
+        xx(HasFastListLength)       \
+        xx(GetListLength)           \
+        xx(GetEstimatedListLength)  \
+        xx(GetListIterator)         \
+        xx(GetListRepresentation)   \
+        xx(ReverseListImpl)         \
+        xx(SkipListImpl)            \
+        xx(TakeListImpl)            \
+        xx(ToIndexDictImpl)         \
+        xx(GetDictLength)           \
+        xx(GetDictIterator)         \
+        xx(GetKeysIterator)         \
+        xx(GetPayloadsIterator)     \
+        xx(Contains)                \
+        xx(Lookup)                  \
+        xx(GetElement)              \
+        xx(GetElements)             \
+        xx(Run)                     \
+        xx(GetResourceTag)          \
+        xx(GetResource)             \
+        xx(HasListItems)            \
+        xx(HasDictItems)            \
+        xx(GetVariantIndex)         \
+        xx(GetVariantItem)          \
+        xx(Fetch)                   \
+        xx(Skip)                    \
+        xx(Next)                    \
+        xx(NextPair)                \
+        xx(Apply)                   \
+        xx(GetTraverseCount)        \
+        xx(GetTraverseItem)         \
+        xx(Save)                    \
+        xx(Load)                    \
+        xx(Push)                    \
+        xx(IsSortedDict)            \
+        xx(Unused1)                 \
+        xx(Unused2)                 \
+        xx(Unused3)                 \
+        xx(Unused4)                 \
+        xx(Unused5)                 \
+        xx(Unused6)                 \
+        xx(WideFetch)
+    // clang-format on
 
 #elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 19)
-
-#define METHOD_MAP(xx) \
-    xx(HasFastListLength) \
-    xx(GetListLength) \
-    xx(GetEstimatedListLength) \
-    xx(GetListIterator) \
-    xx(GetListRepresentation) \
-    xx(ReverseListImpl) \
-    xx(SkipListImpl) \
-    xx(TakeListImpl) \
-    xx(ToIndexDictImpl) \
-    xx(GetDictLength) \
-    xx(GetDictIterator) \
-    xx(GetKeysIterator) \
-    xx(GetPayloadsIterator) \
-    xx(Contains) \
-    xx(Lookup) \
-    xx(GetElement) \
-    xx(GetElements) \
-    xx(Run) \
-    xx(GetResourceTag) \
-    xx(GetResource) \
-    xx(HasListItems) \
-    xx(HasDictItems) \
-    xx(GetVariantIndex) \
-    xx(GetVariantItem) \
-    xx(Fetch) \
-    xx(Skip) \
-    xx(Next) \
-    xx(NextPair) \
-    xx(Apply) \
-    xx(GetTraverseCount) \
-    xx(GetTraverseItem) \
-    xx(Save) \
-    xx(Load) \
-    xx(Push) \
-    xx(IsSortedDict) \
-    xx(Unused1) \
-    xx(Unused2) \
-    xx(Unused3) \
-    xx(Unused4) \
-    xx(Unused5) \
-    xx(Unused6)
+    // clang-format off
+    #define METHOD_MAP(xx)          \
+        xx(HasFastListLength)       \
+        xx(GetListLength)           \
+        xx(GetEstimatedListLength)  \
+        xx(GetListIterator)         \
+        xx(GetListRepresentation)   \
+        xx(ReverseListImpl)         \
+        xx(SkipListImpl)            \
+        xx(TakeListImpl)            \
+        xx(ToIndexDictImpl)         \
+        xx(GetDictLength)           \
+        xx(GetDictIterator)         \
+        xx(GetKeysIterator)         \
+        xx(GetPayloadsIterator)     \
+        xx(Contains)                \
+        xx(Lookup)                  \
+        xx(GetElement)              \
+        xx(GetElements)             \
+        xx(Run)                     \
+        xx(GetResourceTag)          \
+        xx(GetResource)             \
+        xx(HasListItems)            \
+        xx(HasDictItems)            \
+        xx(GetVariantIndex)         \
+        xx(GetVariantItem)          \
+        xx(Fetch)                   \
+        xx(Skip)                    \
+        xx(Next)                    \
+        xx(NextPair)                \
+        xx(Apply)                   \
+        xx(GetTraverseCount)        \
+        xx(GetTraverseItem)         \
+        xx(Save)                    \
+        xx(Load)                    \
+        xx(Push)                    \
+        xx(IsSortedDict)            \
+        xx(Unused1)                 \
+        xx(Unused2)                 \
+        xx(Unused3)                 \
+        xx(Unused4)                 \
+        xx(Unused5)                 \
+        xx(Unused6)
+    // clang-format on
 
 #elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 12)
-
-#define METHOD_MAP(xx) \
-    xx(HasFastListLength) \
-    xx(GetListLength) \
-    xx(GetEstimatedListLength) \
-    xx(GetListIterator) \
-    xx(GetListRepresentation) \
-    xx(ReverseListImpl) \
-    xx(SkipListImpl) \
-    xx(TakeListImpl) \
-    xx(ToIndexDictImpl) \
-    xx(GetDictLength) \
-    xx(GetDictIterator) \
-    xx(GetKeysIterator) \
-    xx(GetPayloadsIterator) \
-    xx(Contains) \
-    xx(Lookup) \
-    xx(GetElement) \
-    xx(GetElements) \
-    xx(Run) \
-    xx(GetResourceTag) \
-    xx(GetResource) \
-    xx(HasListItems) \
-    xx(HasDictItems) \
-    xx(GetVariantIndex) \
-    xx(GetVariantItem) \
-    xx(Fetch) \
-    xx(Skip) \
-    xx(Next) \
-    xx(NextPair) \
-    xx(Apply) \
-    xx(GetTraverseCount) \
-    xx(GetTraverseItem) \
-    xx(Save) \
-    xx(Load) \
-    xx(Push) \
-    xx(IsSortedDict)
-
+    // clang-format off
+    #define METHOD_MAP(xx)          \
+        xx(HasFastListLength)       \
+        xx(GetListLength)           \
+        xx(GetEstimatedListLength)  \
+        xx(GetListIterator)         \
+        xx(GetListRepresentation)   \
+        xx(ReverseListImpl)         \
+        xx(SkipListImpl)            \
+        xx(TakeListImpl)            \
+        xx(ToIndexDictImpl)         \
+        xx(GetDictLength)           \
+        xx(GetDictIterator)         \
+        xx(GetKeysIterator)         \
+        xx(GetPayloadsIterator)     \
+        xx(Contains)                \
+        xx(Lookup)                  \
+        xx(GetElement)              \
+        xx(GetElements)             \
+        xx(Run)                     \
+        xx(GetResourceTag)          \
+        xx(GetResource)             \
+        xx(HasListItems)            \
+        xx(HasDictItems)            \
+        xx(GetVariantIndex)         \
+        xx(GetVariantItem)          \
+        xx(Fetch)                   \
+        xx(Skip)                    \
+        xx(Next)                    \
+        xx(NextPair)                \
+        xx(Apply)                   \
+        xx(GetTraverseCount)        \
+        xx(GetTraverseItem)         \
+        xx(Save)                    \
+        xx(Load)                    \
+        xx(Push)                    \
+        xx(IsSortedDict)
+    // clang-format on
 #elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 11)
-
-#define METHOD_MAP(xx) \
-    xx(HasFastListLength) \
-    xx(GetListLength) \
-    xx(GetEstimatedListLength) \
-    xx(GetListIterator) \
-    xx(GetListRepresentation) \
-    xx(ReverseListImpl) \
-    xx(SkipListImpl) \
-    xx(TakeListImpl) \
-    xx(ToIndexDictImpl) \
-    xx(GetDictLength) \
-    xx(GetDictIterator) \
-    xx(GetKeysIterator) \
-    xx(GetPayloadsIterator) \
-    xx(Contains) \
-    xx(Lookup) \
-    xx(GetElement) \
-    xx(GetElements) \
-    xx(Run) \
-    xx(GetResourceTag) \
-    xx(GetResource) \
-    xx(HasListItems) \
-    xx(HasDictItems) \
-    xx(GetVariantIndex) \
-    xx(GetVariantItem) \
-    xx(Fetch) \
-    xx(Skip) \
-    xx(Next) \
-    xx(NextPair) \
-    xx(Apply) \
-    xx(GetTraverseCount) \
-    xx(GetTraverseItem) \
-    xx(Save) \
-    xx(Load) \
-    xx(Push)
-
+    // clang-format off
+    #define METHOD_MAP(xx)          \
+        xx(HasFastListLength)       \
+        xx(GetListLength)           \
+        xx(GetEstimatedListLength)  \
+        xx(GetListIterator)         \
+        xx(GetListRepresentation)   \
+        xx(ReverseListImpl)         \
+        xx(SkipListImpl)            \
+        xx(TakeListImpl)            \
+        xx(ToIndexDictImpl)         \
+        xx(GetDictLength)           \
+        xx(GetDictIterator)         \
+        xx(GetKeysIterator)         \
+        xx(GetPayloadsIterator)     \
+        xx(Contains)                \
+        xx(Lookup)                  \
+        xx(GetElement)              \
+        xx(GetElements)             \
+        xx(Run)                     \
+        xx(GetResourceTag)          \
+        xx(GetResource)             \
+        xx(HasListItems)            \
+        xx(HasDictItems)            \
+        xx(GetVariantIndex)         \
+        xx(GetVariantItem)          \
+        xx(Fetch)                   \
+        xx(Skip)                    \
+        xx(Next)                    \
+        xx(NextPair)                \
+        xx(Apply)                   \
+        xx(GetTraverseCount)        \
+        xx(GetTraverseItem)         \
+        xx(Save)                    \
+        xx(Load)                    \
+        xx(Push)
+    // clang-format on
 #elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 3)
-
-#define METHOD_MAP(xx) \
-    xx(HasFastListLength) \
-    xx(GetListLength) \
-    xx(GetEstimatedListLength) \
-    xx(GetListIterator) \
-    xx(GetListRepresentation) \
-    xx(ReverseListImpl) \
-    xx(SkipListImpl) \
-    xx(TakeListImpl) \
-    xx(ToIndexDictImpl) \
-    xx(GetDictLength) \
-    xx(GetDictIterator) \
-    xx(GetKeysIterator) \
-    xx(GetPayloadsIterator) \
-    xx(Contains) \
-    xx(Lookup) \
-    xx(GetElement) \
-    xx(GetElements) \
-    xx(Run) \
-    xx(GetResourceTag) \
-    xx(GetResource) \
-    xx(HasListItems) \
-    xx(HasDictItems) \
-    xx(GetVariantIndex) \
-    xx(GetVariantItem) \
-    xx(Fetch) \
-    xx(Skip) \
-    xx(Next) \
-    xx(NextPair) \
-    xx(Apply) \
-    xx(GetTraverseCount) \
-    xx(GetTraverseItem) \
-    xx(Save) \
-    xx(Load)
-
+    // clang-format off
+    #define METHOD_MAP(xx)          \
+        xx(HasFastListLength)       \
+        xx(GetListLength)           \
+        xx(GetEstimatedListLength)  \
+        xx(GetListIterator)         \
+        xx(GetListRepresentation)   \
+        xx(ReverseListImpl)         \
+        xx(SkipListImpl)            \
+        xx(TakeListImpl)            \
+        xx(ToIndexDictImpl)         \
+        xx(GetDictLength)           \
+        xx(GetDictIterator)         \
+        xx(GetKeysIterator)         \
+        xx(GetPayloadsIterator)     \
+        xx(Contains)                \
+        xx(Lookup)                  \
+        xx(GetElement)              \
+        xx(GetElements)             \
+        xx(Run)                     \
+        xx(GetResourceTag)          \
+        xx(GetResource)             \
+        xx(HasListItems)            \
+        xx(HasDictItems)            \
+        xx(GetVariantIndex)         \
+        xx(GetVariantItem)          \
+        xx(Fetch)                   \
+        xx(Skip)                    \
+        xx(Next)                    \
+        xx(NextPair)                \
+        xx(Apply)                   \
+        xx(GetTraverseCount)        \
+        xx(GetTraverseItem)         \
+        xx(Save)                    \
+        xx(Load)
+    // clang-format on
 #else
-
-#define METHOD_MAP(xx) \
-    xx(HasFastListLength) \
-    xx(GetListLength) \
-    xx(GetEstimatedListLength) \
-    xx(GetListIterator) \
-    xx(GetListRepresentation) \
-    xx(ReverseListImpl) \
-    xx(SkipListImpl) \
-    xx(TakeListImpl) \
-    xx(ToIndexDictImpl) \
-    xx(GetDictLength) \
-    xx(GetDictIterator) \
-    xx(GetKeysIterator) \
-    xx(GetPayloadsIterator) \
-    xx(Contains) \
-    xx(Lookup) \
-    xx(GetElement) \
-    xx(GetElements) \
-    xx(Run) \
-    xx(GetResourceTag) \
-    xx(GetResource) \
-    xx(HasListItems) \
-    xx(HasDictItems) \
-    xx(GetVariantIndex) \
-    xx(GetVariantItem) \
-    xx(Fetch) \
-    xx(Skip) \
-    xx(Next) \
-    xx(NextPair) \
-    xx(Apply)
-
+    // clang-format off
+    #define METHOD_MAP(xx)          \
+        xx(HasFastListLength)       \
+        xx(GetListLength)           \
+        xx(GetEstimatedListLength)  \
+        xx(GetListIterator)         \
+        xx(GetListRepresentation)   \
+        xx(ReverseListImpl)         \
+        xx(SkipListImpl)            \
+        xx(TakeListImpl)            \
+        xx(ToIndexDictImpl)         \
+        xx(GetDictLength)           \
+        xx(GetDictIterator)         \
+        xx(GetKeysIterator)         \
+        xx(GetPayloadsIterator)     \
+        xx(Contains)                \
+        xx(Lookup)                  \
+        xx(GetElement)              \
+        xx(GetElements)             \
+        xx(Run)                     \
+        xx(GetResourceTag)          \
+        xx(GetResource)             \
+        xx(HasListItems)            \
+        xx(HasDictItems)            \
+        xx(GetVariantIndex)         \
+        xx(GetVariantItem)          \
+        xx(Fetch)                   \
+        xx(Skip)                    \
+        xx(Next)                    \
+        xx(NextPair)                \
+        xx(Apply)
+    // clang-format on
 #endif
 
-    enum class EMethod : ui32 {
+    enum class EMethod: ui32 {
 #define MAP_HANDLER(xx) xx,
         METHOD_MAP(MAP_HANDLER)
 #undef MAP_HANDLER
     };
 
-    template<typename Method>
+    template <typename Method>
     static uintptr_t GetMethodPtr(Method method) {
         uintptr_t ret;
         memcpy(&ret, &method, sizeof(uintptr_t));
@@ -537,7 +545,9 @@ struct TBoxedValueAccessor
 
     static uintptr_t GetMethodPtr(EMethod method) {
         switch (method) {
-#define MAP_HANDLER(xx) case EMethod::xx: return GetMethodPtr(&IBoxedValue::xx);
+#define MAP_HANDLER(xx) \
+    case EMethod::xx:   \
+        return GetMethodPtr(&IBoxedValue::xx);
             METHOD_MAP(MAP_HANDLER)
 #undef MAP_HANDLER
         }
@@ -545,7 +555,8 @@ struct TBoxedValueAccessor
         Y_ABORT("unknown method");
     }
 
-    template<EMethod Method> static uintptr_t GetMethodPtr();
+    template <EMethod Method>
+    static uintptr_t GetMethodPtr();
 
     // List accessors
     static inline bool HasFastListLength(const IBoxedValue& value);
@@ -621,7 +632,11 @@ struct TBoxedValueAccessor
 #endif
 };
 
-#define MAP_HANDLER(xx) template<> inline uintptr_t TBoxedValueAccessor::GetMethodPtr<TBoxedValueAccessor::EMethod::xx>() { return GetMethodPtr(&IBoxedValue::xx); }
+#define MAP_HANDLER(xx)                                                                      \
+    template <>                                                                              \
+    inline uintptr_t TBoxedValueAccessor::GetMethodPtr<TBoxedValueAccessor::EMethod::xx>() { \
+        return GetMethodPtr(&IBoxedValue::xx);                                               \
+    }
 METHOD_MAP(MAP_HANDLER)
 #undef MAP_HANDLER
 
@@ -713,28 +728,32 @@ private:
 #endif
 };
 
-class TBoxedValueLink: public TBoxedValueBase
-{
+class TBoxedValueLink: public TBoxedValueBase {
 public:
     void Link(TBoxedValueLink* root);
     void Unlink();
-    void InitLinks() { Left_ = Right_ = this; }
-    TBoxedValueLink* GetLeft() const { return Left_; }
-    TBoxedValueLink* GetRight() const { return Right_; }
+    void InitLinks() {
+        Left_ = Right_ = this;
+    }
+    TBoxedValueLink* GetLeft() const {
+        return Left_;
+    }
+    TBoxedValueLink* GetRight() const {
+        return Right_;
+    }
+
 private:
-    TBoxedValueLink *Left_ = nullptr;
-    TBoxedValueLink *Right_ = nullptr;
+    TBoxedValueLink* Left_ = nullptr;
+    TBoxedValueLink* Right_ = nullptr;
 };
 
-class TBoxedValue: public TBoxedValueLink, public TWithUdfAllocator
-{
+class TBoxedValue: public TBoxedValueLink, public TWithUdfAllocator {
 public:
     TBoxedValue();
     ~TBoxedValue();
 };
 
-class TManagedBoxedValue: public TBoxedValueBase, public TWithUdfAllocator
-{
+class TManagedBoxedValue: public TBoxedValueBase, public TWithUdfAllocator {
 };
 
 UDF_ASSERT_TYPE_SIZE(TBoxedValue, 32);
@@ -769,11 +788,11 @@ struct TRawStringValue {
     };
 };
 
-class TUnboxedValuePod
-{
-friend class TUnboxedValue;
+class TUnboxedValuePod {
+    friend class TUnboxedValue;
+
 public:
-    enum class EMarkers : ui8 {
+    enum class EMarkers: ui8 {
         Empty = 0,
         Embedded,
         String,
@@ -799,13 +818,23 @@ public:
 
     void Dump(IOutputStream& out) const;
     // meta information
-    inline explicit operator bool() const { return bool(Raw); }
+    inline explicit operator bool() const {
+        return bool(Raw);
+    }
 
-    inline bool HasValue() const { return EMarkers::Empty != Raw.GetMarkers(); }
+    inline bool HasValue() const {
+        return EMarkers::Empty != Raw.GetMarkers();
+    }
 
-    inline bool IsString() const { return EMarkers::String == Raw.GetMarkers(); }
-    inline bool IsBoxed() const { return EMarkers::Boxed == Raw.GetMarkers(); }
-    inline bool IsEmbedded() const { return EMarkers::Embedded == Raw.GetMarkers(); }
+    inline bool IsString() const {
+        return EMarkers::String == Raw.GetMarkers();
+    }
+    inline bool IsBoxed() const {
+        return EMarkers::Boxed == Raw.GetMarkers();
+    }
+    inline bool IsEmbedded() const {
+        return EMarkers::Embedded == Raw.GetMarkers();
+    }
 
     // Data accessors
     template <typename T, typename = std::enable_if_t<TPrimitiveDataType<T>::Result || std::is_same_v<T, NYql::NDecimal::TInt128>>>
@@ -847,8 +876,10 @@ public:
     inline TUnboxedValuePod MakeOptional() const;
     inline TUnboxedValuePod GetOptionalValue() const;
 
-    template<bool IsOptional> inline TUnboxedValuePod GetOptionalValueIf() const;
-    template<bool IsOptional> inline TUnboxedValuePod MakeOptionalIf() const;
+    template <bool IsOptional>
+    inline TUnboxedValuePod GetOptionalValueIf() const;
+    template <bool IsOptional>
+    inline TUnboxedValuePod MakeOptionalIf() const;
 
     // List accessors
     inline bool HasFastListLength() const;
@@ -908,7 +939,7 @@ public:
 #endif
 
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 30)
-    inline EFetchStatus WideFetch(TUnboxedValue *result, ui32 width) const;
+    inline EFetchStatus WideFetch(TUnboxedValue* result, ui32 width) const;
 #endif
 
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 36)
@@ -932,9 +963,9 @@ protected:
 
         struct {
             union {
-                #define FIELD(type) type type##_;
+#define FIELD(type) type type##_;
                 PRIMITIVE_VALUE_TYPES(FIELD);
-                #undef FIELD
+#undef FIELD
                 const void* Void;
                 ui64 Count;
             };
@@ -957,7 +988,9 @@ protected:
             return Simple.Meta >> 2;
         }
 
-        explicit operator bool() const { return Simple.FullMeta | Simple.Count; }
+        explicit operator bool() const {
+            return Simple.FullMeta | Simple.Count;
+        }
     } Raw;
 
 public:
@@ -984,8 +1017,7 @@ static_assert(std::is_trivially_move_constructible<TUnboxedValuePod>::value, "In
 //////////////////////////////////////////////////////////////////////////////
 // TUnboxedValue
 ///////////////////////////////////////////////////////////////////////////////
-class TUnboxedValue : public TUnboxedValuePod
-{
+class TUnboxedValue: public TUnboxedValuePod {
 public:
     inline TUnboxedValue() noexcept = default;
     inline ~TUnboxedValue() noexcept;
@@ -1012,8 +1044,7 @@ UDF_ASSERT_TYPE_SIZE(TUnboxedValue, 16);
 // TBoxedResource
 ///////////////////////////////////////////////////////////////////////////////
 template <typename TResourceData, const char* ResourceTag>
-class TBoxedResource: public TBoxedValue
-{
+class TBoxedResource: public TBoxedValue {
 public:
     template <typename... Args>
     inline TBoxedResource(Args&&... args)
@@ -1048,17 +1079,17 @@ private:
 } // namespace NUdf
 } // namespace NYql
 
-template<>
-inline void Out<NYql::NUdf::TUnboxedValuePod>(class IOutputStream &o, const NYql::NUdf::TUnboxedValuePod& value);
+template <>
+inline void Out<NYql::NUdf::TUnboxedValuePod>(class IOutputStream& o, const NYql::NUdf::TUnboxedValuePod& value);
 
-template<>
-inline void Out<NYql::NUdf::TUnboxedValue>(class IOutputStream &o, const NYql::NUdf::TUnboxedValue& value);
+template <>
+inline void Out<NYql::NUdf::TUnboxedValue>(class IOutputStream& o, const NYql::NUdf::TUnboxedValue& value);
 
-template<>
-inline void Out<NYql::NUdf::EFetchStatus>(class IOutputStream &o, NYql::NUdf::EFetchStatus value);
+template <>
+inline void Out<NYql::NUdf::EFetchStatus>(class IOutputStream& o, NYql::NUdf::EFetchStatus value);
 
-template<>
-inline void Out<NYql::NUdf::TStringRef>(class IOutputStream &o, const NYql::NUdf::TStringRef& value);
+template <>
+inline void Out<NYql::NUdf::TStringRef>(class IOutputStream& o, const NYql::NUdf::TStringRef& value);
 
 #include "udf_terminator.h"
 #include <util/stream/output.h>
@@ -1070,18 +1101,15 @@ namespace NUdf {
 //////////////////////////////////////////////////////////////////////////////
 // TBoxedValue
 //////////////////////////////////////////////////////////////////////////////
-inline bool TBoxedValueBase::HasFastListLength() const
-{
+inline bool TBoxedValueBase::HasFastListLength() const {
     Y_ABORT("Not implemented");
 }
 
-inline ui64 TBoxedValueBase::GetListLength() const
-{
+inline ui64 TBoxedValueBase::GetListLength() const {
     Y_ABORT("Not implemented");
 }
 
-inline ui64 TBoxedValueBase::GetEstimatedListLength() const
-{
+inline ui64 TBoxedValueBase::GetEstimatedListLength() const {
     Y_ABORT("Not implemented");
 }
 
@@ -1111,8 +1139,7 @@ inline IBoxedValuePtr TBoxedValueBase::ToIndexDictImpl(const IValueBuilder& buil
     return nullptr;
 }
 
-inline ui64 TBoxedValueBase::GetDictLength() const
-{
+inline ui64 TBoxedValueBase::GetDictLength() const {
     Y_ABORT("Not implemented");
 }
 
@@ -1137,23 +1164,19 @@ inline void TBoxedValueLink::Unlink() {
     Left_ = Right_ = nullptr;
 }
 
-inline TUnboxedValue TBoxedValueBase::GetDictIterator() const
-{
+inline TUnboxedValue TBoxedValueBase::GetDictIterator() const {
     Y_ABORT("Not implemented");
 }
 
-inline TUnboxedValue TBoxedValueBase::GetListIterator() const
-{
+inline TUnboxedValue TBoxedValueBase::GetListIterator() const {
     Y_ABORT("Not implemented");
 }
 
-inline TUnboxedValue TBoxedValueBase::GetKeysIterator() const
-{
+inline TUnboxedValue TBoxedValueBase::GetKeysIterator() const {
     Y_ABORT("Not implemented");
 }
 
-inline TUnboxedValue TBoxedValueBase::GetPayloadsIterator() const
-{
+inline TUnboxedValue TBoxedValueBase::GetPayloadsIterator() const {
     Y_ABORT("Not implemented");
 }
 
@@ -1173,19 +1196,16 @@ inline bool TBoxedValueBase::NextPair(TUnboxedValue&, TUnboxedValue&)
     Y_ABORT("Not implemented");
 }
 
-inline TUnboxedValue TBoxedValueBase::GetElement(ui32 index) const
-{
+inline TUnboxedValue TBoxedValueBase::GetElement(ui32 index) const {
     Y_UNUSED(index);
     Y_ABORT("Not implemented");
 }
 
-inline const TUnboxedValue* TBoxedValueBase::GetElements() const
-{
+inline const TUnboxedValue* TBoxedValueBase::GetElements() const {
     return nullptr;
 }
 
-inline void TBoxedValueBase::Apply(IApplyContext&) const
-{
+inline void TBoxedValueBase::Apply(IApplyContext&) const {
     Y_ABORT("Not implemented");
 }
 
@@ -1210,20 +1230,17 @@ inline ui32 TBoxedValueBase::GetVariantIndex() const {
     Y_ABORT("Not implemented");
 }
 
-inline bool TBoxedValueBase::Contains(const TUnboxedValuePod& key) const
-{
+inline bool TBoxedValueBase::Contains(const TUnboxedValuePod& key) const {
     Y_UNUSED(key);
     Y_ABORT("Not implemented");
 }
 
-inline TUnboxedValue TBoxedValueBase::Lookup(const TUnboxedValuePod& key) const
-{
+inline TUnboxedValue TBoxedValueBase::Lookup(const TUnboxedValuePod& key) const {
     Y_UNUSED(key);
     Y_ABORT("Not implemented");
 }
 
-inline TUnboxedValue TBoxedValueBase::Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const
-{
+inline TUnboxedValue TBoxedValueBase::Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const {
     Y_UNUSED(valueBuilder);
     Y_UNUSED(args);
     Y_ABORT("Not implemented");
@@ -1299,7 +1316,7 @@ inline void TBoxedValueBase::Unused6() {
 #endif
 
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 30)
-inline EFetchStatus TBoxedValueBase::WideFetch(TUnboxedValue *result, ui32 width) {
+inline EFetchStatus TBoxedValueBase::WideFetch(TUnboxedValue* result, ui32 width) {
     Y_UNUSED(result);
     Y_UNUSED(width);
     Y_ABORT("Not implemented");
@@ -1315,54 +1332,53 @@ inline bool TBoxedValueBase::Load2(const TUnboxedValue& value) {
 
 inline void TUnboxedValuePod::Dump(IOutputStream& out) const {
     switch (Raw.GetMarkers()) {
-    case EMarkers::Empty:
-        out << "Empty, count: " << (i64)Raw.Simple.Count;
-        break;
-    case EMarkers::Embedded:
-        out << "Embedded, size: " << (ui32)Raw.Embedded.Size << ", buffer: " <<
-            TString(Raw.Embedded.Buffer, sizeof(Raw.Embedded.Buffer)).Quote();
-        break;
-    case EMarkers::String: {
-        out << "String, size: " << Raw.String.Size << ", offset: " << (Raw.String.Offset & 0xffffff) << ", buffer: ";
-        auto ref = AsStringRef();
-        out << TString(ref.Data(), ref.Size()).Quote();
-        break;
-    }
-    case EMarkers::Boxed:
-        out << "Boxed, pointer: " << (void*)Raw.Boxed.Value;
-        break;
+        case EMarkers::Empty:
+            out << "Empty, count: " << (i64)Raw.Simple.Count;
+            break;
+        case EMarkers::Embedded:
+            out << "Embedded, size: " << (ui32)Raw.Embedded.Size << ", buffer: " << TString(Raw.Embedded.Buffer, sizeof(Raw.Embedded.Buffer)).Quote();
+            break;
+        case EMarkers::String: {
+            out << "String, size: " << Raw.String.Size << ", offset: " << (Raw.String.Offset & 0xffffff) << ", buffer: ";
+            auto ref = AsStringRef();
+            out << TString(ref.Data(), ref.Size()).Quote();
+            break;
+        }
+        case EMarkers::Boxed:
+            out << "Boxed, pointer: " << (void*)Raw.Boxed.Value;
+            break;
     }
 }
 
 } // namespace NUdf
 } // namespace NYql
 
-template<>
-inline void Out<NYql::NUdf::TUnboxedValuePod>(class IOutputStream &o, const NYql::NUdf::TUnboxedValuePod& value) {
+template <>
+inline void Out<NYql::NUdf::TUnboxedValuePod>(class IOutputStream& o, const NYql::NUdf::TUnboxedValuePod& value) {
     value.Dump(o);
 }
 
-template<>
-inline void Out<NYql::NUdf::TUnboxedValue>(class IOutputStream &o, const NYql::NUdf::TUnboxedValue& value) {
+template <>
+inline void Out<NYql::NUdf::TUnboxedValue>(class IOutputStream& o, const NYql::NUdf::TUnboxedValue& value) {
     value.Dump(o);
 }
 
-template<>
-inline void Out<NYql::NUdf::EFetchStatus>(class IOutputStream &o, NYql::NUdf::EFetchStatus value) {
+template <>
+inline void Out<NYql::NUdf::EFetchStatus>(class IOutputStream& o, NYql::NUdf::EFetchStatus value) {
     switch (value) {
-    case NYql::NUdf::EFetchStatus::Ok:
-        o << "Ok";
-        break;
-    case NYql::NUdf::EFetchStatus::Yield:
-        o << "Yield";
-        break;
-    case NYql::NUdf::EFetchStatus::Finish:
-        o << "Finish";
-        break;
+        case NYql::NUdf::EFetchStatus::Ok:
+            o << "Ok";
+            break;
+        case NYql::NUdf::EFetchStatus::Yield:
+            o << "Yield";
+            break;
+        case NYql::NUdf::EFetchStatus::Finish:
+            o << "Finish";
+            break;
     }
 }
 
-template<>
-inline void Out<NYql::NUdf::TStringRef>(class IOutputStream &o, const NYql::NUdf::TStringRef& value) {
+template <>
+inline void Out<NYql::NUdf::TStringRef>(class IOutputStream& o, const NYql::NUdf::TStringRef& value) {
     o << TStringBuf(value.Data(), value.Size());
 }

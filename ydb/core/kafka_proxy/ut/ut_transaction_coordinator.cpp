@@ -209,7 +209,7 @@ namespace {
             ui32 eventCounter = 0;
             TActorId txnActorId;
             auto observer = [&](TAutoPtr<IEventHandle>& input) {
-                if (auto* event = input->CastAsLocal<NKafka::TEvKafka::TEvEndTxnRequest>()) {
+                if (input->CastAsLocal<NKafka::TEvKafka::TEvEndTxnRequest>()) {
                     // There will be four events TEvEndTxnRequest. We need only two of them
                     // with recipient not equal to our TTransactionCoordinatorActor id.
                     // Those are event sent from TTransactionCoordinatorActor to TTransactionActor
@@ -248,9 +248,9 @@ namespace {
             bool seenEvent = false;
             TActorId txnActorId;
             auto observer = [&](TAutoPtr<IEventHandle>& input) {
-                if (auto* event = input->CastAsLocal<NKafka::TEvKafka::TEvEndTxnRequest>()) {
+                if (input->CastAsLocal<NKafka::TEvKafka::TEvEndTxnRequest>()) {
                     txnActorId = input->Recipient;
-                } else if (auto* event = input->CastAsLocal<TEvents::TEvPoison>()) {
+                } else if (input->CastAsLocal<TEvents::TEvPoison>()) {
                     UNIT_ASSERT_VALUES_EQUAL(txnActorId, input->Recipient);
                     seenEvent = true;
                 }

@@ -1,5 +1,5 @@
 #include "mkql_callable.h"
-#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
+#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 
@@ -8,22 +8,23 @@ namespace NMiniKQL {
 
 namespace {
 
-class TCallableWrapper : public TCustomValueCodegeneratorNode<TCallableWrapper> {
+class TCallableWrapper: public TCustomValueCodegeneratorNode<TCallableWrapper> {
     typedef TCustomValueCodegeneratorNode<TCallableWrapper> TBaseComputation;
+
 private:
-    class TValue : public TComputationValue<TValue> {
+    class TValue: public TComputationValue<TValue> {
     public:
         TValue(TMemoryUsageInfo* memInfo, TComputationContext& compCtx, IComputationNode* resultNode,
-            const TComputationExternalNodePtrVector& argNodes)
+               const TComputationExternalNodePtrVector& argNodes)
             : TComputationValue(memInfo)
             , CompCtx(compCtx)
             , ResultNode(resultNode)
             , ArgNodes(argNodes)
-        {}
+        {
+        }
 
     private:
-        NUdf::TUnboxedValue Run(const NUdf::IValueBuilder*, const NUdf::TUnboxedValuePod* args) const override
-        {
+        NUdf::TUnboxedValue Run(const NUdf::IValueBuilder*, const NUdf::TUnboxedValuePod* args) const override {
             for (const auto node : ArgNodes) {
                 node->SetValue(CompCtx, NUdf::TUnboxedValuePod(*args++));
             }
@@ -32,11 +33,11 @@ private:
         }
 
         TComputationContext& CompCtx;
-        IComputationNode *const ResultNode;
+        IComputationNode* const ResultNode;
         const TComputationExternalNodePtrVector ArgNodes;
     };
 
-    class TCodegenValue : public TComputationValue<TCodegenValue> {
+    class TCodegenValue: public TComputationValue<TCodegenValue> {
     public:
         using TBase = TComputationValue<TCodegenValue>;
 
@@ -46,7 +47,8 @@ private:
             : TBase(memInfo)
             , RunFunc(run)
             , Ctx(ctx)
-        {}
+        {
+        }
 
     private:
         NUdf::TUnboxedValue Run(const NUdf::IValueBuilder*, const NUdf::TUnboxedValuePod* args) const override {
@@ -56,6 +58,7 @@ private:
         const TRunPtr RunFunc;
         TComputationContext* const Ctx;
     };
+
 public:
     TCallableWrapper(TComputationMutables& mutables, IComputationNode* resultNode, TComputationExternalNodePtrVector&& argNodes)
         : TBaseComputation(mutables)
@@ -66,8 +69,9 @@ public:
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
 #ifndef MKQL_DISABLE_CODEGEN
-        if (ctx.ExecuteLLVM && Run)
+        if (ctx.ExecuteLLVM && Run) {
             return ctx.HolderFactory.Create<TCodegenValue>(Run, &ctx);
+        }
 #endif
         return ctx.HolderFactory.Create<TValue>(ctx, ResultNode, ArgNodes);
     }
@@ -88,8 +92,9 @@ private:
     }
 
     void FinalizeFunctions(NYql::NCodegen::ICodegen& codegen) final {
-        if (RunFunc)
+        if (RunFunc) {
             Run = reinterpret_cast<TRunPtr>(codegen.GetPointerToFunction(RunFunc));
+        }
     }
 
     Function* GenerateRun(NYql::NCodegen::ICodegen& codegen) const {
@@ -97,8 +102,9 @@ private:
         auto& context = codegen.GetContext();
 
         const auto& name = TBaseComputation::MakeName("Run");
-        if (const auto f = module.getFunction(name.c_str()))
+        if (const auto f = module.getFunction(name.c_str())) {
             return f;
+        }
 
         const auto valueType = Type::getInt128Ty(context);
         const auto argsType = ArrayType::get(valueType, ArgNodes.size());
@@ -143,11 +149,11 @@ private:
     TRunPtr Run = nullptr;
 #endif
 
-    IComputationNode *const ResultNode;
+    IComputationNode* const ResultNode;
     const TComputationExternalNodePtrVector ArgNodes;
 };
 
-}
+} // namespace
 
 IComputationNode* WrapCallable(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() > 0U, "Expected at least one argument");
@@ -167,5 +173,5 @@ IComputationNode* WrapCallable(TCallable& callable, const TComputationNodeFactor
     return new TCallableWrapper(ctx.Mutables, resultNode, std::move(argNodes));
 }
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

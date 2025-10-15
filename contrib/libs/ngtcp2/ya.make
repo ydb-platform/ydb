@@ -2,11 +2,13 @@
 
 LIBRARY()
 
-VERSION(1.14.0)
+VERSION(1.15.1)
 
-ORIGINAL_SOURCE(https://github.com/ngtcp2/ngtcp2/releases/download/v1.14.0/ngtcp2-1.14.0.tar.xz)
+ORIGINAL_SOURCE(https://github.com/ngtcp2/ngtcp2/releases/download/v1.15.1/ngtcp2-1.15.1.tar.xz)
 
 LICENSE(
+    "(Apache-2.0 OR MIT)" AND
+    Apache-2.0 AND
     BSD-3-Clause AND
     FSFAP AND
     MIT
@@ -53,6 +55,7 @@ SRCS(
     lib/ngtcp2_objalloc.c
     lib/ngtcp2_opl.c
     lib/ngtcp2_path.c
+    lib/ngtcp2_pcg.c
     lib/ngtcp2_pkt.c
     lib/ngtcp2_pmtud.c
     lib/ngtcp2_ppe.c
@@ -60,6 +63,7 @@ SRCS(
     lib/ngtcp2_pv.c
     lib/ngtcp2_qlog.c
     lib/ngtcp2_range.c
+    lib/ngtcp2_ratelim.c
     lib/ngtcp2_ringbuf.c
     lib/ngtcp2_rob.c
     lib/ngtcp2_rst.c

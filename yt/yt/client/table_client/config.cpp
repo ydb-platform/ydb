@@ -469,6 +469,8 @@ void TChunkWriterOptions::Register(TRegistrar registrar)
         .Default(true);
     registrar.Parameter("cast_any_to_composite", &TThis::CastAnyToCompositeNode)
         .Default();
+    registrar.Parameter("cast_composite_to_any", &TThis::CastCompositeToAny)
+        .Default(false);
     registrar.Parameter("single_column_group_by_default", &TThis::SingleColumnGroupByDefault)
         .Default();
     registrar.Parameter("enable_columnar_value_statistics", &TThis::EnableColumnarValueStatistics)

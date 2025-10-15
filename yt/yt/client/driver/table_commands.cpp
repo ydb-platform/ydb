@@ -800,6 +800,13 @@ void TAlterTableCommand::Register(TRegistrar registrar)
             return command->Options.ReplicationProgress;
         })
         .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<TTimestamp>>(
+        "clip_timestamp",
+        [] (TThis* command) -> auto& {
+            return command->Options.ClipTimestamp;
+        })
+        .Optional(/*init*/ false);
 }
 
 void TAlterTableCommand::DoExecute(ICommandContextPtr context)
@@ -909,6 +916,13 @@ void TSelectRowsCommand::Register(TRegistrar registrar)
         })
         .Optional(/*init*/ false);
 
+    registrar.ParameterWithUniversalAccessor<std::optional<EOptimizationLevel>>(
+        "optimization_level",
+        [] (TThis* command) -> auto& {
+            return command->Options.OptimizationLevel;
+        })
+        .Optional(/*init*/ false);
+
     registrar.ParameterWithUniversalAccessor<TVersionedReadOptions>(
         "versioned_read_options",
         [] (TThis* command) -> auto& {
@@ -947,7 +961,7 @@ void TSelectRowsCommand::Register(TRegistrar registrar)
         .GreaterThan(0)
         .Optional(/*init*/ false);
 
-    registrar.ParameterWithUniversalAccessor<bool>(
+    registrar.ParameterWithUniversalAccessor<std::optional<bool>>(
         "use_order_by_in_join_subqueries",
         [] (TThis* command) -> auto& {
             return command->Options.UseOrderByInJoinSubqueries;

@@ -844,12 +844,45 @@
             ]
         },
         {
+            "Name": "TKqpOpUnionAll",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KqpOpUnionAll"},
+            "Children": [
+                {"Index": 0, "Name": "LeftInput", "Type": "TExprBase"},
+                {"Index": 1, "Name": "RightInput", "Type": "TExprBase"}
+            ]
+        },
+        {
             "Name": "TKqpOpLimit",
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "KqpOpLimit"},
             "Children": [
                 {"Index": 0, "Name": "Input", "Type": "TExprBase"},
                 {"Index": 1, "Name": "Count", "Type": "TExprBase"}
+            ]
+        },
+        {
+            "Name": "TKqpOpSortElement",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KqpOpSortElement"},
+            "Children": [
+                {"Index": 0, "Name": "Input", "Type": "TExprBase"},
+                {"Index": 1, "Name": "Direction", "Type": "TCoAtom"},
+                {"Index": 2, "Name": "NullsFirst", "Type": "TCoAtom"},
+                {"Index": 3, "Name": "Lambda", "Type": "TCoLambda"}
+            ]
+        }, 
+        {
+            "Name": "TKqpOpSortList",
+            "ListBase" : "TKqpOpSortElement"
+        },
+        {
+            "Name": "TKqpOpSort",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KqpOpSort"},
+            "Children": [
+                {"Index": 0, "Name": "Input", "Type": "TExprBase"},
+                {"Index": 1, "Name": "SortExpressions", "Type": "TKqpOpSortList"}
             ]
         },
         {

@@ -70,13 +70,12 @@ IComputationNode* TBlockHelper::WrapMaterializeBlockStream(TCallable& callable, 
     return new TMaterializeBlockStream(ctx.Mutables, stream, underlyingType, fuzzId, FuzzerHolder_);
 }
 
-
 TComputationNodeFactory TBlockHelper::GetNodeTestFactory() {
     return [this](TCallable& callable, const TComputationNodeFactoryContext& ctx) -> IComputationNode* {
         if (callable.GetType()->GetName() == "MaterializeBlockStream") {
             return WrapMaterializeBlockStream(callable, ctx);
         }
-        if (auto* pgResult =  NYql::GetPgFactory()(callable, ctx)) {
+        if (auto* pgResult = NYql::GetPgFactory()(callable, ctx)) {
             return pgResult;
         }
         return GetBuiltinFactory()(callable, ctx);

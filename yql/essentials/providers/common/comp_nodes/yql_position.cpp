@@ -11,5 +11,5 @@ NYql::TPosition ExtractPosition(TCallable& callable) {
     return NYql::TPosition(column, row, TString(file));
 }
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

@@ -6,8 +6,8 @@
 #include <library/cpp/yson/public.h>
 
 namespace NYT {
-    class TNode;
-}
+class TNode;
+} // namespace NYT
 
 namespace NYql {
 namespace NResult {
@@ -28,5 +28,5 @@ TString DecodeRestrictedYson(
     const NYT::TNode& node,
     NYson::EYsonFormat format = NYson::EYsonFormat::Binary);
 
-}
-}
+} // namespace NResult
+} // namespace NYql

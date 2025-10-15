@@ -24,7 +24,7 @@ public:
 
     const TString& GetPreparationId() const;
 
-    void LockFiles(TVector<TRichYPath>* paths);
+    TRichYPath LockFile(const TRichYPath& path);
 
     TOperationId StartOperation(
         TOperation* operation,
@@ -83,6 +83,22 @@ public:
     bool ShouldEnableDebugCommandLineArguments() const;
 
 private:
+    // NB(achains): Used as workaround to avoid ttl race in master
+    // Consider to return to batch locking after YT-26261
+    class TEagerLockingFileCache
+    {
+    public:
+        explicit TEagerLockingFileCache(TOperationPreparer& operationPreparer);
+
+        const TVector<TRichYPath>& GetFiles() const;
+
+        void InsertFile(const TRichYPath& path);
+    private:
+        TOperationPreparer& OperationPreparer_;
+        TVector<TRichYPath> LockedFiles_;
+    };
+
+private:
     const IRawClientPtr RawClient_;
 
     TOperationPreparer& OperationPreparer_;
@@ -90,7 +106,7 @@ private:
     TOperationOptions Options_;
 
     TVector<TRichYPath> CypressFiles_;
-    TVector<TRichYPath> CachedFiles_;
+    TEagerLockingFileCache LockedFilesCache_;
 
     TVector<TYPath> Layers_;
 

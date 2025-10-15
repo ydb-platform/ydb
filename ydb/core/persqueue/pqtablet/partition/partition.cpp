@@ -1008,7 +1008,15 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
         for (ui32 i = 0; i < PartitionCountersLabeled->GetCounters().Size(); ++i) {
             ac->AddValues(PartitionCountersLabeled->GetCounters()[i].Get());
         }
+        if (PartitionCompactionCounters) {
+            for (ui32 i = 0; i < PartitionCompactionCounters->GetCounters().Size(); ++i) {
+                ac->MutableCompactionCounters()->AddValues(PartitionCompactionCounters->GetCounters()[i].Get());
+            }
+        }
+
+
         for (auto&& userInfoPair : UsersInfoStorage->ViewAll()) {
+
             auto& userInfo = userInfoPair.second;
             if (!userInfo.LabeledCounters)
                 continue;
@@ -1468,6 +1476,13 @@ void TPartition::Handle(TEvPQ::TEvGetWriteInfoRequest::TPtr& ev, const TActorCon
                                      "Topic.Partition.GetWriteInfo",
                                      NWilson::EFlags::AUTO_END);
 
+    StopCompaction = true;
+    if (CompactionInProgress) {
+        LOG_D("Event TEvPQ::TEvGetWriteInfoRequest will be processed later");
+        PendingGetWriteInfoRequest.reset(ev->Release().Release());
+        return;
+    }
+
     ProcessPendingEvent(ev, ctx);
 }
 
@@ -1752,6 +1767,9 @@ void TPartition::Handle(TEvPQ::TEvError::TPtr& ev, const TActorContext& ctx) {
         CompacterPartitionRequestInflight = false;
         if (Compacter) {
             Compacter->ProcessResponse(ev);
+            // auto compacterCounters = Compacter->GetCounters();
+            // KeyCompactionReadCyclesTotal.Set(compacterCounters.ReadCyclesCount);
+            // KeyCompactionWriteCyclesTotal.Set(compacterCounters.WriteCyclesCount);
         }
     }
     ReadingTimestamp = false;
@@ -2072,6 +2090,46 @@ bool TPartition::UpdateCounters(const TActorContext& ctx, bool force) {
             PartitionCountersLabeled->GetCounters()[METRIC_READ_QUOTA_PARTITION_TOTAL_USAGE].Set(quotaUsage);
         }
     }
+    if (PartitionCompactionCounters) {
+        Y_ENSURE(Compacter);
+        auto counters = Compacter->GetCounters();
+        if (counters.UncompactedSize != PartitionCompactionCounters->GetCounters()[METRIC_UNCOMPACTED_SIZE_MAX].Get()) {
+            PartitionCompactionCounters->GetCounters()[METRIC_UNCOMPACTED_SIZE_MAX].Set(counters.UncompactedSize);
+            haveChanges = true;
+        }
+        if (counters.UncompactedSize != PartitionCompactionCounters->GetCounters()[METRIC_UNCOMPACTED_SIZE_SUM].Get()) {
+            PartitionCompactionCounters->GetCounters()[METRIC_UNCOMPACTED_SIZE_SUM].Set(counters.UncompactedSize);
+            haveChanges = true;
+        }
+        if (counters.CompactedSize != PartitionCompactionCounters->GetCounters()[METRIC_COMPACTED_SIZE_MAX].Get()) {
+            PartitionCompactionCounters->GetCounters()[METRIC_COMPACTED_SIZE_MAX].Set(counters.CompactedSize);
+            haveChanges = true;
+        }
+        if (counters.CompactedSize != PartitionCompactionCounters->GetCounters()[METRIC_COMPACTED_SIZE_SUM].Get()) {
+            PartitionCompactionCounters->GetCounters()[METRIC_COMPACTED_SIZE_SUM].Set(counters.CompactedSize);
+            haveChanges = true;
+        }
+        if (counters.UncompactedCount != PartitionCompactionCounters->GetCounters()[METRIC_UNCOMPACTED_COUNT].Get()) {
+            PartitionCompactionCounters->GetCounters()[METRIC_UNCOMPACTED_COUNT].Set(counters.UncompactedCount);
+            haveChanges = true;
+        }
+        if (counters.CompactedCount != PartitionCompactionCounters->GetCounters()[METRIC_COMPACTED_COUNT].Get()) {
+            PartitionCompactionCounters->GetCounters()[METRIC_COMPACTED_COUNT].Set(counters.CompactedCount);
+            haveChanges = true;
+        }
+        // if (counters.GetUncompactedRatio() != PartitionCompactionCounters->GetCounters()[METRIC_UNCOMPACTED_RATIO].Get()) {
+        //     PartitionCompactionCounters->GetCounters()[METRIC_UNCOMPACTED_RATIO].Set(counters.GetUncompactedRatio());
+        //     haveChanges = true;
+        // }
+        if (counters.CurrReadCycleDuration.MilliSeconds() != PartitionCompactionCounters->GetCounters()[METRIC_CURR_CYCLE_DURATION].Get()) {
+            PartitionCompactionCounters->GetCounters()[METRIC_CURR_CYCLE_DURATION].Set(counters.CurrReadCycleDuration.MilliSeconds());
+            haveChanges = true;
+        }
+        if (counters.CurrentReadCycleKeys != PartitionCompactionCounters->GetCounters()[METRIC_CURR_READ_CYCLE_KEYS].Get()) {
+            PartitionCompactionCounters->GetCounters()[METRIC_CURR_READ_CYCLE_KEYS].Set(counters.CurrentReadCycleKeys);
+            haveChanges = true;
+        }
+    }
     return haveChanges;
 }
 
@@ -2105,6 +2163,9 @@ void TPartition::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext&
         Send(ReadQuotaTrackerActor, new TEvPQ::TEvReleaseExclusiveLock());
         if (Compacter) {
             Compacter->ProcessResponse(ev);
+            // auto compacterCounters = Compacter->GetCounters();
+            // KeyCompactionReadCyclesTotal.Set(compacterCounters.ReadCyclesCount);
+            // KeyCompactionWriteCyclesTotal.Set(compacterCounters.WriteCyclesCount);
         }
         return;
     }
@@ -2909,50 +2970,6 @@ void TPartition::CommitWriteOperations(TTransaction& t)
         BlobEncoder.NewHead.Offset = Parameters->CurOffset;
     }
 
-    //if (!t.WriteInfo->BlobsFromHead.empty()) {
-    //    auto& first = t.WriteInfo->BlobsFromHead.front();
-    //    // In one operation, a partition can write blocks of several transactions. Some of them can be broken down
-    //    // into parts. We need to take this division into account.
-    //    BlobEncoder.NewHead.PartNo += first.GetPartNo();
-
-    //    Parameters->HeadCleared = Parameters->HeadCleared || !t.WriteInfo->BodyKeys.empty();
-
-    //    BlobEncoder.NewPartitionedBlob(Partition,
-    //                                BlobEncoder.NewHead.Offset,
-    //                                first.SourceId,
-    //                                first.SeqNo,
-    //                                first.GetTotalParts(),
-    //                                first.GetTotalSize(),
-    //                                Parameters->HeadCleared, // headCleared
-    //                                false,                   // needCompactHead
-    //                                MaxBlobSize,
-    //                                first.GetPartNo());
-
-    //    for (auto& blob : t.WriteInfo->BlobsFromHead) {
-    //        TWriteMsg msg{Max<ui64>(), Nothing(), TEvPQ::TEvWrite::TMsg{
-    //            .SourceId = blob.SourceId,
-    //            .SeqNo = blob.SeqNo,
-    //            .PartNo = (ui16)(blob.PartData ? blob.PartData->PartNo : 0),
-    //            .TotalParts = (ui16)(blob.PartData ? blob.PartData->TotalParts : 1),
-    //            .TotalSize = (ui32)(blob.PartData ? blob.PartData->TotalSize : blob.UncompressedSize),
-    //            .CreateTimestamp = blob.CreateTimestamp.MilliSeconds(),
-    //            .ReceiveTimestamp = blob.CreateTimestamp.MilliSeconds(),
-    //            .DisableDeduplication = false,
-    //            .WriteTimestamp = blob.WriteTimestamp.MilliSeconds(),
-    //            .Data = blob.Data,
-    //            .UncompressedSize = blob.UncompressedSize,
-    //            .PartitionKey = blob.PartitionKey,
-    //            .ExplicitHashKey = blob.ExplicitHashKey,
-    //            .External = false,
-    //            .IgnoreQuotaDeadline = true,
-    //            .HeartbeatVersion = std::nullopt,
-    //        }, std::nullopt};
-    //        msg.Internal = true;
-
-    //        WriteInflightSize += msg.Msg.Data.size();
-    //        ExecRequest(msg, *Parameters, PersistRequest.Get());
-    //    }
-    //}
     for (const auto& [srcId, info] : t.WriteInfo->SrcIdInfo) {
         auto& sourceIdBatch = Parameters->SourceIdBatch;
         auto sourceId = sourceIdBatch.GetSource(srcId);
@@ -3729,7 +3746,8 @@ void TPartition::ScheduleReplyError(const ui64 dst, bool internal,
                                     NPersQueue::NErrorCode::EErrorCode errorCode,
                                     const TString& error)
 {
-    LOG_E("Got error: " << error);
+    auto logLevel = NPersQueue::NErrorCode::WRITE_ERROR_PARTITION_INACTIVE == errorCode ? NActors::NLog::PRI_INFO : NActors::NLog::PRI_ERROR;
+    LOG(logLevel, "Got error: " << error);
     Replies.emplace_back(internal ? SelfId() : TabletActorId,
                          MakeReplyError(dst,
                                         errorCode,
@@ -4315,6 +4333,10 @@ bool TPartition::IsSupportive() const
     return Partition.IsSupportivePartition();
 }
 
+bool TPartition::IsKeyCompactionEnabled() const {
+    return Config.GetEnableCompactification() && AppData()->FeatureFlags.GetEnableTopicCompactificationByKey() && !IsSupportive();
+}
+
 void TPartition::AttachPersistRequestSpan(NWilson::TSpan& span)
 {
     if (span) {
@@ -4343,9 +4365,10 @@ void TPartition::Handle(TEvPQ::TEvExclusiveLockAcquired::TPtr&) {
 
 IActor* CreatePartitionActor(ui64 tabletId, const TPartitionId& partition, const TActorId& tablet, ui32 tabletGeneration,
     const TActorId& blobCache, const NPersQueue::TTopicConverterPtr& topicConverter, TString dcId, bool isServerless,
-               const NKikimrPQ::TPQTabletConfig& config, const std::shared_ptr<TTabletCountersBase>& counters, bool SubDomainOutOfSpace,
-               ui32 numChannels, const TActorId& writeQuoterActorId,
-               TIntrusivePtr<NJaegerTracing::TSamplingThrottlingControl> samplingControl, bool newPartition) {
+    const NKikimrPQ::TPQTabletConfig& config, const std::shared_ptr<TTabletCountersBase>& counters, bool SubDomainOutOfSpace,
+    ui32 numChannels, const TActorId& writeQuoterActorId,
+    TIntrusivePtr<NJaegerTracing::TSamplingThrottlingControl> samplingControl, bool newPartition
+) {
 
     return new TPartition(tabletId, partition, tablet, tabletGeneration, blobCache, topicConverter, dcId, isServerless,
         config, counters, SubDomainOutOfSpace, numChannels, writeQuoterActorId, samplingControl,

@@ -30,14 +30,14 @@ TParsedTokenList Tokenize(const TString& query) {
     return tokens;
 }
 
-}
+} // namespace
 
 #define ANTLR_VER 3
 #include "sql_ut_common.h"
 
 Y_UNIT_TEST_SUITE(QuerySplit) {
-    Y_UNIT_TEST(Simple) {
-        TString query = R"(
+Y_UNIT_TEST(Simple) {
+    TString query = R"(
         ;
         -- Comment 1
         SELECT * From Input; -- Comment 2
@@ -63,29 +63,29 @@ Y_UNIT_TEST_SUITE(QuerySplit) {
 
         )";
 
-        google::protobuf::Arena Arena;
+    google::protobuf::Arena Arena;
 
-        NSQLTranslation::TTranslationSettings settings;
-        settings.AnsiLexer = false;
-        settings.Antlr4Parser = false;
-        settings.Arena = &Arena;
+    NSQLTranslation::TTranslationSettings settings;
+    settings.AnsiLexer = false;
+    settings.Antlr4Parser = false;
+    settings.Arena = &Arena;
 
-        TVector<TString> statements;
-        NYql::TIssues issues;
+    TVector<TString> statements;
+    NYql::TIssues issues;
 
-        NSQLTranslationV1::TLexers lexers;
-        lexers.Antlr3 = NSQLTranslationV1::MakeAntlr3LexerFactory();
-        NSQLTranslationV1::TParsers parsers;
-        parsers.Antlr3 = NSQLTranslationV1::MakeAntlr3ParserFactory();
+    NSQLTranslationV1::TLexers lexers;
+    lexers.Antlr3 = NSQLTranslationV1::MakeAntlr3LexerFactory();
+    NSQLTranslationV1::TParsers parsers;
+    parsers.Antlr3 = NSQLTranslationV1::MakeAntlr3ParserFactory();
 
-        UNIT_ASSERT(NSQLTranslationV1::SplitQueryToStatements(lexers, parsers, query, statements, issues, settings));
+    UNIT_ASSERT(NSQLTranslationV1::SplitQueryToStatements(lexers, parsers, query, statements, issues, settings));
 
-        UNIT_ASSERT_VALUES_EQUAL(statements.size(), 3);
+    UNIT_ASSERT_VALUES_EQUAL(statements.size(), 3);
 
-        UNIT_ASSERT_VALUES_EQUAL(statements[0], "-- Comment 1\n        SELECT * From Input; -- Comment 2\n");
-        UNIT_ASSERT_VALUES_EQUAL(statements[1], R"(-- Comment 3
+    UNIT_ASSERT_VALUES_EQUAL(statements[0], "-- Comment 1\n        SELECT * From Input; -- Comment 2\n");
+    UNIT_ASSERT_VALUES_EQUAL(statements[1], R"(-- Comment 3
         $a = "a";)");
-        UNIT_ASSERT_VALUES_EQUAL(statements[2], R"(-- Comment 10
+    UNIT_ASSERT_VALUES_EQUAL(statements[2], R"(-- Comment 10
 
         -- Comment 8
 
@@ -94,5 +94,5 @@ Y_UNIT_TEST_SUITE(QuerySplit) {
         return /* Comment 5 */ $x;
         -- Comment 6
         };)");
-    }
 }
+} // Y_UNIT_TEST_SUITE(QuerySplit)

@@ -58,7 +58,9 @@ apt-get -y install --no-install-recommends \
   antlr3 cmake docker.io git jq libaio-dev libaio1 libicu70 libidn11-dev libkrb5-3 \
   liblttng-ust1 m4 make ninja-build parallel postgresql-client postgresql-client \
   python-is-python3 python3-pip s3cmd s3cmd zlib1g linux-tools-common linux-tools-generic \
-  linux-modules-extra-$(uname -r) ibverbs-providers rdma-core libibverbs1 ibverbs-utils
+  ibverbs-providers rdma-core libibverbs1 ibverbs-utils
+
+apt-get -y install linux-modules-extra-$(ls -1 /lib/modules | sort -V | tail -1)
 
 apt-get -y purge lxd-agent-loader snapd modemmanager
 apt-get -y autoremove
@@ -74,8 +76,15 @@ pip3 install conan==2.4.1 pytest==7.1.3 pytest-timeout pytest-xdist==3.3.1 setpr
 curl -fsSL https://deb.nodesource.com/setup_20.x | bash
 apt-get install -y nodejs
 
-rdma link add rxe_lo type rxe netdev lo
-ibv_devinfo -vvv
+printf '%s\n' '#!/bin/bash' 'rdma link add rxe_lo type rxe netdev lo' 'ibv_devinfo -vvv' 'exit 0' | tee -a /etc/rc.local
+chmod +x /etc/rc.local
+
+echo "DefaultLimitMEMLOCK=8589934592" >> /etc/systemd/user.conf
+echo "DefaultLimitMEMLOCK=8589934592" >> /etc/systemd/system.conf
+echo "*  hard memlock  8388608" >> /etc/security/limits.conf
+echo "*  soft memlock  8388608" >> /etc/security/limits.conf
+
+echo "vm.max_map_count = 1048576" >> /etc/sysctl.d/30-vm.conf
 
 npm install -g @testmo/testmo-cli
 EOF

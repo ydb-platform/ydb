@@ -99,6 +99,11 @@ const ITimestampProviderPtr& TClient::GetTimestampProvider()
     return TimestampProvider_.Value();
 }
 
+const TClientOptions& TClient::GetOptions()
+{
+    return ClientOptions_;
+}
+
 void TClient::Terminate()
 { }
 
@@ -526,6 +531,9 @@ TFuture<void> TClient::AlterTable(
     }
     if (options.ReplicationProgress) {
         ToProto(req->mutable_replication_progress(), *options.ReplicationProgress);
+    }
+    if (options.ClipTimestamp) {
+        req->set_clip_timestamp(*options.ClipTimestamp);
     }
 
     ToProto(req->mutable_mutating_options(), options);
@@ -1938,6 +1946,7 @@ TFuture<int> TClient::BuildSnapshot(const TBuildSnapshotOptions& options)
     }
     req->set_set_read_only(options.SetReadOnly);
     req->set_wait_for_snapshot_completion(options.WaitForSnapshotCompletion);
+    req->set_enable_automaton_read_only_barrier(options.EnableAutomatonReadOnlyBarrier);
 
     return req->Invoke().Apply(BIND([] (const TErrorOr<TApiServiceProxy::TRspBuildSnapshotPtr>& rspOrError) -> int {
         const auto& rsp = rspOrError.ValueOrThrow();
@@ -2644,12 +2653,12 @@ TFuture<TGetQueryTrackerInfoResult> TClient::GetQueryTrackerInfo(
     }));
 }
 
-TFuture<TGetDeclaredParametersInfoResult> TClient::GetDeclaredParametersInfo(
-    const TGetDeclaredParametersInfoOptions& options)
+TFuture<TGetQueryDeclaredParametersInfoResult> TClient::GetQueryDeclaredParametersInfo(
+    const TGetQueryDeclaredParametersInfoOptions& options)
 {
     auto proxy = CreateApiServiceProxy();
 
-    auto req = proxy.GetDeclaredParametersInfo();
+    auto req = proxy.GetQueryDeclaredParametersInfo();
     SetTimeoutOptions(*req, options);
 
     req->set_query_tracker_stage(options.QueryTrackerStage);
@@ -2661,8 +2670,8 @@ TFuture<TGetDeclaredParametersInfoResult> TClient::GetDeclaredParametersInfo(
     req->set_query(options.Query);
     req->set_engine(NProto::ConvertQueryEngineToProto(options.Engine));
 
-    return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspGetDeclaredParametersInfoPtr& rsp) {
-        return TGetDeclaredParametersInfoResult{
+    return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspGetQueryDeclaredParametersInfoPtr& rsp) {
+        return TGetQueryDeclaredParametersInfoResult{
             .Parameters = TYsonString(rsp->declared_parameters_info()),
         };
     }));

@@ -4,7 +4,7 @@
 
 namespace google {
 namespace protobuf {
-    class Message;
+class Message;
 } // namespace protobuf
 } // namespace google
 

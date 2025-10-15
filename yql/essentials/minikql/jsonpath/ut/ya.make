@@ -1,7 +1,5 @@
 UNITTEST_FOR(yql/essentials/minikql/jsonpath)
 
-
-
 SRCS(
     common_ut.cpp
     examples_ut.cpp

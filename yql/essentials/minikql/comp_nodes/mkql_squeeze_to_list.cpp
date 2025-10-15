@@ -2,8 +2,8 @@
 
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
-#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
-#include <yql/essentials/minikql/computation/mkql_llvm_base.h>  // Y_IGNORE
+#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
+#include <yql/essentials/minikql/computation/mkql_llvm_base.h>                // Y_IGNORE
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -12,17 +12,22 @@ namespace {
 
 class TSqueezeToListWrapper: public TStatefulFlowCodegeneratorNode<TSqueezeToListWrapper> {
     using TBase = TStatefulFlowCodegeneratorNode<TSqueezeToListWrapper>;
+
 public:
     class TState: public TComputationValue<TState> {
         using TBase = TComputationValue<TState>;
+
     public:
         TState(TMemoryUsageInfo* memInfo, ui64 limit)
-            : TBase(memInfo), Limit(limit) {
+            : TBase(memInfo)
+            , Limit(limit)
+        {
         }
 
         NUdf::TUnboxedValuePod Pull(TComputationContext& ctx) {
-            if (Accumulator.empty())
+            if (Accumulator.empty()) {
                 return ctx.HolderFactory.GetEmptyContainerLazy();
+            }
 
             NUdf::TUnboxedValue* items = nullptr;
             const auto list = ctx.HolderFactory.CreateDirectArrayHolder(Accumulator.size(), items);
@@ -35,6 +40,7 @@ public:
             Accumulator.emplace_back(std::move(value));
             return Limit != 0 && Limit <= Accumulator.size();
         }
+
     private:
         const ui64 Limit;
         TUnboxedValueDeque Accumulator;
@@ -42,7 +48,9 @@ public:
 
     TSqueezeToListWrapper(TComputationMutables& mutables, IComputationNode* flow, IComputationNode* limit)
         : TBase(mutables, flow, EValueRepresentation::Boxed, EValueRepresentation::Any)
-        , Flow(flow), Limit(limit) {
+        , Flow(flow)
+        , Limit(limit)
+    {
     }
 
     NUdf::TUnboxedValuePod DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
@@ -69,8 +77,10 @@ public:
     private:
         using TBase = TLLVMFieldsStructure<TComputationValue<TState>>;
         llvm::PointerType* StructPtrType;
+
     protected:
         using TBase::Context;
+
     public:
         std::vector<llvm::Type*> GetFieldsArray() {
             std::vector<llvm::Type*> result = TBase::GetFields();
@@ -79,7 +89,8 @@ public:
 
         TLLVMFieldsStructureForState(llvm::LLVMContext& context)
             : TBase(context)
-            , StructPtrType(PointerType::getUnqual(StructType::get(context))) {
+            , StructPtrType(PointerType::getUnqual(StructType::get(context)))
+        {
         }
     };
 
@@ -180,7 +191,7 @@ private:
     IComputationNode* const Limit;
 };
 
-}
+} // namespace
 
 IComputationNode* WrapSqueezeToList(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 2, "Expected pair of arguments.");
@@ -189,5 +200,5 @@ IComputationNode* WrapSqueezeToList(TCallable& callable, const TComputationNodeF
     return new TSqueezeToListWrapper(ctx.Mutables, flow, limit);
 }
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

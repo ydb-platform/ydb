@@ -6,4 +6,4 @@ namespace NKikimr::NMiniKQL {
 
 IComputationNode* WrapExpandMap(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 
-}
+} // namespace NKikimr::NMiniKQL

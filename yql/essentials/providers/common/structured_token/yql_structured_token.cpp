@@ -6,12 +6,11 @@
 #include <library/cpp/json/json_writer.h>
 #include <library/cpp/string_utils/base64/base64.h>
 
-
 namespace NYql {
 
 TStructuredToken::TStructuredToken(TMap<TString, TString>&& data)
-    : Data_(std::move(data)) {
-
+    : Data_(std::move(data))
+{
 }
 
 TString TStructuredToken::GetField(const TString& name) const {
@@ -49,7 +48,7 @@ TString TStructuredToken::ToJson() const {
     NJson::TJsonWriter writer(&output, false, true, true);
     writer.OpenMap();
 
-    for (auto&[k, v] : Data_) {
+    for (auto& [k, v] : Data_) {
         if (!IsUtf8(v)) {
             writer.Write(k + "(base64)", Base64Encode(TStringBuf(v)));
         } else {
@@ -70,7 +69,7 @@ TStructuredToken ParseStructuredToken(const TString& content) {
     NJson::ReadJsonTree(content, &v, true);
     TMap<TString, TString> data;
     const auto& m = v.GetMapSafe();
-    for (auto&[k, v] : m) {
+    for (auto& [k, v] : m) {
         TStringBuf key(k);
         if (key.ChopSuffix("(base64)")) {
             const auto& s = v.GetStringSafe();

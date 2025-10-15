@@ -42,7 +42,7 @@ class TReplication::TImpl: public TLagProvider {
             return;
         }
 
-        SecretResolver = ctx.Register(CreateSecretResolver(ctx.SelfID, ReplicationId, PathId, secretName, ++SecretResolverCookie));
+        SecretResolver = ctx.Register(CreateSecretResolver(ctx.SelfID, ReplicationId, PathId, secretName, ++SecretResolverCookie, Database));
     }
 
     ui64 GetExpectedSecretResolverCookie() const {
@@ -159,6 +159,8 @@ public:
 
             if (endpoint.empty()) {
                 ydbProxy.Reset(CreateLocalYdbProxy(Database));
+            } else if (database.empty()) {
+                ErrorState("Database is not specified.");
             } else {
                 switch (params.GetCredentialsCase()) {
                 case NKikimrReplication::TConnectionParams::kStaticCredentials:

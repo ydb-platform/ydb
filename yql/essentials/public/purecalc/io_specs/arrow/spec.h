@@ -37,7 +37,9 @@ public:
     explicit TArrowInputSpec(const TVector<NYT::TNode>& schemas);
     const TVector<NYT::TNode>& GetSchemas() const override;
     const NYT::TNode& GetSchema(ui32 index) const;
-    bool ProvidesBlocks() const override { return true; }
+    bool ProvidesBlocks() const override {
+        return true;
+    }
 };
 
 /**
@@ -70,7 +72,9 @@ private:
 public:
     explicit TArrowOutputSpec(const NYT::TNode& schema);
     const NYT::TNode& GetSchema() const override;
-    bool AcceptsBlocks() const override { return true; }
+    bool AcceptsBlocks() const override {
+        return true;
+    }
 };
 
 template <>
@@ -86,22 +90,22 @@ struct TInputSpecTraits<TArrowInputSpec> {
     using TConsumerType = THolder<IConsumer<TInputItemType>>;
 
     static void PreparePullListWorker(const TArrowInputSpec&, IPullListWorker*,
-        IInputStream*);
+                                      IInputStream*);
     static void PreparePullListWorker(const TArrowInputSpec&, IPullListWorker*,
-        THolder<IInputStream>);
+                                      THolder<IInputStream>);
     static void PreparePullListWorker(const TArrowInputSpec&, IPullListWorker*,
-        const TVector<IInputStream*>&);
+                                      const TVector<IInputStream*>&);
     static void PreparePullListWorker(const TArrowInputSpec&, IPullListWorker*,
-        TVector<THolder<IInputStream>>&&);
+                                      TVector<THolder<IInputStream>>&&);
 
     static void PreparePullStreamWorker(const TArrowInputSpec&, IPullStreamWorker*,
-        IInputStream*);
+                                        IInputStream*);
     static void PreparePullStreamWorker(const TArrowInputSpec&, IPullStreamWorker*,
-        THolder<IInputStream>);
+                                        THolder<IInputStream>);
     static void PreparePullStreamWorker(const TArrowInputSpec&, IPullStreamWorker*,
-        const TVector<IInputStream*>&);
+                                        const TVector<IInputStream*>&);
     static void PreparePullStreamWorker(const TArrowInputSpec&, IPullStreamWorker*,
-        TVector<THolder<IInputStream>>&&);
+                                        TVector<THolder<IInputStream>>&&);
 
     static TConsumerType MakeConsumer(const TArrowInputSpec&, TWorkerHolder<IPushStreamWorker>);
 };

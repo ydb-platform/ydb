@@ -5,6 +5,6 @@
 
 namespace NSQLComplete {
 
-    INameService::TPtr MakeColumnReplicatingService(INameService::TPtr origin, IRanking::TPtr ranking);
+INameService::TPtr MakeColumnReplicatingService(INameService::TPtr origin, IRanking::TPtr ranking);
 
 } // namespace NSQLComplete

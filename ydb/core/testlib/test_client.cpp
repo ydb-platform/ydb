@@ -555,6 +555,7 @@ namespace Tests {
             appData.DataStreamsAuthFactory = Settings->DataStreamsAuthFactory.get();
             appData.PersQueueMirrorReaderFactory = Settings->PersQueueMirrorReaderFactory.get();
             appData.HiveConfig.MergeFrom(Settings->AppConfig->GetHiveConfig());
+            appData.DataShardConfig.MergeFrom(Settings->AppConfig->GetDataShardConfig());
             appData.GraphConfig.MergeFrom(Settings->AppConfig->GetGraphConfig());
             appData.SqsConfig.MergeFrom(Settings->AppConfig->GetSqsConfig());
             appData.SharedCacheConfig.MergeFrom(Settings->AppConfig->GetSharedCacheConfig());
@@ -1453,7 +1454,7 @@ namespace Tests {
         {
             if (Settings->PQConfig.GetEnabled() == true) {
                 IActor *pqMetaCache = NMsgBusProxy::NPqMetaCacheV2::CreatePQMetaCache(
-                        new ::NMonitoring::TDynamicCounters(), TDuration::Seconds(1)
+                        new ::NMonitoring::TDynamicCounters()
                 );
 
                 TActorId pqMetaCacheId = Runtime->Register(pqMetaCache, nodeIdx, userPoolId);

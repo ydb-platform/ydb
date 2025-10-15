@@ -246,6 +246,7 @@ private:
     void Handle(TEvents::TEvPoisonPill::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvSubDomainStatus::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvRunCompaction::TPtr& ev);
+    void Handle(TEvPQ::TEvForceCompaction::TPtr& ev);
     void Handle(TEvPQ::TEvExclusiveLockAcquired::TPtr& ev);
     void Handle(TEvPQ::TBroadcastPartitionError::TPtr& ev, const TActorContext& ctx);
     void HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorContext& ctx);
@@ -498,6 +499,7 @@ private:
     ui64 GetReadOffset(ui64 offset, TMaybe<TInstant> readTimestamp) const;
 
     TConsumerSnapshot CreateSnapshot(TUserInfo& userInfo) const;
+    bool IsKeyCompactionEnabled() const;
     void CreateCompacter();
     void SendCompacterWriteRequest(THolder<TEvKeyValue::TEvRequest>&& request);
 
@@ -595,6 +597,7 @@ private:
             HFuncTraced(TEvPQ::TEvDeletePartition, HandleOnInit);
             IgnoreFunc(TEvPQ::TEvTxBatchComplete);
             hFuncTraced(TEvPQ::TEvRunCompaction, Handle);
+            hFuncTraced(TEvPQ::TEvForceCompaction, Handle);
         default:
             if (!Initializer.Handle(ev)) {
                 ALOG_ERROR(NKikimrServices::PERSQUEUE, "Unexpected " << EventStr("StateInit", ev));
@@ -663,6 +666,7 @@ private:
             HFuncTraced(TEvPQ::TEvDeletePartition, Handle);
             IgnoreFunc(TEvPQ::TEvTxBatchComplete);
             hFuncTraced(TEvPQ::TEvRunCompaction, Handle);
+            hFuncTraced(TEvPQ::TEvForceCompaction, Handle);
         default:
             ALOG_ERROR(NKikimrServices::PERSQUEUE, "Unexpected " << EventStr("StateIdle", ev));
             break;
@@ -916,12 +920,15 @@ private:
     TTabletCountersBase TabletCounters;
     THolder<TPartitionLabeledCounters> PartitionCountersLabeled;
 
+    THolder<TPartitionKeyCompactionCounters> PartitionCompactionCounters;
+
     // Per partition counters
     NMonitoring::TDynamicCounters::TCounterPtr WriteTimeLagMsByLastWritePerPartition;
     NMonitoring::TDynamicCounters::TCounterPtr SourceIdCountPerPartition;
     NMonitoring::TDynamicCounters::TCounterPtr TimeSinceLastWriteMsPerPartition;
     NMonitoring::TDynamicCounters::TCounterPtr BytesWrittenPerPartition;
     NMonitoring::TDynamicCounters::TCounterPtr MessagesWrittenPerPartition;
+
 
     TInstant LastCountersUpdate;
 
@@ -1001,6 +1008,9 @@ private:
     TMultiCounter CompactionUnprocessedCount;
     TMultiCounter CompactionUnprocessedBytes;
     TMultiCounter CompactionTimeLag;
+
+    // NKikimr::NPQ::TMultiCounter KeyCompactionReadCyclesTotal;
+    // NKikimr::NPQ::TMultiCounter KeyCompactionWriteCyclesTotal;
 
     // Writing blob with topic quota variables
     ui64 TopicQuotaRequestCookie = 0;
@@ -1109,7 +1119,7 @@ private:
                         const TEvPQ::TEvBlobResponse* blobResponse,
                         const TActorContext& ctx);
 
-    void TryRunCompaction();
+    void TryRunCompaction(bool force = false);
     void BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& blobs);
     void BlobsForCompactionWereWrite();
     ui64 NextReadCookie();
@@ -1147,16 +1157,28 @@ private:
                               bool needToCompactiHead,
                               TEvKeyValue::TEvRequest* compactionRequest,
                               TInstant& blobCreationUnixTime,
-                              bool wasThePreviousBlobBig);
+                              bool wasThePreviousBlobBig,
+                              bool& newHeadIsInitialized);
     void RenameCompactedBlob(TDataKey& k,
                              const size_t size,
                              const bool needToCompactHead,
+                             bool& newHeadIsInitialized,
                              TProcessParametersBase& parameters,
                              TEvKeyValue::TEvRequest* compactionRequest);
 
     bool WasTheLastBlobBig = true;
 
     void DumpKeysForBlobsCompaction() const;
+
+    void TryProcessGetWriteInfoRequest(const TActorContext& ctx);
+
+    std::unique_ptr<TEvPQ::TEvGetWriteInfoRequest> PendingGetWriteInfoRequest;
+    bool StopCompaction = false;
+
+    TMaybe<std::pair<ui64, ui16>> FirstCompactionPart;
+
+    void InitFirstCompactionPart();
+    bool InitNewHeadForCompaction();
 };
 
 inline ui64 TPartition::GetStartOffset() const {

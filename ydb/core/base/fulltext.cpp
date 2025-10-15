@@ -6,6 +6,15 @@ namespace NKikimr::NFulltext {
 
 namespace {
 
+    bool ValidateSettingInRange(const TString& name, i32 value, i32 minValue, i32 maxValue, TString& error) {
+        if (minValue <= value && value <= maxValue) {
+            return true;
+        }
+
+        error = TStringBuilder() << "Invalid " << name << ": " << value << " should be between " << minValue << " and " << maxValue;
+        return false;
+    };
+
     Ydb::Table::FulltextIndexSettings::Layout ParseLayout(const TString& layout_, TString& error) {
         const TString layout = to_lower(layout_);
         if (layout == "flat")
@@ -87,7 +96,6 @@ namespace {
         }
     }
 
-
     TVector<TString> Tokenize(const TString& text, const Ydb::Table::FulltextIndexSettings::Tokenizer& tokenizer) {
         TVector<TString> tokens;
         switch (tokenizer) {
@@ -106,6 +114,28 @@ namespace {
                 Y_ENSURE(TStringBuilder() << "Invalid tokenizer: " << static_cast<int>(tokenizer));
         }
         return tokens;
+    }
+
+    size_t GetLengthUTF8(const TString& token) {
+        const unsigned char* ptr = (const unsigned char*)token.data();
+        const unsigned char* end = ptr + token.size();
+        size_t length = 0;
+
+        while (ptr < end) {
+            wchar32 symbol;
+            size_t symbolBytes = 0;
+
+            while (ptr < end) { // skip delimiters
+                if (SafeReadUTF8Char(symbol, symbolBytes, ptr, end) != RECODE_OK) {
+                    Y_ASSERT(false); // should be dropped during tokenize
+                    return 0;
+                }
+                length++;
+                ptr += symbolBytes;
+            }
+        }
+
+        return length;
     }
 
     bool ValidateSettings(const Ydb::Table::FulltextIndexSettings::Analyzers& settings, TString& error) {
@@ -142,15 +172,27 @@ namespace {
         }
 
         if (settings.use_filter_length()) {
-            error = "Unsupported use_filter_length setting";
+            if (!settings.has_filter_length_min() && !settings.has_filter_length_max()) {
+                error = "either filter_length_min or filter_length_max should be set with use_filter_length";
+                return false;
+            }
+            if (settings.has_filter_length_min() && !ValidateSettingInRange("filter_length_min", settings.filter_length_min(), 1, 1000, error)) {
+                return false;
+            }
+            if (settings.has_filter_length_max() && !ValidateSettingInRange("filter_length_max", settings.filter_length_max(), 1, 1000, error)) {
+                return false;
+            }
+            if (settings.has_filter_length_min() && settings.has_filter_length_max() && settings.filter_length_min() > settings.filter_length_max()) {
+                error = "Invalid filter_length_min: should be less or equal than filter_length_max";
+                return false;
+            }
+        }
+        if (settings.has_filter_length_min() && !settings.use_filter_length()) {
+            error = "use_filter_length should be set with filter_length_min";
             return false;
         }
-        if (settings.has_filter_length_min()) {
-            error = "Unsupported filter_length_min setting";
-            return false;
-        }
-        if (settings.has_filter_length_max()) {
-            error = "Unsupported filter_length_max setting";
+        if (settings.has_filter_length_max() && !settings.use_filter_length()) {
+            error = "use_filter_length should be set with filter_length_max";
             return false;
         }
 
@@ -165,6 +207,23 @@ TVector<TString> Analyze(const TString& text, const Ydb::Table::FulltextIndexSet
         for (auto i : xrange(tokens.size())) {
             tokens[i] = ToLowerUTF8(tokens[i]);
         }
+    }
+
+    if (settings.use_filter_length() && (settings.has_filter_length_min() || settings.has_filter_length_max())) {
+        tokens.erase(
+            std::remove_if(tokens.begin(), tokens.end(),
+                [&](const TString& token){
+                    auto length = GetLengthUTF8(token);
+                    if (settings.has_filter_length_min() && length < static_cast<size_t>(settings.filter_length_min())) {
+                        return true;
+                    }
+                    if (settings.has_filter_length_max() && length > static_cast<size_t>(settings.filter_length_max())) {
+                        return true;
+                    }
+                    return false;
+                }),
+            tokens.end()
+        );
     }
 
     return tokens;

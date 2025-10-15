@@ -201,19 +201,7 @@ public:
         Y_ABORT_UNLESS(context.SS->Tables.contains(pathId));
         auto table = context.SS->Tables.at(pathId);
 
-        // Do not increment AlterVersion: restore only copies data without schema changes
         NIceDb::TNiceDb db(context.GetDB());
-
-        // Increment parent directory version to trigger republishing
-        auto parentDir = context.SS->PathsById.at(path->ParentPathId);
-        ++parentDir->DirAlterVersion;
-        context.SS->PersistPathDirAlterVersion(db, parentDir);
-        context.SS->ClearDescribePathCaches(parentDir);
-        context.OnComplete.PublishToSchemeBoard(OperationId, parentDir->PathId);
-
-        context.SS->ClearDescribePathCaches(path);
-        context.OnComplete.PublishToSchemeBoard(OperationId, pathId);
-
         context.SS->ChangeTxState(db, OperationId, TTxState::ProposedWaitParts);
 
         return true;

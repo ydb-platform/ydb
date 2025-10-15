@@ -422,29 +422,21 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
         }
     }
 
-    TChecksumState GetChecksumState() const {
-        TChecksumState checksumState;
-        if (Checksum) {
-            checksumState = Checksum->GetState();
-        }
-        return checksumState;
-    }
-
     void Handle(TEvDataShard::TEvS3DownloadInfo::TPtr& ev) {
         IMPORT_LOG_D("Handle " << ev->Get()->ToString());
 
         const auto& info = ev->Get()->Info;
         if (!info.DataETag) {
             Send(DataShard, new TEvDataShard::TEvStoreS3DownloadInfo(TxId, {
-                ETag, ProcessedBytes, WrittenBytes, WrittenRows, GetChecksumState()
+                ETag, ProcessedBytes, WrittenBytes, WrittenRows, ProcessedChecksumState
             }));
             return;
         }
 
-        ProcessDownloadInfo(info, TStringBuf("DownloadInfo"));
+        ProcessDownloadInfo(info, TStringBuf("DownloadInfo"), true);
     }
 
-    void ProcessDownloadInfo(const TS3Download& info, const TStringBuf marker) {
+    void ProcessDownloadInfo(const TS3Download& info, const TStringBuf marker, bool loadState = false) {
         IMPORT_LOG_N("Process download info at '" << marker << "'"
             << ": info# " << info);
 
@@ -453,12 +445,16 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
             return;
         }
 
+        if (loadState) {
+            if (Checksum) {
+                Checksum->SetState(info.ProcessedChecksumState);
+            }
+        }
+
         ProcessedBytes = info.ProcessedBytes;
+        ProcessedChecksumState = info.ProcessedChecksumState;
         WrittenBytes = info.WrittenBytes;
         WrittenRows = info.WrittenRows;
-        if (Checksum) {
-            Checksum->Continue(info.ChecksumState);
-        }
 
         if (!ContentLength || ProcessedBytes >= ContentLength) {
             if (!CheckChecksum()) {
@@ -546,16 +542,23 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
                 << ": " << error);
         }
 
-        if (Checksum) {
-            Checksum->AddData(data);
-        }
-
         RequestBuilder.New(TableInfo, Scheme);
-        TMemoryPool pool(256);
-        while (ProcessData(data, pool));
+
+        if (data) {
+            if (Checksum) {
+                Checksum->AddData(data);
+            }
+
+            TMemoryPool pool(256);
+            while (ProcessData(data, pool));
+        }
 
         if (const auto processed = Reader->ReadyBytes()) { // has progress
             ProcessedBytes += processed;
+            if (Checksum) {
+                ProcessedChecksumState = Checksum->GetState();
+            }
+
             WrittenBytes += std::exchange(PendingBytes, 0);
             WrittenRows += std::exchange(PendingRows, 0);
         }
@@ -616,7 +619,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
             << ", size# " << record->ByteSizeLong());
 
         Send(DataShard, new TEvDataShard::TEvS3UploadRowsRequest(TxId, record, {
-            ETag, ProcessedBytes, WrittenBytes, WrittenRows, GetChecksumState()
+            ETag, ProcessedBytes, WrittenBytes, WrittenRows, ProcessedChecksumState
         }));
     }
 
@@ -816,6 +819,7 @@ public:
         , ReadBatchSize(task.GetS3Settings().GetLimits().GetReadBatchSize())
         , ReadBufferSizeLimit(AppData()->DataShardConfig.GetRestoreReadBufferSizeLimit())
         , Checksum(task.GetValidateChecksums() ? CreateChecksum() : nullptr)
+        , ProcessedChecksumState(Checksum ? Checksum->GetState() : NKikimrBackup::TChecksumState())
     {
     }
 
@@ -894,6 +898,7 @@ private:
     TUploadRowsRequestBuilder RequestBuilder;
 
     NBackup::IChecksum::TPtr Checksum;
+    NKikimrBackup::TChecksumState ProcessedChecksumState;
     TString ExpectedChecksum;
 }; // TS3Downloader
 

@@ -456,7 +456,7 @@ protected:
         }
 
         const auto embedding = row.at(EmbeddingPos).AsRef();
-        if (!Clusters->IsExpectedSize(embedding)) {
+        if (!Clusters->IsExpectedFormat(embedding)) {
             return;
         }
 
@@ -482,7 +482,7 @@ protected:
     void FeedFinal(TArrayRef<const TCell> row, TArrayRef<const TCell> sourcePk,
         TArrayRef<const TCell> dataColumns, TArrayRef<const TCell> origKey, bool isPostingLevel)
     {
-        Clusters->FindClusters(row.at(EmbeddingPos).AsRef(), TmpClusters, OverlapClusters, OverlapRatio);
+        Clusters->FindClusters(row.at(EmbeddingPos).AsBuf(), TmpClusters, OverlapClusters, OverlapRatio);
         if (OutForeign) {
             bool foreign = false;
             if (InForeign) {

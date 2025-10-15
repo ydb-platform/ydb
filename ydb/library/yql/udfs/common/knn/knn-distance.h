@@ -225,9 +225,9 @@ public:
             return {};
         }
 
-        auto compute = [](auto ll, float lr, auto rr) {
-            const float norm = std::sqrt(ll * rr);
-            const float cosine = norm != 0 ? lr / norm : 1;
+        auto compute = [](TRes ll, TRes lr, TRes rr) {
+            const auto norm = std::sqrt(ll * rr);
+            const TRes cosine = norm != 0 ? lr / static_cast<TRes>(norm) : 1;
             return cosine;
         };
 

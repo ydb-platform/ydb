@@ -20,8 +20,8 @@ struct TSdkSession : public ISession {
 
     NThreading::TFuture<NYdb::NTable::TDataQueryResult> ExecuteDataQuery(
         const TString& sql,
-        std::shared_ptr<NYdb::TParamsBuilder> paramsBuilder,
         NFq::ISession::TTxControl txControl,
+        std::shared_ptr<NYdb::TParamsBuilder> paramsBuilder,
         NYdb::NTable::TExecDataQuerySettings execDataQuerySettings = NYdb::NTable::TExecDataQuerySettings()) override {
         auto params = paramsBuilder->Build();
 
@@ -67,8 +67,8 @@ struct TSdkSession : public ISession {
         Transaction = transaction;
     }
 
-    std::optional<NYdb::NTable::TTransaction>& GetTransaction() override {
-        return Transaction;
+    bool HasActiveTransaction() override {
+        return Transaction && Transaction->IsActive();
     }
 
 private: 

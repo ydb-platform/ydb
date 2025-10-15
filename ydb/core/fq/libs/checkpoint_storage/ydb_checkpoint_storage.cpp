@@ -1,6 +1,5 @@
 #include "ydb_checkpoint_storage.h"
 
-#include <memory>
 #include <ydb/core/fq/libs/actors/logging/log.h>
 #include <ydb/core/fq/libs/ydb/util.h>
 #include <ydb/core/fq/libs/ydb/ydb.h>
@@ -13,16 +12,13 @@
 #include <util/string/printf.h>
 
 #include <fmt/format.h>
-#include <ydb/library/query_actor/query_actor.h>
-
-#include <ydb/library/table_creator/table_creator.h>
 
 namespace NFq {
 
 using namespace NThreading;
 using namespace NYdb;
 using namespace NYdb::NTable;
-using namespace NKikimr;
+//using namespace NKikimr;
 using NYql::TIssues;
 using TTxControl = NFq::ISession::TTxControl;
 
@@ -118,8 +114,8 @@ TFuture<TDataQueryResult> SelectGraphCoordinators(const TGenerationContextPtr& c
     auto params = std::make_shared<NYdb::TParamsBuilder>();
     return context->Session->ExecuteDataQuery(
         query,
-        params,
         TTxControl::BeginAndCommitTx(),
+        params,
         context->ExecDataQuerySettings);
 }
 
@@ -228,7 +224,7 @@ TFuture<TStatus> CreateCheckpoint(const TCheckpointContextPtr& context) {
     }
 
     auto ttxControl = TTxControl::ContinueAndCommitTx();
-    return generationContext->Session->ExecuteDataQuery(query, std::move(params), ttxControl, generationContext->ExecDataQuerySettings).Apply(
+    return generationContext->Session->ExecuteDataQuery(query, ttxControl, std::move(params), generationContext->ExecDataQuerySettings).Apply(
         [] (const TFuture<TDataQueryResult>& future) {
             TStatus status = future.GetValue();
             return status;
@@ -278,7 +274,7 @@ TFuture<TStatus> UpdateCheckpoint(const TCheckpointContextPtr& context) {
             .Build();
 
     auto ttxControl = TTxControl::ContinueAndCommitTx();
-    return generationContext->Session->ExecuteDataQuery(query, std::move(params), ttxControl, generationContext->ExecDataQuerySettings).Apply(
+    return generationContext->Session->ExecuteDataQuery(query, ttxControl, std::move(params), generationContext->ExecDataQuerySettings).Apply(
         [] (const TFuture<TDataQueryResult>& future) {
             TStatus status = future.GetValue();
             return status;
@@ -307,8 +303,8 @@ TFuture<TDataQueryResult> SelectGraphDescId(const TCheckpointContextPtr& context
 
     return generationContext->Session->ExecuteDataQuery(
         query,
-        std::move(params),
         TTxControl::ContinueTx(),
+        std::move(params),
         generationContext->ExecDataQuerySettings);
 }
 
@@ -423,8 +419,8 @@ TFuture<TDataQueryResult> SelectGraphCheckpoints(const TGenerationContextPtr& co
 
     return context->Session->ExecuteDataQuery(
         query,
-        std::move(paramsBuilder),
         TTxControl::BeginAndCommitTx(),
+        std::move(paramsBuilder),
         context->ExecDataQuerySettings);
 }
 
@@ -503,8 +499,8 @@ TFuture<TDataQueryResult> SelectCheckpoint(const TCheckpointContextPtr& context)
 
     return generationContext->Session->ExecuteDataQuery(
         query,
-        std::move(params),
         TTxControl::ContinueTx(),
+        std::move(params),
         generationContext->ExecDataQuerySettings);
 }
 
@@ -996,8 +992,8 @@ TFuture<TIssues> TCheckpointStorage::DeleteGraph(const TString& graphId) {
 
             auto future = context->Session->ExecuteDataQuery(
                 query,
-                std::move(params),
                 TTxControl::BeginAndCommitTx(),
+                std::move(params),
                 settings);
 
             return future.Apply(
@@ -1065,8 +1061,8 @@ TFuture<TIssues> TCheckpointStorage::MarkCheckpointsGC(
 
             auto future = context->Session->ExecuteDataQuery(
                 query,
-                std::move(params),
                 TTxControl::BeginAndCommitTx(),
+                std::move(params),
                 thisPtr->DefaultExecDataQuerySettings());
 
             return future.Apply(
@@ -1143,8 +1139,8 @@ TFuture<TIssues> TCheckpointStorage::DeleteMarkedCheckpoints(
 
             auto future = session->ExecuteDataQuery(
                 query,
-                std::move(params),
                 TTxControl::BeginAndCommitTx(),
+                std::move(params),
                 settings);
 
             return future.Apply(
@@ -1158,6 +1154,9 @@ TFuture<TIssues> TCheckpointStorage::DeleteMarkedCheckpoints(
 }
 
 TFuture<ICheckpointStorage::TGetTotalCheckpointsStateSizeResult> TCheckpointStorage::GetTotalCheckpointsStateSize(const TString& graphId) {
+    
+            Cerr << "GetTotalCheckpointsStateSize " << Endl; 
+
     auto result = MakeIntrusive<TGetTotalCheckpointsStateSizeContext>();
     auto future = YdbConnection->GetTableClient()->RetryOperation(
         [prefix = YdbConnection->GetTablePathPrefix(), graphId, thisPtr = TIntrusivePtr(this), result,
@@ -1190,8 +1189,8 @@ TFuture<ICheckpointStorage::TGetTotalCheckpointsStateSizeResult> TCheckpointStor
 
             return context->Session->ExecuteDataQuery(
                 query,
-                std::move(paramsBuilder),
                 TTxControl::BeginAndCommitTx(true),
+                std::move(paramsBuilder),
                 thisPtr->DefaultExecDataQuerySettings())
               .Apply(
                   [graphId, result, actorSystem](const TFuture<TDataQueryResult>& future) {

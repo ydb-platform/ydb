@@ -1,94 +1,148 @@
 #include <ydb/core/fq/libs/ydb/query_actor.h>
-#include <ydb/library/actors/core/events.h>
-#include <ydb/public/api/protos/ydb_status_codes.pb.h>
+#include <ydb/core/fq/libs/actors/logging/log.h>
 
-#include <yql/essentials/public/issue/yql_issue.h>
+#include <ydb/library/actors/core/events.h>
 #include <ydb/library/query_actor/query_actor.h>
 
+#include <ydb/public/api/protos/ydb_status_codes.pb.h>
+#include <yql/essentials/public/issue/yql_issue.h>
+#include <library/cpp/threading/future/core/future.h>
+
+#define LOG_T(stream) LOG_TRACE_S(*NActors::TlsActivationContext, LogComponent, LogPrefix() << stream)
 
 namespace NFq {
 
-struct TEvPrivate {
-    // Event ids
-    enum EEv : ui32 {
-        EvStart = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
-        EvExecuteDataQueryResult,
-        EvEnd
+class TQuerySession final : public NKikimr::TQueryBase {
+    using TBase = NKikimr::TQueryBase;
+
+    struct TDataQuery{
+        TString Sql;
+        std::shared_ptr<NYdb::TParamsBuilder> Params;
+        TEvQuerySession::TTxControl TxControl;
+        NThreading::TPromise<NYdb::NTable::TDataQueryResult> Promise;
     };
 
-    static_assert(EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE)");
+public:
+    TQuerySession()
+        : NKikimr::TQueryBase(NKikimrServices::STREAMS_STORAGE_SERVICE) {
+    }
+    
+private:
 
-    template <typename TEv, ui32 EventType>
-    struct TEvResultBase : public NActors::TEventLocal<TEv, EventType> {
-        explicit TEvResultBase(Ydb::StatusIds::StatusCode status, NYql::TIssues issues = {})
-            : Status(status)
-            , Issues(std::move(issues))
-        {}
+    TString LogPrefix() const {
+        return "TQuerySession: ";
+    }
 
-        const Ydb::StatusIds::StatusCode Status;
-        const NYql::TIssues Issues;
-    };
+    TAutoPtr<NActors::IEventHandle> AfterRegister(const NActors::TActorId &self, const NActors::TActorId& parentId) override {
+        Y_UNUSED(parentId);
+        Become(&TQuerySession::StateWork);
+        return new NActors::IEventHandle(self, self, new NActors::TEvents::TEvBootstrap());
+    }
+    
+    STATEFN(StateWork) {
+        Cerr << "StateFunc 777" << Endl;
+        switch (ev->GetTypeRewrite()) {
+            cFunc(NActors::TEvents::TEvBootstrap::EventType, DoBootstrap);
+            hFunc(TEvQuerySession::TEvExecuteDataQuery, Handle);
+            hFunc(TEvQuerySession::TEvRollbackTransaction, Handle);
+            sFunc(NActors::TEvents::TEvPoison, DoPassAway);
+            default:
+                TBase::StateFunc(ev);
+        }
+    }
+    
+    void DoBootstrap() {
+        TBase::Bootstrap();
+        Become(&TQuerySession::StateWork);
+    }
 
+    void Handle(TEvQuerySession::TEvExecuteDataQuery::TPtr& ev) {
+        LOG_T("TEvExecuteDataQuery");
+        Y_ABORT_UNLESS(!IsExecuting);
+        Y_ABORT_UNLESS(!DataQuery);
 
-    struct TEvExecuteDataQueryResult : public TEvResultBase<TEvExecuteDataQueryResult, EvExecuteDataQueryResult> {
-        using TEvResultBase::TEvResultBase;
-    };
+        DataQuery = TDataQuery{ev->Get()->Sql, ev->Get()->Params, ev->Get()->TxControl, ev->Get()->Promise};
+        ProcessQueries();
+    }
 
+    void Handle(TEvQuerySession::TEvRollbackTransaction::TPtr& /*ev*/) {
+        LOG_T("TEvRollbackTransaction");
+        Y_ABORT_UNLESS(!DataQuery);
+        Finish(Ydb::StatusIds::INTERNAL_ERROR, "Rollback transaction", true);
+    }
+
+    void OnRunQuery() final {
+        LOG_T("OnRunQuery()");
+        ReadyToExecute = true;
+        ProcessQueries();
+    }
+
+    void OnQueryResult() final {
+        Y_ABORT_UNLESS(IsExecuting);
+        LOG_T("OnQueryResult()");
+
+        auto promise = DataQuery->Promise;
+        DataQuery = std::nullopt;
+        auto status = NYdb::TStatus(NYdb::EStatus::SUCCESS, NYdb::NIssue::TIssues());
+        
+        IsExecuting = false;
+        promise.SetValue(NYdb::NTable::TDataQueryResult(std::move(status), std::move(ResultSets), std::nullopt, std::nullopt, false, std::nullopt));
+        if (IsFinishing) {
+            Finish();
+        }
+    }
+
+    void OnFinish(Ydb::StatusIds::StatusCode statusCode, NYql::TIssues&& issues) final {
+        LOG_T("OnFinish");
+
+        if (DataQuery) {          
+            NYdb::TStatus status(static_cast<NYdb::EStatus>(statusCode), NYdb::NAdapters::ToSdkIssues(issues));
+            DataQuery->Promise.SetValue(NYdb::NTable::TDataQueryResult(std::move(status), std::move(ResultSets), std::nullopt, std::nullopt, false, std::nullopt));
+        }
+        DataQuery = std::nullopt;
+    }
+
+    void ProcessQueries() {
+        if (IsExecuting || !ReadyToExecute || !DataQuery) {
+            return;
+        }
+        IsExecuting = true;
+
+        TQueryBase::TTxControl tx;
+        if (DataQuery->TxControl.Begin) {
+            tx.Begin(true);
+        }
+        if (DataQuery->TxControl.Commit) {
+            tx.Commit(true);
+        }
+        if (DataQuery->TxControl.Continue) {
+            tx.Continue(true);
+        }
+        if (DataQuery->TxControl.SnapshotRead) {
+            tx.SnapshotRead(true);
+        }
+        Cerr << "Run query " << DataQuery->Sql << " tx.Begin " << tx.Begin_ << " tx.Commit " << tx.Commit_ << Endl; 
+        RunDataQuery(DataQuery->Sql, DataQuery->Params.get()/*, tx*/);
+    }
+
+    void DoPassAway() {
+        LOG_T("DoPassAway");
+        if (DataQuery) {
+            IsFinishing = true;
+            return;
+        }
+        Finish();
+    }
+
+private:
+    std::optional<TDataQuery> DataQuery;
+    bool IsExecuting = false;
+    bool ReadyToExecute = false;
+    bool IsFinishing = false;
 };
 
-
-
-// class TDataQuery : public NActors::TActorBootstrapped<TDataQuery> {
-// public:
-//     TDataQuery(
-//         NThreading::TPromise<NYdb::NTable::TDataQueryResult> promise,
-//         const TString& sql,
-//         std::shared_ptr<NYdb::TParamsBuilder> params,
-//         NYdb::NTable::TTxControl txControl)
-//         : Promise(promise)
-//         , Sql(sql)
-//         , Params(params)
-//         , TxControl(txControl) {
-//     }     
-    
-//     void Bootstrap() {
-//         Become(&TDataQuery::StateFunc);
-//         Cerr << "Bootstrap NewDataQuery" << Endl;
-//         NActors::TActivationContext::AsActorContext().Register(new TExecuteDataQuery::TRetry(SelfId(), "", "", Sql, Params, TxControl));
-
-//     }
-//     STFUNC(StateFunc) {
-//         switch (ev->GetTypeRewrite()) {
-//             hFunc(TEvPrivate::TEvExecuteDataQueryResult, Handle);
-//         }
-//     }
-
-//     void Handle(TEvPrivate::TEvExecuteDataQueryResult::TPtr& /*ev*/) {
-//        Cerr << "TEvExecuteDataQueryResult " << Endl;
-//     }
-// private: 
-//     NThreading::TPromise<NYdb::NTable::TDataQueryResult> Promise;
-//     const TString Sql;
-//     std::shared_ptr<NYdb::TParamsBuilder> Params;
-//     const NYdb::NTable::TTxControl TxControl;
-// };
-
-
-// std::unique_ptr<NActors::IActor> NewDataQuery(
-//     NThreading::TPromise<NYdb::NTable::TDataQueryResult> promise,
-//     const TString& sql,
-//     std::shared_ptr<NYdb::TParamsBuilder> params,
-//     NYdb::NTable::TTxControl txControl) {
-//     Cerr << "NewDataQuery" << Endl;
-
-//     return std::unique_ptr<NActors::IActor>(new TDataQuery(promise, sql, params, txControl));
-//     //return std::unique_ptr<NActors::IActor>(new TRowDispatcher(
-// }
-
-
-
-std::unique_ptr<TQuerySession> MakeQueryActor() {
-    return std::unique_ptr<TQuerySession>(new TQuerySession());
+std::unique_ptr<NActors::IActor> MakeQuerySession() {
+    return std::unique_ptr<NActors::IActor>(new TQuerySession());
 }
 
 

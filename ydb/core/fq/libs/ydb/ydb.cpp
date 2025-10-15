@@ -47,7 +47,7 @@ TFuture<TDataQueryResult> SelectGeneration(const TGenerationContextPtr& context)
         ttxControl.CommitTx();
     }
 
-    return context->Session->ExecuteDataQuery(query, std::move(params), ttxControl);
+    return context->Session->ExecuteDataQuery(query, ttxControl, std::move(params));
 }
 
 TFuture<TStatus> CheckGeneration(
@@ -105,7 +105,7 @@ TFuture<TStatus> CheckGeneration(
         return MakeFuture(MakeErrorStatus(EStatus::ALREADY_EXISTS, ss.Str()));
     }
 
-    if (requiresTransaction && !context->Session->GetTransaction()) {
+    if (requiresTransaction && !context->Session->HasActiveTransaction()) {
         // just sanity check, normally should not happen.
         // note that we use retriable error
         TStringStream ss;
@@ -157,7 +157,7 @@ TFuture<TStatus> UpsertGeneration(const TGenerationContextPtr& context) {
         ttxControl = NFq::ISession::TTxControl::ContinueAndCommitTx();
     }
 
-    auto f = context->Session->ExecuteDataQuery(query, std::move(params), ttxControl, context->ExecDataQuerySettings);
+    auto f = context->Session->ExecuteDataQuery(query, ttxControl, std::move(params), context->ExecDataQuerySettings);
     if (context->CommitTx) {
         context->Session->UpdateTransaction(std::nullopt);
     }
@@ -351,7 +351,7 @@ TFuture<TStatus> CheckGeneration(const TGenerationContextPtr& context) {
 
 TFuture<TStatus> RollbackTransaction(const TGenerationContextPtr& context) {
 
-    if (!context->Session->GetTransaction() || !context->Session->GetTransaction()->IsActive()) {
+    if (!context->Session->HasActiveTransaction()) {
         auto status = MakeErrorStatus(EStatus::INTERNAL_ERROR, "trying to rollback non-active transaction");
         return MakeFuture(status);
     }

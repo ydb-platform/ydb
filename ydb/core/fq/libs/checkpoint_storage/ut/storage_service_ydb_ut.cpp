@@ -389,7 +389,7 @@ Y_UNIT_TEST_SUITE(TStorageServiceTest) {
         RegisterCoordinator(coordinator1, true);
     }
 
-    Y_UNIT_TEST_F(ShouldCreateCheckpoint1, TSdkFixture)
+    Y_UNIT_TEST_F(ShouldCreateCheckpoint, TSdkFixture)
     {
         RegisterDefaultCoordinator();
         CreateCheckpoint(GraphId, Generation, CheckpointId1, false);
@@ -640,7 +640,7 @@ Y_UNIT_TEST_SUITE(TStorageServiceLocalTest) {
         CreateCheckpoint(GraphId, Generation, CheckpointId1, true);
     }
 
-    Y_UNIT_TEST_F(ShouldNotCreateCheckpointTwice, TLocalFixture)
+    Y_UNIT_TEST_F(ShouldNotCreateCheckpointTwice2, TLocalFixture)
     {
         RegisterDefaultCoordinator();
         CreateCheckpoint(GraphId, Generation, CheckpointId1, false);

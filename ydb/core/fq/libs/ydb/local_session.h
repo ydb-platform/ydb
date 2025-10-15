@@ -8,9 +8,9 @@
 #include <ydb/core/fq/libs/ydb/query_actor.h>
 
 #include <ydb/library/table_creator/table_creator.h>
+#include <ydb/core/fq/libs/actors/logging/log.h>
 
 namespace NFq {
-
 
 class TTableCreator : public NActors::TActorBootstrapped<TTableCreator> {
 public:
@@ -22,7 +22,6 @@ public:
         , Promise(promise)
     {
         LOG_STREAMS_STORAGE_SERVICE_INFO("TTableCreator()");
-        //Cerr << "TTableCreator() path = " << path << Endl;
     }
 
     void Bootstrap() {
@@ -50,7 +49,7 @@ public:
             if (typeParser.GetKind() == NYdb::TTypeParser::ETypeKind::Primitive) {
                 type = (TStringBuilder() << typeParser.GetPrimitive());
             } else {
-              //  Y_ABORT("primitive type %s not suported yet", ToString(typeParser.GetPrimitive()).c_str());
+                Y_ABORT("not primitive type %s not suported yet", ToString(typeParser.GetPrimitive()).c_str());
             }
             desc.SetType(type);
             desc.SetNotNull(!optional); 
@@ -60,7 +59,6 @@ public:
         Register(
             NKikimr::CreateTableCreator(
                 pathComponents,
-                //{ ".metadata", "checkpoints", "states" },
                 columns,
                 keyColumns,
                 NKikimrServices::STREAMS_STORAGE_SERVICE,
@@ -94,7 +92,7 @@ private:
 struct TLocalSession : public ISession { 
 
     TLocalSession() {
-        QuerySessionId = NActors::TActivationContext::AsActorContext().RegisterWithSameMailbox(MakeQueryActor().release());
+        QuerySessionId = NActors::TActivationContext::AsActorContext().RegisterWithSameMailbox(MakeQuerySession().release());
         LOG_STREAMS_STORAGE_SERVICE_INFO("TLocalSession()");
     }
 
@@ -105,26 +103,24 @@ struct TLocalSession : public ISession {
 
     NThreading::TFuture<NYdb::NTable::TDataQueryResult> ExecuteDataQuery(
         const TString& sql,
+        NFq::ISession::TTxControl txControl,
         std::shared_ptr<NYdb::TParamsBuilder> params,
-        NFq::ISession::TTxControl /*txControl*/,
         NYdb::NTable::TExecDataQuerySettings execDataQuerySettings = NYdb::NTable::TExecDataQuerySettings()) override {
         LOG_STREAMS_STORAGE_SERVICE_INFO("TLocalSession::ExecuteDataQuery()");
 
-        auto txControl1 = NYdb::NTable::TTxControl::BeginTx(NYdb::NTable::TTxSettings::SerializableRW());
-
-        auto p = NThreading::NewPromise<NYdb::NTable::TDataQueryResult>();
-        NActors::TActivationContext::AsActorContext().Send(QuerySessionId, new TEvQueryActor::TEvExecuteDataQuery(sql, params, txControl1, execDataQuerySettings, p));
-        return p.GetFuture();
+        auto promise = NThreading::NewPromise<NYdb::NTable::TDataQueryResult>();
+        NActors::TActivationContext::AsActorContext().Send(QuerySessionId, new TEvQuerySession::TEvExecuteDataQuery(
+            sql,
+            params,
+            TEvQuerySession::TTxControl{txControl.Begin_, txControl.Commit_, txControl.Continue_, txControl.SnapshotRead_},
+            execDataQuerySettings,
+            promise));
+        return promise.GetFuture();
     }
-
-    // void CommitTransaction() override {
-    //     LOG_STREAMS_STORAGE_SERVICE_INFO("TLocalSession::CommitTransaction()");
-    //     NActors::TActivationContext::AsActorContext().Send(QuerySessionId, new TEvQueryActor::TEvCommitTransaction());
-    // }
 
     NYdb::TAsyncStatus Rollback() override {
         LOG_STREAMS_STORAGE_SERVICE_INFO("TLocalSession::Rollback()");
-        NActors::TActivationContext::AsActorContext().Send(QuerySessionId, new TEvQueryActor::TEvRollbackTransaction());
+        NActors::TActivationContext::AsActorContext().Send(QuerySessionId, new TEvQuerySession::TEvRollbackTransaction());
         return NThreading::MakeFuture(NYdb::TStatus{NYdb::EStatus::SUCCESS, {}});
     }
 
@@ -142,16 +138,15 @@ struct TLocalSession : public ISession {
     }
 
     void UpdateTransaction(std::optional<NYdb::NTable::TTransaction> /*transaction*/) override {
-
+        // nothing
     }
-
-    std::optional<NYdb::NTable::TTransaction>& GetTransaction() override {
-            return tr;
+    
+    bool HasActiveTransaction() override {
+        return true;
     }
 
 private: 
     NActors::TActorId QuerySessionId;
-    std::optional<NYdb::NTable::TTransaction> tr;
 };
 
 } // namespace NFq

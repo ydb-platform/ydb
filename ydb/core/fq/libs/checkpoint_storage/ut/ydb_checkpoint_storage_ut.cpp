@@ -9,7 +9,8 @@
 #include <deque>
 #include <ydb/core/testlib/actors/test_runtime.h>
 #include <ydb/core/testlib/basics/appdata.h>
-#include <ydb/core/fq/libs/ydb/ydb_local_connection.h>
+#include <ydb/core/fq/libs/ydb/ydb_connection.h>
+
 namespace NFq {
 
 namespace {

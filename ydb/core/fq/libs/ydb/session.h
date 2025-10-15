@@ -29,8 +29,8 @@ struct ISession : public TThrRefBase{
 
     virtual NThreading::TFuture<NYdb::NTable::TDataQueryResult> ExecuteDataQuery(
         const TString& sql,
-        std::shared_ptr<NYdb::TParamsBuilder> params,
         TTxControl txControl,
+        std::shared_ptr<NYdb::TParamsBuilder> params,
         NYdb::NTable::TExecDataQuerySettings execDataQuerySettings = NYdb::NTable::TExecDataQuerySettings()) = 0;
     
     //virtual void CommitTransaction() = 0;
@@ -43,7 +43,7 @@ struct ISession : public TThrRefBase{
 
     virtual void UpdateTransaction(std::optional<NYdb::NTable::TTransaction> transaction) = 0;
 
-    virtual std::optional<NYdb::NTable::TTransaction>& GetTransaction() = 0;
+    virtual bool HasActiveTransaction() = 0;
 
     //virtual TTxControl GetTxControl() = 0;
 };

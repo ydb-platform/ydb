@@ -13,7 +13,8 @@
 
 #include <yql/essentials/minikql/comp_nodes/mkql_saveload.h>
 #include <ydb/core/fq/libs/actors/logging/log.h>
-#include <ydb/core/fq/libs/ydb/ydb_local_connection.h>
+#include <ydb/core/fq/libs/ydb/ydb_connection.h>
+
 namespace NFq {
 
 namespace {

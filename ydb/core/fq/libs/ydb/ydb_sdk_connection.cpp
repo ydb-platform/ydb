@@ -6,7 +6,6 @@
 
 namespace NFq {
 
-
 struct TSdkYdbConnection : public IYdbConnection {
 
     TSdkYdbConnection(
@@ -34,7 +33,6 @@ struct TSdkYdbConnection : public IYdbConnection {
     TString GetTablePathPrefixWithoutDb() override {
         return TablePathPrefix;
     }
-
 
 private:
     NYdb::TDriver Driver;

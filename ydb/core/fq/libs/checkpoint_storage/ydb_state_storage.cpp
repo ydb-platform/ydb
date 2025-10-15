@@ -591,8 +591,8 @@ TFuture<IStateStorage::TCountStatesResult> TStateStorage::CountStates(
 
             auto future = session->ExecuteDataQuery(
                 query,
-                paramsBuilder,
                 TTxControl::BeginAndCommitTx(),
+                paramsBuilder,
                 thisPtr->GetExecDataQuerySettings());
 
             return future.Apply(
@@ -657,8 +657,8 @@ TFuture<TStatus> TStateStorage::ListStates(const TContextPtr& context) {
 
             auto future = session->ExecuteDataQuery(
                 query,
-                paramsBuilder,
                 TTxControl::BeginAndCommitTx(),
+                paramsBuilder,
                 thisPtr->GetExecDataQuerySettings());
 
             return future.Apply(
@@ -732,8 +732,8 @@ TFuture<TIssues> TStateStorage::DeleteGraph(const TString& graphId) {
 
             auto future = session->ExecuteDataQuery(
                 query,
-                paramsBuilder,
                 TTxControl::BeginAndCommitTx(),
+                paramsBuilder,
                 thisPtr->GetExecDataQuerySettings(DeleteStateTimeoutMultiplier));
 
             return future.Apply(
@@ -781,8 +781,8 @@ TFuture<TIssues> TStateStorage::DeleteCheckpoints(
 
             auto future = session->ExecuteDataQuery(
                 query,
-                paramsBuilder,
                 TTxControl::BeginAndCommitTx(),
+                paramsBuilder,
                 thisPtr->GetExecDataQuerySettings(DeleteStateTimeoutMultiplier));
 
             return future.Apply(
@@ -851,8 +851,8 @@ TFuture<TDataQueryResult> TStateStorage::SelectState(const TContextPtr& context)
     Y_ENSURE(context->Session, "Session is empty");
     return (*context->Session)->ExecuteDataQuery(
         query,
-        paramsBuilder,
         TTxControl::BeginAndCommitTx(),
+        paramsBuilder,
         GetExecDataQuerySettings());
 }
 
@@ -897,8 +897,8 @@ TFuture<TStatus> TStateStorage::UpsertRow(const TContextPtr& context) {
 
             auto future = (*context->Session)->ExecuteDataQuery(
                 query,
-                paramsBuilder,
                 TTxControl::BeginAndCommitTx(),
+                paramsBuilder,
                 thisPtr->GetExecDataQuerySettings());
 
             return future.Apply(

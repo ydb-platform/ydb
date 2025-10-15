@@ -24,7 +24,7 @@
 
 #include <util/system/env.h>
 
-#include <ydb/core/fq/libs/ydb/ydb_local_connection.h>
+#include <ydb/core/fq/libs/ydb/ydb_connection.h>
 
 namespace NFq {
 

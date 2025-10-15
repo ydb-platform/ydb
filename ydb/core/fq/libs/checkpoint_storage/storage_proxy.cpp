@@ -22,7 +22,7 @@
 #include <util/string/join.h>
 #include <util/string/strip.h>
 
-#include <ydb/core/fq/libs/ydb/ydb_local_connection.h>
+#include <ydb/core/fq/libs/ydb/ydb_connection.h>
 #include <ydb/core/base/appdata_fwd.h>
 
 namespace NFq {

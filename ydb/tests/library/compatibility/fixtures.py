@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 import copy
 import logging
-import math
 import os
 import pytest
 import time
@@ -176,16 +175,16 @@ class MixedClusterFixture:
         return driver
 
     def setup_cluster(self, tenant_db=None, **kwargs):
-        has_current_version = any(
-            math.isinf(item) and item > 0
+        all_versions_numbered = all(
+            # +inf == current will be float, all other versions are int
+            isinstance(item, int)
             for tpl in self.versions
             for item in tpl
-            if isinstance(item, float)
         )
         self.config = KikimrConfigGenerator(
             erasure=Erasure.MIRROR_3_DC,
             binary_paths=self.all_binary_paths,
-            suppress_version_check=has_current_version,
+            suppress_version_check=not all_versions_numbered,
             **kwargs,
         )
 

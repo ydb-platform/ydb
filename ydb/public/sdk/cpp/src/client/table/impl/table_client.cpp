@@ -1032,16 +1032,17 @@ TAsyncBulkUpsertResult TTableClient::TImpl::BulkUpsert(const std::string& table,
 
     request->set_table(TStringType{table});
 
-    if (rows.GetType().Impl_.use_count() == 1) {
-        request->mutable_rows()->mutable_type()->Swap(&rows.GetType().GetProto());
-    } else {
-        *request->mutable_rows()->mutable_type() = rows.GetType().GetProto();
-    }
-
+    auto* mutable_rows = request->mutable_rows();
     if (rows.Impl_.use_count() == 1) {
-        request->mutable_rows()->mutable_value()->Swap(&rows.GetProto());
+        mutable_rows->mutable_value()->Swap(&rows.GetProto());
+        if (rows.GetType().Impl_.use_count() == 1) {
+            mutable_rows->mutable_type()->Swap(&rows.GetType().GetProto());
+        } else {
+            *mutable_rows->mutable_type() = rows.GetType().GetProto();
+        }
     } else {
-        *request->mutable_rows()->mutable_value() = rows.GetProto();
+        *mutable_rows->mutable_value() = rows.GetProto();
+        *mutable_rows->mutable_type() = rows.GetType().GetProto();
     }
 
     auto promise = NewPromise<TBulkUpsertResult>();

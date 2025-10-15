@@ -23,8 +23,6 @@ struct TSdkSession : public ISession {
         NFq::ISession::TTxControl txControl,
         std::shared_ptr<NYdb::TParamsBuilder> paramsBuilder,
         NYdb::NTable::TExecDataQuerySettings execDataQuerySettings = NYdb::NTable::TExecDataQuerySettings()) override {
-        auto params = paramsBuilder->Build();
-
         NYdb::NTable::TTxControl tx = NYdb::NTable::TTxControl::BeginTx(NYdb::NTable::TTxSettings::SerializableRW());
         if (txControl.SnapshotRead_) {
             tx = NYdb::NTable::TTxControl::BeginTx(NYdb::NTable::TTxSettings::SnapshotRO());
@@ -35,14 +33,16 @@ struct TSdkSession : public ISession {
         if (txControl.Commit_) {
             tx = tx.CommitTx();
         }
-
         Cerr << "ExecuteDataQuery " << sql << Endl;
         Cerr << "Begin_ " << txControl.Begin_ << Endl;
         Cerr << "Continue_ " << txControl.Continue_ << Endl;
         Cerr << "Commit_ " << txControl.Commit_ << Endl;
-
-
-        return Session.ExecuteDataQuery(sql, tx, params, execDataQuerySettings);
+        
+        if (paramsBuilder) {
+            return Session.ExecuteDataQuery(sql, tx, paramsBuilder->Build(), execDataQuerySettings);
+        } else {
+            return Session.ExecuteDataQuery(sql, tx, execDataQuerySettings);
+        }
     }
 
     // void CommitTransaction() override {

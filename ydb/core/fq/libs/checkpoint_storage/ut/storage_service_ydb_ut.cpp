@@ -325,7 +325,7 @@ public:
 
 private:
   //  TScriptExecutionsYdbSetup Ydb;
-    public:
+    //public:
     TPortManager PortManager;
     ui16 MsgBusPort = 0;
     ui16 GrpcPort = 0;

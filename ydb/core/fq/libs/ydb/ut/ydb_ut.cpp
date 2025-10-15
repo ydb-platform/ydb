@@ -9,19 +9,77 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/system/env.h>
+#include <ydb/core/testlib/test_client.h>
 
 namespace NFq {
 
 using namespace NThreading;
 using namespace NYdb;
 using namespace NYdb::NTable;
+using namespace NKikimr;
+using TTxControl = NFq::ISession::TTxControl;
 
 namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TFixture : public NUnitTest::TBaseFixture {
+TFuture<TStatus> CheckTransactionClosed(const TFuture<TStatus>& future, const TGenerationContextPtr& context) {
+    return future.Apply(
+        [context] (const TFuture<TStatus>& future) {
+            if (context->Session->HasActiveTransaction()) {
+                auto status = MakeErrorStatus(EStatus::INTERNAL_ERROR, "unfinished transaction");
+                return MakeFuture(status);
+            }
+            return future;
+        });
+}
+
+TFuture<TStatus> UpsertDummyInTransaction(const TFuture<TStatus>& future, const TGenerationContextPtr& context) {
+    return future.Apply(
+        [context] (const TFuture<TStatus>& future) {
+            if (future.HasException() || !future.GetValue().IsSuccess()) {
+                return future;
+            }
+
+            if (!context->Session->HasActiveTransaction()) {
+                auto status = MakeErrorStatus(EStatus::INTERNAL_ERROR, "no transaction");
+                return MakeFuture(status);
+            }
+
+            auto query = Sprintf(R"(
+                --!syntax_v1
+                PRAGMA TablePathPrefix("%s");
+
+                UPSERT INTO dummy (id) VALUES
+                    ("ID DQD");
+            )", context->TablePathPrefix.c_str());
+
+            auto ttxControl = TTxControl::ContinueAndCommitTx();
+            return context->Session->ExecuteDataQuery(query, ttxControl, nullptr).Apply(
+                [] (const TFuture<TDataQueryResult>& future) {
+                    TStatus status = future.GetValue();
+                    return status;
+                });
+        });
+}
+
+} // namespace
+
+////////////////////////////////////////////////////////////////////////////////
+
+template<bool UseSdkConnection>
+class TRegisterCheckTestBase: public NUnitTest::TTestBase/*, public TMyFixture<UseSdkConnection>*/ {
+    using TSelf = TRegisterCheckTestBase<UseSdkConnection>;
+
+    IYdbConnection::TPtr Connection;
+    TPortManager PortManager;
+    ui16 MsgBusPort = 0;
+    ui16 GrpcPort = 0;
+    THolder<Tests::TServerSettings> ServerSettings;
+    THolder<Tests::TServer> Server;
+    THolder<Tests::TClient> Client;
 public:
+
     IYdbConnection::TPtr MakeConnection(const char* tablePrefix) {
         NKikimrConfig::TExternalStorage config;
 
@@ -31,7 +89,12 @@ public:
         config.SetTablePrefix(tablePrefix);
 
         NYdb::TDriver driver({});
-        Connection = CreateSdkYdbConnection(config, NKikimr::CreateYdbCredentialsProviderFactory, driver);
+        if (UseSdkConnection) {
+            Connection = CreateSdkYdbConnection(config, NKikimr::CreateYdbCredentialsProviderFactory, driver);
+        } else {
+            InitLocalConnection();
+            Connection = CreateLocalYdbConnection("db", "test/checkpoints");
+        }
 
         // auto status = Connection->SchemeClient.MakeDirectory(Connection->TablePathPrefix).GetValueSync();
         // UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
@@ -47,7 +110,7 @@ public:
         return Connection;
     }
 
-    void TearDown(NUnitTest::TTestContext& /*ctx*/) override {
+    void TearDown() override {
         if (Connection) {
             auto tablePath = JoinPath(Connection->GetTablePathPrefix(), "test");
             Connection->GetTableClient()->RetryOperation(
@@ -57,56 +120,51 @@ public:
         }
     }
 
-    IYdbConnection::TPtr Connection;
-};
+    void InitLocalConnection() {
+        MsgBusPort = PortManager.GetPort(2134);
+        GrpcPort = PortManager.GetPort(2135);
+        NKikimrProto::TAuthConfig authConfig;
+        authConfig.SetUseBuiltinDomain(true);
+        ServerSettings = MakeHolder<Tests::TServerSettings>(MsgBusPort, authConfig);
+        ServerSettings->AppConfig->MutableQueryServiceConfig()->MutableCheckpointsConfig()->SetEnabled(true);
+        ServerSettings->AppConfig->MutableFeatureFlags()->SetEnableStreamingQueries(true);
 
-TFuture<TStatus> CheckTransactionClosed(const TFuture<TStatus>& future, const TGenerationContextPtr& context) {
-    return future.Apply(
-        [context] (const TFuture<TStatus>& future) {
-            if (context->Transaction && context->Transaction->IsActive()) {
-                auto status = MakeErrorStatus(EStatus::INTERNAL_ERROR, "unfinished transaction");
-                return MakeFuture(status);
-            }
-            return future;
-        });
-}
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableStreamingQueries(true);
+        ServerSettings->SetFeatureFlags(featureFlags);
 
-TFuture<TStatus> UpsertDummyInTransaction(const TFuture<TStatus>& future, const TGenerationContextPtr& context) {
-    return future.Apply(
-        [context] (const TFuture<TStatus>& future) {
-            if (future.HasException() || !future.GetValue().IsSuccess()) {
-                return future;
-            }
+        ServerSettings->SetEnableScriptExecutionOperations(true);
+        ServerSettings->SetInitializeFederatedQuerySetupFactory(true);
+        ServerSettings->SetGrpcPort(GrpcPort);
+        ServerSettings->NodeCount = 1;
+        Server = MakeHolder<Tests::TServer>(*ServerSettings);
+        Client = MakeHolder<Tests::TClient>(*ServerSettings);
+     //   Server->GetRuntime()->SetLogPriority(NKikimrServices::KQP_PROXY, NActors::NLog::PRI_DEBUG);
+        Server->GetRuntime()->SetLogPriority(NKikimrServices::STREAMS_STORAGE_SERVICE, NActors::NLog::PRI_DEBUG);
+       // Server->GetRuntime()->SetDispatchTimeout(TestTimeout);
+        Server->EnableGRpc(GrpcPort);
+        Client->InitRootScheme();
 
-            if (!context->Transaction || !context->Transaction->IsActive()) {
-                auto status = MakeErrorStatus(EStatus::INTERNAL_ERROR, "no transaction");
-                return MakeFuture(status);
-            }
+        Sleep(TDuration::Seconds(5));
+        Cerr << "\n\n\n--------------------------- INIT FINISHED ---------------------------\n\n\n";
+    }
 
-            auto query = Sprintf(R"(
-                --!syntax_v1
-                PRAGMA TablePathPrefix("%s");
+   // static constexpr char const* SuiteName = "TRegisterCheckTestBase";//#UseSdkConnection;
 
-                UPSERT INTO dummy (id) VALUES
-                    ("ID DQD");
-            )", context->TablePathPrefix.c_str());
+    // UNIT_TEST_SUITE(TRegisterCheckTestBase);
+    UNIT_TEST_SUITE_DEMANGLE(TSelf);
+    UNIT_TEST(ShouldRegisterCheckNewGeneration);
+    UNIT_TEST(ShouldRegisterCheckSameGeneration);
+    UNIT_TEST(ShouldRegisterCheckNextGeneration);
+    UNIT_TEST(ShouldNotRegisterCheckPrevGeneration);
+    UNIT_TEST(ShouldNotRegisterCheckPrevGeneration2);
+    UNIT_TEST(ShouldRegisterCheckNewGenerationAndTransact);
+    UNIT_TEST(ShouldRegisterCheckSameGenerationAndTransact);
+    UNIT_TEST(ShouldRollbackTransactionWhenCheckFails);
+    UNIT_TEST(ShouldRollbackTransactionWhenCheckFails2);
+    UNIT_TEST_SUITE_END();
 
-            auto ttxControl = TTxControl::Tx(*context->Transaction).CommitTx();
-            return context->Session->ExecuteDataQuery(query, nullptr, ttxControl).Apply(
-                [] (const TFuture<TDataQueryResult>& future) {
-                    TStatus status = future.GetValue();
-                    return status;
-                });
-        });
-}
-
-} // namespace
-
-////////////////////////////////////////////////////////////////////////////////
-
-Y_UNIT_TEST_SUITE(TRegisterCheckTest) {
-    Y_UNIT_TEST_F(ShouldRegisterCheckNewGeneration, TFixture)
-    {
+    void ShouldRegisterCheckNewGeneration() {
         auto connection = MakeConnection("ShouldRegisterCheckNewGeneration");
 
         auto future = connection->GetTableClient()->RetryOperation(
@@ -129,7 +187,7 @@ Y_UNIT_TEST_SUITE(TRegisterCheckTest) {
         UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
     }
 
-    Y_UNIT_TEST_F(ShouldRegisterCheckSameGeneration, TFixture)
+    void ShouldRegisterCheckSameGeneration()
     {
         auto connection = MakeConnection("ShouldRegisterCheckSameGeneration");
 
@@ -171,7 +229,7 @@ Y_UNIT_TEST_SUITE(TRegisterCheckTest) {
         UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
     }
 
-    Y_UNIT_TEST_F(ShouldRegisterCheckNextGeneration, TFixture)
+    void ShouldRegisterCheckNextGeneration()
     {
         auto connection = MakeConnection("ShouldRegisterCheckNextGeneration");
 
@@ -212,7 +270,7 @@ Y_UNIT_TEST_SUITE(TRegisterCheckTest) {
         UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
     }
 
-    Y_UNIT_TEST_F(ShouldNotRegisterCheckPrevGeneration, TFixture)
+    void ShouldNotRegisterCheckPrevGeneration()
     {
         auto connection = MakeConnection("ShouldNotRegisterCheckPrevGeneration");
 
@@ -254,7 +312,7 @@ Y_UNIT_TEST_SUITE(TRegisterCheckTest) {
         UNIT_ASSERT(!status.IsSuccess());
     }
 
-    Y_UNIT_TEST_F(ShouldNotRegisterCheckPrevGeneration2, TFixture)
+    void ShouldNotRegisterCheckPrevGeneration2()
     {
         auto connection = MakeConnection("ShouldNotRegisterCheckPrevGeneration2");
 
@@ -296,7 +354,7 @@ Y_UNIT_TEST_SUITE(TRegisterCheckTest) {
         UNIT_ASSERT(!status.IsSuccess());
     }
 
-    Y_UNIT_TEST_F(ShouldRegisterCheckNewGenerationAndTransact, TFixture)
+    void ShouldRegisterCheckNewGenerationAndTransact()
     {
         auto connection = MakeConnection("ShouldRegisterCheckNewGenerationAndTransact");
 
@@ -328,7 +386,7 @@ Y_UNIT_TEST_SUITE(TRegisterCheckTest) {
         UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
     }
 
-    Y_UNIT_TEST_F(ShouldRegisterCheckSameGenerationAndTransact, TFixture)
+    void ShouldRegisterCheckSameGenerationAndTransact()
     {
         auto connection = MakeConnection("ShouldRegisterCheckNewGenerationAndTransact");
 
@@ -377,13 +435,8 @@ Y_UNIT_TEST_SUITE(TRegisterCheckTest) {
         status = future.GetValueSync();
         UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
     }
-}
 
-////////////////////////////////////////////////////////////////////////////////
-
-// most of logic is tested inside libs/storage, thus we don't test here again
-Y_UNIT_TEST_SUITE(TCheckGenerationTest) {
-    Y_UNIT_TEST_F(ShouldRollbackTransactionWhenCheckFails, TFixture)
+    void ShouldRollbackTransactionWhenCheckFails()
     {
         auto connection = MakeConnection("ShouldRollbackTransactionWhenCheckFails");
 
@@ -425,7 +478,7 @@ Y_UNIT_TEST_SUITE(TCheckGenerationTest) {
         UNIT_ASSERT(!status.IsSuccess());
     }
 
-    Y_UNIT_TEST_F(ShouldRollbackTransactionWhenCheckFails2, TFixture)
+    void ShouldRollbackTransactionWhenCheckFails2()
     {
         auto connection = MakeConnection("ShouldRollbackTransactionWhenCheckFails2");
 
@@ -466,7 +519,15 @@ Y_UNIT_TEST_SUITE(TCheckGenerationTest) {
         status = future.GetValueSync();
         UNIT_ASSERT(!status.IsSuccess());
     }
-}
+};
+
+using TRegisterCheckTest = TRegisterCheckTestBase<true>;
+using TRegisterCheckLocalTest = TRegisterCheckTestBase<false>;
+
+UNIT_TEST_SUITE_REGISTRATION(TRegisterCheckTest);
+UNIT_TEST_SUITE_REGISTRATION(TRegisterCheckLocalTest);
+
+////////////////////////////////////////////////////////////////////////////////
 
 Y_UNIT_TEST_SUITE(TFqYdbTest) {
     Y_UNIT_TEST(ShouldStatusToIssuesProcessExceptions)

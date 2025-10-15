@@ -1,10 +1,8 @@
 # query_service_config
 
-Секция `query_service_config` описывает параметры работы {{ ydb-short-name }} с внешними источниками данных с помощью функциональности [федеративных запросов](../../concepts/federated_query/index.md)
+Секция `query_service_config` описывает параметры работы {{ ydb-short-name }} с внешними источниками данных с помощью функциональности [федеративных запросов](../../concepts/federated_query/index.md).
 
 Если для доступа к нужному вам источнику требуется развернуть коннектор, необходимо также настроить [Коннектор](../../concepts/federated_query/architecture.md#connectors) по [инструкции](../../devops/deployment-options/manual/federated-queries/connector-deployment.md).
-
-Параметры `all_external_data_sources_are_available` и `available_external_data_sources` используются в случаях, когда требуется подключить только некоторые из внешних источников данных.
 
 ## Описание параметров
 
@@ -23,7 +21,7 @@
 | Использовать ли шифрование соединения. При размещении коннектора и динамического узла {{ ydb-short-name }} на одном сервере шифрованное соединение между ними не требуется, но при необходимости его можно включить.
 ||
 || `generic.connector.ssl_ca_crt`
-|
+| пустая строка
 | Путь к сертификату CA, который используется для шифрования.
 ||
 || `generic.default_settings.name.UsePredicatePushdown`
@@ -32,13 +30,19 @@
 ||
 || `available_external_data_sources`
 | пустой список
-| Список с разрешенными типами внешних источников. Возможные значения: ObjectStorage, ClickHouse, PostgreSQL, MySQL, Greenplum, MsSQLServer, Ydb.
-Применяется при `all_external_data_sources_are_available: false`.
+| Список с разрешенными типами внешних источников. Применяется при `all_external_data_sources_are_available: false`. Возможные значения: 
+* `ObjectStorage`
+* `ClickHouse`
+* `PostgreSQL`
+* `MySQL`
+* `Greenplum`
+* `MsSQLServer`
+* `Ydb`
 ||
 || `all_external_data_sources_are_available`
 | `false`
 | Включение всех типов внешних источников.
-При true значение `available_external_data_sources` не используется.
+При true, значение `available_external_data_sources` не используется.
 ||
 |#
 

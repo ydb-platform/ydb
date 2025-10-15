@@ -74,11 +74,11 @@ bool RewriteTablePathPrefix(TString& query, TStringBuf backupRoot, TStringBuf re
         return true;
     }
 
+    restorePathPrefix = RewriteAbsolutePath(backupPathPrefix, backupRoot, restoreRoot);
+
     if (backupRoot == restoreRoot) {
         return true;
     }
-
-    restorePathPrefix = RewriteAbsolutePath(backupPathPrefix, backupRoot, restoreRoot);
 
     if (!re2::RE2::Replace(&query, pattern,
         std::format(R"(PRAGMA TablePathPrefix = '{}';)", restorePathPrefix.c_str())

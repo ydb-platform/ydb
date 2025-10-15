@@ -448,6 +448,7 @@ protected:
     struct TBarrier {
         static constexpr TInstant NoBarrier = TInstant::Zero();
         static constexpr TInstant CheckpointBarrier = TInstant::Max();
+        static constexpr TInstant MaxValidWatermark = TInstant::Max() - TDuration::MicroSeconds(1);
         TInstant Barrier = CheckpointBarrier;
         ui64 Batches = 0;
         ui64 Bytes = 0;

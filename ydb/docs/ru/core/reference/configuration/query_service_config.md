@@ -2,7 +2,7 @@
 
 Секция `query_service_config` описывает параметры работы {{ ydb-short-name }} с внешними источниками данных с помощью функциональности [федеративных запросов](../../concepts/federated_query/index.md).
 
-Если для доступа к нужному вам источнику требуется развернуть коннектор, необходимо также настроить [Коннектор](../../concepts/federated_query/architecture.md#connectors) по [инструкции](../../devops/deployment-options/manual/federated-queries/connector-deployment.md).
+Если для доступа к нужному вам источнику требуется развернуть [коннектор](../../concepts/federated_query/architecture.md#connectors), его необходимо также настроить по [инструкции](../../devops/deployment-options/manual/federated-queries/connector-deployment.md).
 
 Параметры `all_external_data_sources_are_available` и `available_external_data_sources` используются в случаях, когда требуется подключить только некоторые из внешних источников данных.
 

@@ -282,9 +282,8 @@ class WorkloadManagerComputeScheduler(WorkloadManagerBase):
                   ''.join([f'<th style="padding-left: 10; padding-right: 10">{k[:-2] if k.endswith(' d') else k}</th>' for k in keys]) +
                   '</tr>\n')
         norm_metrics = []
-        sum_satisfaction = {}
-        first_req_num = None
-        last_req_num = None
+        first_i = None
+        last_i = None
         for r in range(len(cls.metrics)):
             record: dict[str, float] = {}
             cur_t, cur_m = cls.metrics[r]
@@ -295,34 +294,40 @@ class WorkloadManagerComputeScheduler(WorkloadManagerBase):
                     else:
                         prev_t, prev_m = cls.metrics[r - 1]
                         record[k] = (v - prev_m.get(k, 0.)) / (cur_t - prev_t)
-                else:
+                elif not k.endswith('satisfaction') or v >= 0.:
                     record[k] = v
-            ss = 0.
             for p in pools:
-                sum_satisfaction.setdefault(p.name, 0.)
-                s = record.get(f'{p.name} satisfaction', 0.)
-                sum_satisfaction[p.name] += s
-                ss += s
-            if ss > 0:
-                last_req_num = r
-                if first_req_num is None:
-                    first_req_num = r
+                s = record.get(f'{p.name} satisfaction', -1.)
+                if s >= 0.:
+                    if first_i is None:
+                        first_i = r
+                    last_i = r
             norm_metrics.append(record)
-            report += f'<tr><th style="padding-left: 10; padding-right: 10">{datetime.fromtimestamp(cur_t)}</th>'
+            line = f'<tr><th style="padding-left: 10; padding-right: 10">{datetime.fromtimestamp(cur_t)}</th>'
+            empty = True
             for k in keys:
                 v = record.get(k)
-                v = f'{record.get(k):.1f}' if v is not None else ''
-                report += f'<td style="padding-left: 10; padding-right: 10">{v}</td>'
-            report += '</tr>\n'
+                empty = empty and v is None
+                if k.find('satisfaction') and v is not None and v < 0:
+                    v = None
+                v = f'{v:.3f}' if v is not None else ''
+                line += f'<td style="padding-left: 10; padding-right: 10">{v}</td>'
+            line += '</tr>\n'
+            if not empty:
+                report += line
         report += '</table></body></html>'
         allure.attach(report, 'metrics', allure.attachment_type.HTML)
         times = [datetime.fromtimestamp(t) for t, _ in cls.metrics]
         fig, axs = pyplot.subplots(len(pools), 1, layout='constrained', figsize=(6.4, 3.2 * len(pools)))
         for p in range(len(pools)):
             pool = pools[p]
-            axs[p].plot(times, [m.get(f'{pool.name} satisfaction') for m in norm_metrics], label=pool.name)
+            axs[p].set_title(pool.name)
+            axs[p].plot(times, [m.get(f'{pool.name} satisfaction') for m in norm_metrics], label='satisfaction')
+            axs[p].plot(times, [m.get(f'{pool.name} adjusted satisfaction d') for m in norm_metrics], label='adj satisfaction')
+            if last_i is not None:
+                axs[p].plot([datetime.fromtimestamp(cls.metrics[first_i][0]), datetime.fromtimestamp(cls.metrics[last_i][0])], [1, 1], label='period')
             axs[p].set_ylabel('satisfaction')
-            axs[p].legend()
+            axs[p].legend(fontsize=10, loc='lower right')
             axs[p].grid()
             axs[p].xaxis.set_major_formatter(
                 dates.ConciseDateFormatter(axs[p].xaxis.get_major_locator())
@@ -331,9 +336,14 @@ class WorkloadManagerComputeScheduler(WorkloadManagerBase):
         pyplot.savefig('satisfaction.plot.svg', format='svg')
         with open('satisfaction.plot.svg') as s:
             allure.attach(s.read(), 'satisfaction.plot.svg', allure.attachment_type.SVG)
-        if first_req_num is not None:
-            for pool, sum_s in sum_satisfaction.items():
-                result.add_stat('test', f'satisfaction_avg_{pool}', sum_s / (1 + last_req_num - first_req_num))
+        if last_i is not None:
+            for pool in pools:
+                last_t, last_v = cls.metrics[last_i]
+                first_t, first_v = cls.metrics[first_i]
+                sat = last_v.get(f'{pool.name} adjusted satisfaction d', 0.) - first_v.get(f'{pool.name} adjusted satisfaction d', 0.)
+                if last_t > first_t:
+                    sat /= last_t - first_t
+                result.add_stat('test', f'satisfaction_avg_{pool.name}', sat)
 
     @classmethod
     def check_signals(cls) -> str:
@@ -341,18 +351,23 @@ class WorkloadManagerComputeScheduler(WorkloadManagerBase):
         for pool in cls.get_resource_pools():
             metrics_request.update({
                 f'{pool.name} satisfaction': {'scheduler/pool': pool.name, 'sensor': 'Satisfaction'},
+                f'{pool.name} adjusted satisfaction d': {'scheduler/pool': pool.name, 'sensor': 'AdjustedSatisfaction'},
             })
         metrics = YdbCluster.get_metrics(db_only=True, counters='kqp', metrics=metrics_request)
         sum = {}
+        count = {}
         for slot, values in metrics.items():
             for k, v in values.items():
-                sum.setdefault(k, 0.)
-                sum[k] += v
+                if not k.endswith('satisfaction') or v >= 0.:
+                    sum.setdefault(k, 0.)
+                    count.setdefault(k, 0)
+                    sum[k] += v
+                    count[k] += 1
                 cls.metrics_keys.add(k)
         for k in sum.keys():
-            if not k.endswith(' d'):
-                sum[k] /= len(metrics)
-            if k.endswith('satisfaction'):
+            if count[k] > 0:
+                sum[k] /= count[k]
+            if k.find('satisfaction') >= 0:
                 sum[k] /= 1.e6
         cls.metrics.append((time.time(), sum))
         return ''

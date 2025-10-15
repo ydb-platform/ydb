@@ -99,10 +99,6 @@ template <EJoinKind Kind> class TScalarHashJoinState : public TComputationValue<
   private:
     TJoin<TScalarRowSource, Kind> Join_;
     TRenamedOutput<Kind> Output_;
-    // std::vector<NUdf::TUnboxedValue> OutputBuffer_;
-    // const TDqRenames Renames_;
-    // const std::vector<NYql::NUdf::TUnboxedValue> NullTuples_{
-    // static_cast<size_t>(std::max(Join_.BuildSize(), Join_.ProbeSize())), NYql::NUdf::TUnboxedValuePod{}};
 };
 
 template <EJoinKind Kind>

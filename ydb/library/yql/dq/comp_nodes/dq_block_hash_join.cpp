@@ -165,7 +165,7 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
             if (Finished_) {
                 return NYql::NUdf::EFetchStatus::Finish;
             }
-            while (Output_.SizeTuples() < Threshold) {
+            while (Output_.SizeTuples() < Threshold_) {
                 auto res = Join_.MatchRows(*Ctx_, Output_.MakeConsumeFn());
                 switch (res) {
                 case EFetchResult::Finish: {
@@ -190,7 +190,7 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
         TRenamedOutput<Kind> Output_;
         std::vector<std::unique_ptr<IBlockItemConverter>> OutputItemConverters_;
         const std::vector<TType*> OutputTypes_;
-        const int Threshold = 10000;
+        const int Threshold_ = 10000;
         bool Finished_ = false;
     };
 

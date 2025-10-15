@@ -382,7 +382,7 @@ message TPQTabletConfig {
         optional bool Important = 9 [default = false];
         optional uint64 AvailabilityPeriodMs = 10 [default = 0];
         optional EConsumerType Type = 11 [default = CONSUMER_TYPE_STREAMING];
-        optional uint64 Id = 12;
+        optional uint64 Id = 12; // Filled in pq tablet
     }
 
     repeated TConsumer Consumers = 37;
@@ -458,6 +458,8 @@ message TPQTabletConfig {
 
     // The ID of the Monitoring project that will be used as the value of `project` label for detailed metrics level.
     optional string MonitoringProjectId = 41;
+
+    optional uint64 NextConsumerId = 42; // Filled in pq tablet
 }
 
 message THeartbeat {

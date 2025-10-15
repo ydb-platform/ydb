@@ -242,7 +242,6 @@ private:
     bool IsServerless = false;
     TVector<NScheme::TTypeInfo> KeySchema;
     NKikimrPQ::TPQTabletConfig Config;
-    ui64 MaxConsumerId = 0;
 
     NKikimrPQ::ETabletState TabletState;
     TSet<TChangeNotification> TabletStateRequests;

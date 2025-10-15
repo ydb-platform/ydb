@@ -1330,6 +1330,7 @@ void TPersQueue::UpdateConsumers(NKikimrPQ::TPQTabletConfig& cfg)
         existed[c.GetName()] = c;
     }
 
+    auto nextConsumerId = Config.GetNextConsumerId();
     for (auto& c : *cfg.MutableConsumers()) {
         auto it = existed.find(c.GetName());
         if (it != existed.end() && it->second.GetVersion() == c.GetVersion()) {
@@ -1337,9 +1338,10 @@ void TPersQueue::UpdateConsumers(NKikimrPQ::TPQTabletConfig& cfg)
             c.SetId(it->second.GetId());
         } else {
             c.SetGeneration(curConfigVersion);
-            c.SetId(++MaxConsumerId);
+            c.SetId(++nextConsumerId);
         }
     }
+    cfg.SetNextConsumerId(nextConsumerId);
 }
 
 void TPersQueue::ProcessUpdateConfigRequest(TAutoPtr<TEvPersQueue::TEvUpdateConfig> ev, const TActorId& sender, const TActorContext& ctx)

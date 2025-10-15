@@ -133,15 +133,16 @@ void Migrate(NKikimrPQ::TPQTabletConfig& config) {
         consumer->SetImportant(true);
     }
 
-    ui64 maxId = 0;
+    ui64 nextConsumerId = 0;
     for (auto& consumer : config.GetConsumers()) {
-        maxId = std::max(maxId, consumer.GetId());
+        nextConsumerId = std::max(nextConsumerId, consumer.GetId());
     }
     for (auto& consumer : *config.MutableConsumers()) {
         if (!consumer.HasId()) {
-            consumer.SetId(++maxId);
+            consumer.SetId(++nextConsumerId);
         }
-    };
+    }
+    config.SetNextConsumerId(nextConsumerId);
 }
 
 bool HasConsumer(const NKikimrPQ::TPQTabletConfig& config, const TString& consumerName) {

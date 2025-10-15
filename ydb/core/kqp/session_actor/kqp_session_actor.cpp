@@ -184,7 +184,8 @@ public:
             NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
             TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters,
             const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
-            const TActorId& kqpTempTablesAgentActor)
+            const TActorId& kqpTempTablesAgentActor,
+            std::shared_ptr<NYql::NDq::IDqChannelService> channelService)
         : Owner(owner)
         , QueryCache(std::move(queryCache))
         , SessionId(sessionId)
@@ -201,6 +202,7 @@ public:
         , QueryServiceConfig(queryServiceConfig)
         , KqpTempTablesAgentActor(kqpTempTablesAgentActor)
         , GUCSettings(std::make_shared<TGUCSettings>())
+        , ChannelService(channelService)
     {
         RequestCounters = MakeIntrusive<TKqpRequestCounters>();
         RequestCounters->Counters = Counters;
@@ -1735,7 +1737,7 @@ public:
             QueryState ? QueryState->StatementResultIndex : 0, FederatedQuerySetup,
             (QueryState && QueryState->RequestEv->GetSyntax() == Ydb::Query::Syntax::SYNTAX_PG)
                 ? GUCSettings : nullptr, {}, txCtx->ShardIdToTableInfo, txCtx->TxManager, txCtx->BufferActorId, /* batchOperationSettings */ Nothing(),
-            llvmSettings, QueryServiceConfig, QueryState ? QueryState->Generation : 0);
+            llvmSettings, QueryServiceConfig, QueryState ? QueryState->Generation : 0, ChannelService);
 
         auto exId = RegisterWithSameMailbox(executerActor);
         LOG_D("Created new KQP executer: " << exId << " isRollback: " << isRollback);
@@ -3205,6 +3207,7 @@ private:
     std::shared_ptr<std::atomic<bool>> CompilationCookie;
 
     TGUCSettings::TPtr GUCSettings;
+    std::shared_ptr<NYql::NDq::IDqChannelService> ChannelService;
 };
 
 } // namespace
@@ -3218,13 +3221,14 @@ IActor* CreateKqpSessionActor(const TActorId& owner,
     NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
     TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters,
     const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
-    const TActorId& kqpTempTablesAgentActor)
+    const TActorId& kqpTempTablesAgentActor,
+    std::shared_ptr<NYql::NDq::IDqChannelService> channelService)
 {
     return new TKqpSessionActor(
         owner, std::move(queryCache),
         std::move(resourceManager), std::move(caFactory), sessionId, kqpSettings, workerSettings, federatedQuerySetup,
                                 std::move(asyncIoFactory),  std::move(moduleResolverState), counters,
-                                queryServiceConfig, kqpTempTablesAgentActor);
+                                queryServiceConfig, kqpTempTablesAgentActor, channelService);
 }
 
 }

@@ -230,6 +230,7 @@ struct TGraphMeta {
     std::map<TString, TString> SecureParams;
     bool AllowOlapDataQuery = true; // used by Data executer - always true for Scan executer
     bool StreamResult = false;
+    bool UseFastChannels = false;
 
     const TIntrusivePtr<TProtoArenaHolder>& GetArenaIntrusivePtr() const {
         return Arena;

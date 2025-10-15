@@ -219,3 +219,41 @@ message TMessageTransportMeta {
     optional uint64 SeqNo = 1; // SeqNo of message
     optional uint64 ConfirmedSeqNo = 2; // All input messages with SeqNo <= ConfirmedSeqNo are received.
 }
+
+message TEvChannelDataV2 {
+    optional NActorsProto.TActorId SrcActorId = 1;
+    optional NActorsProto.TActorId DstActorId = 2;
+    optional uint64 ChannelId = 3;
+    optional uint64 SeqNo = 4;
+
+    optional uint32 PayloadId = 5;
+    optional EDataTransportVersion TransportVersion = 6;
+    optional EValuePackerVersion ValuePackerVersion = 7;
+    optional uint32 Rows = 8;
+    optional uint32 Bytes = 9;
+
+    optional bool Finished = 10;
+
+    optional uint64 SendTime = 11;
+    optional bool NoAck = 12;
+};
+
+message TEvChannelAckV2 {
+
+    enum EAckStatus {
+        UNSPECIFIED = 0; // Ignore SeqNo
+        OK = 1;
+        OVERLOAD = 2;
+        UNDELIVERED = 3;
+    }
+
+    optional NActorsProto.TActorId SrcActorId = 1;
+    optional NActorsProto.TActorId DstActorId = 2;
+    optional uint64 ChannelId = 3;
+    optional uint64 SeqNo = 4;
+
+    optional EAckStatus Status = 5;
+    optional bool EarlyFinished = 6;
+    optional uint64 PopBytes = 7;
+};
+

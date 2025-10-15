@@ -1,4 +1,5 @@
 #pragma once
+#include "bridge.h"
 #include "defs.h"
 #include "events.h"
 #include <ydb/core/protos/statestorage.pb.h>
@@ -514,6 +515,7 @@ struct TStateStorageInfo : public TThrRefBase {
         ERingGroupState State;
         bool WriteOnly = false;
         ui32 NToSelect = 0;
+        TBridgePileId BridgePileId;
         TVector<TRing> Rings;
 
         TString ToString() const;

@@ -16,6 +16,7 @@
 #include <util/system/execpath.h>
 #include <util/system/platform.h>
 #include <util/system/mlock.h>
+#include <util/system/mutex.h>
 
 #ifdef _linux_
     #include <signal.h>
@@ -77,6 +78,7 @@ void SetFatalSignalAction(void (*sigaction)(int, siginfo_t*, void*))
 
 namespace {
 std::vector<std::function<void(int)>> Before, After;
+TMutex FatalCallbackMutex;
 bool KikimrSymbolize = false;
 NYql::NBacktrace::TCollectedFrame Frames[NYql::NBacktrace::Limit];
 
@@ -145,11 +147,15 @@ void SetModulesMapping(const THashMap<TString, TString>& mapping) {
 }
 
 void AddBeforeFatalCallback(const std::function<void(int)>& before) {
-    Before.push_back(before);
+    with_lock (FatalCallbackMutex) {
+        Before.push_back(before);
+    }
 }
 
 void AddAfterFatalCallback(const std::function<void(int)>& after) {
-    After.push_back(after);
+    with_lock (FatalCallbackMutex) {
+        After.push_back(after);
+    }
 }
 
 void RegisterKikimrFatalActions() {

@@ -25,12 +25,14 @@ namespace NKikimr {
 namespace NSchemeShard {
 
 static void FillTableStats(NKikimrTableStats::TTableStats* stats, const TPartitionStats& tableStats) {
+    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("XXXXX", tableStats.RowCount);
     stats->SetRowCount(tableStats.RowCount);
     stats->SetDataSize(tableStats.DataSize);
     stats->SetIndexSize(tableStats.IndexSize);
     stats->SetByKeyFilterSize(tableStats.ByKeyFilterSize);
     stats->SetLastAccessTime(tableStats.LastAccessTime.MilliSeconds());
     stats->SetLastUpdateTime(tableStats.LastUpdateTime.MilliSeconds());
+    stats->SetImmediateTxCompleted(tableStats.ImmediateTxCompleted);
     stats->SetImmediateTxCompleted(tableStats.ImmediateTxCompleted);
     stats->SetPlannedTxCompleted(tableStats.PlannedTxCompleted);
     stats->SetTxRejectedByOverload(tableStats.TxRejectedByOverload);
@@ -218,7 +220,7 @@ TPathElement::EPathSubType TPathDescriber::CalcPathSubType(const TPath& path) {
             case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
                 return TPathElement::EPathSubType::EPathSubTypeVectorKmeansTreeIndexImplTable;
             case NKikimrSchemeOp::EIndexTypeGlobalFulltext:
-                return TPathElement::EPathSubType::EPathSubTypeFulltextIndexImplTable; 
+                return TPathElement::EPathSubType::EPathSubTypeFulltextIndexImplTable;
             default:
                 Y_DEBUG_ABORT_S(NTableIndex::InvalidIndexType(indexInfo->Type));
                 return TPathElement::EPathSubType::EPathSubTypeEmpty;

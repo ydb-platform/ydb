@@ -4,6 +4,7 @@
 #include "collection.h"
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/tx/columnshard/engines/storage/chunks/data.h>
 #include <ydb/core/tx/columnshard/splitter/chunks.h>
 
 #include <ydb/library/conclusion/status.h>
@@ -44,7 +45,8 @@ class IIndexMeta {
 private:
     YDB_READONLY_DEF(TString, IndexName);
     YDB_READONLY(ui32, IndexId, 0);
-    YDB_READONLY(TString, StorageId, IStoragesManager::DefaultStorageId);
+    YDB_READONLY(TString, DefaultStorageId, IStoragesManager::DefaultStorageId);
+    YDB_READONLY_DEF(bool, InheritPortionStorage);
 
     virtual std::shared_ptr<NReader::NCommon::IKernelFetchLogic> DoBuildFetchTask(const THashSet<NRequest::TOriginalDataAddress>& dataAddresses,
         const std::shared_ptr<IIndexMeta>& selfPtr,
@@ -59,7 +61,7 @@ private:
     }
 
 protected:
-    virtual TConclusion<std::vector<std::shared_ptr<IPortionDataChunk>>> DoBuildIndexOptional(
+    virtual TConclusion<std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>>> DoBuildIndexOptional(
         const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, const ui32 recordsCount,
         const TIndexInfo& indexInfo) const = 0;
     virtual bool DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& proto) = 0;
@@ -88,15 +90,20 @@ public:
         return DoBuildFetchTask(dataAddresses, meta, storagesManager);
     }
 
-    bool IsInplaceData() const {
-        return StorageId == NBlobOperations::TGlobal::LocalMetadataStorageId;
+    bool IsInplaceData(const TString& specialTier) const {
+        if (InheritPortionStorage && specialTier && specialTier != NBlobOperations::TGlobal::DefaultStorageId) {
+            return false;
+        }
+        return DefaultStorageId == NBlobOperations::TGlobal::LocalMetadataStorageId;
     }
 
     IIndexMeta() = default;
-    IIndexMeta(const ui32 indexId, const TString& indexName, const TString& storageId)
+    IIndexMeta(const ui32 indexId, const TString& indexName, const TString& storageId, const bool inheritPortionStorage)
         : IndexName(indexName)
         , IndexId(indexId)
-        , StorageId(storageId) {
+        , DefaultStorageId(storageId)
+        , InheritPortionStorage(inheritPortionStorage)
+    {
     }
 
     NJson::TJsonValue SerializeDataToJson(const TIndexChunk& iChunk, const TIndexInfo& indexInfo) const;
@@ -114,9 +121,8 @@ public:
 
     virtual ~IIndexMeta() = default;
 
-    TConclusion<std::vector<std::shared_ptr<IPortionDataChunk>>> BuildIndexOptional(
-        const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, const ui32 recordsCount,
-        const TIndexInfo& indexInfo) const;
+    TConclusion<std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>>> BuildIndexOptional(
+        const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, const ui32 recordsCount, const TIndexInfo& indexInfo) const;
 
     bool DeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& proto);
     void SerializeToProto(NKikimrSchemeOp::TOlapIndexDescription& proto) const;

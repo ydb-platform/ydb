@@ -46,17 +46,26 @@ public:
     void CommitToDatabase(IDbWrapper& wrapper);
 
     virtual NSplitter::TEntityGroups GetEntityGroupsByStorageId(
-        const TString& /*specialTier*/, const IStoragesManager& storages, const TIndexInfo& /*indexInfo*/) const override {
-        NSplitter::TEntityGroups groups(storages.GetDefaultOperator()->GetBlobSplitSettings(), IStoragesManager::DefaultStorageId);
+        const TString& specialTier, const IStoragesManager& storages, const TIndexInfo& /*indexInfo*/) const override {
+        const TString& storageId = [&]() {
+            if (specialTier && specialTier != IStoragesManager::DefaultStorageId) {
+                return specialTier;
+            }
+            return IStoragesManager::DefaultStorageId;
+        }();
+        NSplitter::TEntityGroups groups(storages.GetOperatorVerified(storageId)->GetBlobSplitSettings(), storageId);
         return groups;
     }
 
     virtual const TString& GetColumnStorageId(const ui32 /*columnId*/, const TIndexInfo& /*indexInfo*/) const override {
-        return { NBlobOperations::TGlobal::DefaultStorageId };
+        if (GetMeta().GetTierName()) {
+            return GetMeta().GetTierName();
+        }
+        return NBlobOperations::TGlobal::DefaultStorageId;
     }
 
-    virtual const TString& GetEntityStorageId(const ui32 /*columnId*/, const TIndexInfo& /*indexInfo*/) const override {
-        return { NBlobOperations::TGlobal::DefaultStorageId };
+    virtual const TString& GetEntityStorageId(const ui32 columnId, const TIndexInfo& indexInfo) const override {
+        return GetColumnStorageId(columnId, indexInfo);
     }
 
     virtual const TString& GetIndexStorageId(const ui32 /*indexId*/, const TIndexInfo& /*indexInfo*/) const override {

@@ -1,4 +1,4 @@
-#include "kqp_fulltext_tokenize.h"
+#include "kqp_fulltext_analyze.h"
 
 #include <ydb/core/base/fulltext.h>
 

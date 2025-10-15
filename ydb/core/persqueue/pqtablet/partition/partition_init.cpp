@@ -926,8 +926,6 @@ void TInitDataStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorConte
                 }
                 head.PackedSize += size;
 
-                Partition()->InitFirstCompactionPart();
-
                 break;
                 }
             case NKikimrProto::OVERRUN:
@@ -949,6 +947,8 @@ void TInitDataStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorConte
 
         };
     }
+
+    Partition()->InitFirstCompactionPart();
 
     Done(ctx);
 }

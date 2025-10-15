@@ -35,31 +35,108 @@ def is_system_object(obj):
 
 
 def sdk_select_table_rows(session, table, path_prefix="/Root"):
-    sql = f'PRAGMA TablePathPrefix("{path_prefix}"); SELECT id, number, txt FROM {table} ORDER BY id;'
+    if table.startswith("/"):
+        full_path = table
+        base_name = os.path.basename(table)
+        table_for_sql = base_name
+        pp = os.path.dirname(full_path) or path_prefix
+    else:
+        base_name = table
+        full_path = os.path.join(path_prefix, base_name)
+        table_for_sql = base_name
+        pp = path_prefix
+
+    cols = None
+    primary_keys = None
+    try:
+        if hasattr(session, "describe_table"):
+            desc = session.describe_table(full_path)
+        else:
+            tc = getattr(getattr(session, "driver", None), "table_client", None)
+            if tc is not None and hasattr(tc, "describe_table"):
+                desc = tc.describe_table(full_path)
+            else:
+                desc = None
+
+        if desc is not None:
+            raw_cols = getattr(desc, "columns", None) or getattr(desc, "Columns", None)
+            if raw_cols:
+                try:
+                    cols = [c.name for c in raw_cols]
+                except Exception:
+                    cols = [str(c) for c in raw_cols]
+
+            pk = getattr(desc, "primary_key", None) or getattr(desc, "primary_keys", None) or getattr(desc, "key_columns", None)
+            if pk:
+                try:
+                    if isinstance(pk, (list, tuple)):
+                        primary_keys = list(pk)
+                    else:
+                        primary_keys = [str(pk)]
+                except Exception:
+                    primary_keys = None
+    except Exception:
+        cols = None
+        primary_keys = None
+
+    if not cols:
+        try:
+            sql_try = f'PRAGMA TablePathPrefix("{pp}"); SELECT * FROM {table_for_sql} LIMIT 1;'
+            res_try = session.transaction().execute(sql_try, commit_tx=True)
+            rs0 = res_try[0]
+            try:
+                meta = getattr(rs0, "columns", None) or getattr(rs0, "Columns", None)
+                if meta:
+                    cols = [c.name for c in meta]
+            except Exception:
+                cols = None
+        except Exception:
+            cols = None
+
+    if not cols:
+        raise AssertionError(f"Не удалось получить список колонок для таблицы {full_path}")
+
+    def q(n):
+        return "`" + n.replace("`", "``") + "`"
+
+    select_list = ", ".join(q(c) for c in cols)
+
+    order_clause = ""
+    if primary_keys:
+        pks = [p for p in primary_keys if p in cols]
+        if pks:
+            order_clause = " ORDER BY " + ", ".join(q(p) for p in pks)
+
+    sql = f'PRAGMA TablePathPrefix("{pp}"); SELECT {select_list} FROM {table_for_sql}{order_clause};'
+
     result_sets = session.transaction().execute(sql, commit_tx=True)
 
     rows = []
-    rows.append(["id", "number", "txt"])
+    rows.append(cols.copy())
 
     for r in result_sets[0].rows:
-        try:
-            idv = r.id
-        except Exception:
-            idv = r[0]
-        try:
-            numv = r.number
-        except Exception:
-            numv = r[1]
-        try:
-            txtv = r.txt
-        except Exception:
-            txtv = r[2]
+        vals = []
+        for i, col in enumerate(cols):
+            v = None
+            try:
+                v = getattr(r, col)
+            except Exception:
+                try:
+                    v = r[i]
+                except Exception:
+                    v = None
 
-        rows.append([
-            str(idv) if idv is not None else "",
-            str(numv) if numv is not None else "",
-            txtv if txtv is not None else "",
-        ])
+            if v is None:
+                vals.append("")
+            else:
+                try:
+                    if isinstance(v, (bytes, bytearray)):
+                        vals.append(v.decode("utf-8", "replace"))
+                    else:
+                        vals.append(str(v))
+                except Exception:
+                    vals.append(repr(v))
+        rows.append(vals)
 
     return rows
 
@@ -1240,6 +1317,16 @@ class TestFullCycleLocalBackupRestoreWSchemaChange(TestFullCycleLocalBackupResto
             # add more tables
             create_table_with_data(session, "extra_table_2")
 
+            # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+            # # remove table under backup collection -> except fail
+            # # but the current version allows you to delete
+            # # a table included in backup collection
+            # try:
+            #     session.execute_scheme('DROP TABLE `/Root/products`;')
+            # except Exception:
+            #     raise AssertionError("DROP failed")
+            # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
             # remove some tables from step5: drop extra_table_1
             try:
                 session.execute_scheme('DROP TABLE `/Root/extra_table_1`;')
@@ -1252,7 +1339,6 @@ class TestFullCycleLocalBackupRestoreWSchemaChange(TestFullCycleLocalBackupResto
             except Exception:
                 raise AssertionError("ADD COLUMN failed")
 
-            # attempt alter column (if supported) - many builds do not support complex ALTER, so guard with try
             try:
                 session.execute_scheme('ALTER TABLE `/Root/orders` SET (TTL = Interval("PT0S") ON expire_at);')
             except Exception:
@@ -1260,7 +1346,7 @@ class TestFullCycleLocalBackupRestoreWSchemaChange(TestFullCycleLocalBackupResto
 
             # drop columns
             try:
-                session.execute_scheme('ALTER TABLE `/Root/orders` DROP COLUMN new_col;')
+                session.execute_scheme('ALTER TABLE `/Root/orders` DROP COLUMN number;')
             except Exception:
                 raise AssertionError("DROP COLUMN failed")
 

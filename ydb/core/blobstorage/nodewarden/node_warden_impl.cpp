@@ -4,6 +4,7 @@
 #include "distconf.h"
 
 #include <google/protobuf/util/message_differencer.h>
+#include <ydb/core/config/validation/validators.h>
 #include <ydb/core/blobstorage/common/immediate_control_defaults.h>
 #include <ydb/core/blobstorage/crypto/secured_block.h>
 #include <ydb/core/blobstorage/dsproxy/dsproxy.h>
@@ -1648,7 +1649,7 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
 
             auto updateConfig = [&](bool needMerge, auto *to, const auto& from, const char *entity) {
                 if (needMerge) {
-                    *errorReason = VerifyConfigCompatibility(entity, from, *to);
+                    *errorReason = NKikimr::NConfig::ValidateStateStorageConfig(entity, from, *to);
                     if (!errorReason->empty()) {
                         return false;
                     }
@@ -1677,7 +1678,7 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
 #define UPDATE_EXPLICIT_CONFIG(NAME) \
         if (domains.HasExplicit##NAME##Config()) { \
             if (config->Has##NAME##Config()) { \
-                *errorReason = VerifyConfigCompatibility(#NAME, config->Get##NAME##Config(), domains.GetExplicit##NAME##Config()); \
+                *errorReason = NKikimr::NConfig::ValidateStateStorageConfig(#NAME, config->Get##NAME##Config(), domains.GetExplicit##NAME##Config()); \
                 if (!errorReason->empty()) { \
                     return false; \
                 } \
@@ -1691,102 +1692,6 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
     }
 
     return true;
-}
-
-TString NKikimr::VerifyConfigCompatibility(const char* name, const NKikimrConfig::TDomainsConfig::TStateStorage& oldSSConfig, const NKikimrConfig::TDomainsConfig::TStateStorage& newSSConfig) {
-    STLOG(PRI_DEBUG, BS_NODE, NW102, "VerifyConfigCompatibility", (oldSSConfig, oldSSConfig), (newSSConfig, newSSConfig));
-
-    if ((oldSSConfig.HasRing() || oldSSConfig.RingGroupsSize() == 1) && (newSSConfig.HasRing() || newSSConfig.RingGroupsSize() == 1)) {
-        auto toInfo = BuildStateStorageInfo(newSSConfig);
-        auto fromInfo = BuildStateStorageInfo(oldSSConfig);
-        if (toInfo->RingGroups != fromInfo->RingGroups) {
-            return TStringBuilder() << name << " NToSelect/rings differs"
-                << " from# " << SingleLineProto(oldSSConfig)
-                << " to# " << SingleLineProto(newSSConfig);
-        }
-        return "";
-    }
-    if (newSSConfig.RingGroupsSize() < 1) {
-        return TStringBuilder() << "New " << name << " configuration RingGroups is not filled in";
-    }
-    if (newSSConfig.GetRingGroups(0).GetWriteOnly()) {
-        return TStringBuilder() << "New " << name << " configuration first RingGroup is writeOnly";
-    }
-    for (auto& rg : newSSConfig.GetRingGroups()) {
-        if (rg.RingSize() && rg.NodeSize()) {
-            return TStringBuilder() << name << " Ring and Node are defined, use the one of them";
-        }
-        const size_t numItems = Max(rg.RingSize(), rg.NodeSize());
-        if (!rg.HasNToSelect() || numItems < 1 || rg.GetNToSelect() < 1 || rg.GetNToSelect() > numItems) {
-            return TStringBuilder() << name << " invalid ring group selection";
-        }
-        for (auto &ring : rg.GetRing()) {
-            if (ring.RingSize() > 0) {
-                return TStringBuilder() << name << " too deep nested ring declaration";
-            }
-            if (ring.HasRingGroupActorIdOffset()) {
-                return TStringBuilder() << name << " RingGroupActorIdOffset should be used in ring group level, not ring";
-            }
-            if (ring.NodeSize() < 1) {
-                return TStringBuilder() << name << " empty ring";
-            }
-        }
-    }
-    try {
-        TIntrusivePtr<TStateStorageInfo> newSSInfo;
-        TIntrusivePtr<TStateStorageInfo> oldSSInfo;
-        newSSInfo = BuildStateStorageInfo(newSSConfig);
-        oldSSInfo = BuildStateStorageInfo(oldSSConfig);
-        THashSet<TActorId> replicas;
-        for (auto& ringGroup : newSSInfo->RingGroups) {
-            for (auto& ring : ringGroup.Rings) {
-                for (auto& node : ring.Replicas) {
-                    if (!replicas.insert(node).second) {
-                        return TStringBuilder() << name << " replicas ActorId intersection, specify"
-                            " RingGroupActorIdOffset if you run multiple replicas on one node";
-                    }
-                }
-            }
-        }
-
-        Y_ABORT_UNLESS(newSSInfo->RingGroups.size() > 0 && oldSSInfo->RingGroups.size() > 0);
-
-        for (auto& newGroup : newSSInfo->RingGroups) {
-            if (newGroup.WriteOnly) {
-                continue;
-            }
-            bool found = false;
-            for (auto& rg : oldSSInfo->RingGroups) {
-                if (newGroup.SameConfiguration(rg)) {
-                    found = true;
-                    break;
-                }
-            }
-            if (!found) {
-                return TStringBuilder() << "New introduced ring group should be WriteOnly old: " << oldSSInfo->ToString()
-                    << " new: " << newSSInfo->ToString();
-            }
-        }
-        for (auto& oldGroup : oldSSInfo->RingGroups) {
-            if (oldGroup.WriteOnly) {
-                continue;
-            }
-            bool found = false;
-            for (auto& rg : newSSInfo->RingGroups) {
-                if (oldGroup.SameConfiguration(rg)) {
-                    found = true;
-                    break;
-                }
-            }
-            if (!found) {
-                return TStringBuilder() << "Can not delete not WriteOnly ring group. Make it WriteOnly before deletion old: "
-                    << oldSSInfo->ToString() << " new: " << newSSInfo->ToString();
-            }
-        }
-    } catch (const std::exception& e) {
-        return TStringBuilder() << "Can not build " << name << " info from config. " << e.what();
-    }
-    return "";
 }
 
 bool NKikimr::ObtainStaticKey(TEncryptionKey *key) {

@@ -231,17 +231,8 @@ class WorkloadManagerConcurrentQueryLimit(WorkloadManagerBase):
 
 
 class WorkloadManagerComputeScheduler(WorkloadManagerBase):
-    threads = 3
     metrics: list[(float, dict[str, float])] = []
     metrics_keys = set()
-
-    @classmethod
-    def get_resource_pools(cls) -> list[ResourcePool]:
-        return [
-            ResourcePool('test_pool_30', ['testuser1'], total_cpu_limit_percent_per_node=30, resource_weight=4),
-            ResourcePool('test_pool_40', ['testuser2'], total_cpu_limit_percent_per_node=40, resource_weight=4),
-            ResourcePool('test_pool_50', ['testuser3'], total_cpu_limit_percent_per_node=50, resource_weight=4),
-        ]
 
     @classmethod
     def get_key_measurements(cls) -> tuple[list[LoadSuiteBase.KeyMeasurement], str]:
@@ -319,6 +310,8 @@ class WorkloadManagerComputeScheduler(WorkloadManagerBase):
         allure.attach(report, 'metrics', allure.attachment_type.HTML)
         times = [datetime.fromtimestamp(t) for t, _ in cls.metrics]
         fig, axs = pyplot.subplots(len(pools), 1, layout='constrained', figsize=(6.4, 3.2 * len(pools)))
+        if len(pools) == 1:
+            axs = [axs]
         for p in range(len(pools)):
             pool = pools[p]
             axs[p].set_title(pool.name)
@@ -373,7 +366,29 @@ class WorkloadManagerComputeScheduler(WorkloadManagerBase):
         return ''
 
 
-class TestWorkloadManagerClickbenchComputeScheduler(WorkloadManagerClickbenchBase, WorkloadManagerComputeScheduler):
+class WorkloadManagerComputeSchedulerP3(WorkloadManagerComputeScheduler):
+    threads = 3
+
+    @classmethod
+    def get_resource_pools(cls) -> list[ResourcePool]:
+        return [
+            ResourcePool('test_pool_30', ['testuser1'], total_cpu_limit_percent_per_node=30, resource_weight=4),
+            ResourcePool('test_pool_40', ['testuser2'], total_cpu_limit_percent_per_node=40, resource_weight=4),
+            ResourcePool('test_pool_50', ['testuser3'], total_cpu_limit_percent_per_node=50, resource_weight=4),
+        ]
+
+
+class WorkloadManagerComputeSchedulerP1(WorkloadManagerComputeScheduler):
+    threads = 1
+
+    @classmethod
+    def get_resource_pools(cls) -> list[ResourcePool]:
+        return [
+            ResourcePool('test_pool_100', ['testuser1'], total_cpu_limit_percent_per_node=100, resource_weight=4),
+        ]
+
+
+class TestWorkloadManagerClickbenchComputeScheduler(WorkloadManagerClickbenchBase, WorkloadManagerComputeSchedulerP3):
     pass
 
 
@@ -381,8 +396,26 @@ class TestWorkloadManagerClickbenchConcurrentQueryLimit(WorkloadManagerClickbenc
     pass
 
 
-class TestWorkloadManagerTpchComputeSchedulerS100(WorkloadManagerTpchBase, WorkloadManagerComputeScheduler):
+class TestWorkloadManagerTpchComputeSchedulerS100(WorkloadManagerTpchBase, WorkloadManagerComputeSchedulerP3):
     tables_size = tpch.TestTpch100.tables_size
     scale = tpch.TestTpch100.scale
-    timeout = tpch.TestTpch100.timeout * len(WorkloadManagerComputeScheduler.get_resource_pools())
+    timeout = tpch.TestTpch100.timeout * len(WorkloadManagerComputeSchedulerP3.get_resource_pools())
     threads = 1
+
+
+class TestWorkloadManagerTpchComputeSchedulerP1S10(WorkloadManagerTpchBase, WorkloadManagerComputeSchedulerP1):
+    tables_size = tpch.TpchParallelS1T10.tables_size
+    scale = tpch.TpchParallelS1T10.scale
+    timeout = tpch.TpchParallelS1T10.timeout * len(WorkloadManagerComputeSchedulerP1.get_resource_pools())
+    threads = tpch.TpchParallelS1T10.threads
+    iterations = tpch.TpchParallelS1T10.iterations
+
+
+class TestWorkloadManagerClickbenchComputeSchedulerP1T1(WorkloadManagerClickbenchBase, WorkloadManagerComputeSchedulerP1):
+    threads = 1
+    iterations = ClickbenchParallelBase.iterations
+
+
+class TestWorkloadManagerClickbenchComputeSchedulerP1T4(WorkloadManagerClickbenchBase, WorkloadManagerComputeSchedulerP1):
+    threads = 4
+    iterations = ClickbenchParallelBase.iterations

@@ -75,7 +75,7 @@ void TYdbErrorException::LogToStderr() const {
     Cerr << Status;
 }
 
-static void VerifyStatus(TStatus status, TString explain = "") {
+static void VerifyStatus(TStatus status, const TString& explain = {}) {
     if (status.IsSuccess()) {
         if (status.GetIssues()) {
             LOG_D(status);
@@ -85,6 +85,18 @@ static void VerifyStatus(TStatus status, TString explain = "") {
             LOG_E(explain << ": " << status.GetIssues().ToOneLineString());
         }
         throw TYdbErrorException(status) << explain;
+    }
+}
+
+class TSkipException: public yexception {
+};
+
+static void VerifyStatusOrSkip(TStatus status, const TString& explain = {}) {
+    if (status.GetStatus() == EStatus::CLIENT_CALL_UNIMPLEMENTED) {
+        LOG_D(explain << '\n' << status);
+        throw TSkipException() << explain;
+    } else {
+        VerifyStatus(status, explain);
     }
 }
 
@@ -534,7 +546,7 @@ NTopic::TTopicDescription DescribeTopic(TDriver driver, const TString& path) {
     const auto result = NConsoleClient::RetryFunction([&]() {
         return client.DescribeTopic(path).ExtractValueSync();
     });
-    VerifyStatus(result, "describe topic");
+    VerifyStatusOrSkip(result, "error describing topic");
     return result.GetTopicDescription();
 }
 
@@ -607,7 +619,7 @@ namespace {
 TString DescribeViewQuery(TDriver driver, const TString& path) {
     TString query;
     auto status = NDump::DescribeViewQuery(driver, path, query);
-    VerifyStatus(status, "describe view");
+    VerifyStatusOrSkip(status, "error describing view");
     return query;
 }
 
@@ -668,7 +680,7 @@ NCoordination::TNodeDescription DescribeCoordinationNode(TDriver driver, const T
     auto status = NConsoleClient::RetryFunction([&]() {
         return client.DescribeNode(path).ExtractValueSync();
     });
-    VerifyStatus(status, "describe coordination node");
+    VerifyStatusOrSkip(status, "error describing coordination node");
     return status.ExtractResult();
 }
 
@@ -678,7 +690,7 @@ std::vector<std::string> ListRateLimiters(NRateLimiter::TRateLimiterClient& clie
     auto status = NConsoleClient::RetryFunction([&]() {
         return client.ListResources(coordinationNodePath, AllRootResourcesTag, settings).ExtractValueSync();
     });
-    VerifyStatus(status, "list rate limiters");
+    VerifyStatusOrSkip(status, "error listing rate limiters");
     return status.GetResourcePaths();
 }
 
@@ -688,7 +700,7 @@ NRateLimiter::TDescribeResourceResult DescribeRateLimiter(
     auto status = NConsoleClient::RetryFunction([&]() {
         return client.DescribeResource(coordinationNodePath, rateLimiterPath).ExtractValueSync();
     });
-    VerifyStatus(status, "describe rate limiter");
+    VerifyStatusOrSkip(status, "error describing rate limiter");
     return status;
 }
 
@@ -817,7 +829,7 @@ void BackupReplication(
 
     NReplication::TReplicationClient replicationClient(driver);
     TMaybe<NReplication::TReplicationDescription> desc;
-    VerifyStatus(NDump::DescribeReplication(replicationClient, dbPath, desc), "describe replication");
+    VerifyStatusOrSkip(NDump::DescribeReplication(replicationClient, dbPath, desc), "error describing replication");
     const auto creationQuery = BuildCreateReplicationQuery(db, dbBackupRoot, fsBackupFolder.GetName(), *desc);
 
     WriteCreationQueryToFile(creationQuery, fsBackupFolder, NDump::NFiles::CreateAsyncReplication());
@@ -967,7 +979,7 @@ void BackupExternalDataSource(TDriver driver, const TString& dbPath, const TFsPa
 
     Ydb::Table::DescribeExternalDataSourceResult description;
     NTable::TTableClient client(driver);
-    VerifyStatus(NDump::DescribeExternalDataSource(client, dbPath, description), "describe external data source");
+    VerifyStatusOrSkip(NDump::DescribeExternalDataSource(client, dbPath, description), "error describing external data source");
     CanonizeForBackup(description);
     const auto creationQuery = BuildCreateExternalDataSourceQuery(description);
 
@@ -987,7 +999,7 @@ Ydb::Table::DescribeExternalTableResult DescribeExternalTable(TDriver driver, co
         }
         return result;
     });
-    VerifyStatus(status, "describe external table");
+    VerifyStatusOrSkip(status, "error describing external table");
     return description;
 }
 
@@ -1035,7 +1047,7 @@ Ydb::Table::DescribeSystemViewResult DescribeSystemView(TDriver driver, const TS
     NTable::TTableClient client(driver);
     Ydb::Table::DescribeSystemViewResult description;
     auto status = NDump::DescribeSystemView(client, path, description);
-    VerifyStatus(status, "describe system view");
+    VerifyStatusOrSkip(status, "error describing system view");
     description.clear_self();
     return description;
 }
@@ -1145,27 +1157,32 @@ void BackupFolderImpl(TDriver driver, const TString& database, const TString& db
                     CreateClusterDirectory(driver, JoinDatabasePath(backupPrefix, dbIt.GetRelPath()));
                 }
             }
-            if (dbIt.IsView()) {
-                BackupView(driver, database, dbIt.GetTraverseRoot(), dbIt.GetRelPath(), childFolderPath, issues);
-            } else if (dbIt.IsTopic()) {
-                BackupTopic(driver, dbIt.GetFullPath(), childFolderPath);
-            } else if (dbIt.IsCoordinationNode()) {
-                BackupCoordinationNode(driver, dbIt.GetFullPath(), childFolderPath);
-            } else if (dbIt.IsReplication()) {
-                BackupReplication(driver, database, dbIt.GetTraverseRoot(), dbIt.GetRelPath(), childFolderPath);
-            } else if (dbIt.IsExternalDataSource()) {
-                BackupExternalDataSource(driver, dbIt.GetFullPath(), childFolderPath);
-            } else if (dbIt.IsExternalTable()) {
-                BackupExternalTable(driver, dbIt.GetFullPath(), childFolderPath);
-            } else if (dbIt.IsSystemView()) {
-                BackupSystemView(driver, dbIt.GetFullPath(), childFolderPath);
-            } else if (dbIt.IsTransfer()) {
-                BackupTransfer(driver, database, dbIt.GetTraverseRoot(), dbIt.GetRelPath(), childFolderPath);
-            } else if (!dbIt.IsTable() && !dbIt.IsDir()) {
-                LOG_W("Skipping " << dbIt.GetFullPath().Quote() << ": dumping objects of type " << dbIt.GetCurrentNode()->Type << " is not supported");
-                childFolderPath.Child(NDump::NFiles::Incomplete().FileName).DeleteIfExists();
-                childFolderPath.DeleteIfExists();
+            
+            try {
+                if (dbIt.IsView()) {
+                    BackupView(driver, database, dbIt.GetTraverseRoot(), dbIt.GetRelPath(), childFolderPath, issues);
+                } else if (dbIt.IsTopic()) {
+                    BackupTopic(driver, dbIt.GetFullPath(), childFolderPath);
+                } else if (dbIt.IsCoordinationNode()) {
+                    BackupCoordinationNode(driver, dbIt.GetFullPath(), childFolderPath);
+                } else if (dbIt.IsReplication()) {
+                    BackupReplication(driver, database, dbIt.GetTraverseRoot(), dbIt.GetRelPath(), childFolderPath);
+                } else if (dbIt.IsExternalDataSource()) {
+                    BackupExternalDataSource(driver, dbIt.GetFullPath(), childFolderPath);
+                } else if (dbIt.IsExternalTable()) {
+                    BackupExternalTable(driver, dbIt.GetFullPath(), childFolderPath);
+                } else if (dbIt.IsSystemView()) {
+                    BackupSystemView(driver, dbIt.GetFullPath(), childFolderPath);
+                } else if (dbIt.IsTransfer()) {
+                    BackupTransfer(driver, database, dbIt.GetTraverseRoot(), dbIt.GetRelPath(), childFolderPath);
+                } else if (!dbIt.IsTable() && !dbIt.IsDir()) {
+                    throw TSkipException() << "dumping objects of type " << dbIt.GetCurrentNode()->Type << " is not supported";
+                }
+            } catch (const TSkipException& ex) {
+                LOG_W("Skipping " << dbIt.GetFullPath().Quote() << ": " << ex.what());
+                childFolderPath.ForceDelete();
             }
+
             dbIt.Next();
         }
     }

@@ -21,7 +21,7 @@ DATABASE_ENDPOINT = config["QA_DB"]["DATABASE_ENDPOINT"]
 DATABASE_PATH = config["QA_DB"]["DATABASE_PATH"]
 
 
-def get_all_tests(job_id=None, branch=None):
+def get_all_tests(job_id=None, branch=None, build_type=None):
     print(f'Getting all tests')
 
     with ydb.Driver(
@@ -60,19 +60,26 @@ def get_all_tests(job_id=None, branch=None):
                     and branch = '{branch}'
             )
             """
-        else:  # only all tests from main
+        else:  # get all tests with run_timestamp_last from test_runs_column for specific branch
             tests = f"""
             SELECT 
-                suite_folder,
-                test_name,
-                full_name,
-                owners,
-                run_timestamp_last,
+                t.suite_folder,
+                t.test_name,
+                t.full_name,
+                t.owners,
+                trc.run_timestamp_last,
                 Date('{today}') as date
-            FROM `test_results/analytics/testowners`
-            WHERE  
-                run_timestamp_last >= Date('{today}') - 6*Interval("P1D") 
-                and run_timestamp_last <= Date('{today}') + Interval("P1D")
+            FROM `test_results/analytics/testowners` t
+            INNER JOIN (
+                SELECT 
+                    suite_folder,
+                    test_name,
+                    MAX(run_timestamp) as run_timestamp_last
+                FROM `test_results/test_runs_column`
+                WHERE branch = '{branch}'
+                AND build_type = '{build_type}'
+                GROUP BY suite_folder, test_name
+            ) trc ON t.suite_folder = trc.suite_folder AND t.test_name = trc.test_name
             """
         query = ydb.ScanQuery(tests, {})
         it = table_client.scan_query(query)
@@ -183,7 +190,7 @@ def mute_applier(args):
     mute_check.load(muted_ya_path)
 
     if args.mode == 'upload_muted_tests':
-        all_tests = get_all_tests(branch=args.branch)
+        all_tests = get_all_tests(branch=args.branch, build_type=args.build_type)
         for test in all_tests:
             testsuite = to_str(test['suite_folder'])
             testcase = to_str(test['test_name'])
@@ -193,7 +200,7 @@ def mute_applier(args):
         upload_muted_tests(all_tests)
 
     elif args.mode == 'get_mute_diff':
-        all_tests = get_all_tests(job_id=args.job_id, branch=args.branch)
+        all_tests = get_all_tests(job_id=args.job_id, branch=args.branch, build_type=args.build_type)
         all_tests.sort(key=lambda test: test['full_name'])
         muted_tests = []
         all_tests_names_and_suites = []
@@ -275,6 +282,9 @@ if __name__ == "__main__":
     upload_muted_tests_parser.add_argument(
         '--branch', required=True, default='main', help='branch for getting all tests'
     )
+    upload_muted_tests_parser.add_argument(
+        '--build_type', required=True, help='build type for filtering tests'
+    )
 
     get_mute_details_parser = subparsers.add_parser(
         'get_mute_diff',
@@ -291,6 +301,11 @@ if __name__ == "__main__":
         '--job-id',
         required=True,
         help='pass job-id to extend list of tests by new tests from this pr (by job-id of PR-check and branch)',
+    )
+    get_mute_details_parser.add_argument(
+        '--build_type',
+        required=True,
+        help='build type for filtering tests',
     )
     args = parser.parse_args()
 

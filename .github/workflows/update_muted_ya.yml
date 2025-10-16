@@ -59,11 +59,14 @@ jobs:
         with:
           ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
     
+      - name: Collect testowners
+        run: python3 .github/scripts/analytics/upload_testowners.py
+    
       - name: Collect test history data
         run: python3 .github/scripts/analytics/flaky_tests_history.py --days-window=1 --branch=${{ env.BASE_BRANCH }} --build_type=${{ env.BUILD_TYPE }}
       
       - name: Update muted tests in DB
-        run: python3 .github/scripts/tests/get_muted_tests.py upload_muted_tests --branch=${{ env.BASE_BRANCH }} 
+        run: python3 .github/scripts/tests/get_muted_tests.py upload_muted_tests --branch=${{ env.BASE_BRANCH }} --build_type=${{ env.BUILD_TYPE }} 
       
       - name: Update test monitor
         run: python3 .github/scripts/analytics/tests_monitor.py --branch=${{ env.BASE_BRANCH }} --build_type=${{ env.BUILD_TYPE }}

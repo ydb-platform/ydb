@@ -20,8 +20,14 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
         return result;
     }
 
-    NYdb::NQuery::TScriptExecutionOperation WaitScriptExecutionOperation(const NYdb::TOperation::TOperationId& operationId, const NYdb::TDriver& ydbDriver) {
-        NYdb::NOperation::TOperationClient client(ydbDriver);
+    NYdb::NQuery::TScriptExecutionOperation WaitScriptExecutionOperation(const NYdb::TOperation::TOperationId& operationId, const NYdb::TDriver& ydbDriver, const TString& userSID) {
+        NYdb::TCommonClientSettings settings;
+
+        if (userSID) {
+            settings.AuthToken(userSID);
+        }
+
+        NYdb::NOperation::TOperationClient client(ydbDriver, settings);
         while (1) {
             auto op = client.Get<NYdb::NQuery::TScriptExecutionOperation>(operationId).GetValueSync();
 

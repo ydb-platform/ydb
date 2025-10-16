@@ -9,6 +9,7 @@
 #include <ydb/core/kqp/proxy_service/script_executions_utils/kqp_script_execution_compression.h>
 #include <ydb/core/kqp/proxy_service/script_executions_utils/kqp_script_execution_retries.h>
 #include <ydb/core/kqp/run_script_actor/kqp_run_script_actor.h>
+#include <ydb/core/protos/feature_flags.pb.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/interconnect.h>
@@ -123,6 +124,23 @@ bool GetUserGroupSids(const std::string& serializedUserGroupSids, TVector<NACLib
     return true;
 }
 
+TString CheckScriptExecutionAccess(std::optional<TString>& userSID) {
+    if (!AppData()->FeatureFlags.GetEnableSecureScriptExecutions()) {
+        userSID = std::nullopt;
+        return "";
+    }
+
+    if (!userSID) {
+        return "Access to script execution operations without user token is not allowed";
+    }
+
+    if (NACLib::TUserToken(*userSID, {}).IsSystemUser()) {
+        userSID = std::nullopt;
+    }
+
+    return "";
+}
+
 class TQueryBase : public NKikimr::TQueryBase {
 public:
     struct TSettings {
@@ -133,7 +151,7 @@ public:
     };
 
     TQueryBase(const TString& operationName, const TSettings& settings)
-        : NKikimr::TQueryBase(NKikimrServices::KQP_PROXY, settings.SessionId)
+        : NKikimr::TQueryBase(NKikimrServices::KQP_PROXY, settings.SessionId, {}, /* isSystemUser */ true)
     {
         SetOperationInfo(operationName, CreateTraceId(settings));
     }
@@ -166,16 +184,27 @@ class TScriptExecutionsTablesCreator : public NTableCreator::TMultiTableCreator 
     using TBase = NTableCreator::TMultiTableCreator;
 
 public:
-    explicit TScriptExecutionsTablesCreator()
+    explicit TScriptExecutionsTablesCreator(const NKikimrConfig::TFeatureFlags& featureFlags)
         : TBase({
-            GetScriptExecutionsCreator(),
-            GetScriptExecutionLeasesCreator(),
-            GetScriptResultSetsCreator()
+            GetScriptExecutionsCreator(featureFlags),
+            GetScriptExecutionLeasesCreator(featureFlags),
+            GetScriptResultSetsCreator(featureFlags)
         })
     {}
 
 private:
-    static IActor* GetScriptExecutionsCreator() {
+    static TMaybe<NACLib::TDiffACL> GetTableACL(const NKikimrConfig::TFeatureFlags& featureFlags) {
+        if (!featureFlags.GetEnableSecureScriptExecutions()) {
+            return Nothing();
+        }
+
+        NACLib::TDiffACL acl;
+        acl.ClearAccess();
+        acl.SetInterruptInheritance(true);
+        return acl;
+    }
+
+    static IActor* GetScriptExecutionsCreator(const NKikimrConfig::TFeatureFlags& featureFlags) {
         return CreateTableCreator(
             { ".metadata", "script_executions" },
             {
@@ -215,11 +244,15 @@ private:
             },
             { "database", "execution_id" },
             NKikimrServices::KQP_PROXY,
-            TtlCol("expire_at", DEADLINE_OFFSET, BRO_RUN_INTERVAL)
+            TtlCol("expire_at", DEADLINE_OFFSET, BRO_RUN_INTERVAL),
+            {},
+            /* isSystemUser */ featureFlags.GetEnableSecureScriptExecutions(),
+            Nothing(),
+            GetTableACL(featureFlags)
         );
     }
 
-    static IActor* GetScriptExecutionLeasesCreator() {
+    static IActor* GetScriptExecutionLeasesCreator(const NKikimrConfig::TFeatureFlags& featureFlags) {
         return CreateTableCreator(
             { ".metadata", "script_execution_leases" },
             {
@@ -232,11 +265,15 @@ private:
             },
             { "database", "execution_id" },
             NKikimrServices::KQP_PROXY,
-            TtlCol("expire_at", DEADLINE_OFFSET, BRO_RUN_INTERVAL)
+            TtlCol("expire_at", DEADLINE_OFFSET, BRO_RUN_INTERVAL),
+            {},
+            /* isSystemUser */ featureFlags.GetEnableSecureScriptExecutions(),
+            Nothing(),
+            GetTableACL(featureFlags)
         );
     }
 
-    static IActor* GetScriptResultSetsCreator() {
+    static IActor* GetScriptResultSetsCreator(const NKikimrConfig::TFeatureFlags& featureFlags) {
         return CreateTableCreator(
             { ".metadata", "result_sets" },
             {
@@ -250,7 +287,11 @@ private:
             },
             { "database", "execution_id", "result_set_id", "row_id" },
             NKikimrServices::KQP_PROXY,
-            TtlCol("expire_at", DEADLINE_OFFSET, BRO_RUN_INTERVAL)
+            TtlCol("expire_at", DEADLINE_OFFSET, BRO_RUN_INTERVAL),
+            {},
+            /* isSystemUser */ featureFlags.GetEnableSecureScriptExecutions(),
+            Nothing(),
+            GetTableACL(featureFlags)
         );
     }
 
@@ -1428,13 +1469,14 @@ class TCheckLeaseStatusQueryActor : public TQueryBase {
     };
 
 public:
-    using TRetry = TQueryRetryActor<TCheckLeaseStatusQueryActor, NPrivate::TEvPrivate::TEvLeaseCheckResult, TString, TString, i64>;
+    using TRetry = TQueryRetryActor<TCheckLeaseStatusQueryActor, NPrivate::TEvPrivate::TEvLeaseCheckResult, TString, TString, i64, std::optional<TString>>;
 
-    TCheckLeaseStatusQueryActor(const TString& database, const TString& executionId, ui64 cookie = 0)
+    TCheckLeaseStatusQueryActor(const TString& database, const TString& executionId, ui64 cookie = 0, const std::optional<TString>& userSID = std::nullopt)
         : TQueryBase(__func__, {.Database = database, .ExecutionId = executionId})
         , Database(database)
         , ExecutionId(executionId)
         , Cookie(cookie)
+        , UserSID(userSID)
         , Response(std::make_unique<NPrivate::TEvPrivate::TEvLeaseCheckResult>())
     {}
 
@@ -1453,7 +1495,8 @@ public:
                 issues,
                 run_script_actor_id,
                 retry_state,
-                result_set_metas
+                result_set_metas,
+                user_token
             FROM `.metadata/script_executions`
             WHERE database = $database AND execution_id = $execution_id AND
                   (expire_at > CurrentUtcTimestamp() OR expire_at IS NULL);
@@ -1491,7 +1534,11 @@ public:
             return;
         }
 
-        executionsResult.TryNextRow();
+        if (const auto ownerUser = executionsResult.ColumnParser("user_token").GetOptionalUtf8(); UserSID && ownerUser && *ownerUser != *UserSID) {
+            KQP_PROXY_LOG_W("Access denied for user " << *UserSID);
+            Finish(Ydb::StatusIds::UNAUTHORIZED, "User is not owner of script execution operation");
+            return;
+        }
 
         const auto runScriptActorId = executionsResult.ColumnParser("run_script_actor_id").GetOptionalUtf8();
         if (!runScriptActorId) {
@@ -1623,21 +1670,24 @@ private:
     const TString Database;
     const TString ExecutionId;
     const ui64 Cookie;
+    const std::optional<TString> UserSID;
     std::unique_ptr<NPrivate::TEvPrivate::TEvLeaseCheckResult> Response;
 };
 
 class TCheckLeaseStatusActor : public TCheckLeaseStatusActorBase {
 public:
     TCheckLeaseStatusActor(const TActorId& replyActorId, const TString& database, const TString& executionId,
-        const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, TIntrusivePtr<TKqpCounters> counters, bool canRetry, ui64 cookie = 0)
+        const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, TIntrusivePtr<TKqpCounters> counters, bool canRetry, ui64 cookie = 0,
+        const std::optional<TString>& userSID = std::nullopt)
         : TCheckLeaseStatusActorBase(replyActorId, __func__, database, executionId, queryServiceConfig, counters)
         , ReplyActorId(replyActorId)
         , CanRetry(canRetry)
         , Cookie(cookie)
+        , UserSID(userSID)
     {}
 
     void OnBootstrap() override {
-        const auto& checkerId = Register(new TCheckLeaseStatusQueryActor::TRetry(SelfId(), Database, ExecutionId, Cookie));
+        const auto& checkerId = Register(new TCheckLeaseStatusQueryActor::TRetry(SelfId(), Database, ExecutionId, Cookie, UserSID));
         KQP_PROXY_LOG_D("Bootstrap, Cookie: " << Cookie << ". Start TCheckLeaseStatusQueryActor " << checkerId);
 
         Become(&TCheckLeaseStatusActor::StateFunc);
@@ -1732,6 +1782,7 @@ private:
     const TActorId ReplyActorId;
     const bool CanRetry = true;
     const ui64 Cookie;
+    const std::optional<TString> UserSID;
     TEvPrivate::TEvLeaseCheckResult::TPtr Response;
 };
 
@@ -1955,6 +2006,11 @@ public:
     {}
 
     void Bootstrap() {
+        auto userSID = Request->Get()->UserSID;
+        if (const auto& error = CheckScriptExecutionAccess(userSID)) {
+            return Reply(Ydb::StatusIds::UNAUTHORIZED, error);
+        }
+
         TString error;
         TMaybe<TString> executionId = NKqp::ScriptExecutionIdFromOperation(Request->Get()->OperationId, error);
         if (!executionId) {
@@ -1964,7 +2020,7 @@ public:
 
         ExecutionId = *executionId;
 
-        const auto& checkerId = Register(new TCheckLeaseStatusActor(SelfId(), Request->Get()->Database, ExecutionId, QueryServiceConfig, Counters, true));
+        const auto& checkerId = Register(new TCheckLeaseStatusActor(SelfId(), Request->Get()->Database, ExecutionId, QueryServiceConfig, Counters, true, 0, userSID));
         KQP_PROXY_LOG_D("Bootstrap. Start TCheckLeaseStatusActor " << checkerId);
 
         Become(&TForgetScriptExecutionOperationActor::StateFunc);
@@ -2062,11 +2118,12 @@ std::optional<TString> ParseCompressedColumn(const TString& columnName, NYdb::TR
 
 class TGetScriptExecutionOperationQueryActor : public TQueryBase {
 public:
-    using TRetry = TQueryRetryActor<TGetScriptExecutionOperationQueryActor, TEvGetScriptExecutionOperationQueryResponse, TString, TString>;
+    using TRetry = TQueryRetryActor<TGetScriptExecutionOperationQueryActor, TEvGetScriptExecutionOperationQueryResponse, TString, TString, std::optional<TString>>;
 
-    TGetScriptExecutionOperationQueryActor(const TString& database, const TString& executionId)
+    TGetScriptExecutionOperationQueryActor(const TString& database, const TString& executionId, const std::optional<TString>& userSID)
         : TQueryBase(__func__, {.Database = database, .ExecutionId = executionId})
         , Database(database)
+        , UserSID(userSID)
         , StartActorTime(TInstant::Now())
         , Response(std::make_unique<TEvGetScriptExecutionOperationQueryResponse>(executionId))
     {}
@@ -2096,7 +2153,8 @@ public:
                 ast_compressed,
                 ast_compression_method,
                 graph_compressed IS NOT NULL AS has_graph,
-                retry_state
+                retry_state,
+                user_token
             FROM `.metadata/script_executions`
             WHERE database = $database AND execution_id = $execution_id AND
                   (expire_at > CurrentUtcTimestamp() OR expire_at IS NULL);
@@ -2132,6 +2190,12 @@ public:
             NYdb::TResultSetParser result(ResultSets[0]);
             if (!result.TryNextRow()) {
                 Finish(Ydb::StatusIds::NOT_FOUND, "No such execution");
+                return;
+            }
+
+            if (const auto ownerUser = result.ColumnParser("user_token").GetOptionalUtf8(); UserSID && ownerUser && *ownerUser != *UserSID) {
+                KQP_PROXY_LOG_W("Access denied for user " << *UserSID);
+                Finish(Ydb::StatusIds::UNAUTHORIZED, "User is not owner of script execution operation");
                 return;
             }
 
@@ -2286,6 +2350,7 @@ public:
 
 private:
     const TString Database;
+    const std::optional<TString> UserSID;
     const TInstant StartActorTime;
     std::unique_ptr<TEvGetScriptExecutionOperationQueryResponse> Response;
     std::optional<Ydb::StatusIds::StatusCode> OperationStatus;
@@ -2300,6 +2365,11 @@ public:
     {}
 
     void OnBootstrap() override {
+        auto userSID = Request->Get()->UserSID;
+        if (const auto& error = CheckScriptExecutionAccess(userSID)) {
+            return Reply(Ydb::StatusIds::UNAUTHORIZED, error);
+        }
+
         TString error;
         const auto executionId = ScriptExecutionIdFromOperation(Request->Get()->OperationId, error);
         if (!executionId) {
@@ -2309,7 +2379,7 @@ public:
 
         ExecutionId = *executionId;
 
-        const auto& getterId = Register(new TGetScriptExecutionOperationQueryActor::TRetry(SelfId(), Database, ExecutionId));
+        const auto& getterId = Register(new TGetScriptExecutionOperationQueryActor::TRetry(SelfId(), Database, ExecutionId, userSID));
         KQP_PROXY_LOG_D("Bootstrap. Start TGetScriptExecutionOperationQueryActor " << getterId);
 
         Become(&TGetScriptExecutionOperationActor::StateFunc);
@@ -2428,11 +2498,12 @@ private:
 
 class TListScriptExecutionOperationsQuery : public TQueryBase {
 public:
-    using TRetry = TQueryRetryActor<TListScriptExecutionOperationsQuery, TEvListScriptExecutionOperationsResponse, TString, TString, ui64>;
+    using TRetry = TQueryRetryActor<TListScriptExecutionOperationsQuery, TEvListScriptExecutionOperationsResponse, TString, std::optional<TString>, TString, ui64>;
 
-    TListScriptExecutionOperationsQuery(const TString& database, const TString& pageToken, ui64 pageSize)
+    TListScriptExecutionOperationsQuery(const TString& database, const std::optional<TString>& userSID, const TString& pageToken, ui64 pageSize)
         : TQueryBase(__func__, {.Database = database})
         , Database(database)
+        , UserSID(userSID)
         , PageToken(pageToken)
         , PageSize(pageSize)
     {}
@@ -2464,6 +2535,7 @@ public:
             -- TListScriptExecutionOperationsQuery::OnRunQuery
             DECLARE $database AS Text;
             DECLARE $page_size AS Uint64;
+            DECLARE $user_sid AS Optional<Text>;
 
             SELECT
                 execution_id,
@@ -2478,6 +2550,11 @@ public:
             FROM `.metadata/script_executions`
             WHERE database = $database AND (expire_at > CurrentUtcTimestamp() OR expire_at IS NULL)
         )";
+        if (UserSID) {
+            sql << R"(
+                AND (user_token IS NULL OR user_token = $user_sid)
+                )";
+        }
         if (PageToken) {
             sql << R"(
                 AND (start_ts, execution_id) <= ($ts, $execution_id)
@@ -2495,6 +2572,9 @@ public:
                 .Build()
             .AddParam("$page_size")
                 .Uint64(PageSize + 1)
+                .Build()
+            .AddParam("$user_sid")
+                .OptionalUtf8(UserSID)
                 .Build();
 
         if (PageToken) {
@@ -2582,6 +2662,7 @@ public:
 
 private:
     const TString Database;
+    const std::optional<TString> UserSID;
     const TString PageToken;
     const ui64 PageSize;
     TString NextPageToken;
@@ -2598,9 +2679,16 @@ public:
     {}
 
     void Bootstrap() {
+        auto userSID = Request->Get()->UserSID;
+        if (const auto& error = CheckScriptExecutionAccess(userSID)) {
+            KQP_PROXY_LOG_W("Token validation failed: " << error);
+            Send(Request->Sender, new TEvListScriptExecutionOperationsResponse(Ydb::StatusIds::UNAUTHORIZED, {NYql::TIssue(error)}));
+            return;
+        }
+
         const auto& pageToken = Request->Get()->PageToken;
         const ui64 pageSize = ClampVal<ui64>(Request->Get()->PageSize, 1, 100);
-        const auto& listerId = Register(new TListScriptExecutionOperationsQuery::TRetry(SelfId(), Database, pageToken, pageSize));
+        const auto& listerId = Register(new TListScriptExecutionOperationsQuery::TRetry(SelfId(), Database, userSID, pageToken, pageSize));
         KQP_PROXY_LOG_D("Bootstrap. Start TListScriptExecutionOperationsQuery " << listerId << ", PageToken: " << pageToken << ", PageSize: " << pageSize);
 
         Become(&TListScriptExecutionOperationsActor::StateFunc);
@@ -2840,6 +2928,11 @@ public:
     {}
 
     void Bootstrap() {
+        auto userSID = Request->Get()->UserSID;
+        if (const auto& error = CheckScriptExecutionAccess(userSID)) {
+            return Reply(Ydb::StatusIds::UNAUTHORIZED, error);
+        }
+
         TString error;
         const auto executionId = NKqp::ScriptExecutionIdFromOperation(Request->Get()->OperationId, error);
         if (!executionId) {
@@ -2848,7 +2941,7 @@ public:
 
         ExecutionId = *executionId;
 
-        const auto& checkerId = Register(new TCheckLeaseStatusActor(SelfId(), Request->Get()->Database, ExecutionId, QueryServiceConfig, Counters, false));
+        const auto& checkerId = Register(new TCheckLeaseStatusActor(SelfId(), Request->Get()->Database, ExecutionId, QueryServiceConfig, Counters, false, 0, userSID));
         KQP_PROXY_LOG_D("Bootstrap. Start TCheckLeaseStatusActor " << checkerId);
 
         Become(&TCancelScriptExecutionOperationActor::StateFunc);
@@ -3225,13 +3318,14 @@ private:
 
 class TGetScriptExecutionResultQueryActor : public TQueryBase {
 public:
-    using TRetry = TQueryRetryActor<TGetScriptExecutionResultQueryActor, TEvFetchScriptResultsResponse, TString, TString, i32, i64, i64, i64, TInstant>;
+    using TRetry = TQueryRetryActor<TGetScriptExecutionResultQueryActor, TEvFetchScriptResultsResponse, TString, TString, std::optional<TString>, i32, i64, i64, i64, TInstant>;
 
-    TGetScriptExecutionResultQueryActor(const TString& database, const TString& executionId, i32 resultSetIndex,
-        i64 offset, i64 rowsLimit, i64 sizeLimit, TInstant deadline)
+    TGetScriptExecutionResultQueryActor(const TString& database, const TString& executionId, const std::optional<TString>& userSID,
+        i32 resultSetIndex, i64 offset, i64 rowsLimit, i64 sizeLimit, TInstant deadline)
         : TQueryBase(__func__, {.Database = database, .ExecutionId = executionId})
         , Database(database)
         , ExecutionId(executionId)
+        , UserSID(userSID)
         , ResultSetIndex(resultSetIndex)
         , Offset(offset)
         , RowsLimit(rowsLimit)
@@ -3251,7 +3345,8 @@ public:
                 issues,
                 transient_issues,
                 end_ts,
-                meta
+                meta,
+                user_token
             FROM `.metadata/script_executions`
             WHERE database = $database AND execution_id = $execution_id AND
                   (expire_at > CurrentUtcTimestamp() OR expire_at IS NULL);
@@ -3279,6 +3374,12 @@ public:
         NYdb::TResultSetParser result(ResultSets[0]);
         if (!result.TryNextRow()) {
             Finish(Ydb::StatusIds::NOT_FOUND, "Script execution not found");
+            return;
+        }
+
+        if (const auto ownerUser = result.ColumnParser("user_token").GetOptionalUtf8(); UserSID && ownerUser && *ownerUser != *UserSID) {
+            KQP_PROXY_LOG_W("Access denied for user " << *UserSID);
+            Finish(Ydb::StatusIds::UNAUTHORIZED, "User is not owner of script execution operation");
             return;
         }
 
@@ -3491,6 +3592,7 @@ private:
 private:
     const TString Database;
     const TString ExecutionId;
+    const std::optional<TString> UserSID;
     const i32 ResultSetIndex;
     const i64 Offset;
     const i64 RowsLimit;
@@ -3507,10 +3609,11 @@ private:
 class TGetScriptExecutionResultActor : public TActorBootstrapped<TGetScriptExecutionResultActor> {
 public:
     TGetScriptExecutionResultActor(const TActorId& replyActorId, const TString& database, const TString& executionId,
-        i32 resultSetIndex, i64 offset, i64 rowsLimit, i64 sizeLimit, TInstant operationDeadline)
+        const std::optional<TString>& userSID, i32 resultSetIndex, i64 offset, i64 rowsLimit, i64 sizeLimit, TInstant operationDeadline)
         : ReplyActorId(replyActorId)
         , Database(database)
         , ExecutionId(executionId)
+        , UserSID(userSID)
         , ResultSetIndex(resultSetIndex)
         , Offset(offset)
         , RowsLimit(rowsLimit)
@@ -3519,14 +3622,16 @@ public:
     {}
 
     void Bootstrap() {
-        if (RowsLimit < 0 || SizeLimit < 0) {
-            KQP_PROXY_LOG_W("Invalid fetch result limits, RowsLimit: " << RowsLimit << ", SizeLimit: " << SizeLimit);
-            Send(ReplyActorId, new TEvFetchScriptResultsResponse(Ydb::StatusIds::BAD_REQUEST, std::nullopt, true, {NYql::TIssue("Result rows limit and size limit should not be negative")}));
-            PassAway();
-            return;
+        if (const auto& error = CheckScriptExecutionAccess(UserSID)) {
+            return Reply(Ydb::StatusIds::UNAUTHORIZED, error);
         }
 
-        const auto& fetcherId = Register(new TGetScriptExecutionResultQueryActor::TRetry(SelfId(), Database, ExecutionId, ResultSetIndex, Offset, RowsLimit, SizeLimit, OperationDeadline));
+        if (RowsLimit < 0 || SizeLimit < 0) {
+            KQP_PROXY_LOG_W("Invalid fetch result limits, RowsLimit: " << RowsLimit << ", SizeLimit: " << SizeLimit);
+            return Reply(Ydb::StatusIds::BAD_REQUEST, "Result rows limit and size limit should not be negative");
+        }
+
+        const auto& fetcherId = Register(new TGetScriptExecutionResultQueryActor::TRetry(SelfId(), Database, ExecutionId, UserSID, ResultSetIndex, Offset, RowsLimit, SizeLimit, OperationDeadline));
         KQP_PROXY_LOG_D("Bootstrap. Started TGetScriptExecutionResultQueryActor: " << fetcherId << ", Offset: " << Offset << ", RowsLimit: " << RowsLimit << ", SizeLimit: " << SizeLimit);
         Become(&TGetScriptExecutionResultActor::StateFunc);
     }
@@ -3542,6 +3647,12 @@ public:
     }
 
 private:
+    void Reply(Ydb::StatusIds::StatusCode status, const TString& message) {
+        KQP_PROXY_LOG_W("Failed with status " << status << ", message: " << message);
+        Send(ReplyActorId, new TEvFetchScriptResultsResponse(status, std::nullopt, true, {NYql::TIssue(message)}));
+        PassAway();
+    }
+
     TString LogPrefix() const {
         return TStringBuilder() << "[TGetScriptExecutionResultActor] OwnerId: " << ReplyActorId << " ActorId: " << SelfId() << " Database: " << Database << " ExecutionId: " << ExecutionId << " ResultSetIndex: " << ResultSetIndex << ". ";
     }
@@ -3550,6 +3661,7 @@ private:
     const TActorId ReplyActorId;
     const TString Database;
     const TString ExecutionId;
+    std::optional<TString> UserSID;
     const i32 ResultSetIndex;
     const i64 Offset;
     const i64 RowsLimit;
@@ -4748,8 +4860,8 @@ IActor* CreateScriptExecutionCreatorActor(TEvKqp::TEvScriptRequest::TPtr&& ev, c
     return new TCreateScriptExecutionActor(std::move(ev), queryServiceConfig, counters, maxRunTime, LEASE_DURATION);
 }
 
-IActor* CreateScriptExecutionsTablesCreator() {
-    return new TScriptExecutionsTablesCreator();
+IActor* CreateScriptExecutionsTablesCreator(const NKikimrConfig::TFeatureFlags& featureFlags) {
+    return new TScriptExecutionsTablesCreator(featureFlags);
 }
 
 IActor* CreateForgetScriptExecutionOperationActor(TEvForgetScriptExecutionOperation::TPtr ev, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, TIntrusivePtr<TKqpCounters> counters) {
@@ -4780,8 +4892,8 @@ IActor* CreateSaveScriptExecutionResultActor(const TActorId& runScriptActorId, c
     return new TSaveScriptExecutionResultActor(runScriptActorId, database, executionId, resultSetId, expireAt, firstRow, accumulatedSize, std::move(resultSet));
 }
 
-IActor* CreateGetScriptExecutionResultActor(const TActorId& replyActorId, const TString& database, const TString& executionId, i32 resultSetIndex, i64 offset, i64 rowsLimit, i64 sizeLimit, TInstant operationDeadline) {
-    return new TGetScriptExecutionResultActor(replyActorId, database, executionId, resultSetIndex, offset, rowsLimit, sizeLimit, operationDeadline);
+IActor* CreateGetScriptExecutionResultActor(const TActorId& replyActorId, const TString& database, const TString& executionId, const std::optional<TString>& userSID, i32 resultSetIndex, i64 offset, i64 rowsLimit, i64 sizeLimit, TInstant operationDeadline) {
+    return new TGetScriptExecutionResultActor(replyActorId, database, executionId, userSID, resultSetIndex, offset, rowsLimit, sizeLimit, operationDeadline);
 }
 
 IActor* CreateSaveScriptExternalEffectActor(TEvSaveScriptExternalEffectRequest::TPtr ev, i64 leaseGeneration) {

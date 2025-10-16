@@ -1293,13 +1293,13 @@ private:
 
         IDataProvider::TFillSettings fillSettings = NCommon::GetFillSettings(res.Ref());
 
-        if (IsIn({EKikimrQueryType::Query, EKikimrQueryType::Script}, SessionCtx->Query().Type)) {
-            if (fillSettings.Discard) {
-                ctx.AddError(YqlIssue(ctx.GetPosition(res.Pos()), TIssuesIds::KIKIMR_BAD_OPERATION, TStringBuilder()
-                    << "DISCARD not supported in YDB queries"));
-                return SyncError();
-            }
-        }
+        // if (IsIn({EKikimrQueryType::Query, EKikimrQueryType::Script}, SessionCtx->Query().Type)) {
+        //     if (fillSettings.Discard) {
+        //         ctx.AddError(YqlIssue(ctx.GetPosition(res.Pos()), TIssuesIds::KIKIMR_BAD_OPERATION, TStringBuilder()
+        //             << "DISCARD not supported in YDB queries"));
+        //         return SyncError();
+        //     }
+        // }
 
         auto* runResult = SessionCtx->Query().Results.FindPtr(exec.Ref().UniqueId());
         if (!runResult) {

@@ -864,20 +864,7 @@ public:
                 // Get resources snapshot
                 TVector<NKikimrKqp::TKqpNodeResources> resourcesSnapshot;
                 if (needResourcesSnapshot) {
-                    std::mutex mutex;
-                    std::condition_variable waitCond;
-
-                    std::unique_lock lock(mutex);
-                    GetKqpResourceManager()->RequestClusterResourcesInfo(
-                        [&](TVector<NKikimrKqp::TKqpNodeResources>&& resources) {
-                            std::unique_lock lock(mutex);
-                            needResourcesSnapshot = false;
-                            resourcesSnapshot = std::move(resources);
-                            waitCond.notify_one();
-                        }
-                    );
-
-                    waitCond.wait(lock, [&] { return !needResourcesSnapshot; });
+                    resourcesSnapshot = GetKqpResourceManager()->GetClusterResources();
                 }
 
                 try {

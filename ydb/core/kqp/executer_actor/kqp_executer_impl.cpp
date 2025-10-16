@@ -120,7 +120,7 @@ IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TSt
             );
 
         case NKqpProto::TKqpPhyTx::TYPE_SCAN:
-            return CreateKqpScanExecuter(
+            return CreateKqpScanExecuter( // not to forget about this comrade
                 std::move(request), database, userToken, std::move(formatsSettings), counters,
                 executerConfig, std::move(asyncIoFactory), userRequestContext,
                 statementResultIndex, federatedQuerySetup, nullptr, llvmSettings, channelService

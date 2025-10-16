@@ -3390,25 +3390,24 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
     Y_UNIT_TEST(DiscardSelectSupport) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetQueryClient();
-        // {
-        //     TVector<TString> queries = {
-        //         "DISCARD SELECT 1",
-        //         "DISCARD SELECT COUNT(*) FROM `/Root/EightShard`",
-        //         // "DISCARD SELECT 5 FROM (SELECT Key FROM `/Root/EightShard`)",
-        //         R"(DISCARD SELECT e1.Key, e2.Value1
-        //         FROM `/Root/EightShard` AS e1
-        //         JOIN `/Root/TwoShard` AS e2 ON e1.Key = e2.Key)"
-        //     };
+        {
+            TVector<TString> queries = {
+                "DISCARD SELECT 1",
+                "DISCARD SELECT COUNT(*) FROM `/Root/EightShard`",
+                // "DISCARD SELECT 5 FROM (SELECT Key FROM `/Root/EightShard`)",
+                R"(DISCARD SELECT e1.Key, e2.Value1
+                FROM `/Root/EightShard` AS e1
+                JOIN `/Root/TwoShard` AS e2 ON e1.Key = e2.Key)"
+            };
 
-        //     for (const auto& query : queries) {
-        //         auto result = db.ExecuteQuery(query,
-        //                 NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-        //         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        //         UNIT_ASSERT_VALUES_EQUAL_C(result.GetResultSets().size(), 0,
-        //             "DISCARD SELECT should return no result sets for query: " << query);
-        //     }
-        // }
-        // UNIT_ASSERT(false);
+            for (const auto& query : queries) {
+                auto result = db.ExecuteQuery(query,
+                        NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetResultSets().size(), 0,
+                    "DISCARD SELECT should return no result sets for query: " << query);
+            }
+        }
         {
             TVector<TString> queries = {
                 "SELECT 1; DISCARD SELECT 2; DISCARD SELECT COUNT(*) FROM `/Root/EightShard`; SELECT MIN(Key) FROM `/Root/TwoShard`"
@@ -3423,28 +3422,28 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
             }
         }
 
-        // // Test case: DISCARD with ENSURE
-        // {
-        //     TVector<TString> discardEnsureQueries = {
-        //         R"(DISCARD SELECT Ensure(Data, Data < 100, "Data value out of range") AS value FROM `/Root/EightShard`)"
-        //     };
+        // Test case: DISCARD with ENSURE
+        {
+            TVector<TString> discardEnsureQueries = {
+                R"(DISCARD SELECT Ensure(Data, Data < 100, "Data value out of range") AS value FROM `/Root/EightShard`)"
+            };
 
-        //     for (const auto& query : discardEnsureQueries) {
-        //         auto result = db.ExecuteQuery(query,
-        //                 NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-        //         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        //         UNIT_ASSERT_VALUES_EQUAL_C(result.GetResultSets().size(), 0,
-        //             "got result sets: " << result.GetResultSets().size() << " instead of 0 for query: " << query);
-        //     }
-        // }
+            for (const auto& query : discardEnsureQueries) {
+                auto result = db.ExecuteQuery(query,
+                        NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetResultSets().size(), 0,
+                    "got result sets: " << result.GetResultSets().size() << " instead of 0 for query: " << query);
+            }
+        }
         // todo anely-d: create scan request and check discard on it
-        // // todo anely-d: make error on this test
-        // {
-        //     auto notValidQuery = "SELECT 5 FROM (DISCARD SELECT Key FROM `/Root/EightShard`)";
-        //     auto result = db.ExecuteQuery(notValidQuery,
-        //             NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-        //     UNIT_ASSERT_C(!result.IsSuccess(), "discard is high level operator, can not be used in inner queries");
-        // }
+        // todo anely-d: make error on this test
+        {
+            auto notValidQuery = "SELECT 5 FROM (DISCARD SELECT Key FROM `/Root/EightShard`)";
+            auto result = db.ExecuteQuery(notValidQuery,
+                    NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(!result.IsSuccess(), "discard is high level operator, can not be used in inner queries");
+        }
     }
 }
 

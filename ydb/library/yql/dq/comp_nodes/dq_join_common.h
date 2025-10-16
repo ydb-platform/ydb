@@ -1,6 +1,5 @@
 #pragma once
 #include "dq_hash_join_table.h"
-#include <ranges>
 #include <vector>
 #include <yql/essentials/minikql/computation/mkql_block_reader.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node.h>
@@ -19,55 +18,75 @@ struct TJoinMetadata {
     TKeyTypes KeyTypes;
 };
 
-template <EJoinKind Kind> struct TJoinKindTag {
-    static constexpr EJoinKind Kind_ = Kind;
-};
-
-using TTypedJoinKind =
-    std::variant<TJoinKindTag<EJoinKind::Inner>, 
-                 TJoinKindTag<EJoinKind::Left>,
-                 TJoinKindTag<EJoinKind::Right>,
-                 TJoinKindTag<EJoinKind::LeftOnly>,
-                 TJoinKindTag<EJoinKind::RightOnly>,
-                 TJoinKindTag<EJoinKind::LeftSemi>,
-                 TJoinKindTag<EJoinKind::RightSemi>,
-                 TJoinKindTag<EJoinKind::Full>,
-                 TJoinKindTag<EJoinKind::Exclusion>>;
-
-TTypedJoinKind TypifyJoinKind(EJoinKind kind);
-
 TKeyTypes KeyTypesFromColumns(const std::vector<TType*>& types, const std::vector<ui32>& keyIndexes);
 
-constexpr bool SemiOrOnlyJoin(EJoinKind kind) {
-    switch (kind) {
-        using enum EJoinKind;
-    case RightOnly:
-    case RightSemi:
-    case LeftOnly:
-    case LeftSemi:
-        return true;
-    default:
-        return false;
-    }
-}
+template <EJoinKind Kind> struct TRenamedOutput {
+    TRenamedOutput(TDqRenames renames, const std::vector<TType*>& leftColumnTypes,
+                   const std::vector<TType*>& rightColumnTypes)
+        : OutputBuffer()
+        , NullTuples(std::max(leftColumnTypes.size(), rightColumnTypes.size()), NYql::NUdf::TUnboxedValuePod{})
+        , Renames(std::move(renames))
+    {}
 
-constexpr bool ContainsRowsFromInnerJoin(EJoinKind kind) { // true if kind is a join that contains all rows from inner join output.
-    switch (kind) {
-        using enum EJoinKind;
-    case Inner:
-    case Full:
-    case Left:
-    case Right:
-    case Cross:
-        return true;
-    default:
-        return false;
+    int TupleSize() const {
+        return Renames.size();
     }
-}
+
+    int SizeTuples() const {
+        MKQL_ENSURE(OutputBuffer.size() % TupleSize() == 0, "buffer contains tuple parts??");
+        return OutputBuffer.size() / TupleSize();
+    }
+
+    std::vector<NUdf::TUnboxedValue> OutputBuffer;
+
+    auto MakeConsumeFn() {
+        return [&] {
+            if constexpr (SemiOrOnlyJoin(Kind)) {
+                return [&](NJoinTable::TTuple tuple) {
+                    MKQL_ENSURE(tuple != nullptr, "null output row in semi/only join?");
+                    for (int index = 0; index < std::ssize(Renames); ++index) {
+                        auto thisRename = Renames[index];
+                        if constexpr (Kind == EJoinKind::LeftOnly || Kind == EJoinKind::LeftSemi) {
+                            MKQL_ENSURE(thisRename.Side == JoinSide::kLeft,
+                                        "rename has right column for LeftOnly or LeftSemi join??");
+                        } else {
+                            MKQL_ENSURE(thisRename.Side == JoinSide::kRight,
+                                        "rename has left column for RightOnly or RightSemi join??");
+                        }
+                        OutputBuffer.push_back(tuple[thisRename.Index]);
+                    }
+                };
+            } else {
+                return [&](NJoinTable::TTuple probe, NJoinTable::TTuple build) {
+                    if (!probe) { // todo: remove nullptr checks for some join types.
+                        probe = NullTuples.data();
+                    }
+
+                    if (!build) {
+                        build = NullTuples.data();
+                    }
+                    for (int index = 0; index < std::ssize(Renames); ++index) {
+                        auto thisRename = Renames[index];
+                        if (thisRename.Side == JoinSide::kLeft) {
+                            OutputBuffer.push_back(probe[thisRename.Index]);
+                        } else {
+                            OutputBuffer.push_back(build[thisRename.Index]);
+                        }
+                    }
+                };
+            }
+        }();
+    }
+
+  private:
+    const std::vector<NYql::NUdf::TUnboxedValue> NullTuples;
+    const TDqRenames Renames;
+};
 
 // Some joins produce concatenation of 2 tuples, some produce one tuple(effectively)
-template<typename Fun>
-concept JoinMatchFun = std::invocable<Fun, NJoinTable::TTuple> || std::invocable<Fun, NJoinTable::TTuple, NJoinTable::TTuple>;
+template <typename Fun>
+concept JoinMatchFun =
+    std::invocable<Fun, NJoinTable::TTuple> || std::invocable<Fun, NJoinTable::TTuple, NJoinTable::TTuple>;
 
 template <typename Source, EJoinKind Kind> class TJoin : public TComputationValue<TJoin<Source, Kind>> {
     using TBase = TComputationValue<TJoin>;
@@ -101,8 +120,7 @@ template <typename Source, EJoinKind Kind> class TJoin : public TComputationValu
         return Build_.UserDataSize();
     }
 
-
-    EFetchResult MatchRows(TComputationContext& ctx, JoinMatchFun auto consumeOneOrTwoTuples) { 
+    EFetchResult MatchRows(TComputationContext& ctx, JoinMatchFun auto consumeOneOrTwoTuples) {
         while (!Build_.Finished()) {
             auto res = Build_.ForEachRow(ctx, [&](auto tuple) { Table_.Add({tuple, tuple + Build_.UserDataSize()}); });
             switch (res) {

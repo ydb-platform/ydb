@@ -1,7 +1,7 @@
 name: Collect-analytics-run
 on:
-  schedule:
-    - cron: "0 1-23/2 * * *" # Every 2 hours starting from 1:00 to 23:00.
+  #schedule:
+  #  - cron: "0 1-23/2 * * *" # Every 2 hours starting from 1:00 to 23:00.
   workflow_dispatch:
 
 
@@ -28,13 +28,6 @@ jobs:
     - name: Install dependencies
       run: |
         python3 -m pip install ydb ydb[yc] codeowners pandas
-    - name: Collect testowners
-      run: python3 .github/scripts/analytics/upload_testowners.py
-    - name: Export GitHub issues
-      env:
-        GITHUB_TOKEN: ${{ env.GH_TOKEN }}
-      continue-on-error: true
-      run: python3 .github/scripts/analytics/export_issues_to_ydb.py
 
   matrix-job:
     name: Test collection on ${{ matrix.branch }}
@@ -43,7 +36,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        branch: [ main, stable-25-1, stable-25-1-analytics ]
+        branch: [ main ]
     steps:
     - name: Checkout
       uses: actions/checkout@v4
@@ -56,6 +49,12 @@ jobs:
     - name: Install dependencies
       run: |
         python3 -m pip install ydb ydb[yc] codeowners pandas
+    - name: Collect testowners
+      run: python3 .github/scripts/analytics/upload_testowners.py
+    - name: Set build types
+      id: set-build-types
+      run: |
+        echo "BUILD_TYPES=release-asan release-msan release-tsan" >> $GITHUB_ENV
     - name: Collect all muted and not muted tests
       run: |
         # Save the original muted_ya.txt file
@@ -66,15 +65,14 @@ jobs:
         URL="https://raw.githubusercontent.com/ydb-platform/ydb/${BRANCH}/.github/config/muted_ya.txt"
         wget -O .github/config/muted_ya.txt $URL
 
-        # Run the script
-        python3 .github/scripts/tests/get_muted_tests.py upload_muted_tests --branch $BRANCH 
+        # Run the script for each build type
+        for BUILD_TYPE in $BUILD_TYPES; do
+          echo "Processing muted tests for build type: $BUILD_TYPE"
+          python3 .github/scripts/tests/get_muted_tests.py upload_muted_tests --branch $BRANCH --build_type $BUILD_TYPE
+        done 
 
         # Restore the original muted_ya.txt file
         mv .github/config/muted_ya.txt.bak .github/config/muted_ya.txt
-    - name: Set build types
-      id: set-build-types
-      run: |
-        echo "BUILD_TYPES=relwithdebinfo release-asan release-msan release-tsan" >> $GITHUB_ENV
     - name: Collect test history data for all build types
       run: |
         for BUILD_TYPE in $BUILD_TYPES; do

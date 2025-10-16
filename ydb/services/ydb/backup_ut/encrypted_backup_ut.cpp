@@ -971,6 +971,10 @@ Y_UNIT_TEST_SUITE_F(CommonEncryptionRequirementsTest, TBackupEncryptionCommonReq
 Y_UNIT_TEST_SUITE_F(ImportBigEncryptedFileTest, TS3BackupTestFixture) {
     Y_UNIT_TEST(ImportBigEncryptedFile) {
         const bool debug = false;
+
+        // Set one read portion size
+        AppConfig().MutableDataShardConfig()->SetRestoreDataS3ReadBatchSize(8_KB);
+
         // It is a big test, so turn logging off if it is not needed
         if (!debug) {
             auto& runtime = *Server().GetRuntime();
@@ -1027,7 +1031,8 @@ Y_UNIT_TEST_SUITE_F(ImportBigEncryptedFileTest, TS3BackupTestFixture) {
         NBackup::TEncryptionIV iv = getIV(dataFilePath);
         NBackup::TEncryptionIV ivCompressed = getIV(compressedDataFilePath);
 
-        auto addToResult = [&](TStringBuf data, bool last, NBackup::TEncryptedFileSerializer& serializer, TString& resultEncryptedData) {
+        auto addToResult = [&](TStringBuf data, bool last, NBackup::TEncryptedFileSerializer& serializer, TString& resultEncryptedData, size_t& dataSize) {
+            dataSize += data.size();
             TBuffer block = serializer.AddBlock(data, last);
             resultEncryptedData.append(block.Data(), block.Size());
         };
@@ -1053,31 +1058,55 @@ Y_UNIT_TEST_SUITE_F(ImportBigEncryptedFileTest, TS3BackupTestFixture) {
             ui64 line = 0;
             NBackup::TEncryptedFileSerializer serializer("ChaCha20-Poly1305", encryptionKey, compressed ? ivCompressed : iv);
             size_t previousSerializePos = 0;
+            size_t unencryptedDataSize = 0;
+
+            auto getNextResultBlock = [&]() {
+                zstd.reset(); // finalize zstd frame (if any)
+
+                TStringBuf block(resultData.data() + previousSerializePos, resultData.size() - previousSerializePos);
+                previousSerializePos = resultData.size();
+
+                // Init new zstd frame
+                if (compressed) {
+                    zstd.emplace(&output);
+                    outputStream = &*zstd;
+                }
+
+                return block;
+            };
+
             while (resultData.size() < resultFileSize) {
                 outputStream->Write(TStringBuilder() << ++line << ",\"Encrypted+hello+world+line+" << bigStr << line << "\"\n");
 
                 if (resultData.size() - previousSerializePos >= encryptedBlockSize) {
-                    zstd.reset(); // finalize zstd frame (if any)
-                    addToResult(TStringBuf(resultData.data() + previousSerializePos, resultData.size() - previousSerializePos),
+                    addToResult(getNextResultBlock(),
                         false,
                         serializer,
-                        resultEncryptedData);
-                    previousSerializePos = resultData.size();
-
-                    if (compressed) {
-                        zstd.emplace(&output);
-                        outputStream = &*zstd;
-                    }
+                        resultEncryptedData,
+                        unencryptedDataSize);
                 }
             }
-            zstd.reset();
-            addToResult(TStringBuf(resultData.data() + previousSerializePos, resultData.size() - previousSerializePos),
-                true,
+            addToResult(getNextResultBlock(),
+                !compressed, // last
                 serializer,
-                resultEncryptedData);
+                resultEncryptedData,
+                unencryptedDataSize);
+
+            // Handle also theoretical case: add zstd block with empty payload but not empty encoded data
+            if (compressed) {
+                addToResult(getNextResultBlock(),
+                    true,
+                    serializer,
+                    resultEncryptedData,
+                    unencryptedDataSize);
+            }
+
+            Cerr << "Patched file with lines: " << line << Endl;
+            Cerr << "Patched file with size " << unencryptedDataSize << Endl;
+            Cerr << "Patched encrypted file with size " << resultEncryptedData.size() << Endl;
             S3Mock().GetData()[path] = resultEncryptedData;
 
-            constexpr bool additionalCheck = false;
+            constexpr bool additionalCheck = true;
             if (additionalCheck) {
                 // Check that we encoded correctly
                 auto [decodedData, decodedIV] = NBackup::TEncryptedFileDeserializer::DecryptFullFile(
@@ -1140,25 +1169,33 @@ Y_UNIT_TEST_SUITE_F(ImportBigEncryptedFileTest, TS3BackupTestFixture) {
         };
 
         // Patch data and test that datashard can work with any configuration.
-        // Data is read by datashard by 8 MB parts.
+        // Data is read by datashard by 8 KB parts (== RestoreDataS3ReadBatchSize).
         // Also it can be splitted into blocks in encrypted file.
 
         ui64 linesCount;
 
-        // Read big parts (8 MB), decode small parts
-        linesCount = patchData(315_KB, 10_MB, false, dataFilePath);
+        // Read big parts (8 KB), decode small parts
+        linesCount = patchData(315_B, 10_KB, false, dataFilePath);
         checkImport("EncryptedExport", linesCount);
 
-        // Read big parts (8 MB), decode bigger parts
-        linesCount = patchData(9_MB, 20_MB, false, dataFilePath);
+        // Read big parts (8 KB), decode bigger parts
+        linesCount = patchData(9_KB, 20_KB, false, dataFilePath);
         checkImport("EncryptedExport", linesCount);
 
-        // Read big parts (8 MB), decode small parts
-        linesCount = patchData(555_KB, 10_MB, true, compressedDataFilePath);
+        // Read the whole file at a time
+        linesCount = patchData(1_KB, 5_KB, false, dataFilePath);
+        checkImport("EncryptedExport", linesCount);
+
+        // Read big parts (8 KB), decode small parts
+        linesCount = patchData(555_B, 10_KB, true, compressedDataFilePath);
         checkImport("EncryptedCompressedExport", linesCount);
 
-        // Read big parts (8 MB), decode bigger parts
-        linesCount = patchData(9_MB, 20_MB, true, compressedDataFilePath);
+        // Read big parts (8 KB), decode bigger parts
+        linesCount = patchData(9_KB, 20_KB, true, compressedDataFilePath);
+        checkImport("EncryptedCompressedExport", linesCount);
+
+        // Read the whole file at a time
+        linesCount = patchData(1_KB, 5_KB, true, compressedDataFilePath);
         checkImport("EncryptedCompressedExport", linesCount);
     }
 }

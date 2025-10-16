@@ -45,17 +45,11 @@ In practice, you don’t need to worry about creating, reusing, or closing sessi
 
 ## Transactions
 
-Every query in {{ ydb-short-name }} is executed within the context of a transaction, ensuring data consistency and reliability. Transactions can be managed with `BeginTransaction`/`CommitTransaction` calls, or by providing the appropriate flags when calling the `ExecuteQuery` method.
+Every query in {{ ydb-short-name }} is executed within the context of a transaction, ensuring data consistency and reliability. Transactions can be managed either explicitly, or by specifying appropriate transaction control parameters during query execution.
 
 {{ ydb-short-name }} also supports interactive transactions, which give you the flexibility to execute multiple queries within the same transaction, while allowing your application to perform custom logic between those queries. This makes it possible to build complex workflows that require several related operations to be treated as a single atomic unit.
 
-Supported transaction modes:
-
-* `SerializableReadWrite` — fully isolated read-write transactions (default).
-* `SnapshotReadOnly` — read-only queries executed on a consistent snapshot of the data.
-* `StaleReadOnly` — read-only transactions that may read from replicas and therefore return slightly stale data.
-
-For more information about transactions in {{ ydb-short-name }}, see the [Transactions](transactions.md) article.
+For comprehensive information on transactions and the available transaction modes in {{ ydb-short-name }}, see the [Transactions](transactions.md) article.
 
 ## Retries
 

@@ -1,6 +1,8 @@
 #pragma once
 #include "portion_info.h"
 
+#include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
+
 namespace NKikimr::NOlap {
 
 class TWrittenPortionInfoConstructor;
@@ -65,11 +67,18 @@ public:
     }
 
     virtual const TString& GetEntityStorageId(const ui32 columnId, const TIndexInfo& indexInfo) const override {
+        if (indexInfo.GetIndexOptional(columnId)) {
+            return GetIndexStorageId(columnId, indexInfo);
+        }
         return GetColumnStorageId(columnId, indexInfo);
     }
 
-    virtual const TString& GetIndexStorageId(const ui32 /*indexId*/, const TIndexInfo& /*indexInfo*/) const override {
-        return { NBlobOperations::TGlobal::DefaultStorageId };
+    virtual const TString& GetIndexStorageId(const ui32 indexId, const TIndexInfo& indexInfo) const override {
+        if (indexInfo.GetIndexVerified(indexId)->GetInheritPortionStorage()) {
+            return GetColumnStorageId(0, indexInfo);
+        } else {
+            return IStoragesManager::DefaultStorageId;
+        }
     }
 
     virtual std::unique_ptr<TPortionInfoConstructor> BuildConstructor(const bool withMetadata) const override;

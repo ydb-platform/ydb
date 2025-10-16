@@ -11,9 +11,9 @@ std::partial_ordering TPredicateContainer::ComparePredicatesSamePrefix(const NOl
     Y_ABORT_UNLESS(r.Batch->num_columns());
     Y_ABORT_UNLESS(l.Batch->num_rows() == r.Batch->num_rows());
     Y_ABORT_UNLESS(l.Batch->num_rows() == 1);
-    const auto commonPrefixLenth = std::min(l.Batch->columns().size(), r.Batch->columns().size());
+    const auto commonPrefixLength = std::min(l.Batch->columns().size(), r.Batch->columns().size());
     using NKikimr::NArrow::TRawReplaceKey;
-    return TRawReplaceKey{&l.Batch->columns(), 0}.ComparePart<false>(TRawReplaceKey{&r.Batch->columns(), 0}, commonPrefixLenth);
+    return TRawReplaceKey{&l.Batch->columns(), 0}.ComparePart<false>(TRawReplaceKey{&r.Batch->columns(), 0}, commonPrefixLength);
 }
 
 TString TPredicateContainer::DebugString() const {

@@ -45,7 +45,9 @@
 ||
 |#
 
-## Пример конфига (из внешних источников данных доступен только ClickHouse и MySQL)
+## Примеры {#examples} 
+
+### Включение внешних источников ClickHouse и MySQL
 
 ```yaml
 query_service_config:

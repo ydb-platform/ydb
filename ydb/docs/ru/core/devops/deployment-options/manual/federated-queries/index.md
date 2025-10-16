@@ -37,11 +37,11 @@
 2. Если для доступа к нужному вам источнику требуется развернуть коннектор, сделайте это [согласно инструкции](./connector-deployment.md).
 3. [В конфигурационном файле](../../../../reference/configuration/index.md) {{ ydb-short-name }} добавьте в секцию `feature_flags` следующее содержимое:
 
-    ```yaml
-    feature_flags:
-        enable_external_data_sources: true
-    ```
-    
+```yaml
+feature_flags:
+    enable_external_data_sources: true
+```
+
 4. [В конфигурационном файле](../../../../reference/configuration/index.md) {{ ydb-short-name }} добавьте настройки внешних источников данных. Полное описание настроек доступно по [ссылке](../../../../reference/configuration/query_service_config.md):
 
 {% list tabs %}

@@ -604,6 +604,7 @@ private:
 
     using TStatisticsFiller = std::function<void(const TActorContext&, std::unique_ptr<TEvDataShard::TEvPeriodicTableStats>&)>;
     void SendPeriodicStats(const TStatisticsFiller& filler);
+    void FillCommonStatistics(const TActorContext& ctx, std::unique_ptr<TEvDataShard::TEvPeriodicTableStats>& ev);
     void FillBaseStatistics(const TActorContext& ctx, std::unique_ptr<TEvDataShard::TEvPeriodicTableStats>& ev);
     void FillExecutorStatistics(const TActorContext& ctx, std::unique_ptr<TEvDataShard::TEvPeriodicTableStats>& ev);
 

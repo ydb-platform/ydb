@@ -25,7 +25,7 @@ namespace NKikimr {
 namespace NSchemeShard {
 
 static void FillTableStats(NKikimrTableStats::TTableStats* stats, const TPartitionStats& tableStats) {
-    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("XXXXX", tableStats.RowCount);
+    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("XXXXX", tableStats.ImmediateTxCompleted);
     stats->SetRowCount(tableStats.RowCount);
     stats->SetDataSize(tableStats.DataSize);
     stats->SetIndexSize(tableStats.IndexSize);

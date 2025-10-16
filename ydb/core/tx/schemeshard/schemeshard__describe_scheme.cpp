@@ -56,7 +56,7 @@ struct TSchemeShard::TTxDescribeScheme : public TSchemeShard::TRwTxBase {
                         << ", result: " << Result->GetRecord().ShortDebugString()
                         << ", at schemeshard: " << Self->TabletID());
 
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("ZZZZZZ", Result->GetRecord().GetPathDescription().GetTableStats().GetRowCount());
+        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("ZZZZZZ", Result->GetRecord().GetPathDescription().GetTableStats().GetImmediateTxCompleted());
         ctx.Send(Sender, std::move(Result), 0, Cookie);
     }
 

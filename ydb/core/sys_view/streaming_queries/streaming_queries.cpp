@@ -908,11 +908,7 @@ private:
                 }
             }
 
-            auto event = std::make_unique<NKqp::TEvGetScriptExecutionOperation>(
-                DatabaseName,
-                NKqp::OperationIdFromExecutionId(executionId),
-                UserToken ? std::optional(UserToken->GetUserSID()) : std::nullopt
-            );
+            auto event = std::make_unique<NKqp::TEvGetScriptExecutionOperation>(DatabaseName, NKqp::OperationIdFromExecutionId(executionId), BUILTIN_ACL_METADATA);
             event->CheckLeaseState = false;
             Send(kqpProxyId, std::move(event), 0, i);
 

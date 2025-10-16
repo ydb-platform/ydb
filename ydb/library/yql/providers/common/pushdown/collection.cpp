@@ -207,6 +207,9 @@ private:
         if (Settings.IsEnabled(EFlag::TimestampCtor) && node.Maybe<TCoTimestamp>()) {
             return true;
         }
+        if (Settings.IsEnabled(EFlag::IntervalCtor) && node.Maybe<TCoInterval>()) {
+            return true;
+        }
         if (Settings.IsEnabled(EFlag::StringTypes) && (node.Maybe<TCoUtf8>() || node.Maybe<TCoString>())) {
             return true;
         }

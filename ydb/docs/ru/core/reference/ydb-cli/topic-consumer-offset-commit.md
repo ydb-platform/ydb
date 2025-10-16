@@ -1,6 +1,6 @@
 # Сохранение позиции чтения
 
-Каждый писатель топика обладает [позицией чтения](../../concepts/datamodel/topic.md#consumer-offset).
+Каждый читатель топика обладает [позицией чтения](../../concepts/datamodel/topic.md#consumer-offset).
 
 С помощью команды `topic consumer offset commit` можно сохранить позицию чтения [добавленного ранее](topic-consumer-add.md) читателя.
 

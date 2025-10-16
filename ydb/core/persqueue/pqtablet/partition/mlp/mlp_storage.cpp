@@ -1,15 +1,19 @@
 #include "mlp_storage.h"
 
+#include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/library/actors/core/log.h>
 
 namespace NKikimr::NPQ::NMLP {
 
 
-std::optional<TStorage::TMessageId> TStorage::Next(TInstant deadline, ui64 fromOffset) {
+std::optional<TStorage::NextResult> TStorage::Next(TInstant deadline, ui64 fromOffset) {
     if (!ReleasedMessages.empty()) {
         auto offset = ReleasedMessages.front();
         ReleasedMessages.pop_front();
-        return DoLock(offset - FirstOffset, deadline);
+        return NextResult{
+            .Message = DoLock(offset - FirstOffset, deadline),
+            .FromOffset = fromOffset
+        };
     }
 
     bool moveUnlockedOffset = fromOffset <= FirstUnlockedOffset;
@@ -25,7 +29,10 @@ std::optional<TStorage::TMessageId> TStorage::Next(TInstant deadline, ui64 fromO
                 ++FirstUnlockedOffset;
             }
 
-            return DoLock(i, deadline);
+            return NextResult{
+                .Message = DoLock(i, deadline),
+                .FromOffset = FirstOffset + i
+            };
         } else if (moveUnlockedOffset) {
             ++FirstUnlockedOffset;
         }
@@ -69,6 +76,60 @@ bool TStorage::ProccessDeadlines() {
     return result;
 }
 
+bool TStorage::Compact() {
+    AFL_ENSURE(FirstOffset <= FirstUncommittedOffset)("l", FirstOffset)("r", FirstUncommittedOffset);
+    AFL_ENSURE(FirstOffset <= FirstUnlockedOffset)("l", FirstOffset)("r", FirstUnlockedOffset);
+    AFL_ENSURE(FirstUncommittedOffset <= FirstUnlockedOffset)("l", FirstUncommittedOffset)("r", FirstUnlockedOffset);
+
+    if (FirstOffset = FirstUncommittedOffset) {
+        return false;
+    }
+
+    while(FirstOffset < FirstUncommittedOffset) {
+        Messages.pop_front();
+        ++FirstOffset;
+    }
+
+    return true;
+}
+
+bool TStorage::InitializeFromSnapshot(const NKikimrPQ::TMLPStorageSnapshot& snapshot) {
+    AFL_ENSURE(snapshot.GetFormatVersion() == 1)("v", snapshot.GetFormatVersion());
+
+    Messages.resize(snapshot.GetMessages().length() / sizeof(TMessage));
+
+    auto& meta = snapshot.GetMeta();
+    FirstOffset = meta.GetFirstOffset();
+    FirstUncommittedOffset = meta.GetFirstUncommittedOffset();
+    BaseDeadline = TInstant::MilliSeconds(meta.GetBaseDeadlineMilliseconds());
+
+    const TMessage* ptr = reinterpret_cast<const TMessage*>(snapshot.GetMessages().data());
+    for (size_t i = 0; i < Messages.size(); ++i) {
+        Messages[i] = ptr[i];  // TODO BIGENDIAN/LOWENDIAN
+    }
+
+    return true;
+}
+
+bool TStorage::CreateSnapshot(NKikimrPQ::TMLPStorageSnapshot& snapshot) {
+    auto* meta = snapshot.MutableMeta();
+    meta->SetFirstOffset(FirstOffset);
+    meta->SetFirstUncommittedOffset(FirstUncommittedOffset);
+    meta->SetBaseDeadlineMilliseconds(BaseDeadline.MilliSeconds());
+
+    snapshot.SetFormatVersion(1);
+
+    TString buffer;
+    buffer.reserve(Messages.size() * sizeof(TMessage));
+    for (auto& message : Messages) {
+        void* ptr = &message;
+        buffer.append(static_cast<char*>(ptr), sizeof(TMessage)); // TODO BIGENDIAN/LOWENDIAN
+    }
+    snapshot.SetMessages(std::move(buffer));
+
+    return true;
+}
+
 std::pair<ui64, TStorage::TMessage*> TStorage::GetMessage(ui64 offset, EMessageStatus expectedStatus) {
     if (offset < FirstOffset) {
         return {0, nullptr};
@@ -102,7 +163,7 @@ ui64 TStorage::NormalizeDeadline(TInstant deadline) {
     return deadlineDelta;
 }
 
-TStorage::TMessageId TStorage::DoLock(ui64 offsetDelta, TInstant deadline) {
+TMessageId TStorage::DoLock(ui64 offsetDelta, TInstant deadline) {
     auto& message = Messages[offsetDelta];
     AFL_VERIFY(message.Status == EMessageStatus::Unprocessed)("status", message.Status);
     message.Status = EMessageStatus::Locked;

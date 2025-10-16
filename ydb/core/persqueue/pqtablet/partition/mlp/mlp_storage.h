@@ -1,12 +1,15 @@
 #pragma once
 
+#include "mlp.h"
+
 #include <util/datetime/base.h>
 
 #include <deque>
-#include <set>
 #include <unordered_set>
 
 namespace NKikimr::NPQ::NMLP {
+
+class TSerializer;    
 
 //
 // На диске храним 3 типа блобов
@@ -14,6 +17,8 @@ namespace NKikimr::NPQ::NMLP {
 // * Информация о статусе обработке сообщений. MaxMessages * 8 байтов (~800Kb). Всегда один блоб. Перезаписывается редко.
 // * WAL изменений. Несколько блобов. Частая запись. Информация об измененных статусах сообщениях.
 class TStorage {
+
+    friend class TSerializer;
 
     // Имеет смысл ограничить 100К сообщений на партицию. Надо больше - увеличивайте кол-во партиции.
     // В худшем случае на 100000 сообщений надо ~3MB памяти
@@ -33,7 +38,6 @@ class TStorage {
         DLQ = 3
     };
 
-    // sizeof(TMessage) == 8
     struct TMessage {
         // Статус сообщения. EMessageStatus
         ui64 Status: 3 = EMessageStatus::Unprocessed;
@@ -52,16 +56,15 @@ class TStorage {
 
 public:
 
-    // Идентификатор сообщения.
-    struct TMessageId {
-        ui64 Offset;
-    };
-
     // Return next message for client processing.
     // deadline - time for processing visibility
     // fromOffset indicates from which offset it is necessary to continue searching for the next free message.
     //            it is an optimization for the case when the method is called several times in a row.
-    std::optional<TMessageId> Next(TInstant deadline, ui64 fromOffset = 0);
+    struct NextResult {
+        TMessageId Message;
+        ui64 FromOffset;
+    };
+    std::optional<NextResult> Next(TInstant deadline, ui64 fromOffset = 0);
     bool Commit(TMessageId message);
     bool Unlock(TMessageId message);
     // For SQS compatibility
@@ -69,6 +72,10 @@ public:
     bool ChangeMessageDeadline(TMessageId message, TInstant deadline);
 
     bool ProccessDeadlines();
+    bool Compact();
+
+    bool InitializeFromSnapshot(const NKikimrPQ::TMLPStorageSnapshot& snapshot);
+    bool CreateSnapshot(NKikimrPQ::TMLPStorageSnapshot& snapshot);
 
 private:
     // offsetDelte, TMessage

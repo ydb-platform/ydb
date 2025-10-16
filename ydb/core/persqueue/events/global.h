@@ -529,6 +529,10 @@ namespace NKikimr::TEvPersQueue {
         ui32 GetPartitionId() const {
             return Record.GetPartitionId();
         }
+
+        TInstant GetDeadlineTimestamp() const {
+            return TInstant::Seconds(Record.GetDeadlineTimestampSeconds());
+        }
     };
 
     //

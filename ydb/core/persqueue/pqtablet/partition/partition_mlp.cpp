@@ -79,7 +79,7 @@ void TPartition::InitializeMLPConsumers() {
             continue;
         }
 
-        Send(consumerInfo.ActorId, new TEvents::TEvPoison()); // TODO delete blobs
+        Send(consumerInfo.ActorId, new TEvents::TEvPoison()); // TODO MLP delete blobs
         it = MLPConsumers.erase(it);
     }
 
@@ -91,6 +91,7 @@ void TPartition::InitializeMLPConsumers() {
         auto actorId = RegisterWithSameMailbox(NMLP::CreateConsumerActor(
             TabletId,
             TabletActorId,
+            Partition.OriginalPartitionId,
             SelfId(),
             consumer
         ));

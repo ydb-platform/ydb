@@ -1343,3 +1343,21 @@ message TEvMLPChangeMessageDeadlineResponse {
     optional NPersQueue.NErrorCode.EErrorCode ErrorCode = 1;
 }
 
+message TMLPStorageSnapshot {
+    message TConfiguration {
+        optional uint32 ConsumerId = 1;
+        optional uint64 Generation = 2;
+    }
+    optional TConfiguration Configuration = 1;
+
+    message TMeta {
+        optional uint64 FirstOffset = 1;
+        optional uint64 FirstUncommittedOffset = 2;
+        optional uint64 BaseDeadlineMilliseconds = 3; 
+    }
+    optional TMeta Meta = 2;
+
+    optional uint64 FormatVersion = 3;
+    optional bytes Messages = 4;
+}
+

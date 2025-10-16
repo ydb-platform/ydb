@@ -2,24 +2,30 @@
 
 #include "mlp.h"
 #include "mlp_storage.h"
+#include "batch.h"
 
+#include <ydb/core/keyvalue/keyvalue_events.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/common/actor.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 
 namespace NKikimr::NPQ::NMLP {
 
+class TSerializer;
+
 using namespace NActors;
 
-class TConsumerActor : public TBaseActor<TConsumerActor> {
+class TConsumerActor : public TBaseActor<TConsumerActor>
+                     , public TConstantLogPrefix {
+    friend class TSerializer;
 
 public:
-    TConsumerActor(ui64 tabletId, const TActorId& tabletActorId, const TActorId& partitionActorId, const NKikimrPQ::TPQTabletConfig::TConsumer& config);
+    TConsumerActor(ui64 tabletId, const TActorId& tabletActorId, ui32 partitionId, const TActorId& partitionActorId, const NKikimrPQ::TPQTabletConfig::TConsumer& config);
 
 protected:
     void Bootstrap();
-    void PassAway();
-    const TString& GetLogPrefix() const;
+    void PassAway() override;
+    TString BuildLogPrefix() const override;
 
 private:
     void Queue(TEvPersQueue::TEvMLPReadRequest::TPtr&);
@@ -32,14 +38,23 @@ private:
     void Handle(TEvPersQueue::TEvMLPReleaseRequest::TPtr&);
     void Handle(TEvPersQueue::TEvMLPChangeMessageDeadlineRequest::TPtr&);
 
+    void HandleOnInit(TEvKeyValue::TEvResponse::TPtr&);
+    void HandleOnWrite(TEvKeyValue::TEvResponse::TPtr&);
+
     STFUNC(StateInit);
     STFUNC(StateWork);
     STFUNC(StateWrite);
 
+    void Restart(TString&& error);
+
     void ProcessEventQueue();
+
+    void ReadSnapshot();
+    void PersistSnapshot();
 
 private:
     const TActorId TabletActorId;
+    const ui32 PartitionId;
     const TActorId PartitionActorId;
     const NKikimrPQ::TPQTabletConfig::TConsumer Config;
 
@@ -49,6 +64,8 @@ private:
     std::deque<TEvPersQueue::TEvMLPCommitRequest::TPtr> CommitRequestsQueue;
     std::deque<TEvPersQueue::TEvMLPReleaseRequest::TPtr> ReleaseRequestsQueue;
     std::deque<TEvPersQueue::TEvMLPChangeMessageDeadlineRequest::TPtr> ChangeMessageDeadlineRequestsQueue;
+
+    TBatch Batch;
 };
 
 }

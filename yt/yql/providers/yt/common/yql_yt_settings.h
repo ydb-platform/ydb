@@ -114,6 +114,7 @@ public:
     NCommon::TConfSetting<EBlockOutputMode, StaticPerCluster> JobBlockOutput;
     NCommon::TConfSetting<TSet<TString>, StaticPerCluster> JobBlockOutputSupportedTypes;
     NCommon::TConfSetting<TSet<NUdf::EDataSlot>, StaticPerCluster> JobBlockOutputSupportedDataTypes;
+    NCommon::TConfSetting<bool, StaticPerCluster> ValidatePool;
 
     // static global
     NCommon::TConfSetting<TString, Static> Auth;

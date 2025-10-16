@@ -660,6 +660,9 @@
     "name": "yt.UserSlots"
   },
   {
+    "name": "yt.ValidatePool"
+  },
+  {
     "name": "yt.ViewIsolation"
   },
   {

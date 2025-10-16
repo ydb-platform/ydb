@@ -1,0 +1,9 @@
+/* ytfile can not */
+/* custom error: Pool "nonexistent_pool" not found */
+
+USE plato;
+
+PRAGMA plato.ValidatePool;
+PRAGMA plato.Pool="nonexistent_pool";
+
+INSERT INTO Output SELECT * FROM Input;

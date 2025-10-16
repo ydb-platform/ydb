@@ -149,9 +149,7 @@ template <typename Source, EJoinKind Kind> class TJoin : public TComputationValu
                     if constexpr (Kind == EJoinKind::RightSemi) {
                         for (auto& v : Table_.MapView()) {
                             if (v.second.Used) {
-                                for (NJoinTable::TTuple used : v.second.Tuples) {
-                                    consumeOneOrTwoTuples(used);
-                                }
+                                Table_.ForEachFLat(consumeOneOrTwoTuples, v.second.Tuples);
                             }
                         }
                     }

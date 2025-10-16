@@ -19,7 +19,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   check-running-allowed:
-    if: ${{github.event.pull_request.opened == true && vars.CHECKS_SWITCH != '' && fromJSON(vars.CHECKS_SWITCH).pr_check == true}}
+    if: ${{github.event.pull_request.state == 'open' && vars.CHECKS_SWITCH != '' && fromJSON(vars.CHECKS_SWITCH).pr_check == true}}
     runs-on: [self-hosted, tiny-worker]
     timeout-minutes: 600
     outputs:

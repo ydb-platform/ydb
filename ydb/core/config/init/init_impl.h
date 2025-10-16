@@ -1100,11 +1100,17 @@ public:
         }
 
         if (CommonAppOptions.SeedNodesFile) {
+            Logger.Err() << "[Init] --seed-nodes option detected, file='" << CommonAppOptions.SeedNodesFile << "'" << Endl;
             ParseSeedNodes(CommonAppOptions);
+            Logger.Err() << "[Init] Parsed seed nodes count=" << CommonAppOptions.SeedNodes.size() << Endl;
+            for (size_t i = 0; i < CommonAppOptions.SeedNodes.size(); ++i) {
+                Logger.Err() << "[Init] Seed[" << i << "]='" << CommonAppOptions.SeedNodes[i] << "'" << Endl;
+            }
         }
 
         if (CommonAppOptions.IsStaticNode()) {
             if (yamlConfigFile.empty() && CommonAppOptions.SeedNodesFile) {
+                Logger.Err() << "[Init] Static node: initializing config from seed nodes file='" << CommonAppOptions.SeedNodesFile << "'" << Endl;
                 InitConfigFromSeedNodes(yamlConfigFile, storageYamlConfigFile);
             }
             if (!CommonAppOptions.ConfigDirPath.empty() && yamlConfigFile.empty()) {
@@ -1120,7 +1126,7 @@ public:
         Option("naming-file", TCfg::TNameserviceConfigFieldTag{});
 
         CommonAppOptions.NodeId = CommonAppOptions.DeduceNodeId(AppConfig, Env);
-        Logger.Out() << "Determined node ID: " << CommonAppOptions.NodeId << Endl;
+        Logger.Err() << "Determined node ID: " << CommonAppOptions.NodeId << Endl;
 
         CommonAppOptions.ValidateTenant();
 
@@ -1191,7 +1197,7 @@ public:
             ythrow yexception() << errors.front();
         }
 
-        Logger.Out() << "configured" << Endl;
+        Logger.Err() << "configured" << Endl;
     }
 
     void FillData(const NConfig::TCommonAppOptions& cf) {
@@ -1409,6 +1415,11 @@ public:
         }
 
         if (CommonAppOptions.SeedNodesFile) {
+            Logger.Err() << "[DynInit] NodeId=" << NodeId << ", seed-nodes path='" << CommonAppOptions.SeedNodesFile << "'" << Endl;
+            Logger.Err() << "[DynInit] NodeId=" << NodeId << ", seed-nodes count=" << CommonAppOptions.SeedNodes.size() << Endl;
+            for (size_t i = 0; i < CommonAppOptions.SeedNodes.size(); ++i) {
+                Logger.Err() << "[DynInit] NodeId=" << NodeId << ", seed[" << i << "]='" << CommonAppOptions.SeedNodes[i] << "'" << Endl;
+            }
             return InitConfigFromSeedNodesDynamic();
         }
 
@@ -1424,20 +1435,23 @@ public:
             AppConfig.GetAuthConfig().GetStaffApiUserToken(),
         };
 
+        Logger.Err() << "[DynInit] NodeId=" << NodeId << ": fetching config via DynConfigClient, addrs.size=" << addrs.size() << Endl;
         auto result = DynConfigClient.GetConfig(CommonAppOptions.GrpcSslSettings, addrs, settings, Env, Logger);
 
         if (!result) {
+            Logger.Err() << "[DynInit] NodeId=" << NodeId << ": DynConfigClient.GetConfig returned empty result" << Endl;
             return;
         }
 
         NKikimrConfig::TAppConfig yamlConfig = GetYamlConfigFromResult(*result, Labels);
+        Logger.Err() << "[DynInit] NodeId=" << NodeId << ": received dyn config from CMS (before ReplaceUnmanagedKinds)" << Endl;
         NYamlConfig::ReplaceUnmanagedKinds(result->GetConfig(), yamlConfig);
 
         InitDebug.OldConfig.CopyFrom(result->GetConfig());
         InitDebug.YamlConfig.CopyFrom(yamlConfig);
 
         NKikimrConfig::TAppConfig appConfig = GetActualDynConfig(yamlConfig, result->GetConfig(), ConfigUpdateTracer);
-
+        Logger.Err() << "[DynInit] NodeId=" << NodeId << ": applying dyn config" << Endl;
         ApplyConfigForNode(appConfig);
     }
 
@@ -1516,9 +1530,10 @@ public:
             ythrow yexception() << "No seed nodes provided";
         }
 
+        Logger.Err() << "[SeedStatic] Fetching config from seeds count=" << CommonAppOptions.SeedNodes.size() << Endl;
         auto result = ConfigClient.FetchConfig(CommonAppOptions.GrpcSslSettings, CommonAppOptions.SeedNodes, Env, Logger);
         if (!result) {
-            Logger.Out() << "Failed to fetch config from seed nodes" << Endl;
+            Logger.Err() << "[SeedStatic] Failed to fetch config from seed nodes" << Endl;
             return;
         }
 
@@ -1546,6 +1561,7 @@ public:
             }
         };
 
+        Logger.Err() << "[SeedStatic] Received main_yaml.size=" << clusterConfig.size() << ", storage_yaml.size=" << storageConfig.size() << Endl;
         bool clusterSaved = !clusterConfig.empty() && saveConfig(clusterConfig, CONFIG_NAME);
         bool storageSaved = !storageConfig.empty() && saveConfig(storageConfig, STORAGE_CONFIG_NAME);
 
@@ -1557,10 +1573,10 @@ public:
         }
 
         if (clusterSaved && storageSaved) {
-            Logger.Out() << "Initialized main and storage configs in " << configDirPath << "/"
+            Logger.Err() << "[SeedStatic] Initialized main and storage configs in " << configDirPath << "/"
                          << CONFIG_NAME << " and " << STORAGE_CONFIG_NAME << Endl;
         } else if (clusterSaved) {
-            Logger.Out() << "Initialized config in " << configDirPath << "/" << CONFIG_NAME << Endl;
+            Logger.Err() << "[SeedStatic] Initialized config in " << configDirPath << "/" << CONFIG_NAME << Endl;
         } else if (!clusterConfig.empty() || !storageConfig.empty()) {
             TStringBuilder errorMsg;
             errorMsg << "Failed to save configs: ";
@@ -1575,7 +1591,7 @@ public:
             }
             ythrow yexception() << errorMsg;
         } else {
-            Logger.Out() << "No configs received from seed nodes" << Endl;
+            Logger.Err() << "[SeedStatic] No configs received from seed nodes" << Endl;
         }
     }
     void InitConfigFromSeedNodesDynamic() {
@@ -1583,15 +1599,17 @@ public:
             ythrow yexception() << "No seed nodes provided";
         }
 
+        Logger.Err() << "[SeedDynamic] NodeId=" << NodeId << ": fetching config from seeds count=" << CommonAppOptions.SeedNodes.size() << Endl;
         auto cfgResult = ConfigClient.FetchConfig(CommonAppOptions.GrpcSslSettings, CommonAppOptions.SeedNodes, Env, Logger);
         if (!cfgResult) {
-            Logger.Out() << "Failed to fetch config from seed nodes" << Endl;
+            Logger.Err() << "[SeedDynamic] NodeId=" << NodeId << ": failed to fetch config from seed nodes" << Endl;
             return;
         }
 
         const TString& mainYaml = cfgResult->GetMainYamlConfig();
+        Logger.Err() << "[SeedDynamic] NodeId=" << NodeId << ": main_yaml.size=" << mainYaml.size() << Endl;
         if (mainYaml.empty()) {
-            Logger.Out() << "No main config received from seed nodes" << Endl;
+            Logger.Err() << "[SeedDynamic] NodeId=" << NodeId << ": no main config received from seed nodes" << Endl;
             return;
         }
 
@@ -1599,6 +1617,7 @@ public:
         NYamlConfig::ResolveAndParseYamlConfig(mainYaml, {}, Labels, yamlConfig);
 
         InitDebug.YamlConfig.CopyFrom(yamlConfig);
+        Logger.Err() << "[SeedDynamic] NodeId=" << NodeId << ": applying yaml config fetched from seed nodes" << Endl;
         return ApplyConfigForNode(yamlConfig);
     }
 };

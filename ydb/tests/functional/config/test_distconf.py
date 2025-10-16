@@ -65,6 +65,14 @@ class DistConfKiKiMRTest(object):
             # 'TX_PROXY': LogLevels.DEBUG,
             # 'TICKET_PARSER': LogLevels.DEBUG,
         }
+        system_tablets = {
+            "console": [
+                {
+                    "info": {"tablet_id": 72057594037936131},
+                    "node": [3]
+                }
+            ]
+        }
         cls.configurator = KikimrConfigGenerator(
             cls.erasure,
             nodes=cls.nodes_count,
@@ -75,7 +83,8 @@ class DistConfKiKiMRTest(object):
             simple_config=True,
             use_self_management=True,
             extra_grpc_services=['config'],
-            additional_log_configs=log_configs)
+            additional_log_configs=log_configs,
+            system_tablets=system_tablets)
 
         cls.cluster = KiKiMR(configurator=cls.configurator)
         cls.cluster.start()
@@ -204,7 +213,7 @@ class TestKiKiMRDistConfBasic(DistConfKiKiMRTest):
 
     def test_dynamic_slot_start_with_seed_nodes(self):
         database_path = os.path.join('/', self.cluster.domain_name, f'dyn_seed_db')
-
+        # database_path = "/Root/mydb"
         try:
             self.cluster.remove_database(database_path)
         except Exception:
@@ -225,36 +234,51 @@ class TestKiKiMRDistConfBasic(DistConfKiKiMRTest):
                 """
             )
 
-        # Without dynamic slots, query should fail
-        failed_without_slots = False
-        try:
-            pool.retry_operation_sync(create_table)
-        except Exception:
-            failed_without_slots = True
-        assert failed_without_slots, 'Query unexpectedly succeeded without dynamic slots'
+        initial_slots = self.cluster.register_and_start_slots(database_path, count=1)
+        logger.info(f"[TEST] Initially started slots: {[s.node_id for s in initial_slots]}")
+        self.cluster.wait_tenant_up(database_path)
+        pool.retry_operation_sync(create_table)
 
-        # Prepare seed nodes file
-        seed_nodes = [f"grpc://localhost:{node.grpc_port}" for _, node in self.cluster.nodes.items()]
+        for s in initial_slots:
+            s.stop()
+        logger.info("[TEST] Stopped initial dynamic slot(s)")
+
+        self.cluster.nodes[3].stop()
+        logger.info("[TEST] Stopped static node 3 (Console)")
+
+        seed_nodes = [f"grpc://localhost:{node.grpc_port}" for _, node in self.cluster.nodes.items() if node.node_id != 3]
+        logger.info(f"[TEST] Seed nodes for slot restart: {seed_nodes}")
         seed_nodes_file = tempfile.NamedTemporaryFile(mode='w', prefix='seed_nodes_', suffix='.yaml', delete=False)
         try:
             yaml.dump(seed_nodes, seed_nodes_file)
+            logger.info(f"[TEST] Seed nodes file created at: {seed_nodes_file.name}")
             seed_nodes_file.close()
 
-            slots = self.cluster.register_and_start_slots(database_path, count=1, seed_nodes_file=seed_nodes_file.name)
-            self.cluster.wait_tenant_up(database_path)
+            for s in initial_slots:
+                s.set_seed_nodes_file(seed_nodes_file.name)
+                s.start()
+            logger.info(f"[TEST] Restarted slots with seed-nodes: {[s.node_id for s in initial_slots]}")
 
-            # Now query should succeed
-            pool.retry_operation_sync(create_table)
+            def create_table2(session):
+                session.execute_scheme(
+                    f"""
+                    create table `{database_path}/t2` (
+                        id Uint64,
+                        primary key(id)
+                    );
+                    """
+                )
 
+            pool.retry_operation_sync(create_table2)
             def upsert(session):
                 session.transaction().execute(
-                    f"upsert into `{database_path}/t` (id) values (1);",
+                    f"upsert into `{database_path}/t` (id) values (1); upsert into `{database_path}/t2` (id) values (2);",
                     commit_tx=True,
                 )
 
             def select(session):
                 session.transaction().execute(
-                    f"select id from `{database_path}/t`;",
+                    f"select id from `{database_path}/t`; select id from `{database_path}/t2`;",
                     commit_tx=True,
                 )
 

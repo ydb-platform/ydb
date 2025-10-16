@@ -991,7 +991,7 @@ void TTablet::HandleFindLatestLogEntry(TEvTabletBase::TEvFindLatestLogEntryResul
         {
             BLOG_ERROR("HandleFindLatestLogEntry, msg->Status: " << NKikimrProto::EReplyStatus_Name(msg->Status), "TSYS20");
             if (Info->BootMode == TTabletStorageInfo::EBootMode::Restore) {
-                return PromoteToCandidate(0); // we stil can find latest generation
+                return PromoteToCandidate(0); // we still can find latest generation
             } else {
                 return CancelTablet(TEvTablet::TEvTabletDead::ReasonBootBSError, msg->ErrorReason);
             }

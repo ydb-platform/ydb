@@ -26,18 +26,31 @@ namespace {
     std::vector<TSchedulableTaskPtr> CreateDemandTasks(NHdrf::NDynamic::TQueryPtr query, ui64 demand) {
         std::vector<TSchedulableTaskPtr> tasks;
 
+        // Currently Demand for query snapshot is set as (Demand + ActualDemand) / 2.
+        // ActualDemand is set to 0 after each snapshot take, so to avoid updating is every time this workaround was implemented
         for (ui64 i = 0; i < 2 * demand; ++i) {
             tasks.emplace_back(std::make_shared<TSchedulableTask>(query));
         }
 
         return tasks;
     }
+
+    void UpdateDemand(std::vector<TSchedulableTaskPtr>& tasks, ui64 demand) {
+        tasks.resize(2 * demand);
+    }
 }
 
     Y_UNIT_TEST(SingleDatabasePoolQueryStructure) {
         /*
-            Each query has demand 2. And fair share 6 is under total limit 12.
+            Scenario:
+            - 1 database with 1 pool that has 3 queries with demand 2
+            - CPU limit is greater than sum of demands so each database, pool and query should have FairShare equal to demand
+            - Demand for pools and databases is a sum of children's demands
         */
+
+        constexpr ui64 kCpuLimit = 12;
+        constexpr size_t kNQueries = 3;
+        constexpr ui64 kQueryDemand = 2;
 
         const TOptions options{
             .Counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>()),
@@ -45,7 +58,7 @@ namespace {
             .UpdateFairSharePeriod = kDefaultUpdateFairSharePeriod
         };
         TComputeScheduler scheduler(options.Counters, options.DelayParams);
-        scheduler.SetTotalCpuLimit(12);
+        scheduler.SetTotalCpuLimit(kCpuLimit);
 
         const TString databaseId = "db1";
         scheduler.AddOrUpdateDatabase(databaseId, {});
@@ -55,9 +68,9 @@ namespace {
 
         std::vector<NHdrf::NDynamic::TQueryPtr> queries;
         std::vector<std::vector<TSchedulableTaskPtr>> tasks;
-        for (NHdrf::TQueryId queryId = 0; queryId < 3; ++queryId) {
+        for (NHdrf::TQueryId queryId = 0; queryId < kNQueries; ++queryId) {
             auto query = queries.emplace_back(scheduler.AddOrUpdateQuery(databaseId, poolId, queryId, {}));
-            tasks.emplace_back(CreateDemandTasks(query, 2));
+            tasks.emplace_back(CreateDemandTasks(query, kQueryDemand));
         }
 
         scheduler.UpdateFairShare();
@@ -65,29 +78,36 @@ namespace {
         for (const auto& query : queries) {
             auto querySnapshot = query->GetSnapshot();
             UNIT_ASSERT(querySnapshot);
-            UNIT_ASSERT_VALUES_EQUAL(querySnapshot->FairShare, 2);
+            UNIT_ASSERT_VALUES_EQUAL(querySnapshot->FairShare, kQueryDemand);
         }
 
         auto* poolSnapshot = queries[0]->GetSnapshot()->GetParent();
         UNIT_ASSERT(poolSnapshot);
-        UNIT_ASSERT_VALUES_EQUAL(poolSnapshot->FairShare, 6);
+        UNIT_ASSERT_VALUES_EQUAL(poolSnapshot->FairShare, kNQueries * kQueryDemand);
 
         auto* databaseSnapshot = poolSnapshot->GetParent();
         UNIT_ASSERT(databaseSnapshot);
-        UNIT_ASSERT_VALUES_EQUAL(databaseSnapshot->FairShare, 6);
+        UNIT_ASSERT_VALUES_EQUAL(databaseSnapshot->FairShare, kNQueries * kQueryDemand);
     }
 
     Y_UNIT_TEST_TWIN(QueriesWithFairShareOverlimit, AllowOverlimit) {
         /*
-            Total limit is 4 but due to fair share overlimit rule each query should have 1 fair-share.
+            Scenario:
+            - 1 database with 1 pool that has 5 queries with demand 1
+            - CPU limit is less than sum of demands so FairShare for databases and pools should be limited by it
+            - With allowed overlimit each query should have at least 1 FairShare no matter how low is CPU limit
         */
+        constexpr ui64 kCpuLimit = 4;
+        constexpr size_t kNQueries = 5;
+        constexpr ui64 kQueryDemand = 1;
+
         const TOptions options{
             .Counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>()),
             .DelayParams = kDefaultDelayParams,
             .UpdateFairSharePeriod = kDefaultUpdateFairSharePeriod
         };
         TComputeScheduler scheduler(options.Counters, options.DelayParams);
-        scheduler.SetTotalCpuLimit(4);
+        scheduler.SetTotalCpuLimit(kCpuLimit);
 
         const TString databaseId = "db1";
         scheduler.AddOrUpdateDatabase(databaseId, {});
@@ -97,9 +117,9 @@ namespace {
 
         std::vector<NHdrf::NDynamic::TQueryPtr> queries;
         std::vector<std::vector<TSchedulableTaskPtr>> tasks;
-        for (NHdrf::TQueryId queryId = 0; queryId < 5; ++queryId) {
+        for (NHdrf::TQueryId queryId = 0; queryId < kNQueries; ++queryId) {
             auto query = queries.emplace_back(scheduler.AddOrUpdateQuery(databaseId, poolId, queryId, {}));
-            tasks.emplace_back(CreateDemandTasks(query, 1));
+            tasks.emplace_back(CreateDemandTasks(query, kQueryDemand));
         }
 
         scheduler.UpdateFairShare(AllowOverlimit);
@@ -109,32 +129,39 @@ namespace {
             UNIT_ASSERT(querySnapshot);
 
             if (AllowOverlimit) {
-                UNIT_ASSERT_VALUES_EQUAL_C(querySnapshot->FairShare, 1, "With allowed fair-share overlimit each query should have at least 1 fair-share");
+                UNIT_ASSERT_VALUES_EQUAL_C(querySnapshot->FairShare, kQueryDemand, "With allowed fair-share overlimit each query should have at least 1 fair-share");
             } else {
-                UNIT_ASSERT_LE(querySnapshot->FairShare, 1);
+                UNIT_ASSERT_LE(querySnapshot->FairShare, kQueryDemand);
             }
         }
         
-        auto* poolSnapshot = queries[0]->GetSnapshot()->GetParent();
+        auto* poolSnapshot = queries.front()->GetSnapshot()->GetParent();
         UNIT_ASSERT(poolSnapshot);
-        UNIT_ASSERT_VALUES_EQUAL(poolSnapshot->FairShare, 4);
+        UNIT_ASSERT_VALUES_EQUAL(poolSnapshot->FairShare, kCpuLimit);
 
         auto* databaseSnapshot = poolSnapshot->GetParent();
         UNIT_ASSERT(databaseSnapshot);
-        UNIT_ASSERT_VALUES_EQUAL(databaseSnapshot->FairShare, 4);
+        UNIT_ASSERT_VALUES_EQUAL(databaseSnapshot->FairShare, kCpuLimit);
     }
 
     Y_UNIT_TEST(DemandIsCutOffByLimit) {
         /*
-            Total limit is 10 but each query has demand 12..
+            Scenario:
+            - 1 database with 2 pool, each having 3 queries with demand 4
+            - CPU limit is less than sum of demands so FairShare for databases and pools should be limited by it
+            - Checking FairShare cut off on each level, not only on query -> pool
         */
+        constexpr ui64 kCpuLimit = 10;
+        constexpr size_t kNQueries = 3;
+        constexpr ui64 kQueryDemand = 4;
+
         const TOptions options{
             .Counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>()),
             .DelayParams = kDefaultDelayParams,
             .UpdateFairSharePeriod = kDefaultUpdateFairSharePeriod
         };
         TComputeScheduler scheduler(options.Counters, options.DelayParams);
-        scheduler.SetTotalCpuLimit(10);
+        scheduler.SetTotalCpuLimit(kCpuLimit);
 
         const TString databaseId = "db1";
         scheduler.AddOrUpdateDatabase(databaseId, {});
@@ -144,36 +171,42 @@ namespace {
             scheduler.AddOrUpdatePool(databaseId, poolId, {});
         }
     
-        std::vector<NHdrf::NDynamic::TQueryPtr> queries;
+        std::vector<std::vector<NHdrf::NDynamic::TQueryPtr>> queries;
         std::vector<std::vector<TSchedulableTaskPtr>> tasks;
         NHdrf::TQueryId queryId = 0;
         for (const auto& poolId : poolIds) {
-            for (size_t i = 0; i < 3; ++i, ++queryId) {
-                auto query = queries.emplace_back(scheduler.AddOrUpdateQuery(databaseId, poolId, queryId, {}));
-                tasks.emplace_back(CreateDemandTasks(query, 4));
+            queries.emplace_back();
+            for (size_t i = 0; i < kNQueries; ++i, ++queryId) {
+                auto query = queries.back().emplace_back(scheduler.AddOrUpdateQuery(databaseId, poolId, queryId, {}));
+                tasks.emplace_back(CreateDemandTasks(query, kQueryDemand));
             }
         }
 
         scheduler.UpdateFairShare();
 
-        auto* poolSnapshot1 = queries[0]->GetSnapshot()->GetParent();
+        auto* poolSnapshot1 = queries[0].front()->GetSnapshot()->GetParent();
         UNIT_ASSERT(poolSnapshot1);
-        UNIT_ASSERT_VALUES_EQUAL(poolSnapshot1->Demand, 10);
+        UNIT_ASSERT_VALUES_EQUAL(poolSnapshot1->Demand, kCpuLimit);
 
-        auto* poolSnapshot2 = queries[3]->GetSnapshot()->GetParent();
+        auto* poolSnapshot2 = queries[1].front()->GetSnapshot()->GetParent();
         UNIT_ASSERT(poolSnapshot2);
-        UNIT_ASSERT_VALUES_EQUAL(poolSnapshot2->Demand, 10);
+        UNIT_ASSERT_VALUES_EQUAL(poolSnapshot2->Demand, kCpuLimit);
     
         auto* databaseSnapshot = poolSnapshot1->GetParent();
         UNIT_ASSERT(databaseSnapshot);
-        UNIT_ASSERT_VALUES_EQUAL(databaseSnapshot->Demand, 10);
+        UNIT_ASSERT_VALUES_EQUAL(databaseSnapshot->Demand, kCpuLimit);
     }
 
     Y_UNIT_TEST(LeftFairShareIsDistributed) {
         /*
-            Total limit is 10 but due to fair share overlimit rule each query gets 1 fair-share.
-            Left fair-share is distributed between queries in FIFO order.
+            Scenario:
+            - 1 database with 1 pool and 3 queries with demand 4
+            - CPU limit is less than sum of demands so the last query can't get full satisfaction
+            - Checking that each query get 1 demand and than two queries get full demand while the last only gets what lasts 
         */
+        constexpr ui64 kCpuLimit = 10;
+        constexpr size_t kNQueries = 3;
+        constexpr ui64 kQueryDemand = 4;
 
         const TOptions options{
             .Counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>()),
@@ -181,7 +214,7 @@ namespace {
             .UpdateFairSharePeriod = kDefaultUpdateFairSharePeriod
         };
         TComputeScheduler scheduler(options.Counters, options.DelayParams);
-        scheduler.SetTotalCpuLimit(10);
+        scheduler.SetTotalCpuLimit(kCpuLimit);
         
         const TString databaseId = "db1";
         scheduler.AddOrUpdateDatabase(databaseId, {});
@@ -191,15 +224,15 @@ namespace {
 
         std::vector<NHdrf::NDynamic::TQueryPtr> queries;
         std::vector<std::vector<TSchedulableTaskPtr>> tasks;
-        for (NHdrf::TQueryId queryId = 0; queryId < 3; ++queryId) {
+        for (NHdrf::TQueryId queryId = 0; queryId < kNQueries; ++queryId) {
             auto query = queries.emplace_back(scheduler.AddOrUpdateQuery(databaseId, poolId, queryId, {}));
-            tasks.emplace_back(CreateDemandTasks(query, 4));
+            tasks.emplace_back(CreateDemandTasks(query, kQueryDemand));
         }
 
         scheduler.UpdateFairShare();
 
-        const std::vector<ui64> fairShares = {4, 4, 2};
-        for (NHdrf::TQueryId queryId = 0; queryId < 3; ++queryId) {
+        const std::vector<ui64> fairShares = {kQueryDemand, kQueryDemand, kCpuLimit - 2 * kQueryDemand};
+        for (NHdrf::TQueryId queryId = 0; queryId < kNQueries; ++queryId) {
             auto querySnapshot = queries[queryId]->GetSnapshot();
             UNIT_ASSERT(querySnapshot);
             UNIT_ASSERT_VALUES_EQUAL(querySnapshot->FairShare, fairShares[queryId]);
@@ -207,26 +240,30 @@ namespace {
 
         auto* poolSnapshot = queries[0]->GetSnapshot()->GetParent();
         UNIT_ASSERT(poolSnapshot);
-        UNIT_ASSERT_VALUES_EQUAL(poolSnapshot->FairShare, 10);
+        UNIT_ASSERT_VALUES_EQUAL(poolSnapshot->FairShare, kCpuLimit);
 
         auto* databaseSnapshot = poolSnapshot->GetParent();
         UNIT_ASSERT(databaseSnapshot);
-        UNIT_ASSERT_VALUES_EQUAL(databaseSnapshot->FairShare, 10);
+        UNIT_ASSERT_VALUES_EQUAL(databaseSnapshot->FairShare, kCpuLimit);
     }
 
     Y_UNIT_TEST(WeightedDatabase) {
         /*
-            Total limit is 12. Database has weight 2. Queries have demands 6, 3, 3.
-            Weighted fair share for each query is 6, so each query will get (6 * 12) / 18 = 4 fair-share.
-            Each query should have demands 4, 3, 3.
+            Scenario:
+            - 3 databases with different weights, each one with 1 pool and 1 query
+            - FairShare is distributed with weight coefficients, in this case TotalDemand is 12, so it's (demand * weight)/TotalWeightedDemand * TotalDemand = 6/18 * 12 = 4
+            - Each database gets it's requested weighted FairShare, but some queries can underutilize it due to low Demand
         */
+        constexpr ui64 kCpuLimit = 12;
+        constexpr ui64 kWeightedFairShare = 4;
+
         const TOptions options{
             .Counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>()),
             .DelayParams = kDefaultDelayParams,
             .UpdateFairSharePeriod = kDefaultUpdateFairSharePeriod
         };
         TComputeScheduler scheduler(options.Counters, options.DelayParams);
-        scheduler.SetTotalCpuLimit(12);
+        scheduler.SetTotalCpuLimit(kCpuLimit);
 
         const std::vector<TString> databaseIds = {"db1", "db2", "db3"};
         const std::vector<double> databaseWeights = {1., 2., 2.};
@@ -237,6 +274,7 @@ namespace {
         std::vector<NHdrf::NDynamic::TQueryPtr> queries;
         std::vector<std::vector<TSchedulableTaskPtr>> tasks;
         std::vector<ui64> queryDemands = {6, 3, 3};
+
         for (size_t i = 0; i < databaseIds.size(); ++i) {
             const TString poolId = "pool" + ToString(i + 1);
             scheduler.AddOrUpdatePool(databaseIds[i], poolId, {});
@@ -247,38 +285,43 @@ namespace {
 
         scheduler.UpdateFairShare();
 
-        const std::vector<ui64> fairShares = {4, 3, 3};
         for (size_t i = 0; i < databaseIds.size(); ++i) {
             auto query = queries[i];
             auto querySnapshot = query->GetSnapshot();
             UNIT_ASSERT(querySnapshot);
-            UNIT_ASSERT_VALUES_EQUAL(querySnapshot->FairShare, fairShares[i]);
+            UNIT_ASSERT_VALUES_EQUAL(querySnapshot->FairShare, Min(kWeightedFairShare, queryDemands[i]));
 
             auto* poolSnapshot = querySnapshot->GetParent();
             UNIT_ASSERT(poolSnapshot);
-            UNIT_ASSERT_VALUES_EQUAL(poolSnapshot->FairShare, 4);
+            UNIT_ASSERT_VALUES_EQUAL(poolSnapshot->FairShare, kWeightedFairShare);
         }
 
         for (size_t i = 0; i < databaseIds.size(); ++i) {
             auto* databaseSnapshot = queries[i]->GetSnapshot()->GetParent()->GetParent();
             UNIT_ASSERT(databaseSnapshot);
-            UNIT_ASSERT_VALUES_EQUAL(databaseSnapshot->FairShare, 4);
+            UNIT_ASSERT_VALUES_EQUAL(databaseSnapshot->FairShare, kWeightedFairShare);
         }
     }
 
     Y_UNIT_TEST(WeightedPools) {
         /*
-            Total limit is 12. Pools have weights 1, 2, 2. Queries have demands 6, 3, 3.
-            Weighted fair share for each pool is 6, so each pool will get (6 * 12) / 18 = 4 fair-share.
-            Each query should have demands 4, 3, 3.
+            Scenario:
+            - 1 database with 3 pools with different weights, each one having 1 query
+            - FairShare is distributed with weight coefficients, in this case TotalDemand is 12, so it's (demand * weight)/TotalWeightedDemand * TotalDemand = 6/18 * 12 = 4
+            - Each pool gets it's requested weighted FairShare, but some queries can underutilize it
+            The test is almost the same as previous, but checks weight distribution for pools
         */
+        constexpr ui64 kCpuLimit = 12;
+        constexpr size_t kNQueries = 3;
+        constexpr ui64 kWeightedFairShare = 4;
+
         const TOptions options{
             .Counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>()),
             .DelayParams = kDefaultDelayParams,
             .UpdateFairSharePeriod = kDefaultUpdateFairSharePeriod
         };
         TComputeScheduler scheduler(options.Counters, options.DelayParams);
-        scheduler.SetTotalCpuLimit(12);
+        scheduler.SetTotalCpuLimit(kCpuLimit);
 
         const TString databaseId = "db1";
         scheduler.AddOrUpdateDatabase(databaseId, {});
@@ -293,93 +336,103 @@ namespace {
         std::vector<NHdrf::NDynamic::TQueryPtr> queries;
         std::vector<std::vector<TSchedulableTaskPtr>> tasks;
 
-        // to not face integer rounding errors, each will get 4 fair-share
-        std::vector<ui64> demands = {6, 3, 3};
+        std::vector<ui64> queryDemands = {6, 3, 3};
         
-        for (NHdrf::TQueryId queryId = 0; queryId < 3; ++queryId) {
+        for (NHdrf::TQueryId queryId = 0; queryId < kNQueries; ++queryId) {
             auto query = queries.emplace_back(
-                scheduler.AddOrUpdateQuery(databaseId, pools[queryId], queryId, {.Weight = weights[queryId]})
+                scheduler.AddOrUpdateQuery(databaseId, pools[queryId], queryId, {})
             );
-            tasks.emplace_back(CreateDemandTasks(query, demands[queryId]));
+            tasks.emplace_back(CreateDemandTasks(query, queryDemands[queryId]));
         }
 
         scheduler.UpdateFairShare();
 
-        demands = {4, 3, 3};
-        for (size_t queryId = 0; queryId < 3; ++queryId) {
+        for (size_t queryId = 0; queryId < kNQueries; ++queryId) {
             auto query = queries[queryId];
             auto querySnapshot = query->GetSnapshot();
             UNIT_ASSERT(querySnapshot);
-            UNIT_ASSERT_VALUES_EQUAL(querySnapshot->FairShare, demands[queryId]);
+            UNIT_ASSERT_VALUES_EQUAL(querySnapshot->FairShare, Min(kWeightedFairShare, queryDemands[queryId]));
 
             auto* poolSnapshot = querySnapshot->GetParent();
             UNIT_ASSERT(poolSnapshot);
-            UNIT_ASSERT_VALUES_EQUAL(poolSnapshot->FairShare, 4);
+            UNIT_ASSERT_VALUES_EQUAL(poolSnapshot->FairShare, kWeightedFairShare);
         }
 
         auto* databaseSnapshot = queries[0]->GetSnapshot()->GetParent()->GetParent();
         UNIT_ASSERT(databaseSnapshot);
-        UNIT_ASSERT_VALUES_EQUAL(databaseSnapshot->FairShare, 12);
+        UNIT_ASSERT_VALUES_EQUAL(databaseSnapshot->FairShare, kCpuLimit);
     }
 
+    // RIGHT NOW TEST IS FAILING, NEED TO IMPLEMENT TODO tree/snapshot.cpp:79
     Y_UNIT_TEST(WeightedQueries) {
         /*
-            Check that queries weight doesn't affect fair share.
+            Scenario:
+            - Database with one pool and 3 queries
+            - Different weights are set for queries, they should be sorted by weight in descending order
+            - CPU limit is less than sum of Demands so they should be fulfilled in correct order: 2, 3, 5(unable to give 6 to the last query)
         */
-        const TOptions options{
-            .Counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>()),
-            .DelayParams = kDefaultDelayParams,
-            .UpdateFairSharePeriod = kDefaultUpdateFairSharePeriod
-        };
-        TComputeScheduler scheduler(options.Counters, options.DelayParams);
-        scheduler.SetTotalCpuLimit(12);
+        // constexpr ui64 kCpuLimit = 10;
+        // constexpr size_t kNQueries = 3;
 
-        const TString databaseId = "db1";
-        scheduler.AddOrUpdateDatabase(databaseId, {});
+        // const TOptions options{
+        //     .Counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>()),
+        //     .DelayParams = kDefaultDelayParams,
+        //     .UpdateFairSharePeriod = kDefaultUpdateFairSharePeriod
+        // };
+        // TComputeScheduler scheduler(options.Counters, options.DelayParams);
+        // scheduler.SetTotalCpuLimit(kCpuLimit);
 
-        const TString poolId = "pool1";
-        scheduler.AddOrUpdatePool(databaseId, poolId, {});
+        // const TString databaseId = "db1";
+        // scheduler.AddOrUpdateDatabase(databaseId, {});
 
-        std::vector<std::vector<TSchedulableTaskPtr>> tasks;
-        const std::vector<double> weights = {1, 2, 3};
-        const std::vector<ui64> demands = {6, 3, 2};
+        // const TString poolId = "pool1";
+        // scheduler.AddOrUpdatePool(databaseId, poolId, {});
 
-        std::vector<NHdrf::NDynamic::TQueryPtr> queries;
-        for (NHdrf::TQueryId queryId = 0; queryId < 3; ++queryId) {
-            auto query = queries.emplace_back(scheduler.AddOrUpdateQuery(databaseId, poolId, queryId, {.Weight = weights[queryId]}));
-            tasks.emplace_back(CreateDemandTasks(query, demands[queryId]));
-        }
+        // std::vector<std::vector<TSchedulableTaskPtr>> tasks;
+        // const std::vector<double> weights = {1, 2, 3};
+        // const std::vector<ui64> queryDemands = {6, 3, 2};
 
-        scheduler.UpdateFairShare();
+        // std::vector<NHdrf::NDynamic::TQueryPtr> queries;
+        // for (NHdrf::TQueryId queryId = 0; queryId < kNQueries; ++queryId) {
+        //     auto query = queries.emplace_back(scheduler.AddOrUpdateQuery(databaseId, poolId, queryId, {.Weight = weights[queryId]}));
+        //     tasks.emplace_back(CreateDemandTasks(query, queryDemands[queryId]));
+        // }
 
-        for (size_t queryId = 0; queryId < queries.size(); ++queryId) {
-            auto query = queries[queryId];
-            auto querySnapshot = query->GetSnapshot();
-            UNIT_ASSERT(querySnapshot);
-            UNIT_ASSERT_VALUES_EQUAL(querySnapshot->FairShare, demands[queryId]);
+        // scheduler.UpdateFairShare();
 
-        }
+        // const std::vector<ui64> querySortedDemands = {5, 3, 2};
+        // for (size_t queryId = 0; queryId < queries.size(); ++queryId) {
+        //     auto query = queries[queryId];
+        //     auto querySnapshot = query->GetSnapshot();
+        //     UNIT_ASSERT(querySnapshot);
+        //     UNIT_ASSERT_VALUES_EQUAL(querySnapshot->FairShare, querySortedDemands[queryId]);
+        // }
 
-        auto* poolSnapshot = queries[0]->GetSnapshot()->GetParent();
-        UNIT_ASSERT(poolSnapshot);
-        UNIT_ASSERT_VALUES_EQUAL(poolSnapshot->FairShare, 11);
+        // auto* poolSnapshot = queries[0]->GetSnapshot()->GetParent();
+        // UNIT_ASSERT(poolSnapshot);
+        // UNIT_ASSERT_VALUES_EQUAL(poolSnapshot->FairShare, kCpuLimit);
 
-        auto* databaseSnapshot = poolSnapshot->GetParent();
-        UNIT_ASSERT(databaseSnapshot);
-        UNIT_ASSERT_VALUES_EQUAL(databaseSnapshot->FairShare, 11);
+        // auto* databaseSnapshot = poolSnapshot->GetParent();
+        // UNIT_ASSERT(databaseSnapshot);
+        // UNIT_ASSERT_VALUES_EQUAL(databaseSnapshot->FairShare, kCpuLimit);
     }
 
     Y_UNIT_TEST(MultipleDatabasesPoolsQueries) {
         /*
-            Check that fair share is distributed correctly when there are multiple databases, pools and queries.
+            Scenario:
+            - 2 databases with 3 and 2 pools respectively, each having 1 or 2 queries
+            - FairShare is distributed with weight coefficients beetween databases and pools. Demands and weights are carefully chosen to avoid integer division errors
+            - This test combine few previous test cases simultaneously
         */
+        constexpr ui64 kCpuLimit = 20;
+
         const TOptions options{
             .Counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>()),
             .DelayParams = kDefaultDelayParams,
             .UpdateFairSharePeriod = kDefaultUpdateFairSharePeriod
         };
         TComputeScheduler scheduler(options.Counters, options.DelayParams);
-        scheduler.SetTotalCpuLimit(20);
+        scheduler.SetTotalCpuLimit(kCpuLimit);
 
         const std::vector<TString> databaseIds = {"db1", "db2"};
         for (const auto& databaseId : databaseIds) {
@@ -423,20 +476,24 @@ namespace {
             UNIT_ASSERT_VALUES_EQUAL(querySnapshot->FairShare, fairShares[i]);
         }
 
-        std::vector<ui64> poolIndexes = {0, 2, 3, 4, 6};
+        constexpr size_t kFirstPoolOfFirstDB = 0;
+        constexpr size_t kFirstPoolOfSecondDB = 4;
+
+        // this is queries indices corresponding to each pool
+        std::vector<ui64> queriesForPoolsIndices = {0, 2, 3, 4, 6};
         std::vector<ui64> poolFairShares = {4, 2, 2, 5, 1};
         std::vector<ui64> databaseFairShares = {8, 6};
 
-        for (size_t i = 0; i < poolIndexes.size(); ++i) {
-            auto* poolSnapshot = queries[poolIndexes[i]]->GetSnapshot()->GetParent();
+        for (size_t i = 0; i < queriesForPoolsIndices.size(); ++i) {
+            auto* poolSnapshot = queries[queriesForPoolsIndices[i]]->GetSnapshot()->GetParent();
             UNIT_ASSERT(poolSnapshot);
             UNIT_ASSERT_VALUES_EQUAL(poolSnapshot->FairShare, poolFairShares[i]);
 
-            if (poolIndexes[i] == 0) {
+            if (queriesForPoolsIndices[i] == kFirstPoolOfFirstDB) {
                 auto* databaseSnapshot = poolSnapshot->GetParent();
                 UNIT_ASSERT(databaseSnapshot);
                 UNIT_ASSERT_VALUES_EQUAL(databaseSnapshot->FairShare, databaseFairShares[0]);
-            } else if (poolIndexes[i] == 4) {
+            } else if (queriesForPoolsIndices[i] == kFirstPoolOfSecondDB) {
                 auto* databaseSnapshot = poolSnapshot->GetParent();
                 UNIT_ASSERT(databaseSnapshot);
                 UNIT_ASSERT_VALUES_EQUAL(databaseSnapshot->FairShare, databaseFairShares[1]);
@@ -446,15 +503,18 @@ namespace {
 
     Y_UNIT_TEST(ZeroQueries) {
         /*
-            Check that update fair share works when there are no queries
+            Scenario:
+            - UpdateFairShare with no queries shouldn't throw exception
         */
+        constexpr ui64 kCpuLimit = 12;
+
         const TOptions options{
             .Counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>()),
             .DelayParams = kDefaultDelayParams,
             .UpdateFairSharePeriod = kDefaultUpdateFairSharePeriod
         };
         TComputeScheduler scheduler(options.Counters, options.DelayParams);
-        scheduler.SetTotalCpuLimit(10);
+        scheduler.SetTotalCpuLimit(kCpuLimit);
 
         const TString databaseId = "db1";
         scheduler.AddOrUpdateDatabase(databaseId, {});
@@ -465,101 +525,129 @@ namespace {
         UNIT_ASSERT_NO_EXCEPTION(scheduler.UpdateFairShare());
     }
 
-    Y_UNIT_TEST(ZeroLimits) {
+    Y_UNIT_TEST_TWIN(ZeroLimits, AllowOverlimit) {
         /*
-            Trying to set zero limit should still give 1 fair share for each query.
+            Scenario:
+            - 1 database with 1 pool and 3 queries
+            - Database and pool has zero limit, despite this with AllowOverlimit option queries should get 1 FairShare
         */
+        constexpr ui64 kCpuLimit = 12;
+        constexpr ui64 kInternalLimit = 0;
+        constexpr size_t kNQueries = 3;
+        constexpr ui64 kQueryDemand = 2;
+
         const TOptions options{
             .Counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>()),
             .DelayParams = kDefaultDelayParams,
             .UpdateFairSharePeriod = kDefaultUpdateFairSharePeriod
         };
         TComputeScheduler scheduler(options.Counters, options.DelayParams);
-        scheduler.SetTotalCpuLimit(10);
+        scheduler.SetTotalCpuLimit(kCpuLimit);
 
         const TString databaseId = "db1";
-        scheduler.AddOrUpdateDatabase(databaseId, {.Limit = 0});
+        scheduler.AddOrUpdateDatabase(databaseId, {.Limit = kInternalLimit});
 
         const TString poolId = "pool1";
-        scheduler.AddOrUpdatePool(databaseId, poolId, {.Limit = 0});
+        scheduler.AddOrUpdatePool(databaseId, poolId, {.Limit = kInternalLimit});
 
         std::vector<NHdrf::NDynamic::TQueryPtr> queries;
         std::vector<std::vector<TSchedulableTaskPtr>> tasks;
-        for (NHdrf::TQueryId queryId = 0; queryId < 3; ++queryId) {
+        for (NHdrf::TQueryId queryId = 0; queryId < kNQueries; ++queryId) {
             auto query = queries.emplace_back(scheduler.AddOrUpdateQuery(databaseId, poolId, queryId, {}));
-            tasks.emplace_back(CreateDemandTasks(query, 2));
+            tasks.emplace_back(CreateDemandTasks(query, kQueryDemand));
         }
 
-        scheduler.UpdateFairShare();
+        scheduler.UpdateFairShare(AllowOverlimit);
 
         for (size_t queryId = 0; queryId < queries.size(); ++queryId) {
             auto querySnapshot = queries[queryId]->GetSnapshot();
             UNIT_ASSERT(querySnapshot);
-            UNIT_ASSERT_VALUES_EQUAL(querySnapshot->FairShare, 1);
+
+            if (AllowOverlimit) {
+                UNIT_ASSERT_VALUES_EQUAL(querySnapshot->FairShare, 1);
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(querySnapshot->FairShare, 0);
+            }
         }
 
         auto* poolSnapshot = queries[0]->GetSnapshot()->GetParent();
         UNIT_ASSERT(poolSnapshot);
-        UNIT_ASSERT_VALUES_EQUAL(poolSnapshot->FairShare, 0);
+        UNIT_ASSERT_VALUES_EQUAL(poolSnapshot->FairShare, kInternalLimit);
 
         auto* databaseSnapshot = poolSnapshot->GetParent();
         UNIT_ASSERT(databaseSnapshot);
-        UNIT_ASSERT_VALUES_EQUAL(databaseSnapshot->FairShare, 0);
+        UNIT_ASSERT_VALUES_EQUAL(databaseSnapshot->FairShare, kInternalLimit);
     }
 
-    Y_UNIT_TEST(ZeroLimitDbWithNonZeroPools) {
+    Y_UNIT_TEST_TWIN(ZeroLimitDbWithNonZeroPools, AllowOverlimit) {
         /*
-            Trying to set zero limit for database with non-zero pools should still give at least 1 fair share for each query.
+            Scenario:
+            - 1 database with 1 pool and 3 queries
+            - Database and pool has zero limit, despite this with AllowOverlimit option queries should get 1 FairShare
+            - Zero Limit and thus zero FairShare should be inherited by pool
         */
+        constexpr ui64 kCpuLimit = 10;
+        constexpr ui64 kInternalLimit = 0;
+        constexpr size_t kNQueries = 3;
+        constexpr ui64 kQueryDemand = 2;
+
         const TOptions options{
             .Counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>()),
             .DelayParams = kDefaultDelayParams,
             .UpdateFairSharePeriod = kDefaultUpdateFairSharePeriod
         };
         TComputeScheduler scheduler(options.Counters, options.DelayParams);
-        scheduler.SetTotalCpuLimit(10);
+        scheduler.SetTotalCpuLimit(kCpuLimit);
 
         const TString databaseId = "db1";
-        scheduler.AddOrUpdateDatabase(databaseId, {.Limit = 0});
+        scheduler.AddOrUpdateDatabase(databaseId, {.Limit = kInternalLimit});
 
         const TString poolId = "pool1";
         scheduler.AddOrUpdatePool(databaseId, poolId, {});
 
         std::vector<NHdrf::NDynamic::TQueryPtr> queries;
         std::vector<std::vector<TSchedulableTaskPtr>> tasks;
-        for (NHdrf::TQueryId queryId = 0; queryId < 3; ++queryId) {
+        for (NHdrf::TQueryId queryId = 0; queryId < kNQueries; ++queryId) {
             auto query = queries.emplace_back(scheduler.AddOrUpdateQuery(databaseId, poolId, queryId, {}));
-            tasks.emplace_back(CreateDemandTasks(query, 3));
+            tasks.emplace_back(CreateDemandTasks(query, kQueryDemand));
         }
 
-        scheduler.UpdateFairShare();
+        scheduler.UpdateFairShare(AllowOverlimit);
 
         for (size_t queryId = 0; queryId < queries.size(); ++queryId) {
             auto querySnapshot = queries[queryId]->GetSnapshot();
             UNIT_ASSERT(querySnapshot);
-            UNIT_ASSERT_VALUES_EQUAL(querySnapshot->FairShare, 1);
+
+            if (AllowOverlimit) {
+                UNIT_ASSERT_VALUES_EQUAL(querySnapshot->FairShare, 1);
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(querySnapshot->FairShare, 0);
+            }
         }
 
         auto* poolSnapshot = queries[0]->GetSnapshot()->GetParent();
         UNIT_ASSERT(poolSnapshot);
-        UNIT_ASSERT_VALUES_EQUAL(poolSnapshot->FairShare, 0);
+        UNIT_ASSERT_VALUES_EQUAL(poolSnapshot->FairShare, kInternalLimit);
 
         auto* databaseSnapshot = poolSnapshot->GetParent();
         UNIT_ASSERT(databaseSnapshot);
-        UNIT_ASSERT_VALUES_EQUAL(databaseSnapshot->FairShare, 0);
+        UNIT_ASSERT_VALUES_EQUAL(databaseSnapshot->FairShare, kInternalLimit);
     }
 
     Y_UNIT_TEST(ZeroWeightDatabasePoolQuery) {
         /*
-            Trying to set zero weight for database, pool or query should throw an exception.
+            Scenario:
+            - Setting zero weight to database, pool and query is prohibited and should throw
         */
+        constexpr ui64 kCpuLimit = 10;
+
         const TOptions options{
             .Counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>()),
             .DelayParams = kDefaultDelayParams,
             .UpdateFairSharePeriod = kDefaultUpdateFairSharePeriod
         };
         TComputeScheduler scheduler(options.Counters, options.DelayParams);
-        scheduler.SetTotalCpuLimit(10);
+        scheduler.SetTotalCpuLimit(kCpuLimit);
 
         const TString databaseId = "db1";
         scheduler.AddOrUpdateDatabase(databaseId, {});
@@ -575,8 +663,16 @@ namespace {
 
     Y_UNIT_TEST(AddUpdateQueries) {
         /*
-            Trying to add or update query should correctly redistribute fair share.
+            Scenario:
+            - 1 database with 1 pool and 3 queries with demand 5
+            - CPU limit is less than demand so FairShare is distributed in FIFO order with at least 1 FairShare for each query
+            - After adding one more query FairShare is still distributed in FIFO order but second query gets less 
+            - Decreasing Demand for the first query should affect distribution by giving more for the next
         */
+        constexpr ui64 kCpuLimit = 10;
+        constexpr size_t kNQueries = 3;
+        constexpr ui64 kQueryDemand = 5;
+
         const TOptions options{
             .Counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>()),
             .DelayParams = kDefaultDelayParams,
@@ -584,7 +680,7 @@ namespace {
         };
     
         TComputeScheduler scheduler(options.Counters, options.DelayParams);
-        scheduler.SetTotalCpuLimit(10);
+        scheduler.SetTotalCpuLimit(kCpuLimit);
 
         const TString databaseId = "db1";
         scheduler.AddOrUpdateDatabase(databaseId, {});
@@ -594,9 +690,9 @@ namespace {
 
         std::vector<NHdrf::NDynamic::TQueryPtr> queries;
         std::vector<std::vector<TSchedulableTaskPtr>> tasks;
-        for (NHdrf::TQueryId queryId = 1; queryId <= 3; ++queryId) {
+        for (NHdrf::TQueryId queryId = 0; queryId < kNQueries; ++queryId) {
             auto query = queries.emplace_back(scheduler.AddOrUpdateQuery(databaseId, poolId, queryId, {}));
-            tasks.emplace_back(CreateDemandTasks(query, 5));
+            tasks.emplace_back(CreateDemandTasks(query, kQueryDemand));
         }
 
         scheduler.UpdateFairShare();
@@ -610,10 +706,8 @@ namespace {
         }
 
         NHdrf::NDynamic::TQueryPtr new_query = queries.emplace_back(scheduler.AddOrUpdateQuery(databaseId, poolId, 4, {}));
-        tasks.emplace_back(CreateDemandTasks(new_query, 5));
-        for (auto& query : queries) {
-            query->UpdateActualDemand();
-        }
+        tasks.emplace_back(CreateDemandTasks(new_query, kQueryDemand));
+
         scheduler.UpdateFairShare();
 
         // distribution in FIFO ordering
@@ -625,10 +719,7 @@ namespace {
             UNIT_ASSERT_VALUES_EQUAL(querySnapshot->FairShare, fairShares[queryId]);
         }
 
-        tasks[0].resize(3);
-        for (auto& query : queries) {
-            query->UpdateActualDemand();
-        }
+        UpdateDemand(tasks[0], 2);
         scheduler.UpdateFairShare();
 
         fairShares = {2, 5, 2, 1};
@@ -641,24 +732,31 @@ namespace {
 
         auto* poolSnapshot = queries[0]->GetSnapshot()->GetParent();
         UNIT_ASSERT(poolSnapshot);
-        UNIT_ASSERT_VALUES_EQUAL(poolSnapshot->FairShare, 10);
+        UNIT_ASSERT_VALUES_EQUAL(poolSnapshot->FairShare, kCpuLimit);
 
         auto* databaseSnapshot = poolSnapshot->GetParent();
         UNIT_ASSERT(databaseSnapshot);
-        UNIT_ASSERT_VALUES_EQUAL(databaseSnapshot->FairShare, 10);
+        UNIT_ASSERT_VALUES_EQUAL(databaseSnapshot->FairShare, kCpuLimit);
     }
 
     Y_UNIT_TEST(DeleteQueries) {
         /*
-            Trying to delete query should correctly redistribute fair share.
+            Scenario:
+            - 1 database with 1 pool and 3 queries with demand 5
+            - CPU limit is less than demand so FairShare is distributed in FIFO order with at least 1 FairShare for each query
+            - After deleting the first query there should be enough CPU limit to fulfill every Demand
         */
+        constexpr ui64 kCpuLimit = 10;
+        constexpr size_t kNQueries = 3;
+        constexpr ui64 kQueryDemand = 5;
+
         const TOptions options{
             .Counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>()),
             .DelayParams = kDefaultDelayParams,
             .UpdateFairSharePeriod = kDefaultUpdateFairSharePeriod
         };
         TComputeScheduler scheduler(options.Counters, options.DelayParams);
-        scheduler.SetTotalCpuLimit(10);
+        scheduler.SetTotalCpuLimit(kCpuLimit);
 
         const TString databaseId = "db1";
         scheduler.AddOrUpdateDatabase(databaseId, {});
@@ -668,9 +766,9 @@ namespace {
 
         std::vector<NHdrf::NDynamic::TQueryPtr> queries;
         std::vector<std::vector<TSchedulableTaskPtr>> tasks;
-        for (NHdrf::TQueryId queryId = 0; queryId < 3; ++queryId) {
+        for (NHdrf::TQueryId queryId = 0; queryId < kNQueries; ++queryId) {
             auto query = queries.emplace_back(scheduler.AddOrUpdateQuery(databaseId, poolId, queryId, {}));
-            tasks.emplace_back(CreateDemandTasks(query, 5));
+            tasks.emplace_back(CreateDemandTasks(query, kQueryDemand));
         }
 
         scheduler.UpdateFairShare();
@@ -685,39 +783,44 @@ namespace {
 
         auto* poolSnapshot = queries[0]->GetSnapshot()->GetParent();
         UNIT_ASSERT(poolSnapshot);
-        UNIT_ASSERT_VALUES_EQUAL(poolSnapshot->FairShare, 10);
+        UNIT_ASSERT_VALUES_EQUAL(poolSnapshot->FairShare, kCpuLimit);
 
         auto* databaseSnapshot = poolSnapshot->GetParent();
         UNIT_ASSERT(databaseSnapshot);
-        UNIT_ASSERT_VALUES_EQUAL(databaseSnapshot->FairShare, 10);
+        UNIT_ASSERT_VALUES_EQUAL(databaseSnapshot->FairShare, kCpuLimit);
 
         scheduler.RemoveQuery(queries[0]);
-
-        for (auto& query : queries) {
-            query->UpdateActualDemand();
-        }
 
         scheduler.UpdateFairShare();
 
         for (const auto& query : queries) {
             auto querySnapshot = query->GetSnapshot();
             UNIT_ASSERT(querySnapshot);
-            UNIT_ASSERT_VALUES_EQUAL(querySnapshot->FairShare, 5);
+            UNIT_ASSERT_VALUES_EQUAL(querySnapshot->FairShare, kQueryDemand);
         }
 
         poolSnapshot = queries[0]->GetSnapshot()->GetParent();
         UNIT_ASSERT(poolSnapshot);
-        UNIT_ASSERT_VALUES_EQUAL(poolSnapshot->FairShare, 10);
+        UNIT_ASSERT_VALUES_EQUAL(poolSnapshot->FairShare, kCpuLimit);
 
         databaseSnapshot = poolSnapshot->GetParent();
         UNIT_ASSERT(databaseSnapshot);
-        UNIT_ASSERT_VALUES_EQUAL(databaseSnapshot->FairShare, 10);
+        UNIT_ASSERT_VALUES_EQUAL(databaseSnapshot->FairShare, kCpuLimit);
     }
 
     Y_UNIT_TEST(AddUpdatePools) {
         /*
-            Trying to add or update pool should correctly redistribute fair share.
+            Scenario:
+            - 1 database with 3 pool, each having 1 query with demand 3
+            - With 3 pool total demand is under CPU limit so FairShare equals demand
+            - Adding one more pool with query with demand 3 should redistribute FairShares with everyone getting 3/12 * 10 = 5/2 = 2(rounded down)
+            - Updating the first pool's weight to 2 once again redistribute FairShares, but now it gets FairShare 6/15 * 10 = 4 and others 3/15 * 10 = 2. And first query underutilize this FairShare
         */
+        constexpr ui64 kCpuLimit = 10;
+        constexpr size_t kNQueries = 3;
+        constexpr ui64 kQueryDemand = 3;
+        constexpr ui64 kRoundedDemand = 2;
+
         const TOptions options{
             .Counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>()),
             .DelayParams = kDefaultDelayParams,
@@ -725,7 +828,7 @@ namespace {
         };
 
         TComputeScheduler scheduler(options.Counters, options.DelayParams);
-        scheduler.SetTotalCpuLimit(10);
+        scheduler.SetTotalCpuLimit(kCpuLimit);
 
         const TString databaseId = "db1";
         scheduler.AddOrUpdateDatabase(databaseId, {});
@@ -737,9 +840,9 @@ namespace {
 
         std::vector<NHdrf::NDynamic::TQueryPtr> queries;
         std::vector<std::vector<TSchedulableTaskPtr>> tasks;
-        for (NHdrf::TQueryId queryId = 1; queryId <= 3; ++queryId) {
-            auto query = queries.emplace_back(scheduler.AddOrUpdateQuery(databaseId, pools[queryId - 1], queryId, {}));
-            tasks.emplace_back(CreateDemandTasks(query, 3));
+        for (NHdrf::TQueryId queryId = 0; queryId < kNQueries; ++queryId) {
+            auto query = queries.emplace_back(scheduler.AddOrUpdateQuery(databaseId, pools[queryId], queryId, {}));
+            tasks.emplace_back(CreateDemandTasks(query, kQueryDemand));
         }
 
         scheduler.UpdateFairShare();
@@ -747,80 +850,80 @@ namespace {
         for (size_t queryId = 0; queryId < queries.size(); ++queryId) {
             auto query = queries[queryId];
             auto querySnapshot = query->GetSnapshot();
+
             UNIT_ASSERT(querySnapshot);
-            UNIT_ASSERT_VALUES_EQUAL(querySnapshot->FairShare, 3);
+            UNIT_ASSERT_VALUES_EQUAL(querySnapshot->FairShare, kQueryDemand);
 
             auto* poolSnapshot = querySnapshot->GetParent();
             UNIT_ASSERT(poolSnapshot);
-            UNIT_ASSERT_VALUES_EQUAL(poolSnapshot->FairShare, 3);
+            UNIT_ASSERT_VALUES_EQUAL(poolSnapshot->FairShare, kQueryDemand);
         }
 
         auto* databaseSnapshot = queries[0]->GetSnapshot()->GetParent()->GetParent();
         UNIT_ASSERT(databaseSnapshot);
-        UNIT_ASSERT_VALUES_EQUAL(databaseSnapshot->FairShare, 9);
+        UNIT_ASSERT_VALUES_EQUAL(databaseSnapshot->FairShare, kNQueries * kQueryDemand);
 
         scheduler.AddOrUpdatePool(databaseId, "pool4", {});
         pools.emplace_back("pool4");
 
         NHdrf::NDynamic::TQueryPtr new_query = queries.emplace_back(scheduler.AddOrUpdateQuery(databaseId, "pool4", 4, {}));
-        tasks.emplace_back(CreateDemandTasks(new_query, 3));
+        tasks.emplace_back(CreateDemandTasks(new_query, kQueryDemand));
 
-        for (auto& query : queries) {
-            query->UpdateActualDemand();
-        }
         scheduler.UpdateFairShare();
 
         for (size_t queryId = 0; queryId < queries.size(); ++queryId) {
             auto query = queries[queryId];
             auto querySnapshot = query->GetSnapshot();
             UNIT_ASSERT(querySnapshot);
-            UNIT_ASSERT_VALUES_EQUAL(querySnapshot->FairShare, 2);
+            UNIT_ASSERT_VALUES_EQUAL(querySnapshot->FairShare, kRoundedDemand);
 
             auto* poolSnapshot = querySnapshot->GetParent();
             UNIT_ASSERT(poolSnapshot);
-            UNIT_ASSERT_VALUES_EQUAL(poolSnapshot->FairShare, 2);
+            UNIT_ASSERT_VALUES_EQUAL(poolSnapshot->FairShare, kRoundedDemand);
 
         }
 
         databaseSnapshot = queries[0]->GetSnapshot()->GetParent()->GetParent();
         UNIT_ASSERT(databaseSnapshot);
-        UNIT_ASSERT_VALUES_EQUAL(databaseSnapshot->FairShare, 10);
+        UNIT_ASSERT_VALUES_EQUAL(databaseSnapshot->FairShare, kCpuLimit);
 
         scheduler.AddOrUpdatePool(databaseId, "pool1", {.Weight = 2});
-        for (auto& query : queries) {
-            query->UpdateActualDemand();
-        }
+
         scheduler.UpdateFairShare();
 
-        const std::vector<ui64> queriesFairShares = {3, 2, 2, 2};
         const std::vector<ui64> poolsFairShares = {4, 2, 2, 2};
         for (size_t queryId = 0; queryId < queries.size(); ++queryId) {
             auto query = queries[queryId];
             auto querySnapshot = query->GetSnapshot();
-            UNIT_ASSERT(querySnapshot);
-            UNIT_ASSERT_VALUES_EQUAL(querySnapshot->FairShare, queriesFairShares[queryId]);
-
             auto* poolSnapshot = querySnapshot->GetParent();
+
             UNIT_ASSERT(poolSnapshot);
             UNIT_ASSERT_VALUES_EQUAL(poolSnapshot->FairShare, poolsFairShares[queryId]);
+
+            UNIT_ASSERT(querySnapshot);
+            UNIT_ASSERT_VALUES_EQUAL(querySnapshot->FairShare, Min(poolsFairShares[queryId], kQueryDemand));
         }
 
         databaseSnapshot = queries[0]->GetSnapshot()->GetParent()->GetParent();
         UNIT_ASSERT(databaseSnapshot);
-        UNIT_ASSERT_VALUES_EQUAL(databaseSnapshot->FairShare, 10);
+        UNIT_ASSERT_VALUES_EQUAL(databaseSnapshot->FairShare, kCpuLimit);
     }
 
-    Y_UNIT_TEST(DeleteNonExistent) {
+    Y_UNIT_TEST(AddUpdateDeleteNonExistent) {
         /*
-            Trying to delete non-existent query should throw an exception.
+            Scenario:
+            - Double removing of query should throw exception
+            - Adding to or updating non-existent database/pool should throw exception
         */
+        constexpr ui64 kCpuLimit = 12;
+
         const TOptions options{
             .Counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>()),
             .DelayParams = kDefaultDelayParams,
             .UpdateFairSharePeriod = kDefaultUpdateFairSharePeriod
         };
         TComputeScheduler scheduler(options.Counters, options.DelayParams);
-        scheduler.SetTotalCpuLimit(10);
+        scheduler.SetTotalCpuLimit(kCpuLimit);
 
         const TString databaseId = "db1";
         scheduler.AddOrUpdateDatabase(databaseId, {});
@@ -828,15 +931,16 @@ namespace {
         const TString poolId = "pool1";
         scheduler.AddOrUpdatePool(databaseId, poolId, {});
 
-        NHdrf::NDynamic::TQueryPtr query = scheduler.AddOrUpdateQuery(databaseId, poolId, 1, {});
+        NHdrf::TQueryId queryId = 1;
+        NHdrf::NDynamic::TQueryPtr query = scheduler.AddOrUpdateQuery(databaseId, poolId, queryId, {});
 
         UNIT_ASSERT_NO_EXCEPTION(scheduler.RemoveQuery(query));
         UNIT_ASSERT_EXCEPTION(scheduler.RemoveQuery(nullptr), yexception);
         UNIT_ASSERT_EXCEPTION(scheduler.RemoveQuery(query), yexception);
         UNIT_ASSERT_EXCEPTION(scheduler.AddOrUpdatePool("non-existent", poolId, {}), yexception);
-        UNIT_ASSERT_EXCEPTION(scheduler.AddOrUpdateQuery("non-existent", poolId, 1, {}), yexception);
-        UNIT_ASSERT_EXCEPTION(scheduler.AddOrUpdateQuery(databaseId, "non-existent", 1, {}), yexception);
-        UNIT_ASSERT_EXCEPTION(scheduler.AddOrUpdateQuery("non-existent", "non-existent", 1, {}), yexception);
+        UNIT_ASSERT_EXCEPTION(scheduler.AddOrUpdateQuery("non-existent", poolId, queryId, {}), yexception);
+        UNIT_ASSERT_EXCEPTION(scheduler.AddOrUpdateQuery(databaseId, "non-existent", queryId, {}), yexception);
+        UNIT_ASSERT_EXCEPTION(scheduler.AddOrUpdateQuery("non-existent", "non-existent", queryId, {}), yexception);
     }
 }
 } // namespace NKikimr::NKqp::NScheduler

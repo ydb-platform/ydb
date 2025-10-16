@@ -48,7 +48,7 @@ public:
 
     void Handle(TEvAddDatabase::TPtr& ev) {
         NHdrf::TStaticAttributes const attrs {
-            .Weight = std::max(ev->Get()->Weight, 0.0), // TODO: weight shouldn't be negative!
+            .Weight = ev->Get()->Weight, // TODO: weight shouldn't be negative!
         };
         Scheduler->AddOrUpdateDatabase(ev->Get()->Id, attrs);
     }
@@ -62,7 +62,7 @@ public:
         const auto& poolId = ev->Get()->PoolId;
         const auto resourceWeight = std::max(ev->Get()->Params.ResourceWeight, 0.0); // TODO: resource weight shouldn't be negative!
         NHdrf::TStaticAttributes attrs = {
-            .Weight = std::max(ev->Get()->Weight, 0.0), // TODO: weight shouldn't be negative!
+            .Weight = ev->Get()->Weight, // TODO: weight shouldn't be negative!
         };
 
         if (ev->Get()->Params.TotalCpuLimitPercentPerNode >= 0) {
@@ -127,7 +127,7 @@ public:
         const auto& poolId = ev->Get()->PoolId;
         const auto& queryId = ev->Get()->QueryId;
         NHdrf::TStaticAttributes const attrs {
-            .Weight = std::max(ev->Get()->Weight, 0.0), // TODO: weight shouldn't be negative!
+            .Weight = ev->Get()->Weight, // TODO: weight shouldn't be negative!
         };
 
         auto query = Scheduler->AddOrUpdateQuery(databaseId, poolId.empty() ? NKikimr::NResourcePool::DEFAULT_POOL_ID : poolId, queryId, attrs);

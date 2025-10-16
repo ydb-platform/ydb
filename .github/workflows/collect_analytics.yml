@@ -28,11 +28,6 @@ jobs:
     - name: Install dependencies
       run: |
         python3 -m pip install ydb ydb[yc] codeowners pandas
-    - name: Export GitHub issues
-      env:
-        GITHUB_TOKEN: ${{ env.GH_TOKEN }}
-      continue-on-error: true
-      run: python3 .github/scripts/analytics/export_issues_to_ydb.py
 
   matrix-job:
     name: Test collection on ${{ matrix.branch }}

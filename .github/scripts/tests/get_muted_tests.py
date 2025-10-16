@@ -5,6 +5,7 @@ import datetime
 import os
 import posixpath
 import re
+import time
 import ydb
 from get_diff_lines_of_file import get_diff_lines_of_file
 from mute_utils import pattern_to_re
@@ -22,7 +23,10 @@ DATABASE_PATH = config["QA_DB"]["DATABASE_PATH"]
 
 
 def get_all_tests(job_id=None, branch=None, build_type=None):
-    print(f'Getting all tests')
+    print(f'🔍 Getting all tests with parameters:')
+    print(f'   - job_id: {job_id}')
+    print(f'   - branch: {branch}')
+    print(f'   - build_type: {build_type}')
 
     with ydb.Driver(
         endpoint=DATABASE_ENDPOINT,
@@ -37,7 +41,12 @@ def get_all_tests(job_id=None, branch=None, build_type=None):
 
         # geting last date from history
         today = datetime.date.today().strftime('%Y-%m-%d')
+        print(f'📅 Using date: {today}')
+        
         if job_id and branch:  # extend all tests from main by new tests from pr
+            print(f'🔄 Mode: Extend all tests from main by new tests from PR')
+            print(f'   - job_id: {job_id}')
+            print(f'   - branch: {branch}')
 
             tests = f"""
             SELECT * FROM (
@@ -61,13 +70,17 @@ def get_all_tests(job_id=None, branch=None, build_type=None):
             )
             """
         else:  # get all tests with run_timestamp_last from test_runs_column for specific branch
+            print(f'🎯 Mode: Get all tests with run_timestamp_last from test_runs_column')
+            print(f'   - branch: {branch}')
+            print(f'   - build_type: {build_type}')
+
             tests = f"""
             SELECT 
-                t.suite_folder,
-                t.test_name,
-                t.full_name,
-                t.owners,
-                trc.run_timestamp_last,
+                t.suite_folder as suite_folder,
+                t.test_name as test_name,
+                t.full_name as full_name,
+                t.owners as owners,
+                trc.run_timestamp_last as run_timestamp_last,
                 Date('{today}') as date
             FROM `test_results/analytics/testowners` t
             INNER JOIN (
@@ -81,15 +94,38 @@ def get_all_tests(job_id=None, branch=None, build_type=None):
                 GROUP BY suite_folder, test_name
             ) trc ON t.suite_folder = trc.suite_folder AND t.test_name = trc.test_name
             """
+        
+        print(f'📝 Executing SQL query:')
+        print(f'```sql')
+        print(tests)
+        print(f'```')
+        
         query = ydb.ScanQuery(tests, {})
+        print(f'⏱️  Starting query execution...')
+        start_time = time.time()
         it = table_client.scan_query(query)
+        
         results = []
+        batch_count = 0
         while True:
             try:
                 result = next(it)
+                batch_count += 1
+                batch_size = len(result.result_set.rows) if result.result_set.rows else 0
                 results = results + result.result_set.rows
+                print(f'📦 Batch {batch_count}: {batch_size} rows')
             except StopIteration:
                 break
+        
+        end_time = time.time()
+        print(f'✅ Query completed in {end_time - start_time:.2f} seconds')
+        print(f'📊 Total results: {len(results)} tests')
+        
+        if len(results) > 0:
+            print(f'🔍 Sample results (first 3):')
+            for i, row in enumerate(results[:3]):
+                print(f'   {i+1}. {row.get("suite_folder", "N/A")}/{row.get("test_name", "N/A")} (owners: {row.get("owners", "N/A")})')
+        
         return results
 
 
@@ -119,7 +155,9 @@ def create_tables(pool, table_path):
 
 
 def bulk_upsert(table_client, table_path, rows):
-    print(f"> bulk upsert: {table_path}")
+    print(f'📤 Starting bulk upsert to: {table_path}')
+    print(f'   - Rows to upsert: {len(rows)}')
+    
     column_types = (
         ydb.BulkUpsertColumns()
         .add_column("date", ydb.OptionalType(ydb.PrimitiveType.Date))
@@ -131,7 +169,16 @@ def bulk_upsert(table_client, table_path, rows):
         .add_column("branch", ydb.OptionalType(ydb.PrimitiveType.Utf8))
         .add_column("is_muted", ydb.OptionalType(ydb.PrimitiveType.Uint32))
     )
+    
+    print(f'🔧 Column types configured')
+    print(f'⏱️  Executing bulk upsert...')
+    
+    start_time = time.time()
     table_client.bulk_upsert(table_path, rows, column_types)
+    end_time = time.time()
+    
+    print(f'✅ Bulk upsert completed in {end_time - start_time:.2f} seconds')
+    print(f'📊 Successfully upserted {len(rows)} rows')
 
 
 def write_to_file(text, file):
@@ -141,23 +188,38 @@ def write_to_file(text, file):
 
 
 def upload_muted_tests(tests):
+    print(f'💾 Starting upload_muted_tests with {len(tests)} tests')
+    
     with ydb.Driver(
         endpoint=DATABASE_ENDPOINT,
         database=DATABASE_PATH,
         credentials=ydb.credentials_from_env_variables(),
     ) as driver:
+        print(f'📡 Connecting to YDB for upload: {DATABASE_ENDPOINT}/{DATABASE_PATH}')
         driver.wait(timeout=10, fail_fast=True)
+        print(f'✅ YDB connection established for upload')
 
         # settings, paths, consts
         tc_settings = ydb.TableClientSettings().with_native_date_in_result_sets(enabled=True)
         table_client = ydb.TableClient(driver, tc_settings)
 
         table_path = f'test_results/all_tests_with_owner_and_mute'
+        print(f'📋 Target table: {table_path}')
 
         with ydb.SessionPool(driver) as pool:
+            print(f'🏗️  Creating table if not exists...')
             create_tables(pool, table_path)
+            
             full_path = posixpath.join(DATABASE_PATH, table_path)
+            print(f'📤 Starting bulk upsert to: {full_path}')
+            print(f'   - Records to upload: {len(tests)}')
+            
+            start_time = time.time()
             bulk_upsert(driver.table_client, full_path, tests)
+            end_time = time.time()
+            
+            print(f'✅ Bulk upsert completed in {end_time - start_time:.2f} seconds')
+            print(f'📊 Successfully uploaded {len(tests)} test records')
 
 
 def to_str(data):
@@ -170,15 +232,21 @@ def to_str(data):
 
 
 def mute_applier(args):
+    print(f'🚀 Starting mute_applier with mode: {args.mode}')
+    print(f'   - branch: {args.branch}')
+    print(f'   - build_type: {args.build_type}')
+    print(f'   - output_folder: {args.output_folder}')
+    
     output_path = args.output_folder
 
     all_tests_file = os.path.join(output_path, '1_all_tests.txt')
     all_muted_tests_file = os.path.join(output_path, '1_all_muted_tests.txt')
 
     if "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS" not in os.environ:
-        print("Error: Env variable CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS is missing, skipping")
+        print("❌ Error: Env variable CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS is missing, skipping")
         return 1
     else:
+        print("✅ YDB credentials found, setting up environment")
         # Do not set up 'real' variable from gh workflows because it interfere with ydb tests
         # So, set up it locally
         os.environ["YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"] = os.environ[
@@ -186,18 +254,41 @@ def mute_applier(args):
         ]
 
     # all muted
+    print(f'📋 Loading mute rules from: {muted_ya_path}')
     mute_check = YaMuteCheck()
     mute_check.load(muted_ya_path)
+    print(f'✅ Mute rules loaded successfully')
 
     if args.mode == 'upload_muted_tests':
+        print(f'📊 Mode: upload_muted_tests')
+        print(f'   - branch: {args.branch}')
+        print(f'   - build_type: {args.build_type}')
+        
         all_tests = get_all_tests(branch=args.branch, build_type=args.build_type)
-        for test in all_tests:
+        print(f'📝 Processing {len(all_tests)} tests...')
+        
+        muted_count = 0
+        for i, test in enumerate(all_tests):
             testsuite = to_str(test['suite_folder'])
             testcase = to_str(test['test_name'])
             test['branch'] = args.branch
-            test['is_muted'] = int(mute_check(testsuite, testcase))
-
+            is_muted = int(mute_check(testsuite, testcase))
+            test['is_muted'] = is_muted
+            
+            if is_muted:
+                muted_count += 1
+            
+            if (i + 1) % 1000 == 0:
+                print(f'   Processed {i + 1}/{len(all_tests)} tests...')
+        
+        print(f'📊 Processing complete:')
+        print(f'   - Total tests: {len(all_tests)}')
+        print(f'   - Muted tests: {muted_count}')
+        print(f'   - Unmuted tests: {len(all_tests) - muted_count}')
+        
+        print(f'💾 Uploading to database...')
         upload_muted_tests(all_tests)
+        print(f'✅ Upload completed successfully')
 
     elif args.mode == 'get_mute_diff':
         all_tests = get_all_tests(job_id=args.job_id, branch=args.branch, build_type=args.build_type)
@@ -265,6 +356,11 @@ def mute_applier(args):
 
 
 if __name__ == "__main__":
+    print(f'🚀 Starting get_muted_tests.py script')
+    print(f'📅 Current time: {datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}')
+    print(f'📁 Working directory: {os.getcwd()}')
+    print(f'📋 Muted YA file path: {muted_ya_path}')
+    
     parser = argparse.ArgumentParser(description="Generate diff files for mute_ya.txt")
 
     parser.add_argument(
@@ -308,5 +404,15 @@ if __name__ == "__main__":
         help='build type for filtering tests',
     )
     args = parser.parse_args()
+    
+    print(f'📋 Parsed arguments:')
+    print(f'   - mode: {args.mode}')
+    print(f'   - branch: {getattr(args, "branch", "N/A")}')
+    print(f'   - build_type: {getattr(args, "build_type", "N/A")}')
+    print(f'   - output_folder: {args.output_folder}')
+    if hasattr(args, 'job_id'):
+        print(f'   - job_id: {args.job_id}')
 
+    print(f'🎯 Starting mute_applier...')
     mute_applier(args)
+    print(f'✅ get_muted_tests.py script completed successfully')

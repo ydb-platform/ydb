@@ -22,6 +22,7 @@ public:
         : TBaseComputation(mutables)
         , TextArg(textArg)
         , SettingsArg(settingsArg)
+        , CachedSettingsIndex(mutables.CurValueIndex++)
     {
     }
 
@@ -44,15 +45,28 @@ public:
 
         TString settingsStr(settingsValue.AsStringRef());
 
-        // Deserialize settings
-        Ydb::Table::FulltextIndexSettings::Analyzers analyzers;
-        if (!analyzers.ParseFromString(settingsStr)) {
-            // Failed to parse settings, return empty list
-            return ctx.HolderFactory.GetEmptyContainerLazy();
+        // Check if we have cached analyzers for these settings
+        auto& cachedValue = ctx.MutableValues[CachedSettingsIndex];
+        Ydb::Table::FulltextIndexSettings::Analyzers* analyzers = nullptr;
+        
+        if (!cachedValue) {
+            // First time - parse and cache the settings
+            auto analyzersPtr = std::make_unique<Ydb::Table::FulltextIndexSettings::Analyzers>();
+            if (!analyzersPtr->ParseFromString(settingsStr)) {
+                // Failed to parse settings, return empty list
+                return ctx.HolderFactory.GetEmptyContainerLazy();
+            }
+            
+            analyzers = analyzersPtr.get();
+            cachedValue = NUdf::TUnboxedValuePod(reinterpret_cast<ui64>(analyzersPtr.release()));
+        } else {
+            // Reuse cached settings
+            analyzers = reinterpret_cast<Ydb::Table::FulltextIndexSettings::Analyzers*>(
+                static_cast<ui64>(cachedValue.Get<ui64>()));
         }
 
         // Tokenize text using NKikimr::NFulltext::Analyze
-        TVector<TString> tokens = Analyze(textStr, analyzers);
+        TVector<TString> tokens = Analyze(textStr, *analyzers);
 
         // Convert tokens to TUnboxedValue list
         NUdf::TUnboxedValue* items = nullptr;
@@ -72,6 +86,7 @@ private:
 
     IComputationNode* const TextArg;
     IComputationNode* const SettingsArg;
+    const ui32 CachedSettingsIndex;
 };
 
 } // namespace

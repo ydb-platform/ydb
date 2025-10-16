@@ -4,6 +4,7 @@ import pytest
 import logging
 import yatest.common
 import ydb
+import random
 
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
@@ -86,6 +87,7 @@ class TestLogScenario(object):
         cls.ydb_client.stop()
         cls.cluster.stop()
 
+
     @classmethod
     def _setup_ydb(cls, writing_in_flight_requests_count_limit, writing_in_flight_request_bytes_limit):
         ydb_path = yatest.common.build_path(os.environ.get("YDB_DRIVER_BINARY"))
@@ -97,6 +99,24 @@ class TestLogScenario(object):
                                  "writing_in_flight_requests_count_limit": writing_in_flight_requests_count_limit,
                                  "writing_in_flight_request_bytes_limit": writing_in_flight_request_bytes_limit},
         )
+        cls.cluster = KiKiMR(config)
+        cls.cluster.start()
+        node = cls.cluster.nodes[1]
+        cls.ydb_client = YdbClient(endpoint=f"grpc://{node.host}:{node.port}", database=f"/{config.domain_name}")
+        cls.ydb_client.wait_connection(timeout=60)
+
+    @classmethod
+    def _setup_ydb_rp(cls, writing_in_flight_requests_count_limit, writing_in_flight_request_bytes_limit):
+        ydb_path = yatest.common.build_path(os.environ.get("YDB_DRIVER_BINARY"))
+        logger.info(yatest.common.execute([ydb_path, "-V"], wait=True).stdout.decode("utf-8"))
+        config = KikimrConfigGenerator(
+            extra_feature_flags={"enable_olap_reject_probability": True},
+            column_shard_config={"alter_object_enabled": True,
+                                 "writing_in_flight_requests_count_limit": writing_in_flight_requests_count_limit,
+                                 "writing_in_flight_request_bytes_limit": writing_in_flight_request_bytes_limit},
+            memory_controller_config={"max_tx_in_fly": 0},
+        )
+        #config.yaml_config["memory_controller_config"]["max_tx_in_fly"] = 0
         cls.cluster = KiKiMR(config)
         cls.cluster.start()
         node = cls.cluster.nodes[1]
@@ -156,6 +176,7 @@ class TestLogScenario(object):
     @pytest.mark.parametrize('writing_in_flight_requests_count_limit, writing_in_flight_request_bytes_limit', [(1, 10000), (2, 10000), (1000, 1), (1000, 2), (1, 1), (2, 2)])
     def test_overloads_workload(self, writing_in_flight_requests_count_limit, writing_in_flight_request_bytes_limit):
         self._setup_ydb(writing_in_flight_requests_count_limit, writing_in_flight_request_bytes_limit)
+
         wait_time: int = 60
         self.table_name: str = f"log_{writing_in_flight_requests_count_limit}_{writing_in_flight_request_bytes_limit}"
 
@@ -191,3 +212,59 @@ class TestLogScenario(object):
 
         logging.info(f"Count rows after insert {self.get_row_count()}")
         assert self.get_row_count() != 0
+
+    @pytest.mark.parametrize('writing_in_flight_requests_count_limit, writing_in_flight_request_bytes_limit', [(2000, 400000)])
+    def test_overloads_reject_probability(self, writing_in_flight_requests_count_limit, writing_in_flight_request_bytes_limit):
+        test_name = f"test_overloads_bulk_upsert_{writing_in_flight_requests_count_limit}_{writing_in_flight_request_bytes_limit}"
+        self._setup_ydb_rp(writing_in_flight_requests_count_limit, writing_in_flight_request_bytes_limit)
+
+        test_dir = f"{self.ydb_client.database}/{test_name}"
+        table_path = f"{test_dir}/table_for_rp"
+        self.ydb_client.query(
+            f"""
+            CREATE TABLE `{table_path}` (
+                id Uint64 NOT NULL,
+                v1 Int64,
+                v2 Int64,
+                PRIMARY KEY(id),
+            )
+            WITH (
+                STORE = COLUMN,
+                PARTITION_COUNT = 1,
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1
+            )
+            """
+        )
+
+        column_types = ydb.BulkUpsertColumns()
+        column_types.add_column("id", ydb.PrimitiveType.Uint64)
+        column_types.add_column("v1", ydb.PrimitiveType.Int64)
+        column_types.add_column("v2", ydb.PrimitiveType.Int64)
+
+        rows_count = 1000
+
+        data = [
+            {
+                "id": i,
+                "v1": 1,
+                "v2": -1,
+            }
+            for i in range(rows_count)
+        ]
+
+        self.ydb_client.bulk_upsert(table_path, column_types, data)
+
+        futures = []
+
+        for _ in range(29):
+            lb = random.randint(0, rows_count)
+            futures.append(self.ydb_client.query_async(f"UPDATE `{table_path}` SET v1 = v1 + 1, v2 = v2 - 1 WHERE id > {lb};"))
+
+        for future in futures:
+            future.result()
+
+        metrics = self.cluster.get_metrics(db_only=True, metrics={
+            'reject_probability': {'sensor': 'Overload/RejectProbability/Count'}
+        })
+        assert metrics['reject_probability'] > 0
+

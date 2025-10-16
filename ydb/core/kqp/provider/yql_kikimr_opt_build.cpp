@@ -69,6 +69,14 @@ ui64 GetResultRowsLimit(const TResWriteBase& resWrite) {
     return 0;
 }
 
+bool GetResultDiscard(const TResWriteBase& resWrite) {
+    auto discardSetting = GetSetting(resWrite.Settings().Ref(), "discard");
+    if (discardSetting) {
+        return true;
+    }
+    return false;
+}
+
 enum class TPrimitiveYdbOperation : ui32 {
     Read = 1 << 0,
     Write = 1 << 1
@@ -848,6 +856,7 @@ TVector<TKiDataQueryBlock> MakeKiDataQueryBlocks(TExprBase node, const TKiExplor
                 .Value(resWrite.Data())
                 .Columns(GetResultColumns(resWrite, ctx))
                 .RowsLimit().Build(GetResultRowsLimit(resWrite))
+                .Discard().Build(GetResultDiscard(resWrite) ? "true" : "false")
                 .Done();
 
             queryResults.push_back(kiResult.Ptr());

@@ -2056,7 +2056,15 @@ private:
                 case FederatedQuery::StreamingDisposition::DISPOSITION_NOT_SET:
                     break;
             }
-            dataProvidersInit.push_back(GetPqDataProviderInitializer(pqGateway, false, dbResolver, std::move(disposition), Params.TaskSensorLabels, Params.NodeIds));
+            dataProvidersInit.push_back(GetPqDataProviderInitializer(
+                pqGateway,
+                /* supportRtmrMode */ false,
+                dbResolver,
+                std::move(disposition),
+                Params.TaskSensorLabels,
+                Params.NodeIds,
+                Params.Config.GetCommon().GetUseActorSystemThreadsInTopicClient()
+            ));
         }
 
         {

@@ -46,10 +46,10 @@
 #include <util/generic/xrange.h>
 #include <util/generic/ymath.h>
 
+
 namespace NKikimr {
 namespace NTabletFlatExecutor {
 
-static constexpr ui64 MaxTxInFly = 10000;
 
 LWTRACE_USING(TABLET_FLAT_PROVIDER)
 

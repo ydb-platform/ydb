@@ -90,6 +90,7 @@ namespace NKikimr::NBridge {
     }
 
     void TSyncerActor::PassAway() {
+        STLOG(PRI_DEBUG, BS_BRIDGE_SYNC, BRSS15, "PassAway", (LogId, LogId));
         TActorBootstrapped::PassAway();
     }
 

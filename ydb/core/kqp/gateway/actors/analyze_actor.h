@@ -62,7 +62,7 @@ private:
     std::optional<ui64> StatisticsAggregatorId;
     TULIDGenerator UlidGen;
     TPathId PathId;
-    TString OperationId;
+    const TString OperationId;
 
     // for retries
     NStat::TEvStatistics::TEvAnalyze Request;

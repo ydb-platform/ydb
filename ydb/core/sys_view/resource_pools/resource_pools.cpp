@@ -23,9 +23,9 @@ namespace NSysView {
 
 using namespace NActors;
 
-class TResourcePoolsScan : public TScanActorBase<TResourcePoolsScan> {
+class TResourcePoolsScan : public TScanActorWithoutBackPressure<TResourcePoolsScan> {
 public:
-    using TBase  = TScanActorBase<TResourcePoolsScan>;
+    using TBase = TScanActorWithoutBackPressure<TResourcePoolsScan>;
 
     enum class EState {
         LIST_RESOURCE_POOLS,
@@ -49,7 +49,7 @@ public:
 
     STFUNC(StateScan) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(NKqp::TEvKqpCompute::TEvScanDataAck, Handle);
+            sFunc(NKqp::TEvKqpCompute::TEvScanDataAck, HandleAck);
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
             hFunc(NKqp::TEvKqp::TEvAbortExecution, HandleAbortExecution);
             cFunc(TEvents::TEvWakeup::EventType, HandleTimeout);
@@ -61,14 +61,7 @@ public:
     }
 
 private:
-    void ProceedToScan() override {
-        Become(&TResourcePoolsScan::StateScan);
-        if (AckReceived) {
-            StartScan();
-        }
-    }
-
-    void StartScan() {
+    void StartScan() final {
         SendRequestToSchemeCache({{".metadata/workload_manager", "pools"}},  NSchemeCache::TSchemeCacheNavigate::OpList);
     }
 
@@ -236,10 +229,6 @@ private:
             std::reverse(batch->Rows.begin(), batch->Rows.end());
         }
         SendBatch(std::move(batch));
-    }
-
-    void Handle(NKqp::TEvKqpCompute::TEvScanDataAck::TPtr&) {
-        StartScan();
     }
 
 private:

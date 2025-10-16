@@ -14,7 +14,8 @@ using TRowFiller = std::function<TString(const TString&, const TString&)>;
 using TStaticRowFiller = std::function<TString(const NYql::NPg::TTableInfo&)>;
 
 
-class TPgTablesScanBase : public NKikimr::NSysView::TScanActorBase<TPgTablesScanBase> {
+class TPgTablesScanBase : public TScanActorWithoutBackPressure<TPgTablesScanBase> {
+    using TBase = TScanActorWithoutBackPressure<TPgTablesScanBase>;
 private:
     TVector<TCell> MakePgTablesRow(const TString& tableName, const TString& tableOwner, TVector<TString>& cellData);
     TVector<TCell> MakePgTablesStaticRow(const NYql::NPg::TTableInfo& tableInfo, TVector<TString>& cellData);
@@ -35,9 +36,9 @@ public:
         THashMap<TString, TStaticRowFiller>&& staticFillers);
 
     static constexpr auto ActorActivityType();
-    void ProceedToScan();
+    void StartScan() final;
     void Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev, const TActorContext& ctx);
-    void StateWork(TAutoPtr<IEventHandle>& ev);
+    void StateScan(TAutoPtr<IEventHandle>& ev);
 protected:
     TString ConvertError_;
     TString TablePath_;

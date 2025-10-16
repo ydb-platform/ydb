@@ -24,9 +24,9 @@ namespace NSysView {
 using namespace NActors;
 using namespace NNodeWhiteboard;
 
-class TResourcePoolClassifiersScan : public TScanActorBase<TResourcePoolClassifiersScan> {
+class TResourcePoolClassifiersScan : public TScanActorWithoutBackPressure<TResourcePoolClassifiersScan> {
 public:
-    using TBase  = TScanActorBase<TResourcePoolClassifiersScan>;
+    using TBase = TScanActorWithoutBackPressure<TResourcePoolClassifiersScan>;
 
     static constexpr auto ActorActivityType() {
         return NKikimrServices::TActivity::KQP_SYSTEM_VIEW_SCAN;
@@ -45,7 +45,7 @@ public:
     STFUNC(StateScan) {
         try {
             switch (ev->GetTypeRewrite()) {
-                hFunc(NKqp::TEvKqpCompute::TEvScanDataAck, Handle);
+                sFunc(NKqp::TEvKqpCompute::TEvScanDataAck, HandleAck);
                 hFunc(NMetadata::NProvider::TEvRefreshSubscriberData, Handle)
                 hFunc(NKqp::NWorkload::TEvFetchDatabaseResponse, Handle);
                 hFunc(NKqp::TEvKqp::TEvAbortExecution, HandleAbortExecution);
@@ -63,22 +63,11 @@ public:
     }
 
 private:
-    void ProceedToScan() override {
-        Become(&TResourcePoolClassifiersScan::StateScan);
-        if (AckReceived) {
-            StartScan();
-        }
-    }
-
-    void StartScan() {
+    void StartScan() final {
         if (!NMetadata::NProvider::TServiceOperator::IsEnabled()) {
             ReplyEmptyAndDie();
         }
         Register(NKqp::NWorkload::CreateDatabaseFetcherActor(SelfId(), Database, UserToken, NACLib::EAccessRights::GenericFull));
-    }
-
-    void Handle(NKqp::TEvKqpCompute::TEvScanDataAck::TPtr&) {
-        StartScan();
     }
 
     void Handle(NKqp::NWorkload::TEvFetchDatabaseResponse::TPtr& ev) {

@@ -196,6 +196,12 @@ private:
             return;
         }
 
+        if (OldScanStarted) {
+            return;
+        }
+
+        OldScanStarted = true;
+
         NodesToRequest.reserve(this->TenantNodes.size());
         for (const auto& nodeId : this->TenantNodes) {
             Nodes[nodeId] = TRetryState{false, 0, StartRetryInterval};
@@ -504,6 +510,7 @@ private:
 
     THolder<TScanQueryHistory<TGreater>> History;
 
+    bool OldScanStarted = false;
     bool UseProcessor = false;
     NKikimrSysView::TEvGetQueryMetricsRequest Request;
 };

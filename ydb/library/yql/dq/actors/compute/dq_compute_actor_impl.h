@@ -1605,7 +1605,8 @@ protected:
     void HandleCheckIdleness(const TEvPrivate::TEvCheckIdleness::TPtr& ev) {
         auto now = TInstant::Now();
         auto checkTime = Max(ev->Get()->CheckTime, now);
-        InflightIdlenessCheck.Clear();
+        auto removed = InflightIdlenessCheck.erase(ev->Get()->CheckTime);
+        Y_DEBUG_ABORT_UNLESS(removed);
         auto idleWatermark = WatermarksTracker.HandleIdleness(checkTime);
         if (idleWatermark) {
             CA_LOG_T("Idleness watermark " << idleWatermark);
@@ -1617,9 +1618,9 @@ protected:
     void ScheduleIdlenessCheck() {
         auto checkTime = WatermarksTracker.GetNextIdlenessCheckAt();
         // only schedule new check if nothing scheduled at same or earlier time
-        if (checkTime && (!InflightIdlenessCheck || *InflightIdlenessCheck > checkTime)) {
-            CA_LOG_T("Reschedule next idleness check from " << InflightIdlenessCheck << " to " << checkTime);
-            InflightIdlenessCheck = *checkTime;
+        if (checkTime && (InflightIdlenessCheck.empty() || *InflightIdlenessCheck.cbegin() > *checkTime)) {
+            CA_LOG_T("Reschedule next idleness check from {" << JoinSeq(',', InflightIdlenessCheck) << "} to " << checkTime);
+            InflightIdlenessCheck.emplace(*checkTime);
             this->Schedule(*checkTime, new TEvPrivate::TEvCheckIdleness(*checkTime));
         }
     }
@@ -2132,7 +2133,7 @@ protected:
     ::NMonitoring::TDynamicCounters::TCounterPtr InputTransformCpuTimeMs;
     THolder<NYql::TCounters> Stat;
     TDuration CpuTimeSpent;
-    TMaybe<TInstant> InflightIdlenessCheck;
+    TSet<TInstant> InflightIdlenessCheck;
 };
 
 } // namespace NYql

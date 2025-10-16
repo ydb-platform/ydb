@@ -110,7 +110,7 @@ ParserFile(file, parser, namedActions, contextSuperClass) ::= <<
 
 #include "<file.parser.name>.h"
 #include \<yql/essentials/parser/proto_ast/antlr4/proto_ast_antlr4.h>
-#include \<@PROTOBUF_HEADER_PATH@/SQLv1Parser@PROTOBUF_SUFFIX_PATH@>
+#include \<@PROTOBUF_HEADER_PATH@/SQLv1Antlr4Parser@PROTOBUF_SUFFIX_PATH@>
 
 <namedActions.postinclude>
 

@@ -139,7 +139,7 @@ std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl<arrow::StructType>(NUdf::E
 
     std::vector<std::shared_ptr<arrow::Field>> fields{
         std::make_shared<arrow::Field>("datetime", type, false),
-        std::make_shared<arrow::Field>("timezoneId", arrow::uint16(), false),
+        std::make_shared<arrow::Field>("timezone", arrow::utf8(), false),
     };
     return arrow::struct_(fields);
 }
@@ -363,7 +363,7 @@ void AppendDataValue<arrow::BinaryType>(arrow::ArrayBuilder *builder, NUdf::TUnb
 
 // Only for timezone datetime types
 template <>
-void AppendDataValue<arrow::StructType>(arrow::ArrayBuilder *builder, NUdf::TUnboxedValue value) {
+void AppendDataValue<arrow::StructType>(arrow::ArrayBuilder* builder, NUdf::TUnboxedValue value) {
     YQL_ENSURE(builder->type()->id() == arrow::Type::STRUCT, "Unexpected builder type");
     auto typedBuilder = reinterpret_cast<arrow::StructBuilder *>(builder);
     YQL_ENSURE(typedBuilder->num_fields() == 2, "StructBuilder of timezone datetime types should have 2 fields");
@@ -378,32 +378,32 @@ void AppendDataValue<arrow::StructType>(arrow::ArrayBuilder *builder, NUdf::TUnb
     YQL_ENSURE(status.ok(), "Failed to append data value: " << status.ToString());
 
     auto datetimeArray = typedBuilder->field_builder(0);
-    auto timezoneArray = reinterpret_cast<arrow::UInt16Builder *>(typedBuilder->field_builder(1));
+    auto timezoneArray = reinterpret_cast<arrow::StringBuilder*>(typedBuilder->field_builder(1));
 
     switch (datetimeArray->type()->id()) {
         // NUdf::EDataSlot::TzDate
         case arrow::Type::UINT16: {
-            status = reinterpret_cast<arrow::UInt16Builder *>(datetimeArray)->Append(value.Get<ui16>());
+            status = reinterpret_cast<arrow::UInt16Builder*>(datetimeArray)->Append(value.Get<ui16>());
             break;
         }
         // NUdf::EDataSlot::TzDatetime
         case arrow::Type::UINT32: {
-            status = reinterpret_cast<arrow::UInt32Builder *>(datetimeArray)->Append(value.Get<ui32>());
+            status = reinterpret_cast<arrow::UInt32Builder*>(datetimeArray)->Append(value.Get<ui32>());
             break;
         }
         // NUdf::EDataSlot::TzTimestamp
         case arrow::Type::UINT64: {
-            status = reinterpret_cast<arrow::UInt64Builder *>(datetimeArray)->Append(value.Get<ui64>());
+            status = reinterpret_cast<arrow::UInt64Builder*>(datetimeArray)->Append(value.Get<ui64>());
             break;
         }
         // NUdf::EDataSlot::TzDate32
         case arrow::Type::INT32: {
-            status = reinterpret_cast<arrow::Int32Builder *>(datetimeArray)->Append(value.Get<i32>());
+            status = reinterpret_cast<arrow::Int32Builder*>(datetimeArray)->Append(value.Get<i32>());
             break;
         }
         // NUdf::EDataSlot::TzDatetime64, NUdf::EDataSlot::TzTimestamp64
         case arrow::Type::INT64: {
-            status = reinterpret_cast<arrow::Int64Builder *>(datetimeArray)->Append(value.Get<i64>());
+            status = reinterpret_cast<arrow::Int64Builder*>(datetimeArray)->Append(value.Get<i64>());
             break;
         }
         default:
@@ -412,7 +412,8 @@ void AppendDataValue<arrow::StructType>(arrow::ArrayBuilder *builder, NUdf::TUnb
     }
     YQL_ENSURE(status.ok(), "Failed to append data value: " << status.ToString());
 
-    status = timezoneArray->Append(value.GetTimezoneId());
+    auto tzName = NMiniKQL::GetTimezoneIANAName(value.GetTimezoneId());
+    status = timezoneArray->Append(tzName.Data(), tzName.size());
     YQL_ENSURE(status.ok(), "Failed to append data value: " << status.ToString());
 }
 
@@ -763,7 +764,7 @@ NUdf::TUnboxedValue GetUnboxedValue<arrow::StructType>(std::shared_ptr<arrow::Ar
     YQL_ENSURE(array->num_fields() == 2, "StructArray of some TzDate type should have 2 fields");
 
     auto datetimeArray = array->field(0);
-    auto timezoneArray = std::static_pointer_cast<arrow::UInt16Array>(array->field(1));
+    auto timezoneArray = std::static_pointer_cast<arrow::StringArray>(array->field(1));
 
     NUdf::TUnboxedValuePod value;
 
@@ -803,7 +804,8 @@ NUdf::TUnboxedValue GetUnboxedValue<arrow::StructType>(std::shared_ptr<arrow::Ar
             return NUdf::TUnboxedValuePod();
     }
 
-    value.SetTimezoneId(timezoneArray->Value(row));
+    auto view = timezoneArray->Value(row);
+    value.SetTimezoneId(NMiniKQL::GetTimezoneId(NUdf::TStringRef(view.data(), view.size())));
     return value;
 }
 

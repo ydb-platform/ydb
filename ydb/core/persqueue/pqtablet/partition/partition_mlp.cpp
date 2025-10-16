@@ -91,7 +91,8 @@ void TPartition::InitializeMLPConsumers() {
         auto actorId = RegisterWithSameMailbox(NMLP::CreateConsumerActor(
             TabletId,
             TabletActorId,
-            SelfId()
+            SelfId(),
+            consumer
         ));
         MLPConsumers.emplace(consumer.GetName(), actorId);
     }

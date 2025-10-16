@@ -1,20 +1,12 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 import time
-import os
 
 
 import grpc
-import logging
 
 from ydb.public.api.grpc.draft import ydb_dynamic_config_v1_pb2_grpc as grpc_server
 from ydb.public.api.protos.draft import ydb_dynamic_config_pb2 as dynamic_config_api
-
-
-logger = logging.getLogger()
-
-def channels_list():
-    return os.getenv('CHANNELS_LIST', '')
 
 
 class DynConfigClient(object):

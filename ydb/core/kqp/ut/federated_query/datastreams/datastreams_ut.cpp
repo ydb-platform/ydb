@@ -779,6 +779,7 @@ public:
         TString Name;
         TString Status = "RUNNING";
         TString Issues = "{}";
+        std::optional<TString> Ast;
         std::optional<TString> Text;
         bool Run = true;
         TString Pool = "default";
@@ -793,13 +794,23 @@ public:
         std::vector<TString> PreviousExecutionIds;
     };
 
-    std::vector<TSysViewResult> CheckSysView(const std::vector<TSysViewRow>& rows, const TString& filter = "", const TString& order = "Path ASC") {
+    std::vector<TSysViewResult> CheckSysView(std::vector<TSysViewRow> rows, const TString& filter = "", const TString& order = "Path ASC") {
         const auto& result = ExecQuery(TStringBuilder()
             << "SELECT * FROM `.sys/streaming_queries`"
             << (filter ? " WHERE " + filter : "")
             << (order ? " ORDER BY " + order : "")
         );
         UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
+
+        if (order.EndsWith("ASC")) {
+            Sort(rows, [&](const auto& lhs, const auto& rhs) {
+                return lhs.Name < rhs.Name;
+            });
+        } else if (order.EndsWith("DESC")) {
+            Sort(rows, [&](const auto& lhs, const auto& rhs) {
+                return lhs.Name > rhs.Name;
+            });
+        }
 
         std::vector<TSysViewResult> results;
         CheckScriptResult(result[0], SYS_VIEW_COLUMNS_COUNT, rows.size(), [&](TResultSetParser& resultSet) {
@@ -812,7 +823,7 @@ public:
             const bool expectExecutions = row.Run && IsIn({"RUNNING", "COMPLETED", "CANCELLED", "FAILED"}, row.Status);
             if (expectExecutions || row.CheckPlan) {
                 UNIT_ASSERT_STRING_CONTAINS(*resultSet.ColumnParser("Plan").GetOptionalUtf8(), TStringBuilder() << "Write " << PQ_SOURCE);                
-                UNIT_ASSERT_STRING_CONTAINS(*resultSet.ColumnParser("Ast").GetOptionalUtf8(),  JoinPath({"/Root", PQ_SOURCE}));
+                UNIT_ASSERT_STRING_CONTAINS(*resultSet.ColumnParser("Ast").GetOptionalUtf8(), row.Ast ? *row.Ast : JoinPath({"/Root", PQ_SOURCE}));
             }
 
             UNIT_ASSERT_VALUES_EQUAL(*resultSet.ColumnParser("Text").GetOptionalUtf8(), row.Text.value_or(GetQueryText(row.Name)));
@@ -2881,9 +2892,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {
             "query_name"_a = queryName
         ));
 
-        auto readSession = WaitMockPqReadSession(pqGateway, InputTopic);
+        auto readSession = pqGateway->WaitReadSession(InputTopic);
         readSession->AddDataReceivedEvent(0, "test0");
-        ReadMockPqMessage(WaitMockPqWriteSession(pqGateway, OutputTopic), "test0");
+        pqGateway->WaitWriteSession(OutputTopic)->ExpectMessage("test0");
 
         {
             Sleep(TDuration::Seconds(1));
@@ -2901,9 +2912,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {
 
         auto failAt = TInstant::Now();
         readSession->AddCloseSessionEvent(EStatus::UNAVAILABLE, {NIssue::TIssue("Test pq session failure")});
-        readSession = WaitMockPqReadSession(pqGateway, InputTopic);
+        readSession = pqGateway->WaitReadSession(InputTopic);
         readSession->AddDataReceivedEvent(0, "test0");
-        ReadMockPqMessage(WaitMockPqWriteSession(pqGateway, OutputTopic), "test0");
+        pqGateway->WaitWriteSession(OutputTopic)->ExpectMessage("test0");
 
         {
             Sleep(TDuration::Seconds(1));
@@ -3068,11 +3079,15 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {
         });
     }
 
-    Y_UNIT_TEST_F(ReadSysViewWithBackPressure, TStreamingSysViewTestFixture) {
+    Y_UNIT_TEST_F(ReadSysViewWithRowCountBackPressure, TStreamingSysViewTestFixture) {
+        SetupAppConfig().MutableTableServiceConfig()->MutableResourceManager()->SetChannelBufferSize(1_KB);
         Setup();
 
+        constexpr ui64 NUMBER_OF_QUERIES = 2010;
+
         std::vector<TSysViewRow> rows;
-        for (ui64 i = 0; i < 4000; ++i) {
+        rows.reserve(NUMBER_OF_QUERIES);
+        for (ui64 i = 0; i < NUMBER_OF_QUERIES; ++i) {
             const auto name = TStringBuilder() << "query-" << i;
             ExecQuery(fmt::format(R"(
                 CREATE STREAMING QUERY `{name}` WITH (
@@ -3088,8 +3103,91 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {
             });
         }
 
-        std::sort(rows.begin(), rows.end(), [](const auto& lhs, const auto& rhs) {
-            return lhs.Name < rhs.Name;
+        CheckSysView(rows);
+    }
+
+    Y_UNIT_TEST_F(ReadSysViewWithRowSizeBackPressure, TStreamingSysViewTestFixture) {
+        SetupAppConfig().MutableTableServiceConfig()->MutableResourceManager()->SetChannelBufferSize(1_KB);
+        Setup();
+
+        constexpr ui64 NUMBER_OF_QUERIES = 50;
+        const TString payload(100_KB, 'x');
+
+        std::vector<TSysViewRow> rows;
+        rows.reserve(NUMBER_OF_QUERIES);
+        for (ui64 i = 0; i < NUMBER_OF_QUERIES; ++i) {
+            const auto name = TStringBuilder() << "query-" << i;
+            const auto text = TStringBuilder() << GetQueryText(name) << " /* " << payload << " */";
+            ExecQuery(fmt::format(R"(
+                CREATE STREAMING QUERY `{name}` WITH (
+                    RUN = FALSE
+                ) AS DO BEGIN{text}END DO)",
+                "name"_a = name,
+                "text"_a = text
+            ));
+            rows.push_back({
+                .Name = name,
+                .Status = "CREATED",
+                .Text = text,
+                .Run = false,
+            });
+        }
+
+        CheckSysView(rows);
+    }
+
+    Y_UNIT_TEST_F(ReadSysViewWithMetadataSizeBackPressure, TStreamingSysViewTestFixture) {
+        SetupAppConfig().MutableTableServiceConfig()->MutableResourceManager()->SetChannelBufferSize(1_KB);
+        Setup();
+
+        constexpr ui64 NUMBER_OF_QUERIES = 50;
+        const TString payload(50_KB, 'x');
+
+        std::vector<TSysViewRow> rows;
+        TVector<TString> resultMessages;
+        rows.reserve(NUMBER_OF_QUERIES);
+        resultMessages.reserve(NUMBER_OF_QUERIES);
+        for (ui64 i = 0; i < NUMBER_OF_QUERIES; ++i) {
+            const auto name = TStringBuilder() << "query-" << i;
+            const TString text = fmt::format(R"(
+                ;INSERT INTO `{pq_source}`.`{output_topic}`
+                SELECT Data || "{payload}" FROM `{pq_source}`.`{input_topic}`
+                LIMIT 1;)",
+                "payload"_a = payload,
+                "pq_source"_a = PQ_SOURCE,
+                "input_topic"_a = InputTopic,
+                "output_topic"_a = OutputTopic
+            );
+            ExecQuery(fmt::format(R"(
+                CREATE STREAMING QUERY `{name}`
+                AS DO BEGIN{text}END DO)",
+                "name"_a = name,
+                "text"_a = text
+            ));
+            rows.push_back({
+                .Name = name,
+                .Status = "COMPLETED",
+                .Ast = payload,
+                .Text = text,
+                .Run = true,
+            });
+            resultMessages.emplace_back(TStringBuilder() << "test" << payload);
+        }
+
+        WriteTopicMessage(InputTopic, "test");
+        ReadTopicMessages(OutputTopic, resultMessages);
+
+        WaitFor(TDuration::Seconds(10), "Wait for queries to complete", [&](TString& error) {
+            const auto& result = ExecQuery("SELECT COUNT(*) FROM `.metadata/script_execution_leases`");
+            UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
+
+            ui64 count = 0;
+            CheckScriptResult(result[0], 1, 1, [&](TResultSetParser& resultSet) {
+                count = resultSet.ColumnParser(0).GetUint64();
+            });
+
+            error = TStringBuilder() << "running queries: " << count;
+            return count == 0;
         });
 
         CheckSysView(rows);

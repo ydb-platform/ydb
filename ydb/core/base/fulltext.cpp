@@ -120,19 +120,16 @@ namespace {
         const unsigned char* ptr = (const unsigned char*)token.data();
         const unsigned char* end = ptr + token.size();
         size_t length = 0;
+        wchar32 symbol;
+        size_t symbolBytes = 0;
 
         while (ptr < end) {
-            wchar32 symbol;
-            size_t symbolBytes = 0;
-
-            while (ptr < end) { // skip delimiters
-                if (SafeReadUTF8Char(symbol, symbolBytes, ptr, end) != RECODE_OK) {
-                    Y_ASSERT(false); // should be dropped during tokenize
-                    return 0;
-                }
-                length++;
-                ptr += symbolBytes;
+            if (SafeReadUTF8Char(symbol, symbolBytes, ptr, end) != RECODE_OK) {
+                Y_ASSERT(false); // should be dropped during tokenize
+                return 0;
             }
+            length++;
+            ptr += symbolBytes;
         }
 
         return length;
@@ -186,14 +183,15 @@ namespace {
                 error = "Invalid filter_length_min: should be less or equal than filter_length_max";
                 return false;
             }
-        }
-        if (settings.has_filter_length_min() && !settings.use_filter_length()) {
-            error = "use_filter_length should be set with filter_length_min";
-            return false;
-        }
-        if (settings.has_filter_length_max() && !settings.use_filter_length()) {
-            error = "use_filter_length should be set with filter_length_max";
-            return false;
+        } else {
+            if (settings.has_filter_length_min()) {
+                error = "use_filter_length should be set with filter_length_min";
+                return false;
+            }
+            if (settings.has_filter_length_max()) {
+                error = "use_filter_length should be set with filter_length_max";
+                return false;
+            }
         }
 
         return true;
@@ -210,20 +208,16 @@ TVector<TString> Analyze(const TString& text, const Ydb::Table::FulltextIndexSet
     }
 
     if (settings.use_filter_length() && (settings.has_filter_length_min() || settings.has_filter_length_max())) {
-        tokens.erase(
-            std::remove_if(tokens.begin(), tokens.end(),
-                [&](const TString& token){
-                    auto length = GetLengthUTF8(token);
-                    if (settings.has_filter_length_min() && length < static_cast<size_t>(settings.filter_length_min())) {
-                        return true;
-                    }
-                    if (settings.has_filter_length_max() && length > static_cast<size_t>(settings.filter_length_max())) {
-                        return true;
-                    }
-                    return false;
-                }),
-            tokens.end()
-        );
+        tokens.erase(std::remove_if(tokens.begin(), tokens.end(), [&](const TString& token){
+            auto length = GetLengthUTF8(token);
+            if (settings.has_filter_length_min() && length < static_cast<size_t>(settings.filter_length_min())) {
+                return true;
+            }
+            if (settings.has_filter_length_max() && length > static_cast<size_t>(settings.filter_length_max())) {
+                return true;
+            }
+            return false;
+        }), tokens.end());
     }
 
     return tokens;

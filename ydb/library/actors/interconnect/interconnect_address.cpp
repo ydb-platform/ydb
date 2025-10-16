@@ -114,7 +114,7 @@ namespace NInterconnect {
         return p ? TString(p) : TString();
     }
 
-#if !defined(__win__)
+#if not defined(_win32_)
     TAddress::TV6Addr GetV6CompatAddr(const NInterconnect::TAddress& a) noexcept {
         switch (a.GetFamily()) {
             case AF_INET: {

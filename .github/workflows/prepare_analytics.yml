@@ -1,0 +1,79 @@
+name: Prepare Analytics
+
+on:
+  workflow_call:
+    inputs:
+      branches:
+        description: 'Comma-separated list of branches to process'
+        required: false
+        default: 'main,stable-25-2,stable-25-2-1,stable-25-3,stable-25-3-1,stream-nb-25-1'
+        type: string
+      build_type:
+        description: 'Build type for filtering tests'
+        required: false
+        default: 'relwithdebinfo'
+        type: string
+    outputs:
+      matrix_branches:
+        description: 'Matrix of branches processed'
+        value: ${{ jobs.prepare-analytics.outputs.matrix_branches }}
+
+env:
+  BUILD_TYPE: ${{ inputs.build_type }}
+
+jobs:
+  prepare-analytics:
+    runs-on: [ self-hosted, auto-provisioned, build-preset-analytic-node]
+    outputs:
+      matrix_branches: ${{ steps.set-matrix.outputs.branches }}
+    steps:
+      - name: Set matrix for analytics
+        id: set-matrix
+        run: |
+          if [ "${{ inputs.branches }}" != "" ]; then
+            echo "branches=$(echo '${{ inputs.branches }}' | jq -R -s -c 'split(",")')" >> $GITHUB_OUTPUT
+          else
+            echo "branches=$(echo '["main","stable-25-2","stable-25-2-1","stable-25-3","stable-25-3-1","stream-nb-25-1"]' | jq -c .)" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install ydb[yc] codeowners pandas
+
+      - name: Setup ydb access
+        uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
+        with:
+          ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
+    
+      - name: Collect testowners
+        run: python3 .github/scripts/analytics/upload_testowners.py
+
+      - name: Collect test history data for all branches
+        run: |
+          branches=$(echo '${{ steps.set-matrix.outputs.branches }}' | jq -r '.[]')
+          for branch in $branches; do
+            echo "Collecting test history for branch: $branch"
+            python3 .github/scripts/analytics/flaky_tests_history.py --days-window=1 --branch=$branch --build_type=${{ env.BUILD_TYPE }}
+          done
+      
+      - name: Update muted tests in DB for all branches
+        run: |
+          branches=$(echo '${{ steps.set-matrix.outputs.branches }}' | jq -r '.[]')
+          for branch in $branches; do
+            echo "Updating muted tests for branch: $branch"
+            python3 .github/scripts/tests/get_muted_tests.py upload_muted_tests --branch=$branch --build_type=${{ env.BUILD_TYPE }}
+          done
+      
+      - name: Update test monitor for all branches
+        run: |
+          branches=$(echo '${{ steps.set-matrix.outputs.branches }}' | jq -r '.[]')
+          for branch in $branches; do
+            echo "Updating test monitor for branch: $branch"
+            python3 .github/scripts/analytics/tests_monitor.py --branch=$branch --build_type=${{ env.BUILD_TYPE }}
+          done

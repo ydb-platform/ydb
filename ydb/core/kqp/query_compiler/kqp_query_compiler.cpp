@@ -1337,6 +1337,12 @@ private:
                         for (const auto& columnName : columns) {
                             columnsSet.insert(columnName);
                         }
+                        THashSet<TStringBuf> mainKeyColumnsSet;
+                        for (const auto& columnName : tableMeta->KeyColumnNames) {
+                            mainKeyColumnsSet.insert(columnName);
+                            AFL_ENSURE(columnsSet.contains(columnName));
+                        }
+
                         THashSet<TStringBuf> lookupColumnsSet;
                         for (size_t index = 0; index < tableMeta->Indexes.size(); ++index) {
                             const auto& indexDescription = tableMeta->Indexes[index];
@@ -1349,6 +1355,12 @@ private:
 
                             AFL_ENSURE(indexDescription.Type == TIndexDescription::EType::GlobalSync);
                             AFL_ENSURE(implTable->Kind == EKikimrTableKind::Datashard);
+
+                            for (const auto& columnName : implTable->KeyColumnNames) {
+                                if (!mainKeyColumnsSet.contains(columnName) && lookupColumnsSet.insert(columnName).second) {
+                                    lookupColumns.push_back(columnName);
+                                }
+                            }
 
                             for (const auto& [columnName, _] : implTable->Columns) {
                                 if (!columnsSet.contains(columnName) && lookupColumnsSet.insert(columnName).second) {
@@ -1393,12 +1405,13 @@ private:
                         }
 
                         TVector<TStringBuf> indexColumns;
+                        THashSet<TStringBuf> indexColumnsSet;
                         indexColumns.reserve(implTable->Columns.size());
 
                         for (const auto& columnsList : {columns, lookupColumns}) {
                             for (const auto& columnName : columnsList) {
                                 const auto columnMeta = implTable->Columns.FindPtr(columnName);
-                                if (columnMeta) {
+                                if (columnMeta && indexColumnsSet.insert(columnName).second) {
                                     indexColumns.emplace_back(columnName);
 
                                     auto columnProto = indexSettings->AddColumns();

@@ -1040,20 +1040,28 @@ IDataBatchProjectionPtr CreateDataBatchProjection(
         const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> additionalInputColumns,
         const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> outputColumns,
         const TConstArrayRef<ui32> outputWriteIndex,
+        const bool preferAdditionalInputColumns,
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc) {
     // inputColumns (reordered using inputWriteIndex) + additionalInputColumns 
     // -> outputColumns (reordered using outputWriteIndex)
 
     AFL_ENSURE(inputColumns.size() == inputWriteIndex.size());
     AFL_ENSURE(outputColumns.size() == outputWriteIndex.size());
-    AFL_ENSURE(outputColumns.size() <= inputColumns.size());
+    AFL_ENSURE(outputColumns.size() <= inputColumns.size() + additionalInputColumns.size());
 
-    THashMap<TString, ui32> InputColumnNameToIndex;
-    for (size_t index = 0; index < inputColumns.size(); ++index) {
-        InputColumnNameToIndex[inputColumns[index].GetName()] = index;
-    }
-    for (size_t index = 0; index < additionalInputColumns.size(); ++index) {
-        InputColumnNameToIndex[additionalInputColumns[index].GetName()] = inputColumns.size() + index;
+    THashMap<TString, ui32> inputColumnNameToIndex;
+    auto fillInputColumnNameToIndex = [&](const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto>& columns, size_t shift) {
+        for (size_t index = 0; index < columns.size(); ++index) {
+            inputColumnNameToIndex[columns[index].GetName()] = shift + index;
+        }
+    };
+
+    if (preferAdditionalInputColumns) {
+        fillInputColumnNameToIndex(inputColumns, 0);
+        fillInputColumnNameToIndex(additionalInputColumns, inputColumns.size());
+    } else {
+        fillInputColumnNameToIndex(additionalInputColumns, inputColumns.size());
+        fillInputColumnNameToIndex(inputColumns, 0);
     }
 
     std::vector<ui32> outputOrder(outputWriteIndex.size());
@@ -1065,7 +1073,7 @@ IDataBatchProjectionPtr CreateDataBatchProjection(
     for (size_t index = 0; index < outputColumns.size(); ++index) {
         const auto& outputColumnIndex = outputOrder.at(index);
         const auto& outputColumnName = outputColumns.at(outputColumnIndex).GetName();
-        const auto& inputColumnIndex = InputColumnNameToIndex.at(outputColumnName);
+        const auto& inputColumnIndex = inputColumnNameToIndex.at(outputColumnName);
         const auto& inputIndex = inputColumnIndex < inputWriteIndex.size()
             ? inputWriteIndex.at(inputColumnIndex)
             : inputColumnIndex;

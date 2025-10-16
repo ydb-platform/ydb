@@ -16,7 +16,7 @@ using namespace NYdb;
 using namespace NYdb::NQuery;
 
 Y_UNIT_TEST_SUITE(KqpStreamIndexes) {
-    void RunTest(TString query, TString mainResult, TString indexResult) {
+    void RunTest(TString query, TString mainResult, TString indexResult, bool exists) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(true);
@@ -41,13 +41,13 @@ Y_UNIT_TEST_SUITE(KqpStreamIndexes) {
 
         auto client = kikimr.GetQueryClient();
 
-       //{
-       //    auto it = client.ExecuteQuery(
-       //        "INSERT INTO `/Root/DataShard` (Col1, Col2, Col3) VALUES (1u, 1u, 1u);",
-       //        NYdb::NQuery::TTxControl::BeginTx().CommitTx(),
-       //        TExecuteQuerySettings().ClientTimeout(TDuration::MilliSeconds(1000))).ExtractValueSync();
-       //    UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-       //}
+        if (exists) {
+            auto it = client.ExecuteQuery(
+                "INSERT INTO `/Root/DataShard` (Col1, Col2, Col3) VALUES (0u, 1u, 1u);",
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx(),
+                TExecuteQuerySettings().ClientTimeout(TDuration::MilliSeconds(1000))).ExtractValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+        }
 
         {
             auto it = client.ExecuteQuery(
@@ -80,44 +80,88 @@ Y_UNIT_TEST_SUITE(KqpStreamIndexes) {
         RunTest(
             "INSERT INTO `/Root/DataShard` (Col1, Col2, Col3) VALUES (0u, 0u, 0u);",
             R"([[[0u];[0u];[0u]]])",
-            R"([[[0u];[0u]]])");
+            R"([[[0u];[0u]]])",
+            false);
     }
 
-    Y_UNIT_TEST(ReplaceFull) {
+    Y_UNIT_TEST_TWIN(ReplaceFull, exists) {
         RunTest(
             "REPLACE INTO `/Root/DataShard` (Col1, Col2, Col3) VALUES (0u, 0u, 0u);",
             R"([[[0u];[0u];[0u]]])",
-            R"([[[0u];[0u]]])");
+            R"([[[0u];[0u]]])",
+            exists);
     }
 
-    Y_UNIT_TEST(UpsertFull) {
+    Y_UNIT_TEST_TWIN(UpsertFull, exists) {
         RunTest(
             "UPSERT INTO `/Root/DataShard` (Col1, Col2, Col3) VALUES (0u, 0u, 0u);",
             R"([[[0u];[0u];[0u]]])",
-            R"([[[0u];[0u]]])");
+            R"([[[0u];[0u]]])",
+            exists);
     }
 
     Y_UNIT_TEST(InsertNoColumn) {
         RunTest(
             "INSERT INTO `/Root/DataShard` (Col1, Col3) VALUES (0u, 0u);",
             R"([[[0u];#;[0u]]])",
-            R"([[[0u];#]])");
+            R"([[[0u];#]])",
+            false);
     }
 
-    Y_UNIT_TEST(ReplaceNoColumn) {
-        // TODO: check is replace
+    Y_UNIT_TEST(InsertNoColumn2) {
+        RunTest(
+            "INSERT INTO `/Root/DataShard` (Col1, Col2) VALUES (0u, 0u);",
+            R"([[[0u];[0u];#]])",
+            R"([[[0u];[0u]]])",
+            false);
+    }
+
+    Y_UNIT_TEST_TWIN(ReplaceNoColumn, exists) {
         RunTest(
             "REPLACE INTO `/Root/DataShard` (Col1, Col3) VALUES (0u, 0u);",
             R"([[[0u];#;[0u]]])",
-            R"([[[0u];#]])");
+            R"([[[0u];#]])",
+            exists);
     }
 
-    Y_UNIT_TEST(UpsertNoColumn) {
-        // TODO: check is upsert
+    Y_UNIT_TEST_TWIN(ReplaceNoColumn2, exists) {
+        RunTest(
+            "REPLACE INTO `/Root/DataShard` (Col1, Col2) VALUES (0u, 0u);",
+            R"([[[0u];[0u];#]])",
+            R"([[[0u];[0u]]])",
+            exists);
+    }
+
+    Y_UNIT_TEST(UpsertNoColumnNotExists) {
         RunTest(
             "UPSERT INTO `/Root/DataShard` (Col1, Col3) VALUES (0u, 0u);",
             R"([[[0u];#;[0u]]])",
-            R"([[[0u];#]])");
+            R"([[[0u];#]])",
+            false);
+    }
+
+    Y_UNIT_TEST(UpsertNoColumnExists) {
+        RunTest(
+            "UPSERT INTO `/Root/DataShard` (Col1, Col3) VALUES (0u, 0u);",
+            R"([[[0u];[1u];[0u]]])",
+            R"([[[0u];[1u]]])",
+            true);
+    }
+
+    Y_UNIT_TEST(UpsertNoColumnNotExists2) {
+        RunTest(
+            "UPSERT INTO `/Root/DataShard` (Col1, Col2) VALUES (0u, 0u);",
+            R"([[[0u];[0u];#]])",
+            R"([[[0u];[0u]]])",
+            false);
+    }
+
+    Y_UNIT_TEST(UpsertNoColumnExists2) {
+        RunTest(
+            "UPSERT INTO `/Root/DataShard` (Col1, Col2) VALUES (0u, 0u);",
+            R"([[[0u];[0u];[1u]]])",
+            R"([[[0u];[0u]]])",
+            true);
     }
 }
 }

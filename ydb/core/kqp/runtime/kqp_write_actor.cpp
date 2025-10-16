@@ -1433,7 +1433,7 @@ class TKqpWriteTask {
 public:
     struct TPathWriteInfo {
         IDataBatchProjectionPtr Projection = nullptr;
-        IDataBatchProjectionPtr KeyProjection = nullptr;
+        IDataBatchProjectionPtr DeleteProjection = nullptr;
         TKqpTableWriteActor* WriteActor = nullptr;
     };
 
@@ -1657,9 +1657,9 @@ private:
             if (PathId != actorPathId) {
                 if (OperationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE
                         && OperationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT) {
-                    AFL_ENSURE(actorInfo.KeyProjection);
-                    actorInfo.KeyProjection->Fill(batch);
-                    auto preparedKeyBatch = actorInfo.KeyProjection->Flush();
+                    AFL_ENSURE(actorInfo.DeleteProjection);
+                    actorInfo.DeleteProjection->Fill(batch);
+                    auto preparedKeyBatch = actorInfo.DeleteProjection->Flush();
                     actorInfo.WriteActor->Write(
                         Cookie,
                         NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE,
@@ -1684,7 +1684,7 @@ private:
             actorInfo.Projection->Fill(batch);
             batch = actorInfo.Projection->Flush();
         }
-        AFL_ENSURE(!actorInfo.KeyProjection);
+        AFL_ENSURE(!actorInfo.DeleteProjection);
         PathWriteInfo.at(PathId).WriteActor->Write(Cookie, OperationType, std::move(batch));
     }
 
@@ -2399,17 +2399,19 @@ public:
                     settings.LookupColumns,
                     indexSettings.Columns,
                     indexSettings.WriteIndex,
+                    /* preferAdditionalInputColumns */ false,
                     Alloc);
 
                 std::vector<ui32> keyWriteIndex(indexSettings.KeyColumns.size());
                 std::iota(std::begin(keyWriteIndex), std::end(keyWriteIndex), 0);
 
-                auto keyProjection = CreateDataBatchProjection(
+                auto deleteProjection = CreateDataBatchProjection(
                     settings.Columns,
                     settings.WriteIndex,
                     settings.LookupColumns,
                     indexSettings.KeyColumns,
                     keyWriteIndex,
+                    /* preferAdditionalInputColumns */ true,
                     Alloc);
 
                 writeInfo.Actors.at(indexSettings.TableId.PathId).WriteActor->Open(
@@ -2421,7 +2423,7 @@ public:
 
                 writes.emplace_back(TKqpWriteTask::TPathWriteInfo{
                     .Projection = std::move(projection),
-                    .KeyProjection = std::move(keyProjection),
+                    .DeleteProjection = std::move(deleteProjection),
                     .WriteActor = writeInfo.Actors.at(indexSettings.TableId.PathId).WriteActor,
                 });
 
@@ -2436,6 +2438,7 @@ public:
                     settings.LookupColumns,
                     settings.Columns,
                     settings.WriteIndex,
+                    /* preferAdditionalInputColumns */ false,
                     Alloc);
                 
                 auto lookupInfo = LookupInfos.at(settings.TableId.PathId);
@@ -2460,7 +2463,7 @@ public:
                 settings.Priority);
             writes.emplace_back(TKqpWriteTask::TPathWriteInfo{
                 .Projection = std::move(projection),
-                .KeyProjection = nullptr,
+                .DeleteProjection = nullptr,
                 .WriteActor = writeInfo.Actors.at(settings.TableId.PathId).WriteActor,
             });
 

@@ -1317,34 +1317,25 @@ class TestFullCycleLocalBackupRestoreWSchemaChange(TestFullCycleLocalBackupResto
             # add more tables
             create_table_with_data(session, "extra_table_2")
 
-            # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-            # # remove table under backup collection -> except fail
-            # # but the current version allows you to delete
-            # # a table included in backup collection
-            # try:
-            #     session.execute_scheme('DROP TABLE `/Root/products`;')
-            # except Exception:
-            #     raise AssertionError("DROP failed")
-            # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
             # remove some tables from step5: drop extra_table_1
             try:
                 session.execute_scheme('DROP TABLE `/Root/extra_table_1`;')
             except Exception:
                 raise AssertionError("DROP failed")
 
-            # add columns to initial tables
+            # add columns to initial tables -> except fail
             try:
                 session.execute_scheme('ALTER TABLE `/Root/orders` ADD COLUMN new_col Uint32;')
             except Exception:
                 raise AssertionError("ADD COLUMN failed")
 
+            # ALTER SET -> except fail
             try:
                 session.execute_scheme('ALTER TABLE `/Root/orders` SET (TTL = Interval("PT0S") ON expire_at);')
             except Exception:
                 raise AssertionError("SET TTL failed")
 
-            # drop columns
+            # drop columns -> except fail
             try:
                 session.execute_scheme('ALTER TABLE `/Root/orders` DROP COLUMN number;')
             except Exception:

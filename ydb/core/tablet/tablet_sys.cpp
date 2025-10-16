@@ -3,6 +3,7 @@
 
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/tablet_pipecache.h>
+#include <ydb/core/tablet/tablet_recovery.h>
 #include <ydb/library/services/services.pb.h>
 
 #include <ydb/library/actors/core/log.h>
@@ -234,6 +235,12 @@ void TTablet::WriteZeroEntry(TEvTablet::TDependencyGraph *graph) {
 
     Become(&TThis::StateWriteZeroEntry);
     ReportTabletStateChange(TTabletStateInfo::WriteZeroEntry);
+}
+
+void TTablet::DeleteData() {
+    Y_ABORT_UNLESS(Info);
+    Register(CreateTabletReqDelete(SelfId(), Info.Get(), StateStorageInfo.KnownGeneration - 1));
+    Become(&TThis::StateDeleteData);
 }
 
 void TTablet::StartActivePhase() {
@@ -983,7 +990,11 @@ void TTablet::HandleFindLatestLogEntry(TEvTabletBase::TEvFindLatestLogEntryResul
     default:
         {
             BLOG_ERROR("HandleFindLatestLogEntry, msg->Status: " << NKikimrProto::EReplyStatus_Name(msg->Status), "TSYS20");
-            return CancelTablet(TEvTablet::TEvTabletDead::ReasonBootBSError, msg->ErrorReason);
+            if (Info->BootMode == TTabletStorageInfo::EBootMode::Restore) {
+                return PromoteToCandidate(0); // we stil can find latest generation
+            } else {
+                return CancelTablet(TEvTablet::TEvTabletDead::ReasonBootBSError, msg->ErrorReason);
+            }
         }
     }
 }
@@ -992,7 +1003,17 @@ void TTablet::HandleBlockBlobStorageResult(TEvTabletBase::TEvBlockBlobStorageRes
     TEvTabletBase::TEvBlockBlobStorageResult *msg = ev->Get();
     switch (msg->Status) {
     case NKikimrProto::OK:
-        return TabletRebuildGraph();
+        if (Info->BootMode == TTabletStorageInfo::EBootMode::Restore) {
+            auto graph = MakeIntrusive<TEvTablet::TDependencyGraph>(std::pair<ui32, ui32>(0, 0));
+            WriteZeroEntry(graph.Get());
+            Send(UserTablet,
+                 new TEvTablet::TEvBoot(TabletID(), StateStorageInfo.KnownGeneration,
+                                        graph.Get(), Launcher, Info, ResourceProfiles,
+                                        TxCacheQuota));
+            return;
+        } else {
+            return TabletRebuildGraph();
+        }
     default:
         {
             BLOG_ERROR("HandleBlockBlobStorageResult, msg->Status: "
@@ -1050,12 +1071,29 @@ void TTablet::HandleWriteZeroEntry(TEvTabletBase::TEvWriteLogResult::TPtr &ev) {
     TEvTabletBase::TEvWriteLogResult *msg = ev->Get();
     switch (msg->Status) {
     case NKikimrProto::OK:
-        return StartActivePhase();
+        if (Info->BootMode == TTabletStorageInfo::EBootMode::Restore) {
+            return DeleteData();
+        } else {
+            return StartActivePhase();
+        }
     default:
         {
             BLOG_ERROR("HandleWriteZeroEntry, msg->Status: " << NKikimrProto::EReplyStatus_Name(msg->Status), "TSYS23");
             ReassignYellowChannels(std::move(msg->YellowMoveChannels));
             return CancelTablet(TEvTablet::TEvTabletDead::ReasonBootBSError, msg->ErrorReason); // TODO: detect 'need channel reconfiguration' case
+        }
+    }
+}
+
+void TTablet::HandleDeleteData(TEvTabletBase::TEvDeleteTabletResult::TPtr &ev) {
+    TEvTabletBase::TEvDeleteTabletResult *msg = ev->Get();
+    switch (msg->Status) {
+    case NKikimrProto::OK:
+        return StartActivePhase();
+    default:
+        {
+            BLOG_ERROR("HandleDeleteData, msg->Status: " << NKikimrProto::EReplyStatus_Name(msg->Status), "TSYS34");
+            return CancelTablet(TEvTablet::TEvTabletDead::ReasonBootBSError);
         }
     }
 }
@@ -2269,7 +2307,11 @@ void TTablet::ExternalWriteZeroEntry(TTabletStorageInfo *info, ui32 gen, TActorI
 }
 
 TActorId TTabletSetupInfo::Apply(TTabletStorageInfo *info, TActorIdentity owner) {
-    return TActivationContext::Register(Op(owner, info), owner, MailboxType, PoolId);
+    if (info->BootMode == TTabletStorageInfo::EBootMode::Restore) {
+        return TActivationContext::Register(CreateRestoreShard(owner, info), owner, MailboxType, PoolId);
+    } else {
+        return TActivationContext::Register(Op(owner, info), owner, MailboxType, PoolId);
+    }
 }
 
 TActorId TTabletSetupInfo::Apply(TTabletStorageInfo *info, const TActorContext &ctx) {

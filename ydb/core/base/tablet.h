@@ -23,6 +23,8 @@ namespace NKikimr {
 TIntrusivePtr<TTabletStorageInfo> TabletStorageInfoFromProto(const NKikimrTabletBase::TTabletStorageInfo &proto);
 void TabletStorageInfoToProto(const TTabletStorageInfo &info, NKikimrTabletBase::TTabletStorageInfo *proto);
 
+TTabletStorageInfo::EBootMode BootModeFromProto(NKikimrConfig::TBootstrap::EBootMode mode);
+
 inline ui64 MakeGenStepPair(ui32 gen, ui32 step) {
     ui64 g = gen;
     ui64 s = step;

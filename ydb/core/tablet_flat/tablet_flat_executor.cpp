@@ -88,6 +88,10 @@ namespace NFlatExecutorSetup {
     }
 
     bool ITablet::NeedBackup() const {
+        if (TabletInfo->BootMode != TTabletStorageInfo::EBootMode::Normal) {
+            return false;
+        }
+
         if (TabletInfo->TenantPathId != TPathId()) {
             return false;
         }

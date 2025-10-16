@@ -302,6 +302,7 @@ class TTablet : public TActor<TTablet> {
     void TabletBlockBlobStorage();
     void TabletRebuildGraph();
     void WriteZeroEntry(TEvTablet::TDependencyGraph *graph);
+    void DeleteData();
 
     void StartActivePhase();
     void UpdateStateStorageSignature(TEvStateStorage::TEvUpdateSignature::TPtr &ev);
@@ -346,6 +347,7 @@ class TTablet : public TActor<TTablet> {
 
     void HandleRebuildGraphResult(TEvTabletBase::TEvRebuildGraphResult::TPtr &ev);
     void HandleWriteZeroEntry(TEvTabletBase::TEvWriteLogResult::TPtr &ev);
+    void HandleDeleteData(TEvTabletBase::TEvDeleteTabletResult::TPtr &ev);
 
     void Handle(TEvTablet::TEvPing::TPtr &ev);
     void HandleByLeader(TEvTablet::TEvTabletActive::TPtr &ev);
@@ -567,6 +569,30 @@ class TTablet : public TActor<TTablet> {
     STATEFN(StateWriteZeroEntry) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvTabletBase::TEvWriteLogResult, HandleWriteZeroEntry);
+            hFunc(TEvStateStorage::TEvUpdateSignature, UpdateStateStorageSignature);
+            hFunc(TEvTablet::TEvPing, HandlePingBoot);
+            hFunc(TEvTablet::TEvFeatures, HandleFeatures);
+            hFunc(TEvTablet::TEvTabletStop, HandleStop);
+            cFunc(TEvTablet::TEvTabletStopped::EventType, HandleStopped);
+            cFunc(TEvents::TSystem::PoisonPill, HandlePoisonPill);
+            cFunc(TEvStateStorage::TEvReplicaLeaderDemoted::EventType, HandleDemoted);
+            hFunc(TEvTabletPipe::TEvConnect, HandleQueued);
+            hFunc(TEvTablet::TEvFollowerAttach, HandleByLeader);
+            hFunc(TEvTablet::TEvFollowerDetach, HandleByLeader);
+            hFunc(TEvTablet::TEvFollowerRefresh, HandleByLeader);
+            hFunc(TEvTablet::TEvUpdateConfig, Handle);
+            hFunc(TEvTabletBase::TEvTrySyncFollower, HandleByLeader);
+            hFunc(TEvTablet::TEvTabletStateSubscribe, Handle);
+            hFunc(TEvTablet::TEvTabletStateUnsubscribe, Handle);
+            hFunc(TEvInterconnect::TEvNodeConnected, HandleByLeader);
+            hFunc(TEvInterconnect::TEvNodeDisconnected, HandleByLeader);
+            hFunc(TEvents::TEvUndelivered, HandleByLeader);
+        }
+    }
+
+    STATEFN(StateDeleteData) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvTabletBase::TEvDeleteTabletResult, HandleDeleteData);
             hFunc(TEvStateStorage::TEvUpdateSignature, UpdateStateStorageSignature);
             hFunc(TEvTablet::TEvPing, HandlePingBoot);
             hFunc(TEvTablet::TEvFeatures, HandleFeatures);

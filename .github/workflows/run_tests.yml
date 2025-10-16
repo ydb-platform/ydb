@@ -64,14 +64,14 @@ on:
         required: false
         default: ''
       build_preset:
-        description: 'Build preset type (relwithdebinfo, release-asan, release-msan, release-tsan)'
+        description: 'Build preset type (relwithdebinfo, relwithdebinfo-asan, relwithdebinfo-msan, relwithdebinfo-tsan)'
         required: true
         type: choice
         options:
           - relwithdebinfo
-          - release-asan
-          - release-msan
-          - release-tsan
+          - relwithdebinfo-asan
+          - relwithdebinfo-msan
+          - relwithdebinfo-tsan
         default: relwithdebinfo
 
 jobs:
@@ -129,13 +129,13 @@ jobs:
           if [[ "${{ inputs.build_preset }}" == "relwithdebinfo" ]]; then
             echo "threads_count=52" >> $GITHUB_ENV
             echo "timeout=1200" >> $GITHUB_ENV
-          elif [[ "${{ inputs.build_preset }}" == "release-asan" ]]; then
+          elif [[ "${{ inputs.build_preset }}" == "relwithdebinfo-asan" ]]; then
             echo "threads_count=20" >> $GITHUB_ENV
             echo "timeout=1200" >> $GITHUB_ENV
-          elif [[ "${{ inputs.build_preset }}" == "release-msan" ]]; then
+          elif [[ "${{ inputs.build_preset }}" == "relwithdebinfo-msan" ]]; then
             echo "threads_count=5" >> $GITHUB_ENV
             echo "timeout=1200" >> $GITHUB_ENV
-          elif [[ "${{ inputs.build_preset }}" == "release-tsan" ]]; then
+          elif [[ "${{ inputs.build_preset }}" == "relwithdebinfo-tsan" ]]; then
             echo "threads_count=18" >> $GITHUB_ENV
             echo "timeout=1200" >> $GITHUB_ENV
           else

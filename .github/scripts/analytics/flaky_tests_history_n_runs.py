@@ -79,7 +79,7 @@ def bulk_upsert(table_client, table_path, rows):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--runs', default=10,choices=[10, 25, 50], type=int, help='how many runs back we collecting history')
-    parser.add_argument('--build_type',choices=['relwithdebinfo', 'release-asan'], default='relwithdebinfo', type=str, help='build : relwithdebinfo or release-asan')
+    parser.add_argument('--build_type',choices=['relwithdebinfo', 'relwithdebinfo-asan'], default='relwithdebinfo', type=str, help='build : relwithdebinfo or relwithdebinfo-asan')
     parser.add_argument('--branch', default='main',choices=['main'], type=str, help='branch')
 
     args, unknown = parser.parse_known_args()

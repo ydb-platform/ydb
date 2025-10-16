@@ -37,7 +37,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        build_preset: ["release", "relwithdebinfo", "release-asan"]
+        build_preset: ["release", "relwithdebinfo", "relwithdebinfo-asan"]
         branch: ${{ fromJSON(needs.determine_branches.outputs.branches) }}
     runs-on: [ self-hosted, auto-provisioned, "${{ format('build-preset-{0}', matrix.build_preset) }}" ]
     name: Build and test ${{ matrix.build_preset }} on ${{ matrix.branch }}

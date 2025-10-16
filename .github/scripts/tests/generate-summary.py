@@ -340,12 +340,12 @@ def render_testlist_html(rows, fn, build_preset, branch, pr_number=None, workflo
         status_test.get(current_status,[]).sort(key=lambda val: (val.full_name, ))
 
     buid_preset_params = '--build unknown_build_type'
-    if build_preset == 'release-asan' :
-        buid_preset_params = '--build "release" --sanitize="address" -DDEBUGINFO_LINES_ONLY'
-    elif build_preset == 'release-msan':
-        buid_preset_params = '--build "release" --sanitize="memory" -DDEBUGINFO_LINES_ONLY'
-    elif build_preset == 'release-tsan':   
-        buid_preset_params = '--build "release" --sanitize="thread" -DDEBUGINFO_LINES_ONLY'
+    if build_preset == 'relwithdebinfo-asan' :
+        buid_preset_params = '--build "relwithdebinfo" --sanitize="address" -DDEBUGINFO_LINES_ONLY'
+    elif build_preset == 'relwithdebinfo-msan':
+        buid_preset_params = '--build "relwithdebinfo" --sanitize="memory" -DDEBUGINFO_LINES_ONLY'
+    elif build_preset == 'relwithdebinfo-tsan':
+        buid_preset_params = '--build "relwithdebinfo" --sanitize="thread" -DDEBUGINFO_LINES_ONLY'
     elif build_preset == 'relwithdebinfo':
         buid_preset_params = '--build "relwithdebinfo"'
     

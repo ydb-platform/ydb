@@ -8,7 +8,7 @@
 #include <sys/stat.h>
 #endif
 
-#if defined(__APPLE__) || defined(__darwin__)
+#if defined(__APPLE__) || defined(_darwin_)
 /* OSX seems not to define these. */
 #ifndef s6_addr16
 #define s6_addr16 __u6_addr.__u6_addr16

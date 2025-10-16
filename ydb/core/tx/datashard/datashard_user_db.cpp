@@ -190,7 +190,7 @@ void TDataShardUserDb::InsertRow(
     Y_ENSURE(localTableId != 0, "Unexpected InsertRow for an unknown table");
 
     if (RowExists(tableId, key)) {
-        // Compitability with old stats.
+        // Compatibility with old stats.
         // We count read only if row exists.
         IncreaseSelectCounters(key);
         throw TUniqueConstrainException();
@@ -210,7 +210,7 @@ void TDataShardUserDb::UpdateRow(
     Y_ENSURE(localTableId != 0, "Unexpected UpdateRow for an unknown table");
 
     if (!RowExists(tableId, key)) {
-        // Compitability with old stats.
+        // Compatibility with old stats.
         // We count read only if row exists.
         return;
     }

@@ -104,8 +104,6 @@ ydb/tests/functional/api test_discovery.py.TestDiscoveryExtEndpoint.test_scenari
 ydb/tests/functional/bridge test_bridge.py.TestBridgeBasic.test_failover
 ydb/tests/functional/bridge test_bridge.py.TestBridgeBasic.test_rejoin
 ydb/tests/functional/bridge test_bridge.py.TestBridgeBasic.test_takedown
-ydb/tests/functional/config test_distconf_reassign_state_storage.py.TestKiKiMRChangeRingGroupWithConfigDistconf.test_cluster_change_state_storage
-ydb/tests/functional/config test_distconf_reassign_state_storage.py.TestKiKiMRDistConfReassignStateStorageBadCases.test_cluster_change_state_storage
 ydb/tests/functional/encryption test_encryption.py.TestEncryption.test_simple_encryption
 ydb/tests/functional/hive test_drain.py.TestHive.test_drain_on_stop
 ydb/tests/functional/postgresql test_postgres.py.TestPostgresSuite.test_postgres_suite[select_1]

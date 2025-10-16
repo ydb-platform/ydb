@@ -1570,11 +1570,12 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         auto db = kikimr.GetTableClient();
 
         auto it = db.StreamExecuteScanQuery(R"(
-            SELECT COUNT(*) FROM `/Root/KeyValue`
+            SELECT COUNT(*) as C FROM `/Root/KeyValue`
             UNION ALL
-            SELECT COUNT(*) FROM `/Root/EightShard`
+            SELECT COUNT(*) as C FROM `/Root/EightShard`
             UNION ALL
-            SELECT SUM(Amount) FROM `/Root/Test`;
+            SELECT SUM(Amount) as C FROM `/Root/Test`
+            ORDER BY C;
         )").GetValueSync();
         auto res = StreamResultToYson(it);
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());

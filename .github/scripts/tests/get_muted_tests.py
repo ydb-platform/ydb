@@ -74,7 +74,7 @@ def get_all_tests(job_id=None, branch=None, build_type=None):
             print(f'   - branch: {branch}')
             print(f'   - build_type: {build_type}')
 
-            tests = f"""
+            tests_query = f"""
             SELECT 
                 t.suite_folder as suite_folder,
                 t.test_name as test_name,
@@ -96,9 +96,9 @@ def get_all_tests(job_id=None, branch=None, build_type=None):
             """
         
         print(f'📝 Executing SQL query:')
-        print(tests)
+        print(tests_query)
         
-        query = ydb.ScanQuery(tests, {})
+        query = ydb.ScanQuery(tests_query, {})
         print(f'⏱️  Starting query execution...')
         start_time = time.time()
         it = table_client.scan_query(query)
@@ -119,10 +119,6 @@ def get_all_tests(job_id=None, branch=None, build_type=None):
         print(f'✅ Query completed in {end_time - start_time:.2f} seconds')
         print(f'📊 Total results: {len(results)} tests')
         
-        if len(results) > 0:
-            print(f'🔍 Sample results (first 3):')
-            for i, row in enumerate(results[:3]):
-                print(f'   {i+1}. {row.get("suite_folder", "N/A")}/{row.get("test_name", "N/A")} (owners: {row.get("owners", "N/A")})')
         
         return results
 
@@ -276,8 +272,6 @@ def mute_applier(args):
             if is_muted:
                 muted_count += 1
             
-            if (i + 1) % 1000 == 0:
-                print(f'   Processed {i + 1}/{len(all_tests)} tests...')
         
         print(f'📊 Processing complete:')
         print(f'   - Total tests: {len(all_tests)}')

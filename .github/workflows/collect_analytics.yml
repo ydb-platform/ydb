@@ -1,7 +1,7 @@
 name: Collect-analytics-run
 on:
-  schedule:
-    - cron: "0 1-23/2 * * *" # Every 2 hours starting from 1:00 to 23:00.
+  #schedule:
+  #  - cron: "0 1-23/2 * * *" # Every 2 hours starting from 1:00 to 23:00.
   workflow_dispatch:
 
 

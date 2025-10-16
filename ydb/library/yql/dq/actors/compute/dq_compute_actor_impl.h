@@ -102,6 +102,7 @@ private:
     struct TEvPrivate {
         enum EEv : ui32 {
             EvAsyncOutputError = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
+            EvCheckIdleness,
             EvEnd
         };
 
@@ -115,6 +116,14 @@ private:
 
             NYql::NDqProto::StatusIds::StatusCode StatusCode;
             NYql::TIssues Issues;
+        };
+
+        struct TEvCheckIdleness : public NActors::TEventLocal<TEvCheckIdleness, EvCheckIdleness> {
+            TEvCheckIdleness(TInstant checkTime)
+                : CheckTime(checkTime)
+            {}
+
+            TInstant CheckTime;
         };
     };
 
@@ -136,6 +145,8 @@ public:
             Channels = new TDqComputeActorChannels(this->SelfId(), TxId, Task, !RuntimeSettings.FailOnUndelivery,
                 RuntimeSettings.StatsMode, MemoryLimits.ChannelBufferSize, this, this->GetActivityType());
             this->RegisterWithSameMailbox(Channels);
+
+            InitializeWatermarks();
 
             if (RuntimeSettings.Timeout) {
                 CA_LOG_D("Set execution timeout " << *RuntimeSettings.Timeout);
@@ -317,6 +328,7 @@ protected:
             hFunc(IDqComputeActorAsyncInput::TEvNewAsyncInputDataArrived, OnNewAsyncInputDataArrived);
             hFunc(IDqComputeActorAsyncInput::TEvAsyncInputError, OnAsyncInputError);
             hFunc(TEvPrivate::TEvAsyncOutputError, HandleAsyncOutputError);
+            hFunc(TEvPrivate::TEvCheckIdleness, HandleCheckIdleness);
             default: {
                 CA_LOG_C("TDqComputeActorBase, unexpected event: " << ev->GetTypeRewrite() << " (" << GetEventTypeString(ev) << ")");
                 InternalError(NYql::NDqProto::StatusIds::INTERNAL_ERROR, TIssuesIds::DEFAULT_ERROR, TStringBuilder() << "Unexpected event: " << ev->GetTypeRewrite() << " (" << GetEventTypeString(ev) << ")");
@@ -843,6 +855,7 @@ protected:
         IDqInputChannel::TPtr Channel;
         bool HasPeer = false;
         const NDqProto::EWatermarksMode WatermarksMode;
+        const TDuration WatermarksIdleDelay = TDuration::Max();
         std::optional<NDqProto::TCheckpoint> PendingCheckpoint;
         const NDqProto::ECheckpointingMode CheckpointingMode;
         i64 FreeSpace = 0;
@@ -852,11 +865,13 @@ protected:
                 ui64 channelId,
                 ui32 srcStageId,
                 NDqProto::EWatermarksMode watermarksMode,
-                NDqProto::ECheckpointingMode checkpointingMode)
+                NDqProto::ECheckpointingMode checkpointingMode,
+                TDuration watermarksIdleDelay)
             : LogPrefix(logPrefix)
             , ChannelId(channelId)
             , SrcStageId(srcStageId)
             , WatermarksMode(watermarksMode)
+            , WatermarksIdleDelay(watermarksIdleDelay)
             , CheckpointingMode(checkpointingMode)
         {
         }
@@ -1582,6 +1597,29 @@ protected:
         InternalError(ev->Get()->StatusCode, ev->Get()->Issues);
     }
 
+    void HandleCheckIdleness(const TEvPrivate::TEvCheckIdleness::TPtr& ev) {
+        auto now = TInstant::Now();
+        auto checkTime = Max(ev->Get()->CheckTime, now);
+        auto removed = InflightIdlenessCheck.erase(ev->Get()->CheckTime);
+        Y_DEBUG_ABORT_UNLESS(removed);
+        auto idleWatermark = WatermarksTracker.HandleIdleness(checkTime);
+        if (idleWatermark) {
+            CA_LOG_T("Idleness watermark " << idleWatermark);
+            ResumeExecution(EResumeSource::CAWatermarkIdleness);
+        }
+        ScheduleIdlenessCheck();
+    }
+
+    void ScheduleIdlenessCheck() {
+        auto checkTime = WatermarksTracker.GetNextIdlenessCheckAt();
+        // only schedule new check if nothing scheduled at same or earlier time
+        if (checkTime && (InflightIdlenessCheck.empty() || *InflightIdlenessCheck.cbegin() > *checkTime)) {
+            CA_LOG_T("Reschedule next idleness check from {" << JoinSeq(',', InflightIdlenessCheck) << "} to " << checkTime);
+            InflightIdlenessCheck.emplace(*checkTime);
+            this->Schedule(*checkTime, new TEvPrivate::TEvCheckIdleness(*checkTime));
+        }
+    }
+
     bool AllAsyncOutputsFinished() const {
         for (const auto& [outputIndex, sinkInfo] : SinksMap) {
             if (!sinkInfo.FinishIsAcknowledged) {
@@ -1622,8 +1660,12 @@ protected:
             } else {
                 for (auto& channel : inputDesc.GetChannels()) {
                     auto channelWatermarksMode = channel.GetWatermarksMode();
+                    TDuration watermarksIdleDelay = TDuration::Max();
                     if (channelWatermarksMode != NDqProto::EWatermarksMode::WATERMARKS_MODE_DISABLED) {
                         watermarksMode = channelWatermarksMode;
+                    }
+                    if (channel.HasWatermarksIdleDelayUs()) {
+                        watermarksIdleDelay = TDuration::MicroSeconds(channel.GetWatermarksIdleDelayUs());
                     }
                     auto result = InputChannelsMap.emplace(
                         channel.GetId(),
@@ -1632,7 +1674,8 @@ protected:
                             channel.GetId(),
                             channel.GetSrcStageId(),
                             channelWatermarksMode,
-                            channel.GetCheckpointingMode())
+                            channel.GetCheckpointingMode(),
+                            watermarksIdleDelay)
                     );
                     YQL_ENSURE(result.second);
                 }
@@ -1682,7 +1725,6 @@ protected:
 
         RequestContext = MakeIntrusive<NYql::NDq::TRequestContext>(Task.GetRequestContext());
 
-        InitializeWatermarks();
         InitializeLogPrefix(); // note: SelfId is not initialized here
     }
 
@@ -1690,13 +1732,13 @@ private:
     void InitializeWatermarks() {
         for (const auto& [id, source] : SourcesMap) {
             if (source.WatermarksMode == NDqProto::EWatermarksMode::WATERMARKS_MODE_DEFAULT) {
-                WatermarksTracker.RegisterAsyncInput(id);
+                WatermarksTracker.RegisterAsyncInput(id, source.WatermarksIdleDelay);
             }
         }
 
         for (const auto& [id, channel] : InputChannelsMap) {
             if (channel.WatermarksMode == NDqProto::EWatermarksMode::WATERMARKS_MODE_DEFAULT) {
-                WatermarksTracker.RegisterInputChannel(id);
+                WatermarksTracker.RegisterInputChannel(id, channel.WatermarksIdleDelay);
             }
         }
     }
@@ -2086,6 +2128,7 @@ protected:
     ::NMonitoring::TDynamicCounters::TCounterPtr InputTransformCpuTimeMs;
     THolder<NYql::TCounters> Stat;
     TDuration CpuTimeSpent;
+    TSet<TInstant> InflightIdlenessCheck;
 };
 
 } // namespace NYql

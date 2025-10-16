@@ -294,34 +294,6 @@ private:
             }
         }
 
-        TVector<ui32> finishedInputsWithWatermarks;
-        TVector<ui32> finishedSourcesWithWatermarks;
-        if (WatermarkRequests.empty()) {
-            // check if any of inputs become empty and finished and drop them off
-            for (ui32 i = InputsWithWatermarksPendingFinish; i < InputsWithWatermarks.size(); ) {
-                auto& channelId = InputsWithWatermarks[i];
-                auto inputChannel = TaskRunner->GetInputChannel(channelId);
-                if (inputChannel->IsFinished()) {
-                    finishedInputsWithWatermarks.push_back(channelId);
-                    std::swap(channelId, InputsWithWatermarks.back());
-                    InputsWithWatermarks.pop_back();
-                } else {
-                    ++i;
-                }
-            }
-            for (ui32 i = SourcesWithWatermarksPendingFinish; i < SourcesWithWatermarks.size(); ) {
-                auto& sourceId = SourcesWithWatermarks[i];
-                auto source = TaskRunner->GetSource(sourceId);
-                if (source->IsFinished()) {
-                    finishedSourcesWithWatermarks.push_back(sourceId);
-                    std::swap(sourceId, SourcesWithWatermarks.back());
-                    SourcesWithWatermarks.pop_back();
-                } else {
-                    ++i;
-                }
-            }
-        }
-
         if (MemoryQuota) {
             MemoryQuota->TryShrinkMemory(guard.GetMutex());
         }
@@ -354,8 +326,6 @@ private:
                 MemoryQuota ? MemoryQuota->GetMkqlMemoryLimit() : 0,
                 std::move(mkqlProgramState),
                 watermarkInjectedToOutputs,
-                std::move(finishedInputsWithWatermarks),
-                std::move(finishedSourcesWithWatermarks),
                 ev->Get()->CheckpointRequest.Defined(),
                 TInstant::Now() - start),
             /*flags=*/0,
@@ -373,16 +343,6 @@ private:
         const ui64 freeSpace = inputChannel->GetFreeSpace();
         if (finish) {
             inputChannel->Finish();
-
-            // check if finished channel was tracked for watermarks move them to Pending part
-            Y_DEBUG_ABORT_UNLESS(InputsWithWatermarksPendingFinish <= InputsWithWatermarks.size());
-            const auto end = InputsWithWatermarks.begin() + InputsWithWatermarksPendingFinish;
-            auto it = std::find(InputsWithWatermarks.begin(), end, channelId); // O(n), but rare/once-per-channel
-            if (it != end) {
-                Y_DEBUG_ABORT_UNLESS(InputsWithWatermarksPendingFinish > 0);
-                --InputsWithWatermarksPendingFinish;
-                std::swap(*it, InputsWithWatermarks[InputsWithWatermarksPendingFinish]);
-            }
         }
         if (ev->Get()->PauseAfterPush) {
             HasActiveCheckpoint = true;
@@ -414,19 +374,10 @@ private:
         source->Push(std::move(batch), space);
         if (finish) {
             source->Finish();
-
-            Y_DEBUG_ABORT_UNLESS(SourcesWithWatermarksPendingFinish <= SourcesWithWatermarks.size());
-            const auto end = SourcesWithWatermarks.begin() + SourcesWithWatermarksPendingFinish;
-            auto it = std::find(SourcesWithWatermarks.begin(), end, index); // O(n), but rare/once-per-channel
-            if (it != end) {
-                Y_DEBUG_ABORT_UNLESS(SourcesWithWatermarksPendingFinish > 0);
-                --SourcesWithWatermarksPendingFinish;
-                std::swap(*it, SourcesWithWatermarks[SourcesWithWatermarksPendingFinish]);
-            }
         }
         Send(
             ParentId,
-            new TEvSourceDataAck(index, source->GetFreeSpace()),
+            new TEvSourceDataAck(index, source->GetFreeSpace(), finish),
             /*flags=*/0,
             cookie);
     }
@@ -609,8 +560,6 @@ private:
         }
         std::sort(Inputs.begin(), Inputs.end());
         Y_ENSURE(std::unique(Inputs.begin(), Inputs.end()) == Inputs.end());
-        InputsWithWatermarksPendingFinish = InputsWithWatermarks.size();
-        SourcesWithWatermarksPendingFinish = SourcesWithWatermarks.size();
 
         auto& outputs = settings.GetOutputs();
         for (auto outputId = 0; outputId < outputs.size(); outputId++) {
@@ -703,13 +652,11 @@ private:
     TVector<ui32> Inputs;
     TVector<ui32> InputsWithCheckpoints;
     TVector<ui32> InputsWithWatermarks;
-    ui32 InputsWithWatermarksPendingFinish; // index in InputsWithWatermarks after which source buffers has pending finished mark
     TVector<ui32> InputTransforms;
     TVector<ui32> InputTransformsWithCheckpoints;
     TVector<ui32> InputTransformsWithWatermarks;
     TVector<ui32> Sources;
     TVector<ui32> SourcesWithWatermarks;
-    ui32 SourcesWithWatermarksPendingFinish; // index in SourcesWithWatermarks after which source buffers has pending finished mark
     TVector<ui32> Sinks;
     TVector<ui32> Outputs;
     TVector<ui32> OutputsWithWatermarks;

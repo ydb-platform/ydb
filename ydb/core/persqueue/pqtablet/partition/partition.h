@@ -1161,10 +1161,12 @@ private:
                               bool needToCompactiHead,
                               TEvKeyValue::TEvRequest* compactionRequest,
                               TInstant& blobCreationUnixTime,
-                              bool wasThePreviousBlobBig);
+                              bool wasThePreviousBlobBig,
+                              bool& newHeadIsInitialized);
     void RenameCompactedBlob(TDataKey& k,
                              const size_t size,
                              const bool needToCompactHead,
+                             bool& newHeadIsInitialized,
                              TProcessParametersBase& parameters,
                              TEvKeyValue::TEvRequest* compactionRequest);
 
@@ -1176,6 +1178,10 @@ private:
 
     std::unique_ptr<TEvPQ::TEvGetWriteInfoRequest> PendingGetWriteInfoRequest;
     bool StopCompaction = false;
+    TMaybe<std::pair<ui64, ui16>> FirstCompactionPart;
+
+    void InitFirstCompactionPart();
+    bool InitNewHeadForCompaction();
 
 private:
     void HandleOnInit(TEvPersQueue::TEvMLPReadRequest::TPtr&);

@@ -217,8 +217,8 @@ protected:
                             builder << col;
                         }
                         builder << snaphsotsResult.size();
-                        for (size_t i = 0; i < finalCypressPaths.size(); ++i) {
-                            builder << finalCypressPaths[i] << snaphsotsResult[i].second;
+                        for (size_t i = 0; i < snaphsotsResult.size(); ++i) {
+                            builder << snaphsotsResult[i].first << snaphsotsResult[i].second;
                         }
                         operationHash = builder.Finish();
                     }

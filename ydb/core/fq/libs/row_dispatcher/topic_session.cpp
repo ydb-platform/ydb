@@ -111,6 +111,7 @@ private:
             , Columns(GetColumns(ev->Get()->Record.GetSource()))
             , ConsumerName(ev->Get()->Record.GetSource().GetConsumerName())
             , UseSsl(ev->Get()->Record.GetSource().GetUseSsl())
+            , UseActorSystemThreads(ev->Get()->Record.GetSource().GetUseActorSystemThreadsInTopicClient())
             , ReadActorId(ev->Sender)
             , Counters(counters)
         {
@@ -219,6 +220,7 @@ private:
         const TVector<TSchemaColumn> Columns;
         const TString ConsumerName;
         const bool UseSsl;
+        const bool UseActorSystemThreads;
         const TActorId ReadActorId;
         TDuration ReconnectPeriod;
 
@@ -317,8 +319,8 @@ public:
     [[maybe_unused]] static constexpr char ActorName[] = "FQ_ROW_DISPATCHER_SESSION";
 
 private:
-    NYdb::NTopic::TTopicClientSettings GetTopicClientSettings(bool useSsl);
-    NYql::ITopicClient& GetTopicClient(bool useSsl);
+    NYdb::NTopic::TTopicClientSettings GetTopicClientSettings(bool useSsl, bool useActorSystemThreads);
+    NYql::ITopicClient& GetTopicClient(bool useSsl, bool useActorSystemThreads);
     NYdb::NTopic::TReadSessionSettings GetReadSessionSettings(const TString& consumerName) const;
     void CreateTopicSession();
     void CloseTopicSession();
@@ -450,9 +452,12 @@ void TTopicSession::SubscribeOnNextEvent() {
     });
 }
 
-NYdb::NTopic::TTopicClientSettings TTopicSession::GetTopicClientSettings(bool useSsl) {
+NYdb::NTopic::TTopicClientSettings TTopicSession::GetTopicClientSettings(bool useSsl, bool useActorSystemThreads) {
     auto opts = PqGateway->GetTopicClientSettings();
-    SetupTopicClientSettings(ActorContext().ActorSystem(), SelfId(), opts);
+
+    if (useActorSystemThreads) {
+        SetupTopicClientSettings(ActorContext().ActorSystem(), SelfId(), opts);
+    }
 
     opts.Database(Database)
         .DiscoveryEndpoint(Endpoint)
@@ -462,9 +467,9 @@ NYdb::NTopic::TTopicClientSettings TTopicSession::GetTopicClientSettings(bool us
     return opts;
 }
 
-NYql::ITopicClient& TTopicSession::GetTopicClient(bool useSsl) {
+NYql::ITopicClient& TTopicSession::GetTopicClient(bool useSsl, bool useActorSystemThreads) {
     if (!TopicClient) {
-        TopicClient = PqGateway->GetTopicClient(Driver, GetTopicClientSettings(useSsl));
+        TopicClient = PqGateway->GetTopicClient(Driver, GetTopicClientSettings(useSsl, useActorSystemThreads));
     }
     return *TopicClient;
 }
@@ -509,7 +514,7 @@ void TTopicSession::CreateTopicSession() {
     if (!ReadSession) {
         // Use any sourceParams.
         const auto& client = Clients.begin()->second;
-        ReadSession = GetTopicClient(client->UseSsl).CreateReadSession(GetReadSessionSettings(client->ConsumerName));
+        ReadSession = GetTopicClient(client->UseSsl, client->UseActorSystemThreads).CreateReadSession(GetReadSessionSettings(client->ConsumerName));
         StartingMessageTimestamp = GetMinStartingMessageTimestamp();
         SubscribeOnNextEvent();
     }

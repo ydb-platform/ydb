@@ -172,11 +172,14 @@ EValidationResult ValidateStaticGroup(const NKikimrConfig::TAppConfig& current, 
 
 
 EValidationResult ValidateStateStorageConfig(const NKikimrConfig::TAppConfig& proposed, std::vector<TString>& msg) {
-    if (proposed.HasSelfManagementConfig() || !proposed.HasDomainsConfig()) {
+    if (proposed.HasSelfManagementConfig()) {
         const auto& sm = proposed.GetSelfManagementConfig();
         if (sm.GetEnabled()) {
             return EValidationResult::Ok;
         }
+    }
+    if (!proposed.HasDomainsConfig()) {
+        return EValidationResult::Ok;
     }
     const auto& domains = proposed.GetDomainsConfig();
     bool isExplicit = domains.HasExplicitStateStorageConfig() && domains.HasExplicitStateStorageBoardConfig() && domains.HasExplicitSchemeBoardConfig();

@@ -124,6 +124,7 @@ void TGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
             ActorSystem->Send(GRpcRequestProxyId, new TGrpcRequestNoOperationCall<                           \
                 NKikimrClient::In,                                                                           \
                 NKikimrClient::Out,                                                                          \
+                NRuntimeEvents::EType::COMMON,                                                               \
                 NLegacyGrpcService::TLegacyGrpcMethodAccessorTraits<NKikimrClient::In, NKikimrClient::Out>>( \
                     reqCtx, createActorCb,                                                                   \
                     TRequestAuxSettings {                                                                    \

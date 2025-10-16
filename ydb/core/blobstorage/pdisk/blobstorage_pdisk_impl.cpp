@@ -84,6 +84,13 @@ TPDisk::TPDisk(std::shared_ptr<TPDiskCtx> pCtx, const TIntrusivePtr<TPDiskConfig
             SectorMapLastSectorWriteRate = TControlWrapper(diskModeParams->LastSectorWriteRate, 0, 100000ull * 1024 * 1024);
             SectorMapSeekSleepMicroSeconds = TControlWrapper(diskModeParams->SeekSleepMicroSeconds, 0, 100ul * 1000 * 1000);
         }
+        auto failureProbs = Cfg->SectorMap->GetFailureProbabilities();
+        if (failureProbs) {
+            SectorMapWriteErrorProbability = TControlWrapper(0, 0, 1000000);
+            SectorMapReadErrorProbability = TControlWrapper(0, 0, 1000000);
+            SectorMapSilentWriteFailProbability = TControlWrapper(0, 0, 1000000);
+            SectorMapReadReplayProbability = TControlWrapper(0, 0, 1000000);
+        }
     }
 
     AddCbs(OwnerSystem, GateLog, "Log", 2'000'000ull);
@@ -2907,6 +2914,12 @@ bool TPDisk::Initialize() {
                     LastSectorReadRateControlName = TStringBuilder() << "PDisk_" << PCtx->PDiskId << "_SectorMapLastSectorReadRate";
                     LastSectorWriteRateControlName = TStringBuilder() << "PDisk_" << PCtx->PDiskId << "_SectorMapLastSectorWriteRate";
                 }
+                if (Cfg->SectorMap->GetFailureProbabilities()) {
+                    REGISTER_LOCAL_CONTROL(SectorMapWriteErrorProbability);
+                    REGISTER_LOCAL_CONTROL(SectorMapReadErrorProbability);
+                    REGISTER_LOCAL_CONTROL(SectorMapSilentWriteFailProbability);
+                    REGISTER_LOCAL_CONTROL(SectorMapReadReplayProbability);
+                }
             }
         }
 
@@ -4006,6 +4019,13 @@ void TPDisk::Update() {
             }
 
             diskModeParams->SeekSleepMicroSeconds.store(SectorMapSeekSleepMicroSeconds);
+        }
+        auto failureProbs = Cfg->SectorMap->GetFailureProbabilities();
+        if (failureProbs) {
+            failureProbs->WriteErrorProbability.store(SectorMapWriteErrorProbability / 1000000.0);
+            failureProbs->ReadErrorProbability.store(SectorMapReadErrorProbability / 1000000.0);
+            failureProbs->SilentWriteFailProbability.store(SectorMapSilentWriteFailProbability / 1000000.0);
+            failureProbs->ReadReplayProbability.store(SectorMapReadReplayProbability / 1000000.0);
         }
     }
 

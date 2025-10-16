@@ -41,8 +41,7 @@
 ||
 || `all_external_data_sources_are_available`
 | `false`
-| Включение всех типов внешних источников.
-При true, значение `available_external_data_sources` не используется.
+| Включение всех типов внешних источников. Если включено, настройка `available_external_data_sources` игнорируется.
 ||
 |#
 

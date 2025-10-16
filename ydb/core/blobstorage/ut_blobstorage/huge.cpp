@@ -22,9 +22,17 @@ namespace {
         ui8 TestSubgroupNodeId = 6;
 
     public:
-        THugeBlobTest()
+
+        static THugeBlobTest CreateHugeBlobTest() {
+            TFeatureFlags ff;
+            ff.SetForceDistconfDisable(true);
+            return THugeBlobTest(std::move(ff));
+        }
+
+        THugeBlobTest(TFeatureFlags&& featureFlags)
             : Env{{
                     .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+                    .FeatureFlags = std::move(featureFlags),
                     .UseFakeConfigDispatcher = true,
                 }}
             , Runtime(*Env.Runtime)
@@ -223,7 +231,7 @@ namespace {
                     << " targetHuge2# " << targetHuge2
                     << " targetHuge3# " << targetHuge3
                     << Endl;
-                THugeBlobTest test;
+                THugeBlobTest test = THugeBlobTest::CreateHugeBlobTest();
                 test.RunTest(fresh1, fresh2, huge1, huge2, targetHuge, fresh3, huge3, targetHuge2, targetHuge3);
             }}}}}}}}}
         }

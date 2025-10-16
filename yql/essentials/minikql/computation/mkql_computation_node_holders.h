@@ -32,7 +32,8 @@ const ui32 CodegenArraysFallbackLimit = 1000u;
 
 template <typename Type, EMemorySubPool MemoryPool = EMemorySubPool::Default>
 using TMKQLVector = std::vector<Type, TMKQLAllocator<Type, MemoryPool>>;
-template<typename Key, typename T, typename Hash = std::hash<Key>, typename KeyEqual = std::equal_to<Key>, EMemorySubPool MemoryPool = EMemorySubPool::Default>
+template <typename Key, typename T, typename Hash = std::hash<Key>,
+          typename KeyEqual = std::equal_to<Key>, EMemorySubPool MemoryPool = EMemorySubPool::Default>
 using TMKQLHashMap = std::unordered_map<Key, T, Hash, KeyEqual, TMKQLAllocator<std::pair<const Key, T>, MemoryPool>>;
 
 using TKeyTypes = std::vector<std::pair<NUdf::EDataSlot, bool>>;
@@ -93,7 +94,7 @@ public:
         std::swap(RowCount_, other.RowCount_);
     }
 
-    template<typename... TArgs>
+    template <typename... TArgs>
     void emplace_back(TArgs&&... args) {
         MKQL_ENSURE(!IsWide(), "emplace_back() should not be used for wide batch");
         if (Values_.empty() || Values_.back().size() == Values_.back().capacity()) {
@@ -112,10 +113,11 @@ public:
         emplace_back(std::move(row));
     }
 
-    template<typename TFunc>
+    template <typename TFunc>
     auto ForEachRow(const TFunc& cb) const {
         MKQL_ENSURE(!IsWide(), "ForEachRowWide() should be used instead");
-        return DoForEachRow<const NUdf::TUnboxedValue, const TUnboxedValueBatch>(this,
+        return DoForEachRow<const NUdf::TUnboxedValue, const TUnboxedValueBatch>(
+            this,
             [&cb](const NUdf::TUnboxedValue* values, ui32 width) {
                 Y_DEBUG_ABORT_UNLESS(width == 1);
                 Y_DEBUG_ABORT_UNLESS(values);
@@ -123,10 +125,11 @@ public:
             });
     }
 
-    template<typename TFunc>
+    template <typename TFunc>
     auto ForEachRow(const TFunc& cb) {
         MKQL_ENSURE(!IsWide(), "ForEachRowWide() should be used instead");
-        return DoForEachRow<NUdf::TUnboxedValue, TUnboxedValueBatch>(this,
+        return DoForEachRow<NUdf::TUnboxedValue, TUnboxedValueBatch>(
+            this,
             [&cb](NUdf::TUnboxedValue* values, ui32 width) {
                 Y_DEBUG_ABORT_UNLESS(width == 1);
                 Y_DEBUG_ABORT_UNLESS(values);
@@ -134,13 +137,13 @@ public:
             });
     }
 
-    template<typename TFunc>
+    template <typename TFunc>
     auto ForEachRowWide(const TFunc& cb) const {
         MKQL_ENSURE(IsWide(), "ForEachRow() should be used instead");
         return DoForEachRow<const NUdf::TUnboxedValue, const TUnboxedValueBatch>(this, cb);
     }
 
-    template<typename TFunc>
+    template <typename TFunc>
     auto ForEachRowWide(const TFunc& cb) {
         MKQL_ENSURE(IsWide(), "ForEachRow() should be used instead");
         return DoForEachRow<NUdf::TUnboxedValue, TUnboxedValueBatch>(this, cb);
@@ -181,7 +184,7 @@ public:
         RowCount_ -= rowCount;
     }
 
-    template<typename TFunc>
+    template <typename TFunc>
     void PushRow(const TFunc& producer) {
         ReserveNextRow();
         for (ui32 i = 0; i < Width_; ++i) {
@@ -217,7 +220,7 @@ private:
         }
     }
 
-    template<typename TValue, typename TParent, typename TFunc>
+    template <typename TValue, typename TParent, typename TFunc>
     static auto DoForEachRow(TParent* parent, const TFunc& cb) {
         using TReturn = typename std::result_of<TFunc(TValue*, ui32)>::type;
 
@@ -261,23 +264,20 @@ private:
     ui64 RowCount_ = 0;
 };
 
-inline int CompareValues(NUdf::EDataSlot type, bool asc, bool isOptional, const NUdf::TUnboxedValuePod& lhs, const NUdf::TUnboxedValuePod& rhs) {
+inline int CompareValues(NUdf::EDataSlot type, bool asc, bool isOptional,
+                         const NUdf::TUnboxedValuePod& lhs, const NUdf::TUnboxedValuePod& rhs) {
     int cmp;
     if (isOptional) {
         if (!lhs && !rhs) {
             cmp = 0;
-        }
-        else if (!lhs) {
+        } else if (!lhs) {
             cmp = -1;
-        }
-        else if (!rhs) {
+        } else if (!rhs) {
             cmp = 1;
-        }
-        else {
+        } else {
             cmp = NUdf::CompareValues(type, lhs, rhs);
         }
-    }
-    else {
+    } else {
         cmp = NUdf::CompareValues(type, lhs, rhs);
     }
 
@@ -288,9 +288,11 @@ inline int CompareValues(NUdf::EDataSlot type, bool asc, bool isOptional, const 
     return cmp;
 }
 
-inline int CompareValues(const NUdf::TUnboxedValuePod* left, const NUdf::TUnboxedValuePod* right, const TKeyTypes& types, const bool* directions) {
+inline int CompareValues(const NUdf::TUnboxedValuePod* left, const NUdf::TUnboxedValuePod* right,
+                         const TKeyTypes& types, const bool* directions) {
     for (ui32 i = 0; i < types.size(); ++i) {
-        if (const auto cmp = CompareValues(types[i].first, directions[i], types[i].second, left[i], right[i])) {
+        if (const auto cmp = CompareValues(types[i].first, directions[i],
+                                           types[i].second, left[i], right[i])) {
             return cmp;
         }
     }
@@ -298,22 +300,25 @@ inline int CompareValues(const NUdf::TUnboxedValuePod* left, const NUdf::TUnboxe
     return 0;
 }
 
-inline int CompareKeys(const NUdf::TUnboxedValuePod& left, const NUdf::TUnboxedValuePod& right, const TKeyTypes& types, bool isTuple) {
+inline int CompareKeys(const NUdf::TUnboxedValuePod& left, const NUdf::TUnboxedValuePod& right,
+                       const TKeyTypes& types, bool isTuple) {
     if (isTuple) {
-        if (left && right)
+        if (left && right) {
             for (ui32 i = 0; i < types.size(); ++i) {
-                if (const auto cmp = CompareValues(types[i].first, true, types[i].second, left.GetElement(i), right.GetElement(i))) {
+                if (const auto cmp = CompareValues(types[i].first, true,
+                                                   types[i].second,
+                                                   left.GetElement(i), right.GetElement(i))) {
                     return cmp;
                 }
             }
-        else if (!left && right)
+        } else if (!left && right) {
             return -1;
-        else if (left && !right)
+        } else if (left && !right) {
             return 1;
+        }
 
         return 0;
-    }
-    else {
+    } else {
         return CompareValues(types.front().first, true, types.front().second, left, right);
     }
 }
@@ -323,7 +328,8 @@ struct TKeyPayloadPairLess {
         : Types(&types)
         , IsTuple(isTuple)
         , Compare(compare)
-    {}
+    {
+    }
 
     bool operator()(const TKeyPayloadPair& left, const TKeyPayloadPair& right) const {
         if (Compare) {
@@ -343,7 +349,8 @@ struct TKeyPayloadPairEqual {
         : Types(&types)
         , IsTuple(isTuple)
         , Equate(equate)
-    {}
+    {
+    }
 
     bool operator()(const TKeyPayloadPair& left, const TKeyPayloadPair& right) const {
         if (Equate) {
@@ -363,7 +370,8 @@ struct TValueEqual {
         : Types(&types)
         , IsTuple(isTuple)
         , Equate(equate)
-    {}
+    {
+    }
 
     bool operator()(const NUdf::TUnboxedValue& left, const NUdf::TUnboxedValue& right) const {
         if (Equate) {
@@ -383,7 +391,8 @@ struct TValueLess {
         : Types(&types)
         , IsTuple(isTuple)
         , Compare(compare)
-    {}
+    {
+    }
 
     bool operator()(const NUdf::TUnboxedValue& left, const NUdf::TUnboxedValue& right) const {
         if (Compare) {
@@ -405,32 +414,37 @@ struct TValueHasher {
         : Types(&types)
         , IsTuple(isTuple)
         , Hash(hash)
-    {}
+    {
+    }
 
     NUdf::THashType operator()(const NUdf::TUnboxedValuePod& value) const {
         if (Hash) {
             return Hash->Hash(value);
         }
 
-        if (!value)
+        if (!value) {
             return HashOfNull;
+        }
 
         if (IsTuple) {
             NUdf::THashType hash = 0ULL;
-            if (auto elements = value.GetElements())
+            if (auto elements = value.GetElements()) {
                 for (const auto& type : (*Types)) {
-                    if (const auto v = *elements++)
+                    if (const auto v = *elements++) {
                         hash = CombineHashes(hash, NUdf::GetValueHash(type.first, v));
-                    else
+                    } else {
                         hash = CombineHashes(hash, HashOfNull);
+                    }
                 }
-            else
+            } else {
                 for (auto i = 0U; i < Types->size(); ++i) {
-                    if (const auto v = value.GetElement(i))
+                    if (const auto v = value.GetElement(i)) {
                         hash = CombineHashes(hash, NUdf::GetValueHash((*Types)[i].first, v));
-                    else
+                    } else {
                         hash = CombineHashes(hash, HashOfNull);
+                    }
                 }
+            }
             return hash;
         }
         return NUdf::GetValueHash((*Types).front().first, value);
@@ -441,16 +455,14 @@ struct TValueHasher {
     const NUdf::IHash* Hash;
 };
 
-
-
-template<typename T>
-struct TFloatHash : private std::hash<T> {
+template <typename T>
+struct TFloatHash: private std::hash<T> {
     std::size_t operator()(T value) const {
         return std::isnan(value) ? ~0ULL : std::hash<T>::operator()(value);
     }
 };
 
-template<typename T>
+template <typename T>
 struct TFloatEquals {
     bool operator()(T l, T r) const {
         return std::isunordered(l, r) ? std::isnan(l) == std::isnan(r) : l == r;
@@ -466,9 +478,9 @@ using TMyEquals = std::conditional_t<std::is_floating_point<T>::value, TFloatEqu
 constexpr float COMPACT_HASH_MAX_LOAD_FACTOR = 1.2f;
 
 using TValuesDictHashMap = std::unordered_map<
-        NUdf::TUnboxedValue, NUdf::TUnboxedValue,
-        NYql::TVaryingHash<NUdf::TUnboxedValue, TValueHasher>, TValueEqual,
-        TMKQLAllocator<std::pair<const NUdf::TUnboxedValue, NUdf::TUnboxedValue>>>;
+    NUdf::TUnboxedValue, NUdf::TUnboxedValue,
+    NYql::TVaryingHash<NUdf::TUnboxedValue, TValueHasher>, TValueEqual,
+    TMKQLAllocator<std::pair<const NUdf::TUnboxedValue, NUdf::TUnboxedValue>>>;
 
 using TValuesDictHashSet = std::unordered_set<
     NUdf::TUnboxedValue, NYql::TVaryingHash<NUdf::TUnboxedValue, TValueHasher>, TValueEqual,
@@ -507,8 +519,7 @@ inline ui64 AddSmallValue(TPagedArena& pool, const TStringBuf& value) {
         memcpy((ui8*)&ret, value.data(), value.size());
         Y_DEBUG_ABORT_UNLESS(IsSmallValueEmbedded(ret));
         return ret;
-    }
-    else {
+    } else {
         auto ptr = pool.Alloc(value.size());
         memcpy((ui8*)ptr, value.data(), value.size());
         return (ui64)ptr;
@@ -520,8 +531,7 @@ inline ui64 AsSmallValue(const TStringBuf& value) {
         ui64 ret = 0;
         memcpy((ui8*)&ret, value.data(), value.size());
         return ret;
-    }
-    else {
+    } else {
         return (ui64)value.data();
     }
 }
@@ -549,7 +559,7 @@ using TValuesDictHashSingleFixedCompactMultiMap = NCHash::TCompactMultiHash<T, u
 
 template <typename T>
 using TValuesDictHashSingleFixedMap = std::unordered_map<T, NUdf::TUnboxedValue, NYql::TVaryingHash<T, TMyHash<T>>, TMyEquals<T>,
-    TMKQLAllocator<std::pair<const T, NUdf::TUnboxedValue>>>;
+                                                         TMKQLAllocator<std::pair<const T, NUdf::TUnboxedValue>>>;
 
 using THashedDictFiller = std::function<void(TValuesDictHashMap&)>;
 using THashedSetFiller = std::function<void(TValuesDictHashSet&)>;
@@ -567,7 +577,8 @@ public:
     TTypeHolder(TMemoryUsageInfo* memInfo, TType* type)
         : TComputationValue(memInfo)
         , Type_(type)
-    {}
+    {
+    }
 
     NUdf::TStringRef GetResourceTag() const override {
         return NUdf::TStringRef::Of("TypeHolder");
@@ -615,6 +626,7 @@ private:
 template <class IFace>
 class TTypeOperationsRegistry {
     using TValuePtr = typename IFace::TPtr;
+
 public:
     IFace* FindOrEmplace(TType& type) const {
         const TString serializedType = SerializeNode(&type, NodeStack_);
@@ -641,16 +653,17 @@ private:
     mutable THashMap<TString, TValuePtr> Registry_;
 };
 
-class TDirectArrayHolderInplace : public TComputationValue<TDirectArrayHolderInplace> {
+class TDirectArrayHolderInplace: public TComputationValue<TDirectArrayHolderInplace> {
 public:
     void* operator new(size_t sz) = delete;
     void* operator new[](size_t sz) = delete;
-    void operator delete(void *mem, std::size_t sz) {
-        const auto pSize = static_cast<void*>(static_cast<ui8*>(mem) + sizeof(TComputationValue<TDirectArrayHolderInplace>));
+    void operator delete(void* mem, std::size_t sz) {
+        const auto pSize = static_cast<void*>(static_cast<ui8*>(mem) +
+                                              sizeof(TComputationValue<TDirectArrayHolderInplace>));
         FreeWithSize(mem, sz + *static_cast<ui64*>(pSize) * sizeof(NUdf::TUnboxedValue));
     }
 
-    void operator delete[](void *mem, std::size_t sz) = delete;
+    void operator delete[](void* mem, std::size_t sz) = delete;
 
     TDirectArrayHolderInplace(TMemoryUsageInfo* memInfo, ui64 size)
         : TComputationValue(memInfo)
@@ -677,11 +690,13 @@ public:
     }
 
 private:
-    class TIterator : public TTemporaryComputationValue<TIterator> {
+    class TIterator: public TTemporaryComputationValue<TIterator> {
     public:
         TIterator(const TDirectArrayHolderInplace* parent)
-            : TTemporaryComputationValue(parent->GetMemInfo()), Parent_(const_cast<TDirectArrayHolderInplace*>(parent))
-        {}
+            : TTemporaryComputationValue(parent->GetMemInfo())
+            , Parent_(const_cast<TDirectArrayHolderInplace*>(parent))
+        {
+        }
 
     private:
         bool Skip() final {
@@ -689,15 +704,17 @@ private:
         }
 
         bool Next(NUdf::TUnboxedValue& value) final {
-            if (!Skip())
+            if (!Skip()) {
                 return false;
+            }
             value = Parent_->GetPtr()[Current_];
             return true;
         }
 
         bool NextPair(NUdf::TUnboxedValue& key, NUdf::TUnboxedValue& payload) final {
-            if (!Next(payload))
+            if (!Next(payload)) {
                 return false;
+            }
             key = NUdf::TUnboxedValuePod(Current_);
             return true;
         }
@@ -706,19 +723,23 @@ private:
         ui64 Current_ = Max<ui64>();
     };
 
-    class TKeysIterator : public TTemporaryComputationValue<TKeysIterator> {
+    class TKeysIterator: public TTemporaryComputationValue<TKeysIterator> {
     public:
         TKeysIterator(const TDirectArrayHolderInplace& parent)
-            : TTemporaryComputationValue(parent.GetMemInfo()), Size_(parent.GetSize())
-        {}
+            : TTemporaryComputationValue(parent.GetMemInfo())
+            , Size_(parent.GetSize())
+        {
+        }
+
     private:
         bool Skip() final {
             return ++Current_ < Size_;
         }
 
         bool Next(NUdf::TUnboxedValue& key) final {
-            if (!Skip())
+            if (!Skip()) {
                 return false;
+            }
             key = NUdf::TUnboxedValuePod(Current_);
             return true;
         }
@@ -768,8 +789,9 @@ private:
     }
 
     NUdf::IBoxedValuePtr ReverseListImpl(const NUdf::IValueBuilder& builder) const final {
-        if (1U >= Size_)
+        if (1U >= Size_) {
             return const_cast<TDirectArrayHolderInplace*>(this);
+        }
 
         NUdf::TUnboxedValue* items = nullptr;
         auto result = builder.NewArray(Size_, items);
@@ -778,11 +800,13 @@ private:
     }
 
     NUdf::IBoxedValuePtr SkipListImpl(const NUdf::IValueBuilder& builder, ui64 count) const final {
-        if (!count)
+        if (!count) {
             return const_cast<TDirectArrayHolderInplace*>(this);
+        }
 
-        if (count >= Size_)
+        if (count >= Size_) {
             return builder.NewEmptyList().Release().AsBoxed();
+        }
 
         const auto newSize = Size_ - count;
         NUdf::TUnboxedValue* items = nullptr;
@@ -792,11 +816,13 @@ private:
     }
 
     NUdf::IBoxedValuePtr TakeListImpl(const NUdf::IValueBuilder& builder, ui64 count) const final {
-        if (!count)
+        if (!count) {
             return builder.NewEmptyList().Release().AsBoxed();
+        }
 
-        if (count >= Size_)
+        if (count >= Size_) {
             return const_cast<TDirectArrayHolderInplace*>(this);
+        }
 
         const auto newSize = count;
         NUdf::TUnboxedValue* items = nullptr;
@@ -837,8 +863,7 @@ private:
 //////////////////////////////////////////////////////////////////////////////
 // THolderFactory
 //////////////////////////////////////////////////////////////////////////////
-class THolderFactory: private TNonCopyable
-{
+class THolderFactory: private TNonCopyable {
 public:
     THolderFactory(
         TAllocState& allocState,
@@ -873,8 +898,9 @@ public:
     template <class TForwardIterator>
     NUdf::TUnboxedValuePod RangeAsArray(TForwardIterator first, TForwardIterator last) const {
         auto count = std::distance(first, last);
-        if (count == 0)
+        if (count == 0) {
             return GetEmptyContainerLazy();
+        }
 
         NUdf::TUnboxedValue* itemsPtr = nullptr;
         auto tuple = CreateDirectArrayHolder(count, itemsPtr);
@@ -887,33 +913,33 @@ public:
     }
 
     NUdf::TUnboxedValuePod CreateDirectSortedSetHolder(
-            TSortedSetFiller filler,
-            const TKeyTypes& types,
-            bool isTuple,
-            EDictSortMode mode,
-            bool eagerFill,
-            TType* encodedType,
-            const NUdf::ICompare* compare,
-            const NUdf::IEquate* equate) const;
+        TSortedSetFiller filler,
+        const TKeyTypes& types,
+        bool isTuple,
+        EDictSortMode mode,
+        bool eagerFill,
+        TType* encodedType,
+        const NUdf::ICompare* compare,
+        const NUdf::IEquate* equate) const;
 
     NUdf::TUnboxedValuePod CreateDirectSortedDictHolder(
-            TSortedDictFiller filler,
-            const TKeyTypes& types,
-            bool isTuple,
-            EDictSortMode mode,
-            bool eagerFill,
-            TType* encodedType,
-            const NUdf::ICompare* compare,
-            const NUdf::IEquate* equate) const;
+        TSortedDictFiller filler,
+        const TKeyTypes& types,
+        bool isTuple,
+        EDictSortMode mode,
+        bool eagerFill,
+        TType* encodedType,
+        const NUdf::ICompare* compare,
+        const NUdf::IEquate* equate) const;
 
     NUdf::TUnboxedValuePod CreateDirectHashedDictHolder(
-            THashedDictFiller filler,
-            const TKeyTypes& types,
-            bool isTuple,
-            bool eagerFill,
-            TType* encodedType,
-            const NUdf::IHash* hash,
-            const NUdf::IEquate* equate) const;
+        THashedDictFiller filler,
+        const TKeyTypes& types,
+        bool isTuple,
+        bool eagerFill,
+        TType* encodedType,
+        const NUdf::IHash* hash,
+        const NUdf::IEquate* equate) const;
 
     NUdf::TUnboxedValuePod CreateDirectHashedSetHolder(
         THashedSetFiller filler,
@@ -925,13 +951,16 @@ public:
         const NUdf::IEquate* equate) const;
 
     template <typename T, bool OptionalKey>
-    NUdf::TUnboxedValuePod CreateDirectHashedSingleFixedSetHolder(TValuesDictHashSingleFixedSet<T>&& set, bool hasNull) const;
+    NUdf::TUnboxedValuePod CreateDirectHashedSingleFixedSetHolder(
+        TValuesDictHashSingleFixedSet<T>&& set, bool hasNull) const;
 
     template <typename T, bool OptionalKey>
-    NUdf::TUnboxedValuePod CreateDirectHashedSingleFixedCompactSetHolder(TValuesDictHashSingleFixedCompactSet<T>&& set, bool hasNull) const;
+    NUdf::TUnboxedValuePod CreateDirectHashedSingleFixedCompactSetHolder(
+        TValuesDictHashSingleFixedCompactSet<T>&& set, bool hasNull) const;
 
     template <typename T, bool OptionalKey>
-    NUdf::TUnboxedValuePod CreateDirectHashedSingleFixedMapHolder(TValuesDictHashSingleFixedMap<T>&& map, std::optional<NUdf::TUnboxedValue>&& nullPayload) const;
+    NUdf::TUnboxedValuePod CreateDirectHashedSingleFixedMapHolder(
+        TValuesDictHashSingleFixedMap<T>&& map, std::optional<NUdf::TUnboxedValue>&& nullPayload) const;
 
     NUdf::TUnboxedValuePod CreateDirectHashedCompactSetHolder(
         TValuesDictHashCompactSet&& set, TPagedArena&& pool, TType* keyType,
@@ -947,17 +976,17 @@ public:
 
     template <typename T, bool OptionalKey>
     NUdf::TUnboxedValuePod CreateDirectHashedSingleFixedCompactMapHolder(
-        TValuesDictHashSingleFixedCompactMap<T>&& map, std::optional<ui64>&& nullPayload, TPagedArena&& pool, TType* payloadType,
-        TComputationContext* ctx) const;
+        TValuesDictHashSingleFixedCompactMap<T>&& map, std::optional<ui64>&& nullPayload, TPagedArena&& pool,
+        TType* payloadType, TComputationContext* ctx) const;
 
     template <typename T, bool OptionalKey>
     NUdf::TUnboxedValuePod CreateDirectHashedSingleFixedCompactMultiMapHolder(
-        TValuesDictHashSingleFixedCompactMultiMap<T>&& map, std::vector<ui64>&& nullPayloads, TPagedArena&& pool, TType* payloadType,
-        TComputationContext* ctx) const;
+        TValuesDictHashSingleFixedCompactMultiMap<T>&& map, std::vector<ui64>&& nullPayloads, TPagedArena&& pool,
+        TType* payloadType, TComputationContext* ctx) const;
 
     NUdf::IDictValueBuilder::TPtr NewDict(
-            const NUdf::TType* dictType,
-            ui32 flags) const;
+        const NUdf::TType* dictType,
+        ui32 flags) const;
 
     NUdf::IListValueBuilder::TPtr NewList() const;
 
@@ -965,16 +994,16 @@ public:
     NUdf::TUnboxedValuePod Reversed(const NUdf::TUnboxedValuePod& it) const;
 
     NUdf::TUnboxedValuePod CreateLimitedList(
-            NUdf::IBoxedValuePtr&& parent,
-            TMaybe<ui64> skip, TMaybe<ui64> take,
-            TMaybe<ui64> knownLength) const;
+        NUdf::IBoxedValuePtr&& parent,
+        TMaybe<ui64> skip, TMaybe<ui64> take,
+        TMaybe<ui64> knownLength) const;
 
     NUdf::TUnboxedValuePod ReverseList(const NUdf::IValueBuilder* builder, const NUdf::TUnboxedValuePod list) const;
     NUdf::TUnboxedValuePod SkipList(const NUdf::IValueBuilder* builder, const NUdf::TUnboxedValuePod list, ui64 count) const;
     NUdf::TUnboxedValuePod TakeList(const NUdf::IValueBuilder* builder, const NUdf::TUnboxedValuePod list, ui64 count) const;
     NUdf::TUnboxedValuePod ToIndexDict(const NUdf::IValueBuilder* builder, const NUdf::TUnboxedValuePod list) const;
 
-    template<bool IsStream>
+    template <bool IsStream>
     NUdf::TUnboxedValuePod Collect(NUdf::TUnboxedValuePod list) const;
 
     NUdf::TUnboxedValuePod LazyList(NUdf::TUnboxedValuePod list) const;
@@ -1013,7 +1042,7 @@ public:
         return FunctionRegistry_;
     }
 
-    template<bool FromStreams>
+    template <bool FromStreams>
     NUdf::TUnboxedValuePod ExtendList(NUdf::TUnboxedValue* data, ui64 size) const;
     NUdf::TUnboxedValuePod ExtendStream(NUdf::TUnboxedValue* data, ui64 size) const;
 
@@ -1032,7 +1061,7 @@ constexpr const ui32 STEP_FOR_RSS_CHECK = 100U;
 
 // Returns true if current usage delta exceeds the memory limit
 // The function automatically adjusts memory limit taking into account RSS delta between calls
-template<bool TrackRss>
+template <bool TrackRss>
 inline bool TComputationContext::CheckAdjustedMemLimit(ui64 memLimit, ui64 initMemUsage) {
     if (!memLimit) {
         return false;
@@ -1045,9 +1074,10 @@ inline bool TComputationContext::CheckAdjustedMemLimit(ui64 memLimit, ui64 initM
     return currentMemUsage * UsageAdjustor >= initMemUsage + memLimit;
 }
 
-void GetDictionaryKeyTypes(const TType* keyType, TKeyTypes& types, bool& isTuple, bool& encoded, bool& useIHash, bool expandTuple = true);
+void GetDictionaryKeyTypes(const TType* keyType, TKeyTypes& types,
+                           bool& isTuple, bool& encoded, bool& useIHash, bool expandTuple = true);
 
-template<bool SupportEqual, bool SupportHash, bool SupportLess>
+template <bool SupportEqual, bool SupportHash, bool SupportLess>
 class TKeyTypeContanerHelper {
 public:
     TKeyTypeContanerHelper() = default;
@@ -1056,35 +1086,37 @@ public:
         bool useIHash;
         GetDictionaryKeyTypes(type, KeyTypes_, IsTuple_, encoded, useIHash);
         if (useIHash || encoded) {
-            if constexpr(SupportEqual) {
+            if constexpr (SupportEqual) {
                 Equate_ = MakeEquateImpl(type);
             }
-            if constexpr(SupportHash) {
+            if constexpr (SupportHash) {
                 Hash_ = MakeHashImpl(type);
             }
-            if constexpr(SupportLess) {
+            if constexpr (SupportLess) {
                 Compare_ = MakeCompareImpl(type);
             }
         }
     }
-public: //unavailable getters may be eliminated at compile time, but it'd make code much less readable
-    TValueEqual GetValueEqual() const{
+
+public: // unavailable getters may be eliminated at compile time, but it'd make code much less readable
+    TValueEqual GetValueEqual() const {
         Y_ABORT_UNLESS(SupportEqual);
         return TValueEqual(KeyTypes_, IsTuple_, Equate_.Get());
     }
-    TValueHasher GetValueHash() const{
+    TValueHasher GetValueHash() const {
         Y_ABORT_UNLESS(SupportHash);
         return TValueHasher(KeyTypes_, IsTuple_, Hash_.Get());
     }
-    TValueLess GetValueLess() const{
+    TValueLess GetValueLess() const {
         Y_ABORT_UNLESS(SupportLess);
-        return TValueLess(KeyTypes_, IsTuple_ , Compare_.Get());
+        return TValueLess(KeyTypes_, IsTuple_, Compare_.Get());
     }
+
 private:
     TKeyTypes KeyTypes_;
     bool IsTuple_ = false;
 
-    //unsused pointers may be eliminated at compile time, but it'd make code much less readable
+    // unsused pointers may be eliminated at compile time, but it'd make code much less readable
     NUdf::IEquate::TPtr Equate_;
     NUdf::IHash::TPtr Hash_;
     NUdf::ICompare::TPtr Compare_;
@@ -1107,12 +1139,13 @@ private:
     ui8 CacheIndex_ = 0U;
 };
 
-template<class TObject>
+template <class TObject>
 class TMutableObjectOverBoxedValue {
 public:
     TMutableObjectOverBoxedValue(TComputationMutables& mutables)
         : ObjectIndex_(mutables.CurValueIndex++)
-    {}
+    {
+    }
 
     template <typename... Args>
     TObject& RefMutableObject(TComputationContext& ctx, Args&&... args) const {
@@ -1123,6 +1156,7 @@ public:
         auto boxed = unboxed.AsBoxed();
         return *static_cast<TObject*>(boxed.Get());
     }
+
 private:
     const ui32 ObjectIndex_;
 };

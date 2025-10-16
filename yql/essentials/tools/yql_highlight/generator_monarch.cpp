@@ -10,6 +10,19 @@
 
 namespace NSQLHighlight {
 
+template <std::invocable<const TUnit&, const NSQLTranslationV1::TRegexPattern&, size_t> Action>
+void ForEachBeforablePattern(const THighlighting& highlighting, Action action) {
+    for (const TUnit& unit : highlighting.Units) {
+        size_t i = 0;
+        for (const NSQLTranslationV1::TRegexPattern& regex : unit.Patterns) {
+            if (!regex.Before.empty()) {
+                i += 1;
+                action(unit, regex, i);
+            }
+        }
+    }
+}
+
 TString ToMonarchRegex(const TUnit& unit, const NSQLTranslationV1::TRegexPattern& pattern) {
     TStringBuilder regex;
 
@@ -40,6 +53,8 @@ TString ToMonarchSelector(EUnitKind kind) {
             return "string.tablepath";
         case EUnitKind::BindParameterIdentifier:
             return "variable";
+        case EUnitKind::OptionIdentifier:
+            return "constant";
         case EUnitKind::TypeIdentifier:
             return "keyword.type";
         case EUnitKind::FunctionIdentifier:
@@ -69,6 +84,8 @@ TString ToMonarchStateName(EUnitKind kind) {
             return "quotedIdentifier";
         case EUnitKind::BindParameterIdentifier:
             return "bindParameterIdentifier";
+        case EUnitKind::OptionIdentifier:
+            return "optionIdentifier";
         case EUnitKind::TypeIdentifier:
             return "typeIdentifier";
         case EUnitKind::FunctionIdentifier:
@@ -136,6 +153,14 @@ NJson::TJsonValue ToMonarchMultiLineState(const TUnit& unit, bool ansi) {
     return json;
 }
 
+NJson::TJsonValue ToMonarchBeforableState(const TUnit& unit, const NSQLTranslationV1::TRegexPattern& pattern) {
+    NJson::TJsonValue json;
+    json.AppendValue(ToMonarchRegex(unit, pattern));
+    json.AppendValue(ToMonarchSelector(unit.Kind));
+    json.AppendValue("@pop");
+    return NJson::TJsonArray({json});
+}
+
 NJson::TJsonValue MonarchEmbeddedState() {
     return NJson::TJsonArray{{NJson::TJsonArray{
         "([^@]|^)([@]{4})*[@]{2}([@]([^@]|$)|[^@]|$)",
@@ -164,6 +189,15 @@ NJson::TJsonValue ToMonarchWhitespaceState(const THighlighting& highlighting) {
         });
     });
 
+    ForEachBeforablePattern(highlighting, [&](const auto& unit, const auto& pattern, auto i) {
+        // Note: Assume that before is always a keyword.
+        json.AppendValue(NJson::TJsonArray{
+            pattern.Before,
+            ToMonarchSelector(EUnitKind::Keyword),
+            "@" + ToMonarchStateName(unit.Kind) + ToString(i),
+        });
+    });
+
     return json;
 }
 
@@ -183,6 +217,10 @@ NJson::TJsonValue ToMonarchRootState(const THighlighting& highlighting, bool ans
         }
 
         for (const NSQLTranslationV1::TRegexPattern& pattern : *patterns) {
+            if (!pattern.Before.empty()) {
+                continue;
+            }
+
             TString regex = ToMonarchRegex(unit, pattern);
             json.AppendValue(NJson::TJsonArray{regex, group});
         }
@@ -212,6 +250,12 @@ void GenerateMonarch(IOutputStream& out, const THighlighting& highlighting, bool
         write_json(ToMonarchStateName(unit.Kind), ToMonarchMultiLineState(unit, ansi));
     });
     write_json("embedded", MonarchEmbeddedState());
+    ForEachBeforablePattern(highlighting, [&](const auto& unit, const auto& pattern, auto i) {
+        write_json(
+            ToMonarchStateName(unit.Kind) + ToString(i),
+            ToMonarchBeforableState(unit, pattern));
+    });
+
     buf.EndObject();
 
     buf.EndObject();

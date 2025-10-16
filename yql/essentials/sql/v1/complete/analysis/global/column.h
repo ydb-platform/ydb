@@ -6,6 +6,6 @@
 
 namespace NSQLComplete {
 
-    TMaybe<TColumnContext> InferColumnContext(TParsedInput input, const TNamedNodes& nodes);
+TMaybe<TColumnContext> InferColumnContext(TParsedInput input, const TNamedNodes& nodes);
 
 } // namespace NSQLComplete

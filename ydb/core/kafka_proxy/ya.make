@@ -15,6 +15,8 @@ SRCS(
     actors/kafka_fetch_actor.cpp
     actors/kafka_find_coordinator_actor.cpp
     actors/kafka_read_session_actor.cpp
+    actors/kafka_read_session_proxy.cpp
+    actors/kafka_read_session_utils.cpp
     actors/kafka_offset_fetch_actor.cpp
     actors/kafka_offset_commit_actor.cpp
     actors/kafka_create_topics_actor.cpp
@@ -53,12 +55,14 @@ SRCS(
 )
 
 GENERATE_ENUM_SERIALIZATION(kafka.h)
+GENERATE_ENUM_SERIALIZATION(actors/actors.h)
 
 PEERDIR(
     ydb/public/sdk/cpp/src/client/params
     ydb/library/actors/core
     ydb/library/actors/protos
     ydb/core/base
+    ydb/core/persqueue/public/describer
     ydb/core/persqueue/public/fetcher
     ydb/core/persqueue/public/write_meta
     ydb/core/protos

@@ -17,6 +17,7 @@ PEERDIR(
     ydb/core/cms/console
     ydb/core/kqp/common
     ydb/core/kqp/common/events
+    ydb/core/kqp/gateway/behaviour/streaming_query/common
     ydb/core/kqp/gateway/utils
     ydb/core/kqp/provider
     ydb/core/protos
@@ -38,3 +39,7 @@ PEERDIR(
 YQL_LAST_ABI_VERSION()
 
 END()
+
+RECURSE(
+    common
+)

@@ -14,7 +14,7 @@ namespace NFastCheck {
 
 namespace {
 
-class TParserRunner : public TCheckRunnerBase {
+class TParserRunner: public TCheckRunnerBase {
 public:
     TString GetCheckName() const final {
         return "parser";
@@ -22,12 +22,12 @@ public:
 
     TCheckResponse DoRun(const TChecksRequest& request) final {
         switch (request.Syntax) {
-        case ESyntax::SExpr:
-            return RunSExpr(request);
-        case ESyntax::PG:
-            return RunPg(request);
-        case ESyntax::YQL:
-            return RunYql(request);
+            case ESyntax::SExpr:
+                return RunSExpr(request);
+            case ESyntax::PG:
+                return RunPg(request);
+            case ESyntax::YQL:
+                return RunYql(request);
         }
     }
 
@@ -37,15 +37,15 @@ private:
         return TCheckResponse{
             .CheckName = GetCheckName(),
             .Success = res.IsOk(),
-            .Issues = res.Issues
-        };
+            .Issues = res.Issues};
     }
 
-    class TPGParseEventsHandler : public IPGParseEvents {
+    class TPGParseEventsHandler: public IPGParseEvents {
     public:
         TPGParseEventsHandler(TCheckResponse& res)
             : Res_(res)
-        {}
+        {
+        }
 
         void OnResult(const List* raw) final {
             Y_UNUSED(raw);
@@ -61,14 +61,14 @@ private:
     };
 
     TCheckResponse RunPg(const TChecksRequest& request) {
-        TCheckResponse res {.CheckName = GetCheckName()};
+        TCheckResponse res{.CheckName = GetCheckName()};
         TPGParseEventsHandler handler(res);
         PGParse(request.Program, handler);
         return res;
     }
 
     TCheckResponse RunYql(const TChecksRequest& request) {
-        TCheckResponse res {.CheckName = GetCheckName()};
+        TCheckResponse res{.CheckName = GetCheckName()};
         NSQLTranslation::TTranslationSettings settings;
         settings.SyntaxVersion = request.SyntaxVersion;
         settings.AnsiLexer = request.IsAnsiLexer;
@@ -92,7 +92,7 @@ private:
             parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory();
             parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory();
             auto msg = NSQLTranslationV1::SqlAST(parsers, request.Program, request.File, res.Issues, NSQLTranslation::SQL_MAX_PARSER_ERRORS,
-                settings.AnsiLexer, true, &arena);
+                                                 settings.AnsiLexer, true, &arena);
             if (msg) {
                 res.Success = true;
             }
@@ -102,11 +102,11 @@ private:
     }
 };
 
-}
+} // namespace
 
 std::unique_ptr<ICheckRunner> MakeParserRunner() {
     return std::make_unique<TParserRunner>();
 }
 
-}
-}
+} // namespace NFastCheck
+} // namespace NYql

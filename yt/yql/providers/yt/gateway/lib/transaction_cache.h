@@ -51,6 +51,7 @@ public:
         NYT::TNode TransactionSpec;
         THashMap<TString, TString> BinarySnapshots; // remote path -> snapshot path
         NYT::ITransactionPtr BinarySnapshotTx;
+        NYT::ITransactionPtr LayersSnapshotTx;
         THashMap<TString, NYT::ITransactionPtr> CheckpointTxs;
         TString DefaultTmpFolder;
         THashMap<std::tuple<TString, TString, TString>, std::vector<NYT::TRichYPath>> RangeCache;
@@ -136,6 +137,8 @@ public:
 
         std::pair<TString, NYT::TTransactionId> GetBinarySnapshot(TString remoteTmpFolder, const TString& md5, const TString& localPath, TDuration expirationInterval);
         TMaybe<std::pair<TString, NYT::TTransactionId>> GetBinarySnapshotFromCache(TString binaryCacheFolder, const TString& md5, const TString& fileName);
+        TVector<std::pair<TString, ui64>> GetLayersSnapshot(const TVector<TString>& paths);
+
 
         enum class ECacheStatus {
             Hit,

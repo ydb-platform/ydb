@@ -22,8 +22,6 @@ manager = PnpmPackageManager
 def get_package_manager_type(key: PackageManagerType) -> type[BasePackageManager]:
     if key == "pnpm":
         return PnpmPackageManager
-    # if key == "npm":
-    #     return NpmPackageManager
     raise ValueError(f"Invalid package manager key: {key}")
 
 

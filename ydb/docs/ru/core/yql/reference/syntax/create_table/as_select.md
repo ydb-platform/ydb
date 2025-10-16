@@ -39,31 +39,19 @@ AS SELECT ...
 
 * `CREATE TABLE AS` создаёт таблицу во временной директории `.tmp/sessions`, а после успешной записи данных перемещает её в указанное место. Если операция прервётся из-за ошибки, временная таблица не удаляется мгновенно, а остаётся в системе ещё на некоторое время.
 
-{% list tabs %}
+## Примеры
 
-- Создание строковой таблицы с одной строкой
+* Создание колоночной таблицы из результатов запроса
 
-    ```yql
-    CREATE TABLE my_table (
-        PRIMARY KEY (key)
-    ) AS SELECT 
-        1 AS key,
-        "test" AS value;
-    ```
-
-- Создание колоночной таблицы из результатов запроса
-
-    ```yql
-    CREATE TABLE my_table (
-        PRIMARY KEY (key1, key2)
-    ) WITH (
-        STORE=COLUMN
-    ) AS SELECT 
-        key AS key1,
-        Unwrap(other_key) AS key2,
-        value,
-        String::Contains(value, "test") AS has_test
-    FROM other_table;
-    ```
-
-{% endlist %}
+```yql
+CREATE TABLE my_table (
+    PRIMARY KEY (key1, key2)
+) WITH (
+    STORE=COLUMN
+) AS SELECT 
+    key AS key1,
+    Unwrap(other_key) AS key2,
+    value,
+    String::Contains(value, "test") AS has_test
+FROM other_table;
+```

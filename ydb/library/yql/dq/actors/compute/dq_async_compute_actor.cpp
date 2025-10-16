@@ -660,7 +660,7 @@ private:
             Send(QuoterServiceActorId,
                 new NKikimr::TEvQuota::TEvRequest(
                     NKikimr::TEvQuota::EResourceOperator::And,
-                    { NKikimr::TEvQuota::TResourceLeaf(Task.GetRateLimiter(), Task.GetRateLimiterResource(), CpuTimeSpent.MilliSeconds(), true) },
+                    { NKikimr::TEvQuota::TResourceLeaf(Task.GetRateLimiterDatabase(), Task.GetRateLimiter(), Task.GetRateLimiterResource(), CpuTimeSpent.MilliSeconds(), true) },
                     TDuration::Max()));
         }
         TBase::PassAway();
@@ -1109,7 +1109,7 @@ private:
             Send(QuoterServiceActorId,
                 new NKikimr::TEvQuota::TEvRequest(
                     NKikimr::TEvQuota::EResourceOperator::And,
-                    { NKikimr::TEvQuota::TResourceLeaf(Task.GetRateLimiter(), Task.GetRateLimiterResource(), CpuTimeSpent.MilliSeconds(), true) },
+                    { NKikimr::TEvQuota::TResourceLeaf(Task.GetRateLimiterDatabase(), Task.GetRateLimiter(), Task.GetRateLimiterResource(), CpuTimeSpent.MilliSeconds(), true) },
                     TDuration::Max()));
             CpuTimeQuotaAsked = TInstant::Now();
             CpuTimeSpent = TDuration::Zero();

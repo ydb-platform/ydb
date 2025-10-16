@@ -1,6 +1,7 @@
 #include "ut_common.h"
 
 #include <ydb/public/lib/ydb_cli/dump/util/query_utils.h>
+#include <ydb/public/lib/ydb_cli/dump/util/view_utils.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_scripting.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
 
@@ -24,8 +25,9 @@ namespace NKikimr {
 namespace NSysView {
 
 using namespace NYdb;
-using namespace NYdb::NTable;
+using namespace NYdb::NDump;
 using namespace NYdb::NScheme;
+using namespace NYdb::NTable;
 
 namespace {
 
@@ -2269,6 +2271,134 @@ ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_OPTIONS,
         );
     }
 
+    Y_UNIT_TEST(ShowCreateTableFamilyParameters) {
+        TTestEnv env(1, 4, {.StoragePools = 4, .ShowCreateTable = true, .EnableTableCacheModes = true});
+
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NActors::NLog::PRI_DEBUG);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_YQL, NActors::NLog::PRI_TRACE);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NActors::NLog::PRI_DEBUG);
+
+        TShowCreateChecker checker(env);
+
+        checker.CheckShowCreateTable(
+            R"(CREATE TABLE `/Root/test_show_create` (
+                Key Uint32,
+                Value0 String,
+                Value1 String FAMILY Family1,
+                Value2 String FAMILY Family2,
+                Value3 String FAMILY Family3,
+                Value4 String FAMILY Family4,
+                Value5 String FAMILY Family5,
+                Value6 String FAMILY Family6,
+                PRIMARY KEY (Key),
+                FAMILY default (
+                    DATA = "test0",
+                    COMPRESSION = "lz4",
+                    CACHE_MODE = "in_memory"
+                ),
+                FAMILY Family1 (
+                    COMPRESSION = "off",
+                    CACHE_MODE = "regular"
+                ),
+                FAMILY Family2 (
+                    DATA = "test1",
+                    CACHE_MODE = "in_memory"
+                ),
+                FAMILY Family3 (
+                    DATA = "test2",
+                    COMPRESSION = "lz4"
+                ),
+                FAMILY Family4 (
+                    DATA = "test3"
+                ),
+                FAMILY Family5 (
+                    COMPRESSION = "off"
+                ),
+                FAMILY Family6 (
+                    CACHE_MODE = "regular"
+                )
+            );
+            )", "test_show_create",
+R"(CREATE TABLE `test_show_create` (
+    `Key` Uint32,
+    `Value0` String,
+    `Value1` String FAMILY `Family1`,
+    `Value2` String FAMILY `Family2`,
+    `Value3` String FAMILY `Family3`,
+    `Value4` String FAMILY `Family4`,
+    `Value5` String FAMILY `Family5`,
+    `Value6` String FAMILY `Family6`,
+    FAMILY `default` (DATA = 'test0', COMPRESSION = 'lz4', CACHE_MODE = 'in_memory'),
+    FAMILY `Family1` (COMPRESSION = 'off', CACHE_MODE = 'regular'),
+    FAMILY `Family2` (DATA = 'test1', CACHE_MODE = 'in_memory'),
+    FAMILY `Family3` (DATA = 'test2', COMPRESSION = 'lz4'),
+    FAMILY `Family4` (DATA = 'test3'),
+    FAMILY `Family5` (COMPRESSION = 'off'),
+    FAMILY `Family6` (CACHE_MODE = 'regular'),
+    PRIMARY KEY (`Key`)
+);
+)"
+        );
+
+        checker.CheckShowCreateTable(
+            R"(CREATE TABLE `/Root/test_show_create` (
+                Key Uint32,
+                Value0 String,
+                PRIMARY KEY (Key),
+                FAMILY default (
+                    DATA = "test0"
+                )
+            );
+            )", "test_show_create",
+R"(CREATE TABLE `test_show_create` (
+    `Key` Uint32,
+    `Value0` String,
+    FAMILY `default` (DATA = 'test0'),
+    PRIMARY KEY (`Key`)
+);
+)"
+        );
+
+        checker.CheckShowCreateTable(
+            R"(CREATE TABLE `/Root/test_show_create` (
+                Key Uint32,
+                Value0 String,
+                PRIMARY KEY (Key),
+                FAMILY default (
+                    COMPRESSION = "lz4"
+                )
+            );
+            )", "test_show_create",
+R"(CREATE TABLE `test_show_create` (
+    `Key` Uint32,
+    `Value0` String,
+    FAMILY `default` (COMPRESSION = 'lz4'),
+    PRIMARY KEY (`Key`)
+);
+)"
+        );
+
+        checker.CheckShowCreateTable(
+            R"(CREATE TABLE `/Root/test_show_create` (
+                Key Uint32,
+                Value0 String,
+                PRIMARY KEY (Key),
+                FAMILY default (
+                    CACHE_MODE = "in_memory"
+                )
+            );
+            )", "test_show_create",
+R"(CREATE TABLE `test_show_create` (
+    `Key` Uint32,
+    `Value0` String,
+    FAMILY `default` (CACHE_MODE = 'in_memory'),
+    PRIMARY KEY (`Key`)
+);
+)"
+        );
+    }
+
     Y_UNIT_TEST(Nodes) {
         TTestEnv env;
         CreateTenantsAndTables(env, false);
@@ -2639,11 +2769,11 @@ ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_OPTIONS,
         check.Uint64(1u); // LastTtlRowsProcessed
         check.Uint64(1u); // LastTtlRowsErased
     }
-    
+
     Y_UNIT_TEST(PartitionStatsAfterRemoveColumnTable) {
         TTestEnv env;
         NQuery::TQueryClient client(env.GetDriver());
-        
+
         {
             auto result = client.ExecuteQuery(R"(
                 CREATE TABLE `/Root/test_table` (
@@ -2652,10 +2782,10 @@ ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_OPTIONS,
                     PRIMARY KEY(key)
                 ) WITH (STORE=COLUMN);
             )", NQuery::TTxControl::NoTx()).GetValueSync();
-            
+
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
-        
+
         {
             auto result = client.ExecuteQuery(R"(
                 SELECT Path FROM `/Root/.sys/partition_stats`
@@ -2674,15 +2804,15 @@ ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_OPTIONS,
             }
             UNIT_ASSERT_C(existsPath, "Path /Root/test_table not found");
         }
-        
+
         {
             auto result = client.ExecuteQuery(R"(
                 DROP TABLE `/Root/test_table`
             )", NQuery::TTxControl::NoTx()).GetValueSync();
-            
+
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
-        
+
         {
             auto result = client.ExecuteQuery(R"(
                 SELECT Path FROM `/Root/.sys/partition_stats`
@@ -2704,9 +2834,7 @@ ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_OPTIONS,
     }
 
     Y_UNIT_TEST(PartitionStatsLocksFields) {
-        NDataShard::gDbStatsReportInterval = TDuration::Seconds(0);
-
-        TTestEnv env;
+        TTestEnv env({.DataShardStatsReportIntervalSeconds = 0});
         CreateRootTable(env, /* partitionCount */ 1, /* fillTable */ true);
 
         TTableClient client(env.GetDriver());
@@ -2734,11 +2862,9 @@ ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_OPTIONS,
     }
 
     Y_UNIT_TEST(PartitionStatsFields) {
-        NDataShard::gDbStatsReportInterval = TDuration::Seconds(0);
-
         auto nowUs = TInstant::Now().MicroSeconds();
 
-        TTestEnv env;
+        TTestEnv env({.DataShardStatsReportIntervalSeconds = 0});
         CreateRootTable(env);
         const auto describeResult = env.GetClient().Describe(env.GetServer().GetRuntime(), "Root/Table0");
         const auto tablePathId = describeResult.GetPathId();
@@ -3229,11 +3355,9 @@ ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_OPTIONS,
     }
 
     Y_UNIT_TEST(TopPartitionsByCpuFields) {
-        NDataShard::gDbStatsReportInterval = TDuration::Seconds(0);
-
         auto nowUs = TInstant::Now().MicroSeconds();
 
-        TTestEnv env(1, 4, {.EnableSVP = true});
+        TTestEnv env(1, 4, {.EnableSVP = true, .DataShardStatsReportIntervalSeconds = 0});
         CreateTenantsAndTables(env);
 
         TTableClient client(env.GetDriver());
@@ -3281,11 +3405,9 @@ ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_OPTIONS,
     }
 
     Y_UNIT_TEST(TopPartitionsByCpuTables) {
-        NDataShard::gDbStatsReportInterval = TDuration::Seconds(0);
-
         constexpr ui64 partitionCount = 5;
 
-        TTestEnv env(1, 4, {.EnableSVP = true});
+        TTestEnv env(1, 4, {.EnableSVP = true, .DataShardStatsReportIntervalSeconds = 0});
         CreateTenantsAndTables(env, true, partitionCount);
 
         TTableClient client(env.GetDriver());
@@ -3311,11 +3433,9 @@ ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_OPTIONS,
     }
 
     Y_UNIT_TEST(TopPartitionsByCpuRanges) {
-        NDataShard::gDbStatsReportInterval = TDuration::Seconds(0);
-
         constexpr ui64 partitionCount = 5;
 
-        TTestEnv env(1, 4, {.EnableSVP = true});
+        TTestEnv env(1, 4, {.EnableSVP = true, .DataShardStatsReportIntervalSeconds = 0});
         CreateTenantsAndTables(env, true, partitionCount);
 
         TTableClient client(env.GetDriver());
@@ -3392,11 +3512,13 @@ ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_OPTIONS,
     }
 
     Y_UNIT_TEST(TopPartitionsByCpuFollowers) {
-        NDataShard::gDbStatsReportInterval = TDuration::Seconds(0);
-
         auto nowUs = TInstant::Now().MicroSeconds();
 
-        TTestEnv env(1, 4, {.EnableSVP = true, .EnableForceFollowers = true});
+        TTestEnv env(1, 4, {
+            .EnableSVP = true,
+            .EnableForceFollowers = true,
+            .DataShardStatsReportIntervalSeconds = 0,
+        });
 
         auto& runtime = *env.GetServer().GetRuntime();
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
@@ -3567,9 +3689,7 @@ ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_OPTIONS,
     }
 
     Y_UNIT_TEST(TopPartitionsByTliFields) {
-        NDataShard::gDbStatsReportInterval = TDuration::Seconds(0);
-
-        TTestEnv env(1, 4, {.EnableSVP = true});
+        TTestEnv env(1, 4, {.EnableSVP = true, .DataShardStatsReportIntervalSeconds = 0});
         CreateTenantsAndTables(env);
 
         TTableClient client(env.GetDriver());

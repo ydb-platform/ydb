@@ -78,7 +78,7 @@ Y_UNIT_TEST_SUITE(KqpBlockHashJoin) {
 
             auto resultSet = status.GetResultSets()[0];
             // Current Join implementation is simple and returns all the rows
-            auto expectedRowsCount = UseBlockHashJoin ? 6 : 3;
+            auto expectedRowsCount = 3;
             UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), expectedRowsCount);
 
             auto explainResult = queryClient.ExecuteQuery(

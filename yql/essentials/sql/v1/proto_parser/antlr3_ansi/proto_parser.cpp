@@ -8,10 +8,10 @@ namespace NSQLTranslationV1 {
 
 namespace {
 
-class TParser : public NSQLTranslation::IParser {
+class TParser: public NSQLTranslation::IParser {
 public:
     google::protobuf::Message* Parse(
-    const TString& query, const TString& queryName, NProtoAST::IErrorCollector& err,
+        const TString& query, const TString& queryName, NProtoAST::IErrorCollector& err,
         google::protobuf::Arena* arena) final {
         YQL_ENSURE(arena);
         NProtoAST::TProtoASTBuilder3<NALPAnsi::SQLv1Parser, NALPAnsi::SQLv1Lexer> builder(query, queryName, arena);
@@ -26,10 +26,10 @@ public:
     }
 };
 
-}
+} // namespace
 
 NSQLTranslation::TParserFactoryPtr MakeAntlr3AnsiParserFactory() {
     return MakeIntrusive<TFactory>();
 }
 
-}
+} // namespace NSQLTranslationV1

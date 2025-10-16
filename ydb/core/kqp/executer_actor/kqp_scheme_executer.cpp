@@ -200,6 +200,7 @@ public:
         AFL_ENSURE(dirPath.size() >= 2);
 
         auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+        request->DatabaseName = Database;
         TVector<TString> path;
 
         for (const auto& part : dirPath) {
@@ -564,7 +565,7 @@ public:
                 auto analyzePromise = NewPromise<IKqpGateway::TGenericResult>();
 
                 TVector<TString> columns{analyzeOperation.columns().begin(), analyzeOperation.columns().end()};
-                IActor* analyzeActor = new TAnalyzeActor(analyzeOperation.GetTablePath(), columns, analyzePromise);
+                IActor* analyzeActor = new TAnalyzeActor(Database, analyzeOperation.GetTablePath(), columns, analyzePromise);
 
                 auto actorSystem = TActivationContext::ActorSystem();
                 RegisterWithSameMailbox(analyzeActor);

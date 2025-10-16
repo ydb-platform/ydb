@@ -68,7 +68,7 @@ bool TGroupByClause::ParseList(const TRule_grouping_element_list& groupingListNo
     if (!GroupingElement(groupingListNode.GetRule_grouping_element1(), featureContext)) {
         return false;
     }
-    for (auto b: groupingListNode.GetBlock2()) {
+    for (auto b : groupingListNode.GetBlock2()) {
         if (!GroupingElement(b.GetRule_grouping_element2(), featureContext)) {
             return false;
         }
@@ -121,14 +121,14 @@ TString TGroupByClause::GetSuffix() const {
 
 TMaybe<TVector<TNodePtr>> TGroupByClause::MultiplyGroupingSets(const TVector<TNodePtr>& lhs, const TVector<TNodePtr>& rhs) const {
     TVector<TNodePtr> content;
-    for (const auto& leftNode: lhs) {
+    for (const auto& leftNode : lhs) {
         auto leftPtr = leftNode->ContentListPtr();
         if (!leftPtr) {
             // TODO: shouldn't happen
             Ctx_.Error() << "Unable to multiply grouping sets";
             return {};
         }
-        for (const auto& rightNode: rhs) {
+        for (const auto& rightNode : rhs) {
             TVector<TNodePtr> mulItem(leftPtr->begin(), leftPtr->end());
             auto rightPtr = rightNode->ContentListPtr();
             if (!rightPtr) {
@@ -196,7 +196,7 @@ bool TGroupByClause::GroupingElement(const TRule_grouping_element& node, EGroupB
         case TRule_grouping_element::kAltGroupingElement2: {
             TGroupByClause subClause(Ctx_, Mode_, GroupSetContext_);
             if (!subClause.OrdinaryGroupingSetList(node.GetAlt_grouping_element2().GetRule_rollup_list1().GetRule_ordinary_grouping_set_list3(),
-                EGroupByFeatures::Rollup))
+                                                   EGroupByFeatures::Rollup))
             {
                 return false;
             }
@@ -215,7 +215,7 @@ bool TGroupByClause::GroupingElement(const TRule_grouping_element& node, EGroupB
         case TRule_grouping_element::kAltGroupingElement3: {
             TGroupByClause subClause(Ctx_, Mode_, GroupSetContext_);
             if (!subClause.OrdinaryGroupingSetList(node.GetAlt_grouping_element3().GetRule_cube_list1().GetRule_ordinary_grouping_set_list3(),
-                EGroupByFeatures::Cube))
+                                                   EGroupByFeatures::Cube))
             {
                 return false;
             }
@@ -249,11 +249,11 @@ bool TGroupByClause::GroupingElement(const TRule_grouping_element& node, EGroupB
             auto& content = subClause.Content();
             TVector<TNodePtr> collection;
             bool hasEmpty = false;
-            for (auto& elem: content) {
+            for (auto& elem : content) {
                 auto elemContent = elem->ContentListPtr();
                 if (elemContent) {
                     if (!elemContent->empty() && elemContent->front()->ContentListPtr()) {
-                        for (auto& sub: *elemContent) {
+                        for (auto& sub : *elemContent) {
                             FeedCollection(sub, collection, hasEmpty);
                         }
                     } else {
@@ -308,7 +308,7 @@ bool TGroupByClause::OrdinaryGroupingSet(const TRule_ordinary_grouping_set& node
             Ctx_.IncrementMonCounter("sql_errors", "GroupByAliasForListOfExpressions");
             return false;
         }
-        for (auto& content: *contentPtr) {
+        for (auto& content : *contentPtr) {
             auto label = content->GetLabel();
             if (!label) {
                 if (content->GetColumnName()) {
@@ -353,7 +353,7 @@ bool TGroupByClause::OrdinaryGroupingSetList(const TRule_ordinary_grouping_set_l
     if (!OrdinaryGroupingSet(node.GetRule_ordinary_grouping_set1(), featureContext)) {
         return false;
     }
-    for (auto& block: node.GetBlock2()) {
+    for (auto& block : node.GetBlock2()) {
         if (!OrdinaryGroupingSet(block.GetRule_ordinary_grouping_set2(), featureContext)) {
             return false;
         }
@@ -375,7 +375,7 @@ bool TGroupByClause::HoppingWindow(const TRule_hopping_window_specification& nod
             return false;
         }
     }
-    auto processIntervalParam = [&] (const TRule_expr& rule) -> TNodePtr {
+    auto processIntervalParam = [&](const TRule_expr& rule) -> TNodePtr {
         TSqlExpression expr(Ctx_, Mode_);
         auto node = expr.Build(rule);
         if (!node) {
@@ -384,10 +384,8 @@ bool TGroupByClause::HoppingWindow(const TRule_hopping_window_specification& nod
 
         auto literal = node->GetLiteral("String");
         if (!literal) {
-            return new TAstListNodeImpl(Ctx_.Pos(), {
-                new TAstAtomNodeImpl(Ctx_.Pos(), "EvaluateExpr", TNodeFlags::Default),
-                node
-            });
+            return new TAstListNodeImpl(Ctx_.Pos(), {new TAstAtomNodeImpl(Ctx_.Pos(), "EvaluateExpr", TNodeFlags::Default),
+                                                     node});
         }
 
         const auto out = NKikimr::NMiniKQL::ValueFromString(NKikimr::NUdf::EDataSlot::Interval, *literal);
@@ -401,13 +399,9 @@ bool TGroupByClause::HoppingWindow(const TRule_hopping_window_specification& nod
             return nullptr;
         }
 
-        return new TAstListNodeImpl(Ctx_.Pos(), {
-            new TAstAtomNodeImpl(Ctx_.Pos(), "Interval", TNodeFlags::Default),
-            new TAstListNodeImpl(Ctx_.Pos(), {
-                new TAstAtomNodeImpl(Ctx_.Pos(), "quote", TNodeFlags::Default),
-                new TAstAtomNodeImpl(Ctx_.Pos(), ToString(out.Get<i64>()), TNodeFlags::Default)
-            })
-        });
+        return new TAstListNodeImpl(Ctx_.Pos(), {new TAstAtomNodeImpl(Ctx_.Pos(), "Interval", TNodeFlags::Default),
+                                                 new TAstListNodeImpl(Ctx_.Pos(), {new TAstAtomNodeImpl(Ctx_.Pos(), "quote", TNodeFlags::Default),
+                                                                                   new TAstAtomNodeImpl(Ctx_.Pos(), ToString(out.Get<i64>()), TNodeFlags::Default)})});
     };
 
     LegacyHoppingWindowSpec_->Hop = processIntervalParam(node.GetRule_expr5());

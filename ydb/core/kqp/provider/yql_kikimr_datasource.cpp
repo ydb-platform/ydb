@@ -666,7 +666,8 @@ public:
                 node.IsCallable(TDqReadWrap::CallableName()) ||
                 node.IsCallable(TDqReadWideWrap::CallableName()) ||
                 node.IsCallable(TDqReadBlockWideWrap::CallableName()) ||
-                node.IsCallable(TDqSource::CallableName())
+                node.IsCallable(TDqSource::CallableName()) ||
+                node.IsCallable(TDqLookupSourceWrap::CallableName())
             )
         )
         {

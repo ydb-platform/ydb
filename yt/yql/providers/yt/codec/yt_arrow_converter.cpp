@@ -621,8 +621,10 @@ struct TComplexTypeYsonReaderTraits {
         ythrow yexception() << "Complex type Yson reader not implemented for block resources";
     }
 
+    template <bool IsNull>
     static std::unique_ptr<TResult> MakeSingular(const NUdf::TType* type) {
         Y_UNUSED(type);
+        Y_UNUSED(IsNull);
         ythrow yexception() << "Complex type Yson reader not implemented for singular types.";
     }
 

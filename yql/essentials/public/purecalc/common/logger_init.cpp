@@ -8,25 +8,25 @@ namespace NYql {
 namespace NPureCalc {
 
 namespace {
-    std::atomic_bool Initialized;
-}
+std::atomic_bool Initialized;
+} // namespace
 
-    void InitLogging(const TLoggingOptions& options) {
-        NLog::InitLogger(options.LogDestination);
-        auto& logger = NLog::YqlLogger();
-        logger.SetDefaultPriority(options.LogLevel);
-        for (int i = 0; i < NLog::EComponentHelpers::ToInt(NLog::EComponent::MaxValue); ++i) {
-            logger.SetComponentLevel((NLog::EComponent) i, (NLog::ELevel) options.LogLevel);
-        }
-        Initialized = true;
+void InitLogging(const TLoggingOptions& options) {
+    NLog::InitLogger(options.LogDestination);
+    auto& logger = NLog::YqlLogger();
+    logger.SetDefaultPriority(options.LogLevel);
+    for (int i = 0; i < NLog::EComponentHelpers::ToInt(NLog::EComponent::MaxValue); ++i) {
+        logger.SetComponentLevel((NLog::EComponent)i, (NLog::ELevel)options.LogLevel);
     }
+    Initialized = true;
+}
 
-    void EnsureLoggingInitialized() {
-        if (Initialized.load()) {
-            return;
-        }
-        InitLogging(TLoggingOptions());
+void EnsureLoggingInitialized() {
+    if (Initialized.load()) {
+        return;
     }
+    InitLogging(TLoggingOptions());
+}
 
-}
-}
+} // namespace NPureCalc
+} // namespace NYql

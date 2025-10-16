@@ -1,5 +1,6 @@
 #include "auto_config_initializer.h"
 #include "run.h"
+#include "grpc_servers_manager.h"
 #include "service_initializer.h"
 #include "kikimr_services_initializers.h"
 
@@ -21,7 +22,7 @@
 #include <ydb/library/actors/core/scheduler_basic.h>
 
 #include <ydb/library/actors/interconnect/interconnect.h>
-#include <ydb/library/actors/interconnect/poller_tcp.h>
+#include <ydb/library/actors/interconnect/poller/poller_tcp.h>
 #include <ydb/library/actors/interconnect/interconnect_tcp_proxy.h>
 #include <ydb/library/actors/interconnect/interconnect_tcp_server.h>
 #include <ydb/library/actors/interconnect/interconnect_mon.h>
@@ -196,6 +197,8 @@ class TGRpcServersManager : public TActorBootstrapped<TGRpcServersManager> {
     std::weak_ptr<TGRpcServersWrapper> GRpcServersWrapper;
     TIntrusivePtr<NMemory::IProcessMemoryInfoProvider> ProcessMemoryInfoProvider;
     bool Started = false;
+    bool StopScheduled = false;
+    bool WaitingForDisconnectRequest = false;
 
 public:
     enum {
@@ -227,9 +230,26 @@ public:
         if (const auto& bridgeInfo = ev->Get()->BridgeInfo) {
             if (NBridge::PileStateTraits(bridgeInfo->SelfNodePile->State).RequiresConfigQuorum) {
                 Start();
-            } else {
-                Stop();
+            } else if (!StopScheduled) {
+                StopScheduled = true;
+                CheckAndExecuteStop();
             }
+        }
+    }
+
+    void HandleDisconnectRequestStarted() {
+        WaitingForDisconnectRequest = true;
+    }
+
+    void HandleDisconnectRequestFinished() {
+        WaitingForDisconnectRequest = false;
+        CheckAndExecuteStop();
+    }
+
+    void CheckAndExecuteStop() {
+        if (StopScheduled && !WaitingForDisconnectRequest) {
+            StopScheduled = false;
+            Stop();
         }
     }
 
@@ -238,6 +258,8 @@ public:
             return;
         }
         Started = true;
+        StopScheduled = false;
+        WaitingForDisconnectRequest = false;
         auto wrapper = GRpcServersWrapper.lock();
         if (!wrapper) {
             return;
@@ -292,6 +314,8 @@ public:
     STRICT_STFUNC(StateFunc,
         hFunc(TEvNodeWardenStorageConfig, Handle)
         hFunc(TEvStop, HandleStop)
+        cFunc(TEvGRpcServersManager::EvDisconnectRequestStarted, HandleDisconnectRequestStarted)
+        cFunc(TEvGRpcServersManager::EvDisconnectRequestFinished, HandleDisconnectRequestFinished)
     )
 };
 
@@ -737,7 +761,7 @@ TGRpcServers TKikimrRunner::CreateGRpcServers(const TKikimrRunConfig& runConfig)
         names["object_storage"] = &hasObjectStorage;
         TServiceCfg hasClickhouseInternal = services.empty();
         names["clickhouse_internal"] = &hasClickhouseInternal;
-        TServiceCfg hasRateLimiter = false;
+        TServiceCfg hasRateLimiter = services.empty();
         names["rate_limiter"] = &hasRateLimiter;
         TServiceCfg hasExport = services.empty();
         names["export"] = &hasExport;
@@ -2015,6 +2039,7 @@ void TKikimrRunner::KikimrStart() {
     if (GRpcServersWrapper) {
         GRpcServersWrapper->Servers = GRpcServersWrapper->GrpcServersFactory();
         GRpcServersManager = ActorSystem->Register(new TGRpcServersManager(GRpcServersWrapper, ProcessMemoryInfoProvider));
+        ActorSystem->RegisterLocalService(NKikimr::MakeGRpcServersManagerId(ActorSystem->NodeId), GRpcServersManager);
     }
 
     if (SqsHttp) {

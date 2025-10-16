@@ -531,7 +531,7 @@ namespace NKafka::NTests {
             auto [actorId, actor] = CreateFetchActor(edge, {NKikimr::JoinPath({"/Root/PQ/", topicName})}, runtime, config);
             Sleep(TDuration::MilliSeconds(100)); // wait actor willbe created
 
-            // emulate pipe error
+            // emulate timeout
             auto topicIndexes = TestAccessor::GetTopicIndexes(actor);
             UNIT_ASSERT(topicIndexes.size() == 1);
             auto fetchActorId = topicIndexes.begin()->first;

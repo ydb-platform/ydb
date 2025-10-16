@@ -8,8 +8,8 @@
 
 namespace NSQLComplete {
 
-    TMaybe<TString> ToCluster(const NYql::TExprNode& node);
+TMaybe<TString> ToCluster(const NYql::TExprNode& node);
 
-    THashSet<TString> CollectClusters(const NYql::TExprNode& root);
+THashSet<TString> CollectClusters(const NYql::TExprNode& root);
 
 } // namespace NSQLComplete

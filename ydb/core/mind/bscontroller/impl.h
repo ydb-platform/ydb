@@ -2030,6 +2030,11 @@ private:
     std::set<std::tuple<TNodeId, TSyncerState*>> NodeToSyncerState;
     TIntrusiveList<TSyncerState, TSyncersRequiringAction> SyncersRequiringAction;
 
+    bool CheckingUnsyncedBridgePiles = false;
+    bool NotifyBridgeSyncFinishedErrors = false;
+    bool RecheckUnsyncedBridgePiles = false;
+    ui32 NumPendingBridgeSyncFinishedResponses = 0;
+
     void CheckUnsyncedBridgePiles();
 
     void ApplySyncerState(TNodeId nodeId, const NKikimrBlobStorage::TEvControllerUpdateSyncerState& update,
@@ -2037,7 +2042,7 @@ private:
 
     void CheckSyncerDisconnectedNodes();
 
-    bool ProcessSyncers(TNodeId nodeId = 0);
+    void ProcessSyncers(THashSet<TNodeId> nodesToUpdate = {});
 
     void SerializeSyncers(TNodeId nodeId, NKikimrBlobStorage::TEvControllerNodeServiceSetUpdate *update,
         TSet<ui32>& groupIdsToRead);

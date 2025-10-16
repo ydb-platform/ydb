@@ -23,10 +23,10 @@ TEST_SRCS(
     test_topic.py
     test_kafka_topic.py
     test_transfer.py
-    test_vdisks.py
     test_node_broker_delta_protocol.py
     test_table_schema_compatibility.py
     test_workload_manager.py
+    test_default_columns.py
     udf/test_datetime2.py
     udf/test_digest.py
     udf/test_digest_regression.py
@@ -51,6 +51,7 @@ PEERDIR(
 END()
 
 RECURSE(
+    federated_queries
     s3_backups
     olap
 )

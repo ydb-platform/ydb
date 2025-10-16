@@ -5,10 +5,12 @@ namespace NUdf {
 
 ITypeVisitor::ITypeVisitor(ui16 compatibilityVersion)
     : TBase(compatibilityVersion)
-{}
+{
+}
 
 ITypeInfoHelper::ITypeInfoHelper()
-{}
+{
+}
 
-} // namspace NUdf
-} // namspace NYql
+} // namespace NUdf
+} // namespace NYql

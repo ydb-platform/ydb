@@ -1,6 +1,5 @@
 LIBRARY()
 
-
 SRCS(
     sql_format.cpp
 )
@@ -20,6 +19,10 @@ PEERDIR(
 )
 
 END()
+
+RECURSE(
+    check
+)
 
 RECURSE_FOR_TESTS(
     ut

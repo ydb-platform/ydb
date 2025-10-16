@@ -4,7 +4,7 @@
 namespace NKikimr {
 namespace NMiniKQL {
 
-class TUnboxedValueStream : public IOutputStream {
+class TUnboxedValueStream: public IOutputStream {
 public:
     TUnboxedValueStream();
 
@@ -16,5 +16,5 @@ private:
     NUdf::TUnboxedValue Value_;
 };
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

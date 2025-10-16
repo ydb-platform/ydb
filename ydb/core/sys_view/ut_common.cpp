@@ -51,6 +51,7 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, const TTestEnvSettings& 
     featureFlags.SetEnableExternalDataSources(true);
     featureFlags.SetEnableSparsedColumns(settings.EnableSparsedColumns);
     featureFlags.SetEnableOlapCompression(settings.EnableOlapCompression);
+    featureFlags.SetEnableTableCacheModes(settings.EnableTableCacheModes);
     if (settings.EnableRealSystemViewPaths) {
         featureFlags.SetEnableRealSystemViewPaths(*settings.EnableRealSystemViewPaths);
     }
@@ -76,6 +77,11 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, const TTestEnvSettings& 
     }
 
     Settings->AppConfig->MutableHiveConfig()->AddBalancerIgnoreTabletTypes(NKikimrTabletBase::TTabletTypes::SysViewProcessor);
+
+    if (settings.DataShardStatsReportIntervalSeconds) {
+        Settings->AppConfig->MutableDataShardConfig()
+            ->SetStatsReportIntervalSeconds(*settings.DataShardStatsReportIntervalSeconds);
+    }
 
     Server = new Tests::TServer(*Settings);
     Server->EnableGRpc(grpcPort);

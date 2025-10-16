@@ -748,6 +748,134 @@ public:
     }
 };
 
+class TStreamingSysViewTestFixture : public TStreamingTestFixture {
+public:
+    inline static constexpr ui64 SYS_VIEW_COLUMNS_COUNT = 13;
+    inline static constexpr char INPUT_TOPIC_NAME[] = "sysViewInput";
+    inline static constexpr char OUTPUT_TOPIC_NAME[] = "sysViewOutput";
+    inline static constexpr char PQ_SOURCE[] = "sysViewSourceName";
+
+public:
+    void Setup() {
+        LogSettings.AddLogPriority(NKikimrServices::SYSTEM_VIEWS, NLog::PRI_DEBUG);
+
+        UNIT_ASSERT_C(!InputTopic, "Setup called twice");
+        InputTopic = TStringBuilder() << INPUT_TOPIC_NAME << Name_;
+        OutputTopic = TStringBuilder() << OUTPUT_TOPIC_NAME << Name_;
+        CreateTopic(InputTopic);
+        CreateTopic(OutputTopic);
+        CreatePqSource(PQ_SOURCE);
+    }
+
+    void StartQuery(const TString& name) {
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY `{query_name}` AS DO BEGIN{text}END DO)",
+            "query_name"_a = name,
+            "text"_a = GetQueryText(name)
+        ));
+    }
+
+    struct TSysViewRow {
+        TString Name;
+        TString Status = "RUNNING";
+        TString Issues = "{}";
+        std::optional<TString> Text;
+        bool Run = true;
+        TString Pool = "default";
+        ui64 RetryCount = 0;
+        std::optional<TInstant> LastFailAt;
+        std::optional<TInstant> SuspendedUntil;
+        bool CheckPlan = false;
+    };
+
+    struct TSysViewResult {
+        TString ExecutionId;
+        std::vector<TString> PreviousExecutionIds;
+    };
+
+    std::vector<TSysViewResult> CheckSysView(const std::vector<TSysViewRow>& rows, const TString& filter = "", const TString& order = "Path ASC") {
+        const auto& result = ExecQuery(TStringBuilder()
+            << "SELECT * FROM `.sys/streaming_queries`"
+            << (filter ? " WHERE " + filter : "")
+            << (order ? " ORDER BY " + order : "")
+        );
+        UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
+
+        std::vector<TSysViewResult> results;
+        CheckScriptResult(result[0], SYS_VIEW_COLUMNS_COUNT, rows.size(), [&](TResultSetParser& resultSet) {
+            const auto& row = rows[results.size()];
+            auto& result = results.emplace_back();
+            UNIT_ASSERT_VALUES_EQUAL(*resultSet.ColumnParser("Path").GetOptionalUtf8(), JoinPath({"/Root", row.Name}));
+            UNIT_ASSERT_VALUES_EQUAL(*resultSet.ColumnParser("Status").GetOptionalUtf8(), row.Status);
+            UNIT_ASSERT_STRING_CONTAINS(*resultSet.ColumnParser("Issues").GetOptionalUtf8(), row.Issues);
+
+            const bool expectExecutions = row.Run && IsIn({"RUNNING", "COMPLETED", "CANCELLED", "FAILED"}, row.Status);
+            if (expectExecutions || row.CheckPlan) {
+                UNIT_ASSERT_STRING_CONTAINS(*resultSet.ColumnParser("Plan").GetOptionalUtf8(), TStringBuilder() << "Write " << PQ_SOURCE);                
+                UNIT_ASSERT_STRING_CONTAINS(*resultSet.ColumnParser("Ast").GetOptionalUtf8(),  JoinPath({"/Root", PQ_SOURCE}));
+            }
+
+            UNIT_ASSERT_VALUES_EQUAL(*resultSet.ColumnParser("Text").GetOptionalUtf8(), row.Text.value_or(GetQueryText(row.Name)));
+            UNIT_ASSERT_VALUES_EQUAL(*resultSet.ColumnParser("Run").GetOptionalBool(), row.Run);
+            UNIT_ASSERT_VALUES_EQUAL(*resultSet.ColumnParser("ResourcePool").GetOptionalUtf8(), row.Pool);
+            UNIT_ASSERT_VALUES_EQUAL(*resultSet.ColumnParser("RetryCount").GetOptionalUint64(), row.RetryCount);
+
+            if (row.LastFailAt) {
+                const auto delta = abs(resultSet.ColumnParser("LastFailAt").GetOptionalTimestamp()->SecondsFloat() - row.LastFailAt->SecondsFloat());
+                UNIT_ASSERT_GE(5, delta);
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser("LastFailAt").GetOptionalTimestamp().has_value(), row.RetryCount > 0);
+            }
+
+            if (row.SuspendedUntil) {
+                const auto delta = abs(resultSet.ColumnParser("SuspendedUntil").GetOptionalTimestamp()->SecondsFloat() - row.SuspendedUntil->SecondsFloat());
+                UNIT_ASSERT_GE(5, delta);
+            } else {
+                UNIT_ASSERT(!resultSet.ColumnParser("SuspendedUntil").GetOptionalTimestamp());
+            }
+
+            result.ExecutionId = *resultSet.ColumnParser("LastExecutionId").GetOptionalUtf8();
+            UNIT_ASSERT_VALUES_EQUAL(!result.ExecutionId.empty(), expectExecutions);
+
+            const auto previousExecutionIds = *resultSet.ColumnParser("PreviousExecutionIds").GetOptionalUtf8();
+            NJson::TJsonValue value;
+            UNIT_ASSERT(NJson::ReadJsonTree(previousExecutionIds, &value));
+            UNIT_ASSERT_VALUES_EQUAL(value.GetType(), NJson::JSON_ARRAY);
+
+            const auto executionsSize = value.GetIntegerRobust();
+            result.PreviousExecutionIds.reserve(executionsSize);
+            for (i64 i = 0; i < executionsSize; ++i) {
+                const NJson::TJsonValue* executionId = nullptr;
+                value.GetValuePointer(i, &executionId);
+                Y_ENSURE(executionId);
+
+                result.PreviousExecutionIds.emplace_back(executionId->GetString());
+            }
+        });
+
+        return results;
+    }
+
+protected:
+    TString GetQueryText(const TString& name) const {
+        UNIT_ASSERT_C(InputTopic, "Setup is not called");
+
+        return fmt::format(R"(
+            ;INSERT INTO `{pq_source}`.`{output_topic}`
+            /* {query_name} */
+            SELECT * FROM `{pq_source}`.`{input_topic}`;)",
+            "query_name"_a = name,
+            "pq_source"_a = PQ_SOURCE,
+            "input_topic"_a = InputTopic,
+            "output_topic"_a = OutputTopic
+        );
+    }
+
+protected:
+    TString InputTopic;
+    TString OutputTopic;
+};
+
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
@@ -2646,6 +2774,325 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         CheckScriptExecutionsCount(2, 1);
 
         ReadTopicMessage(outputTopicName, "B-P3", readDisposition);
+    }
+}
+
+Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {
+    Y_UNIT_TEST_F(ReadNotCreatedSysView, TStreamingSysViewTestFixture) {
+        Setup();
+        CheckSysView({});
+    }
+
+    Y_UNIT_TEST_F(ReadRangesForSysView, TStreamingSysViewTestFixture) {
+        Setup();
+
+        StartQuery("A");
+        StartQuery("B");
+        StartQuery("C");
+        StartQuery("D");
+        StartQuery("E");
+        Sleep(TDuration::Seconds(1));
+
+        CheckSysView({
+            {"A"}, {"B"}, {"C"}, {"D"}, {"E"}
+        });
+
+        CheckSysView({
+            {"B"}, {"C"}, {"D"}
+        }, "Path > '/Root/A' AND Path < '/Root/E'");
+
+        CheckSysView({
+            {"C"}, {"D"}, {"E"}
+        }, "Path > '/Root/B'");
+
+        CheckSysView({
+            {"A"}, {"B"}
+        }, "Path < '/Root/C'");
+
+        CheckSysView({
+            {"C"}, {"D"}, {"E"}
+        }, "Path >= '/Root/C' AND Path <= '/Root/E'");
+
+        CheckSysView({
+            {"D"}, {"E"}
+        }, "Path >= '/Root/D'");
+
+        CheckSysView({
+            {"A"}, {"B"}
+        }, "Path <= '/Root/B'");
+
+        CheckSysView({
+            {"C"}
+        }, "Path = '/Root/C'");
+    }
+
+    Y_UNIT_TEST_F(SortOrderForSysView, TStreamingSysViewTestFixture) {
+        Setup();
+
+        StartQuery("A");
+        StartQuery("B");
+        StartQuery("C");
+        StartQuery("D");
+
+        CheckSysView({
+            {"A"}, {"B"}, {"C"}, {"D"}
+        }, "", "Path ASC");
+
+        CheckSysView({
+            {"C"}, {"D"}
+        }, "Path >= '/Root/C'", "Path ASC");
+
+        CheckSysView({
+            {"D"}, {"C"}, {"B"}, {"A"}
+        }, "", "Path DESC");
+
+        CheckSysView({
+            {"D"}, {"C"}
+        }, "Path >= '/Root/C'", "Path DESC");
+    }
+
+    Y_UNIT_TEST_F(SysViewColumnsValues, TStreamingSysViewTestFixture) {
+        const auto pqGateway = SetupMockPqGateway();
+        Setup();
+
+        constexpr char queryName[] = "streamingQuery";
+        ExecQuery(fmt::format(R"(
+            GRANT ALL ON `/Root` TO `root@builtin`;
+            CREATE RESOURCE POOL MyResourcePool WITH (CONCURRENT_QUERY_LIMIT = "-1");
+            CREATE STREAMING QUERY `{query_name}` WITH (
+                RUN = FALSE,
+                RESOURCE_POOL = "MyResourcePool"
+            ) AS DO BEGIN{text}END DO)",
+            "query_name"_a = queryName,
+            "text"_a = GetQueryText(queryName)
+        ));
+
+        CheckSysView({{
+            .Name = queryName,
+            .Status = "CREATED",
+            .Run = false,
+            .Pool = "MyResourcePool",
+        }});
+
+        ExecQuery(fmt::format(R"(
+            ALTER STREAMING QUERY `{query_name}` SET (
+                RUN = TRUE
+            ))",
+            "query_name"_a = queryName
+        ));
+
+        auto readSession = WaitMockPqReadSession(pqGateway, InputTopic);
+        readSession->AddDataReceivedEvent(0, "test0");
+        ReadMockPqMessage(WaitMockPqWriteSession(pqGateway, OutputTopic), "test0");
+
+        {
+            Sleep(TDuration::Seconds(1));
+            const auto result = CheckSysView({{
+                .Name = queryName,
+                .Status = "RUNNING",
+                .Run = true,
+                .Pool = "MyResourcePool",
+            }})[0];
+
+            UNIT_ASSERT_VALUES_EQUAL(result.PreviousExecutionIds.size(), 0);
+            const auto operation = GetScriptExecutionOperation(OperationIdFromExecutionId(result.ExecutionId));
+            UNIT_ASSERT_VALUES_EQUAL(operation.Metadata().ExecStatus, EExecStatus::Running);
+        }
+
+        auto failAt = TInstant::Now();
+        readSession->AddCloseSessionEvent(EStatus::UNAVAILABLE, {NIssue::TIssue("Test pq session failure")});
+        readSession = WaitMockPqReadSession(pqGateway, InputTopic);
+        readSession->AddDataReceivedEvent(0, "test0");
+        ReadMockPqMessage(WaitMockPqWriteSession(pqGateway, OutputTopic), "test0");
+
+        {
+            Sleep(TDuration::Seconds(1));
+            const auto result = CheckSysView({{
+                .Name = queryName,
+                .Status = "RUNNING",
+                .Issues = "Test pq session failure",
+                .Run = true,
+                .Pool = "MyResourcePool",
+                .RetryCount = 1,
+                .LastFailAt = failAt,
+            }})[0];
+
+            UNIT_ASSERT_VALUES_EQUAL(result.PreviousExecutionIds.size(), 0);
+            const auto operation = GetScriptExecutionOperation(OperationIdFromExecutionId(result.ExecutionId));
+            UNIT_ASSERT_VALUES_EQUAL(operation.Metadata().ExecStatus, EExecStatus::Running);
+        }
+
+        failAt = TInstant::Now();
+        ExecQuery(fmt::format(R"(
+            ALTER STREAMING QUERY `{query_name}` SET (
+                RUN = FALSE
+            ))",
+            "query_name"_a = queryName
+        ));
+
+        {
+            const auto result = CheckSysView({{
+                .Name = queryName,
+                .Status = "STOPPED",
+                .Issues = "Request was canceled by user",
+                .Run = false,
+                .Pool = "MyResourcePool",
+                .RetryCount = 1,
+                .LastFailAt = failAt,
+                .CheckPlan = true,
+            }})[0];
+
+            UNIT_ASSERT_VALUES_EQUAL(result.PreviousExecutionIds.size(), 1);
+            UNIT_ASSERT(!result.ExecutionId);
+            const auto operation = GetScriptExecutionOperation(OperationIdFromExecutionId(result.PreviousExecutionIds[0]), /* checkStatus */ false);
+            const auto& status = operation.Status();
+            UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::CANCELLED, status.GetIssues().ToOneLineString());
+            UNIT_ASSERT_VALUES_EQUAL(operation.Metadata().ExecStatus, EExecStatus::Canceled);
+        }
+    }
+
+    Y_UNIT_TEST_F(SysViewForFinishedStreamingQueries, TStreamingSysViewTestFixture) {
+        Setup();
+
+        const std::vector<TString> texts = {
+            fmt::format(R"(
+                ;INSERT INTO `{pq_source}`.`{output_topic}`
+                /* A */
+                SELECT * FROM `{pq_source}`.`{input_topic}`
+                LIMIT 1;)",
+                "pq_source"_a = PQ_SOURCE,
+                "output_topic"_a = OutputTopic,
+                "input_topic"_a = InputTopic
+            ), fmt::format(R"(
+                ;PRAGMA ydb.OverridePlanner = @@ [
+                    {{ "tx": 0, "stage": 10, "tasks": 1 }}
+                ] @@;
+                INSERT INTO `{pq_source}`.`{output_topic}`
+                /* B */
+                SELECT * FROM `{pq_source}`.`{input_topic}`;)",
+                "pq_source"_a = PQ_SOURCE,
+                "output_topic"_a = OutputTopic,
+                "input_topic"_a = InputTopic
+            )
+        };
+
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY A AS DO BEGIN{text}END DO)",
+            "text"_a = texts[0]
+        ));
+
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY B AS DO BEGIN{text}END DO)",
+            "text"_a = texts[1]
+        ), EStatus::GENERIC_ERROR);
+
+        Sleep(TDuration::Seconds(1));
+        WriteTopicMessage(InputTopic, "test0");
+        ReadTopicMessage(OutputTopic, "test0");
+        Sleep(TDuration::Seconds(1));
+
+        CheckSysView({{
+            .Name = "A",
+            .Status = "COMPLETED",
+            .Text = texts[0],
+            .CheckPlan = true,
+        }, {
+            .Name = "B",
+            .Status = "CREATED",
+            .Text = texts[1],
+        }});
+    }
+
+    Y_UNIT_TEST_F(SysViewForSuspendedStreamingQueries, TStreamingSysViewTestFixture) {
+        Setup();
+
+        const TString text = fmt::format(R"(
+            PRAGMA pq.Consumer = "unknown";
+            INSERT INTO `{pq_source}`.`{output_topic}`
+            SELECT * FROM `{pq_source}`.`{input_topic}`;)",
+            "pq_source"_a = PQ_SOURCE,
+            "output_topic"_a = OutputTopic,
+            "input_topic"_a = InputTopic
+        );
+
+        const auto start = TInstant::Now();
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY A AS DO BEGIN{text}END DO)",
+            "text"_a = text
+        ));
+
+        const auto timeout = TDuration::Seconds(20);
+        WaitFor(timeout, "Wait query suspend", [&](TString& error) {
+            const auto& result = ExecQuery("SELECT Status, SuspendedUntil FROM `.sys/streaming_queries`");
+            UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
+
+            TString status;
+            std::optional<TInstant> suspendedUntil;
+            CheckScriptResult(result[0], 2, 1, [&](TResultSetParser& resultSet) {
+                status = *resultSet.ColumnParser("Status").GetOptionalUtf8();
+                suspendedUntil = resultSet.ColumnParser("SuspendedUntil").GetOptionalTimestamp();
+            });
+
+            if (status != "SUSPENDED") {
+                error = TStringBuilder() << "Query status is not SUSPENDED, but " << status;
+                return false;
+            }
+
+            const auto delta = abs(suspendedUntil->SecondsFloat() - start.SecondsFloat());
+            UNIT_ASSERT_GE(timeout.SecondsFloat(), delta);
+            return true;
+        });
+    }
+
+    Y_UNIT_TEST_F(ReadPartOfSysViewColumns, TStreamingSysViewTestFixture) {
+        Setup();
+
+        StartQuery("A");
+
+        const auto& result = ExecQuery(R"(
+            SELECT
+                Path,
+                Text,
+                Run,
+                ResourcePool
+            FROM `.sys/streaming_queries`
+        )");
+        UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
+
+        std::vector<TSysViewResult> results;
+        CheckScriptResult(result[0], 4, 1, [&](TResultSetParser& resultSet) {
+            UNIT_ASSERT_VALUES_EQUAL(*resultSet.ColumnParser("Path").GetOptionalUtf8(), "/Root/A");
+            UNIT_ASSERT_VALUES_EQUAL(*resultSet.ColumnParser("Text").GetOptionalUtf8(), GetQueryText("A"));
+            UNIT_ASSERT_VALUES_EQUAL(*resultSet.ColumnParser("Run").GetOptionalBool(), true);
+            UNIT_ASSERT_VALUES_EQUAL(*resultSet.ColumnParser("ResourcePool").GetOptionalUtf8(), "default");
+        });
+    }
+
+    Y_UNIT_TEST_F(ReadSysViewWithBackPressure, TStreamingSysViewTestFixture) {
+        Setup();
+
+        std::vector<TSysViewRow> rows;
+        for (ui64 i = 0; i < 4000; ++i) {
+            const auto name = TStringBuilder() << "query-" << i;
+            ExecQuery(fmt::format(R"(
+                CREATE STREAMING QUERY `{name}` WITH (
+                    RUN = FALSE
+                ) AS DO BEGIN{text}END DO)",
+                "name"_a = name,
+                "text"_a = GetQueryText(name)
+            ));
+            rows.push_back({
+                .Name = name,
+                .Status = "CREATED",
+                .Run = false,
+            });
+        }
+
+        std::sort(rows.begin(), rows.end(), [](const auto& lhs, const auto& rhs) {
+            return lhs.Name < rhs.Name;
+        });
+
+        CheckSysView(rows);
     }
 }
 

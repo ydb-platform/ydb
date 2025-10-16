@@ -71,17 +71,17 @@ query_service_config:
 
 ```yaml
 query_service_config:
-    generic:
-        connector:
-            endpoint:
-                host: localhost                 # имя хоста, где развернут коннектор
-                port: 2130                      # номер порта коннектора
-            use_ssl: false                      # флаг, включающий шифрование соединений
-            ssl_ca_crt: "/opt/ydb/certs/ca.crt" # путь к сертификату CA
-        default_settings:
-        - name: UsePredicatePushdown
-          value: "true"
-    all_external_data_sources_are_available: true
+  generic:
+    connector:
+      endpoint:
+        host: localhost                   # имя хоста, где развернут коннектор
+        port: 2130                        # номер порта коннектора
+      use_ssl: false                      # флаг, включающий шифрование соединений
+      ssl_ca_crt: "/opt/ydb/certs/ca.crt" # путь к сертификату CA
+    default_settings:
+    - name: UsePredicatePushdown
+      value: "true"
+  all_external_data_sources_are_available: true
 ```
 
 ## См. также

@@ -2087,6 +2087,16 @@ message TEvRead {
     optional NKikimrSchemeOp.EOlapProgramType ProgramType = 903;
 
     optional NKikimrDataEvents.ELockMode LockMode = 904;
+
+    optional TReadVectorTopK VectorTopK = 905;
+}
+
+message TReadVectorTopK {
+    // Top-K pushdown by vector distance between Column and TargetVector
+    optional uint32 Column = 1;
+    optional Ydb.Table.VectorIndexSettings Settings = 2;
+    optional bytes TargetVector = 3;
+    optional uint32 Limit = 4;
 }
 
 message TReadContinuationToken {

@@ -280,7 +280,7 @@ IComputationNode* WrapDqBlockHashJoin(TCallable& callable, const TComputationNod
     const auto leftStream = LocateNode(ctx.NodeLocator, callable, 0);
     const auto rightStream = LocateNode(ctx.NodeLocator, callable, 1);
     MKQL_ENSURE(joinKind == EJoinKind::Inner, "Only inner is supported, see gh#26780 for details.");
-    ValidateRenames(renames, joinKind);
+    ValidateRenames(renames, joinKind, std::ssize(leftStreamItems) - 1, std::ssize(rightStreamItems) - 1);
 
     return new TBlockHashJoinWrapper<EJoinKind::Inner>(ctx.Mutables, std::move(joinItems), std::move(leftStreamItems),
                                                        std::move(leftKeyColumns), std::move(rightStreamItems),

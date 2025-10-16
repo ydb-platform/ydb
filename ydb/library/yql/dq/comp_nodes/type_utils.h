@@ -121,7 +121,7 @@ struct TIndexAndSide {
 
 using TDqRenames = std::vector<TIndexAndSide>;
 
-void ValidateRenames(const TDqRenames& renames, EJoinKind kind);
+void ValidateRenames(const TDqRenames& renames, EJoinKind kind, int leftTypesWidth, int rightTypesWidth);
 
 struct TGraceJoinRenames {
     TVector<ui32> Left;

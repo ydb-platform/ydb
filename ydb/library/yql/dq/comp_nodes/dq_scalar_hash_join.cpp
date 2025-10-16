@@ -218,7 +218,7 @@ IComputationWideFlowNode* WrapDqScalarHashJoin(TCallable& callable, const TCompu
 
     TDqRenames renames =
         FromGraceFormat(TGraceJoinRenames::FromRuntimeNodes(callable.GetInput(5), callable.GetInput(6)));
-    ValidateRenames(renames, joinKind);
+    ValidateRenames(renames, joinKind, std::ssize(leftFlowItems), std::ssize(rightFlowItems));
     return new TScalarHashJoinWrapper<EJoinKind::Inner>(ctx.Mutables, leftFlow, rightFlow, std::move(joinItems),
                                                         std::move(leftFlowItems), std::move(leftKeyColumns),
                                                         std::move(rightFlowItems), std::move(rightKeyColumns), renames);

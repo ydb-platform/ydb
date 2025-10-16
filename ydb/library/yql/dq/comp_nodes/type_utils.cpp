@@ -52,7 +52,7 @@ bool ForceLeftOptional(EJoinKind kind) {
     }
 }
 
-void ValidateRenames(const TDqRenames& renames, EJoinKind kind) {
+void ValidateRenames(const TDqRenames& renames, EJoinKind kind, int leftTypesWidth, int rightTypesWidth) {
     if (LeftSemiOrOnly(kind)) {
         MKQL_ENSURE(std::find_if(renames.begin(), renames.end(), [&](const TIndexAndSide& data) {
                         return data.Side == JoinSide::kRight;
@@ -62,6 +62,15 @@ void ValidateRenames(const TDqRenames& renames, EJoinKind kind) {
         MKQL_ENSURE(std::find_if(renames.begin(), renames.end(), [&](const TIndexAndSide& data) {
                         return data.Side == JoinSide::kLeft;
                     }) == renames.end(), "right side tuple in right semi or inner join renames?");
+    }
+
+    for (TIndexAndSide rename : renames) {
+        MKQL_ENSURE(rename.Index >= 0, "column index negative");
+        if (rename.Side == JoinSide::kLeft) {
+            MKQL_ENSURE(rename.Index < leftTypesWidth, "column index too big");
+        } else {
+            MKQL_ENSURE(rename.Index < rightTypesWidth, "column index too big");
+        }
     }
 }
 

@@ -69,7 +69,7 @@ TExprBase BuildDeleteIndexStagesImpl(const TKikimrTableDescription& table,
             .Add(effects)
             .Done();
     }
-    
+
     for (const auto& [tableNode, indexDesc] : indexes) {
         THashSet<TStringBuf> indexTableColumnsSet;
         TVector<TStringBuf> indexTableColumns;

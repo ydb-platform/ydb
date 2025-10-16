@@ -171,6 +171,78 @@ Y_UNIT_TEST_SUITE(KqpStreamIndexes) {
             R"([])",
             exists);
     }
+
+    Y_UNIT_TEST_TWIN(DeleteKey2, exists) {
+        RunTest(
+            "DELETE FROM `/Root/DataShard` ON SELECT 0u AS Col1;",
+            R"([])",
+            R"([])",
+            exists);
+    }
+
+    Y_UNIT_TEST(UpdateKeyExists) {
+        RunTest(
+            "UPDATE `/Root/DataShard` SET Col2 = 0u WHERE Col1 = 0u;",
+            R"([[[0u];[0u];[1u]]])",
+            R"([[[0u];[0u]]])",
+            true);
+    }
+
+    Y_UNIT_TEST(UpdateKeyNotExists) {
+        RunTest(
+            "UPDATE `/Root/DataShard` SET Col2 = 0u WHERE Col1 = 0u;",
+            R"([])",
+            R"([])",
+            false);
+    }
+
+    Y_UNIT_TEST(UpdateKeyExists2) {
+        RunTest(
+            "UPDATE `/Root/DataShard` SET Col3 = 0u WHERE Col1 = 0u;",
+            R"([[[0u];[1u];[0u]]])",
+            R"([[[0u];[1u]]])",
+            true);
+    }
+
+    Y_UNIT_TEST(UpdateKeyNotExists2) {
+        RunTest(
+            "UPDATE `/Root/DataShard` SET Col3 = 0u WHERE Col1 = 0u;",
+            R"([])",
+            R"([])",
+            false);
+    }
+
+    Y_UNIT_TEST(UpdateKeyExists3) {
+        RunTest(
+            "UPDATE `/Root/DataShard` ON SELECT 0u AS Col1, 0u AS Col3;",
+            R"([[[0u];[1u];[0u]]])",
+            R"([[[0u];[1u]]])",
+            true);
+    }
+
+    Y_UNIT_TEST(UpdateKeyNotExists3) {
+        RunTest(
+            "UPDATE `/Root/DataShard` ON SELECT 0u AS Col1, 0u AS Col3;",
+            R"([])",
+            R"([])",
+            false);
+    }
+
+    Y_UNIT_TEST(UpdateKeyExists4) {
+        RunTest(
+            "UPDATE `/Root/DataShard` ON SELECT 0u AS Col1, 0u AS Col2;",
+            R"([[[0u];[0u];[1u]]])",
+            R"([[[0u];[0u]]])",
+            true);
+    }
+
+    Y_UNIT_TEST(UpdateKeyNotExists4) {
+        RunTest(
+            "UPDATE `/Root/DataShard` ON SELECT 0u AS Col1, 0u AS Col2;",
+            R"([])",
+            R"([])",
+            false);
+    }
 }
 }
 }

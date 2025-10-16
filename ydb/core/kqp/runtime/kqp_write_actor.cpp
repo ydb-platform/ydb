@@ -1612,17 +1612,24 @@ private:
             rowsBatcher->AddRow();
         });
 
-        for (const auto& [key, index] : KeyToIndex) {
-            const auto& inputCells = ProcessCells[index];
-            Y_UNUSED(inputCells);
-            for (const auto& cell : inputCells) {
-                rowsBatcher->AddCell(cell);
+        if (OperationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE) {
+            for (const auto& [key, index] : KeyToIndex) {
+                const auto& inputCells = ProcessCells[index];
+                Y_UNUSED(inputCells);
+                for (const auto& cell : inputCells) {
+                    rowsBatcher->AddCell(cell);
+                }
+                for (size_t i = 0; i < lookupColumnsCount; ++i) {
+                    rowsBatcher->AddCell(TCell{});
+                    Memory += sizeof(TCell);
+                }
+                rowsBatcher->AddRow();
             }
-            for (size_t i = 0; i < lookupColumnsCount; ++i) {
-                rowsBatcher->AddCell(TCell{});
-                Memory += sizeof(TCell);
+        } else {
+            for (const auto& [key, index] : KeyToIndex) {
+                const auto& inputCells = ProcessCells[index];
+                Memory -= EstimateSize(inputCells);
             }
-            rowsBatcher->AddRow();
         }
 
         KeyToIndex.clear();
@@ -1685,7 +1692,13 @@ private:
             batch = actorInfo.Projection->Flush();
         }
         AFL_ENSURE(!actorInfo.DeleteProjection);
-        PathWriteInfo.at(PathId).WriteActor->Write(Cookie, OperationType, std::move(batch));
+        PathWriteInfo.at(PathId).WriteActor->Write(
+            Cookie,
+            (OperationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE
+                && PathLookupInfo.contains(PathId))
+                    ? NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT
+                    : OperationType,
+            std::move(batch));
     }
 
     void CloseWrite() {

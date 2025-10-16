@@ -205,6 +205,10 @@ TExprNode::TPtr GetPgNotNullColumns(
 TExprNode::TPtr IsUpdateSetting(TExprContext& ctx, const TPositionHandle& pos) {
     return Build<TCoNameValueTupleList>(ctx, pos)
         .Add()
+            .Name().Build("Mode")
+            .Value<TCoAtom>().Build("update") // TODO: make it conditional
+        .Build()
+        .Add()
             .Name().Build("IsUpdate")
         .Build()
     .Done().Ptr();
@@ -679,7 +683,7 @@ TExprBase BuildUpdateTable(const TKiUpdateTable& update, const TKikimrTableDescr
 }
 
 TExprBase BuildUpdateTableWithIndex(const TKiUpdateTable& update, const TKikimrTableDescription& tableData,
-    bool withSystemColumns, TExprContext& ctx)
+    bool withSystemColumns, TExprContext& ctx, TKqpOptimizeContext& kqpCtx)
 {
     auto rowsToUpdate = BuildRowsToUpdate(tableData, withSystemColumns, update.Filter(), update.IsBatch(), update.Pos(), ctx);
 
@@ -707,8 +711,16 @@ TExprBase BuildUpdateTableWithIndex(const TKiUpdateTable& update, const TKikimrT
 
     const bool needsKqpEffect = std::find_if(indexes.begin(), indexes.end(), idxNeedsKqpEffect) != indexes.end();
 
+    const bool isSink = NeedSinks(tableData, kqpCtx);
+
+    const bool canUseStreamIndex = kqpCtx.Config->EnableIndexStreamWrite
+        && std::all_of(indexes.begin(), indexes.end(), [](const auto& index) {
+            return index.second->Type == TIndexDescription::EType::GlobalSync
+                || index.second->Type == TIndexDescription::EType::GlobalSyncUnique;
+        });
+
     // For unique or vector index rewrite UPDATE to UPDATE ON
-    if (needsKqpEffect) {
+    if (needsKqpEffect || (isSink && canUseStreamIndex)) {
         return Build<TKqlUpdateRowsIndex>(ctx, update.Pos())
             .Table(BuildTableMeta(tableData, update.Pos(), ctx))
             .Input<TKqpWriteConstraint>()
@@ -966,7 +978,7 @@ TExprNode::TPtr HandleUpdateTable(const TKiUpdateTable& update, TExprContext& ct
     }
 
     if (HasIndexesToWrite(tableData)) {
-        return BuildUpdateTableWithIndex(update, tableData, withSystemColumns, ctx).Ptr();
+        return BuildUpdateTableWithIndex(update, tableData, withSystemColumns, ctx, kqpCtx).Ptr();
     } else {
         return BuildUpdateTable(update, tableData, withSystemColumns, ctx).Ptr();
     }

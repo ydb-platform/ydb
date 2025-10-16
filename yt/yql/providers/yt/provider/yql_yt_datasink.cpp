@@ -213,6 +213,10 @@ public:
                     }
 
                     cluster = TString(node.Child(1)->Content());
+                    if (*cluster != "$all" && *cluster != YtUnspecifiedCluster && !State_->Gateway->GetClusterServer(*cluster)) {
+                        ctx.AddError(TIssue(ctx.GetPosition(node.Child(1)->Pos()), TStringBuilder() << "Unknown cluster: " << *cluster));
+                        return false;
+                    }
                 }
 
                 return true;

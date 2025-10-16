@@ -1487,7 +1487,7 @@ private:
         if (State.HasCurrentExecutionId()) {
             const auto& executionId = State.GetCurrentExecutionId();
             LOG_D("Cancel streaming query execution " << executionId);
-            SendToKqpProxy(std::make_unique<TEvCancelScriptExecutionOperation>(Context.GetDatabase(), OperationIdFromExecutionId(executionId)));
+            SendToKqpProxy(std::make_unique<TEvCancelScriptExecutionOperation>(Context.GetDatabase(), OperationIdFromExecutionId(executionId), BUILTIN_ACL_METADATA));
             return;
         }
 
@@ -1495,7 +1495,7 @@ private:
             LOG_D("Cleanup #" << State.PreviousExecutionIdsSize() << " previous executions");
 
             for (const auto& executionId : State.GetPreviousExecutionIds()) {
-                SendToKqpProxy(std::make_unique<TEvForgetScriptExecutionOperation>(Context.GetDatabase(), OperationIdFromExecutionId(executionId)), OperationsToForget++);
+                SendToKqpProxy(std::make_unique<TEvForgetScriptExecutionOperation>(Context.GetDatabase(), OperationIdFromExecutionId(executionId), BUILTIN_ACL_METADATA), OperationsToForget++);
                 LOG_D("Forget streaming query execution #" << OperationsToForget << " " << executionId);
             }
             return;
@@ -1601,7 +1601,7 @@ public:
     void HandleStartQuery(TEvents::TEvWakeup::TPtr&) {
         const auto& executionId = State.GetCurrentExecutionId();
         LOG_D("Get streaming query execution " << executionId);
-        SendToKqpProxy(std::make_unique<TEvGetScriptExecutionOperation>(Context.GetDatabase(), OperationIdFromExecutionId(executionId)));
+        SendToKqpProxy(std::make_unique<TEvGetScriptExecutionOperation>(Context.GetDatabase(), OperationIdFromExecutionId(executionId), BUILTIN_ACL_METADATA));
     }
 
     void HandleStartQuery(TEvGetScriptExecutionOperationResponse::TPtr& ev) {
@@ -1698,7 +1698,7 @@ private:
 
             for (ui64 i = 0; i < toCleanup; ++i) {
                 const auto& executionId = State.GetPreviousExecutionIds(i);
-                SendToKqpProxy(std::make_unique<TEvForgetScriptExecutionOperation>(Context.GetDatabase(), OperationIdFromExecutionId(executionId)), OperationsToForget++);
+                SendToKqpProxy(std::make_unique<TEvForgetScriptExecutionOperation>(Context.GetDatabase(), OperationIdFromExecutionId(executionId), BUILTIN_ACL_METADATA), OperationsToForget++);
                 LOG_D("Forget streaming query execution #" << OperationsToForget << " " << executionId);
             }
             return;
@@ -2046,7 +2046,7 @@ private:
         if (State.HasCurrentExecutionId()) {
             const auto& executionId = State.GetCurrentExecutionId();
             LOG_D("Cancel streaming query execution " << executionId << " (" << info << ")");
-            SendToKqpProxy(std::make_unique<TEvCancelScriptExecutionOperation>(Context.GetDatabase(), OperationIdFromExecutionId(executionId)));
+            SendToKqpProxy(std::make_unique<TEvCancelScriptExecutionOperation>(Context.GetDatabase(), OperationIdFromExecutionId(executionId), BUILTIN_ACL_METADATA));
             return;
         }
 

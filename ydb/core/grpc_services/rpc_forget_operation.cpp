@@ -3,6 +3,7 @@
 #include "rpc_operation_request_base.h"
 
 #include <ydb/core/grpc_services/base/base.h>
+#include <ydb/core/grpc_services/rpc_common/rpc_common.h>
 #include <ydb/core/kqp/common/events/script_executions.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/common/simple/services.h>
@@ -10,9 +11,8 @@
 #include <ydb/core/tx/schemeshard/schemeshard_build_index.h>
 #include <ydb/core/tx/schemeshard/schemeshard_export.h>
 #include <ydb/core/tx/schemeshard/schemeshard_import.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/operation_id/operation_id.h>
-
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/operation_id/operation_id.h>
 
 namespace NKikimr {
 namespace NGRpcService {
@@ -108,7 +108,7 @@ class TForgetOperationRPC: public TRpcOperationRequestActor<TForgetOperationRPC,
     }
 
     void SendForgetScriptExecutionOperation() {
-        Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), new NKqp::TEvForgetScriptExecutionOperation(GetDatabaseName(), OperationId));
+        Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), new NKqp::TEvForgetScriptExecutionOperation(GetDatabaseName(), OperationId, GetUserSID(*Request)));
     }
 
     void Handle(TEvBackup::TEvForgetIncrementalBackupResponse::TPtr& ev) {

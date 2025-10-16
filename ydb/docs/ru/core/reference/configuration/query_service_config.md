@@ -1,6 +1,6 @@
 # query_service_config
 
-Секция `query_service_config` описывает параметры работы {{ ydb-short-name }} с внешними источниками данных с помощью функциональности [федеративных запросов](../../concepts/federated_query/index.md).
+Секция `query_service_config` описывает параметры работы {{ ydb-short-name }} с внешними источниками данных с использованием [федеративных запросов](../../concepts/federated_query/index.md).
 
 Если для доступа к нужному вам источнику требуется развернуть [коннектор](../../concepts/federated_query/architecture.md#connectors), его необходимо также настроить по [инструкции](../../devops/deployment-options/manual/federated-queries/connector-deployment.md).
 
@@ -43,48 +43,49 @@
 ||
 || `all_external_data_sources_are_available`
 | `false`
-| Включение всех типов внешних источников.
-При true, значение `available_external_data_sources` не используется.
+| Включение всех типов внешних источников. Если включено, настройка `available_external_data_sources` игнорируется.
 ||
 |#
 
-## Пример конфига (из внешних источников данных доступен только ClickHouse и MySQL)
+## Примеры {#examples} 
+
+### Включение внешних источников ClickHouse и MySQL
 
 ```yaml
 query_service_config:
-    generic:
-        connector:
-            endpoint:
-                host: localhost                 # имя хоста, где развернут коннектор
-                port: 2130                      # номер порта коннектора
-            use_ssl: false                      # флаг, включающий шифрование соединений
-            ssl_ca_crt: "/opt/ydb/certs/ca.crt" # путь к сертификату CA
-        default_settings:
-        - name: UsePredicatePushdown
-          value: "true"
-    all_external_data_sources_are_available: false
-    available_external_data_sources:
-    - ClickHouse
-    - MySQL
+  generic:
+    connector:
+      endpoint:
+        host: localhost                   # имя хоста, где развернут коннектор
+        port: 2130                        # номер порта коннектора
+      use_ssl: false                      # флаг, включающий шифрование соединений
+      ssl_ca_crt: "/opt/ydb/certs/ca.crt" # путь к сертификату CA
+    default_settings:
+    - name: UsePredicatePushdown
+      value: "true"
+  all_external_data_sources_are_available: false
+  available_external_data_sources:
+  - ClickHouse
+  - MySQL
 ```
 
-## Пример конфига (доступны все типы внешних источников данных)
+### Включение всех типов внешних источников
 
 ```yaml
 query_service_config:
-    generic:
-        connector:
-            endpoint:
-                host: localhost                 # имя хоста, где развернут коннектор
-                port: 2130                      # номер порта коннектора
-            use_ssl: false                      # флаг, включающий шифрование соединений
-            ssl_ca_crt: "/opt/ydb/certs/ca.crt" # путь к сертификату CA
-        default_settings:
-        - name: UsePredicatePushdown
-          value: "true"
-    all_external_data_sources_are_available: true
+  generic:
+    connector:
+      endpoint:
+        host: localhost                   # имя хоста, где развернут коннектор
+        port: 2130                        # номер порта коннектора
+      use_ssl: false                      # флаг, включающий шифрование соединений
+      ssl_ca_crt: "/opt/ydb/certs/ca.crt" # путь к сертификату CA
+    default_settings:
+    - name: UsePredicatePushdown
+      value: "true"
+  all_external_data_sources_are_available: true
 ```
 
 ## См. также
 
-- [Развёртывание YDB с функцией Federated Query](../../devops/deployment-options/manual/federated-queries/index.md)
+- [{#T}](../../devops/deployment-options/manual/federated-queries/index.md)

@@ -27,6 +27,8 @@ arrow::Result<TArrowCSV> TArrowCSVTable::Create(const std::vector<NYdb::NTable::
         if (tp.GetKind() == NYdb::TTypeParser::ETypeKind::Decimal) {
             columnInfo.Precision = tp.GetDecimal().Precision;
             columnInfo.Scale = tp.GetDecimal().Scale;
+        } else if (tp.GetKind() == NYdb::TTypeParser::ETypeKind::Primitive && tp.GetPrimitive() == NYdb::EPrimitiveType::Bool) {
+            columnInfo.IsBool = true;
         }
 
         convertedColumns.emplace_back(columnInfo);

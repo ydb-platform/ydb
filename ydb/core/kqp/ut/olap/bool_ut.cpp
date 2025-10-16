@@ -352,6 +352,31 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
             CreateDataShardTable(helper, tableName);
         }
     }
+
+    bool TryPrepareBase(TTestHelper& helper, ETableKind tableKind, const TString& tableName, TTestHelper::TColumnTable* colTableOut,
+        TVector<TTestHelper::TColumnSchema>* schemaOut) {
+        if (tableKind == ETableKind::COLUMNSHARD) {
+            TVector<TTestHelper::TColumnSchema> schema = {
+                TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
+                TTestHelper::TColumnSchema().SetName("int").SetType(NScheme::NTypeIds::Int64),
+                TTestHelper::TColumnSchema().SetName("b").SetType(NScheme::NTypeIds::Bool),
+            };
+
+            *schemaOut = schema;
+            TTestHelper::TColumnTable col;
+            col.SetName(tableName).SetPrimaryKey({ "id" }).SetSharding({ "id" }).SetSchema(schema);
+            auto result = helper.GetSession().ExecuteSchemeQuery(col.BuildQuery()).GetValueSync();
+            if (result.GetStatus() == NYdb::EStatus::SUCCESS) {
+                *colTableOut = col;
+                return true;
+            } else {
+                return false;
+            }
+        } else {
+            CreateDataShardTable(helper, tableName);
+            return true;
+        }
+    }
     }   // namespace
 
     class TBoolTestCase {
@@ -660,8 +685,8 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
         };
         
         TVector<TCSVFormat> formats = {
+            {"true", "false", "true/false"},
             {"1", "0", "1/0"},
-            {"t", "f", "t/f"}
         };
         
         for (auto&& format : formats) {
@@ -681,7 +706,53 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
                 Scan);
         }
     }
-    }
 
+    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(TestFeatureFlag, EQueryMode, ETableKind) {
+        const auto Scan = Arg<0>();
+        const auto Table = Arg<1>();
+
+        const TString tableName = "/Root/Table1";        
+        TTestHelper helperDisabled(TKikimrSettings().SetWithSampleTables(false));
+        TTestHelper::TColumnTable col;
+        TVector<TTestHelper::TColumnSchema> schema;
+        
+        TVector<TRow> rows = {
+            {1, 100, true},
+            {2, 200, false}
+        };
+        
+        if (Table == ETableKind::DATASHARD) {
+            PrepareBase(helperDisabled, Table, tableName, &col, &schema);
+            LoadData(helperDisabled, Table, ELoadKind::ARROW, tableName, rows, &col, &schema);
+            CheckOrExec(helperDisabled, 
+                "SELECT id, int, b FROM `" + tableName + "` ORDER BY id",
+                "[[1;[100];[%true]];[2;[200];[%false]]]", 
+                Scan);
+        } else {
+            bool tableCreated = TryPrepareBase(helperDisabled, Table, tableName, &col, &schema);
+            if (tableCreated) {
+                try {
+                    LoadData(helperDisabled, Table, ELoadKind::ARROW, tableName, rows, &col, &schema);
+                    UNIT_ASSERT_C(false, "Expected error for ColumnShard with disabled feature flag");
+                } catch (const std::exception& e) {
+                    TString errorMsg = e.what();
+                    UNIT_ASSERT_C(errorMsg.find("EnableColumnshardBool") != TString::npos || 
+                                 errorMsg.find("bool") != TString::npos,
+                                 "Expected error about bool support, got: " + errorMsg);
+                }
+            }
+        }
+
+        TTestHelper helperEnabled(CreateKikimrSettingsWithBoolSupport());
+        TTestHelper::TColumnTable col2;
+        TVector<TTestHelper::TColumnSchema> schema2;
+        PrepareBase(helperEnabled, Table, tableName, &col2, &schema2);
+        LoadData(helperEnabled, Table, ELoadKind::ARROW, tableName, rows, &col2, &schema2);
+        CheckOrExec(helperEnabled, 
+            "SELECT id, int, b FROM `" + tableName + "` ORDER BY id",
+            "[[1;[100];[%true]];[2;[200];[%false]]]", 
+            Scan);
+    }
+}
 }   // namespace NKqp
 }   // namespace NKikimr

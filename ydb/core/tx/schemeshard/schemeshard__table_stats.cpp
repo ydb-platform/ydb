@@ -484,18 +484,32 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
         return true;
     }
 
-    auto path = TPath::Init(pathId, Self);
-    auto checks = path.Check();
-    constexpr ui64 deltaShards = 2;
-    checks
-        .PathShardsLimit(deltaShards)
-        .ShardsLimit(deltaShards);
-    if (!checks) {
-        LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                        "Do not request full stats from datashard"
-                            << ", datashard: " << datashardId
-                            << ", reason: " << checks.GetError());
-        return true;
+    //NOTE: intentionally avoid using TPath.Check().{PathShardsLimit,ShardsLimit}() here.
+    // PathShardsLimit() performs pedantic validation by recalculating shard count through
+    // iteration over entire ShardInfos, which is too slow for this hot spot. It also performs
+    // additional lookups we want to avoid.
+    {
+        constexpr ui64 deltaShards = 2;
+        if ((pathElement->GetShardsInside() + deltaShards) > subDomainInfo->GetSchemeLimits().MaxShardsInPath) {
+            LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Do not request full stats from datashard " << datashardId
+                << ", reason: shards count limit exceeded (in path)"
+                << ", limit: " << subDomainInfo->GetSchemeLimits().MaxShardsInPath
+                << ", current: " << pathElement->GetShardsInside()
+                << ", delta: " << deltaShards
+            );
+            return true;
+        }
+        const auto currentShards = (subDomainInfo->GetShardsInside() - subDomainInfo->GetBackupShards());
+        if ((currentShards + deltaShards) > subDomainInfo->GetSchemeLimits().MaxShards) {
+            LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Do not request full stats from datashard " << datashardId
+                << ", datashard: " << datashardId
+                << ", reason: shards count limit exceeded (in subdomain)"
+                << ", limit: " << subDomainInfo->GetSchemeLimits().MaxShards
+                << ", current: " << currentShards
+                << ", delta: " << deltaShards
+            );
+            return true;
+        }
     }
 
     if (newStats.HasBorrowedData) {
@@ -505,9 +519,11 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
         return true;
     }
 
-    if (path.IsLocked()) {
+    // path.IsLocked() and path.LockedBy() equivalent
+    if (const auto& found = Self->LockedPaths.find(pathId); found != Self->LockedPaths.end()) {
+        const auto txId = found->second;
         LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "Postpone split tablet " << datashardId << " because it is locked by " << path.LockedBy());
+            "Postpone split tablet " << datashardId << " because it is locked by " << txId);
         return true;
     }
 

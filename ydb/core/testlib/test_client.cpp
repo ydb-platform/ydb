@@ -476,6 +476,24 @@ namespace Tests {
             return;
 
         TAppPrepare app; /* will cook TAppData */
+        if (Settings->AppConfig) {
+#define MERGE_CFG(cfg) app.cfg.MergeFrom(Settings->AppConfig->Get ## cfg())
+            MERGE_CFG(CompactionConfig);
+            MERGE_CFG(HiveConfig);
+            MERGE_CFG(DataShardConfig);
+            MERGE_CFG(ColumnShardConfig);
+            MERGE_CFG(SchemeShardConfig);
+            MERGE_CFG(MeteringConfig);
+            MERGE_CFG(PQConfig);
+            MERGE_CFG(AwsCompatibilityConfig);
+            MERGE_CFG(S3ProxyResolverConfig);
+            MERGE_CFG(GraphConfig);
+            MERGE_CFG(ImmediateControlsConfig);
+            MERGE_CFG(ResourceBrokerConfig);
+            MERGE_CFG(WorkloadManagerConfig);
+            MERGE_CFG(QueryServiceConfig);
+#undef MERGE_CFG
+        }
         app.SetNetDataSourceUrl(Settings->NetClassifierConfig.GetUpdaterConfig().GetNetDataSourceUrl());
         app.SetEnableKqpSpilling(Settings->EnableKqpSpilling);
         app.SetKeepSnapshotTimeout(Settings->KeepSnapshotTimeout);

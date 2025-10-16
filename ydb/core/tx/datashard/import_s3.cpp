@@ -229,7 +229,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
 
                 if (res == 0) {
                     // end of frame
-                    if (AsStringBuf(Buffer.Size()).back() != '\n') {
+                    if (Buffer.Size() > 0 && AsStringBuf(Buffer.Size()).back() != '\n') { // Handle also a special case: theoretically it is possible to have nonempty zstd block with empty output data (we created a new block and have not added any data yet)
                         error = "cannot find new line symbol";
                         return ERROR;
                     }
@@ -262,7 +262,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
 
             Portion.ChopHead(input.pos);
 
-            if (!ReadyOutputPos) {
+            if (!ReadyOutputPos && input.pos < input.size) {
                 if (!CanRequestNextRange(Buffer.Size(), error)) {
                     return ERROR;
                 } else {
@@ -270,7 +270,11 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
                 }
             }
 
-            data = AsStringBuf(ReadyOutputPos);
+            if (ReadyOutputPos) {
+                data = AsStringBuf(ReadyOutputPos);
+            } else {
+                data = TStringBuf();
+            }
             return READY_DATA;
         }
 

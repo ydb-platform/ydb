@@ -1,7 +1,7 @@
 LIBRARY()
 
 PEERDIR (
-    yql/essentials/parser/proto_ast/gen/v1_proto_split
+    yql/essentials/parser/proto_ast/gen/v1_proto_split_antlr4
     yql/essentials/parser/proto_ast/antlr4
 )
 
@@ -10,7 +10,7 @@ SET(antlr_templates ${antlr_output}/org/antlr/v4/tool/templates/codegen)
 SET(sql_grammar ${antlr_output}/SQLv1Antlr4.g)
 
 SET(ANTLR_PACKAGE_NAME NSQLv1Generated)
-SET(PROTOBUF_HEADER_PATH yql/essentials/parser/proto_ast/gen/v1_proto_split)
+SET(PROTOBUF_HEADER_PATH yql/essentials/parser/proto_ast/gen/v1_proto_split_antlr4)
 SET(PROTOBUF_SUFFIX_PATH .pb.main.h)
 
 SET(LEXER_PARSER_NAMESPACE NALPDefaultAntlr4)
@@ -46,7 +46,7 @@ RUN_ANTLR4(
     IN ${sql_grammar} ${antlr_templates}/Cpp/Cpp.stg ${antlr_templates}/Cpp/Files.stg
     OUT SQLv1Antlr4Parser.cpp SQLv1Antlr4Lexer.cpp SQLv1Antlr4Parser.h SQLv1Antlr4Lexer.h
     OUTPUT_INCLUDES
-    ${PROTOBUF_HEADER_PATH}/SQLv1Parser.pb.main.h
+    ${PROTOBUF_HEADER_PATH}/SQLv1Antlr4Parser.pb.main.h
     ${STG_INCLUDES}
     CWD ${antlr_output}
 )

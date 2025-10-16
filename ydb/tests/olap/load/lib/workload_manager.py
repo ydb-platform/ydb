@@ -412,7 +412,7 @@ class TestWorkloadManagerTpchComputeSchedulerP1S10(WorkloadManagerTpchBase, Work
 
 
 class TestWorkloadManagerClickbenchComputeSchedulerP1T1(WorkloadManagerClickbenchBase, WorkloadManagerComputeSchedulerP1):
-    threads = 1
+    threads = 2
     iterations = ClickbenchParallelBase.iterations
 
 

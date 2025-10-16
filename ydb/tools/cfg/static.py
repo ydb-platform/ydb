@@ -1514,7 +1514,6 @@ class StaticConfigGenerator(object):
                     node.WalleLocation.Body = int(host.body)
                 elif self.__cluster_details.use_k8s_api:
                     node.Location.DataCenter = host.datacenter
-                    node.Location.Module = host.module
                     node.Location.Rack = host.rack
                     node.Location.Body = int(host.body)
                 else:

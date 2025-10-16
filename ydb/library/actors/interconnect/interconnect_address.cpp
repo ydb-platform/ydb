@@ -8,6 +8,16 @@
 #include <sys/stat.h>
 #endif
 
+#if defined(__APPLE__) || defined(_darwin_)
+/* OSX seems not to define these. */
+#ifndef s6_addr16
+#define s6_addr16 __u6_addr.__u6_addr16
+#endif
+#ifndef s6_addr32
+#define s6_addr32 __u6_addr.__u6_addr32
+#endif
+#endif
+
 namespace NInterconnect {
     TAddress::TAddress() {
         memset(&Addr, 0, sizeof(Addr));
@@ -104,10 +114,11 @@ namespace NInterconnect {
         return p ? TString(p) : TString();
     }
 
-    TAddress::TV6Addr TAddress::GetV6CompatAddr() const {
-        switch (GetFamily()) {
+#if not defined(_win32_)
+    TAddress::TV6Addr GetV6CompatAddr(const NInterconnect::TAddress& a) noexcept {
+        switch (a.GetFamily()) {
             case AF_INET: {
-                TV6Addr addr;
+                TAddress::TV6Addr addr;
                 addr.s6_addr16[0] = 0;
                 addr.s6_addr16[1] = 0;
                 addr.s6_addr16[2] = 0;
@@ -115,17 +126,18 @@ namespace NInterconnect {
                 addr.s6_addr16[4] = 0;
                 addr.s6_addr16[5] = Max<ui16>();
                 addr.s6_addr16[6] = Max<ui16>();
-                addr.s6_addr32[3] = Addr.Ipv4.sin_addr.s_addr;
+                addr.s6_addr32[3] = a.Addr.Ipv4.sin_addr.s_addr;
                 return addr;
             }
             case AF_INET6:
-                return Addr.Ipv6.sin6_addr;
+                return a.Addr.Ipv6.sin6_addr;
             default: {
-                TV6Addr addr;
+                TAddress::TV6Addr addr;
                 memset(&addr, 0, sizeof(addr));
                 return addr;
             }
             break;
         }
     }
+#endif
 }

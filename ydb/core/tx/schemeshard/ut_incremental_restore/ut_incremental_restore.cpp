@@ -134,7 +134,7 @@ struct TLongOpTestSetup {
                       Name: ")" << tableName << R"("
                       Columns { Name: "key"   Type: "Uint64" }
                       Columns { Name: "value" Type: "Utf8" }
-                      Columns { Name: "__ydb_incrBackupImpl_deleted" Type: "Bool" }
+                      Columns { Name: "__ydb_incrBackupImpl_changeMetadata" Type: "String" }
                       KeyColumnNames: ["key"]
                 )";
                 
@@ -466,7 +466,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
                   Name: "DatabaseTestTable"
                   Columns { Name: "key"   Type: "Uint32" }
                   Columns { Name: "value" Type: "Utf8" }
-                  Columns { Name: "__ydb_incrBackupImpl_deleted" Type: "Bool" }
+                  Columns { Name: "__ydb_incrBackupImpl_changeMetadata" Type: "String" }
                   KeyColumnNames: ["key"]
             )");
             env.TestWaitNotification(runtime, txId);

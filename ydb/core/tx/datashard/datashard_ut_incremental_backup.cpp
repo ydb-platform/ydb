@@ -21,6 +21,8 @@
 #include <library/cpp/string_utils/base64/base64.h>
 
 #include <util/generic/size_literals.h>
+#include <util/string/escape.h>
+#include <util/string/hex.h>
 #include <util/string/join.h>
 #include <util/string/printf.h>
 #include <util/string/strip.h>
@@ -247,6 +249,29 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
         return proto;
     }
 
+    // Helper function to create serialized TChangeMetadata
+    TString SerializeChangeMetadata(bool isDeleted = false, const TVector<std::pair<ui32, std::pair<bool, bool>>>& columnStates = {}) {
+        NKikimrBackup::TChangeMetadata metadata;
+        metadata.SetIsDeleted(isDeleted);
+        
+        for (const auto& [tag, state] : columnStates) {
+            auto* columnState = metadata.AddColumnStates();
+            columnState->SetTag(tag);
+            columnState->SetIsNull(state.first);
+            columnState->SetIsChanged(state.second);
+        }
+        
+        TString binaryData;
+        Y_PROTOBUF_SUPPRESS_NODISCARD metadata.SerializeToString(&binaryData);
+        
+        // Convert binary data to hex escape sequences for YDB SQL string literal
+        TString result;
+        for (unsigned char byte : binaryData) {
+            result += TStringBuilder() << "\\x" << Sprintf("%02x", static_cast<int>(byte));
+        }
+        return result;
+    }
+
     Y_UNIT_TEST(SimpleBackup) {
         TPortManager portManager;
         TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
@@ -359,14 +384,17 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
                 .Columns({
                     {"key", "Uint32", true, false},
                     {"value", "Uint32", false, false},
-                    {"__ydb_incrBackupImpl_deleted", "Bool", false, false}}));
+                    {"__ydb_incrBackupImpl_changeMetadata", "String", false, false}}));
 
-        ExecSQL(server, edgeActor, R"(
-            UPSERT INTO `/Root/IncrBackupImpl` (key, value, __ydb_incrBackupImpl_deleted) VALUES
-            (1, 10, NULL),
-            (2, NULL, true),
-            (3, 30, NULL),
-            (5, NULL, true);
+        auto normalMetadata = SerializeChangeMetadata(false); // Not deleted
+        auto deletedMetadata = SerializeChangeMetadata(true);  // Deleted
+
+        ExecSQL(server, edgeActor, TStringBuilder() << R"(
+            UPSERT INTO `/Root/IncrBackupImpl` (key, value, __ydb_incrBackupImpl_changeMetadata) VALUES
+            (1, 10, ')" << normalMetadata << R"('),
+            (2, NULL, ')" << deletedMetadata << R"('),
+            (3, 30, ')" << normalMetadata << R"('),
+            (5, NULL, ')" << deletedMetadata << R"(');
         )");
 
         WaitTxNotification(server, edgeActor, AsyncAlterRestoreIncrementalBackup(server, "/Root", "/Root/IncrBackupImpl", "/Root/Table"));
@@ -811,24 +839,26 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
                 .Columns({
                     {"key", "Uint32", true, false},
                     {"value", "Uint32", false, false},
-                    {"__ydb_incrBackupImpl_deleted", "Bool", false, false},
-                    {"__ydb_incrBackupImpl_columnStates", "String", false, false}});
+                    {"__ydb_incrBackupImpl_changeMetadata", "String", false, false}});
 
             CreateShardedTable(server, edgeActor, "/Root/.backups/collections/MyCollection/19700101000002Z_incremental", "Table", opts);
 
-            ExecSQL(server, edgeActor, R"(
-                UPSERT INTO `/Root/.backups/collections/MyCollection/19700101000002Z_incremental/Table` (key, value, __ydb_incrBackupImpl_deleted, __ydb_incrBackupImpl_columnStates) VALUES
-                  (2, 200, NULL, NULL)
-                , (1, NULL, true, NULL)
+            auto normalMetadata = SerializeChangeMetadata(false); // Not deleted
+            auto deletedMetadata = SerializeChangeMetadata(true);  // Deleted
+
+            ExecSQL(server, edgeActor, TStringBuilder() << R"(
+                UPSERT INTO `/Root/.backups/collections/MyCollection/19700101000002Z_incremental/Table` (key, value, __ydb_incrBackupImpl_changeMetadata) VALUES
+                  (2, 200, ')" << normalMetadata << R"(')
+                , (1, NULL, ')" << deletedMetadata << R"(')
                 ;
             )");
 
             CreateShardedTable(server, edgeActor, "/Root/.backups/collections/MyCollection/19700101000003Z_incremental", "Table", opts);
 
-            ExecSQL(server, edgeActor, R"(
-                UPSERT INTO `/Root/.backups/collections/MyCollection/19700101000003Z_incremental/Table` (key, value, __ydb_incrBackupImpl_deleted, __ydb_incrBackupImpl_columnStates) VALUES
-                  (2, 2000, NULL, NULL)
-                , (5, NULL, true, NULL)
+            ExecSQL(server, edgeActor, TStringBuilder() << R"(
+                UPSERT INTO `/Root/.backups/collections/MyCollection/19700101000003Z_incremental/Table` (key, value, __ydb_incrBackupImpl_changeMetadata) VALUES
+                  (2, 2000, ')" << normalMetadata << R"(')
+                , (5, NULL, ')" << deletedMetadata << R"(')
                 ;
             )");
         }
@@ -953,24 +983,27 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
                 .Columns({
                     {"key", "Uint32", true, false},
                     {"value", "Uint32", false, false},
-                    {"__ydb_incrBackupImpl_deleted", "Bool", false, false}});
+                    {"__ydb_incrBackupImpl_changeMetadata", "String", false, false}});
+
+            auto normalMetadata = SerializeChangeMetadata(false); // Not deleted
+            auto deletedMetadata = SerializeChangeMetadata(true);  // Deleted
 
             {
                 CreateShardedTable(server, edgeActor, "/Root/.backups/collections/MyCollection/19700101000002Z_incremental", "Table", opts);
 
-                ExecSQL(server, edgeActor, R"(
-                    UPSERT INTO `/Root/.backups/collections/MyCollection/19700101000002Z_incremental/Table` (key, value, __ydb_incrBackupImpl_deleted) VALUES
-                      (2, 200, NULL)
-                    , (1, NULL, true)
+                ExecSQL(server, edgeActor, TStringBuilder() << R"(
+                    UPSERT INTO `/Root/.backups/collections/MyCollection/19700101000002Z_incremental/Table` (key, value, __ydb_incrBackupImpl_changeMetadata) VALUES
+                      (2, 200, ')" << normalMetadata << R"(')
+                    , (1, NULL, ')" << deletedMetadata << R"(')
                     ;
                 )");
 
                 CreateShardedTable(server, edgeActor, "/Root/.backups/collections/MyCollection/19700101000003Z_incremental", "Table", opts);
 
-                ExecSQL(server, edgeActor, R"(
-                    UPSERT INTO `/Root/.backups/collections/MyCollection/19700101000003Z_incremental/Table` (key, value, __ydb_incrBackupImpl_deleted) VALUES
-                      (2, 2000, NULL)
-                    , (5, NULL, true)
+                ExecSQL(server, edgeActor, TStringBuilder() << R"(
+                    UPSERT INTO `/Root/.backups/collections/MyCollection/19700101000003Z_incremental/Table` (key, value, __ydb_incrBackupImpl_changeMetadata) VALUES
+                      (2, 2000, ')" << normalMetadata << R"(')
+                    , (5, NULL, ')" << deletedMetadata << R"(')
                     ;
                 )");
             }
@@ -979,10 +1012,10 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
                 CreateShardedTable(server, edgeActor, "/Root/.backups/collections/MyCollection/19700101000002Z_incremental/DirA", "TableA", opts);
                 CreateShardedTable(server, edgeActor, "/Root/.backups/collections/MyCollection/19700101000003Z_incremental/DirA", "TableA", opts);
 
-                ExecSQL(server, edgeActor, R"(
-                    UPSERT INTO `/Root/.backups/collections/MyCollection/19700101000003Z_incremental/DirA/TableA` (key, value, __ydb_incrBackupImpl_deleted) VALUES
-                      (21, 20001, NULL)
-                    , (51, NULL, true)
+                ExecSQL(server, edgeActor, TStringBuilder() << R"(
+                    UPSERT INTO `/Root/.backups/collections/MyCollection/19700101000003Z_incremental/DirA/TableA` (key, value, __ydb_incrBackupImpl_changeMetadata) VALUES
+                      (21, 20001, ')" << normalMetadata << R"(')
+                    , (51, NULL, ')" << deletedMetadata << R"(')
                     ;
                 )");
             }
@@ -990,10 +1023,10 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
             {
                 CreateShardedTable(server, edgeActor, "/Root/.backups/collections/MyCollection/19700101000002Z_incremental/DirA", "TableB", opts);
 
-                ExecSQL(server, edgeActor, R"(
-                    UPSERT INTO `/Root/.backups/collections/MyCollection/19700101000002Z_incremental/DirA/TableB` (key, value, __ydb_incrBackupImpl_deleted) VALUES
-                      (22, 2002, NULL)
-                    , (12, NULL, true)
+                ExecSQL(server, edgeActor, TStringBuilder() << R"(
+                    UPSERT INTO `/Root/.backups/collections/MyCollection/19700101000002Z_incremental/DirA/TableB` (key, value, __ydb_incrBackupImpl_changeMetadata) VALUES
+                      (22, 2002, ')" << normalMetadata << R"(')
+                    , (12, NULL, ')" << deletedMetadata << R"(')
                     ;
                 )");
 
@@ -1339,19 +1372,22 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
                 .Columns({
                     {"key", "Uint32", true, false},
                     {"value", "Uint32", false, false},
-                    {"__ydb_incrBackupImpl_deleted", "Bool", false, false}});
+                    {"__ydb_incrBackupImpl_changeMetadata", "String", false, false}});
 
             // Create incremental backup tables with same sharding as full backup
             // Table2Shard - 2 shards: delete some keys, update others
             CreateShardedTable(server, edgeActor, "/Root/.backups/collections/ForgedMultiShardCollection/19700101000002Z_incremental", "Table2Shard", 
                 opts.Shards(2));
 
-            ExecSQL(server, edgeActor, R"(
-                UPSERT INTO `/Root/.backups/collections/ForgedMultiShardCollection/19700101000002Z_incremental/Table2Shard` (key, value, __ydb_incrBackupImpl_deleted) VALUES
-                  (2, 2000, NULL)
-                , (12, 12000, NULL)
-                , (1, NULL, true)
-                , (21, NULL, true)
+            auto normalMetadata = SerializeChangeMetadata(false); // Not deleted
+            auto deletedMetadata = SerializeChangeMetadata(true);  // Deleted
+
+            ExecSQL(server, edgeActor, TStringBuilder() << R"(
+                UPSERT INTO `/Root/.backups/collections/ForgedMultiShardCollection/19700101000002Z_incremental/Table2Shard` (key, value, __ydb_incrBackupImpl_changeMetadata) VALUES
+                  (2, 2000, ')" << normalMetadata << R"(')
+                , (12, 12000, ')" << normalMetadata << R"(')
+                , (1, NULL, ')" << deletedMetadata << R"(')
+                , (21, NULL, ')" << deletedMetadata << R"(')
                 ;
             )");
 
@@ -1359,14 +1395,14 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
             CreateShardedTable(server, edgeActor, "/Root/.backups/collections/ForgedMultiShardCollection/19700101000002Z_incremental", "Table3Shard", 
                 opts.Shards(3));
 
-            ExecSQL(server, edgeActor, R"(
-                UPSERT INTO `/Root/.backups/collections/ForgedMultiShardCollection/19700101000002Z_incremental/Table3Shard` (key, value, __ydb_incrBackupImpl_deleted) VALUES
-                  (1, 1000, NULL)
-                , (11, 11000, NULL)
-                , (21, 21000, NULL)
-                , (3, NULL, true)
-                , (13, NULL, true)
-                , (23, NULL, true)
+            ExecSQL(server, edgeActor, TStringBuilder() << R"(
+                UPSERT INTO `/Root/.backups/collections/ForgedMultiShardCollection/19700101000002Z_incremental/Table3Shard` (key, value, __ydb_incrBackupImpl_changeMetadata) VALUES
+                  (1, 1000, ')" << normalMetadata << R"(')
+                , (11, 11000, ')" << normalMetadata << R"(')
+                , (21, 21000, ')" << normalMetadata << R"(')
+                , (3, NULL, ')" << deletedMetadata << R"(')
+                , (13, NULL, ')" << deletedMetadata << R"(')
+                , (23, NULL, ')" << deletedMetadata << R"(')
                 ;
             )");
 
@@ -1374,16 +1410,16 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
             CreateShardedTable(server, edgeActor, "/Root/.backups/collections/ForgedMultiShardCollection/19700101000002Z_incremental", "Table4Shard", 
                 opts.Shards(4));
 
-            ExecSQL(server, edgeActor, R"(
-                UPSERT INTO `/Root/.backups/collections/ForgedMultiShardCollection/19700101000002Z_incremental/Table4Shard` (key, value, __ydb_incrBackupImpl_deleted) VALUES
-                  (2, 200, NULL)
-                , (12, 1200, NULL)
-                , (22, 2200, NULL)
-                , (32, 3200, NULL)
-                , (1, NULL, true)
-                , (11, NULL, true)
-                , (21, NULL, true)
-                , (31, NULL, true)
+            ExecSQL(server, edgeActor, TStringBuilder() << R"(
+                UPSERT INTO `/Root/.backups/collections/ForgedMultiShardCollection/19700101000002Z_incremental/Table4Shard` (key, value, __ydb_incrBackupImpl_changeMetadata) VALUES
+                  (2, 200, ')" << normalMetadata << R"(')
+                , (12, 1200, ')" << normalMetadata << R"(')
+                , (22, 2200, ')" << normalMetadata << R"(')
+                , (32, 3200, ')" << normalMetadata << R"(')
+                , (1, NULL, ')" << deletedMetadata << R"(')
+                , (11, NULL, ')" << deletedMetadata << R"(')
+                , (21, NULL, ')" << deletedMetadata << R"(')
+                , (31, NULL, ')" << deletedMetadata << R"(')
                 ;
             )");
         }
@@ -2172,6 +2208,160 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
         ExecSQL(server, edgeActor, R"(BACKUP `MixedCollection` INCREMENTAL;)", false, Ydb::StatusIds::SCHEME_ERROR);
         
         ExecSQL(server, edgeActor, "SELECT 1;");
+    }
+
+    Y_UNIT_TEST(QueryIncrementalBackupImplTableAfterRestore) {
+        TPortManager portManager;
+        TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false)
+            .SetDomainName("Root")
+            .SetEnableChangefeedInitialScan(true)
+            .SetEnableBackupService(true)
+        );
+
+        auto& runtime = *server->GetRuntime();
+        const auto edgeActor = runtime.AllocateEdgeActor();
+
+        SetupLogging(runtime);
+        InitRoot(server, edgeActor);
+
+        // Create backup collection structure manually
+        ExecSQL(server, edgeActor, R"(
+            CREATE BACKUP COLLECTION `TestCollection`
+              ( TABLE `/Root/Table`
+              )
+            WITH
+              ( STORAGE = 'cluster'
+              , INCREMENTAL_BACKUP_ENABLED = 'true'
+              );
+            )", false);
+
+        // Manually create full backup table with initial data
+        CreateShardedTable(server, edgeActor, "/Root/.backups/collections/TestCollection/19700101000001Z_full", "Table", SimpleTable());
+
+        ExecSQL(server, edgeActor, R"(
+            UPSERT INTO `/Root/.backups/collections/TestCollection/19700101000001Z_full/Table` (key, value) VALUES
+                (1, 10), (2, 20), (3, 30), (4, 40), (5, 50);
+        )");
+
+        // Manually create first incremental backup table
+        auto incrOpts = TShardedTableOptions()
+            .AllowSystemColumnNames(true)
+            .Columns({
+                {"key", "Uint32", true, false},
+                {"value", "Uint32", false, false},
+                {"__ydb_incrBackupImpl_changeMetadata", "String", false, false}
+            });
+
+        CreateShardedTable(server, edgeActor, "/Root/.backups/collections/TestCollection/19700101000002Z_incremental", "Table", incrOpts);
+
+        auto normalMetadata = SerializeChangeMetadata(false); // Not deleted
+        auto deletedMetadata = SerializeChangeMetadata(true);  // Deleted
+
+        // First incremental backup: delete key=1, update key=2 to 200, insert key=6 with 600
+        ExecSQL(server, edgeActor, TStringBuilder() << R"(
+            UPSERT INTO `/Root/.backups/collections/TestCollection/19700101000002Z_incremental/Table` (key, value, __ydb_incrBackupImpl_changeMetadata) VALUES
+              (1, NULL, ')" << deletedMetadata << R"(')
+            , (2, 200, ')" << normalMetadata << R"(')
+            , (6, 600, ')" << normalMetadata << R"(')
+            ;
+        )");
+
+        // Manually create second incremental backup table
+        CreateShardedTable(server, edgeActor, "/Root/.backups/collections/TestCollection/19700101000003Z_incremental", "Table", incrOpts);
+
+        // Second incremental backup: delete key=4, update key=3 to 300
+        ExecSQL(server, edgeActor, TStringBuilder() << R"(
+            UPSERT INTO `/Root/.backups/collections/TestCollection/19700101000003Z_incremental/Table` (key, value, __ydb_incrBackupImpl_changeMetadata) VALUES
+              (3, 300, ')" << normalMetadata << R"(')
+            , (4, NULL, ')" << deletedMetadata << R"(')
+            ;
+        )");
+
+        // Restore from backup collection
+        ExecSQL(server, edgeActor, R"(RESTORE `TestCollection`;)", false);
+        runtime.SimulateSleep(TDuration::Seconds(10));
+
+        // Verify restored table has expected data (full backup + both incremental backups applied)
+        auto restoredData = KqpSimpleExec(runtime, R"(
+            SELECT key, value FROM `/Root/Table`
+            ORDER BY key
+        )");
+
+        UNIT_ASSERT_VALUES_EQUAL(restoredData,
+            "{ items { uint32_value: 2 } items { uint32_value: 200 } }, "
+            "{ items { uint32_value: 3 } items { uint32_value: 300 } }, "
+            "{ items { uint32_value: 5 } items { uint32_value: 50 } }, "
+            "{ items { uint32_value: 6 } items { uint32_value: 600 } }");
+
+        // Now test querying incremental backup implementation tables
+        // These should still be accessible after restore
+
+        // Query the first incremental backup table
+        auto incrBackup1Result = KqpSimpleExec(runtime, R"(
+            SELECT key, value, LENGTH(__ydb_incrBackupImpl_changeMetadata) as metadata_len 
+            FROM `/Root/.backups/collections/TestCollection/19700101000002Z_incremental/Table`
+            ORDER BY key
+        )");
+
+        // Should contain the changes from first incremental backup
+        UNIT_ASSERT_C(incrBackup1Result.find("uint32_value: 1") != TString::npos,
+            "First incremental backup should contain deleted key 1");
+        UNIT_ASSERT_C(incrBackup1Result.find("uint32_value: 2") != TString::npos,
+            "First incremental backup should contain updated key 2");
+        UNIT_ASSERT_C(incrBackup1Result.find("uint32_value: 6") != TString::npos,
+            "First incremental backup should contain new key 6");
+
+        // Query the second incremental backup table
+        auto incrBackup2Result = KqpSimpleExec(runtime, R"(
+            SELECT key, value, LENGTH(__ydb_incrBackupImpl_changeMetadata) as metadata_len
+            FROM `/Root/.backups/collections/TestCollection/19700101000003Z_incremental/Table`
+            ORDER BY key
+        )");
+
+        // Should contain the changes from second incremental backup
+        UNIT_ASSERT_C(incrBackup2Result.find("uint32_value: 3") != TString::npos,
+            "Second incremental backup should contain updated key 3");
+        UNIT_ASSERT_C(incrBackup2Result.find("uint32_value: 4") != TString::npos,
+            "Second incremental backup should contain deleted key 4");
+
+        // Verify we can also query with WHERE clause on incremental backup tables
+        auto filteredResult = KqpSimpleExec(runtime, R"(
+            SELECT key FROM `/Root/.backups/collections/TestCollection/19700101000002Z_incremental/Table`
+            WHERE key > 1 AND key < 10
+            ORDER BY key
+        )");
+
+        UNIT_ASSERT_C(filteredResult.find("uint32_value: 2") != TString::npos,
+            "Filtered query should return key 2");
+        UNIT_ASSERT_C(filteredResult.find("uint32_value: 6") != TString::npos,
+            "Filtered query should return key 6");
+
+        // Verify we can join incremental backup table with restored table
+        auto joinResult = KqpSimpleExec(runtime, R"(
+            SELECT t.key, t.value as current_value
+            FROM `/Root/Table` as t
+            JOIN `/Root/.backups/collections/TestCollection/19700101000002Z_incremental/Table` as b
+            ON t.key = b.key
+            ORDER BY t.key
+        )");
+
+        // Should return keys that exist in both restored table and incremental backup
+        UNIT_ASSERT_C(joinResult.find("uint32_value: 2") != TString::npos,
+            "Join should include key 2");
+        UNIT_ASSERT_C(joinResult.find("uint32_value: 6") != TString::npos,
+            "Join should include key 6");
+
+        // Additional test: Verify full backup table is still queryable
+        auto fullBackupResult = KqpSimpleExec(runtime, R"(
+            SELECT key, value FROM `/Root/.backups/collections/TestCollection/19700101000001Z_full/Table`
+            ORDER BY key
+        )");
+
+        UNIT_ASSERT_C(fullBackupResult.find("uint32_value: 1") != TString::npos,
+            "Full backup should contain key 1");
+        UNIT_ASSERT_C(fullBackupResult.find("uint32_value: 10") != TString::npos,
+            "Full backup should contain original value 10");
     }
 
 } // Y_UNIT_TEST_SUITE(IncrementalBackup)

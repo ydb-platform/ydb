@@ -126,6 +126,12 @@ private:
             return;
         }
 
+        // if feature flag is not set -- return only for self node
+        if (!AppData()->FeatureFlags.GetEnableCompileCacheView()) {
+            PendingNodesInitialized = true;
+            PendingNodes.emplace_back(SelfId().NodeId());
+        }
+
         if (AckReceived) {
             StartScan();
         }
@@ -137,7 +143,8 @@ private:
             return;
         }
 
-        if (!PendingNodesInitialized) {
+        if (!PendingNodesInitialized && !PendingRequest) {
+            PendingRequest = true;
             Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), new NKikimr::NKqp::TEvKqp::TEvListProxyNodesRequest());
             return;
         }
@@ -173,6 +180,7 @@ private:
     }
 
     void Handle(NKqp::TEvKqp::TEvListProxyNodesResponse::TPtr& ev) {
+        PendingRequest = false;
         auto& proxies = ev->Get()->ProxyNodes;
         std::sort(proxies.begin(), proxies.end());
         PendingNodes = std::deque<ui32>(proxies.begin(), proxies.end());

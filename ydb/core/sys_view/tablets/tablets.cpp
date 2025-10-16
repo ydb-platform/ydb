@@ -165,6 +165,12 @@ private:
     }
 
     void RequestTabletIds() {
+        if (TabletIdsRequested) {
+            return;
+        }
+
+        TabletIdsRequested = true;
+
         auto request = MakeHolder<TEvSysView::TEvGetTabletIdsRequest>();
 
         if (!CalculateRangeFrom() || !CalculateRangeTo()) {
@@ -350,6 +356,7 @@ private:
     TVector<ui64> TabletIds;
     TVector<ui64>::const_iterator FromIterator;
 
+    bool TabletIdsRequested = false;
     bool BatchRequested = false;
 };
 

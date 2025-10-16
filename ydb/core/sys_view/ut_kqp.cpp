@@ -1,12 +1,8 @@
 #include "ut_common.h"
 
-#include <ydb/public/lib/ydb_cli/dump/util/query_utils.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_scripting.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
-
 #include <ydb/core/base/path.h>
-#include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/common/simple/temp_tables.h>
+#include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/sys_view/common/events.h>
 #include <ydb/core/sys_view/service/sysview_service.h>
@@ -15,7 +11,11 @@
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/ydb_convert/table_description.h>
-
+#include <ydb/library/testlib/common/test_utils.h>
+#include <ydb/public/lib/ydb_cli/dump/util/query_utils.h>
+#include <ydb/public/lib/ydb_cli/dump/util/view_utils.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_scripting.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
 
 #include <library/cpp/yson/node/node_io.h>
@@ -26,10 +26,11 @@ namespace NSysView {
 using namespace NYdb;
 using namespace NYdb::NTable;
 using namespace NYdb::NScheme;
+using namespace NTestUtils;
 
 namespace {
 
-void CreateTenant(TTestEnv& env, const TString& tenantName, bool extSchemeShard = true) {
+void CreateTenant(TTestEnv& env, const TString& tenantName, bool extSchemeShard = true, ui64 nodesCount = 2) {
     auto subdomain = GetSubDomainDeclareSettings(tenantName);
     if (extSchemeShard) {
         UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
@@ -39,7 +40,7 @@ void CreateTenant(TTestEnv& env, const TString& tenantName, bool extSchemeShard 
             env.GetClient().CreateSubdomain("/Root", subdomain));
     }
 
-    env.GetTenants().Run("/Root/" + tenantName, 2);
+    env.GetTenants().Run("/Root/" + tenantName, nodesCount);
 
     auto subdomainSettings = GetSubDomainDefaultSettings(tenantName, env.GetPools());
     subdomainSettings.SetExternalSysViewProcessor(true);
@@ -2852,6 +2853,61 @@ ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_OPTIONS,
         check("SELECT ReadBytes FROM `Root/.sys/top_queries_by_cpu_time_one_hour`");
         check("SELECT ReadBytes FROM `Root/.sys/top_queries_by_request_units_one_minute`");
         check("SELECT ReadBytes FROM `Root/.sys/top_queries_by_request_units_one_hour`");
+    }
+
+    Y_UNIT_TEST(SysViewScanBackPressure) {
+        NKikimrConfig::TTableServiceConfig tableServiceConfig;
+        tableServiceConfig.MutableResourceManager()->SetChannelBufferSize(1_KB);
+
+        TTestEnv env({
+            .EnableSVP = true,
+            .ShowCreateTable = true,
+            .TableServiceConfig = tableServiceConfig,
+        });
+        CreateTenant(env, "Tenant1", true, /* nodesCount */ 1);
+
+        TDriver driver(TDriverConfig()
+            .SetEndpoint(env.GetEndpoint())
+            .SetDiscoveryMode(EDiscoveryMode::Off)
+            .SetDatabase("/Root/Tenant1"));
+        NQuery::TQueryClient queryClient(driver);
+
+        // PAYLOAD_SIZE * NUMBER_OF_QUERIES should be greater than BatchSizeLimit in TSysViewProcessor (4 MB)
+        constexpr ui64 PAYLOAD_SIZE = 100_KB;
+        constexpr ui64 NUMBER_OF_QUERIES = 100;
+
+        auto& actorSystem = *env.GetServer().GetRuntime()->GetActorSystem(env.GetTenants().List("/Root/Tenant1")[0]);
+        ui64 amountSize = 0;
+        const std::string payload(PAYLOAD_SIZE, 'X');
+        for (ui64 i = 0; i < NUMBER_OF_QUERIES; ++i) {
+            const auto queryText = TStringBuilder() << "SELECT * FROM `/Root/Tenant1/Table0` /* " << i << " = " << payload << " */";
+            amountSize += queryText.size();
+
+            auto collectEv = std::make_unique<NSysView::TEvSysView::TEvCollectQueryStats>();
+            collectEv->Database = "/Root/Tenant1";
+            collectEv->QueryStats.SetQueryTextHash(i);
+            collectEv->QueryStats.SetQueryText(queryText);
+            collectEv->QueryStats.SetEndTimeMs(TInstant::Now().MilliSeconds());
+            actorSystem.Send(NSysView::MakeSysViewServiceID(actorSystem.NodeId), collectEv.release());
+        }
+
+        WaitFor(TDuration::Minutes(1), "statistics delivery", [&](TString& error) {
+            const auto result = queryClient.ExecuteQuery(
+                "SELECT SUM(Len(QueryText)) FROM `/Root/Tenant1/.sys/query_metrics_one_minute`",
+                NQuery::TTxControl::NoTx(),
+                NYdb::NQuery::TExecuteQuerySettings().ClientTimeout(TDuration::Minutes(1))
+            ).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+
+            auto resultSet = result.GetResultSetParser(0);
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnsCount(), 1);
+            UNIT_ASSERT(resultSet.TryNextRow());
+
+            const auto currentSum = resultSet.ColumnParser(0).GetOptionalUint64().value_or(0);
+            error = TStringBuilder() << "currentSum = " << currentSum << ", expectedSum = " << amountSize;
+            return currentSum >= amountSize;
+        });
     }
 
     Y_UNIT_TEST(QueryStatsRetries) {

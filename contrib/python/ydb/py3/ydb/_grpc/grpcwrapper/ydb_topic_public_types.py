@@ -18,6 +18,7 @@ from ...scheme import SchemeEntry
 class CreateTopicRequestParams:
     path: str
     min_active_partitions: Optional[int]
+    max_active_partitions: Optional[int]
     partition_count_limit: Optional[int]
     retention_period: Optional[datetime.timedelta]
     retention_storage_mb: Optional[int]
@@ -27,6 +28,26 @@ class CreateTopicRequestParams:
     attributes: Optional[Dict[str, str]]
     consumers: Optional[List[Union["PublicConsumer", str]]]
     metering_mode: Optional["PublicMeteringMode"]
+    auto_partitioning_settings: Optional["PublicAutoPartitioningSettings"]
+
+
+@dataclass
+class AlterTopicRequestParams:
+    path: str
+    set_min_active_partitions: Optional[int]
+    set_max_active_partitions: Optional[int]
+    set_partition_count_limit: Optional[int]
+    add_consumers: Optional[List[Union["PublicConsumer", str]]]
+    alter_consumers: Optional[List[Union["PublicAlterConsumer", str]]]
+    drop_consumers: Optional[List[str]]
+    alter_attributes: Optional[Dict[str, str]]
+    set_metering_mode: Optional["PublicMeteringMode"]
+    set_partition_write_speed_bytes_per_second: Optional[int]
+    set_partition_write_burst_bytes: Optional[int]
+    set_retention_period: Optional[datetime.timedelta]
+    set_retention_storage_mb: Optional[int]
+    set_supported_codecs: Optional[List[Union["PublicCodec", int]]]
+    alter_auto_partitioning_settings: Optional["PublicAlterAutoPartitioningSettings"]
 
 
 class PublicCodec(int):
@@ -50,6 +71,30 @@ class PublicMeteringMode(IntEnum):
     REQUEST_UNITS = 2
 
 
+class PublicAutoPartitioningStrategy(IntEnum):
+    UNSPECIFIED = 0
+    DISABLED = 1
+    SCALE_UP = 2
+    SCALE_UP_AND_DOWN = 3
+    PAUSED = 4
+
+
+@dataclass
+class PublicAutoPartitioningSettings:
+    strategy: Optional["PublicAutoPartitioningStrategy"] = None
+    stabilization_window: Optional[datetime.timedelta] = None
+    down_utilization_percent: Optional[int] = None
+    up_utilization_percent: Optional[int] = None
+
+
+@dataclass
+class PublicAlterAutoPartitioningSettings:
+    set_strategy: Optional["PublicAutoPartitioningStrategy"] = None
+    set_stabilization_window: Optional[datetime.timedelta] = None
+    set_down_utilization_percent: Optional[int] = None
+    set_up_utilization_percent: Optional[int] = None
+
+
 @dataclass
 class PublicConsumer:
     name: str
@@ -69,6 +114,50 @@ class PublicConsumer:
     """
 
     attributes: Dict[str, str] = field(default_factory=lambda: dict())
+    "Attributes of consumer"
+
+    consumer_stats: Optional["PublicConsumer.ConsumerStats"] = None
+
+    @dataclass
+    class ConsumerStats:
+        min_partitions_last_read_time: datetime.datetime
+        "Minimal timestamp of last read from partitions."
+
+        max_read_time_lag: datetime.timedelta
+        """
+        Maximum of differences between timestamp of read and write timestamp for all messages,
+        read during last minute.
+        """
+
+        max_write_time_lag: datetime.timedelta
+        """
+        Maximum of differences between write timestamp and create timestamp for all messages,
+        written during last minute.
+        """
+
+        bytes_read: "PublicMultipleWindowsStat"
+        "Bytes read statistics."
+
+
+@dataclass
+class PublicAlterConsumer:
+    name: str
+    set_important: Optional[bool] = None
+    """
+    Consumer may be marked as 'important'. It means messages for this consumer will never expire due to retention.
+    User should take care that such consumer never stalls, to prevent running out of disk space.
+    """
+
+    set_read_from: Optional[datetime.datetime] = None
+    "All messages with smaller server written_at timestamp will be skipped."
+
+    set_supported_codecs: Optional[List[PublicCodec]] = None
+    """
+    List of supported codecs by this consumer.
+    supported_codecs on topic must be contained inside this list.
+    """
+
+    alter_attributes: Optional[Dict[str, str]] = None
     "Attributes of consumer"
 
 
@@ -97,6 +186,9 @@ class PublicDescribeTopicResult:
 
     min_active_partitions: int
     "Minimum partition count auto merge would stop working at"
+
+    max_active_partitions: int
+    "Minimum partition count auto split would stop working at"
 
     partition_count_limit: int
     "Limit for total partition count, including active (open for write) and read-only partitions"
@@ -130,6 +222,8 @@ class PublicDescribeTopicResult:
 
     topic_stats: "PublicDescribeTopicResult.TopicStats"
     "Statistics of topic"
+
+    auto_partitioning_settings: "PublicAutoPartitioningSettings"
 
     @dataclass
     class PartitionInfo:

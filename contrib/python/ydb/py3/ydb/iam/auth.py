@@ -3,7 +3,7 @@ from ydb import credentials, tracing
 import grpc
 import time
 import abc
-from datetime import datetime
+from datetime import datetime, timezone
 import json
 import os
 
@@ -43,8 +43,8 @@ YANDEX_CLOUD_JWT_ALGORITHM = "PS256"
 def get_jwt(account_id, access_key_id, private_key, jwt_expiration_timeout, algorithm, token_service_url, subject=None):
     assert jwt is not None, "Install pyjwt library to use jwt tokens"
     now = time.time()
-    now_utc = datetime.utcfromtimestamp(now)
-    exp_utc = datetime.utcfromtimestamp(now + jwt_expiration_timeout)
+    now_utc = datetime.fromtimestamp(now, timezone.utc)
+    exp_utc = datetime.fromtimestamp(now + jwt_expiration_timeout, timezone.utc)
     payload = {
         "iss": account_id,
         "aud": token_service_url,

@@ -96,9 +96,7 @@ def get_all_tests(job_id=None, branch=None, build_type=None):
             """
         
         print(f'📝 Executing SQL query:')
-        print(f'```sql')
         print(tests)
-        print(f'```')
         
         query = ydb.ScanQuery(tests, {})
         print(f'⏱️  Starting query execution...')
@@ -358,7 +356,6 @@ def mute_applier(args):
 if __name__ == "__main__":
     print(f'🚀 Starting get_muted_tests.py script')
     print(f'📅 Current time: {datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}')
-    print(f'📁 Working directory: {os.getcwd()}')
     print(f'📋 Muted YA file path: {muted_ya_path}')
     
     parser = argparse.ArgumentParser(description="Generate diff files for mute_ya.txt")

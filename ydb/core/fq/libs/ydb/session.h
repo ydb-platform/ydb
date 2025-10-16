@@ -44,8 +44,6 @@ struct ISession : public TThrRefBase{
     virtual void UpdateTransaction(std::optional<NYdb::NTable::TTransaction> transaction) = 0;
 
     virtual bool HasActiveTransaction() = 0;
-
-    //virtual TTxControl GetTxControl() = 0;
 };
 
 } // namespace NFq

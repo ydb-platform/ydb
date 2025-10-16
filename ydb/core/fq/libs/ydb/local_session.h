@@ -127,6 +127,7 @@ struct TLocalSession : public ISession {
     NYdb::TAsyncStatus Rollback() override {
         LOG_STREAMS_STORAGE_SERVICE_INFO("TLocalSession::Rollback()");
         NActors::TActivationContext::AsActorContext().Send(QuerySessionId, new TEvQuerySession::TEvRollbackTransaction());
+        HasTransaction = false;
         return NThreading::MakeFuture(NYdb::TStatus{NYdb::EStatus::SUCCESS, {}});
     }
 

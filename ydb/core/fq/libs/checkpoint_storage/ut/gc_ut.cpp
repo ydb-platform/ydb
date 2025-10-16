@@ -94,7 +94,6 @@ struct TTestRuntime {
         NYdb::TDriver driver(NYdb::TDriverConfig{});
         auto ydbConnectionPtr = CreateSdkYdbConnection(config.GetExternalStorage(), credFactory, driver);
         CheckpointStorage = NewYdbCheckpointStorage(storageConfig, CreateEntityIdGenerator("id"), ydbConnectionPtr);
-
         auto issues = CheckpointStorage->Init().GetValueSync();
         UNIT_ASSERT_C(issues.Empty(), issues.ToString());
 

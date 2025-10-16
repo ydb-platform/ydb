@@ -69,9 +69,9 @@ TFuture<TStatus> UpsertDummyInTransaction(const TFuture<TStatus>& future, const 
 
 ////////////////////////////////////////////////////////////////////////////////
 
-template<bool UseSdkConnection>
-class TRegisterCheckTestBase: public NUnitTest::TTestBase/*, public TMyFixture<UseSdkConnection>*/ {
-    using TSelf = TRegisterCheckTestBase<UseSdkConnection>;
+template<bool UseYdbSdk>
+class TRegisterCheckTestBase: public NUnitTest::TTestBase {
+    using TSelf = TRegisterCheckTestBase<UseYdbSdk>;
 
     IYdbConnection::TPtr Connection;
     TPortManager PortManager;
@@ -91,7 +91,7 @@ public:
         config.SetTablePrefix(CreateGuidAsString());
 
         NYdb::TDriver driver({});
-        if (UseSdkConnection) {
+        if (UseYdbSdk) {
             Connection = CreateSdkYdbConnection(config, NKikimr::CreateYdbCredentialsProviderFactory, driver);
         } else {
             Connection = CreateLocalYdbConnection(Server->GetRuntime()->GetAppData().TenantName, ".metadata/checkpoints");
@@ -112,14 +112,14 @@ public:
     }
 
     void SetUp() override {
-        if (!UseSdkConnection) {
+        if (!UseYdbSdk) {
             InitRuntime();
         }
         Connection = MakeConnection();
     }
 
     void TearDown() override {
-        if (!UseSdkConnection) {
+        if (!UseYdbSdk) {
             return; // DropTable is not supported
         }
         if (Connection) {
@@ -153,14 +153,14 @@ public:
         Client = MakeHolder<Tests::TClient>(*ServerSettings);
         Client->InitRootScheme();
 
-        Sleep(TDuration::Seconds(5));
+        Sleep(TDuration::Seconds(1));
         Cerr << "\n\n\n--------------------------- INIT FINISHED ---------------------------\n\n\n";
     }
 
     TFuture<TStatus> CheckTransactionClosed(const TFuture<TStatus>& future, const TGenerationContextPtr& context) {
-        if (!UseSdkConnection) {
-            return future;  // HasActiveTransaction in local connection is not fully supported
-        }
+        // if (!UseYdbSdk) {
+        //     return future;  // HasActiveTransaction in local connection is not fully supported
+        // }
         return future.Apply(
             [context] (const TFuture<TStatus>& future) {
                 if (context->Session->HasActiveTransaction()) {
@@ -173,7 +173,7 @@ public:
 
     template<typename TValue>
     auto Call(std::function<TValue()> operation) {
-        if (UseSdkConnection) {
+        if (UseYdbSdk) {
             return operation();     
         }
         auto promise = NThreading::NewPromise<TValue>();
@@ -194,9 +194,6 @@ public:
         return Call<NYdb::TAsyncStatus>(f);
     }
 
-   // static constexpr char const* SuiteName = "TRegisterCheckTestBase";//#UseSdkConnection;
-
-    // UNIT_TEST_SUITE(TRegisterCheckTestBase);
     UNIT_TEST_SUITE_DEMANGLE(TSelf);
     UNIT_TEST(ShouldRegisterCheckNewGeneration);
     UNIT_TEST(ShouldRegisterCheckSameGeneration);

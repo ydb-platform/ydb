@@ -12,6 +12,7 @@ namespace NFq {
 using namespace NThreading;
 using namespace NYdb;
 using namespace NYdb::NTable;
+using TTxControl = NFq::ISession::TTxControl;
 
 using NYql::TIssues;
 
@@ -21,7 +22,7 @@ namespace {
 
 TFuture<TDataQueryResult> SelectGeneration(const TGenerationContextPtr& context) {
     // TODO: use prepared queries
-    
+
     auto query = Sprintf(R"(
         --!syntax_v1
         PRAGMA TablePathPrefix("%s");
@@ -42,7 +43,7 @@ TFuture<TDataQueryResult> SelectGeneration(const TGenerationContextPtr& context)
         .String(context->PrimaryKey)
         .Build();
 
-    auto ttxControl = NFq::ISession::TTxControl::BeginTx();
+    auto ttxControl = TTxControl::BeginTx();
     if (context->OperationType == TGenerationContext::Check && context->CommitTx) {
         ttxControl.CommitTx();
     }
@@ -152,9 +153,9 @@ TFuture<TStatus> UpsertGeneration(const TGenerationContextPtr& context) {
         .Uint64(context->Generation)
         .Build();
 
-    auto ttxControl = NFq::ISession::TTxControl::ContinueTx();
+    auto ttxControl = TTxControl::ContinueTx();
     if (context->CommitTx) {
-        ttxControl = NFq::ISession::TTxControl::ContinueAndCommitTx();
+        ttxControl = TTxControl::ContinueAndCommitTx();
     }
 
     auto f = context->Session->ExecuteDataQuery(query, ttxControl, std::move(params), context->ExecDataQuerySettings);
@@ -335,7 +336,7 @@ TFuture<TStatus> RegisterCheckGeneration(const TGenerationContextPtr& context) {
                 // we need to finish it (rare case, nobody probably needs check
                 // without transaction)
                 if (context->CommitTx) {
-                    // we don't check result of rollback, because don't care                   
+                    // we don't check result of rollback, because don't care
                     RollbackTransaction(context);
                     return future;
                 }

@@ -109,13 +109,9 @@ void TActorGC::Handle(TEvCheckpointStorage::TEvNewCheckpointSucceeded::TPtr& ev)
         graphId,
         checkpointUpperBound);
 
-
-    LOG_STREAMS_STORAGE_SERVICE_AS_DEBUG(*context->ActorSystem, "MarkCheckpointsGC");
-
     // 1-2.
     auto future = CheckpointStorage->MarkCheckpointsGC(graphId, checkpointUpperBound).Apply(
         [context] (const TFuture<TIssues>& future) {
-            LOG_STREAMS_STORAGE_SERVICE_AS_DEBUG(*context->ActorSystem, "MarkCheckpointsGC end");
             auto issues = future.GetValue();
             if (!issues.Empty()) {
                 TStringStream ss;
@@ -126,8 +122,6 @@ void TActorGC::Handle(TEvCheckpointStorage::TEvNewCheckpointSucceeded::TPtr& ev)
                 context->Stage = TContext::StageFailed;
                 return future;
             }
-
-            LOG_STREAMS_STORAGE_SERVICE_AS_DEBUG(*context->ActorSystem, "DeleteCheckpoints");
 
             return context->StateStorage->DeleteCheckpoints(context->GraphId, context->UpperBound);
         });

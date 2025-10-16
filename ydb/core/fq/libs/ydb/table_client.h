@@ -18,9 +18,4 @@ struct IYdbTableClient : public TThrRefBase{
         const NYdb::NRetry::TRetryOperationSettings& settings = NYdb::NRetry::TRetryOperationSettings()) = 0;
 };
 
-//using IYdbConnectionPtr = TIntrusivePtr<IYdbTableClient>;
-
-
-
-
 } // namespace NFq

@@ -34,9 +34,4 @@ IYdbTableClient::TPtr CreateSdkTableClient(
     return MakeIntrusive<TSdkYdbTableClient>(driver, settings);
 }
 
-
-//using IYdbConnectionPtr = TIntrusivePtr<IYdbTableClient>;
-
-
-
 } // namespace NFq

@@ -17,8 +17,10 @@
 
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/testlib/tablet_helpers.h>
-#include <util/system/env.h>
 #include <ydb/core/testlib/test_client.h>
+
+#include <util/system/env.h>
+
 namespace NFq {
 
 using namespace NActors;
@@ -45,10 +47,6 @@ template <bool UseYdbSdk, bool EnableGc = false>
 class TFixture : public NUnitTest::TBaseFixture {
 public:
     void SetUp(NUnitTest::TTestContext& /* context */) override {
-        Prepare();
-    }
-
-    void Prepare() {
         if constexpr (UseYdbSdk) {
             InitSdkConnection();
         } else {
@@ -109,7 +107,7 @@ public:
         Server->EnableGRpc(GrpcPort);
         Client->InitRootScheme();
 
-        Sleep(TDuration::Seconds(5));
+        Sleep(TDuration::Seconds(1));
         Cerr << "\n\n\n--------------------------- INIT FINISHED ---------------------------\n\n\n";
     }
 
@@ -127,7 +125,6 @@ public:
     {
         TActorId sender = GetRuntime()->AllocateEdgeActor();
         auto request = std::make_unique<TEvCheckpointStorage::TEvRegisterCoordinatorRequest>(coordinatorId);
-       // Sleep(TDuration::Seconds(5));
                 
         GetRuntime()->Send(new IEventHandle(
             NYql::NDq::MakeCheckpointStorageID(), sender, request.release(), IEventHandle::FlagTrackDelivery));
@@ -247,7 +244,6 @@ public:
         const TString& graphId)
     {
         TActorId sender = GetRuntime()->AllocateEdgeActor();
-
         auto request = std::make_unique<TEvCheckpointStorage::TEvGetCheckpointsMetadataRequest>(graphId);
         GetRuntime()->Send(new IEventHandle(
             NYql::NDq::MakeCheckpointStorageID(), sender, request.release()));
@@ -256,7 +252,6 @@ public:
         auto* event = GetRuntime()->template GrabEdgeEvent<TEvCheckpointStorage::TEvGetCheckpointsMetadataResponse>(handle);
         UNIT_ASSERT(event);
         UNIT_ASSERT(event->Issues.Empty());
-
         return event->Checkpoints;
     }
 
@@ -266,7 +261,6 @@ public:
         const TString& blob)
     {
         TActorId sender = GetRuntime()->AllocateEdgeActor();
-
         TCoordinatorId coordinatorId(GraphId, Generation);
 
         // XXX use proper checkpointId
@@ -324,8 +318,6 @@ public:
     }
 
 private:
-  //  TScriptExecutionsYdbSetup Ydb;
-    //public:
     TPortManager PortManager;
     ui16 MsgBusPort = 0;
     ui16 GrpcPort = 0;

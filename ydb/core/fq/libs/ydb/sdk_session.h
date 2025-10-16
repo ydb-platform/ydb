@@ -45,10 +45,6 @@ struct TSdkSession : public ISession {
         }
     }
 
-    // void CommitTransaction() override {
-    //     // TODO
-    // }
-
     NYdb::TAsyncStatus Rollback() override {
         auto future = Transaction->Rollback();
         Transaction = std::nullopt;

@@ -6,6 +6,7 @@
 #include <ydb/core/fq/libs/common/entity_id.h>
 #include <ydb/core/fq/libs/ydb/ydb.h>
 #include <ydb/core/fq/libs/ydb/ydb_connection.h>
+
 namespace NKikimrConfig {
 class TCheckpointsConfig;
 } // namespace NKikimrConfig

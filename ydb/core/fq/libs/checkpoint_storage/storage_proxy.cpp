@@ -11,6 +11,7 @@
 
 #include <ydb/core/fq/libs/actors/logging/log.h>
 #include <ydb/core/fq/libs/ydb/ydb.h>
+#include <ydb/core/fq/libs/ydb/ydb_connection.h>
 #include <ydb/core/fq/libs/ydb/util.h>
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
@@ -22,7 +23,6 @@
 #include <util/string/join.h>
 #include <util/string/strip.h>
 
-#include <ydb/core/fq/libs/ydb/ydb_connection.h>
 #include <ydb/core/base/appdata_fwd.h>
 
 namespace NFq {
@@ -91,9 +91,6 @@ public:
     void Bootstrap();
     void Initialize();
 
-    ~TStorageProxy() {
-        Cerr << "~TStorageProxy" << Endl;
-    }
     static constexpr char ActorName[] = "YQ_STORAGE_PROXY";
 
 private:
@@ -208,7 +205,6 @@ void TStorageProxy::Initialize() {
 }
 
 void TStorageProxy::Handle(TEvCheckpointStorage::TEvRegisterCoordinatorRequest::TPtr& ev) {
-    Cerr << "TEvRegisterCoordinatorRequest" << Endl;
     Initialize();
     auto context = MakeIntrusive<TRequestContext>(Metrics);
 
@@ -260,7 +256,6 @@ void TStorageProxy::Handle(TEvCheckpointStorage::TEvCreateCheckpointRequest::TPt
                 context->IncError();
                 return NThreading::MakeFuture(ICheckpointStorage::TCreateCheckpointResult {TString(), std::move(issues) } );
             }
-//            return NThreading::MakeFuture(ICheckpointStorage::TCreateCheckpointResult {TString(), std::move(issues) } );
 
             if (std::holds_alternative<TString>(graphDesc)) {
                 return storage->CreateCheckpoint(coordinatorId, checkpointId, std::get<TString>(graphDesc), ECheckpointStatus::Pending);
@@ -323,7 +318,7 @@ void TStorageProxy::Handle(TEvCheckpointStorage::TEvCompleteCheckpointRequest::T
                 cookie = ev->Cookie,
                 sender = ev->Sender,
                 type = event->Type,
-              //  gcEnabled = Config.GetCheckpointGarbageConfig().GetEnabled(),
+                gcEnabled = !Config.GetCheckpointGarbageConfig().HasEnabled() || Config.GetCheckpointGarbageConfig().GetEnabled(),
                 actorGC = ActorGC,
                 actorSystem = TActivationContext::ActorSystem(),
                 context]
@@ -335,10 +330,11 @@ void TStorageProxy::Handle(TEvCheckpointStorage::TEvCompleteCheckpointRequest::T
                 LOG_STREAMS_STORAGE_SERVICE_AS_DEBUG(*actorSystem, "[" << coordinatorId << "] [" << checkpointId << "] Failed to set 'Completed' status: " << response->Issues.ToString())
             } else {
                 LOG_STREAMS_STORAGE_SERVICE_AS_INFO(*actorSystem, "[" << coordinatorId << "] [" << checkpointId << "] Status updated to 'Completed'")
-
-                auto request = std::make_unique<TEvCheckpointStorage::TEvNewCheckpointSucceeded>(coordinatorId, checkpointId, type);
-                LOG_STREAMS_STORAGE_SERVICE_AS_DEBUG(*actorSystem, "[" << coordinatorId << "] [" << checkpointId << "] Send TEvNewCheckpointSucceeded")
-                actorSystem->Send(actorGC, request.release(), 0);
+                if (gcEnabled) {
+                    auto request = std::make_unique<TEvCheckpointStorage::TEvNewCheckpointSucceeded>(coordinatorId, checkpointId, type);
+                    LOG_STREAMS_STORAGE_SERVICE_AS_DEBUG(*actorSystem, "[" << coordinatorId << "] [" << checkpointId << "] Send TEvNewCheckpointSucceeded")
+                    actorSystem->Send(actorGC, request.release(), 0);
+                }
             }
             LOG_STREAMS_STORAGE_SERVICE_AS_DEBUG(*actorSystem, "[" << coordinatorId << "] [" << checkpointId << "] Send TEvCompleteCheckpointResponse")
             actorSystem->Send(sender, response.release(), 0, cookie);

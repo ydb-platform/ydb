@@ -449,7 +449,7 @@ NKikimr::TConclusionStatus TIndexInfo::AppendIndex(const THashMap<ui32, std::vec
     AFL_VERIFY(it != Indexes.end());
     auto& index = it->second;
     TMemoryProfileGuard mpg("IndexConstruction::" + index->GetIndexName());
-    TConclusion<std::vector<std::shared_ptr<IPortionDataChunk>>> indexChunkConclusion =
+    TConclusion<std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>>> indexChunkConclusion =
         index->BuildIndexOptional(originalData, recordsCount, *this);
     if (indexChunkConclusion.IsFail()) {
         return indexChunkConclusion;
@@ -457,7 +457,8 @@ NKikimr::TConclusionStatus TIndexInfo::AppendIndex(const THashMap<ui32, std::vec
     if (indexChunkConclusion->empty()) {
         return TConclusionStatus::Success();
     }
-    auto chunks = indexChunkConclusion.DetachResult();
+    std::vector<std::shared_ptr<IPortionDataChunk>> chunks(
+        std::make_move_iterator(indexChunkConclusion->begin()), std::make_move_iterator(indexChunkConclusion->end()));
     const TString indexStorageId = GetIndexStorageId(indexId, specialTier);
     auto opStorage = operators->GetOperatorVerified(indexStorageId);
     for (auto&& chunk : chunks) {

@@ -45,6 +45,7 @@ public:
 
         // TODO: Collect type annotation directly from AST.
         NYql::TTypeAnnotationContext typesCtx;
+        typesCtx.LangVer = ctx.LangVer;
         auto callableTransformer = NYql::CreateExtCallableTypeAnnotationTransformer(typesCtx);
         auto typeTransformer = NYql::CreateTypeAnnotationTransformer(callableTransformer, typesCtx);
         if (NYql::InstantTransform(*typeTransformer, exprRoot, *exprCtxPtr) != NYql::IGraphTransformer::TStatus::Ok) {

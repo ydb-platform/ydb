@@ -386,7 +386,6 @@ $config = @@{
 SELECT Udf(Protobuf::TryParse, $config As TypeConfig)("")
 ```
 
-
 ## CurrentUtc... {#current-utc}
 
 `CurrentUtcDate()`, `CurrentUtcDatetime()` и `CurrentUtcTimestamp()` - получение текущей даты и/или времени в UTC. Тип данных результата указан в конце названия функции.
@@ -1149,6 +1148,51 @@ WithSideEffectsMode(T, mode:string)->T
 ```yql
 SELECT WithSideEffects(MyModule::Func(...)) FROM table
 ```
+
+## ToDynamicLinear
+
+#### Сигнатура
+
+```yql
+ToDynamicLinear(Linear<T>)->DynamicLinear<T>
+```
+
+Функция доступна начиная с версии [2025.04](../changelog/2025.04.md).
+Функция `ToDynamicLinear` преобразует значение из статического [линейного](../types/linear.md) типа в динамический.
+
+## FromDynamicLinear
+
+#### Сигнатура
+
+```yql
+FromDynamicLinear(DynamicLinear<T>)->Linear<T>
+```
+
+Функция доступна начиная с версии [2025.04](../changelog/2025.04.md).
+Функция `FromDynamicLinear` преобразует значение из динамического [линейного](../types/linear.md) типа в статический.
+
+## Block
+
+#### Сигнатура
+
+```yql
+Block(lambda((dependsOnArgument)->T))->T
+```
+
+Функция доступна начиная с версии [2025.04](../changelog/2025.04.md).
+Функция `Block` выполняет лямбду с одним аргументом (тип которого не определен, так как должен использоваться только как зависимый узел) и возвращает ее выходное значение.
+Зависимые узлы это те, которые используются для управления вычислением недетерминированных функций таких как [Random](#random) или функций, создающих значения [линейных](../types/linear.md) типов.
+
+#### Пример
+
+```yql
+SELECT Block(($arg)->{
+    $dict = ToMutDict({'key1':123}, $arg); -- используем зависимый узел при создании значения линейного типа
+    $dict = MutDictInsert($dict, 'key2', 456);
+    return FromMutDict($dict);
+}); -- {'key1':123, 'key2': 456}
+```
+
 
 ## EvaluateExpr, EvaluateAtom {#evaluate_expr_atom}
 

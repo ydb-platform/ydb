@@ -913,6 +913,50 @@ A typical example of a `SemilatticeRT` side effect is to perform an `UPSERT` to 
 SELECT WithSideEffects(MyModule::Func(...)) FROM table
 ```
 
+## ToDynamicLinear
+
+#### Signature
+
+```yql
+ToDynamicLinear(Linear<T>)->DynamicLinear<T>
+```
+
+This function is available since version [2025.04](../changelog/2025.04.md).
+The `ToDynamicLinear` function converts a value from a static [linear](../types/linear.md) type to a dynamic type.
+
+## FromDynamicLinear
+
+#### Signature
+
+```yql
+FromDynamicLinear(DynamicLinear<T>)->Linear<T>
+```
+
+This function is available since version [2025.04](../changelog/2025.04.md).
+The `FromDynamicLinear` function converts a value from a dynamic [linear](../types/linear.md) type to a static type.
+
+## Block
+
+#### Signature
+
+```yql
+Block(lambda((dependsOnArgument)->T))->T
+```
+
+This function is available since version [2025.04](../changelog/2025.04.md).
+The `Block` function evaluates a lambda with one argument (whose type is unspecified, as it should only be used as a dependent node) and returns its output value.
+Dependent nodes are those used to control the evaluation of nondeterministic functions such as [Random](#random) or functions that produce values ​​of [linear](../types/linear.md) types.
+
+#### Example
+
+```yql
+SELECT Block(($arg)->{
+    $dict = ToMutDict({'key1':123}, $arg); -- use a dependent node when creating a linear value
+    $dict = MutDictInsert($dict, 'key2', 456);
+    return FromMutDict($dict);
+}); -- {'key1':123, 'key2': 456}
+```
+
 ## EvaluateExpr, EvaluateAtom {#evaluate_expr_atom}
 
 Evaluate an expression before the start of the main calculation and input its result to the query as a literal (constant). In many contexts, where only a constant would be expected in standard SQL (for example, in table names, in the number of rows in [LIMIT](../syntax/select/limit_offset.md), and so on), this functionality is implicitly enabled automatically.

@@ -443,3 +443,496 @@ SELECT SetSymmetricDifference(
 -- { 2 : (null, "qwe"), 3 : ("bar", null) }
 ```
 
+## DictInsert {#dictinsert}
+
+#### Сигнатура
+
+```yql
+DictInsert(Dict<K,V>,K,V)->Dict<K,V>
+```
+
+Функция доступна начиная с версии [2025.04](../changelog/2025.04.md).
+Возвращает новый словарь в который добавили заданный ключ и значение. Если ключ уже существовал, словарь не изменяется.
+При работе с множеством (`Set`) в качестве значения следует передавать функцию `Void()`.
+
+#### Примеры
+
+```yql
+SELECT DictInsert({'foo':1}, 'bar', 2); -- {'foo':1,'bar':2}
+SELECT DictInsert({'foo':1}, 'foo', 2); -- {'foo':1}
+SELECT DictInsert({'foo'}, 'bar', Void()); -- {'foo','bar'}
+```
+
+## DictUpsert {#dictupsert}
+
+#### Сигнатура
+
+```yql
+DictUpsert(Dict<K,V>,K,V)->Dict<K,V>
+```
+
+Функция доступна начиная с версии [2025.04](../changelog/2025.04.md).
+Возвращает новый словарь в который добавили или заменили заданный ключ и значение. Если ключ уже существовал, значение обновляется.
+
+#### Примеры
+
+```yql
+SELECT DictUpsert({'foo':1}, 'bar', 2); -- {'foo':1,'bar':2}
+SELECT DictUpsert({'foo':1}, 'foo', 2); -- {'foo':2}
+```
+
+## DictUpdate {#dictupdate}
+
+#### Сигнатура
+
+```yql
+DictUpdate(Dict<K,V>,K,V)->Dict<K,V>
+```
+
+Функция доступна начиная с версии [2025.04](../changelog/2025.04.md).
+Возвращает новый словарь в который заменили значение по заданному ключу. Если ключ не существовал, словарь не меняется.
+
+#### Примеры
+
+```yql
+SELECT DictUpdate({'foo':1}, 'bar', 2); -- {'foo':1}
+SELECT DictUpdate({'foo':1}, 'foo', 2); -- {'foo':2}
+```
+
+## DictRemove {#dictremove}
+
+#### Сигнатура
+
+```yql
+DictRemove(Dict<K,V>,K)->Dict<K,V>
+```
+
+Функция доступна начиная с версии [2025.04](../changelog/2025.04.md).
+Возвращает новый словарь без заданного ключа. Если ключ не существовал, словарь не меняется.
+
+#### Примеры
+
+```yql
+SELECT DictRemove({'foo':1}, 'bar'); -- {'foo':1}
+SELECT DictRemove({'foo':1}, 'foo'); -- {}
+```
+
+## ToMutDict {#tomutdict}
+
+#### Сигнатура
+
+```yql
+ToMutDict(Dict<K,V>,dependArg1...)->Linear<mutDictType for Dict<K,V>>
+```
+
+Функция доступна начиная с версии [2025.04](../changelog/2025.04.md).
+Конвертирует словарь в свою мутабельную версию. Также необходимо передать одно или более зависимое выражение, например, используя аргумент `lambda` в функции [`Block`](basic.md#block).
+
+#### Примеры
+
+```yql
+SELECT Block(
+    ($arg)->{
+        $dict = ToMutDict({'foo':1}, $arg);
+        return FromMutDict($dict);
+    }); -- {'foo':1}
+```
+
+## MutDictCreate {#mutdictcreate}
+
+#### Сигнатура
+
+```yql
+MutDictCreate(KeyType,ValueType,dependArg1...)->Linear<mutDictType for Dict<K,V>>
+```
+
+Функция доступна начиная с версии [2025.04](../changelog/2025.04.md).
+Строит пустой мутабельный словарь с заданными типами ключа и значения. Также необходимо передать одно или более зависимое выражение, например, используя аргумент `lambda` в функции [`Block`](basic.md#block).
+
+#### Примеры
+
+```yql
+SELECT Block(
+    ($arg)->{
+        $dict = MutDictCreate(String, Int32, $arg);
+        return FromMutDict($dict);
+    }); -- {}
+```
+
+## FromMutDict {#frommutdict}
+
+#### Сигнатура
+
+```yql
+FromMutDict(Linear<mutDictType for Dict<K,V>>)->Dict<K,V>
+```
+
+Функция доступна начиная с версии [2025.04](../changelog/2025.04.md).
+Поглощает мутабельный словарь и преобразует его в иммутабельный.
+
+#### Примеры
+
+```yql
+SELECT Block(
+    ($arg)->{
+        $dict = ToMutDict({'foo':1}, $arg);
+        return FromMutDict($dict);
+    }); -- {'foo':1}
+```
+
+## MutDictInsert {#mutdictinsert}
+
+#### Сигнатура
+
+```yql
+MutDictInsert(Linear<mutDictType for Dict<K,V>>,K,V)->Linear<mutDictType for Dict<K,V>>
+```
+
+Функция доступна начиная с версии [2025.04](../changelog/2025.04.md).
+Добавляет в мутабельный словарь заданные ключ и значение, возвращает этот же мутабельный словарь. Если ключ в словаре уже существовал, словарь не меняется.
+При работе с множеством (`Set`) в качестве значения следует передавать функцию `Void()`.
+
+#### Примеры
+
+```yql
+SELECT Block(
+    ($arg)->{
+        $dict = ToMutDict({'foo':1}, $arg);
+        $dict = MutDictInsert($dict,'foo',2);
+        return FromMutDict($dict);
+    }); -- {'foo':1}
+
+SELECT Block(
+    ($arg)->{
+        $dict = ToMutDict({'foo':1}, $arg);
+        $dict = MutDictInsert($dict,'bar',2);
+        return FromMutDict($dict);
+    }); -- {'foo':1,'bar':2}
+
+SELECT Block(
+    ($arg)->{
+        $dict = ToMutDict({'foo'}, $arg);
+        $dict = MutDictInsert($dict,'bar', Void());
+        return FromMutDict($dict);
+    }); -- {'foo','bar'}
+```
+
+## MutDictUpsert {#mutdictupsert}
+
+#### Сигнатура
+
+```yql
+MutDictUpsert(Linear<mutDictType for Dict<K,V>>,K,V)->Linear<mutDictType for Dict<K,V>>
+```
+
+Функция доступна начиная с версии [2025.04](../changelog/2025.04.md).
+Добавляет или заменяет в мутабельный словаре заданные ключ и значение, возвращает этот же мутабельный словарь. Если ключ в словаре уже существовал, значение обновляется.
+
+#### Примеры
+
+```yql
+SELECT Block(
+    ($arg)->{
+        $dict = ToMutDict({'foo':1}, $arg);
+        $dict = MutDictUpsert($dict,'foo',2);
+        return FromMutDict($dict);
+    }); -- {'foo':2}
+
+SELECT Block(
+    ($arg)->{
+        $dict = ToMutDict({'foo':1}, $arg);
+        $dict = MutDictUpsert($dict,'bar',2);
+        return FromMutDict($dict);
+    }); -- {'foo':1,'bar':2}
+```
+
+## MutDictUpdate {#mutdictupdate}
+
+#### Сигнатура
+
+```yql
+MutDictUpdate(Linear<mutDictType for Dict<K,V>>,K,V)->Linear<mutDictType for Dict<K,V>>
+```
+
+Функция доступна начиная с версии [2025.04](../changelog/2025.04.md).
+Заменяет в мутабельном словаре значение по заданному ключу, возвращает этот же мутабельный словарь. Если ключ в словаре не существовал, словарь не меняется.
+
+#### Примеры
+
+```yql
+SELECT Block(
+    ($arg)->{
+        $dict = ToMutDict({'foo':1}, $arg);
+        $dict = MutDictUpdate($dict,'foo',2);
+        return FromMutDict($dict);
+    }); -- {'foo':2}
+
+SELECT Block(
+    ($arg)->{
+        $dict = ToMutDict({'foo':1}, $arg);
+        $dict = MutDictUpdate($dict,'bar',2);
+        return FromMutDict($dict);
+    }); -- {'foo':1}
+```
+
+## MutDictRemove {#mutdictremove}
+
+#### Сигнатура
+
+```yql
+MutDictRemove(Linear<mutDictType for Dict<K,V>>,K)->Linear<mutDictType for Dict<K,V>>
+```
+
+Функция доступна начиная с версии [2025.04](../changelog/2025.04.md).
+Удаляет в мутабельном словаре значение по заданному ключу, возвращает этот же мутабельный словарь. Если ключ в словаре не существовал, словарь не меняется.
+
+#### Примеры
+
+```yql
+SELECT Block(
+    ($arg)->{
+        $dict = ToMutDict({'foo':1}, $arg);
+        $dict = MutDictRemove($dict,'foo');
+        return FromMutDict($dict);
+    }); -- {}
+
+SELECT Block(
+    ($arg)->{
+        $dict = ToMutDict({'foo':1}, $arg);
+        $dict = MutDictRemove($dict,'bar');
+        return FromMutDict($dict);
+    }); -- {'foo':1}
+```
+
+
+## MutDictPop {#mutdictpop}
+
+#### Сигнатура
+
+```yql
+MutDictPop(Linear<mutDictType for Dict<K,V>>,K)->Tuple<Linear<mutDictType for Dict<K,V>>,V?>
+```
+
+Функция доступна начиная с версии [2025.04](../changelog/2025.04.md).
+Удаляет в мутабельном словаре значение по заданному ключу, возвращает этот же мутабельный словарь и значение по удаленному ключу. Если ключ в словаре не существовал, словарь не меняется и возвращается пустой Optional.
+
+#### Примеры
+
+```yql
+SELECT Block(
+    ($arg)->{
+        $dict = ToMutDict({'foo':1}, $arg);
+        $dict, $val = MutDictPop($dict,'foo');
+        return (FromMutDict($dict), $val);
+    }); -- ({},1)
+
+SELECT Block(
+    ($arg)->{
+        $dict = ToMutDict({'foo':1}, $arg);
+        $dict, $val = MutDictPop($dict,'bar');
+        return (FromMutDict($dict), $val);
+    }); -- ({'foo':1},null)
+```
+
+## MutDictContains {#mutdictcontains}
+
+#### Сигнатура
+
+```yql
+MutDictContains(Linear<mutDictType for Dict<K,V>>,K)->Tuple<Linear<mutDictType for Dict<K,V>>,Bool>
+```
+
+Функция доступна начиная с версии [2025.04](../changelog/2025.04.md).
+Проверяет существования ключа в мутабельном словаре, возвращает этот же мутабельный словарь и результат.
+
+#### Примеры
+
+```yql
+SELECT Block(
+    ($arg)->{
+        $dict = ToMutDict({'foo':1}, $arg);
+        $dict, $val = MutDictContains($dict,'foo');
+        return (FromMutDict($dict), $val);
+    }); -- ({'foo':1},True)
+
+SELECT Block(
+    ($arg)->{
+        $dict = ToMutDict({'foo':1}, $arg);
+        $dict, $val = MutDictContains($dict,'bar');
+        return (FromMutDict($dict), $val);
+    }); -- ({'foo':1},False)
+```
+
+## MutDictLookup {#mutdictlookup}
+
+#### Сигнатура
+
+```yql
+MutDictLookup(Linear<mutDictType for Dict<K,V>>,K)->Tuple<Linear<mutDictType for Dict<K,V>>,V?>
+```
+
+Функция доступна начиная с версии [2025.04](../changelog/2025.04.md).
+Получает значение по ключу в мутабельном словаре, возвращает этот же мутабельный словарь и опциональный результат.
+
+#### Примеры
+
+```yql
+SELECT Block(
+    ($arg)->{
+        $dict = ToMutDict({'foo':1}, $arg);
+        $dict, $val = MutDictLookup($dict,'foo');
+        return (FromMutDict($dict), $val);
+    }); -- ({'foo':1},1)
+
+SELECT Block(
+    ($arg)->{
+        $dict = ToMutDict({'foo':1}, $arg);
+        $dict, $val = MutDictLookup($dict,'bar');
+        return (FromMutDict($dict), $val);
+    }); -- ({'foo':1},null)
+```
+
+## MutDictHasItems {#mutdicthasitems}
+
+#### Сигнатура
+
+```yql
+MutDictHasItems(Linear<mutDictType for Dict<K,V>>)->Tuple<Linear<mutDictType for Dict<K,V>>,Bool>
+```
+
+Функция доступна начиная с версии [2025.04](../changelog/2025.04.md).
+Проверяет непустоту мутабельного словаря, возвращает этот же мутабельный словарь и результат.
+
+#### Примеры
+
+```yql
+SELECT Block(
+    ($arg)->{
+        $dict = ToMutDict({'foo':1}, $arg);
+        $dict, $val = MutDictHasItems($dict);
+        return (FromMutDict($dict), $val);
+    }); -- ({'foo':1},True)
+
+SELECT Block(
+    ($arg)->{
+        $dict = MutDictCreate(String, Int32, $arg);
+        $dict, $val = MutDictHasItems($dict);
+        return (FromMutDict($dict), $val);
+    }); -- ({},False)
+```
+
+## MutDictLength {#mutdictlength}
+
+#### Сигнатура
+
+```yql
+MutDictLength(Linear<mutDictType for Dict<K,V>>)->Tuple<Linear<mutDictType for Dict<K,V>>,Uint64>
+```
+
+Функция доступна начиная с версии [2025.04](../changelog/2025.04.md).
+Получает количество элементов в мутабельном словаре, возвращает этот же мутабельный словарь и результат.
+
+#### Примеры
+
+```yql
+SELECT Block(
+    ($arg)->{
+        $dict = ToMutDict({'foo':1}, $arg);
+        $dict, $val = MutDictLength($dict);
+        return (FromMutDict($dict), $val);
+    }); -- ({'foo':1},1)
+
+SELECT Block(
+    ($arg)->{
+        $dict = MutDictCreate(String, Int32, $arg);
+        $dict, $val = MutDictLength($dict);
+        return (FromMutDict($dict), $val);
+    }); -- ({},0)
+```
+
+## MutDictKeys {#mutdictkeys}
+
+#### Сигнатура
+
+```yql
+MutDictKeys(Linear<mutDictType for Dict<K,V>>)->Tuple<Linear<mutDictType for Dict<K,V>>,List<K>>
+```
+
+Функция доступна начиная с версии [2025.04](../changelog/2025.04.md).
+Получает список ключей в мутабельном словаре, возвращает этот же мутабельный словарь и результат.
+
+#### Примеры
+
+```yql
+SELECT Block(
+    ($arg)->{
+        $dict = ToMutDict({'foo':1}, $arg);
+        $dict, $val = MutDictKeys($dict);
+        return (FromMutDict($dict), $val);
+    }); -- ({'foo':1},['foo'])
+
+SELECT Block(
+    ($arg)->{
+        $dict = MutDictCreate(String, Int32, $arg);
+        $dict, $val = MutDictKeys($dict);
+        return (FromMutDict($dict), $val);
+    }); -- ({},[])
+```
+
+## MutDictPayloads {#mutdictpayloads}
+
+#### Сигнатура
+
+```yql
+MutDictPayloads(Linear<mutDictType for Dict<K,V>>)->Tuple<Linear<mutDictType for Dict<K,V>>,List<V>>
+```
+
+Функция доступна начиная с версии [2025.04](../changelog/2025.04.md).
+Получает список значений в мутабельном словаре, возвращает этот же мутабельный словарь и результат.
+
+#### Примеры
+
+```yql
+SELECT Block(
+    ($arg)->{
+        $dict = ToMutDict({'foo':1}, $arg);
+        $dict, $val = MutDictPayloads($dict);
+        return (FromMutDict($dict), $val);
+    }); -- ({'foo':1},['1'])
+
+SELECT Block(
+    ($arg)->{
+        $dict = MutDictCreate(String, Int32, $arg);
+        $dict, $val = MutDictPayloads($dict);
+        return (FromMutDict($dict), $val);
+    }); -- ({},[])
+```
+
+## MutDictItems {#mutdictitems}
+
+#### Сигнатура
+
+```yql
+MutDictItems(Linear<mutDictType for Dict<K,V>>)->Tuple<Linear<mutDictType for Dict<K,V>>,List<Tuple<K,V>>>
+```
+
+Функция доступна начиная с версии [2025.04](../changelog/2025.04.md).
+Получает список кортежей с парами ключ-значение в мутабельном словаре, возвращает этот же мутабельный словарь и результат.
+
+#### Примеры
+
+```yql
+SELECT Block(
+    ($arg)->{
+        $dict = ToMutDict({'foo':1}, $arg);
+        $dict, $val = MutDictItems($dict);
+        return (FromMutDict($dict), $val);
+    }); -- ({'foo':1},[('foo',1)])
+
+SELECT Block(
+    ($arg)->{
+        $dict = MutDictCreate(String, Int32, $arg);
+        $dict, $val = MutDictItems($dict);
+        return (FromMutDict($dict), $val);
+    }); -- ({},[])
+```

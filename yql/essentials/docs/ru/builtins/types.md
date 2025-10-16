@@ -282,6 +282,25 @@ VoidType()->тип
 SELECT FormatType(VoidType()); -- Void
 ```
 
+## LinearType, DynamicLinearType {#lineartype}
+
+#### Сигнатура
+
+```yql
+LinearType(Type)->линейный тип, параметризуемый заданным типом
+```
+
+Функции доступны начиная с версии [2025.04](../changelog/2025.04.md).
+Возвращает [линейный](../types/linear.md) тип.
+
+#### Примеры
+
+```yql
+SELECT FormatType(LinearType(ResourceType("Foo"))); -- Linear<Resource<'Foo'>>
+SELECT FormatType(DynamicLinearType(ResourceType("Foo"))); -- DynamicLinear<Resource<'Foo'>>
+```
+
+
 ## OptionalItemType, ListItemType и StreamItemType {#optionalitemtype}
 
 #### Сигнатура
@@ -307,6 +326,34 @@ SELECT FormatType(ListItemType(
 ```yql
 SELECT FormatType(ListItemType(
   ParseTypeHandle("List<Int32>")
+)); -- Int32
+```
+
+## LinearItemType {#linearitemtype}
+
+#### Сигнатура
+
+```yql
+LinearItemType(LinearType)->тип параметра линейного типа
+LinearItemType(DynamicLinearType)->тип параметра линейного типа
+```
+
+Функции доступны начиная с версии [2025.04](../changelog/2025.04.md).
+Если этим функциям передается тип, то они выполняют действие, обратное [LinearType](#lineartype) или [DynamicLinearType](#lineartype) — возвращают тип параметра линейного типа.
+
+Если этим функциям передается хендл типа, то выполняют действие, обратное [LinearTypeHandle](#lineartypehandle) или [DynamicLinearTypeHandle](#lineartypehandle) — возвращают хендл типа параметра по хендлу линейного типа.
+
+#### Примеры
+
+```yql
+SELECT FormatType(LinearItemType(
+  ParseType("Linear<Int32>")
+)); -- Int32
+```
+
+```yql
+SELECT FormatType(LinearItemType(
+  ParseTypeHandle("Linear<Int32>")
 )); -- Int32
 ```
 
@@ -983,4 +1030,24 @@ LambdaOptionalArgumentsCount(LambdaFunction)->Uint32
 ```yql
 SELECT LambdaOptionalArgumentsCount(($x, $y, $z?)->(if($x,$y,$z)))
 ; -- 1
+```
+
+### LinearTypeHandle и DynamicLinearTypeHandle {#lineartypehandle}
+
+#### Сигнатура
+
+```yql
+LinearTypeHandle(TypeHandle)->хэндл статического линейного типа
+DynamicLinearTypeHandle(TypeHandle)->хэндл динамического линейного типа
+```
+
+Функции доступны начиная с версии [2025.04](../changelog/2025.04.md).
+Функции строят хендл статического или динамического линейного типа по переданному хендлу типа параметра.
+
+#### Примеры
+
+```yql
+SELECT FormatType(LinearTypeHandle(
+    TypeHandle(DataType("Bool"))
+)); -- Linear<Bool>
 ```

@@ -921,6 +921,7 @@ void TInitDataStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorConte
                 PQ_INIT_ENSURE(size == read.GetValue().size())("size", size)("read.GetValue().size()", read.GetValue().size());
 
                 for (TBlobIterator it(key, read.GetValue()); it.IsValid(); it.Next()) {
+                    PQ_LOG_D("add batch");
                     head.AddBatch(it.GetBatch());
                 }
                 head.PackedSize += size;
@@ -946,6 +947,8 @@ void TInitDataStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorConte
 
         };
     }
+
+    Partition()->InitFirstCompactionPart();
 
     Done(ctx);
 }

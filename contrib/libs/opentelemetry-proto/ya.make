@@ -32,6 +32,4 @@ SRCS(
     opentelemetry/proto/trace/v1/trace.proto
 )
 
-EXCLUDE_TAGS(GO_PROTO)
-
 END()

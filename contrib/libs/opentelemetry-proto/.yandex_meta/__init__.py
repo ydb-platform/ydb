@@ -14,7 +14,6 @@ def post_install(self):
         PROTO_NAMESPACE=ArcPath(self.arcdir, GLOBAL=True),
         PY_NAMESPACE=".",
     )
-    self.yamakes["."].before("END", "EXCLUDE_TAGS(GO_PROTO)\n")
 
 
 opentelemetry_proto = NixSourceProject(

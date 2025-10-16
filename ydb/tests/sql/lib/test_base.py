@@ -32,7 +32,8 @@ class TestBase(Query):
                                                                         "enable_external_data_sources",
                                                                         "enable_tiering_in_column_shard",
                                                                         "enable_parameterized_decimal",
-                                                                        "enable_table_datetime64"],
+                                                                        "enable_table_datetime64",
+                                                                        "enable_local_dbbtree_index"],
                                                    column_shard_config={
                                                        'disabled_on_scheme_shard': False,
                                                        'lag_for_compaction_before_tierings_ms': 0,

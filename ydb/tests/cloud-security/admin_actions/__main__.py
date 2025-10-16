@@ -7,9 +7,12 @@ import logging
 import yaml
 import time
 from hamcrest import assert_that
+from enum import Enum
 
 from ydb.public.api.grpc.draft import ydb_dynamic_config_v1_pb2_grpc as grpc_server
+from ydb.public.api.grpc import ydb_cms_v1_pb2_grpc as cms_grpc_server
 from ydb.public.api.protos.draft import ydb_dynamic_config_pb2 as dynamic_config_api
+from ydb.public.api.protos import ydb_cms_pb2 as cms_api
 
 from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
 import ydb.public.api.protos.draft.ydb_dynamic_config_pb2 as dynconfig
@@ -21,6 +24,9 @@ class ClientMetaOptions:
         self.database = None
         self.token = None
 
+
+# defaults:
+# port = 2135
 def parse_args() -> ClientMetaOptions:
     def mask_token(token):
         if token is None:
@@ -86,7 +92,8 @@ class CommonClientInvoker(object):
             ('grpc.max_send_message_length', 64 * 10 ** 6)
         ]
         self._channel = grpc.insecure_channel("%s:%s" % (self.endpoint, self.port), options=self._options)
-        self._stub = grpc_server.DynamicConfigServiceStub(self._channel)
+        self._dynconfig_stub = grpc_server.DynamicConfigServiceStub(self._channel)
+        self._cms_stub = cms_grpc_server.CmsServiceStub(self._channel)
 
     def _create_metadata(self):
         metadata = []
@@ -94,16 +101,20 @@ class CommonClientInvoker(object):
             metadata.append(('x-ydb-auth-ticket', self.token))
         return metadata
 
-    def _get_invoke_callee(self, method):
-        return getattr(self._stub, method)
+    def _get_invoke_callee(self, method, service):
+        if service == 'cms':
+            return getattr(self._cms_stub, method)
+        elif service == 'dynconfig':
+            return getattr(self._dynconfig_stub, method)
 
-    def invoke(self, request, method):
+    def invoke(self, request, method, service):
         retry = self.__retry_count
         while True:
             try:
-                callee = self._get_invoke_callee(method)
+                callee = self._get_invoke_callee(method, service)
                 return callee(request, metadata=self._create_metadata())
-            except (RuntimeError, grpc.RpcError):
+            except (RuntimeError, grpc.RpcError) as e:
+                print(f"Error invoking {method}: {e}")
                 retry -= 1
 
                 if not retry:
@@ -122,7 +133,7 @@ class CommonClientInvoker(object):
 def fetch_dynconfig(client: CommonClientInvoker):
     def fetch():
         request = dynamic_config_api.GetConfigRequest()
-        return client.invoke(request, 'GetConfig')
+        return client.invoke(request, 'GetConfig', 'dynconfig')
 
     fetch_config_response = fetch()
     assert_that(fetch_config_response.operation.status == StatusIds.SUCCESS)
@@ -134,12 +145,48 @@ def fetch_dynconfig(client: CommonClientInvoker):
     else:
         return result.config[0]
 
+def alter_database(client: CommonClientInvoker, path):
+    class EAction(Enum):
+        CreateAttributes = 0
+        DropAttributes = 1
+
+    def alter(action: EAction):
+        attrs = {}
+
+        if action == EAction.CreateAttributes:
+            attrs = {
+                'one': '1',
+                'two': 'two',
+            }
+        elif action == EAction.DropAttributes:
+            attrs = {
+                'one': '',
+                'two': '',
+            }
+
+        request = cms_api.AlterDatabaseRequest()
+        request.path = path
+        request.alter_attributes.update(attrs)
+
+        print(f'request.path = {request.path}')
+        return client.invoke(request, 'AlterDatabase', 'cms')
+
+    for action in EAction:
+        print(f"Alter database action: {action}")
+        create_database_response = alter(action)
+        print(f"Alter database response status: {create_database_response.operation.status}")
+        print(f"Alter database response issue: {create_database_response.operation.issues}")
+        assert_that(create_database_response.operation.status == StatusIds.SUCCESS)
+        print('Database altered successfully')
+
 def main():
     client_options = parse_args()
     client = CommonClientInvoker(client_options)
 
-    fetched_dynconfig = fetch_dynconfig(client)
-    print(f"Fetched dynconfig:\n{fetched_dynconfig}")
+    # fetched_dynconfig = fetch_dynconfig(client)
+    # print(f"Fetched dynconfig:\n{fetched_dynconfig}")
+
+    alter_database(client, '/Root/db2')
 
 if __name__ == '__main__':
     main()

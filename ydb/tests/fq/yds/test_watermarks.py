@@ -119,7 +119,8 @@ class TestWatermarks(TestYdsBase):
 
     @yq_v1
     @pytest.mark.parametrize("shared_reading", [False, True], ids=["no_shared", "shared"])
-    def test_idle_watermarks(self, kikimr: StreamingOverKikimr, client: FederatedQueryClient, shared_reading: bool):
+    @pytest.mark.parametrize("tasks", [1, 2])
+    def test_idle_watermarks(self, kikimr: StreamingOverKikimr, client: FederatedQueryClient, shared_reading: bool, tasks: int):
         client.create_yds_connection(
             name=YDS_CONNECTION, database=os.getenv("YDB_DATABASE"), endpoint=os.getenv("YDB_ENDPOINT"), shared_reading=shared_reading
         )
@@ -131,10 +132,11 @@ class TestWatermarks(TestYdsBase):
         sql = Rf'''
             USE {YDS_CONNECTION};
             -- Cannot guarantee writing to a specific partition
-            PRAGMA dq.MaxTasksPerStage="1";
+            PRAGMA dq.MaxTasksPerStage="{tasks}";
             PRAGMA dq.WatermarksMode="default";
             PRAGMA dq.WatermarksGranularityMs="500";
             PRAGMA dq.WatermarksLateArrivalDelayMs="100";
+            PRAGMA dq.WatermarksIdleDelayMs="200";
             PRAGMA dq.WatermarksEnableIdlePartitions="true";
 
             $input =

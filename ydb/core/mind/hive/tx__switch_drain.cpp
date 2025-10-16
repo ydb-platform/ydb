@@ -10,7 +10,7 @@ class TTxSwitchDrainOn : public TTransactionBase<THive> {
     TActorId Initiator;
     NKikimrProto::EReplyStatus Status = NKikimrProto::UNKNOWN;
     ui64 SeqNo;
-    bool ShouldStartDrain = true;
+    bool StartingDrain = true;
 public:
     TTxSwitchDrainOn(TNodeId nodeId, TDrainSettings settings, const TActorId& initiator, ui64 seqNo, THive* hive)
         : TBase(hive)
@@ -28,11 +28,11 @@ public:
         if (node != nullptr) {
             if (!(node->Drain) && (Self->BalancerNodes.count(NodeId) != 0 || (SeqNo != 0 && SeqNo <= node->DrainSeqNo))) {
                 Status = NKikimrProto::ALREADY;
-                ShouldStartDrain = false;
+                StartingDrain = false;
             } else {
                 Status = NKikimrProto::OK;
                 if (node->Drain) {
-                    ShouldStartDrain = false;
+                    StartingDrain = false;
                 }
                 node->Drain = true;
                 node->DrainInitiators.emplace_back(Initiator);
@@ -55,19 +55,20 @@ public:
                         }
                     }
                 }
+                if (StartingDrain) {
+                    Self->StartHiveDrain(NodeId, std::move(Settings));
+                }
             }
         } else {
             Status = NKikimrProto::ERROR;
-            ShouldStartDrain = false;
+            StartingDrain = false;
         }
         return true;
     }
 
     void Complete(const TActorContext&) override {
         BLOG_D("THive::TTxSwitchDrainOn::Complete NodeId: " << NodeId << " Status: " << Status);
-        if (ShouldStartDrain) {
-            Self->StartHiveDrain(NodeId, std::move(Settings));
-        } else {
+        if (!StartingDrain) {
             if (Initiator) {
                 Self->Send(Initiator, new TEvHive::TEvDrainNodeResult(Status));
             }

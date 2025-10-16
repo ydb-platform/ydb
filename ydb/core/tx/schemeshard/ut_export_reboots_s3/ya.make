@@ -9,6 +9,7 @@ IF (SANITIZER_TYPE OR WITH_VALGRIND)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
     SIZE(MEDIUM)
+    REQUIREMENTS(cpu:4)
 ENDIF()
 
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/supp/ubsan_supp.inc)

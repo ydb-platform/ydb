@@ -199,6 +199,7 @@ struct TEvPQ {
         EvMirrorTopicDescription,
         EvBroadcastPartitionError,
         EvForceCompaction,
+        EvMLPReadBatchResponse,
         EvEnd
     };
 
@@ -1288,6 +1289,16 @@ struct TEvPQ {
 
         ui32 PartitionId = 0;
     };
+
+    struct TEvMLPReadBatchResponse : TEventLocal<TEvMLPReadBatchResponse, EvMLPReadBatchResponse> {
+        struct TResponse {
+            TActorId Sender;
+            ui64 Cookie;
+            std::vector<ui64> Offsets;
+        };
+        std::vector<TResponse> Responses;
+    };
+
 };
 
 } //NKikimr

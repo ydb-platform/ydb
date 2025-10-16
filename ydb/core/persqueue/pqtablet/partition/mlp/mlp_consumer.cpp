@@ -1,4 +1,7 @@
+#include "mlp_batch.h"
 #include "mlp_consumer.h"
+#include "mlp_storage.h"
+
 
 #include <ydb/core/persqueue/common/key.h>
 
@@ -13,11 +16,14 @@ TConsumerActor::TConsumerActor(ui64 tabletId, const TActorId& tabletActorId, ui3
     : TBaseActor(tabletId, tabletActorId, NKikimrServices::EServiceKikimr::PQ_MLP_CONSUMER)
     , PartitionId(partitionId)
     , PartitionActorId(partitionActorId)
-    , Config(config) {
+    , Config(config)
+    , Storage(std::make_unique<TStorage>()) {
 }
 
 void TConsumerActor::Bootstrap() {
     Become(&TConsumerActor::StateInit);
+
+    Batch = std::make_unique<TBatch>(SelfId());
 
     auto request = std::make_unique<TEvKeyValue::TEvRequest>();
     request->Record.AddCmdRead()->SetKey(MakeSnapshotKey(PartitionId, Config.GetId()));
@@ -26,7 +32,7 @@ void TConsumerActor::Bootstrap() {
 }
 
 void TConsumerActor::PassAway() {
-    Batch.Rollback();
+    Batch->Rollback();
 
     // TODO reply error for all mesages from queues
 
@@ -152,8 +158,6 @@ void TConsumerActor::Restart(TString&& error) {
 }
 
 void TConsumerActor::ProcessEventQueue() {
-    Batch.Clear();
-
     for (auto& ev : CommitRequestsQueue) {
         for (auto offset : ev->Get()->Record.GetOffset()) {
             Storage->Commit({
@@ -161,7 +165,7 @@ void TConsumerActor::ProcessEventQueue() {
             });
         }
 
-        Batch.Add(ev);
+        Batch->Add(ev);
     }
     CommitRequestsQueue.clear();
 
@@ -172,7 +176,7 @@ void TConsumerActor::ProcessEventQueue() {
             });
         }
 
-        Batch.Add(ev);
+        Batch->Add(ev);
     }
     ReleaseRequestsQueue.clear();
 
@@ -184,7 +188,7 @@ void TConsumerActor::ProcessEventQueue() {
             }, deadlineTimestamp);
         }
 
-        Batch.Add(ev);
+        Batch->Add(ev);
     }
     ChangeMessageDeadlineRequestsQueue.clear();
 
@@ -211,11 +215,11 @@ void TConsumerActor::ProcessEventQueue() {
             break;
         }
 
-        Batch.Add(ev, std::move(messages));
+        Batch->Add(ev, std::move(messages));
         ReadRequestsQueue.pop_front();
     }
 
-    if (Batch.Empty()) {
+    if (Batch->Empty()) {
         return;
     }
 

@@ -1,8 +1,6 @@
 #pragma once
 
 #include "mlp.h"
-#include "mlp_storage.h"
-#include "batch.h"
 
 #include <ydb/core/keyvalue/keyvalue_events.h>
 #include <ydb/core/persqueue/events/global.h>
@@ -11,7 +9,8 @@
 
 namespace NKikimr::NPQ::NMLP {
 
-class TSerializer;
+class TBatch;
+class TStorage;
 
 using namespace NActors;
 
@@ -59,13 +58,13 @@ private:
     const NKikimrPQ::TPQTabletConfig::TConsumer Config;
 
     std::unique_ptr<TStorage> Storage;
+    std::unique_ptr<TBatch> Batch;
 
     std::deque<TEvPersQueue::TEvMLPReadRequest::TPtr> ReadRequestsQueue;
     std::deque<TEvPersQueue::TEvMLPCommitRequest::TPtr> CommitRequestsQueue;
     std::deque<TEvPersQueue::TEvMLPReleaseRequest::TPtr> ReleaseRequestsQueue;
     std::deque<TEvPersQueue::TEvMLPChangeMessageDeadlineRequest::TPtr> ChangeMessageDeadlineRequestsQueue;
 
-    TBatch Batch;
 };
 
 }

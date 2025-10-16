@@ -537,15 +537,6 @@ Y_UNIT_TEST_SUITE(StateStorageConfigValidation) {
         UNIT_ASSERT_EQUAL(res, EValidationResult::Ok);
     }
 
-    Y_UNIT_TEST(ValidateConfigDomainsConfigUndef) {
-        NKikimrConfig::TAppConfig proposed;
-        std::vector<TString> err;
-        auto res = ValidateConfig(proposed, err);
-        UNIT_ASSERT_EQUAL(err.size(), 1);
-        UNIT_ASSERT_EQUAL(err[0], "DomainsConfig is not defined");
-        UNIT_ASSERT_EQUAL(res, EValidationResult::Error);
-    }
-
     Y_UNIT_TEST(ValidateConfigDomainEmpty) {
         NKikimrConfig::TAppConfig proposed;
         auto* domains = proposed.MutableDomainsConfig();

@@ -112,8 +112,6 @@ class WalleHostsInformationProvider(HostsInformationProvider):
 
     def get_module(self, hostname):
         queue = self._ask_location(hostname)["location"].get("queue", "")
-        if not queue:
-            return ""
         return queue if self._cloud_mode else queue.upper()
 
     def get_body(self, hostname):

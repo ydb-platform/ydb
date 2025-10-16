@@ -163,6 +163,14 @@ Y_UNIT_TEST_SUITE(KqpStreamIndexes) {
             R"([[[0u];[0u]]])",
             true);
     }
+
+    Y_UNIT_TEST_TWIN(DeleteKey, exists) {
+        RunTest(
+            "DELETE FROM `/Root/DataShard` WHERE Col1 = 0u;",
+            R"([])",
+            R"([])",
+            exists);
+    }
 }
 }
 }

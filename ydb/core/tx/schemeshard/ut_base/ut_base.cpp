@@ -11034,6 +11034,21 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         );
         env.TestWaitNotification(runtime, txId);
 
+        // altering non-default column families is not allowed
+        TestAlterTable(runtime, ++txId, "/MyRoot/table/indexByValue/", R"(
+                Name: "indexImplTable"
+                KeyColumnNames: ["key", "value"]
+                PartitionConfig {
+                    ColumnFamilies {
+                        Name: "test1"
+                        ColumnCacheMode: ColumnCacheModeTryKeepInMemory
+                    }
+                }
+            )",
+            {TEvSchemeShard::EStatus::StatusNameConflict}
+        );
+        env.TestWaitNotification(runtime, txId);
+
         {
             TestAlterTable(runtime, ++txId, "/MyRoot/table/indexByValue/", R"(
                         Name: "indexImplTable"
@@ -11045,6 +11060,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                                     SizeThreshold: 100500
                                     RowCountThreshold: 100500
                                 }
+                            }
+                            ColumnFamilies {
+                                Name: "default"
+                                ColumnCacheMode: ColumnCacheModeTryKeepInMemory
                             }
                         }
                )"
@@ -11094,7 +11113,17 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                             NLs::PartitionCount(1),
                             NLs::MinPartitionsCountEqual(1),
                             NLs::NoMaxPartitionsCount,
-                            NLs::SizeToSplitEqual(100500)});
+                            NLs::SizeToSplitEqual(100500),
+                            NLs::ColumnFamiliesCount(1),
+                            NLs::ColumnFamiliesHas(0),
+                            [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+                                const NKikimrSchemeOp::TTableDescription& tableDescription = record.GetPathDescription().GetTable();
+                                const auto& partConfig = tableDescription.GetPartitionConfig();
+                                UNIT_ASSERT_VALUES_EQUAL(
+                                    (int)partConfig.GetColumnFamilies(0).GetColumnCacheMode(),
+                                    (int)NKikimrSchemeOp::EColumnCacheMode::ColumnCacheModeTryKeepInMemory
+                                );
+                            }});
     }
 
     template <typename TCreateFn, typename TDropFn>

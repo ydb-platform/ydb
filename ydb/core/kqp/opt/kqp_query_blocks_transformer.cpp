@@ -85,7 +85,9 @@ public:
     }
 
     TStatus DoApplyAsyncChanges(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) override {
-        return QueryBlockTransformer->ApplyAsyncChanges(input, output, ctx);
+        YQL_ENSURE(CurrentBlock < input->ChildrenSize());
+        output = input;
+        return QueryBlockTransformer->ApplyAsyncChanges(input->Child(CurrentBlock), output->ChildRef(CurrentBlock), ctx);
     }
 
 private:

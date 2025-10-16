@@ -566,7 +566,6 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
     const bool isBulk = operation.HasIsBulk() && operation.GetIsBulk();
 
     const auto& mvccSnapshot = record.HasMvccSnapshot() ? NOlap::TSnapshot{record.GetMvccSnapshot().GetStep(), record.GetMvccSnapshot().GetTxId()} : NOlap::TSnapshot::Zero();
-    auto snapshotSchema = TablesManager.GetPrimaryIndex()->GetVersionedIndex().GetSchemaVerified(mvccSnapshot);
 
     LWPROBE(EvWrite, TabletID(), source.ToString(), cookie, record.GetTxId(), writeTimeout.value_or(TDuration::Max()), arrowData->GetSize(), "", true, operation.GetIsBulk(), "", "");
 

@@ -233,4 +233,5 @@ message TFeatureFlags {
     optional bool EnableTinyDisks = 207 [default = false];
     optional bool EnableMetricsLevel = 208 [default = false];
     optional bool EnableCompileCacheView = 209 [default = false];
+    optional bool EnableColumnshardBool = 210 [default = false];
 }

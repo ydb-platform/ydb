@@ -257,7 +257,7 @@ public:
     NActors::TActorId ReadActorId2;
     NActors::TActorId ReadActorId3;
     ui32 PartitionId = 0;
-    NKikimrConfig::TSharedReadingConfig Config;
+    NConfig::TRowDispatcherConfig Config;
     TIntrusivePtr<IMockPqGateway> MockPqGateway;
     IMockPqReadSession::TPtr MockReadSession;
 

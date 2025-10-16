@@ -94,7 +94,9 @@ NKikimr::Tests::TServerSettings TKikimrSetupBase::GetServerSettings(const TServe
     serverSettings.SetInitializeFederatedQuerySetupFactory(true);
     serverSettings.SetVerbose(verbosity);
     serverSettings.SetNeedStatsCollectors(true);
-    serverSettings.SetEnableStorageProxy(settings.AppConfig.GetQueryServiceConfig().GetCheckpointsConfig().GetEnabled());
+
+    const auto& externalStorage = settings.AppConfig.GetQueryServiceConfig().GetStreamingQueries().GetExternalStorage().GetDatabaseConnection();
+    serverSettings.SetEnableStorageProxy(externalStorage.GetDatabase() && externalStorage.GetEndpoint());
 
     SetLoggerSettings(settings, serverSettings);
     SetFunctionRegistry(settings, serverSettings);

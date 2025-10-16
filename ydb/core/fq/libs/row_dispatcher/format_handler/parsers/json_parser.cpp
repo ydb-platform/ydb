@@ -8,14 +8,11 @@
 #include <util/string/join.h>
 
 #include <ydb/core/fq/libs/actors/logging/log.h>
-#include <ydb/core/fq/libs/config/protos/row_dispatcher.pb.h>
 
 #include <yql/essentials/minikql/dom/json.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
 #include <yql/essentials/minikql/mkql_type_ops.h>
-
-#include <ydb/core/protos/config.pb.h>
 
 namespace NFq::NRowDispatcher {
 
@@ -562,16 +559,13 @@ TValueStatus<ITopicParser::TPtr> CreateJsonParser(IParsedDataConsumer::TPtr cons
     return ITopicParser::TPtr(parser);
 }
 
-TJsonParserConfig CreateJsonParserConfig(const NKikimrConfig::TSharedReadingConfig::TJsonParserConfig& parserConfig, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry) {
-    TJsonParserConfig result = {.FunctionRegistry = functionRegistry};
-    if (const auto batchSize = parserConfig.GetBatchSizeBytes()) {
-        result.BatchSize = batchSize;
-    }
-    if (const auto bufferCellCount = parserConfig.GetBufferCellCount()) {
-        result.BufferCellCount = bufferCellCount;
-    }
-    result.LatencyLimit = TDuration::MilliSeconds(parserConfig.GetBatchCreationTimeoutMs());
-    return result;
+TJsonParserConfig CreateJsonParserConfig(const TRowDispatcherSettings::TJsonParserSettings& parserConfig, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry) {
+    return {
+        .FunctionRegistry = functionRegistry,
+        .BatchSize = parserConfig.GetBatchSizeBytes(),
+        .LatencyLimit = parserConfig.GetBatchCreationTimeout(),
+        .BufferCellCount = parserConfig.GetBufferCellCount(),
+    };
 }
 
 }  // namespace NFq::NRowDispatcher

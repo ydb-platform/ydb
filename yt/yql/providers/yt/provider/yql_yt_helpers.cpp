@@ -4,6 +4,7 @@
 #include "yql_yt_optimize.h"
 
 #include <yt/yql/providers/yt/lib/mkql_helpers/mkql_helpers.h>
+#include <yt/yql/providers/yt/provider/yql_yt_layers_integration.h>
 #include <yt/yql/providers/yt/common/yql_configuration.h>
 #include <yt/yql/providers/yt/opt/yql_yt_key_selector.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
@@ -21,6 +22,7 @@
 #include <yql/essentials/core/yql_expr_csee.h>
 #include <yql/essentials/core/yql_graph_transformer.h>
 #include <yql/essentials/core/yql_opt_utils.h>
+#include <yql/essentials/core/yql_layers_helpers.h>
 #include <yql/essentials/ast/yql_expr.h>
 #include <yql/essentials/utils/log/log.h>
 
@@ -59,6 +61,14 @@ bool IsYtIsolatedLambdaImpl(const TExprNode& lambdaBody, TSyncMap& syncList, TSt
 
     if (TMaybeNode<TCoTypeOf>(&lambdaBody)) {
         return true;
+    }
+
+    if (lambdaBody.IsCallable("udf") && lambdaBody.ChildrenSize() == 8) {
+        for (const auto& setting: lambdaBody.Child(7)->Children()) {
+            if (setting->HeadPtr()->Content() == "layers") {
+                return false;
+            }
+        }
     }
 
     if (auto maybeLength = TMaybeNode<TYtLength>(&lambdaBody)) {
@@ -2428,6 +2438,49 @@ TMaybeNode<TCoLambda> GetMapLambda(const TYtWithUserJobsOpBase& op) {
     }
 
     return {};
+}
+
+TMaybe<TVector<TString>> BuildLayersPaths(const TExprNode::TPtr& input, const TString& cluster, const NLayers::ILayersRegistryPtr& layersRegistry,
+    const NLayers::ILayersIntegrationPtr& integration, const TYtSettings::TConstPtr& conf, TExprContext& ctx)
+{
+    auto layers = ExtractLayersFromExpr(input);
+    if (layers.empty()) {
+        return TVector<TString>();
+    }
+    if (auto val = conf->LayerPaths.Get(cluster)) {
+        ctx.AddError(TIssue("Can't use both Layers and yt.LayerPaths"));
+        return {};
+    }
+    auto logicalOrder = layersRegistry->ResolveLogicalLayers(layers, ctx);
+    if (!logicalOrder) {
+        return {};
+    }
+    if (auto caches = conf->LayerCaches.Get(cluster)) {
+        for (const auto& [name, locs]: *caches) {
+            TVector<NLayers::TLocation> locationInfos;
+            locationInfos.reserve(locs.size());
+            for (const auto& loc: locs) {
+                locationInfos.emplace_back(NLayers::TLocation{
+                    .System = TString(YtProviderName),
+                    .Cluster = cluster,
+                    .Path = loc
+                });
+            }
+            if (!integration->UpdateLayerLocations(NLayers::TKey(name), std::move(locationInfos), ctx)) {
+                return {};
+            }
+        }
+    }
+    auto finalOrder = layersRegistry->ResolveLayers(*logicalOrder, TString(YtProviderName), cluster, ctx);
+    if (!finalOrder) {
+        return {};
+    }
+    TVector<TString> finalCypressPaths;
+    finalCypressPaths.reserve(finalOrder->size());
+    for (auto& loc: *finalOrder) {
+        finalCypressPaths.emplace_back(std::move(loc.Path));
+    }
+    return finalCypressPaths;
 }
 
 } // NYql

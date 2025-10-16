@@ -290,7 +290,7 @@ def mangle_ar(path):
         try:
             with open(out_path, 'wb') as out:
                 mangle_ar_impl(ar, out)
-        except:
+        except Exception:
             os.unlink(out_path)
             raise
 

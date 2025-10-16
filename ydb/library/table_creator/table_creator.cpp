@@ -38,7 +38,8 @@ public:
         TMaybe<NKikimrSchemeOp::TTTLSettings> ttlSettings = Nothing(),
         const TString& database = {},
         bool isSystemUser = false,
-        TMaybe<NKikimrSchemeOp::TPartitioningPolicy> partitioningPolicy = Nothing())
+        TMaybe<NKikimrSchemeOp::TPartitioningPolicy> partitioningPolicy = Nothing(),
+        TMaybe<NACLib::TDiffACL> newTableAcl = Nothing())
         : PathComponents(std::move(pathComponents))
         , Columns(std::move(columns))
         , KeyColumns(std::move(keyColumns))
@@ -47,6 +48,7 @@ public:
         , Database(database)
         , IsSystemUser(isSystemUser)
         , PartitioningPolicy(std::move(partitioningPolicy))
+        , NewTableAcl(std::move(newTableAcl))
         , LogPrefix("Table " + TableName() + " updater. ")
     {
         Y_ABORT_UNLESS(!PathComponents.empty());
@@ -107,6 +109,16 @@ public:
             tableDesc = modifyScheme.MutableCreateTable();
             for (const TString& k : KeyColumns) {
                 tableDesc->AddKeyColumnNames(k);
+            }
+
+            if (NewTableAcl) {
+                auto& acl = *modifyScheme.MutableModifyACL();
+                acl.SetName(TableName());
+                acl.SetDiffACL(NewTableAcl->SerializeAsString());
+
+                if (IsSystemUser) {
+                    acl.SetNewOwner(BUILTIN_ACL_METADATA);
+                }
             }
         } else {
             Y_DEBUG_ABORT_UNLESS(OperationType == NKikimrSchemeOp::ESchemeOpAlterTable);
@@ -400,6 +412,7 @@ private:
     TString Database;
     bool IsSystemUser = false;
     const TMaybe<NKikimrSchemeOp::TPartitioningPolicy> PartitioningPolicy;
+    const TMaybe<NACLib::TDiffACL> NewTableAcl;
     NKikimrSchemeOp::EOperationType OperationType = NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable;
     NActors::TActorId Owner;
     NActors::TActorId SchemePipeActorId;
@@ -502,11 +515,12 @@ NActors::IActor* CreateTableCreator(
     TMaybe<NKikimrSchemeOp::TTTLSettings> ttlSettings,
     const TString& database,
     bool isSystemUser,
-    TMaybe<NKikimrSchemeOp::TPartitioningPolicy> partitioningPolicy)
+    TMaybe<NKikimrSchemeOp::TPartitioningPolicy> partitioningPolicy,
+    TMaybe<NACLib::TDiffACL> newTableAcl)
 {
     return new TTableCreator(std::move(pathComponents), std::move(columns),
         std::move(keyColumns), logService, std::move(ttlSettings), database,
-        isSystemUser, std::move(partitioningPolicy));
+        isSystemUser, std::move(partitioningPolicy), std::move(newTableAcl));
 }
 
 } // namespace NKikimr

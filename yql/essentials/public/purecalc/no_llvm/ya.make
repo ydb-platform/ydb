@@ -1,7 +1,5 @@
 LIBRARY()
 
-ENABLE(YQL_STYLE_CPP)
-
 ADDINCL(
    yql/essentials/public/purecalc
 )

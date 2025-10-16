@@ -41,6 +41,7 @@ struct TEvQuota {
 
         const ui64 QuoterId;
         const ui64 ResourceId;
+        const TString Database;
         const TString Quoter;
         const TString Resource;
 
@@ -56,9 +57,10 @@ struct TEvQuota {
             , IsUsedAmount(isUsedAmount)
         {}
 
-        TResourceLeaf(const TString &quoter, const TString &resource, ui64 amount, bool isUsedAmount = false)
+        TResourceLeaf(const TString& database, const TString &quoter, const TString &resource, ui64 amount, bool isUsedAmount = false)
             : QuoterId(0)
             , ResourceId(0)
+            , Database(database)
             , Quoter(quoter)
             , Resource(resource)
             , Amount(amount)

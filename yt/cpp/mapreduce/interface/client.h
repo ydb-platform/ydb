@@ -551,6 +551,13 @@ public:
         const TGetTabletInfosOptions& options = TGetTabletInfosOptions()) = 0;
 
     ///
+    /// @brief Get cluster configuration stored in Cypress by profile name (e.g. "default").
+    ///
+    /// Cluster configs location is defined in |TConfig::ConfigRemotePatchPath|.
+    ///
+    virtual const TNode::TMapType& GetDynamicConfiguration(const TString& configProfile);
+
+    ///
     /// @brief Suspend operation.
     ///
     /// Jobs will be aborted.

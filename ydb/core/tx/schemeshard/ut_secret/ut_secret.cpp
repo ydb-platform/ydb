@@ -72,7 +72,7 @@ namespace {
 
         // assert access
         const auto describeResult = DescribePath(runtime, secretPath).GetPathDescription().GetSelf();
-        const TSecurityObject secObj(describeResult.GetOwner(), describeResult.GetEffectiveACL(), false);
+        const TSecurityObject secObj(describeResult.GetOwner(), describeResult.GetEffectiveACL(), /* isContainer */ false);
         UNIT_ASSERT_VALUES_EQUAL(expectedHasAccess, secObj.CheckAccess(NACLib::DescribeSchema, userToken));
     }
 }
@@ -193,7 +193,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSecretTest) {
         }
     }
 
-    Y_UNIT_TEST(CreateExistingSecret) {
+    Y_UNIT_TEST(CreateSecretOverExistingSecret) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
@@ -210,6 +210,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSecretTest) {
         env.TestWaitNotification(runtime, txId);
         TestLs(runtime, "/MyRoot/dir/test-secret", false, NLs::PathExist);
 
+        // operation should fail
         TestCreateSecret(runtime, ++txId, "/MyRoot/dir",
             R"(
                 Name: "test-secret"
@@ -218,9 +219,34 @@ Y_UNIT_TEST_SUITE(TSchemeShardSecretTest) {
             {EStatus::StatusSchemeError, EStatus::StatusAlreadyExists}
         );
         env.TestWaitNotification(runtime, txId);
+
+        // the value should remain the same
         const auto describeResult = DescribePathWithSecretValue(runtime, "/MyRoot/dir/test-secret");
         TestDescribeResult(describeResult, {NLs::Finished, NLs::IsSecret});
         ExpectEqualSecretDescription(describeResult, "test-secret", "test-value-init", 0);
+    }
+
+    Y_UNIT_TEST(CreateSecretOverExistingObject) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestMkDir(runtime, ++txId, "/MyRoot", "dir");
+        env.TestWaitNotification(runtime, txId);
+
+        // operation should fail
+        TestCreateSecret(runtime, ++txId, "/MyRoot",
+            R"(
+                Name: "dir"
+                Value: ""
+            )",
+            {EStatus::StatusNameConflict}
+        );
+        env.TestWaitNotification(runtime, txId);
+
+        // the object type should remain the same
+        const auto describeResult = DescribePathWithSecretValue(runtime, "/MyRoot/dir");
+        TestDescribeResult(describeResult, {NLs::Finished, NLs::IsDirectory});
     }
 
     Y_UNIT_TEST(CreateSecretInheritPermissions) {
@@ -228,45 +254,76 @@ Y_UNIT_TEST_SUITE(TSchemeShardSecretTest) {
         TTestEnv env(runtime);
         ui64 txId = 100;
 
-        AsyncMkDir(runtime, ++txId, "/MyRoot", "dir");
-        env.TestWaitNotification(runtime, txId);
-
         // setup acl
         NACLib::TDiffACL diffACL;
         diffACL.AddAccess(NACLib::EAccessType::Allow, NACLib::DescribeSchema, "user1");
         diffACL.AddAccess(NACLib::EAccessType::Deny, NACLib::DescribeSchema, "user2");
         diffACL.AddAccess(NACLib::EAccessType::Allow, NACLib::AlterSchema, "user1");
         diffACL.AddAccess(NACLib::EAccessType::Allow, NACLib::AlterSchema, "user2");
-        AsyncModifyACL(runtime, ++txId, "/MyRoot", "dir", diffACL.SerializeAsString(), /* newOwner */ "");
+        AsyncModifyACL(runtime, ++txId, "", "MyRoot", diffACL.SerializeAsString(), /* newOwner */ "");
         env.TestWaitNotification(runtime, txId);
 
+        // create just a secret
         TestCreateSecret(runtime, ++txId, "/MyRoot",
             R"(
-                Name: "dir/test-secret"
-                Value: "test-value"
+                Name: "secret"
+                Value: "value"
                 InheritPermissions: true
             )"
         );
         env.TestWaitNotification(runtime, txId);
 
-        const auto secretDescribePath = DescribePath(runtime, "/MyRoot/dir/test-secret");
-        TestDescribeResult(secretDescribePath, {
-            NLs::HasNoRight("+(DS):user1"), NLs::HasEffectiveRight("+(DS):user1"),
-            NLs::HasNoRight("+(AS):user1"), NLs::HasEffectiveRight("+(AS):user1"),
-            NLs::HasNoRight("-(DS):user2"), NLs::HasEffectiveRight("-(DS):user2"),
-            NLs::HasNoRight("+(AS):user2"), NLs::HasEffectiveRight("+(AS):user2")});
+        // create a secret with an intermediate directory
+        TestCreateSecret(runtime, ++txId, "/MyRoot",
+            R"(
+                Name: "dir/secret"
+                Value: "value"
+                InheritPermissions: true
+            )"
+        );
+        env.TestWaitNotification(runtime, txId);
 
-        auto describeResult = secretDescribePath.GetPathDescription().GetSelf();
-        const NACLib::TACL secretAcl(describeResult.GetEffectiveACL());
-        const auto parentDescribePath = DescribePath(runtime, "/MyRoot/dir");
-        describeResult = parentDescribePath.GetPathDescription().GetSelf();
-        const NACLib::TACL parentAcl(describeResult.GetEffectiveACL());
+        // check that both secrets and created directory inherit permissions from the last existing directory: '/Root' in this case
+        const auto user1Token = NACLib::TUserToken(NACLib::TUserToken::TUserTokenInitFields{.UserSID = "user1"});
+        const auto user2Token = NACLib::TUserToken(NACLib::TUserToken::TUserTokenInitFields{.UserSID = "user2"});
+        for (const auto& path : TVector<TString>{"/MyRoot/secret", "/MyRoot/dir/secret", "/MyRoot/dir"}) {
+            auto describeSecret = DescribePath(runtime, path).GetPathDescription().GetSelf();
+            { // check effective acl
+                const TSecurityObject secObj(describeSecret.GetOwner(), describeSecret.GetEffectiveACL(),
+                    /* isContainer */ false);
+                UNIT_ASSERT_C(secObj.CheckAccess(NACLib::DescribeSchema, user1Token),
+                    "user1 should have grant (inherited from root)");
+                UNIT_ASSERT_C(secObj.CheckAccess(NACLib::AlterSchema, user1Token),
+                    "user1 should have grant (inherited from root)");
 
-        // Cannot compare rules themselves because they are actually different: i.e. there's an Inherited=true flag at the secret aces
-        UNIT_ASSERT_EQUAL_C(
-            secretAcl.GetACE().size(), parentAcl.GetACE().size(),
-            "Secret ACL must be inherited, hence the number of rules must should be the same")
-        ;
+                UNIT_ASSERT_C(!secObj.CheckAccess(NACLib::DescribeSchema, user2Token),
+                    "user2 should have no grant (inherited deny from root)");
+                UNIT_ASSERT_C(secObj.CheckAccess(NACLib::AlterSchema, user2Token),
+                    "user2 should have grant (inherited from root)");
+            }
+
+            { // check acl – all aces should be inherited, so be absent on the object itself
+                const TSecurityObject secObj(describeSecret.GetOwner(), describeSecret.GetACL(),
+                    /* isContainer */ false);
+                for (const auto& grant : {NACLib::DescribeSchema, NACLib::AlterSchema}) {
+                    for (const auto& userToken : {user1Token, user2Token}) {
+                        UNIT_ASSERT_C(!secObj.CheckAccess(grant, userToken),
+                            "No aces on the created objects expected");
+                    }
+                }
+            }
+
+            // check that aces are not duplicated
+            const NACLib::TACL secretAcl(describeSecret.GetEffectiveACL());
+            const auto rootDescribePath = DescribePath(runtime, "/MyRoot");
+            const auto describeRoot = rootDescribePath.GetPathDescription().GetSelf();
+            const NACLib::TACL rootAcl(describeRoot.GetEffectiveACL());
+            // Cannot compare rules themselves because they are actually different: i.e. there's an Inherited=true flag at the secret aces
+            UNIT_ASSERT_EQUAL_C(
+                secretAcl.GetACE().size(), rootAcl.GetACE().size(),
+                "Secret ACL must be inherited, hence the number of rules must should be the same")
+            ;
+        }
     }
 
     Y_UNIT_TEST(CreateSecretNoInheritPermissions) {
@@ -278,71 +335,90 @@ Y_UNIT_TEST_SUITE(TSchemeShardSecretTest) {
         env.TestWaitNotification(runtime, txId);
 
         // setup acl
-        NACLib::TDiffACL diffACL;
-        diffACL.AddAccess(NACLib::EAccessType::Allow, NACLib::DescribeSchema, "user1");
-        diffACL.AddAccess(NACLib::EAccessType::Deny, NACLib::DescribeSchema, "user2");
-        diffACL.AddAccess(NACLib::EAccessType::Allow, NACLib::AlterSchema, "user1");
-        diffACL.AddAccess(NACLib::EAccessType::Allow, NACLib::AlterSchema, "user2");
-        AsyncModifyACL(runtime, ++txId, "/MyRoot", "dir", diffACL.SerializeAsString(), /* newOwner */ "");
-        env.TestWaitNotification(runtime, txId);
-
-        TestCreateSecret(runtime, ++txId, "/MyRoot",
-            R"(
-                Name: "dir/test-secret"
-                Value: "test-value"
-                InheritPermissions: false
-            )"
-        );
-        env.TestWaitNotification(runtime, txId);
-
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/dir/test-secret"), {
-            NLs::HasRight("+(DS):user1"), NLs::HasEffectiveRight("+(DS):user1"),
-            NLs::HasNoRight("+(AS):user1"), NLs::HasNoEffectiveRight("+(AS):user1"),
-
-            NLs::HasRight("-(DS):user2"), NLs::HasEffectiveRight("-(DS):user2"),
-            NLs::HasNoRight("+(AS):user2"), NLs::HasNoEffectiveRight("+(AS):user2")});
-    }
-
-    Y_UNIT_TEST(CreateSecretInheritPermissionsForManyDirs) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
-        ui64 txId = 100;
-
-        AsyncMkDir(runtime, ++txId, "/MyRoot", "dir");
-        env.TestWaitNotification(runtime, txId);
-        AsyncMkDir(runtime, ++txId, "/MyRoot/dir", "subdir");
-        env.TestWaitNotification(runtime, txId);
-
-        // setup acl
         {
             NACLib::TDiffACL diffACL;
             diffACL.AddAccess(NACLib::EAccessType::Allow, NACLib::DescribeSchema, "user1");
+            diffACL.AddAccess(NACLib::EAccessType::Allow, NACLib::AlterSchema, "user1");
             diffACL.AddAccess(NACLib::EAccessType::Allow, NACLib::DescribeSchema, "user2");
-            AsyncModifyACL(runtime, ++txId, "/MyRoot", "dir", diffACL.SerializeAsString(), /* newOwner */ "");
+            AsyncModifyACL(runtime, ++txId, "", "MyRoot", diffACL.SerializeAsString(), /* newOwner */ "");
             env.TestWaitNotification(runtime, txId);
         }
         {
             NACLib::TDiffACL diffACL;
             diffACL.AddAccess(NACLib::EAccessType::Deny, NACLib::DescribeSchema, "user2");
-            AsyncModifyACL(runtime, ++txId, "/MyRoot/dir", "subdir", diffACL.SerializeAsString(), /* newOwner */ "");
+            AsyncModifyACL(runtime, ++txId, "/MyRoot", "dir", diffACL.SerializeAsString(), /* newOwner */ "");
             env.TestWaitNotification(runtime, txId);
         }
 
-        TestCreateSecret(runtime, ++txId, "/MyRoot/dir/subdir",
+        // create just a secret
+        TestCreateSecret(runtime, ++txId, "/MyRoot/dir",
             R"(
-                Name: "test-secret"
-                Value: "test-value"
-                InheritPermissions: true
+                Name: "secret"
+                Value: "value"
+                InheritPermissions: false
             )"
         );
         env.TestWaitNotification(runtime, txId);
 
-        const auto describeResult = DescribePath(runtime, "/MyRoot/dir/subdir/test-secret").GetPathDescription().GetSelf();
-        const TSecurityObject secObj(describeResult.GetOwner(), describeResult.GetEffectiveACL(), false);
+        // create a secret with intermediate directory
+        TestCreateSecret(runtime, ++txId, "/MyRoot/dir",
+            R"(
+                Name: "subdir/secret"
+                Value: "value"
+                InheritPermissions: false
+            )"
+        );
+        env.TestWaitNotification(runtime, txId);
+
+        // check secret grants
         const auto user1Token = NACLib::TUserToken(NACLib::TUserToken::TUserTokenInitFields{.UserSID = "user1"});
         const auto user2Token = NACLib::TUserToken(NACLib::TUserToken::TUserTokenInitFields{.UserSID = "user2"});
-        UNIT_ASSERT_C(secObj.CheckAccess(NACLib::DescribeSchema, user1Token), "user1 should have grant (inherited from dir)");
-        UNIT_ASSERT_C(!secObj.CheckAccess(NACLib::DescribeSchema, user2Token), "user2 should have no grant (inherited from subdir)");
+        for (const auto& path : TVector<TString>{"/MyRoot/dir/secret", "/MyRoot/dir/subdir/secret"}) {
+            const auto describeSecret = DescribePath(runtime, path).GetPathDescription().GetSelf();
+
+            // compare EffectiveACL and ACL
+            UNIT_ASSERT_EQUAL_C(describeSecret.GetEffectiveACL(), describeSecret.GetACL(),
+                "ACL should be the same, since aces are set on secrets themselves");
+
+            // Check access
+            const TSecurityObject secObj(describeSecret.GetOwner(), describeSecret.GetACL(), /* isContainer */ false);
+            UNIT_ASSERT_C(secObj.CheckAccess(NACLib::DescribeSchema, user1Token),
+                "user1 should have grant (inherited from root)");
+            UNIT_ASSERT_C(!secObj.CheckAccess(NACLib::AlterSchema, user1Token),
+                "user1 should have no grant (only DescribeSchema grant is inherited)");
+
+            UNIT_ASSERT_C(!secObj.CheckAccess(NACLib::DescribeSchema, user2Token),
+                "user2 should have no grant (deny is inherited from dir)");
+            UNIT_ASSERT_C(!secObj.CheckAccess(NACLib::AlterSchema, user2Token),
+                "user2 should have no grant (only DescribeSchema grant is inherited)");
+        }
+
+        // check created directory grants – they should be interited from the root
+        const auto describeSecret = DescribePath(runtime, "/MyRoot/dir/subdir").GetPathDescription().GetSelf();
+        { // check effective acl
+            const TSecurityObject secObjWithEffectiveAcl(describeSecret.GetOwner(), describeSecret.GetEffectiveACL(),
+                /* isContainer */ false);
+            UNIT_ASSERT_C(secObjWithEffectiveAcl.CheckAccess(NACLib::DescribeSchema, user1Token),
+                "user1 should have grant (inherited from root)");
+            UNIT_ASSERT_C(secObjWithEffectiveAcl.CheckAccess(NACLib::AlterSchema, user1Token),
+                "user1 should have grant (inherited from root)");
+
+            UNIT_ASSERT_C(!secObjWithEffectiveAcl.CheckAccess(NACLib::DescribeSchema, user2Token),
+                "user2 should have grant (inherited from root)");
+            UNIT_ASSERT_C(!secObjWithEffectiveAcl.CheckAccess(NACLib::AlterSchema, user2Token),
+                "user2 should have no grant (was not provided at all)");
+        }
+
+        { // check acl – all aces should be inherited, so be absent on the object itself
+            const TSecurityObject secObjWithAcl(describeSecret.GetOwner(), describeSecret.GetACL(),
+                /* isContainer */ false);
+            for (const auto& grant : {NACLib::DescribeSchema, NACLib::AlterSchema}) {
+                for (const auto& userToken : {user1Token, user2Token}) {
+                    UNIT_ASSERT_C(!secObjWithAcl.CheckAccess(grant, userToken),
+                        "No aces on the created directory expected");
+                }
+            }
+        }
     }
 
     Y_UNIT_TEST(InheritPermissionsWithDifferentInheritanceTypes) {
@@ -557,6 +633,22 @@ Y_UNIT_TEST_SUITE(TSchemeShardSecretTest) {
         env.TestWaitNotification(runtime, txId);
     }
 
+    Y_UNIT_TEST(DropNotASecret) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestMkDir(runtime, ++txId, "/MyRoot", "dir");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDropSecret(runtime, ++txId, "/MyRoot", "dir", {EStatus::StatusNameConflict});
+        env.TestWaitNotification(runtime, txId);
+
+        // the object type should remain the same
+        const auto describeResult = DescribePathWithSecretValue(runtime, "/MyRoot/dir");
+        TestDescribeResult(describeResult, {NLs::Finished, NLs::IsDirectory});
+    }
+
     Y_UNIT_TEST(AsyncDropSameSecret) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -655,6 +747,28 @@ Y_UNIT_TEST_SUITE(TSchemeShardSecretTest) {
         env.TestWaitNotification(runtime, txId);
 
         TestLs(runtime, "/MyRoot/dir/test-secret", false, NLs::PathNotExist);
+    }
+
+    Y_UNIT_TEST(AlterNotASecret) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestMkDir(runtime, ++txId, "/MyRoot", "dir");
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterSecret(runtime, ++txId, "/MyRoot",
+            R"(
+                Name: "dir"
+                Value: ""
+            )",
+             {EStatus::StatusNameConflict}
+        );
+        env.TestWaitNotification(runtime, txId);
+
+        // the object type should remain the same
+        const auto describeResult = DescribePathWithSecretValue(runtime, "/MyRoot/dir");
+        TestDescribeResult(describeResult, {NLs::Finished, NLs::IsDirectory});
     }
 
     Y_UNIT_TEST(AsyncAlterSameSecret) {

@@ -286,7 +286,7 @@ public:
         LOG_D("Describe #" << Paths.size() << " paths");
 
         auto request = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
-        request->DatabaseName = CanonizePath(Database);
+        request->DatabaseName = Database;
         request->UserToken = UserToken;
 
         request->ResultSet.reserve(Paths.size());

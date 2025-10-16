@@ -107,7 +107,6 @@ TNodePtr BuildViewSelect(const TRule_select_stmt& selectStatement, TContext& con
 
 namespace NSQLTranslationV1 {
 
-using NALPDefault::SQLv1LexerTokens;
 using NALPDefaultAntlr4::SQLv1Antlr4Lexer;
 
 using namespace NSQLv1Generated;

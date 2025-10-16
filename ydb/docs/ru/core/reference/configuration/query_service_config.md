@@ -30,15 +30,17 @@
 ||
 || `available_external_data_sources`
 | пустой список
-| Список с разрешенными типами внешних источников. Применяется при `all_external_data_sources_are_available: false`. Возможные значения:
+| Список с разрешенными типами внешних источников. Применяется при `all_external_data_sources_are_available: false`. 
 
-* `ObjectStorage`
-* `ClickHouse`
-* `PostgreSQL`
-* `MySQL`
-* `Greenplum`
-* `MsSQLServer`
-* `Ydb`
+Возможные значения:
+
+* `ObjectStorage`;
+* `ClickHouse`;
+* `PostgreSQL`;
+* `MySQL`;
+* `Greenplum`;
+* `MsSQLServer`;
+* `Ydb`.
 
 ||
 || `all_external_data_sources_are_available`

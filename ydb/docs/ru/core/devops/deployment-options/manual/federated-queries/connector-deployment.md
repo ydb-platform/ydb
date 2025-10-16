@@ -203,3 +203,45 @@
 | `paging` | Опциональная секция. Содержит настройки алгоритма разбиения извлекаемого из источника потока данных на Arrow-блоки. На каждый запрос в коннекторе создаётся очередь из заранее подготовленных к отправке на сторону {{ ydb-short-name }} блоков данных. Аллокации Arrow-блоков формируют наиболее существенный вклад в потребление оперативной памяти процессом `fq-connector-go`. Минимальный объём памяти, необходимый коннектору для работы, можно приблизительно оценить по формуле $Mem = 2 \cdot Requests \cdot BPP \cdot PQC$, где $Requests$ — количество одновременно выполняемых запросов, $BPP$ — параметр `paging.bytes_per_page`, а $PQC$  — параметр `paging.prefetch_queue_capacity`. ||
 | `paging.bytes_per_page` | Максимальное количество байт в одном блоке. Рекомендуемые значения - от 4 до 8 МиБ, максимальное значение - 48 МиБ. | 4 МиБ |
 | `paging.prefetch_queue_capacity` | Количество заранее вычитываемых блоков данных, которые хранятся в адресном пространстве коннектора до обращения {{ ydb-short-name }} за очередным блоком данных. В некоторых сценариях бóльшие значения данной настройки могут увеличить пропускную способность, но одновременно приведут и к большему потреблению оперативной памяти процессом. Рекомендуемые значения - не менее 2. | 2 |
+| `datasources` | Опциональная секция. Содержит настройки, специфичные для источников данных. ||
+| `datasources.postgresql` | Опциональная секция. Содержит настройки, специфичные для источника данных PostgreSQL. ||
+| `datasources.postgresql.open_connection_timeout` | Таймаут открытия соединения с PostgreSQL. Допустимые значения должны удовлетворять формату `time.ParseDuration` (например, `5s`, `100ms`, `3h`). | `5s` |
+| `datasources.postgresql.splitting` | Опциональная секция. Содержит различные настройки для процесса разбиения таблиц. ||
+| `datasources.postgresql.splitting.enabled` | Включает разбиение таблиц. Допустимые значения: `true`, `false`. | `false` |
+| `datasources.postgresql.splitting.table_physical_size_threshold_bytes` | Минимальное значение физического размера таблицы для включения разбиения. Все таблицы меньшего размера будут всегда читаться в одном разбиении. ||
+| `datasources.postgresql.pushdown` | Опциональная секция. Содержит различные настройки для проталкивания предикатов. ||
+| `datasources.postgresql.pushdown.enable_timestamp_pushdown` | Включает проталкивание фильтров для столбцов типа YQL Timestamp. Допустимые значения: `true`, `false`. | `false` |
+| `datasources.clickhouse` | Опциональная секция. Содержит настройки, специфичные для источника данных ClickHouse. ||
+| `datasources.clickhouse.open_connection_timeout` | Таймаут открытия соединения с ClickHouse. Допустимые значения должны удовлетворять формату `time.ParseDuration` (например, `5s`, `100ms`, `3h`). | `5s` |
+| `datasources.clickhouse.ping_connection_timeout` | Таймаут проверки соединения с ClickHouse. Допустимые значения должны удовлетворять формату `time.ParseDuration` (например, `5s`, `100ms`, `3h`). | `5s` |
+| `datasources.clickhouse.pushdown` | Опциональная секция. Содержит различные настройки для проталкивания предикатов. ||
+| `datasources.clickhouse.pushdown.enable_timestamp_pushdown` | Включает проталкивание фильтров для столбцов типа YQL Timestamp. Допустимые значения: `true`, `false`. | `false` |
+| `datasources.mysql` | Опциональная секция. Содержит настройки, специфичные для источника данных MySQL. ||
+| `datasources.mysql.result_chan_capacity` | Ёмкость канала результатов. | `512` |
+| `datasources.mysql.open_connection_timeout` | Таймаут открытия соединения с MySQL. Допустимые значения должны удовлетворять формату `time.ParseDuration` (например, `5s`, `100ms`, `3h`). | `5s` |
+| `datasources.mysql.pushdown` | Опциональная секция. Содержит различные настройки для проталкивания предикатов. ||
+| `datasources.mysql.pushdown.enable_timestamp_pushdown` | Включает проталкивание фильтров для столбцов типа YQL Timestamp. Допустимые значения: `true`, `false`. | `false` |
+| `datasources.ms_sql_server` | Опциональная секция. Содержит настройки, специфичные для источника данных MS SQL Server. ||
+| `datasources.ms_sql_server.open_connection_timeout` | Таймаут открытия соединения с MS SQL Server. Допустимые значения должны удовлетворять формату `time.ParseDuration` (например, `5s`, `100ms`, `3h`). | `5s` |
+| `datasources.ms_sql_server.ping_connection_timeout` | Таймаут проверки соединения с MS SQL Server. Допустимые значения должны удовлетворять формату `time.ParseDuration` (например, `5s`, `100ms`, `3h`). | `5s` |
+| `datasources.ms_sql_server.pushdown` | Опциональная секция. Содержит различные настройки для проталкивания предикатов. ||
+| `datasources.ms_sql_server.pushdown.enable_timestamp_pushdown` | Включает проталкивание фильтров для столбцов типа YQL Timestamp. Допустимые значения: `true`, `false`. | `false` |
+| `datasources.greenplum` | Опциональная секция. Содержит настройки, специфичные для источника данных Greenplum. ||
+| `datasources.greenplum.open_connection_timeout` | Таймаут открытия соединения с Greenplum. Допустимые значения должны удовлетворять формату `time.ParseDuration` (например, `5s`, `100ms`, `3h`). | `5s` |
+| `datasources.greenplum.pushdown` | Опциональная секция. Содержит различные настройки для проталкивания предикатов. ||
+| `datasources.greenplum.pushdown.enable_timestamp_pushdown` | Включает проталкивание фильтров для столбцов типа YQL Timestamp. Допустимые значения: `true`, `false`. | `false` |
+| `datasources.ydb` | Опциональная секция. Содержит настройки, специфичные для источника данных YDB. ||
+| `datasources.ydb.open_connection_timeout` | Таймаут открытия соединения с YDB. Допустимые значения должны удовлетворять формату `time.ParseDuration` (например, `5s`, `100ms`, `3h`). | `5s` |
+| `datasources.ydb.ping_connection_timeout` | Таймаут проверки соединения с YDB. Допустимые значения должны удовлетворять формату `time.ParseDuration` (например, `5s`, `100ms`, `3h`). | `5s` |
+| `datasources.ydb.use_underlay_network_for_dedicated_databases` | Флаг, принудительно включающий использование underlay-сетей для выделенных баз данных YDB. Допустимые значения: `true`, `false`. | `false` |
+| `datasources.ydb.mode` | Режим параметризует способ взаимодействия коннектора YDB с серверами YDB. Допустимые значения: `MODE_TABLE_SERVICE_STDLIB_SCAN_QUERIES` (использует Table Service YDB через стандартный интерфейс Go database/sql с scan-запросами), `MODE_QUERY_SERVICE_NATIVE` (использует Query Service YDB через нативный интерфейс YDB). | `MODE_QUERY_SERVICE_NATIVE` |
+| `datasources.ydb.service_account_key_file_credentials` | Путь к JSON-файлу со статическими учётными данными сервисного аккаунта. Если этот файл предоставлен, коннектор YDB будет использовать эти учётные данные для доступа к базе данных. ||
+| `datasources.ydb.iam_endpoint` | Опциональная секция. Конфигурация IAM endpoint. Необходимо указать IAM endpoint для аутентификации сервисного аккаунта, если установлен параметр `service_account_key_file_credentials`. ||
+| `datasources.ydb.iam_endpoint.host` | Хостнейм или IP-адрес IAM endpoint. | `iam.api.cloud.yandex.net` (если установлен `service_account_key_file_credentials`) |
+| `datasources.ydb.iam_endpoint.port` | Номер порта IAM endpoint. | `443` (если установлен `service_account_key_file_credentials`) |
+| `datasources.ydb.splitting` | Опциональная секция. Содержит различные настройки для процесса разбиения таблиц. ||
+| `datasources.ydb.splitting.enabled_on_column_shards` | Включает разбиение для OLAP-таблиц. Допустимые значения: `true`, `false`. | `false` |
+| `datasources.ydb.splitting.query_tablet_ids_timeout` | Таймаут для запроса, запрашивающего идентификаторы таблеток из OLAP-базы данных YDB. Допустимые значения должны удовлетворять формату `time.ParseDuration` (например, `5s`, `100ms`, `3h`). | `1m` |
+| `datasources.ydb.resource_pool` | Имя пула ресурсов, которое будет использоваться при выполнении запроса. Применимо только если режим `MODE_QUERY_SERVICE_NATIVE`. | `default` |
+| `datasources.ydb.pushdown` | Опциональная секция. Содержит различные настройки для проталкивания предикатов. ||
+| `datasources.ydb.pushdown.enable_timestamp_pushdown` | Включает проталкивание фильтров для столбцов типа YQL Timestamp. Допустимые значения: `true`, `false`. | `false` |

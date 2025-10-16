@@ -109,6 +109,7 @@ private:
     std::string OldMessageTag_;
     bool Active_ = true;
 };
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NLogging

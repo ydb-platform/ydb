@@ -1721,8 +1721,8 @@ void TKqpTasksGraph::BuildSysViewScanTasks(TStageInfo& stageInfo) {
     }
 }
 
-std::pair<ui32, TKqpTasksGraph::TTaskType::EReason> TKqpTasksGraph::GetMaxTasksAggregation(TStageInfo& stageInfo, const ui32 previousTasksCount, const ui32 nodesCount) {
-    TTaskType::EReason taskReason = TTaskType::MINIMUM_COMPUTE;
+std::pair<ui32, TKqpTasksGraph::TTaskType::ECreateReason> TKqpTasksGraph::GetMaxTasksAggregation(TStageInfo& stageInfo, const ui32 previousTasksCount, const ui32 nodesCount) {
+    TTaskType::ECreateReason taskReason = TTaskType::MINIMUM_COMPUTE;
     ui32 result = 1;
 
     if (AggregationSettings.HasAggregationComputeThreads()) {
@@ -1752,7 +1752,7 @@ bool TKqpTasksGraph::BuildComputeTasks(TStageInfo& stageInfo, const ui32 nodesCo
         return false;
     }
 
-    TTaskType::EReason tasksReason = TTaskType::MINIMUM_COMPUTE;
+    TTaskType::ECreateReason tasksReason = TTaskType::MINIMUM_COMPUTE;
     bool unknownAffectedShardCount = false;
     ui32 partitionsCount = 1;
     ui32 inputTasks = 0;
@@ -1946,7 +1946,7 @@ void MergeReadInfoToTaskMeta(TTaskMeta& meta, ui64 shardId, TMaybe<TShardKeyRang
 void TKqpTasksGraph::BuildDatashardTasks(TStageInfo& stageInfo, THashSet<ui64>* shardsWithEffects) {
     THashMap<ui64, ui64> shardTasks; // shardId -> taskId
     auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
-    TTaskType::EReason tasksReason = TTaskType::UPSERT_DELETE_DATASHARD;
+    TTaskType::ECreateReason tasksReason = TTaskType::UPSERT_DELETE_DATASHARD;
 
     auto getShardTask = [&](ui64 shardId) -> TTask& {
         // TODO: YQL_ENSURE(!txManager);
@@ -2063,8 +2063,8 @@ void PrepareScanMetaForUsage(TTaskMeta& meta, const TVector<NScheme::TTypeInfo>&
         });
 }
 
-std::pair<ui32, TKqpTasksGraph::TTaskType::EReason> TKqpTasksGraph::GetScanTasksPerNode(TStageInfo& stageInfo, const bool isOlapScan, const ui64 /* nodeId */, bool enableShuffleElimination) const {
-    TTaskType::EReason taskReason;
+std::pair<ui32, TKqpTasksGraph::TTaskType::ECreateReason> TKqpTasksGraph::GetScanTasksPerNode(TStageInfo& stageInfo, const bool isOlapScan, const ui64 /* nodeId */, bool enableShuffleElimination) const {
+    TTaskType::ECreateReason taskReason;
     const auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
     if (const auto taskCount = stage.GetTaskCount()) {
         taskReason = TTaskType::FORCED;
@@ -2482,7 +2482,7 @@ TMaybe<size_t> TKqpTasksGraph::BuildScanTasksFromSource(TStageInfo& stageInfo, b
             ui64 taskLocation,
             TMaybe<ui64> shardId,
             TMaybe<ui64> maxInFlightShards,
-            TTaskType::EReason taskReason) -> TTask&
+            TTaskType::ECreateReason taskReason) -> TTask&
     {
         auto& task = AddTask(stageInfo, taskReason);
         task.Meta.Type = TTaskMeta::TTaskType::Scan;
@@ -2601,7 +2601,7 @@ TMaybe<size_t> TKqpTasksGraph::BuildScanTasksFromSource(TStageInfo& stageInfo, b
         TMaybe<ui64> shardId,
         const TShardInfo& shardInfo,
         TMaybe<ui64> maxInFlightShards,
-        TTaskType::EReason tasksReason)
+        TTaskType::ECreateReason tasksReason)
     {
         YQL_ENSURE(!shardInfo.KeyWriteRanges);
 
@@ -3030,7 +3030,7 @@ TKqpTasksGraph::TKqpTasksGraph(
 
 TVector<TString> TKqpTasksGraph::GetStageIntrospection(const TStageId& stageId) const {
     TVector<TString> introspections;
-    THashMap<TTaskType::EReason, ui64> tasksPerReason;
+    THashMap<TTaskType::ECreateReason, ui64> tasksPerReason;
 
     for (const auto& taskId : GetStageInfo(stageId).Tasks) {
         const auto& task = GetTask(taskId);
@@ -3039,73 +3039,73 @@ TVector<TString> TKqpTasksGraph::GetStageIntrospection(const TStageId& stageId) 
 
     for (const auto [reason, count] : tasksPerReason) {
         switch(reason) {
-            case TTaskType::EReason::UNKNOWN:
+            case TTaskType::ECreateReason::UNKNOWN:
                 introspections.push_back(ToString(count) + " tasks created for unknown reason");
                 break;
-            case TTaskType::EReason::LITERAL:
+            case TTaskType::ECreateReason::LITERAL:
                 introspections.push_back(ToString(count) + " tasks for literal executer");
                 break;
-            case TTaskType::EReason::RESTORED:
+            case TTaskType::ECreateReason::RESTORED:
                 introspections.push_back(ToString(count) + " tasks restored");
                 break;
-            case TTaskType::EReason::FORCED:
+            case TTaskType::ECreateReason::FORCED:
                 introspections.push_back(ToString(count) + " tasks forced by user override");
                 break;
-            case TTaskType::EReason::LEVEL_PREDICTED:
+            case TTaskType::ECreateReason::LEVEL_PREDICTED:
                 introspections.push_back(ToString(count) + " tasks by level prediction");
                 break;
-            case TTaskType::EReason::MINIMUM_COMPUTE:
+            case TTaskType::ECreateReason::MINIMUM_COMPUTE:
                 introspections.push_back(ToString(count) + " minimum tasks for compute");
                 break;
-            case TTaskType::EReason::SYSVIEW_COMPUTE:
+            case TTaskType::ECreateReason::SYSVIEW_COMPUTE:
                 introspections.push_back(ToString(count) + " tasks for sysview");
                 break;
-            case TTaskType::EReason::PREV_STAGE_COMPUTE:
+            case TTaskType::ECreateReason::PREV_STAGE_COMPUTE:
                 introspections.push_back(ToString(count) + " tasks same as previous stage");
                 break;
-            case TTaskType::EReason::AGGREGATION_COMPUTE:
+            case TTaskType::ECreateReason::AGGREGATION_COMPUTE:
                 introspections.push_back(ToString(count) + " tasks from AggregationComputeThreads setting");
                 break;
-            case TTaskType::EReason::UPSERT_DELETE_DATASHARD:
+            case TTaskType::ECreateReason::UPSERT_DELETE_DATASHARD:
                 introspections.push_back(ToString(count) + " tasks for upsert/delete in datashard");
                 break;
-            case TTaskType::EReason::DEFAULT_SOURCE_SCAN:
+            case TTaskType::ECreateReason::DEFAULT_SOURCE_SCAN:
                 introspections.push_back(ToString(count) + " tasks default for source scan");
                 break;
-            case TTaskType::EReason::DEFAULT_SHARD_SCAN:
+            case TTaskType::ECreateReason::DEFAULT_SHARD_SCAN:
                 introspections.push_back(ToString(count) + " tasks default for shard scan");
                 break;
-            case TTaskType::EReason::SHUFFLE_ELIMINATE_SCAN:
+            case TTaskType::ECreateReason::SHUFFLE_ELIMINATE_SCAN:
                 introspections.push_back(ToString(count) + " tasks for scan with shuffle elimination");
                 break;
-            case TTaskType::EReason::SINGLE_SOURCE_SCAN:
+            case TTaskType::ECreateReason::SINGLE_SOURCE_SCAN:
                 introspections.push_back(ToString(count) + " tasks for a single/sequential source scan");
                 break;
-            case TTaskType::EReason::DEFAULT_SOURCE_READ:
+            case TTaskType::ECreateReason::DEFAULT_SOURCE_READ:
                 introspections.push_back(ToString(count) + " tasks default for source read");
                 break;
-            case TTaskType::EReason::SCHEDULED_SOURCE_READ:
+            case TTaskType::ECreateReason::SCHEDULED_SOURCE_READ:
                 introspections.push_back(ToString(count) + " tasks scheduled for source read");
                 break;
-            case TTaskType::EReason::SNAPSHOT_SOURCE_READ:
+            case TTaskType::ECreateReason::SNAPSHOT_SOURCE_READ:
                 introspections.push_back(ToString(count) + " tasks by resource snapshot for source read");
                 break;
-            case TTaskType::EReason::OLAP_AGGREGATION_SCAN:
+            case TTaskType::ECreateReason::OLAP_AGGREGATION_SCAN:
                 introspections.push_back(ToString(count) + " tasks from CSScanThreadsPerNode setting");
                 break;
-            case TTaskType::EReason::OLTP_AGGREGATION_SCAN:
+            case TTaskType::ECreateReason::OLTP_AGGREGATION_SCAN:
                 introspections.push_back(ToString(count) + " tasks from DSScanMinimalThreads setting");
                 break;
-            case TTaskType::EReason::OLAP_SORT_SCAN:
+            case TTaskType::ECreateReason::OLAP_SORT_SCAN:
                 introspections.push_back(ToString(count) + " tasks for OLAP and sort scan");
                 break;
-            case TTaskType::EReason::OLTP_SORT_SCAN:
+            case TTaskType::ECreateReason::OLTP_SORT_SCAN:
                 introspections.push_back(ToString(count) + " tasks from DSBaseSortScanThreads setting");
                 break;
-            case TTaskType::EReason::OLTP_MAP_JOIN_SCAN:
+            case TTaskType::ECreateReason::OLTP_MAP_JOIN_SCAN:
                 introspections.push_back(ToString(count) + " tasks from DSBaseJoinScanThreads setting");
                 break;
-            case TTaskType::EReason::MINIMUM_SCAN:
+            case TTaskType::ECreateReason::MINIMUM_SCAN:
                 introspections.push_back(ToString(count) + " tasks default for scan");
                 break;
         }

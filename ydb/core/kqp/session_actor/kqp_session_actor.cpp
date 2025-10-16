@@ -864,21 +864,20 @@ public:
                 // Get resources snapshot
                 TVector<NKikimrKqp::TKqpNodeResources> resourcesSnapshot;
                 if (needResourcesSnapshot) {
-                    struct TEvResourcesSnapshot : public TEventLocal<TEvResourcesSnapshot, EventSpaceBegin(TEvents::ES_PRIVATE)> {
-                        TVector<NKikimrKqp::TKqpNodeResources> Snapshot;
+                    std::mutex mutex;
+                    std::condition_variable waitCond;
 
-                        TEvResourcesSnapshot(TVector<NKikimrKqp::TKqpNodeResources>&& snapshot)
-                            : Snapshot(std::move(snapshot)) {}
-                    };
-
+                    std::unique_lock lock(mutex);
                     GetKqpResourceManager()->RequestClusterResourcesInfo(
-                        [as = TlsActivationContext->ActorSystem(), self = SelfId()](TVector<NKikimrKqp::TKqpNodeResources>&& resources) {
-                            TAutoPtr<IEventHandle> eh = new IEventHandle(self, self, new TEvResourcesSnapshot(std::move(resources)));
-                            as->Send(eh);
+                        [&](TVector<NKikimrKqp::TKqpNodeResources>&& resources) {
+                            std::unique_lock lock(mutex);
+                            needResourcesSnapshot = false;
+                            resourcesSnapshot = std::move(resources);
+                            waitCond.notify_one();
                         }
                     );
 
-                    resourcesSnapshot = std::move((co_await ActorWaitForEvent<TEvResourcesSnapshot>(0))->Get()->Snapshot);
+                    waitCond.wait(lock, [&] { return !needResourcesSnapshot; });
                 }
 
                 try {

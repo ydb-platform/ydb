@@ -198,7 +198,8 @@ public:
     NDqProto::ECheckpointingMode CheckpointingMode = NDqProto::CHECKPOINTING_MODE_DEFAULT;
     NDqProto::EWatermarksMode WatermarksMode = NDqProto::WATERMARKS_MODE_DISABLED;
 
-    enum EReason {
+    // Reason of task creation - for better introspection
+    enum ECreateReason {
         UNKNOWN = 0,
 
         LITERAL,
@@ -327,7 +328,7 @@ public:
         return StagesInfo.emplace(stageInfo.Id, std::move(stageInfo)).second;
     }
 
-    TTaskType& AddTask(TStageInfoType& stageInfo, TTaskType::EReason reason = TTaskType::UNKNOWN) {
+    TTaskType& AddTask(TStageInfoType& stageInfo, TTaskType::ECreateReason reason = TTaskType::UNKNOWN) {
         auto& task = Tasks.emplace_back(stageInfo);
         task.Id = Tasks.size();
         task.Reason = reason;

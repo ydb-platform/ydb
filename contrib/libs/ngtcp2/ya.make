@@ -2,9 +2,9 @@
 
 LIBRARY()
 
-VERSION(1.15.1)
+VERSION(1.16.0)
 
-ORIGINAL_SOURCE(https://github.com/ngtcp2/ngtcp2/releases/download/v1.15.1/ngtcp2-1.15.1.tar.xz)
+ORIGINAL_SOURCE(https://github.com/ngtcp2/ngtcp2/releases/download/v1.16.0/ngtcp2-1.16.0.tar.xz)
 
 LICENSE(
     "(Apache-2.0 OR MIT)" AND
@@ -41,6 +41,7 @@ SRCS(
     lib/ngtcp2_cc.c
     lib/ngtcp2_cid.c
     lib/ngtcp2_conn.c
+    lib/ngtcp2_conn_info.c
     lib/ngtcp2_conv.c
     lib/ngtcp2_crypto.c
     lib/ngtcp2_dcidtr.c

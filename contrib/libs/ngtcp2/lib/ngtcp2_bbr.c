@@ -384,8 +384,9 @@ static void bbr_check_full_bw_reached(ngtcp2_cc_bbr *bbr,
 
   bbr->full_bw_reached = 1;
 
-  ngtcp2_log_info(bbr->cc.log, NGTCP2_LOG_EVENT_CCA,
-                  "bbr reached full bandwidth, full_bw=%" PRIu64, bbr->full_bw);
+  ngtcp2_log_infof(bbr->cc.log, NGTCP2_LOG_EVENT_CCA,
+                   "bbr reached full bandwidth, full_bw=%" PRIu64,
+                   bbr->full_bw);
 }
 
 static void bbr_check_startup_high_loss(ngtcp2_cc_bbr *bbr) {
@@ -1025,8 +1026,8 @@ static void bbr_update_min_rtt(ngtcp2_cc_bbr *bbr, const ngtcp2_cc_ack *ack,
     bbr->min_rtt = bbr->probe_rtt_min_delay;
     bbr->min_rtt_stamp = bbr->probe_rtt_min_stamp;
 
-    ngtcp2_log_info(bbr->cc.log, NGTCP2_LOG_EVENT_CCA,
-                    "bbr update min_rtt=%" PRIu64, bbr->min_rtt);
+    ngtcp2_log_infof(bbr->cc.log, NGTCP2_LOG_EVENT_CCA,
+                     "bbr update min_rtt=%" PRIu64, bbr->min_rtt);
   }
 }
 

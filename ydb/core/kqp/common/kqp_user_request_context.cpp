@@ -14,6 +14,9 @@ namespace NKikimr::NKqp {
             o << ", CurrentExecutionId: " << CurrentExecutionId;
             o << ", RunScriptActorId: " << RunScriptActorId.ToString();
         }
+        if (CheckpointId) {
+            o << ", CheckpointId: " << CheckpointId;
+        }
         o << "}";
     }
 
@@ -26,5 +29,6 @@ namespace NKikimr::NKqp {
         resultMap["CustomerSuppliedId"] = ctx.CustomerSuppliedId;
         resultMap["PoolId"] = ctx.PoolId;
         resultMap["RunScriptActorId"] = ctx.RunScriptActorId.ToString();  // Only for logging
+        resultMap["CheckpointId"] = ctx.CheckpointId;
     }
 }

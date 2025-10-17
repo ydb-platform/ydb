@@ -659,7 +659,7 @@ drop_streaming_query_stmt: DROP STREAMING QUERY (IF EXISTS)? object_ref;
 
 create_view_stmt: CREATE VIEW (IF NOT EXISTS)? object_ref
     create_object_features?
-    AS select_stmt
+    AS (select_stmt | DO BEGIN define_action_or_subquery_body END DO)
 ;
 
 drop_view_stmt: DROP VIEW (IF EXISTS)? object_ref;

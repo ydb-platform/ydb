@@ -4896,22 +4896,7 @@ bool TSqlTranslation::DefineActionOrSubqueryStatement(const TRule_define_action_
     TBlocks innerBlocks;
     const bool hasValidBody = DefineActionOrSubqueryBody(query, innerBlocks, stmt.GetRule_define_action_or_subquery_body8());
 
-    ui32 topLevelSelects = 0;
-    bool hasTailOps = false;
-    for (auto& block : innerBlocks) {
-        if (block->SubqueryAlias()) {
-            continue;
-        }
-
-        if (block->HasSelectResult()) {
-            ++topLevelSelects;
-        } else if (topLevelSelects) {
-            hasTailOps = true;
-        }
-    }
-
-    if (isSubquery && (topLevelSelects != 1 || hasTailOps)) {
-        Error() << "Strictly one select/process/reduce statement is expected at the end of subquery";
+    if (isSubquery && !ValidateSubqueryOrViewBody(innerBlocks)) {
         return false;
     }
 
@@ -5381,6 +5366,30 @@ bool TSqlTranslation::ValidateExternalTable(const TCreateTableParameters& params
     return true;
 }
 
+bool TSqlTranslation::ValidateSubqueryOrViewBody(const TBlocks& blocks) {
+    ui32 topLevelSelects = 0;
+    bool hasTailOps = false;
+    for (auto& block : blocks) {
+        if (block->SubqueryAlias()) {
+            continue;
+        }
+
+        if (block->HasSelectResult()) {
+            ++topLevelSelects;
+        } else if (topLevelSelects) {
+            hasTailOps = true;
+        }
+    }
+
+    if (topLevelSelects != 1 || hasTailOps) {
+        Error() << "Strictly one select/process/reduce statement is expected at the end of "
+                << (Mode_ == NSQLTranslation::ESqlMode::LIMITED_VIEW ? "view" : "subquery");
+        return false;
+    }
+
+    return true;
+}
+
 bool TSqlTranslation::ParseViewQuery(
     std::map<TString, TDeferredAtom>& features,
     const TRule_select_stmt& query) {
@@ -5398,6 +5407,70 @@ bool TSqlTranslation::ParseViewQuery(
         return false;
     }
     features["query_ast"] = {viewSelect, Ctx_};
+
+    return true;
+}
+
+bool TSqlTranslation::ParseViewQuery(
+    std::map<TString, TDeferredAtom>& features,
+    const TRule_define_action_or_subquery_body& body,
+    const NSQLv1Generated::TToken& beforeToken,
+    const NSQLv1Generated::TToken& afterToken,
+    const TString& service,
+    const TDeferredAtom& cluster)
+{
+    if (!body.HasBlock2()) {
+        Error() << "Empty view body is not allowed";
+        return false;
+    }
+    const auto saveScoped = Ctx_.Scoped;
+    const auto saveMode = Ctx_.Settings.Mode;
+    Ctx_.Scoped = Ctx_.CreateScopedState();
+    Ctx_.AllScopes.push_back(Ctx_.Scoped);
+    Ctx_.Scoped->CurrCluster = cluster;
+    Ctx_.Scoped->CurrService = service;
+    Ctx_.Settings.Mode = ESqlMode::LIMITED_VIEW;
+
+    Y_DEFER {
+        Ctx_.ScopeLevel--;
+        Ctx_.Scoped = saveScoped;
+        Ctx_.Settings.Mode = saveMode;
+    };
+
+    TSqlQuery query(Ctx_, Ctx_.Settings.Mode, /* topLevel */ false, /* allowTopLevelPragmas */ true);
+    TBlocks innerBlocks;
+
+    TNodePtr clearWorldNode = new TAstListNodeImpl(Ctx_.Pos());
+    clearWorldNode->Add("World");
+    innerBlocks.push_back(clearWorldNode);
+
+    if (!DefineActionOrSubqueryBody(query, innerBlocks, body)) {
+        return false;
+    }
+
+    if (!ValidateSubqueryOrViewBody(innerBlocks)) {
+        return false;
+    }
+
+    auto queryNode = BuildQuery(Ctx_.Pos(), innerBlocks, false, Ctx_.Scoped, Ctx_.SeqMode);
+    if (!queryNode) {
+        return false;
+    }
+
+    if (!WarnUnusedNodes()) {
+        return false;
+    }
+
+    TNodePtr blockNode = new TAstListNodeImpl(Ctx_.Pos());
+    blockNode->Add("block", blockNode->Q(queryNode));
+    features[TStreamingQuerySettings::QUERY_AST_FEATURE] = TDeferredAtom(blockNode, Ctx_);
+
+    auto begin = GetQueryPosition(Ctx_.Query, beforeToken, Ctx_.Settings.Antlr4Parser);
+    auto end = GetQueryPosition(Ctx_.Query, afterToken, Ctx_.Settings.Antlr4Parser);
+    YQL_ENSURE(begin < Ctx_.Query.size() && end < Ctx_.Query.size());
+    begin += beforeToken.value().size();
+    YQL_ENSURE(begin < end);
+    features[TStreamingQuerySettings::QUERY_TEXT_FEATURE] = TDeferredAtom(Ctx_.Pos(), Ctx_.Query.substr(begin, end - begin));
 
     return true;
 }

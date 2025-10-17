@@ -29,7 +29,7 @@ public:
         TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> keyColumns,
         TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> lookupColumns) = 0;
 
-    virtual void AddLookupTask(ui64 cookie, const std::vector<TConstArrayRef<TCell>>& keys) = 0;
+    virtual void AddLookupTask(ui64 cookie, bool uniqueCheck, const std::vector<TConstArrayRef<TCell>>& keys) = 0;
     virtual bool HasResult(ui64 cookie) = 0;
     virtual void ExtractResult(ui64 cookie, std::function<void(TConstArrayRef<TCell>)>&& callback) = 0;
 

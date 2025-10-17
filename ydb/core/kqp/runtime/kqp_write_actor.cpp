@@ -1544,6 +1544,7 @@ private:
 
             const auto& keyColumnTypes = lookupInfo.Lookup->GetKeyColumnTypes();
 
+            // TODO: uniq index check + insert uniq check
             ProcessCells = GetSortedUniqueRows(ProcessBatches, keyColumnTypes);
             for (size_t index = 0; index < ProcessCells.size(); ++index) {
                 const auto& row = ProcessCells[index];
@@ -1551,7 +1552,7 @@ private:
             }
 
             lookupInfo.Lookup->AddLookupTask(
-                Cookie, CutColumns(ProcessCells, keyColumnTypes.size()));
+                Cookie, /* unique check */ false, CutColumns(ProcessCells, keyColumnTypes.size()));
 
             State = EState::LOOKUP_MAIN_TABLE;
         } else if (!PathLookupInfo.empty()) {

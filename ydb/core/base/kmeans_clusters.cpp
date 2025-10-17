@@ -602,4 +602,29 @@ bool FillSetting(Ydb::Table::KMeansTreeSettings& settings, const TString& name, 
     return !error;
 }
 
+void FilterOverlapRows(TVector<TSerializedCellVec>& rows, size_t distancePos, ui32 overlapClusters, double overlapRatio) {
+    if (rows.size() <= 1) {
+        return;
+    }
+    std::sort(rows.begin(), rows.end(), [&](const TSerializedCellVec& a, const TSerializedCellVec& b) {
+        auto da = a.GetCells().at(distancePos).AsValue<double>();
+        auto db = b.GetCells().at(distancePos).AsValue<double>();
+        return da < db;
+    });
+    if (rows.size() > overlapClusters) {
+        rows.resize(overlapClusters);
+    }
+    if (overlapRatio > 0) {
+        auto thresh = rows[0].GetCells().at(distancePos).AsValue<double>();
+        thresh = (thresh < 0 ? thresh/overlapRatio : thresh*overlapRatio);
+        for (size_t i = 1; i < rows.size(); i++) {
+            auto d = rows[i].GetCells().at(distancePos).AsValue<double>();
+            if (d > thresh) {
+                rows.resize(i);
+                break;
+            }
+        }
+    }
+}
+
 }

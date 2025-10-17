@@ -19,6 +19,7 @@ namespace NKikimrTxDataShard {
     class TEvRecomputeKMeansResponse;
     class TEvSampleKResponse;
     class TEvValidateUniqueIndexResponse;
+    class TEvFilterKMeansResponse;
 }
 
 namespace NKikimr {
@@ -120,6 +121,7 @@ TString ToShortDebugString(const NKikimrTxDataShard::TEvRecomputeKMeansRequest& 
 TString ToShortDebugString(const NKikimrTxDataShard::TEvRecomputeKMeansResponse& record);
 TString ToShortDebugString(const NKikimrTxDataShard::TEvSampleKResponse& record);
 TString ToShortDebugString(const NKikimrTxDataShard::TEvValidateUniqueIndexResponse& record);
+TString ToShortDebugString(const NKikimrTxDataShard::TEvFilterKMeansResponse& record);
 
 }
 }

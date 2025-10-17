@@ -34,10 +34,10 @@ PEERDIR(
     ydb/services/kesus
     ydb/services/persqueue_cluster_discovery
     ydb/services/ydb
-    yql/essentials/minikql/invoke_builtins/llvm16
+    yql/essentials/minikql/invoke_builtins/llvm20
     yql/essentials/public/udf/service/exception_policy
-    yt/yql/providers/yt/comp_nodes/dq/llvm16
-    yt/yql/providers/yt/comp_nodes/llvm16
+    yt/yql/providers/yt/comp_nodes/dq/llvm20
+    yt/yql/providers/yt/comp_nodes/llvm20
 )
 
 YQL_LAST_ABI_VERSION()

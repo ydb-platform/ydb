@@ -22,13 +22,13 @@ PEERDIR(
     ydb/services/kesus
     ydb/services/persqueue_cluster_discovery
     ydb/services/ydb
-    yql/essentials/minikql/comp_nodes/llvm16
+    yql/essentials/minikql/comp_nodes/llvm20
     yql/essentials/parser/pg_wrapper
     yql/essentials/public/udf
     yql/essentials/public/udf/service/exception_policy
     yql/essentials/sql/pg
-    yt/yql/providers/yt/comp_nodes/dq/llvm16
-    yt/yql/providers/yt/comp_nodes/llvm16
+    yt/yql/providers/yt/comp_nodes/dq/llvm20
+    yt/yql/providers/yt/comp_nodes/llvm20
 )
 
 ADDINCL(

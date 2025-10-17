@@ -14,11 +14,11 @@ PEERDIR(
     ydb/library/pdisk_io
     ydb/tools/stress_tool/lib
     ydb/tools/stress_tool/proto
-    yql/essentials/minikql/comp_nodes/llvm16
+    yql/essentials/minikql/comp_nodes/llvm20
     yql/essentials/parser/pg_wrapper
     yql/essentials/sql/pg
-    yt/yql/providers/yt/comp_nodes/dq/llvm16
-    yt/yql/providers/yt/comp_nodes/llvm16
+    yt/yql/providers/yt/comp_nodes/dq/llvm20
+    yt/yql/providers/yt/comp_nodes/llvm20
 )
 
 SRCS(

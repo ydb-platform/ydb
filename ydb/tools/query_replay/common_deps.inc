@@ -81,6 +81,6 @@ SET(YDB_REPLAY_PEERDIRS
     yql/essentials/udfs/common/yson2
     yql/essentials/udfs/logs/dsv
     yt/yql/providers/yt/codec/codegen
-    yt/yql/providers/yt/comp_nodes/dq/llvm16
-    yt/yql/providers/yt/comp_nodes/llvm16
+    yt/yql/providers/yt/comp_nodes/dq/llvm20
+    yt/yql/providers/yt/comp_nodes/llvm20
 )

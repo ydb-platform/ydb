@@ -1,5 +1,6 @@
 #include <cmath>
 #include <library/cpp/svnversion/svnversion.h>
+#include <library/cpp/monlib/dynamic_counters/encode.h>
 #include <util/system/info.h>
 #include <util/system/hostname.h>
 #include <ydb/core/base/appdata.h>
@@ -14,6 +15,7 @@
 #include <ydb/core/base/counters.h>
 #include <ydb/core/util/cpuinfo.h>
 #include <ydb/core/util/tuples.h>
+
 
 #include <util/string/split.h>
 #include <util/system/getpid.h>
@@ -575,6 +577,7 @@ protected:
         HFunc(TEvPrivate::TEvSendListNodes, Handle);
         HFunc(TEvPrivate::TEvUpdateRuntimeStats, Handle);
         HFunc(TEvPrivate::TEvCleanupDeadTablets, Handle);
+        HFunc(TEvWhiteboard::TEvCountersInfoRequest, Handle);
     )
 
     void Handle(TEvWhiteboard::TEvTabletStateUpdate::TPtr &ev, const TActorContext &ctx) {
@@ -1258,6 +1261,20 @@ protected:
             }
         }
         ctx.Schedule(TDuration::Seconds(60), new TEvPrivate::TEvCleanupDeadTablets());
+    }
+
+    void Handle(TEvWhiteboard::TEvCountersInfoRequest::TPtr &ev, const TActorContext &ctx) {
+        auto& counters = NKikimr::AppData()->Counters;
+        TString nameLabel("sensor");
+        TString out;
+        TStringOutput oss(out);
+        auto encoder = NMonitoring::CreateEncoder(&oss, NMonitoring::EFormat::JSON, nameLabel, {});
+
+        counters->Accept(TString(), TString(), *encoder);
+        THolder<TEvWhiteboard::TEvCountersInfoResponse> response = MakeHolder<TEvWhiteboard::TEvCountersInfoResponse>();
+        auto& record = response->Record;
+        record.SetResponse(out);
+        ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
     }
 };
 

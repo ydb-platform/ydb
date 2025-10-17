@@ -440,3 +440,10 @@ message TEvBridgeInfoResponse {
     optional TBridgeNodesInfo BridgeNodesInfo = 3;
     optional uint64 ResponseTime = 4;
 }
+
+message TEvCountersInfoRequest {
+}
+
+message TEvCountersInfoResponse {
+    optional string Response = 1;
+}

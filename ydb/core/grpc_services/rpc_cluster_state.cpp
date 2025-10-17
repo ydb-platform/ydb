@@ -46,6 +46,7 @@ public:
     TMap<ui32, NKikimrWhiteboard::TEvSystemStateResponse> SystemInfo;
     TMap<ui32, NKikimrWhiteboard::TEvBridgeInfoResponse> BridgeInfo;
     TMap<ui32, NKikimrWhiteboard::TEvNodeStateResponse> NodeInfo;
+    TMap<ui32, TVector<TString>> CountersInfo;
     Ydb::Monitoring::SelfCheckResult SelfCheck;
     Ydb::StatusIds_StatusCode Status = Ydb::StatusIds::SUCCESS;
 
@@ -62,6 +63,8 @@ public:
         request(TEvSystemStateRequest);
         request(TEvBridgeInfoRequest);
         request(TEvNodeStateRequest);
+        request(TEvCountersInfoRequest);
+
 #undef request
     }
 
@@ -94,13 +97,14 @@ public:
             processCase(EvSystemStateResponse, SystemInfo)
             processCase(EvBridgeInfoResponse, BridgeInfo)
             processCase(EvNodeStateResponse, NodeInfo)
+            NodeStateInfoReceived();
         }
     }
 
     void Disconnected(TEvInterconnect::TEvNodeDisconnected::TPtr &ev) {
         ui32 nodeId = ev->Get()->NodeId;
 #define process(NAME, INFO) \
-    if (VDiskInfo.emplace(nodeId, NKikimrWhiteboard::TEvVDiskStateResponse{}).second) { \
+    if (INFO.emplace(nodeId, NKikimrWhiteboard::NAME{}).second) { \
         NodeStateInfoReceived(); \
     }
         process(TEvVDiskStateResponse, VDiskInfo)
@@ -110,6 +114,7 @@ public:
         process(TEvSystemStateResponse, SystemInfo)
         process(TEvBridgeInfoResponse, BridgeInfo)
         process(TEvNodeStateResponse, NodeInfo)
+        NodeStateInfoReceived();
 #undef process
     }
 
@@ -127,6 +132,12 @@ public:
     HandleWhiteboard(TEvSystemStateResponse, SystemInfo)
     HandleWhiteboard(TEvBridgeInfoResponse, BridgeInfo)
     HandleWhiteboard(TEvNodeStateResponse, NodeInfo)
+
+    void Handle(NNodeWhiteboard::TEvWhiteboard::TEvCountersInfoResponse::TPtr& ev) {
+        ui64 nodeId = ev.Get()->Cookie;
+        CountersInfo[nodeId].emplace_back(std::move(ev->Get()->Record.GetResponse()));
+        NodeStateInfoReceived();
+    }
 
     void NodeStateInfoReceived() {
         ++Received;
@@ -185,6 +196,7 @@ public:
             hFunc(NNodeWhiteboard::TEvWhiteboard::TEvSystemStateResponse, Handle);
             hFunc(NNodeWhiteboard::TEvWhiteboard::TEvBridgeInfoResponse, Handle);
             hFunc(NNodeWhiteboard::TEvWhiteboard::TEvNodeStateResponse, Handle);
+            hFunc(NNodeWhiteboard::TEvWhiteboard::TEvCountersInfoResponse, Handle);
             hFunc(TEvents::TEvUndelivered, Undelivered);
             hFunc(TEvInterconnect::TEvNodeDisconnected, Disconnected);
             cFunc(TEvents::TSystem::Wakeup, Timeout);
@@ -209,6 +221,22 @@ public:
             }
             res << "}\n";
         };
+        auto serializeArray = [&](auto &info) {
+            res << "[";
+            for (auto v : info) {
+                res << v << ",\n";
+            }
+            res << "]";
+        };
+        auto serializeDictOfArray = [&](const char *name, auto &info) {
+            res << "\"" << name <<"\" : {";
+            for(auto &[k, v] : info) {
+                res << "{" << k << ":";
+                serializeArray(v);
+                res << "},\n";
+            }
+            res << "}\n";
+        };
         auto serialize = [&](const char *name, auto &info) {
             res << "\"" << name <<"\": ";
             TString data;
@@ -223,6 +251,7 @@ public:
         serializeDict("BridgeInfo", BridgeInfo);
         serializeDict("NodeInfo", NodeInfo);
         serialize("SelfCheck", SelfCheck);
+        serializeDictOfArray("CountersInfo", CountersInfo);
 
         res << "\"version\": 1}\n";
         result.Setresult(res);

@@ -1225,6 +1225,8 @@ class GnuToolchain(Toolchain):
                     '$MACOS_SDK_RESOURCE_GLOBAL/usr/bin',
                     '$GO_FAKE_XCRUN_RESOURCE_GLOBAL',
                 ])
+            elif target.is_android:
+                self.env_go['PATH'] = ['{}/llvm-toolchain/bin'.format(self.tc.name_marker), '/usr/bin']
 
         self.swift_flags_platform = []
         self.swift_lib_path = None

@@ -570,9 +570,28 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
     if (mvccSnapshot != NOlap::TSnapshot::Zero()) {
         auto snapshotSchema = TablesManager.GetPrimaryIndex()->GetVersionedIndex().GetSchemaVerified(mvccSnapshot);
         if (snapshotSchema->GetVersion() != schema->GetVersion()) {
+            const TString errorMessage = TStringBuilder() << "schema version mismatch with snapshot: "
+                << "tx_id=" << record.GetTxId() 
+                << ", snapshot=" << mvccSnapshot
+                << ", snapshot_schema_version=" << snapshotSchema->GetVersion()
+                << ", current_schema_version=" << schema->GetVersion()
+                << ", table_id=" << schemeShardLocalPathId
+                << ", lock_id=" << lockId;
+            
+            AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "schema_version_mismatch")
+                ("tx_id", record.GetTxId())
+                ("snapshot", TStringBuilder() << mvccSnapshot)
+                ("snapshot_schema_version", snapshotSchema->GetVersion())
+                ("current_schema_version", schema->GetVersion())
+                ("table_id", schemeShardLocalPathId)
+                ("lock_id", lockId)
+                ("path_id", pathId)
+                ("source", source.ToString())
+                ("cookie", cookie);
+            
             LWPROBE(EvWrite, TabletID(), source.ToString(), cookie, record.GetTxId(), writeTimeout.value_or(TDuration::Max()), 0, "", false,
-                operation.GetIsBulk(), ToString(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST), "schema version mismatch with snapshot");
-            sendError("schema version mismatch with snapshot", NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
+                operation.GetIsBulk(), ToString(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST), errorMessage);
+            sendError(errorMessage, NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
             return;
         }
     }

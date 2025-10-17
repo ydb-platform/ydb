@@ -44,6 +44,8 @@ inline NYql::TAstParseResult SqlToYqlWithMode(const TString& query, NSQLTranslat
     settings.ClusterMapping[cluster] = service;
     settings.ClusterMapping["hahn"] = NYql::YtProviderName;
     settings.ClusterMapping["mon"] = NYql::SolomonProviderName;
+    settings.ClusterMapping["rtmr"] = NYql::RtmrProviderName;
+    settings.ClusterMapping["ydb"] = NYql::YdbProviderName;
     settings.MaxErrors = maxErrors;
     settings.Mode = mode;
     settings.Arena = &arena;

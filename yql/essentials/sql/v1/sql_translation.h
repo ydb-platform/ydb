@@ -247,6 +247,12 @@ protected:
     [[nodiscard]] bool ParseSecretId(const TRule_id_or_at& node, TString& objectId);
     bool ParseViewOptions(std::map<TString, TDeferredAtom>& features, const TRule_with_table_settings& options);
     bool ParseViewQuery(std::map<TString, TDeferredAtom>& features, const TRule_select_stmt& query);
+    bool ParseViewQuery(std::map<TString, TDeferredAtom>& features,
+                        const TRule_define_action_or_subquery_body& body,
+                        const NSQLv1Generated::TToken& beforeToken,
+                        const NSQLv1Generated::TToken& afterToken,
+                        const TString& service,
+                        const TDeferredAtom& cluster);
     bool ParseResourcePoolSettings(std::map<TString, TDeferredAtom>& result, const TRule_with_table_settings& settings);
     bool ParseResourcePoolSettings(std::map<TString, TDeferredAtom>& result, std::set<TString>& toReset, const TRule_alter_resource_pool_action& alterAction);
     bool ParseResourcePoolClassifierSettings(std::map<TString, TDeferredAtom>& result, const TRule_with_table_settings& settings);
@@ -288,6 +294,7 @@ protected:
 
     bool ValidateAuthMethod(const std::map<TString, TDeferredAtom>& result);
     bool ValidateExternalTable(const TCreateTableParameters& params);
+    bool ValidateSubqueryOrViewBody(const TBlocks& blocks);
 
     TNodePtr ReturningList(const ::NSQLv1Generated::TRule_returning_columns_list& columns);
 

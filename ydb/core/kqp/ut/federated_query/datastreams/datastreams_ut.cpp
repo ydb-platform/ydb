@@ -6,6 +6,7 @@
 #include <ydb/core/kqp/proxy_service/kqp_script_executions.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/ut/federated_query/common/common.h>
+#include <ydb/library/testlib/common/test_utils.h>
 #include <ydb/library/testlib/pq_helpers/mock_pq_gateway.h>
 #include <ydb/library/testlib/s3_recipe_helper/s3_recipe_helper.h>
 #include <ydb/library/testlib/solomon_helpers/solomon_emulator_helpers.h>
@@ -83,7 +84,7 @@ public:
         UNIT_ASSERT_C(!PqGateway, "PqGateway is already initialized");
         EnsureNotInitialized("MockPqGateway");
 
-        const auto mockPqGateway = CreateMockPqGateway();
+        const auto mockPqGateway = CreateMockPqGateway({.OperationTimeout = TEST_OPERATION_TIMEOUT});
         PqGateway = mockPqGateway;
 
         return mockPqGateway;
@@ -611,54 +612,6 @@ public:
         });
     }
 
-    // Mock PQ utils
-
-    static IMockPqReadSession::TPtr WaitMockPqReadSession(IMockPqGateway::TPtr gateway, const TString& topic) {
-        return WaitForPqMockSession<IMockPqReadSession>(TEST_OPERATION_TIMEOUT, "read", [gateway, topic]() {
-            return gateway->ExtractReadSession(topic);
-        });
-    }
-
-    static IMockPqWriteSession::TPtr WaitMockPqWriteSession(IMockPqGateway::TPtr gateway, const TString& topic) {
-        return WaitForPqMockSession<IMockPqWriteSession>(TEST_OPERATION_TIMEOUT, "write", [gateway, topic]() {
-            return gateway->ExtractWriteSession(topic);
-        });
-    }
-
-    template <typename TSession>
-    static TSession::TPtr WaitForPqMockSession(TDuration timeout, const TString& info, std::function<typename TSession::TPtr()> sessionExtractor) {
-        typename TSession::TPtr session;
-        WaitFor(timeout, TStringBuilder() << info << " session from mock pq gateway", [&](TString& errorString) {
-            if (session = sessionExtractor()) {
-                return true;
-            }
-
-            errorString = "Session is not ready";
-            return false;
-        });
-
-        return session;
-    }
-
-    static void ReadMockPqMessages(IMockPqWriteSession::TPtr session, const std::vector<TString>& messages) {
-        ui64 receivedMessages = 0;
-        WaitFor(TEST_OPERATION_TIMEOUT, "read message from mock pq gateway", [&](TString& errorString) {
-            const auto data = session->ExtractData();
-            UNIT_ASSERT_GE(messages.size(), receivedMessages + data.size());
-
-            for (const auto& message : data) {
-                UNIT_ASSERT_VALUES_EQUAL(message, messages[receivedMessages++]);
-            }
-
-            errorString = "no messages found";
-            return receivedMessages == messages.size();
-        });
-    }
-
-    static void ReadMockPqMessage(IMockPqWriteSession::TPtr session, const TString& message) {
-        ReadMockPqMessages(session, {message});
-    }
-
     // Mock Connector utils
 
     static NYql::TGenericDataSourceInstance GetMockConnectorSourceInstance() {
@@ -745,23 +698,6 @@ public:
             readSplitsBuilder.Result()
                 .AddResponse(settings.ResultFactory(), NYql::NConnector::NewSuccess());
         }
-    }
-
-    // Utils
-
-    static void WaitFor(TDuration timeout, const TString& description, std::function<bool(TString&)> callback) {
-        TInstant start = TInstant::Now();
-        TString errorString;
-        while (TInstant::Now() - start <= timeout) {
-            if (callback(errorString)) {
-                return;
-            }
-
-            Cerr << "Wait " << description << " " << TInstant::Now() - start << ": " << errorString << "\n";
-            Sleep(TDuration::Seconds(1));
-        }
-
-        UNIT_FAIL("Waiting " << description << " timeout. Spent time " << TInstant::Now() - start << " exceeds limit " << timeout << ", last error: " << errorString);
     }
 
 private:
@@ -1203,7 +1139,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             .RetryMapping = CreateRetryMapping({Ydb::StatusIds::BAD_REQUEST})
         });
 
-        WaitMockPqReadSession(pqGateway, topicName)->AddCloseSessionEvent(EStatus::UNAVAILABLE, {NIssue::TIssue("Test pq session failure")});
+        pqGateway->WaitReadSession(topicName)->AddCloseSessionEvent(EStatus::UNAVAILABLE, {NIssue::TIssue("Test pq session failure")});
         WaitScriptExecution(operationId, EExecStatus::Failed, true);
 
         ExecQuery(fmt::format(R"(
@@ -1213,7 +1149,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             "pq_source"_a = pqSourceName
         ));
 
-        WaitMockPqReadSession(pqGateway, topicName)->AddDataReceivedEvent(1, R"({"key": "key1", "value": "value1"})");
+        pqGateway->WaitReadSession(topicName)->AddDataReceivedEvent(1, R"({"key": "key1", "value": "value1"})");
         WaitScriptExecution(operationId);
 
         UNIT_ASSERT_VALUES_EQUAL(GetAllObjects(writeBucket), "{\"key\":\"key1\",\"value\":\"value1\"}\n");
@@ -1251,8 +1187,8 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
 
         WaitCheckpointUpdate(executionId);
 
-        auto readSession = WaitMockPqReadSession(pqGateway, inputTopicName);
-        auto writeSession = WaitMockPqWriteSession(pqGateway, outputTopicName);
+        auto readSession = pqGateway->WaitReadSession(inputTopicName);
+        auto writeSession = pqGateway->WaitWriteSession(outputTopicName);
         readSession->AddDataReceivedEvent(1, R"({"key": "key1", "value": "value1"})");
         readSession->AddDataReceivedEvent(2, R"({"key": "key2", "value": "value2"})");
         readSession->AddDataReceivedEvent(3, R"({"key": "key3", "value": "value3"})");
@@ -1262,9 +1198,9 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         WaitScriptExecution(operationId, EExecStatus::Failed, true);
         WaitCheckpointUpdate(executionId);
 
-        WaitMockPqReadSession(pqGateway, inputTopicName)->AddDataReceivedEvent(4, R"({"key": "key4", "value": "value4"})");
-        writeSession = WaitMockPqWriteSession(pqGateway, outputTopicName);
-        ReadMockPqMessage(writeSession, "key4value4");
+        pqGateway->WaitReadSession(inputTopicName)->AddDataReceivedEvent(4, R"({"key": "key4", "value": "value4"})");
+        writeSession = pqGateway->WaitWriteSession(outputTopicName);
+        writeSession->ExpectMessage("key4value4");
 
         CancelScriptExecution(operationId);
     }
@@ -1346,11 +1282,11 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             .SaveState = true
         });
 
-        auto writeSession = WaitMockPqWriteSession(pqGateway, outputTopicName);
+        auto writeSession = pqGateway->WaitWriteSession(outputTopicName);
         WaitCheckpointUpdate(executionId);
         writeSession->Lock();
 
-        auto readSession = WaitMockPqReadSession(pqGateway, inputTopicName);
+        auto readSession = pqGateway->WaitReadSession(inputTopicName);
         const TString value(1_KB, 'x');
         TInstant time = TInstant::Now();
         for (ui64 i = 0; i < 100000; ++i, time += TDuration::Hours(2)) {
@@ -1788,7 +1724,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         CheckScriptExecutionsCount(1, 1);
 
         CleanupSolomon(soLocation);
-        auto readSession = WaitMockPqReadSession(pqGateway, inputTopicName);
+        auto readSession = pqGateway->WaitReadSession(inputTopicName);
         readSession->AddDataReceivedEvent(0, "1234");
 
         Sleep(TDuration::Seconds(2));
@@ -1814,7 +1750,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         readSession->AddCloseSessionEvent(EStatus::UNAVAILABLE, {NIssue::TIssue("Test pq session failure")});
 
-        WaitMockPqReadSession(pqGateway, inputTopicName)->AddDataReceivedEvent(1, "4321");
+        pqGateway->WaitReadSession(inputTopicName)->AddDataReceivedEvent(1, "4321");
         Sleep(TDuration::Seconds(2));
 
         expectedMetrics = R"([
@@ -1899,7 +1835,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         CheckScriptExecutionsCount(1, 1);
 
-        auto readSession = WaitMockPqReadSession(pqGateway, inputTopicName);
+        auto readSession = pqGateway->WaitReadSession(inputTopicName);
         const std::vector<IMockPqReadSession::TMessage> sampleMessages = {
             {0, R"({"time": 0, "event": "A", "host": "host1.example.com"})"},
             {1, R"({"time": 1, "event": "B", "host": "host3.example.com"})"},
@@ -1907,14 +1843,13 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         };
         readSession->AddDataReceivedEvent(sampleMessages);
 
-        auto writeSession = WaitMockPqWriteSession(pqGateway, outputTopicName);
         const std::vector<TString> sampleResult = {"A-P1", "B-P3", "A-P1"};
-        ReadMockPqMessages(writeSession, sampleResult);
+        pqGateway->WaitWriteSession(outputTopicName)->ExpectMessages(sampleResult);
 
         readSession->AddCloseSessionEvent(EStatus::UNAVAILABLE, {NIssue::TIssue("Test pq session failure")});
 
-        WaitMockPqReadSession(pqGateway, inputTopicName)->AddDataReceivedEvent(sampleMessages);
-        ReadMockPqMessages(WaitMockPqWriteSession(pqGateway, outputTopicName), sampleResult);
+        pqGateway->WaitReadSession(inputTopicName)->AddDataReceivedEvent(sampleMessages);
+        pqGateway->WaitWriteSession(outputTopicName)->ExpectMessages(sampleResult);
     }
 
     Y_UNIT_TEST_F(StreamingQueryWithYdbJoin, TStreamingTestFixture) {
@@ -2010,7 +1945,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         CheckScriptExecutionsCount(1, 1);
 
-        auto readSession = WaitMockPqReadSession(pqGateway, inputTopicName);
+        auto readSession = pqGateway->WaitReadSession(inputTopicName);
         const std::vector<IMockPqReadSession::TMessage> sampleMessages = {
             {0, R"({"time": 0, "event": "A", "host": "host1.example.com"})"},
             {1, R"({"time": 1, "event": "B", "host": "host3.example.com"})"},
@@ -2018,14 +1953,13 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         };
         readSession->AddDataReceivedEvent(sampleMessages);
 
-        auto writeSession = WaitMockPqWriteSession(pqGateway, outputTopicName);
         const std::vector<TString> sampleResult = {"A-P1", "B-P3", "A-P1"};
-        ReadMockPqMessages(writeSession, sampleResult);
+        pqGateway->WaitWriteSession(outputTopicName)->ExpectMessages(sampleResult);
 
         readSession->AddCloseSessionEvent(EStatus::UNAVAILABLE, {NIssue::TIssue("Test pq session failure")});
 
-        WaitMockPqReadSession(pqGateway, inputTopicName)->AddDataReceivedEvent(sampleMessages);
-        ReadMockPqMessages(WaitMockPqWriteSession(pqGateway, outputTopicName), sampleResult);
+        pqGateway->WaitReadSession(inputTopicName)->AddDataReceivedEvent(sampleMessages);
+        pqGateway->WaitWriteSession(outputTopicName)->ExpectMessages(sampleResult);
     }
 
     Y_UNIT_TEST_F(StreamingQueryWithStreamLookupJoin, TStreamingTestFixture) {
@@ -2120,7 +2054,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         CheckScriptExecutionsCount(1, 1);
 
-        auto readSession = WaitMockPqReadSession(pqGateway, inputTopicName);
+        auto readSession = pqGateway->WaitReadSession(inputTopicName);
         const std::vector<IMockPqReadSession::TMessage> sampleMessages = {
             {0, R"({"time": 0, "event": "A", "host": "host1.example.com"})"},
             {1, R"({"time": 1, "event": "B", "host": "host3.example.com"})"},
@@ -2128,20 +2062,19 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         };
         readSession->AddDataReceivedEvent(sampleMessages);
 
-        auto writeSession = WaitMockPqWriteSession(pqGateway, outputTopicName);
         const std::vector<TString> sampleResult = {"A-P1", "B-P3", "A-P1"};
-        ReadMockPqMessages(writeSession, sampleResult);
+        pqGateway->WaitWriteSession(outputTopicName)->ExpectMessages(sampleResult);
 
         readSession->AddCloseSessionEvent(EStatus::UNAVAILABLE, {NIssue::TIssue("Test pq session failure")});
 
-        readSession = WaitMockPqReadSession(pqGateway, inputTopicName);
+        readSession = pqGateway->WaitReadSession(inputTopicName);
         readSession->AddDataReceivedEvent(sampleMessages);
-        writeSession = WaitMockPqWriteSession(pqGateway, outputTopicName);
-        ReadMockPqMessages(writeSession, sampleResult);
+        auto writeSession = pqGateway->WaitWriteSession(outputTopicName);
+        writeSession->ExpectMessages(sampleResult);
 
         Sleep(TDuration::Seconds(2));
         readSession->AddDataReceivedEvent(sampleMessages);
-        ReadMockPqMessages(writeSession, {"A-P4", "B-P6", "A-P4"});
+        writeSession->ExpectMessages({"A-P4", "B-P6", "A-P4"});
 
         CheckScriptExecutionsCount(1, 1);
         const auto results = ExecQuery(
@@ -2153,6 +2086,71 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             UNIT_ASSERT(ast);
             UNIT_ASSERT_STRING_CONTAINS(*ast, "DqCnStreamLookup");
         });
+    }
+
+    Y_UNIT_TEST_F(StreamingQueryUnderSecureScriptExecutions, TStreamingTestFixture) {
+        SetupAppConfig().MutableFeatureFlags()->SetEnableSecureScriptExecutions(true);
+        GetRuntime().GetAppData().FeatureFlags.SetEnableSecureScriptExecutions(true);
+
+        constexpr char inputTopicName[] = "streamingQueryUnderSecureScriptExecutionsInputTopic";
+        constexpr char outputTopicName[] = "streamingQueryUnderSecureScriptExecutionsOutputTopic";
+        CreateTopic(inputTopicName);
+        CreateTopic(outputTopicName);
+
+        constexpr char pqSourceName[] = "sourceName";
+        CreatePqSource(pqSourceName);
+
+        constexpr char queryName[] = "streamingQuery";
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                INSERT INTO `{pq_source}`.`{output_topic}`
+                SELECT * FROM `{pq_source}`.`{input_topic}`
+            END DO;)",
+            "query_name"_a = queryName,
+            "pq_source"_a = pqSourceName,
+            "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName
+        ));
+
+        Sleep(TDuration::Seconds(1));
+        WriteTopicMessage(inputTopicName, R"({"key": "key1", "value": "value1"})");
+        ReadTopicMessage(outputTopicName, R"({"key": "key1", "value": "value1"})");
+
+        NOperation::TOperationClient rootClient(*GetInternalDriver(), TCommonClientSettings().AuthToken(BUILTIN_ACL_ROOT));
+        {
+            const auto result = rootClient.List<TScriptExecutionOperation>(10).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetList().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetList()[0].Metadata().ExecStatus, EExecStatus::Running);
+        }
+
+        NOperation::TOperationClient testClient(*GetInternalDriver(), TCommonClientSettings().AuthToken("test@" BUILTIN_ACL_DOMAIN));
+        {
+            const auto result = testClient.List<TScriptExecutionOperation>(10).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetList().size(), 0);
+        }
+
+        ExecQuery(fmt::format(R"(
+            ALTER STREAMING QUERY `{query_name}` SET (
+                RUN = FALSE
+            ))",
+            "query_name"_a = queryName
+        ));
+
+        {
+            const auto result = rootClient.List<TScriptExecutionOperation>(10).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetList().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetList()[0].Metadata().ExecStatus, EExecStatus::Canceled);
+        }
+
+        {
+            const auto result = testClient.List<TScriptExecutionOperation>(10).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetList().size(), 0);
+        }
     }
 
     Y_UNIT_TEST_F(OffsetsAndStateRecoveryOnInternalRetry, TStreamingTestFixture) {

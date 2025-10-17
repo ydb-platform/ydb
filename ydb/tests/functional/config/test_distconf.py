@@ -239,9 +239,8 @@ class TestKiKiMRDistConfBasic(DistConfKiKiMRTest):
         self.cluster.wait_tenant_up(database_path)
         pool.retry_operation_sync(create_table)
 
-        for s in initial_slots:
-            s.stop()
-        logger.info("[TEST] Stopped initial dynamic slot(s)")
+        initial_slots[0].stop()
+        logger.info("[TEST] Stopped initial dynamic slot")
 
         self.cluster.nodes[3].stop()
         logger.info("[TEST] Stopped static node 3 (Console)")
@@ -254,10 +253,9 @@ class TestKiKiMRDistConfBasic(DistConfKiKiMRTest):
             logger.info(f"[TEST] Seed nodes file created at: {seed_nodes_file.name}")
             seed_nodes_file.close()
 
-            for s in initial_slots:
-                s.set_seed_nodes_file(seed_nodes_file.name)
-                s.start()
-            logger.info(f"[TEST] Restarted slots with seed-nodes: {[s.node_id for s in initial_slots]}")
+            initial_slots[0].set_seed_nodes_file(seed_nodes_file.name)
+            initial_slots[0].start()
+            logger.info(f"[TEST] Restarted slot with seed-nodes: {initial_slots[0].node_id}")
 
             def create_table2(session):
                 session.execute_scheme(

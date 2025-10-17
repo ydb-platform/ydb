@@ -1794,8 +1794,6 @@ Y_UNIT_TEST(TestGetTimestamps) {
 
         CmdSetOffset(0, "user1", 1, true, tc);
         CmdSetOffset(0, "user1", 0, true, tc);
-        // Previous commit command was made with strict = false.
-        // Suchwise, we expect offset to be set to a new value even if it is less than start offset.
         CmdGetOffset(0, "user1", 0, tc, Max<i64>());
         CmdSetOffset(0, "user1", 1, true, tc);
         CmdGetOffset(0, "user1", 1, tc, 1);

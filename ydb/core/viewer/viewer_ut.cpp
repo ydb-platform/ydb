@@ -1945,9 +1945,9 @@ Y_UNIT_TEST_SUITE(Viewer) {
         auto grpcSettings = NYdbGrpc::TServerOptions().SetHost("[::1]").SetPort(grpcPort);
         TServer server{settings};
         server.EnableGRpc(grpcSettings);
-        auto client = MakeHolder<NKikimr::NPersQueueTests::TFlatMsgBusPQClient>(settings, grpcPort);
-        client->InitRoot();
-        client->InitSourceIds();
+        auto pqClient = MakeHolder<NKikimr::NPersQueueTests::TFlatMsgBusPQClient>(settings, grpcPort);
+        pqClient->InitRoot();
+        pqClient->InitSourceIds();
         NYdb::TDriverConfig driverCfg;
         TString topicPath = "/Root/topic1";
         driverCfg.SetEndpoint(TStringBuilder() << "localhost:" << grpcPort)
@@ -1988,22 +1988,30 @@ Y_UNIT_TEST_SUITE(Viewer) {
         auto postReturnCode1 = PostOffsetCommit(httpClient, "root@builtin");
         UNIT_ASSERT_EQUAL(postReturnCode1, HTTP_FORBIDDEN);
 
-        TClient client1(settings);
-        client1.InitRootScheme();
-        GrantConnect(client1);
+        TClient client(settings);
+        client.InitRootScheme();
+        GrantConnect(client);
 
-        // checking that user with rights and correct token can commit successfully
+        // client without required AccessRights can't commit offsets
         auto postReturnCode2 = PostOffsetCommit(httpClient, VALID_TOKEN);
-        UNIT_ASSERT_EQUAL(postReturnCode2, HTTP_OK);
+        Cerr << postReturnCode2 << Endl;
+        UNIT_ASSERT_EQUAL(postReturnCode2, HTTP_FORBIDDEN);
+
+
+        client.Grant("/", "Root", "username", NACLib::EAccessRights::SelectRow);
+        // checking that user with rights and correct token can commit successfully
+        auto postReturnCode3 = PostOffsetCommit(httpClient, VALID_TOKEN);
+        UNIT_ASSERT_EQUAL(postReturnCode3, HTTP_OK);
+
 
         // checking that user with invalid token cannot commit
         TString invalid_token = "abracadabra";
-        auto postReturnCode10 = PostOffsetCommit(httpClient, invalid_token);
-        UNIT_ASSERT_EQUAL(postReturnCode10, HTTP_FORBIDDEN);
+        auto postReturnCode4 = PostOffsetCommit(httpClient, invalid_token);
+        UNIT_ASSERT_EQUAL(postReturnCode4, HTTP_FORBIDDEN);
 
         // checking that commiting with consumer without read rule is forbidden
-        auto postReturnCode3 = PostOffsetCommit(httpClient, VALID_TOKEN, "/Root", "/Root/topic1", "consumer2", 0, 55000);
-        UNIT_ASSERT_EQUAL(postReturnCode3, HTTP_BAD_REQUEST);
+        auto postReturnCode5 = PostOffsetCommit(httpClient, VALID_TOKEN, "/Root", "/Root/topic1", "consumer2", 0, 55000);
+        UNIT_ASSERT_EQUAL(postReturnCode5, HTTP_BAD_REQUEST);
 
         auto describeTopicResult = topicClient.DescribeTopic(topicPath).GetValueSync();
         UNIT_ASSERT(describeTopicResult.IsSuccess());
@@ -2017,11 +2025,11 @@ Y_UNIT_TEST_SUITE(Viewer) {
 
         // now messages are deleted because of retention
         // check that if we commit offset less than start offset in strict mode, start offset is committed
-        auto postReturnCode4 = PostOffsetCommit(httpClient, VALID_TOKEN, "/Root", "/Root/topic1", "consumer1", 0, 1000);
-        UNIT_ASSERT_EQUAL(postReturnCode4, HTTP_OK);
+        auto postReturnCode6 = PostOffsetCommit(httpClient, VALID_TOKEN, "/Root", "/Root/topic1", "consumer1", 0, 1000);
+        UNIT_ASSERT_EQUAL(postReturnCode6, HTTP_OK);
         // check that offset commit works correctly if start offset is non-zero and offset is greater that start offset
-        auto postReturnCode5 = PostOffsetCommit(httpClient, VALID_TOKEN, "/Root", "/Root/topic1", "consumer1", 0, 15000);
-        UNIT_ASSERT_EQUAL(postReturnCode5, HTTP_OK);
+        auto postReturnCode7 = PostOffsetCommit(httpClient, VALID_TOKEN, "/Root", "/Root/topic1", "consumer1", 0, 15000);
+        UNIT_ASSERT_EQUAL(postReturnCode7, HTTP_OK);
 
     }
 

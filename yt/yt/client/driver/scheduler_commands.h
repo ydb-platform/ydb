@@ -147,6 +147,8 @@ public:
     static void Register(TRegistrar registrar);
 
 private:
+    NJobTrackerClient::TJobId JobId;
+
     void DoExecute(ICommandContextPtr context) override;
 };
 

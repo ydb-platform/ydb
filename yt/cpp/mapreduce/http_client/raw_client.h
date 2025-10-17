@@ -199,8 +199,9 @@ public:
         const TJobId& jobId,
         const TGetJobStderrOptions& options = {}) override;
 
-    std::vector<TJobTraceEvent> GetJobTrace(
+    IFileReaderPtr GetJobTrace(
         const TOperationId& operationId,
+        const TJobId& jobId,
         const TGetJobTraceOptions& options = {}) override;
 
     // Files

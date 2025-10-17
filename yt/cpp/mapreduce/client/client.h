@@ -479,8 +479,9 @@ public:
         const TJobId& jobId,
         const TGetJobStderrOptions& options = TGetJobStderrOptions()) override;
 
-    std::vector<TJobTraceEvent> GetJobTrace(
+    IFileReaderPtr GetJobTrace(
         const TOperationId& operationId,
+        const TJobId& jobId,
         const TGetJobTraceOptions& options = TGetJobTraceOptions()) override;
 
     TNode::TListType SkyShareTable(

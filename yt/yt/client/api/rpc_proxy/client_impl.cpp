@@ -1434,26 +1434,28 @@ TFuture<TGetJobStderrResponse> TClient::GetJobStderr(
     }));
 }
 
-TFuture<std::vector<TJobTraceEvent>> TClient::GetJobTrace(
+TFuture<IAsyncZeroCopyInputStreamPtr> TClient::GetJobTrace(
     const TOperationIdOrAlias& operationIdOrAlias,
+    NJobTrackerClient::TJobId jobId,
     const TGetJobTraceOptions& options)
 {
     auto proxy = CreateApiServiceProxy();
 
     auto req = proxy.GetJobTrace();
-    SetTimeoutOptions(*req, options);
+
+    if (options.Timeout) {
+        SetTimeoutOptions(*req, options);
+    } else {
+        InitStreamingRequest(*req);
+    }
 
     NScheduler::ToProto(req, operationIdOrAlias);
-    YT_OPTIONAL_TO_PROTO(req, job_id, options.JobId);
+    ToProto(req->mutable_job_id(), jobId);
     YT_OPTIONAL_TO_PROTO(req, trace_id, options.TraceId);
     YT_OPTIONAL_SET_PROTO(req, from_time, options.FromTime);
     YT_OPTIONAL_SET_PROTO(req, to_time, options.ToTime);
-    YT_OPTIONAL_SET_PROTO(req, from_event_index, options.FromEventIndex);
-    YT_OPTIONAL_SET_PROTO(req, to_event_index, options.ToEventIndex);
 
-    return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspGetJobTracePtr& rsp) {
-        return FromProto<std::vector<TJobTraceEvent>>(rsp->events());
-    }));
+    return CreateRpcClientInputStream(std::move(req));
 }
 
 TFuture<std::vector<TOperationEvent>> TClient::ListOperationEvents(

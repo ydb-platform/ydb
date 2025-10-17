@@ -1,6 +1,8 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/public/lib/ydb_cli/common/format.h>
 
 #include <util/string/printf.h>
@@ -8,6 +10,9 @@
 #include <algorithm>
 #include <fstream>
 #include <regex>
+
+#include "kqp_join_topology_generator.h"
+
 
 namespace NKikimr {
 namespace NKqp {
@@ -613,6 +618,145 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         }
     }
 
+    TString ExplainQuery(NYdb::NQuery::TSession session, const std::string &query) {
+        auto explainRes = session.ExecuteQuery(query,
+          NYdb::NQuery::TTxControl::NoTx(),
+          NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)
+        ).ExtractValueSync();
+
+        Cout << query << "\n";
+        explainRes.GetIssues().PrintTo(Cout);
+        Cout << "Status: " << explainRes.IsSuccess() << "\n";
+        UNIT_ASSERT_VALUES_EQUAL(explainRes.GetStatus(), EStatus::SUCCESS);
+
+        return *explainRes.GetStats()->GetPlan();
+    }
+
+    std::vector<NYdb::TResultSet> ExecuteQuery(NYdb::NQuery::TSession session, std::string query) {
+        auto execRes = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+
+        Cout << query << "\n";
+        execRes.GetIssues().PrintTo(Cout);
+        Cout << "Status: " << execRes.IsSuccess() << "\n";
+        UNIT_ASSERT(execRes.IsSuccess());
+
+        return execRes.GetResultSets();
+    }
+
+    void JustPrintPlan(const TString &plan) {
+      NYdb::NConsoleClient::TQueryPlanPrinter queryPlanPrinter(
+          NYdb::NConsoleClient::EDataFormat::PrettyTable,
+          /*analyzeMode=*/true, Cout, /*maxWidth=*/0
+      );
+
+      queryPlanPrinter.Print(plan);
+    }
+
+    std::string ConfigureQuery(const std::string &query, bool enableShuffleElimination = false, unsigned optLevel = 2) {
+        std::string queryWithShuffleElimination = "PRAGMA ydb.OptShuffleElimination = \"";
+        queryWithShuffleElimination += enableShuffleElimination ? "true" : "false";
+        queryWithShuffleElimination += "\";\n";
+        queryWithShuffleElimination += "PRAGMA ydb.MaxDPHypDPTableSize='4294967295';\n";
+        queryWithShuffleElimination += "PRAGMA ydb.ForceShuffleElimination='true';\n";
+        queryWithShuffleElimination += "PRAGMA ydb.CostBasedOptimizationLevel = \"" + std::to_string(optLevel) + "\";\n";
+        queryWithShuffleElimination += query;
+
+        return queryWithShuffleElimination;
+    }
+
+    struct TShuffleEliminationBenchResult {
+        unsigned TimeWithShuffleEliminationNanos = 0;
+        unsigned TimeWithoutShuffleEliminationNanos = 0;
+    };
+
+    TShuffleEliminationBenchResult BenchmarkShuffleElimination(NYdb::NQuery::TSession session, const TString& query) {
+        namespace Nsc = std::chrono;
+        using TClock = Nsc::high_resolution_clock;
+
+        TString queryWithoutCBO = ConfigureQuery(query, /*enableShuffleElimination=*/false, /*optLevel=*/1);
+        unsigned nanosWithoutCBO = 0;
+        {
+            std::chrono::time_point start = TClock::now();
+            ExplainQuery(session, queryWithoutCBO);
+            nanosWithoutCBO = Nsc::duration_cast<Nsc::nanoseconds>(TClock::now() - start).count();
+            Cout << "Nanoseconds for query without CBO: " << nanosWithoutCBO << "\n";
+        }
+
+        TString queryWithShuffleElimination = ConfigureQuery(query, /*enableShuffleElimination=*/true);
+        TString planWithShuffleElimnation;
+        unsigned nanosWith = 0;
+        {
+
+            std::chrono::time_point start = TClock::now();
+            planWithShuffleElimnation = ExplainQuery(session, queryWithShuffleElimination);
+            nanosWith = Nsc::duration_cast<Nsc::nanoseconds>(TClock::now() - start).count();
+            Cout << "Nanoseconds for CBO with shuffle elimination: " << nanosWith - nanosWithoutCBO << "\n";
+        }
+
+        TString queryWithoutShuffleElimination = ConfigureQuery(query, /*enableShuffleElimination=*/false);
+        TString planWithoutShuffleElimnation;
+        unsigned nanosWithout = 0;
+        {
+            std::chrono::time_point start = TClock::now();
+            planWithoutShuffleElimnation = ExplainQuery(session, queryWithoutShuffleElimination);
+            nanosWithout = Nsc::duration_cast<Nsc::nanoseconds>(TClock::now() - start).count();
+            Cout << "Nanoseconds for CBO without shuffle elimination: " << nanosWithout - nanosWithoutCBO << "\n";
+        }
+
+        JustPrintPlan(planWithShuffleElimnation);
+        JustPrintPlan(planWithoutShuffleElimnation);
+
+        return { nanosWith, nanosWithout };
+    }
+
+    struct TTopologyShuffleEliminationResult {
+        double NewColumnProbability = 0.0;
+        int NumTables = 0;
+        TShuffleEliminationBenchResult Bench = {};
+
+        void Dump(IOutputStream &OS) const {
+            OS << NewColumnProbability << " " << NumTables << " "
+               << Bench.TimeWithShuffleEliminationNanos << " "
+               << Bench.TimeWithoutShuffleEliminationNanos << "\n";
+        }
+    };
+
+    template <auto Lambda>
+    void BenchmarkShuffleEliminationOnTopology(int maxNumTables, double probabilityStep, unsigned seed = 0) {
+        std::mt19937 mt(seed);
+
+        TSchema fullSchema = TSchema::MakeWithEnoughColumns(maxNumTables);
+        TString stats = TSchemaStats::MakeRandom(mt, fullSchema, 7, 10).ToJSON();
+
+        auto kikimr = GetKikimrWithJoinSettings(/*useStreamLookupJoin=*/false, /*stats=*/stats, /*useCBO=*/true, TExecuteParams{});
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        std::vector<TTopologyShuffleEliminationResult> data;
+        int totalCount = 0;
+        for (double probability = 0; probability <= 1.0; probability += probabilityStep) {
+            for (int i = 2 /* one table is not possible with all topoloties, so 2 */; i < maxNumTables; i ++) {
+                TRelationGraph graph = Lambda(mt, i, 0.5);
+
+                ExecuteQuery(session, graph.GetSchema().MakeCreateQuery());
+
+                auto resultTime = BenchmarkShuffleElimination(session, graph.MakeQuery());
+                data.push_back({probability, i, resultTime});
+
+                Cout << "totalCount: " << ++ totalCount << "\n";
+                Cout << "result: ";
+                data.back().Dump(Cout);
+
+                ExecuteQuery(session, graph.GetSchema().MakeDropQuery());
+            }
+        }
+
+        // Printing a report of all measurements
+        for (const auto &result: data) {
+            result.Dump(Cout);
+        }
+    }
+
     void CheckJoinCardinality(const TString& queryPath, const TString& statsPath, const TString& joinKind, double card, bool useStreamLookupJoin, bool useColumnStore) {
         auto kikimr = GetKikimrWithJoinSettings(useStreamLookupJoin, GetStatic(statsPath), true);
         kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableViews(true);
@@ -861,6 +1005,22 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         auto joinFinder = TFindJoinWithLabels(plan);
         auto join = joinFinder.Find({"R", "S"});
         UNIT_ASSERT_C(join.Join == "InnerJoin (Grace)", join.Join);
+    }
+
+    Y_UNIT_TEST(ShuffleEliminationBenchmarkOnStar) {
+        BenchmarkShuffleEliminationOnTopology<GenerateStar>(/*maxNumTables=*/15, /*probabilityStep=*/0.2);
+    }
+
+    Y_UNIT_TEST(ShuffleEliminationBenchmarkOnLine) {
+        BenchmarkShuffleEliminationOnTopology<GenerateLine>(/*maxNumTables=*/15, /*probabilityStep=*/0.2);
+    }
+
+    Y_UNIT_TEST(ShuffleEliminationBenchmarkOnFullyConnected) {
+        BenchmarkShuffleEliminationOnTopology<GenerateFullyConnected>(/*maxNumTables=*/15, /*probabilityStep=*/0.2);
+    }
+
+    Y_UNIT_TEST(ShuffleEliminationBenchmarkOnRandomTree) {
+        BenchmarkShuffleEliminationOnTopology<GenerateRandomTree>(/*maxNumTables=*/15, /*probabilityStep=*/0.2);
     }
 
     Y_UNIT_TEST_TWIN(ShuffleEliminationOneJoin, EnableSeparationComputeActorsFromRead) {

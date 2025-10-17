@@ -3374,6 +3374,16 @@ TNodePtr TSqlTranslation::TypeNode(const TRule_type_name_composite& node) {
             result = new TAstListNodeImpl(pos, items);
             break;
         }
+        case TRule_type_name_composite_TBlock1::kAlt14: {
+            auto& linearType = block.GetAlt14().GetRule_type_name_linear1();
+            result = wrapOneParamType(linearType.GetRule_type_name_or_bind3(), "LinearType");
+            break;
+        }
+        case TRule_type_name_composite_TBlock1::kAlt15: {
+            auto& linearType = block.GetAlt15().GetRule_type_name_dynamiclinear1();
+            result = wrapOneParamType(linearType.GetRule_type_name_or_bind3(), "DynamicLinearType");
+            break;
+        }
         case TRule_type_name_composite_TBlock1::ALT_NOT_SET:
             Y_ABORT("You should change implementation according to grammar changes");
     }

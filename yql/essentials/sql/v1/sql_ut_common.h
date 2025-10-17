@@ -4255,6 +4255,13 @@ Y_UNIT_TEST(AutoSampleWorksWithSubquery) {
     UNIT_ASSERT(SqlToYql("select * from (select * from plato.Input) sample 0.2").IsOk());
 }
 
+Y_UNIT_TEST(LinearAsColumnOrType) {
+    UNIT_ASSERT(SqlToYql("select FormatType(Linear<Int32>)").IsOk());
+    UNIT_ASSERT(SqlToYql("select Linear<2 from (select 1 as Linear)").IsOk());
+    UNIT_ASSERT(SqlToYql("select FormatType(DynamicLinear<Int32>)").IsOk());
+    UNIT_ASSERT(SqlToYql("select DynamicLinear<2 from (select 1 as DynamicLinear)").IsOk());
+}
+
 Y_UNIT_TEST(CreateTableTrailingComma) {
     UNIT_ASSERT(SqlToYql("USE plato; CREATE TABLE tableName (Key Uint32, PRIMARY KEY (Key),);").IsOk());
     UNIT_ASSERT(SqlToYql("USE plato; CREATE TABLE tableName (Key Uint32,);").IsOk());

@@ -801,6 +801,15 @@ Y_UNIT_TEST_SUITE(KqpFormat_MiniKQL_Arrow) {
         TestBasicType<ui64, ui64, arrow::UInt64Array>(arrow::Type::UINT64);
     }
 
+    // Floating point types
+    Y_UNIT_TEST(DataType_Float) {
+        TestBasicType<float, float, arrow::FloatArray>(arrow::Type::FLOAT);
+    }
+
+    Y_UNIT_TEST(DataType_Double) {
+        TestBasicType<double, double, arrow::DoubleArray>(arrow::Type::DOUBLE);
+    }
+
     // Datetime types
     Y_UNIT_TEST(DataType_Date) {
         TestBasicType<NUdf::TDate, ui16, arrow::UInt16Array>(arrow::Type::UINT16);

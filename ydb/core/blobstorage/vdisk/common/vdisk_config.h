@@ -1,10 +1,10 @@
 #pragma once
 #include "defs.h"
 
+#include "vdisk_events_quoter.h"
 #include "vdisk_performance_params.h"
 
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
-#include <ydb/core/blobstorage/vdisk/repl/repl_quoter.h>
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/protos/blobstorage_vdisk_config.pb.h>
 #include <ydb/core/protos/feature_flags.pb.h>
@@ -130,6 +130,8 @@ namespace NKikimr {
         TControlWrapper FreshCompMaxInFlightReads;
         TControlWrapper HullCompMaxInFlightWrites;
         TControlWrapper HullCompMaxInFlightReads;
+        TControlWrapper HullCompFullCompPeriodSec;
+        TControlWrapper HullCompThrottlerBytesRate;
         double HullCompReadBatchEfficiencyThreshold;
         ui64 AnubisOsirisMaxInFly;
         bool AddHeader;

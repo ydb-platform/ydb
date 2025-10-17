@@ -21,6 +21,14 @@ using namespace NYql;
 
 namespace {
 
+ui16 GetTimezoneIdSkipEmpty(ui16 index) {
+    auto size = NTi::GetTimezones().size();
+    while (NTi::GetTimezones()[index % size].empty()) {
+        index = (index + 1) % size;
+    }
+    return GetTimezoneId(NTi::GetTimezones()[index % size]);
+}
+
 NUdf::TUnboxedValue GetValueOfBasicType(TType* type, ui64 value) {
     Y_ABORT_UNLESS(type->GetKind() == TType::EKind::Data);
     auto dataType = static_cast<const TDataType*>(type);
@@ -76,32 +84,32 @@ NUdf::TUnboxedValue GetValueOfBasicType(TType* type, ui64 value) {
             return NUdf::TUnboxedValuePod(static_cast<i64>(value % NUdf::MAX_INTERVAL64));
         case NUdf::EDataSlot::TzDate: {
             auto ret = NUdf::TUnboxedValuePod(static_cast<ui16>(value % NUdf::MAX_DATE));
-            ret.SetTimezoneId(NKikimr::NMiniKQL::GetTimezoneId(NTi::GetTimezones()[value % NTi::GetTimezones().size()]));
+            ret.SetTimezoneId(GetTimezoneIdSkipEmpty(value));
             return ret;
         }
         case NUdf::EDataSlot::TzDatetime: {
             auto ret = NUdf::TUnboxedValuePod(static_cast<ui32>(value % NUdf::MAX_DATETIME));
-            ret.SetTimezoneId(NKikimr::NMiniKQL::GetTimezoneId(NTi::GetTimezones()[value % NTi::GetTimezones().size()]));
+            ret.SetTimezoneId(GetTimezoneIdSkipEmpty(value));
             return ret;
         }
         case NUdf::EDataSlot::TzTimestamp: {
             auto ret = NUdf::TUnboxedValuePod(static_cast<ui64>(value % NUdf::MAX_TIMESTAMP));
-            ret.SetTimezoneId(NKikimr::NMiniKQL::GetTimezoneId(NTi::GetTimezones()[value % NTi::GetTimezones().size()]));
+            ret.SetTimezoneId(GetTimezoneIdSkipEmpty(value));
             return ret;
         }
         case NUdf::EDataSlot::TzDate32: {
             auto ret = NUdf::TUnboxedValuePod(static_cast<i32>(value % NUdf::MAX_DATE32));
-            ret.SetTimezoneId(NKikimr::NMiniKQL::GetTimezoneId(NTi::GetTimezones()[value % NTi::GetTimezones().size()]));
+            ret.SetTimezoneId(GetTimezoneIdSkipEmpty(value));
             return ret;
         }
         case NUdf::EDataSlot::TzDatetime64: {
             auto ret = NUdf::TUnboxedValuePod(static_cast<i64>(value % NUdf::MAX_DATETIME64));
-            ret.SetTimezoneId(NKikimr::NMiniKQL::GetTimezoneId(NTi::GetTimezones()[value % NTi::GetTimezones().size()]));
+            ret.SetTimezoneId(GetTimezoneIdSkipEmpty(value));
             return ret;
         }
         case NUdf::EDataSlot::TzTimestamp64: {
             auto ret = NUdf::TUnboxedValuePod(static_cast<i64>(value % NUdf::MAX_TIMESTAMP64));
-            ret.SetTimezoneId(NKikimr::NMiniKQL::GetTimezoneId(NTi::GetTimezones()[value % NTi::GetTimezones().size()]));
+            ret.SetTimezoneId(GetTimezoneIdSkipEmpty(value));
             return ret;
         }
         default:
@@ -708,62 +716,101 @@ void AssertUnboxedValuesAreEqual(NUdf::TUnboxedValue& left, NUdf::TUnboxedValue&
 
 namespace NKikimr::NKqp::NFormats {
 
-template <typename MKqlArrayType, typename ArrowArrayType>
-void TestDatetimeType(NUdf::TDataTypeId MKqlTypeId, arrow::Type::type ArrowTypeId) {
-    TTestContext context;
-    size_t valuesCount = 1 << 8;
+inline static constexpr size_t DATETIME_ARRAY_SIZE = 1 << 16;
 
-    auto type = TDataType::Create(MKqlTypeId, context.TypeEnv);
+template <typename MKqlArrayType, typename ArrowArrayType, bool HasTimezone>
+void TestDatetimeType(NUdf::TDataTypeId mkqlTypeId, arrow::Type::type arrowTypeId) {
+    TTestContext context;
+
+    auto type = TDataType::Create(mkqlTypeId, context.TypeEnv);
     UNIT_ASSERT(NFormats::NTestUtils::IsArrowCompatible(type));
 
     TUnboxedValueVector values;
-    for (size_t i = 0; i < valuesCount; ++i) {
+    values.reserve(DATETIME_ARRAY_SIZE);
+
+    for (size_t i = 0; i < DATETIME_ARRAY_SIZE; ++i) {
         values.emplace_back(GetValueOfBasicType(type, i));
     }
 
     auto array = NFormats::NTestUtils::MakeArray(values, type);
     UNIT_ASSERT_C(array->ValidateFull().ok(), array->ValidateFull().ToString());
     UNIT_ASSERT(array->length() == static_cast<i64>(values.size()));
-    UNIT_ASSERT(array->type_id() == arrow::Type::STRUCT);
 
-    auto structArray = static_pointer_cast<arrow::StructArray>(array);
-    UNIT_ASSERT(structArray->num_fields() == 2);
-    UNIT_ASSERT(structArray->field(0)->type_id() == ArrowTypeId);
-    UNIT_ASSERT(structArray->field(1)->type_id() == arrow::Type::STRING);
+    std::shared_ptr<ArrowArrayType> datetimeArray;
+    std::shared_ptr<arrow::StringArray> timezoneArray;
 
-    auto dateArray = static_pointer_cast<ArrowArrayType>(structArray->field(0));
-    auto timezoneArray = static_pointer_cast<arrow::StringArray>(structArray->field(1));
+    if constexpr (HasTimezone) {
+        UNIT_ASSERT(array->type_id() == arrow::Type::STRUCT);
+        auto structArray = static_pointer_cast<arrow::StructArray>(array);
+        UNIT_ASSERT(structArray->num_fields() == 2);
+        UNIT_ASSERT(structArray->field(0)->type_id() == arrowTypeId);
+        UNIT_ASSERT(structArray->field(1)->type_id() == arrow::Type::STRING);
 
-    for (size_t i = 0; i < valuesCount; ++i) {
-        auto view = timezoneArray->Value(i);
-        UNIT_ASSERT(dateArray->Value(i) == values[i].Get<MKqlArrayType>());
-        UNIT_ASSERT(values[i].GetTimezoneId() == NKikimr::NMiniKQL::GetTimezoneId(std::string(view.data(), view.size())));
+        datetimeArray = static_pointer_cast<ArrowArrayType>(structArray->field(0));
+        timezoneArray = static_pointer_cast<arrow::StringArray>(structArray->field(1));
+    } else {
+        UNIT_ASSERT(array->type_id() == arrowTypeId);
+        datetimeArray = static_pointer_cast<ArrowArrayType>(array);
+    }
+
+    for (size_t i = 0; i < DATETIME_ARRAY_SIZE; ++i) {
+        UNIT_ASSERT(datetimeArray->Value(i) == values[i].Get<MKqlArrayType>());
+
+        if constexpr (HasTimezone) {
+            auto view = timezoneArray->Value(i);
+            UNIT_ASSERT(values[i].GetTimezoneId() == GetTimezoneId(NUdf::TStringRef(view.data(), view.size())));
+        }
     }
 }
 
-Y_UNIT_TEST_SUITE(KqpResultSetArrow) {
+Y_UNIT_TEST_SUITE(KqpFormat_MiniKQL_Arrow) {
+    // Datetime types
+    Y_UNIT_TEST(DataType_Date) {
+        TestDatetimeType<ui16, arrow::UInt16Array, /* HasTimezone */ false>(NUdf::TDataType<NUdf::TDate>::Id, arrow::Type::UINT16);
+    }
+
+    Y_UNIT_TEST(DataType_Datetime) {
+        TestDatetimeType<ui32, arrow::UInt32Array, /* HasTimezone */ false>(NUdf::TDataType<NUdf::TDatetime>::Id, arrow::Type::UINT32);
+    }
+
+    Y_UNIT_TEST(DataType_Timestamp) {
+        TestDatetimeType<ui64, arrow::UInt64Array, /* HasTimezone */ false>(NUdf::TDataType<NUdf::TTimestamp>::Id, arrow::Type::UINT64);
+    }
+
+    Y_UNIT_TEST(DataType_Date32) {
+        TestDatetimeType<i32, arrow::Int32Array, /* HasTimezone */ false>(NUdf::TDataType<NUdf::TDate32>::Id, arrow::Type::INT32);
+    }
+
+    Y_UNIT_TEST(DataType_Datetime64) {
+        TestDatetimeType<i64, arrow::Int64Array, /* HasTimezone */ false>(NUdf::TDataType<NUdf::TDatetime64>::Id, arrow::Type::INT64);
+    }
+
+    Y_UNIT_TEST(DataType_Timestamp64) {
+        TestDatetimeType<i64, arrow::Int64Array, /* HasTimezone */ false>(NUdf::TDataType<NUdf::TTimestamp64>::Id, arrow::Type::INT64);
+    }
+
     Y_UNIT_TEST(DataType_TzDate) {
-        TestDatetimeType<ui16, arrow::UInt16Array>(NUdf::TDataType<NUdf::TTzDate>::Id, arrow::Type::UINT16);
+        TestDatetimeType<ui16, arrow::UInt16Array, /* HasTimezone */ true>(NUdf::TDataType<NUdf::TTzDate>::Id, arrow::Type::UINT16);
     }
 
     Y_UNIT_TEST(DataType_TzDatetime) {
-        TestDatetimeType<ui32, arrow::UInt32Array>(NUdf::TDataType<NUdf::TTzDatetime>::Id, arrow::Type::UINT32);
+        TestDatetimeType<ui32, arrow::UInt32Array, /* HasTimezone */ true>(NUdf::TDataType<NUdf::TTzDatetime>::Id, arrow::Type::UINT32);
     }
 
     Y_UNIT_TEST(DataType_TzTimestamp) {
-        TestDatetimeType<ui64, arrow::UInt64Array>(NUdf::TDataType<NUdf::TTzTimestamp>::Id, arrow::Type::UINT64);
+        TestDatetimeType<ui64, arrow::UInt64Array, /* HasTimezone */ true>(NUdf::TDataType<NUdf::TTzTimestamp>::Id, arrow::Type::UINT64);
     }
 
     Y_UNIT_TEST(DataType_TzDate32) {
-        TestDatetimeType<i32, arrow::Int32Array>(NUdf::TDataType<NUdf::TTzDate32>::Id, arrow::Type::INT32);
+        TestDatetimeType<i32, arrow::Int32Array, /* HasTimezone */ true>(NUdf::TDataType<NUdf::TTzDate32>::Id, arrow::Type::INT32);
     }
 
     Y_UNIT_TEST(DataType_TzDatetime64) {
-        TestDatetimeType<i64, arrow::Int64Array>(NUdf::TDataType<NUdf::TTzDatetime64>::Id, arrow::Type::INT64);
+        TestDatetimeType<i64, arrow::Int64Array, /* HasTimezone */ true>(NUdf::TDataType<NUdf::TTzDatetime64>::Id, arrow::Type::INT64);
     }
 
     Y_UNIT_TEST(DataType_TzTimestamp64) {
-        TestDatetimeType<i64, arrow::Int64Array>(NUdf::TDataType<NUdf::TTzTimestamp64>::Id, arrow::Type::INT64);
+        TestDatetimeType<i64, arrow::Int64Array, /* HasTimezone */ true>(NUdf::TDataType<NUdf::TTzTimestamp64>::Id, arrow::Type::INT64);
     }
 }
 

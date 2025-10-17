@@ -107,8 +107,23 @@ public:
         Server->EnableGRpc(GrpcPort);
         Client->InitRootScheme();
 
-        Sleep(TDuration::Seconds(1));
-        Cerr << "\n\n\n--------------------------- INIT FINISHED ---------------------------\n\n\n";
+        WaitBootstrapped();
+        Cerr << "\n--------------------------- INIT FINISHED ---------------------------\n";
+    }
+
+    void WaitBootstrapped() {
+        TActorId sender = GetRuntime()->AllocateEdgeActor();
+        while (true) {
+            try {
+                auto request = std::make_unique<TEvCheckpointStorage::TEvAbortCheckpointRequest>(TCoordinatorId{"graphId", 0}, TCheckpointId{0, 0}, "test reason");
+                GetRuntime()->Send(new IEventHandle(NYql::NDq::MakeCheckpointStorageID(), sender, request.release()));
+                const auto event = GetRuntime()->template GrabEdgeEvent<TEvCheckpointStorage::TEvAbortCheckpointResponse>(sender, TDuration::Seconds(1));
+                if (event) {
+                    break;
+                }
+            } catch (TEmptyEventQueueException&) {
+            }
+        }
     }
 
     TTestActorRuntime* GetRuntime() {

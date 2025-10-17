@@ -16,6 +16,7 @@ PEERDIR(
     ydb/core/scheme
     ydb/core/tablet_flat/test/libs/exec
     ydb/core/tablet_flat/test/libs/table
+    ydb/core/testlib/default
     yql/essentials/public/udf/service/exception_policy
     yql/essentials/sql/pg_dummy
 )

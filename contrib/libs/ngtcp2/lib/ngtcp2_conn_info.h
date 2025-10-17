@@ -2,7 +2,6 @@
  * ngtcp2
  *
  * Copyright (c) 2025 ngtcp2 contributors
- * Copyright (c) 2023 nghttp2 contributors
  *
  * Permission is hereby granted, free of charge, to any person obtaining
  * a copy of this software and associated documentation files (the
@@ -23,8 +22,8 @@
  * OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
  * WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
-#ifndef NGTCP2_RATELIM_H
-#define NGTCP2_RATELIM_H
+#ifndef NGTCP2_CONN_INFO_H
+#define NGTCP2_CONN_INFO_H
 
 #ifdef HAVE_CONFIG_H
 #  include <config.h>
@@ -32,28 +31,15 @@
 
 #include <ngtcp2/ngtcp2.h>
 
-typedef struct ngtcp2_ratelim {
-  /* burst is the maximum number of tokens. */
-  uint64_t burst;
-  /* rate is the rate of token generation measured by token /
-     second. */
-  uint64_t rate;
-  /* tokens is the amount of tokens available to drain. */
-  uint64_t tokens;
-  /* carry is the partial token gained in sub-second period.  It is
-     added to the computation in the next update round. */
-  uint64_t carry;
-  /* ts is the last timestamp that is known to this object. */
-  ngtcp2_tstamp ts;
-} ngtcp2_ratelim;
+typedef struct ngtcp2_conn_stat ngtcp2_conn_stat;
 
-/* ngtcp2_ratelim_init initializes |rlim| with the given
-   parameters. */
-void ngtcp2_ratelim_init(ngtcp2_ratelim *rlim, uint64_t burst, uint64_t rate,
-                         ngtcp2_tstamp ts);
+/*
+ * ngtcp2_conn_info_init_versioned initializes |cinfo| of version
+ * |conn_info_version| from |cstat|.  This function only fills the
+ * fields of |cinfo| that are available in the specified version.
+ */
+void ngtcp2_conn_info_init_versioned(int conn_info_version,
+                                     ngtcp2_conn_info *cinfo,
+                                     const ngtcp2_conn_stat *cstat);
 
-/* ngtcp2_ratelim_drain drains |n| from rlim->tokens.  It returns 0 if
-   it succeeds, or -1. */
-int ngtcp2_ratelim_drain(ngtcp2_ratelim *rlim, uint64_t n, ngtcp2_tstamp ts);
-
-#endif /* !defined(NGTCP2_RATELIM_H) */
+#endif /* !defined(NGTCP2_CONN_INFO_H) */

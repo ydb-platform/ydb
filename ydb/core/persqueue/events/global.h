@@ -61,6 +61,7 @@ namespace NKikimr::TEvPersQueue {
         EvBalancingSubscribeNotify,
         EvMLPGetPartitionRequest,
         EvMLPGetPartitionResponse,
+        EvMLPErrorResponse,
         EvMLPReadRequest,
         EvMLPReadResponse,
         EvMLPCommitRequest,
@@ -366,6 +367,23 @@ namespace NKikimr::TEvPersQueue {
         // The tablet of the partition which is ready for reading. Return it because partition may not exist yet in local scheme cache.
         ui64 GetTabletId() const {
             return Record.GetTabletId();
+        }
+    };
+
+    struct TEvMLPErrorResponse : TEventPB<TEvMLPErrorResponse, NKikimrPQ::TEvMLPErrorResponse, EvMLPErrorResponse> {
+        TEvMLPErrorResponse() = default;
+
+        TEvMLPErrorResponse(NPersQueue::NErrorCode::EErrorCode errorCode, TString&& errorMessage) {
+            Record.SetErrorCode(errorCode);
+            Record.SetErrorMessage(errorMessage);
+        }
+
+        NPersQueue::NErrorCode::EErrorCode GetErrorCode() const {
+            return Record.GetErrorCode();
+        }
+
+        const TString& GetErrorMessage() const {
+            return Record.GetErrorMessage();
         }
     };
 

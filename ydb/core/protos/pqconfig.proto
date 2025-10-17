@@ -1283,6 +1283,12 @@ message TEvMLPGetPartitionResponse {
     optional uint64 TabletId = 3;
 }
 
+// From PQTablet
+message TEvMLPErrorResponse {
+    optional NPersQueue.NErrorCode.EErrorCode ErrorCode = 1;
+    optional string ErrorMessage = 2;
+}
+
 // To PQTablet
 message TEvMLPReadRequest {
     optional string Topic = 1; // PathId? Нужен для возможности в одной таблетке хранить несколько топиков

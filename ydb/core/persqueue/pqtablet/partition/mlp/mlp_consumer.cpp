@@ -173,10 +173,10 @@ STFUNC(TConsumerActor::StateWrite) {
 
 namespace {
 
-template<typename R, typename T>
+template<typename T>
 void ReplyErrorAll(const TActorIdentity selfActorId, std::deque<T>& queue) {
     for (auto& ev : queue) {
-        selfActorId.Send(ev->Sender, new R(NPersQueue::NErrorCode::EErrorCode::ERROR), 0, ev->Cookie);
+        selfActorId.Send(ev->Sender, new TEvPersQueue::TEvMLPErrorResponse(NPersQueue::NErrorCode::EErrorCode::ERROR, "Actor destroyed"), 0, ev->Cookie);
     }
     queue.clear();
 }
@@ -188,10 +188,10 @@ void TConsumerActor::Restart(TString&& error) {
 
     Send(PartitionActorId, new TEvPQ::TEvMLPRestartActor());
 
-    ReplyErrorAll<TEvPersQueue::TEvMLPReadResponse>(SelfId(), ReadRequestsQueue);
-    ReplyErrorAll<TEvPersQueue::TEvMLPCommitResponse>(SelfId(), CommitRequestsQueue);
-    ReplyErrorAll<TEvPersQueue::TEvMLPUnlockResponse>(SelfId(), UnlockRequestsQueue);
-    ReplyErrorAll<TEvPersQueue::TEvMLPChangeMessageDeadlineResponse>(SelfId(), ChangeMessageDeadlineRequestsQueue);
+    ReplyErrorAll(SelfId(), ReadRequestsQueue);
+    ReplyErrorAll(SelfId(), CommitRequestsQueue);
+    ReplyErrorAll(SelfId(), UnlockRequestsQueue);
+    ReplyErrorAll(SelfId(), ChangeMessageDeadlineRequestsQueue);
 
     PassAway();
 }

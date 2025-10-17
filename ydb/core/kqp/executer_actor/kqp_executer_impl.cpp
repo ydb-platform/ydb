@@ -86,9 +86,9 @@ IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TSt
         // commit-only or rollback-only data transaction
         return CreateKqpDataExecuter(
             std::move(request), database, userToken, std::move(formatsSettings), counters,
-            false, executerConfig, std::move(asyncIoFactory), creator,
+            executerConfig, std::move(asyncIoFactory), creator,
             userRequestContext, statementResultIndex,
-            federatedQuerySetup, /*GUCSettings*/nullptr, std::move(partitionPrunerConfig),
+            federatedQuerySetup, nullptr, std::move(partitionPrunerConfig),
             shardIdToTableInfo, txManager, bufferActorId, std::move(batchOperationSettings), queryServiceConfig, generation
         );
     }
@@ -110,9 +110,9 @@ IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TSt
         case NKqpProto::TKqpPhyTx::TYPE_DATA:
             return CreateKqpDataExecuter(
                 std::move(request), database, userToken, std::move(formatsSettings), counters,
-                false, executerConfig, std::move(asyncIoFactory), creator,
+                executerConfig, std::move(asyncIoFactory), creator,
                 userRequestContext, statementResultIndex,
-                federatedQuerySetup, /*GUCSettings*/nullptr, std::move(partitionPrunerConfig),
+                federatedQuerySetup, nullptr, std::move(partitionPrunerConfig),
                 shardIdToTableInfo, txManager, bufferActorId, std::move(batchOperationSettings), queryServiceConfig, generation
             );
 
@@ -125,8 +125,8 @@ IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TSt
 
         case NKqpProto::TKqpPhyTx::TYPE_GENERIC:
             return CreateKqpDataExecuter(
-                std::move(request), database, userToken, std::move(formatsSettings),
-                counters, true, executerConfig, std::move(asyncIoFactory), creator,
+                std::move(request), database, userToken, std::move(formatsSettings), counters,
+                executerConfig, std::move(asyncIoFactory), creator,
                 userRequestContext, statementResultIndex,
                 federatedQuerySetup, GUCSettings, std::move(partitionPrunerConfig),
                 shardIdToTableInfo, txManager, bufferActorId, std::move(batchOperationSettings), queryServiceConfig, generation

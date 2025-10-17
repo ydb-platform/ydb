@@ -20,8 +20,8 @@
 #include <yql/essentials/types/binary_json/write.h>
 #include <yql/essentials/types/uuid/uuid.h>
 
-#include <tuple>
 #include <functional>
+#include <tuple>
 
 template <class... Es>
 static TString BuildParamTestName(const char* base, const Es&... es) {
@@ -103,6 +103,12 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
         std::optional<bool> B;
     };
 
+    TKikimrSettings CreateKikimrSettingsWithBoolSupport() {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableColumnshardBool(true);
+        return TKikimrSettings().SetWithSampleTables(false).SetFeatureFlags(featureFlags);
+    }
+
     void CreateDataShardTable(TTestHelper& helper, const TString& name) {
         auto& session = helper.GetSession();
         auto res = session
@@ -133,11 +139,12 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
         UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), NYdb::EStatus::SUCCESS);
     }
 
-    void BulkUpsertRowTableYdbValue(TTestHelper& helper, const TString& name, const TVector<TRow>& rows) {
+    void BulkUpsertRowTableYdbValueWithColumnName(
+        TTestHelper& helper, const TString& name, const TVector<TRow>& rows, const TString& columnName) {
         TValueBuilder builder;
         builder.BeginList();
         for (auto&& r : rows) {
-            builder.AddListItem().BeginStruct().AddMember("id").Int32(r.Id).AddMember("int").Int64(r.IntVal).AddMember("b");
+            builder.AddListItem().BeginStruct().AddMember("id").Int32(r.Id).AddMember(columnName).Int64(r.IntVal).AddMember("b");
             if (r.B.has_value()) {
                 builder.BeginOptional().Bool(*r.B).EndOptional();
             } else {
@@ -150,6 +157,10 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
         builder.EndList();
         auto result = helper.GetKikimr().GetTableClient().BulkUpsert(name, builder.Build()).GetValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    }
+
+    void BulkUpsertRowTableYdbValue(TTestHelper& helper, const TString& name, const TVector<TRow>& rows) {
+        BulkUpsertRowTableYdbValueWithColumnName(helper, name, rows, "int");
     }
 
     void BulkUpsertRowTableYdbValueWithSecondColumn(
@@ -187,15 +198,30 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
     }
 
-    std::shared_ptr<arrow::RecordBatch> MakeArrowBatch(const TVector<TRow>& rows) {
+    void BulkUpsertRowTableCSVWithFormat(TTestHelper& helper, const TString& name, const TVector<TRow>& rows, const TString& trueValue, const TString& falseValue) {
+        TStringBuilder builder;
+        for (auto&& r : rows) {
+            builder << r.Id << "," << r.IntVal << ",";
+            if (r.B.has_value()) {
+                builder << (*r.B ? trueValue : falseValue);
+            }
+
+            builder << '\n';
+        }
+
+        auto result = helper.GetKikimr().GetTableClient().BulkUpsert(name, EDataFormat::CSV, builder).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    }
+
+    std::shared_ptr<arrow::RecordBatch> MakeArrowBatchWithColumnName(const TVector<TRow>& rows, const TString& columnName) {
         arrow::Int32Builder idBuilder;
         arrow::Int64Builder intBuilder;
-        arrow::BooleanBuilder boolBuilder;
+        arrow::UInt8Builder boolBuilder;
         for (auto&& r : rows) {
             Y_ABORT_UNLESS(idBuilder.Append(r.Id).ok());
             Y_ABORT_UNLESS(intBuilder.Append(r.IntVal).ok());
             if (r.B.has_value()) {
-                Y_ABORT_UNLESS(boolBuilder.Append(*r.B).ok());
+                Y_ABORT_UNLESS(boolBuilder.Append(*r.B ? 1 : 0).ok());
             } else {
                 Y_ABORT_UNLESS(boolBuilder.AppendNull().ok());
             }
@@ -207,20 +233,24 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
         Y_ABORT_UNLESS(intBuilder.Finish(&intArr).ok());
         std::shared_ptr<arrow::Array> boolArr;
         Y_ABORT_UNLESS(boolBuilder.Finish(&boolArr).ok());
-        auto schema = arrow::schema({ arrow::field("id", arrow::int32(), /*nullable*/ false), arrow::field("int", arrow::int64()),
-            arrow::field("b", arrow::boolean()) });
+        auto schema = arrow::schema({ arrow::field("id", arrow::int32(), /*nullable*/ false), arrow::field(columnName, arrow::int64()),
+            arrow::field("b", arrow::uint8()) });
         return arrow::RecordBatch::Make(schema, rows.size(), { idArr, intArr, boolArr });
+    }
+
+    std::shared_ptr<arrow::RecordBatch> MakeArrowBatch(const TVector<TRow>& rows) {
+        return MakeArrowBatchWithColumnName(rows, "int");
     }
 
     std::shared_ptr<arrow::RecordBatch> MakeArrowBatchWithSecondColumn(const TVector<TRow>& rows, const TString& secondName) {
         arrow::Int32Builder idBuilder;
         arrow::Int64Builder secondBuilder;
-        arrow::BooleanBuilder boolBuilder;
+        arrow::UInt8Builder boolBuilder;
         for (auto&& r : rows) {
             Y_ABORT_UNLESS(idBuilder.Append(r.Id).ok());
             Y_ABORT_UNLESS(secondBuilder.Append(r.IntVal).ok());
             if (r.B.has_value()) {
-                Y_ABORT_UNLESS(boolBuilder.Append(*r.B).ok());
+                Y_ABORT_UNLESS(boolBuilder.Append(*r.B ? 1 : 0).ok());
             } else {
                 Y_ABORT_UNLESS(boolBuilder.AppendNull().ok());
             }
@@ -233,7 +263,7 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
         std::shared_ptr<arrow::Array> boolArr;
         Y_ABORT_UNLESS(boolBuilder.Finish(&boolArr).ok());
         auto schema = arrow::schema({ arrow::field("id", arrow::int32(), /*nullable*/ false), arrow::field(secondName, arrow::int64()),
-            arrow::field("b", arrow::boolean()) });
+            arrow::field("b", arrow::uint8()) });
         return arrow::RecordBatch::Make(schema, rows.size(), { idArr, secondArr, boolArr });
     }
 
@@ -259,20 +289,30 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
     void LoadData(TTestHelper& helper, ETableKind table, ELoadKind load, const TString& name, const TVector<TRow>& rows,
         TTestHelper::TColumnTable* col = nullptr, const TVector<TTestHelper::TColumnSchema>* schema = nullptr) {
         switch (table) {
-            case ETableKind::COLUMN_SHARD: {
+            case ETableKind::COLUMNSHARD: {
                 Y_ABORT_UNLESS(col && schema);
                 if (load == ELoadKind::ARROW) {
-                    auto batch = MakeArrowBatch(rows);
+                    TString columnName = "int";
+                    if (schema->size() >= 2) {
+                        columnName = (*schema)[1].GetName();
+                    }
+
+                    auto batch = MakeArrowBatchWithColumnName(rows, columnName);
                     helper.BulkUpsert(*col, batch);
                 } else if (load == ELoadKind::YDB_VALUE) {
-                    BulkUpsertRowTableYdbValue(helper, name, rows);
+                    TString columnName = "int";
+                    if (schema->size() >= 2) {
+                        columnName = (*schema)[1].GetName();
+                    }
+
+                    BulkUpsertRowTableYdbValueWithColumnName(helper, name, rows, columnName);
                 } else {
                     BulkUpsertRowTableCSV(helper, name, rows);
                 }
 
                 break;
             }
-            case ETableKind::DATA_SHARD: {
+            case ETableKind::DATASHARD: {
                 if (load == ELoadKind::ARROW) {
                     BulkUpsertRowTableArrow(helper, name, rows);
                 } else if (load == ELoadKind::YDB_VALUE) {
@@ -296,7 +336,7 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
 
     void PrepareBase(TTestHelper& helper, ETableKind tableKind, const TString& tableName, TTestHelper::TColumnTable* colTableOut,
         TVector<TTestHelper::TColumnSchema>* schemaOut) {
-        if (tableKind == ETableKind::COLUMN_SHARD) {
+        if (tableKind == ETableKind::COLUMNSHARD) {
             TVector<TTestHelper::TColumnSchema> schema = {
                 TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
                 TTestHelper::TColumnSchema().SetName("int").SetType(NScheme::NTypeIds::Int64),
@@ -312,12 +352,37 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
             CreateDataShardTable(helper, tableName);
         }
     }
+
+    bool TryPrepareBase(TTestHelper& helper, ETableKind tableKind, const TString& tableName, TTestHelper::TColumnTable* colTableOut,
+        TVector<TTestHelper::TColumnSchema>* schemaOut) {
+        if (tableKind == ETableKind::COLUMNSHARD) {
+            TVector<TTestHelper::TColumnSchema> schema = {
+                TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
+                TTestHelper::TColumnSchema().SetName("int").SetType(NScheme::NTypeIds::Int64),
+                TTestHelper::TColumnSchema().SetName("b").SetType(NScheme::NTypeIds::Bool),
+            };
+
+            *schemaOut = schema;
+            TTestHelper::TColumnTable col;
+            col.SetName(tableName).SetPrimaryKey({ "id" }).SetSharding({ "id" }).SetSchema(schema);
+            auto result = helper.GetSession().ExecuteSchemeQuery(col.BuildQuery()).GetValueSync();
+            if (result.GetStatus() == NYdb::EStatus::SUCCESS) {
+                *colTableOut = col;
+                return true;
+            } else {
+                return false;
+            }
+        } else {
+            CreateDataShardTable(helper, tableName);
+            return true;
+        }
+    }
     }   // namespace
 
     class TBoolTestCase {
     public:
         TBoolTestCase()
-            : TestHelper(TKikimrSettings().SetWithSampleTables(false)) {
+            : TestHelper(CreateKikimrSettingsWithBoolSupport()) {
         }
 
         TTestHelper::TUpdatesBuilder Inserter() {
@@ -399,12 +464,9 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
         const auto Scan = Arg<0>();
         const auto Table = Arg<1>();
         const auto Load = Arg<2>();
-        if (Table == ETableKind::COLUMN_SHARD) {
-            return;   // skip until bool is supported in columnshard
-        }
 
         const TString tableName = "/Root/Table1";
-        TTestHelper helper(TKikimrSettings().SetWithSampleTables(false));
+        TTestHelper helper(CreateKikimrSettingsWithBoolSupport());
         TTestHelper::TColumnTable col;
         TVector<TTestHelper::TColumnSchema> schema;
         PrepareBase(helper, Table, tableName, &col, &schema);
@@ -418,12 +480,9 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
         const auto Scan = Arg<0>();
         const auto Table = Arg<1>();
         const auto Load = Arg<2>();
-        if (Table == ETableKind::COLUMN_SHARD) {
-            return;   // skip until bool is supported in columnshard
-        }
 
         const TString tableName = "/Root/Table1";
-        TTestHelper helper(TKikimrSettings().SetWithSampleTables(false));
+        TTestHelper helper(CreateKikimrSettingsWithBoolSupport());
         TTestHelper::TColumnTable col;
         TVector<TTestHelper::TColumnSchema> schema;
         PrepareBase(helper, Table, tableName, &col, &schema);
@@ -436,12 +495,9 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
         const auto Scan = Arg<0>();
         const auto Table = Arg<1>();
         const auto Load = Arg<2>();
-        if (Table == ETableKind::COLUMN_SHARD) {
-            return;   // skip until bool is supported in columnshard
-        }
 
         const TString tableName = "/Root/Table1";
-        TTestHelper helper(TKikimrSettings().SetWithSampleTables(false));
+        TTestHelper helper(CreateKikimrSettingsWithBoolSupport());
         TTestHelper::TColumnTable col;
         TVector<TTestHelper::TColumnSchema> schema;
         PrepareBase(helper, Table, tableName, &col, &schema);
@@ -457,12 +513,9 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
         const auto Scan = Arg<0>();
         const auto Table = Arg<1>();
         const auto Load = Arg<2>();
-        if (Table == ETableKind::COLUMN_SHARD) {
-            return;   // skip until bool is supported in columnshard
-        }
 
         const TString tableName = "/Root/Table1";
-        TTestHelper helper(TKikimrSettings().SetWithSampleTables(false));
+        TTestHelper helper(CreateKikimrSettingsWithBoolSupport());
         TTestHelper::TColumnTable col;
         TVector<TTestHelper::TColumnSchema> schema;
         PrepareBase(helper, Table, tableName, &col, &schema);
@@ -480,12 +533,9 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
         const auto Scan = Arg<0>();
         const auto Table = Arg<1>();
         const auto Load = Arg<2>();
-        if (Table == ETableKind::COLUMN_SHARD) {
-            return;   // skip until bool is supported in columnshard
-        }
 
         const TString tableName = "/Root/Table1";
-        TTestHelper helper(TKikimrSettings().SetWithSampleTables(false));
+        TTestHelper helper(CreateKikimrSettingsWithBoolSupport());
         TTestHelper::TColumnTable col;
         TVector<TTestHelper::TColumnSchema> schema;
         PrepareBase(helper, Table, tableName, &col, &schema);
@@ -498,12 +548,9 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
         const auto Scan = Arg<0>();
         const auto Table = Arg<1>();
         const auto Load = Arg<2>();
-        if (Table == ETableKind::COLUMN_SHARD) {
-            return;   // skip until bool is supported in columnshard
-        }
 
         const TString tableName = "/Root/Table1";
-        TTestHelper helper(TKikimrSettings().SetWithSampleTables(false));
+        TTestHelper helper(CreateKikimrSettingsWithBoolSupport());
         TTestHelper::TColumnTable col;
         TVector<TTestHelper::TColumnSchema> schema;
         PrepareBase(helper, Table, tableName, &col, &schema);
@@ -516,12 +563,9 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
         const auto Scan = Arg<0>();
         const auto Table = Arg<1>();
         const auto Load = Arg<2>();
-        if (Table == ETableKind::COLUMN_SHARD) {
-            return;   // skip until bool is supported in columnshard
-        }
 
         const TString tableName = "/Root/Table1";
-        TTestHelper helper(TKikimrSettings().SetWithSampleTables(false));
+        TTestHelper helper(CreateKikimrSettingsWithBoolSupport());
         TTestHelper::TColumnTable col;
         TVector<TTestHelper::TColumnSchema> schema;
         PrepareBase(helper, Table, tableName, &col, &schema);
@@ -534,16 +578,13 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
         const auto Scan = Arg<0>();
         const auto Table = Arg<1>();
         const auto Load = Arg<2>();
-        if (Table == ETableKind::COLUMN_SHARD) {
-            return;   // skip until bool is supported in columnshard
-        }
 
         const TString t1 = "/Root/Table1";
         const TString t2 = "/Root/Table2";
-        TTestHelper helper(TKikimrSettings().SetWithSampleTables(false));
+        TTestHelper helper(CreateKikimrSettingsWithBoolSupport());
         TTestHelper::TColumnTable col1, col2;
         TVector<TTestHelper::TColumnSchema> s1, s2;
-        if (Table == ETableKind::COLUMN_SHARD) {
+        if (Table == ETableKind::COLUMNSHARD) {
             s1 = {
                 TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
                 TTestHelper::TColumnSchema().SetName("int").SetType(NScheme::NTypeIds::Int64),
@@ -566,7 +607,7 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
         }
 
         LoadData(helper, Table, Load, t1, { { 1, 4, true }, { 2, 3, true } }, &col1, &s1);
-        if (Table == ETableKind::COLUMN_SHARD) {
+        if (Table == ETableKind::COLUMNSHARD) {
             LoadData(helper, Table, Load, t2, { { 1, 1, true }, { 2, 1, false }, { 3, 2, true }, { 4, 2, false } }, &col2, &s2);
         } else {
             if (Load == ELoadKind::ARROW) {
@@ -592,16 +633,13 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
         const auto Scan = Arg<0>();
         const auto Table = Arg<1>();
         const auto Load = Arg<2>();
-        if (Table == ETableKind::COLUMN_SHARD) {
-            return;   // skip until bool is supported in columnshard
-        }
 
         const TString t1 = "/Root/Table1";
         const TString t2 = "/Root/Table2";
-        TTestHelper helper(TKikimrSettings().SetWithSampleTables(false));
+        TTestHelper helper(CreateKikimrSettingsWithBoolSupport());
         TTestHelper::TColumnTable col1, col2;
         TVector<TTestHelper::TColumnSchema> s1, s2;
-        if (Table == ETableKind::COLUMN_SHARD) {
+        if (Table == ETableKind::COLUMNSHARD) {
             s1 = {
                 TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
                 TTestHelper::TColumnSchema().SetName("int").SetType(NScheme::NTypeIds::Int64),
@@ -629,7 +667,92 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
             "SELECT t1.id, t2.id, t1.b FROM `/Root/Table1` as t1 join `/Root/Table2` as t2 on t1.b = t2.b order by t1.id, t2.id, t1.b",
             R"([[2;1;[%true]];[2;3;[%true]];[4;1;[%true]];[4;3;[%true]]])", Scan);
     }
-}
 
+    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(TestCSVBoolFormats, EQueryMode, ETableKind) {
+        const auto Scan = Arg<0>();
+        const auto Table = Arg<1>();
+
+        const TString tableName = "/Root/Table1";
+        TTestHelper helper(CreateKikimrSettingsWithBoolSupport());
+        TTestHelper::TColumnTable col;
+        TVector<TTestHelper::TColumnSchema> schema;
+        PrepareBase(helper, Table, tableName, &col, &schema);
+        
+        struct TCSVFormat {
+            TString TrueValue;
+            TString FalseValue;
+            TString Description;
+        };
+        
+        TVector<TCSVFormat> formats = {
+            {"true", "false", "true/false"},
+            {"1", "0", "1/0"},
+        };
+        
+        for (auto&& format : formats) {
+            helper.ExecuteQuery("DELETE FROM `" + tableName + "`");
+            TVector<TRow> rows = {
+                {1, 100, true},
+                {2, 200, false},
+                {3, 300, true},
+                {4, 400, false}
+            };
+
+            BulkUpsertRowTableCSVWithFormat(helper, tableName, rows, format.TrueValue, format.FalseValue);
+            
+            CheckOrExec(helper, 
+                "SELECT id, int, b FROM `" + tableName + "` ORDER BY id",
+                "[[1;[100];[%true]];[2;[200];[%false]];[3;[300];[%true]];[4;[400];[%false]]]", 
+                Scan);
+        }
+    }
+
+    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(TestFeatureFlag, EQueryMode, ETableKind) {
+        const auto Scan = Arg<0>();
+        const auto Table = Arg<1>();
+
+        const TString tableName = "/Root/Table1";        
+        TTestHelper helperDisabled(TKikimrSettings().SetWithSampleTables(false));
+        TTestHelper::TColumnTable col;
+        TVector<TTestHelper::TColumnSchema> schema;
+        
+        TVector<TRow> rows = {
+            {1, 100, true},
+            {2, 200, false}
+        };
+        
+        if (Table == ETableKind::DATASHARD) {
+            PrepareBase(helperDisabled, Table, tableName, &col, &schema);
+            LoadData(helperDisabled, Table, ELoadKind::ARROW, tableName, rows, &col, &schema);
+            CheckOrExec(helperDisabled, 
+                "SELECT id, int, b FROM `" + tableName + "` ORDER BY id",
+                "[[1;[100];[%true]];[2;[200];[%false]]]", 
+                Scan);
+        } else {
+            bool tableCreated = TryPrepareBase(helperDisabled, Table, tableName, &col, &schema);
+            if (tableCreated) {
+                try {
+                    LoadData(helperDisabled, Table, ELoadKind::ARROW, tableName, rows, &col, &schema);
+                    UNIT_ASSERT_C(false, "Expected error for ColumnShard with disabled feature flag");
+                } catch (const std::exception& e) {
+                    TString errorMsg = e.what();
+                    UNIT_ASSERT_C(errorMsg.find("EnableColumnshardBool") != TString::npos || 
+                                 errorMsg.find("bool") != TString::npos,
+                                 "Expected error about bool support, got: " + errorMsg);
+                }
+            }
+        }
+
+        TTestHelper helperEnabled(CreateKikimrSettingsWithBoolSupport());
+        TTestHelper::TColumnTable col2;
+        TVector<TTestHelper::TColumnSchema> schema2;
+        PrepareBase(helperEnabled, Table, tableName, &col2, &schema2);
+        LoadData(helperEnabled, Table, ELoadKind::ARROW, tableName, rows, &col2, &schema2);
+        CheckOrExec(helperEnabled, 
+            "SELECT id, int, b FROM `" + tableName + "` ORDER BY id",
+            "[[1;[100];[%true]];[2;[200];[%false]]]", 
+            Scan);
+    }
+}
 }   // namespace NKqp
 }   // namespace NKikimr

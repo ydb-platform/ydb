@@ -344,7 +344,7 @@ namespace NKqp {
     std::shared_ptr<arrow::Field> TTestHelper::TColumnTableBase::BuildField(const TString name, const NScheme::TTypeInfo& typeInfo, bool nullable) const {
         switch (typeInfo.GetTypeId()) {
         case NScheme::NTypeIds::Bool:
-            return arrow::field(name, arrow::boolean(), nullable);
+            return arrow::field(name, arrow::uint8(), nullable);
         case NScheme::NTypeIds::Int8:
             return arrow::field(name, arrow::int8(), nullable);
         case NScheme::NTypeIds::Int16:

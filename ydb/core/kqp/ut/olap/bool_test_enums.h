@@ -9,8 +9,8 @@ enum EQueryMode {
 };
 
 enum ETableKind {
-    COLUMN_SHARD,
-    DATA_SHARD
+    COLUMNSHARD,
+    DATASHARD
 };
 
 enum ELoadKind {

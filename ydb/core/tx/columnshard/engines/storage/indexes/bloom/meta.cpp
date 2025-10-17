@@ -12,7 +12,8 @@
 
 namespace NKikimr::NOlap::NIndexes {
 
-std::vector<std::shared_ptr<IPortionDataChunk>> TBloomIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader, const ui32 recordsCount) const {
+std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TBloomIndexMeta::DoBuildIndexImpl(
+    TChunkedBatchReader& reader, const ui32 recordsCount) const {
     std::deque<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> dataOwners;
     ui32 indexHitsCount = 0;
     for (reader.Start(); reader.IsCorrect();) {

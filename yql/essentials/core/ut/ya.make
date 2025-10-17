@@ -29,8 +29,8 @@ PEERDIR(
     yql/essentials/providers/common/schema/parser
     yql/essentials/providers/pure
     yql/essentials/providers/result/provider
-    yql/essentials/minikql/comp_nodes/llvm16
-    yql/essentials/minikql/invoke_builtins/llvm16
+    yql/essentials/minikql/comp_nodes/llvm20
+    yql/essentials/minikql/invoke_builtins/llvm20
     yql/essentials/parser/pg_wrapper
     yql/essentials/sql/pg
     yql/essentials/sql

@@ -9,7 +9,7 @@ namespace NYql::NDq {
 namespace {
 class TDqOptimizerFactory : public IOptimizerFactory {
 public:
-    virtual IOptimizerNew::TPtr MakeJoinCostBasedOptimizerNative(IProviderContext& pctx, TExprContext& ectx, const TCBOSettings& settings) const override {
+    virtual IOptimizerNew::TPtr MakeJoinCostBasedOptimizerNative(IProviderContext& pctx, TExprContext& ectx, const TOptimizerSettings& settings) const override {
       return IOptimizerNew::TPtr(MakeNativeOptimizerNew(pctx, settings, ectx, false, nullptr));
     }
 

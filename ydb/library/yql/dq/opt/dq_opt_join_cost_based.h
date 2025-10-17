@@ -50,7 +50,7 @@ void CollectInterestingOrderingsFromJoinTree(
 
 IOptimizerNew* MakeNativeOptimizerNew(
     IProviderContext& ctx,
-    const TCBOSettings &settings,
+    const TOptimizerSettings &settings,
     TExprContext& ectx,
     bool enableShuffleElimination,
     TSimpleSharedPtr<TOrderingsStateMachine> orderingsFSM = nullptr,

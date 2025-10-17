@@ -126,7 +126,7 @@ protected:
         }
 
         const auto arrayType = ArrayType::get(valueType, ++width);
-        const auto atTop = --ctx.Func->getEntryBlock().end();
+        const auto atTop = ctx.GetEntryBlockEnd();
 
         const auto stub = new AllocaInst(arrayType, 0U, "stub", atTop);
 
@@ -331,9 +331,8 @@ public:
         const auto zero = ConstantInt::get(valueType, 0);
 
         const auto keysType = IsTuple ? ArrayType::get(valueType, this->LeftKeyColumns.size()) : nullptr;
-        const auto kitmsPtr = IsTuple ? new AllocaInst(PointerType::getUnqual(keysType), 0U, "kitms_ptr", --ctx.Func->getEntryBlock().end()) : nullptr;
-
-        const auto keysPtr = new AllocaInst(valueType, 0U, "keys_ptr", --ctx.Func->getEntryBlock().end());
+        const auto kitmsPtr = IsTuple ? new AllocaInst(PointerType::getUnqual(keysType), 0U, "kitms_ptr", ctx.GetEntryBlockEnd()) : nullptr;
+        const auto keysPtr = new AllocaInst(valueType, 0U, "keys_ptr", ctx.GetEntryBlockEnd());
         new StoreInst(zero, keysPtr, block);
 
         const auto dict = GetNodeValue(this->Dict, ctx, block);
@@ -510,16 +509,15 @@ public:
         const auto zero = ConstantInt::get(valueType, 0);
 
         const auto keysType = IsTuple ? ArrayType::get(valueType, this->LeftKeyColumns.size()) : nullptr;
-        const auto kitmsPtr = IsTuple ? new AllocaInst(PointerType::getUnqual(keysType), 0U, "kitms_ptr", --ctx.Func->getEntryBlock().end()) : nullptr;
-
-        const auto keysPtr = new AllocaInst(valueType, 0U, "keys_ptr", --ctx.Func->getEntryBlock().end());
+        const auto kitmsPtr = IsTuple ? new AllocaInst(PointerType::getUnqual(keysType), 0U, "kitms_ptr", ctx.GetEntryBlockEnd()) : nullptr;
+        const auto keysPtr = new AllocaInst(valueType, 0U, "keys_ptr", ctx.GetEntryBlockEnd());
 
         std::vector<Value*> leftStoragePointers;
         leftStoragePointers.reserve(TBase::LeftRenames.size() >> 1U);
         auto i = 0U;
         const auto values = ctx.GetMutables();
         std::generate_n(std::back_inserter(leftStoragePointers), TBase::LeftRenames.size() >> 1U,
-                        [&]() { return GetElementPtrInst::CreateInBounds(valueType, values, {ConstantInt::get(resultType, LeftRenamesStorageIndex + i++)}, (TString("left_out_") += ToString(i)).c_str(), &ctx.Func->getEntryBlock().back()); });
+                        [&]() { return GetElementPtrInst::CreateInBounds(valueType, values, {ConstantInt::get(resultType, LeftRenamesStorageIndex + i++)}, (TString("left_out_") += ToString(i)).c_str(), ctx.GetEntryBlockEnd()); });
 
         const auto work = BasicBlock::Create(context, "work", ctx.Func);
 
@@ -1069,12 +1067,12 @@ public:
         const auto keysType = IsTuple ? ArrayType::get(valueType, this->LeftKeyColumns.size()) : nullptr;
 
         const auto itemsType = PointerType::getUnqual(arrayType);
-        const auto itemsPtr = new AllocaInst(itemsType, 0U, "items_ptr", --ctx.Func->getEntryBlock().end());
-        const auto kitmsPtr = IsTuple ? new AllocaInst(PointerType::getUnqual(keysType), 0U, "kitms_ptr", --ctx.Func->getEntryBlock().end()) : nullptr;
+        const auto itemsPtr = new AllocaInst(itemsType, 0U, "items_ptr", ctx.GetEntryBlockEnd());
+        const auto kitmsPtr = IsTuple ? new AllocaInst(PointerType::getUnqual(keysType), 0U, "kitms_ptr", ctx.GetEntryBlockEnd()) : nullptr;
 
-        const auto keysPtr = new AllocaInst(valueType, 0U, "keys_ptr", --ctx.Func->getEntryBlock().end());
+        const auto keysPtr = new AllocaInst(valueType, 0U, "keys_ptr", ctx.GetEntryBlockEnd());
         new StoreInst(zero, keysPtr, block);
-        const auto itemPtr = new AllocaInst(valueType, 0U, "item_ptr", --ctx.Func->getEntryBlock().end());
+        const auto itemPtr = new AllocaInst(valueType, 0U, "item_ptr", ctx.GetEntryBlockEnd());
         new StoreInst(zero, itemPtr, block);
 
         const auto dict = GetNodeValue(this->Dict, ctx, block);
@@ -1191,11 +1189,11 @@ public:
         const auto keysType = IsTuple ? ArrayType::get(valueType, this->LeftKeyColumns.size()) : nullptr;
 
         const auto itemsType = PointerType::getUnqual(arrayType);
-        const auto itemsPtr = new AllocaInst(itemsType, 0U, "items_ptr", --ctx.Func->getEntryBlock().end());
-        const auto kitmsPtr = IsTuple ? new AllocaInst(PointerType::getUnqual(keysType), 0U, "kitms_ptr", --ctx.Func->getEntryBlock().end()) : nullptr;
+        const auto itemsPtr = new AllocaInst(itemsType, 0U, "items_ptr", ctx.GetEntryBlockEnd());
+        const auto kitmsPtr = IsTuple ? new AllocaInst(PointerType::getUnqual(keysType), 0U, "kitms_ptr", ctx.GetEntryBlockEnd()) : nullptr;
 
-        const auto keysPtr = new AllocaInst(valueType, 0U, "keys_ptr", --ctx.Func->getEntryBlock().end());
-        const auto itemPtr = new AllocaInst(valueType, 0U, "item_ptr", --ctx.Func->getEntryBlock().end());
+        const auto keysPtr = new AllocaInst(valueType, 0U, "keys_ptr", ctx.GetEntryBlockEnd());
+        const auto itemPtr = new AllocaInst(valueType, 0U, "item_ptr", ctx.GetEntryBlockEnd());
         new StoreInst(zero, itemPtr, block);
 
         const auto work = BasicBlock::Create(context, "work", ctx.Func);

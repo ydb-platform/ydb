@@ -14,12 +14,12 @@ PEERDIR(
 
 IF (OS_LINUX)
     PEERDIR(
-        contrib/libs/llvm16/lib/ExecutionEngine/PerfJITEvents
+        contrib/libs/llvm20/lib/ExecutionEngine/PerfJITEvents
     )
 ENDIF()
 
-USE_LLVM_BC16()
-SET(LLVM_VER 16)
+USE_LLVM_BC20()
+SET(LLVM_VER 20)
 
 INCLUDE(../../ut/ya.make.inc)
 

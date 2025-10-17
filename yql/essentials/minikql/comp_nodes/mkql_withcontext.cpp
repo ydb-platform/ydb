@@ -237,7 +237,7 @@ public:
         block = good;
 
         const auto arrayType = ArrayType::get(valueType, getres.second.size());
-        const auto arrayPtr = new AllocaInst(arrayType, 0U, "array_ptr", --ctx.Func->getEntryBlock().end());
+        const auto arrayPtr = new AllocaInst(arrayType, 0U, "array_ptr", ctx.GetEntryBlockEnd());
         Value* array = UndefValue::get(arrayType);
         for (auto idx = 0U; idx < getres.second.size(); ++idx) {
             const auto item = getres.second[idx](ctx, block);

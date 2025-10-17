@@ -652,7 +652,7 @@ public:
 
         const auto statusType = Type::getInt32Ty(context);
         const auto valueType = Type::getInt128Ty(context);
-        const auto valuePtr = new AllocaInst(valueType, 0U, "value_ptr", --ctx.Func->getEntryBlock().end());
+        const auto valuePtr = new AllocaInst(valueType, 0U, "value_ptr", ctx.GetEntryBlockEnd());
         new StoreInst(ConstantInt::get(valueType, 0), valuePtr, block);
 
         const auto more = BasicBlock::Create(context, "more", ctx.Func);
@@ -859,7 +859,7 @@ public:
 
         const auto statusType = Type::getInt32Ty(context);
         const auto valueType = Type::getInt128Ty(context);
-        const auto valuePtr = new AllocaInst(valueType, 0U, "value_ptr", --ctx.Func->getEntryBlock().end());
+        const auto valuePtr = new AllocaInst(valueType, 0U, "value_ptr", ctx.GetEntryBlockEnd());
         new StoreInst(ConstantInt::get(valueType, 0), valuePtr, block);
 
         const auto more = BasicBlock::Create(context, "more", ctx.Func);
@@ -1533,7 +1533,7 @@ public:
                 block = smsk;
 
                 const auto arrayType = ArrayType::get(list->getType(), UseOnStack);
-                const auto array = *this->Stateless_ || ctx.AlwaysInline ? new AllocaInst(arrayType, 0U, "array", &ctx.Func->getEntryBlock().back()) : new AllocaInst(arrayType, 0U, "array", block);
+                const auto array = *this->Stateless_ || ctx.AlwaysInline ? new AllocaInst(arrayType, 0U, "array", ctx.GetEntryBlockEnd()) : new AllocaInst(arrayType, 0U, "array", block);
                 const auto ptr = GetElementPtrInst::CreateInBounds(arrayType, array, {zeroSize, zeroSize}, "ptr", block);
 
                 vector->addIncoming(ptr, block);
@@ -1603,7 +1603,7 @@ public:
             Value* res;
             if constexpr (!IsMultiRowPerItem) {
                 const auto newType = PointerType::getUnqual(list->getType());
-                const auto newPtr = *this->Stateless_ || ctx.AlwaysInline ? new AllocaInst(newType, 0U, "new_ptr", &ctx.Func->getEntryBlock().back()) : new AllocaInst(newType, 0U, "new_ptr", block);
+                const auto newPtr = *this->Stateless_ || ctx.AlwaysInline ? new AllocaInst(newType, 0U, "new_ptr", ctx.GetEntryBlockEnd()) : new AllocaInst(newType, 0U, "new_ptr", block);
                 res = GenNewArray(ctx, idx, newPtr, block);
                 const auto target = new LoadInst(newType, newPtr, "target", block);
 

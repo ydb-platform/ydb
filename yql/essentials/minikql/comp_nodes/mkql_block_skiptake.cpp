@@ -72,7 +72,7 @@ public:
         const auto indexType = Type::getInt64Ty(context);
         const auto valueType = Type::getInt128Ty(context);
 
-        const auto atTop = --ctx.Func->getEntryBlock().end();
+        const auto atTop = ctx.GetEntryBlockEnd();
 
         const auto offsetPtr = new AllocaInst(indexType, 0U, "offset_ptr", atTop);
         const auto sizePtr = new AllocaInst(indexType, 0U, "size_ptr", atTop);
@@ -291,7 +291,7 @@ public:
         const auto indexType = Type::getInt64Ty(context);
         const auto valueType = Type::getInt128Ty(context);
 
-        const auto atTop = --ctx.Func->getEntryBlock().end();
+        const auto atTop = ctx.GetEntryBlockEnd();
 
         const auto sizePtr = new AllocaInst(indexType, 0U, "size_ptr", atTop);
         new StoreInst(ConstantInt::get(indexType, 0), sizePtr, atTop);

@@ -313,7 +313,11 @@ public:
         auto&& engineBuilder = llvm::EngineBuilder(std::move(module));
         engineBuilder
             .setEngineKind(llvm::EngineKind::JIT)
+#if LLVM_VERSION_MAJOR >= 20
             .setOptLevel(llvm::CodeGenOptLevel::Default)
+#else
+            .setOptLevel(llvm::CodeGenOpt::Default)
+#endif
             .setErrorStr(&what)
             .setTargetOptions(targetOptions);
 
@@ -440,19 +444,34 @@ public:
             llvm::TimePassesIsEnabled = true;
         }
 
-        if (ExportedSymbols) {
-            std::unique_ptr<llvm::legacy::PassManager> modulePassManager;
-            std::unique_ptr<llvm::legacy::FunctionPassManager> functionPassManager;
+        llvm::PassBuilder passBuilder;
 
-            modulePassManager = std::make_unique<llvm::legacy::PassManager>();
-/*
-            modulePassManager->add(llvm::createInternalizePass([&](const llvm::GlobalValue& gv) -> bool {
+        llvm::LoopAnalysisManager lam;
+        llvm::FunctionAnalysisManager fam;
+        llvm::CGSCCAnalysisManager cgam;
+        llvm::ModuleAnalysisManager mam;
+
+        // Register the target library analysis directly and give it a customized
+        // preset TLI.
+        std::unique_ptr<llvm::TargetLibraryInfoImpl> tlii(new llvm::TargetLibraryInfoImpl(llvm::Triple(Triple_)));
+        fam.registerPass([&] { return llvm::TargetLibraryAnalysis(*tlii); });
+
+        // Register all the basic analyses with the managers.
+        passBuilder.registerModuleAnalyses(mam);
+        passBuilder.registerCGSCCAnalyses(cgam);
+        passBuilder.registerFunctionAnalyses(fam);
+        passBuilder.registerLoopAnalyses(lam);
+        passBuilder.crossRegisterProxies(lam, fam, cgam, mam);
+
+        if (ExportedSymbols) {
+            llvm::ModulePassManager modulePassManager;
+            modulePassManager.addPass(llvm::InternalizePass([&](const llvm::GlobalValue& gv) -> bool {
                 auto name = TString(gv.getName().str());
                 return ExportedSymbols->contains(name);
             }));
-            modulePassManager->add(llvm::createGlobalDCEPass());
-*/
-            modulePassManager->run(*Module_);
+
+            modulePassManager.addPass(llvm::GlobalDCEPass());
+            modulePassManager.run(*Module_, mam);
         }
 
 #if LLVM_VERSION_MAJOR < 16
@@ -508,26 +527,11 @@ public:
             compileStats->ModulePassTime = (Now() - modulePassStart).MilliSeconds();
         }
 #else
-        llvm::PassBuilder passBuilder;
-
-        llvm::LoopAnalysisManager lam;
-        llvm::FunctionAnalysisManager fam;
-        llvm::CGSCCAnalysisManager cgam;
-        llvm::ModuleAnalysisManager mam;
-
-        // Register the target library analysis directly and give it a customized
-        // preset TLI.
-        std::unique_ptr<llvm::TargetLibraryInfoImpl> tlii(new llvm::TargetLibraryInfoImpl(llvm::Triple(Triple_)));
-        fam.registerPass([&] { return llvm::TargetLibraryAnalysis(*tlii); });
-
-        // Register all the basic analyses with the managers.
-        passBuilder.registerModuleAnalyses(mam);
-        passBuilder.registerCGSCCAnalyses(cgam);
-        passBuilder.registerFunctionAnalyses(fam);
-        passBuilder.registerLoopAnalyses(lam);
-        passBuilder.crossRegisterProxies(lam, fam, cgam, mam);
-
+    #if LLVM_VERSION_MAJOR >= 20
         auto sanitizersCallback = [&](llvm::ModulePassManager& mpm, llvm::OptimizationLevel level, llvm::ThinOrFullLTOPhase) {
+    #else
+        auto sanitizersCallback = [&](llvm::ModulePassManager& mpm, llvm::OptimizationLevel level) {
+    #endif
             Y_UNUSED(level);
             if (EffectiveSanitize_ == ESanitize::Asan) {
                 llvm::AddressSanitizerOptions options;
@@ -739,9 +743,15 @@ private:
         info.print(printer);
     }
 
+#if LLVM_VERSION_MAJOR >= 20
+    static void DiagnosticHandler(const llvm::DiagnosticInfo* info, void* context) {
+        return static_cast<TCodegen*>(context)->OnDiagnosticInfo(*info);
+    }
+#else
     static void DiagnosticHandler(const llvm::DiagnosticInfo& info, void* context) {
         return static_cast<TCodegen*>(context)->OnDiagnosticInfo(info);
     }
+#endif
 
     struct TPatterns {
         TPatterns()

@@ -163,7 +163,7 @@ public:
         const auto statusType = Type::getInt32Ty(context);
         const auto sizeType = Type::getInt64Ty(context);
 
-        const auto atTop = --ctx.Func->getEntryBlock().end();
+        const auto atTop = ctx.GetEntryBlockEnd();
 
         const auto sizePtr = new AllocaInst(valueType, 0U, "size_ptr", atTop);
         new StoreInst(ConstantInt::get(valueType, 0), sizePtr, atTop);
@@ -441,7 +441,7 @@ public:
         const auto stateType = StructType::get(context, stateFields.GetFieldsArray());
         const auto statePtrType = PointerType::getUnqual(stateType);
 
-        const auto atTop = --ctx.Func->getEntryBlock().end();
+        const auto atTop = ctx.GetEntryBlockEnd();
 
         const auto getFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TCompressBlocksState::Get>());
         const auto getType = FunctionType::get(valueType, {statePtrType, indexType, ctx.GetFactory()->getType(), indexType}, false);

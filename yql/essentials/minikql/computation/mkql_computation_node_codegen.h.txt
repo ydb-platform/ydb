@@ -115,6 +115,21 @@ struct TCodegenContext {
     Value* GetStat() const;
     Value* GetMutables() const;
     Value* GetBuilder() const;
+    auto GetEntryBlockEnd() const {
+#if LLVM_VERSION_MAJOR >= 20
+        return std::prev(Func->getEntryBlock().end());
+#else
+        return &Func->getEntryBlock().back();
+#endif
+    }
+
+    auto GetEntryBlockBegin() const {
+#if LLVM_VERSION_MAJOR >= 20
+        return Func->getEntryBlock().begin();
+#else
+        return &Func->getEntryBlock().front();
+#endif
+    }
 
 private:
     Value * Factory = nullptr;

@@ -29,7 +29,7 @@ public:
 
         const auto dict = GetNodeValue(Dict, ctx, block);
 
-        const auto keyp = *Stateless_ || ctx.AlwaysInline ? new AllocaInst(valueType, 0U, "key", &ctx.Func->getEntryBlock().back()) : new AllocaInst(valueType, 0U, "key", block);
+        const auto keyp = *Stateless_ || ctx.AlwaysInline ? new AllocaInst(valueType, 0U, "key", ctx.GetEntryBlockEnd()) : new AllocaInst(valueType, 0U, "key", block);
         GetNodeValue(keyp, Key, ctx, block);
         const auto cont = CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Contains>(Type::getInt1Ty(context), dict, ctx.Codegen, block, keyp);
 

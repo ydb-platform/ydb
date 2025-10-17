@@ -1,3 +1,8 @@
+SUBSCRIBER(
+    g:yql
+    g:yql_ydb_core
+)
+
 ADDINCL(
     ${ARCADIA_BUILD_ROOT}/${MODDIR}
     yql/essentials/minikql/codegen
@@ -22,15 +27,15 @@ COPY_FILE(
         llvm/Linker/Linker.h
         llvm/Passes/PassBuilder.h
         llvm-c/Disassembler.h
-#        llvm/Support/Host.h
         llvm/Support/ManagedStatic.h
         llvm/Support/SourceMgr.h
         llvm/Support/TargetSelect.h
         llvm/Support/Timer.h
         llvm/Support/ErrorHandling.h
+        llvm/TargetParser/Host.h
         llvm/Transforms/IPO.h
-#        llvm/Transforms/IPO/PassManagerBuilder.h
-#        llvm/Transforms/Instrumentation.h
+        llvm/Transforms/IPO/GlobalDCE.h
+        llvm/Transforms/IPO/Internalize.h
         llvm/Transforms/Instrumentation/AddressSanitizer.h
         llvm/Transforms/Instrumentation/MemorySanitizer.h
         llvm/Transforms/Instrumentation/ThreadSanitizer.h

@@ -1,5 +1,7 @@
 LIBRARY()
 
+ENABLE(YQL_STYLE_CPP)
+
 SRCS(
     mkql_block_builder.cpp
     mkql_block_impl.cpp

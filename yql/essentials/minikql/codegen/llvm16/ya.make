@@ -1,5 +1,7 @@
 LIBRARY()
 
+ENABLE(YQL_STYLE_CPP)
+
 PEERDIR(
     contrib/libs/llvm16/lib/IR
     contrib/libs/llvm16/lib/ExecutionEngine/MCJIT
@@ -10,6 +12,7 @@ PEERDIR(
     contrib/libs/llvm16/lib/Target/X86/Disassembler
     contrib/libs/llvm16/lib/Transforms/IPO
     contrib/libs/llvm16/lib/Transforms/ObjCARC
+    contrib/libs/llvm16/lib/TargetParser
 )
 
 IF (OS_LINUX)

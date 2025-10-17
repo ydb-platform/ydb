@@ -26,7 +26,7 @@ constexpr bool EnableStaticRefcount = true;
 using namespace llvm;
 
 Type* GetStringRefType(LLVMContext& context) {
-    const auto stringRefType = StructType::get(context, {Type::getInt8PtrTy(context),
+    const auto stringRefType = StructType::get(context, {PointerType::get(Type::getInt8Ty(context), 0),
                                                          Type::getInt32Ty(context),
                                                          Type::getInt32Ty(context)});
 
@@ -67,8 +67,8 @@ Value* TCodegenContext::GetFactory() const {
         } else {
             const auto ptr = GetElementPtrInst::CreateInBounds(
                 GetCompContextType(context), Ctx,
-                {ConstantInt::get(indexType, 0), ConstantInt::get(indexType, 0)}, "factory_ptr", &Func->getEntryBlock().front());
-            const_cast<Value*&>(Factory) = new LoadInst(ptrType, ptr, "factory", &Func->getEntryBlock().back());
+                {ConstantInt::get(indexType, 0), ConstantInt::get(indexType, 0)}, "factory_ptr", GetEntryBlockBegin());
+            const_cast<Value*&>(Factory) = new LoadInst(ptrType, ptr, "factory", GetEntryBlockEnd());
         }
     }
     return Factory;
@@ -87,8 +87,8 @@ Value* TCodegenContext::GetStat() const {
         } else {
             const auto ptr = GetElementPtrInst::CreateInBounds(
                 GetCompContextType(context), Ctx,
-                {ConstantInt::get(indexType, 0), ConstantInt::get(indexType, 1)}, "stat_ptr", &Func->getEntryBlock().front());
-            const_cast<Value*&>(Stat) = new LoadInst(ptrType, ptr, "stat", &Func->getEntryBlock().back());
+                {ConstantInt::get(indexType, 0), ConstantInt::get(indexType, 1)}, "stat_ptr", GetEntryBlockBegin());
+            const_cast<Value*&>(Stat) = new LoadInst(ptrType, ptr, "stat", GetEntryBlockEnd());
         }
     }
     return Stat;
@@ -107,8 +107,8 @@ Value* TCodegenContext::GetMutables() const {
         } else {
             const auto ptr = GetElementPtrInst::CreateInBounds(
                 GetCompContextType(context), Ctx,
-                {ConstantInt::get(indexType, 0), ConstantInt::get(indexType, 2)}, "mutables_ptr", &Func->getEntryBlock().front());
-            const_cast<Value*&>(Mutables) = new LoadInst(ptrType, ptr, "mutables", &Func->getEntryBlock().back());
+                {ConstantInt::get(indexType, 0), ConstantInt::get(indexType, 2)}, "mutables_ptr", GetEntryBlockBegin());
+            const_cast<Value*&>(Mutables) = new LoadInst(ptrType, ptr, "mutables", GetEntryBlockEnd());
         }
     }
     return Mutables;
@@ -127,8 +127,8 @@ Value* TCodegenContext::GetBuilder() const {
         } else {
             const auto ptr = GetElementPtrInst::CreateInBounds(
                 GetCompContextType(context), Ctx,
-                {ConstantInt::get(indexType, 0), ConstantInt::get(indexType, 3)}, "builder_ptr", &Func->getEntryBlock().front());
-            const_cast<Value*&>(Builder) = new LoadInst(ptrType, ptr, "builder", &Func->getEntryBlock().back());
+                {ConstantInt::get(indexType, 0), ConstantInt::get(indexType, 3)}, "builder_ptr", GetEntryBlockBegin());
+            const_cast<Value*&>(Builder) = new LoadInst(ptrType, ptr, "builder", GetEntryBlockEnd());
         }
     }
     return Builder;
@@ -1986,7 +1986,7 @@ std::pair<Value*, Value*> GetVariantParts(Value* variant, const TCodegenContext&
     {
         block = boxed;
 
-        const auto place = new AllocaInst(item->getType(), 0U, "place", &ctx.Func->getEntryBlock().back());
+        const auto place = new AllocaInst(item->getType(), 0U, "place", ctx.GetEntryBlockEnd());
         const auto idx = CallBoxedValueVirtualMethod<
             NUdf::TBoxedValueAccessor::EMethod::GetVariantIndex>(
             type, variant, ctx.Codegen, block);
@@ -2063,7 +2063,7 @@ Value* GetNodeValue(IComputationNode* node, const TCodegenContext& ctx, BasicBlo
     const auto nodeThis = CastInst::Create(Instruction::IntToPtr, ptr, ptrType, "node_this", block);
 
     const auto valueType = Type::getInt128Ty(context);
-    const auto retPtr = new AllocaInst(valueType, 0U, "return_ptr", --ctx.Func->getEntryBlock().end());
+    const auto retPtr = new AllocaInst(valueType, 0U, "return_ptr", ctx.GetEntryBlockEnd());
     const auto funType =
         FunctionType::get(Type::getVoidTy(context), {retPtr->getType(), nodeThis->getType(), ctx.Ctx->getType()}, false);
     const auto ptrFunType = PointerType::getUnqual(funType);
@@ -2580,8 +2580,7 @@ Y_NO_INLINE Value* TMutableCodegeneratorPtrNodeBase::CreateGetValueImpl(
         const auto type = Type::getInt128Ty(ctx.Codegen.GetContext());
         const auto pointer = ctx.Func->getEntryBlock().empty()
                                  ? new AllocaInst(type, 0U, "output", &ctx.Func->getEntryBlock())
-                                 : new AllocaInst(type, 0U, "output", &ctx.Func->getEntryBlock().back());
-
+                                 : new AllocaInst(type, 0U, "output", ctx.GetEntryBlockEnd());
         DoGenerateGetValue(ctx, pointer, block);
         ValueRelease(representation, pointer, ctx, block);
         const auto load = new LoadInst(type, pointer, "load", block);

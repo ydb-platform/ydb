@@ -126,7 +126,7 @@ public:
         const auto statusType = Type::getInt32Ty(context);
         const auto arrayType = ArrayType::get(valueType, Width_);
 
-        const auto arrayPtr = new AllocaInst(arrayType, 0, "array_ptr", --ctx.Func->getEntryBlock().end());
+        const auto arrayPtr = new AllocaInst(arrayType, 0, "array_ptr", ctx.GetEntryBlockEnd());
 
         TLLVMFieldsStructureState stateFields(context);
 
@@ -429,7 +429,7 @@ public:
         const auto statusType = Type::getInt32Ty(context);
         const auto arrayType = ArrayType::get(valueType, Width_);
 
-        const auto arrayPtr = new AllocaInst(arrayType, 0, "array_ptr", --ctx.Func->getEntryBlock().end());
+        const auto arrayPtr = new AllocaInst(arrayType, 0, "array_ptr", ctx.GetEntryBlockEnd());
 
         TLLVMFieldsStructureState stateFields(context);
 
@@ -614,7 +614,7 @@ public:
         const auto size = ConstantInt::get(sizeType, Lists.size());
 
         const auto arrayType = ArrayType::get(valueType, Lists.size());
-        const auto array = *this->Stateless_ || ctx.AlwaysInline ? new AllocaInst(arrayType, 0U, "array", &ctx.Func->getEntryBlock().back()) : new AllocaInst(arrayType, 0U, "array", block);
+        const auto array = *this->Stateless_ || ctx.AlwaysInline ? new AllocaInst(arrayType, 0U, "array", ctx.GetEntryBlockEnd()) : new AllocaInst(arrayType, 0U, "array", block);
 
         for (size_t i = 0U; i < Lists.size(); ++i) {
             const auto ptr = GetElementPtrInst::CreateInBounds(arrayType, array, {ConstantInt::get(sizeType, 0), ConstantInt::get(sizeType, i)}, (TString("ptr_") += ToString(i)).c_str(), block);

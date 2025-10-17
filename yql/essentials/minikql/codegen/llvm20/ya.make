@@ -8,6 +8,7 @@ PEERDIR(
     contrib/libs/llvm20/lib/Target/X86
     contrib/libs/llvm20/lib/Target/X86/AsmParser
     contrib/libs/llvm20/lib/Target/X86/Disassembler
+    contrib/libs/llvm20/lib/TargetParser
     contrib/libs/llvm20/lib/Transforms/IPO
     contrib/libs/llvm20/lib/Transforms/ObjCARC
 )

@@ -7,11 +7,12 @@ namespace NSQLTranslation {
 
 namespace {
 
-class TDummyLexer : public ILexer {
+class TDummyLexer: public ILexer {
 public:
     TDummyLexer(const TString& name)
         : Name_(name)
-    {}
+    {
+    }
 
     bool Tokenize(const TString& query, const TString& queryName, const TTokenCallback& onNextToken, NYql::TIssues& issues, size_t maxErrors) final {
         Y_UNUSED(query);
@@ -30,7 +31,8 @@ class TDummyFactory: public ILexerFactory {
 public:
     TDummyFactory(const TString& name)
         : Name_(name)
-    {}
+    {
+    }
 
     ILexer::TPtr MakeLexer() const final {
         return MakeHolder<TDummyLexer>(Name_);
@@ -40,10 +42,10 @@ private:
     const TString Name_;
 };
 
-}
+} // namespace
 
 TLexerFactoryPtr MakeDummyLexerFactory(const TString& name) {
     return MakeIntrusive<TDummyFactory>(name);
 }
 
-}
+} // namespace NSQLTranslation

@@ -5,7 +5,7 @@
 namespace NKikimr {
 namespace NMiniKQL {
 
-class TCustomListValue : public TComputationValue<TCustomListValue> {
+class TCustomListValue: public TComputationValue<TCustomListValue> {
 public:
     TCustomListValue(TMemoryUsageInfo* memInfo)
         : TComputationValue(memInfo)
@@ -59,14 +59,14 @@ protected:
     mutable std::optional<bool> HasItems_;
     mutable NUdf::TUnboxedValue Iterator_;
 
-    //FIXME Remove
-    std::optional<ui64>& Length; // NOLINT(readability-identifier-naming)
+    // FIXME Remove
+    std::optional<ui64>& Length;   // NOLINT(readability-identifier-naming)
     std::optional<bool>& HasItems; // NOLINT(readability-identifier-naming)
 };
 
-class TForwardListValue : public TCustomListValue {
+class TForwardListValue: public TCustomListValue {
 public:
-    class TIterator : public TComputationValue<TIterator> {
+    class TIterator: public TComputationValue<TIterator> {
     public:
         TIterator(TMemoryUsageInfo* memInfo, NUdf::TUnboxedValue&& stream);
 
@@ -84,9 +84,9 @@ private:
     mutable NUdf::TUnboxedValue Stream_;
 };
 
-class TExtendListValue : public TCustomListValue {
+class TExtendListValue: public TCustomListValue {
 public:
-    class TIterator : public TComputationValue<TIterator> {
+    class TIterator: public TComputationValue<TIterator> {
     public:
         TIterator(TMemoryUsageInfo* memInfo, TUnboxedValueVector&& iters);
         ~TIterator();
@@ -111,7 +111,7 @@ private:
     const TUnboxedValueVector Lists_;
 };
 
-class TExtendStreamValue : public TComputationValue<TExtendStreamValue> {
+class TExtendStreamValue: public TComputationValue<TExtendStreamValue> {
 public:
     using TBase = TComputationValue<TExtendStreamValue>;
 
@@ -126,5 +126,5 @@ private:
     ui32 Index_ = 0;
 };
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

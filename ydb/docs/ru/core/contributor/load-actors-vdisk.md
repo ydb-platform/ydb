@@ -24,3 +24,5 @@
 ### Параметры вероятностного распределения {#params}
 
 {% include [load-actors-params](../_includes/load-actors-interval.md) %}
+
+{% include [career](./_includes/career.md) %}

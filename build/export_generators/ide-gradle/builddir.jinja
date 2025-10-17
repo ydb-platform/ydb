@@ -16,6 +16,9 @@ var mkBuildDir = tasks.register("mkBuildDir") {
     doFirst {
         mkdir(layout.buildDirectory.asFile.get())
     }
+    onlyIf {
+        !layout.buildDirectory.asFile.get().exists()
+    }
 }
 
 tasks.withType<JavaExec>().configureEach {

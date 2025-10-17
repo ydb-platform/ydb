@@ -45,6 +45,7 @@ TStatus DescribeTable(NTable::TTableClient& tableClient, const TString& path, TM
 TStatus DescribeExternalDataSource(NTable::TTableClient& tableClient, const TString& path, Ydb::Table::DescribeExternalDataSourceResult& out);
 TStatus DescribeSystemView(NTable::TTableClient& tableClient, const TString& path, Ydb::Table::DescribeSystemViewResult& out);
 TStatus DescribeReplication(NReplication::TReplicationClient& replicationClient, const TString& path, TMaybe<NReplication::TReplicationDescription>& out);
+TStatus DescribeTransfer(NReplication::TReplicationClient& replicationClient, const TString& path, TMaybe<NReplication::TTransferDescription>& out);
 TStatus DescribeViewQuery(const NYdb::TDriver& driver, const TString& path, TString& out);
 
 NScheme::TDescribePathResult DescribePath(

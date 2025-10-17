@@ -255,8 +255,12 @@ bool TCommandPing::PingKqpSelect1(NQuery::TQueryClient& client, const TString& q
 
     settings.Syntax(NQuery::ESyntax::YqlV1);
 
+    auto sessionResult = client.GetSession(NQuery::TCreateSessionSettings()).GetValueSync();
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(sessionResult);
+    auto session = sessionResult.GetSession();
+
     // Execute query without parameters
-    auto asyncResult = client.StreamExecuteQuery(
+    auto asyncResult = session.StreamExecuteQuery(
         query,
         NQuery::TTxControl::NoTx(),
         settings

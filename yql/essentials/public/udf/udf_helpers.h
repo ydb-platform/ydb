@@ -14,77 +14,76 @@
 #include <util/generic/strbuf.h>
 #include <util/string/builder.h>
 
-
 namespace NYql {
 namespace NUdf {
 
-    template <class T>
-    concept CUDF = requires(const TStringRef& name, TType* userType, IFunctionTypeInfoBuilder& builder, bool typesOnly) {
-        { T::Name() } -> std::convertible_to<const TStringRef&>;
-        { T::DeclareSignature(name, userType, builder, typesOnly) } -> std::convertible_to<bool>;
-    };
+template <class T>
+concept CUDF = requires(const TStringRef& name, TType* userType, IFunctionTypeInfoBuilder& builder, bool typesOnly) {
+    { T::Name() } -> std::convertible_to<const TStringRef&>;
+    { T::DeclareSignature(name, userType, builder, typesOnly) } -> std::convertible_to<bool>;
+};
 
-    template <ui32 V, CUDF TLegacyUDF, CUDF TActualUDF>
-    class TLangVerForked {
-    private:
-        Y_HAS_SUBTYPE(TBlockType);
+template <ui32 V, CUDF TLegacyUDF, CUDF TActualUDF>
+class TLangVerForked {
+private:
+    Y_HAS_SUBTYPE(TBlockType);
 
-    public:
-        using TTypeAwareMarker = bool;
+public:
+    using TTypeAwareMarker = bool;
 
-        using TBlockType = decltype([] {
-            static_assert(THasTBlockType<TLegacyUDF>::value == THasTBlockType<TActualUDF>::value);
-            if constexpr (THasTBlockType<TActualUDF>::value) {
-                return TLangVerForked<
-                    V,
-                    typename TLegacyUDF::TBlockType,
-                    typename TActualUDF::TBlockType>();
-            } else {
-                return;
-            }
-        }());
-
-        static const TStringRef& Name() {
-            Y_ENSURE(TLegacyUDF::Name() == TActualUDF::Name());
-            return TActualUDF::Name();
+    using TBlockType = decltype([] {
+        static_assert(THasTBlockType<TLegacyUDF>::value == THasTBlockType<TActualUDF>::value);
+        if constexpr (THasTBlockType<TActualUDF>::value) {
+            return TLangVerForked<
+                V,
+                typename TLegacyUDF::TBlockType,
+                typename TActualUDF::TBlockType>();
+        } else {
+            return;
         }
+    }());
 
-        static bool DeclareSignature(
-            const TStringRef& name, TType* userType,
-            IFunctionTypeInfoBuilder& builder, bool typesOnly) {
+    static const TStringRef& Name() {
+        Y_ENSURE(TLegacyUDF::Name() == TActualUDF::Name());
+        return TActualUDF::Name();
+    }
+
+    static bool DeclareSignature(
+        const TStringRef& name, TType* userType,
+        IFunctionTypeInfoBuilder& builder, bool typesOnly) {
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 43)
-            if (V <= builder.GetCurrentLangVer()) {
-                return TActualUDF::DeclareSignature(name, userType, builder, typesOnly);
-            }
-#endif
-            return TLegacyUDF::DeclareSignature(name, userType, builder, typesOnly);
+        if (V <= builder.GetCurrentLangVer()) {
+            return TActualUDF::DeclareSignature(name, userType, builder, typesOnly);
         }
-    };
+#endif
+        return TLegacyUDF::DeclareSignature(name, userType, builder, typesOnly);
+    }
+};
 
-    inline TSourcePosition GetSourcePosition(IFunctionTypeInfoBuilder& builder) {
+inline TSourcePosition GetSourcePosition(IFunctionTypeInfoBuilder& builder) {
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 9)
-        return builder.GetSourcePosition();
+    return builder.GetSourcePosition();
 #else
-        Y_UNUSED(builder);
-        return {};
+    Y_UNUSED(builder);
+    return {};
 #endif
-    }
+}
 
-    TString LoadResourceOnce(TStringBuf resourceId);
+TString LoadResourceOnce(TStringBuf resourceId);
 
-    inline void SetIRImplementation(IFunctionTypeInfoBuilder& builder, TStringBuf resourceId, TStringBuf functionName) {
+inline void SetIRImplementation(IFunctionTypeInfoBuilder& builder, TStringBuf resourceId, TStringBuf functionName) {
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 16)
-        if (functionName) {
-            builder.IRImplementation(LoadResourceOnce(resourceId), resourceId, functionName);
-        }
-#else
-        Y_UNUSED(builder);
-        Y_UNUSED(resourceId);
-        Y_UNUSED(functionName);
-#endif
+    if (functionName) {
+        builder.IRImplementation(LoadResourceOnce(resourceId), resourceId, functionName);
     }
+#else
+    Y_UNUSED(builder);
+    Y_UNUSED(resourceId);
+    Y_UNUSED(functionName);
+#endif
 }
-}
+} // namespace NUdf
+} // namespace NYql
 
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 17)
     #define APPEND_SOURCE_LOCATION(sb, valueBuilder, Pos_) sb << valueBuilder->WithCalleePosition(Pos_) << " ";
@@ -93,131 +92,136 @@ namespace NUdf {
 #endif
 
 #define UDF_IMPL_EX(udfName, typeBody, members, init, irResourceId, irFunctionName, blockType, create_impl) \
-    class udfName: public ::NYql::NUdf::TBoxedValue {                                    \
-    public:                                                                              \
-        using TBlockType = blockType;                                                    \
-        explicit udfName(::NYql::NUdf::IFunctionTypeInfoBuilder& builder)                \
-            : Pos_(GetSourcePosition(builder))                                              \
-        {                                                                                   \
-            init                                                                            \
-        }                                                                                   \
-        static const ::NYql::NUdf::TStringRef& Name() {                                  \
-            static auto name = ::NYql::NUdf::TStringRef::Of(#udfName).Substring(1, 256); \
-            return name;                                                                    \
-        }                                                                                   \
-        inline ::NYql::NUdf::TUnboxedValue RunImpl(                                      \
-            const ::NYql::NUdf::IValueBuilder* valueBuilder,                             \
-            const ::NYql::NUdf::TUnboxedValuePod* args) const;                           \
-        ::NYql::NUdf::TUnboxedValue Run(                                                 \
-            const ::NYql::NUdf::IValueBuilder* valueBuilder,                             \
-            const ::NYql::NUdf::TUnboxedValuePod* args) const override {                 \
-            try {                                                                           \
-                return RunImpl(valueBuilder, args);                                                  \
-            } catch (const std::exception& ex) {                                                     \
-                    TStringBuilder sb;                                                               \
-                    APPEND_SOURCE_LOCATION(sb, valueBuilder, Pos_)                                   \
-                    sb << ex.what();                                                                 \
-                    UdfTerminate(sb.c_str());                                                        \
-            }                                                                                        \
-        }                                                                                            \
-        static bool DeclareSignature(                                                    \
-            const ::NYql::NUdf::TStringRef& name,                                        \
-            ::NYql::NUdf::TType* userType,                                               \
-            ::NYql::NUdf::IFunctionTypeInfoBuilder& builder,                             \
-            bool typesOnly) {                                                               \
-            Y_UNUSED(userType);                                                             \
-            if (Name() == name) {                                                           \
-                typeBody if (!typesOnly) {                                                  \
-                    create_impl                                                             \
-                    SetIRImplementation(builder, irResourceId, irFunctionName);             \
-                }                                                                           \
-                return true;                                                                \
-            }                                                                               \
-            return false;                                                                   \
-        }                                                                                   \
-        ::NYql::NUdf::TSourcePosition GetPos() const { return Pos_; }                       \
-    private:                                                                                \
-        ::NYql::NUdf::TSourcePosition Pos_;                                              \
-        members                                                                             \
-    };                                                                                      \
-    ::NYql::NUdf::TUnboxedValue udfName::RunImpl(                                        \
-        const ::NYql::NUdf::IValueBuilder* valueBuilder,                                 \
+    class udfName: public ::NYql::NUdf::TBoxedValue {                                                       \
+    public:                                                                                                 \
+        using TBlockType = blockType;                                                                       \
+        explicit udfName(::NYql::NUdf::IFunctionTypeInfoBuilder& builder)                                   \
+            : Pos_(GetSourcePosition(builder))                                                              \
+        {                                                                                                   \
+            init                                                                                            \
+        }                                                                                                   \
+        static const ::NYql::NUdf::TStringRef& Name() {                                                     \
+            static auto name = ::NYql::NUdf::TStringRef::Of(#udfName).Substring(1, 256);                    \
+            return name;                                                                                    \
+        }                                                                                                   \
+        inline ::NYql::NUdf::TUnboxedValue RunImpl(                                                         \
+            const ::NYql::NUdf::IValueBuilder* valueBuilder,                                                \
+            const ::NYql::NUdf::TUnboxedValuePod* args) const;                                              \
+        ::NYql::NUdf::TUnboxedValue Run(                                                                    \
+            const ::NYql::NUdf::IValueBuilder* valueBuilder,                                                \
+            const ::NYql::NUdf::TUnboxedValuePod* args) const override {                                    \
+            try {                                                                                           \
+                return RunImpl(valueBuilder, args);                                                         \
+            } catch (const std::exception& ex) {                                                            \
+                TStringBuilder sb;                                                                          \
+                APPEND_SOURCE_LOCATION(sb, valueBuilder, Pos_)                                              \
+                sb << ex.what();                                                                            \
+                UdfTerminate(sb.c_str());                                                                   \
+            }                                                                                               \
+        }                                                                                                   \
+        static bool DeclareSignature(                                                                       \
+            const ::NYql::NUdf::TStringRef& name,                                                           \
+            ::NYql::NUdf::TType* userType,                                                                  \
+            ::NYql::NUdf::IFunctionTypeInfoBuilder& builder,                                                \
+            bool typesOnly) {                                                                               \
+            Y_UNUSED(userType);                                                                             \
+            if (Name() == name) {                                                                           \
+                typeBody if (!typesOnly) {                                                                  \
+                    create_impl                                                                             \
+                        SetIRImplementation(builder, irResourceId, irFunctionName);                         \
+                }                                                                                           \
+                return true;                                                                                \
+            }                                                                                               \
+            return false;                                                                                   \
+        }                                                                                                   \
+        ::NYql::NUdf::TSourcePosition GetPos() const {                                                      \
+            return Pos_;                                                                                    \
+        }                                                                                                   \
+                                                                                                            \
+    private:                                                                                                \
+        ::NYql::NUdf::TSourcePosition Pos_;                                                                 \
+        members                                                                                             \
+    };                                                                                                      \
+    ::NYql::NUdf::TUnboxedValue udfName::RunImpl(                                                           \
+        const ::NYql::NUdf::IValueBuilder* valueBuilder,                                                    \
         const ::NYql::NUdf::TUnboxedValuePod* args) const
 
 #define UDF_IMPL(udfName, typeBody, members, init, irResourceId, irFunctionName, blockType) \
-        UDF_IMPL_EX(udfName, typeBody, members, init, irResourceId, irFunctionName, blockType, builder.Implementation(new udfName(builder));)
+    UDF_IMPL_EX(udfName, typeBody, members, init, irResourceId, irFunctionName, blockType, builder.Implementation(new udfName(builder));)
 
 #define UDF(udfName, typeBody) UDF_IMPL(udfName, typeBody, ;, ;, "", "", void)
 
-#define UDF_RUN_IMPL(udfName, typeBody, members, init, irResourceId, irFunctionName)        \
-    struct udfName##Members {                                                               \
-        members                                                                             \
-    };                                                                                      \
-                                                                                            \
+#define UDF_RUN_IMPL(udfName, typeBody, members, init, irResourceId, irFunctionName)     \
+    struct udfName##Members {                                                            \
+        members                                                                          \
+    };                                                                                   \
+                                                                                         \
     class udfName: public ::NYql::NUdf::TBoxedValue, public udfName##Members {           \
-    public:                                                                                 \
+    public:                                                                              \
         explicit udfName(::NYql::NUdf::IFunctionTypeInfoBuilder& builder)                \
-            : Pos_(GetSourcePosition(builder))                                              \
-        {                                                                                   \
-            init                                                                            \
-        }                                                                                   \
+            : Pos_(GetSourcePosition(builder))                                           \
+        {                                                                                \
+            init                                                                         \
+        }                                                                                \
         static const ::NYql::NUdf::TStringRef& Name() {                                  \
             static auto name = ::NYql::NUdf::TStringRef::Of(#udfName).Substring(1, 256); \
-            return name;                                                                    \
-        }                                                                                   \
-        class TImpl: public TBoxedValue, public udfName##Members {                          \
-        public:                                                                             \
-            TImpl(const udfName##Members& parent,                                           \
-                const ::NYql::NUdf::TUnboxedValuePod& runConfig,                         \
-                ::NYql::NUdf::TSourcePosition pos)                                       \
-                : udfName##Members(parent)                                                  \
+            return name;                                                                 \
+        }                                                                                \
+        class TImpl: public TBoxedValue, public udfName##Members {                       \
+        public:                                                                          \
+            TImpl(const udfName##Members& parent,                                        \
+                  const ::NYql::NUdf::TUnboxedValuePod& runConfig,                       \
+                  ::NYql::NUdf::TSourcePosition pos)                                     \
+                : udfName##Members(parent)                                               \
                 , RunConfig(::NYql::NUdf::TUnboxedValuePod(runConfig))                   \
-                , Pos_(pos)                                                                 \
-            {}                                                                              \
+                , Pos_(pos)                                                              \
+            {                                                                            \
+            }                                                                            \
             inline ::NYql::NUdf::TUnboxedValue RunImpl(                                  \
                 const ::NYql::NUdf::IValueBuilder* valueBuilder,                         \
                 const ::NYql::NUdf::TUnboxedValuePod* args) const;                       \
             ::NYql::NUdf::TUnboxedValue Run(                                             \
                 const ::NYql::NUdf::IValueBuilder* valueBuilder,                         \
                 const ::NYql::NUdf::TUnboxedValuePod* args) const override {             \
-                try {                                                                                \
-                    return RunImpl(valueBuilder, args);                                              \
-                } catch (const std::exception& ex) {                                                 \
-                    TStringBuilder sb;                                                               \
-                    APPEND_SOURCE_LOCATION(sb, valueBuilder, Pos_)                                   \
-                    sb << ex.what();                                                                 \
-                    UdfTerminate(sb.c_str());                                                        \
-                }                                                                                    \
-            }                                                                                        \
-                                                                                            \
-        private:                                                                            \
+                try {                                                                    \
+                    return RunImpl(valueBuilder, args);                                  \
+                } catch (const std::exception& ex) {                                     \
+                    TStringBuilder sb;                                                   \
+                    APPEND_SOURCE_LOCATION(sb, valueBuilder, Pos_)                       \
+                    sb << ex.what();                                                     \
+                    UdfTerminate(sb.c_str());                                            \
+                }                                                                        \
+            }                                                                            \
+                                                                                         \
+        private:                                                                         \
             ::NYql::NUdf::TUnboxedValue RunConfig;                                       \
             ::NYql::NUdf::TSourcePosition Pos_;                                          \
-        };                                                                                  \
+        };                                                                               \
         ::NYql::NUdf::TUnboxedValue Run(                                                 \
             const ::NYql::NUdf::IValueBuilder* valueBuilder,                             \
             const ::NYql::NUdf::TUnboxedValuePod* args) const override {                 \
-            Y_UNUSED(valueBuilder);                                                         \
+            Y_UNUSED(valueBuilder);                                                      \
             return ::NYql::NUdf::TUnboxedValuePod(new TImpl(*this, args[0], Pos_));      \
-        }                                                                                   \
-        static bool DeclareSignature(                                                       \
+        }                                                                                \
+        static bool DeclareSignature(                                                    \
             const ::NYql::NUdf::TStringRef& name,                                        \
             ::NYql::NUdf::TType* userType,                                               \
             ::NYql::NUdf::IFunctionTypeInfoBuilder& builder,                             \
-            bool typesOnly) {                                                               \
-            Y_UNUSED(userType);                                                             \
-            if (Name() == name) {                                                           \
-                typeBody if (!typesOnly) {                                                  \
-                    builder.Implementation(new udfName(builder));                           \
-                    SetIRImplementation(builder, irResourceId, irFunctionName);             \
-                }                                                                           \
-                return true;                                                                \
-            }                                                                               \
-            return false;                                                                   \
-        }                                                                                   \
-    private:                                                                                \
+            bool typesOnly) {                                                            \
+            Y_UNUSED(userType);                                                          \
+            if (Name() == name) {                                                        \
+                typeBody if (!typesOnly) {                                               \
+                    builder.Implementation(new udfName(builder));                        \
+                    SetIRImplementation(builder, irResourceId, irFunctionName);          \
+                }                                                                        \
+                return true;                                                             \
+            }                                                                            \
+            return false;                                                                \
+        }                                                                                \
+                                                                                         \
+    private:                                                                             \
         ::NYql::NUdf::TSourcePosition Pos_;                                              \
-    };                                                                                      \
+    };                                                                                   \
     ::NYql::NUdf::TUnboxedValue udfName::TImpl::RunImpl(                                 \
         const ::NYql::NUdf::IValueBuilder* valueBuilder,                                 \
         const ::NYql::NUdf::TUnboxedValuePod* args) const
@@ -229,7 +233,6 @@ namespace NUdf {
 
 #define SIMPLE_UDF_IMPL(udfName, typeBody, signature, irResourceId, irFunctionName, blockType) \
     SIMPLE_UDF_IMPL_EX(udfName, typeBody, signature, irResourceId, irFunctionName, blockType, builder.Implementation(new udfName(builder));)
-
 
 #define SIMPLE_UDF(udfName, signature) \
     SIMPLE_UDF_IMPL(udfName, builder.SimpleSignature<signature>();, signature, "", "", void)
@@ -261,25 +264,25 @@ namespace NUdf {
 #define SIMPLE_UDF_RUN(udfName, signature, runConfigSignature) \
     SIMPLE_UDF_RUN_OPTIONS(udfName, signature, builder.RunConfig<runConfigSignature>())
 
-#define SIMPLE_MODULE(moduleName, ...)                                               \
-    class moduleName: public ::NYql::NUdf::TSimpleUdfModuleHelper<__VA_ARGS__> {  \
-    public:                                                                          \
-        ::NYql::NUdf::TStringRef Name() const {                                   \
-            auto name = ::NYql::NUdf::TStringRef::Of(#moduleName);                \
-            return name.Substring(1, name.Size() - 7);                               \
-        }                                                                            \
+#define SIMPLE_MODULE(moduleName, ...)                                           \
+    class moduleName: public ::NYql::NUdf::TSimpleUdfModuleHelper<__VA_ARGS__> { \
+    public:                                                                      \
+        ::NYql::NUdf::TStringRef Name() const {                                  \
+            auto name = ::NYql::NUdf::TStringRef::Of(#moduleName);               \
+            return name.Substring(1, name.Size() - 7);                           \
+        }                                                                        \
     };
 
-#define EMPTY_RESULT_ON_EMPTY_ARG(n)             \
-    if (!args[n]) {                              \
+#define EMPTY_RESULT_ON_EMPTY_ARG(n)          \
+    if (!args[n]) {                           \
         return ::NYql::NUdf::TUnboxedValue(); \
     }
 
 namespace NYql {
 namespace NUdf {
 
-template<bool CheckOptional, bool CheckBlock, const char* TFuncName, template<class> class TFunc, typename... TUserTypes>
-class TUserDataTypeFuncFactory : public ::NYql::NUdf::TBoxedValue {
+template <bool CheckOptional, bool CheckBlock, const char* TFuncName, template <class> class TFunc, typename... TUserTypes>
+class TUserDataTypeFuncFactory: public ::NYql::NUdf::TBoxedValue {
 public:
     typedef bool TTypeAwareMarker;
 
@@ -308,8 +311,7 @@ public:
         return userType;
     }
 
-
-    template<typename TUserType>
+    template <typename TUserType>
     static bool DeclareSignatureImpl(
         const ::NYql::NUdf::TStringRef& name,
         TDataTypeId typeId,
@@ -324,7 +326,7 @@ public:
         return true;
     }
 
-    template<typename TUserType, typename THead, typename... TTail>
+    template <typename TUserType, typename THead, typename... TTail>
     static bool DeclareSignatureImpl(
         const ::NYql::NUdf::TStringRef& name,
         TDataTypeId typeId,
@@ -390,9 +392,8 @@ public:
     }
 };
 
-template<CUDF... TUdfs>
-class TSimpleUdfModuleHelper : public IUdfModule
-{
+template <CUDF... TUdfs>
+class TSimpleUdfModuleHelper: public IUdfModule {
     Y_HAS_SUBTYPE(TTypeAwareMarker);
     Y_HAS_SUBTYPE(TBlockType);
 
@@ -400,7 +401,7 @@ public:
     void CleanupOnTerminate() const override {
     }
 
-    template<typename TUdfType>
+    template <typename TUdfType>
     void GetAllFunctionsImpl(IFunctionNamesSink& names) const {
         auto r = names.Add(TUdfType::Name());
         if (THasTTypeAwareMarker<TUdfType>::value) {
@@ -415,20 +416,19 @@ public:
         }
     }
 
-    template<typename THead1, typename THead2, typename... TTail>
+    template <typename THead1, typename THead2, typename... TTail>
     void GetAllFunctionsImpl(IFunctionNamesSink& names) const {
         GetAllFunctionsImpl<THead1>(names);
         GetAllFunctionsImpl<THead2, TTail...>(names);
     }
 
-    template<typename TUdfType>
+    template <typename TUdfType>
     bool BuildFunctionTypeInfoImpl(
-                const TStringRef& name,
-                TType* userType,
-                const TStringRef& typeConfig,
-                ui32 flags,
-                IFunctionTypeInfoBuilder& builder) const
-    {
+        const TStringRef& name,
+        TType* userType,
+        const TStringRef& typeConfig,
+        ui32 flags,
+        IFunctionTypeInfoBuilder& builder) const {
         Y_UNUSED(typeConfig);
         bool typesOnly = (flags & TFlags::TypesOnly);
         bool found = TUdfType::DeclareSignature(name, userType, builder, typesOnly);
@@ -443,14 +443,13 @@ public:
         return found;
     }
 
-    template<typename THead1, typename THead2, typename... TTail>
+    template <typename THead1, typename THead2, typename... TTail>
     bool BuildFunctionTypeInfoImpl(
-                const TStringRef& name,
-                TType* userType,
-                const TStringRef& typeConfig,
-                ui32 flags,
-                IFunctionTypeInfoBuilder& builder) const
-    {
+        const TStringRef& name,
+        TType* userType,
+        const TStringRef& typeConfig,
+        ui32 flags,
+        IFunctionTypeInfoBuilder& builder) const {
         bool found = BuildFunctionTypeInfoImpl<THead1>(name, userType, typeConfig, flags, builder);
         if (!found) {
             found = BuildFunctionTypeInfoImpl<THead2, TTail...>(name, userType, typeConfig, flags, builder);
@@ -463,12 +462,11 @@ public:
     }
 
     void BuildFunctionTypeInfo(
-                        const TStringRef& name,
-                        TType* userType,
-                        const TStringRef& typeConfig,
-                        ui32 flags,
-                        IFunctionTypeInfoBuilder& builder) const override
-    {
+        const TStringRef& name,
+        TType* userType,
+        const TStringRef& typeConfig,
+        ui32 flags,
+        IFunctionTypeInfoBuilder& builder) const override {
         try {
             bool found = BuildFunctionTypeInfoImpl<TUdfs...>(name, userType, typeConfig, flags, builder);
             if (!found) {
@@ -480,8 +478,7 @@ public:
             builder.SetError(CurrentExceptionMessage());
         }
     }
-
 };
 
-} // namspace NUdf
-} // namspace NYql
+} // namespace NUdf
+} // namespace NYql

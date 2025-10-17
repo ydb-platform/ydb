@@ -19,7 +19,7 @@ ui32 GetPercentage(const TActivation& activation, const TString& userName, const
     if (!groups.empty() && AnyOf(activation.GetIncludeGroups(), [&](const auto& includeGroup) { return groups.contains(includeGroup); })) {
         return 100;
     }
-    const auto currentRev =  GetProgramCommitId();
+    const auto currentRev = GetProgramCommitId();
     if (currentRev && AnyOf(activation.GetIncludeRevisions(), [&](const auto& rev) { return rev == currentRev; })) {
         return 100;
     }
@@ -43,7 +43,7 @@ ui32 GetPercentage(const TActivation& activation, const TString& userName, const
         now.LocalTime(&local);
         const auto hour = ui32(local.tm_hour);
 
-        for (auto& byHour: activation.GetByHour()) {
+        for (auto& byHour : activation.GetByHour()) {
             if (byHour.GetHour() == hour) {
                 percent = byHour.GetPercentage();
                 break;
@@ -64,4 +64,4 @@ bool Allow(const TActivation& activation, const TString& userName, const std::un
 template ui32 GetPercentage<NYql::TActivationPercentage>(const NYql::TActivationPercentage& activation, const TString& userName, const std::unordered_set<std::string_view>& groups);
 template bool Allow<NYql::TActivationPercentage>(const NYql::TActivationPercentage& activation, const TString& userName, const std::unordered_set<std::string_view>& groups);
 
-} // namespace
+} // namespace NYql::NConfig

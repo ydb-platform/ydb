@@ -13,7 +13,8 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
 
     NYdb::NQuery::TScriptExecutionOperation WaitScriptExecutionOperation(
         const NYdb::TOperation::TOperationId& operationId,
-        const NYdb::TDriver& ydbDriver);
+        const NYdb::TDriver& ydbDriver,
+        const TString& userSID = "");
 
     void WaitResourcesPublish(ui32 nodeId, ui32 expectedNodeCount);
     void WaitResourcesPublish(const TKikimrRunner& kikimrRunner);
@@ -25,6 +26,7 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
         bool EnableScriptExecutionBackgroundChecks = true;
         TIntrusivePtr<NYql::IPqGateway> PqGateway;
         TDuration CheckpointPeriod = TDuration::MilliSeconds(200);
+        TTestLogSettings LogSettings;
     };
 
     std::shared_ptr<TKikimrRunner> MakeKikimrRunner(

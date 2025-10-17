@@ -22,5 +22,5 @@ private:
     bool Finish_ = false;
 };
 
-}
-}
+} // namespace NUdf
+} // namespace NYql

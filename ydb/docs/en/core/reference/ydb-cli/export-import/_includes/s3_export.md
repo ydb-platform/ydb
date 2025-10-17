@@ -125,9 +125,7 @@ You can track the export progress by changes in the "progress" attribute:
 
 ### Completing the export operation {#forget}
 
-When running the export operation, a directory named `export_*` is created in the root directory, where `*` is the numeric part of the export ID. This directory stores tables with a consistent snapshot of exported data as of the export start time.
-
-Once the export is done, use the `operation forget` command to make sure the export is completed: the operation is removed from the list of operations and all files created for it are deleted:
+Once the export is done, use the `operation forget` command to make sure the export is considered complete (removed from the list of operations):
 
 ```bash
 {{ ydb-cli }} -p quickstart operation forget "ydb://export/6?id=281474976788395&kind=s3"

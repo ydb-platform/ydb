@@ -90,10 +90,10 @@ NCommon::IMkqlCallableCompiler::TCompiler MakeFolderPathCallableCompiler(const T
     };
 }
 
-}
+} // namespace
 
 NKikimr::NMiniKQL::TRuntimeNode CompileMkql(const TExprNode::TPtr& exprRoot, TExprContext& exprCtx,
-    const NKikimr::NMiniKQL::IFunctionRegistry& funcRegistry, const NKikimr::NMiniKQL::TTypeEnvironment& env, const TUserDataTable& userData, NCommon::TMemoizedTypesMap* typeMemoization)
+                                            const NKikimr::NMiniKQL::IFunctionRegistry& funcRegistry, const NKikimr::NMiniKQL::TTypeEnvironment& env, const TUserDataTable& userData, NCommon::TMemoizedTypesMap* typeMemoization)
 {
     NCommon::TMkqlCommonCallableCompiler compiler;
 
@@ -106,11 +106,11 @@ NKikimr::NMiniKQL::TRuntimeNode CompileMkql(const TExprNode::TPtr& exprRoot, TEx
     // Prepare build context
 
     NKikimr::NMiniKQL::TProgramBuilder pgmBuilder(env, funcRegistry);
-    NCommon::TMkqlBuildContext buildCtx(compiler, pgmBuilder, exprCtx, /*lambdaId*/0, /*args*/{}, typeMemoization);
+    NCommon::TMkqlBuildContext buildCtx(compiler, pgmBuilder, exprCtx, /*lambdaId*/ 0, /*args*/ {}, typeMemoization);
 
     // Build the root MKQL node
 
     return NCommon::MkqlBuildExpr(*exprRoot, buildCtx);
 }
 
-} // NYql::NPureCalc
+} // namespace NYql::NPureCalc

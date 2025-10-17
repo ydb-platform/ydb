@@ -2525,15 +2525,20 @@ public:
         }
     }
 
-    static TString AdjustPath(const TString& path, const TString& database) {
+    TString AdjustPath(const TString& path, const TString& database) const {
         if (path.StartsWith('/')) {
+            if (database.empty() && !path.StartsWith(GetDatabase())) {
+                throw yexception() << "Path '" << path << "' not in database '" << GetDatabase() << "'";
+            }
             if (!path.StartsWith(database)) {
                 throw yexception() << "Path '" << path << "' not in database '" << database << "'";
             }
             return path;
-        } else {
-            return database + '/' + path;
         }
+        if (database.empty()) {
+            return path;
+        }
+        return database + '/' + path;
     }
 
     TFuture<TGenericResult> CreateReplication(const TString& cluster, const NYql::TCreateReplicationSettings& settings) override {
@@ -2588,6 +2593,10 @@ public:
             }
             if (const auto& consistency = settings.Settings.GlobalConsistency) {
                 consistency->Serialize(*config.MutableConsistencySettings()->MutableGlobal());
+            }
+
+            if (params.GetDatabase().empty()) {
+                return MakeFuture(ResultFromError<TGenericResult>("Database is not specified"));
             }
 
             auto& targets = *config.MutableSpecific();
@@ -2665,6 +2674,10 @@ public:
                     params.SetEndpoint(TString{parseResult.Endpoint});
                     params.SetDatabase(TString{parseResult.Database});
                     params.SetEnableSsl(parseResult.EnableSsl);
+
+                    if (params.GetDatabase().empty()) {
+                        return MakeFuture(ResultFromError<TGenericResult>("Database is not specified"));
+                    }
                 }
                 if (const auto& endpoint = settings.Settings.Endpoint) {
                     params.SetEndpoint(*endpoint);
@@ -2797,6 +2810,10 @@ public:
                 params.SetCaCert(*caCert);
             }
 
+            if (!params.GetEndpoint().empty() && params.GetDatabase().empty()) {
+                return MakeFuture(ResultFromError<TGenericResult>("Database is not specified"));
+            }
+
             {
                 const auto& [src, dst, lambda] = settings.Target;
                 auto& target = *config.MutableTransferSpecific()->MutableTarget();
@@ -2900,6 +2917,10 @@ public:
                     params.SetEndpoint(TString{parseResult.Endpoint});
                     params.SetDatabase(TString{parseResult.Database});
                     params.SetEnableSsl(parseResult.EnableSsl);
+
+                    if (params.GetDatabase().empty()) {
+                        return MakeFuture(ResultFromError<TGenericResult>("Database is not specified"));
+                    }
                 }
                 if (const auto& endpoint = settings.Settings.Endpoint) {
                     params.SetEndpoint(*endpoint);

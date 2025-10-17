@@ -70,6 +70,6 @@ enum class EBackportCompatibleFeaturesMode {
 };
 
 bool IsBackwardCompatibleFeatureAvailable(TLangVersion currentVer, TLangVersion featureVer,
-    EBackportCompatibleFeaturesMode mode);
+                                          EBackportCompatibleFeaturesMode mode);
 
-}
+} // namespace NYql

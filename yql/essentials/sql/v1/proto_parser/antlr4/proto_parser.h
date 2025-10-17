@@ -7,4 +7,4 @@ NSQLTranslation::TParserFactoryPtr MakeAntlr4ParserFactory(
     bool isAmbiguityError = false,
     bool isAmbiguityDebugging = false);
 
-}
+} // namespace NSQLTranslationV1

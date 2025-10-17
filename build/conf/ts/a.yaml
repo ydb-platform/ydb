@@ -27,3 +27,38 @@ arcanum:
           name: fbp_team
           assign: 999
           ship: 1
+
+
+ci:
+  # @robot-nots https://yav.yandex-team.ru/secret/sec-01gfaajz2g21eq18zbdzcgye52
+  secret: sec-01gfaajz2g21eq18zbdzcgye52
+  runtime:
+    sandbox-owner: FRONTEND_BUILD_PLATFORM
+
+  actions:
+    check-use-prebuilt-nots-tool:
+      title: Check TS_USE_PREBUILT_NOTS_TOOL=yes
+      flow: check-use-prebuilt-nots-tool
+      triggers:
+        - on: pr
+          required: always
+          filters:
+            - sub-paths: [ ts.conf ]
+
+  flows:
+    check-use-prebuilt-nots-tool:
+      title: Check TS_USE_PREBUILT_NOTS_TOOL=yes
+      jobs:
+        check:
+          title: Check TS_USE_PREBUILT_NOTS_TOOL=yes
+          task: common/misc/run_command
+          input:
+            config:
+              arc_mount_config:
+                enabled: true
+              logs_config:
+                redirect_stderr_to_stdout: true
+                stdout_ci_badge: true
+              cmd_line: |
+                set -ex
+                grep -r 'TS_USE_PREBUILT_NOTS_TOOL=yes' $ARCADIA_PATH/build/conf/ts/ts.conf

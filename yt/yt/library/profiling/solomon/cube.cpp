@@ -754,36 +754,42 @@ int TCube<T>::ReadSensorValues(
 template <class T>
 void TCube<T>::DumpCube(NProto::TCube *cube, const std::vector<TTagIdList>& extraProjections) const
 {
-    for (const auto& extraTags : extraProjections) {
-        for (const auto& [tagIds, window] : Projections_) {
-            auto projection = cube->add_projections();
-            for (auto tagId : tagIds) {
-                projection->add_tag_ids(tagId);
-            }
-            for (auto tagId : extraTags) {
-                projection->add_tag_ids(tagId);
-            }
+    for (const auto& extraTagIds : extraProjections) {
+        DumpCube(cube, extraTagIds);
+    }
+}
 
-            projection->set_has_value(window.HasValue[Index_]);
-            if constexpr (std::is_same_v<T, i64>) {
-                projection->set_counter(window.Values[Index_]);
-            } else if constexpr (std::is_same_v<T, TDuration>) {
-                projection->set_duration(window.Values[Index_].GetValue());
-            } else if constexpr (std::is_same_v<T, double>) {
-                projection->set_gauge(window.Values[Index_]);
-            } else if constexpr (std::is_same_v<T, TSummarySnapshot<double>>) {
-                ToProto(projection->mutable_summary(), window.Values[Index_]);
-            } else if constexpr (std::is_same_v<T, TSummarySnapshot<TDuration>>) {
-                ToProto(projection->mutable_timer(), window.Values[Index_]);
-            } else if constexpr (std::is_same_v<T, TTimeHistogramSnapshot>) {
-                ToProto(projection->mutable_time_histogram(), window.Values[Index_]);
-            } else if constexpr (std::is_same_v<T, TGaugeHistogramSnapshot>) {
-                ToProto(projection->mutable_gauge_histogram(), window.Values[Index_]);
-            } else if constexpr (std::is_same_v<T, TRateHistogramSnapshot>) {
-                ToProto(projection->mutable_rate_histogram(), window.Values[Index_]);
-            } else {
-                THROW_ERROR_EXCEPTION("Unexpected cube type");
-            }
+template <class T>
+void TCube<T>::DumpCube(NProto::TCube *cube, const TTagIdList& extraTagIds) const
+{
+    for (const auto& [tagIds, window] : Projections_) {
+        auto projection = cube->add_projections();
+        for (auto tagId : tagIds) {
+            projection->add_tag_ids(tagId);
+        }
+        for (auto tagId : extraTagIds) {
+            projection->add_tag_ids(tagId);
+        }
+
+        projection->set_has_value(window.HasValue[Index_]);
+        if constexpr (std::is_same_v<T, i64>) {
+            projection->set_counter(window.Values[Index_]);
+        } else if constexpr (std::is_same_v<T, TDuration>) {
+            projection->set_duration(window.Values[Index_].GetValue());
+        } else if constexpr (std::is_same_v<T, double>) {
+            projection->set_gauge(window.Values[Index_]);
+        } else if constexpr (std::is_same_v<T, TSummarySnapshot<double>>) {
+            ToProto(projection->mutable_summary(), window.Values[Index_]);
+        } else if constexpr (std::is_same_v<T, TSummarySnapshot<TDuration>>) {
+            ToProto(projection->mutable_timer(), window.Values[Index_]);
+        } else if constexpr (std::is_same_v<T, TTimeHistogramSnapshot>) {
+            ToProto(projection->mutable_time_histogram(), window.Values[Index_]);
+        } else if constexpr (std::is_same_v<T, TGaugeHistogramSnapshot>) {
+            ToProto(projection->mutable_gauge_histogram(), window.Values[Index_]);
+        } else if constexpr (std::is_same_v<T, TRateHistogramSnapshot>) {
+            ToProto(projection->mutable_rate_histogram(), window.Values[Index_]);
+        } else {
+            THROW_ERROR_EXCEPTION("Unexpected cube type %Qv", TypeName<T>());
         }
     }
 }

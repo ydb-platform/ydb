@@ -345,7 +345,7 @@ void TBlobStorageController::ApplySyncerState(TNodeId nodeId, const NKikimrBlobS
             bool dropNewSyncer = false;
             for (auto it = syncerState.NodeIds.begin(); it != syncerState.NodeIds.end(); ) {
                 auto& [existingNodeId, item] = *it;
-                if (TNodeInfo *node = FindNode(existingNodeId); node && node->ConnectedServerId) {
+                if (TNodeInfo *node = FindNode(existingNodeId); node && node->Registered) {
                     // this node already has a working syncer, delete incoming one
                     dropNewSyncer = true;
                     ++it;
@@ -604,7 +604,7 @@ void TBlobStorageController::ProcessSyncers(THashSet<TNodeId> nodesToUpdate) {
             }
             auto pred = [&](TNodeId nodeId) {
                 const TNodeInfo *nodeInfo = FindNode(nodeId);
-                return !nodeInfo || !nodeInfo->ConnectedServerId;
+                return !nodeInfo || !nodeInfo->Registered;
             };
             std::erase_if(nodes, pred);
             if (nodes.empty()) {
@@ -633,6 +633,8 @@ void TBlobStorageController::ProcessSyncers(THashSet<TNodeId> nodesToUpdate) {
         TSet<ui32> groupIdsToRead;
         SerializeSyncers(nodeId, &ev->Record, groupIdsToRead);
         ReadGroups(groupIdsToRead, false, ev.get(), nodeId);
+        STLOG(PRI_DEBUG, BS_CONTROLLER, BSCBR09, "ProcessSyncers: sending an update", (NodeId, nodeId),
+            (Record, ev->Record));
         SendToWarden(nodeId, std::move(ev), 0);
     }
 }

@@ -95,9 +95,6 @@ NKikimr::Tests::TServerSettings TKikimrSetupBase::GetServerSettings(const TServe
     serverSettings.SetVerbose(verbosity);
     serverSettings.SetNeedStatsCollectors(true);
 
-    const auto& externalStorage = settings.AppConfig.GetQueryServiceConfig().GetStreamingQueries().GetExternalStorage().GetDatabaseConnection();
-    serverSettings.SetEnableStorageProxy(externalStorage.GetDatabase() && externalStorage.GetEndpoint());
-
     SetLoggerSettings(settings, serverSettings);
     SetFunctionRegistry(settings, serverSettings);
 

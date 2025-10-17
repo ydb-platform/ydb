@@ -2,7 +2,6 @@
 #include "kqp_executer_impl.h"
 #include "kqp_locks_helper.h"
 #include "kqp_planner.h"
-#include "kqp_table_resolver.h"
 #include "kqp_tasks_validate.h"
 
 #include <ydb/core/base/appdata.h>
@@ -99,7 +98,7 @@ public:
     TKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
         const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
         NFormats::TFormatsSettings formatsSettings, TKqpRequestCounters::TPtr counters,
-        bool streamResult, const TExecuterConfig& executerConfig,
+        const TExecuterConfig& executerConfig,
         NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
         const TActorId& creator, const TIntrusivePtr<TUserRequestContext>& userRequestContext,
         ui32 statementResultIndex, const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup,
@@ -114,7 +113,7 @@ public:
         : TBase(std::move(request), std::move(asyncIoFactory), federatedQuerySetup, GUCSettings, std::move(partitionPrunerConfig),
             database, userToken, std::move(formatsSettings), counters,
             executerConfig, userRequestContext, statementResultIndex, TWilsonKqp::DataExecuter,
-            "DataExecuter", streamResult, bufferActorId, txManager, std::move(batchOperationSettings))
+            "DataExecuter", bufferActorId, txManager, std::move(batchOperationSettings))
         , ShardIdToTableInfo(shardIdToTableInfo)
         , WaitCAStatsTimeout(TDuration::MilliSeconds(executerConfig.TableServiceConfig.GetQueryLimits().GetWaitCAStatsTimeoutMs()))
         , QueryServiceConfig(queryServiceConfig)
@@ -1965,9 +1964,7 @@ private:
             }
         }
 
-        size_t sourceScanPartitionsCount = TasksGraph.BuildAllTasks(false, TasksGraph.GetMeta().StreamResult || EnableReadsMerge, {},
-            Request.Transactions, ResourcesSnapshot, CollectProfileStats(Request.StatsMode), Stats.get(),
-            std::max<ui32>(ShardsOnNode.size(), ResourcesSnapshot.size()), &ShardsWithEffects);
+        size_t sourceScanPartitionsCount = TasksGraph.BuildAllTasks({}, ResourcesSnapshot, Stats.get(), &ShardsWithEffects);
         OnEmptyResult();
 
         TIssue validateIssue;
@@ -2142,7 +2139,7 @@ private:
             }
         }
 
-        if (TasksGraph.GetMeta().StreamResult || EnableReadsMerge || TasksGraph.GetMeta().AllowOlapDataQuery) {
+        if (TasksGraph.GetMeta().StreamResult || IsEnabledReadsMerge() || TasksGraph.GetMeta().AllowOlapDataQuery) {
             TSet<ui64> shardIds;
             for (const auto& [stageId, stageInfo] : TasksGraph.GetStagesInfo()) {
                 if (stageInfo.Meta.IsOlap()) {
@@ -2989,7 +2986,7 @@ private:
 } // namespace
 
 IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
-    NFormats::TFormatsSettings formatsSettings, TKqpRequestCounters::TPtr counters, bool streamResult, const TExecuterConfig& executerConfig,
+    NFormats::TFormatsSettings formatsSettings, TKqpRequestCounters::TPtr counters, const TExecuterConfig& executerConfig,
     NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, const TActorId& creator,
     const TIntrusivePtr<TUserRequestContext>& userRequestContext, ui32 statementResultIndex,
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
@@ -2997,7 +2994,7 @@ IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const
     const IKqpTransactionManagerPtr& txManager, const TActorId bufferActorId,
     TMaybe<NBatchOperations::TSettings> batchOperationSettings, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, ui64 generation)
 {
-    return new TKqpDataExecuter(std::move(request), database, userToken, std::move(formatsSettings), counters, streamResult, executerConfig,
+    return new TKqpDataExecuter(std::move(request), database, userToken, std::move(formatsSettings), counters, executerConfig,
         std::move(asyncIoFactory), creator, userRequestContext, statementResultIndex, federatedQuerySetup, GUCSettings,
         std::move(partitionPrunerConfig), shardIdToTableInfo, txManager, bufferActorId, std::move(batchOperationSettings), queryServiceConfig, generation);
 }

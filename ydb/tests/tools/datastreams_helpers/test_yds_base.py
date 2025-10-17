@@ -21,9 +21,9 @@ class TestYdsBase(object):
             create_stream(self.output_topic, partitions_count=partitions_count)
             create_read_rule(self.output_topic, self.consumer_name)
 
-    def write_stream(self, data, topic_path=None):
+    def write_stream(self, data, topic_path=None, partition_key=None):
         topic = topic_path if topic_path else self.input_topic
-        write_stream(topic, data)
+        write_stream(topic, data, partition_key=partition_key)
 
     def read_stream(self, messages_count, commit_after_processing=True, topic_path=None):
         topic = topic_path if topic_path else self.output_topic

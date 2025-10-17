@@ -13,6 +13,11 @@
 #include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 #include <ydb/library/yql/providers/pq/proto/dq_io_state.pb.h>
 
+#define SRC_LOG_T(s) \
+    LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, LogPrefix << s)
+#define SRC_LOG_D(s) \
+    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, LogPrefix << s)
+
 namespace NYql::NDq::NInternal {
 
 namespace {
@@ -98,6 +103,7 @@ void TDqPqReadActorBase::SaveState(const NDqProto::TCheckpoint& /*checkpoint*/, 
 }
 
 void TDqPqReadActorBase::LoadState(const TSourceState& state) {
+    InitWatermarkTracker();
     TInstant minStartingMessageTs = state.DataSize() ? TInstant::Max() : StartingMessageTimestamp;
     ui64 ingressBytes = 0;
     for (const auto& data : state.Data) {
@@ -136,6 +142,44 @@ ui64 TDqPqReadActorBase::GetInputIndex() const {
 
 const NYql::NDq::TDqAsyncStats& TDqPqReadActorBase::GetIngressStats() const {
     return IngressStats;
+}
+
+void TDqPqReadActorBase::InitWatermarkTracker(TDuration lateArrivalDelay, TDuration idleDelay) {
+    const auto granularity = TDuration::MicroSeconds(SourceParams.GetWatermarks().GetGranularityUs());
+    SRC_LOG_D("SessionId: " << GetSessionId() << " Watermarks enabled: " << SourceParams.GetWatermarks().GetEnabled() << " granularity: " << granularity
+        << " late arrival delay: " << lateArrivalDelay
+        << " idle: " << SourceParams.GetWatermarks().GetIdlePartitionsEnabled()
+        << " idle delay: " << idleDelay
+        );
+
+    if (!SourceParams.GetWatermarks().GetEnabled()) {
+        return;
+    }
+
+    WatermarkTracker.ConstructInPlace(
+        granularity,
+        SourceParams.GetWatermarks().GetIdlePartitionsEnabled(),
+        lateArrivalDelay,
+        idleDelay,
+        TInstant::Now()
+    );
+}
+
+void TDqPqReadActorBase::MaybeScheduleNextIdleCheck(TInstant systemTime) {
+    if (!WatermarkTracker) {
+        return;
+    }
+
+    const auto nextIdleCheckAt = WatermarkTracker->GetNextIdlenessCheckAt(systemTime);
+    if (!nextIdleCheckAt) {
+        return;
+    }
+
+    if (!NextIdlenessCheckAt.Defined() || nextIdleCheckAt != *NextIdlenessCheckAt) {
+        NextIdlenessCheckAt = *nextIdleCheckAt;
+        SRC_LOG_T("SessionId: " << GetSessionId() << " Next idleness check scheduled at " << *nextIdleCheckAt);
+        ScheduleSourcesCheck(*nextIdleCheckAt);
+    }
 }
 
 } // namespace NYql::NDq::NInternal

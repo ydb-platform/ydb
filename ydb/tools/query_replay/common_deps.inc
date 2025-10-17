@@ -7,11 +7,7 @@ SET(YDB_REPLAY_SRCS
 )
 
 SET(YDB_REPLAY_PEERDIRS
-    ydb/library/actors/core
-    ydb/library/actors/interconnect
     library/cpp/getopt
-    ydb/public/sdk/cpp/src/library/grpc/client
-    ydb/library/grpc/server
     library/cpp/regex/pcre
     ydb/core/actorlib_impl
     ydb/core/base
@@ -45,15 +41,17 @@ SET(YDB_REPLAY_PEERDIRS
     ydb/core/tx/mediator
     ydb/core/tx/time_cast
     ydb/core/tx/tx_proxy
-    yql/essentials/core/services/mounts
-    yql/essentials/minikql/comp_nodes/llvm16
-    yt/yql/providers/yt/codec/codegen
-    yt/yql/providers/yt/comp_nodes/llvm16
-    yql/essentials/public/udf/service/exception_policy
+    ydb/library/actors/core
+    ydb/library/actors/interconnect
+    ydb/library/grpc/server
+    ydb/library/yql/dq/comp_nodes/llvm16
+    ydb/library/yql/udfs/common/clickhouse/client
+    ydb/library/yql/udfs/common/datetime
     ydb/public/api/protos
     ydb/public/lib/base
     ydb/public/lib/deprecated/kicli
     ydb/public/sdk/cpp/src/client/table
+    ydb/public/sdk/cpp/src/library/grpc/client
     ydb/services/cms
     ydb/services/datastreams
     ydb/services/discovery
@@ -62,9 +60,10 @@ SET(YDB_REPLAY_PEERDIRS
     ydb/services/persqueue_v1
     ydb/services/rate_limiter
     ydb/services/ydb
-    ydb/library/yql/dq/comp_nodes/llvm16
-    ydb/library/yql/udfs/common/clickhouse/client
-    ydb/library/yql/udfs/common/datetime
+    yql/essentials/core/services/mounts
+    yql/essentials/minikql/comp_nodes/llvm16
+    yql/essentials/public/udf/service/exception_policy
+    yql/essentials/sql/pg_dummy
     yql/essentials/udfs/common/datetime2
     yql/essentials/udfs/common/digest
     yql/essentials/udfs/common/histogram
@@ -82,5 +81,7 @@ SET(YDB_REPLAY_PEERDIRS
     yql/essentials/udfs/common/topfreq
     yql/essentials/udfs/common/yson2
     yql/essentials/udfs/logs/dsv
-    yql/essentials/sql/pg_dummy
+    yt/yql/providers/yt/codec/codegen
+    yt/yql/providers/yt/comp_nodes/dq/llvm16
+    yt/yql/providers/yt/comp_nodes/llvm16
 )

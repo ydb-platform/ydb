@@ -34,6 +34,7 @@ struct TScriptQuerySettings {
     NKikimrKqp::TScriptExecutionRetryState::TMapping RetryMapping;
     std::optional<NKikimrKqp::TQueryPhysicalGraph> PhysicalGraph;
     TDuration Timeout = TDuration::Seconds(30);
+    TString CheckpointId = CreateGuidAsString();
 };
 
 struct TColumn {
@@ -118,7 +119,9 @@ public:
 
             LogSettings
                 .AddLogPriority(NKikimrServices::STREAMS_STORAGE_SERVICE, NLog::PRI_DEBUG)
-                .AddLogPriority(NKikimrServices::STREAMS_CHECKPOINT_COORDINATOR, NLog::PRI_DEBUG);
+                .AddLogPriority(NKikimrServices::STREAMS_CHECKPOINT_COORDINATOR, NLog::PRI_DEBUG)
+                .AddLogPriority(NKikimrServices::KQP_EXECUTER, NLog::PRI_DEBUG)
+                .AddLogPriority(NKikimrServices::KQP_COMPUTE, NLog::PRI_DEBUG);
 
             Kikimr = MakeKikimrRunner(true, ConnectorClient, nullptr, AppConfig, NYql::NDq::CreateS3ActorsFactory(), {
                 .CredentialsFactory = CreateCredentialsFactory(),
@@ -251,11 +254,11 @@ public:
         }
     }
 
-    void ReadTopicMessage(const TString& topicName, const TString& expectedMessage, TInstant disposition = TInstant::Now() - TDuration::Seconds(100), bool sort = false) {
-        ReadTopicMessages(topicName, {expectedMessage}, disposition, sort);
+    void ReadTopicMessage(const TString& topicName, const TString& expectedMessage, TInstant disposition = TInstant::Now() - TDuration::Seconds(100)) {
+        ReadTopicMessages(topicName, {expectedMessage}, disposition);
     }
 
-    void ReadTopicMessages(const TString& topicName, const TVector<TString>& expectedMessages, TInstant disposition = TInstant::Now() - TDuration::Seconds(100), bool sort = false) {
+    void ReadTopicMessages(const TString& topicName, TVector<TString> expectedMessages, TInstant disposition = TInstant::Now() - TDuration::Seconds(100), bool sort = false) {
         NTopic::TReadSessionSettings readSettings;
         readSettings
             .WithoutConsumer()
@@ -299,7 +302,8 @@ public:
         });
 
         if (sort) {
-            std::sort(received.begin(), received.end());
+            Sort(expectedMessages);
+            Sort(received);
         }
 
         UNIT_ASSERT_VALUES_EQUAL(received.size(), expectedMessages.size());
@@ -520,6 +524,7 @@ public:
         ev->RetryMapping = {settings.RetryMapping};
         ev->SaveQueryPhysicalGraph = settings.SaveState;
         ev->QueryPhysicalGraph = settings.PhysicalGraph;
+        ev->CheckpointId = settings.CheckpointId;
 
         const auto edgeActor = runtime.AllocateEdgeActor();
         runtime.Send(MakeKqpProxyID(runtime.GetNodeId()), edgeActor, ev.release());
@@ -583,13 +588,13 @@ public:
         });
     }
 
-    void WaitCheckpointUpdate(const TString& executionId) {
+    void WaitCheckpointUpdate(const TString& checkpointId) {
         std::optional<uint64_t> minSeqNo;
         WaitFor(TEST_OPERATION_TIMEOUT, "checkpoint update", [&](TString& error) {
             const auto& result = ExecExternalQuery(fmt::format(R"(
                 SELECT MIN(seq_no) AS seq_no FROM checkpoints_metadata
-                WHERE graph_id = "{execution_id}";
-            )", "execution_id"_a = executionId));
+                WHERE graph_id = "{checkpoint_id}";
+            )", "checkpoint_id"_a = checkpointId));
             UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
 
             std::optional<uint64_t> seqNo;
@@ -1169,6 +1174,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         constexpr char sourceName[] = "sourceName";
         CreatePqSource(sourceName);
 
+        const TString checkpointId = CreateGuidAsString();
         const auto& [executionId, operationId] = ExecScriptNative(fmt::format(R"(
                 $input = SELECT key, value FROM `{source}`.`{input_topic}`
                 WITH (
@@ -1184,21 +1190,22 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                 "output_topic"_a = outputTopicName
             ), {
                 .SaveState = true,
-                .RetryMapping = CreateRetryMapping({Ydb::StatusIds::BAD_REQUEST})
+                .RetryMapping = CreateRetryMapping({Ydb::StatusIds::BAD_REQUEST}),
+                .CheckpointId = checkpointId
             });
 
-        WaitCheckpointUpdate(executionId);
+        WaitCheckpointUpdate(checkpointId);
 
         auto readSession = pqGateway->WaitReadSession(inputTopicName);
         auto writeSession = pqGateway->WaitWriteSession(outputTopicName);
         readSession->AddDataReceivedEvent(1, R"({"key": "key1", "value": "value1"})");
         readSession->AddDataReceivedEvent(2, R"({"key": "key2", "value": "value2"})");
         readSession->AddDataReceivedEvent(3, R"({"key": "key3", "value": "value3"})");
-        WaitCheckpointUpdate(executionId);
+        WaitCheckpointUpdate(checkpointId);
         readSession->AddCloseSessionEvent(EStatus::UNAVAILABLE, {NIssue::TIssue("Test pq session failure")});
 
         WaitScriptExecution(operationId, EExecStatus::Failed, true);
-        WaitCheckpointUpdate(executionId);
+        WaitCheckpointUpdate(checkpointId);
 
         pqGateway->WaitReadSession(inputTopicName)->AddDataReceivedEvent(4, R"({"key": "key4", "value": "value4"})");
         writeSession = pqGateway->WaitWriteSession(outputTopicName);
@@ -1218,6 +1225,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         constexpr char sourceName[] = "sourceName";
         CreatePqSource(sourceName);
 
+        const TString checkpointId = CreateGuidAsString();
         const auto& [executionId, operationId] = ExecScriptNative(fmt::format(R"(
             INSERT INTO `{source}`.`{output_topic}`
             SELECT event FROM `{source}`.`{input_topic}` WITH (
@@ -1232,7 +1240,8 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             "input_topic"_a = inputTopicName,
             "output_topic"_a = outputTopicName
         ), {
-            .SaveState = true
+            .SaveState = true,
+            .CheckpointId = checkpointId
         });
 
         WriteTopicMessages(inputTopicName, {
@@ -1240,14 +1249,14 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             R"({"time": "2025-08-25T00:00:00.000000Z", "event": "B"})"
         });
         ReadTopicMessage(outputTopicName, "A");
-        WaitCheckpointUpdate(executionId);
+        WaitCheckpointUpdate(checkpointId);
 
         const auto& result = ExecExternalQuery(fmt::format(R"(
             SELECT COUNT(*) AS states_count FROM (
                 SELECT DISTINCT task_id FROM states
-                WHERE graph_id = "{execution_id}"
+                WHERE graph_id = "{checkpoint_id}"
             )
-        )", "execution_id"_a = executionId));
+        )", "checkpoint_id"_a = checkpointId));
         UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
 
         CheckScriptResult(result[0], 1, 1, [](TResultSetParser& resultSet) {
@@ -1267,6 +1276,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         constexpr char sourceName[] = "sourceName";
         CreatePqSource(sourceName);
 
+        const TString checkpointId = CreateGuidAsString();
         const auto& [executionId, operationId] = ExecScriptNative(fmt::format(R"(
             INSERT INTO `{source}`.`{output_topic}`
             SELECT event FROM `{source}`.`{input_topic}` WITH (
@@ -1281,11 +1291,12 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             "input_topic"_a = inputTopicName,
             "output_topic"_a = outputTopicName
         ), {
-            .SaveState = true
+            .SaveState = true,
+            .CheckpointId = checkpointId
         });
 
         auto writeSession = pqGateway->WaitWriteSession(outputTopicName);
-        WaitCheckpointUpdate(executionId);
+        WaitCheckpointUpdate(checkpointId);
         writeSession->Lock();
 
         auto readSession = pqGateway->WaitReadSession(inputTopicName);
@@ -1299,7 +1310,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         writeSession->Unlock();
 
         for (ui64 i = 0; i < 3; ++i) {
-            WaitCheckpointUpdate(executionId);
+            WaitCheckpointUpdate(checkpointId);
         }
     }
 
@@ -2275,6 +2286,362 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             "A-2025-08-25T00:00:00.000000Z-P1-1",
             "B-2025-08-25T00:00:00.000000Z-P2-1"
         }, readDisposition, /* sort */ true);
+    }
+
+    struct TTestInfo {
+        TString InputTopicName;
+        TString OutputTopicName;
+        TString PqSourceName;
+        TString QueryName;
+        TString QueryText;
+    };
+
+    TTestInfo SetupCheckpointRecoveryTest(TStreamingTestFixture& self) {
+        TTestInfo info = {
+            .InputTopicName = TStringBuilder() << "inputTopicName" << self.Name_,
+            .OutputTopicName = TStringBuilder() << "outputTopicName" << self.Name_,
+            .PqSourceName = "pqSourceName",
+            .QueryName = "streamingQuery"
+        };
+        info.QueryText = fmt::format(R"(
+            -- Test that offsets are recovered
+            $pq_source = SELECT * FROM `{pq_source}`.`{input_topic}` WITH (
+                FORMAT = "json_each_row",
+                SCHEMA (
+                    time String NOT NULL,
+                    event String
+                )
+            );
+
+            -- Test that state also recovered
+            $grouped = SELECT
+                event,
+                CAST(SOME(time) AS String) AS time,
+                CAST(COUNT(*) AS String) AS count
+            FROM $pq_source
+            GROUP BY
+                HOP (CAST(time AS Timestamp), "PT1H", "PT1H", "PT0H"),
+                event;
+
+            INSERT INTO `{pq_source}`.`{output_topic}`
+            SELECT Unwrap(event || "-" || time || "-" || count) FROM $grouped)",
+            "pq_source"_a = info.PqSourceName,
+            "input_topic"_a = info.InputTopicName,
+            "output_topic"_a = info.OutputTopicName
+        );
+
+        self.CreateTopic(info.InputTopicName);
+        self.CreateTopic(info.OutputTopicName);
+        self.CreatePqSource(info.PqSourceName);
+
+        self.ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                {query_text}
+            END DO;)",
+            "query_name"_a = info.QueryName,
+            "query_text"_a = info.QueryText
+        ));
+        self.CheckScriptExecutionsCount(1, 1);
+        Sleep(TDuration::Seconds(1));
+
+        return info;
+    }
+
+    Y_UNIT_TEST_F(OffsetsAndStateRecoveryOnManualRestart, TStreamingTestFixture) {
+        const auto info = SetupCheckpointRecoveryTest(*this);
+
+        WriteTopicMessages(info.InputTopicName, {
+            R"({"time": "2025-08-24T00:00:00.000000Z", "event": "A"})",
+            R"({"time": "2025-08-25T00:00:00.000000Z", "event": "A"})",
+        });
+        ReadTopicMessage(info.OutputTopicName, "A-2025-08-24T00:00:00.000000Z-1");
+
+        ExecQuery(fmt::format(R"(
+            ALTER STREAMING QUERY `{query_name}` SET (
+                RUN = FALSE
+            );)",
+            "query_name"_a = info.QueryName
+        ));
+        CheckScriptExecutionsCount(1, 0);
+
+        Sleep(TDuration::Seconds(1));
+        WriteTopicMessage(info.InputTopicName, R"({"time": "2025-08-25T00:00:00.000000Z", "event": "B"})");
+        const auto readDisposition = TInstant::Now();
+
+        ExecQuery(fmt::format(R"(
+            ALTER STREAMING QUERY `{query_name}` SET (
+                RUN = TRUE
+            );)",
+            "query_name"_a = info.QueryName
+        ));
+        CheckScriptExecutionsCount(2, 1);
+        Sleep(TDuration::Seconds(1));
+
+        WriteTopicMessage(info.InputTopicName, R"({"time": "2025-08-26T00:00:00.000000Z", "event": "A"})");
+        ReadTopicMessages(info.OutputTopicName, {
+            "A-2025-08-25T00:00:00.000000Z-1",
+            "B-2025-08-25T00:00:00.000000Z-1"
+        }, readDisposition, /* sort */ true);
+    }
+
+    Y_UNIT_TEST_F(OffsetsRecoveryOnQueryTextChangeBasic, TStreamingTestFixture) {
+        const auto info = SetupCheckpointRecoveryTest(*this);
+
+        WriteTopicMessages(info.InputTopicName, {
+            R"({"time": "2025-08-24T00:00:00.000000Z", "event": "A"})",
+            R"({"time": "2025-08-25T00:00:00.000000Z", "event": "A"})",
+        });
+        ReadTopicMessage(info.OutputTopicName, "A-2025-08-24T00:00:00.000000Z-1");
+
+        ExecQuery(fmt::format(R"(
+            ALTER STREAMING QUERY `{query_name}` SET (
+                FORCE = TRUE,
+                RUN = FALSE
+            ) AS
+            DO BEGIN
+                /* some comment */
+                {text}
+            END DO;)",
+            "query_name"_a = info.QueryName,
+            "text"_a = info.QueryText
+        ));
+        CheckScriptExecutionsCount(1, 0);
+
+        Sleep(TDuration::Seconds(1));
+        WriteTopicMessage(info.InputTopicName, R"({"time": "2025-08-25T00:00:00.000000Z", "event": "B"})");
+        const auto readDisposition = TInstant::Now();
+
+        ExecQuery(fmt::format(R"(
+            ALTER STREAMING QUERY `{query_name}` SET (
+                RUN = TRUE
+            );)",
+            "query_name"_a = info.QueryName
+        ));
+        CheckScriptExecutionsCount(2, 1);
+        Sleep(TDuration::Seconds(1));
+
+        WriteTopicMessage(info.InputTopicName, R"({"time": "2025-08-26T00:00:00.000000Z", "event": "A"})");
+        ReadTopicMessage(info.OutputTopicName, "B-2025-08-25T00:00:00.000000Z-1", readDisposition);
+    }
+
+    Y_UNIT_TEST_F(OffsetsRecoveryOnQueryTextChangeWithFail, TStreamingTestFixture) {
+        const auto info = SetupCheckpointRecoveryTest(*this);
+
+        WriteTopicMessages(info.InputTopicName, {
+            R"({"time": "2025-08-24T00:00:00.000000Z", "event": "A"})",
+            R"({"time": "2025-08-25T00:00:00.000000Z", "event": "A"})",
+        });
+        ReadTopicMessage(info.OutputTopicName, "A-2025-08-24T00:00:00.000000Z-1");
+
+        ExecQuery(fmt::format(R"(
+            ALTER STREAMING QUERY `{query_name}` SET (
+                FORCE = TRUE,
+                RESOURCE_POOL = "unknown_pool"
+            ) AS
+            DO BEGIN
+                /* some comment */
+                {text}
+            END DO;)",
+            "query_name"_a = info.QueryName,
+            "text"_a = info.QueryText
+        ), EStatus::NOT_FOUND, "Resource pool unknown_pool not found or you don't have access permissions");
+
+        Sleep(TDuration::Seconds(1));
+        WriteTopicMessage(info.InputTopicName, R"({"time": "2025-08-25T00:00:00.000000Z", "event": "B"})");
+        const auto readDisposition = TInstant::Now();
+
+        ExecQuery(fmt::format(R"(
+            ALTER STREAMING QUERY `{query_name}` SET (
+                RESOURCE_POOL = "default"
+            );)",
+            "query_name"_a = info.QueryName
+        ));
+        CheckScriptExecutionsCount(3, 1);
+        Sleep(TDuration::Seconds(1));
+
+        WriteTopicMessage(info.InputTopicName, R"({"time": "2025-08-26T00:00:00.000000Z", "event": "A"})");
+        ReadTopicMessage(info.OutputTopicName, "B-2025-08-25T00:00:00.000000Z-1", readDisposition);
+    }
+
+    Y_UNIT_TEST_F(OffsetsAndStateRecoveryAfterQueryTextChange, TStreamingTestFixture) {
+        const auto info = SetupCheckpointRecoveryTest(*this);
+
+        WriteTopicMessages(info.InputTopicName, {
+            R"({"time": "2025-08-24T00:00:00.000000Z", "event": "A"})",
+            R"({"time": "2025-08-25T00:00:00.000000Z", "event": "A"})",
+        });
+        ReadTopicMessage(info.OutputTopicName, "A-2025-08-24T00:00:00.000000Z-1");
+
+        ExecQuery(fmt::format(R"(
+            ALTER STREAMING QUERY `{query_name}` SET (
+                FORCE = TRUE,
+                RUN = FALSE
+            ) AS
+            DO BEGIN
+                /* some comment */
+                {text}
+            END DO;)",
+            "query_name"_a = info.QueryName,
+            "text"_a = info.QueryText
+        ));
+        CheckScriptExecutionsCount(1, 0);
+
+        Sleep(TDuration::Seconds(1));
+        WriteTopicMessage(info.InputTopicName, R"({"time": "2025-08-25T00:00:00.000000Z", "event": "B"})");
+        auto readDisposition = TInstant::Now();
+
+        ExecQuery(fmt::format(R"(
+            ALTER STREAMING QUERY `{query_name}` SET (
+                RUN = TRUE
+            );)",
+            "query_name"_a = info.QueryName
+        ));
+        CheckScriptExecutionsCount(2, 1);
+        Sleep(TDuration::Seconds(1));
+
+        WriteTopicMessage(info.InputTopicName, R"({"time": "2025-08-26T00:00:00.000000Z", "event": "A"})");
+        ReadTopicMessage(info.OutputTopicName, "B-2025-08-25T00:00:00.000000Z-1", readDisposition);
+
+        ExecQuery(fmt::format(R"(
+            ALTER STREAMING QUERY `{query_name}` SET (
+                RUN = FALSE
+            );)",
+            "query_name"_a = info.QueryName
+        ));
+        CheckScriptExecutionsCount(2, 0);
+
+        Sleep(TDuration::Seconds(1));
+        WriteTopicMessage(info.InputTopicName, R"({"time": "2025-08-26T00:00:00.000000Z", "event": "B"})");
+        readDisposition = TInstant::Now();
+
+        ExecQuery(fmt::format(R"(
+            ALTER STREAMING QUERY `{query_name}` SET (
+                RUN = TRUE
+            );)",
+            "query_name"_a = info.QueryName
+        ));
+        CheckScriptExecutionsCount(3, 1);
+        Sleep(TDuration::Seconds(1));
+
+        WriteTopicMessage(info.InputTopicName, R"({"time": "2025-08-27T00:00:00.000000Z", "event": "A"})");
+        ReadTopicMessages(info.OutputTopicName, {
+            "A-2025-08-26T00:00:00.000000Z-1",
+            "B-2025-08-26T00:00:00.000000Z-1"
+        }, readDisposition, /* sort */ true);
+    }
+
+    Y_UNIT_TEST_F(CheckpointPropagationWithStreamLookupJoinHanging, TStreamingTestFixture) {
+        const auto connectorClient = SetupMockConnectorClient();
+
+        constexpr char inputTopicName[] = "sljInputTopicName";
+        constexpr char outputTopicName[] = "sljOutputTopicName";
+        CreateTopic(inputTopicName);
+        CreateTopic(outputTopicName);
+
+        constexpr char pqSourceName[] = "pqSourceName";
+        constexpr char ydbSourceName[] = "ydbSourceName";
+        CreatePqSource(pqSourceName);
+        CreateYdbSource(ydbSourceName);
+
+        constexpr char ydbTable[] = "lookup";
+        ExecExternalQuery(fmt::format(R"(
+            CREATE TABLE `{table}` (
+                fqdn String,
+                payload String,
+                PRIMARY KEY (fqdn)
+            ))",
+            "table"_a = ydbTable
+        ));
+
+        {   // Prepare connector mock
+            const std::vector<TColumn> columns = {
+                {"fqdn", Ydb::Type::STRING},
+                {"payload", Ydb::Type::STRING}
+            };
+            SetupMockConnectorTableDescription(connectorClient, {
+                .TableName = ydbTable,
+                .Columns = columns,
+                .DescribeCount = 2,
+                .ListSplitsCount = 4,
+                .ValidateListSplitsArgs = false
+            });
+
+            const std::vector<std::string> fqdnColumn = {"host1.example.com", "host2.example.com", "host3.example.com"};
+            const std::vector<std::string> payloadColumn = std::vector<std::string>{"P1", "P2", "P3"};
+            SetupMockConnectorTableData(connectorClient, {
+                .TableName = ydbTable,
+                .Columns = columns,
+                .NumberReadSplits = 3,
+                .ValidateReadSplitsArgs = false,
+                .ResultFactory = [&]() {
+                    return MakeRecordBatch(
+                        MakeArray<arrow::BinaryBuilder>("fqdn", fqdnColumn, arrow::binary()),
+                        MakeArray<arrow::BinaryBuilder>("payload", payloadColumn, arrow::binary())
+                    );
+                }
+            });
+        }
+
+        constexpr char queryName[] = "streamingQuery";
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                $ydb_lookup = SELECT * FROM `{ydb_source}`.`{ydb_table}`;
+
+                $pq_source = SELECT * FROM `{pq_source}`.`{input_topic}` WITH (
+                    FORMAT = "json_each_row",
+                    SCHEMA (
+                        time Int32 NOT NULL,
+                        event String,
+                        host String
+                    )
+                );
+
+                $joined = SELECT l.payload AS payload, p.* FROM $pq_source AS p
+                LEFT JOIN /*+ streamlookup(TTL 1) */ ANY $ydb_lookup AS l
+                ON (l.fqdn = p.host);
+
+                INSERT INTO `{pq_source}`.`{output_topic}`
+                SELECT Unwrap(event || "-" || payload) FROM $joined
+            END DO;)",
+            "query_name"_a = queryName,
+            "pq_source"_a = pqSourceName,
+            "ydb_source"_a = ydbSourceName,
+            "ydb_table"_a = ydbTable,
+            "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName
+        ));
+        CheckScriptExecutionsCount(1, 1);
+        Sleep(TDuration::Seconds(1));
+
+        WriteTopicMessage(inputTopicName, R"({"time": 0, "event": "A", "host": "host1.example.com"})");
+        ReadTopicMessage(outputTopicName, "A-P1");
+
+        connectorClient->LockReading();
+        WriteTopicMessage(inputTopicName, R"({"time": 1, "event": "B", "host": "host3.example.com"})");
+        Sleep(TDuration::Seconds(2));
+        const auto readDisposition = TInstant::Now();
+
+        ExecQuery(fmt::format(R"(
+            ALTER STREAMING QUERY `{query_name}` SET (
+                RUN = FALSE
+            );)",
+            "query_name"_a = queryName
+        ));
+        CheckScriptExecutionsCount(1, 0);
+
+        connectorClient->UnlockReading();
+
+        ExecQuery(fmt::format(R"(
+            ALTER STREAMING QUERY `{query_name}` SET (
+                RUN = TRUE
+            );)",
+            "query_name"_a = queryName
+        ));
+        CheckScriptExecutionsCount(2, 1);
+
+        ReadTopicMessage(outputTopicName, "B-P3", readDisposition);
     }
 }
 

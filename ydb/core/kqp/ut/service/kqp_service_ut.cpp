@@ -2,6 +2,9 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/base/counters.h>
 
+#include <ydb/core/kqp/common/events/events.h>
+#include <ydb/core/kqp/common/simple/services.h>
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 #include <library/cpp/threading/local_executor/local_executor.h>
 #include <ydb/core/tx/datashard/datashard_failpoints.h>
 

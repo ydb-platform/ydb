@@ -736,7 +736,7 @@ namespace NKikimr::NKqp::NFormats {
 inline static constexpr size_t TEST_ARRAY_SIZE = 1 << 16;
 
 template <typename MiniKQLType, typename PhysicalType, typename ArrowArrayType, bool IsStringType = false, bool IsTimezoneType = false>
-void TestBasicType(arrow::Type::type arrowTypeId) {
+void TestDataTypeConversion(arrow::Type::type arrowTypeId) {
     TTestContext context;
 
     auto type = TDataType::Create(NUdf::TDataType<MiniKQLType>::Id, context.TypeEnv);
@@ -791,143 +791,143 @@ void TestBasicType(arrow::Type::type arrowTypeId) {
 Y_UNIT_TEST_SUITE(KqpFormat_MiniKQL_Arrow) {
     // Integral types
     Y_UNIT_TEST(DataType_Bool) {
-        TestBasicType<bool, bool, arrow::UInt8Array>(arrow::Type::UINT8);
+        TestDataTypeConversion<bool, bool, arrow::UInt8Array>(arrow::Type::UINT8);
     }
 
     Y_UNIT_TEST(DataType_Int8) {
-        TestBasicType<i8, i8, arrow::Int8Array>(arrow::Type::INT8);
+        TestDataTypeConversion<i8, i8, arrow::Int8Array>(arrow::Type::INT8);
     }
 
     Y_UNIT_TEST(DataType_UInt8) {
-        TestBasicType<ui8, ui8, arrow::UInt8Array>(arrow::Type::UINT8);
+        TestDataTypeConversion<ui8, ui8, arrow::UInt8Array>(arrow::Type::UINT8);
     }
 
     Y_UNIT_TEST(DataType_Int16) {
-        TestBasicType<i16, i16, arrow::Int16Array>(arrow::Type::INT16);
+        TestDataTypeConversion<i16, i16, arrow::Int16Array>(arrow::Type::INT16);
     }
 
     Y_UNIT_TEST(DataType_UInt16) {
-        TestBasicType<ui16, ui16, arrow::UInt16Array>(arrow::Type::UINT16);
+        TestDataTypeConversion<ui16, ui16, arrow::UInt16Array>(arrow::Type::UINT16);
     }
 
     Y_UNIT_TEST(DataType_Int32) {
-        TestBasicType<i32, i32, arrow::Int32Array>(arrow::Type::INT32);
+        TestDataTypeConversion<i32, i32, arrow::Int32Array>(arrow::Type::INT32);
     }
 
     Y_UNIT_TEST(DataType_UInt32) {
-        TestBasicType<ui32, ui32, arrow::UInt32Array>(arrow::Type::UINT32);
+        TestDataTypeConversion<ui32, ui32, arrow::UInt32Array>(arrow::Type::UINT32);
     }
 
     Y_UNIT_TEST(DataType_Int64) {
-        TestBasicType<i64, i64, arrow::Int64Array>(arrow::Type::INT64);
+        TestDataTypeConversion<i64, i64, arrow::Int64Array>(arrow::Type::INT64);
     }
 
     Y_UNIT_TEST(DataType_UInt64) {
-        TestBasicType<ui64, ui64, arrow::UInt64Array>(arrow::Type::UINT64);
+        TestDataTypeConversion<ui64, ui64, arrow::UInt64Array>(arrow::Type::UINT64);
     }
 
     // Floating point types
     Y_UNIT_TEST(DataType_Float) {
-        TestBasicType<float, float, arrow::FloatArray>(arrow::Type::FLOAT);
+        TestDataTypeConversion<float, float, arrow::FloatArray>(arrow::Type::FLOAT);
     }
 
     Y_UNIT_TEST(DataType_Double) {
-        TestBasicType<double, double, arrow::DoubleArray>(arrow::Type::DOUBLE);
+        TestDataTypeConversion<double, double, arrow::DoubleArray>(arrow::Type::DOUBLE);
     }
 
     // Binary number types
     Y_UNIT_TEST(DataType_Decimal) {
         // TODO: Support fixed size binary
-        // TestBasicType<NUdf::TDecimal, std::string, arrow::FixedSizeBinaryArray, /* IsStringType */ true>(arrow::Type::FIXED_SIZE_BINARY);
+        // TestDataTypeConversion<NUdf::TDecimal, std::string, arrow::FixedSizeBinaryArray, /* IsStringType */ true>(arrow::Type::FIXED_SIZE_BINARY);
     }
 
     Y_UNIT_TEST(DataType_DyNumber) {
         // TODO: Serialize DyNumber from binary to string
-        // TestBasicType<NUdf::TDyNumber, std::string, arrow::StringArray, /* IsStringType */ true>(arrow::Type::STRING);
+        // TestDataTypeConversion<NUdf::TDyNumber, std::string, arrow::StringArray, /* IsStringType */ true>(arrow::Type::STRING);
     }
 
     // Datetime types
     Y_UNIT_TEST(DataType_Date) {
-        TestBasicType<NUdf::TDate, ui16, arrow::UInt16Array>(arrow::Type::UINT16);
+        TestDataTypeConversion<NUdf::TDate, ui16, arrow::UInt16Array>(arrow::Type::UINT16);
     }
 
     Y_UNIT_TEST(DataType_Datetime) {
-        TestBasicType<NUdf::TDatetime, ui32, arrow::UInt32Array>(arrow::Type::UINT32);
+        TestDataTypeConversion<NUdf::TDatetime, ui32, arrow::UInt32Array>(arrow::Type::UINT32);
     }
 
     Y_UNIT_TEST(DataType_Timestamp) {
-        TestBasicType<NUdf::TTimestamp, ui64, arrow::UInt64Array>(arrow::Type::UINT64);
+        TestDataTypeConversion<NUdf::TTimestamp, ui64, arrow::UInt64Array>(arrow::Type::UINT64);
     }
 
     Y_UNIT_TEST(DataType_Date32) {
-        TestBasicType<NUdf::TDate32, i32, arrow::Int32Array>(arrow::Type::INT32);
+        TestDataTypeConversion<NUdf::TDate32, i32, arrow::Int32Array>(arrow::Type::INT32);
     }
 
     Y_UNIT_TEST(DataType_Datetime64) {
-        TestBasicType<NUdf::TDatetime64, i64, arrow::Int64Array>(arrow::Type::INT64);
+        TestDataTypeConversion<NUdf::TDatetime64, i64, arrow::Int64Array>(arrow::Type::INT64);
     }
 
     Y_UNIT_TEST(DataType_Timestamp64) {
-        TestBasicType<NUdf::TTimestamp64, i64, arrow::Int64Array>(arrow::Type::INT64);
+        TestDataTypeConversion<NUdf::TTimestamp64, i64, arrow::Int64Array>(arrow::Type::INT64);
     }
 
     Y_UNIT_TEST(DataType_Interval) {
-        TestBasicType<NUdf::TInterval, i64, arrow::Int64Array>(arrow::Type::INT64);
+        TestDataTypeConversion<NUdf::TInterval, i64, arrow::Int64Array>(arrow::Type::INT64);
     }
 
     Y_UNIT_TEST(DataType_Interval64) {
-        TestBasicType<NUdf::TInterval64, i64, arrow::Int64Array>(arrow::Type::INT64);
+        TestDataTypeConversion<NUdf::TInterval64, i64, arrow::Int64Array>(arrow::Type::INT64);
     }
 
     Y_UNIT_TEST(DataType_TzDate) {
-        TestBasicType<NUdf::TTzDate, ui16, arrow::UInt16Array, /* IsStringType */ false, /* HasTimezone */ true>(arrow::Type::UINT16);
+        TestDataTypeConversion<NUdf::TTzDate, ui16, arrow::UInt16Array, /* IsStringType */ false, /* HasTimezone */ true>(arrow::Type::UINT16);
     }
 
     Y_UNIT_TEST(DataType_TzDatetime) {
-        TestBasicType<NUdf::TTzDatetime, ui32, arrow::UInt32Array, /* IsStringType */ false, /* HasTimezone */ true>(arrow::Type::UINT32);
+        TestDataTypeConversion<NUdf::TTzDatetime, ui32, arrow::UInt32Array, /* IsStringType */ false, /* HasTimezone */ true>(arrow::Type::UINT32);
     }
 
     Y_UNIT_TEST(DataType_TzTimestamp) {
-        TestBasicType<NUdf::TTzTimestamp, ui64, arrow::UInt64Array, /* IsStringType */ false, /* HasTimezone */ true>(arrow::Type::UINT64);
+        TestDataTypeConversion<NUdf::TTzTimestamp, ui64, arrow::UInt64Array, /* IsStringType */ false, /* HasTimezone */ true>(arrow::Type::UINT64);
     }
 
     Y_UNIT_TEST(DataType_TzDate32) {
-        TestBasicType<NUdf::TTzDate32, i32, arrow::Int32Array, /* IsStringType */ false, /* HasTimezone */ true>(arrow::Type::INT32);
+        TestDataTypeConversion<NUdf::TTzDate32, i32, arrow::Int32Array, /* IsStringType */ false, /* HasTimezone */ true>(arrow::Type::INT32);
     }
 
     Y_UNIT_TEST(DataType_TzDatetime64) {
-        TestBasicType<NUdf::TTzDatetime64, i64, arrow::Int64Array, /* IsStringType */ false, /* HasTimezone */ true>(arrow::Type::INT64);
+        TestDataTypeConversion<NUdf::TTzDatetime64, i64, arrow::Int64Array, /* IsStringType */ false, /* HasTimezone */ true>(arrow::Type::INT64);
     }
 
     Y_UNIT_TEST(DataType_TzTimestamp64) {
-        TestBasicType<NUdf::TTzTimestamp64, i64, arrow::Int64Array, /* IsStringType */ false, /* HasTimezone */ true>(arrow::Type::INT64);
+        TestDataTypeConversion<NUdf::TTzTimestamp64, i64, arrow::Int64Array, /* IsStringType */ false, /* HasTimezone */ true>(arrow::Type::INT64);
     }
 
     // String types
     Y_UNIT_TEST(DataType_String) {
-        TestBasicType<char*, std::string, arrow::BinaryArray, /* IsStringType */ true>(arrow::Type::BINARY);
+        TestDataTypeConversion<char*, std::string, arrow::BinaryArray, /* IsStringType */ true>(arrow::Type::BINARY);
     }
 
     Y_UNIT_TEST(DataType_Utf8) {
-        TestBasicType<NUdf::TUtf8, std::string, arrow::StringArray, /* IsStringType */ true>(arrow::Type::STRING);
+        TestDataTypeConversion<NUdf::TUtf8, std::string, arrow::StringArray, /* IsStringType */ true>(arrow::Type::STRING);
     }
 
     Y_UNIT_TEST(DataType_Json) {
-        TestBasicType<NUdf::TJson, std::string, arrow::StringArray, /* IsStringType */ true>(arrow::Type::STRING);
+        TestDataTypeConversion<NUdf::TJson, std::string, arrow::StringArray, /* IsStringType */ true>(arrow::Type::STRING);
     }
 
     Y_UNIT_TEST(DataType_JsonDocument) {
         // TODO: Support serialize JsonDocument from binary to string
-        // TestBasicType<NUdf::TJsonDocument, std::string, arrow::StringArray, /* IsStringType */ true>(arrow::Type::STRING);
+        // TestDataTypeConversion<NUdf::TJsonDocument, std::string, arrow::StringArray, /* IsStringType */ true>(arrow::Type::STRING);
     }
 
     Y_UNIT_TEST(DataType_Yson) {
-        TestBasicType<NUdf::TYson, std::string, arrow::BinaryArray, /* IsStringType */ true>(arrow::Type::BINARY);
+        TestDataTypeConversion<NUdf::TYson, std::string, arrow::BinaryArray, /* IsStringType */ true>(arrow::Type::BINARY);
     }
 
     Y_UNIT_TEST(DataType_Uuid) {
         // TODO: Support fixed size binary
-        // TestBasicType<NUdf::TUuid, std::string, arrow::FixedSizeBinaryArray, /* IsStringType */ true>(arrow::Type::FIXED_SIZE_BINARY);
+        // TestDataTypeConversion<NUdf::TUuid, std::string, arrow::FixedSizeBinaryArray, /* IsStringType */ true>(arrow::Type::FIXED_SIZE_BINARY);
     }
 }
 

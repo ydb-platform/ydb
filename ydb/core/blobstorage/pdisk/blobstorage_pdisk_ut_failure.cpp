@@ -182,25 +182,12 @@ Y_UNIT_TEST_SUITE(TPDiskFailureInjection) {
             appData.Dcb->SetValue(controlName, oneProb, prevValue);
         }
 
-        auto* failureProbs = testCtx.TestCtx.SectorMap->GetFailureProbabilities();
-        UNIT_ASSERT(failureProbs != nullptr);
-
         TString data = PrepareData(4096);
         TString originalData = data;
         testCtx.TestResponse<NPDisk::TEvChunkWriteResult>(
                 new NPDisk::TEvChunkWrite(vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound,
                     reservedChunk, 0, new NPDisk::TEvChunkWrite::TAlignedParts(std::move(data)), nullptr, false, NPriRead::HullOnlineOther),
                 NKikimrProto::OK);
-
-        {
-            auto *runtime = testCtx.GetRuntime();
-            auto &appData = runtime->GetAppData();
-            TAtomic prevValue = 0;
-            const ui32 pdiskId = testCtx.GetPDisk()->PCtx->PDiskId;
-            TString controlName = Sprintf("PDisk_%u_SectorMapSilentWriteFailProbability", pdiskId);
-            const TAtomicBase zeroProb = 0;
-            appData.Dcb->SetValue(controlName, zeroProb, prevValue);
-        }
 
         auto res = testCtx.TestResponse<NPDisk::TEvChunkReadResult>(
                 new NPDisk::TEvChunkRead(vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound,

@@ -4028,21 +4028,10 @@ void TPDisk::Update() {
             failureProbs->ReadReplayProbability.store(SectorMapReadReplayProbability / 1000000000.0);
 
             auto& sectorMap = *Cfg->SectorMap;
-            ui64 current = sectorMap.EmulatedWriteErrors.load(std::memory_order_relaxed);
-            *Mon.EmulatedWriteErrors += current - LastEmulatedWriteErrors;
-            LastEmulatedWriteErrors = current;
-
-            current = sectorMap.EmulatedReadErrors.load(std::memory_order_relaxed);
-            *Mon.EmulatedReadErrors += current - LastEmulatedReadErrors;
-            LastEmulatedReadErrors = current;
-
-            current = sectorMap.EmulatedSilentWriteFails.load(std::memory_order_relaxed);
-            *Mon.EmulatedSilentWriteFails += current - LastEmulatedSilentWriteFails;
-            LastEmulatedSilentWriteFails = current;
-
-            current = sectorMap.EmulatedReadReplays.load(std::memory_order_relaxed);
-            *Mon.EmulatedReadReplays += current - LastEmulatedReadReplays;
-            LastEmulatedReadReplays = current;
+            *Mon.EmulatedWriteErrors = sectorMap.EmulatedWriteErrors.load(std::memory_order_relaxed);
+            *Mon.EmulatedReadErrors = sectorMap.EmulatedReadErrors.load(std::memory_order_relaxed);
+            *Mon.EmulatedSilentWriteFails = sectorMap.EmulatedSilentWriteFails.load(std::memory_order_relaxed);
+            *Mon.EmulatedReadReplays = sectorMap.EmulatedReadReplays.load(std::memory_order_relaxed);
         }
     }
 

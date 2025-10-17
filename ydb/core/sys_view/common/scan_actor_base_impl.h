@@ -328,6 +328,7 @@ private:
         switch (ev->GetTypeRewrite()) {
             hFunc(NKqp::TEvKqpCompute::TEvScanDataAck, HandleScanAck);
             hFunc(TEvSysView::TEvGetScanLimiterResult, HandleLimiter);
+            hFunc(NKqp::TEvKqp::TEvAbortExecution, HandleAbortExecution);
             cFunc(TEvents::TEvWakeup::EventType, HandleTimeout);
             cFunc(TEvents::TEvPoison::EventType, this->PassAway);
             default:
@@ -394,6 +395,40 @@ protected:
     } FailState = OK;
 };
 
+template <typename TDerived>
+class TScanActorWithoutBackPressure : public TScanActorBase<TDerived> {
+    using TBase = TScanActorBase<TDerived>;
+
+public:
+    using TBase::TBase;
+
+protected:
+    // Should scan all data inside call
+    virtual void StartScan() = 0;
+
+    void HandleAck() {
+        TBase::AckReceived = true;
+        DoScan();
+    }
+
+    void ProceedToScan() final {
+        TBase::Become(&TDerived::StateScan);
+        if (TBase::AckReceived) {
+            DoScan();
+        }
+    }
+
+private:
+    void DoScan() {
+        if (!ScanStarted) {
+            ScanStarted = true;
+            StartScan();
+        }
+    }
+
+private:
+    bool ScanStarted = false;
+};
 
 } // NSysView
 } // NKikimr

@@ -1,7 +1,5 @@
 LIBRARY()
 
-ENABLE(YQL_STYLE_CPP)
-
 SRCS(
     yql_dq_task_transform.cpp
 )

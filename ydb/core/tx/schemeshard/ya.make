@@ -37,6 +37,7 @@ RECURSE_FOR_TESTS(
     ut_move_reboots
     ut_olap
     ut_olap_reboots
+    ut_partition_stats
     ut_pq_reboots
     ut_reboots
     ut_replication

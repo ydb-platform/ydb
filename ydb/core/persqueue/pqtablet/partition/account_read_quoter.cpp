@@ -102,7 +102,7 @@ void TBasicAccountQuoter::HandleQuotaConsumed(NAccountQuoterEvents::TEvConsumed:
             TThis::Send(MakeQuoterServiceID(),
                 new TEvQuota::TEvRequest(
                     TEvQuota::EResourceOperator::And,
-                    { TEvQuota::TResourceLeaf(KesusPath, ResourcePath, ConsumedBytesInCredit) },
+                    { TEvQuota::TResourceLeaf(KesusPath, KesusPath, ResourcePath, ConsumedBytesInCredit) },
                     TDuration::Max()),
                 0,
                 ++CurrentQuotaRequestCookie

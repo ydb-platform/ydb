@@ -1,6 +1,6 @@
-Metadata-Version: 2.1
+Metadata-Version: 2.4
 Name: google-auth
-Version: 2.40.3
+Version: 2.41.0
 Summary: Google Authentication Library
 Home-page: https://github.com/googleapis/google-auth-library-python
 Author: Google Cloud Platform
@@ -25,23 +25,23 @@ Classifier: Operating System :: OS Independent
 Classifier: Topic :: Internet :: WWW/HTTP
 Requires-Python: >=3.7
 License-File: LICENSE
-Requires-Dist: cachetools<6.0,>=2.0.0
+Requires-Dist: cachetools<7.0,>=2.0.0
 Requires-Dist: pyasn1-modules>=0.2.1
 Requires-Dist: rsa<5,>=3.1.4
 Provides-Extra: aiohttp
 Requires-Dist: aiohttp<4.0.0,>=3.6.2; extra == "aiohttp"
 Requires-Dist: requests<3.0.0,>=2.20.0; extra == "aiohttp"
-Provides-Extra: enterprise_cert
+Provides-Extra: enterprise-cert
 Requires-Dist: cryptography; extra == "enterprise-cert"
 Requires-Dist: pyopenssl; extra == "enterprise-cert"
-Provides-Extra: pyjwt
-Requires-Dist: pyjwt>=2.0; extra == "pyjwt"
-Requires-Dist: cryptography>=38.0.3; extra == "pyjwt"
-Requires-Dist: cryptography<39.0.0; python_version < "3.8" and extra == "pyjwt"
 Provides-Extra: pyopenssl
 Requires-Dist: pyopenssl>=20.0.0; extra == "pyopenssl"
 Requires-Dist: cryptography>=38.0.3; extra == "pyopenssl"
 Requires-Dist: cryptography<39.0.0; python_version < "3.8" and extra == "pyopenssl"
+Provides-Extra: pyjwt
+Requires-Dist: pyjwt>=2.0; extra == "pyjwt"
+Requires-Dist: cryptography>=38.0.3; extra == "pyjwt"
+Requires-Dist: cryptography<39.0.0; python_version < "3.8" and extra == "pyjwt"
 Provides-Extra: reauth
 Requires-Dist: pyu2f>=0.1.5; extra == "reauth"
 Provides-Extra: requests
@@ -54,10 +54,13 @@ Requires-Dist: mock; extra == "testing"
 Requires-Dist: oauth2client; extra == "testing"
 Requires-Dist: pyjwt>=2.0; extra == "testing"
 Requires-Dist: cryptography>=38.0.3; extra == "testing"
+Requires-Dist: cryptography<39.0.0; python_version < "3.8" and extra == "testing"
 Requires-Dist: pytest; extra == "testing"
 Requires-Dist: pytest-cov; extra == "testing"
 Requires-Dist: pytest-localserver; extra == "testing"
 Requires-Dist: pyopenssl>=20.0.0; extra == "testing"
+Requires-Dist: cryptography>=38.0.3; extra == "testing"
+Requires-Dist: cryptography<39.0.0; python_version < "3.8" and extra == "testing"
 Requires-Dist: pyu2f>=0.1.5; extra == "testing"
 Requires-Dist: responses; extra == "testing"
 Requires-Dist: urllib3; extra == "testing"
@@ -68,10 +71,21 @@ Requires-Dist: aioresponses; extra == "testing"
 Requires-Dist: pytest-asyncio; extra == "testing"
 Requires-Dist: pyopenssl<24.3.0; extra == "testing"
 Requires-Dist: aiohttp<3.10.0; extra == "testing"
-Requires-Dist: cryptography<39.0.0; python_version < "3.8" and extra == "testing"
 Provides-Extra: urllib3
 Requires-Dist: urllib3; extra == "urllib3"
 Requires-Dist: packaging; extra == "urllib3"
+Dynamic: author
+Dynamic: author-email
+Dynamic: classifier
+Dynamic: description
+Dynamic: home-page
+Dynamic: keywords
+Dynamic: license
+Dynamic: license-file
+Dynamic: provides-extra
+Dynamic: requires-dist
+Dynamic: requires-python
+Dynamic: summary
 
 Google Auth Python Library
 ==========================

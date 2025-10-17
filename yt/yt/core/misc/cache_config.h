@@ -88,6 +88,8 @@ DEFINE_REFCOUNTED_TYPE(TSlruCacheDynamicConfig)
 struct TAsyncExpiringCacheConfig
     : public virtual NYTree::TYsonStruct
 {
+    size_t ShardCount;
+
     //! Time since last finished Get() after which an entry is removed.
     TDuration ExpireAfterAccessTime;
 

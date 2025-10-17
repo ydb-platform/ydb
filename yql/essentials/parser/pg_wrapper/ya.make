@@ -1,5 +1,7 @@
 LIBRARY()
 
+ENABLE(SKIP_YQL_STYLE_CPP)
+
 PROVIDES(
     yql_pg_runtime
 )

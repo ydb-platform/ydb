@@ -457,10 +457,11 @@ namespace NKikimr::NBsController {
             Y_ABORT_UNLESS(group->Database);
             Y_ABORT_UNLESS(!group->HiveId);
             const TString& database = *group->Database;
+            TString domainPath;
 
             const auto& domainsInfo = AppData()->DomainsInfo;
             if (const auto& domain = domainsInfo->Domain) {
-                const TString domainPath = TStringBuilder() << '/' << domain->Name;
+                domainPath = TStringBuilder() << '/' << domain->Name;
                 if (database == domainPath || database.StartsWith(TStringBuilder() << domainPath << '/')) {
                     RootHiveId = domainsInfo->GetHive();
                     if (RootHiveId == TDomainsInfo::BadTabletId) {
@@ -470,6 +471,8 @@ namespace NKikimr::NBsController {
             }
 
             auto req = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+            req->DatabaseName = domainPath;
+
             auto& item = req->ResultSet.emplace_back();
             item.Path = NKikimr::SplitPath(database);
             item.RedirectRequired = false;

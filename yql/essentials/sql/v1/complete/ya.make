@@ -1,7 +1,5 @@
 LIBRARY()
 
-ENABLE(YQL_STYLE_CPP)
-
 SRCS(
     configuration.cpp
     name_mapping.cpp

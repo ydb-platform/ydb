@@ -15,8 +15,20 @@ void TBaseLocalTopicPartitionActor::Bootstrap() {
     DoDescribe(TopicPath);
 }
 
+TString TBaseLocalTopicPartitionActor::MakeAbsolutePath(TString path) const {
+    if (path.StartsWith(Database + "/")) {
+        return path;
+    }
+
+    if (path.StartsWith("/")) {
+        return TStringBuilder() << Database << path;
+    }
+
+    return TStringBuilder() << Database << "/" << path;
+}
+
 void TBaseLocalTopicPartitionActor::DoDescribe(const TString& topicPath) {
-    auto path = TStringBuilder() << "/" << Database << topicPath;
+    auto path = MakeAbsolutePath(topicPath);
     LOG_D("Describe topic '" << path << "'");
     auto request = MakeHolder<TNavigate>();
     request->ResultSet.emplace_back(MakeNavigateEntry(path, TNavigate::OpPath));

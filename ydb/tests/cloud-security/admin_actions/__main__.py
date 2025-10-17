@@ -158,7 +158,7 @@ def parse_args() -> ParsedOptions:
     result.scheme_special_options.quite = getattr(args, 'quiet', False)
     result.scheme_special_options.path = getattr(args, 'path', None)
 
-    if result.action == EAction.Dynconfig:
+    if result.action == EAction.AlterDatabase:
         assert result.database is not None, "Database is required for dynconfig"
     
     if result.action == EAction.SchemeLs:
@@ -237,7 +237,7 @@ def fetch_dynconfig(client: CommonClientInvoker, expected_result : EExpectedResu
 
     fetch_config_response = make_request()
     status = fetch_config_response.operation.status
-    issue = fetch_config_response.operation.issue
+    issue = fetch_config_response.operation.issues
 
     if expected_result == EExpectedResult.Success:
         assert status == StatusIds.SUCCESS, generate_error_message('GetConfig', status, issue)

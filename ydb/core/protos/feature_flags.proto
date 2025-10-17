@@ -234,4 +234,5 @@ message TFeatureFlags {
     optional bool EnableMetricsLevel = 208 [default = false];
     optional bool EnableCompileCacheView = 209 [default = false];
     optional bool EnableSecureScriptExecutions = 210 [default = false];
+    optional bool EnableColumnshardBool = 211 [default = false];
 }

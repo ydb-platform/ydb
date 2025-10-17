@@ -103,6 +103,7 @@ void TDqPqReadActorBase::SaveState(const NDqProto::TCheckpoint& /*checkpoint*/, 
 }
 
 void TDqPqReadActorBase::LoadState(const TSourceState& state) {
+    InitWatermarkTracker();
     TInstant minStartingMessageTs = state.DataSize() ? TInstant::Max() : StartingMessageTimestamp;
     ui64 ingressBytes = 0;
     for (const auto& data : state.Data) {

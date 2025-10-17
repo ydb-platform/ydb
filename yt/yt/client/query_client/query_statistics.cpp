@@ -104,7 +104,6 @@ TQueryStatistics TQueryStatistics::FromExecutionStatistics(
     queryStatistics.WriteTime.Set(statistics.WriteTime, statisticsAggregation);
     queryStatistics.CodegenTime.Set(statistics.CodegenTime, statisticsAggregation);
     queryStatistics.WaitOnReadyEventTime.Set(statistics.WaitOnReadyEventTime, statisticsAggregation);
-    queryStatistics.MemoryUsage.Set(statistics.MemoryUsage, statisticsAggregation);
     queryStatistics.GroupedRowCount.Set(statistics.GroupedRowCount, statisticsAggregation);
 
     queryStatistics.IncompleteInput = statistics.IncompleteInput;

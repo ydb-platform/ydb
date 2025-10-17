@@ -75,6 +75,11 @@ jobs:
           python -m pip install --upgrade pip
           pip install ydb[yc] PyGithub codeowners pandas
 
+      - name: Setup ydb access
+        uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
+        with:
+          ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
+
       - name: Get muted_ya.txt from target branch
         run: |
           echo "Getting muted_ya.txt from branch: ${{ env.BASE_BRANCH }}"

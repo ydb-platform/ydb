@@ -326,7 +326,7 @@ namespace NKikimr::NBsController {
                 db.Table<Schema::State>().Key(true).Update(
                     NIceDb::TUpdate<Schema::State::NextOperationLogIndex>(++Self->NextOperationLogIndex));
 
-                STLOG(PRI_INFO, BS_CONTROLLER_AUDIT, BSCA10, "Operation Log", (Request, Cmd.DebugString()),
+                STLOG(PRI_INFO, BS_CONTROLLER_AUDIT, BSCA10, "Finished processing command", (Request, Cmd.DebugString()),
                         (Response, Response->DebugString()), (ExecutionTime, executionTime), (OperationLogIndex, operationLogIndex));
             }
 

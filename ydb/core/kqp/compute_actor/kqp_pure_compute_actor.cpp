@@ -132,8 +132,9 @@ void TKqpComputeActor::DoBootstrap() {
         if (Meta->GetTable().HasSysViewDescription()) {
             SysViewInfo = Meta->GetTable().GetSysViewDescription();
         }
-        auto scanActor = NSysView::CreateSystemViewScan(SelfId(), 0, ScanData->TableId, ScanData->TablePath, SysViewInfo,
-                                                        ranges, columns, UserToken, Database, reverse);
+        auto scanActor = NSysView::CreateSystemViewScan(SelfId(), 0, Database, SysViewInfo,
+                                                        ScanData->TableId, ScanData->TablePath,
+                                                        ranges, columns, UserToken, reverse);
 
         if (!scanActor) {
             ErrorFromIssue(TIssuesIds::DEFAULT_ERROR, TStringBuilder()

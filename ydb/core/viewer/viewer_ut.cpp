@@ -527,6 +527,8 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TClient client(settings);
         client.InitRootScheme();
         GrantConnect(client);
+        client.Grant("/", "Root", "username", NACLib::EAccessRights::GenericWrite);
+        client.Grant("/", "Root", "username", NACLib::EAccessRights::GenericRead);
         TKeepAliveHttpClient httpClient("localhost", monPort);
         WaitForHttpReady(httpClient);
         //Scheme operations cannot be executed inside transaction
@@ -1546,6 +1548,8 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TClient client(settings);
         client.InitRootScheme();
         GrantConnect(client);
+        client.Grant("/", "Root", "username", NACLib::EAccessRights::GenericWrite);
+        client.Grant("/", "Root", "username", NACLib::EAccessRights::GenericRead);
         TTestActorRuntime& runtime = *server.GetRuntime();
         runtime.SetLogPriority(NKikimrServices::TICKET_PARSER, NLog::PRI_TRACE);
 
@@ -1580,6 +1584,9 @@ Y_UNIT_TEST_SUITE(Viewer) {
         client.InitRootScheme();
 
         GrantConnect(client);
+
+        client.Grant("/", "Root", "username", NACLib::EAccessRights::GenericWrite);
+        client.Grant("/", "Root", "username", NACLib::EAccessRights::GenericRead);
 
         TTestActorRuntime& runtime = *server.GetRuntime();
         runtime.SetLogPriority(NKikimrServices::TICKET_PARSER, NLog::PRI_TRACE);
@@ -1621,6 +1628,8 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TClient client(settings);
 
         GrantConnect(client);
+        client.Grant("/", "Root", "username", NACLib::EAccessRights::GenericWrite);
+        client.Grant("/", "Root", "username", NACLib::EAccessRights::GenericRead);
 
         TTestActorRuntime& runtime = *server.GetRuntime();
         runtime.SetLogPriority(NKikimrServices::GRPC_SERVER, NLog::PRI_TRACE);
@@ -1832,6 +1841,8 @@ Y_UNIT_TEST_SUITE(Viewer) {
         client.InitRootScheme();
 
         GrantConnect(client);
+        client.Grant("/", "Root", "username", NACLib::EAccessRights::GenericWrite);
+        client.Grant("/", "Root", "username", NACLib::EAccessRights::GenericRead);
 
 
         TTestActorRuntime& runtime = *server.GetRuntime();

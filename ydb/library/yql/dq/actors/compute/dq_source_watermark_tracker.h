@@ -72,17 +72,7 @@ public:
             Y_DEBUG_ABORT_UNLESS(WatermarksQueue_.contains(TWatermarksQueueItem { data.Watermark, it }));
         }
 
-        if (WatermarksQueue_.empty()) {
-            return Nothing();
-        }
-
-        if (auto nextWatermark = WatermarksQueue_.begin()->Time; Watermark_ < nextWatermark) {
-            return Watermark_ = nextWatermark;
-        } else if (nextWatermark < Watermark_) {
-            SRC_WM_LOG_D("Watermark goes backward (some events may be dropped) " << nextWatermark << '<' << Watermark_);
-        }
-
-        return Nothing();
+        return RecalcWatermark();
     }
 
     bool RegisterPartition(const TPartitionKey& partitionKey, TInstant systemTime) {
@@ -127,15 +117,7 @@ public:
            ArrivalQueue_.erase(it);
         }
 
-        if (WatermarksQueue_.empty()) {
-            return Nothing();
-        }
-        if (auto nextWatermark = WatermarksQueue_.begin()->Time; Watermark_ < nextWatermark) {
-            return Watermark_ = nextWatermark;
-        } else if (nextWatermark < Watermark_) {
-            SRC_WM_LOG_T("Watermark goes backward (partition was added or idle partition unidled) " << nextWatermark << '<' << Watermark_);
-        }
-        return Nothing();
+        return RecalcWatermark();
     }
 
     [[nodiscard]] TMaybe<TInstant> GetNextIdlenessCheckAt(TInstant systemTime) {
@@ -182,6 +164,20 @@ private:
 
         NextIdlenessCheckAt_ = discreteSystemTime + Granularity_;
         return true;
+    }
+
+    TMaybe<TInstant> RecalcWatermark() {
+        if (WatermarksQueue_.empty()) {
+            return Nothing();
+        }
+
+        if (auto nextWatermark = WatermarksQueue_.begin()->Time; Watermark_ < nextWatermark) {
+            return Watermark_ = nextWatermark;
+        } else if (nextWatermark < Watermark_) {
+            SRC_WM_LOG_D("Watermark goes backward (some events may be dropped) " << nextWatermark << '<' << Watermark_);
+        }
+
+        return Nothing();
     }
 
 private:

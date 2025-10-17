@@ -3690,19 +3690,12 @@ public:
         ReplyErrorAndDie(statusCode, std::move(issues));
     }
 
-    void OnError(
+    void OnLookupError(
+            NYql::NDqProto::StatusIds::StatusCode statusCode,
+            NYql::EYqlIssueCode id,
             const TString& message,
-            const NYql::NDqProto::StatusIds::StatusCode statusCode,
             const NYql::TIssues& subIssues) override {
-        NYql::TIssue rootIssue(message);
-        for (const auto& issue : subIssues) {
-            rootIssue.AddSubIssue(MakeIntrusive<NYql::TIssue>(issue));
-        }
-
-        NYql::TIssues issues;
-        issues.AddIssue(std::move(rootIssue));
-
-        ReplyErrorAndDie(statusCode, std::move(issues));
+        ReplyErrorAndDie(statusCode, id, message, subIssues);
     }
 
     void ReplyErrorAndDie(NYql::NDqProto::StatusIds::StatusCode statusCode, auto id, const TString& message, const NYql::TIssues& subIssues = {}) {

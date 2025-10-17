@@ -12,9 +12,10 @@ struct IKqpBufferTableLookupCallbacks {
     virtual ~IKqpBufferTableLookupCallbacks() = default;
 
     virtual void OnLookupTaskFinished() = 0;
-    virtual void OnError(
+    virtual void OnLookupError(
+        NYql::NDqProto::StatusIds::StatusCode statusCode,
+        NYql::EYqlIssueCode id,
         const TString& message,
-        const NYql::NDqProto::StatusIds::StatusCode statusCode,
         const NYql::TIssues& subIssues) = 0;
 };
 

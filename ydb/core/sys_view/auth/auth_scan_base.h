@@ -48,11 +48,11 @@ public:
     }
 
     TAuthScanBase(const NActors::TActorId& ownerId, ui32 scanId,
-        const NKikimrSysView::TSysViewDescription& sysViewInfo,
+        const TString& database, const NKikimrSysView::TSysViewDescription& sysViewInfo,
         const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
         TIntrusiveConstPtr<NACLib::TUserToken> userToken,
         bool requireUserAdministratorAccess, bool applyPathTableRange)
-        : TBase(ownerId, scanId, sysViewInfo, tableRange, columns)
+        : TBase(ownerId, scanId, database, sysViewInfo, tableRange, columns)
         , UserToken(std::move(userToken))
         , RequireUserAdministratorAccess(requireUserAdministratorAccess)
     {
@@ -205,6 +205,7 @@ protected:
         IsNavigatePathInProgress = true;
 
         auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+        request->DatabaseName = this->DatabaseName;
 
         auto& entry = request->ResultSet.emplace_back();
         entry.RequestType = TSchemeCacheNavigate::TEntry::ERequestType::ByPath;

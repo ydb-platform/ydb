@@ -20,10 +20,10 @@ public:
     using TAuthBase = TAuthScanBase<TGroupMembersScan>;
 
     TGroupMembersScan(const NActors::TActorId& ownerId, ui32 scanId,
-        const NKikimrSysView::TSysViewDescription& sysViewInfo,
+        const TString& database, const NKikimrSysView::TSysViewDescription& sysViewInfo,
         const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
         TIntrusiveConstPtr<NACLib::TUserToken> userToken)
-        : TAuthBase(ownerId, scanId, sysViewInfo, tableRange, columns, std::move(userToken), true, false)
+        : TAuthBase(ownerId, scanId, database, sysViewInfo, tableRange, columns, std::move(userToken), true, false)
     {
     }
 
@@ -71,11 +71,11 @@ protected:
 };
 
 THolder<NActors::IActor> CreateGroupMembersScan(const NActors::TActorId& ownerId, ui32 scanId,
-    const NKikimrSysView::TSysViewDescription& sysViewInfo, const TTableRange& tableRange,
-    const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
+    const TString& database, const NKikimrSysView::TSysViewDescription& sysViewInfo,
+    const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
     TIntrusiveConstPtr<NACLib::TUserToken> userToken)
 {
-    return MakeHolder<TGroupMembersScan>(ownerId, scanId, sysViewInfo, tableRange, columns, std::move(userToken));
+    return MakeHolder<TGroupMembersScan>(ownerId, scanId, database, sysViewInfo, tableRange, columns, std::move(userToken));
 }
 
 }

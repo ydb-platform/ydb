@@ -35,7 +35,6 @@ using namespace NTabletFlatExecutor;
 // But in unit tests we want to test both scenarios
 bool gAllowLogBatchingDefaultValue = true;
 
-TDuration gDbStatsReportInterval = TDuration::Seconds(10);
 ui64 gDbStatsDataSizeResolution = 10*1024*1024;
 ui64 gDbStatsRowCountResolution = 100000;
 ui32 gDbStatsHistogramBucketsCount = 10;

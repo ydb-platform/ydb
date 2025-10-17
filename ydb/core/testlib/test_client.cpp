@@ -540,6 +540,7 @@ namespace Tests {
             appData.DataStreamsAuthFactory = Settings->DataStreamsAuthFactory.get();
             appData.PersQueueMirrorReaderFactory = Settings->PersQueueMirrorReaderFactory.get();
             appData.HiveConfig.MergeFrom(Settings->AppConfig->GetHiveConfig());
+            appData.DataShardConfig.MergeFrom(Settings->AppConfig->GetDataShardConfig());
             appData.GraphConfig.MergeFrom(Settings->AppConfig->GetGraphConfig());
             appData.SqsConfig.MergeFrom(Settings->AppConfig->GetSqsConfig());
             appData.SharedCacheConfig.MergeFrom(Settings->AppConfig->GetSharedCacheConfig());

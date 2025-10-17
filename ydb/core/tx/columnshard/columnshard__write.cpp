@@ -574,15 +574,15 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
                 << "tx_id=" << record.GetTxId() 
                 << ", snapshot=" << mvccSnapshot
                 << ", snapshot_schema_version=" << snapshotSchema->GetVersion()
-                << ", current_schema_version=" << schema->GetVersion()
+                << ", request_schema_version=" << schema->GetVersion()
                 << ", table_id=" << schemeShardLocalPathId
                 << ", lock_id=" << lockId;
             
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "schema_version_mismatch")
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "schema_version_mismatch")
                 ("tx_id", record.GetTxId())
                 ("snapshot", TStringBuilder() << mvccSnapshot)
                 ("snapshot_schema_version", snapshotSchema->GetVersion())
-                ("current_schema_version", schema->GetVersion())
+                ("request_schema_version", schema->GetVersion())
                 ("table_id", schemeShardLocalPathId)
                 ("lock_id", lockId)
                 ("path_id", pathId)

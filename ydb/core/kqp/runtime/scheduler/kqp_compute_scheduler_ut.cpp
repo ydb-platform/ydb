@@ -421,7 +421,7 @@ namespace {
         /*
             Scenario:
             - 2 databases with 3 and 2 pools respectively, each having 1 or 2 queries
-            - FairShare is distributed with weight coefficients beetween databases and pools. Demands and weights are carefully chosen to avoid integer division errors
+            - FairShare is distributed with weight coefficients between databases and pools. Demands and weights are carefully chosen to avoid integer division errors
             - This test combine few previous test cases simultaneously
         */
         constexpr ui64 kCpuLimit = 20;
@@ -499,12 +499,21 @@ namespace {
                 UNIT_ASSERT_VALUES_EQUAL(databaseSnapshot->FairShare, databaseFairShares[1]);
             }
         }
+
+        ui64 sumOfFairShares = 0;
+        for (auto& fairshare : databaseFairShares) {
+            sumOfFairShares += fairshare;
+        }
+
+        auto root = queries[0]->GetSnapshot()->GetParent()->GetParent()->GetParent();
+        UNIT_ASSERT_VALUES_EQUAL(root->FairShare, sumOfFairShares);
     }
 
     Y_UNIT_TEST(ZeroQueries) {
         /*
             Scenario:
             - UpdateFairShare with no queries shouldn't throw exception
+            - With zero demand all nodes even the root should have FairShare 0
         */
         constexpr ui64 kCpuLimit = 12;
 
@@ -523,13 +532,32 @@ namespace {
         scheduler.AddOrUpdatePool(databaseId, poolId, {});
 
         UNIT_ASSERT_NO_EXCEPTION(scheduler.UpdateFairShare());
+
+        auto query = scheduler.AddOrUpdateQuery(databaseId, poolId, 0, {});
+        scheduler.UpdateFairShare();
+
+        auto querySnapshot = query->GetSnapshot();
+        UNIT_ASSERT(querySnapshot);
+        UNIT_ASSERT_VALUES_EQUAL(querySnapshot->FairShare, 0);
+
+        auto* poolSnapshot = querySnapshot->GetParent();
+        UNIT_ASSERT(poolSnapshot);
+        UNIT_ASSERT_VALUES_EQUAL(poolSnapshot->FairShare, 0);
+
+        auto* databaseSnapshot = poolSnapshot->GetParent();
+        UNIT_ASSERT(databaseSnapshot);
+        UNIT_ASSERT_VALUES_EQUAL(databaseSnapshot->FairShare, 0);
+
+        auto root = databaseSnapshot->GetParent();
+        UNIT_ASSERT(root);
+        UNIT_ASSERT_VALUES_EQUAL(root->FairShare, 0);
     }
 
-    Y_UNIT_TEST_TWIN(ZeroLimits, AllowOverlimit) {
+    Y_UNIT_TEST(ZeroLimits) {
         /*
             Scenario:
             - 1 database with 1 pool and 3 queries
-            - Database and pool has zero limit, despite this with AllowOverlimit option queries should get 1 FairShare
+            - Database and pool has zero limit, despite AllowOverlimit option queries shouldn't get 1 FairShare
         */
         constexpr ui64 kCpuLimit = 12;
         constexpr ui64 kInternalLimit = 0;
@@ -557,17 +585,12 @@ namespace {
             tasks.emplace_back(CreateDemandTasks(query, kQueryDemand));
         }
 
-        scheduler.UpdateFairShare(AllowOverlimit);
+        scheduler.UpdateFairShare();
 
         for (size_t queryId = 0; queryId < queries.size(); ++queryId) {
             auto querySnapshot = queries[queryId]->GetSnapshot();
             UNIT_ASSERT(querySnapshot);
-
-            if (AllowOverlimit) {
-                UNIT_ASSERT_VALUES_EQUAL(querySnapshot->FairShare, 1);
-            } else {
-                UNIT_ASSERT_VALUES_EQUAL(querySnapshot->FairShare, 0);
-            }
+            UNIT_ASSERT_VALUES_EQUAL_C(querySnapshot->FairShare, kInternalLimit, "With zero limits overlimit should be ignored");
         }
 
         auto* poolSnapshot = queries[0]->GetSnapshot()->GetParent();
@@ -579,11 +602,11 @@ namespace {
         UNIT_ASSERT_VALUES_EQUAL(databaseSnapshot->FairShare, kInternalLimit);
     }
 
-    Y_UNIT_TEST_TWIN(ZeroLimitDbWithNonZeroPools, AllowOverlimit) {
+    Y_UNIT_TEST(ZeroLimitDbWithNonZeroPools) {
         /*
             Scenario:
             - 1 database with 1 pool and 3 queries
-            - Database and pool has zero limit, despite this with AllowOverlimit option queries should get 1 FairShare
+            - Database and pool has zero limit, despite AllowOverlimit option queries shouldn't get 1 FairShare
             - Zero Limit and thus zero FairShare should be inherited by pool
         */
         constexpr ui64 kCpuLimit = 10;
@@ -612,17 +635,12 @@ namespace {
             tasks.emplace_back(CreateDemandTasks(query, kQueryDemand));
         }
 
-        scheduler.UpdateFairShare(AllowOverlimit);
+        scheduler.UpdateFairShare();
 
         for (size_t queryId = 0; queryId < queries.size(); ++queryId) {
             auto querySnapshot = queries[queryId]->GetSnapshot();
             UNIT_ASSERT(querySnapshot);
-
-            if (AllowOverlimit) {
-                UNIT_ASSERT_VALUES_EQUAL(querySnapshot->FairShare, 1);
-            } else {
-                UNIT_ASSERT_VALUES_EQUAL(querySnapshot->FairShare, 0);
-            }
+            UNIT_ASSERT_VALUES_EQUAL_C(querySnapshot->FairShare, kInternalLimit, "With zero limit overlimit should be ignored");
         }
 
         auto* poolSnapshot = queries[0]->GetSnapshot()->GetParent();
@@ -790,6 +808,7 @@ namespace {
         UNIT_ASSERT_VALUES_EQUAL(databaseSnapshot->FairShare, kCpuLimit);
 
         scheduler.RemoveQuery(queries[0]);
+        queries.erase(queries.begin());
 
         scheduler.UpdateFairShare();
 

@@ -249,7 +249,6 @@ private:
     void Handle(TEvPQ::TEvForceCompaction::TPtr& ev);
     void Handle(TEvPQ::TEvExclusiveLockAcquired::TPtr& ev);
     void Handle(TEvPQ::TBroadcastPartitionError::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvPQ::TEvMLPRestartActor::TPtr& ev);
     void HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorContext& ctx);
     void HandleOnIdle(TEvPQ::TEvDeregisterMessageGroup::TPtr& ev, const TActorContext& ctx);
     void HandleOnIdle(TEvPQ::TEvRegisterMessageGroup::TPtr& ev, const TActorContext& ctx);
@@ -1195,6 +1194,8 @@ private:
     void Handle(TEvPersQueue::TEvMLPUnlockRequest::TPtr&);
     void Handle(TEvPersQueue::TEvMLPChangeMessageDeadlineRequest::TPtr&);
 
+    void Handle(TEvPQ::TEvMLPRestartActor::TPtr& ev);
+
     void ProcessMLPPendingEvents();
     template<typename TEventHandle>
     void ForwardToMLPConsumer(const TString& consumer, TAutoPtr<TEventHandle>& ev);
@@ -1205,6 +1206,7 @@ private:
         TActorId ActorId;
     };
     std::unordered_map<TString, TMLPConsumerInfo> MLPConsumers;
+
     using TMLPPendingEvent = std::variant<
         TEvPersQueue::TEvMLPReadRequest::TPtr,
         TEvPersQueue::TEvMLPCommitRequest::TPtr,

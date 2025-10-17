@@ -20,6 +20,7 @@ class TStorage {
 
     friend class TSerializer;
 
+public:
     // Имеет смысл ограничить 100К сообщений на партицию. Надо больше - увеличивайте кол-во партиции.
     // В худшем случае на 100000 сообщений надо ~3MB памяти
     static constexpr size_t MaxMessages = 100000;
@@ -31,6 +32,7 @@ class TStorage {
     // зоне (их выборка будет происходить очень быстро, без поиска по списку всех Messages).
     static constexpr size_t MaxReleasedMessageSize = 1024;
 
+private:
     enum EMessageStatus {
         Unprocessed = 0,
         Locked = 1,
@@ -63,6 +65,7 @@ public:
         size_t DLQMessageCount = 0;
         size_t LockedMessageGroupCount = 0;
         size_t DeadlineExpiredMessageCount = 0;
+        size_t UnprocessedMessageCount = 0;
     };
 
     // Return next message for client processing.
@@ -80,6 +83,8 @@ public:
     // https://docs.amazonaws.cn/en_us/AWSSimpleQueueService/latest/APIReference/API_ChangeMessageVisibility.html
     bool ChangeMessageDeadline(TMessageId message, TInstant deadline);
 
+    void AddMessage(ui64 offset, ui32 messageGroupIdHash);
+
     bool ProccessDeadlines();
     bool Compact();
 
@@ -87,6 +92,7 @@ public:
     bool CreateSnapshot(NKikimrPQ::TMLPStorageSnapshot& snapshot);
 
     const TMetrics& GetMetrics() const;
+    ui64 GetLastOffset() const;
 
 private:
     // offsetDelte, TMessage

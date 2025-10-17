@@ -148,6 +148,9 @@ void TConsumerActor::HandleOnWrite(TEvKeyValue::TEvResponse::TPtr& ev) {
     Become(&TConsumerActor::StateWork);
 
     ProcessEventQueue();
+    FetchMessagesIfNeeded();
+
+    // TODO commit offset
 }
 
 STFUNC(TConsumerActor::StateWork) {
@@ -257,6 +260,7 @@ void TConsumerActor::ProcessEventQueue() {
 
     if (Batch->Empty()) {
         Batch.reset();
+        FetchMessagesIfNeeded();
         return;
     }
 
@@ -273,7 +277,6 @@ void TConsumerActor::PersistSnapshot() {
     auto* config = snapshot.MutableConfiguration();
     config->SetConsumerId(Config.GetId());
     config->SetGeneration(Config.GetGeneration());
-
     Storage->CreateSnapshot(snapshot);
 
     auto request = std::make_unique<TEvKeyValue::TEvRequest>();
@@ -281,6 +284,83 @@ void TConsumerActor::PersistSnapshot() {
     request->Record.AddCmdWrite()->SetValue(snapshot.SerializeAsString());
 
     Send(TabletActorId, std::move(request));
+}
+
+namespace {
+std::unique_ptr<TEvPQ::TEvRead> MakeEvRead(const TString& consumerName, ui64 startOffset, ui64 count, ui64 cookie, TMaybe<ui64> nextPartNo = Nothing()) {
+    return std::make_unique<TEvPQ::TEvRead>(
+        cookie,
+        startOffset,
+        startOffset + count,
+        nextPartNo.GetOrElse(0),
+        count,
+        TString{},
+        consumerName,
+        1000,
+        std::numeric_limits<ui32>::max(),
+        0,
+        0,
+        "unknown",
+        false,
+        TActorId{}
+    );
+}
+
+bool IsSucess(const TEvPQ::TEvProxyResponse::TPtr& ev) {
+    return ev->Get()->Response->GetStatus() == NMsgBusProxy::MSTATUS_OK &&
+        ev->Get()->Response->GetErrorCode() == NPersQueue::NErrorCode::OK;
+}
+
+}
+
+void TConsumerActor::FetchMessagesIfNeeded() {
+    if (FetchInProgress) {
+        return;
+    }
+
+    auto& metrics = Storage->GetMetrics();
+    if (metrics.InflyMessageCount >= TStorage::MaxMessages) {
+        return;
+    }
+    if (metrics.InflyMessageCount >= 1000 && metrics.UnprocessedMessageCount >= metrics.LockedMessageCount * 2) {
+        return;
+    }
+
+    FetchInProgress = true;
+
+    auto maxMessages = TStorage::MaxMessages - metrics.InflyMessageCount;
+    Send(PartitionActorId, MakeEvRead(Config.GetName(), Storage->GetLastOffset(), maxMessages, ++FetchCookie));
+    //Send(PartitionActorId, new TEvPQ::TEvMLPFetchMessagesRequest(Storage->GetLastOffset(), maxMessages));
+}
+
+void TConsumerActor::Handle(TEvPQ::TEvProxyResponse::TPtr& ev) {
+    if (FetchCookie != ev->Cookie) {
+        return;
+    }
+
+    FetchInProgress = false;
+
+    if (!IsSucess(ev)) {
+        return;
+    }
+
+    auto& response = ev->Get()->Response;
+    if (response->GetPartitionResponse().HasCmdReadResult()) {
+        auto lastOffset = Storage->GetLastOffset();
+        for (auto& result : response->GetPartitionResponse().GetCmdReadResult().GetResult()) {
+            if (lastOffset > result.GetOffset()) {
+                continue;
+            }
+
+            if (result.GetPartNo() > 0) {
+                continue;
+            }
+
+            Storage->AddMessage(result.GetOffset(), Hash(result.GetSourceId()));
+        }
+    }
+
+    ProcessEventQueue();
 }
 
 

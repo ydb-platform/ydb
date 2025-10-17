@@ -12,6 +12,7 @@ std::optional<TStorage::NextResult> TStorage::Next(TInstant deadline, ui64 fromO
         ReleasedMessages.pop_front();
 
         ++Metrics.LockedMessageCount;
+        --Metrics.UnprocessedMessageCount;
 
         return NextResult{
             .Message = DoLock(offset - FirstOffset, deadline),
@@ -33,6 +34,7 @@ std::optional<TStorage::NextResult> TStorage::Next(TInstant deadline, ui64 fromO
             }
 
             ++Metrics.LockedMessageCount;
+            --Metrics.UnprocessedMessageCount;
 
             return NextResult{
                 .Message = DoLock(i, deadline),
@@ -113,7 +115,24 @@ bool TStorage::InitializeFromSnapshot(const NKikimrPQ::TMLPStorageSnapshot& snap
 
     const TMessage* ptr = reinterpret_cast<const TMessage*>(snapshot.GetMessages().data());
     for (size_t i = 0; i < Messages.size(); ++i) {
-        Messages[i] = ptr[i];  // TODO BIGENDIAN/LOWENDIAN
+        auto& message = Messages[i] = ptr[i];  // TODO BIGENDIAN/LOWENDIAN
+
+        switch(message.Status) {
+            case EMessageStatus::Locked:
+                ++Metrics.LockedMessageCount;
+                if (message.HasMessageGroupId) {
+                    LockedMessageGroupsId.insert(message.MessageGroupIdHash);
+                    ++Metrics.LockedMessageGroupCount;
+                }
+                break;
+            case EMessageStatus::Committed:
+                ++Metrics.CommittedMessageCount;
+                break;
+            case EMessageStatus::Unprocessed:
+                ++Metrics.UnprocessedMessageCount;
+                break;
+
+        }
     }
 
     Metrics.InflyMessageCount = Messages.size();
@@ -190,12 +209,13 @@ TMessageId TStorage::DoLock(ui64 offsetDelta, TInstant deadline) {
     }
 
     ++Metrics.LockedMessageCount;
+    --Metrics.UnprocessedMessageCount;
 
     return FirstOffset + offsetDelta;
 }
 
 bool TStorage::DoCommit(ui64 offset) {
-    auto [offsetDelta, message] = GetMessage(offset, EMessageStatus::Locked);
+    auto [offsetDelta, message] = GetMessage(offset, EMessageStatus::Locked); // TODO статус может бть любым
     if (!message) {
         return false;
     }
@@ -242,10 +262,14 @@ void TStorage::DoUnlock(TMessage& message, ui64 offset) {
         message.Status = EMessageStatus::DLQ;
 
         ++Metrics.DLQMessageCount;
-    } else if (ReleasedMessages.size() < MaxReleasedMessageSize) {
-        ReleasedMessages.push_back(offset);
     } else {
-        FirstUnlockedOffset = std::min(FirstUnlockedOffset, offset);
+        if (ReleasedMessages.size() < MaxReleasedMessageSize) {
+            ReleasedMessages.push_back(offset);
+        } else {
+            FirstUnlockedOffset = std::min(FirstUnlockedOffset, offset);
+        }
+        
+        ++Metrics.UnprocessedMessageCount;
     }
 }
 
@@ -269,6 +293,10 @@ void TStorage::UpdateFirstUncommittedOffset() {
 
 const TStorage::TMetrics& TStorage::GetMetrics() const {
     return Metrics;
+}
+
+ui64 TStorage::GetLastOffset() const {
+    return FirstOffset + Messages.size();
 }
 
 }

@@ -4,6 +4,7 @@
 
 #include <ydb/core/keyvalue/keyvalue_events.h>
 #include <ydb/core/persqueue/events/global.h>
+#include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/persqueue/common/actor.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 
@@ -41,6 +42,8 @@ private:
     void HandleOnInit(TEvKeyValue::TEvResponse::TPtr&);
     void HandleOnWrite(TEvKeyValue::TEvResponse::TPtr&);
 
+    void Handle(TEvPQ::TEvProxyResponse::TPtr&);
+
     STFUNC(StateInit);
     STFUNC(StateWork);
     STFUNC(StateWrite);
@@ -48,7 +51,7 @@ private:
     void Restart(TString&& error);
 
     void ProcessEventQueue();
-
+    void FetchMessagesIfNeeded();
     void ReadSnapshot();
     void PersistSnapshot();
 
@@ -57,6 +60,9 @@ private:
     const ui32 PartitionId;
     const TActorId PartitionActorId;
     const NKikimrPQ::TPQTabletConfig::TConsumer Config;
+
+    bool FetchInProgress = false;
+    ui64 FetchCookie = 0;
 
     std::unique_ptr<TStorage> Storage;
     std::unique_ptr<TBatch> Batch;

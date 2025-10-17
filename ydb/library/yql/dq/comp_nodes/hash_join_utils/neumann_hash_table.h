@@ -9,8 +9,6 @@
 
 #include <util/generic/buffer.h>
 
-#include <ydb/library/yql/utils/simd/simd.h>
-
 #include "tuple.h"
 
 namespace NKikimr {

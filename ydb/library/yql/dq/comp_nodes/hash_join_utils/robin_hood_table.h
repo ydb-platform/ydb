@@ -8,8 +8,6 @@
 #include <yql/essentials/minikql/mkql_rh_hash_utils.h>
 #include <yql/essentials/utils/prefetch.h>
 
-#include <ydb/library/yql/utils/simd/simd.h>
-
 #include <util/digest/city.h>
 #include <util/generic/scope.h>
 

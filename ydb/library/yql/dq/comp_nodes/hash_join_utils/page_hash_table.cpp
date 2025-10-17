@@ -1,7 +1,5 @@
 #include "page_hash_table.h"
 
-#include <ydb/library/yql/utils/simd/simd.h>
-
 #include <arrow/util/bit_util.h>
 
 namespace NKikimr {

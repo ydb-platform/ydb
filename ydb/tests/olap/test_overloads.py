@@ -106,17 +106,13 @@ class TestLogScenario(object):
         cls.ydb_client.wait_connection(timeout=60)
 
     @classmethod
-    def _setup_ydb_rp(cls, writing_in_flight_requests_count_limit, writing_in_flight_request_bytes_limit):
+    def _setup_ydb_rp(cls):
         ydb_path = yatest.common.build_path(os.environ.get("YDB_DRIVER_BINARY"))
         logger.info(yatest.common.execute([ydb_path, "-V"], wait=True).stdout.decode("utf-8"))
         config = KikimrConfigGenerator(
             extra_feature_flags={"enable_olap_reject_probability": True},
-            column_shard_config={"alter_object_enabled": True,
-                                 "writing_in_flight_requests_count_limit": writing_in_flight_requests_count_limit,
-                                 "writing_in_flight_request_bytes_limit": writing_in_flight_request_bytes_limit},
             memory_controller_config={"max_tx_in_fly": 0},
         )
-        #config.yaml_config["memory_controller_config"]["max_tx_in_fly"] = 0
         cls.cluster = KiKiMR(config)
         cls.cluster.start()
         node = cls.cluster.nodes[1]
@@ -213,13 +209,10 @@ class TestLogScenario(object):
         logging.info(f"Count rows after insert {self.get_row_count()}")
         assert self.get_row_count() != 0
 
-    @pytest.mark.parametrize('writing_in_flight_requests_count_limit, writing_in_flight_request_bytes_limit', [(2000, 400000)])
-    def test_overloads_reject_probability(self, writing_in_flight_requests_count_limit, writing_in_flight_request_bytes_limit):
-        test_name = f"test_overloads_bulk_upsert_{writing_in_flight_requests_count_limit}_{writing_in_flight_request_bytes_limit}"
-        self._setup_ydb_rp(writing_in_flight_requests_count_limit, writing_in_flight_request_bytes_limit)
+    def test_overloads_reject_probability(self):
+        self._setup_ydb_rp()
 
-        test_dir = f"{self.ydb_client.database}/{test_name}"
-        table_path = f"{test_dir}/table_for_rp"
+        table_path = f"{self.ydb_client.database}/table_for_test_overloads_reject_probability"
         self.ydb_client.query(
             f"""
             CREATE TABLE `{table_path}` (
@@ -256,15 +249,14 @@ class TestLogScenario(object):
 
         futures = []
 
-        for _ in range(29):
+        for _ in range(19):
             lb = random.randint(0, rows_count)
             futures.append(self.ydb_client.query_async(f"UPDATE `{table_path}` SET v1 = v1 + 1, v2 = v2 - 1 WHERE id > {lb};"))
 
         for future in futures:
             future.result()
 
-        metrics = self.cluster.get_metrics(db_only=True, metrics={
-            'reject_probability': {'sensor': 'Overload/RejectProbability/Count'}
-        })
-        assert metrics['reject_probability'] > 0
+        monitor = self.cluster.monitors[0].fetch()
+        _, rejectProbabilityCount = monitor.get_by_name('Deriviative/Overload/RejectProbability/Count')[0]
 
+        assert rejectProbabilityCount > 0

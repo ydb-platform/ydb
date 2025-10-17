@@ -65,7 +65,7 @@ static constexpr i64 FILE_SPLIT_THRESHOLD = 128 << 20; // 128 MiB
 static constexpr i64 READ_TABLE_RETRIES = 100;
 static const std::string ATTR_ASYNC_REPLICATION = "__async_replication";
 static const std::string ATTR_ASYNC_REPLICA = "__async_replica";
-
+constexpr TStringBuf TRANSFER_LAMBDA_DEFAULT_NAME = "$__ydb_transfer_lambda";
 
 ////////////////////////////////////////////////////////////////////////////////
 //                               Util
@@ -768,6 +768,21 @@ inline TString Interval(const TDuration& value) {
     return TStringBuilder() << "Interval('PT" << value.Seconds() << "S')";
 }
 
+void AddConnectionOptions(const NReplication::TConnectionParams& connectionParams, TVector<TString>& options) {
+    options.push_back(BuildOption("CONNECTION_STRING", Quote(BuildConnectionString(connectionParams))));
+    switch (connectionParams.GetCredentials()) {
+        case NReplication::TConnectionParams::ECredentials::Static:
+            options.push_back(BuildOption("USER", Quote(connectionParams.GetStaticCredentials().User)));
+            options.push_back(BuildOption("PASSWORD_SECRET_NAME", Quote(connectionParams.GetStaticCredentials().PasswordSecretName)));
+            break;
+        case NReplication::TConnectionParams::ECredentials::OAuth:
+            if (const auto& secret = connectionParams.GetOAuthCredentials().TokenSecretName; !secret.empty()) {
+                options.push_back(BuildOption("TOKEN_SECRET_NAME", Quote(secret)));
+            }
+            break;
+    }
+}
+
 TString BuildCreateReplicationQuery(
         const TString& db,
         const TString& backupRoot,
@@ -781,21 +796,10 @@ TString BuildCreateReplicationQuery(
         }
     }
 
-    const auto& params = desc.GetConnectionParams();
-
     TVector<TString> opts(::Reserve(5 /* max options */));
-    opts.push_back(BuildOption("CONNECTION_STRING", Quote(BuildConnectionString(params))));
-    switch (params.GetCredentials()) {
-        case NReplication::TConnectionParams::ECredentials::Static:
-            opts.push_back(BuildOption("USER", Quote(params.GetStaticCredentials().User)));
-            opts.push_back(BuildOption("PASSWORD_SECRET_NAME", Quote(params.GetStaticCredentials().PasswordSecretName)));
-            break;
-        case NReplication::TConnectionParams::ECredentials::OAuth:
-            if (const auto& secret = params.GetOAuthCredentials().TokenSecretName; !secret.empty()) {
-                opts.push_back(BuildOption("TOKEN_SECRET_NAME", Quote(secret)));
-            }
-            break;
-    }
+        
+    const auto& params = desc.GetConnectionParams();
+    AddConnectionOptions(params, opts);
 
     opts.push_back(BuildOption("CONSISTENCY_LEVEL", Quote(ToString(desc.GetConsistencyLevel()))));
     if (desc.GetConsistencyLevel() == NReplication::TReplicationDescription::EConsistencyLevel::Global) {
@@ -830,6 +834,108 @@ void BackupReplication(
 
     WriteCreationQueryToFile(creationQuery, fsBackupFolder, NDump::NFiles::CreateAsyncReplication());
     BackupPermissions(driver, dbPath, fsBackupFolder);
+}
+
+namespace {
+
+TString ExtractTransformationLambdaName(const TString& lambdaCreateQuery) {
+    const TString lambdaNameStartPattern = TStringBuilder() << TRANSFER_LAMBDA_DEFAULT_NAME << " = ";
+    const TString lambdaNameEndPattern = ";";
+    
+    size_t startPos = lambdaCreateQuery.find(lambdaNameStartPattern);
+    if (startPos == TString::npos) {
+        LOG_E(Sprintf("Unexpected transfer lambda name: '%s' was not found", lambdaNameStartPattern.c_str()));
+        return "";
+    }
+
+    startPos += lambdaNameStartPattern.length();
+
+    size_t endPos = lambdaCreateQuery.rfind(lambdaNameEndPattern);
+    if (endPos == TString::npos) {
+        LOG_E("Unexpected transfer lambda name: end semicolon was not found");
+        return "";
+    }
+
+    if (startPos >= endPos) {
+        LOG_E("Unexpected transfer lambda name");
+        return "";
+    }
+    
+    return lambdaCreateQuery.substr(startPos, endPos - startPos);
+}
+
+void CleanQuery(TString& query, const TString& patternToRemove) {    
+    if (patternToRemove.empty()) {
+        return;
+    }
+
+    size_t patternLength = patternToRemove.length();
+    size_t position;
+    while ((position = query.find(patternToRemove)) != TString::npos) {
+        query.erase(position, patternLength);
+    }    
+}
+
+TString BuildCreateTransferQuery(
+        const TString& db,
+        const TString& backupRoot,
+        const TString& name,
+        const NReplication::TTransferDescription& desc)
+{            
+    TVector<TString> options(::Reserve(7));
+    
+    const auto& connectionParams = desc.GetConnectionParams();
+    AddConnectionOptions(connectionParams, options);
+
+    options.push_back(BuildOption("CONSUMER", Quote(desc.GetConsumerName())));
+
+    const auto& batchingSettings = desc.GetBatchingSettings();
+    options.push_back(BuildOption("BATCH_SIZE_BYTES", ToString(batchingSettings.SizeBytes)));
+    options.push_back(BuildOption("FLUSH_INTERVAL", Interval(batchingSettings.FlushInterval)));
+
+    const TString& lambdaCreateQuery = desc.GetTransformationLambda().c_str();
+    const TString& lambdaName = ExtractTransformationLambdaName(lambdaCreateQuery.c_str()).c_str();
+
+    TString cleanedLambdaCreateQuery = lambdaCreateQuery;
+    CleanQuery(cleanedLambdaCreateQuery, "PRAGMA OrderedColumns;");
+    CleanQuery(cleanedLambdaCreateQuery, TStringBuilder() << TRANSFER_LAMBDA_DEFAULT_NAME << " = " << lambdaName << ";");
+
+    return std::format(
+            "-- database: \"{}\"\n"
+            "-- backup root: \"{}\"\n"
+            "{}\n\n"
+            "CREATE TRANSFER `{}`\n"
+            "FROM `{}` TO `{}` USING {}\n"
+            "WITH (\n{}\n);",
+            db.c_str(), backupRoot.c_str(),
+            cleanedLambdaCreateQuery.c_str(),
+            name.c_str(), 
+            desc.GetSrcPath().c_str(), desc.GetDstPath().c_str(), lambdaName.c_str(),
+            JoinSeq(",\n", options).c_str()
+        );        
+}
+
+} // namespace
+
+void BackupTransfer(
+    TDriver driver,
+    const TString& db,
+    const TString& dbBackupRoot,
+    const TString& dbPathRelativeToBackupRoot,
+    const TFsPath& fsBackupFolder)
+{
+    Y_ENSURE(!dbPathRelativeToBackupRoot.empty());
+    const auto dbPath = JoinDatabasePath(dbBackupRoot, dbPathRelativeToBackupRoot);
+
+    LOG_I("Backup transfer " << dbPath.Quote() << " to " << fsBackupFolder.GetPath().Quote());
+
+    NReplication::TReplicationClient client(driver);
+    TMaybe<NReplication::TTransferDescription> desc;
+    VerifyStatus(NDump::DescribeTransfer(client, dbPath, desc), "describe transfer");
+    const auto creationTransferQuery = BuildCreateTransferQuery(db, dbBackupRoot, fsBackupFolder.GetName(), *desc);
+
+    WriteCreationQueryToFile(creationTransferQuery, fsBackupFolder, NDump::NFiles::CreateTransfer());
+    BackupPermissions(driver, dbPath, fsBackupFolder);    
 }
 
 namespace {
@@ -1051,7 +1157,7 @@ void BackupFolderImpl(TDriver driver, const TString& database, const TString& db
                     CreateClusterDirectory(driver, JoinDatabasePath(backupPrefix, dbIt.GetRelPath()));
                 }
             }
-
+            
             try {
                 if (dbIt.IsView()) {
                     BackupView(driver, database, dbIt.GetTraverseRoot(), dbIt.GetRelPath(), childFolderPath, issues);
@@ -1067,6 +1173,8 @@ void BackupFolderImpl(TDriver driver, const TString& database, const TString& db
                     BackupExternalTable(driver, dbIt.GetFullPath(), childFolderPath);
                 } else if (dbIt.IsSystemView()) {
                     BackupSystemView(driver, dbIt.GetFullPath(), childFolderPath);
+                } else if (dbIt.IsTransfer()) {
+                    BackupTransfer(driver, database, dbIt.GetTraverseRoot(), dbIt.GetRelPath(), childFolderPath);
                 } else if (!dbIt.IsTable() && !dbIt.IsDir()) {
                     throw TSkipException() << "dumping objects of type " << dbIt.GetCurrentNode()->Type << " is not supported";
                 }

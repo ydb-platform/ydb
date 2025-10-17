@@ -99,7 +99,8 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
     void Handle(TEvPersQueue::TEvMLPChangeMessageDeadlineRequest::TPtr&);
 
     template<typename TEventHandle>
-    void ForwardToPartition(ui32 partitionId, TAutoPtr<TEventHandle>& ev);
+    bool ForwardToPartition(ui32 partitionId, TAutoPtr<TEventHandle>& ev);
+    void ProcessMLPQueue();
 
     bool OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext& ctx) override;
     bool OnRenderAppHtmlPageTx(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext& ctx);
@@ -255,6 +256,14 @@ private:
 
     TVector<TAutoPtr<TEvPersQueue::TEvHasDataInfo>> HasDataRequests;
     TVector<std::pair<TAutoPtr<TEvPersQueue::TEvUpdateConfig>, TActorId> > UpdateConfigRequests;
+
+    using TMLPRequest = std::variant<
+        TEvPersQueue::TEvMLPReadRequest::TPtr,
+        TEvPersQueue::TEvMLPCommitRequest::TPtr,
+        TEvPersQueue::TEvMLPUnlockRequest::TPtr,
+        TEvPersQueue::TEvMLPChangeMessageDeadlineRequest::TPtr
+    >;
+    TDeque<TMLPRequest> MLPRequests;
 
 public:
     struct TPipeInfo {

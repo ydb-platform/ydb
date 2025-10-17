@@ -104,6 +104,12 @@ void TReaderActor::Handle(TEvPersQueue::TEvMLPReadResponse::TPtr& ev) {
     PassAway();
 }
 
+void TReaderActor::Handle(TEvPersQueue::TEvMLPErrorResponse::TPtr& ev) {
+    LOG_D("Handle TEvPersQueue::TEvMLPErrorResponse " << ev->Get()->GetErrorMessage());
+    Send(ParentId, new TEvPersQueue::TEvMLPReadResponse(ev->Get()->GetErrorCode()));
+    PassAway();
+}
+
 void TReaderActor::HandleOnRead(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
     if (ev->Cookie != Cookie) {
         return;

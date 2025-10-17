@@ -53,15 +53,14 @@ void TBatch::Commit() {
 
 namespace {
 
-template<typename T>
 void ReplyError(const TActorIdentity& selfActorId, const TActorId& sender, ui64 cookie) {
-    selfActorId.Send(sender, new T(NPersQueue::NErrorCode::EErrorCode::ERROR), 0, cookie);
+    selfActorId.Send(sender, new TEvPersQueue::TEvMLPErrorResponse(NPersQueue::NErrorCode::EErrorCode::ERROR, "rollback"), 0, cookie);
 }
 
 template<typename T>
 void ReplyErrorAll(const TActorIdentity& selfActorId, std::vector<TResponseHolder<T>>& queue) {
     for (auto& response : queue) {
-        ReplyError<T>(selfActorId, response.Sender, response.Cookie);
+        ReplyError(selfActorId, response.Sender, response.Cookie);
     }
     queue.clear();
 }
@@ -71,7 +70,7 @@ void ReplyErrorAll(const TActorIdentity& selfActorId, std::vector<TResponseHolde
 void TBatch::Rollback() {
     if (ReadResponse) {
         for (auto& response : ReadResponse->Responses) {
-            ReplyError<TEvPersQueue::TEvMLPReadResponse>(SelfActorId, response.Sender, response.Cookie);
+            ReplyError(SelfActorId, response.Sender, response.Cookie);
         }
         ReadResponse.reset();
     }

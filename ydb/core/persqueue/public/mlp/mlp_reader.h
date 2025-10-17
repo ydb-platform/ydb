@@ -31,6 +31,7 @@ private:
 
     void DoRead();
     void Handle(TEvPersQueue::TEvMLPReadResponse::TPtr&);
+    void Handle(TEvPersQueue::TEvMLPErrorResponse::TPtr&);
     void HandleOnRead(TEvPipeCache::TEvDeliveryProblem::TPtr&);
     STFUNC(ReadState);
 

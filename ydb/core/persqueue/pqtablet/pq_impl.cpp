@@ -1227,6 +1227,8 @@ void TPersQueue::Handle(TEvPQ::TEvInitComplete::TPtr& ev, const TActorContext& c
     if (allInitialized) {
         ProcessStatusRequests(ctx);
     }
+
+    ProcessMLPQueue();
 }
 
 void TPersQueue::Handle(TEvPQ::TEvError::TPtr& ev, const TActorContext& ctx)
@@ -5276,14 +5278,38 @@ void TPersQueue::Handle(TEvPersQueue::TEvMLPChangeMessageDeadlineRequest::TPtr& 
 }
 
 template<typename TEventHandle>
-void TPersQueue::ForwardToPartition(ui32 partitionId, TAutoPtr<TEventHandle>& ev) {
+bool TPersQueue::ForwardToPartition(ui32 partitionId, TAutoPtr<TEventHandle>& ev) {
     auto it = Partitions.find(TPartitionId{partitionId});
     if (it == Partitions.end()) {
-        // TODO reply error
+        Send(ev->Sender, new TEvPersQueue::TEvMLPErrorResponse(NPersQueue::NErrorCode::EErrorCode::SCHEMA_ERROR,
+            TStringBuilder() <<"Partition " << partitionId << " not found"), 0, ev->Cookie);
+        return true;
     }
 
     auto& partitionInfo = it->second;
+    if (!partitionInfo.InitDone) {
+        MLPRequests.emplace_back(std::move(ev));
+        return false;
+    }
     Forward(ev, partitionInfo.Actor);
+    return true;
+}
+
+void TPersQueue::ProcessMLPQueue() {
+    while(!MLPRequests.empty()) {
+        auto ev = std::move(MLPRequests.front());
+        MLPRequests.pop_front();
+
+        auto result = std::visit([&, this](auto& ev) {
+            return ForwardToPartition(ev->Get()->GetPartitionId(), ev);
+        }, ev);
+        if (!result) {
+            return;
+        }
+    }
+    if (MLPRequests.empty()) {
+        MLPRequests = {};
+    }
 }
 
 bool TPersQueue::HandleHook(STFUNC_SIG)

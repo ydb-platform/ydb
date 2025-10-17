@@ -135,7 +135,7 @@ void Migrate(NKikimrPQ::TPQTabletConfig& config) {
 
     ui32 nextConsumerId = 0;
     for (auto& consumer : config.GetConsumers()) {
-        nextConsumerId = std::max(nextConsumerId, consumer.GetId());
+        nextConsumerId = std::max<ui32>(nextConsumerId, consumer.GetId());
     }
     for (auto& consumer : *config.MutableConsumers()) {
         if (!consumer.HasId()) {

@@ -2,8 +2,8 @@
 #include "mlp_consumer.h"
 #include "mlp_storage.h"
 
-
 #include <ydb/core/persqueue/common/key.h>
+#include <ydb/core/persqueue/events/internal.h>
 
 namespace NKikimr::NPQ::NMLP {
 
@@ -23,8 +23,6 @@ TConsumerActor::TConsumerActor(ui64 tabletId, const TActorId& tabletActorId, ui3
 void TConsumerActor::Bootstrap() {
     Become(&TConsumerActor::StateInit);
 
-    Batch = std::make_unique<TBatch>(SelfId());
-
     auto request = std::make_unique<TEvKeyValue::TEvRequest>();
     request->Record.AddCmdRead()->SetKey(MakeSnapshotKey(PartitionId, Config.GetId()));
 
@@ -32,7 +30,9 @@ void TConsumerActor::Bootstrap() {
 }
 
 void TConsumerActor::PassAway() {
-    Batch->Rollback();
+    if (Batch) {
+        Batch->Rollback();
+    }
 
     // TODO reply error for all mesages from queues
 
@@ -128,6 +128,28 @@ STFUNC(TConsumerActor::StateInit) {
     }
 }
 
+void TConsumerActor::HandleOnWrite(TEvKeyValue::TEvResponse::TPtr& ev) {
+    auto& record = ev->Get()->Record;
+
+    if (record.GetStatus() != NMsgBusProxy::MSTATUS_OK) {
+        return Restart(TStringBuilder() << "Received KV error on write: " << record.GetStatus());
+    }
+    if (record.ReadResultSize() != 1) {
+        return Restart(TStringBuilder() << "Unexpected KV response on write: " << record.ReadResultSize());
+    }
+
+    auto& readResult = record.GetReadResult(0);
+    if (readResult.GetStatus() != NKikimrProto::OK) {
+        return Restart(TStringBuilder() << "Received KV response error on write: " << readResult.GetStatus());
+    }
+    AFL_ENSURE(readResult.HasValue() && readResult.GetValue().size());
+
+    LOG_D("Snapshot persisted");
+    Become(&TConsumerActor::StateWork);
+
+    ProcessEventQueue();
+}
+
 STFUNC(TConsumerActor::StateWork) {
     switch (ev->GetTypeRewrite()) {
         hFunc(TEvPersQueue::TEvMLPReadRequest, Handle);
@@ -149,15 +171,35 @@ STFUNC(TConsumerActor::StateWrite) {
     }
 }
 
+namespace {
+
+template<typename R, typename T>
+void ReplyErrorAll(const TActorIdentity selfActorId, std::deque<T>& queue) {
+    for (auto& ev : queue) {
+        selfActorId.Send(ev->Sender, new R(NPersQueue::NErrorCode::EErrorCode::ERROR), 0, ev->Cookie);
+    }
+    queue.clear();
+}
+
+}
+
 void TConsumerActor::Restart(TString&& error) {
     LOG_E(error);
 
-    // TODO Send restart command to partition
+    Send(PartitionActorId, new TEvPQ::TEvMLPRestartActor());
+
+    ReplyErrorAll<TEvPersQueue::TEvMLPReadResponse>(SelfId(), ReadRequestsQueue);
+    ReplyErrorAll<TEvPersQueue::TEvMLPCommitResponse>(SelfId(), CommitRequestsQueue);
+    ReplyErrorAll<TEvPersQueue::TEvMLPUnlockResponse>(SelfId(), UnlockRequestsQueue);
+    ReplyErrorAll<TEvPersQueue::TEvMLPChangeMessageDeadlineResponse>(SelfId(), ChangeMessageDeadlineRequestsQueue);
 
     PassAway();
 }
 
 void TConsumerActor::ProcessEventQueue() {
+    AFL_ENSURE(!Batch);
+    Batch = std::make_unique<TBatch>(SelfId(), PartitionActorId);
+
     for (auto& ev : CommitRequestsQueue) {
         for (auto offset : ev->Get()->Record.GetOffset()) {
             Storage->Commit({
@@ -220,6 +262,7 @@ void TConsumerActor::ProcessEventQueue() {
     }
 
     if (Batch->Empty()) {
+        Batch.reset();
         return;
     }
 
@@ -238,6 +281,12 @@ void TConsumerActor::PersistSnapshot() {
     config->SetGeneration(Config.GetGeneration());
 
     Storage->CreateSnapshot(snapshot);
+
+    auto request = std::make_unique<TEvKeyValue::TEvRequest>();
+    request->Record.AddCmdWrite()->SetKey(MakeSnapshotKey(PartitionId, Config.GetId()));
+    request->Record.AddCmdWrite()->SetValue(snapshot.SerializeAsString());
+
+    Send(TabletActorId, std::move(request));
 }
 
 

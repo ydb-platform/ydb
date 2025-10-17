@@ -200,6 +200,7 @@ struct TEvPQ {
         EvBroadcastPartitionError,
         EvForceCompaction,
         EvMLPReadBatchResponse,
+        EvMLPRestartActor,
         EvEnd
     };
 
@@ -1297,6 +1298,9 @@ struct TEvPQ {
             std::vector<ui64> Offsets;
         };
         std::vector<TResponse> Responses;
+    };
+
+    struct TEvMLPRestartActor : TEventLocal<TEvMLPRestartActor, EvMLPRestartActor> {
     };
 
 };

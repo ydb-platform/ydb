@@ -48,26 +48,26 @@ namespace NKikimr::NStorage {
         static std::optional<TString> LocalYamlValidate(const TString& yaml, bool allowUnknown = true) {
             try {
                 auto doc = NFyaml::TDocument::Parse(yaml);
-                auto resolved = NYamlConfig::ResolveAll(doc);
-
                 TSimpleSharedPtr<NYamlConfig::TBasicUnknownFieldsCollector> unknownCollector =
                     new NYamlConfig::TBasicUnknownFieldsCollector;
 
                 std::vector<TString> errors;
-                for (auto& [_, config] : resolved.Configs) {
-                    auto appCfg = NYamlConfig::YamlToProto(
-                        config.second,
-                        true,   // strict
-                        true,   // merge database config (if any)
-                        unknownCollector);
-                    if (NKikimr::NConfig::ValidateConfig(appCfg, errors) == NKikimr::NConfig::EValidationResult::Error) {
-                        if (!errors.empty()) {
-                            return errors.front();
-                        } else {
-                            return TString("unknown validation error");
+                NYamlConfig::ResolveUniqueDocs(
+                    doc,
+                    [&](NYamlConfig::TDocumentConfig&& config) {
+                        auto appCfg = NYamlConfig::YamlToProto(
+                            config.second,
+                            true,   // strict
+                            true,   // merge database config (if any)
+                            unknownCollector);
+                        if (NKikimr::NConfig::ValidateConfig(appCfg, errors) == NKikimr::NConfig::EValidationResult::Error) {
+                            if (!errors.empty()) {
+                                ythrow yexception() << errors.front();
+                            } else {
+                                ythrow yexception() << "unknown validation error";
+                            }
                         }
-                    }
-                }
+                    });
 
                 if (!allowUnknown && !unknownCollector->GetUnknownKeys().empty()) {
                     return TString("has forbidden unknown fields");

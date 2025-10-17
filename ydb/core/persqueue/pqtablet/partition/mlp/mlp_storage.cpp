@@ -41,16 +41,16 @@ std::optional<TStorage::NextResult> TStorage::Next(TInstant deadline, ui64 fromO
     return std::nullopt;
 }
 
-bool TStorage::Commit(TMessageId message) {
-    return DoCommit(message.Offset);
+bool TStorage::Commit(TMessageId messageId) {
+    return DoCommit(messageId);
 }
 
-bool TStorage::Unlock(TMessageId message) {
-    return DoUnlock(message.Offset);
+bool TStorage::Unlock(TMessageId messageId) {
+    return DoUnlock(messageId);
 }
 
 bool TStorage::ChangeMessageDeadline(TMessageId messageId, TInstant deadline) {
-    auto [offsetDelta, message] = GetMessage(messageId.Offset, EMessageStatus::Locked);
+    auto [offsetDelta, message] = GetMessage(messageId, EMessageStatus::Locked);
     if (!message) {
         return false;
     }
@@ -177,9 +177,7 @@ TMessageId TStorage::DoLock(ui64 offsetDelta, TInstant deadline) {
         LockedMessageGroupsId.insert(message.MessageGroupIdHash);
     }
 
-    return TMessageId{
-        .Offset = FirstOffset + offsetDelta,
-    };
+    return FirstOffset + offsetDelta;
 }
 
 bool TStorage::DoCommit(ui64 offset) {

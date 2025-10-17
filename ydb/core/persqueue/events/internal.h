@@ -1292,6 +1292,8 @@ struct TEvPQ {
     };
 
     struct TEvMLPReadBatchResponse : TEventLocal<TEvMLPReadBatchResponse, EvMLPReadBatchResponse> {
+        TEvMLPReadBatchResponse() = default;
+
         struct TResponse {
             TActorId Sender;
             ui64 Cookie;
@@ -1301,6 +1303,7 @@ struct TEvPQ {
     };
 
     struct TEvMLPRestartActor : TEventLocal<TEvMLPRestartActor, EvMLPRestartActor> {
+        TEvMLPRestartActor() = default;
     };
 
 };

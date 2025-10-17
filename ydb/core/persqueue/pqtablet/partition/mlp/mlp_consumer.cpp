@@ -202,9 +202,7 @@ void TConsumerActor::ProcessEventQueue() {
 
     for (auto& ev : CommitRequestsQueue) {
         for (auto offset : ev->Get()->Record.GetOffset()) {
-            Storage->Commit({
-                .Offset = offset
-            });
+            Storage->Commit(offset);
         }
 
         Batch->Add(ev);
@@ -213,9 +211,7 @@ void TConsumerActor::ProcessEventQueue() {
 
     for (auto& ev : UnlockRequestsQueue) {
         for (auto offset : ev->Get()->Record.GetOffset()) {
-            Storage->Unlock({
-                .Offset = offset
-            });
+            Storage->Unlock(offset);
         }
 
         Batch->Add(ev);
@@ -225,9 +221,7 @@ void TConsumerActor::ProcessEventQueue() {
     for (auto& ev : ChangeMessageDeadlineRequestsQueue) {
         auto deadlineTimestamp = ev->Get()->GetDeadlineTimestamp();
         for (auto offset : ev->Get()->Record.GetOffset()) {
-            Storage->ChangeMessageDeadline({
-                .Offset = offset
-            }, deadlineTimestamp);
+            Storage->ChangeMessageDeadline(offset, deadlineTimestamp);
         }
 
         Batch->Add(ev);

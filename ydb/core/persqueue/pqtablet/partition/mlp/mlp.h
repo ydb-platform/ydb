@@ -9,10 +9,8 @@
 
 namespace NKikimr::NPQ::NMLP {
 
-struct TMessageId {
-    ui64 Offset;
-};
-
+// the offset of the message
+using TMessageId = ui64;
 
 // MLP не работает если включена компактифкация по ключу!!! (иначе не понятно как прореживать скомпакченные значения)
 NActors::IActor* CreateConsumerActor(

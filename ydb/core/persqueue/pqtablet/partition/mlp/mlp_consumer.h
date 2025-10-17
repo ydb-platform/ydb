@@ -21,9 +21,10 @@ class TConsumerActor : public TBaseActor<TConsumerActor>
 public:
     TConsumerActor(ui64 tabletId, const TActorId& tabletActorId, ui32 partitionId, const TActorId& partitionActorId, const NKikimrPQ::TPQTabletConfig::TConsumer& config);
 
-protected:
     void Bootstrap();
     void PassAway() override;
+
+protected:
     TString BuildLogPrefix() const override;
 
 private:

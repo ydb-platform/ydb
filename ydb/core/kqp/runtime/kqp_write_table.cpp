@@ -136,6 +136,11 @@ public:
         return !Data || Data->num_rows() == 0;
     }
 
+    size_t GetRowsCount() const override {
+        AFL_ENSURE(!Extracted);
+        return Data ? Data->num_rows() : 0;
+    }
+
     TRecordBatchPtr Extract() {
         AFL_ENSURE(!Extracted);
         Extracted = true;
@@ -215,6 +220,11 @@ public:
     bool IsEmpty() const override {
         AFL_ENSURE(!Extracted);
         return Rows.empty();
+    }
+
+    size_t GetRowsCount() const override {
+        AFL_ENSURE(!Extracted);
+        return Rows.Size();
     }
 
     TOwnedCellVecBatch Extract() {
@@ -987,12 +997,16 @@ public:
             , RowBatcher(ColumnsMapping.size(), std::nullopt, Alloc) {
     }
 
-    void Fill(const IDataBatchPtr& data) override {
+    void Fill(const IDataBatchPtr& data, std::optional<size_t> limit) override {
         YQL_ENSURE(RowBatcher.IsEmpty());
         auto* batch = dynamic_cast<TRowBatch*>(data.Get());
         AFL_ENSURE(batch);
         const auto& rows = batch->GetRows();
-        AddDataShard(rows.begin(), rows.end());
+        AddDataShard(
+            rows.begin(),
+            limit
+                ? rows.begin() + std::min(*limit, rows.Size())
+                : rows.end());
     }
 
     void Fill(const TRowsRef& data) override {

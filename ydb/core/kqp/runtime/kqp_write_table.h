@@ -18,6 +18,7 @@ public:
     virtual i64 GetSerializedMemory() const = 0;
     virtual i64 GetMemory() const = 0;
     virtual bool IsEmpty() const = 0;
+    virtual size_t GetRowsCount() const = 0;
 
     virtual std::shared_ptr<void> ExtractBatch() = 0;
 
@@ -67,7 +68,7 @@ IDataBatcherPtr CreateColumnDataBatcher(
 
 class IDataBatchProjection : public TThrRefBase {
 public:
-    virtual void Fill(const IDataBatchPtr& data) = 0;
+    virtual void Fill(const IDataBatchPtr& data, std::optional<size_t> limit = std::nullopt) = 0;
     virtual void Fill(const TRowsRef& data) = 0;
     virtual IDataBatchPtr Flush() = 0;
 };

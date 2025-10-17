@@ -1599,7 +1599,6 @@ private:
             KeyToIndex.erase(it);
 
             const auto& inputCells = ProcessCells[index];
-            Y_UNUSED(inputCells);
 
             for (const auto& cell : inputCells) {
                 rowsBatcher->AddCell(cell);
@@ -1612,10 +1611,14 @@ private:
             rowsBatcher->AddRow();
         });
 
-        if (OperationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE) {
+        if (OperationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE) {
             for (const auto& [key, index] : KeyToIndex) {
                 const auto& inputCells = ProcessCells[index];
-                Y_UNUSED(inputCells);
+                Memory -= EstimateSize(inputCells);
+            }
+        } else {
+            for (const auto& [key, index] : KeyToIndex) {
+                const auto& inputCells = ProcessCells[index];
                 for (const auto& cell : inputCells) {
                     rowsBatcher->AddCell(cell);
                 }
@@ -1625,16 +1628,16 @@ private:
                 }
                 rowsBatcher->AddRow();
             }
-        } else {
-            for (const auto& [key, index] : KeyToIndex) {
-                const auto& inputCells = ProcessCells[index];
-                Memory -= EstimateSize(inputCells);
-            }
         }
 
-        KeyToIndex.clear();
+        Writes.push_back(TWrite{
+            .Batch = rowsBatcher->Flush(),
+            .WriteOnlyRows = (OperationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE)
+                ? 0
+                : KeyToIndex.size(),
+        });
 
-        Writes.push_back(rowsBatcher->Flush());
+        KeyToIndex.clear();
 
         if (PathLookupInfo.size() > 1) {
             // Need to lookup unique indexes
@@ -1652,25 +1655,30 @@ private:
 
     void FlushWritesToActors() {
         for (auto& write : Writes) {
-            Memory -= write->GetMemory();
-            WriteBatchToActors(std::move(write));
+            Memory -= write.Batch->GetMemory();
+            WriteBatchToActors(std::move(write.Batch), write.WriteOnlyRows);
         }
         Writes.clear();
     }
 
-    void WriteBatchToActors(IDataBatchPtr batch) {
+    void WriteBatchToActors(IDataBatchPtr batch, size_t writeOnlySuffixRows) {
         for (auto& [actorPathId, actorInfo] : PathWriteInfo) {
             // At first, write to indexes
             if (PathId != actorPathId) {
                 if (OperationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE
                         && OperationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT) {
                     AFL_ENSURE(actorInfo.DeleteProjection);
-                    actorInfo.DeleteProjection->Fill(batch);
-                    auto preparedKeyBatch = actorInfo.DeleteProjection->Flush();
-                    actorInfo.WriteActor->Write(
-                        Cookie,
-                        NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE,
-                        std::move(preparedKeyBatch));
+                    const auto& rowsCount = batch->GetRowsCount();
+                    AFL_ENSURE(rowsCount >= writeOnlySuffixRows);
+
+                    if (rowsCount != writeOnlySuffixRows) {
+                        actorInfo.DeleteProjection->Fill(batch, rowsCount - writeOnlySuffixRows);
+                        auto preparedKeyBatch = actorInfo.DeleteProjection->Flush();
+                        actorInfo.WriteActor->Write(
+                            Cookie,
+                            NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE,
+                            std::move(preparedKeyBatch));
+                    }
                     actorInfo.WriteActor->FlushBuffer(Cookie);
                 }
                 AFL_ENSURE(actorInfo.Projection);
@@ -1724,7 +1732,12 @@ private:
 
     std::vector<IDataBatchPtr> BufferedBatches;
     std::vector<IDataBatchPtr> ProcessBatches;
-    std::vector<IDataBatchPtr> Writes;
+
+    struct TWrite {
+        IDataBatchPtr Batch;
+        size_t WriteOnlyRows;
+    };
+    std::vector<TWrite> Writes;
     std::vector<TConstArrayRef<TCell>> ProcessCells;
     THashMap<TConstArrayRef<TCell>, ui32, NKikimr::TCellVectorsHash, NKikimr::TCellVectorsEquals> KeyToIndex;
 };

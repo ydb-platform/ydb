@@ -1316,7 +1316,7 @@ message TEvMLPCommitResponse {
 
 // To PQTablet
 // освобождает сообщение до истечения таймаута. Может быть полезно для протоколов, которые держат постоянное соединение с клиентом, и могут обрабатывать обрыв соединения
-message TEvMLPReleaseRequest {
+message TEvMLPUnlockRequest {
     optional string Topic = 1; // PathId? Нужен для возможности в одной таблетке хранить несколько топиков
     optional string Consumer = 2;
     optional uint32 PartitionId = 3;
@@ -1324,7 +1324,7 @@ message TEvMLPReleaseRequest {
 }
 
 // From PQTablet
-message TEvMLPReleaseResponse {
+message TEvMLPUnlockResponse {
     optional NPersQueue.NErrorCode.EErrorCode ErrorCode = 1;
 }
 

@@ -1048,7 +1048,7 @@ private:
         std::unique_ptr<TEvPQ::TEvDeletePartition>,
         std::unique_ptr<TEvPersQueue::TEvMLPReadRequest>,
         std::unique_ptr<TEvPersQueue::TEvMLPCommitRequest>,
-        std::unique_ptr<TEvPersQueue::TEvMLPReleaseRequest>,
+        std::unique_ptr<TEvPersQueue::TEvMLPUnlockRequest>,
         std::unique_ptr<TEvPersQueue::TEvMLPChangeMessageDeadlineRequest>
     >;
 
@@ -1186,11 +1186,11 @@ private:
 private:
     void HandleOnInit(TEvPersQueue::TEvMLPReadRequest::TPtr&);
     void HandleOnInit(TEvPersQueue::TEvMLPCommitRequest::TPtr&);
-    void HandleOnInit(TEvPersQueue::TEvMLPReleaseRequest::TPtr&);
+    void HandleOnInit(TEvPersQueue::TEvMLPUnlockRequest::TPtr&);
     void HandleOnInit(TEvPersQueue::TEvMLPChangeMessageDeadlineRequest::TPtr&);
     void Handle(TEvPersQueue::TEvMLPReadRequest::TPtr&);
     void Handle(TEvPersQueue::TEvMLPCommitRequest::TPtr&);
-    void Handle(TEvPersQueue::TEvMLPReleaseRequest::TPtr&);
+    void Handle(TEvPersQueue::TEvMLPUnlockRequest::TPtr&);
     void Handle(TEvPersQueue::TEvMLPChangeMessageDeadlineRequest::TPtr&);
 
     void ProcessMLPPendingEvents();
@@ -1206,7 +1206,7 @@ private:
     using TMLPPendingEvent = std::variant<
         TEvPersQueue::TEvMLPReadRequest::TPtr,
         TEvPersQueue::TEvMLPCommitRequest::TPtr,
-        TEvPersQueue::TEvMLPReleaseRequest::TPtr,
+        TEvPersQueue::TEvMLPUnlockRequest::TPtr,
         TEvPersQueue::TEvMLPChangeMessageDeadlineRequest::TPtr
     >;
     std::vector<TMLPPendingEvent> MLPPendingEvents;

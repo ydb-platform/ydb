@@ -15,8 +15,8 @@ void TBatch::Add(TEvPersQueue::TEvMLPCommitRequest::TPtr& ev) {
     CommitResponses.emplace_back(ev->Sender, ev->Cookie, std::make_unique<TEvPersQueue::TEvMLPCommitResponse>(NPersQueue::NErrorCode::EErrorCode::OK));
 }
 
-void TBatch::Add(TEvPersQueue::TEvMLPReleaseRequest::TPtr& ev) {
-    ReleaseResponses.emplace_back(ev->Sender, ev->Cookie, std::make_unique<TEvPersQueue::TEvMLPReleaseResponse>(NPersQueue::NErrorCode::EErrorCode::OK));
+void TBatch::Add(TEvPersQueue::TEvMLPUnlockRequest::TPtr& ev) {
+    UnlockResponses.emplace_back(ev->Sender, ev->Cookie, std::make_unique<TEvPersQueue::TEvMLPUnlockResponse>(NPersQueue::NErrorCode::EErrorCode::OK));
 }
 
 void TBatch::Add(TEvPersQueue::TEvMLPChangeMessageDeadlineRequest::TPtr& ev) {
@@ -26,7 +26,7 @@ void TBatch::Add(TEvPersQueue::TEvMLPChangeMessageDeadlineRequest::TPtr& ev) {
 void TBatch::Clear() {
     ReadResponse.reset();
     CommitResponses.clear();
-    ReleaseResponses.clear();
+    UnlockResponses.clear();
     ChangeMessageDeadlineResponses.clear();
 }
 
@@ -47,7 +47,7 @@ void TBatch::Commit() {
     }
 
     ReplyAll(SelfActorId, CommitResponses);
-    ReplyAll(SelfActorId, ReleaseResponses);
+    ReplyAll(SelfActorId, UnlockResponses);
     ReplyAll(SelfActorId, ChangeMessageDeadlineResponses);
 }
 
@@ -77,12 +77,12 @@ void TBatch::Rollback() {
     }
 
     ReplyErrorAll(SelfActorId, CommitResponses);
-    ReplyErrorAll(SelfActorId, ReleaseResponses);
+    ReplyErrorAll(SelfActorId, UnlockResponses);
     ReplyErrorAll(SelfActorId, ChangeMessageDeadlineResponses);
 }
 
 bool TBatch::Empty() const {
-    return !ReadResponse && CommitResponses.empty() && ReleaseResponses.empty() && ChangeMessageDeadlineResponses.empty();
+    return !ReadResponse && CommitResponses.empty() && UnlockResponses.empty() && ChangeMessageDeadlineResponses.empty();
 }
 
 }

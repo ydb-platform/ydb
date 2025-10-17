@@ -23,7 +23,7 @@ public:
     TBatch(TActorIdentity selfActorId, const TActorId& partitionActorId);
 
     void Add(TEvPersQueue::TEvMLPCommitRequest::TPtr& ev);
-    void Add(TEvPersQueue::TEvMLPReleaseRequest::TPtr& ev);
+    void Add(TEvPersQueue::TEvMLPUnlockRequest::TPtr& ev);
     void Add(TEvPersQueue::TEvMLPChangeMessageDeadlineRequest::TPtr& ev);
     void Add(TEvPersQueue::TEvMLPReadRequest::TPtr& ev, std::vector<TMessageId>&& messages);
 
@@ -41,7 +41,7 @@ private:
     std::unique_ptr<TEvPQ::TEvMLPReadBatchResponse> ReadResponse;
 
     std::vector<TResponseHolder<TEvPersQueue::TEvMLPCommitResponse>> CommitResponses;
-    std::vector<TResponseHolder<TEvPersQueue::TEvMLPReleaseResponse>> ReleaseResponses;
+    std::vector<TResponseHolder<TEvPersQueue::TEvMLPUnlockResponse>> UnlockResponses;
     std::vector<TResponseHolder<TEvPersQueue::TEvMLPChangeMessageDeadlineResponse>> ChangeMessageDeadlineResponses;
 };
 

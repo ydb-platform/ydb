@@ -65,8 +65,8 @@ namespace NKikimr::TEvPersQueue {
         EvMLPReadResponse,
         EvMLPCommitRequest,
         EvMLPCommitResponse,
-        EvMLPReleaseRequest,
-        EvMLPReleaseResponse,
+        EvMLPUnlockRequest,
+        EvMLPUnlockResponse,
         EvMLPChangeMessageDeadlineRequest,
         EvMLPChangeMessageDeadlineResponse,
         EvResponse = EvRequest + 256,
@@ -468,10 +468,10 @@ namespace NKikimr::TEvPersQueue {
     //
     // Request to the PQ-tablet.
     //
-    struct TEvMLPReleaseRequest : TEventPB<TEvMLPReleaseRequest, NKikimrPQ::TEvMLPReleaseRequest, EvMLPReleaseRequest> {
-        TEvMLPReleaseRequest() = default;
+    struct TEvMLPUnlockRequest : TEventPB<TEvMLPUnlockRequest, NKikimrPQ::TEvMLPUnlockRequest, EvMLPUnlockRequest> {
+        TEvMLPUnlockRequest() = default;
 
-        TEvMLPReleaseRequest(const TString& topic, const TString& consumer, ui32 partitionId) {
+        TEvMLPUnlockRequest(const TString& topic, const TString& consumer, ui32 partitionId) {
             Record.SetTopic(topic);
             Record.SetConsumer(consumer);
             Record.SetPartitionId(partitionId);
@@ -497,10 +497,10 @@ namespace NKikimr::TEvPersQueue {
     //
     // Response from the PQ-tablet.
     //
-    struct TEvMLPReleaseResponse : TEventPB<TEvMLPReleaseResponse, NKikimrPQ::TEvMLPReleaseResponse, EvMLPReleaseResponse> {
-        TEvMLPReleaseResponse() = default;
+    struct TEvMLPUnlockResponse : TEventPB<TEvMLPUnlockResponse, NKikimrPQ::TEvMLPUnlockResponse, EvMLPUnlockResponse> {
+        TEvMLPUnlockResponse() = default;
 
-        TEvMLPReleaseResponse(NPersQueue::NErrorCode::EErrorCode errorCode) {
+        TEvMLPUnlockResponse(NPersQueue::NErrorCode::EErrorCode errorCode) {
             Record.SetErrorCode(errorCode);
         }
     };

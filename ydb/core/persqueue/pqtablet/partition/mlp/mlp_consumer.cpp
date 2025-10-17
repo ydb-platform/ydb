@@ -51,8 +51,8 @@ void TConsumerActor::Queue(TEvPersQueue::TEvMLPCommitRequest::TPtr& ev) {
     CommitRequestsQueue.push_back(std::move(ev));
 }
 
-void TConsumerActor::Queue(TEvPersQueue::TEvMLPReleaseRequest::TPtr& ev) {
-    ReleaseRequestsQueue.push_back(std::move(ev));
+void TConsumerActor::Queue(TEvPersQueue::TEvMLPUnlockRequest::TPtr& ev) {
+    UnlockRequestsQueue.push_back(std::move(ev));
 }
 
 void TConsumerActor::Queue(TEvPersQueue::TEvMLPChangeMessageDeadlineRequest::TPtr& ev) {
@@ -69,7 +69,7 @@ void TConsumerActor::Handle(TEvPersQueue::TEvMLPCommitRequest::TPtr& ev) {
     ProcessEventQueue();
 }
 
-void TConsumerActor::Handle(TEvPersQueue::TEvMLPReleaseRequest::TPtr& ev) {
+void TConsumerActor::Handle(TEvPersQueue::TEvMLPUnlockRequest::TPtr& ev) {
     Queue(ev);
     ProcessEventQueue();
 }
@@ -121,7 +121,7 @@ STFUNC(TConsumerActor::StateInit) {
     switch (ev->GetTypeRewrite()) {
         hFunc(TEvPersQueue::TEvMLPReadRequest, Queue);
         hFunc(TEvPersQueue::TEvMLPCommitRequest, Queue);
-        hFunc(TEvPersQueue::TEvMLPReleaseRequest, Queue);
+        hFunc(TEvPersQueue::TEvMLPUnlockRequest, Queue);
         hFunc(TEvPersQueue::TEvMLPChangeMessageDeadlineRequest, Queue);
         hFunc(TEvKeyValue::TEvResponse, HandleOnInit);
         sFunc(TEvents::TEvPoison, PassAway);
@@ -132,7 +132,7 @@ STFUNC(TConsumerActor::StateWork) {
     switch (ev->GetTypeRewrite()) {
         hFunc(TEvPersQueue::TEvMLPReadRequest, Handle);
         hFunc(TEvPersQueue::TEvMLPCommitRequest, Handle);
-        hFunc(TEvPersQueue::TEvMLPReleaseRequest, Handle);
+        hFunc(TEvPersQueue::TEvMLPUnlockRequest, Handle);
         hFunc(TEvPersQueue::TEvMLPChangeMessageDeadlineRequest, Handle);
         sFunc(TEvents::TEvPoison, PassAway);
     }
@@ -142,7 +142,7 @@ STFUNC(TConsumerActor::StateWrite) {
     switch (ev->GetTypeRewrite()) {
         hFunc(TEvPersQueue::TEvMLPReadRequest, Queue);
         hFunc(TEvPersQueue::TEvMLPCommitRequest, Queue);
-        hFunc(TEvPersQueue::TEvMLPReleaseRequest, Queue);
+        hFunc(TEvPersQueue::TEvMLPUnlockRequest, Queue);
         hFunc(TEvPersQueue::TEvMLPChangeMessageDeadlineRequest, Queue);
         hFunc(TEvKeyValue::TEvResponse, HandleOnWrite);
         sFunc(TEvents::TEvPoison, PassAway);
@@ -169,7 +169,7 @@ void TConsumerActor::ProcessEventQueue() {
     }
     CommitRequestsQueue.clear();
 
-    for (auto& ev : ReleaseRequestsQueue) {
+    for (auto& ev : UnlockRequestsQueue) {
         for (auto offset : ev->Get()->Record.GetOffset()) {
             Storage->Unlock({
                 .Offset = offset
@@ -178,7 +178,7 @@ void TConsumerActor::ProcessEventQueue() {
 
         Batch->Add(ev);
     }
-    ReleaseRequestsQueue.clear();
+    UnlockRequestsQueue.clear();
 
     for (auto& ev : ChangeMessageDeadlineRequestsQueue) {
         auto deadlineTimestamp = ev->Get()->GetDeadlineTimestamp();

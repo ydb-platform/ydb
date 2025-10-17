@@ -95,7 +95,7 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
 
     void Handle(TEvPersQueue::TEvMLPReadRequest::TPtr&);
     void Handle(TEvPersQueue::TEvMLPCommitRequest::TPtr&);
-    void Handle(TEvPersQueue::TEvMLPReleaseRequest::TPtr&);
+    void Handle(TEvPersQueue::TEvMLPUnlockRequest::TPtr&);
     void Handle(TEvPersQueue::TEvMLPChangeMessageDeadlineRequest::TPtr&);
 
     template<typename TEventHandle>

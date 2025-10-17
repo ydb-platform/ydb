@@ -12,7 +12,7 @@ void TPartition::HandleOnInit(TEvPersQueue::TEvMLPCommitRequest::TPtr& ev) {
    MLPPendingEvents.emplace_back(ev);
 }
 
-void TPartition::HandleOnInit(TEvPersQueue::TEvMLPReleaseRequest::TPtr& ev) {
+void TPartition::HandleOnInit(TEvPersQueue::TEvMLPUnlockRequest::TPtr& ev) {
    MLPPendingEvents.emplace_back(ev);
 }
 
@@ -40,7 +40,7 @@ void TPartition::Handle(TEvPersQueue::TEvMLPCommitRequest::TPtr& ev) {
     ForwardToMLPConsumer(ev->Get()->GetConsumer(), ev);
 }
 
-void TPartition::Handle(TEvPersQueue::TEvMLPReleaseRequest::TPtr& ev) {
+void TPartition::Handle(TEvPersQueue::TEvMLPUnlockRequest::TPtr& ev) {
     ForwardToMLPConsumer(ev->Get()->GetConsumer(), ev);
 }
 

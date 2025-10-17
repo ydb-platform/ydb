@@ -29,12 +29,12 @@ protected:
 private:
     void Queue(TEvPersQueue::TEvMLPReadRequest::TPtr&);
     void Queue(TEvPersQueue::TEvMLPCommitRequest::TPtr&);
-    void Queue(TEvPersQueue::TEvMLPReleaseRequest::TPtr&);
+    void Queue(TEvPersQueue::TEvMLPUnlockRequest::TPtr&);
     void Queue(TEvPersQueue::TEvMLPChangeMessageDeadlineRequest::TPtr&);
 
     void Handle(TEvPersQueue::TEvMLPReadRequest::TPtr&);
     void Handle(TEvPersQueue::TEvMLPCommitRequest::TPtr&);
-    void Handle(TEvPersQueue::TEvMLPReleaseRequest::TPtr&);
+    void Handle(TEvPersQueue::TEvMLPUnlockRequest::TPtr&);
     void Handle(TEvPersQueue::TEvMLPChangeMessageDeadlineRequest::TPtr&);
 
     void HandleOnInit(TEvKeyValue::TEvResponse::TPtr&);
@@ -62,7 +62,7 @@ private:
 
     std::deque<TEvPersQueue::TEvMLPReadRequest::TPtr> ReadRequestsQueue;
     std::deque<TEvPersQueue::TEvMLPCommitRequest::TPtr> CommitRequestsQueue;
-    std::deque<TEvPersQueue::TEvMLPReleaseRequest::TPtr> ReleaseRequestsQueue;
+    std::deque<TEvPersQueue::TEvMLPUnlockRequest::TPtr> UnlockRequestsQueue;
     std::deque<TEvPersQueue::TEvMLPChangeMessageDeadlineRequest::TPtr> ChangeMessageDeadlineRequestsQueue;
 
 };

@@ -5267,7 +5267,7 @@ void TPersQueue::Handle(TEvPersQueue::TEvMLPCommitRequest::TPtr& ev) {
     ForwardToPartition(ev->Get()->GetPartitionId(), ev);
 }
 
-void TPersQueue::Handle(TEvPersQueue::TEvMLPReleaseRequest::TPtr& ev) {
+void TPersQueue::Handle(TEvPersQueue::TEvMLPUnlockRequest::TPtr& ev) {
     ForwardToPartition(ev->Get()->GetPartitionId(), ev);
 }
 
@@ -5336,7 +5336,7 @@ bool TPersQueue::HandleHook(STFUNC_SIG)
         HFuncTraced(TEvPQ::TEvForceCompaction, Handle);
         hFuncTraced(TEvPersQueue::TEvMLPReadRequest, Handle);
         hFuncTraced(TEvPersQueue::TEvMLPCommitRequest, Handle);
-        hFuncTraced(TEvPersQueue::TEvMLPReleaseRequest, Handle);
+        hFuncTraced(TEvPersQueue::TEvMLPUnlockRequest, Handle);
         hFuncTraced(TEvPersQueue::TEvMLPChangeMessageDeadlineRequest, Handle);
         default:
             return false;

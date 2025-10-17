@@ -3,7 +3,9 @@
 
 import argparse
 import datetime
+import math
 import os
+import re
 import requests
 from retry import retry_call
 import urllib
@@ -11,6 +13,25 @@ import urllib
 timeout = 15
 max_tries = 5
 retry_delay = 2
+
+
+def __parse_selectors(selectors):
+    LABEL_NAME_PATTERN        = " *[a-zA-Z0-9-._/]{1,50} *"
+    LABEL_VALUE_PATTERN       = " *[\"'][ -!#-&(-)+->@-_a-{}-~*|-]{1,200}[\"'] *"
+    OPERATOR_PATTERN          = "=|!=|==|!==|=~|!~"
+
+    SELECTOR_PATTERN          = "(?:(" + LABEL_NAME_PATTERN + ")(" + OPERATOR_PATTERN + ")(" + LABEL_VALUE_PATTERN + "))";
+    SELECTORS_FULL_PATTERN    = "{((" + SELECTOR_PATTERN + ",)*" + SELECTOR_PATTERN + ")?}";
+
+    result = {}
+    if not re.fullmatch(SELECTORS_FULL_PATTERN, selectors):
+        return result
+
+    selector_values = re.findall(SELECTOR_PATTERN, selectors)
+    for (name, op, value) in selector_values:
+        result[name.strip()] = (op, value.strip(" '\""))
+
+    return result
 
 
 def _do_request_inner(method, url, json, headers):
@@ -23,18 +44,21 @@ def _do_request(method, url, json=None, headers=None):
     return retry_call(_do_request_inner, fkwargs={"method": method, "url": url, "json": json, "headers": headers}, tries=max_tries, delay=retry_delay)
 
 
-def _build_headers():
+def _build_headers(args):
     token = os.environ.get("TOKEN", None)
 
     headers = {}
     headers["accept"] = "application/json;charset=UTF-8"
     if token is not None:
-        headers["Authorization"] = "OAuth {}".format(token)
+        if args.source_type == "SOLOMON":
+            headers["Authorization"] = "OAuth {}".format(token)
+        elif args.source_type == "MONITORING":
+            headers["Authorization"] = "Bearer {}".format(token)
 
     return headers
 
 
-def list_sensors(args):
+def __do_sensors_request(args, page, pageSize):
     url = "https://{}/api/v2/projects/{}/sensors?".format(args.http_location, args.project)
 
     request_params = {
@@ -43,31 +67,14 @@ def list_sensors(args):
         "forceCluster": args.default_replica,
         "from": args.from_range,
         "to": args.to_range,
-        "page": 0,
-        "pageSize": args.page_size
+        "page": page,
+        "pageSize": pageSize
     }
 
-    pages_count = 1
-    current_page = 0
-
-    metrics = []
-
-    while (current_page < pages_count):
-        request_params["page"] = current_page
-
-        response = _do_request(method="GET", url=url + urllib.parse.urlencode(request_params), json=None, headers=_build_headers())
-        response_data = response.json()
-
-        for metric in response_data["result"]:
-            metrics.append(metric)
-
-        pages_count = response_data["page"]["pagesCount"]
-        current_page += 1
-
-    return metrics
+    return _do_request(method="GET", url=url + urllib.parse.urlencode(request_params), json=None, headers=_build_headers(args))
 
 
-def list_sensor_names(args):
+def __do_sensors_names_request(args):
     url = "https://{}/api/v2/projects/{}/sensors/names?".format(args.http_location, args.project)
 
     request_params = {
@@ -77,7 +84,30 @@ def list_sensor_names(args):
         "to": args.to_range
     }
 
-    response = _do_request(method="GET", url=url + urllib.parse.urlencode(request_params), json=None, headers=_build_headers())
+    return _do_request(method="GET", url=url + urllib.parse.urlencode(request_params), json=None, headers=_build_headers(args))
+
+
+def get_sensors(args):
+    response = __do_sensors_request(args, 0, 1)
+    pages_count = math.ceil(response.json()["page"]["totalCount"] / args.page_size)
+
+    current_page = 0
+    metrics = []
+
+    while (current_page < pages_count):
+        response = __do_sensors_request(args, current_page)
+        response_data = response.json()
+
+        for metric in response_data["result"]:
+            metrics.append(metric)
+
+        current_page += 1
+
+    return metrics
+
+
+def get_sensor_names(args):
+    response = __do_sensors_names_request(args)
     response_data = response.json()
 
     return response_data["names"]
@@ -95,7 +125,7 @@ def parse_args():
         formatter_class=argparse.RawTextHelpFormatter,
         description="""list metrics for specified selectors"""
     )
-    sensors_parser.set_defaults(command=list_sensors)
+    sensors_parser.set_defaults(command=get_sensors)
 
     sensors_parser.add_argument("--page-size", type=int, required=False, default=10000, help="List metrics query page size")
 
@@ -104,17 +134,25 @@ def parse_args():
         formatter_class=argparse.RawTextHelpFormatter,
         description="""list possible label names for specified selectors"""
     )
-    label_names_parser.set_defaults(command=list_sensor_names)
+    label_names_parser.set_defaults(command=get_sensor_names)
+
+    source_type_choices = ["SOLOMON", "MONITORING"]
 
     parser.add_argument("--http-location", type=str, required=False, default="solomon.yandex.net", help="Solomon installation http endpoint")
     parser.add_argument("--grpc-location", type=str, required=False, default="solomon.yandex.net", help="Solomon installation grpc endpoint")
     parser.add_argument("--default-replica", type=str, required=False, default="sas", help="Solomon default replica")
-    parser.add_argument("-P", "--project", type=str, required=True, help="Selectors project")
+    parser.add_argument("--source-type", choices=source_type_choices, default="SOLOMON", help="Solomon source type")
     parser.add_argument("-S", "--selectors", type=str, required=True, help="Selectors query")
     parser.add_argument("-F", "--from-range", type=str, required=False, default=(datetime.datetime.now() - datetime.timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%SZ"), help="Left time range border")
     parser.add_argument("-T", "--to-range", type=str, required=False, default=datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ"), help="Right time range border")
-    return parser.parse_args()
+    args = parser.parse_args()
 
+    args.parsed_selectors = __parse_selectors(args.selectors)
+    if "project" not in args.parsed_selectors:
+        return "project label should be specified in selectors"
+    args.project = args.parsed_selectors["project"][1]
+
+    return args
 
 def main():
     args = parse_args()

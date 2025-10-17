@@ -826,6 +826,14 @@ Y_UNIT_TEST_SUITE(KqpFormat_MiniKQL_Arrow) {
         TestBasicType<NUdf::TTimestamp64, i64, arrow::Int64Array>(arrow::Type::INT64);
     }
 
+    Y_UNIT_TEST(DataType_Interval) {
+        TestBasicType<NUdf::TInterval, i64, arrow::Int64Array>(arrow::Type::INT64);
+    }
+
+    Y_UNIT_TEST(DataType_Interval64) {
+        TestBasicType<NUdf::TInterval64, i64, arrow::Int64Array>(arrow::Type::INT64);
+    }
+
     Y_UNIT_TEST(DataType_TzDate) {
         TestBasicType<NUdf::TTzDate, ui16, arrow::UInt16Array, /* HasTimezone */ true>(arrow::Type::UINT16);
     }

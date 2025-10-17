@@ -4,6 +4,9 @@
 #include <ydb/core/kqp/node_service/kqp_node_service.h>
 #include <ydb/core/base/counters.h>
 
+#include <ydb/core/kqp/common/events/events.h>
+#include <ydb/core/kqp/common/simple/services.h>
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 #include <library/cpp/threading/local_executor/local_executor.h>
 #include <ydb/core/tx/datashard/datashard_failpoints.h>
 

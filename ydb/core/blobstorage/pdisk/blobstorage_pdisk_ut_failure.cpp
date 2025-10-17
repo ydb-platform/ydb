@@ -73,11 +73,12 @@ Y_UNIT_TEST_SUITE(TPDiskFailureInjection) {
         bool writeResult1 = sectorMap->Write((ui8*)data1.data(), 4096, 0);
         UNIT_ASSERT_EQUAL(writeResult1, true);
         
+        failureProbs->ReadReplayProbability.store(1.0);
+
         TString data2(4096, 'E');
         bool writeResult2 = sectorMap->Write((ui8*)data2.data(), 4096, 0);
         UNIT_ASSERT_EQUAL(writeResult2, true);
 
-        failureProbs->ReadReplayProbability.store(1.0);
         TString readData(4096, '\0');
         bool readResult = sectorMap->Read((ui8*)readData.data(), 4096, 0);
         UNIT_ASSERT_EQUAL(readResult, true);
@@ -107,7 +108,7 @@ Y_UNIT_TEST_SUITE(TPDiskFailureInjection) {
             TAtomic prevValue = 0;
             const ui32 pdiskId = testCtx.GetPDisk()->PCtx->PDiskId;
             TString controlName = Sprintf("PDisk_%u_SectorMapWriteErrorProbability", pdiskId);
-            const TAtomicBase oneProb = 1000000;
+            const TAtomicBase oneProb = 1000000000;
             appData.Dcb->SetValue(controlName, oneProb, prevValue);
         }
 
@@ -139,7 +140,7 @@ Y_UNIT_TEST_SUITE(TPDiskFailureInjection) {
             TAtomic prevValue = 0;
             const ui32 pdiskId = testCtx.GetPDisk()->PCtx->PDiskId;
             TString controlName = Sprintf("PDisk_%u_SectorMapReadErrorProbability", pdiskId);
-            const TAtomicBase oneProb = 1000000;
+            const TAtomicBase oneProb = 1000000000;
             appData.Dcb->SetValue(controlName, oneProb, prevValue);
         }
 
@@ -177,7 +178,7 @@ Y_UNIT_TEST_SUITE(TPDiskFailureInjection) {
             TAtomic prevValue = 0;
             const ui32 pdiskId = testCtx.GetPDisk()->PCtx->PDiskId;
             TString controlName = Sprintf("PDisk_%u_SectorMapSilentWriteFailProbability", pdiskId);
-            const TAtomicBase oneProb = 1000000;
+            const TAtomicBase oneProb = 1000000000;
             appData.Dcb->SetValue(controlName, oneProb, prevValue);
         }
 

@@ -86,10 +86,10 @@ TPDisk::TPDisk(std::shared_ptr<TPDiskCtx> pCtx, const TIntrusivePtr<TPDiskConfig
         }
         auto failureProbs = Cfg->SectorMap->GetFailureProbabilities();
         if (failureProbs) {
-            SectorMapWriteErrorProbability = TControlWrapper(0, 0, 1000000);
-            SectorMapReadErrorProbability = TControlWrapper(0, 0, 1000000);
-            SectorMapSilentWriteFailProbability = TControlWrapper(0, 0, 1000000);
-            SectorMapReadReplayProbability = TControlWrapper(0, 0, 1000000);
+            SectorMapWriteErrorProbability = TControlWrapper(0, 0, 1000000000);
+            SectorMapReadErrorProbability = TControlWrapper(0, 0, 1000000000);
+            SectorMapSilentWriteFailProbability = TControlWrapper(0, 0, 1000000000);
+            SectorMapReadReplayProbability = TControlWrapper(0, 0, 1000000000);
         }
     }
 
@@ -4022,10 +4022,27 @@ void TPDisk::Update() {
         }
         auto failureProbs = Cfg->SectorMap->GetFailureProbabilities();
         if (failureProbs) {
-            failureProbs->WriteErrorProbability.store(SectorMapWriteErrorProbability / 1000000.0);
-            failureProbs->ReadErrorProbability.store(SectorMapReadErrorProbability / 1000000.0);
-            failureProbs->SilentWriteFailProbability.store(SectorMapSilentWriteFailProbability / 1000000.0);
-            failureProbs->ReadReplayProbability.store(SectorMapReadReplayProbability / 1000000.0);
+            failureProbs->WriteErrorProbability.store(SectorMapWriteErrorProbability / 1000000000.0);
+            failureProbs->ReadErrorProbability.store(SectorMapReadErrorProbability / 1000000000.0);
+            failureProbs->SilentWriteFailProbability.store(SectorMapSilentWriteFailProbability / 1000000000.0);
+            failureProbs->ReadReplayProbability.store(SectorMapReadReplayProbability / 1000000000.0);
+
+            auto& sectorMap = *Cfg->SectorMap;
+            ui64 current = sectorMap.EmulatedWriteErrors.load(std::memory_order_relaxed);
+            *Mon.EmulatedWriteErrors += current - LastEmulatedWriteErrors;
+            LastEmulatedWriteErrors = current;
+
+            current = sectorMap.EmulatedReadErrors.load(std::memory_order_relaxed);
+            *Mon.EmulatedReadErrors += current - LastEmulatedReadErrors;
+            LastEmulatedReadErrors = current;
+
+            current = sectorMap.EmulatedSilentWriteFails.load(std::memory_order_relaxed);
+            *Mon.EmulatedSilentWriteFails += current - LastEmulatedSilentWriteFails;
+            LastEmulatedSilentWriteFails = current;
+
+            current = sectorMap.EmulatedReadReplays.load(std::memory_order_relaxed);
+            *Mon.EmulatedReadReplays += current - LastEmulatedReadReplays;
+            LastEmulatedReadReplays = current;
         }
     }
 

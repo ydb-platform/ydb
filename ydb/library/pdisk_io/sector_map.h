@@ -22,6 +22,7 @@
 #include <random>
 #include <deque>
 #include <algorithm>
+#include <variant>
 
 #include <util/random/random.h>
 
@@ -209,15 +210,16 @@ public:
     std::atomic<ui64> AllocatedBytes;
     NSectorMap::TFailureProbabilities FailureProbabilities;
 
+    std::atomic<ui64> EmulatedWriteErrors;
+    std::atomic<ui64> EmulatedReadErrors;
+    std::atomic<ui64> EmulatedSilentWriteFails;
+    std::atomic<ui64> EmulatedReadReplays;
+
 private:
-    THashMap<ui64, TString> Map;
+    THashMap<ui64, std::variant<TString, std::pair<TString, TString>>> Map;
     NSectorMap::EDiskMode DiskMode = NSectorMap::DM_NONE;
     THolder<NSectorMap::TSectorOperationThrottler> SectorOperationThrottler;
     std::function<void()> ReadCallback = nullptr;
-
-    THashMap<ui64, TString> ReplayCache;
-    std::deque<ui64> ReplayCacheLru;
-    static constexpr ui64 ReplayCacheSize = 16;
 
     std::mt19937_64 RandomGenerator{RandomNumber<ui64>()};
 
@@ -234,6 +236,10 @@ public:
         FailureProbabilities.ReadErrorProbability = 0.0;
         FailureProbabilities.SilentWriteFailProbability = 0.0;
         FailureProbabilities.ReadReplayProbability = 0.0;
+        EmulatedWriteErrors = 0;
+        EmulatedReadErrors = 0;
+        EmulatedSilentWriteFails = 0;
+        EmulatedReadReplays = 0;
         InitSectorOperationThrottler();
     }
 
@@ -285,28 +291,24 @@ public:
         THPTimer timer;
 
         TGuard<TTicketLock> guard(MapLock);
-
-        if (ShouldReplayRead()) {
-            if (auto it = ReplayCache.find(offset); it != ReplayCache.end()) {
-                for (i64 pos = 0; pos < size; pos += NSectorMap::SECTOR_SIZE) {
-                    char tmp[4 * NSectorMap::SECTOR_SIZE];
-                    int processed = LZ4_decompress_safe(it->second.data(), tmp, it->second.size(), 4 * NSectorMap::SECTOR_SIZE);
-                    Y_VERIFY_S(processed == NSectorMap::SECTOR_SIZE, "processed# " << processed);
-                    memcpy(data + pos, tmp, NSectorMap::SECTOR_SIZE);
-                }
-                if (SectorOperationThrottler.Get() != nullptr) {
-                    SectorOperationThrottler->ThrottleRead(dataSize, dataOffset, prevOperationIsInProgress, timer.Passed() * 1000);
-                }
-                return true;
-            }
-        }
-
         for (; size > 0; size -= NSectorMap::SECTOR_SIZE) {
             if (auto it = Map.find(offset); it == Map.end()) {
                 memset(data, 0x33, NSectorMap::SECTOR_SIZE);
             } else {
+                const TString* value = nullptr;
+                const auto& dataVar = it->second;
+                if (std::holds_alternative<TString>(dataVar)) {
+                    value = &std::get<TString>(dataVar);
+                } else {
+                    const auto& pair = std::get<std::pair<TString, TString>>(dataVar);
+                    if (ShouldReplayRead()) {
+                        value = &pair.first;
+                    } else {
+                        value = &pair.second;
+                    }
+                }
                 char tmp[4 * NSectorMap::SECTOR_SIZE];
-                int processed = LZ4_decompress_safe(it->second.data(), tmp, it->second.size(), 4 * NSectorMap::SECTOR_SIZE);
+                int processed = LZ4_decompress_safe(value->data(), tmp, value->size(), 4 * NSectorMap::SECTOR_SIZE);
                 Y_VERIFY_S(processed == NSectorMap::SECTOR_SIZE, "processed# " << processed);
                 memcpy(data, tmp, NSectorMap::SECTOR_SIZE);
             }
@@ -347,21 +349,36 @@ public:
                 Y_VERIFY_S(written > 0, "written# " << written);
                 TString str = TString::Uninitialized(written);
                 memcpy(str.Detach(), tmp, written);
-                if (auto it = Map.find(offset); it != Map.end()) {
-                    if (ReplayCache.size() >= ReplayCacheSize) {
-                        ui64 lruOffset = ReplayCacheLru.front();
-                        ReplayCacheLru.pop_front();
-                        ReplayCache.erase(lruOffset);
-                    }
-                    ReplayCache[offset] = it->second;
-                    ReplayCacheLru.push_back(offset);
 
-                    AllocatedBytes.fetch_sub(it->second.size());
-                    it->second = str;
+                bool replay = FailureProbabilities.ReadReplayProbability.load(std::memory_order_relaxed) > 0;
+                i64 allocatedBytesDelta = 0;
+                if (auto it = Map.find(offset); it != Map.end()) {
+                    if (std::holds_alternative<TString>(it->second)) {
+                        TString& old_val = std::get<TString>(it->second);
+                        if (replay) {
+                            allocatedBytesDelta = str.size();
+                            it->second = std::make_pair(std::move(old_val), str);
+                        } else {
+                            allocatedBytesDelta = (i64)str.size() - (i64)old_val.size();
+                            it->second = str;
+                        }
+                    } else {
+                        auto& pair = std::get<std::pair<TString, TString>>(it->second);
+                        if (replay) {
+                            allocatedBytesDelta = (i64)str.size() - (i64)pair.first.size();
+                            pair.first = std::move(pair.second);
+                            pair.second = str;
+                        } else {
+                            allocatedBytesDelta = -(i64)(pair.first.size() + pair.second.size()) + str.size();
+                            it->second = str;
+                        }
+                    }
                 } else {
                     Map[offset] = str;
+                    allocatedBytesDelta = str.size();
                 }
-                AllocatedBytes.fetch_add(Map[offset].size());
+
+                AllocatedBytes.fetch_add(allocatedBytesDelta);
                 offset += NSectorMap::SECTOR_SIZE;
                 data += NSectorMap::SECTOR_SIZE;
             }
@@ -379,12 +396,15 @@ public:
         Y_ABORT_UNLESS(offset % NSectorMap::SECTOR_SIZE == 0);
         for (; size > 0; size -= NSectorMap::SECTOR_SIZE) {
             if (auto it = Map.find(offset); it != Map.end()) {
-                AllocatedBytes.fetch_sub(it->second.size());
+                size_t previousSize = 0;
+                if (std::holds_alternative<TString>(it->second)) {
+                    previousSize = std::get<TString>(it->second).size();
+                } else {
+                    auto& pair = std::get<std::pair<TString, TString>>(it->second);
+                    previousSize = pair.first.size() + pair.second.size();
+                }
+                AllocatedBytes.fetch_sub(previousSize);
                 Map.erase(it);
-            }
-            if (ReplayCache.count(offset)) {
-                ReplayCache.erase(offset);
-                ReplayCacheLru.erase(std::remove(ReplayCacheLru.begin(), ReplayCacheLru.end(), offset), ReplayCacheLru.end());
             }
             offset += NSectorMap::SECTOR_SIZE;
         }
@@ -436,19 +456,35 @@ public:
     }
 
     bool ShouldFailWrite() {
-        return CheckFailure(FailureProbabilities.WriteErrorProbability.load(std::memory_order_relaxed));
+        if (CheckFailure(FailureProbabilities.WriteErrorProbability.load(std::memory_order_relaxed))) {
+            EmulatedWriteErrors.fetch_add(1, std::memory_order_relaxed);
+            return true;
+        }
+        return false;
     }
 
     bool ShouldFailRead() {
-        return CheckFailure(FailureProbabilities.ReadErrorProbability.load(std::memory_order_relaxed));
+        if (CheckFailure(FailureProbabilities.ReadErrorProbability.load(std::memory_order_relaxed))) {
+            EmulatedReadErrors.fetch_add(1, std::memory_order_relaxed);
+            return true;
+        }
+        return false;
     }
 
     bool ShouldSilentWriteFail() {
-        return CheckFailure(FailureProbabilities.SilentWriteFailProbability.load(std::memory_order_relaxed));
+        if (CheckFailure(FailureProbabilities.SilentWriteFailProbability.load(std::memory_order_relaxed))) {
+            EmulatedSilentWriteFails.fetch_add(1, std::memory_order_relaxed);
+            return true;
+        }
+        return false;
     }
 
     bool ShouldReplayRead() {
-        return CheckFailure(FailureProbabilities.ReadReplayProbability.load(std::memory_order_relaxed));
+        if (CheckFailure(FailureProbabilities.ReadReplayProbability.load(std::memory_order_relaxed))) {
+            EmulatedReadReplays.fetch_add(1, std::memory_order_relaxed);
+            return true;
+        }
+        return false;
     }
 
 private:

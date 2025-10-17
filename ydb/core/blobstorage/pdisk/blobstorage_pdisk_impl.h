@@ -137,6 +137,12 @@ public:
     TControlWrapper SectorMapSilentWriteFailProbability;
     TControlWrapper SectorMapReadReplayProbability;
 
+    // used to count SectorMap emulated errors in monitoring
+    ui64 LastEmulatedWriteErrors = 0;
+    ui64 LastEmulatedReadErrors = 0;
+    ui64 LastEmulatedSilentWriteFails = 0;
+    ui64 LastEmulatedReadReplays = 0;
+
     ui64 ForsetiMinLogCostNs = 2000000ull;
     i64 ForsetiMaxLogBatchNsCached;
     i64 ForsetiOpPieceSizeCached;

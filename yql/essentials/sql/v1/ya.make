@@ -31,6 +31,7 @@ SRCS(
     list_builtin.cpp
     match_recognize.cpp
     node.cpp
+    select_yql.cpp
     select.cpp
     source.cpp
     sql.cpp
@@ -40,6 +41,7 @@ SRCS(
     sql_match_recognize.cpp
     sql_into_tables.cpp
     sql_query.cpp
+    sql_select_yql.cpp
     sql_select.cpp
     sql_translation.cpp
     sql_values.cpp

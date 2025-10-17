@@ -4927,7 +4927,7 @@ private:
             bool hasLayerPaths = false;
             if constexpr (NPrivate::THasLayersPaths<TRunOptions>::value) {
                 hasLayerPaths |= !execCtx->Options_.LayersPaths().empty();
-                localRun &= !execCtx->Options_.LayersPaths().empty();
+                localRun &= execCtx->Options_.LayersPaths().empty();
             }
             {
                 TUserJobSpec userJobSpec;
@@ -5534,7 +5534,7 @@ private:
         bool hasLayerPaths = false;
         if constexpr (NPrivate::THasLayersPaths<decltype(execCtx->Options_)>::value) {
             hasLayerPaths |= !execCtx->Options_.LayersPaths().empty();
-            localRun &= !execCtx->Options_.LayersPaths().empty();
+            localRun &= execCtx->Options_.LayersPaths().empty();
         }
         {
             execCtx->SetNodeExecProgress("Preparing");

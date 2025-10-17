@@ -1946,6 +1946,7 @@ TFuture<int> TClient::BuildSnapshot(const TBuildSnapshotOptions& options)
     }
     req->set_set_read_only(options.SetReadOnly);
     req->set_wait_for_snapshot_completion(options.WaitForSnapshotCompletion);
+    req->set_enable_automaton_read_only_barrier(options.EnableAutomatonReadOnlyBarrier);
 
     return req->Invoke().Apply(BIND([] (const TErrorOr<TApiServiceProxy::TRspBuildSnapshotPtr>& rspOrError) -> int {
         const auto& rsp = rspOrError.ValueOrThrow();

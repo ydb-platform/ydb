@@ -5,6 +5,8 @@
 
 #include <openssl/sha.h>
 
+#include <functional>
+
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
 #include <util/generic/set.h>
@@ -142,6 +144,8 @@ public:
     size_t GetRuleCount() const { return RulesByName.size(); }
     size_t GetDisabledCount() const { return DisabledRules.size(); }
 
+    bool HasRules() const { return !RulesByName.empty() || !DisabledRules.empty(); }
+
 private:
     TMap<TString, TIncompatibilityRule> RulesByName;
     THashSet<TString> DisabledRules;
@@ -191,6 +195,13 @@ struct TResolvedConfig {
  * Generates configs for all label combinations
  */
 TResolvedConfig ResolveAll(NFyaml::TDocument& doc);
+
+/**
+ * Generates unique resolved documents without materializing label combinations
+ */
+void ResolveUniqueDocs(
+    NFyaml::TDocument& doc,
+    const std::function<void(TDocumentConfig&&)>& onDocument);
 
 /**
  * Calculates hash of resolved config

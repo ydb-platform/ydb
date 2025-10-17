@@ -554,7 +554,7 @@ def apply_and_add_mutes(all_data, output_path, mute_check, aggregated_for_mute, 
         
         # 4. muted_ya (все замьюченные сейчас)
         all_muted_ya, all_muted_ya_debug = create_file_set(
-            aggregated_for_mute, lambda test: mute_check(test.get('suite_folder'), test.get('test_name')) if mute_check else True, use_wildcards=True, resolution='muted_ya'
+            all_data, lambda test: mute_check(test.get('suite_folder'), test.get('test_name')) if mute_check else True, use_wildcards=True, resolution='muted_ya'
         )
         write_file_set(os.path.join(output_path, 'muted_ya.txt'), all_muted_ya, all_muted_ya_debug)
         to_mute_set = set(to_mute)

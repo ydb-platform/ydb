@@ -19,6 +19,10 @@ TTestServer::TTestServer(const TOptions &opts)
     RunServer();
 }
 
+TString TTestServer::GetDomainPath() {
+    return TStringBuilder() << "/" << Tests::TestDomainName;
+}
+
 std::pair<TString, TString> TTestServer::GetKesusPathAndName(size_t i) {
     return {Tests::TestDomainName, TStringBuilder() << "Kesus_" << i};
 }

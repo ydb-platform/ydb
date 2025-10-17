@@ -45,6 +45,13 @@ void TBuildSnapshotCommand::Register(TRegistrar registrar)
             return command->Options.WaitForSnapshotCompletion;
         })
         .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "enable_automaton_read_only_barrier",
+        [] (TThis* command) -> auto& {
+            return command->Options.EnableAutomatonReadOnlyBarrier;
+        })
+        .Optional(/*init*/ true);
 }
 
 void TBuildSnapshotCommand::DoExecute(ICommandContextPtr context)
@@ -81,6 +88,13 @@ void TBuildMasterSnapshotsCommand::Register(TRegistrar registrar)
             return command->Options.Retry;
         })
         .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "enable_automaton_read_only_barrier",
+        [] (TThis* command) -> auto& {
+            return command->Options.EnableAutomatonReadOnlyBarrier;
+        })
+        .Optional(/*init*/ true);
 }
 
 void TBuildMasterSnapshotsCommand::DoExecute(ICommandContextPtr context)

@@ -2634,8 +2634,15 @@ private:
 
             auto [typeType, typeOffset, childrenFields, customMetadata] = SerializeColumnType(&flatbufBuilder, columnSchema.LogicalType(), ArrowConfig_);
 
+            if (CastToV1Type(columnSchema.LogicalType()).first == ESimpleLogicalValueType::Any) {
+                customMetadata.push_back(flatbuf::CreateKeyValue(
+                    flatbufBuilder,
+                    flatbufBuilder.CreateString(YtTypeMetadataKey),
+                    flatbufBuilder.CreateString(YtTypeMetadataValueYson)));
+            }
+
             flatbuffers::Offset<flatbuf::DictionaryEncoding> dictionaryEncodingOffset;
-            auto indexTypeOffset = flatbuf::CreateInt(flatbufBuilder, /*bitWidth*/ 32,  /*is_signed*/ false);
+            auto indexTypeOffset = flatbuf::CreateInt(flatbufBuilder, /*bitWidth*/ 32, /*is_signed*/ false);
 
             if (IsDictionaryEncodedColumn(*typedColumn.Column)) {
                 dictionaryEncodingOffset = flatbuf::CreateDictionaryEncoding(

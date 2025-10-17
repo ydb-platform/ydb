@@ -621,17 +621,20 @@ public:
 
     void SendRequest() {
         UnsafeBecome(&TAcquireRateLimiterResourceRPC::StateFunc);
+        const TString database = Request().GetDatabaseName().GetOrElse("");
 
         if (GetProtoRequest()->units_case() == Ydb::RateLimiter::AcquireResourceRequest::UnitsCase::kRequired) {
             SendLeaf(
-                TEvQuota::TResourceLeaf(GetProtoRequest()->coordination_node_path(),
+                TEvQuota::TResourceLeaf(database,
+                                        GetProtoRequest()->coordination_node_path(),
                                         GetProtoRequest()->resource_path(),
                                         GetProtoRequest()->required()));
             return;
         }
 
         SendLeaf(
-            TEvQuota::TResourceLeaf(GetProtoRequest()->coordination_node_path(),
+            TEvQuota::TResourceLeaf(database,
+                                    GetProtoRequest()->coordination_node_path(),
                                     GetProtoRequest()->resource_path(),
                                     GetProtoRequest()->used(),
                                     true));

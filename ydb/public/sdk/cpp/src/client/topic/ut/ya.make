@@ -1,6 +1,6 @@
 UNITTEST_FOR(ydb/public/sdk/cpp/src/client/topic)
 
-REQUIREMENTS(ram:32)
+REQUIREMENTS(ram:32 cpu:4)
 
 IF (SANITIZER_TYPE OR WITH_VALGRIND)
     SIZE(LARGE)

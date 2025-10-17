@@ -3526,11 +3526,11 @@ Y_UNIT_TEST_SUITE(TStoragePoolsQuotasTest) {
         opts.DisableStatsBatching(true);
         opts.EnablePersistentPartitionStats(true);
         opts.EnableBackgroundCompaction(false);
+        opts.DataShardStatsReportIntervalSeconds(0);
         TTestEnv env(runtime, opts);
 
         runtime.GetAppData().FeatureFlags.SetEnableSeparateDiskSpaceQuotas(true);
 
-        NDataShard::gDbStatsReportInterval = TDuration::Seconds(0);
         NDataShard::gDbStatsDataSizeResolution = 1;
         NDataShard::gDbStatsRowCountResolution = 1;
 
@@ -3699,9 +3699,9 @@ Y_UNIT_TEST_SUITE(TStoragePoolsQuotasTest) {
         opts.DisableStatsBatching(true);
         opts.EnablePersistentPartitionStats(true);
         opts.EnableBackgroundCompaction(false);
+        opts.DataShardStatsReportIntervalSeconds(0);
         TTestEnv env(runtime, opts);
 
-        NDataShard::gDbStatsReportInterval = TDuration::Seconds(0);
         NDataShard::gDbStatsDataSizeResolution = 1;
         NDataShard::gDbStatsRowCountResolution = 1;
 

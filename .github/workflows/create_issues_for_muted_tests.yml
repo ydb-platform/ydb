@@ -6,7 +6,6 @@ on:
       - submitted
     branches:
       - main
-      - 'stable-*'
   workflow_dispatch:
     inputs:
         pr_number: 

@@ -8,7 +8,7 @@ namespace NKikimr::NStat {
 
 struct TStatisticsAggregator::TTxAnalyze : public TTxBase {
     const NKikimrStat::TEvAnalyze& Record;
-    TActorId ReplyToActorId;    
+    TActorId ReplyToActorId;
 
     TTxAnalyze(TSelf* self, const NKikimrStat::TEvAnalyze& record, TActorId replyToActorId)
         : TTxBase(self)
@@ -30,7 +30,7 @@ struct TStatisticsAggregator::TTxAnalyze : public TTxBase {
         const TString operationId = Record.GetOperationId();
 
         // check existing force traversal with the same OperationId
-        const auto existingOperation = Self->ForceTraversalOperation(operationId);  
+        const auto existingOperation = Self->ForceTraversalOperation(operationId);
 
         // update existing force traversal
         if (existingOperation) {
@@ -46,11 +46,13 @@ struct TStatisticsAggregator::TTxAnalyze : public TTxBase {
 
         SA_LOG_D("[" << Self->TabletID() << "] TTxAnalyze::Execute. Create new force traversal operation, OperationId=" << operationId);
         const TString types = JoinVectorIntoString(TVector<ui32>(Record.GetTypes().begin(), Record.GetTypes().end()), ",");
+        const TString& databaseName = Record.GetDatabase();
 
-        // create new force trasersal
+        // create new force traversal
         auto createdAt = ctx.Now();
         TForceTraversalOperation operation {
             .OperationId = operationId,
+            .DatabaseName = databaseName,
             .Tables = {},
             .Types = types,
             .ReplyToActorId = ReplyToActorId,
@@ -87,7 +89,8 @@ struct TStatisticsAggregator::TTxAnalyze : public TTxBase {
         db.Table<Schema::ForceTraversalOperations>().Key(operationId).Update(
             NIceDb::TUpdate<Schema::ForceTraversalOperations::OperationId>(operationId),
             NIceDb::TUpdate<Schema::ForceTraversalOperations::Types>(types),
-            NIceDb::TUpdate<Schema::ForceTraversalOperations::CreatedAt>(createdAt.GetValue())
+            NIceDb::TUpdate<Schema::ForceTraversalOperations::CreatedAt>(createdAt.GetValue()),
+            NIceDb::TUpdate<Schema::ForceTraversalOperations::DatabaseName>(databaseName)
         );
 
         return true;

@@ -961,7 +961,7 @@ void TSelectRowsCommand::Register(TRegistrar registrar)
         .GreaterThan(0)
         .Optional(/*init*/ false);
 
-    registrar.ParameterWithUniversalAccessor<bool>(
+    registrar.ParameterWithUniversalAccessor<std::optional<bool>>(
         "use_order_by_in_join_subqueries",
         [] (TThis* command) -> auto& {
             return command->Options.UseOrderByInJoinSubqueries;

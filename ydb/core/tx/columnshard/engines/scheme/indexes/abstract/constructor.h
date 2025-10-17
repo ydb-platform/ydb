@@ -16,6 +16,7 @@ namespace NKikimr::NOlap::NIndexes {
 class IIndexMetaConstructor {
 private:
     YDB_READONLY_DEF(std::optional<TString>, StorageId);
+    YDB_READONLY_DEF(std::optional<bool>, InheritPortionStorage);
 
 protected:
     virtual TConclusionStatus DoDeserializeFromJson(const NJson::TJsonValue& jsonInfo) = 0;
@@ -38,12 +39,18 @@ public:
         if (proto.HasStorageId()) {
             StorageId = proto.GetStorageId();
         }
+        if (proto.HasInheritPortionStorage()) {
+            InheritPortionStorage = proto.GetInheritPortionStorage();
+        }
         return DoDeserializeFromProto(proto);
     }
 
     void SerializeToProto(NKikimrSchemeOp::TOlapIndexRequested& proto) const {
         if (StorageId) {
             proto.SetStorageId(*StorageId);
+        }
+        if (InheritPortionStorage) {
+            proto.SetInheritPortionStorage(*InheritPortionStorage);
         }
         return DoSerializeToProto(proto);
     }

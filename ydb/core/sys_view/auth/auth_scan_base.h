@@ -116,6 +116,10 @@ protected:
     }
 
     void ContinueScan() {
+        if (IsNavigatePathInProgress) {
+            return;
+        }
+
         while (DeepFirstSearchStack) {
             auto& last = DeepFirstSearchStack.back();
 
@@ -155,6 +159,7 @@ protected:
     }
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) {
+        IsNavigatePathInProgress = false;
         THolder<NSchemeCache::TSchemeCacheNavigate> request(ev->Get()->Request.Release());
 
         Y_ABORT_UNLESS(request->ResultSet.size() == 1);
@@ -197,6 +202,8 @@ protected:
     }
 
     void NavigatePath(TPath path) {
+        IsNavigatePathInProgress = true;
+
         auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
 
         auto& entry = request->ResultSet.emplace_back();
@@ -260,6 +267,7 @@ private:
     bool RequireUserAdministratorAccess;
     std::optional<TString> PathFrom, PathTo;
     TVector<TTraversingChildren> DeepFirstSearchStack;
+    bool IsNavigatePathInProgress = false;
 };
 
 }

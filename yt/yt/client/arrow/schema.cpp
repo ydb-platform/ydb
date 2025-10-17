@@ -99,7 +99,10 @@ NTableClient::TLogicalTypePtr GetLogicalTypeFromArrowType(const std::shared_ptr<
 NTableClient::TLogicalTypePtr GetLogicalTypeFromArrowType(const std::shared_ptr<arrow20::Field>& arrowField)
 {
     auto resultType = GetLogicalTypeFromArrowType(arrowField->type());
-    return arrowField->nullable() ? OptionalLogicalType(resultType) : resultType;
+    // YT type Optional<Null> will not be correctly denullified.
+    return arrowField->nullable() && arrowField->type()->id() != arrow20::Type::type::NA
+        ? OptionalLogicalType(resultType)
+        : resultType;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -284,7 +284,7 @@ public:
         Y_ABORT_UNLESS(!ParamProvider, "GetSerialized isn't supported if external ParamProvider callback is specified!");
         return *Task_;
     }
-    
+
     NDqProto::TDqTask* GetTask() const {
         Y_ABORT_UNLESS(Arena);
         return Task_;
@@ -345,6 +345,10 @@ public:
 
     const TProtoStringType & GetRateLimiterResource() const {
         return Task_->GetRateLimiterResource();
+    }
+
+    const TProtoStringType& GetRateLimiterDatabase() const {
+        return Task_->GetRateLimiterDatabase();
     }
 
     const TProtoStringType& GetRateLimiter() const {

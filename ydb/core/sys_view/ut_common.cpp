@@ -1,4 +1,6 @@
 #include "ut_common.h"
+
+#include <ydb/core/base/backtrace.h>
 #include <ydb/core/persqueue/ut/common/pq_ut_common.h>
 #include <ydb/core/wrappers/fake_storage.h>
 
@@ -28,6 +30,8 @@ NKikimrSubDomains::TSubDomainSettings GetSubDomainDefaultSettings(const TString 
 }
 
 TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, const TTestEnvSettings& settings) {
+    EnableYDBBacktraceFormat();
+
     auto mbusPort = PortManager.GetPort();
     auto grpcPort = PortManager.GetPort();
 
@@ -37,6 +41,7 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, const TTestEnvSettings& 
     authConfig.SetUseBuiltinDomain(true);
     Settings = new Tests::TServerSettings(mbusPort, authConfig);
     Settings->SetDomainName("Root");
+    Settings->SetGrpcPort(grpcPort);
     Settings->SetNodeCount(staticNodes);
     Settings->SetDynamicNodeCount(dynamicNodes);
     Settings->SetKqpSettings(kqpSettings);
@@ -68,7 +73,11 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, const TTestEnvSettings& 
     *appConfig.MutableFeatureFlags() = Settings->FeatureFlags;
     appConfig.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
     appConfig.MutableColumnShardConfig()->SetAlterObjectEnabled(settings.AlterObjectEnabled);
-    appConfig.MutableTableServiceConfig()->SetEnableTempTablesForUser(true);
+
+    auto& tableServiceConfig = *appConfig.MutableTableServiceConfig();
+    tableServiceConfig = settings.TableServiceConfig;
+    tableServiceConfig.SetEnableTempTablesForUser(true);
+
     Settings->SetAppConfig(appConfig);
 
     for (ui32 i : xrange(settings.StoragePools)) {
@@ -77,6 +86,11 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, const TTestEnvSettings& 
     }
 
     Settings->AppConfig->MutableHiveConfig()->AddBalancerIgnoreTabletTypes(NKikimrTabletBase::TTabletTypes::SysViewProcessor);
+
+    if (settings.DataShardStatsReportIntervalSeconds) {
+        Settings->AppConfig->MutableDataShardConfig()
+            ->SetStatsReportIntervalSeconds(*settings.DataShardStatsReportIntervalSeconds);
+    }
 
     Server = new Tests::TServer(*Settings);
     Server->EnableGRpc(grpcPort);

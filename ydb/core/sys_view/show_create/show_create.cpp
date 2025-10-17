@@ -50,9 +50,9 @@ bool RewriteTemporaryTablePath(const TString& database, TString& tablePath, TStr
     return true;
 }
 
-class TShowCreate : public TScanActorBase<TShowCreate> {
+class TShowCreate : public TScanActorWithoutBackPressure<TShowCreate> {
 public:
-    using TBase  = TScanActorBase<TShowCreate>;
+    using TBase = TScanActorWithoutBackPressure<TShowCreate>;
 
     static constexpr auto ActorActivityType() {
         return NKikimrServices::TActivity::KQP_SYSTEM_VIEW_SCAN;
@@ -68,10 +68,10 @@ public:
     {
     }
 
-    STFUNC(StateWork) {
+    STFUNC(StateScan) {
        switch (ev->GetTypeRewrite()) {
             hFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, Handle);
-            hFunc(NKqp::TEvKqpCompute::TEvScanDataAck, Handle);
+            sFunc(NKqp::TEvKqpCompute::TEvScanDataAck, HandleAck);
             default:
                 LOG_CRIT(*TlsActivationContext, NKikimrServices::SYSTEM_VIEWS,
                     "NSysView::TScanActorBase: unexpected event 0x%08" PRIx32, ev->GetTypeRewrite());
@@ -80,11 +80,12 @@ public:
 
     STFUNC(StateCollectTableSettings) {
         switch (ev->GetTypeRewrite()) {
-             hFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, HandleCollectTableSettings);
-             hFunc(NSequenceProxy::TEvSequenceProxy::TEvGetSequenceResult, Handle);
-             default:
-                 LOG_CRIT(*TlsActivationContext, NKikimrServices::SYSTEM_VIEWS,
-                     "NSysView::TScanActorBase: unexpected event 0x%08" PRIx32, ev->GetTypeRewrite());
+            hFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, HandleCollectTableSettings);
+            hFunc(NSequenceProxy::TEvSequenceProxy::TEvGetSequenceResult, Handle);
+            sFunc(NKqp::TEvKqpCompute::TEvScanDataAck, HandleAck);
+            default:
+                LOG_CRIT(*TlsActivationContext, NKikimrServices::SYSTEM_VIEWS,
+                    "NSysView::TScanActorBase: unexpected event 0x%08" PRIx32, ev->GetTypeRewrite());
         }
     }
 
@@ -110,7 +111,7 @@ private:
         return;
     }
 
-    void StartScan() {
+    void StartScan() final {
         if (!AppData()->FeatureFlags.GetEnableShowCreate()) {
             ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR,
                 TStringBuilder() << "Sys view 'show_create' is not supported");
@@ -163,17 +164,6 @@ private:
         }
 
         Send(MakeTxProxyID(), navigateRequest.release());
-    }
-
-    void Handle(NKqp::TEvKqpCompute::TEvScanDataAck::TPtr&) {
-        StartScan();
-    }
-
-    void ProceedToScan() override {
-        Become(&TShowCreate::StateWork);
-        if (AckReceived) {
-            StartScan();
-        }
     }
 
     bool NeedToCollectTableSettings(const NKikimrSchemeOp::TTableDescription& tableDesc) {

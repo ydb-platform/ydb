@@ -77,7 +77,6 @@ Y_UNIT_TEST_SUITE(KqpBlockHashJoin) {
             UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
 
             auto resultSet = status.GetResultSets()[0];
-            // Current Join implementation is simple and returns all the rows
             auto expectedRowsCount = 3;
             UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), expectedRowsCount);
 

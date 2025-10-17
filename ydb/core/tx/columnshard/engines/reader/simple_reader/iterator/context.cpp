@@ -30,14 +30,17 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::DoGetColumnsFetchingPlan(
 
     const auto* source = sourceExt->GetAs<IDataSource>();
 
-    NCommon::EPortionCommitStatus portionCommitStatus = NCommon::EPortionCommitStatus::Unknown;
+    NCommon::TPortionStateAtScanStart portionState = NCommon::TPortionStateAtScanStart{
+        .Committed = true,
+        .Conflicting = false,
+        .MaxRecordSnapshot = source->GetRecordSnapshotMax()
+    };
     if (source->GetType() == NCommon::IDataSource::EType::SimplePortion) {
         const auto* portion = static_cast<const TPortionDataSource*>(source);
-        portionCommitStatus = GetPortionCommitStatus(portion->GetPortionInfo());
+        portionState = GetPortionStateAtScanStart(portion->GetPortionInfo());
     }
 
-    // snapshot filters will filter the uncommitted changes by other txs and mark conflicts
-    const bool needSnapshots = GetReadMetadata()->GetRequestSnapshot() < source->GetRecordSnapshotMax() || portionCommitStatus == NCommon::EPortionCommitStatus::UncommittedByAnotherTx;
+    const bool needSnapshots = GetReadMetadata()->GetRequestSnapshot() < portionState.MaxRecordSnapshot || portionState.Conflicting;
 
     const bool useIndexes = false;
     const bool hasDeletions = source->GetHasDeletions();
@@ -49,8 +52,7 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::DoGetColumnsFetchingPlan(
         }
     }
 
-    // we exclude uncommitted changes by other txs from the duplicate filter because those changes are not visible for the given tx
-    const bool preventDuplicates = NeedDuplicateFiltering() && portionCommitStatus != NCommon::EPortionCommitStatus::UncommittedByAnotherTx;
+    const bool preventDuplicates = NeedDuplicateFiltering() && !portionState.Conflicting;
     {
         auto& result = CacheFetchingScripts[needSnapshots ? 1 : 0][partialUsageByPK ? 1 : 0][useIndexes ? 1 : 0][needShardingFilter ? 1 : 0]
                                            [hasDeletions ? 1 : 0][preventDuplicates ? 1 : 0];
@@ -124,11 +126,12 @@ void TSpecialReadContext::RegisterActors(const NCommon::ISourcesConstructor& sou
     if (NeedDuplicateFiltering()) {
         const auto* casted_sources = dynamic_cast<const NCommon::TSourcesConstructorWithAccessors<TSourceConstructor>*>(&sources);
         AFL_VERIFY(casted_sources);
-        // we do not pass uncommitted portions of concurrent txs to the duplicate filter because they are invisible for the given tx
+        // we do not pass conflicting portions of concurrent txs to the duplicate filter because they are invisible for the given tx
         std::deque<std::shared_ptr<TPortionInfo>> portionsToDuplicateFilter;
         for (auto&& constructor : casted_sources->GetConstructors()) {
             const auto info = constructor.GetPortion();
-            if (GetPortionCommitStatus(*info) != NCommon::EPortionCommitStatus::UncommittedByAnotherTx) {
+            auto state = GetPortionStateAtScanStart(*info);
+            if (!state.Conflicting) {
                 portionsToDuplicateFilter.emplace_back(std::move(info));
             }
         }

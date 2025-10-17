@@ -333,7 +333,7 @@ Y_UNIT_TEST_SUITE(KqpCost) {
 
         { // 2. UPSERT VALUES
             for (ui32 key = 0; key < 100; key++) {
-                TString embedding = "00\x03";
+                TString embedding = "00\x02";
                 embedding[0] = 'a' + key % 26;
                 embedding[1] = 'A' + (key * 17) % 26;
 
@@ -423,7 +423,7 @@ Y_UNIT_TEST_SUITE(KqpCost) {
             // SELECT Key
             checkSelect(Q_(R"(
                 SELECT Key FROM `/Root/Vectors` VIEW PRIMARY KEY
-                    ORDER BY Knn::CosineDistance(Embedding, "pQ\x03")
+                    ORDER BY Knn::CosineDistance(Embedding, "pQ\x02")
                     LIMIT 10;
             )"), {
                 {"/Root/Vectors", 100} // full scan
@@ -432,7 +432,7 @@ Y_UNIT_TEST_SUITE(KqpCost) {
             // SELECT Key, Value --- same stats
             checkSelect(Q_(R"(
                 SELECT Key, Value FROM `/Root/Vectors` VIEW PRIMARY KEY
-                    ORDER BY Knn::CosineDistance(Embedding, "pQ\x03")
+                    ORDER BY Knn::CosineDistance(Embedding, "pQ\x02")
                     LIMIT 10;
             )"), {
                 {"/Root/Vectors", 100}
@@ -443,7 +443,7 @@ Y_UNIT_TEST_SUITE(KqpCost) {
             // SELECT Key
             checkSelect(Q_(R"(
                 SELECT Key FROM `/Root/Vectors` VIEW vector_idx
-                    ORDER BY Knn::CosineDistance(Embedding, "pQ\x03")
+                    ORDER BY Knn::CosineDistance(Embedding, "pQ\x02")
                     LIMIT 10;
             )"), {
                 {"/Root/Vectors/vector_idx/indexImplLevelTable", 6}, // about levels * clusters = 3 * 2 = 6
@@ -454,7 +454,7 @@ Y_UNIT_TEST_SUITE(KqpCost) {
             // SELECT Key, Value --- same stats
             checkSelect(Q_(R"(
                 SELECT Key, Value FROM `/Root/Vectors` VIEW vector_idx
-                    ORDER BY Knn::CosineDistance(Embedding, "pQ\x03")
+                    ORDER BY Knn::CosineDistance(Embedding, "pQ\x02")
                     LIMIT 10;
             )"), {
                 {"/Root/Vectors/vector_idx/indexImplLevelTable", 6},
@@ -466,7 +466,7 @@ Y_UNIT_TEST_SUITE(KqpCost) {
             checkSelect(Q_(R"(
                 pragma ydb.KMeansTreeSearchTopSize = "2";
                 SELECT Key FROM `/Root/Vectors` VIEW vector_idx
-                    ORDER BY Knn::CosineDistance(Embedding, "pQ\x03")
+                    ORDER BY Knn::CosineDistance(Embedding, "pQ\x02")
                     LIMIT 10;
             )"), {
                 {"/Root/Vectors/vector_idx/indexImplLevelTable", 10},
@@ -479,7 +479,7 @@ Y_UNIT_TEST_SUITE(KqpCost) {
             // SELECT Key
             checkSelect(Q_(R"(
                 SELECT Key FROM `/Root/Vectors` VIEW vector_idx_covered
-                    ORDER BY Knn::CosineDistance(Embedding, "pQ\x03")
+                    ORDER BY Knn::CosineDistance(Embedding, "pQ\x02")
                     LIMIT 10;
             )"), {
                 {"/Root/Vectors/vector_idx_covered/indexImplLevelTable", 6}, // about levels * clusters = 3 * 2 = 6
@@ -490,7 +490,7 @@ Y_UNIT_TEST_SUITE(KqpCost) {
             // SELECT Key, Value --- same stats
             checkSelect(Q_(R"(
                 SELECT Key, Value FROM `/Root/Vectors` VIEW vector_idx_covered
-                    ORDER BY Knn::CosineDistance(Embedding, "pQ\x03")
+                    ORDER BY Knn::CosineDistance(Embedding, "pQ\x02")
                     LIMIT 10;
             )"), {
                 {"/Root/Vectors/vector_idx_covered/indexImplLevelTable", 6},
@@ -501,7 +501,7 @@ Y_UNIT_TEST_SUITE(KqpCost) {
             checkSelect(Q_(R"(
                 pragma ydb.KMeansTreeSearchTopSize = "2";
                 SELECT Key FROM `/Root/Vectors` VIEW vector_idx_covered
-                    ORDER BY Knn::CosineDistance(Embedding, "pQ\x03")
+                    ORDER BY Knn::CosineDistance(Embedding, "pQ\x02")
                     LIMIT 10;
             )"), {
                 {"/Root/Vectors/vector_idx_covered/indexImplLevelTable", 10},
@@ -514,7 +514,7 @@ Y_UNIT_TEST_SUITE(KqpCost) {
             checkSelect(Q_(R"(
                 SELECT Key FROM `/Root/Vectors` VIEW vector_idx_prefixed
                     WHERE Prefix = 7
-                    ORDER BY Knn::CosineDistance(Embedding, "pQ\x03")
+                    ORDER BY Knn::CosineDistance(Embedding, "pQ\x02")
                     LIMIT 10;
             )"), {
                 {"/Root/Vectors/vector_idx_prefixed/indexImplPrefixTable", 1},

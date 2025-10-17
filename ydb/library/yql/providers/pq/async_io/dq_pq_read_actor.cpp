@@ -236,7 +236,10 @@ public:
 
     NYdb::NTopic::TTopicClientSettings GetTopicClientSettings(TClusterState& state) {
         NYdb::NTopic::TTopicClientSettings opts = PqGateway->GetTopicClientSettings();
-        SetupTopicClientSettings(ActorContext().ActorSystem(), SelfId(), opts);
+
+        if (SourceParams.GetUseActorSystemThreadsInTopicClient()) {
+            SetupTopicClientSettings(ActorContext().ActorSystem(), SelfId(), opts);
+        }
 
         opts.Database(SourceParams.GetDatabase())
             .DiscoveryEndpoint(SourceParams.GetEndpoint())

@@ -97,7 +97,7 @@ TKesusQuotaRequester::TKesusQuotaRequester(const NKikimr::TOptions& opts, NKikim
 
 THolder<TEvQuota::TEvRequest> TKesusQuotaRequester::MakeQuoterRequest() {
     TVector<TEvQuota::TResourceLeaf> reqs = {
-        TEvQuota::TResourceLeaf(KesusPath, ResourcePath, 1.0)
+        TEvQuota::TResourceLeaf(TTestServer::GetDomainPath(), KesusPath, ResourcePath, 1.0)
     };
     return MakeHolder<TEvQuota::TEvRequest>(TEvQuota::EResourceOperator::And, std::move(reqs), Opts.QuotaRequestDeadline);
 }

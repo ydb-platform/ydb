@@ -1575,7 +1575,7 @@ private:
         switch (ScriptExecutionsCreationStatus) {
             case EScriptExecutionsCreationStatus::NotStarted:
                 ScriptExecutionsCreationStatus = EScriptExecutionsCreationStatus::Pending;
-                Register(CreateScriptExecutionsTablesCreator(), TMailboxType::HTSwap, AppData()->SystemPoolId);
+                Register(CreateScriptExecutionsTablesCreator(FeatureFlags), TMailboxType::HTSwap, AppData()->SystemPoolId);
                 [[fallthrough]];
             case EScriptExecutionsCreationStatus::Pending:
                 if (DelayedEventsQueue.size() < 10000) {

@@ -428,7 +428,7 @@ namespace NTableCreator {
 THolder<NSchemeCache::TSchemeCacheNavigate> BuildSchemeCacheNavigateRequest(const TVector<TVector<TString>>& pathsComponents, const TString& database, TIntrusiveConstPtr<NACLib::TUserToken> userToken) {
     auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
     auto databasePath = SplitPath(database);
-    request->DatabaseName = CanonizePath(databasePath);
+    request->DatabaseName = database;
     if (userToken && !userToken->GetSerializedToken().empty()) {
         request->UserToken = userToken;
     }

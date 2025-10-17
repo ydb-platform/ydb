@@ -117,8 +117,8 @@ struct TTopPartitionsByTliExtractorMap :
 };
 
 THolder<NActors::IActor> CreateTopPartitionsByCpuScan(const NActors::TActorId& ownerId, ui32 scanId,
-    const NKikimrSysView::TSysViewDescription& sysViewInfo, const TTableRange& tableRange,
-    const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
+    const TString& database, const NKikimrSysView::TSysViewDescription& sysViewInfo,
+    const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
 {
     using TTopPartitionsByCpuScan = TProcessorScan<
         NKikimrSysView::TTopPartitionsEntry,
@@ -139,12 +139,12 @@ THolder<NActors::IActor> CreateTopPartitionsByCpuScan(const NActors::TActorId& o
     auto statusIter = nameToStatus.find(sysViewInfo.GetType());
     Y_ABORT_UNLESS(statusIter != nameToStatus.end());
 
-    return MakeHolder<TTopPartitionsByCpuScan>(ownerId, scanId, sysViewInfo, tableRange, columns, statusIter->second);
+    return MakeHolder<TTopPartitionsByCpuScan>(ownerId, scanId, database, sysViewInfo, tableRange, columns, statusIter->second);
 }
 
 THolder<NActors::IActor> CreateTopPartitionsByTliScan(const NActors::TActorId& ownerId, ui32 scanId,
-    const NKikimrSysView::TSysViewDescription& sysViewInfo, const TTableRange& tableRange,
-    const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
+    const TString& database, const NKikimrSysView::TSysViewDescription& sysViewInfo,
+    const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
 {
     using TTopPartitionsByTliScan = TProcessorScan<
         NKikimrSysView::TTopPartitionsEntry,
@@ -165,7 +165,7 @@ THolder<NActors::IActor> CreateTopPartitionsByTliScan(const NActors::TActorId& o
     auto statusIter = nameToStatus.find(sysViewInfo.GetType());
     Y_ABORT_UNLESS(statusIter != nameToStatus.end());
 
-    return MakeHolder<TTopPartitionsByTliScan>(ownerId, scanId, sysViewInfo, tableRange, columns, statusIter->second);
+    return MakeHolder<TTopPartitionsByTliScan>(ownerId, scanId, database, sysViewInfo, tableRange, columns, statusIter->second);
 }
 
 } // NKikimr::NSysView

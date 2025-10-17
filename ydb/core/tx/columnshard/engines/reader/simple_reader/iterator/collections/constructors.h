@@ -15,7 +15,7 @@ namespace NKikimr::NOlap::NReader::NSimple {
 class TSourceConstructor: public ICursorEntity, public TMoveOnly {
 private:
     TCompareKeyForScanSequence Start;
-    YDB_READONLY(ui32, SourceId, 0);
+    YDB_READONLY(ui64, SourceId, 0);
     YDB_READONLY_DEF(std::shared_ptr<TPortionInfo>, Portion);
     ui32 RecordsCount = 0;
     bool IsStartedByCursorFlag = false;
@@ -44,8 +44,10 @@ public:
         return Start;
     }
 
-    TSourceConstructor(const std::shared_ptr<TPortionInfo>&& portion, const NReader::ERequestSorting sorting)
-        : Start(TReplaceKeyAdapter((sorting == NReader::ERequestSorting::DESC) ? portion->IndexKeyEnd() : portion->IndexKeyStart(),
+    TSourceConstructor(
+        const std::shared_ptr<TPortionInfo>&& portion, 
+        const NReader::ERequestSorting sorting
+    ) : Start(TReplaceKeyAdapter((sorting == NReader::ERequestSorting::DESC) ? portion->IndexKeyEnd() : portion->IndexKeyStart(),
                     sorting == NReader::ERequestSorting::DESC),
               portion->GetPortionId())
         , SourceId(portion->GetPortionId())

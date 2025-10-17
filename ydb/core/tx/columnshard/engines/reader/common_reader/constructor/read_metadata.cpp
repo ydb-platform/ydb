@@ -32,7 +32,10 @@ TConclusionStatus TReadMetadata::Init(const NColumnShard::TColumnShard* owner, c
     if (LockId) {
         for (auto&& i : SourcesConstructor->GetUncommittedWriteIds()) {
             auto op = owner->GetOperationsManager().GetOperationByInsertWriteIdVerified(i);
-            AddWriteIdToCheck(i, op->GetLockId());
+            // we do not need to check our own uncommitted writes
+            if (op->GetLockId() != *LockId) {
+                AddWriteIdToCheck(i, op->GetLockId());
+            }
         }
     }
     SourcesConstructor->InitCursor(readDescription.GetScanCursorVerified());
@@ -124,13 +127,6 @@ void TReadMetadata::DoOnReplyConstruction(const ui64 tabletId, NKqp::NInternalIm
             scanData.LocksInfo.Locks.emplace_back(std::move(lockInfo));
         }
     }
-}
-
-bool TReadMetadata::IsMyUncommitted(const TInsertWriteId writeId) const {
-    AFL_VERIFY(LockSharingInfo);
-    auto it = ConflictedWriteIds.find(writeId);
-    AFL_VERIFY(it != ConflictedWriteIds.end())("write_id", writeId)("write_ids_count", ConflictedWriteIds.size());
-    return it->second.GetLockId() == LockSharingInfo->GetLockId();
 }
 
 }   // namespace NKikimr::NOlap::NReader::NCommon

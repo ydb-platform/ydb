@@ -56,6 +56,15 @@ class TStorage {
 
 public:
 
+    struct TMetrics {
+        size_t InflyMessageCount = 0;
+        size_t LockedMessageCount = 0;
+        size_t CommittedMessageCount = 0;
+        size_t DLQMessageCount = 0;
+        size_t LockedMessageGroupCount = 0;
+        size_t DeadlineExpiredMessageCount = 0;
+    };
+
     // Return next message for client processing.
     // deadline - time for processing visibility
     // fromOffset indicates from which offset it is necessary to continue searching for the next free message.
@@ -76,6 +85,8 @@ public:
 
     bool InitializeFromSnapshot(const NKikimrPQ::TMLPStorageSnapshot& snapshot);
     bool CreateSnapshot(NKikimrPQ::TMLPStorageSnapshot& snapshot);
+
+    const TMetrics& GetMetrics() const;
 
 private:
     // offsetDelte, TMessage
@@ -120,6 +131,8 @@ private:
     // начиная от FirstUnlockedOffset и ищем сообщение, которое можно отдать для чтения.
     // В худшем случае список содержит 1000 * 16 = ~16Kb
     std::deque<ui64> ReleasedMessages;
+
+    TMetrics Metrics;
 };
 
 

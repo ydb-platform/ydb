@@ -414,7 +414,7 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
     }
 
     const TTableIndexInfo* index = Self->Indexes.Value(pathElement->ParentPathId, nullptr).Get();
-    const TTableInfo* mainTableForIndex = Self->GetMainTableForIndex(pathId);
+    const TTableInfo* mainTableForIndex = (index ? Self->GetMainTableForIndex(pathId) : nullptr);
 
     TString errStr;
     const auto forceShardSplitSettings = Self->SplitSettings.GetForceShardSplitSettings();

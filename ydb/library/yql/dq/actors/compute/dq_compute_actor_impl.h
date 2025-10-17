@@ -137,11 +137,6 @@ public:
                 RuntimeSettings.StatsMode, MemoryLimits.ChannelBufferSize, this, this->GetActivityType());
             this->RegisterWithSameMailbox(Channels);
 
-            if (RuntimeSettings.Timeout) {
-                CA_LOG_D("Set execution timeout " << *RuntimeSettings.Timeout);
-                this->Schedule(*RuntimeSettings.Timeout, new NActors::TEvents::TEvWakeup(EEvWakeupTag::TimeoutTag));
-            }
-
             if (auto reportStatsSettings = RuntimeSettings.ReportStatsSettings) {
                 if (reportStatsSettings->MaxInterval) {
                     CA_LOG_D("Set periodic stats " << reportStatsSettings->MaxInterval);

@@ -1,7 +1,7 @@
 name: Collect-analytics-fast-run
 on:
   schedule:
-    - cron: "*/15 * * * *"  # Every 15 min
+    - cron: "*/30 * * * *"  # Every 30 min
   workflow_dispatch:
     inputs:
       commit_sha:
@@ -28,14 +28,31 @@ jobs:
       run: |
         python3 -m pip install ydb ydb[yc] codeowners pandas
     - name: Upload new test history to fast table
+      continue-on-error: true
       run: python3 .github/scripts/analytics/test_history_fast.py
+    - name: Upload olap perfomance suites data mart
+      continue-on-error: true
+      run: python3 .github/scripts/analytics/data_mart_executor.py --query_path .github/scripts/analytics/data_mart_queries/perfomance_olap_suites_mart.sql --table_path perfomance/olap/fast_results_siutes --store_type column --partition_keys RunTs --primary_keys RunTs Db Suite --ttl_min 43200 --ttl_key RunTs
     - name: Upload olap perfomance data mart
       continue-on-error: true
       run: python3 .github/scripts/analytics/data_mart_executor.py --query_path .github/scripts/analytics/data_mart_queries/perfomance_olap_mart.sql --table_path perfomance/olap/fast_results --store_type column --partition_keys Run_start_timestamp --primary_keys Run_start_timestamp Db Suite Test Branch --ttl_min 43200 --ttl_key Run_start_timestamp
-    - name: Upload test monitor data mart
+    - name: Export GitHub issues
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      continue-on-error: true
+      run: python3 .github/scripts/analytics/export_issues_to_ydb.py
+    - name: Upload GitHub issue mapping table
+      continue-on-error: true
+      run: python3 .github/scripts/analytics/github_issue_mapping.py
+    - name: Upload MUTED test monitor data mart with GitHub issue links
+      continue-on-error: true
+      run: python3 .github/scripts/analytics/data_mart_executor.py --query_path .github/scripts/analytics/data_mart_queries/test_muted_monitor_mart_with_issue.sql --table_path test_results/analytics/test_muted_monitor_mart --store_type column --partition_keys date_window branch build_type owner_team suite_folder --primary_keys date_window owner_team branch build_type suite_folder full_name --ttl_min 43200 --ttl_key date_window
+    - name: Upload FULL test monitor data mart
       continue-on-error: true
       run: python3 .github/scripts/analytics/data_mart_executor.py --query_path .github/scripts/analytics/data_mart_queries/test_monitor_mart.sql --table_path test_results/analytics/test_monitor_mart --store_type column --partition_keys date_window branch build_type owner_team suite_folder --primary_keys date_window owner_team branch build_type suite_folder full_name --ttl_min 43200 --ttl_key date_window
-    - name: Upload muted test data mart
+    - name: Upload postcommit retry data mart
       continue-on-error: true
-      run: python3 .github/scripts/analytics/data_mart_executor.py --query_path .github/scripts/analytics/data_mart_queries/muted_test_mart.sql --table_path test_results/analytics/test_history_mart --store_type column --partition_keys run_timestamp job_id build_type branch --primary_keys run_timestamp full_name job_id job_name branch build_type test_id --ttl_min 20160 --ttl_key run_timestamp
-
+      run: python3 .github/scripts/analytics/data_mart_executor.py --query_path .github/scripts/analytics/data_mart_queries/datamart_postcommit_retry.sql --table_path test_results/test_results/analytics/postcommit_retry --store_type column --partition_keys postcommit_start_run_timestamp --primary_keys postcommit_start_run_timestamp commit --ttl_min 259200 --ttl_key postcommit_start_run_timestamp
+    - name: Upload Nemesis aggregate data mart
+      continue-on-error: true
+      run: python3 .github/scripts/analytics/data_mart_executor.py --query_path .github/scripts/analytics/data_mart_queries/stability_aggregate_mart.sql --table_path nemesis/aggregated_mart --store_type column --partition_keys RunTs --primary_keys RunTs Db Suite Test --ttl_min 43200 --ttl_key RunTs

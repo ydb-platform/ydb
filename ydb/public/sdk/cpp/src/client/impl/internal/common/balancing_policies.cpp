@@ -9,7 +9,7 @@ TBalancingPolicy::TImpl TBalancingPolicy::TImpl::UseAllNodes() {
     return impl;
 }
 
-TBalancingPolicy::TImpl TBalancingPolicy::TImpl::UsePreferableLocation(const std::string& location) {
+TBalancingPolicy::TImpl TBalancingPolicy::TImpl::UsePreferableLocation(const std::optional<std::string>& location) {
     TBalancingPolicy::TImpl impl;
     impl.PolicyType = EPolicyType::UsePreferableLocation;
     impl.Location = location;

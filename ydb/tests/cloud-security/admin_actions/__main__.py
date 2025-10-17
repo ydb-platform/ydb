@@ -6,28 +6,55 @@ import os
 import logging
 import yaml
 import time
-from hamcrest import assert_that
 from enum import Enum
+
+
 
 from ydb.public.api.grpc.draft import ydb_dynamic_config_v1_pb2_grpc as grpc_server
 from ydb.public.api.grpc import ydb_cms_v1_pb2_grpc as cms_grpc_server
+from ydb.public.api.grpc import ydb_scheme_v1_pb2_grpc as scheme_grpc_server
+
 from ydb.public.api.protos.draft import ydb_dynamic_config_pb2 as dynamic_config_api
 from ydb.public.api.protos import ydb_cms_pb2 as cms_api
+from ydb.public.api.protos import ydb_scheme_pb2 as scheme_api
+
 
 from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
 import ydb.public.api.protos.draft.ydb_dynamic_config_pb2 as dynconfig
 
-class ClientMetaOptions:
+class EExpectedResult(Enum):
+    Success = 0
+    PermissionDenied = 1
+
+class EAction(Enum):
+    SchemeLs = 0
+    AlterDatabase = 1
+    Dynconfig = 2
+
+class ParsedOptions:
+    class DynconfigSpecialOptions:
+        def __init__(self):
+            self.quite = False
+
+    class SchemeSpecialOptions:
+        def __init__(self):
+            self.path = None
+            self.quite = False
+
     def __init__(self):
         self.endpoint = None
         self.port = None
         self.database = None
         self.token = None
+        self.action = None
+        self.expected_result = None
+        self.dynconfig_special_options = ParsedOptions.DynconfigSpecialOptions()
+        self.scheme_special_options = ParsedOptions.SchemeSpecialOptions()
 
 
 # defaults:
 # port = 2135
-def parse_args() -> ClientMetaOptions:
+def parse_args() -> ParsedOptions:
     def mask_token(token):
         if token is None:
             return "None"
@@ -39,7 +66,47 @@ def parse_args() -> ClientMetaOptions:
 
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('-e', '--endpoint', required=True, help='Endpoint to connect. Protocols: grpc, grpcs (default: grpcs)')
+    action_parser = parser.add_subparsers(
+        dest='command',
+        help='Available actions',
+        required=True
+    )
+
+    dynconfig_parser = action_parser.add_parser("dynconfig", help="Performs an operation that first fetches the config file, then replaces it with itself")
+    dynconfig_parser.add_argument(
+        '-q',
+        '--quiet',
+        action='store_true',
+        help='Suppress output during dynconfig operation'
+    )
+
+    scheme_ls_parser = action_parser.add_parser("scheme_ls", help="Performs an operation similar to 'ydb scheme ls'")
+    scheme_ls_parser.add_argument(
+        'path',
+        help="Path for 'scheme ls'"
+    )
+    scheme_ls_parser.add_argument(
+        '-q',
+        '--quiet',
+        action='store_true',
+        help="Suppress output during 'scheme ls' operation"
+    )
+
+    action_parser.add_parser("alter_database", help="Execute an 'alter database' that adds and immediately removes attributes for the database specified in the '--database' option")
+
+    parser.add_argument(
+        '-r',
+        '--expected-result',
+        choices=['success', 'permission_denied'],
+        required=True,
+        help=
+        '''
+            Expected result of response.\n
+            If "success" is specified, it is checked that the action was performed successfully.\n
+            If "permission_denied" is specified, it is checked that the request crashes with an error.
+        '''
+    )
+    parser.add_argument('-e', '--endpoint', required=True, help='Endpoint to connect')
     parser.add_argument('-d', '--database', help='Database to work with')
 
     token_group = parser.add_mutually_exclusive_group()
@@ -65,25 +132,51 @@ def parse_args() -> ClientMetaOptions:
         s = args.endpoint.find("://")
         args.endpoint = args.endpoint[s+3:]
 
-    print(f"Endpoint: {args.endpoint}")
-    print(f"Database: {args.database}")
-    print(f"Token: {mask_token(token)}")
-    print(f"Port: {args.port}", flush=True)
+    # Маппинг команд на enum
+    command_to_action = {
+        'scheme_ls': EAction.SchemeLs,
+        'alter_database': EAction.AlterDatabase,
+        'dynconfig': EAction.Dynconfig
+    }
 
-    result = ClientMetaOptions()
+    # Маппинг expected_result на enum
+    result_to_enum = {
+        'success': EExpectedResult.Success,
+        'permission_denied': EExpectedResult.PermissionDenied
+    }
+
+    result = ParsedOptions()
     result.endpoint = args.endpoint
     result.port = args.port
     result.database = args.database
     result.token = token
+    result.action = command_to_action[args.command]
+    result.expected_result = result_to_enum[args.expected_result]
+
+    result.dynconfig_special_options.quite = getattr(args, 'quiet', False)
+
+    result.scheme_special_options.quite = getattr(args, 'quiet', False)
+    result.scheme_special_options.path = getattr(args, 'path', None)
+
+    if result.action == EAction.Dynconfig:
+        assert result.database is not None, "Database is required for dynconfig"
+    
+    if result.action == EAction.SchemeLs:
+        assert result.database is not None, "Database is required for scheme_ls"
 
     return result
 
 class CommonClientInvoker(object):
-    def __init__(self, meta : ClientMetaOptions, retry_count=1):
-        self.endpoint = meta.endpoint
-        self.port = meta.port
-        self.database = meta.database
-        self.token = meta.token
+    class EService(Enum):
+        Cms = 0
+        Dynconfig = 1
+        Scheme = 2
+
+    def __init__(self, endpoint, port, database, token, retry_count=1):
+        self.endpoint = endpoint
+        self.port = port
+        self.database = database
+        self.token = token
 
         self.__retry_count = retry_count
         self.__retry_sleep_seconds = 10
@@ -92,22 +185,28 @@ class CommonClientInvoker(object):
             ('grpc.max_send_message_length', 64 * 10 ** 6)
         ]
         self._channel = grpc.insecure_channel("%s:%s" % (self.endpoint, self.port), options=self._options)
+
         self._dynconfig_stub = grpc_server.DynamicConfigServiceStub(self._channel)
         self._cms_stub = cms_grpc_server.CmsServiceStub(self._channel)
+        self._scheme_stub = scheme_grpc_server.SchemeServiceStub(self._channel)
 
     def _create_metadata(self):
         metadata = []
         if self.token:
             metadata.append(('x-ydb-auth-ticket', self.token))
+        if self.database:
+            metadata.append(('x-ydb-database', self.database))
         return metadata
 
-    def _get_invoke_callee(self, method, service):
-        if service == 'cms':
+    def _get_invoke_callee(self, method : str, service : EService):
+        if service == CommonClientInvoker.EService.Cms:
             return getattr(self._cms_stub, method)
-        elif service == 'dynconfig':
+        elif service == CommonClientInvoker.EService.Dynconfig:
             return getattr(self._dynconfig_stub, method)
+        elif service == CommonClientInvoker.EService.Scheme:
+            return getattr(self._scheme_stub, method)
 
-    def invoke(self, request, method, service):
+    def invoke(self, request, method : str, service : EService):
         retry = self.__retry_count
         while True:
             try:
@@ -128,37 +227,43 @@ class CommonClientInvoker(object):
     def __del__(self):
         self.close()
 
+def generate_error_message(action, status, issue):
+    return f"{action} response. Status: {status}; issue: {issue}"
 
-
-def fetch_dynconfig(client: CommonClientInvoker):
-    def fetch():
+def fetch_dynconfig(client: CommonClientInvoker, expected_result : EExpectedResult):
+    def make_request():
         request = dynamic_config_api.GetConfigRequest()
-        return client.invoke(request, 'GetConfig', 'dynconfig')
+        return client.invoke(request, 'GetConfig', CommonClientInvoker.EService.Dynconfig)
 
-    fetch_config_response = fetch()
-    assert_that(fetch_config_response.operation.status == StatusIds.SUCCESS)
+    fetch_config_response = make_request()
+    status = fetch_config_response.operation.status
+    issue = fetch_config_response.operation.issue
+
+    if expected_result == EExpectedResult.Success:
+        assert status == StatusIds.SUCCESS, generate_error_message('GetConfig', status, issue)
+    elif expected_result == EExpectedResult.PermissionDenied:
+        assert status == StatusIds.PERMISSION_DENIED, generate_error_message('GetConfig', status, issue)
+    else:
+        raise ValueError(f"Unknown expected_result: {expected_result}")
 
     result = dynconfig.GetConfigResult()
     fetch_config_response.operation.result.Unpack(result)
-    if result.config[0] == "":
-        return None
-    else:
-        return result.config[0]
+    return result.config[0]
 
-def alter_database(client: CommonClientInvoker, path):
-    class EAction(Enum):
+def alter_database(client: CommonClientInvoker, path : str, expected_result : EExpectedResult):
+    class EAlterDatabaseAction(Enum):
         CreateAttributes = 0
         DropAttributes = 1
 
-    def alter(action: EAction):
+    def make_request(action: EAlterDatabaseAction):
         attrs = {}
 
-        if action == EAction.CreateAttributes:
+        if action == EAlterDatabaseAction.CreateAttributes:
             attrs = {
                 'one': '1',
                 'two': 'two',
             }
-        elif action == EAction.DropAttributes:
+        elif action == EAlterDatabaseAction.DropAttributes:
             attrs = {
                 'one': '',
                 'two': '',
@@ -168,25 +273,72 @@ def alter_database(client: CommonClientInvoker, path):
         request.path = path
         request.alter_attributes.update(attrs)
 
-        print(f'request.path = {request.path}')
-        return client.invoke(request, 'AlterDatabase', 'cms')
+        return client.invoke(request, 'AlterDatabase', CommonClientInvoker.EService.Cms)
 
-    for action in EAction:
-        print(f"Alter database action: {action}")
-        create_database_response = alter(action)
-        print(f"Alter database response status: {create_database_response.operation.status}")
-        print(f"Alter database response issue: {create_database_response.operation.issues}")
-        assert_that(create_database_response.operation.status == StatusIds.SUCCESS)
-        print('Database altered successfully')
+    for action in EAlterDatabaseAction:
+        create_database_response = make_request(action)
+        status = create_database_response.operation.status
+        issue = create_database_response.operation.issues
+
+        if expected_result == EExpectedResult.Success:
+            assert status == StatusIds.SUCCESS, generate_error_message("Alter database", status, issue)
+        elif expected_result == EExpectedResult.PermissionDenied:
+            assert status == StatusIds.PERMISSION_DENIED, generate_error_message("Alter database", status, issue)
+        else:
+            raise ValueError(f"Unknown expected_result: {expected_result}")
+
+def scheme_ls(client: CommonClientInvoker, path : str, expected_result : EExpectedResult):
+    def make_request():
+        request = scheme_api.ListDirectoryRequest()
+        request.path = path
+        return client.invoke(request, 'ListDirectory', CommonClientInvoker.EService.Scheme)
+
+    ls_response = make_request()
+
+    status = ls_response.operation.status
+    issue = ls_response.operation.issues
+
+    if expected_result == EExpectedResult.Success:
+        assert status == StatusIds.SUCCESS, generate_error_message("Scheme ls", status, issue)
+    elif expected_result == EExpectedResult.PermissionDenied:
+        assert status == StatusIds.PERMISSION_DENIED, generate_error_message("Scheme ls", status, issue)
+    else:
+        raise ValueError(f"Unknown expected_result: {expected_result}")
+
+    result = scheme_api.ListDirectoryResult()
+    ls_response.operation.result.Unpack(result)
+    return result.children
 
 def main():
-    client_options = parse_args()
-    client = CommonClientInvoker(client_options)
+    parsed_args = parse_args()
+    client = CommonClientInvoker(parsed_args.endpoint, parsed_args.port, parsed_args.database, parsed_args.token)
 
-    # fetched_dynconfig = fetch_dynconfig(client)
-    # print(f"Fetched dynconfig:\n{fetched_dynconfig}")
+    match parsed_args.action:
+        case EAction.SchemeLs:
+            ls_result = scheme_ls(client, parsed_args.scheme_special_options.path, parsed_args.expected_result)
 
-    alter_database(client, '/Root/db2')
+            if parsed_args.expected_result == EExpectedResult.Success:
+                if parsed_args.scheme_special_options.quite:
+                    print("Scheme ls result fetched successfully")
+                else:
+                    print(f"Scheme ls result:\n{ls_result}")
+
+        case EAction.AlterDatabase:
+            alter_database(client, parsed_args.database, parsed_args.expected_result)
+
+        case EAction.Dynconfig:
+            fetched_dynconfig = fetch_dynconfig(client, parsed_args.expected_result)
+
+            if parsed_args.expected_result == EExpectedResult.Success:
+                if parsed_args.dynconfig_special_options.quite:
+                    print("Config fetched successfully")
+                else:
+                    print(f"Fetched dynconfig:\n{fetched_dynconfig}")
+
+        case _:
+            raise ValueError(f"Unknown action: {parsed_args.action}")
+
+    print("Done successfully")
 
 if __name__ == '__main__':
     main()

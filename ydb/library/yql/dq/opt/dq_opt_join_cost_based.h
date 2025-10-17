@@ -50,7 +50,7 @@ void CollectInterestingOrderingsFromJoinTree(
 
 IOptimizerNew* MakeNativeOptimizerNew(
     IProviderContext& ctx,
-    const ui32 maxDPHypDPTableSize,
+    const TOptimizerSettings &settings,
     TExprContext& ectx,
     bool enableShuffleElimination,
     TSimpleSharedPtr<TOrderingsStateMachine> orderingsFSM = nullptr,

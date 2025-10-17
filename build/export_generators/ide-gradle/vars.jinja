@@ -50,6 +50,7 @@
 
 {%- set mainClass = target.app_main_class -%}
 {%- set has_junit5_test = extra_targets|selectattr('junit5_test') -%}
+{%- set has_junit6_test = extra_targets|selectattr('junit6_test') -%}
 
 {%- if proto_template -%}
 {%-     set prepareProtosTask = target.proto_files|length or target.runs|length or target.custom_runs|length -%}

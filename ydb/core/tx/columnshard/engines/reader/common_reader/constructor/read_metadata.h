@@ -157,6 +157,10 @@ public:
         return it->second.IsConflictable();
     }
 
+    bool MayWriteBeConflicting(const TInsertWriteId writeId) const {
+        return ConflictedWriteIds.contains(writeId);
+    }
+
     void AddWriteIdToCheck(const TInsertWriteId writeId, const ui64 lockId) {
         auto it = LockConflictCounters.find(lockId);
         if (it == LockConflictCounters.end()) {
@@ -164,8 +168,6 @@ public:
         }
         AFL_VERIFY(ConflictedWriteIds.emplace(writeId, TWriteIdInfo(lockId, it->second)).second);
     }
-
-    [[nodiscard]] bool IsMyUncommitted(const TInsertWriteId writeId) const;
 
     void SetConflictedWriteId(const TInsertWriteId writeId) const {
         auto it = ConflictedWriteIds.find(writeId);

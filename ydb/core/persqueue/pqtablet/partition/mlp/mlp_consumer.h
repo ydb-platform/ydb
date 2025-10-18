@@ -19,6 +19,8 @@ class TConsumerActor : public TBaseActor<TConsumerActor>
                      , public TConstantLogPrefix {
     friend class TSerializer;
 
+    static constexpr TDuration WakeupInterval = TDuration::Seconds(1);
+
 public:
     TConsumerActor(ui64 tabletId, const TActorId& tabletActorId, ui32 partitionId, const TActorId& partitionActorId, const NKikimrPQ::TPQTabletConfig::TConsumer& config);
 
@@ -45,6 +47,9 @@ private:
     void HandleOnInit(TEvPQ::TEvProxyResponse::TPtr&);
     void Handle(TEvPQ::TEvProxyResponse::TPtr&);
     void Handle(TEvPQ::TEvError::TPtr&);
+
+    void HandleOnWork(TEvents::TEvWakeup::TPtr&);
+    void Handle(TEvents::TEvWakeup::TPtr&);
 
     STFUNC(StateInit);
     STFUNC(StateWork);

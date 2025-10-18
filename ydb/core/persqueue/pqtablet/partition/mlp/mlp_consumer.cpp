@@ -39,6 +39,8 @@ void TConsumerActor::Bootstrap() {
     auto request = std::make_unique<TEvKeyValue::TEvRequest>();
     request->Record.AddCmdRead()->SetKey(key);
     Send(TabletActorId, std::move(request));
+
+    Schedule(WakeupInterval, new TEvents::TEvWakeup());
 }
 
 void TConsumerActor::PassAway() {
@@ -157,6 +159,7 @@ STFUNC(TConsumerActor::StateInit) {
         hFunc(TEvKeyValue::TEvResponse, HandleOnInit);
         hFunc(TEvPQ::TEvProxyResponse, HandleOnInit);
         hFunc(TEvPQ::TEvError, Handle);
+        hFunc(TEvents::TEvWakeup, Handle);
         sFunc(TEvents::TEvPoison, PassAway);
         default:
             LOG_E("Unexpected " << EventStr("StateInit", ev));
@@ -201,6 +204,7 @@ STFUNC(TConsumerActor::StateWork) {
         hFunc(TEvPersQueue::TEvMLPChangeMessageDeadlineRequest, Handle);
         hFunc(TEvPQ::TEvProxyResponse, Handle);
         hFunc(TEvPQ::TEvError, Handle);
+        hFunc(TEvents::TEvWakeup, HandleOnWork);
         sFunc(TEvents::TEvPoison, PassAway);
         default:
             LOG_E("Unexpected " << EventStr("StateInit", ev));
@@ -216,6 +220,7 @@ STFUNC(TConsumerActor::StateWrite) {
         hFunc(TEvKeyValue::TEvResponse, HandleOnWrite);
         hFunc(TEvPQ::TEvProxyResponse, Handle);
         hFunc(TEvPQ::TEvError, Handle);
+        hFunc(TEvents::TEvWakeup, Handle);
         sFunc(TEvents::TEvPoison, PassAway);
         default:
             LOG_E("Unexpected " << EventStr("StateInit", ev));
@@ -445,9 +450,18 @@ void TConsumerActor::Handle(TEvPQ::TEvProxyResponse::TPtr& ev) {
 }
 
 void TConsumerActor::Handle(TEvPQ::TEvError::TPtr& ev) {
-    LOG_W("Received error: " << ev->Get()->Error);
+    Restart(TStringBuilder() << "Received error: " << ev->Get()->Error);
 }
 
+void TConsumerActor::HandleOnWork(TEvents::TEvWakeup::TPtr&) {
+    FetchMessagesIfNeeded();
+    ProcessEventQueue();
+    Schedule(WakeupInterval, new TEvents::TEvWakeup());
+}
+
+void TConsumerActor::Handle(TEvents::TEvWakeup::TPtr&) {
+    Schedule(WakeupInterval, new TEvents::TEvWakeup());
+}
 
 NActors::IActor* CreateConsumerActor(
     ui64 tabletId,

@@ -144,6 +144,24 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
         auto response = GetReadResonse(runtime);
         UNIT_ASSERT_VALUES_EQUAL(response.GetMessage().size(), 0);
     }
+
+    Y_UNIT_TEST(TopicWithData) {
+        auto setup = CreateSetup();
+
+        CreateTopic(setup, "/Root/topic1", "mlp-consumer");
+        setup->Write("/Root/topic1", "msg-1", 0);
+
+        auto& runtime = setup->GetRuntime();
+        CreateActor(runtime, {
+            .DatabasePath = "/Root",
+            .TopicName = "/Root/topic1",
+            .Consumer = "mlp-consumer",
+            .WaitTime = TDuration::Seconds(3)
+        });
+
+        auto response = GetReadResonse(runtime);
+        UNIT_ASSERT_VALUES_EQUAL(response.GetMessage().size(), 1);
+    }
 }
 
 } // namespace NKikimr::NPQ::NMLP

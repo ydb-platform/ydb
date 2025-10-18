@@ -59,8 +59,8 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
 
     void CreateActor(NActors::TTestActorRuntime& runtime, TReaderSetting&& settings) {
         auto edgeId = runtime.AllocateEdgeActor();
-        auto describerId = runtime.Register(CreateReader(edgeId, std::move(settings)));
-        runtime.EnableScheduleForActor(describerId);
+        auto readerId = runtime.Register(CreateReader(edgeId, std::move(settings)));
+        runtime.EnableScheduleForActor(readerId);
         runtime.DispatchEvents();
     }
 

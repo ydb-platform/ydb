@@ -156,6 +156,7 @@ STFUNC(TConsumerActor::StateInit) {
         hFunc(TEvPersQueue::TEvMLPChangeMessageDeadlineRequest, Queue);
         hFunc(TEvKeyValue::TEvResponse, HandleOnInit);
         hFunc(TEvPQ::TEvProxyResponse, HandleOnInit);
+        hFunc(TEvPQ::TEvError, Handle);
         sFunc(TEvents::TEvPoison, PassAway);
         default:
             LOG_E("Unexpected " << EventStr("StateInit", ev));
@@ -199,6 +200,7 @@ STFUNC(TConsumerActor::StateWork) {
         hFunc(TEvPersQueue::TEvMLPUnlockRequest, Handle);
         hFunc(TEvPersQueue::TEvMLPChangeMessageDeadlineRequest, Handle);
         hFunc(TEvPQ::TEvProxyResponse, Handle);
+        hFunc(TEvPQ::TEvError, Handle);
         sFunc(TEvents::TEvPoison, PassAway);
         default:
             LOG_E("Unexpected " << EventStr("StateInit", ev));
@@ -213,6 +215,7 @@ STFUNC(TConsumerActor::StateWrite) {
         hFunc(TEvPersQueue::TEvMLPChangeMessageDeadlineRequest, Queue);
         hFunc(TEvKeyValue::TEvResponse, HandleOnWrite);
         hFunc(TEvPQ::TEvProxyResponse, Handle);
+        hFunc(TEvPQ::TEvError, Handle);
         sFunc(TEvents::TEvPoison, PassAway);
         default:
             LOG_E("Unexpected " << EventStr("StateInit", ev));
@@ -299,9 +302,11 @@ void TConsumerActor::ProcessEventQueue() {
 
         if (messages.empty() && ev->Get()->GetWaitTime() == TDuration::Zero()) {
             // Optimization: do not need to upload the message body.
+            LOG_D("Reply empty result: sender=" << ev->Sender.ToString() << " cookie=" << ev->Cookie);
             Send(ev->Sender, new TEvPersQueue::TEvMLPReadResponse(), 0, ev->Cookie);
+            ReadRequestsQueue.pop_front();
             continue;
-        } else {
+        } else if (messages.empty()) {
             break; // TODO перекладываеть очереди
         }
 
@@ -313,7 +318,7 @@ void TConsumerActor::ProcessEventQueue() {
         LOG_D("Batch is empty");
 
         Batch.reset();
-        FetchMessagesIfNeeded();
+        //FetchMessagesIfNeeded();
         return;
     }
 
@@ -343,7 +348,7 @@ void TConsumerActor::PersistSnapshot() {
 }
 
 namespace {
-std::unique_ptr<TEvPQ::TEvRead> MakeEvRead(const TString& consumerName, ui64 startOffset, ui64 count, ui64 cookie, TMaybe<ui64> nextPartNo = Nothing()) {
+std::unique_ptr<TEvPQ::TEvRead> MakeEvRead(const TActorId& selfId, const TString& consumerName, ui64 startOffset, ui64 count, ui64 cookie, TMaybe<ui64> nextPartNo = Nothing()) {
     return std::make_unique<TEvPQ::TEvRead>(
         cookie,
         startOffset,
@@ -358,7 +363,8 @@ std::unique_ptr<TEvPQ::TEvRead> MakeEvRead(const TString& consumerName, ui64 sta
         0,
         "unknown",
         false,
-        TActorId{}
+        TActorId{},
+        selfId
     );
 }
 
@@ -393,8 +399,8 @@ bool TConsumerActor::FetchMessagesIfNeeded() {
     if (metrics.InflyMessageCount < 1000) {
         maxMessages = std::max(maxMessages, 1000ul - metrics.InflyMessageCount);
     }
-    LOG_D("Fetch " << maxMessages << " messages from " << PartitionActorId);
-    Send(PartitionActorId, MakeEvRead(Config.GetName(), Storage->GetLastOffset(), maxMessages, ++FetchCookie));
+    LOG_D("Fetch " << maxMessages << " messages from offset " << Storage->GetLastOffset() << " from " << PartitionActorId);
+    Send(PartitionActorId, MakeEvRead(SelfId(), Config.GetName(), Storage->GetLastOffset(), maxMessages, ++FetchCookie));
 
     return true;
 }
@@ -409,7 +415,7 @@ void TConsumerActor::Handle(TEvPQ::TEvProxyResponse::TPtr& ev) {
     LOG_D("Handle TEvPQ::TEvProxyResponse");
     if (FetchCookie != ev->Cookie) {
         LOG_D("Cookie mismatch: " << FetchCookie << " != " << ev->Cookie);
-        return;
+        //return;
     }
 
     FetchInProgress = false;
@@ -436,6 +442,10 @@ void TConsumerActor::Handle(TEvPQ::TEvProxyResponse::TPtr& ev) {
     }
 
     ProcessEventQueue();
+}
+
+void TConsumerActor::Handle(TEvPQ::TEvError::TPtr& ev) {
+    LOG_W("Received error: " << ev->Get()->Error);
 }
 
 

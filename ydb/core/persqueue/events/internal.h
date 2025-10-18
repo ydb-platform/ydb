@@ -270,7 +270,7 @@ struct TEvPQ {
         TEvRead(const ui64 cookie, const ui64 offset, ui64 lastOffset, const ui16 partNo, const ui32 count,
                 const TString& sessionId, const TString& clientId, const ui32 timeout, const ui32 size,
                 const ui32 maxTimeLagMs, const ui64 readTimestampMs, const TString& clientDC,
-                bool externalOperation, const TActorId& pipeClient)
+                bool externalOperation, const TActorId& pipeClient, const TActorId& replyTo = {})
             : Cookie(cookie)
             , Offset(offset)
             , PartNo(partNo)
@@ -286,6 +286,7 @@ struct TEvPQ {
             , PipeClient(pipeClient)
             , LastOffset(lastOffset)
             , IsInternal(false)
+            , ReplyTo(replyTo)
         {}
 
         ui64 Cookie;
@@ -303,6 +304,7 @@ struct TEvPQ {
         TActorId PipeClient;
         ui64 LastOffset;
         bool IsInternal;
+        TActorId ReplyTo;
     };
 
     struct TMessageGroup {

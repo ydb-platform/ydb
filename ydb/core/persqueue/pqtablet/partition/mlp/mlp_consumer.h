@@ -42,8 +42,9 @@ private:
     void HandleOnInit(TEvKeyValue::TEvResponse::TPtr&);
     void HandleOnWrite(TEvKeyValue::TEvResponse::TPtr&);
 
-    void HandleOnInit(TEvPQ::TEvProxyResponse::TPtr& ev);
+    void HandleOnInit(TEvPQ::TEvProxyResponse::TPtr&);
     void Handle(TEvPQ::TEvProxyResponse::TPtr&);
+    void Handle(TEvPQ::TEvError::TPtr&);
 
     STFUNC(StateInit);
     STFUNC(StateWork);

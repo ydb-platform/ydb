@@ -30,11 +30,10 @@ struct TEvDqSpilling {
 
     struct TEvRead : public NActors::TEventLocal<TEvRead, TDqSpillingEvents::EvRead> {
         ui64 BlobId;
-        bool RemoveBlob;
         TMaybe<TDuration> Timeout;
 
-        TEvRead(ui64 blobId, bool removeBlob = false, TMaybe<TDuration> timeout = {})
-            : BlobId(blobId), RemoveBlob(removeBlob), Timeout(timeout) {}
+        TEvRead(ui64 blobId, TMaybe<TDuration> timeout = {})
+            : BlobId(blobId), Timeout(timeout) {}
     };
 
     struct TEvReadResult : public NActors::TEventLocal<TEvReadResult, TDqSpillingEvents::EvReadResult> {

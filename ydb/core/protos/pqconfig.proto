@@ -1262,7 +1262,7 @@ message TMLPMessageId {
 
 message TMLPMessageMeta {
     optional string MessageGroupId = 1;
-    optional uint64 SentTimestamp = 2;
+    optional uint64 SentTimestampMilliseconds = 2;
 };
 
 message TMLPMessage {

@@ -24,6 +24,7 @@ public:
     // Имеет смысл ограничить 100К сообщений на партицию. Надо больше - увеличивайте кол-во партиции.
     // В худшем случае на 100000 сообщений надо ~3MB памяти
     static constexpr size_t MaxMessages = 100000;
+    static constexpr size_t MinMessages = 1000;
 
     // Максимальное время блокировки сообщения (Message visibility timeout). (в SQS 12 часов).
     static constexpr size_t MaxDeadlineDelta = Max<ui16>();

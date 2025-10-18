@@ -1,7 +1,7 @@
 LIBRARY()
 
 SRCS(
-    mlp_batch.cpp
+    mlp_common.cpp
     mlp_consumer.cpp
     mlp_message_enricher.cpp
     mlp_storage.cpp

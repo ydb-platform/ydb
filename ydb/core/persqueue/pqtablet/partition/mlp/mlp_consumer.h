@@ -1,6 +1,7 @@
 #pragma once
 
 #include "mlp.h"
+#include "mlp_common.h"
 
 #include <ydb/core/keyvalue/keyvalue_events.h>
 #include <ydb/core/persqueue/events/global.h>
@@ -62,6 +63,8 @@ private:
     void ReadSnapshot();
     void PersistSnapshot();
 
+    void Commit();
+    
 private:
     const ui32 PartitionId;
     const TActorId PartitionActorId;
@@ -71,13 +74,16 @@ private:
     ui64 FetchCookie = 0;
 
     std::unique_ptr<TStorage> Storage;
-    std::unique_ptr<TBatch> Batch;
 
     std::deque<TEvPersQueue::TEvMLPReadRequest::TPtr> ReadRequestsQueue;
     std::deque<TEvPersQueue::TEvMLPCommitRequest::TPtr> CommitRequestsQueue;
     std::deque<TEvPersQueue::TEvMLPUnlockRequest::TPtr> UnlockRequestsQueue;
     std::deque<TEvPersQueue::TEvMLPChangeMessageDeadlineRequest::TPtr> ChangeMessageDeadlineRequestsQueue;
 
+    std::deque<TReadResult> PendingReadQueue;
+    std::deque<TResult> PendingCommitQueue;
+    std::deque<TResult> PendingUnlockQueue;
+    std::deque<TResult> PendingChangeMessageDeadlineQueue;
 };
 
 }

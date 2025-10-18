@@ -1,5 +1,5 @@
-#include "mlp_batch.h"
 #include "mlp_consumer.h"
+#include "mlp_message_enricher.h"
 #include "mlp_storage.h"
 
 #include <ydb/core/persqueue/common/key.h>
@@ -9,14 +9,37 @@ namespace NKikimr::NPQ::NMLP {
 
 namespace {
 
-template <typename TEv>
-TString EventStr(const char * func, const TEv& ev) {
-    return TStringBuilder() << func << " event# " << ev->GetTypeRewrite() << " (" << ev->GetTypeName() << ") "
-        << ", Sender " << ev->Sender.ToString() << ", Recipient " << ev->Recipient.ToString()
-        << ", Cookie: " << ev->Cookie;
+void ReplyError(const TActorIdentity selfActorId, const TActorId& sender, ui64 cookie, TString&& error) {
+    selfActorId.Send(sender, new TEvPersQueue::TEvMLPErrorResponse(NPersQueue::NErrorCode::EErrorCode::ERROR, std::move(error)), 0, cookie);
+}
+
+template<typename T>
+void ReplyErrorAll(const TActorIdentity selfActorId, std::deque<T>& queue) {
+    for (auto& ev : queue) {
+        ReplyError(selfActorId, ev->Sender, ev->Cookie, "Actor destroyed");
+    }
+    queue.clear();
+}
+
+template<typename T>
+void RollbackAll(const TActorIdentity selfActorId, std::deque<T>& queue) {
+    for (auto& ev : queue) {
+        ReplyError(selfActorId, ev.Sender, ev.Cookie, "Rollback");
+    }
+    queue.clear();
+}
+
+template<typename R, typename T>
+void ReplyOk(const TActorIdentity selfActorId, std::deque<T>& queue) {
+    for (auto& ev : queue) {
+        selfActorId.Send(ev.Sender, new R(), 0, ev.Cookie);
+    }
+    queue.clear();
 }
 
 }
+
+
 
 TString MakeSnapshotKey(ui32 partitionId, ui32 consumerId) {
     return TStringBuilder() << TKeyPrefix(TKeyPrefix::EType::TypeConsumerData, TPartitionId(partitionId)).ToString()
@@ -46,11 +69,15 @@ void TConsumerActor::Bootstrap() {
 void TConsumerActor::PassAway() {
     LOG_D("PassAway");
 
-    if (Batch) {
-        Batch->Rollback();
-    }
+    RollbackAll(SelfId(), PendingReadQueue);
+    RollbackAll(SelfId(), PendingCommitQueue);
+    RollbackAll(SelfId(), PendingUnlockQueue);
+    RollbackAll(SelfId(), PendingChangeMessageDeadlineQueue);
 
-    // TODO reply error for all mesages from queues
+    ReplyErrorAll(SelfId(), ReadRequestsQueue);
+    ReplyErrorAll(SelfId(), CommitRequestsQueue);
+    ReplyErrorAll(SelfId(), UnlockRequestsQueue);
+    ReplyErrorAll(SelfId(), ChangeMessageDeadlineRequestsQueue);
 
     TBase::PassAway();
 }
@@ -187,13 +214,22 @@ void TConsumerActor::HandleOnWrite(TEvKeyValue::TEvResponse::TPtr& ev) {
     LOG_D("Snapshot persisted");
     Become(&TConsumerActor::StateWork);
 
-    Batch->Commit();
-    Batch.reset();
+    if (!PendingReadQueue.empty()) {
+        auto msgs = std::exchange(PendingReadQueue, {});
+        RegisterWithSameMailbox(new TMessageEnricherActor(PartitionId, PartitionActorId, Config.GetName(), std::move(msgs))); // TODO excahnge
+    }
+    ReplyOk<TEvPersQueue::TEvMLPCommitResponse>(SelfId(), PendingCommitQueue);
+    ReplyOk<TEvPersQueue::TEvMLPUnlockResponse>(SelfId(), PendingUnlockQueue);
+    ReplyOk<TEvPersQueue::TEvMLPChangeMessageDeadlineResponse>(SelfId(), PendingChangeMessageDeadlineQueue);
 
     ProcessEventQueue();
     FetchMessagesIfNeeded();
 
     // TODO commit offset
+}
+
+void TConsumerActor::Commit() {
+
 }
 
 STFUNC(TConsumerActor::StateWork) {
@@ -207,7 +243,7 @@ STFUNC(TConsumerActor::StateWork) {
         hFunc(TEvents::TEvWakeup, HandleOnWork);
         sFunc(TEvents::TEvPoison, PassAway);
         default:
-            LOG_E("Unexpected " << EventStr("StateInit", ev));
+            LOG_E("Unexpected " << EventStr("StateWork", ev));
     }
 }
 
@@ -223,20 +259,8 @@ STFUNC(TConsumerActor::StateWrite) {
         hFunc(TEvents::TEvWakeup, Handle);
         sFunc(TEvents::TEvPoison, PassAway);
         default:
-            LOG_E("Unexpected " << EventStr("StateInit", ev));
+            LOG_E("Unexpected " << EventStr("StateWrite", ev));
     }
-}
-
-namespace {
-
-template<typename T>
-void ReplyErrorAll(const TActorIdentity selfActorId, std::deque<T>& queue) {
-    for (auto& ev : queue) {
-        selfActorId.Send(ev->Sender, new TEvPersQueue::TEvMLPErrorResponse(NPersQueue::NErrorCode::EErrorCode::ERROR, "Actor destroyed"), 0, ev->Cookie);
-    }
-    queue.clear();
-}
-
 }
 
 void TConsumerActor::Restart(TString&& error) {
@@ -255,15 +279,12 @@ void TConsumerActor::Restart(TString&& error) {
 void TConsumerActor::ProcessEventQueue() {
     LOG_D("ProcessEventQueue");
 
-    AFL_ENSURE(!Batch);
-    Batch = std::make_unique<TBatch>(SelfId(), PartitionActorId);
-
     for (auto& ev : CommitRequestsQueue) {
         for (auto offset : ev->Get()->Record.GetOffset()) {
             Storage->Commit(offset);
         }
 
-        Batch->Add(ev);
+        PendingCommitQueue.emplace_back(ev->Sender, ev->Cookie);
     }
     CommitRequestsQueue.clear();
 
@@ -272,7 +293,7 @@ void TConsumerActor::ProcessEventQueue() {
             Storage->Unlock(offset);
         }
 
-        Batch->Add(ev);
+        PendingUnlockQueue.emplace_back(ev->Sender, ev->Cookie);
     }
     UnlockRequestsQueue.clear();
 
@@ -282,7 +303,7 @@ void TConsumerActor::ProcessEventQueue() {
             Storage->ChangeMessageDeadline(offset, deadlineTimestamp);
         }
 
-        Batch->Add(ev);
+        PendingChangeMessageDeadlineQueue.emplace_back(ev->Sender, ev->Cookie);
     }
     ChangeMessageDeadlineRequestsQueue.clear();
 
@@ -293,8 +314,8 @@ void TConsumerActor::ProcessEventQueue() {
         size_t count = ev->Get()->GetMaxNumberOfMessages();
         const auto deadline = ev->Get()->GetVisibilityTimeout().ToDeadLine();
 
-        std::vector<TMessageId> messages;
-        messages.reserve(count);
+        std::deque<TMessageId> messages;
+        //messages.reserve(count);
         for (; count; --count) {
             auto result = Storage->Next(deadline, fromOffset);
             if (!result) {
@@ -312,18 +333,16 @@ void TConsumerActor::ProcessEventQueue() {
             ReadRequestsQueue.pop_front();
             continue;
         } else if (messages.empty()) {
-            break; // TODO перекладываеть очереди
+            break; // TODO перекладываеть очереди, 0, reply.Cookie
         }
 
-        Batch->Add(ev, std::move(messages));
+        PendingReadQueue.emplace_back(ev->Sender, ev->Cookie, std::move(messages));
         ReadRequestsQueue.pop_front();
     }
 
-    if (Batch->Empty()) {
+    if (PendingCommitQueue.empty() && PendingUnlockQueue.empty() &&
+        PendingChangeMessageDeadlineQueue.empty() && PendingReadQueue.empty()) {
         LOG_D("Batch is empty");
-
-        Batch.reset();
-        //FetchMessagesIfNeeded();
         return;
     }
 
@@ -352,34 +371,6 @@ void TConsumerActor::PersistSnapshot() {
     Send(TabletActorId, std::move(request));
 }
 
-namespace {
-std::unique_ptr<TEvPQ::TEvRead> MakeEvRead(const TActorId& selfId, const TString& consumerName, ui64 startOffset, ui64 count, ui64 cookie, TMaybe<ui64> nextPartNo = Nothing()) {
-    return std::make_unique<TEvPQ::TEvRead>(
-        cookie,
-        startOffset,
-        startOffset + count,
-        nextPartNo.GetOrElse(0),
-        count,
-        TString{},
-        consumerName,
-        1000,
-        std::numeric_limits<ui32>::max(),
-        0,
-        0,
-        "unknown",
-        false,
-        TActorId{},
-        selfId
-    );
-}
-
-bool IsSucess(const TEvPQ::TEvProxyResponse::TPtr& ev) {
-    return ev->Get()->Response->GetStatus() == NMsgBusProxy::MSTATUS_OK &&
-        ev->Get()->Response->GetErrorCode() == NPersQueue::NErrorCode::OK;
-}
-
-}
-
 bool TConsumerActor::FetchMessagesIfNeeded() {
     if (FetchInProgress) {
         return false;
@@ -390,7 +381,7 @@ bool TConsumerActor::FetchMessagesIfNeeded() {
         LOG_D("Skip fetch: infly limit exceeded");
         return false;
     }
-    if (metrics.InflyMessageCount >= 1000 && metrics.UnprocessedMessageCount >= metrics.LockedMessageCount * 2) {
+    if (metrics.InflyMessageCount >= TStorage::MinMessages && metrics.UnprocessedMessageCount >= metrics.LockedMessageCount * 2) {
         LOG_D("Skip fetch: there are enough messages. InflyMessageCount=" << metrics.InflyMessageCount
             << ", UnprocessedMessageCount=" << metrics.UnprocessedMessageCount
             << ", LockedMessageCount=" << metrics.LockedMessageCount);
@@ -401,10 +392,10 @@ bool TConsumerActor::FetchMessagesIfNeeded() {
 
     auto maxMessages = std::min(metrics.LockedMessageCount * 2 - metrics.UnprocessedMessageCount,
         TStorage::MaxMessages - metrics.InflyMessageCount);
-    if (metrics.InflyMessageCount < 1000) {
-        maxMessages = std::max(maxMessages, 1000ul - metrics.InflyMessageCount);
+    if (metrics.InflyMessageCount < TStorage::MinMessages) {
+        maxMessages = std::max(maxMessages, TStorage::MinMessages - metrics.InflyMessageCount);
     }
-    LOG_D("Fetch " << maxMessages << " messages from offset " << Storage->GetLastOffset() << " from " << PartitionActorId);
+    LOG_D("Fetching " << maxMessages << " messages from offset " << Storage->GetLastOffset() << " from " << PartitionActorId);
     Send(PartitionActorId, MakeEvRead(SelfId(), Config.GetName(), Storage->GetLastOffset(), maxMessages, ++FetchCookie));
 
     return true;

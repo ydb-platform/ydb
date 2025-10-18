@@ -23,6 +23,7 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
         setup->GetServer().EnableLogs({
                 NKikimrServices::PQ_MLP_READER,
                 NKikimrServices::PQ_MLP_CONSUMER,
+                NKikimrServices::PQ_MLP_ENRICHER,
                 NKikimrServices::PERSQUEUE,
                 NKikimrServices::PERSQUEUE_READ_BALANCER,
             },

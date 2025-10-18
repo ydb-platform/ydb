@@ -110,7 +110,6 @@ void TReadMetadata::DoOnBeforeStartReading(NColumnShard::TColumnShard& owner) co
     }
     auto evWriter = std::make_shared<NOlap::NTxInteractions::TEvReadStartWriter>(TableMetadataAccessor->GetPathIdVerified(),
         GetResultSchema()->GetIndexInfo().GetPrimaryKey(), GetPKRangesFilterPtr(), GetMaybeConflictingLockIds());
-    // AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("opca", "DoOnBeforeStartReading")("lock_id", *LockId)("conflictable_lock_ids", JoinSeq(", ", GetMaybeConflictableLockIds()));
     owner.GetOperationsManager().AddEventForLock(owner, *LockId, evWriter);
 }
 

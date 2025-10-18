@@ -22,8 +22,8 @@ public:
     using TProto = NKikimrColumnShardTxProto::TEvent;
 
 protected:
-    virtual void DoAddToInteraction(const ui64 txId, TInteractionsContext& context) const = 0;
-    virtual void DoRemoveFromInteraction(const ui64 txId, TInteractionsContext& context) const = 0;
+    virtual void DoAddToInteraction(const ui64 lockId, TInteractionsContext& context) const = 0;
+    virtual void DoRemoveFromInteraction(const ui64 lockId, TInteractionsContext& context) const = 0;
     virtual bool DoDeserializeFromProto(const NKikimrColumnShardTxProto::TEvent& proto) = 0;
     virtual void DoSerializeToProto(NKikimrColumnShardTxProto::TEvent& proto) const = 0;
 

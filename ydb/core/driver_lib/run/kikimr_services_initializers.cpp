@@ -1527,6 +1527,9 @@ void TBootstrapperInitializer::InitializeServices(
                         bi->WatchThreshold = TDuration::MilliSeconds(boot.GetWatchThreshold());
                     if (boot.HasStartFollowers())
                         bi->StartFollowers = boot.GetStartFollowers();
+                    if (boot.HasBootMode()) {
+                        info->BootMode = BootModeFromProto(boot.GetBootMode());
+                    }
 
                     setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(
                         MakeBootstrapperID(info->TabletID, NodeId),

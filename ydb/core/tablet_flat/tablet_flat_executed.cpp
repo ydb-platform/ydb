@@ -272,6 +272,9 @@ void TTabletExecutedFlat::RenderHtmlPage(NMon::TEvRemoteHttpInfo::TPtr &ev, cons
             DIV_CLASS("row") {
                 DIV_CLASS("col-md-12") { str << "Tenant id: " << Info()->TenantPathId; }
             }
+            DIV_CLASS("row") {
+                DIV_CLASS("col-md-12") { str << "Boot mode: " << Info()->BootMode; }
+            }
 
             if (OnRenderAppHtmlPage(nullptr, ctx)) {
                 DIV_CLASS("row") {

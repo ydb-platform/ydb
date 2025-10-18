@@ -30,10 +30,6 @@ void TMessageEnricherActor::PassAway() {
     TBase::PassAway();
 }
 
-TString TMessageEnricherActor::BuildLogPrefix() const {
-    return TStringBuilder() << "[" << SelfId() << "] ";
-}
-
 void TMessageEnricherActor::Handle(TEvPQ::TEvProxyResponse::TPtr& ev) {
     LOG_D("Handle TEvPQ::TEvProxyResponse");
     if (Cookie != ev->Cookie) {

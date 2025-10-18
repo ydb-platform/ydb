@@ -433,14 +433,6 @@ namespace NKikimr::TEvPersQueue {
     //
     struct TEvMLPReadResponse : TEventPB<TEvMLPReadResponse, NKikimrPQ::TEvMLPReadResponse, EvMLPReadResponse> {
         TEvMLPReadResponse() = default;
-
-        TEvMLPReadResponse(NPersQueue::NErrorCode::EErrorCode errorCode) {
-            Record.SetErrorCode(errorCode);
-        }
-
-        NPersQueue::NErrorCode::EErrorCode GetErrorCode() const {
-            return Record.GetErrorCode();
-        }
     };
 
     //
@@ -477,10 +469,6 @@ namespace NKikimr::TEvPersQueue {
     //
     struct TEvMLPCommitResponse : TEventPB<TEvMLPCommitResponse, NKikimrPQ::TEvMLPCommitResponse, EvMLPCommitResponse> {
         TEvMLPCommitResponse() = default;
-
-        TEvMLPCommitResponse(NPersQueue::NErrorCode::EErrorCode errorCode) {
-            Record.SetErrorCode(errorCode);
-        }
     };
 
     //
@@ -517,10 +505,6 @@ namespace NKikimr::TEvPersQueue {
     //
     struct TEvMLPUnlockResponse : TEventPB<TEvMLPUnlockResponse, NKikimrPQ::TEvMLPUnlockResponse, EvMLPUnlockResponse> {
         TEvMLPUnlockResponse() = default;
-
-        TEvMLPUnlockResponse(NPersQueue::NErrorCode::EErrorCode errorCode) {
-            Record.SetErrorCode(errorCode);
-        }
     };
 
     //
@@ -558,10 +542,6 @@ namespace NKikimr::TEvPersQueue {
     //
     struct TEvMLPChangeMessageDeadlineResponse : TEventPB<TEvMLPChangeMessageDeadlineResponse, NKikimrPQ::TEvMLPChangeMessageDeadlineResponse, EvMLPChangeMessageDeadlineResponse> {
         TEvMLPChangeMessageDeadlineResponse() = default;
-
-        TEvMLPChangeMessageDeadlineResponse(NPersQueue::NErrorCode::EErrorCode errorCode) {
-            Record.SetErrorCode(errorCode);
-        }
     };
 
 } // namespace NKikimr::TEvPersQueue

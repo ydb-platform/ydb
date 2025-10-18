@@ -1302,8 +1302,7 @@ message TEvMLPReadRequest {
 
 // From PQTablet
 message TEvMLPReadResponse {
-    optional NPersQueue.NErrorCode.EErrorCode ErrorCode = 1;
-    repeated TMLPMessage Message = 2;
+    repeated TMLPMessage Message = 1;
 }
 
 // To PQTablet
@@ -1317,7 +1316,6 @@ message TEvMLPCommitRequest {
 
 // From PQTablet
 message TEvMLPCommitResponse {
-    optional NPersQueue.NErrorCode.EErrorCode ErrorCode = 1;
 }
 
 // To PQTablet
@@ -1331,7 +1329,6 @@ message TEvMLPUnlockRequest {
 
 // From PQTablet
 message TEvMLPUnlockResponse {
-    optional NPersQueue.NErrorCode.EErrorCode ErrorCode = 1;
 }
 
 // To PQTablet
@@ -1346,7 +1343,6 @@ message TEvMLPChangeMessageDeadlineRequest {
 
 // From PQTablet
 message TEvMLPChangeMessageDeadlineResponse {
-    optional NPersQueue.NErrorCode.EErrorCode ErrorCode = 1;
 }
 
 message TMLPStorageSnapshot {

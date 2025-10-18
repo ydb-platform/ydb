@@ -99,7 +99,10 @@ protected:
 class TConstantLogPrefix: virtual NPrivate::ILogPrefixBase {
 public:
     const TString& GetLogPrefix() const final;
-    virtual TString BuildLogPrefix() const = 0;
+    virtual TString BuildLogPrefix() const {
+        return " ";
+    }
+
 private:
     mutable TMaybe<TString> LogPrefix_;
 };

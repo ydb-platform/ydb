@@ -15,11 +15,13 @@ class TMessageEnricherActor : public TBaseActor<TMessageEnricherActor>
     static constexpr TDuration Timeout = TDuration::Seconds(1);
 
 public:
-    TMessageEnricherActor(const ui32 partitionId, const TActorId& partitionActor, const TString& consumerName, std::deque<TReadResult>&& replies);
+    TMessageEnricherActor(const ui32 partitionId,
+                          const TActorId& partitionActor,
+                          const TString& consumerName,
+                          std::deque<TReadResult>&& replies);
 
     void Bootstrap();
     void PassAway() override;
-    TString BuildLogPrefix() const override;
 
 private:
     void Handle(TEvPQ::TEvProxyResponse::TPtr&);

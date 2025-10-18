@@ -48,7 +48,25 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
         UNIT_ASSERT_VALUES_EQUAL(ev->GetErrorMessage(), message);
     }
 
-    Y_UNIT_TEST(ReadWithoutConsumer) {
+    Y_UNIT_TEST(TopicNotExistsConsumer) {
+        auto setup = std::make_shared<TTopicSdkTestSetup>(TEST_CASE_NAME);
+        setup->GetServer().EnableLogs(
+                { NKikimrServices::PQ_MLP_READER, NKikimrServices::PQ_MLP_CONSUMER },
+                NActors::NLog::PRI_DEBUG
+        );
+        
+        auto& runtime = setup->GetRuntime();
+        CreateActor(runtime, {
+            .DatabasePath = "/Root",
+            .TopicName = "/Root/topic_not_exists",
+            .Consumer = "consumer_not_exists"
+        });
+
+        AssertError(runtime, ::NPersQueue::NErrorCode::EErrorCode::SCHEMA_ERROR,
+            "You do not have access or the '/Root/topic_not_exists' does not exist");
+    }
+
+    Y_UNIT_TEST(TopicWithoutConsumer) {
         auto setup = std::make_shared<TTopicSdkTestSetup>(TEST_CASE_NAME);
         setup->GetServer().EnableLogs(
                 { NKikimrServices::PQ_MLP_READER, NKikimrServices::PQ_MLP_CONSUMER },
@@ -64,7 +82,8 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
             .Consumer = "consumer_not_exists"
         });
 
-        AssertError(runtime, ::NPersQueue::NErrorCode::EErrorCode::SCHEMA_ERROR, "Consumer 'consumer_not_exists' not found");
+        AssertError(runtime, ::NPersQueue::NErrorCode::EErrorCode::SCHEMA_ERROR,
+            "Consumer 'consumer_not_exists' not found");
     }
 }
 

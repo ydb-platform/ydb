@@ -42,6 +42,7 @@ private:
     void HandleOnInit(TEvKeyValue::TEvResponse::TPtr&);
     void HandleOnWrite(TEvKeyValue::TEvResponse::TPtr&);
 
+    void HandleOnInit(TEvPQ::TEvProxyResponse::TPtr& ev);
     void Handle(TEvPQ::TEvProxyResponse::TPtr&);
 
     STFUNC(StateInit);
@@ -51,7 +52,7 @@ private:
     void Restart(TString&& error);
 
     void ProcessEventQueue();
-    void FetchMessagesIfNeeded();
+    bool FetchMessagesIfNeeded();
     void ReadSnapshot();
     void PersistSnapshot();
 

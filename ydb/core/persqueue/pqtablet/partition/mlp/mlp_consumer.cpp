@@ -139,11 +139,13 @@ void TConsumerActor::HandleOnInit(TEvKeyValue::TEvResponse::TPtr& ev) {
             return Restart(TStringBuilder() << "Received KV response error on initialization: " << readResult.GetStatus());
     }
 
-    LOG_D("Initialized");
-    Become(&TConsumerActor::StateWork);
 
     Storage->ProccessDeadlines();
-    ProcessEventQueue();
+    if (!FetchMessagesIfNeeded()) {
+        LOG_D("Initialized");
+        Become(&TConsumerActor::StateWork);
+        ProcessEventQueue();
+    }
 }
 
 STFUNC(TConsumerActor::StateInit) {
@@ -153,6 +155,7 @@ STFUNC(TConsumerActor::StateInit) {
         hFunc(TEvPersQueue::TEvMLPUnlockRequest, Queue);
         hFunc(TEvPersQueue::TEvMLPChangeMessageDeadlineRequest, Queue);
         hFunc(TEvKeyValue::TEvResponse, HandleOnInit);
+        hFunc(TEvPQ::TEvProxyResponse, HandleOnInit);
         sFunc(TEvents::TEvPoison, PassAway);
         default:
             LOG_E("Unexpected " << EventStr("StateInit", ev));
@@ -165,20 +168,23 @@ void TConsumerActor::HandleOnWrite(TEvKeyValue::TEvResponse::TPtr& ev) {
     auto& record = ev->Get()->Record;
 
     if (record.GetStatus() != NMsgBusProxy::MSTATUS_OK) {
-        return Restart(TStringBuilder() << "Received KV error on write: " << record.GetStatus());
+        return Restart(TStringBuilder() << "Received KV error on write: " << record.GetStatus()
+            << " " << record.GetErrorReason());
     }
-    if (record.ReadResultSize() != 1) {
-        return Restart(TStringBuilder() << "Unexpected KV response on write: " << record.ReadResultSize());
+    if (record.WriteResultSize() != 1) {
+        return Restart(TStringBuilder() << "Unexpected KV response on write: " << record.WriteResultSize());
     }
 
-    auto& readResult = record.GetReadResult(0);
-    if (readResult.GetStatus() != NKikimrProto::OK) {
-        return Restart(TStringBuilder() << "Received KV response error on write: " << readResult.GetStatus());
+    auto& writeResult = record.GetWriteResult(0);
+    if (writeResult.GetStatus() != NKikimrProto::OK) {
+        return Restart(TStringBuilder() << "Received KV response error on write: " << writeResult.GetStatus());
     }
-    AFL_ENSURE(readResult.HasValue() && readResult.GetValue().size());
 
     LOG_D("Snapshot persisted");
     Become(&TConsumerActor::StateWork);
+
+    Batch->Commit();
+    Batch.reset();
 
     ProcessEventQueue();
     FetchMessagesIfNeeded();
@@ -192,6 +198,7 @@ STFUNC(TConsumerActor::StateWork) {
         hFunc(TEvPersQueue::TEvMLPCommitRequest, Handle);
         hFunc(TEvPersQueue::TEvMLPUnlockRequest, Handle);
         hFunc(TEvPersQueue::TEvMLPChangeMessageDeadlineRequest, Handle);
+        hFunc(TEvPQ::TEvProxyResponse, Handle);
         sFunc(TEvents::TEvPoison, PassAway);
         default:
             LOG_E("Unexpected " << EventStr("StateInit", ev));
@@ -205,6 +212,7 @@ STFUNC(TConsumerActor::StateWrite) {
         hFunc(TEvPersQueue::TEvMLPUnlockRequest, Queue);
         hFunc(TEvPersQueue::TEvMLPChangeMessageDeadlineRequest, Queue);
         hFunc(TEvKeyValue::TEvResponse, HandleOnWrite);
+        hFunc(TEvPQ::TEvProxyResponse, Handle);
         sFunc(TEvents::TEvPoison, PassAway);
         default:
             LOG_E("Unexpected " << EventStr("StateInit", ev));
@@ -323,8 +331,9 @@ void TConsumerActor::PersistSnapshot() {
     Storage->CreateSnapshot(snapshot);
 
     auto request = std::make_unique<TEvKeyValue::TEvRequest>();
-    request->Record.AddCmdWrite()->SetKey(MakeSnapshotKey(PartitionId, Config.GetId()));
-    request->Record.AddCmdWrite()->SetValue(snapshot.SerializeAsString());
+    auto* write = request->Record.AddCmdWrite();
+    write->SetKey(MakeSnapshotKey(PartitionId, Config.GetId()));
+    write->SetValue(snapshot.SerializeAsString());
 
     Send(TabletActorId, std::move(request));
 }
@@ -356,30 +365,40 @@ bool IsSucess(const TEvPQ::TEvProxyResponse::TPtr& ev) {
 
 }
 
-void TConsumerActor::FetchMessagesIfNeeded() {
+bool TConsumerActor::FetchMessagesIfNeeded() {
     if (FetchInProgress) {
-        return;
+        return false;
     }
 
     auto& metrics = Storage->GetMetrics();
     if (metrics.InflyMessageCount >= TStorage::MaxMessages) {
         LOG_D("Skip fetch: infly limit exceeded");
-        return;
+        return false;
     }
     if (metrics.InflyMessageCount >= 1000 && metrics.UnprocessedMessageCount >= metrics.LockedMessageCount * 2) {
         LOG_D("Skip fetch: there are enough messages. InflyMessageCount=" << metrics.InflyMessageCount
             << ", UnprocessedMessageCount=" << metrics.UnprocessedMessageCount
             << ", LockedMessageCount=" << metrics.LockedMessageCount);
-        return;
+        return false;
     }
 
     FetchInProgress = true;
 
     auto maxMessages = std::min(metrics.LockedMessageCount * 2 - metrics.UnprocessedMessageCount,
         TStorage::MaxMessages - metrics.InflyMessageCount);
+    if (metrics.InflyMessageCount < 1000) {
+        maxMessages = std::max(maxMessages, 1000ul - metrics.InflyMessageCount);
+    }
     LOG_D("Fetch " << maxMessages << " messages");
     Send(PartitionActorId, MakeEvRead(Config.GetName(), Storage->GetLastOffset(), maxMessages, ++FetchCookie));
-    //Send(PartitionActorId, new TEvPQ::TEvMLPFetchMessagesRequest(Storage->GetLastOffset(), maxMessages));
+
+    return true;
+}
+
+void TConsumerActor::HandleOnInit(TEvPQ::TEvProxyResponse::TPtr& ev) {
+    LOG_D("Initialized");
+    Become(&TConsumerActor::StateWork);
+    Handle(ev);
 }
 
 void TConsumerActor::Handle(TEvPQ::TEvProxyResponse::TPtr& ev) {

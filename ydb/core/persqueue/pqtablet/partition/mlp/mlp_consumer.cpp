@@ -348,7 +348,7 @@ std::unique_ptr<TEvPQ::TEvRead> MakeEvRead(const TString& consumerName, ui64 sta
         count,
         TString{},
         consumerName,
-        TDuration::Seconds(1).Seconds(),
+        0,
         std::numeric_limits<ui32>::max(),
         0,
         0,

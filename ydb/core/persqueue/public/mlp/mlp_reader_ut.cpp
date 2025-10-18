@@ -69,10 +69,34 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
     }
 
     void AssertError(NActors::TTestActorRuntime& runtime, ::NPersQueue::NErrorCode::EErrorCode errorCode, const TString& message, TDuration timeout = TDuration::Seconds(5)) {
-        auto ev = runtime.GrabEdgeEvent<TEvPersQueue::TEvMLPErrorResponse>(timeout);
-        UNIT_ASSERT_VALUES_EQUAL_C(::NPersQueue::NErrorCode::EErrorCode_Name(ev->GetErrorCode()),
-            ::NPersQueue::NErrorCode::EErrorCode_Name(errorCode), ev->GetErrorMessage());
-        UNIT_ASSERT_VALUES_EQUAL(ev->GetErrorMessage(), message);
+        TAutoPtr<IEventHandle> handle;
+        auto [error, read] = runtime.GrabEdgeEvents<TEvPersQueue::TEvMLPErrorResponse, TEvPersQueue::TEvMLPReadResponse>(handle,timeout);
+
+        if (error) {
+            UNIT_ASSERT_VALUES_EQUAL_C(::NPersQueue::NErrorCode::EErrorCode_Name(error->GetErrorCode()),
+                ::NPersQueue::NErrorCode::EErrorCode_Name(errorCode), error->GetErrorMessage());
+            UNIT_ASSERT_VALUES_EQUAL(error->GetErrorMessage(), message);
+        } else if (read) {
+            UNIT_FAIL("Unexpected read result");
+        } else {
+            UNIT_FAIL("Timeout");
+        }
+    }
+
+    NKikimrPQ::TEvMLPReadResponse GetReadResonse(NActors::TTestActorRuntime& runtime, TDuration timeout = TDuration::Seconds(5)) {
+        TAutoPtr<IEventHandle> handle;
+        auto [error, read] = runtime.GrabEdgeEvents<TEvPersQueue::TEvMLPErrorResponse, TEvPersQueue::TEvMLPReadResponse>(handle,timeout);
+
+        if (error) {
+            UNIT_FAIL("Unexpected error: " << ::NPersQueue::NErrorCode::EErrorCode_Name(error->GetErrorCode())
+                << " " << error->GetErrorMessage());
+        } else if (read) {
+            return read->Record;
+        } else {
+            UNIT_FAIL("Timeout");
+        }
+
+        return {};
     }
 
     Y_UNIT_TEST(TopicNotExistsConsumer) {
@@ -117,8 +141,8 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
             .Consumer = "mlp-consumer"
         });
 
-        AssertError(runtime, ::NPersQueue::NErrorCode::EErrorCode::SCHEMA_ERROR,
-            "Consumer 'consumer_not_exists' not found");
+        auto response = GetReadResonse(runtime);
+        UNIT_ASSERT_VALUES_EQUAL(response.GetMessage().size(), 0);
     }
 }
 

@@ -1,4 +1,5 @@
 Init tables ...
+
 --!syntax_v1
 
 CREATE TABLE `/Root/db/clickbench/s1` (

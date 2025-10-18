@@ -45,6 +45,7 @@ std::pair<NThreading::TFuture<TEndpointUpdateResult>, bool> TEndpointPool::Updat
             // Is used to convert float to integer load factor
             // same integer values will be selected randomly.
             const float multiplicator = 10.0;
+            std::string selfLocation = result.Result.self_location();
             std::unordered_map<std::string, Ydb::Bridge::PileState> pileStates;
             for (const auto& pile : result.Result.pile_states()) {
                 pileStates[pile.pile_name()] = pile;
@@ -53,7 +54,7 @@ std::pair<NThreading::TFuture<TEndpointUpdateResult>, bool> TEndpointPool::Updat
             for (const auto& endpoint : result.Result.endpoints()) {
                 std::int32_t loadFactor = static_cast<std::int32_t>(multiplicator * std::min(LoadMax, std::max(LoadMin, endpoint.load_factor())));
                 std::uint64_t nodeId = endpoint.node_id();
-                if (!IsLocalEndpoint(endpoint, pileStates)) {
+                if (!IsPreferredEndpoint(endpoint, selfLocation, pileStates)) {
                     // Location mismatch, shift this endpoint
                     loadFactor += GetLocalityShift();
                 }
@@ -173,13 +174,14 @@ constexpr std::int32_t TEndpointPool::GetLocalityShift() {
     return LoadMax * Multiplicator;
 }
 
-bool TEndpointPool::IsLocalEndpoint(const Ydb::Discovery::EndpointInfo& endpoint,
-                                    const std::unordered_map<std::string, Ydb::Bridge::PileState>& pileStates) const {
+bool TEndpointPool::IsPreferredEndpoint(const Ydb::Discovery::EndpointInfo& endpoint,
+                                        const std::string& selfLocation,
+                                        const std::unordered_map<std::string, Ydb::Bridge::PileState>& pileStates) const {
     switch (BalancingPolicy_.PolicyType) {
         case TBalancingPolicy::TImpl::EPolicyType::UseAllNodes:
             return true;
         case TBalancingPolicy::TImpl::EPolicyType::UsePreferableLocation:
-            return endpoint.location() == BalancingPolicy_.Location;
+            return endpoint.location() == BalancingPolicy_.Location.value_or(selfLocation);
         case TBalancingPolicy::TImpl::EPolicyType::UsePreferablePileState:
             if (auto it = pileStates.find(endpoint.bridge_pile_name()); it != pileStates.end()) {
                 return GetPileState(it->second.state()) == BalancingPolicy_.PileState;

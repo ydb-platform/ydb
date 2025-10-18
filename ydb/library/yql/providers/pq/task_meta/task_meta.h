@@ -1,9 +1,18 @@
 #pragma once
+
 #include <google/protobuf/any.pb.h>
 
 #include <util/generic/maybe.h>
 
-namespace NYql::NPq {
+namespace NYql {
+
+namespace NDqProto {
+
+class TDqTask;
+
+} // namespace NDqProto
+
+namespace NPq {
 
 // Partitioning parameters for topic
 struct TTopicPartitionsSet {
@@ -18,4 +27,8 @@ struct TTopicPartitionsSet {
 
 TMaybe<TTopicPartitionsSet> GetTopicPartitionsSet(const google::protobuf::Any& dqTaskMeta);
 
-} // namespace NYql::NPq
+std::vector<TTopicPartitionsSet> GetTopicPartitionsSets(const NDqProto::TDqTask& dqTask);
+
+} // namespace NPq
+
+} // namespace NYql

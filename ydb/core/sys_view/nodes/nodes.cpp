@@ -26,9 +26,9 @@ public:
     }
 
     TNodesScan(const NActors::TActorId& ownerId, ui32 scanId,
-        const NKikimrSysView::TSysViewDescription& sysViewInfo,
+        const TString& database, const NKikimrSysView::TSysViewDescription& sysViewInfo,
         const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
-        : TBase(ownerId, scanId, sysViewInfo, tableRange, columns)
+        : TBase(ownerId, scanId, database, sysViewInfo, tableRange, columns)
     {
         const auto& cellsFrom = TableRange.From.GetCells();
         if (cellsFrom.size() == 1 && !cellsFrom[0].IsNull()) {
@@ -265,10 +265,10 @@ private:
 };
 
 THolder<NActors::IActor> CreateNodesScan(const NActors::TActorId& ownerId, ui32 scanId,
-    const NKikimrSysView::TSysViewDescription& sysViewInfo,
+    const TString& database, const NKikimrSysView::TSysViewDescription& sysViewInfo,
     const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
 {
-    return MakeHolder<TNodesScan>(ownerId, scanId, sysViewInfo, tableRange, columns);
+    return MakeHolder<TNodesScan>(ownerId, scanId, database, sysViewInfo, tableRange, columns);
 }
 
 } // NSysView

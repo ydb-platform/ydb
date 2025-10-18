@@ -2239,6 +2239,8 @@ message TReqPartitionTables
 
     optional bool enable_cookies = 10;
 
+    optional bool omit_inaccessible_rows = 13;
+
     optional TTransactionalOptions transactional_options = 100;
 
     reserved 11, 12;

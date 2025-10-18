@@ -13,7 +13,6 @@ from .utils import (
     build_build_backup_lockfile_path,
     build_pre_lockfile_path,
     build_ws_config_path,
-    build_pnpm_store_path,
 )
 from .pnpm_workspace import PnpmWorkspace
 from ..base import BasePackageManager, PackageManagerError
@@ -26,7 +25,7 @@ from ..base.utils import (
     build_nm_path,
     build_nm_store_path,
     build_pj_path,
-    init_nots_path,
+    build_pnpm_store_path,
     s_rooted,
 )
 
@@ -154,9 +153,9 @@ class PnpmPackageManager(BasePackageManager):
         """
         return cls.load_lockfile(build_lockfile_path(dir_path))
 
-    @staticmethod
-    def get_pnpm_store():
-        return build_pnpm_store_path()
+    @timeit
+    def _get_pnpm_store(self):
+        return build_pnpm_store_path(self.build_root)
 
     @timeit
     def _get_file_hash(self, path: str):
@@ -174,14 +173,12 @@ class PnpmPackageManager(BasePackageManager):
         """
         Creates node_modules directory according to the lockfile.
         """
-        init_nots_path(self.build_root, local_cli)
-
         ws = self._prepare_workspace(local_cli)
 
         self._copy_pnpm_patches()
 
         # Pure `tier 0` logic - isolated stores in the `build_root` (works in `distbuild` and `CI autocheck`)
-        store_dir = self.get_pnpm_store()
+        store_dir = self._get_pnpm_store()
         virtual_store_dir = self._nm_path(VIRTUAL_STORE_DIRNAME)
 
         self._run_pnpm_install(store_dir, virtual_store_dir, self.build_path, local_cli)
@@ -242,8 +239,12 @@ class PnpmPackageManager(BasePackageManager):
         if local_cli:
             files_to_hash = [build_pre_lockfile_path(self.build_path)]
             paths_to_exist = [build_nm_path(cwd)]
-            hash_file = os.path.join(build_nm_store_path(self.module_path), LOCAL_PNPM_INSTALL_HASH_FILENAME)
-            mutex_file = os.path.join(build_nm_store_path(self.module_path), LOCAL_PNPM_INSTALL_MUTEX_FILENAME)
+            hash_file = os.path.join(
+                build_nm_store_path(self.build_root, self.module_path), LOCAL_PNPM_INSTALL_HASH_FILENAME
+            )
+            mutex_file = os.path.join(
+                build_nm_store_path(self.build_root, self.module_path), LOCAL_PNPM_INSTALL_MUTEX_FILENAME
+            )
             os.makedirs(os.path.dirname(mutex_file), exist_ok=True)
             execute_cmd_hashed = hashed_by_files(files_to_hash, paths_to_exist, hash_file)(execute_install_cmd)
             execute_hashed_cmd_exclusively = sync_mutex_file(mutex_file)(execute_cmd_hashed)

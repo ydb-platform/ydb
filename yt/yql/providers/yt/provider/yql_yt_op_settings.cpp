@@ -490,6 +490,7 @@ bool ValidateSettings(const TExprNode& settingsNode, EYtSettingTypes accepted, T
         case EYtSettingType::BlockInputApplied:
         case EYtSettingType::BlockOutputApplied:
         case EYtSettingType::Small:
+        case EYtSettingType::Pruned:
             if (!EnsureTupleSize(*setting, 1, ctx)) {
                 return false;
             }

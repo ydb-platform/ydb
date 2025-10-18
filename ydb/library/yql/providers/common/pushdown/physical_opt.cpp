@@ -51,7 +51,7 @@ NPushdown::TPredicateNode MakePushdownNode(const NNodes::TCoLambda& lambda, TExp
 
     TCoOptionalIf optionalIf = maybeOptionalIf.Cast();
     NPushdown::TPredicateNode predicateTree(optionalIf.Predicate());
-    NPushdown::CollectPredicates(optionalIf.Predicate(), predicateTree, TExprBase(lambdaArg), TExprBase(lambdaArg), settings);
+    NPushdown::CollectPredicates(ctx, optionalIf.Predicate(), predicateTree, TExprBase(lambdaArg), TExprBase(lambdaArg), settings);
     YQL_ENSURE(predicateTree.IsValid(), "Collected filter predicates are invalid");
 
     return SplitForPartialPushdown(predicateTree, ctx, pos, settings);

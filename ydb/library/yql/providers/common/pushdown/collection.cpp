@@ -1,7 +1,6 @@
 #include "collection.h"
 
 #include <yql/essentials/core/yql_expr_type_annotation.h>
-#include <yql/essentials/utils/log/log.h>
 
 #include <vector>
 
@@ -24,9 +23,10 @@ class TPredicateMarkup {
     using EFlag = TSettings::EFeatureFlag;
 
 public:
-    TPredicateMarkup(const TExprBase& lambdaArg, const TSettings& settings)
+    TPredicateMarkup(const TExprBase& lambdaArg, const TSettings& settings, TExprContext& ctx)
         : LambdaArg(lambdaArg)
         , Settings(settings)
+        , Ctx(ctx)
     {}
 
     void MarkupPredicates(const TExprBase& predicate, TPredicateNode& predicateTree) {
@@ -207,6 +207,9 @@ private:
         if (Settings.IsEnabled(EFlag::StringTypes) && (node.Maybe<TCoUtf8>() || node.Maybe<TCoString>())) {
             return true;
         }
+        if (Settings.IsEnabled(EFlag::DecimalCtor) && node.Maybe<TCoDecimal>()) {
+            return true;
+        }
         return false;
     }
 
@@ -247,6 +250,22 @@ private:
             return false;
         }
         return CheckExpressionNodeForPushdown(toBytesExpr);
+    }
+
+    bool IsSupportedToString(const TExprBase& toString) {
+        if (!Settings.IsEnabled(EFlag::ToStringFromStringExpressions)) {
+            return false;
+        }
+
+        if (toString.Ref().ChildrenSize() != 1) {
+            return false;
+        }
+
+        auto toStringExpr = TExprBase(toString.Ref().Child(0));
+        if (!IsStringExpr(toStringExpr)) {
+            return false;
+        }
+        return CheckExpressionNodeForPushdown(toStringExpr);
     }
 
     bool IsSupportedLambda(const TCoLambda& lambda, ui64 numberArguments) {
@@ -298,6 +317,9 @@ private:
         }
         if (node.Ref().IsCallable({"ToBytes"})) {
             return IsSupportedToBytes(node);
+        }
+        if (node.Ref().IsCallable({"ToString"})) {
+            return IsSupportedToString(node);
         }
         if (auto maybeData = node.Maybe<TCoDataCtor>()) {
             return IsSupportedDataType(maybeData.Cast());
@@ -621,33 +643,41 @@ private:
     }
 
     bool ApplyCanBePushed(const TCoApply& apply) {
-        // Check callable
-        if (auto udf = apply.Callable().Maybe<TCoUdf>()) {
-            if (!UdfCanBePushed(udf.Cast(), apply.Ref().ChildrenList())) {
-                return false;
-            }
+        // Check if callable is a UDF and can be pushed
+        auto udf = apply.Callable().Maybe<TCoUdf>();
+        if (!udf || !UdfCanBePushed(udf.Cast(), apply.Ref().ChildrenList())) {
+            return false;
         }
 
-        // Check arguments
+        // Check if all arguments can be pushed
         for (size_t i = 1; i < apply.Ref().ChildrenSize(); ++i) {
             if (!CheckExpressionNodeForPushdown(TExprBase(apply.Ref().Child(i)))) {
                 return false;
             }
         }
+
         return true;
     }
 
 private:
     const TExprBase& LambdaArg;  // Predicate input item, has struct type
     const TSettings& Settings;
+    [[maybe_unused]] TExprContext& Ctx; // To be used for pretty printing
 
     std::unordered_set<const TExprNode*> LambdaArguments;
 };
 
 } // anonymous namespace end
 
-void CollectPredicates(const TExprBase& predicate, TPredicateNode& predicateTree, const TExprBase& lambdaArg, const TExprBase& /*lambdaBody*/, const TSettings& settings) {
-    TPredicateMarkup markup(lambdaArg, settings);
+void CollectPredicates(
+    TExprContext& ctx,
+    const TExprBase& predicate,
+    TPredicateNode& predicateTree,
+    const TExprBase& lambdaArg,
+    const TExprBase& /*lambdaBody*/,
+    const TSettings& settings
+) {
+    TPredicateMarkup markup(lambdaArg, settings, ctx);
     markup.MarkupPredicates(predicate, predicateTree);
 }
 

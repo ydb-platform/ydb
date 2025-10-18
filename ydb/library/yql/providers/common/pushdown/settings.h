@@ -40,7 +40,12 @@ struct TSettings {
         // In case of unsupported / complicated expressions $B and $D
         SplitOrOperator = 1 << 22,
         ToBytesFromStringExpressions = 1 << 23, // ToBytes(string like)
-        FlatMapOverOptionals = 1 << 24 // FlatMap(Optional<T>, Lmabda (T) -> Optional<U>)
+        FlatMapOverOptionals = 1 << 24, // FlatMap(Optional<T>, Lmabda (T) -> Optional<U>)
+        ToStringFromStringExpressions = 1 << 25, // ToString(string like)
+        IntervalCtor = 1 << 26,
+        MinMax = 1 << 27,
+        NonDeterministic = 1 << 28,
+        DecimalCtor = 1 << 29, 
     };
 
     explicit TSettings(NLog::EComponent logComponent)

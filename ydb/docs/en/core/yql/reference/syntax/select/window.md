@@ -2,7 +2,7 @@
 
 Window functions were introduced in the SQL:2003 standard and expanded in the SQL:2011 standard. They let you run calculations on a set of table rows that are related to the current row in some way.
 
-Unlike [aggregate functions](../builtins/aggregation.md), window functions don't group rows into one output row: the number of rows in the resulting table is always the same as in the source table.
+Unlike [aggregate functions](../../builtins/aggregation.md), window functions don't group rows into one output row: the number of rows in the resulting table is always the same as in the source table.
 
 If a query contains both aggregate and window functions, grouping is performed and aggregate function values are calculated first. The calculated values of aggregate functions can be used as window function arguments (but not the other way around).
 
@@ -69,7 +69,7 @@ There should be no window function calls in any of the expressions inside the wi
 
 If `PARTITION BY` is set, the source table rows are grouped into *partitions*, which are then handled independently of each other.
 If `PARTITION BY` isn't set, all rows in the source table are put in the same partition. If `ORDER BY` is set, it determines the order of rows in a partition.
-Both in `PARTITION BY` and [GROUP BY](group_by.md) you can use aliases and [SessionWindow](group_by.md#session-window).
+Both in `PARTITION BY` and [GROUP BY](group-by.md) you can use aliases and [SessionWindow](group-by.md#session-window).
 
 If `ORDER BY` is omitted, the order of rows in the partition is undefined.
 
@@ -88,7 +88,7 @@ Namely, if there is `ORDER BY`, then `ROWS BETWEEN UNBOUNDED PRECEDING AND CURRE
 
 Further, depending on the specific window function, it's calculated either based on the set of rows in the partition or the set of rows in the window frame.
 
-[List of available window functions](../builtins/window.md)
+[List of available window functions](../../builtins/window.md)
 
 #### Examples
 

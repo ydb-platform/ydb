@@ -58,11 +58,13 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
         setup->GetServer().WaitInit(GetTopicPath(topicName));
     }
 
-    void CreateActor(NActors::TTestActorRuntime& runtime, TReaderSetting&& settings) {
+    TActorId CreateActor(NActors::TTestActorRuntime& runtime, TReaderSetting&& settings) {
         auto edgeId = runtime.AllocateEdgeActor();
         auto readerId = runtime.Register(CreateReader(edgeId, std::move(settings)));
         runtime.EnableScheduleForActor(readerId);
         runtime.DispatchEvents();
+
+        return readerId;
     }
 
     THolder<TEvPersQueue::TEvMLPReadResponse> WaitResult(NActors::TTestActorRuntime& runtime) {
@@ -84,20 +86,26 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
         }
     }
 
-    NKikimrPQ::TEvMLPReadResponse GetReadResonse(NActors::TTestActorRuntime& runtime, TDuration timeout = TDuration::Seconds(5)) {
-        TAutoPtr<IEventHandle> handle;
-        auto [error, read] = runtime.GrabEdgeEvents<TEvPersQueue::TEvMLPErrorResponse, TEvPersQueue::TEvMLPReadResponse>(handle,timeout);
+    NKikimrPQ::TEvMLPReadResponse GetReadResonse(NActors::TTestActorRuntime& runtime, TActorId actorId, TDuration timeout = TDuration::Seconds(5)) {
+        while(true) {
+            TAutoPtr<IEventHandle> handle;
+            auto [error, read] = runtime.GrabEdgeEvents<TEvPersQueue::TEvMLPErrorResponse, TEvPersQueue::TEvMLPReadResponse>(handle,timeout);
 
-        if (error) {
-            UNIT_FAIL("Unexpected error: " << ::NPersQueue::NErrorCode::EErrorCode_Name(error->GetErrorCode())
-                << " " << error->GetErrorMessage());
-        } else if (read) {
-            return read->Record;
-        } else {
-            UNIT_FAIL("Timeout");
+            if (handle->Sender != actorId) {
+                continue;
+            }
+
+            if (error) {
+                UNIT_FAIL("Unexpected error: " << ::NPersQueue::NErrorCode::EErrorCode_Name(error->GetErrorCode())
+                    << " " << error->GetErrorMessage());
+            } else if (read) {
+                return read->Record;
+            } else {
+                UNIT_FAIL("Timeout");
+            }
+
+            return {};
         }
-
-        return {};
     }
 
     Y_UNIT_TEST(TopicNotExistsConsumer) {
@@ -136,13 +144,13 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
         CreateTopic(setup, "/Root/topic1", "mlp-consumer");
 
         auto& runtime = setup->GetRuntime();
-        CreateActor(runtime, {
+        auto actorId = CreateActor(runtime, {
             .DatabasePath = "/Root",
             .TopicName = "/Root/topic1",
             .Consumer = "mlp-consumer"
         });
 
-        auto response = GetReadResonse(runtime);
+        auto response = GetReadResonse(runtime, actorId);
         UNIT_ASSERT_VALUES_EQUAL(response.GetMessage().size(), 0);
     }
 
@@ -153,14 +161,14 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
         setup->Write("/Root/topic1", "msg-1", 0);
 
         auto& runtime = setup->GetRuntime();
-        CreateActor(runtime, {
+        auto actorId = CreateActor(runtime, {
             .DatabasePath = "/Root",
             .TopicName = "/Root/topic1",
             .Consumer = "mlp-consumer",
             .WaitTime = TDuration::Seconds(3)
         });
 
-        auto response = GetReadResonse(runtime);
+        auto response = GetReadResonse(runtime, actorId);
         UNIT_ASSERT_VALUES_EQUAL(response.GetMessage().size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(response.GetMessage(0).GetData(), "msg-1");
     }

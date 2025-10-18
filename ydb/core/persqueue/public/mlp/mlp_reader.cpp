@@ -1,6 +1,8 @@
 #include "mlp_reader.h"
 
 #include <ydb/core/protos/grpc_pq_old.pb.h>
+#include <ydb/public/api/protos/ydb_topic.pb.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/codecs.h>
 
 #define LOG_PREFIX_INT TStringBuilder() << "[" << SelfId() << "]"
 #define LOG_D(stream) LOG_DEBUG_S (*NActors::TlsActivationContext, NKikimrServices::EServiceKikimr::PQ_MLP_READER, LOG_PREFIX_INT << stream)
@@ -108,20 +110,26 @@ void TReaderActor::Handle(TEvPersQueue::TEvMLPReadResponse::TPtr& ev) {
 
     auto response = std::make_unique<TEvPersQueue::TEvMLPReadResponse>();
     for (auto& message : *ev->Get()->Record.MutableMessage()) {
-        auto data = std::move(*message.MutableData());
-
         NKikimrPQClient::TDataChunk proto;
-        bool res = proto.ParseFromString(data);
+        bool res = proto.ParseFromString(message.GetData());
         if (!res) {
             LOG_W("Error parsing data. Offset " << message.GetId().GetOffset());
             // Skip message
             continue;
         }
 
+        TString data;
+        if (proto.has_codec() && proto.codec() != Ydb::Topic::CODEC_RAW - 1) {
+            const NYdb::NTopic::ICodec* codecImpl = NYdb::NTopic::TCodecMap::GetTheCodecMap().GetOrThrow(static_cast<ui32>(proto.codec() + 1));
+            data = codecImpl->Decompress(proto.GetData());
+        } else {
+            data = std::move(*proto.MutableData());
+        }
+
         auto* msg = response->Record.AddMessage();
         msg->MutableId()->CopyFrom(message.GetId());
         msg->MutableMessageMeta()->CopyFrom(message.GetMessageMeta());
-        msg->SetData(std::move(*proto.MutableData()));
+        msg->SetData(std::move(std::move(data)));
     }
 
     Send(ParentId, std::move(response));
@@ -130,7 +138,7 @@ void TReaderActor::Handle(TEvPersQueue::TEvMLPReadResponse::TPtr& ev) {
 
 void TReaderActor::Handle(TEvPersQueue::TEvMLPErrorResponse::TPtr& ev) {
     LOG_D("Handle TEvPersQueue::TEvMLPErrorResponse " << ev->Get()->Record.ShortDebugString());
-    Forward(ev, ParentId);
+    Send(ParentId, ev->Release());
     PassAway();
 }
 

@@ -13,8 +13,9 @@ const NKikimrPQ::TPQTabletConfig& TMLPConsumer::GetConfig() const {
 
 const NKikimrPQ::TPQTabletConfig::TPartition& TMLPConsumer::NextPartition() {
     // TODO skip inactive partitions without messages
-    auto partitionId = PartitionIterator++ % GetConfig().GetPartitions().size();
-    return GetConfig().GetPartitions(partitionId);
+    AFL_ENSURE(!GetConfig().GetAllPartitions().empty());
+    auto partitionId = PartitionIterator++ % GetConfig().GetAllPartitions().size();
+    return GetConfig().GetAllPartitions(partitionId);
 }
 
 TMLPBalancer::TMLPBalancer(TPersQueueReadBalancer& topicActor)
@@ -26,13 +27,18 @@ void TMLPBalancer::Handle(TEvPersQueue::TEvMLPGetPartitionRequest::TPtr& ev) {
 
     auto* consumerConfig = NPQ::GetConsumer(GetConfig(), consumerName);
     if (!consumerConfig) {
-        PQ_LOG_D("Consumer '" << consumerName << "' not found");
+        PQ_LOG_D("Consumer '" << consumerName << "' does not exist");
         TopicActor.Send(ev->Sender, new TEvPersQueue::TEvMLPErrorResponse(NPersQueue::NErrorCode::EErrorCode::SCHEMA_ERROR,
-            TStringBuilder() << "Consumer '" << consumerName << "' not found"), 0, ev->Cookie);
+            TStringBuilder() << "Consumer '" << consumerName << "' does not exist"), 0, ev->Cookie);
         return;
     }
 
-    // TODO check that consumer is MLP
+    if (consumerConfig->GetType() != NKikimrPQ::TPQTabletConfig::EConsumerType::TPQTabletConfig_EConsumerType_CONSUMER_TYPE_MLP) {
+        PQ_LOG_D("Consumer '" << consumerName << "' is not MLP consumer");
+        TopicActor.Send(ev->Sender, new TEvPersQueue::TEvMLPErrorResponse(NPersQueue::NErrorCode::EErrorCode::SCHEMA_ERROR,
+            TStringBuilder() << "Consumer '" << consumerName << "' is not MLP consumer"), 0, ev->Cookie);
+        return;
+    }
 
     auto [it, _] = Consumers.try_emplace(consumerName, *this);
     auto& consumer = it->second;

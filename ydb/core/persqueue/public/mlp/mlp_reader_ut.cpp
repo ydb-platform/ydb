@@ -30,6 +30,20 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
         driver.Stop(true);
     }
 
+    void CreateTopic(std::shared_ptr<TTopicSdkTestSetup>& setup, const TString& topicName, const TString& consumerName) {
+        auto driver = TDriver(setup->MakeDriverConfig());
+        auto client = TTopicClient(driver);
+
+        const auto settings = NYdb::NTopic::TCreateTopicSettings()
+                .BeginAddConsumer()
+                    .ConsumerName(consumerName)
+                    .AddAttribute("_mlp", "1")
+                .EndAddConsumer();
+        client.CreateTopic(topicName, settings);
+
+        setup->GetServer().WaitInit(GetTopicPath(topicName));
+    }
+
     void CreateActor(NActors::TTestActorRuntime& runtime, TReaderSetting&& settings) {
         auto edgeId = runtime.AllocateEdgeActor();
         auto describerId = runtime.Register(CreateReader(edgeId, std::move(settings)));
@@ -41,8 +55,8 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
         return runtime.GrabEdgeEvent<TEvPersQueue::TEvMLPReadResponse>();
     }
 
-    void AssertError(NActors::TTestActorRuntime& runtime, ::NPersQueue::NErrorCode::EErrorCode errorCode, const TString& message) {
-        auto ev = runtime.GrabEdgeEvent<TEvPersQueue::TEvMLPErrorResponse>();
+    void AssertError(NActors::TTestActorRuntime& runtime, ::NPersQueue::NErrorCode::EErrorCode errorCode, const TString& message, TDuration timeout = TDuration::Seconds(5)) {
+        auto ev = runtime.GrabEdgeEvent<TEvPersQueue::TEvMLPErrorResponse>(timeout);
         UNIT_ASSERT_VALUES_EQUAL_C(::NPersQueue::NErrorCode::EErrorCode_Name(ev->GetErrorCode()),
             ::NPersQueue::NErrorCode::EErrorCode_Name(errorCode), ev->GetErrorMessage());
         UNIT_ASSERT_VALUES_EQUAL(ev->GetErrorMessage(), message);
@@ -80,6 +94,26 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
             .DatabasePath = "/Root",
             .TopicName = "/Root/topic1",
             .Consumer = "consumer_not_exists"
+        });
+
+        AssertError(runtime, ::NPersQueue::NErrorCode::EErrorCode::SCHEMA_ERROR,
+            "Consumer 'consumer_not_exists' does not exist");
+    }
+
+    Y_UNIT_TEST(EmptyTopic) {
+        auto setup = std::make_shared<TTopicSdkTestSetup>(TEST_CASE_NAME);
+        setup->GetServer().EnableLogs(
+                { NKikimrServices::PQ_MLP_READER, NKikimrServices::PQ_MLP_CONSUMER },
+                NActors::NLog::PRI_DEBUG
+        );
+
+        CreateTopic(setup, "/Root/topic1", "mlp-consumer");
+
+        auto& runtime = setup->GetRuntime();
+        CreateActor(runtime, {
+            .DatabasePath = "/Root",
+            .TopicName = "/Root/topic1",
+            .Consumer = "mlp-consumer"
         });
 
         AssertError(runtime, ::NPersQueue::NErrorCode::EErrorCode::SCHEMA_ERROR,

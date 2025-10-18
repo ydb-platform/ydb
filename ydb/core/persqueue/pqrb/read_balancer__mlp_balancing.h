@@ -8,7 +8,7 @@ class TMLPBalancer;
 
 class TMLPConsumer {
 public:
-    TMLPConsumer(TMLPBalancer& balancer);
+    explicit TMLPConsumer(TMLPBalancer& balancer);
 
     const NKikimrPQ::TPQTabletConfig::TPartition& NextPartition();
 
@@ -21,7 +21,7 @@ private:
 
 class TMLPBalancer {
 public:
-    TMLPBalancer(TPersQueueReadBalancer& topicActor);
+    explicit TMLPBalancer(TPersQueueReadBalancer& topicActor);
 
     void Handle(TEvPersQueue::TEvMLPGetPartitionRequest::TPtr&);
 

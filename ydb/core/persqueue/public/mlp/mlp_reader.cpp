@@ -36,8 +36,7 @@ void TReaderActor::Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
     switch(topic.Status) {
         case NDescriber::EStatus::SUCCESS: {
             ReadBalancerTabletId = topic.Info->Description.GetBalancerTabletID();
-            DoSelectPartition();
-            break;
+            return DoSelectPartition();
         }
         default: {
             ReplyErrorAndDie(NPersQueue::NErrorCode::EErrorCode::SCHEMA_ERROR,
@@ -66,7 +65,7 @@ void TReaderActor::Handle(TEvPersQueue::TEvMLPGetPartitionResponse::TPtr& ev) {
         case NPersQueue::NErrorCode::EErrorCode::OK: {
             PartitionId = result->GetPartitionId();
             PQTabletId = result->GetTabletId();
-            DoRead();
+            return DoRead();
         }
         default:
             ReplyErrorAndDie(NPersQueue::NErrorCode::EErrorCode::ERROR, "Patition choose error");
@@ -108,7 +107,7 @@ void TReaderActor::Handle(TEvPersQueue::TEvMLPReadResponse::TPtr& ev) {
 }
 
 void TReaderActor::Handle(TEvPersQueue::TEvMLPErrorResponse::TPtr& ev) {
-    LOG_D("Handle TEvPersQueue::TEvMLPErrorResponse " << ev->Get()->GetErrorMessage());
+    LOG_D("Handle TEvPersQueue::TEvMLPErrorResponse " << ev->Get()->Record.ShortDebugString());
     Forward(ev, ParentId);
     PassAway();
 }

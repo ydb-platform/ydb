@@ -7,19 +7,6 @@ namespace NKikimr::NPQ::NMLP {
 
 
 std::optional<TStorage::NextResult> TStorage::Next(TInstant deadline, ui64 fromOffset) {
-    if (!ReleasedMessages.empty()) {
-        auto offset = ReleasedMessages.front();
-        ReleasedMessages.pop_front();
-
-        ++Metrics.LockedMessageCount;
-        --Metrics.UnprocessedMessageCount;
-
-        return NextResult{
-            .Message = DoLock(offset - FirstOffset, deadline),
-            .FromOffset = fromOffset
-        };
-    }
-
     bool moveUnlockedOffset = fromOffset <= FirstUnlockedOffset;
     for (size_t i = std::max(fromOffset, FirstUnlockedOffset) - FirstOffset; i < Messages.size(); ++i) {
         const auto& message = Messages[i];
@@ -278,11 +265,7 @@ void TStorage::DoUnlock(TMessage& message, ui64 offset) {
 
         ++Metrics.DLQMessageCount;
     } else {
-        if (ReleasedMessages.size() < MaxReleasedMessageSize) {
-            ReleasedMessages.push_back(offset);
-        } else {
-            FirstUnlockedOffset = std::min(FirstUnlockedOffset, offset);
-        }
+        FirstUnlockedOffset = std::min(FirstUnlockedOffset, offset);
         
         ++Metrics.UnprocessedMessageCount;
     }

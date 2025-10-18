@@ -22,9 +22,18 @@ struct TWideUnboxedEqual {
                 return false;
         return true;
     }
+    bool operator()(std::span<const NUdf::TUnboxedValue> left, std::span<const NUdf::TUnboxedValue> right) const {
+        for (ui32 i = 0U; i < Types.size(); ++i)
+            if (CompareValues(Types[i].first, true, Types[i].second, left[i], right[i]))
+                return false;
+        return true;
+    }
+    
 
     const TKeyTypes& Types;
 };
+
+
 
 struct TWideUnboxedHasher {
     TWideUnboxedHasher(const TKeyTypes& types)
@@ -46,6 +55,9 @@ struct TWideUnboxedHasher {
                 hash = CombineHashes(hash, HashOfNull);
         }
         return hash;
+    }
+    NUdf::THashType operator()(std::span<const NUdf::TUnboxedValue> values) const {
+        return (*this)(values.data());
     }
 
     const TKeyTypes& Types;

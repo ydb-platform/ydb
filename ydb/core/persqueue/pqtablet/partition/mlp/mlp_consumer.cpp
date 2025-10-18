@@ -297,8 +297,12 @@ void TConsumerActor::ProcessEventQueue() {
             fromOffset = result->FromOffset;
         }
 
-        if (messages.empty() && ev->Get()->GetWaitTime() != TDuration::Zero()) {
-            break;
+        if (messages.empty() && ev->Get()->GetWaitTime() == TDuration::Zero()) {
+            // Optimization: do not need to upload the message body.
+            Send(ev->Sender, new TEvPersQueue::TEvMLPReadResponse(), 0, ev->Cookie);
+            continue;
+        } else {
+            break; // TODO перекладываеть очереди
         }
 
         Batch->Add(ev, std::move(messages));

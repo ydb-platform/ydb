@@ -115,7 +115,7 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
             NYql::NDq::CreateReadActorFactoryConfig(s3Config),
             nullptr,
             NYql::TPqGatewayConfig{},
-            options.PqGateway ? options.PqGateway : NKqp::MakePqGateway(driver, NYql::TPqGatewayConfig{}),
+            options.PqGateway ? options.PqGateway : NKqp::MakePqGateway(driver),
             nullptr,
             driver);
 

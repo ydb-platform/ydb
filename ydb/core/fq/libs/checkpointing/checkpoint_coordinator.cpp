@@ -3,9 +3,8 @@
 
 #include <ydb/core/fq/libs/actors/logging/log.h>
 #include <ydb/core/fq/libs/checkpointing/events/events.h>
-
+#include <ydb/core/fq/libs/config/protos/checkpoint_coordinator.pb.h>
 #include <ydb/library/actors/core/hfunc.h>
-
 #include <ydb/library/yql/dq/actors/dq.h>
 #include <ydb/library/yql/dq/state/dq_state_load_plan.h>
 
@@ -24,10 +23,18 @@
 
 namespace NFq {
 
+using namespace NActors;
+
+TCheckpointCoordinatorSettings::TCheckpointCoordinatorSettings(const NFq::NConfig::TCheckpointCoordinatorConfig& config)
+    : CheckpointingPeriod(TDuration::MilliSeconds(config.GetCheckpointingPeriodMillis() ? config.GetCheckpointingPeriodMillis() : 30'000))
+    , CheckpointingSnapshotRotationPeriod(config.GetCheckpointingSnapshotRotationPeriod())
+    , MaxInflight(config.GetMaxInflight())
+{}
+
 TCheckpointCoordinator::TCheckpointCoordinator(TCoordinatorId coordinatorId,
                                                const TActorId& storageProxy,
                                                const TActorId& runActorId,
-                                               const NKikimrConfig::TCheckpointsConfig& settings,
+                                               const TCheckpointCoordinatorSettings& settings,
                                                const ::NMonitoring::TDynamicCounterPtr& counters,
                                                const NProto::TGraphParams& graphParams,
                                                const FederatedQuery::StateLoadMode& stateLoadMode,
@@ -37,7 +44,6 @@ TCheckpointCoordinator::TCheckpointCoordinator(TCoordinatorId coordinatorId,
     , StorageProxy(storageProxy)
     , RunActorId(runActorId)
     , Settings(settings)
-    , CheckpointingPeriod(TDuration::MilliSeconds(Settings.GetCheckpointingPeriodMillis() ? Settings.GetCheckpointingPeriodMillis() : 30'000))
     , CheckpointingSnapshotRotationPeriod(Settings.GetCheckpointingSnapshotRotationPeriod())
     , CheckpointingSnapshotRotationIndex(CheckpointingSnapshotRotationPeriod)   // First - snapshot
     , GraphParams(graphParams)
@@ -97,7 +103,7 @@ void TCheckpointCoordinator::Handle(NFq::TEvCheckpointCoordinator::TEvReadyState
 }
 
 void TCheckpointCoordinator::ScheduleNextCheckpoint() {
-    Schedule(CheckpointingPeriod, new TEvCheckpointCoordinator::TEvScheduleCheckpointing());
+    Schedule(Settings.GetCheckpointingPeriod(), new TEvCheckpointCoordinator::TEvScheduleCheckpointing());
 }
 
 void TCheckpointCoordinator::UpdateInProgressMetric() {
@@ -667,7 +673,7 @@ THolder<NActors::IActor> MakeCheckpointCoordinator(
     TCoordinatorId coordinatorId,
     const TActorId& storageProxy,
     const TActorId& runActorId,
-    const NKikimrConfig::TCheckpointsConfig& config,
+    const TCheckpointCoordinatorSettings& config,
     const ::NMonitoring::TDynamicCounterPtr& counters,
     const NProto::TGraphParams& graphParams,
     const FederatedQuery::StateLoadMode& stateLoadMode,

@@ -14,6 +14,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 
+#include <ydb/library/actors/core/log.h>
 #include <library/cpp/threading/local_executor/local_executor.h>
 #include <util/generic/serialized_enum.h>
 #include <util/string/printf.h>
@@ -198,7 +199,8 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
     }
 
-    void BulkUpsertRowTableCSVWithFormat(TTestHelper& helper, const TString& name, const TVector<TRow>& rows, const TString& trueValue, const TString& falseValue) {
+    void BulkUpsertRowTableCSVWithFormat(
+        TTestHelper& helper, const TString& name, const TVector<TRow>& rows, const TString& trueValue, const TString& falseValue) {
         TStringBuilder builder;
         for (auto&& r : rows) {
             builder << r.Id << "," << r.IntVal << ",";
@@ -454,6 +456,23 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
             }
         }
 
+        void PrepareTable3() {
+            Schema = {
+                TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
+                TTestHelper::TColumnSchema().SetName("b").SetType(NScheme::NTypeIds::Bool).SetNullable(false),
+            };
+
+            TestTable.SetName("/Root/Table3").SetPrimaryKey({ "b" }).SetSchema(Schema);
+            TestHelper.CreateTable(TestTable);
+
+            {
+                TTestHelper::TUpdatesBuilder inserter = Inserter();
+                inserter.AddRow().Add(1).Add(true);
+                inserter.AddRow().Add(2).Add(false);
+                Upsert(inserter);
+            }
+        }
+
     private:
         TTestHelper TestHelper;
         TVector<TTestHelper::TColumnSchema> Schema;
@@ -677,33 +696,26 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
         TTestHelper::TColumnTable col;
         TVector<TTestHelper::TColumnSchema> schema;
         PrepareBase(helper, Table, tableName, &col, &schema);
-        
+
         struct TCSVFormat {
             TString TrueValue;
             TString FalseValue;
             TString Description;
         };
-        
+
         TVector<TCSVFormat> formats = {
-            {"true", "false", "true/false"},
-            {"1", "0", "1/0"},
+            { "true", "false", "true/false" },
+            { "1", "0", "1/0" },
         };
-        
+
         for (auto&& format : formats) {
             helper.ExecuteQuery("DELETE FROM `" + tableName + "`");
-            TVector<TRow> rows = {
-                {1, 100, true},
-                {2, 200, false},
-                {3, 300, true},
-                {4, 400, false}
-            };
+            TVector<TRow> rows = { { 1, 100, true }, { 2, 200, false }, { 3, 300, true }, { 4, 400, false } };
 
             BulkUpsertRowTableCSVWithFormat(helper, tableName, rows, format.TrueValue, format.FalseValue);
-            
-            CheckOrExec(helper, 
-                "SELECT id, int, b FROM `" + tableName + "` ORDER BY id",
-                "[[1;[100];[%true]];[2;[200];[%false]];[3;[300];[%true]];[4;[400];[%false]]]", 
-                Scan);
+
+            CheckOrExec(helper, "SELECT id, int, b FROM `" + tableName + "` ORDER BY id",
+                "[[1;[100];[%true]];[2;[200];[%false]];[3;[300];[%true]];[4;[400];[%false]]]", Scan);
         }
     }
 
@@ -711,23 +723,18 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
         const auto Scan = Arg<0>();
         const auto Table = Arg<1>();
 
-        const TString tableName = "/Root/Table1";        
+        const TString tableName = "/Root/Table1";
         TTestHelper helperDisabled(TKikimrSettings().SetWithSampleTables(false));
         TTestHelper::TColumnTable col;
         TVector<TTestHelper::TColumnSchema> schema;
-        
-        TVector<TRow> rows = {
-            {1, 100, true},
-            {2, 200, false}
-        };
-        
+
+        TVector<TRow> rows = { { 1, 100, true }, { 2, 200, false } };
+
         if (Table == ETableKind::DATASHARD) {
             PrepareBase(helperDisabled, Table, tableName, &col, &schema);
             LoadData(helperDisabled, Table, ELoadKind::ARROW, tableName, rows, &col, &schema);
-            CheckOrExec(helperDisabled, 
-                "SELECT id, int, b FROM `" + tableName + "` ORDER BY id",
-                "[[1;[100];[%true]];[2;[200];[%false]]]", 
-                Scan);
+            CheckOrExec(
+                helperDisabled, "SELECT id, int, b FROM `" + tableName + "` ORDER BY id", "[[1;[100];[%true]];[2;[200];[%false]]]", Scan);
         } else {
             bool tableCreated = TryPrepareBase(helperDisabled, Table, tableName, &col, &schema);
             if (tableCreated) {
@@ -736,9 +743,8 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
                     UNIT_ASSERT_C(false, "Expected error for ColumnShard with disabled feature flag");
                 } catch (const std::exception& e) {
                     TString errorMsg = e.what();
-                    UNIT_ASSERT_C(errorMsg.find("EnableColumnshardBool") != TString::npos || 
-                                 errorMsg.find("bool") != TString::npos,
-                                 "Expected error about bool support, got: " + errorMsg);
+                    UNIT_ASSERT_C(errorMsg.find("EnableColumnshardBool") != TString::npos || errorMsg.find("bool") != TString::npos,
+                        "Expected error about bool support, got: " + errorMsg);
                 }
             }
         }
@@ -748,10 +754,31 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
         TVector<TTestHelper::TColumnSchema> schema2;
         PrepareBase(helperEnabled, Table, tableName, &col2, &schema2);
         LoadData(helperEnabled, Table, ELoadKind::ARROW, tableName, rows, &col2, &schema2);
-        CheckOrExec(helperEnabled, 
-            "SELECT id, int, b FROM `" + tableName + "` ORDER BY id",
-            "[[1;[100];[%true]];[2;[200];[%false]]]", 
-            Scan);
+        CheckOrExec(helperEnabled, "SELECT id, int, b FROM `" + tableName + "` ORDER BY id", "[[1;[100];[%true]];[2;[200];[%false]]]", Scan);
+    }
+
+    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(TestBoolAsPrimaryKey, EQueryMode, ELoadKind) {
+        const auto Scan = Arg<0>();
+        const auto Load = Arg<1>();
+
+        const TString t = "/Root/Table";
+        TTestHelper helper(CreateKikimrSettingsWithBoolSupport());
+        TTestHelper::TColumnTable col;
+        TVector<TTestHelper::TColumnSchema> s;
+        s = {
+            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32),
+            TTestHelper::TColumnSchema().SetName("int").SetType(NScheme::NTypeIds::Int64),
+            TTestHelper::TColumnSchema().SetName("b").SetType(NScheme::NTypeIds::Bool).SetNullable(false),
+        };
+
+        col.SetName(t).SetPrimaryKey({ "b" }).SetSharding({ "b" }).SetSchema(s);
+        helper.CreateTable(col);
+        TVector<TRow> rows = { { 1, 100, true }, { 2, 200, false } };
+
+        LoadData(helper, ETableKind::COLUMNSHARD, Load, t, rows, &col, &s);
+        CheckOrExec(helper,
+            "SELECT id, int, b FROM `/Root/Table` ORDER BY id",
+            R"([[[1];[100];%true];[[2];[200];%false]])", Scan);
     }
 }
 }   // namespace NKqp

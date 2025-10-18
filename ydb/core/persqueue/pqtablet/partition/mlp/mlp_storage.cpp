@@ -5,13 +5,20 @@
 
 namespace NKikimr::NPQ::NMLP {
 
+void TStorage::SetKeepMessageOrder(bool keepMessageOrder) {
+    KeepMessageOrder = keepMessageOrder;
+}
+
+void TStorage::SetMaxMessageReceiveCount(ui32 maxMessageReceiveCount) {
+    MaxMessageReceiveCount = maxMessageReceiveCount;
+}
 
 std::optional<TStorage::NextResult> TStorage::Next(TInstant deadline, ui64 fromOffset) {
     bool moveUnlockedOffset = fromOffset <= FirstUnlockedOffset;
     for (size_t i = std::max(fromOffset, FirstUnlockedOffset) - FirstOffset; i < Messages.size(); ++i) {
         const auto& message = Messages[i];
         if (message.Status == EMessageStatus::Unprocessed) {
-            if (message.HasMessageGroupId && LockedMessageGroupsId.contains(message.MessageGroupIdHash)) {
+            if (KeepMessageOrder && message.HasMessageGroupId && LockedMessageGroupsId.contains(message.MessageGroupIdHash)) {
                 moveUnlockedOffset = false;
                 continue;
             }
@@ -122,7 +129,7 @@ bool TStorage::InitializeFromSnapshot(const NKikimrPQ::TMLPStorageSnapshot& snap
         switch(message.Status) {
             case EMessageStatus::Locked:
                 ++Metrics.LockedMessageCount;
-                if (message.HasMessageGroupId) {
+                if (KeepMessageOrder && message.HasMessageGroupId) {
                     LockedMessageGroupsId.insert(message.MessageGroupIdHash);
                     ++Metrics.LockedMessageGroupCount;
                 }
@@ -204,7 +211,7 @@ TMessageId TStorage::DoLock(ui64 offsetDelta, TInstant deadline) {
     message.DeadlineDelta = deadlineDelta;
     ++message.ReceiveCount;
 
-    if (message.HasMessageGroupId) {
+    if (KeepMessageOrder && message.HasMessageGroupId) {
         LockedMessageGroupsId.insert(message.MessageGroupIdHash);
 
         ++Metrics.LockedMessageGroupCount;
@@ -226,7 +233,9 @@ bool TStorage::DoCommit(ui64 offset) {
     message->DeadlineDelta = 0;
 
     if (message->HasMessageGroupId) {
-        LockedMessageGroupsId.erase(message->MessageGroupIdHash);
+        if (LockedMessageGroupsId.erase(message->MessageGroupIdHash)) {
+            --Metrics.LockedMessageGroupCount;
+        }
     }
 
     ++Metrics.CommittedMessageCount;
@@ -252,14 +261,14 @@ void TStorage::DoUnlock(TMessage& message, ui64 offset) {
     message.DeadlineDelta = 0;
 
     if (message.HasMessageGroupId) {
-        LockedMessageGroupsId.erase(message.MessageGroupIdHash);
-
-        --Metrics.LockedMessageGroupCount;
+        if (LockedMessageGroupsId.erase(message.MessageGroupIdHash)) {
+            --Metrics.LockedMessageGroupCount;
+        }
     }
 
     --Metrics.LockedMessageCount;
 
-    if (message.ReceiveCount > 1000 /* TODO Value from config */) {
+    if (message.ReceiveCount > MaxMessageReceiveCount) {
         // TODO Move to DLQ
         message.Status = EMessageStatus::DLQ;
 

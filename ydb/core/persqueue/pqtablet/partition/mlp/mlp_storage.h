@@ -69,6 +69,9 @@ public:
         size_t UnprocessedMessageCount = 0;
     };
 
+    void SetKeepMessageOrder(bool keepMessageOrder);
+    void SetMaxMessageReceiveCount(ui32 maxMessageReceiveCount);
+
     // Return next message for client processing.
     // deadline - time for processing visibility
     // fromOffset indicates from which offset it is necessary to continue searching for the next free message.
@@ -87,6 +90,7 @@ public:
     void AddMessage(ui64 offset, bool hasMessagegroup, ui32 messageGroupIdHash);
 
     bool ProccessDeadlines();
+    // TODO удалять сообщения если в партиции сместился StartOffset
     bool Compact();
 
     bool InitializeFromSnapshot(const NKikimrPQ::TMLPStorageSnapshot& snapshot);
@@ -109,6 +113,9 @@ private:
     void UpdateFirstUncommittedOffset();
 
 private:
+    bool KeepMessageOrder = false;
+    ui32 MaxMessageReceiveCount = 1000;
+
     // Первый загруженный оффсет  для обработки. Все сообщения с меньшим оффсетом либо уже закоммичены, либо удалены из партиции.
     // Как часто двигаем FirstOffset? Когда сохраняем большой блоб. 
     // Как часто сохраняем большой блоб? Если FirstUncommittedOffset больше FirstOffset на 1000 (5000? 10000?) либо все сообщения обработаны и закончились / раз в N секунд.

@@ -57,6 +57,10 @@ TConsumerActor::TConsumerActor(ui64 tabletId, const TActorId& tabletActorId, ui3
 void TConsumerActor::Bootstrap() {
     Become(&TConsumerActor::StateInit);
 
+    // TODO Update consumer config
+    Storage->SetKeepMessageOrder(Config.GetKeepMessageOrder());
+    Storage->SetMaxMessageReceiveCount(Config.GetMaxMessageReceiveCount());
+
     auto key = MakeSnapshotKey(PartitionId, Config.GetId());
     LOG_D("Reading snapshot " << key << " from " << TabletActorId.ToString());
     auto request = std::make_unique<TEvKeyValue::TEvRequest>();
@@ -312,7 +316,11 @@ void TConsumerActor::ProcessEventQueue() {
         auto& ev = ReadRequestsQueue.front();
 
         size_t count = ev->Get()->GetMaxNumberOfMessages();
-        const auto deadline = ev->Get()->GetVisibilityTimeout().ToDeadLine();
+        auto visibilityTimeout = ev->Get()->GetVisibilityTimeout();
+        if (visibilityTimeout == TDuration::Zero()) {
+            visibilityTimeout = TDuration::Seconds(Config.GetDefaultVisibilityTimeoutSeconds());
+        }
+        const auto deadline =  visibilityTimeout.ToDeadLine();
 
         std::deque<TMessageId> messages;
         //messages.reserve(count);
@@ -445,6 +453,7 @@ void TConsumerActor::Handle(TEvPQ::TEvError::TPtr& ev) {
 }
 
 void TConsumerActor::HandleOnWork(TEvents::TEvWakeup::TPtr&) {
+    Storage->ProccessDeadlines();
     FetchMessagesIfNeeded();
     ProcessEventQueue();
     Schedule(WakeupInterval, new TEvents::TEvWakeup());

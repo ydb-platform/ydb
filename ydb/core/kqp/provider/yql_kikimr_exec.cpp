@@ -469,6 +469,10 @@ namespace {
                 protoConsumer->set_important(FromString<bool>(
                         setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
                 ));
+            } else if (name == "setAvailabilityPeriod"sv) {
+                auto period = TDuration::MicroSeconds(FromString<ui64>(setting.Value().Cast<TCoInterval>().Literal().Value()));
+                protoConsumer->mutable_availability_period()->set_seconds(period.Seconds());
+                protoConsumer->mutable_availability_period()->set_nanos(period.NanoSecondsOfSecond());
             } else if (name == "setReadFromTs") {
                 ui64 tsValue = 0;
                 if(setting.Value().Maybe<TCoDatetime>()) {
@@ -514,6 +518,12 @@ namespace {
                 protoConsumer->set_set_important(FromString<bool>(
                         setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
                 ));
+            } else if (name == "setAvailabilityPeriod"sv) {
+                auto period = TDuration::MicroSeconds(FromString<ui64>(setting.Value().Cast<TCoInterval>().Literal().Value()));
+                protoConsumer->mutable_set_availability_period()->set_seconds(period.Seconds());
+                protoConsumer->mutable_set_availability_period()->set_nanos(period.NanoSecondsOfSecond());
+            } else if (name == "resetAvailabilityPeriod"sv) {
+                protoConsumer->mutable_reset_availability_period();
             } else if (name == "setReadFromTs") {
                 ui64 tsValue = 0;
                 if(setting.Value().Maybe<TCoDatetime>()) {
@@ -1716,7 +1726,7 @@ public:
                                     return SyncError();
                                 } else if (constraint.Name().Value() == "default") {
                                     if (table.Metadata->Kind == EKikimrTableKind::Olap) {
-                                        ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()), 
+                                        ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()),
                                             "Default values are not supported in column tables"));
                                         return SyncError();
                                     }
@@ -2046,10 +2056,10 @@ public:
                             }
                         } else if (name == "indexSettings") {
                             YQL_ENSURE(add_index->type_case() == Ydb::Table::TableIndex::kGlobalVectorKmeansTreeIndex);
-                            
+
                             Ydb::Table::KMeansTreeSettings& settings = *add_index->mutable_global_vector_kmeans_tree_index()->mutable_vector_settings();
                             TString error;
-                            
+
                             auto indexSettings = columnTuple.Item(1).Cast<TCoAtomList>();
                             for (const auto& indexSetting : indexSettings.Cast<TCoNameValueTupleList>()) {
                                 YQL_ENSURE(indexSetting.Value().Maybe<TCoAtom>());

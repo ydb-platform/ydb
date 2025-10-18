@@ -1739,22 +1739,28 @@ static INode::TPtr CreateConsumerDesc(const TTopicConsumerDescription& desc, con
     if (desc.Settings.Important) {
         settings = node.L(settings, node.Q(node.Y(node.Q("important"), desc.Settings.Important)));
     }
+    if (const auto& availabilityPeriod = desc.Settings.AvailabilityPeriod) {
+        if (availabilityPeriod.IsSet()) {
+            settings = node.L(settings, node.Q(node.Y(node.Q("setAvailabilityPeriod"), availabilityPeriod.GetValueSet())));
+        } else {
+            YQL_ENSURE(alter, "Cannot reset on create");
+            settings = node.L(settings, node.Q(node.Y(node.Q("resetAvailabilityPeriod"), node.Q(node.Y()))));
+        }
+    }
     if (const auto& readFromTs = desc.Settings.ReadFromTs) {
         if (readFromTs.IsSet()) {
             settings = node.L(settings, node.Q(node.Y(node.Q("setReadFromTs"), readFromTs.GetValueSet())));
-        } else if (alter) {
+        } else  {
+            YQL_ENSURE(alter, "Cannot reset on create");
             settings = node.L(settings, node.Q(node.Y(node.Q("resetReadFromTs"), node.Q(node.Y()))));
-        } else {
-            YQL_ENSURE(false, "Cannot reset on create");
         }
     }
     if (const auto& readFromTs = desc.Settings.SupportedCodecs) {
         if (readFromTs.IsSet()) {
             settings = node.L(settings, node.Q(node.Y(node.Q("setSupportedCodecs"), readFromTs.GetValueSet())));
-        } else if (alter) {
-            settings = node.L(settings, node.Q(node.Y(node.Q("resetSupportedCodecs"), node.Q(node.Y()))));
         } else {
-            YQL_ENSURE(false, "Cannot reset on create");
+            YQL_ENSURE(alter, "Cannot reset on create");
+            settings = node.L(settings, node.Q(node.Y(node.Q("resetSupportedCodecs"), node.Q(node.Y()))));
         }
     }
     return node.Y(

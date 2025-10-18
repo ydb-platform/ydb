@@ -461,7 +461,7 @@ void TInitInfoRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActor
 
 void TInitInfoRangeStep::PostProcessing(const TActorContext& ctx) {
     auto& usersInfoStorage = Partition()->UsersInfoStorage;
-    for (auto& [_, userInfo] : usersInfoStorage->GetAll()) {
+    for (auto&& [_, userInfo] : usersInfoStorage->GetAll()) {
         userInfo.AnyCommits = userInfo.Offset > (i64)Partition()->BlobEncoder.StartOffset;
     }
 

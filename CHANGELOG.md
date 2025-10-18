@@ -13,3 +13,9 @@
 * 24725:https://github.com/ydb-platform/ydb/issues/24701 [#24725](https://github.com/ydb-platform/ydb/pull/24725) ([Pavel Velikhov](https://github.com/pavelvelikhov))
 * 24668:Fixed an [issue](https://github.com/ydb-platform/ydb/issues/23895) that scalar and block hash shuffles may be incompatible and it causes incorrect results, for example, in hash joins. Now no 2 different kinds of shuffles (SCALAR and BLOCK) should be inputs to the single stage. (#24033) [#24666](https://github.com/ydb-platform/ydb/pull/24666) (#24033) [#24668](https://github.com/ydb-platform/ydb/pull/24668) ([Ivan](https://github.com/abyss7))
 * 24633:Fixed an [issue](https://github.com/ydb-platform/ydb/issues/23731) when `IF` predicate pushdown into column shards by expanding constant folding and getting rid of the `IF`. [#24633](https://github.com/ydb-platform/ydb/pull/24633) ([Pavel Velikhov](https://github.com/pavelvelikhov))
+* 25688:https://github.com/ydb-platform/ydb/issues/25524 [#25688](https://github.com/ydb-platform/ydb/pull/25688) ([stanislav_shchetinin](https://github.com/stanislav-shchetinin))
+* 25455:Listing of objects with a common prefix has been fixed when importing changefeeds
+https://github.com/ydb-platform/ydb/issues/25454 [#25455](https://github.com/ydb-platform/ydb/pull/25455) ([stanislav_shchetinin](https://github.com/stanislav-shchetinin))
+* 25150:fix crash after follower alter https://github.com/ydb-platform/ydb/issues/20866 https://github.com/ydb-platform/ydb/issues/20868 [#25150](https://github.com/ydb-platform/ydb/pull/25150) ([vporyadke](https://github.com/vporyadke))
+* 25127:fix a bug where tablet deletion might get stuck https://github.com/ydb-platform/ydb/issues/23858 [#25127](https://github.com/ydb-platform/ydb/pull/25127) ([vporyadke](https://github.com/vporyadke))
+

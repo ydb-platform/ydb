@@ -15,7 +15,7 @@ class TStorage;
 
 using namespace NActors;
 
-class TConsumerActor : public TBaseActor<TConsumerActor>
+class TConsumerActor : public TBaseTabletActor<TConsumerActor>
                      , public TConstantLogPrefix {
     friend class TSerializer;
 

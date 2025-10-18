@@ -235,21 +235,21 @@ TAutoPtr<TResponseBuilder> CreateResponseProxy(const TActorId& sender, const TAc
 /******************************************************* OffsetsBuilderProxy *********************************************************/
 
 template <typename T, typename T2, typename T3>
-class TBuilderProxy : public TBaseActor<TBuilderProxy<T,T2,T3>> {
+class TBuilderProxy : public TBaseTabletActor<TBuilderProxy<T,T2,T3>> {
     typedef TBuilderProxy<T,T2,T3> TThis;
 
     friend class TActorBootstrapped<TThis>;
     typedef T TEvent;
     typedef typename TEvent::TPtr TTPtr;
 
-    using TBase = TBaseActor<TThis>;
+    using TBase = TBaseTabletActor<TThis>;
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::PERSQUEUE_ANS_ACTOR;
     }
 
     TBuilderProxy(const ui64 tabletId, const TActorId& tabletActorId, const TActorId& sender, const ui32 count, const ui64 cookie)
-    : TBaseActor<TBuilderProxy<T,T2,T3>>(tabletId, tabletActorId, NKikimrServices::PERSQUEUE)
+    : TBaseTabletActor<TBuilderProxy<T,T2,T3>>(tabletId, tabletActorId, NKikimrServices::PERSQUEUE)
     , Sender(sender)
     , Waiting(count)
     , Result()

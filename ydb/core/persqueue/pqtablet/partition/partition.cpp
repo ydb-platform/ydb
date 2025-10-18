@@ -320,7 +320,7 @@ TPartition::TPartition(ui64 tabletId, const TPartitionId& partition, const TActo
                        const TActorId& writeQuoterActorId,
                        TIntrusivePtr<NJaegerTracing::TSamplingThrottlingControl> samplingControl,
                        bool newPartition)
-    : TBaseActor(tabletId, tablet, NKikimrServices::PERSQUEUE)
+    : TBaseTabletActor(tabletId, tablet, NKikimrServices::PERSQUEUE)
     , Initializer(this)
     , TabletGeneration(tabletGeneration)
     , Partition(partition)

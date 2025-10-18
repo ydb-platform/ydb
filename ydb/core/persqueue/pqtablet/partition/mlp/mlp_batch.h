@@ -1,6 +1,7 @@
 #pragma once
 
 #include "mlp.h"
+#include "mlp_types.h"
 
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/events/internal.h>
@@ -38,8 +39,7 @@ private:
     const TActorIdentity SelfActorId;
     const TActorId PartitionActorId;
 
-    std::unique_ptr<TEvPQ::TEvMLPReadBatchResponse> ReadResponse;
-
+    std::vector<TReadResult> ReadResponses;
     std::vector<TResponseHolder<TEvPersQueue::TEvMLPCommitResponse>> CommitResponses;
     std::vector<TResponseHolder<TEvPersQueue::TEvMLPUnlockResponse>> UnlockResponses;
     std::vector<TResponseHolder<TEvPersQueue::TEvMLPChangeMessageDeadlineResponse>> ChangeMessageDeadlineResponses;

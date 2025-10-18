@@ -24,7 +24,7 @@ TString MakeSnapshotKey(ui32 partitionId, ui32 consumerId) {
 }
 
 TConsumerActor::TConsumerActor(ui64 tabletId, const TActorId& tabletActorId, ui32 partitionId, const TActorId& partitionActorId, const NKikimrPQ::TPQTabletConfig_TConsumer& config)
-    : TBaseActor(tabletId, tabletActorId, NKikimrServices::EServiceKikimr::PQ_MLP_CONSUMER)
+    : TBaseTabletActor(tabletId, tabletActorId, NKikimrServices::EServiceKikimr::PQ_MLP_CONSUMER)
     , PartitionId(partitionId)
     , PartitionActorId(partitionActorId)
     , Config(config)
@@ -362,7 +362,7 @@ std::unique_ptr<TEvPQ::TEvRead> MakeEvRead(const TActorId& selfId, const TString
         count,
         TString{},
         consumerName,
-        0,
+        1000,
         std::numeric_limits<ui32>::max(),
         0,
         0,

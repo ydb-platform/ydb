@@ -126,7 +126,7 @@ class TPartitionCompaction;
 
 #define PQ_ENSURE(condition) AFL_ENSURE(condition)("tablet_id", TabletId)("partition_id", Partition)
 
-class TPartition : public TBaseActor<TPartition> {
+class TPartition : public TBaseTabletActor<TPartition> {
     friend TInitializer;
     friend TInitializerStep;
     friend TInitConfigStep;

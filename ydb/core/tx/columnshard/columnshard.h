@@ -109,6 +109,7 @@ namespace TEvColumnShard {
         YDB_ACCESSOR(ui32, ItemsLimit, 0);
         YDB_READONLY_DEF(std::vector<ui32>, ColumnIds);
         std::set<ui32> ColumnIdsSet;
+        YDB_ACCESSOR_DEF(std::optional<ui64>, SchemaVersion);
     public:
         TString TaskIdentifier;
         std::shared_ptr<NOlap::TPKRangesFilter> RangesFilter;

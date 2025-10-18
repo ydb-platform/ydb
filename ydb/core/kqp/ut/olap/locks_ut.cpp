@@ -188,6 +188,32 @@ Y_UNIT_TEST_SUITE(KqpOlapLocks) {
         }
     }
 
+    Y_UNIT_TEST(TableInsertAsSelectOlapStore) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+
+        TKikimrRunner kikimr(settings);
+        Tests::NCommon::TLoggerInit(kikimr)
+            .SetComponents({ NKikimrServices::TX_COLUMNSHARD_WRITE, NKikimrServices::TX_COLUMNSHARD }, "CS")
+            .SetPriority(NActors::NLog::PRI_DEBUG)
+            .Initialize();
+
+        TLocalHelper(kikimr).CreateTestOlapTables();
+
+        WriteTestData(kikimr, "/Root/olapStore/olapTable0", 0, 1000000, 3, true);
+
+        auto client = kikimr.GetQueryClient();
+        {
+            auto result = client
+                              .ExecuteQuery(R"(
+                INSERT INTO `/Root/olapStore/olapTable1` SELECT * FROM `/Root/olapStore/olapTable0`;
+            )",
+                                  NYdb::NQuery::TTxControl::BeginTx().CommitTx())
+                              .ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+    }
+
     void TestDeleteAbsent(const size_t shardCount, bool reboot) {
         //This test tries to DELETE from a table when there is no rows to delete at some shard
         //It corresponds to a SCAN, then NO write then COMMIT on that shard

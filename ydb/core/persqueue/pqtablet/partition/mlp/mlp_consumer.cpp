@@ -7,6 +7,17 @@
 
 namespace NKikimr::NPQ::NMLP {
 
+namespace {
+
+template <typename TEv>
+TString EventStr(const char * func, const TEv& ev) {
+    return TStringBuilder() << func << " event# " << ev->GetTypeRewrite() << " (" << ev->GetTypeName() << ") "
+        << ", Sender " << ev->Sender.ToString() << ", Recipient " << ev->Recipient.ToString()
+        << ", Cookie: " << ev->Cookie;
+}
+
+}
+
 TString MakeSnapshotKey(ui32 partitionId, ui32 consumerId) {
     return TStringBuilder() << TKeyPrefix(TKeyPrefix::EType::TypeConsumerData, TPartitionId(partitionId)).ToString()
         << "_" << Sprintf("%.10" PRIu32, consumerId);
@@ -23,13 +34,16 @@ TConsumerActor::TConsumerActor(ui64 tabletId, const TActorId& tabletActorId, ui3
 void TConsumerActor::Bootstrap() {
     Become(&TConsumerActor::StateInit);
 
+    auto key = MakeSnapshotKey(PartitionId, Config.GetId());
+    LOG_D("Reading snapshot " << key << " from " << TabletActorId.ToString());
     auto request = std::make_unique<TEvKeyValue::TEvRequest>();
-    request->Record.AddCmdRead()->SetKey(MakeSnapshotKey(PartitionId, Config.GetId()));
-
+    request->Record.AddCmdRead()->SetKey(key);
     Send(TabletActorId, std::move(request));
 }
 
 void TConsumerActor::PassAway() {
+    LOG_D("PassAway");
+
     if (Batch) {
         Batch->Rollback();
     }
@@ -95,30 +109,40 @@ void TConsumerActor::HandleOnInit(TEvKeyValue::TEvResponse::TPtr& ev) {
     }
 
     auto& readResult = record.GetReadResult(0);
-    if (readResult.GetStatus() != NKikimrProto::OK) {
-        return Restart(TStringBuilder() << "Received KV response error on initialization: " << readResult.GetStatus());
-    }
-    AFL_ENSURE(readResult.HasValue() && readResult.GetValue().size());
 
-    NKikimrPQ::TMLPStorageSnapshot snapshot;
-    if (!snapshot.ParseFromString(readResult.GetValue())) {
-        return Restart(TStringBuilder() << "Parse snapshot error");
-    }
+    switch(readResult.GetStatus()) {
+        case NKikimrProto::OK: {
+            AFL_ENSURE(readResult.HasValue() && readResult.GetValue().size());
 
-    if (Config.GetId() != snapshot.GetConfiguration().GetConsumerId()) {
-        return Restart(TStringBuilder() << "Snapshot consumer id mismatch: " << Config.GetId() << " vs " << snapshot.GetConfiguration().GetConsumerId());
-    }
+            NKikimrPQ::TMLPStorageSnapshot snapshot;
+            if (!snapshot.ParseFromString(readResult.GetValue())) {
+                return Restart(TStringBuilder() << "Parse snapshot error");
+            }
 
-    if (Config.GetGeneration() != snapshot.GetConfiguration().GetGeneration()) {
-        LOG_W("Received snapshot from old consumer generation: " << Config.GetGeneration() << " vs " << snapshot.GetConfiguration().GetGeneration());
-    } else {
-        Storage->InitializeFromSnapshot(snapshot);
-        Storage->ProccessDeadlines();
+            if (Config.GetId() != snapshot.GetConfiguration().GetConsumerId()) {
+                return Restart(TStringBuilder() << "Snapshot consumer id mismatch: " << Config.GetId() << " vs " << snapshot.GetConfiguration().GetConsumerId());
+            }
+
+            if (Config.GetGeneration() == snapshot.GetConfiguration().GetGeneration()) {
+                Storage->InitializeFromSnapshot(snapshot);
+            } else {
+                LOG_W("Received snapshot from old consumer generation: " << Config.GetGeneration() << " vs " << snapshot.GetConfiguration().GetGeneration());
+            }
+
+            break;
+        }
+        case NKikimrProto::NODATA: {
+            LOG_D("Initializing new consumer");
+            break;
+        }
+        default:
+            return Restart(TStringBuilder() << "Received KV response error on initialization: " << readResult.GetStatus());
     }
 
     LOG_D("Initialized");
     Become(&TConsumerActor::StateWork);
 
+    Storage->ProccessDeadlines();
     ProcessEventQueue();
 }
 
@@ -130,6 +154,8 @@ STFUNC(TConsumerActor::StateInit) {
         hFunc(TEvPersQueue::TEvMLPChangeMessageDeadlineRequest, Queue);
         hFunc(TEvKeyValue::TEvResponse, HandleOnInit);
         sFunc(TEvents::TEvPoison, PassAway);
+        default:
+            LOG_E("Unexpected " << EventStr("StateInit", ev));
     }
 }
 
@@ -167,6 +193,8 @@ STFUNC(TConsumerActor::StateWork) {
         hFunc(TEvPersQueue::TEvMLPUnlockRequest, Handle);
         hFunc(TEvPersQueue::TEvMLPChangeMessageDeadlineRequest, Handle);
         sFunc(TEvents::TEvPoison, PassAway);
+        default:
+            LOG_E("Unexpected " << EventStr("StateInit", ev));
     }
 }
 
@@ -178,6 +206,8 @@ STFUNC(TConsumerActor::StateWrite) {
         hFunc(TEvPersQueue::TEvMLPChangeMessageDeadlineRequest, Queue);
         hFunc(TEvKeyValue::TEvResponse, HandleOnWrite);
         sFunc(TEvents::TEvPoison, PassAway);
+        default:
+            LOG_E("Unexpected " << EventStr("StateInit", ev));
     }
 }
 

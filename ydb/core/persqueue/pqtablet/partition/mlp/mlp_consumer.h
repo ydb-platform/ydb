@@ -56,7 +56,6 @@ private:
     void PersistSnapshot();
 
 private:
-    const TActorId TabletActorId;
     const ui32 PartitionId;
     const TActorId PartitionActorId;
     const NKikimrPQ::TPQTabletConfig::TConsumer Config;

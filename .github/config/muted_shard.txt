@@ -1,5 +1,0 @@
-ydb-core-blobstorage-pdisk-ut_2
-ydb-core-blobstorage-ut_blobstorage_4
-ydb-core-blobstorage-ut_blobstorage_5
-ydb-core-blobstorage-ut_blobstorage_6
-ydb-services-persqueue_v1-ut_3

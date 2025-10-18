@@ -1,0 +1,40 @@
+name: Automerge PR
+on:
+  schedule:
+    - cron: "*/5 * * * *"   # At every 5th minute
+  workflow_dispatch:
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: true
+env:
+  GH_TOKEN: ${{ secrets.YDBOT_TOKEN }}
+jobs:
+  check-pr:
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            .github
+            ydb/ci/
+      - name: install packages
+        shell: bash
+        run: |
+          pip install PyGithub==2.5.0
+
+      - name: configure
+        shell: bash
+        run: |
+            git config --global user.name YDBot
+            git config --global user.email ydbot@ydb.tech
+            git config --local github.token ${{ env.GH_TOKEN }}
+
+      - name: run-command
+        shell: bash
+        env:
+          REPO: ${{ github.repository }}
+          TOKEN: ${{ env.GH_TOKEN }}
+        run: |
+          cd ./ydb/ci/rightlib
+          ./automerge.py

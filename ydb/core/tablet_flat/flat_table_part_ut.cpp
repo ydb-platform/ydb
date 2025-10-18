@@ -240,7 +240,7 @@ Y_UNIT_TEST_SUITE(TLegacy) {
 
     Y_UNIT_TEST(StatsIter) {
         TNullOutput devNull;
-        IOutputStream& dbgOut = devNull; //*/ Cerr;
+        IOutputStream& dbgOut = /**/devNull; //*/ Cerr;
 
         NScheme::TTypeRegistry typeRegistry;
 
@@ -316,6 +316,8 @@ Y_UNIT_TEST_SUITE(TLegacy) {
             stIter.Add(std::move(it2));
         }
 
+        const auto types = lay2.RowScheme()->Keys->Types;
+
         TSerializedCellVec prevKey;
         ui64 prevRowCount = 0;
         ui64 prevDataSize = 0;
@@ -331,7 +333,11 @@ Y_UNIT_TEST_SUITE(TLegacy) {
             dbgOut << DbgPrintTuple(key, typeRegistry)
                    << " " << stats.RowCount << " " << stats.DataSize.Size << Endl;
 
-            UNIT_ASSERT_C(CompareTypedCellVectors(key.Columns, prevKey.GetCells().data(), key.Types, key.ColumnCount, prevKey.GetCells().size()) > 0,
+            // all keys except the first empty prevKey have the same length
+            if (!prevKey) {
+                continue;
+            }
+            UNIT_ASSERT_C(CompareTypedCellVectors(key.Columns, prevKey.GetCells().data(), types.data(), types.size()) > 0,
                           "Keys must be sorted");
 
             UNIT_ASSERT(prevRowCount < stats.RowCount);

@@ -21,7 +21,7 @@ using TTypeId = NScheme::TTypeId;
 using TTypeInfo = NScheme::TTypeInfo;
 
 struct TDataRow {
-    static const TTypeInfo* MakeTypeInfos() {
+    static auto MakeTypeInfos() {
         static const TTypeInfo types[27] = {
             TTypeInfo(NTypeIds::Bool),
             TTypeInfo(NTypeIds::Int8),
@@ -656,11 +656,10 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
 
         UNIT_ASSERT_VALUES_EQUAL(cellRows.size(), rowWriter.Rows.size());
 
+        const auto types_view = TDataRow::MakeYdbSchema() | std::views::values;
+        const auto types = std::vector<TTypeInfo>(types_view.begin(), types_view.end());
         for (size_t i = 0; i < rows.size(); ++i) {
-            UNIT_ASSERT(0 == CompareTypedCellVectors(
-                            cellRows[i].data(), rowWriter.Rows[i].data(),
-                            TDataRow::MakeTypeInfos(),
-                            cellRows[i].size(), rowWriter.Rows[i].size()));
+            UNIT_ASSERT(0 == CompareKeys(cellRows[i], rowWriter.Rows[i], types));
         }
     }
 

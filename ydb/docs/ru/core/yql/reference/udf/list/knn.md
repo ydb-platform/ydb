@@ -44,12 +44,6 @@
 
 {% endnote %}
 
-{% note info %}
-
-В настоящий момент {{ ydb-short-name }} не поддерживает построение векторных индексов для бинарных векторов `BitVector`.
-
-{% endnote %}
-
 {% endif %}
 
 #### Сигнатуры функций {#functions-convert-signature}

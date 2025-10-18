@@ -128,6 +128,9 @@ namespace NKikimr {
             const ui32 DefaultMaxSlots;
 
             // static pdisk/vdisk states
+            std::map<TVSlotId, TStaticVSlotInfo> NewStaticVSlots;
+            std::map<TPDiskId, TStaticPDiskInfo> NewStaticPDisks;
+            std::map<TGroupId, TStaticGroupInfo> NewStaticGroups;
             std::map<TVSlotId, TStaticVSlotInfo>& StaticVSlots;
             std::map<TPDiskId, TStaticPDiskInfo>& StaticPDisks;
             std::map<TGroupId, TStaticGroupInfo>& StaticGroups;
@@ -147,7 +150,7 @@ namespace NKikimr {
 
         public:
             TConfigState(TBlobStorageController &controller, const THostRecordMap &hostRecords, TInstant timestamp,
-                    TMonotonic mono)
+                    TMonotonic mono, const NKikimrBlobStorage::TStorageConfig *storageConfig = nullptr)
                 : Self(controller)
                 , HostConfigs(&controller.HostConfigs)
                 , Boxes(&controller.Boxes)
@@ -168,14 +171,33 @@ namespace NKikimr {
                 , Mono(mono)
                 , DonorMode(controller.DonorMode)
                 , DefaultMaxSlots(controller.DefaultMaxSlots)
-                , StaticVSlots(controller.StaticVSlots)
-                , StaticPDisks(controller.StaticPDisks)
-                , StaticGroups(controller.StaticGroups)
+                , StaticVSlots(storageConfig && storageConfig->HasBlobStorageConfig() ? NewStaticVSlots : controller.StaticVSlots)
+                , StaticPDisks(storageConfig && storageConfig->HasBlobStorageConfig() ? NewStaticPDisks : controller.StaticPDisks)
+                , StaticGroups(storageConfig && storageConfig->HasBlobStorageConfig() ? NewStaticGroups : controller.StaticGroups)
                 , SerialManagementStage(&controller.SerialManagementStage)
                 , StoragePoolStat(*controller.StoragePoolStat)
                 , BridgeInfo(controller.BridgeInfo)
             {
                 Y_ABORT_UNLESS(HostRecords);
+                if (storageConfig && storageConfig->HasBlobStorageConfig()) {
+                    const auto& bsConfig = storageConfig->GetBlobStorageConfig();
+                    const auto& ss = bsConfig.GetServiceSet();
+                    for (const auto& pdisk : ss.GetPDisks()) {
+                        const TPDiskId pdiskId(pdisk.GetNodeID(), pdisk.GetPDiskID());
+                        NewStaticPDisks.try_emplace(pdiskId, pdisk, controller.StaticPDisks);
+                    }
+                    for (const auto& vslot : ss.GetVDisks()) {
+                        const auto& location = vslot.GetVDiskLocation();
+                        const TPDiskId pdiskId(location.GetNodeID(), location.GetPDiskID());
+                        const TVSlotId vslotId(pdiskId, location.GetVDiskSlotID());
+                        NewStaticVSlots.try_emplace(vslotId, vslot, controller.StaticVSlots, Mono);
+                        ++StaticPDisks.at(pdiskId).StaticSlotUsage;
+                    }
+                    for (const auto& group : ss.GetGroups()) {
+                        const auto groupId = TGroupId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetGroupID);
+                        NewStaticGroups.try_emplace(groupId, group, controller.StaticGroups);
+                    }
+                }
             }
 
             void Commit() {

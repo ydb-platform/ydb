@@ -34,7 +34,7 @@ TConclusionStatus TReadMetadata::Init(const NColumnShard::TColumnShard* owner, c
             auto op = owner->GetOperationsManager().GetOperationByInsertWriteIdVerified(i);
             // we do not need to check our own uncommitted writes
             if (op->GetLockId() != *LockId) {
-                AddWriteIdToCheck(i, op->GetLockId());
+                AddMaybeConflictingWrite(i, op->GetLockId());
             }
         }
     }
@@ -88,12 +88,13 @@ void TReadMetadata::DoOnReadFinished(NColumnShard::TColumnShard& owner) const {
         return;
     }
     const ui64 lock = *GetLockId();
-    if (GetBrokenWithCommitted()) {
+    if (GetBreakLockOnReadFinished()) {
         owner.GetOperationsManager().GetLockVerified(lock).SetBroken();
     } else {
         NOlap::NTxInteractions::TTxConflicts conflicts;
-        for (auto&& i : GetConflictableLockIds()) {
-            conflicts.Add(i, lock);
+        for (auto&& lockIdToCommit : GetConflictingLockIds()) {
+            // if lockIdToCommit commits, lock must be broken
+            conflicts.Add(lockIdToCommit, lock);
         }
         if (!conflicts.IsEmpty()) {
             auto writer =
@@ -108,7 +109,8 @@ void TReadMetadata::DoOnBeforeStartReading(NColumnShard::TColumnShard& owner) co
         return;
     }
     auto evWriter = std::make_shared<NOlap::NTxInteractions::TEvReadStartWriter>(TableMetadataAccessor->GetPathIdVerified(),
-        GetResultSchema()->GetIndexInfo().GetPrimaryKey(), GetPKRangesFilterPtr(), GetConflictableLockIds());
+        GetResultSchema()->GetIndexInfo().GetPrimaryKey(), GetPKRangesFilterPtr(), GetMaybeConflictingLockIds());
+    // AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("opca", "DoOnBeforeStartReading")("lock_id", *LockId)("conflictable_lock_ids", JoinSeq(", ", GetMaybeConflictableLockIds()));
     owner.GetOperationsManager().AddEventForLock(owner, *LockId, evWriter);
 }
 

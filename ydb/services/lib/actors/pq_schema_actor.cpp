@@ -227,6 +227,7 @@ namespace NKikimr::NGRpcProxy::V1 {
         auto* consumer = config->AddConsumers();
 
         consumer->SetName(consumerName);
+        consumer->SetType(::NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_STREAMING);
 
         if (rr.read_from().seconds() < 0) {
             return TMsgPqCodes(
@@ -267,6 +268,8 @@ namespace NKikimr::NGRpcProxy::V1 {
                 passwordHash = MD5::Data(pair.second);
                 passwordHash.to_lower();
                 hasPassword = true;
+            } else if (pair.first == "_mlp") { // TODO MLP remove it
+                consumer->SetType(::NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP);
             }
         }
         if (serviceType.empty()) {

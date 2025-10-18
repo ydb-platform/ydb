@@ -264,10 +264,11 @@ TMaybe<ui64> GetOffsetEstimate(const std::deque<TDataKey>& container, TInstant t
     }
 }
 
-void TPartition::ReplyError(const TActorContext& ctx, const ui64 dst, NPersQueue::NErrorCode::EErrorCode errorCode, const TString& error, bool isInternal) {
+void TPartition::ReplyError(const TActorContext& ctx, const ui64 dst, NPersQueue::NErrorCode::EErrorCode errorCode, const TString& error, const TActorId& replyTo) {
+    auto replyToActor = replyTo ? replyTo : TabletActorId;
     ReplyPersQueueError(
-        dst == 0 ? ctx.SelfID : TabletActorId, ctx, TabletId, TopicName(), Partition,
-        TabletCounters, NKikimrServices::PERSQUEUE, dst, errorCode, error, true, isInternal
+        replyToActor, ctx, TabletId, TopicName(), Partition,
+        TabletCounters, NKikimrServices::PERSQUEUE, dst, errorCode, error, true, replyToActor == SelfId()
     );
 }
 
@@ -319,7 +320,7 @@ TPartition::TPartition(ui64 tabletId, const TPartitionId& partition, const TActo
                        const TActorId& writeQuoterActorId,
                        TIntrusivePtr<NJaegerTracing::TSamplingThrottlingControl> samplingControl,
                        bool newPartition)
-    : TBaseActor(tabletId, tablet, NKikimrServices::PERSQUEUE)
+    : TBaseTabletActor(tabletId, tablet, NKikimrServices::PERSQUEUE)
     , Initializer(this)
     , TabletGeneration(tabletGeneration)
     , Partition(partition)
@@ -719,6 +720,7 @@ void TPartition::InitComplete(const TActorContext& ctx) {
     TabletCounters.Percentile()[COUNTER_LATENCY_PQ_INIT].IncrementFor(InitDuration.MilliSeconds());
 
     CreateCompacter();
+    InitializeMLPConsumers();
 
     InitUserInfoForImportantClients(ctx);
 
@@ -756,6 +758,8 @@ void TPartition::InitComplete(const TActorContext& ctx) {
     if (MirroringEnabled(Config)) {
         CreateMirrorerActor();
     }
+
+    ProcessMLPPendingEvents();
 
     ReportCounters(ctx, true);
 }
@@ -1731,7 +1735,8 @@ void TPartition::OnReadComplete(TReadInfo& info,
         TabletCounters.Cumulative()[COUNTER_PQ_READ_BYTES].Increment(resp->ByteSize());
     }
 
-    ctx.Send(info.Destination != 0 && !info.IsInternal ? TabletActorId : ctx.SelfID, answer.Event.Release());
+    auto replyTo = ReplyTo(info.IsInternal, info.ReplyTo);
+    ctx.Send(replyTo, answer.Event.Release());
 
     OnReadRequestFinished(info.Destination, answer.Size, info.User, ctx);
 }
@@ -3246,6 +3251,7 @@ void TPartition::EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig&& config,
     TotalPartitionWriteSpeed = config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond();
 
     CreateCompacter();
+    InitializeMLPConsumers();
 
     if (MirroringEnabled(Config)) {
         if (Mirrorer) {
@@ -4451,5 +4457,4 @@ void TPartition::ResetDetailedMetrics() {
     BytesWrittenPerPartition.Reset();
     MessagesWrittenPerPartition.Reset();
 }
-
 } // namespace NKikimr::NPQ

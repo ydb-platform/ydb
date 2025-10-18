@@ -93,6 +93,15 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
     void Handle(TEvPQ::TEvSubDomainStatus::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvReadingPartitionStatusRequest::TPtr& ev, const TActorContext& ctx);
 
+    void Handle(TEvPersQueue::TEvMLPReadRequest::TPtr&);
+    void Handle(TEvPersQueue::TEvMLPCommitRequest::TPtr&);
+    void Handle(TEvPersQueue::TEvMLPUnlockRequest::TPtr&);
+    void Handle(TEvPersQueue::TEvMLPChangeMessageDeadlineRequest::TPtr&);
+
+    template<typename TEventHandle>
+    bool ForwardToPartition(ui32 partitionId, TAutoPtr<TEventHandle>& ev);
+    void ProcessMLPQueue();
+
     bool OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext& ctx) override;
     bool OnRenderAppHtmlPageTx(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext& ctx);
     bool OnSendReadSetToYourself(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx);
@@ -247,6 +256,14 @@ private:
 
     TVector<TAutoPtr<TEvPersQueue::TEvHasDataInfo>> HasDataRequests;
     TVector<std::pair<TAutoPtr<TEvPersQueue::TEvUpdateConfig>, TActorId> > UpdateConfigRequests;
+
+    using TMLPRequest = std::variant<
+        TEvPersQueue::TEvMLPReadRequest::TPtr,
+        TEvPersQueue::TEvMLPCommitRequest::TPtr,
+        TEvPersQueue::TEvMLPUnlockRequest::TPtr,
+        TEvPersQueue::TEvMLPChangeMessageDeadlineRequest::TPtr
+    >;
+    TDeque<TMLPRequest> MLPRequests;
 
 public:
     struct TPipeInfo {
@@ -583,7 +600,7 @@ private:
     bool AllSupportivePartitionsHaveBeenDeleted(const TMaybe<TWriteId>& writeId) const;
     void DeleteWriteId(const TMaybe<TWriteId>& writeId);
 
-    void UpdateReadRuleGenerations(NKikimrPQ::TPQTabletConfig& cfg) const;
+    void UpdateConsumers(NKikimrPQ::TPQTabletConfig& cfg);
 
     void ResendEvReadSetToReceivers(const TActorContext& ctx);
     void ResendEvReadSetToReceiversForState(const TActorContext& ctx, NKikimrPQ::TTransaction::EState state);

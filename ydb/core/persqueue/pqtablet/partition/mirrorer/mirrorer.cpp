@@ -31,7 +31,7 @@ TMirrorer::TMirrorer(
     const NKikimrPQ::TMirrorPartitionConfig& config,
     const TTabletCountersBase& counters
 )
-    : TBaseActor(tabletId, tabletActor, NKikimrServices::PQ_MIRRORER)
+    : TBaseTabletActor(tabletId, tabletActor, NKikimrServices::PQ_MIRRORER)
     , PartitionActor(partitionActor)
     , TopicConverter(topicConverter)
     , Partition(partition)

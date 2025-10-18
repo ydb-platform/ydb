@@ -15,9 +15,7 @@
 
 #include <ydb/core/protos/pqconfig.pb.h>
 
-namespace NKikimr {
-
-namespace TEvPersQueue {
+namespace NKikimr::TEvPersQueue {
     enum EEv {
         EvRequest = InternalEventSpaceBegin(NPQ::NEvents::EServices::GLOBAL),
         EvUpdateConfig, //change config for all partitions and count of partitions
@@ -61,6 +59,17 @@ namespace TEvPersQueue {
         EvBalancingSubscribe,
         EvBalancingUnsubscribe,
         EvBalancingSubscribeNotify,
+        EvMLPGetPartitionRequest,
+        EvMLPGetPartitionResponse,
+        EvMLPErrorResponse,
+        EvMLPReadRequest,
+        EvMLPReadResponse,
+        EvMLPCommitRequest,
+        EvMLPCommitResponse,
+        EvMLPUnlockRequest,
+        EvMLPUnlockResponse,
+        EvMLPChangeMessageDeadlineRequest,
+        EvMLPChangeMessageDeadlineResponse,
         EvResponse = EvRequest + 256,
         EvInternalEvents = EvResponse + 256,
         EvEnd
@@ -309,5 +318,230 @@ namespace TEvPersQueue {
             Record.SetStatus(status);
         }
     };
-};
-} //NKikimr
+
+    //
+    // Request to the PQRB. It asks him which partition is ready for reading.
+    //
+    struct TEvMLPGetPartitionRequest : TEventPB<TEvMLPGetPartitionRequest, NKikimrPQ::TEvMLPGetPartitionRequest, EvMLPGetPartitionRequest> {
+        TEvMLPGetPartitionRequest() = default;
+
+        TEvMLPGetPartitionRequest(const TString& topic, const TString& consumer) {
+            Record.SetTopic(topic);
+            Record.SetConsumer(consumer);
+        }
+
+        const TString& GetTopic() const {
+            return Record.GetTopic();
+        }
+
+        const TString& GetConsumer() const {
+            return Record.GetConsumer();
+        }
+    };
+
+    //
+    // Response from the PQRB. It tells us which partition is ready for reading.
+    //
+    struct TEvMLPGetPartitionResponse : TEventPB<TEvMLPGetPartitionResponse, NKikimrPQ::TEvMLPGetPartitionResponse, EvMLPGetPartitionResponse> {
+        TEvMLPGetPartitionResponse() = default;
+
+        TEvMLPGetPartitionResponse(ui32 partitionId, ui64 tabletId) {
+            Record.SetErrorCode(NPersQueue::NErrorCode::EErrorCode::OK);
+            Record.SetPartitionId(partitionId);
+            Record.SetTabletId(tabletId);
+        }
+
+        TEvMLPGetPartitionResponse(NPersQueue::NErrorCode::EErrorCode errorCode) {
+            Record.SetErrorCode(errorCode);
+        }
+
+        NPersQueue::NErrorCode::EErrorCode GetErrorCode() const {
+            return Record.GetErrorCode();
+        }
+
+        // The partition which is ready for reading.
+        ui32 GetPartitionId() const {
+            return Record.GetPartitionId();
+        }
+
+        // The tablet of the partition which is ready for reading. Return it because partition may not exist yet in local scheme cache.
+        ui64 GetTabletId() const {
+            return Record.GetTabletId();
+        }
+    };
+
+    struct TEvMLPErrorResponse : TEventPB<TEvMLPErrorResponse, NKikimrPQ::TEvMLPErrorResponse, EvMLPErrorResponse> {
+        TEvMLPErrorResponse() = default;
+
+        TEvMLPErrorResponse(NPersQueue::NErrorCode::EErrorCode errorCode, TString&& errorMessage) {
+            Record.SetErrorCode(errorCode);
+            Record.SetErrorMessage(errorMessage);
+        }
+
+        NPersQueue::NErrorCode::EErrorCode GetErrorCode() const {
+            return Record.GetErrorCode();
+        }
+
+        const TString& GetErrorMessage() const {
+            return Record.GetErrorMessage();
+        }
+    };
+
+    //
+    // Request to the PQ-tablet.
+    //
+    struct TEvMLPReadRequest : TEventPB<TEvMLPReadRequest, NKikimrPQ::TEvMLPReadRequest, EvMLPReadRequest> {
+        TEvMLPReadRequest() = default;
+
+        TEvMLPReadRequest(const TString& topic, const TString& consumer, ui32 partitionId, TDuration waitTime, TDuration visibilityTimeout, ui32 maxNumberOfMessages) {
+            Record.SetTopic(topic);
+            Record.SetConsumer(consumer);
+            Record.SetPartitionId(partitionId);
+            Record.SetWaitTimeSeconds(waitTime.Seconds());
+            Record.SetVisibilityTimeoutSeconds(visibilityTimeout.Seconds());
+            Record.SetMaxNumberOfMessages(maxNumberOfMessages);
+        }
+
+        const TString& GetTopic() const {
+            return Record.GetTopic();
+        }
+
+        const TString& GetConsumer() const {
+            return Record.GetConsumer();
+        }
+
+        ui32 GetPartitionId() const {
+            return Record.GetPartitionId();
+        }
+
+        TDuration GetWaitTime() const {
+            return TDuration::Seconds(Record.GetWaitTimeSeconds());
+        }
+
+        TDuration GetVisibilityTimeout() const {
+            return TDuration::Seconds(Record.GetVisibilityTimeoutSeconds());
+        }
+
+        // The maximum number of messages to return.
+        ui32 GetMaxNumberOfMessages() const {
+            return Record.GetMaxNumberOfMessages();
+        }
+    };
+
+    //
+    // Response from the PQ-tablet.
+    //
+    struct TEvMLPReadResponse : TEventPB<TEvMLPReadResponse, NKikimrPQ::TEvMLPReadResponse, EvMLPReadResponse> {
+        TEvMLPReadResponse() = default;
+    };
+
+    //
+    // Request to the PQ-tablet. It is SQS DeleteMessageBatch request.
+    //
+    struct TEvMLPCommitRequest : TEventPB<TEvMLPCommitRequest, NKikimrPQ::TEvMLPCommitRequest, EvMLPCommitRequest> {
+        TEvMLPCommitRequest() = default;
+
+        TEvMLPCommitRequest(const TString& topic, const TString& consumer, ui32 partitionId) {
+            Record.SetTopic(topic);
+            Record.SetConsumer(consumer);
+            Record.SetPartitionId(partitionId);
+        }
+
+        void AddMessage(ui64 offset) {
+            Record.AddOffset(offset);
+        }
+
+        const TString& GetTopic() const {
+            return Record.GetTopic();
+        }
+
+        const TString& GetConsumer() const {
+            return Record.GetConsumer();
+        }
+
+        ui32 GetPartitionId() const {
+            return Record.GetPartitionId();
+        }
+    };
+
+    //
+    // Response from the PQ-tablet.
+    //
+    struct TEvMLPCommitResponse : TEventPB<TEvMLPCommitResponse, NKikimrPQ::TEvMLPCommitResponse, EvMLPCommitResponse> {
+        TEvMLPCommitResponse() = default;
+    };
+
+    //
+    // Request to the PQ-tablet.
+    //
+    struct TEvMLPUnlockRequest : TEventPB<TEvMLPUnlockRequest, NKikimrPQ::TEvMLPUnlockRequest, EvMLPUnlockRequest> {
+        TEvMLPUnlockRequest() = default;
+
+        TEvMLPUnlockRequest(const TString& topic, const TString& consumer, ui32 partitionId) {
+            Record.SetTopic(topic);
+            Record.SetConsumer(consumer);
+            Record.SetPartitionId(partitionId);
+        }
+
+        void AddMessage(ui64 offset) {
+            Record.AddOffset(offset);
+        }
+
+        const TString& GetTopic() const {
+            return Record.GetTopic();
+        }
+
+        const TString& GetConsumer() const {
+            return Record.GetConsumer();
+        }
+
+        ui32 GetPartitionId() const {
+            return Record.GetPartitionId();
+        }
+    };
+
+    //
+    // Response from the PQ-tablet.
+    //
+    struct TEvMLPUnlockResponse : TEventPB<TEvMLPUnlockResponse, NKikimrPQ::TEvMLPUnlockResponse, EvMLPUnlockResponse> {
+        TEvMLPUnlockResponse() = default;
+    };
+
+    //
+    // Request to the PQ-tablet.
+    //
+    struct TEvMLPChangeMessageDeadlineRequest : TEventPB<TEvMLPChangeMessageDeadlineRequest, NKikimrPQ::TEvMLPChangeMessageDeadlineRequest, EvMLPChangeMessageDeadlineRequest> {
+        TEvMLPChangeMessageDeadlineRequest() = default;
+
+        TEvMLPChangeMessageDeadlineRequest(const TString& topic, const TString& consumer, ui32 partitionId, TDuration deadlineTimestamp) {
+            Record.SetTopic(topic);
+            Record.SetConsumer(consumer);
+            Record.SetPartitionId(partitionId);
+            Record.SetDeadlineTimestampSeconds(deadlineTimestamp.Seconds());
+        }
+
+        const TString& GetTopic() const {
+            return Record.GetTopic();
+        }
+
+        const TString& GetConsumer() const {
+            return Record.GetConsumer();
+        }
+
+        ui32 GetPartitionId() const {
+            return Record.GetPartitionId();
+        }
+
+        TInstant GetDeadlineTimestamp() const {
+            return TInstant::Seconds(Record.GetDeadlineTimestampSeconds());
+        }
+    };
+
+    //
+    // Response from the PQ-tablet.
+    //
+    struct TEvMLPChangeMessageDeadlineResponse : TEventPB<TEvMLPChangeMessageDeadlineResponse, NKikimrPQ::TEvMLPChangeMessageDeadlineResponse, EvMLPChangeMessageDeadlineResponse> {
+        TEvMLPChangeMessageDeadlineResponse() = default;
+    };
+
+} // namespace NKikimr::TEvPersQueue

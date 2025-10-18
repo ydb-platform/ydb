@@ -126,7 +126,7 @@ class TPartitionCompaction;
 
 #define PQ_ENSURE(condition) AFL_ENSURE(condition)("tablet_id", TabletId)("partition_id", Partition)
 
-class TPartition : public TBaseActor<TPartition> {
+class TPartition : public TBaseTabletActor<TPartition> {
     friend TInitializer;
     friend TInitializerStep;
     friend TInitConfigStep;
@@ -180,7 +180,8 @@ private:
 
     bool LastOffsetHasBeenCommited(const TUserInfoBase& userInfo) const;
 
-    void ReplyError(const TActorContext& ctx, const ui64 dst, NPersQueue::NErrorCode::EErrorCode errorCode, const TString& error, bool isInternal = false);
+    TActorId ReplyTo(bool isInternal, const TActorId& replyTo) const;
+    void ReplyError(const TActorContext& ctx, const ui64 dst, NPersQueue::NErrorCode::EErrorCode errorCode, const TString& error, const TActorId& replyTo = {});
     void ReplyError(const TActorContext& ctx, const ui64 dst, NPersQueue::NErrorCode::EErrorCode errorCode, const TString& error, NWilson::TSpan& span);
     void ReplyPropose(const TActorContext& ctx, const NKikimrPQ::TEvProposeTransaction& event, NKikimrPQ::TEvProposeTransactionResult::EStatus statusCode,
                       NKikimrPQ::TError::EKind kind, const TString& reason);
@@ -598,6 +599,10 @@ private:
             IgnoreFunc(TEvPQ::TEvTxBatchComplete);
             hFuncTraced(TEvPQ::TEvRunCompaction, Handle);
             hFuncTraced(TEvPQ::TEvForceCompaction, Handle);
+            hFuncTraced(TEvPersQueue::TEvMLPReadRequest, Handle);
+            hFuncTraced(TEvPersQueue::TEvMLPCommitRequest, Handle);
+            hFuncTraced(TEvPersQueue::TEvMLPUnlockRequest, Handle);
+            hFuncTraced(TEvPersQueue::TEvMLPChangeMessageDeadlineRequest, Handle);
         default:
             if (!Initializer.Handle(ev)) {
                 ALOG_ERROR(NKikimrServices::PERSQUEUE, "Unexpected " << EventStr("StateInit", ev));
@@ -667,6 +672,11 @@ private:
             IgnoreFunc(TEvPQ::TEvTxBatchComplete);
             hFuncTraced(TEvPQ::TEvRunCompaction, Handle);
             hFuncTraced(TEvPQ::TEvForceCompaction, Handle);
+            hFuncTraced(TEvPQ::TEvMLPRestartActor, Handle);
+            hFuncTraced(TEvPersQueue::TEvMLPReadRequest, Handle);
+            hFuncTraced(TEvPersQueue::TEvMLPCommitRequest, Handle);
+            hFuncTraced(TEvPersQueue::TEvMLPUnlockRequest, Handle);
+            hFuncTraced(TEvPersQueue::TEvMLPChangeMessageDeadlineRequest, Handle);
         default:
             ALOG_ERROR(NKikimrServices::PERSQUEUE, "Unexpected " << EventStr("StateIdle", ev));
             break;
@@ -1174,11 +1184,41 @@ private:
 
     std::unique_ptr<TEvPQ::TEvGetWriteInfoRequest> PendingGetWriteInfoRequest;
     bool StopCompaction = false;
-
     TMaybe<std::pair<ui64, ui16>> FirstCompactionPart;
 
     void InitFirstCompactionPart();
     bool InitNewHeadForCompaction();
+
+private:
+    void HandleOnInit(TEvPersQueue::TEvMLPReadRequest::TPtr&);
+    void HandleOnInit(TEvPersQueue::TEvMLPCommitRequest::TPtr&);
+    void HandleOnInit(TEvPersQueue::TEvMLPUnlockRequest::TPtr&);
+    void HandleOnInit(TEvPersQueue::TEvMLPChangeMessageDeadlineRequest::TPtr&);
+    void Handle(TEvPersQueue::TEvMLPReadRequest::TPtr&);
+    void Handle(TEvPersQueue::TEvMLPCommitRequest::TPtr&);
+    void Handle(TEvPersQueue::TEvMLPUnlockRequest::TPtr&);
+    void Handle(TEvPersQueue::TEvMLPChangeMessageDeadlineRequest::TPtr&);
+
+    void Handle(TEvPQ::TEvMLPRestartActor::TPtr& ev);
+
+    void ProcessMLPPendingEvents();
+    template<typename TEventHandle>
+    void ForwardToMLPConsumer(const TString& consumer, TAutoPtr<TEventHandle>& ev);
+
+    void InitializeMLPConsumers();
+
+    struct TMLPConsumerInfo {
+        TActorId ActorId;
+    };
+    std::unordered_map<TString, TMLPConsumerInfo> MLPConsumers;
+
+    using TMLPPendingEvent = std::variant<
+        TEvPersQueue::TEvMLPReadRequest::TPtr,
+        TEvPersQueue::TEvMLPCommitRequest::TPtr,
+        TEvPersQueue::TEvMLPUnlockRequest::TPtr,
+        TEvPersQueue::TEvMLPChangeMessageDeadlineRequest::TPtr
+    >;
+    std::vector<TMLPPendingEvent> MLPPendingEvents;
 };
 
 inline ui64 TPartition::GetStartOffset() const {

@@ -15,7 +15,7 @@
 namespace NKikimr::NPQ {
 
 
-class TMirrorDescriber : public TBaseActor<TMirrorDescriber>, private TConstantLogPrefix {
+class TMirrorDescriber : public TBaseTabletActor<TMirrorDescriber>, private TConstantLogPrefix {
 private:
     static constexpr TDuration INIT_INTERVAL_MAX = TDuration::Seconds(240);
     static constexpr TDuration INIT_INTERVAL_START = TDuration::Seconds(1);

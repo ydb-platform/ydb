@@ -235,21 +235,21 @@ TAutoPtr<TResponseBuilder> CreateResponseProxy(const TActorId& sender, const TAc
 /******************************************************* OffsetsBuilderProxy *********************************************************/
 
 template <typename T, typename T2, typename T3>
-class TBuilderProxy : public TBaseActor<TBuilderProxy<T,T2,T3>> {
+class TBuilderProxy : public TBaseTabletActor<TBuilderProxy<T,T2,T3>> {
     typedef TBuilderProxy<T,T2,T3> TThis;
 
     friend class TActorBootstrapped<TThis>;
     typedef T TEvent;
     typedef typename TEvent::TPtr TTPtr;
 
-    using TBase = TBaseActor<TThis>;
+    using TBase = TBaseTabletActor<TThis>;
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::PERSQUEUE_ANS_ACTOR;
     }
 
     TBuilderProxy(const ui64 tabletId, const TActorId& tabletActorId, const TActorId& sender, const ui32 count, const ui64 cookie)
-    : TBaseActor<TBuilderProxy<T,T2,T3>>(tabletId, tabletActorId, NKikimrServices::PERSQUEUE)
+    : TBaseTabletActor<TBuilderProxy<T,T2,T3>>(tabletId, tabletActorId, NKikimrServices::PERSQUEUE)
     , Sender(sender)
     , Waiting(count)
     , Result()
@@ -1227,6 +1227,8 @@ void TPersQueue::Handle(TEvPQ::TEvInitComplete::TPtr& ev, const TActorContext& c
     if (allInitialized) {
         ProcessStatusRequests(ctx);
     }
+
+    ProcessMLPQueue();
 }
 
 void TPersQueue::Handle(TEvPQ::TEvError::TPtr& ev, const TActorContext& ctx)
@@ -1323,27 +1325,28 @@ void TPersQueue::CreateTopicConverter(const NKikimrPQ::TPQTabletConfig& config,
     AFL_ENSURE(topicConverter->IsValid())("reason", topicConverter->GetReason());
 }
 
-void TPersQueue::UpdateReadRuleGenerations(NKikimrPQ::TPQTabletConfig& cfg) const
+void TPersQueue::UpdateConsumers(NKikimrPQ::TPQTabletConfig& cfg)
 {
     PQ_ENSURE(cfg.HasVersion());
     const int curConfigVersion = cfg.GetVersion();
 
-    // set rr generation for provided read rules
-    THashMap<TString, std::pair<ui64, ui64>> existed; // map name -> rrVersion, rrGeneration
+    THashMap<TString, NKikimrPQ::TPQTabletConfig::TConsumer> existed;
     for (const auto& c : Config.GetConsumers()) {
-        existed[c.GetName()] = std::make_pair(c.GetVersion(), c.GetGeneration());
+        existed[c.GetName()] = c;
     }
 
+    auto nextConsumerId = Config.GetNextConsumerId();
     for (auto& c : *cfg.MutableConsumers()) {
         auto it = existed.find(c.GetName());
-        ui64 generation = 0;
-        if (it != existed.end() && it->second.first == c.GetVersion()) {
-            generation = it->second.second;
+        if (it != existed.end() && it->second.GetVersion() == c.GetVersion()) {
+            c.SetGeneration(it->second.GetGeneration());
+            c.SetId(it->second.GetId());
         } else {
-            generation = curConfigVersion;
+            c.SetGeneration(curConfigVersion);
+            c.SetId(++nextConsumerId); // TODO check < Max<ui32>()
         }
-        c.SetGeneration(generation);
     }
+    cfg.SetNextConsumerId(nextConsumerId);
 }
 
 void TPersQueue::ProcessUpdateConfigRequest(TAutoPtr<TEvPersQueue::TEvUpdateConfig> ev, const TActorId& sender, const TActorContext& ctx)
@@ -1451,7 +1454,7 @@ void TPersQueue::ProcessUpdateConfigRequest(TAutoPtr<TEvPersQueue::TEvUpdateConf
 
     Migrate(cfg);
 
-    UpdateReadRuleGenerations(cfg);
+    UpdateConsumers(cfg);
 
     PQ_LOG_TX_D("Config update version " << cfg.GetVersion() << "(current " << Config.GetVersion() << ") received from actor " << sender
                 << " txId " << record.GetTxId() << " config:\n" << cfg.DebugString());
@@ -3640,7 +3643,7 @@ void TPersQueue::ProcessProposeTransactionQueue(const TActorContext& ctx)
             PQ_LOG_TX_I("Propose TxId " << tx.TxId << ", WriteId " << tx.WriteId);
 
             if (tx.Kind == NKikimrPQ::TTransaction::KIND_CONFIG) {
-                UpdateReadRuleGenerations(tx.TabletConfig);
+                UpdateConsumers(tx.TabletConfig);
             }
 
             if (tx.WriteId.Defined()) {
@@ -5258,6 +5261,57 @@ void TPersQueue::Handle(TEvPQ::TEvForceCompaction::TPtr& ev, const TActorContext
              new TEvPQ::TEvForceCompaction(event.PartitionId));
 }
 
+void TPersQueue::Handle(TEvPersQueue::TEvMLPReadRequest::TPtr& ev) {
+    ForwardToPartition(ev->Get()->GetPartitionId(), ev);
+}
+
+void TPersQueue::Handle(TEvPersQueue::TEvMLPCommitRequest::TPtr& ev) {
+    ForwardToPartition(ev->Get()->GetPartitionId(), ev);
+}
+
+void TPersQueue::Handle(TEvPersQueue::TEvMLPUnlockRequest::TPtr& ev) {
+    ForwardToPartition(ev->Get()->GetPartitionId(), ev);
+}
+
+void TPersQueue::Handle(TEvPersQueue::TEvMLPChangeMessageDeadlineRequest::TPtr& ev) {
+    ForwardToPartition(ev->Get()->GetPartitionId(), ev);
+}
+
+template<typename TEventHandle>
+bool TPersQueue::ForwardToPartition(ui32 partitionId, TAutoPtr<TEventHandle>& ev) {
+    auto it = Partitions.find(TPartitionId{partitionId});
+    if (it == Partitions.end()) {
+        Send(ev->Sender, new TEvPersQueue::TEvMLPErrorResponse(NPersQueue::NErrorCode::EErrorCode::SCHEMA_ERROR,
+            TStringBuilder() <<"Partition " << partitionId << " not found"), 0, ev->Cookie);
+        return true;
+    }
+
+    auto& partitionInfo = it->second;
+    if (!partitionInfo.InitDone) {
+        MLPRequests.emplace_back(std::move(ev));
+        return false;
+    }
+    Forward(ev, partitionInfo.Actor);
+    return true;
+}
+
+void TPersQueue::ProcessMLPQueue() {
+    while(!MLPRequests.empty()) {
+        auto ev = std::move(MLPRequests.front());
+        MLPRequests.pop_front();
+
+        auto result = std::visit([&, this](auto& ev) {
+            return ForwardToPartition(ev->Get()->GetPartitionId(), ev);
+        }, ev);
+        if (!result) {
+            return;
+        }
+    }
+    if (MLPRequests.empty()) {
+        MLPRequests = {};
+    }
+}
+
 bool TPersQueue::HandleHook(STFUNC_SIG)
 {
     TRACE_EVENT(NKikimrServices::PERSQUEUE);
@@ -5306,6 +5360,10 @@ bool TPersQueue::HandleHook(STFUNC_SIG)
         HFuncTraced(TEvPQ::TEvDeletePartitionDone, Handle);
         HFuncTraced(TEvPQ::TEvTransactionCompleted, Handle);
         HFuncTraced(TEvPQ::TEvForceCompaction, Handle);
+        hFuncTraced(TEvPersQueue::TEvMLPReadRequest, Handle);
+        hFuncTraced(TEvPersQueue::TEvMLPCommitRequest, Handle);
+        hFuncTraced(TEvPersQueue::TEvMLPUnlockRequest, Handle);
+        hFuncTraced(TEvPersQueue::TEvMLPChangeMessageDeadlineRequest, Handle);
         default:
             return false;
     }

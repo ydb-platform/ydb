@@ -30,6 +30,8 @@ struct TJsonParserBuffer {
     bool Finished = false;
     TInstant CreationStartTime = TInstant::Now();
     TVector<ui64> Offsets = {};
+    TVector<ui32> MessageOffsets = {};
+
     struct TRecovery {
          ui32 BufferOffset;
          ui32 Index;
@@ -63,11 +65,13 @@ struct TJsonParserBuffer {
 
     void Reserve(size_t size, size_t numberValues) {
         Values.reserve(size + simdjson::SIMDJSON_PADDING);
-        MessageSizes.reserve(numberValues);
+        MessageOffsets.reserve(numberValues);
         Offsets.reserve(numberValues);
     }
 
     void AddMessage(const NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage& message) {
+        LOG_ROW_DISPATCHER_WARN("TJsonParserBuffer AddMessage");
+
         Y_ENSURE(!Finished, "Cannot add messages into finished buffer");
 
         const auto offset = message.GetOffset();
@@ -76,16 +80,16 @@ struct TJsonParserBuffer {
         }
 
         NumberValues++;
+        MessageOffsets.emplace_back(Values.size());
         Values << message.GetData();
-        MessageSizes.emplace_back(message.GetData().size());
         Offsets.emplace_back(offset);
     }
 
     std::pair<const char*, size_t> Finish() {
-        if (Recovery.IsActive()) {
-            Y_ENSURE(Finished);
-            return {Values.data() + Recovery.BufferOffset, MessageSizes[Recovery.Index] + simdjson::SIMDJSON_PADDING};
-        }
+        // if (Recovery.IsActive()) {
+        //     Y_ENSURE(Finished);
+        //     return {Values.data() + Recovery.BufferOffset, MessageSizes[Recovery.Index] + simdjson::SIMDJSON_PADDING};
+        // }
         Y_ENSURE(!Finished, "Cannot finish buffer twice");
         Finished = true;
         Values << TString(simdjson::SIMDJSON_PADDING, ' ');
@@ -94,25 +98,25 @@ struct TJsonParserBuffer {
 
     void Clear() {
         Y_ENSURE(Finished, "Cannot clear not finished buffer");
-        if (Recovery.IsActive()) {
-            Recovery.BufferOffset += MessageSizes[Recovery.Index++];
-            if (Recovery.Index < MessageSizes.size()) {
-                Recovery.Offsets.clear();
-                Recovery.Offsets.emplace_back(Offsets[Recovery.Index]);
-                return;
-            }
-            Recovery.Deactivate();
-        }
+        // if (Recovery.IsActive()) {
+        //     Recovery.BufferOffset += MessageSizes[Recovery.Index++];
+        //     if (Recovery.Index < MessageSizes.size()) {
+        //         Recovery.Offsets.clear();
+        //         Recovery.Offsets.emplace_back(Offsets[Recovery.Index]);
+        //         return;
+        //     }
+        //     Recovery.Deactivate();
+        // }
         NumberValues = 0;
         Finished = false;
         CreationStartTime = TInstant::Now();
         Values.clear();
         Offsets.clear();
-        MessageSizes.clear();
+        MessageOffsets.clear();
     }
 
     const TVector<ui64>& GetOffsets() const {
-        return Recovery.IsActive() ? Recovery.Offsets : Offsets;
+        return Offsets;
     }
 
     void StartRecovery() {
@@ -125,7 +129,6 @@ struct TJsonParserBuffer {
 
 private:
     TStringBuilder Values = {};
-    TVector<ui32> MessageSizes;
     const TString LogPrefix = "TJsonParser: Buffer: ";
 };
 
@@ -394,7 +397,7 @@ public:
         FillColumnsBuffers();
         Buffer.Reserve(Config.BatchSize, MaxNumberRows);
 
-        LOG_ROW_DISPATCHER_INFO("Simdjson active implementation " << simdjson::get_active_implementation()->name());
+        LOG_ROW_DISPATCHER_INFO("Simdjson active implementation " << simdjson::get_active_implementation()->name() << " / " << simdjson::get_active_implementation()->description() );
         Parser.threaded = false;
     }
 
@@ -490,32 +493,42 @@ public:
 
 protected:
 #define HANDLE_ERROR(status) \
-    do { \
-        if (Buffer.Recovery.IsActive()) { \
-            Counters->GetCounter("DocumentErrors")->Inc(); \
-            /* TODO */ \
-            /* if (DoRecovery) { */ \
-            /*     DoRecovery(); */ \
-            /* } */ \
-            Buffer.Clear(); \
-            if (!Buffer.IsReady()) { \
-                return TStatus::Success(); \
-            } \
-            return status; \
-        } else { \
-            Buffer.StartRecovery(); \
-            Counters->GetCounter("ReparseOnError")->Inc(); \
+    if (!status.IsSuccess()) {  \
+        --Buffer.NumberValues; \
+        ++rowId; \
+        if (rowId < Buffer.MessageOffsets.size()) { \
+            values = begin + Buffer.MessageOffsets[rowId]; \
+            size -= (values - begin); \
+            auto it = Buffer.Offsets.begin(); \
+            std::advance(it, rowId -1); \
+            Buffer.Offsets.erase(it); \
+            --rowId; \
+            goto retry; \
+        } else if (rowId == Buffer.MessageOffsets.size()) { \
+            --rowId; \
+            auto it = Buffer.Offsets.begin(); \
+            std::advance(it, rowId); \
+            Buffer.Offsets.erase(it); \
+            goto end_parsing; \
         } \
-        goto retry; \
-    } while(0)
+        return status; \
+    }
+
 
     TStatus DoParsing() override {
-retry:
         Y_ENSURE(Buffer.IsReady(), "Nothing to parse");
         Y_ENSURE(Buffer.NumberValues <= MaxNumberRows, "Too many values to parse");
 
-        const auto [values, size] = Buffer.Finish();
+        auto [values, size] = Buffer.Finish();
+
+        const char* begin = values;
+        
         LOG_ROW_DISPATCHER_TRACE("Do parsing, first offset: " << Buffer.GetOffsets().front() << ", values:\n" << values);
+        ui16 rowId = 0;
+
+retry:
+        LOG_ROW_DISPATCHER_TRACE("Init parser rowId " << rowId << " offset " <<  values - begin  << " size " << size );
+
 
         /*
            Batch size must be at least maximum of document size.
@@ -531,26 +544,27 @@ retry:
         */
         simdjson::ondemand::document_stream documents;
         CHECK_JSON_ERROR(Parser.iterate_many(values, size, size).get(documents)) {
-            auto status = TStatus::Fail(EStatusId::BAD_REQUEST, TStringBuilder() << "Failed to parse message batch from offset " << Buffer.Offsets.front() << ", json documents was corrupted: " << simdjson::error_message(error) << " Current data batch: " << TruncateString(std::string_view(values, size)) << ", buffered offsets: " << JoinSeq(' ', GetOffsets()));
+            auto status =  TStatus::Fail(EStatusId::BAD_REQUEST, TStringBuilder() << "Failed to parse message batch from offset " << Buffer.Offsets.front() << ", json documents was corrupted: " << simdjson::error_message(error) << " Current data batch: " << TruncateString(std::string_view(values, size)) << ", buffered offsets: " << JoinSeq(' ', GetOffsets()));
             HANDLE_ERROR(status);
         }
 
-        ui16 rowId = 0;
         for (auto document : documents) {
             if (Y_UNLIKELY(rowId >= Buffer.NumberValues)) {
                 auto status = TStatus::Fail(EStatusId::INTERNAL_ERROR, TStringBuilder() << "Failed to parse json messages, expected " << Buffer.NumberValues << " json rows from offset " << Buffer.Offsets.front() << " but got " << rowId + 1 << " (expected one json row for each offset from topic API in json each row format, maybe initial data was corrupted or messages is not in json format), current data batch: " << TruncateString(std::string_view(values, size)) << ", buffered offsets: " << JoinSeq(' ', GetOffsets()));
                 HANDLE_ERROR(status);
             }
 
-            const ui64 offset = Buffer.Offsets[rowId];
-            CHECK_JSON_ERROR(document.error()) {
+        LOG_ROW_DISPATCHER_TRACE("rowId " << rowId << " offset: " << (size_t) (document.current_location() - values));
+
+        const ui64 offset = Buffer.Offsets[rowId];
+        CHECK_JSON_ERROR(document.error()) {
                 auto status = TStatus::Fail(EStatusId::BAD_REQUEST, TStringBuilder() << "Failed to parse json message for offset " << offset << ", json document was corrupted: " << simdjson::error_message(error) << " Current data batch: " << TruncateString(std::string_view(values, size)) << ", buffered offsets: " << JoinSeq(' ', GetOffsets()));
                 HANDLE_ERROR(status);
             }
 
             for (auto item : document.get_object()) {
                 CHECK_JSON_ERROR(item.error()) {
-                    auto status = TStatus::Fail(EStatusId::BAD_REQUEST, TStringBuilder() << "Failed to parse json message for offset " << offset << ", json item was corrupted: " << simdjson::error_message(error) << " Current data batch: " << TruncateString(std::string_view(values, size)) << ", buffered offsets: " << JoinSeq(' ', GetOffsets()));
+                    auto status =  TStatus::Fail(EStatusId::BAD_REQUEST, TStringBuilder() << "Failed to parse json message for offset " << offset << ", json item was corrupted: " << simdjson::error_message(error) << " Current data batch: " << TruncateString(std::string_view(values, size)) << ", buffered offsets: " << JoinSeq(' ', GetOffsets()));
                     HANDLE_ERROR(status);
                 }
 
@@ -565,6 +579,8 @@ retry:
             rowId++;
         }
 
+end_parsing:
+
         if (Y_UNLIKELY(rowId != Buffer.NumberValues)) {
             auto status = TStatus::Fail(EStatusId::INTERNAL_ERROR, TStringBuilder() << "Failed to parse json messages, expected " << Buffer.NumberValues << " json rows from offset " << Buffer.Offsets.front() << " but got " << rowId << " (expected one json row for each offset from topic API in json each row format, maybe initial data was corrupted or messages is not in json format), current data batch: " << TruncateString(std::string_view(values, size)) << ", buffered offsets: " << JoinSeq(' ', GetOffsets()));
             HANDLE_ERROR(status);
@@ -572,19 +588,18 @@ retry:
 
         for (auto& column : Columns) {
             column.ValidateNumberValues(rowId, GetOffsets());
-            if (column.GetStatus().IsFail()) {
-                if (!Buffer.Recovery.IsActive()) {
-                    Counters->GetCounter("ReparseOnError")->Inc();
-                    Buffer.StartRecovery();
-                    if (!Buffer.IsReady()) {
-                        return TStatus::Success();
-                    }
-                    goto retry;
-                }
-                Counters->GetCounter("ColumnErrors")->Inc();
-            }
+            // if (column.GetStatus().IsFail()) {
+            //     if (!Buffer.Recovery.IsActive()) {
+            //         Counters->GetCounter("ReparseOnError")->Inc();
+            //         Buffer.StartRecovery();
+            //         if (!Buffer.IsReady()) {
+            //             return TStatus::Success();
+            //         }
+            //         goto retry;
+            //     }
+            //     Counters->GetCounter("ColumnErrors")->Inc();
+            // }
         }
-
         return TStatus::Success();
     }
 

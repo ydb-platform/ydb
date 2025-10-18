@@ -618,6 +618,40 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
 
         PassAway();
     }
+
+    Y_UNIT_TEST_F(WrongJson, TRealTopicFixture) {
+        const TString topicName = "topic3";
+        PQCreateStream(topicName);
+        Init(topicName);
+        auto source = BuildSource();
+        StartSession(ReadActorId1, source);
+        
+        
+        //TString wrongJson = "{\"dt\":100,\"value\"}";
+//        TString wrongJson = "wrong";
+        
+        
+        auto writeRead = [&](const std::vector<TString>& input, const TBatch& output) {
+            PQWrite(input);
+            ExpectNewDataArrived({ReadActorId1});
+            ExpectMessageBatch(ReadActorId1, output);
+        };
+
+        auto test = [&](const TString& wrongJson) {
+            writeRead({ Json1, wrongJson, Json3 }, { JsonMessage(1), JsonMessage(3) });
+            writeRead({ wrongJson, Json2, Json3 }, { JsonMessage(2), JsonMessage(3) });
+            writeRead({ Json1, Json2 , wrongJson }, { JsonMessage(1), JsonMessage(2) });
+        };
+
+        test("{\"dt\":100,\"value\"}");     // empty value
+        test("wrong");                      // not json
+        
+        // 2 wrong json
+
+        //  
+        PassAway();
+    }
+
 }
 
 }  // namespace NFq::NRowDispatcher::NTests

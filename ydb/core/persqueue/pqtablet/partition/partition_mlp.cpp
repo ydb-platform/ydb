@@ -5,19 +5,23 @@
 namespace NKikimr::NPQ {
 
 void TPartition::HandleOnInit(TEvPersQueue::TEvMLPReadRequest::TPtr& ev) {
-   MLPPendingEvents.emplace_back(ev);
+    LOG_D("HandleOnInit TEvPersQueue::TEvMLPReadRequest " << ev->Get()->Record.ShortDebugString());
+    MLPPendingEvents.emplace_back(ev);
 }
 
 void TPartition::HandleOnInit(TEvPersQueue::TEvMLPCommitRequest::TPtr& ev) {
-   MLPPendingEvents.emplace_back(ev);
+    LOG_D("HandleOnInit TEvPersQueue::TEvMLPCommitRequest " << ev->Get()->Record.ShortDebugString());
+    MLPPendingEvents.emplace_back(ev);
 }
 
 void TPartition::HandleOnInit(TEvPersQueue::TEvMLPUnlockRequest::TPtr& ev) {
-   MLPPendingEvents.emplace_back(ev);
+    LOG_D("HandleOnInit TEvPersQueue::TEvMLPUnlockRequest " << ev->Get()->Record.ShortDebugString());
+    MLPPendingEvents.emplace_back(ev);
 }
 
 void TPartition::HandleOnInit(TEvPersQueue::TEvMLPChangeMessageDeadlineRequest::TPtr& ev) {
-   MLPPendingEvents.emplace_back(ev);
+    LOG_D("HandleOnInit TEvPersQueue::TEvMLPChangeMessageDeadlineRequest " << ev->Get()->Record.ShortDebugString());
+    MLPPendingEvents.emplace_back(ev);
 }
 
 template<typename TEventHandle>
@@ -33,18 +37,22 @@ void TPartition::ForwardToMLPConsumer(const TString& consumer, TAutoPtr<TEventHa
 }
 
 void TPartition::Handle(TEvPersQueue::TEvMLPReadRequest::TPtr& ev) {
+    LOG_D("Handle TEvPersQueue::TEvMLPReadRequest " << ev->Get()->Record.ShortDebugString());
     ForwardToMLPConsumer(ev->Get()->GetConsumer(), ev);
 }
 
 void TPartition::Handle(TEvPersQueue::TEvMLPCommitRequest::TPtr& ev) {
+    LOG_D("Handle TEvPersQueue::TEvMLPCommitRequest " << ev->Get()->Record.ShortDebugString());
     ForwardToMLPConsumer(ev->Get()->GetConsumer(), ev);
 }
 
 void TPartition::Handle(TEvPersQueue::TEvMLPUnlockRequest::TPtr& ev) {
+    LOG_D("Handle TEvPersQueue::TEvMLPUnlockRequest " << ev->Get()->Record.ShortDebugString());
     ForwardToMLPConsumer(ev->Get()->GetConsumer(), ev);
 }
 
 void TPartition::Handle(TEvPersQueue::TEvMLPChangeMessageDeadlineRequest::TPtr& ev) {
+    LOG_D("Handle TEvPersQueue::TEvMLPChangeMessageDeadlineRequest " << ev->Get()->Record.ShortDebugString());
     ForwardToMLPConsumer(ev->Get()->GetConsumer(), ev);
 }
 
@@ -72,12 +80,16 @@ void TPartition::InitializeMLPConsumers() {
         }
     }
 
+    LOG_D("Initializing MLP Consumers: " << consumers.size());
+
     for (auto it = MLPConsumers.begin(); it != MLPConsumers.end();) {
         auto &[name, consumerInfo] = *it;
         if (consumers.contains(name)) {
             ++it;
             continue;
         }
+
+        LOG_I("Destroing MLP consumer '" << name << "'");
 
         Send(consumerInfo.ActorId, new TEvents::TEvPoison()); // TODO MLP delete blobs
         it = MLPConsumers.erase(it);
@@ -87,6 +99,8 @@ void TPartition::InitializeMLPConsumers() {
         if (MLPConsumers.contains(name)) {
             continue;
         }
+
+        LOG_I("Creating MLP consumer '" << name << "'");
 
         auto actorId = RegisterWithSameMailbox(NMLP::CreateConsumerActor(
             TabletId,

@@ -598,6 +598,10 @@ private:
             IgnoreFunc(TEvPQ::TEvTxBatchComplete);
             hFuncTraced(TEvPQ::TEvRunCompaction, Handle);
             hFuncTraced(TEvPQ::TEvForceCompaction, Handle);
+            hFuncTraced(TEvPersQueue::TEvMLPReadRequest, Handle);
+            hFuncTraced(TEvPersQueue::TEvMLPCommitRequest, Handle);
+            hFuncTraced(TEvPersQueue::TEvMLPUnlockRequest, Handle);
+            hFuncTraced(TEvPersQueue::TEvMLPChangeMessageDeadlineRequest, Handle);
         default:
             if (!Initializer.Handle(ev)) {
                 ALOG_ERROR(NKikimrServices::PERSQUEUE, "Unexpected " << EventStr("StateInit", ev));
@@ -668,6 +672,10 @@ private:
             hFuncTraced(TEvPQ::TEvRunCompaction, Handle);
             hFuncTraced(TEvPQ::TEvForceCompaction, Handle);
             hFuncTraced(TEvPQ::TEvMLPRestartActor, Handle);
+            hFuncTraced(TEvPersQueue::TEvMLPReadRequest, Handle);
+            hFuncTraced(TEvPersQueue::TEvMLPCommitRequest, Handle);
+            hFuncTraced(TEvPersQueue::TEvMLPUnlockRequest, Handle);
+            hFuncTraced(TEvPersQueue::TEvMLPChangeMessageDeadlineRequest, Handle);
         default:
             ALOG_ERROR(NKikimrServices::PERSQUEUE, "Unexpected " << EventStr("StateIdle", ev));
             break;

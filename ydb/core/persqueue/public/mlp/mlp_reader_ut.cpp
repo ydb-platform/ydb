@@ -18,6 +18,19 @@ using namespace NYdb::NTopic::NTests;
 
 Y_UNIT_TEST_SUITE(TMLPReaderTests) {
 
+    auto CreateSetup() {
+        auto setup = std::make_shared<TTopicSdkTestSetup>("TODO");
+        setup->GetServer().EnableLogs({
+                NKikimrServices::PQ_MLP_READER,
+                NKikimrServices::PQ_MLP_CONSUMER,
+                NKikimrServices::PERSQUEUE,
+                NKikimrServices::PERSQUEUE_READ_BALANCER,
+            },
+            NActors::NLog::PRI_DEBUG
+        );
+        return setup;
+    }
+
     void ExecuteDDL(TTopicSdkTestSetup& setup, const TString& query) {
         TDriver driver(setup.MakeDriverConfig());
         TQueryClient client(driver);
@@ -63,11 +76,7 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
     }
 
     Y_UNIT_TEST(TopicNotExistsConsumer) {
-        auto setup = std::make_shared<TTopicSdkTestSetup>(TEST_CASE_NAME);
-        setup->GetServer().EnableLogs(
-                { NKikimrServices::PQ_MLP_READER, NKikimrServices::PQ_MLP_CONSUMER },
-                NActors::NLog::PRI_DEBUG
-        );
+        auto setup = CreateSetup();
         
         auto& runtime = setup->GetRuntime();
         CreateActor(runtime, {
@@ -81,11 +90,7 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
     }
 
     Y_UNIT_TEST(TopicWithoutConsumer) {
-        auto setup = std::make_shared<TTopicSdkTestSetup>(TEST_CASE_NAME);
-        setup->GetServer().EnableLogs(
-                { NKikimrServices::PQ_MLP_READER, NKikimrServices::PQ_MLP_CONSUMER },
-                NActors::NLog::PRI_DEBUG
-        );
+        auto setup = CreateSetup();
         
         ExecuteDDL(*setup, "CREATE TOPIC topic1");
 
@@ -101,11 +106,7 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
     }
 
     Y_UNIT_TEST(EmptyTopic) {
-        auto setup = std::make_shared<TTopicSdkTestSetup>(TEST_CASE_NAME);
-        setup->GetServer().EnableLogs(
-                { NKikimrServices::PQ_MLP_READER, NKikimrServices::PQ_MLP_CONSUMER },
-                NActors::NLog::PRI_DEBUG
-        );
+        auto setup = CreateSetup();
 
         CreateTopic(setup, "/Root/topic1", "mlp-consumer");
 

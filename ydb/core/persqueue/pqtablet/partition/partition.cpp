@@ -719,6 +719,7 @@ void TPartition::InitComplete(const TActorContext& ctx) {
     TabletCounters.Percentile()[COUNTER_LATENCY_PQ_INIT].IncrementFor(InitDuration.MilliSeconds());
 
     CreateCompacter();
+    InitializeMLPConsumers();
 
     InitUserInfoForImportantClients(ctx);
 
@@ -3248,6 +3249,7 @@ void TPartition::EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig&& config,
     TotalPartitionWriteSpeed = config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond();
 
     CreateCompacter();
+    InitializeMLPConsumers();
 
     if (MirroringEnabled(Config)) {
         if (Mirrorer) {

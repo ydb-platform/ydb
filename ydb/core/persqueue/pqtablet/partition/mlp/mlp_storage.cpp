@@ -62,21 +62,21 @@ bool TStorage::ChangeMessageDeadline(TMessageId messageId, TInstant deadline) {
     return true;
 }
 
-bool TStorage::ProccessDeadlines() {
+size_t TStorage::ProccessDeadlines() {
     auto deadlineDelta = (TInstant::Now() - BaseDeadline).Seconds();
-    bool result = false;
+    size_t count = 0;
 
     for (size_t i = 0; i < Messages.size(); ++i) {
         auto& message = Messages[i];
         if (message.Status == EMessageStatus::Locked && message.DeadlineDelta > deadlineDelta) {
             DoUnlock(message, FirstOffset + i);
-            result = true;
+            ++count;
 
             ++Metrics.DeadlineExpiredMessageCount;
         }
     }
 
-    return result;
+    return count;
 }
 
 bool TStorage::Compact() {

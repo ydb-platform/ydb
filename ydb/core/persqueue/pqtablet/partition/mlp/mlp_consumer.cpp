@@ -453,7 +453,9 @@ void TConsumerActor::Handle(TEvPQ::TEvError::TPtr& ev) {
 }
 
 void TConsumerActor::HandleOnWork(TEvents::TEvWakeup::TPtr&) {
-    Storage->ProccessDeadlines();
+    auto expiredCount = Storage->ProccessDeadlines();
+    LOG_D("Expired " << expiredCount << " messages");
+
     FetchMessagesIfNeeded();
     ProcessEventQueue();
     Schedule(WakeupInterval, new TEvents::TEvWakeup());

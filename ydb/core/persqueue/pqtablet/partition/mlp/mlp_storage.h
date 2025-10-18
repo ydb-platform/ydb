@@ -89,7 +89,7 @@ public:
 
     void AddMessage(ui64 offset, bool hasMessagegroup, ui32 messageGroupIdHash);
 
-    bool ProccessDeadlines();
+    size_t ProccessDeadlines();
     // TODO удалять сообщения если в партиции сместился StartOffset
     bool Compact();
 

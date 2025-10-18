@@ -98,7 +98,7 @@ public:
             StopOnError("unexpected exception: " + CurrentExceptionMessage());
         }
     }
-
+    void HandleExecute(NActors::TEvents::TEvWakeup::TPtr& ev);
     void HandleExecute(TEvScanExchange::TEvAckData::TPtr& ev);
 
     void HandleExecute(TEvScanExchange::TEvTerminateFromCompute::TPtr& ev);

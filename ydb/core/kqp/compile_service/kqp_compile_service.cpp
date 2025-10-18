@@ -308,6 +308,7 @@ private:
         bool defaultSyntaxVersion = TableServiceConfig.GetSqlVersion();
 
         ui64 rangesLimit = TableServiceConfig.GetExtractPredicateRangesLimit();
+        ui64 paramLimitSize = TableServiceConfig.GetExtractPredicateParameterListSizeLimit();
         ui64 idxLookupPointsLimit = TableServiceConfig.GetIdxLookupJoinPointsLimit();
 
         bool allowOlapDataQuery = TableServiceConfig.GetAllowOlapDataQuery();
@@ -349,6 +350,7 @@ private:
         bool enableTempTablesForUser = TableServiceConfig.GetEnableTempTablesForUser();
 
         bool enableSimpleProgramsSinglePartitionOptimization = TableServiceConfig.GetEnableSimpleProgramsSinglePartitionOptimization();
+        bool enableSimpleProgramsSinglePartitionOptimizationBroadPrograms = TableServiceConfig.GetEnableSimpleProgramsSinglePartitionOptimizationBroadPrograms();
 
         ui32 defaultLangVer = TableServiceConfig.GetDefaultLangVer();
 
@@ -378,6 +380,7 @@ private:
             TableServiceConfig.GetEnableDataShardCreateTableAs() != enableDataShardCreateTableAs ||
             TableServiceConfig.GetBlockChannelsMode() != blockChannelsMode ||
             TableServiceConfig.GetExtractPredicateRangesLimit() != rangesLimit ||
+            TableServiceConfig.GetExtractPredicateParameterListSizeLimit() != paramLimitSize ||
             TableServiceConfig.GetResourceManager().GetMkqlHeavyProgramMemoryLimit() != mkqlHeavyLimit ||
             TableServiceConfig.GetIdxLookupJoinPointsLimit() != idxLookupPointsLimit ||
             TableServiceConfig.GetEnableSpillingNodes() != enableSpillingNodes ||
@@ -400,6 +403,7 @@ private:
             TableServiceConfig.GetEnableOlapPushdownProjections() != enableOlapPushdownProjections ||
             TableServiceConfig.GetEnableTempTablesForUser() != enableTempTablesForUser ||
             TableServiceConfig.GetEnableSimpleProgramsSinglePartitionOptimization() != enableSimpleProgramsSinglePartitionOptimization ||
+            TableServiceConfig.GetEnableSimpleProgramsSinglePartitionOptimizationBroadPrograms() != enableSimpleProgramsSinglePartitionOptimizationBroadPrograms ||
             TableServiceConfig.GetDefaultLangVer() != defaultLangVer ||
             TableServiceConfig.GetEnableOlapPushdownAggregate() != enableOlapPushdownAggregate ||
             TableServiceConfig.GetEnableOrderOptimizaionFSM() != enableOrderOptimizaionFSM ||

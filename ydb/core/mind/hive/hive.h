@@ -329,6 +329,7 @@ struct TNodeFilter {
     TVector<TDataCenterId> AllowedDataCenters;
     TSubDomainKey ObjectDomain;
     TTabletTypes::EType TabletType = TTabletTypes::TypeInvalid;
+    bool MustBePrimaryPile = true;
 
     const THive* Hive;
 

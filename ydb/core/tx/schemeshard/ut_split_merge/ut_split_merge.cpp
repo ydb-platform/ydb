@@ -139,12 +139,12 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitBySizeTest) {
 
         TTestEnvOptions opts;
         opts.EnableBackgroundCompaction(false);
+        opts.DataShardStatsReportIntervalSeconds(1);
 
         TTestEnv env(runtime, opts);
 
         ui64 txId = 100;
 
-        NDataShard::gDbStatsReportInterval = TDuration::Seconds(1);
         NDataShard::gDbStatsDataSizeResolution = 10;
         NDataShard::gDbStatsRowCountResolution = 10;
 
@@ -208,12 +208,12 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitBySizeTest) {
         TTestEnvOptions opts;
         opts.EnableBackgroundCompaction(false);
         opts.EnableParameterizedDecimal(true);
+        opts.DataShardStatsReportIntervalSeconds(1);
 
         TTestEnv env(runtime, opts);
 
         ui64 txId = 100;
 
-        NDataShard::gDbStatsReportInterval = TDuration::Seconds(1);
         NDataShard::gDbStatsDataSizeResolution = 10;
         NDataShard::gDbStatsRowCountResolution = 10;
 
@@ -265,12 +265,12 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitBySizeTest) {
         TTestEnvOptions opts;
         opts.EnableBackgroundCompaction(false);
         opts.EnableTablePgTypes(true);
+        opts.DataShardStatsReportIntervalSeconds(1);
 
         TTestEnv env(runtime, opts);
 
         ui64 txId = 100;
 
-        NDataShard::gDbStatsReportInterval = TDuration::Seconds(1);
         NDataShard::gDbStatsDataSizeResolution = 10;
         NDataShard::gDbStatsRowCountResolution = 10;
 
@@ -315,13 +315,12 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitBySizeTest) {
         TTestEnvOptions opts;
         opts.EnableBackgroundCompaction(false);
         opts.DisableStatsBatching(true);
+        opts.DataShardStatsReportIntervalSeconds(0);
 
         TTestEnv env(runtime, opts);
 
         ui64 txId = 100;
         runtime.SetDispatchedEventsLimit(10'000'000);
-
-        NDataShard::gDbStatsReportInterval = TDuration::MilliSeconds(1);
 
         //runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_CRIT);
 
@@ -815,10 +814,10 @@ struct TLoadAndSplitSimulator {
 TTestEnv SetupEnv(TTestBasicRuntime &runtime) {
     TTestEnvOptions opts;
     opts.EnableBackgroundCompaction(false);
+    opts.DataShardStatsReportIntervalSeconds(0);
 
     TTestEnv env(runtime, opts);
 
-    NDataShard::gDbStatsReportInterval = TDuration::Seconds(0);
     NDataShard::gDbStatsDataSizeResolution = 10;
     NDataShard::gDbStatsRowCountResolution = 10;
 

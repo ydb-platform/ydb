@@ -348,7 +348,7 @@ std::unique_ptr<TEvPQ::TEvRead> MakeEvRead(const TString& consumerName, ui64 sta
         count,
         TString{},
         consumerName,
-        1000,
+        TDuration::Seconds(1).Seconds(),
         std::numeric_limits<ui32>::max(),
         0,
         0,
@@ -389,7 +389,7 @@ bool TConsumerActor::FetchMessagesIfNeeded() {
     if (metrics.InflyMessageCount < 1000) {
         maxMessages = std::max(maxMessages, 1000ul - metrics.InflyMessageCount);
     }
-    LOG_D("Fetch " << maxMessages << " messages");
+    LOG_D("Fetch " << maxMessages << " messages from " << PartitionActorId);
     Send(PartitionActorId, MakeEvRead(Config.GetName(), Storage->GetLastOffset(), maxMessages, ++FetchCookie));
 
     return true;

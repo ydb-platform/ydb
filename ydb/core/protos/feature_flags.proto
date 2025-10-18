@@ -235,4 +235,5 @@ message TFeatureFlags {
     optional bool EnableCompileCacheView = 209 [default = false];
     optional bool EnableSecureScriptExecutions = 210 [default = false];
     optional bool EnableColumnshardBool = 211 [default = false];
+    optional bool EnableTopicMessageLevelParallelism = 212 [default = false];
 }

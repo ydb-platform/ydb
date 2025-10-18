@@ -40,22 +40,26 @@ void TConsumerActor::PassAway() {
 }
 
 TString TConsumerActor::BuildLogPrefix() const {
-    return TStringBuilder() << "[" << PartitionId << "][MLP][" << Config.GetName() << "]";
+    return TStringBuilder() << "[" << PartitionId << "][MLP][" << Config.GetName() << "] ";
 }
 
 void TConsumerActor::Queue(TEvPersQueue::TEvMLPReadRequest::TPtr& ev) {
+    LOG_D("Queue TEvPersQueue::TEvMLPReadRequest " << ev->Get()->Record.ShortDebugString());
     ReadRequestsQueue.push_back(std::move(ev));
 }
 
 void TConsumerActor::Queue(TEvPersQueue::TEvMLPCommitRequest::TPtr& ev) {
+    LOG_D("Queue TEvPersQueue::TEvMLPCommitRequest " << ev->Get()->Record.ShortDebugString());
     CommitRequestsQueue.push_back(std::move(ev));
 }
 
 void TConsumerActor::Queue(TEvPersQueue::TEvMLPUnlockRequest::TPtr& ev) {
+    LOG_D("Queue TEvPersQueue::TEvMLPUnlockRequest " << ev->Get()->Record.ShortDebugString());
     UnlockRequestsQueue.push_back(std::move(ev));
 }
 
 void TConsumerActor::Queue(TEvPersQueue::TEvMLPChangeMessageDeadlineRequest::TPtr& ev) {
+    LOG_D("Queue TEvPersQueue::TEvMLPChangeMessageDeadlineRequest " << ev->Get()->Record.ShortDebugString());
     ChangeMessageDeadlineRequestsQueue.push_back(std::move(ev));
 }
 
@@ -80,6 +84,7 @@ void TConsumerActor::Handle(TEvPersQueue::TEvMLPChangeMessageDeadlineRequest::TP
 }
 
 void TConsumerActor::HandleOnInit(TEvKeyValue::TEvResponse::TPtr& ev) {
+    LOG_D("HandleOnInit TEvKeyValue::TEvResponse");
     auto& record = ev->Get()->Record;
 
     if (record.GetStatus() != NMsgBusProxy::MSTATUS_OK) {
@@ -129,6 +134,8 @@ STFUNC(TConsumerActor::StateInit) {
 }
 
 void TConsumerActor::HandleOnWrite(TEvKeyValue::TEvResponse::TPtr& ev) {
+    LOG_D("HandleOnWrite TEvKeyValue::TEvResponse");
+
     auto& record = ev->Get()->Record;
 
     if (record.GetStatus() != NMsgBusProxy::MSTATUS_OK) {
@@ -200,6 +207,8 @@ void TConsumerActor::Restart(TString&& error) {
 }
 
 void TConsumerActor::ProcessEventQueue() {
+    LOG_D("ProcessEventQueue");
+
     AFL_ENSURE(!Batch);
     Batch = std::make_unique<TBatch>(SelfId(), PartitionActorId);
 
@@ -259,6 +268,8 @@ void TConsumerActor::ProcessEventQueue() {
     }
 
     if (Batch->Empty()) {
+        LOG_D("Batch is empty");
+
         Batch.reset();
         FetchMessagesIfNeeded();
         return;
@@ -268,6 +279,8 @@ void TConsumerActor::ProcessEventQueue() {
 }
 
 void TConsumerActor::PersistSnapshot() {
+    LOG_D("PersistSnapshot");
+
     Become(&TConsumerActor::StateWrite);
 
     Storage->Compact();
@@ -320,27 +333,36 @@ void TConsumerActor::FetchMessagesIfNeeded() {
 
     auto& metrics = Storage->GetMetrics();
     if (metrics.InflyMessageCount >= TStorage::MaxMessages) {
+        LOG_D("Skip fetch: infly limit exceeded");
         return;
     }
     if (metrics.InflyMessageCount >= 1000 && metrics.UnprocessedMessageCount >= metrics.LockedMessageCount * 2) {
+        LOG_D("Skip fetch: there are enough messages. InflyMessageCount=" << metrics.InflyMessageCount
+            << ", UnprocessedMessageCount=" << metrics.UnprocessedMessageCount
+            << ", LockedMessageCount=" << metrics.LockedMessageCount);
         return;
     }
 
     FetchInProgress = true;
 
-    auto maxMessages = TStorage::MaxMessages - metrics.InflyMessageCount;
+    auto maxMessages = std::min(metrics.LockedMessageCount * 2 - metrics.UnprocessedMessageCount,
+        TStorage::MaxMessages - metrics.InflyMessageCount);
+    LOG_D("Fetch " << maxMessages << " messages");
     Send(PartitionActorId, MakeEvRead(Config.GetName(), Storage->GetLastOffset(), maxMessages, ++FetchCookie));
     //Send(PartitionActorId, new TEvPQ::TEvMLPFetchMessagesRequest(Storage->GetLastOffset(), maxMessages));
 }
 
 void TConsumerActor::Handle(TEvPQ::TEvProxyResponse::TPtr& ev) {
+    LOG_D("Handle TEvPQ::TEvProxyResponse");
     if (FetchCookie != ev->Cookie) {
+        LOG_D("Cookie mismatch: " << FetchCookie << " != " << ev->Cookie);
         return;
     }
 
     FetchInProgress = false;
 
     if (!IsSucess(ev)) {
+        LOG_W("Fetch messages failed: " << ev->Get()->Response->DebugString());
         return;
     }
 

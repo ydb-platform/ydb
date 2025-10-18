@@ -1,5 +1,7 @@
 LIBRARY()
 
+ENABLE(YQL_STYLE_CPP)
+
 SRCS(
     mkql_block_builder.cpp
     mkql_block_impl.cpp
@@ -33,10 +35,12 @@ YQL_LAST_ABI_VERSION()
 END()
 
 RECURSE(
-    llvm16
+#    llvm16
+    llvm20
     no_llvm
 )
 
 RECURSE_FOR_TESTS(
-    llvm16/ut
+#    llvm16/ut
+    llvm20/ut
 )

@@ -27,9 +27,9 @@ PEERDIR(
     yql/essentials/minikql/arrow
     yql/essentials/public/udf
     yql/essentials/public/udf/service/exception_policy
-    yql/essentials/minikql/comp_nodes/llvm16
+    yql/essentials/minikql/comp_nodes/llvm20
     yql/essentials/parser/pg_catalog
-    yql/essentials/minikql/codegen/llvm16
+    yql/essentials/minikql/codegen/llvm20
     library/cpp/resource
 )
 

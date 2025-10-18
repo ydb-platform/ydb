@@ -1,0 +1,15 @@
+From 614091ef5408ac33b16a5ee34f1082395447ae11 Mon Sep 17 00:00:00 2001
+From: Антон Самохвалов <pg@yandex-team.ru>
+Date: Tue, 21 Mar 2017 15:47:38 +0000
+Subject: [PATCH] DEVTOOLSUP-308 REVIEW: 253436 remove deps on newer libc
+
+git-svn-id: svn+ssh://arcadia.yandex.ru/arc/trunk/arcadia/contrib/libs/llvm37@2774744 41d65440-b5be-11dd-afe3-b2e846d9b4f8
+---
+ stubs/llvm/Config/config.h | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+--- a/include/llvm/Config/config-linux.h
++++ b/include/llvm/Config/config-linux.h
+@@ -233,1 +233,1 @@
+-#define HAVE_POSIX_SPAWN 1
++#undef HAVE_POSIX_SPAWN

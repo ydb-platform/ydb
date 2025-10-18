@@ -1,6 +1,4 @@
 #pragma once
-
-#include <util/system/unaligned_mem.h>
 #include <util/system/compiler.h>
 #include <util/system/types.h>
 #include <util/generic/bitops.h>
@@ -13,8 +11,6 @@
 
 #include <util/digest/city.h>
 #include <util/generic/scope.h>
-
-#define MKQL_RH_HASH_MOVE_API_TO_NEW_VERSION
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -59,13 +55,9 @@ protected:
 
     template <>
     struct TPSLStorageImpl<true> {
-        i32 Distance;
-        ui64 Hash;
-        TPSLStorageImpl()
-            : Distance(-1)
-            , Hash(0)
-        {
-        }
+        i32 Distance = -1;
+        ui64 Hash = 0;
+        TPSLStorageImpl() = default;
         TPSLStorageImpl(const ui64 hash)
             : Distance(0)
             , Hash(hash)
@@ -73,14 +65,10 @@ protected:
         }
     };
 
-public:
     template <>
     struct TPSLStorageImpl<false> {
-        i32 Distance;
-        TPSLStorageImpl()
-            : Distance(-1)
-        {
-        }
+        i32 Distance = -1;
+        TPSLStorageImpl() = default;
         TPSLStorageImpl(const ui64 /*hash*/)
             : Distance(0)
         {
@@ -89,7 +77,6 @@ public:
 
     using TPSLStorage = TPSLStorageImpl<CacheHash>;
 
-protected:
     explicit TRobinHoodHashBase(const ui64 initialCapacity, THash hash, TEqual equal)
         : HashLocal_(std::move(hash))
         , EqualLocal_(std::move(equal))
@@ -182,7 +169,7 @@ public:
     void Clear() {
         char* ptr = Data_;
         for (ui64 i = 0; i < Capacity_; ++i) {
-            WriteUnaligned<i32>(&static_cast<TPSLStorage*>(GetPslPtr(ptr))->Distance, -1);
+            GetPSL(ptr).Distance = -1;
             ptr += AsDeriv().GetCellSize();
         }
         Size_ = 0;
@@ -220,41 +207,31 @@ public:
         ptr += AsDeriv().GetCellSize();
     }
 
-    bool IsValid(const char* ptr) const {
-        return ReadUnaligned<i32>(&static_cast<const TPSLStorage*>(GetPslPtr(ptr))->Distance) >= 0;
+    bool IsValid(const char* ptr) {
+        return GetPSL(ptr).Distance >= 0;
     }
 
-    // WARNING: Returns unaligned pointer! Use ReadUnaligned/WriteUnaligned for access
-    static const void* GetPslPtr(const char* ptr) {
-        return ptr;
+    static const TPSLStorage& GetPSL(const char* ptr) {
+        return *(const TPSLStorage*)ptr;
     }
 
-    // WARNING: Returns unaligned pointer! Use ReadUnaligned/WriteUnaligned for access
-    static const void* GetKeyPtr(const char* ptr) {
-        return ptr + sizeof(TPSLStorage);
+    static const TKey& GetKey(const char* ptr) {
+        return *(const TKey*)(ptr + sizeof(TPSLStorage));
     }
 
-    // WARNING: Returns unaligned pointer! Use ReadUnaligned/WriteUnaligned for access
-    static void* GetKeyPtr(char* ptr) {
-        return ptr + sizeof(TPSLStorage);
+    static TKey& GetKey(char* ptr) {
+        return *(TKey*)(ptr + sizeof(TPSLStorage));
     }
 
-    static TKey GetKeyValue(const char* ptr) {
-        return ReadUnaligned<TKey>(GetKeyPtr(ptr));
-    }
-
-    // WARNING: Returns unaligned pointer! Use ReadUnaligned/WriteUnaligned for access
-    const void* GetPayloadPtr(const char* ptr) const {
+    const void* GetPayload(const char* ptr) {
         return AsDeriv().GetPayloadImpl(ptr);
     }
 
-    // WARNING: Returns unaligned pointer! Use ReadUnaligned/WriteUnaligned for access
-    static void* GetPslPtr(char* ptr) {
-        return ptr;
+    static TPSLStorage& GetPSL(char* ptr) {
+        return *(TPSLStorage*)ptr;
     }
 
-    // WARNING: Returns unaligned pointer! Use ReadUnaligned/WriteUnaligned for access
-    void* GetMutablePayloadPtr(char* ptr) {
+    void* GetMutablePayload(char* ptr) {
         return AsDeriv().GetPayloadImpl(ptr);
     }
 
@@ -276,38 +253,30 @@ private:
         char* returnPtr;
         typename TDeriv::TPayloadStore tmpPayload;
         for (;;) {
-            auto* pslPtr = GetPslPtr(ptr);
-            TPSLStorage pslData = ReadUnaligned<TPSLStorage>(pslPtr);
-            i32 pslDistance = pslData.Distance;
-            if (pslDistance < 0) {
+            auto& pslPtr = GetPSL(ptr);
+            if (pslPtr.Distance < 0) {
                 isNew = true;
-                WriteUnaligned<TPSLStorage>(pslPtr, psl);
-                SetKeyValue(ptr, key);
+                pslPtr = psl;
+                GetKey(ptr) = key;
                 return ptr;
             }
 
             if constexpr (CacheHash) {
-                ui64 pslHash = pslData.Hash;
-                if (pslHash == psl.Hash && EqualLocal_(GetKeyValue(ptr), key)) {
+                if (pslPtr.Hash == psl.Hash && EqualLocal_(GetKey(ptr), key)) {
                     return ptr;
                 }
             } else {
-                if (EqualLocal_(GetKeyValue(ptr), key)) {
+                if (EqualLocal_(GetKey(ptr), key)) {
                     return ptr;
                 }
             }
 
-            if (psl.Distance > pslDistance) {
+            if (psl.Distance > pslPtr.Distance) {
+                // swap keys & state
                 returnPtr = ptr;
-
-                // swap keys & states
-                TKey ptrKey = GetKeyValue(ptr);
-                WriteUnaligned<TPSLStorage>(pslPtr, psl);
-                SetKeyValue(ptr, key);
-                psl = pslData;
-                key = ptrKey;
-
-                AsDeriv().SavePayload(GetPayloadPtr(ptr), tmpPayload);
+                std::swap(psl, pslPtr);
+                std::swap(key, GetKey(ptr));
+                AsDeriv().SavePayload(GetPayload(ptr), tmpPayload);
                 isNew = true;
 
                 ++psl.Distance;
@@ -320,24 +289,19 @@ private:
         }
 
         for (;;) {
-            auto pslPtr = GetPslPtr(ptr);
-            TPSLStorage pslData = ReadUnaligned<TPSLStorage>(pslPtr);
-            i32 pslDistance = pslData.Distance;
-            if (pslDistance < 0) {
-                WriteUnaligned<TPSLStorage>(pslPtr, psl);
-                SetKeyValue(ptr, key);
-                AsDeriv().RestorePayload(GetMutablePayloadPtr(ptr), tmpPayload);
+            auto& pslPtr = GetPSL(ptr);
+            if (pslPtr.Distance < 0) {
+                pslPtr = psl;
+                GetKey(ptr) = key;
+                AsDeriv().RestorePayload(GetMutablePayload(ptr), tmpPayload);
                 return returnPtr; // for original key
             }
 
-            if (psl.Distance > pslDistance) {
+            if (psl.Distance > pslPtr.Distance) {
                 // swap keys & state
-                TKey ptrKey = GetKeyValue(ptr);
-                WriteUnaligned<TPSLStorage>(pslPtr, psl);
-                SetKeyValue(ptr, key);
-                psl = pslData;
-                key = ptrKey;
-                AsDeriv().SwapPayload(GetMutablePayloadPtr(ptr), tmpPayload);
+                std::swap(psl, pslPtr);
+                std::swap(key, GetKey(ptr));
+                AsDeriv().SwapPayload(GetMutablePayload(ptr), tmpPayload);
             }
 
             ++psl.Distance;
@@ -345,25 +309,20 @@ private:
         }
     }
 
-    static void SetKeyValue(char* ptr, const TKey& key) {
-        return WriteUnaligned<TKey>(GetKeyPtr(ptr), key);
-    }
-
     Y_FORCE_INLINE char* LookupImpl(TKey key, const ui64 hash, char* data, char* dataEnd, char* ptr) {
         i32 currDistance = 0;
         for (;;) {
-            TPSLStorage pslData = ReadUnaligned<TPSLStorage>(GetPslPtr(ptr));
-            i32 pslDistance = pslData.Distance;
-            if (pslDistance < 0 || currDistance > pslDistance) {
+            auto& pslPtr = GetPSL(ptr);
+            if (pslPtr.Distance < 0 || currDistance > pslPtr.Distance) {
                 return nullptr;
             }
 
             if constexpr (CacheHash) {
-                if (pslData.HashlHash == hash && EqualLocal_(GetKeyValue(ptr), key)) {
+                if (pslPtr.Hash == hash && EqualLocal_(GetKey(ptr), key)) {
                     return ptr;
                 }
             } else {
-                if (EqualLocal_(GetKeyValue(ptr), key)) {
+                if (EqualLocal_(GetKey(ptr), key)) {
                     return ptr;
                 }
             }
@@ -385,8 +344,7 @@ private:
         std::array<TInternalBatchRequestItem, PrefetchBatchSize> batch;
         ui32 batchLen = 0;
         for (auto iter = Begin(); iter != End(); Advance(iter)) {
-            TPSLStorage pslData = ReadUnaligned<TPSLStorage>(GetPslPtr(iter));
-            if (pslData.Distance < 0) {
+            if (GetPSL(iter).Distance < 0) {
                 continue;
             }
 
@@ -396,11 +354,11 @@ private:
             }
 
             auto& r = batch[batchLen++];
-            r.ConstructKey(GetKeyValue(iter));
+            r.ConstructKey(GetKey(iter));
             r.OriginalIterator = iter;
 
             if constexpr (CacheHash) {
-                r.Hash = pslData.Hash;
+                r.Hash = GetPSL(iter).Hash;
             } else {
                 r.Hash = HashLocal_(r.GetKey());
             }
@@ -422,7 +380,7 @@ private:
             bool isNew;
             auto iter = InsertImpl(r.GetKey(), r.Hash, isNew, newData, newDataEnd, r.InitialIterator);
             Y_ASSERT(isNew);
-            AsDeriv().CopyPayload(GetMutablePayloadPtr(iter), GetPayloadPtr(r.OriginalIterator));
+            AsDeriv().CopyPayload(GetMutablePayload(iter), GetPayload(r.OriginalIterator));
         }
     }
 
@@ -433,7 +391,7 @@ private:
 
     static ui64 GetSelfHash(void* self) {
         char buf[sizeof(void*)];
-        WriteUnaligned<void*>(buf, self);
+        *(void**)buf = self;
         return CityHash64(buf, sizeof(buf));
     }
 
@@ -449,7 +407,7 @@ private:
         dataEnd = data + bytes;
         char* ptr = data;
         for (ui64 i = 0; i < capacity; ++i) {
-            WriteUnaligned<i32>(&static_cast<TPSLStorage*>(GetPslPtr(ptr))->Distance, -1);
+            GetPSL(ptr).Distance = -1;
             ptr += AsDeriv().GetCellSize();
         }
     }
@@ -503,13 +461,11 @@ public:
         return CellSize_;
     }
 
-    // WARNING: Returns unaligned pointer! Use ReadUnaligned/WriteUnaligned for access
     void* GetPayloadImpl(char* ptr) {
         return ptr + sizeof(typename TBase::TPSLStorage) + sizeof(TKey);
     }
 
-    // WARNING: Returns unaligned pointer! Use ReadUnaligned/WriteUnaligned for access
-    const void* GetPayloadImpl(const char* ptr) const {
+    const void* GetPayloadImpl(const char* ptr) {
         return ptr + sizeof(typename TBase::TPSLStorage) + sizeof(TKey);
     }
 
@@ -564,32 +520,28 @@ public:
         return sizeof(typename TBase::TPSLStorage) + sizeof(TKey) + sizeof(TPayload);
     }
 
-    // WARNING: Returns unaligned pointer! Use ReadUnaligned/WriteUnaligned for access
     void* GetPayloadImpl(char* ptr) {
         return ptr + sizeof(typename TBase::TPSLStorage) + sizeof(TKey);
     }
 
-    // WARNING: Returns unaligned pointer! Use ReadUnaligned/WriteUnaligned for access
-    const void* GetPayloadImpl(const char* ptr) const {
+    const void* GetPayloadImpl(const char* ptr) {
         return ptr + sizeof(typename TBase::TPSLStorage) + sizeof(TKey);
     }
 
     void CopyPayload(void* dst, const void* src) {
-        WriteUnaligned<TPayload>(dst, ReadUnaligned<TPayload>(src));
+        *(TPayload*)dst = *(const TPayload*)src;
     }
 
     void SavePayload(const void* p, TPayload& store) {
-        store = ReadUnaligned<TPayload>(p);
+        store = *(const TPayload*)p;
     }
 
     void RestorePayload(void* p, const TPayload& store) {
-        WriteUnaligned<TPayload>(p, store);
+        *(TPayload*)p = store;
     }
 
     void SwapPayload(void* p, TPayload& store) {
-        TPayload temp = ReadUnaligned<TPayload>(p);
-        WriteUnaligned<TPayload>(p, store);
-        store = temp;
+        std::swap(*(TPayload*)p, store);
     }
 };
 
@@ -621,7 +573,7 @@ public:
         return nullptr;
     }
 
-    const void* GetPayloadImpl(const char* ptr) const {
+    const void* GetPayloadImpl(const char* ptr) {
         Y_UNUSED(ptr);
         return nullptr;
     }

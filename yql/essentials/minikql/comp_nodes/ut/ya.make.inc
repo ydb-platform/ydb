@@ -1,5 +1,7 @@
 FORK_SUBTESTS()
 
+ENABLE(YQL_STYLE_CPP)
+
 SPLIT_FACTOR(60)
 
 IF (SANITIZER_TYPE  == "address")
@@ -16,6 +18,8 @@ ELSE()
 ENDIF()
 
 REQUIREMENTS(ram:32)
+
+SUBSCRIBER(g:yql)
 
 INCLUDE(${ARCADIA_ROOT}/yql/essentials/minikql/computation/header.ya.make.inc)
 INCLUDE(${ARCADIA_ROOT}/yql/essentials/minikql/invoke_builtins/header.ya.make.inc)

@@ -81,7 +81,7 @@ public:
         block = work;
 
         const auto itemsType = PointerType::getUnqual(valueType);
-        const auto itemsPtr = *Stateless_ || ctx.AlwaysInline ? new AllocaInst(itemsType, 0U, "items_ptr", &ctx.Func->getEntryBlock().back()) : new AllocaInst(itemsType, 0U, "items_ptr", block);
+        const auto itemsPtr = *Stateless_ || ctx.AlwaysInline ? new AllocaInst(itemsType, 0U, "items_ptr", ctx.GetEntryBlockEnd()) : new AllocaInst(itemsType, 0U, "items_ptr", block);
 
         const auto idxType = Type::getInt32Ty(context);
 
@@ -259,7 +259,7 @@ public:
         block = work;
 
         const auto itemsType = PointerType::getUnqual(valueType);
-        const auto itemsPtr = *Stateless_ || ctx.AlwaysInline ? new AllocaInst(itemsType, 0U, "items_ptr", &ctx.Func->getEntryBlock().back()) : new AllocaInst(itemsType, 0U, "items_ptr", block);
+        const auto itemsPtr = *Stateless_ || ctx.AlwaysInline ? new AllocaInst(itemsType, 0U, "items_ptr", ctx.GetEntryBlockEnd()) : new AllocaInst(itemsType, 0U, "items_ptr", block);
 
         const auto idxType = Type::getInt32Ty(context);
 

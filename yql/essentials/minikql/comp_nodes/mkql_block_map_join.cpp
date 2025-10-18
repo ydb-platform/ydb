@@ -754,24 +754,22 @@ public:
 
             auto processInsertBatch = [&]() {
                 Index_->BatchInsert({insertBatch.data(), insertBatchLen}, [&](size_t i, TIndexMap::iterator iter, bool isNew) {
-                    auto valuePtr = Index_->GetMutablePayloadPtr(iter);
+                    auto value = static_cast<TIndexMapValue*>(Index_->GetMutablePayload(iter));
                     if (isNew) {
                         // Store single entry inplace
-                        WriteUnaligned<TIndexMapValue>(valuePtr, TIndexMapValue(insertBatchEntries[i]));
+                        *value = TIndexMapValue(insertBatchEntries[i]);
                         Index_->CheckGrow();
                     } else {
-                        if (Any_ && ContainsKey(ReadUnaligned<TIndexMapValue>(valuePtr), insertBatchKeys[i])) {
+                        if (Any_ && ContainsKey(value, insertBatchKeys[i])) {
                             return;
                         }
 
-                        auto currentValue = ReadUnaligned<TIndexMapValue>(valuePtr);
                         // Store as list
-                        if (currentValue.IsInplace()) {
-                            WriteUnaligned<TIndexMapValue>(valuePtr, TIndexMapValue(InsertIndexNode(currentValue.GetEntry())));
-                            currentValue = ReadUnaligned<TIndexMapValue>(valuePtr);
+                        if (value->IsInplace()) {
+                            *value = TIndexMapValue(InsertIndexNode(value->GetEntry()));
                         }
 
-                        WriteUnaligned<TIndexMapValue>(valuePtr, TIndexMapValue(InsertIndexNode(insertBatchEntries[i], currentValue.GetList())));
+                        *value = TIndexMapValue(InsertIndexNode(insertBatchEntries[i], value->GetList()));
                     }
                 });
             };
@@ -827,12 +825,11 @@ public:
                 return;
             }
 
-            const auto* valuePtr = Index_->GetPayloadPtr(iter);
-            const TIndexMapValue value = ReadUnaligned<TIndexMapValue>(valuePtr);
-            if (value.IsInplace()) {
-                iterators[i] = TIterator(this, value.GetEntry(), std::move(itemsBatch[i]));
+            auto value = static_cast<const TIndexMapValue*>(Index_->GetPayload(iter));
+            if (value->IsInplace()) {
+                iterators[i] = TIterator(this, value->GetEntry(), std::move(itemsBatch[i]));
             } else {
-                iterators[i] = TIterator(this, value.GetList(), std::move(itemsBatch[i]));
+                iterators[i] = TIterator(this, value->GetList(), std::move(itemsBatch[i]));
             }
         });
     }
@@ -879,11 +876,11 @@ private:
         return &IndexNodes_.emplace_back(entry, currentHead);
     }
 
-    bool ContainsKey(const TIndexMapValue& chain, const std::vector<NYql::NUdf::TBlockItem>& keyItems) const {
-        if (chain.IsInplace()) {
-            return IsKeyEquals(chain.GetEntry(), keyItems);
+    bool ContainsKey(const TIndexMapValue* chain, const std::vector<NYql::NUdf::TBlockItem>& keyItems) const {
+        if (chain->IsInplace()) {
+            return IsKeyEquals(chain->GetEntry(), keyItems);
         } else {
-            for (TIndexNode* node = chain.GetList(); node != nullptr; node = node->Next) {
+            for (TIndexNode* node = chain->GetList(); node != nullptr; node = node->Next) {
                 if (IsKeyEquals(node->Entry, keyItems)) {
                     return true;
                 }

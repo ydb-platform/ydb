@@ -809,7 +809,7 @@ public:
                 block = smsk;
 
                 const auto arrayType = ArrayType::get(Type::getInt64Ty(context), UseOnStack);
-                const auto array = *Stateless_ || ctx.AlwaysInline ? new AllocaInst(arrayType, 0U, "array", &ctx.Func->getEntryBlock().back()) : new AllocaInst(arrayType, 0U, "array", block);
+                const auto array = *Stateless_ || ctx.AlwaysInline ? new AllocaInst(arrayType, 0U, "array", ctx.GetEntryBlockEnd()) : new AllocaInst(arrayType, 0U, "array", block);
                 const auto ptr = GetElementPtrInst::CreateInBounds(arrayType, array, {zeroSize, zeroSize}, "ptr", block);
 
                 bits->addIncoming(ptr, block);
@@ -905,7 +905,7 @@ public:
             }
 
             const auto itemsType = PointerType::getUnqual(list->getType());
-            const auto itemsPtr = *Stateless_ || ctx.AlwaysInline ? new AllocaInst(itemsType, 0U, "items_ptr", &ctx.Func->getEntryBlock().back()) : new AllocaInst(itemsType, 0U, "items_ptr", block);
+            const auto itemsPtr = *Stateless_ || ctx.AlwaysInline ? new AllocaInst(itemsType, 0U, "items_ptr", ctx.GetEntryBlockEnd()) : new AllocaInst(itemsType, 0U, "items_ptr", block);
             const auto array = GenNewArray(ctx, count, itemsPtr, block);
             const auto items = new LoadInst(itemsType, itemsPtr, "items", block);
 
@@ -1165,7 +1165,7 @@ public:
                 block = smsk;
 
                 const auto arrayType = ArrayType::get(Type::getInt64Ty(context), UseOnStack);
-                const auto array = *Stateless_ || ctx.AlwaysInline ? new AllocaInst(arrayType, 0U, "array", &ctx.Func->getEntryBlock().back()) : new AllocaInst(arrayType, 0U, "array", block);
+                const auto array = *Stateless_ || ctx.AlwaysInline ? new AllocaInst(arrayType, 0U, "array", ctx.GetEntryBlockEnd()) : new AllocaInst(arrayType, 0U, "array", block);
                 const auto ptr = GetElementPtrInst::CreateInBounds(arrayType, array, {zeroSize, zeroSize}, "ptr", block);
 
                 bits->addIncoming(ptr, block);
@@ -1265,7 +1265,7 @@ public:
             }
 
             const auto itemsType = PointerType::getUnqual(list->getType());
-            const auto itemsPtr = *Stateless_ || ctx.AlwaysInline ? new AllocaInst(itemsType, 0U, "items_ptr", &ctx.Func->getEntryBlock().back()) : new AllocaInst(itemsType, 0U, "items_ptr", block);
+            const auto itemsPtr = *Stateless_ || ctx.AlwaysInline ? new AllocaInst(itemsType, 0U, "items_ptr", ctx.GetEntryBlockEnd()) : new AllocaInst(itemsType, 0U, "items_ptr", block);
             const auto array = GenNewArray(ctx, count, itemsPtr, block);
             const auto items = new LoadInst(itemsType, itemsPtr, "items", block);
 

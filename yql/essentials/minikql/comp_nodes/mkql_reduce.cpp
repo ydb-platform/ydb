@@ -71,7 +71,7 @@ public:
 
         const auto list = GetNodeValue(List, ctx, block);
 
-        const auto itemPtr = *this->Stateless_ || ctx.AlwaysInline ? new AllocaInst(valueType, 0U, "item_ptr", &ctx.Func->getEntryBlock().back()) : new AllocaInst(valueType, 0U, "item_ptr", block);
+        const auto itemPtr = *this->Stateless_ || ctx.AlwaysInline ? new AllocaInst(valueType, 0U, "item_ptr", ctx.GetEntryBlockEnd()) : new AllocaInst(valueType, 0U, "item_ptr", block);
         new StoreInst(ConstantInt::get(valueType, 0), itemPtr, block);
 
         const auto loop = BasicBlock::Create(context, "loop", ctx.Func);
@@ -99,7 +99,7 @@ public:
 
             block = done;
         } else {
-            const auto iterPtr = *this->Stateless_ || ctx.AlwaysInline ? new AllocaInst(valueType, 0U, "iter_ptr", &ctx.Func->getEntryBlock().back()) : new AllocaInst(valueType, 0U, "iter_ptr", block);
+            const auto iterPtr = *this->Stateless_ || ctx.AlwaysInline ? new AllocaInst(valueType, 0U, "iter_ptr", ctx.GetEntryBlockEnd()) : new AllocaInst(valueType, 0U, "iter_ptr", block);
             CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::GetListIterator>(iterPtr, list, ctx.Codegen, block);
             const auto iter = new LoadInst(valueType, iterPtr, "iter", block);
 

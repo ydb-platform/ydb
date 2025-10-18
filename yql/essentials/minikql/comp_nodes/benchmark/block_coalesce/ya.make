@@ -1,5 +1,9 @@
 G_BENCHMARK()
 
+ENABLE(YQL_STYLE_CPP)
+
+SUBSCRIBER(g:yql)
+
 PEERDIR(
     yql/essentials/public/udf
     yql/essentials/public/udf/arrow

@@ -412,7 +412,7 @@ void ParallelProgTest(T f, bool useLLVM, ui64 testResult, size_t vecSize = 10'00
     explorer.Walk(progReturn.GetNode(), typeEnv);
 
     TComputationPatternOpts opts(alloc.Ref(), typeEnv, GetListTestFactory(), functionRegistry.Get(),
-                                 NUdf::EValidateMode::Lazy, NUdf::EValidatePolicy::Exception, useLLVM ? "" : "OFF", EGraphPerProcess::Multi);
+                                 NUdf::EValidateMode::Lazy, NUdf::EValidatePolicy::Exception, useLLVM ? "--dump-generated" : "OFF", EGraphPerProcess::Multi);
 
     {
         auto guard = entry->Env.BindAllocator();
@@ -445,7 +445,7 @@ void ParallelProgTest(T f, bool useLLVM, ui64 testResult, size_t vecSize = 10'00
 
             TComputationPatternOpts opts(entry->Alloc.Ref(), entry->Env, GetListTestFactory(),
                                          functionRegistry.Get(), NUdf::EValidateMode::Lazy, NUdf::EValidatePolicy::Exception,
-                                         useLLVM ? "" : "OFF", EGraphPerProcess::Multi);
+                                         useLLVM ? "--dump-generated" : "OFF", EGraphPerProcess::Multi);
 
             auto graph = entry->Pattern->Clone(opts.ToComputationOptions(*randomProvider, *timeProvider, &graphAlloc.Ref()));
             TUnboxedValue* items = nullptr;

@@ -387,7 +387,7 @@ Y_UNIT_TEST_SUITE(KqpQueryPerf) {
         )"), params);
 
         AssertTableStats(stats, "/Root/EightShard", {
-            .ExpectedReads = UseSink ? 0 : 1, // Non-existing keys don't count in reads
+            .ExpectedReads = 1, // Non-existing keys don't count in reads
             .ExpectedUpdates = 1,
         });
 

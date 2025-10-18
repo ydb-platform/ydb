@@ -83,7 +83,7 @@ public:
     // https://docs.amazonaws.cn/en_us/AWSSimpleQueueService/latest/APIReference/API_ChangeMessageVisibility.html
     bool ChangeMessageDeadline(TMessageId message, TInstant deadline);
 
-    void AddMessage(ui64 offset, ui32 messageGroupIdHash);
+    void AddMessage(ui64 offset, bool hasMessagegroup, ui32 messageGroupIdHash);
 
     bool ProccessDeadlines();
     bool Compact();

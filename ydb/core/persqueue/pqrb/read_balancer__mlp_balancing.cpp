@@ -27,7 +27,8 @@ void TMLPBalancer::Handle(TEvPersQueue::TEvMLPGetPartitionRequest::TPtr& ev) {
     auto* consumerConfig = NPQ::GetConsumer(GetConfig(), consumerName);
     if (!consumerConfig) {
         PQ_LOG_D("Consumer '" << consumerName << "' not found");
-        TopicActor.Send(ev->Sender, new TEvPersQueue::TEvMLPGetPartitionResponse(NPersQueue::NErrorCode::EErrorCode::SCHEMA_ERROR), 0, ev->Cookie);
+        TopicActor.Send(ev->Sender, new TEvPersQueue::TEvMLPErrorResponse(NPersQueue::NErrorCode::EErrorCode::SCHEMA_ERROR,
+            TStringBuilder() << "Consumer '" << consumerName << "' not found"), 0, ev->Cookie);
         return;
     }
 

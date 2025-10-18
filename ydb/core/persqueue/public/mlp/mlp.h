@@ -17,7 +17,7 @@ struct TReaderSetting {
     // TODO check access
 };
 
-// Reply TEvPersQueue::TEvMLPReadResponse
+// Reply TEvPersQueue::TEvMLPReadResponse or TEvPersQueue::TEvMLPErrorResponse 
 IActor* CreateReader(const NActors::TActorId& parentId, TReaderSetting&& settings);
 
 

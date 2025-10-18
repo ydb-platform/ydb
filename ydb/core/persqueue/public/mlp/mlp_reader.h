@@ -36,7 +36,7 @@ private:
     STFUNC(ReadState);
 
     void SendToTablet(ui64 tabletId, IEventBase *ev);
-    void ReplyErrorAndDie(NPersQueue::NErrorCode::EErrorCode errorCode);
+    void ReplyErrorAndDie(NPersQueue::NErrorCode::EErrorCode errorCode, TString&& errorMessage);
     void PassAway() override;
 
     bool OnUnhandledException(const std::exception&) override;

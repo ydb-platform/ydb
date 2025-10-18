@@ -3,6 +3,7 @@
 #define LOG_PREFIX_INT TStringBuilder() << "[" << SelfId() << "]"
 #define LOG_D(stream) LOG_DEBUG_S (*NActors::TlsActivationContext, NKikimrServices::EServiceKikimr::PQ_MLP_READER, LOG_PREFIX_INT << stream)
 #define LOG_I(stream) LOG_INFO_S  (*NActors::TlsActivationContext, NKikimrServices::EServiceKikimr::PQ_MLP_READER, LOG_PREFIX_INT << stream)
+#define LOG_E(stream) LOG_ERROR_S (*NActors::TlsActivationContext, NKikimrServices::EServiceKikimr::PQ_MLP_READER, LOG_PREFIX_INT << stream)
 
 
 namespace NKikimr::NPQ::NMLP {
@@ -39,7 +40,8 @@ void TReaderActor::Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
             break;
         }
         default: {
-            ReplyErrorAndDie(NPersQueue::NErrorCode::EErrorCode::SCHEMA_ERROR);
+            ReplyErrorAndDie(NPersQueue::NErrorCode::EErrorCode::SCHEMA_ERROR,
+                NDescriber::Description(Settings.TopicName, topic.Status));
         }
     }
 }
@@ -67,7 +69,7 @@ void TReaderActor::Handle(TEvPersQueue::TEvMLPGetPartitionResponse::TPtr& ev) {
             DoRead();
         }
         default:
-            ReplyErrorAndDie(NPersQueue::NErrorCode::EErrorCode::ERROR);
+            ReplyErrorAndDie(NPersQueue::NErrorCode::EErrorCode::ERROR, "Patition choose error");
     }
 }
 
@@ -80,12 +82,13 @@ void TReaderActor::HandleOnSelectPartition(TEvPipeCache::TEvDeliveryProblem::TPt
         Backoff.Next();
         return DoSelectPartition();
     }
-    ReplyErrorAndDie(NPersQueue::NErrorCode::EErrorCode::ERROR);
+    ReplyErrorAndDie(NPersQueue::NErrorCode::EErrorCode::ERROR, "Pipe error");
 }
 
 STFUNC(TReaderActor::SelectPartitionState) {
     switch (ev->GetTypeRewrite()) {
         hFunc(TEvPersQueue::TEvMLPGetPartitionResponse, Handle);
+        hFunc(TEvPersQueue::TEvMLPErrorResponse, Handle);
         hFunc(TEvPipeCache::TEvDeliveryProblem, HandleOnSelectPartition);
         sFunc(TEvents::TEvPoison, PassAway);
     }
@@ -106,7 +109,7 @@ void TReaderActor::Handle(TEvPersQueue::TEvMLPReadResponse::TPtr& ev) {
 
 void TReaderActor::Handle(TEvPersQueue::TEvMLPErrorResponse::TPtr& ev) {
     LOG_D("Handle TEvPersQueue::TEvMLPErrorResponse " << ev->Get()->GetErrorMessage());
-    Send(ParentId, new TEvPersQueue::TEvMLPReadResponse(ev->Get()->GetErrorCode()));
+    Forward(ev, ParentId);
     PassAway();
 }
 
@@ -119,12 +122,13 @@ void TReaderActor::HandleOnRead(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
         Backoff.Next();
         return DoRead();
     }
-    ReplyErrorAndDie(NPersQueue::NErrorCode::EErrorCode::ERROR);
+    ReplyErrorAndDie(NPersQueue::NErrorCode::EErrorCode::ERROR, "Pipe error");
 }
 
 STFUNC(TReaderActor::ReadState) {
     switch (ev->GetTypeRewrite()) {
         hFunc(TEvPersQueue::TEvMLPReadResponse, Handle);
+        hFunc(TEvPersQueue::TEvMLPErrorResponse, Handle);
         hFunc(TEvPipeCache::TEvDeliveryProblem, HandleOnRead);
         sFunc(TEvents::TEvPoison, PassAway);
     }
@@ -136,9 +140,9 @@ void TReaderActor::SendToTablet(ui64 tabletId, IEventBase *ev) {
     Send(MakePipePerNodeCacheID(false), forward.release(), IEventHandle::FlagTrackDelivery);
 }
 
-void TReaderActor::ReplyErrorAndDie(NPersQueue::NErrorCode::EErrorCode errorCode) {
+void TReaderActor::ReplyErrorAndDie(NPersQueue::NErrorCode::EErrorCode errorCode, TString&& errorMessage) {
     LOG_I("Reply error " << NPersQueue::NErrorCode::EErrorCode_Name(errorCode));
-    Send(ParentId, new TEvPersQueue::TEvMLPReadResponse(errorCode));
+    Send(ParentId, new TEvPersQueue::TEvMLPErrorResponse(errorCode, std::move(errorMessage)));
     PassAway();
 }
 
@@ -149,8 +153,12 @@ void TReaderActor::PassAway() {
     Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvUnlink(0));
 }
 
-bool TReaderActor::OnUnhandledException(const std::exception&) {
-    ReplyErrorAndDie(NPersQueue::NErrorCode::EErrorCode::ERROR);
+bool TReaderActor::OnUnhandledException(const std::exception& exc) {
+    LOG_E("unhandled exception " << TypeName(exc) << ": " << exc.what() << Endl
+        << TBackTrace::FromCurrentException().PrintToString());
+
+    ReplyErrorAndDie(NPersQueue::NErrorCode::EErrorCode::ERROR,
+        TStringBuilder() <<"Unhandled exception: " << exc.what());
     return true;
 }
 

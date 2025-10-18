@@ -1046,11 +1046,7 @@ private:
         std::unique_ptr<TEvPQ::TEvGetWriteInfoRequest>,
         std::unique_ptr<TEvPQ::TEvGetWriteInfoResponse>,
         std::unique_ptr<TEvPQ::TEvGetWriteInfoError>,
-        std::unique_ptr<TEvPQ::TEvDeletePartition>,
-        std::unique_ptr<TEvPersQueue::TEvMLPReadRequest>,
-        std::unique_ptr<TEvPersQueue::TEvMLPCommitRequest>,
-        std::unique_ptr<TEvPersQueue::TEvMLPUnlockRequest>,
-        std::unique_ptr<TEvPersQueue::TEvMLPChangeMessageDeadlineRequest>
+        std::unique_ptr<TEvPQ::TEvDeletePartition>
     >;
 
     TDeque<TPendingEvent> PendingEvents;

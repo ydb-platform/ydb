@@ -103,6 +103,21 @@ bool TStorage::Compact() {
     return true;
 }
 
+void TStorage::AddMessage(ui64 offset, bool hasMessagegroup, ui32 messageGroupIdHash) {
+    AFL_ENSURE(offset == GetLastOffset())("l", offset)("r", GetLastOffset());
+
+    Messages.push_back({
+        .Status = EMessageStatus::Unprocessed,
+        .HasMessageGroupId = hasMessagegroup,
+        .ReceiveCount = 0,
+        .DeadlineDelta = 0,
+        .MessageGroupIdHash = messageGroupIdHash,
+    });
+
+    ++Metrics.InflyMessageCount;
+    ++Metrics.UnprocessedMessageCount;
+}
+
 bool TStorage::InitializeFromSnapshot(const NKikimrPQ::TMLPStorageSnapshot& snapshot) {
     AFL_ENSURE(snapshot.GetFormatVersion() == 1)("v", snapshot.GetFormatVersion());
 

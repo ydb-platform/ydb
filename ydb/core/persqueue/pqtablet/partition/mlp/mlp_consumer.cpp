@@ -8,7 +8,7 @@
 namespace NKikimr::NPQ::NMLP {
 
 TString MakeSnapshotKey(ui32 partitionId, ui32 consumerId) {
-    return TStringBuilder() << TKeyPrefix(TKeyPrefix::EType::TypeConsumerData, TPartitionId(partitionId))
+    return TStringBuilder() << TKeyPrefix(TKeyPrefix::EType::TypeConsumerData, TPartitionId(partitionId)).ToString()
         << "_" << Sprintf("%.10" PRIu32, consumerId);
 }
 
@@ -356,7 +356,7 @@ void TConsumerActor::Handle(TEvPQ::TEvProxyResponse::TPtr& ev) {
                 continue;
             }
 
-            Storage->AddMessage(result.GetOffset(), Hash(result.GetSourceId()));
+            Storage->AddMessage(result.GetOffset(), result.HasSourceId() && !result.GetSourceId().empty(), Hash(result.GetSourceId()));
         }
     }
 

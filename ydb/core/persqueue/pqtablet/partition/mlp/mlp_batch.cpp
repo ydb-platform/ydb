@@ -3,6 +3,12 @@
 
 namespace NKikimr::NPQ::NMLP {
 
+TBatch::TBatch(TActorIdentity selfActorId, const TActorId& partitionActorId)
+    : SelfActorId(selfActorId)
+    , PartitionActorId(partitionActorId)
+{
+}
+
 void TBatch::Add(TEvPersQueue::TEvMLPReadRequest::TPtr& ev, std::vector<TMessageId>&& messages) {
     if (!ReadResponse) {
         ReadResponse = std::make_unique<TEvPQ::TEvMLPReadBatchResponse>();

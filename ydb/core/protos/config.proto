@@ -1248,7 +1248,7 @@ message TQueryServiceConfig {
     optional uint32 QueryTimeoutDefaultSeconds = 19 [default = 7200];
     optional bool EnableMatchRecognize = 20 [default = false];
     repeated string AvailableExternalDataSources = 22;                  // Ignored if AllExternalDataSourcesAreAvailable is true
-    optional bool AllExternalDataSourcesAreAvailable = 23 [default = true];
+    optional bool AllExternalDataSourcesAreAvailable = 23 [default = false];
     optional TCheckpointsConfig CheckpointsConfig = 24;
     optional TStreamingQueriesConfig StreamingQueries = 25;
     optional TSharedReadingConfig SharedReading = 26;

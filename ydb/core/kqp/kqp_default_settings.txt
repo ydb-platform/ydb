@@ -65,7 +65,7 @@ DefaultSettings {
 
 DefaultSettings {
     Name: "_KqpMaxComputeActors"
-    Value: "10000"
+    Value: "100000"
 }
 
 DefaultSettings {

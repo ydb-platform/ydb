@@ -26,6 +26,7 @@ private:
     std::atomic<bool> Broken = false;
     std::atomic<bool> Writes = false;
     std::atomic<LockState> State{LockState::Created};
+    std::atomic<bool> IsExplicitlyDeleted = false;
     friend class TLockFeatures;
 
 public:
@@ -54,7 +55,7 @@ public:
     }
 
     bool IsDeleted() const {
-        return State == LockState::Deleted || State == LockState::Aborted;
+        return IsExplicitlyDeleted;
     }
 
     bool IsAborted() const {
@@ -119,6 +120,7 @@ public:
     void SetDeleted() {
         auto prevState = TLockSharingInfo::LockState::Created;
         SharingInfo->State.compare_exchange_strong(prevState, TLockSharingInfo::LockState::Deleted);
+        SharingInfo->IsExplicitlyDeleted.store(true);
     }
 
     bool IsDeleted() const {
@@ -180,6 +182,18 @@ class TOperationsManager {
     TOperationWriteId LastWriteId = TOperationWriteId(0);
 
 public:
+
+    void DebugInfo() const {
+        size_t operationsInProgress = 0;
+        for (const auto& [_, lock] : LockFeatures) {
+            operationsInProgress += lock.GetOperationsInProgress();
+        }
+
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "!!!VLAD_DebugInfo")
+            ("Tx2Lock.size()", Tx2Lock.size())("LockFeatures.size()", LockFeatures.size())
+            ("operationsInProgress", operationsInProgress)
+            ("Operations.size()", Operations.size())("InsertWriteIdToOpWriteId.size()", InsertWriteIdToOpWriteId.size());
+    }
 
     void StopWriting(const TString& errorMessage) {
         for (auto&& i : Operations) {

@@ -389,6 +389,10 @@ private:
     EOverloadStatus CheckOverloadedImmediate(const TInternalPathId tableId) const;
     EOverloadStatus CheckOverloadedWait(const TInternalPathId tableId) const;
 
+    bool IsLocksMemoryLimitExceeded() const;
+    void DeleteLock(const ui64 lockId);
+    bool IsLockDeleted(const ui64 lockId) const;
+
 protected:
     STFUNC(StateInit) {
         TRACE_EVENT(NKikimrServices::TX_COLUMNSHARD);

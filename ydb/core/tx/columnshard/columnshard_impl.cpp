@@ -458,6 +458,8 @@ void TColumnShard::EnqueueBackgroundActivities(const bool periodic) {
     //  !!!!!! MUST BE FIRST THROUGH DATA HAVE TO BE SAME IN SESSIONS AFTER TABLET RESTART
     SharingSessionsManager->Start(*this);
 
+    OperationsManager->DebugInfo();
+
     SetupCompaction({});
     SetupCleanupSchemas();
     SetupCleanupPortions();

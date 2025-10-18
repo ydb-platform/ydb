@@ -4,23 +4,21 @@
 #include <ydb/public/api/protos/ydb_topic.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/codecs.h>
 
-#define LOG_PREFIX_INT TStringBuilder() << "[" << SelfId() << "]"
-#define LOG_D(stream) LOG_DEBUG_S (*NActors::TlsActivationContext, NKikimrServices::EServiceKikimr::PQ_MLP_READER, LOG_PREFIX_INT << stream)
-#define LOG_I(stream) LOG_INFO_S  (*NActors::TlsActivationContext, NKikimrServices::EServiceKikimr::PQ_MLP_READER, LOG_PREFIX_INT << stream)
-#define LOG_W(stream) LOG_WARN_S (*NActors::TlsActivationContext, NKikimrServices::EServiceKikimr::PQ_MLP_READER, LOG_PREFIX_INT << stream)
-#define LOG_E(stream) LOG_ERROR_S (*NActors::TlsActivationContext, NKikimrServices::EServiceKikimr::PQ_MLP_READER, LOG_PREFIX_INT << stream)
-
-
 namespace NKikimr::NPQ::NMLP {
 
 TReaderActor::TReaderActor(const TActorId& parentId, const TReaderSetting& settings)
-    : ParentId(parentId)
+    : TBaseActor(NKikimrServices::EServiceKikimr::PQ_MLP_READER)
+    , ParentId(parentId)
     , Settings(settings)
 {
 }
 
 void TReaderActor::Bootstrap() {
     DoDescribe();
+}
+
+TString TReaderActor::BuildLogPrefix() const {
+    return "";
 }
 
 void TReaderActor::DoDescribe() {
@@ -183,12 +181,9 @@ void TReaderActor::PassAway() {
 }
 
 bool TReaderActor::OnUnhandledException(const std::exception& exc) {
-    LOG_E("unhandled exception " << TypeName(exc) << ": " << exc.what() << Endl
-        << TBackTrace::FromCurrentException().PrintToString());
-
     ReplyErrorAndDie(NPersQueue::NErrorCode::EErrorCode::ERROR,
         TStringBuilder() <<"Unhandled exception: " << exc.what());
-    return true;
+    return TBaseActor::OnUnhandledException(exc);
 }
 
 IActor* CreateReader(const NActors::TActorId& parentId, TReaderSetting&& settings) {

@@ -3,20 +3,22 @@
 #include "mlp.h"
 
 #include <ydb/core/base/tablet_pipecache.h>
+#include <ydb/core/persqueue/common/actor.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/public/describer/describer.h>
 #include <ydb/core/util/backoff.h>
-#include <ydb/library/actors/core/actor_bootstrapped.h>
 
 namespace NKikimr::NPQ::NMLP {
 
-class TReaderActor : public TActorBootstrapped<TReaderActor>
-                   , public NActors::IActorExceptionHandler {
+class TReaderActor : public TBaseActor<TReaderActor>
+                   , public TConstantLogPrefix {
 
 public:
     TReaderActor(const TActorId& parentId, const TReaderSetting& settings);
 
     void Bootstrap();
+    void PassAway() override;
+    TString BuildLogPrefix() const override;
 
 private:
 
@@ -37,7 +39,6 @@ private:
 
     void SendToTablet(ui64 tabletId, IEventBase *ev);
     void ReplyErrorAndDie(NPersQueue::NErrorCode::EErrorCode errorCode, TString&& errorMessage);
-    void PassAway() override;
 
     bool OnUnhandledException(const std::exception&) override;
 

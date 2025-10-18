@@ -49,7 +49,7 @@ public:
     }
 
     TStringBuilder LogBuilder() const {
-        return TStringBuilder();
+        return TStringBuilder() << "[" << TBase::SelfId() << "]";
     }
 
 protected:

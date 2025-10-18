@@ -54,11 +54,11 @@ public:
     }
 
 protected:
-    ui64 PartitionStreamId;
+    ui64 PartitionStreamId = 0;
     std::string TopicPath;
     std::string Cluster;
-    ui64 PartitionGroupId;
-    ui64 PartitionId;
+    ui64 PartitionGroupId = 0;
+    ui64 PartitionId = 0;
 };
 
 

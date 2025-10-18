@@ -465,11 +465,11 @@ TConclusion<bool> TPortionDataSource::DoStartReserveMemory(const NArrow::NSSA::T
 bool TPortionDataSource::DoAddTxConflict() {
     auto state = GetContext()->GetPortionStateAtScanStart(this->GetPortionInfo());
     if (state.Committed) {
-        GetContext()->GetReadMetadata()->SetBrokenWithCommitted();
+        GetContext()->GetReadMetadata()->SetBreakLockOnReadFinished();
         return true;
     } else if (!state.IsMyUncommitted()) {
         const auto* wPortion = static_cast<const TWrittenPortionInfo*>(Portion.get());
-        GetContext()->GetReadMetadata()->SetConflictedWriteId(wPortion->GetInsertWriteId());
+        GetContext()->GetReadMetadata()->SetWriteConflicting(wPortion->GetInsertWriteId());
         return true;
     }
     return false;

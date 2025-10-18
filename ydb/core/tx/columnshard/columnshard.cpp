@@ -421,17 +421,9 @@ void TColumnShard::FillColumnTableStats(const TActorContext& ctx, std::unique_pt
     }
 }
 
-void TColumnShard::FillCommonStatistics(const TActorContext& ctx, std::unique_ptr<TEvDataShard::TEvPeriodicTableStats>& ev) {
-    ev->Record.SetShardState(2);   // NKikimrTxDataShard.EDatashardState.Ready
-    ev->Record.SetNodeId(ctx.SelfID.NodeId());
-    ev->Record.SetStartTime(StartTime().MilliSeconds());
-}
-
-
 void TColumnShard::FillBaseStatistics(const TActorContext& ctx, std::unique_ptr<TEvDataShard::TEvPeriodicTableStats>& ev) {
 
     ev->Record.SetShardState(2);   // NKikimrTxDataShard.EDatashardState.Ready
-    ev->Record.SetRound(StatsReportRound++);
     ev->Record.SetNodeId(ctx.SelfID.NodeId());
     ev->Record.SetStartTime(StartTime().MilliSeconds());
 
@@ -452,7 +444,7 @@ void TColumnShard::FillBaseStatistics(const TActorContext& ctx, std::unique_ptr<
         periodicTableStats->SetTableLocalId(schemeShardLocalPathId.GetRawValue());
 
         periodicTableStats->SetShardState(2);   // NKikimrTxDataShard.EDatashardState.Ready
-        periodicTableStats->SetRound(StatsReportRound++);
+        periodicTableStats->SetRound(StatsReportRound);
         periodicTableStats->SetNodeId(ctx.SelfID.NodeId());
         periodicTableStats->SetStartTime(StartTime().MilliSeconds());
 
@@ -468,7 +460,7 @@ void TColumnShard::FillBaseStatistics(const TActorContext& ctx, std::unique_ptr<
 }
 
 void TColumnShard::FillExecutorStatistics(const TActorContext& ctx, std::unique_ptr<TEvDataShard::TEvPeriodicTableStats>& ev) {
-        ev->Record.SetGeneration(Executor()->Generation());
+    ev->Record.SetGeneration(Executor()->Generation());
     FillOlapStats(ctx, ev);
     FillColumnTableStats(ctx, ev);
 }
@@ -484,76 +476,36 @@ void TColumnShard::SendPeriodicStats(const TColumnShard::TStatisticsFiller& fill
         NTabletPipe::TClientConfig clientConfig;
         StatsReportPipe = ctx.Register(NTabletPipe::CreateClient(ctx.SelfID, CurrentSchemeShardId, clientConfig));
     }
-    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("new", "SendPeriodicStats");
+
     const auto& tabletSchemeShardLocalPathId = TablesManager.GetTabletPathIdVerified().SchemeShardLocalPathId;
+
+    if (!LastStats) {
+        LastStats = std::make_unique<TEvDataShard::TEvPeriodicTableStats>(TabletID(), tabletSchemeShardLocalPathId.GetRawValue());
+    }
     auto newStats = std::make_unique<TEvDataShard::TEvPeriodicTableStats>(TabletID(), tabletSchemeShardLocalPathId.GetRawValue());
-    if (LastStats) {
-    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("new", "SendPeriodicStats");
-        newStats->Record.CopyFrom(LastStats->Record);
-    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("new", "SendPeriodicStats");
-        filler(ctx, newStats);
-        google::protobuf::util::MessageDifferencer differencer;
-        if (!differencer.Compare(newStats->Record, LastStats->Record)) {
-            newStats->Record.SetRound(StatsReportRound++);
-            LastStats->Record.CopyFrom(newStats->Record);
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("PPPPPP", newStats->Record.GetTableStats().GetImmediateTxCompleted());
+
+    newStats->Record.CopyFrom(LastStats->Record);
+    filler(ctx, newStats);
+    google::protobuf::util::MessageDifferencer differencer;
+    TString diff_report;
+
+    // We pass a pointer to our string to the reporter.
+    differencer.ReportDifferencesToString(&diff_report);
+    if (!differencer.Compare(newStats->Record, LastStats->Record)) {
+        newStats->Record.SetRound(StatsReportRound++);
+        LastStats->Record.CopyFrom(newStats->Record);
+        if (newStats->Record.HasGeneration() && newStats->Record.HasStartTime()) {
             NTabletPipe::SendData(ctx, StatsReportPipe, newStats.release());
-        }
-        else {
-            AFL_VERIFY(false)("readlly", "yeah");
         }
     }
     else {
-        LastStats = std::make_unique<TEvDataShard::TEvPeriodicTableStats>(TabletID(), tabletSchemeShardLocalPathId.GetRawValue());
-    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("new", "SendPeriodicStats");
-    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("new", "SendPeriodicStats");
-        filler(ctx, newStats);
-        newStats->Record.SetRound(StatsReportRound++);
-    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("new", "SendPeriodicStats");
-        LastStats->Record.CopyFrom(newStats->Record);
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("QQQQQQQ", newStats->Record.GetTableStats().GetImmediateTxCompleted());
-        NTabletPipe::SendData(ctx, StatsReportPipe, newStats.release());
-    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("new", "SendPeriodicStats");
+        AFL_VERIFY(false)("readlly", "yeah");
     }
 }
-
-// void TColumnShard::SendPeriodicStats() {
-//     LOG_S_DEBUG("Send periodic stats.");
-
-//     if (!CurrentSchemeShardId || !TablesManager.GetTabletPathIdOptional()) {
-//         LOG_S_DEBUG("Disabled periodic stats at tablet " << TabletID());
-//         return;
-//     }
-//     const auto& tabletSchemeShardLocalPathId = TablesManager.GetTabletPathIdVerified().SchemeShardLocalPathId;
-
-//     const TActorContext& ctx = ActorContext();
-//     const TInstant now = TAppData::TimeProvider->Now();
-
-//     if (LastStatsReport + StatsReportInterval > now) {
-//         LOG_S_TRACE("Skip send periodic stats: report interval = " << StatsReportInterval);
-//         return;
-//     }
-//     LastStatsReport = now;
-
-//     if (!StatsReportPipe) {
-//         LOG_S_DEBUG("Create periodic stats pipe to " << CurrentSchemeShardId << " at tablet " << TabletID());
-//         NTabletPipe::TClientConfig clientConfig;
-//         StatsReportPipe = ctx.Register(NTabletPipe::CreateClient(ctx.SelfID, CurrentSchemeShardId, clientConfig));
-//     }
-
-//     auto ev = std::make_unique<TEvDataShard::TEvPeriodicTableStats>(TabletID(), tabletSchemeShardLocalPathId.GetRawValue());
-
-//     FillOlapStats(ctx, ev);
-//     FillColumnTableStats(ctx, ev);
-
-//     NTabletPipe::SendData(ctx, StatsReportPipe, ev.release());
-// }
-
 
 
 void TColumnShard::Handle(TEvPrivate::TEvReportBaseStatistics::TPtr& /*ev*/) {
     ActorContext().Schedule(TDuration::MilliSeconds(100), new TEvPrivate::TEvReportBaseStatistics);
-    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("new", "TEvReportBaseStatistics");
     LOG_S_DEBUG("Send periodic stats.");
     SendPeriodicStats([this](const auto& ctx, auto& ev) {
         FillBaseStatistics(ctx, ev);
@@ -563,9 +515,8 @@ void TColumnShard::Handle(TEvPrivate::TEvReportBaseStatistics::TPtr& /*ev*/) {
 
 void TColumnShard::Handle(TEvPrivate::TEvReportExecutorStatistics::TPtr& /*ev*/) {
     ActorContext().Schedule(TDuration::MilliSeconds(100), new TEvPrivate::TEvReportExecutorStatistics);
-    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("new", "TEvReportExecutorStatistics");
     LOG_S_DEBUG("Send periodic stats.");
-        SendPeriodicStats([this](const auto& ctx, auto& ev) {
+    SendPeriodicStats([this](const auto& ctx, auto& ev) {
         FillExecutorStatistics(ctx, ev);
     });
     return;
@@ -588,16 +539,13 @@ void TColumnShard::Handle(TEvPrivate::TEvReportExecutorStatistics::TPtr& /*ev*/)
         StatsReportPipe = ctx.Register(NTabletPipe::CreateClient(ctx.SelfID, CurrentSchemeShardId, clientConfig));
     }
 
-    LOG_S_ERROR("iurii Shard id " << CurrentSchemeShardId << " " << tabletSchemeShardLocalPathId.GetRawValue());
 
     auto ev = std::make_unique<TEvDataShard::TEvPeriodicTableStats>(TabletID(), tabletSchemeShardLocalPathId.GetRawValue());
 
     FillOlapStats(ctx, ev);
     FillColumnTableStats(ctx, ev);
 
-    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("ev", ev->ToString());
     // ActorContext().Send(ColumnShardStatisticsReporter, ev.release());
-    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iurii", "debug")("ev", "sent");
 
 
     // NTabletPipe::SendData(ctx, StatsReportPipe, ev.release());

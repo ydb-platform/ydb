@@ -33,7 +33,6 @@ static void FillTableStats(NKikimrTableStats::TTableStats* stats, const TPartiti
     stats->SetLastAccessTime(tableStats.LastAccessTime.MilliSeconds());
     stats->SetLastUpdateTime(tableStats.LastUpdateTime.MilliSeconds());
     stats->SetImmediateTxCompleted(tableStats.ImmediateTxCompleted);
-    stats->SetImmediateTxCompleted(tableStats.ImmediateTxCompleted);
     stats->SetPlannedTxCompleted(tableStats.PlannedTxCompleted);
     stats->SetTxRejectedByOverload(tableStats.TxRejectedByOverload);
     stats->SetTxRejectedBySpace(tableStats.TxRejectedBySpace);

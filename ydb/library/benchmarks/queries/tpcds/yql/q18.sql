@@ -33,7 +33,16 @@ select  item.i_item_id i_item_id,
        d_year = 1998 and
        ca_state in ('MS','IN','ND'
                    ,'OK','NM','VA','MS')
- group by rollup (item.i_item_id, customer_address.ca_country, customer_address.ca_state, customer_address.ca_county)
+ group by -- rollup (item.i_item_id, customer_address.ca_country, customer_address.ca_state, customer_address.ca_county)
+
+ grouping sets (
+   (item.i_item_id, customer_address.ca_country, customer_address.ca_state, customer_address.ca_county),
+   (item.i_item_id, customer_address.ca_country, customer_address.ca_state),
+   (item.i_item_id, customer_address.ca_country),
+   (item.i_item_id),
+   ((d_year < 0) AS FAKE)
+ )
+
  order by ca_country,
         ca_state,
         ca_county,

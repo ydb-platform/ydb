@@ -68,6 +68,8 @@ struct TEvWhiteboard {
         EvBridgeInfoUpdate,
         EvBridgeInfoRequest,
         EvBridgeInfoResponse,
+        EvCountersInfoRequest,
+        EvCountersInfoResponse,
         EvEnd
     };
 
@@ -484,6 +486,8 @@ struct TEvWhiteboard {
     struct TEvBridgeInfoUpdate : public TEventPB<TEvBridgeInfoUpdate, NKikimrWhiteboard::TBridgeInfo, EvBridgeInfoUpdate> {};
     struct TEvBridgeInfoRequest : public TEventPB<TEvBridgeInfoRequest, NKikimrWhiteboard::TEvBridgeInfoRequest, EvBridgeInfoRequest> {};
     struct TEvBridgeInfoResponse : public TEventPB<TEvBridgeInfoResponse, NKikimrWhiteboard::TEvBridgeInfoResponse, EvBridgeInfoResponse> {};
+    struct TEvCountersInfoRequest : public TEventPB<TEvCountersInfoRequest, NKikimrWhiteboard::TEvCountersInfoRequest, EvCountersInfoRequest> {};
+    struct TEvCountersInfoResponse : public TEventPB<TEvCountersInfoResponse, NKikimrWhiteboard::TEvCountersInfoResponse, EvCountersInfoResponse> {};
 };
 
 inline TActorId MakeNodeWhiteboardServiceId(ui32 node) {

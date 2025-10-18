@@ -28,6 +28,7 @@ SRCS(
     rpc_cms.cpp
     rpc_commit_transaction.cpp
     rpc_config.cpp
+    rpc_cluster_state.cpp
     rpc_copy_table.cpp
     rpc_copy_tables.cpp
     rpc_create_coordination_node.cpp

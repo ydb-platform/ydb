@@ -4,6 +4,7 @@
 #include "blobstorage_pdisk_blockdevice.h"
 #include <ydb/library/pdisk_io/buffers.h>
 #include "blobstorage_pdisk_chunk_tracker.h"
+#include "blobstorage_pdisk_chunk_write_queue.h"
 #include "blobstorage_pdisk_crypto.h"
 #include "blobstorage_pdisk_data.h"
 #include "blobstorage_pdisk_delayed_cost_loop.h"
@@ -32,6 +33,7 @@
 #include <util/generic/queue.h>
 #include <util/system/condvar.h>
 #include <util/system/mutex.h>
+#include <util/thread/lfqueue.h>
 
 #include <queue>
 
@@ -82,13 +84,15 @@ public:
 
     TVector<TRequestBase*> JointLogReads;
     std::queue<TIntrusivePtr<TRequestBase>> JointChunkReads;
-    std::queue<TRequestBase*> JointChunkWrites;
+    std::queue<TChunkWritePiece*> JointChunkWriteRequests;
+    TChunkWritePieceQueue JointChunkWrites;
     std::queue<TLogWrite*> JointLogWrites;
     TVector<TChunkTrim*> JointChunkTrims;
     TVector<std::unique_ptr<TChunkForget>> JointChunkForgets;
     TVector<std::unique_ptr<TRequestBase>> FastOperationsQueue;
     TDeque<TRequestBase*> PausedQueue;
     std::set<std::unique_ptr<TYardInit>> PendingYardInits;
+    THolder<IThreadPool> ChunkEncoder;
     ui64 LastFlushId = 0;
     bool IsQueuePaused = false;
     bool IsQueueStep = false;
@@ -325,10 +329,12 @@ public:
         bool parseCommitMessage);
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Chunk writing
-    bool ChunkWritePiece(TChunkWrite *evChunkWrite, ui32 pieceShift, ui32 pieceSize);
-    void ChunkWritePiecePlain(TChunkWrite *evChunkWrite);
-    bool ChunkWritePieceEncrypted(TChunkWrite *evChunkWrite, TChunkWriter &writer, ui32 bytesAvailable);
+    void PushChunkWrite(TChunkWritePiece *piece);
+    TChunkWriteResult ChunkWritePiece(TChunkWritePiece *piece);
+    void ChunkWritePiecePlain(TChunkWritePiece *piece);
+    bool ChunkWritePieceEncrypted(TChunkWritePiece *piece, TChunkWriter &writer, ui32 bytesAvailable);
     void SendChunkWriteError(TChunkWrite &evChunkWrite, const TString &errorReason, NKikimrProto::EReplyStatus status);
+    bool HasEncryptionThreads() const;
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Chunk reading
     enum EChunkReadPieceResult {

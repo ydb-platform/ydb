@@ -70,6 +70,8 @@ namespace NActors {
         }
     };
 
+    static constexpr TInstant DEFAULT_TEST_DATE = TInstant::Seconds(978307200); // January 1, 2001 0:00:00
+
     TActorSystem::TActorSystem(THolder<TActorSystemSetup>& setup, void* appData,
                                TIntrusivePtr<NLog::TSettings> loggerSettings)
         : NodeId(setup->NodeId)
@@ -77,8 +79,8 @@ namespace NActors {
         , ExecutorPoolCount(CpuManager->GetExecutorsCount())
         , Scheduler(setup->Scheduler)
         , InterconnectCount((ui32)setup->Interconnect.ProxyActors.size())
-        , CurrentTimestamp(0)
-        , CurrentMonotonic(0)
+        , CurrentTimestamp(DEFAULT_TEST_DATE.MicroSeconds())
+        , CurrentMonotonic(DEFAULT_TEST_DATE.MicroSeconds())
         , CurrentIDCounter(RandomNumber<ui64>())
         , SystemSetup(setup.Release())
         , DefSelfID(NodeId, "actorsystem")

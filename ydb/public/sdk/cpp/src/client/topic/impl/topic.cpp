@@ -11,6 +11,10 @@
 
 namespace NYdb::inline Dev::NTopic {
 
+static TDuration ConvertPositiveDuration(const google::protobuf::Duration& duration) {
+    return TDuration::Seconds(Max<i64>(duration.seconds(), 0)) + TDuration::MicroSeconds(Max<i32>(duration.nanos(), 0) / 1000);
+}
+
 TDescribeTopicResult::TDescribeTopicResult(TStatus&& status, Ydb::Topic::DescribeTopicResult&& result)
     : TStatus(std::move(status))
     , TopicDescription_(std::move(result))
@@ -89,6 +93,7 @@ TPartitionDescription::TPartitionDescription(Ydb::Topic::DescribePartitionResult
 TConsumer::TConsumer(const Ydb::Topic::Consumer& consumer)
     : ConsumerName_(consumer.name())
     , Important_(consumer.important())
+    , AvailabilityPeriod_(ConvertPositiveDuration(consumer.availability_period()))
     , ReadFrom_(TInstant::Seconds(consumer.read_from().seconds()))
 {
     for (const auto& codec : consumer.supported_codecs().codecs()) {
@@ -105,6 +110,10 @@ const std::string& TConsumer::GetConsumerName() const {
 
 bool TConsumer::GetImportant() const {
     return Important_;
+}
+
+TDuration TConsumer::GetAvailabilityPeriod() const {
+    return AvailabilityPeriod_;
 }
 
 const TInstant& TConsumer::GetReadFrom() const {
@@ -290,7 +299,7 @@ uint32_t TAutoPartitioningSettings::GetDownUtilizationPercent() const {
 TTopicStats::TTopicStats(const Ydb::Topic::DescribeTopicResult::TopicStats& topicStats)
     : StoreSizeBytes_(topicStats.store_size_bytes())
     , MinLastWriteTime_(TInstant::Seconds(topicStats.min_last_write_time().seconds()))
-    , MaxWriteTimeLag_(TDuration::Seconds(topicStats.max_write_time_lag().seconds()) + TDuration::MicroSeconds(topicStats.max_write_time_lag().nanos() / 1000))
+    , MaxWriteTimeLag_(ConvertPositiveDuration(topicStats.max_write_time_lag()))
     , BytesWrittenPerMinute_(topicStats.bytes_written().per_minute())
     , BytesWrittenPerHour_(topicStats.bytes_written().per_hour())
     , BytesWrittenPerDay_(topicStats.bytes_written().per_day())
@@ -327,7 +336,7 @@ TPartitionStats::TPartitionStats(const Ydb::Topic::PartitionStats& partitionStat
     , EndOffset_(partitionStats.partition_offsets().end())
     , StoreSizeBytes_(partitionStats.store_size_bytes())
     , LastWriteTime_(TInstant::Seconds(partitionStats.last_write_time().seconds()))
-    , MaxWriteTimeLag_(TDuration::Seconds(partitionStats.max_write_time_lag().seconds()) + TDuration::MicroSeconds(partitionStats.max_write_time_lag().nanos() / 1000))
+    , MaxWriteTimeLag_(ConvertPositiveDuration(partitionStats.max_write_time_lag()))
     , BytesWrittenPerMinute_(partitionStats.bytes_written().per_minute())
     , BytesWrittenPerHour_(partitionStats.bytes_written().per_hour())
     , BytesWrittenPerDay_(partitionStats.bytes_written().per_day())
@@ -628,6 +637,7 @@ template <typename TSettings>
 TConsumerSettings<TSettings>::TConsumerSettings(TSettings& parent, const Ydb::Topic::Consumer& proto)
     : ConsumerName_(proto.name())
     , Important_(proto.important())
+    , AvailabilityPeriod_(ConvertPositiveDuration(proto.availability_period()))
     , ReadFrom_(TInstant::Seconds(proto.read_from().seconds()))
     , SupportedCodecs_(DeserializeCodecs(proto.supported_codecs()))
     , Attributes_(DeserializeAttributes(proto.attributes()))
@@ -639,6 +649,12 @@ template <typename TSettings>
 void TConsumerSettings<TSettings>::SerializeTo(Ydb::Topic::Consumer& proto) const {
     proto.set_name(ConsumerName_);
     proto.set_important(Important_);
+    if (AvailabilityPeriod_ != TDuration::Zero()) {
+        proto.mutable_availability_period()->set_seconds(AvailabilityPeriod_.Seconds());
+        proto.mutable_availability_period()->set_nanos((AvailabilityPeriod_.MicroSeconds() % 1'000'000) * 1'000);
+    } else {
+        proto.clear_availability_period();
+    }
     proto.mutable_read_from()->set_seconds(ReadFrom_.Seconds());
     *proto.mutable_supported_codecs() = SerializeCodecs(SupportedCodecs_);
     *proto.mutable_attributes() = SerializeAttributes(Attributes_);

@@ -2366,12 +2366,13 @@ bool TSqlTranslation::CreateTableSettings(const TRule_with_table_settings& setti
     return true;
 }
 
-bool StoreConsumerSettingsEntry(
+static bool StoreConsumerSettingsEntry(
         const TIdentifier& id, const TRule_topic_consumer_setting_value* value, TSqlExpression& ctx,
         TTopicConsumerSettings& settings,
-        bool reset
+        bool reset, bool alter
 ) {
     YQL_ENSURE(value || reset);
+    const TStringBuf statement = alter ? "ALTER CONSUMER"sv : "CONSUMER"sv;
     TNodePtr valueExprNode;
     if (value) {
         valueExprNode = ctx.Build(value->GetRule_expr1());
@@ -2382,7 +2383,7 @@ bool StoreConsumerSettingsEntry(
     }
     if (to_lower(id.Name) == "important") {
         if (settings.Important) {
-            ctx.Error() << to_upper(id.Name) << " specified multiple times in ALTER CONSUMER statements for single consumer";
+            ctx.Error() << to_upper(id.Name) << " specified multiple times in " << statement << " statement for single consumer";
             return false;
         }
         if (reset) {
@@ -2394,10 +2395,23 @@ bool StoreConsumerSettingsEntry(
             return false;
         }
         settings.Important = valueExprNode;
-
+    } else if (to_lower(id.Name) == "availability_period") {
+        if (settings.AvailabilityPeriod) {
+            ctx.Error() << to_upper(id.Name) << " specified multiple times in " << statement << " statement for single consumer";
+            return false;
+        }
+        if (reset) {
+            settings.AvailabilityPeriod.Reset();
+        } else {
+            if (valueExprNode->GetOpName() != "Interval") {
+                ctx.Error() << "Literal of Interval type is expected for " << to_upper(id.Name) << " setting";
+                return false;
+            }
+            settings.AvailabilityPeriod.Set(valueExprNode);
+        }
     } else if (to_lower(id.Name) == "read_from") {
         if (settings.ReadFromTs) {
-            ctx.Error() << to_upper(id.Name) << " specified multiple times in ALTER CONSUMER statements for single consumer";
+            ctx.Error() << to_upper(id.Name) << " specified multiple times in " << statement << " statement for single consumer";
             return false;
         }
         if (reset) {
@@ -2408,7 +2422,7 @@ bool StoreConsumerSettingsEntry(
         }
     } else if (to_lower(id.Name) == "supported_codecs") {
         if (settings.SupportedCodecs) {
-            ctx.Error() << to_upper(id.Name) << " specified multiple times in ALTER CONSUMER statements for single consumer";
+            ctx.Error() << to_upper(id.Name) << " specified multiple times in " << statement << " statement for single consumer";
             return false;
         }
         if (reset) {
@@ -2439,7 +2453,8 @@ bool TSqlTranslation::CreateConsumerSettings(
     if (!StoreConsumerSettingsEntry(
             IdEx(firstEntry.GetRule_an_id1(), *this),
             &firstEntry.GetRule_topic_consumer_setting_value3(),
-            expr, settings, false
+            expr, settings, false,
+            /* alter = */ false
     )) {
         return false;
     }
@@ -2448,7 +2463,8 @@ bool TSqlTranslation::CreateConsumerSettings(
         if (!StoreConsumerSettingsEntry(
                 IdEx(entry.GetRule_an_id1(), *this),
                 &entry.GetRule_topic_consumer_setting_value3(),
-                expr, settings, false
+                expr, settings, false,
+                /* alter = */ false
         )) {
             return false;
         }
@@ -2489,7 +2505,8 @@ bool TSqlTranslation::AlterTopicConsumerEntry(
             if (!StoreConsumerSettingsEntry(
                     IdEx(resetNode.GetRule_an_id3(), *this),
                     nullptr,
-                    expr, alterConsumer.Settings, true
+                    expr, alterConsumer.Settings, true,
+                    /* alter = */ true
             )) {
                 return false;
             }
@@ -2498,7 +2515,8 @@ bool TSqlTranslation::AlterTopicConsumerEntry(
                 if (!StoreConsumerSettingsEntry(
                         IdEx(resetItem.GetRule_an_id2(), *this),
                         nullptr,
-                        expr, alterConsumer.Settings, true
+                        expr, alterConsumer.Settings, true,
+                        /* alter = */ true
                 )) {
                     return false;
                 }

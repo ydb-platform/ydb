@@ -1637,9 +1637,9 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
     }
     static bool CheckConsumerSettings(const TCoNameValueTupleList& settings, TExprContext& ctx) {
         for (const auto& setting : settings) {
-            auto name = setting.Name().Value();
-            auto val = TString(setting.Value().Cast<TCoDataCtor>().Literal().template Cast<TCoAtom>().Value());
+            const auto name = setting.Name().Value();
             if (name == "setSupportedCodecs") {
+                auto val = TString(setting.Value().Cast<TCoDataCtor>().Literal().template Cast<TCoAtom>().Value());
                 auto codecsList = GetTopicCodecsFromString(val);
                 if (codecsList.empty()) {
                     ctx.AddError(TIssue(ctx.GetPosition(setting.Value().Ref().Pos()),

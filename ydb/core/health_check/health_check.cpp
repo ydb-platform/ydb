@@ -15,6 +15,7 @@
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/statestorage.h>
+#include <ydb/core/base/statestorage_impl.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/mon/mon.h>
@@ -155,6 +156,9 @@ public:
         QuotaUsage,
         BridgeGroupState,
         PileComputeState,
+        StateStorage,
+        StateStorageRing,
+        StateStorageNode,
     };
 
     enum ETimeoutTag {
@@ -675,6 +679,7 @@ public:
     std::optional<TRequestResponse<TEvSysView::TEvGetPDisksResponse>> PDisks;
     std::optional<TRequestResponse<TEvNodeWardenStorageConfig>> NodeWardenStorageConfig;
     std::optional<TRequestResponse<TEvStateStorage::TEvBoardInfo>> DatabaseBoardInfo;
+    std::optional<TRequestResponse<TEvStateStorage::TEvListStateStorageResult>> StateStorageInfo;
     THashSet<TNodeId> UnknownStaticGroups;
 
     const NKikimrConfig::THealthCheckConfig& HealthCheckConfig;
@@ -837,6 +842,12 @@ public:
             NodeWardenStorageConfig = RequestStorageConfig();
         }
 
+        if (!IsSpecificDatabaseFilter()) {
+            StateStorageInfo = TRequestResponse<TEvStateStorage::TEvListStateStorageResult>(Span.CreateChild(TComponentTracingLevels::TTablet::Detailed, "TEvStateStorage::TEvListStateStorageResult"));
+            Send(MakeStateStorageProxyID(), new TEvStateStorage::TEvListStateStorage(), 0/*flags*/, 0/*cookie*/, Span.GetTraceId());
+            ++Requests;
+        }
+
 
         NodesInfo = TRequestResponse<TEvInterconnect::TEvNodesInfo>(Span.CreateChild(TComponentTracingLevels::TTablet::Detailed, "TEvInterconnect::TEvListNodes"));
         Send(GetNameserviceActorId(), new TEvInterconnect::TEvListNodes(), 0/*flags*/, 0/*cookie*/, Span.GetTraceId());
@@ -921,6 +932,19 @@ public:
         }
     }
 
+    void Handle(TEvStateStorage::TEvListStateStorageResult::TPtr& ev) {
+        if (StateStorageInfo->Set(std::move(ev))) {
+            for (const auto& group : StateStorageInfo->Get()->Info->RingGroups) {
+                for (const auto& ring : group.Rings) {
+                    for (const auto& replica : ring.Replicas) {
+                        RequestGenericNode(replica.NodeId());
+                    }
+                }
+            }
+            RequestDone("TEvListStateStorageResult");
+        }
+    }
+
     STATEFN(StateWait) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvents::TEvUndelivered, Handle);
@@ -946,6 +970,7 @@ public:
             hFunc(TEvStateStorage::TEvBoardInfo, Handle);
             hFunc(TEvents::TEvWakeup, HandleTimeout);
             hFunc(TEvNodeWardenStorageConfig, Handle);
+            hFunc(TEvStateStorage::TEvListStateStorageResult, Handle);
         }
     }
 
@@ -3463,6 +3488,59 @@ public:
         }
     }
 
+    void FillStateStorage(TOverallStateContext& context) {
+        if (!StateStorageInfo || !StateStorageInfo->IsOk()) {
+            return;
+        }
+        TSelfCheckResult ssContext;
+        ssContext.Type = "STATE_STORAGE";
+        const auto info = StateStorageInfo->Get()->Info;
+        for (const auto& ringGroup : info->RingGroups) {
+            if (ringGroup.State != ERingGroupState::PRIMARY && ringGroup.State != ERingGroupState::SYNCHRONIZED) {
+                continue;
+            }
+            TSelfCheckResult* currentContext = &ssContext;
+            TSelfCheckContext pileContext(&ssContext, "PILE_STATE_STORAGE");
+            if ((bool)ringGroup.BridgePileId) {
+                const auto& pileName = NodeWardenStorageConfig->Get()->BridgeInfo->GetPile(ringGroup.BridgePileId)->Name;
+                pileContext.Location.mutable_compute()->mutable_state_storage()->mutable_pile()->set_name(pileName);
+                currentContext = &pileContext;
+            }
+            ui32 disabledRings = 0;
+            ui32 badRings = 0;
+            for (size_t ringIdx = 0; ringIdx < ringGroup.Rings.size(); ++ringIdx) {
+                const auto& ring = ringGroup.Rings[ringIdx];
+                TSelfCheckContext ringContext(currentContext, "STATE_STORAGE_RING");
+                ringContext.Location.mutable_compute()->mutable_state_storage()->set_ring(ringIdx);
+                if (ring.IsDisabled) {
+                    ++disabledRings;
+                    continue;
+                }
+                for (const auto& replica : ring.Replicas) {
+                    const auto node = replica.NodeId();
+                    if (!NodeSystemState[node].IsOk()) {
+                        TSelfCheckContext nodeContext(&ringContext, "STATE_STORAGE_NODE");
+                        nodeContext.Location.mutable_compute()->mutable_state_storage()->mutable_node()->set_id(node);
+                        nodeContext.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "State storage node is not available", ETags::StateStorageNode);
+                    }
+                }
+                ringContext.ReportWithMaxChildStatus("Ring has unavailable nodes", ETags::StateStorageRing, {ETags::StateStorageNode});
+                if (ringContext.GetOverallStatus() == Ydb::Monitoring::StatusFlag::RED) {
+                    ++badRings;
+                }
+            }
+            if (disabledRings + badRings > (ringGroup.NToSelect - 1) / 2) {
+                currentContext->ReportStatus(Ydb::Monitoring::StatusFlag::RED, "State storage is not functional", ETags::StateStorage);
+            } else if (badRings > 1) {
+                currentContext->ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Some state storage rings have unavailable replicas", ETags::StateStorage);
+            } else if (badRings > 0) {
+                currentContext->ReportStatus(Ydb::Monitoring::StatusFlag::BLUE, "State storage has unavailable replicas", ETags::StateStorage);
+            }
+        }
+        context.UpdateMaxStatus(ssContext.GetOverallStatus());
+        context.AddIssues(ssContext.IssueRecords);
+    }
+
     void FillResult(TOverallStateContext context) {
         if (IsSpecificDatabaseFilter()) {
             FillDatabaseResult(context, FilterDatabase, DatabaseState[FilterDatabase]);
@@ -3470,6 +3548,7 @@ public:
             for (auto& [path, state] : DatabaseState) {
                 FillDatabaseResult(context, path, state);
             }
+            FillStateStorage(context);
         }
         if (DatabaseState.empty()) {
             Ydb::Monitoring::DatabaseStatus& databaseStatus(*context.Result->add_database_status());

@@ -1,8 +1,11 @@
 #include "mlp_reader.h"
 
+#include <ydb/core/protos/grpc_pq_old.pb.h>
+
 #define LOG_PREFIX_INT TStringBuilder() << "[" << SelfId() << "]"
 #define LOG_D(stream) LOG_DEBUG_S (*NActors::TlsActivationContext, NKikimrServices::EServiceKikimr::PQ_MLP_READER, LOG_PREFIX_INT << stream)
 #define LOG_I(stream) LOG_INFO_S  (*NActors::TlsActivationContext, NKikimrServices::EServiceKikimr::PQ_MLP_READER, LOG_PREFIX_INT << stream)
+#define LOG_W(stream) LOG_WARN_S (*NActors::TlsActivationContext, NKikimrServices::EServiceKikimr::PQ_MLP_READER, LOG_PREFIX_INT << stream)
 #define LOG_E(stream) LOG_ERROR_S (*NActors::TlsActivationContext, NKikimrServices::EServiceKikimr::PQ_MLP_READER, LOG_PREFIX_INT << stream)
 
 
@@ -102,7 +105,26 @@ void TReaderActor::DoRead() {
 
 void TReaderActor::Handle(TEvPersQueue::TEvMLPReadResponse::TPtr& ev) {
     LOG_D("Handle TEvPersQueue::TEvMLPReadResponse");
-    Forward(ev, ParentId);
+
+    auto response = std::make_unique<TEvPersQueue::TEvMLPReadResponse>();
+    for (auto& message : *ev->Get()->Record.MutableMessage()) {
+        auto data = std::move(*message.MutableData());
+
+        NKikimrPQClient::TDataChunk proto;
+        bool res = proto.ParseFromString(data);
+        if (!res) {
+            LOG_W("Error parsing data. Offset " << message.GetId().GetOffset());
+            // Skip message
+            continue;
+        }
+
+        auto* msg = response->Record.AddMessage();
+        msg->MutableId()->CopyFrom(message.GetId());
+        msg->MutableMessageMeta()->CopyFrom(message.GetMessageMeta());
+        msg->SetData(std::move(*proto.MutableData()));
+    }
+
+    Send(ParentId, std::move(response));
     PassAway();
 }
 

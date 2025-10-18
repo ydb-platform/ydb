@@ -162,6 +162,7 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
 
         auto response = GetReadResonse(runtime);
         UNIT_ASSERT_VALUES_EQUAL(response.GetMessage().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(response.GetMessage(0).GetData(), "msg-1");
     }
 }
 

@@ -59,13 +59,14 @@ void TMessageEnricherActor::Handle(TEvPQ::TEvProxyResponse::TPtr& ev) {
                 while (!reply.Offsets.empty() && offset > reply.Offsets.front()) {
                     reply.Offsets.pop_front();
                 }
+                // TODO multi part messages
                 if (!reply.Offsets.empty() && offset == reply.Offsets.front()) {
                     auto* message = PendingResponse->Record.AddMessage();
                     message->MutableId()->SetPartitionId(PartitionId);
                     message->MutableId()->SetOffset(offset);
                     message->SetData(result.GetData());
-                    message->MutableMeta()->SetMessageGroupId(result.GetSourceId());
-                    message->MutableMeta()->SetSentTimestampMilliseconds(result.GetWriteTimestampMS());
+                    message->MutableMessageMeta()->SetMessageGroupId(result.GetSourceId());
+                    message->MutableMessageMeta()->SetSentTimestampMilliseconds(result.GetWriteTimestampMS());
 
                     reply.Offsets.pop_front();
                 }

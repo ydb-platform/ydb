@@ -1268,7 +1268,7 @@ message TMLPMessageMeta {
 message TMLPMessage {
     optional TMLPMessageId Id = 1;
     optional bytes Data = 2;
-    optional TMLPMessageMeta Meta = 3;
+    optional TMLPMessageMeta MessageMeta = 3;
 }
 
 message TEvMLPGetPartitionRequest {

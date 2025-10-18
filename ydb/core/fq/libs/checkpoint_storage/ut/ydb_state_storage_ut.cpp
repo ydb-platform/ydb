@@ -13,6 +13,7 @@
 
 #include <yql/essentials/minikql/comp_nodes/mkql_saveload.h>
 #include <ydb/core/fq/libs/actors/logging/log.h>
+#include <ydb/core/fq/libs/ydb/ydb_connection.h>
 
 namespace NFq {
 
@@ -47,7 +48,7 @@ public:
         stateStorageLimits.SetMaxRowSizeBytes(YdbRowSizeLimit);
 
         NYdb::TDriver driver(NYdb::TDriverConfig{});
-        auto ydbConnectionPtr = NewYdbConnection(config.GetExternalStorage(), NKikimr::CreateYdbCredentialsProviderFactory, driver);
+        auto ydbConnectionPtr = CreateSdkYdbConnection(config.GetExternalStorage(), NKikimr::CreateYdbCredentialsProviderFactory, driver);
         auto storage = NewYdbStateStorage(config, ydbConnectionPtr);
         storage->Init().GetValueSync();
         return storage;

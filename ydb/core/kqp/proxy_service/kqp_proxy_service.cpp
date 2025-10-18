@@ -1779,6 +1779,9 @@ private:
     }
 
     void InitCheckpointStorage() {
+        if (!AppData()->FeatureFlags.GetEnableStreamingQueries()) {
+            return;
+        }
         const auto& checkpointConfig = QueryServiceConfig.GetCheckpointsConfig();
         if (!checkpointConfig.GetEnabled() || !FederatedQuerySetup) {
             return;

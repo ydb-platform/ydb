@@ -11,6 +11,7 @@
 
 #include <ydb/core/fq/libs/actors/logging/log.h>
 #include <ydb/core/fq/libs/ydb/ydb.h>
+#include <ydb/core/fq/libs/ydb/ydb_connection.h>
 #include <ydb/core/fq/libs/ydb/util.h>
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
@@ -21,6 +22,8 @@
 #include <util/stream/file.h>
 #include <util/string/join.h>
 #include <util/string/strip.h>
+
+#include <ydb/core/base/appdata_fwd.h>
 
 namespace NFq {
 
@@ -155,16 +158,26 @@ TStorageProxy::TStorageProxy(
 }
 
 void TStorageProxy::Bootstrap() {
+    Become(&TStorageProxy::StateFunc);
+    
     LOG_STREAMS_STORAGE_SERVICE_INFO("Bootstrap");
-    auto ydbConnectionPtr = NewYdbConnection(Config.GetExternalStorage(), CredentialsProviderFactory, Driver);
-    CheckpointStorage = NewYdbCheckpointStorage(StorageConfig, CreateEntityIdGenerator(IdsPrefix), ydbConnectionPtr);
-    StateStorage = NewYdbStateStorage(Config, ydbConnectionPtr);
-    if (Config.GetCheckpointGarbageConfig().GetEnabled()) {
+    IYdbConnection::TPtr ydbConnection;
+    if (StorageConfig.HasEndpoint()) {
+        LOG_STREAMS_STORAGE_SERVICE_INFO("Create sdk ydb connection");
+        ydbConnection = CreateSdkYdbConnection(StorageConfig, CredentialsProviderFactory, Driver);
+    } else {
+        LOG_STREAMS_STORAGE_SERVICE_INFO("Create local ydb connection");
+        ydbConnection = CreateLocalYdbConnection(NKikimr::AppData()->TenantName, ".metadata/checkpoints");
+    }
+    CheckpointStorage = NewYdbCheckpointStorage(StorageConfig, CreateEntityIdGenerator(IdsPrefix), ydbConnection);
+    StateStorage = NewYdbStateStorage(Config, ydbConnection);
+    bool enableGc = !Config.HasCheckpointGarbageConfig() || Config.GetCheckpointGarbageConfig().GetEnabled();
+    if (enableGc) {
         const auto& gcConfig = Config.GetCheckpointGarbageConfig();
         ActorGC = Register(NewGC(gcConfig, CheckpointStorage, StateStorage).release());
     }
     Initialize();
-    Become(&TStorageProxy::StateFunc);
+    
 
     LOG_STREAMS_STORAGE_SERVICE_INFO("Successfully bootstrapped TStorageProxy " << SelfId() << " with connection to "
         << StorageConfig.GetEndpoint().data()
@@ -177,7 +190,7 @@ void TStorageProxy::Initialize() {
     }
     LOG_STREAMS_STORAGE_SERVICE_INFO("Initialize");
     Initialized = true;
-    
+
     auto issues = CheckpointStorage->Init().GetValueSync();
     if (!issues.Empty()) {
         LOG_STREAMS_STORAGE_SERVICE_ERROR("Failed to init checkpoint storage: " << issues.ToOneLineString());
@@ -243,6 +256,7 @@ void TStorageProxy::Handle(TEvCheckpointStorage::TEvCreateCheckpointRequest::TPt
                 context->IncError();
                 return NThreading::MakeFuture(ICheckpointStorage::TCreateCheckpointResult {TString(), std::move(issues) } );
             }
+
             if (std::holds_alternative<TString>(graphDesc)) {
                 return storage->CreateCheckpoint(coordinatorId, checkpointId, std::get<TString>(graphDesc), ECheckpointStatus::Pending);
             } else {
@@ -304,7 +318,7 @@ void TStorageProxy::Handle(TEvCheckpointStorage::TEvCompleteCheckpointRequest::T
                 cookie = ev->Cookie,
                 sender = ev->Sender,
                 type = event->Type,
-                gcEnabled = Config.GetCheckpointGarbageConfig().GetEnabled(),
+                gcEnabled = !Config.GetCheckpointGarbageConfig().HasEnabled() || Config.GetCheckpointGarbageConfig().GetEnabled(),
                 actorGC = ActorGC,
                 actorSystem = TActivationContext::ActorSystem(),
                 context]

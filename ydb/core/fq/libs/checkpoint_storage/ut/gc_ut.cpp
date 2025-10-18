@@ -24,6 +24,8 @@
 
 #include <util/system/env.h>
 
+#include <ydb/core/fq/libs/ydb/ydb_connection.h>
+
 namespace NFq {
 
 using namespace NActors;
@@ -90,7 +92,7 @@ struct TTestRuntime {
 
         auto credFactory = NKikimr::CreateYdbCredentialsProviderFactory;
         NYdb::TDriver driver(NYdb::TDriverConfig{});
-        auto ydbConnectionPtr = NewYdbConnection(config.GetExternalStorage(), credFactory, driver);
+        auto ydbConnectionPtr = CreateSdkYdbConnection(config.GetExternalStorage(), credFactory, driver);
         CheckpointStorage = NewYdbCheckpointStorage(storageConfig, CreateEntityIdGenerator("id"), ydbConnectionPtr);
         auto issues = CheckpointStorage->Init().GetValueSync();
         UNIT_ASSERT_C(issues.Empty(), issues.ToString());

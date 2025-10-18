@@ -4,6 +4,7 @@
 
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
 #include <ydb/core/fq/libs/ydb/ydb.h>
+#include <ydb/core/fq/libs/ydb/ydb_connection.h>
 
 namespace NKikimrConfig {
 class TCheckpointsConfig;
@@ -15,6 +16,6 @@ namespace NFq {
 
 TStateStoragePtr NewYdbStateStorage(
     const NKikimrConfig::TCheckpointsConfig& config,
-    const TYdbConnectionPtr& ydbConnection);
+    const IYdbConnection::TPtr& ydbConnection);
 
 } // namespace NFq

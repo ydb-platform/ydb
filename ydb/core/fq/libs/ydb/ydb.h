@@ -14,6 +14,7 @@
 #include <util/system/env.h>
 
 #include <ydb/core/protos/config.pb.h>
+#include <ydb/core/fq/libs/ydb/ydb_connection.h>
 
 namespace NFq {
 
@@ -54,7 +55,7 @@ struct TGenerationContext : public TThrRefBase {
     EOperationType OperationType = Register;
 
     // within this session we execute transaction
-    NYdb::NTable::TSession Session;
+    ISession::TPtr Session = nullptr;
 
     // - In Register and RegisterCheck operation - whether
     // to commit or not after upserting new generation (usually true)
@@ -82,14 +83,12 @@ struct TGenerationContext : public TThrRefBase {
     // it with Transaction (must have CommitTx = false)
     const ui64 Generation;
 
-    std::optional<NYdb::NTable::TTransaction> Transaction;
-
     // result of Select
     ui64 GenerationRead = 0;
 
     NYdb::NTable::TExecDataQuerySettings ExecDataQuerySettings;
 
-    TGenerationContext(NYdb::NTable::TSession session,
+    TGenerationContext(ISession::TPtr session,
                        bool commitTx,
                        const TString& tablePathPrefix,
                        const TString& table,
@@ -98,7 +97,7 @@ struct TGenerationContext : public TThrRefBase {
                        const TString& primaryKey,
                        ui64 generation,
                        const NYdb::NTable::TExecDataQuerySettings& execDataQuerySettings = {})
-        : Session(session)
+        : Session(std::move(session))
         , CommitTx(commitTx)
         , TablePathPrefix(tablePathPrefix)
         , Table(table)
@@ -130,6 +129,11 @@ NThreading::TFuture<NYql::TIssues> StatusToIssues(
 
 NThreading::TFuture<NYdb::TStatus> CreateTable(
     const TYdbConnectionPtr& ydbConnection,
+    const TString& name,
+    NYdb::NTable::TTableDescription&& description);
+
+NThreading::TFuture<NYdb::TStatus> CreateTable(
+    const IYdbConnection::TPtr& ydbConnection,
     const TString& name,
     NYdb::NTable::TTableDescription&& description);
 

@@ -10,6 +10,10 @@
 
 #include <google/protobuf/util/message_differencer.h>
 
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_checkpoints.h>
+#include <ydb/library/yql/providers/dq/api/protos/dqs.pb.h>
+#include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
+
 namespace {
 
 using namespace NKikimr;
@@ -119,19 +123,33 @@ struct TTestBootstrap : public TTestActorRuntime {
             Counters,
             NProto::TGraphParams(),
             FederatedQuery::StateLoadMode::FROM_LAST_CHECKPOINT,
-            {},
-            //
-            "my-graph-id",
-            {} /* ExecuterId */,
-            RunActor,
-            DqSettings,
-            ::NYql::NCommon::TServiceCounters(Counters, nullptr, ""),
-            TDuration::Seconds(3),
-            TDuration::Seconds(1)
+            {}
         ).Release());
-        Send(new IEventHandle(CheckpointCoordinator, {}, new NYql::NDqs::TEvReadyState(std::move(GraphState))));
+        
+        auto ev = BuildEvReadyState();
+        Send(new IEventHandle(CheckpointCoordinator, {}, ev.release()));
 
         EnableScheduleForActor(CheckpointCoordinator);
+    }
+
+    std::unique_ptr<NFq::TEvCheckpointCoordinator::TEvReadyState> BuildEvReadyState() {
+        auto event = std::make_unique<NFq::TEvCheckpointCoordinator::TEvReadyState>();
+        auto& tasks = *GraphState.MutableTask();
+        const auto& actorIds = GraphState.GetActorId();
+        for (int i = 0; i < static_cast<int>(tasks.size()); ++i) {
+            auto actorId = ActorIdFromProto(actorIds[i]);
+            auto settings = NYql::NDq::TDqTaskSettings(&tasks[i]);
+            auto task = NFq::TEvCheckpointCoordinator::TEvReadyState::TTask{
+                settings.GetId(),
+                NYql::NDq::GetTaskCheckpointingMode(settings) != NYql::NDqProto::CHECKPOINTING_MODE_DISABLED,
+                NYql::NDq::IsIngress(settings),
+                NYql::NDq::IsEgress(settings),
+                NYql::NDq::HasState(settings),
+                actorId
+            };
+            event->Tasks.emplace_back(std::move(task));
+        }                
+        return event;
     }
 
     bool IsEqual(

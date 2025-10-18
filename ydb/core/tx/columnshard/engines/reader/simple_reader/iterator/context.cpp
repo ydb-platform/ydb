@@ -108,8 +108,12 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
         if (preventDuplicates) {
             acc.AddStep(std::make_shared<TDuplicateFilter>());
         }
-        const auto& chainProgram = GetReadMetadata()->GetProgram().GetChainVerified();
-        acc.AddStep(std::make_shared<NCommon::TProgramStep>(chainProgram));
+        if (const auto& chainProgram = GetReadMetadata()->GetProgram().GetGraphOptional()) {
+            acc.AddStep(std::make_shared<NCommon::TProgramStep>(chainProgram));
+        } else {
+            acc.AddFetchingStep(*GetFFColumns(), NArrow::NSSA::IMemoryCalculationPolicy::EStage::Fetching);
+            acc.AddAssembleStep(*GetFFColumns(), "LAST", NArrow::NSSA::IMemoryCalculationPolicy::EStage::Fetching, false);
+        }
         if (GetSourcesAggregationScript()) {
             acc.AddStep(std::make_shared<TUpdateAggregatedMemoryStep>());
         }

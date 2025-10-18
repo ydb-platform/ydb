@@ -1024,7 +1024,6 @@ config:
         if (force) {
             request.SetIgnoreGroupFailModelChecks(true);
             request.SetIgnoreDegradedGroupsChecks(true);
-            request.SetIgnoreDisintegratedGroupsChecks(true);
             request.SetIgnoreGroupSanityChecks(true);
         }
         auto *cmd = request.AddCommand();
@@ -1069,7 +1068,6 @@ config:
         NKikimrBlobStorage::TConfigRequest request;
         request.SetIgnoreGroupFailModelChecks(true);
         request.SetIgnoreDegradedGroupsChecks(true);
-        request.SetIgnoreDisintegratedGroupsChecks(true);
         auto *cmd = request.AddCommand();
         auto *wipe = cmd->MutableWipeVDisk();
         auto *vslot = wipe->MutableVSlotId();

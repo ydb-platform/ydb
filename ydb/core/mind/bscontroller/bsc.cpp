@@ -643,9 +643,6 @@ void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerConfigResponse:
             for (const auto& group : resp.GetGroupsGetDisintegrated()) {
                 s << " GroupGetDisintegrated# " << group;
             }
-            for (const auto& group : resp.GetGroupsGetDisintegratedByExpectedStatus()) {
-                s << " GroupGetDisintegratedByExpectedStatus# " << group;
-            }
             errorReason = s.Str();
         }
 

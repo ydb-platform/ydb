@@ -682,7 +682,7 @@ message TConfigRequest {
     bool IgnoreDegradedGroupsChecks = 8;
 
     // ignore disintegrated groups checking
-    bool IgnoreDisintegratedGroupsChecks = 11;
+    bool IgnoreDisintegratedGroupsChecks = 11; // for compatibility only, modern BSC doesn't use it
 
     // do not settle slots over non-operating PDisks
     bool SettleOnlyOnOperationalDisks = 9;
@@ -904,6 +904,6 @@ message TConfigResponse {
     uint64 ConfigTxSeqNo = 4;
     repeated uint32 GroupsGetDegraded = 5;
     repeated uint32 GroupsGetDisintegrated = 6;
-    repeated uint32 GroupsGetDisintegratedByExpectedStatus = 7;
+    repeated uint32 GroupsGetDisintegratedByExpectedStatus = 7; // for compatibility only, modern BSC doesn't use it
     bool RollbackSuccess = 8;
 }

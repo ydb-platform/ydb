@@ -121,6 +121,9 @@ void PrintPrimitive(IOutputStream& out, const TValueParser& parser) {
         case EPrimitiveType::Uint8:
             out << (ui32)parser.GetUint8();
             break;
+        case EPrimitiveType::Uuid:
+            out << parser.GetUuidHack().ToString();
+            break;
         CASE_PRINT_PRIMITIVE_TYPE(out, Int16);
         CASE_PRINT_PRIMITIVE_TYPE(out, Uint16);
         CASE_PRINT_PRIMITIVE_TYPE(out, Int32);

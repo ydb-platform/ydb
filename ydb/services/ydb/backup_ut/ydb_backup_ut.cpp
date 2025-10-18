@@ -392,6 +392,76 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         );
     }
 
+    Y_UNIT_TEST(BackupUuid) {
+        TKikimrWithGrpcAndRootSchema server;
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())));
+        TTableClient tableClient(driver);
+        auto session = tableClient.GetSession().ExtractValueSync().GetSession();
+        TTempDir tempDir;
+        const auto& pathToBackup = tempDir.Path();
+
+        constexpr const char* dbPath = "/Root";
+        constexpr const char* table = "/Root/table";
+
+        ExecuteDataDefinitionQuery(session, Sprintf(R"(
+                CREATE TABLE `%s` (
+                    Key Uuid,
+                    Value Utf8,
+                    PRIMARY KEY (Key)
+                );
+            )",
+            table
+        ));
+
+        std::vector<std::string> uuids = {
+            "5b99a330-04ef-4f1a-9b64-ba6d5f44eafe",
+            "706cca52-b00a-4cbd-a21e-6538de188271",
+            "81b1e345-f2ae-4c9e-8d1a-75447be314f2",
+            "be2765f2-9f4c-4a22-8d2c-a1b77d84f4fb",
+            "d3f9e0a2-5871-4afe-a23a-8db160b449cd",
+            "d3f9e0a2-0000-0000-0000-8db160b449cd"
+        };
+
+        ExecuteDataModificationQuery(session, Sprintf(R"(
+                UPSERT INTO `%s` (Key, Value)
+                VALUES 
+                    (Uuid("%s"), "one"),
+                    (Uuid("%s"), "two"),
+                    (Uuid("%s"), "three"),
+                    (Uuid("%s"), "four"),
+                    (Uuid("%s"), "five"),
+                    (Uuid("%s"), "six");
+            )", table, uuids[0].c_str(), uuids[1].c_str(), uuids[2].c_str(), uuids[3].c_str(), uuids[4].c_str(), uuids[5].c_str()
+        ));
+
+        const auto originalContent = GetTableContent(session, table);
+
+        NBackup::BackupFolder(driver, dbPath, ".", pathToBackup, {}, false, false, true);
+
+        // Check that backup file contains all uuids as strings, making sure we stringify UUIDs correctly in backups
+        TString backupFileContent = TFileInput(pathToBackup.GetPath() + "/table/data_00.csv").ReadAll();
+        for (const auto& uuid : uuids) {
+            UNIT_ASSERT_C(backupFileContent.find(uuid) != TString::npos, "UUID not found in backup file");
+        }
+
+        for (auto backupMode : {NDump::TRestoreSettings::EMode::BulkUpsert, NDump::TRestoreSettings::EMode::ImportData, NDump::TRestoreSettings::EMode::Yql}) {
+            auto opts = NDump::TRestoreSettings().Mode(backupMode);
+
+            ExecuteDataDefinitionQuery(session, Sprintf(R"(
+                    DROP TABLE `%s`;
+                )", table
+            ));
+
+            NDump::TClient backupClient(driver);
+            auto result = backupClient.Restore(pathToBackup, dbPath, opts);
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            const auto newContent = GetTableContent(session, table);
+
+            CompareResults(newContent, originalContent);
+        }
+    }
+
     // TO DO: test index impl table split boundaries restoration from a backup
 }
 

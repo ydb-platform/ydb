@@ -24,7 +24,7 @@ public:
         const TString& database, const NKikimrSysView::TSysViewDescription& sysViewInfo,
         const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
         TIntrusiveConstPtr<NACLib::TUserToken> userToken)
-        : TAuthBase(ownerId, scanId, database, sysViewInfo, tableRange, columns, std::move(userToken), false, true)
+        : TAuthBase(ownerId, scanId, database, sysViewInfo, tableRange, columns, std::move(userToken), true, false, true)
         , Effective(effective)
     {
     }
@@ -92,8 +92,6 @@ protected:
             batch.Rows.emplace_back(TOwnedCellVec::Make(ref));
             cells.clear();
         }
-
-        batch.Finished = false;
     }
 
 private:

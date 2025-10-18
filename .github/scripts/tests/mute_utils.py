@@ -73,7 +73,19 @@ def mute_target(testcase):
         skipped.text = '\n'.join(err_text)
     testcase.append(skipped)
 
-    add_junit_property(testcase, "mute", "automatically muted based on rules")
+    # Build comprehensive mute description including original error information
+    mute_description = "automatically muted based on rules"
+    error_info_parts = []
+    
+    if err_msg:
+        error_info_parts.append(err_msg)
+    if err_text:
+        error_info_parts.extend(err_text)
+    
+    if error_info_parts:
+        mute_description += "\n" + "\n".join(error_info_parts)
+
+    add_junit_property(testcase, "mute", mute_description)
 
     return True
 

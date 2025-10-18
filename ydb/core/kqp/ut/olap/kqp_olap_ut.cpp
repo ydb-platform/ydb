@@ -977,7 +977,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         for (const auto& r : rows) {
             TInstant ts = GetTimestamp(r.at("timestamp"));
             UNIT_ASSERT_GE_C(ts, tsPrev, "result is not sorted in ASC order");
-            UNIT_ASSERT(results.erase(ts.GetValue()));
+            UNIT_ASSERT_C(results.erase(ts.GetValue()), Sprintf("%d", ts.GetValue()));
             tsPrev = ts;
         }
         UNIT_ASSERT(rows.size() == 6);
@@ -3215,6 +3215,50 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
     }
 
+    Y_UNIT_TEST(ReverseMerge) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        auto runnerSettings = TKikimrSettings().SetAppConfig(appConfig).SetWithSampleTables(true).SetColumnShardAlterObjectEnabled(true);
+
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        csController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
+
+        TTestHelper testHelper(runnerSettings);
+        auto client = testHelper.GetKikimr().GetQueryClient();
+
+        TVector<TTestHelper::TColumnSchema> schema = {
+            TTestHelper::TColumnSchema().SetName("k").SetType(NScheme::NTypeIds::Uint64).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("v").SetType(NScheme::NTypeIds::Uint64).SetNullable(false),
+        };
+
+        TTestHelper::TColumnTable testTable;
+        testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({ "k" }).SetSchema(schema);
+        testHelper.CreateTable(testTable);
+
+        {
+            TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
+            tableInserter.AddRow().Add(1).Add(0);
+            tableInserter.AddRow().Add(2).Add(0);
+            testHelper.BulkUpsert(testTable, tableInserter);
+        }
+
+        {
+            TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
+            tableInserter.AddRow().Add(0).Add(0);
+            tableInserter.AddRow().Add(1).Add(0);
+            testHelper.BulkUpsert(testTable, tableInserter);
+        }
+
+        {
+            TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
+            tableInserter.AddRow().Add(2).Add(0);
+            tableInserter.AddRow().Add(3).Add(0);
+            testHelper.BulkUpsert(testTable, tableInserter);
+        }
+
+        testHelper.ReadData(
+            "SELECT k, v FROM (SELECT * FROM `/Root/ColumnTableTest` WHERE k >= 0 AND k < 1000) ORDER BY k DESC LIMIT 3", "[[3u;0u];[2u;0u];[1u;0u]]");
+    }
 }
 
 }

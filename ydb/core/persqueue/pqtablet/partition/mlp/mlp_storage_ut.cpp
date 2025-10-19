@@ -519,6 +519,29 @@ Y_UNIT_TEST(CompactStorage) {
     UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 0);
 }
 
+Y_UNIT_TEST(ProccessDeadlines) {
+    TStorage storage(CreateDefaultTimeProvider());
+    storage.SetKeepMessageOrder(true);
+    storage.AddMessage(3, true, 5);
+    storage.AddMessage(4, true, 7);
+    storage.AddMessage(5, true, 11);
+    storage.AddMessage(6, true, 13);
+
+    storage.Next(TInstant::Now() + TDuration::Seconds(1));
+    storage.Next(TInstant::Now() - TDuration::Seconds(1));
+
+    auto result = storage.ProccessDeadlines();
+    UNIT_ASSERT_VALUES_EQUAL(result, 1);
+
+    auto& metrics = storage.GetMetrics();
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 4);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 3); // offsets 4 and 5 and 6
+    UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 1); // offset 3
+    UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.DeadlineExpiredMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 0);
+}
 
 }
 

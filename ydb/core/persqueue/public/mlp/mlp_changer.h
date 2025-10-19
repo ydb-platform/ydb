@@ -59,6 +59,12 @@ private:
         switch(topic.Status) {
             case NDescriber::EStatus::SUCCESS: {
                 TopicInfo = topic.Info;
+
+                if (!HasConsumer(TopicInfo->Description.GetPQTabletConfig(), Settings.Consumer)) {
+                    return ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR,
+                        TStringBuilder() << "Consumer '" << Settings.Consumer << "' does not exist");
+                }
+
                 return DoChanges();
             }
             default: {

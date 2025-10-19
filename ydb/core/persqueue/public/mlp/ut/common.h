@@ -21,6 +21,9 @@ inline auto CreateSetup() {
     auto setup = std::make_shared<TTopicSdkTestSetup>("TODO");
     setup->GetServer().EnableLogs({
             NKikimrServices::PQ_MLP_READER,
+            NKikimrServices::PQ_MLP_COMMITTER,
+            NKikimrServices::PQ_MLP_UNLOCKER,
+            NKikimrServices::PQ_MLP_DEADLINER,
             NKikimrServices::PQ_MLP_CONSUMER,
             NKikimrServices::PQ_MLP_ENRICHER,
             NKikimrServices::PERSQUEUE,

@@ -189,6 +189,9 @@ public:
 
     TReadMetadata(const std::shared_ptr<const TVersionedIndex>& schemaIndex, const TReadDescription& read);
 
+    TReadMetadata(const TReadMetadata&) = delete;
+    TReadMetadata& operator=(const TReadMetadata&) = delete;
+
     virtual std::vector<TNameTypeInfo> GetKeyYqlSchema() const override {
         return GetResultSchema()->GetIndexInfo().GetPrimaryKeyColumns();
     }

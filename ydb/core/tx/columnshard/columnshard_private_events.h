@@ -349,14 +349,11 @@ struct TEvPrivate {
     };
     
     struct TEvReportScanDiagnostics: public TEventLocal<TEvReportScanDiagnostics, EvReportScanDiagnostics> {
-        /*
-        requestMessage, dotGraph, ssaProgram, true
-        */
-        explicit TEvReportScanDiagnostics(const TString& requestMessage, const TString& dotGraph, const TString& ssaProgram, const TString& pkRangesFilter, bool isPublicScan)
-            : RequestMessage(requestMessage)
-            , DotGraph(dotGraph)
-            , SSAProgram(ssaProgram)
-            , PKRangesFilter(pkRangesFilter)
+        explicit TEvReportScanDiagnostics(TString&& requestMessage, TString&& dotGraph, TString&& ssaProgram, TString&& pkRangesFilter, bool isPublicScan)
+            : RequestMessage(std::move(requestMessage))
+            , DotGraph(std::move(dotGraph))
+            , SSAProgram(std::move(ssaProgram))
+            , PKRangesFilter(std::move(pkRangesFilter))
             , IsPublicScan(isPublicScan) {
         }
         

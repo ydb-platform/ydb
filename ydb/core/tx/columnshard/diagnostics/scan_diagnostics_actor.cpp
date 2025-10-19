@@ -68,7 +68,7 @@ void TScanDiagnosticsActor::Handle(const NColumnShard::TEvPrivate::TEvReportScan
 }
 
 void TScanDiagnosticsActor::AddScanDiagnostics(TScanDiagnosticsInfo&& info, std::deque<TScanDiagnosticsInfo>& lastScans) {
-    lastScans.emplace_back(info);
+    lastScans.emplace_back(std::move(info));
     if (lastScans.size() > MaxScans) {
         lastScans.pop_front();
     }

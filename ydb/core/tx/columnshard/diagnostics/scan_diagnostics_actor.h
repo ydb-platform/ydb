@@ -7,6 +7,8 @@
 
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
 
+#include <deque>
+
 namespace NKikimr::NColumnShard::NDiagnostics  {
 
 class TScanDiagnosticsActor: public NActors::TActor<TScanDiagnosticsActor> {
@@ -24,6 +26,7 @@ class TScanDiagnosticsActor: public NActors::TActor<TScanDiagnosticsActor> {
         StateMain,
         hFunc(NMon::TEvRemoteHttpInfo, Handle)
         hFunc(NColumnShard::TEvPrivate::TEvReportScanDiagnostics, Handle)
+        cFunc(TEvents::TEvPoisonPill::EventType, PassAway)
     )
     
     void Handle(const NMon::TEvRemoteHttpInfo::TPtr& ev);

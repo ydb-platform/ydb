@@ -157,11 +157,11 @@ void TTxScan::Complete(const TActorContext& ctx) {
             }
         }
         auto graphOptional = read.GetProgram().GetGraphOptional();
-        TString dotGraph = graphOptional ? read.GetProgram().GetGraphOptional()->DebugDOT() : "";
+        TString dotGraph = graphOptional ? graphOptional->DebugDOT() : "";
         TString ssaProgram = read.GetProgram().ProtoDebugString();
         auto requestMessage = request.DebugString();
         auto pkRangesFilter = read.PKRangesFilter->DebugString();
-        ctx.Send(Self->ScanDiagnosticsActorId, std::make_unique<NColumnShard::TEvPrivate::TEvReportScanDiagnostics>(requestMessage, dotGraph, ssaProgram, pkRangesFilter, true));
+        ctx.Send(Self->ScanDiagnosticsActorId, std::make_unique<NColumnShard::TEvPrivate::TEvReportScanDiagnostics>(std::move(requestMessage), std::move(dotGraph), std::move(ssaProgram), std::move(pkRangesFilter), true));
     }
     AFL_VERIFY(readMetadataRange);
     readMetadataRange->OnBeforeStartReading(*Self);

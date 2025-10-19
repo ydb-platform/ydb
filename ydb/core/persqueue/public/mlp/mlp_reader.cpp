@@ -6,7 +6,7 @@
 
 namespace NKikimr::NPQ::NMLP {
 
-TReaderActor::TReaderActor(const TActorId& parentId, const TReaderSetting& settings)
+TReaderActor::TReaderActor(const TActorId& parentId, const TReaderSettings& settings)
     : TBaseActor(NKikimrServices::EServiceKikimr::PQ_MLP_READER)
     , ParentId(parentId)
     , Settings(settings)
@@ -186,7 +186,7 @@ bool TReaderActor::OnUnhandledException(const std::exception& exc) {
     return TBaseActor::OnUnhandledException(exc);
 }
 
-IActor* CreateReader(const NActors::TActorId& parentId, TReaderSetting&& settings) {
+IActor* CreateReader(const NActors::TActorId& parentId, TReaderSettings&& settings) {
     return new TReaderActor(parentId, std::move(settings));
 }
 

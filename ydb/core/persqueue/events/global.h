@@ -441,10 +441,13 @@ namespace NKikimr::TEvPersQueue {
     struct TEvMLPCommitRequest : TEventPB<TEvMLPCommitRequest, NKikimrPQ::TEvMLPCommitRequest, EvMLPCommitRequest> {
         TEvMLPCommitRequest() = default;
 
-        TEvMLPCommitRequest(const TString& topic, const TString& consumer, ui32 partitionId) {
+        TEvMLPCommitRequest(const TString& topic, const TString& consumer, ui32 partitionId, const std::vector<ui64>& offsets) {
             Record.SetTopic(topic);
             Record.SetConsumer(consumer);
             Record.SetPartitionId(partitionId);
+            for (auto offset : offsets) {
+                Record.AddOffset(offset);
+            }
         }
 
         void AddMessage(ui64 offset) {
@@ -477,10 +480,13 @@ namespace NKikimr::TEvPersQueue {
     struct TEvMLPUnlockRequest : TEventPB<TEvMLPUnlockRequest, NKikimrPQ::TEvMLPUnlockRequest, EvMLPUnlockRequest> {
         TEvMLPUnlockRequest() = default;
 
-        TEvMLPUnlockRequest(const TString& topic, const TString& consumer, ui32 partitionId) {
+        TEvMLPUnlockRequest(const TString& topic, const TString& consumer, ui32 partitionId, const std::vector<ui64>& offsets) {
             Record.SetTopic(topic);
             Record.SetConsumer(consumer);
             Record.SetPartitionId(partitionId);
+            for (auto offset : offsets) {
+                Record.AddOffset(offset);
+            }
         }
 
         void AddMessage(ui64 offset) {
@@ -513,11 +519,14 @@ namespace NKikimr::TEvPersQueue {
     struct TEvMLPChangeMessageDeadlineRequest : TEventPB<TEvMLPChangeMessageDeadlineRequest, NKikimrPQ::TEvMLPChangeMessageDeadlineRequest, EvMLPChangeMessageDeadlineRequest> {
         TEvMLPChangeMessageDeadlineRequest() = default;
 
-        TEvMLPChangeMessageDeadlineRequest(const TString& topic, const TString& consumer, ui32 partitionId, TDuration deadlineTimestamp) {
+        TEvMLPChangeMessageDeadlineRequest(const TString& topic, const TString& consumer, ui32 partitionId, TInstant deadlineTimestamp, const std::vector<ui64>& offsets) {
             Record.SetTopic(topic);
             Record.SetConsumer(consumer);
             Record.SetPartitionId(partitionId);
             Record.SetDeadlineTimestampSeconds(deadlineTimestamp.Seconds());
+            for (auto offset : offsets) {
+                Record.AddOffset(offset);
+            }
         }
 
         const TString& GetTopic() const {

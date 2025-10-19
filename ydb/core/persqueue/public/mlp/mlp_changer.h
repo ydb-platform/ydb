@@ -10,11 +10,22 @@
 
 namespace NKikimr::NPQ::NMLP {
 
-class TReaderActor : public TBaseActor<TReaderActor>
-                   , public TConstantLogPrefix {
+struct TChangerSettings {
+    TString DatabasePath;
+    TString TopicName;
+    TString Consumer;
+    std::vector<TMessageId> Messages;
+
+    // TODO check access
+
+    std::function<IEventBase* (const TString& topicName, const TString& consumer, ui32 partitionId, const std::vector<ui64>& offsets)> RequestCreator;
+};
+
+class TChangerActor : public TBaseActor<TChangerActor>
+                    , public TConstantLogPrefix {
 
 public:
-    TReaderActor(const TActorId& parentId, const TReaderSettings& settings);
+    TChangerActor(const TActorId& parentId, TChangerSettings&& settings);
 
     void Bootstrap();
     void PassAway() override;
@@ -26,16 +37,11 @@ private:
     void Handle(NDescriber::TEvDescribeTopicsResponse::TPtr&);
     STFUNC(DescribeState);
 
-    void DoSelectPartition();
-    void Handle(TEvPersQueue::TEvMLPGetPartitionResponse::TPtr&);
-    void HandleOnSelectPartition(TEvPipeCache::TEvDeliveryProblem::TPtr&);
-    STFUNC(SelectPartitionState);
-
-    void DoRead();
-    void Handle(TEvPersQueue::TEvMLPReadResponse::TPtr&);
+    void DoCommit();
+    void Handle(TEvPersQueue::TEvMLPCommitResponse::TPtr&);
     void Handle(TEvPersQueue::TEvMLPErrorResponse::TPtr&);
     void HandleOnRead(TEvPipeCache::TEvDeliveryProblem::TPtr&);
-    STFUNC(ReadState);
+    STFUNC(CommitState);
 
     void SendToTablet(ui64 tabletId, IEventBase *ev);
     void ReplyErrorAndDie(NPersQueue::NErrorCode::EErrorCode errorCode, TString&& errorMessage);
@@ -44,15 +50,11 @@ private:
 
 private:
     const TActorId ParentId;
-    const TReaderSettings Settings;
+    const TChangerSettings Settings;
 
     TActorId ChildActorId;
-    ui64 ReadBalancerTabletId;
-    ui32 PartitionId;
-    ui64 PQTabletId;
 
-    TBackoff Backoff = TBackoff(5);
-    ui64 Cookie = 1;
+    std::unordered_set<ui32> PendingPartitions;
 };
 
-} // namespace NKikimr::NPQ::NMLPUSetting&
+} // namespace NKikimr::NPQ::NMLP

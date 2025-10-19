@@ -61,6 +61,28 @@ Y_UNIT_TEST(PartitionNotExists) {
     UNIT_ASSERT_VALUES_EQUAL(result->Messages[0].Success, false);
 }
 
+Y_UNIT_TEST(CommitTest) {
+    auto setup = CreateSetup();
+
+    CreateTopic(setup, "/Root/topic1", "mlp-consumer");
+    
+    auto& runtime = setup->GetRuntime();
+    CreateCommitterActor(runtime, {
+        .DatabasePath = "/Root",
+        .TopicName = "/Root/topic1",
+        .Consumer = "mlp-consumer",
+        .Messages = { TMessageId(0, 17) }
+    });
+
+    auto result = GetChangeResponse(runtime);
+
+    UNIT_ASSERT_VALUES_EQUAL(result->Status, Ydb::StatusIds::SUCCESS);
+    UNIT_ASSERT_VALUES_EQUAL(result->Messages.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(result->Messages[0].MessageId.PartitionId, 0);
+    UNIT_ASSERT_VALUES_EQUAL(result->Messages[0].MessageId.Offset, 17);
+    UNIT_ASSERT_VALUES_EQUAL(result->Messages[0].Success, true);
+}
+
 }
 
 } // namespace NKikimr::NPQ::NMLP

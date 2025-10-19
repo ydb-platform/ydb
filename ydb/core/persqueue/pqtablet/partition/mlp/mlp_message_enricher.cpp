@@ -24,7 +24,7 @@ void TMessageEnricherActor::Bootstrap() {
 void TMessageEnricherActor::PassAway() {
     LOG_D("PassAway");
     for (auto& reply : Queue) {
-        Send(reply.Sender, new TEvPersQueue::TEvMLPErrorResponse(NPersQueue::NErrorCode::EErrorCode::ERROR, "Shutdown"), 0, reply.Cookie);
+        Send(reply.Sender, new TEvPersQueue::TEvMLPErrorResponse(Ydb::StatusIds::SCHEME_ERROR, "Shutdown"), 0, reply.Cookie);
     }
 
     TBase::PassAway();

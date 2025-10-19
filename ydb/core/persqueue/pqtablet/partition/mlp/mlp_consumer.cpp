@@ -10,7 +10,7 @@ namespace NKikimr::NPQ::NMLP {
 namespace {
 
 void ReplyError(const TActorIdentity selfActorId, const TActorId& sender, ui64 cookie, TString&& error) {
-    selfActorId.Send(sender, new TEvPersQueue::TEvMLPErrorResponse(NPersQueue::NErrorCode::EErrorCode::ERROR, std::move(error)), 0, cookie);
+    selfActorId.Send(sender, new TEvPersQueue::TEvMLPErrorResponse(Ydb::StatusIds::INTERNAL_ERROR, std::move(error)), 0, cookie);
 }
 
 template<typename T>

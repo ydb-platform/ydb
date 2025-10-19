@@ -221,6 +221,7 @@ private:
     TActorId ChildActorId;
     TIntrusiveConstPtr<NSchemeCache::TSchemeCacheNavigate::TPQGroupInfo> TopicInfo;
 
+    // TODO retries
     struct TRequestInfo {
         bool Error = false;
         bool Success = false;

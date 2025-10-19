@@ -28,7 +28,7 @@ template<typename TEventHandle>
 void TPartition::ForwardToMLPConsumer(const TString& consumer, TAutoPtr<TEventHandle>& ev) {
     auto it = MLPConsumers.find(consumer);
     if (it == MLPConsumers.end()) {
-        Send(ev->Sender, new TEvPersQueue::TEvMLPErrorResponse(NPersQueue::NErrorCode::EErrorCode::SCHEMA_ERROR, "Consumer not found"), 0, ev->Cookie);
+        Send(ev->Sender, new TEvPersQueue::TEvMLPErrorResponse(Ydb::StatusIds::SCHEME_ERROR, "Consumer not found"), 0, ev->Cookie);
         return;
     }
 

@@ -14,7 +14,7 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
             .Consumer = "consumer_not_exists"
         });
 
-        AssertError(runtime, ::NPersQueue::NErrorCode::EErrorCode::SCHEMA_ERROR,
+        AssertReadError(runtime, Ydb::StatusIds::SCHEME_ERROR,
             "You do not have access or the '/Root/topic_not_exists' does not exist");
     }
 
@@ -30,7 +30,7 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
             .Consumer = "consumer_not_exists"
         });
 
-        AssertError(runtime, ::NPersQueue::NErrorCode::EErrorCode::SCHEMA_ERROR,
+        AssertReadError(runtime, Ydb::StatusIds::SCHEME_ERROR,
             "Consumer 'consumer_not_exists' does not exist");
     }
 
@@ -40,14 +40,14 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
         CreateTopic(setup, "/Root/topic1", "mlp-consumer");
 
         auto& runtime = setup->GetRuntime();
-        auto actorId = CreateReaderActor(runtime, {
+        CreateReaderActor(runtime, {
             .DatabasePath = "/Root",
             .TopicName = "/Root/topic1",
             .Consumer = "mlp-consumer"
         });
 
-        auto response = GetReadResonse(runtime, actorId);
-        UNIT_ASSERT_VALUES_EQUAL(response.GetMessage().size(), 0);
+        auto response = GetReadResponse(runtime);
+        UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 0);
     }
 
     Y_UNIT_TEST(TopicWithData) {
@@ -57,16 +57,18 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
         setup->Write("/Root/topic1", "msg-1", 0);
 
         auto& runtime = setup->GetRuntime();
-        auto actorId = CreateReaderActor(runtime, {
+        CreateReaderActor(runtime, {
             .DatabasePath = "/Root",
             .TopicName = "/Root/topic1",
             .Consumer = "mlp-consumer",
             .WaitTime = TDuration::Seconds(3)
         });
 
-        auto response = GetReadResonse(runtime, actorId);
-        UNIT_ASSERT_VALUES_EQUAL(response.GetMessage().size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(response.GetMessage(0).GetData(), "msg-1");
+        auto response = GetReadResponse(runtime);
+        UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].MessageId.PartitionId, 0);
+        UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].MessageId.Offset, 0);
+        UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].Data, "msg-1");
     }
 
     Y_UNIT_TEST(TopicWithManyIterationsData) {
@@ -82,7 +84,7 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
         Sleep(TDuration::Seconds(2));
 
         {
-            auto actorId = CreateReaderActor(runtime, {
+            CreateReaderActor(runtime, {
                 .DatabasePath = "/Root",
                 .TopicName = "/Root/topic1",
                 .Consumer = "mlp-consumer",
@@ -91,14 +93,14 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
                 .MaxNumberOfMessage = 2
             });
 
-            auto response = GetReadResonse(runtime, actorId);
-            UNIT_ASSERT_VALUES_EQUAL(response.GetMessage().size(), 2);
-            UNIT_ASSERT_VALUES_EQUAL(response.GetMessage(0).GetData(), "msg-1");
-            UNIT_ASSERT_VALUES_EQUAL(response.GetMessage(1).GetData(), "msg-2");
+            auto response = GetReadResponse(runtime);
+            UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].Data, "msg-1");
+            UNIT_ASSERT_VALUES_EQUAL(response->Messages[1].Data, "msg-2");
         }
 
         {
-            auto actorId = CreateReaderActor(runtime, {
+            CreateReaderActor(runtime, {
                 .DatabasePath = "/Root",
                 .TopicName = "/Root/topic1",
                 .Consumer = "mlp-consumer",
@@ -107,13 +109,13 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
                 .MaxNumberOfMessage = 2
             });
 
-            auto response = GetReadResonse(runtime, actorId);
-            UNIT_ASSERT_VALUES_EQUAL(response.GetMessage().size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(response.GetMessage(0).GetData(), "msg-3");
+            auto response = GetReadResponse(runtime);
+            UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].Data, "msg-3");
         }
 
         {
-            auto actorId = CreateReaderActor(runtime, {
+            CreateReaderActor(runtime, {
                 .DatabasePath = "/Root",
                 .TopicName = "/Root/topic1",
                 .Consumer = "mlp-consumer",
@@ -122,12 +124,12 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
                 .MaxNumberOfMessage = 2
             });
 
-            auto response = GetReadResonse(runtime, actorId);
-            UNIT_ASSERT_VALUES_EQUAL(response.GetMessage().size(), 0);
+            auto response = GetReadResponse(runtime);
+            UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 0);
         }
 
         {
-            auto actorId = CreateReaderActor(runtime, {
+            CreateReaderActor(runtime, {
                 .DatabasePath = "/Root",
                 .TopicName = "/Root/topic1",
                 .Consumer = "mlp-consumer",
@@ -136,10 +138,10 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
                 .MaxNumberOfMessage = 2
             });
 
-            auto response = GetReadResonse(runtime, actorId);
-            UNIT_ASSERT_VALUES_EQUAL(response.GetMessage().size(), 2);
-            UNIT_ASSERT_VALUES_EQUAL(response.GetMessage(0).GetData(), "msg-1");
-            UNIT_ASSERT_VALUES_EQUAL(response.GetMessage(1).GetData(), "msg-2");
+            auto response = GetReadResponse(runtime);
+            UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].Data, "msg-1");
+            UNIT_ASSERT_VALUES_EQUAL(response->Messages[1].Data, "msg-2");
         }
 
     }

@@ -38,7 +38,7 @@ void TReaderActor::Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
             return DoSelectPartition();
         }
         default: {
-            ReplyErrorAndDie(NPersQueue::NErrorCode::EErrorCode::SCHEMA_ERROR,
+            ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR,
                 NDescriber::Description(Settings.TopicName, topic.Status));
         }
     }
@@ -60,14 +60,14 @@ void TReaderActor::DoSelectPartition() {
 void TReaderActor::Handle(TEvPersQueue::TEvMLPGetPartitionResponse::TPtr& ev) {
     LOG_D("Handle TEvPersQueue::TEvMLPGetPartitionResponse " << ev->Get()->Record.ShortDebugString());
     auto* result = ev->Get();
-    switch (result->GetErrorCode()) {
-        case NPersQueue::NErrorCode::EErrorCode::OK: {
+    switch (result->GetStatus()) {
+        case Ydb::StatusIds::SUCCESS: {
             PartitionId = result->GetPartitionId();
             PQTabletId = result->GetTabletId();
             return DoRead();
         }
         default:
-            ReplyErrorAndDie(NPersQueue::NErrorCode::EErrorCode::ERROR, "Patition choose error");
+            ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, "Patition choose error");
     }
 }
 
@@ -80,7 +80,7 @@ void TReaderActor::HandleOnSelectPartition(TEvPipeCache::TEvDeliveryProblem::TPt
         Backoff.Next();
         return DoSelectPartition();
     }
-    ReplyErrorAndDie(NPersQueue::NErrorCode::EErrorCode::ERROR, "Pipe error");
+    ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, "Pipe error");
 }
 
 STFUNC(TReaderActor::SelectPartitionState) {
@@ -102,7 +102,7 @@ void TReaderActor::DoRead() {
 void TReaderActor::Handle(TEvPersQueue::TEvMLPReadResponse::TPtr& ev) {
     LOG_D("Handle TEvPersQueue::TEvMLPReadResponse");
 
-    auto response = std::make_unique<TEvPersQueue::TEvMLPReadResponse>();
+    auto response = std::make_unique<TEvReadResponse>();
     for (auto& message : *ev->Get()->Record.MutableMessage()) {
         NKikimrPQClient::TDataChunk proto;
         bool res = proto.ParseFromString(message.GetData());
@@ -120,10 +120,11 @@ void TReaderActor::Handle(TEvPersQueue::TEvMLPReadResponse::TPtr& ev) {
             data = std::move(*proto.MutableData());
         }
 
-        auto* msg = response->Record.AddMessage();
-        msg->MutableId()->CopyFrom(message.GetId());
-        msg->MutableMessageMeta()->CopyFrom(message.GetMessageMeta());
-        msg->SetData(std::move(std::move(data)));
+        response->Messages.push_back(TEvReadResponse::TMessage{
+            .MessageId = {PartitionId, message.GetId().GetOffset()},
+            .Codec = static_cast<Ydb::Topic::Codec>(proto.codec() + 1),
+            .Data = std::move(data) // TODO убрать разжатие
+        });
     }
 
     Send(ParentId, std::move(response));
@@ -132,7 +133,7 @@ void TReaderActor::Handle(TEvPersQueue::TEvMLPReadResponse::TPtr& ev) {
 
 void TReaderActor::Handle(TEvPersQueue::TEvMLPErrorResponse::TPtr& ev) {
     LOG_D("Handle TEvPersQueue::TEvMLPErrorResponse " << ev->Get()->Record.ShortDebugString());
-    Send(ParentId, ev->Release());
+    ReplyErrorAndDie(ev->Get()->GetStatus(), std::move(ev->Get()->GetErrorMessage()));
     PassAway();
 }
 
@@ -145,7 +146,7 @@ void TReaderActor::HandleOnRead(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
         Backoff.Next();
         return DoRead();
     }
-    ReplyErrorAndDie(NPersQueue::NErrorCode::EErrorCode::ERROR, "Pipe error");
+    ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, "Pipe error");
 }
 
 STFUNC(TReaderActor::ReadState) {
@@ -163,9 +164,9 @@ void TReaderActor::SendToTablet(ui64 tabletId, IEventBase *ev) {
     Send(MakePipePerNodeCacheID(false), forward.release(), IEventHandle::FlagTrackDelivery);
 }
 
-void TReaderActor::ReplyErrorAndDie(NPersQueue::NErrorCode::EErrorCode errorCode, TString&& errorMessage) {
-    LOG_I("Reply error " << NPersQueue::NErrorCode::EErrorCode_Name(errorCode));
-    Send(ParentId, new TEvPersQueue::TEvMLPErrorResponse(errorCode, std::move(errorMessage)));
+void TReaderActor::ReplyErrorAndDie(Ydb::StatusIds::StatusCode errorCode, TString&& errorMessage) {
+    LOG_I("Reply error " << Ydb::StatusIds::StatusCode_Name(errorCode));
+    Send(ParentId, new TEvReadResponse(errorCode, std::move(errorMessage)));
     PassAway();
 }
 
@@ -177,7 +178,7 @@ void TReaderActor::PassAway() {
 }
 
 bool TReaderActor::OnUnhandledException(const std::exception& exc) {
-    ReplyErrorAndDie(NPersQueue::NErrorCode::EErrorCode::ERROR,
+    ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR,
         TStringBuilder() <<"Unhandled exception: " << exc.what());
     return TBaseActor::OnUnhandledException(exc);
 }

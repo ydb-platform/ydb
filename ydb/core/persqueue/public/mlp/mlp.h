@@ -1,13 +1,15 @@
 #pragma once
 
-#include <ydb/public/api/protos/ydb_status_codes.pb.h>
 #include <ydb/core/persqueue/events/events.h>
+#include <ydb/public/api/protos/ydb_status_codes.pb.h>
+#include <ydb/public/api/protos/ydb_topic.pb.h>
 #include <ydb/library/actors/core/actorsystem_fwd.h>
 
 namespace NKikimr::NPQ::NMLP {
 
 enum EEv : ui32 {
-    EvChangeResponse = InternalEventSpaceBegin(NPQ::NEvents::EServices::MLP),
+    EvReadResponse = InternalEventSpaceBegin(NPQ::NEvents::EServices::MLP),
+    EvChangeResponse,
     EvEnd
 };
 
@@ -16,19 +18,26 @@ struct TMessageId {
     ui64 Offset;
 };
 
-struct TReaderSettings {
-    TString DatabasePath;
-    TString TopicName;
-    TString Consumer;
-    TDuration WaitTime = TDuration::Zero();
-    TDuration VisibilityTimeout = TDuration::Seconds(30);
-    ui32 MaxNumberOfMessage = 1;
+struct TEvReadResponse : public NActors::TEventLocal<TEvReadResponse, EEv::EvReadResponse> {
 
-    // TODO check access
+    TEvReadResponse(Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS, TString&& errorDescription = {})
+        : Status(status)
+        , ErrorDescription(std::move(errorDescription))
+    {
+    }
+
+    Ydb::StatusIds::StatusCode Status;
+    TString ErrorDescription;
+
+    struct TMessage {
+        TMessageId MessageId;
+        Ydb::Topic::Codec Codec;
+        TString Data;
+    };
+    // The original topic path (from request) -> TopicInfo
+    std::vector<TMessage> Messages;
 };
 
-// Reply TEvPersQueue::TEvMLPReadResponse or TEvPersQueue::TEvMLPErrorResponse 
-IActor* CreateReader(const NActors::TActorId& parentId, TReaderSettings&& settings);
 
 struct TEvChangeResponse : public NActors::TEventLocal<TEvChangeResponse, EEv::EvChangeResponse> {
 
@@ -48,6 +57,22 @@ struct TEvChangeResponse : public NActors::TEventLocal<TEvChangeResponse, EEv::E
     // The original topic path (from request) -> TopicInfo
     std::vector<TResult> Messages;
 };
+
+
+
+struct TReaderSettings {
+    TString DatabasePath;
+    TString TopicName;
+    TString Consumer;
+    TDuration WaitTime = TDuration::Zero();
+    TDuration VisibilityTimeout = TDuration::Seconds(30);
+    ui32 MaxNumberOfMessage = 1;
+
+    // TODO check access
+};
+
+// Reply TEvPersQueue::TEvMLPReadResponse or TEvPersQueue::TEvMLPErrorResponse 
+IActor* CreateReader(const NActors::TActorId& parentId, TReaderSettings&& settings);
 
 
 struct TCommitterSettings {

@@ -18,7 +18,6 @@ public:
 
     void Bootstrap();
     void PassAway() override;
-    //TString BuildLogPrefix() const override;
 
 private:
 
@@ -38,7 +37,7 @@ private:
     STFUNC(ReadState);
 
     void SendToTablet(ui64 tabletId, IEventBase *ev);
-    void ReplyErrorAndDie(NPersQueue::NErrorCode::EErrorCode errorCode, TString&& errorMessage);
+    void ReplyErrorAndDie(Ydb::StatusIds::StatusCode errorCode, TString&& errorMessage);
 
     bool OnUnhandledException(const std::exception&) override;
 

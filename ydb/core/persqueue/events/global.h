@@ -346,17 +346,17 @@ namespace NKikimr::TEvPersQueue {
         TEvMLPGetPartitionResponse() = default;
 
         TEvMLPGetPartitionResponse(ui32 partitionId, ui64 tabletId) {
-            Record.SetErrorCode(NPersQueue::NErrorCode::EErrorCode::OK);
+            Record.SetStatus(Ydb::StatusIds::SUCCESS);
             Record.SetPartitionId(partitionId);
             Record.SetTabletId(tabletId);
         }
 
-        TEvMLPGetPartitionResponse(NPersQueue::NErrorCode::EErrorCode errorCode) {
-            Record.SetErrorCode(errorCode);
+        TEvMLPGetPartitionResponse(Ydb::StatusIds::StatusCode errorCode) {
+            Record.SetStatus(errorCode);
         }
 
-        NPersQueue::NErrorCode::EErrorCode GetErrorCode() const {
-            return Record.GetErrorCode();
+       Ydb::StatusIds::StatusCode GetStatus() const {
+            return Record.GetStatus();
         }
 
         // The partition which is ready for reading.
@@ -373,17 +373,17 @@ namespace NKikimr::TEvPersQueue {
     struct TEvMLPErrorResponse : TEventPB<TEvMLPErrorResponse, NKikimrPQ::TEvMLPErrorResponse, EvMLPErrorResponse> {
         TEvMLPErrorResponse() = default;
 
-        TEvMLPErrorResponse(NPersQueue::NErrorCode::EErrorCode errorCode, TString&& errorMessage) {
-            Record.SetErrorCode(errorCode);
+        TEvMLPErrorResponse(Ydb::StatusIds::StatusCode errorCode, TString&& errorMessage) {
+            Record.SetStatus(errorCode);
             Record.SetErrorMessage(errorMessage);
         }
 
-        NPersQueue::NErrorCode::EErrorCode GetErrorCode() const {
-            return Record.GetErrorCode();
+        Ydb::StatusIds::StatusCode GetStatus() const {
+            return Record.GetStatus();
         }
 
-        const TString& GetErrorMessage() const {
-            return Record.GetErrorMessage();
+        TString& GetErrorMessage() {
+            return *Record.MutableErrorMessage();
         }
     };
 

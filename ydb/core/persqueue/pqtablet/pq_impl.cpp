@@ -5281,7 +5281,7 @@ template<typename TEventHandle>
 bool TPersQueue::ForwardToPartition(ui32 partitionId, TAutoPtr<TEventHandle>& ev) {
     auto it = Partitions.find(TPartitionId{partitionId});
     if (it == Partitions.end()) {
-        Send(ev->Sender, new TEvPersQueue::TEvMLPErrorResponse(NPersQueue::NErrorCode::EErrorCode::SCHEMA_ERROR,
+        Send(ev->Sender, new TEvPersQueue::TEvMLPErrorResponse(Ydb::StatusIds::SCHEME_ERROR,
             TStringBuilder() <<"Partition " << partitionId << " not found"), 0, ev->Cookie);
         return true;
     }

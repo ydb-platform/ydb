@@ -171,7 +171,7 @@ bool TStorage::CreateSnapshot(NKikimrPQ::TMLPStorageSnapshot& snapshot) {
     return true;
 }
 
-std::pair<ui64, TStorage::TMessage*> TStorage::GetMessage(ui64 offset, EMessageStatus expectedStatus) {
+std::pair<ui64, TStorage::TMessage*> TStorage::GetMessage(ui64 offset) {
     if (offset < FirstOffset) {
         return {0, nullptr};
     }
@@ -182,11 +182,20 @@ std::pair<ui64, TStorage::TMessage*> TStorage::GetMessage(ui64 offset, EMessageS
     }
 
     auto& message = Messages[offsetDelta];
-    if (message.Status != expectedStatus) {
+    return {offsetDelta, &message};
+}
+
+std::pair<ui64, TStorage::TMessage*> TStorage::GetMessage(ui64 offset, EMessageStatus expectedStatus) {
+    auto [offsetDelta, message] = GetMessage(offset);
+    if (!message) {
         return {0, nullptr};
     }
 
-    return {offsetDelta, &message};
+    if (message->Status != expectedStatus) {
+        return {0, nullptr};
+    }
+
+    return {offsetDelta, message};
 }
 
 ui64 TStorage::NormalizeDeadline(TInstant deadline) {
@@ -227,21 +236,33 @@ TMessageId TStorage::DoLock(ui64 offsetDelta, TInstant deadline) {
 }
 
 bool TStorage::DoCommit(ui64 offset) {
-    auto [offsetDelta, message] = GetMessage(offset, EMessageStatus::Locked); // TODO статус может бть любым
+    auto [offsetDelta, message] = GetMessage(offset);
     if (!message) {
         return false;
     }
 
-    message->Status = EMessageStatus::Committed;
-    message->DeadlineDelta = 0;
-
-    if (message->HasMessageGroupId) {
-        if (LockedMessageGroupsId.erase(message->MessageGroupIdHash)) {
-            --Metrics.LockedMessageGroupCount;
-        }
+    switch(message->Status) {
+        case EMessageStatus::Unprocessed:
+            --Metrics.UnprocessedMessageCount;
+            ++Metrics.CommittedMessageCount;
+            break;
+        case EMessageStatus::Locked:
+            --Metrics.LockedMessageCount;
+            if (KeepMessageOrder && message->HasMessageGroupId) {
+                if (LockedMessageGroupsId.erase(message->MessageGroupIdHash)) {
+                    --Metrics.LockedMessageGroupCount;
+                }
+            }
+            ++Metrics.CommittedMessageCount;
+            break;
+        case EMessageStatus::Committed:
+            return false;
+        case EMessageStatus::DLQ:
+            break;
     }
 
-    ++Metrics.CommittedMessageCount;
+    message->Status = EMessageStatus::Committed;
+    message->DeadlineDelta = 0;
 
     UpdateFirstUncommittedOffset();
 
@@ -263,7 +284,7 @@ void TStorage::DoUnlock(TMessage& message, ui64 offset) {
     message.Status = EMessageStatus::Unprocessed;
     message.DeadlineDelta = 0;
 
-    if (message.HasMessageGroupId) {
+    if (KeepMessageOrder && message.HasMessageGroupId) {
         if (LockedMessageGroupsId.erase(message.MessageGroupIdHash)) {
             --Metrics.LockedMessageGroupCount;
         }
@@ -298,6 +319,7 @@ void TStorage::UpdateFirstUncommittedOffset() {
     auto offsetDelta = FirstUncommittedOffset > FirstOffset ? FirstUncommittedOffset - FirstOffset : 0;
     while (offsetDelta < Messages.size() && Messages[offsetDelta].Status == EMessageStatus::Committed) {
         ++FirstUncommittedOffset;
+        ++offsetDelta;
     }
 }
 

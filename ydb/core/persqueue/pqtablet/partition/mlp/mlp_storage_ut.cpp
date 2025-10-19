@@ -123,7 +123,127 @@ Y_UNIT_TEST(NextWithoutKeepMessageOrderStorage) {
     UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 0);
 }
 
+Y_UNIT_TEST(NextWithKeepMessageOrderStorage) {
+    TStorage storage;
+    storage.SetKeepMessageOrder(true);
+    storage.AddMessage(3, true, 5);
 
+    auto result = storage.Next(TInstant::Now() + TDuration::Seconds(1));
+    UNIT_ASSERT(result.has_value());
+    UNIT_ASSERT_VALUES_EQUAL(result->Message, 3);
+    UNIT_ASSERT_VALUES_EQUAL(result->FromOffset, 4);
+
+    auto& metrics = storage.GetMetrics();
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.DeadlineExpiredMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 0);
+}
+
+Y_UNIT_TEST(SkipLockedMessage) {
+    TStorage storage;
+    {
+        storage.AddMessage(3, true, 5);
+        auto result = storage.Next(TInstant::Now() + TDuration::Seconds(1));
+        UNIT_ASSERT(result.has_value());
+    }
+
+    auto result = storage.Next(TInstant::Now() + TDuration::Seconds(1));
+    UNIT_ASSERT_C(!result.has_value(), "The message already locked");
+
+    auto& metrics = storage.GetMetrics();
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.DeadlineExpiredMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 0);
+}
+
+Y_UNIT_TEST(CommitLockedMessage_WithoutKeepMessageOrder) {
+    TStorage storage;
+    {
+        storage.AddMessage(3, true, 5);
+        auto result = storage.Next(TInstant::Now() + TDuration::Seconds(1));
+        UNIT_ASSERT(result.has_value());
+    }
+
+    auto result = storage.Commit(3);
+    UNIT_ASSERT(result);
+
+    auto& metrics = storage.GetMetrics();
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.DeadlineExpiredMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 0);
+}
+
+Y_UNIT_TEST(CommitLockedMessage_WithKeepMessageOrder) {
+    TStorage storage;
+    {
+        storage.SetKeepMessageOrder(true);
+        storage.AddMessage(3, true, 5);
+        auto result = storage.Next(TInstant::Now() + TDuration::Seconds(1));
+        UNIT_ASSERT(result.has_value());
+    }
+
+    auto result = storage.Commit(3);
+    UNIT_ASSERT(result);
+
+    auto& metrics = storage.GetMetrics();
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.DeadlineExpiredMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 0);
+}
+
+Y_UNIT_TEST(CommitUnlockedMessage) {
+    TStorage storage;
+    storage.AddMessage(3, true, 5);
+
+    auto result = storage.Commit(3);
+    UNIT_ASSERT(result);
+
+    auto& metrics = storage.GetMetrics();
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.DeadlineExpiredMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 0);
+}
+
+Y_UNIT_TEST(CommitCommittedMessage) {
+    TStorage storage;
+    {
+        storage.AddMessage(3, true, 5);
+        auto result = storage.Commit(3);
+        UNIT_ASSERT(result);
+    }
+
+    auto result = storage.Commit(3);
+    UNIT_ASSERT(!result);
+
+    auto& metrics = storage.GetMetrics();
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.DeadlineExpiredMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 0);
+}
 
 }
 

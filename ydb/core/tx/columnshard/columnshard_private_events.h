@@ -79,6 +79,8 @@ struct TEvPrivate {
         EvRequestFilter,
         EvFilterRequestResourcesAllocated,
         EvFilterConstructionResult,
+        
+        EvReportScanDiagnostics,
 
         EvEnd
     };
@@ -344,6 +346,25 @@ struct TEvPrivate {
         NOlap::TWritingBuffer& MutableWritesBuffer() {
             return WritesBuffer;
         }
+    };
+    
+    struct TEvReportScanDiagnostics: public TEventLocal<TEvReportScanDiagnostics, EvReportScanDiagnostics> {
+        /*
+        requestMessage, dotGraph, ssaProgram, true
+        */
+        explicit TEvReportScanDiagnostics(const TString& requestMessage, const TString& dotGraph, const TString& ssaProgram, const TString& pkRangesFilter, bool isPublicScan)
+            : RequestMessage(requestMessage)
+            , DotGraph(dotGraph)
+            , SSAProgram(ssaProgram)
+            , PKRangesFilter(pkRangesFilter)
+            , IsPublicScan(isPublicScan) {
+        }
+        
+        TString RequestMessage;
+        TString DotGraph;
+        TString SSAProgram;
+        TString PKRangesFilter;
+        bool IsPublicScan;
     };
 };
 

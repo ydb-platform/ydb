@@ -76,6 +76,16 @@ void TTxInternalScan::Complete(const TActorContext& ctx) {
             }
             readMetadataRange = TValidator::CheckNotNull(newRange.DetachResult());
         }
+
+        auto graphOptional = read.GetProgram().GetGraphOptional();
+        TString dotGraph = graphOptional ? read.GetProgram().GetGraphOptional()->DebugDOT() : "";
+        TString ssaProgram = read.GetProgram().ProtoDebugString();
+        auto requestMessage = request.ToString();
+        auto pkRangesFilter = read.PKRangesFilter->DebugString();
+        if (pkRangesFilter.size() > 1024) {
+            pkRangesFilter = pkRangesFilter.substr(0, 1024) + "...";
+        }
+        ctx.Send(Self->ScanDiagnosticsActorId, std::make_unique<NColumnShard::TEvPrivate::TEvReportScanDiagnostics>(requestMessage, dotGraph, ssaProgram, pkRangesFilter, false));
     }
     TStringBuilder detailedInfo;
     if (IS_LOG_PRIORITY_ENABLED(NActors::NLog::PRI_TRACE, NKikimrServices::TX_COLUMNSHARD_SCAN)) {

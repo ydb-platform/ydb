@@ -4,6 +4,7 @@
 #include <ydb/core/tx/columnshard/engines/reader/actor/actor.h>
 #include <ydb/core/tx/columnshard/engines/reader/plain_reader/constructor/constructor.h>
 #include <ydb/core/tx/columnshard/transactions/locks/read_start.h>
+#include <ydb/core/tx/columnshard/columnshard_private_events.h>
 
 namespace NKikimr::NOlap::NReader {
 
@@ -155,6 +156,12 @@ void TTxScan::Complete(const TActorContext& ctx) {
                 return SendError("cannot build metadata", newRange.GetErrorMessage(), ctx);
             }
         }
+        auto graphOptional = read.GetProgram().GetGraphOptional();
+        TString dotGraph = graphOptional ? read.GetProgram().GetGraphOptional()->DebugDOT() : "";
+        TString ssaProgram = read.GetProgram().ProtoDebugString();
+        auto requestMessage = request.DebugString();
+        auto pkRangesFilter = read.PKRangesFilter->DebugString();
+        ctx.Send(Self->ScanDiagnosticsActorId, std::make_unique<NColumnShard::TEvPrivate::TEvReportScanDiagnostics>(requestMessage, dotGraph, ssaProgram, pkRangesFilter, true));
     }
     AFL_VERIFY(readMetadataRange);
     readMetadataRange->OnBeforeStartReading(*Self);

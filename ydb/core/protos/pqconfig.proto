@@ -1298,8 +1298,8 @@ message TEvMLPReadRequest {
     optional string Topic = 1; // PathId? Нужен для возможности в одной таблетке хранить несколько топиков
     optional string Consumer = 2;
     optional uint32 PartitionId = 3;
-    optional uint64 WaitTimeSeconds = 4; // Максимальное время ожидания данных, если в партиции их нет.
-    optional uint64 VisibilityTimeoutSeconds = 5; // Если к указанному времени не произойдет подтверждения обработки сообщения, то сообщение вернется в очередь (может указывать в настройках консьюмера?)
+    optional uint64 WaitDeadlineMilliseconds = 4;
+    optional uint64 VisibilityDeadlineMilliseconds = 5; // Если к указанному времени не произойдет подтверждения обработки сообщения, то сообщение вернется в очередь (может указывать в настройках консьюмера?)
     // The maximum number of messages to return.
     optional uint32 MaxNumberOfMessages = 6;
 }

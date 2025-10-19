@@ -96,7 +96,7 @@ void TReaderActor::DoRead() {
     LOG_D("Start read");
     Become(&TReaderActor::ReadState);
     SendToTablet(PQTabletId, new TEvPersQueue::TEvMLPReadRequest(Settings.TopicName, Settings.Consumer, PartitionId,
-        Settings.WaitTime, Settings.VisibilityTimeout, Settings.MaxNumberOfMessage));
+        Settings.WaitTime.ToDeadLine(), Settings.VisibilityTimeout.ToDeadLine(), Settings.MaxNumberOfMessage));
 }
 
 void TReaderActor::Handle(TEvPersQueue::TEvMLPReadResponse::TPtr& ev) {
@@ -122,7 +122,7 @@ void TReaderActor::Handle(TEvPersQueue::TEvMLPReadResponse::TPtr& ev) {
 
         response->Messages.push_back(TEvReadResponse::TMessage{
             .MessageId = {PartitionId, message.GetId().GetOffset()},
-            .Codec = static_cast<Ydb::Topic::Codec>(proto.codec() + 1),
+            .Codec = Ydb::Topic::CODEC_RAW, // static_cast<Ydb::Topic::Codec>(proto.codec() + 1),
             .Data = std::move(data) // TODO убрать разжатие
         });
     }

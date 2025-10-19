@@ -393,12 +393,12 @@ namespace NKikimr::TEvPersQueue {
     struct TEvMLPReadRequest : TEventPB<TEvMLPReadRequest, NKikimrPQ::TEvMLPReadRequest, EvMLPReadRequest> {
         TEvMLPReadRequest() = default;
 
-        TEvMLPReadRequest(const TString& topic, const TString& consumer, ui32 partitionId, TDuration waitTime, TDuration visibilityTimeout, ui32 maxNumberOfMessages) {
+        TEvMLPReadRequest(const TString& topic, const TString& consumer, ui32 partitionId, TInstant waitDeadline, TInstant visibilityDeadline, ui32 maxNumberOfMessages) {
             Record.SetTopic(topic);
             Record.SetConsumer(consumer);
             Record.SetPartitionId(partitionId);
-            Record.SetWaitTimeSeconds(waitTime.Seconds());
-            Record.SetVisibilityTimeoutSeconds(visibilityTimeout.Seconds());
+            Record.SetWaitDeadlineMilliseconds(waitDeadline.MilliSeconds());
+            Record.SetVisibilityDeadlineMilliseconds(visibilityDeadline.MilliSeconds());
             Record.SetMaxNumberOfMessages(maxNumberOfMessages);
         }
 
@@ -414,12 +414,12 @@ namespace NKikimr::TEvPersQueue {
             return Record.GetPartitionId();
         }
 
-        TDuration GetWaitTime() const {
-            return TDuration::Seconds(Record.GetWaitTimeSeconds());
+        TInstant GetWaitDeadline() const {
+            return TInstant::MilliSeconds(Record.GetWaitDeadlineMilliseconds());
         }
 
-        TDuration GetVisibilityTimeout() const {
-            return TDuration::Seconds(Record.GetVisibilityTimeoutSeconds());
+        TInstant GetVisibilityDeadline() const {
+            return TInstant::MilliSeconds(Record.GetVisibilityDeadlineMilliseconds());
         }
 
         // The maximum number of messages to return.

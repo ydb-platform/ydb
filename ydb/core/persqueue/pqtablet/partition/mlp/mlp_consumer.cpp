@@ -321,21 +321,20 @@ void TConsumerActor::ProcessEventQueue() {
         LOG_T("AfterDeadlinesDump: " << Storage->DebugString());
     }
 
-    ui64 fromOffset = 0;
-    while (!ReadRequestsQueue.empty()) {
-        auto& ev = ReadRequestsQueue.front();
+    auto now = TInstant::Now();
 
+    ui64 fromOffset = 0;
+    std::deque<TEvPersQueue::TEvMLPReadRequest::TPtr> readRequestsQueue;
+    for (auto& ev : ReadRequestsQueue) {
         size_t count = ev->Get()->GetMaxNumberOfMessages();
-        auto visibilityTimeout = ev->Get()->GetVisibilityTimeout();
-        if (visibilityTimeout == TDuration::Zero()) {
-            visibilityTimeout = TDuration::Seconds(Config.GetDefaultVisibilityTimeoutSeconds());
+        auto visibilityDeadline = ev->Get()->GetVisibilityDeadline();
+        if (visibilityDeadline == TInstant::Zero()) {
+            visibilityDeadline = TDuration::Seconds(Config.GetDefaultVisibilityTimeoutSeconds()).ToDeadLine(now);
         }
-        const auto deadline =  visibilityTimeout.ToDeadLine();
 
         std::deque<TMessageId> messages;
-        //messages.reserve(count);
         for (; count; --count) {
-            auto result = Storage->Next(deadline, fromOffset);
+            auto result = Storage->Next(visibilityDeadline, fromOffset);
             if (!result) {
                 break;
             }
@@ -344,19 +343,20 @@ void TConsumerActor::ProcessEventQueue() {
             fromOffset = result->FromOffset;
         }
 
-        if (messages.empty() && ev->Get()->GetWaitTime() == TDuration::Zero()) {
+        if (messages.empty() && ev->Get()->GetWaitDeadline() <= now) {
             // Optimization: do not need to upload the message body.
             LOG_D("Reply empty result: sender=" << ev->Sender.ToString() << " cookie=" << ev->Cookie);
             Send(ev->Sender, new TEvPersQueue::TEvMLPReadResponse(), 0, ev->Cookie);
-            ReadRequestsQueue.pop_front();
             continue;
         } else if (messages.empty()) {
-            break; // TODO перекладываеть очереди, 0, reply.Cookie
+            readRequestsQueue.push_back(std::move(ev));
+            continue;
         }
 
         PendingReadQueue.emplace_back(ev->Sender, ev->Cookie, std::move(messages));
-        ReadRequestsQueue.pop_front();
     }
+
+    ReadRequestsQueue = std::move(readRequestsQueue);
 
     LOG_T("AfterQueueDump: " << Storage->DebugString());
 

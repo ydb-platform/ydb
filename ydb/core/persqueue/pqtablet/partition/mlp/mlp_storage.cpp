@@ -48,7 +48,7 @@ bool TStorage::Unlock(TMessageId messageId) {
 }
 
 bool TStorage::ChangeMessageDeadline(TMessageId messageId, TInstant deadline) {
-    auto [offsetDelta, message] = GetMessage(messageId, EMessageStatus::Locked);
+    auto* message = GetMessage(messageId, EMessageStatus::Locked);
     if (!message) {
         return false;
     }
@@ -60,7 +60,7 @@ bool TStorage::ChangeMessageDeadline(TMessageId messageId, TInstant deadline) {
 }
 
 TInstant TStorage::GetMessageDeadline(TMessageId messageId) {
-    auto [offsetDelta, message] = GetMessage(messageId, EMessageStatus::Locked);
+    auto* message = GetMessage(messageId, EMessageStatus::Locked);
     if (!message) {
         return TInstant::Zero();
     }
@@ -206,31 +206,30 @@ bool TStorage::CreateSnapshot(NKikimrPQ::TMLPStorageSnapshot& snapshot) {
     return true;
 }
 
-std::pair<ui64, TStorage::TMessage*> TStorage::GetMessage(ui64 offset) {
+TStorage::TMessage* TStorage::GetMessage(ui64 offset) {
     if (offset < FirstOffset) {
-        return {0, nullptr};
+        return nullptr;
     }
 
     auto offsetDelta = offset - FirstOffset;
     if (offsetDelta >= Messages.size()) {
-        return {0, nullptr};
+        return nullptr;
     }
 
-    auto& message = Messages[offsetDelta];
-    return {offsetDelta, &message};
+    return &Messages[offsetDelta];
 }
 
-std::pair<ui64, TStorage::TMessage*> TStorage::GetMessage(ui64 offset, EMessageStatus expectedStatus) {
-    auto [offsetDelta, message] = GetMessage(offset);
+TStorage::TMessage* TStorage::GetMessage(ui64 offset, EMessageStatus expectedStatus) {
+    auto* message = GetMessage(offset);
     if (!message) {
-        return {0, nullptr};
+        return nullptr;
     }
 
     if (message->Status != expectedStatus) {
-        return {0, nullptr};
+        return nullptr;
     }
 
-    return {offsetDelta, message};
+    return message;
 }
 
 ui64 TStorage::NormalizeDeadline(TInstant deadline) {
@@ -272,7 +271,7 @@ TMessageId TStorage::DoLock(ui64 offsetDelta, TInstant deadline) {
 }
 
 bool TStorage::DoCommit(ui64 offset) {
-    auto [offsetDelta, message] = GetMessage(offset);
+    auto* message = GetMessage(offset);
     if (!message) {
         return false;
     }
@@ -306,7 +305,7 @@ bool TStorage::DoCommit(ui64 offset) {
 }
 
 bool TStorage::DoUnlock(ui64 offset) {
-    auto [offsetDelta, message] = GetMessage(offset, EMessageStatus::Locked);
+    auto* message = GetMessage(offset, EMessageStatus::Locked);
     if (!message) {
         return false;
     }

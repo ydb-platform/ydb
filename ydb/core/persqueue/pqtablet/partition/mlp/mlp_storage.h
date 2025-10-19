@@ -101,8 +101,8 @@ public:
 
 private:
     // offsetDelte, TMessage
-    std::pair<ui64, TMessage*> GetMessage(ui64 offset);
-    std::pair<ui64, TMessage*> GetMessage(ui64 offset, EMessageStatus expectedStatus);
+    TMessage* GetMessage(ui64 offset);
+    TMessage* GetMessage(ui64 offset, EMessageStatus expectedStatus);
     ui64 NormalizeDeadline(TInstant deadline);
 
     TMessageId DoLock(ui64 offsetDelta, TInstant deadline);

@@ -27,12 +27,9 @@ std::optional<TStorage::NextResult> TStorage::Next(TInstant deadline, ui64 fromO
                 ++FirstUnlockedOffset;
             }
 
-            ++Metrics.LockedMessageCount;
-            --Metrics.UnprocessedMessageCount;
-
             return NextResult{
                 .Message = DoLock(i, deadline),
-                .FromOffset = FirstOffset + i
+                .FromOffset = FirstOffset + i + 1
             };
         } else if (moveUnlockedOffset) {
             ++FirstUnlockedOffset;
@@ -98,7 +95,13 @@ bool TStorage::Compact() {
 }
 
 void TStorage::AddMessage(ui64 offset, bool hasMessagegroup, ui32 messageGroupIdHash) {
-    AFL_ENSURE(offset == GetLastOffset())("l", offset)("r", GetLastOffset());
+    AFL_ENSURE(offset >= GetLastOffset())("l", offset)("r", GetLastOffset());
+
+    if (Messages.empty()) {
+        FirstOffset = offset;
+        FirstUnlockedOffset = offset;
+        FirstUncommittedOffset = offset;
+    }
 
     Messages.push_back({
         .Status = EMessageStatus::Unprocessed,
@@ -300,6 +303,10 @@ void TStorage::UpdateFirstUncommittedOffset() {
 
 const TStorage::TMetrics& TStorage::GetMetrics() const {
     return Metrics;
+}
+
+ui64 TStorage::GetFirstOffset() const {
+    return FirstOffset;
 }
 
 ui64 TStorage::GetLastOffset() const {

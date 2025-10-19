@@ -61,16 +61,19 @@ public:
 
     struct TMetrics {
         size_t InflyMessageCount = 0;
-        size_t LockedMessageCount = 0;
-        size_t CommittedMessageCount = 0;
-        size_t DLQMessageCount = 0;
-        size_t LockedMessageGroupCount = 0;
-        size_t DeadlineExpiredMessageCount = 0;
         size_t UnprocessedMessageCount = 0;
+        size_t LockedMessageCount = 0;
+        size_t LockedMessageGroupCount = 0;
+        size_t CommittedMessageCount = 0;
+        size_t DeadlineExpiredMessageCount = 0;
+        size_t DLQMessageCount = 0;
     };
 
     void SetKeepMessageOrder(bool keepMessageOrder);
     void SetMaxMessageReceiveCount(ui32 maxMessageReceiveCount);
+
+    ui64 GetFirstOffset() const;
+    ui64 GetLastOffset() const;
 
     // Return next message for client processing.
     // deadline - time for processing visibility
@@ -97,7 +100,6 @@ public:
     bool CreateSnapshot(NKikimrPQ::TMLPStorageSnapshot& snapshot);
 
     const TMetrics& GetMetrics() const;
-    ui64 GetLastOffset() const;
 
 private:
     // offsetDelte, TMessage
@@ -119,11 +121,11 @@ private:
     // Первый загруженный оффсет  для обработки. Все сообщения с меньшим оффсетом либо уже закоммичены, либо удалены из партиции.
     // Как часто двигаем FirstOffset? Когда сохраняем большой блоб. 
     // Как часто сохраняем большой блоб? Если FirstUncommittedOffset больше FirstOffset на 1000 (5000? 10000?) либо все сообщения обработаны и закончились / раз в N секунд.
-    ui64 FirstOffset;
+    ui64 FirstOffset = 0;
     // Первый не закоммиченный оффсет для обработки. Всегда <= LastOffset
-    ui64 FirstUncommittedOffset;
+    ui64 FirstUncommittedOffset = 0;
     // Первый не отданный клиенту для обработки. Всегда <= LastOffset
-    ui64 FirstUnlockedOffset;
+    ui64 FirstUnlockedOffset = 0;
     // Время, от которого отсчитываются delta deadline-ов. Позволяет использовать не ui64, а 15 бит.
     // Недостаток - периодически надо смещать BaseDeadline и пересчитывать текущие дельты.
     // Если клиент не использует большие visisbility timeouts, то пересчет редкий (раз в несколько часов)

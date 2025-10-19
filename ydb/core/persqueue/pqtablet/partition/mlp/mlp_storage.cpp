@@ -106,11 +106,37 @@ bool TStorage::Compact() {
 void TStorage::AddMessage(ui64 offset, bool hasMessagegroup, ui32 messageGroupIdHash) {
     AFL_ENSURE(offset >= GetLastOffset())("l", offset)("r", GetLastOffset());
 
+    while (!Messages.empty() && offset > GetLastOffset()) {
+        auto message = Messages.front();
+
+        --Metrics.InflyMessageCount;
+        switch(message.Status) {
+            case EMessageStatus::Unprocessed:
+                --Metrics.UnprocessedMessageCount;
+                break;
+            case EMessageStatus::Locked:
+                --Metrics.LockedMessageCount;
+                if (KeepMessageOrder && message.HasMessageGroupId && LockedMessageGroupsId.erase(message.MessageGroupIdHash)) {
+                    --Metrics.LockedMessageGroupCount;
+                }
+                break;
+            case EMessageStatus::Committed:
+                --Metrics.CommittedMessageCount;
+                break;
+            case EMessageStatus::DLQ:
+                break;
+        }
+
+        Messages.pop_front();
+        ++FirstOffset;
+    }
+
     if (Messages.empty()) {
         FirstOffset = offset;
-        FirstUnlockedOffset = offset;
-        FirstUncommittedOffset = offset;
     }
+
+    FirstUnlockedOffset = std::max(FirstUnlockedOffset, FirstOffset);
+    FirstUncommittedOffset = std::max(FirstUncommittedOffset, FirstOffset);
 
     Messages.push_back({
         .Status = EMessageStatus::Unprocessed,

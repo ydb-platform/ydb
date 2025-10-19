@@ -482,6 +482,15 @@ Y_UNIT_TEST(CompactStorage) {
     UNIT_ASSERT_VALUES_EQUAL(storage.GetLastOffset(), 7);
     UNIT_ASSERT_VALUES_EQUAL(storage.GetFirstUnlockedOffset(), 4);
     UNIT_ASSERT_VALUES_EQUAL(storage.GetFirstUncommittedOffset(), 4);
+
+    auto& metrics = storage.GetMetrics();
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 3);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 2); // offsets 4 and 6
+    UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 1); // offset 5
+    UNIT_ASSERT_VALUES_EQUAL(metrics.DeadlineExpiredMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 0);
 }
 
 

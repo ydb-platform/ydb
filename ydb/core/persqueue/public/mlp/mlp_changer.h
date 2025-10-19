@@ -100,8 +100,10 @@ private:
         }
 
         for (auto& [partitionId, partitionInfo]: PendingPartitions) {
-            auto* ev = CreateRequest(partitionId, partitionInfo.Offsets);
-            SendToTablet(partitionInfo.TabletId, ev, partitionId);
+            if (!partitionInfo.Error) {
+                auto* ev = CreateRequest(partitionId, partitionInfo.Offsets);
+                SendToTablet(partitionInfo.TabletId, ev, partitionId);
+            }
         }
 
         ReplyIfPossible();

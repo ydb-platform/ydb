@@ -81,6 +81,7 @@ struct TEvPrivate {
         EvFilterConstructionResult,
         
         EvReportScanDiagnostics,
+        EvReportScanIteratorDiagnostics,
 
         EvEnd
     };
@@ -349,19 +350,30 @@ struct TEvPrivate {
     };
     
     struct TEvReportScanDiagnostics: public TEventLocal<TEvReportScanDiagnostics, EvReportScanDiagnostics> {
-        explicit TEvReportScanDiagnostics(TString&& requestMessage, TString&& dotGraph, TString&& ssaProgram, TString&& pkRangesFilter, bool isPublicScan)
+        TEvReportScanDiagnostics(TString&& requestMessage, TString&& dotGraph, TString&& ssaProgram, TString&& pkRangesFilter, bool isPublicScan)
             : RequestMessage(std::move(requestMessage))
             , DotGraph(std::move(dotGraph))
             , SSAProgram(std::move(ssaProgram))
             , PKRangesFilter(std::move(pkRangesFilter))
             , IsPublicScan(isPublicScan) {
         }
-        
+
+        ui64 RequestId = 0;
         TString RequestMessage;
         TString DotGraph;
         TString SSAProgram;
         TString PKRangesFilter;
         bool IsPublicScan;
+    };
+
+    struct TEvReportScanIteratorDiagnostics: public TEventLocal<TEvReportScanIteratorDiagnostics, EvReportScanIteratorDiagnostics> {
+        TEvReportScanIteratorDiagnostics(ui64 requestId,TString&& scanIteratorDiagnostics)
+            : RequestId(requestId)
+            , ScanIteratorDiagnostics(std::move(scanIteratorDiagnostics)) {
+        }
+
+        ui64 RequestId;
+        TString ScanIteratorDiagnostics;
     };
 };
 

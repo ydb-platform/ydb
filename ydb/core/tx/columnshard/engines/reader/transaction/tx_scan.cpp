@@ -63,6 +63,7 @@ void TTxScan::Complete(const TActorContext& ctx) {
         "table", table)("snapshot", snapshot)("tablet", Self->TabletID())("timeout", timeout)("cpu_limits", cpuLimits.DebugString());
 
     TReadMetadataPtr readMetadataRange;
+    std::unique_ptr<NColumnShard::TEvPrivate::TEvReportScanDiagnostics> scanDiagnosticsEvent;
     {
         LOG_S_DEBUG("TTxScan prepare txId: " << txId << " scanId: " << scanId << " at tablet " << Self->TabletID());
 
@@ -161,7 +162,7 @@ void TTxScan::Complete(const TActorContext& ctx) {
         TString ssaProgram = read.GetProgram().ProtoDebugString();
         auto requestMessage = request.DebugString();
         auto pkRangesFilter = read.PKRangesFilter->DebugString();
-        ctx.Send(Self->ScanDiagnosticsActorId, std::make_unique<NColumnShard::TEvPrivate::TEvReportScanDiagnostics>(std::move(requestMessage), std::move(dotGraph), std::move(ssaProgram), std::move(pkRangesFilter), true));
+        scanDiagnosticsEvent = std::make_unique<NColumnShard::TEvPrivate::TEvReportScanDiagnostics>(std::move(requestMessage), std::move(dotGraph), std::move(ssaProgram), std::move(pkRangesFilter), true);
     }
     AFL_VERIFY(readMetadataRange);
     readMetadataRange->OnBeforeStartReading(*Self);
@@ -183,7 +184,9 @@ void TTxScan::Complete(const TActorContext& ctx) {
     TComputeShardingPolicy shardingPolicy;
     AFL_VERIFY(shardingPolicy.DeserializeFromProto(request.GetComputeShardingPolicy()));
 
-    auto scanActorId = ctx.Register(new TColumnShardScan(Self->SelfId(), scanComputeActor, Self->GetStoragesManager(),
+    scanDiagnosticsEvent->RequestId = requestCookie;
+    ctx.Send(Self->ScanDiagnosticsActorId, std::move(scanDiagnosticsEvent));
+    auto scanActorId = ctx.Register(new TColumnShardScan(Self->SelfId(), scanComputeActor, Self->ScanDiagnosticsActorId, Self->GetStoragesManager(),
         Self->DataAccessorsManager.GetObjectPtrVerified(), Self->ColumnDataManager.GetObjectPtrVerified(), shardingPolicy, scanId, txId, scanGen,
         requestCookie, Self->TabletID(), timeout, readMetadataRange, dataFormat, Self->Counters.GetScanCounters(), cpuLimits));
     Self->InFlightReadsTracker.AddScanActorId(requestCookie, scanActorId);

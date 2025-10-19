@@ -3,6 +3,18 @@
 #include <contrib/libs/fmt/include/fmt/format.h>
 
 namespace NKikimr::NColumnShard::NDiagnostics {
+    
+namespace {
+
+void ReplaceAll(TString& str, const TString& from, const TString& to) {
+    size_t start_pos = 0;
+    while((start_pos = str.find(from, start_pos)) != TString::npos) {
+        str.replace(start_pos, from.length(), to);
+        start_pos += to.length();
+    }
+}
+
+}
 
 TScanDiagnosticsActor::TScanDiagnosticsActor()
     : TActor(&TThis::StateMain) {    
@@ -16,12 +28,12 @@ void TScanDiagnosticsActor::Handle(const NMon::TEvRemoteHttpInfo::TPtr& ev) {
     Send(ev->Sender, std::make_unique<NMon::TEvRemoteHttpInfoRes>(htmlResult));
 }
 
-TString TScanDiagnosticsActor::RenderScanDiagnostics(const std::deque<TScanDiagnosticsInfo>& lastScans, const TString& tag) {
+TString TScanDiagnosticsActor::RenderScanDiagnostics(const std::deque<std::shared_ptr<TScanDiagnosticsInfo>>& lastScans, const TString& tag) {
     TStringBuilder htmlResult;
     int i = 0;
     for (auto it = lastScans.rbegin(); it != lastScans.rend(); ++it, i++) {
         const auto& info = *it;
-        htmlResult << RenderScanDiagnosticsInfo(info, i, tag);
+        htmlResult << RenderScanDiagnosticsInfo(*info, i, tag);
     }
     return htmlResult;
 }
@@ -36,6 +48,8 @@ TString TScanDiagnosticsActor::RenderScanDiagnosticsInfo(const TScanDiagnosticsI
         <pre>{pk_ranges_filter}</pre>
         <h4> SSA Program </h4>
         <pre>{ssa_program}</pre>
+        <h4> Scan Iterator </h4>
+        <pre>{scan_iterator}</pre>
         <h4> Program Graph </h4>
         <script>
             Viz.instance().then(function(viz) {{
@@ -54,22 +68,39 @@ TString TScanDiagnosticsActor::RenderScanDiagnosticsInfo(const TScanDiagnosticsI
     "request_message"_a = info.RequestMessage,
     "pk_ranges_filter"_a = info.PKRangesFilter,
     "ssa_program"_a = info.SSAProgram,
-    "dot_graph"_a = info.DotGraph);
+    "dot_graph"_a = info.DotGraph,
+    "scan_iterator"_a = info.ScanIterator);
 }
 
 void TScanDiagnosticsActor::Handle(const NColumnShard::TEvPrivate::TEvReportScanDiagnostics::TPtr& ev) {
     auto& event = *ev->Get();
-    TScanDiagnosticsInfo info(std::move(event.RequestMessage), std::move(event.DotGraph), std::move(event.SSAProgram), std::move(event.PKRangesFilter));
+    auto info = std::make_shared<TScanDiagnosticsInfo>(event.RequestId, std::move(event.RequestMessage), std::move(event.DotGraph), std::move(event.SSAProgram), std::move(event.PKRangesFilter));
     if (event.IsPublicScan) {
-        AddScanDiagnostics(std::move(info), LastPublicScans);
+        AddScanDiagnostics(info, LastPublicScans);
     } else {
-        AddScanDiagnostics(std::move(info), LastInternalScans);
+        AddScanDiagnostics(info, LastInternalScans);
     }
 }
 
-void TScanDiagnosticsActor::AddScanDiagnostics(TScanDiagnosticsInfo&& info, std::deque<TScanDiagnosticsInfo>& lastScans) {
-    lastScans.emplace_back(std::move(info));
+void TScanDiagnosticsActor::Handle(const NColumnShard::TEvPrivate::TEvReportScanIteratorDiagnostics::TPtr& ev) {
+    auto& event = *ev->Get();
+    auto it = RequestToInfo.find(event.RequestId);
+    if (it == RequestToInfo.end()) {
+        return;
+    }
+    ReplaceAll(event.ScanIteratorDiagnostics, ";;", ";");
+    ReplaceAll(event.ScanIteratorDiagnostics, ");", ");\n");
+    ReplaceAll(event.ScanIteratorDiagnostics, ";};", ";};\n");
+    ReplaceAll(event.ScanIteratorDiagnostics, "steps:{", "steps:\n{");
+    it->second->ScanIterator = std::move(event.ScanIteratorDiagnostics);
+}
+
+void TScanDiagnosticsActor::AddScanDiagnostics(const std::shared_ptr<TScanDiagnosticsInfo>& info, std::deque<std::shared_ptr<TScanDiagnosticsInfo>>& lastScans) {
+    lastScans.emplace_back(info);
+    RequestToInfo[info->RequestId] = lastScans.back();
     if (lastScans.size() > MaxScans) {
+        ui64 requestId = lastScans.front()->RequestId;
+        RequestToInfo.erase(requestId);
         lastScans.pop_front();
     }
 }

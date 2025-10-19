@@ -72,6 +72,7 @@ private:
 
     bool FetchInProgress = false;
     ui64 FetchCookie = 0;
+    ui64 LastCommittedOffset = 0;
 
     std::unique_ptr<TStorage> Storage;
 

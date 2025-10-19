@@ -216,6 +216,8 @@ void TConsumerActor::HandleOnWrite(TEvKeyValue::TEvResponse::TPtr& ev) {
     LOG_D("Snapshot persisted");
     Become(&TConsumerActor::StateWork);
 
+    Commit();
+
     if (!PendingReadQueue.empty()) {
         auto msgs = std::exchange(PendingReadQueue, {});
         RegisterWithSameMailbox(new TMessageEnricherActor(PartitionId, PartitionActorId, Config.GetName(), std::move(msgs))); // TODO excahnge
@@ -226,12 +228,17 @@ void TConsumerActor::HandleOnWrite(TEvKeyValue::TEvResponse::TPtr& ev) {
 
     ProcessEventQueue();
     FetchMessagesIfNeeded();
-
-    // TODO commit offset
 }
 
 void TConsumerActor::Commit() {
-
+    auto offset = Storage->GetFirstUncommittedOffset();
+    LOG_D("Try commit offset: " << offset << " vs " << LastCommittedOffset);
+    if (LastCommittedOffset != offset) {
+        auto ev = std::make_unique<TEvPQ::TEvSetClientInfo>(0, Config.GetName(), offset,
+            TString{}, 0, 0, 0, TActorId{});
+        Send(PartitionActorId, std::move(ev));
+        LastCommittedOffset = offset;
+    }
 }
 
 STFUNC(TConsumerActor::StateWork) {

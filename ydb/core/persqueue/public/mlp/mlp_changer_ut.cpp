@@ -65,13 +65,17 @@ Y_UNIT_TEST(CommitTest) {
     auto setup = CreateSetup();
 
     CreateTopic(setup, "/Root/topic1", "mlp-consumer");
+    setup->Write("/Root/topic1", "msg-1", 0);
+    setup->Write("/Root/topic1", "msg-2", 0);
+
+    Sleep(TDuration::Seconds(2));
     
     auto& runtime = setup->GetRuntime();
     CreateCommitterActor(runtime, {
         .DatabasePath = "/Root",
         .TopicName = "/Root/topic1",
         .Consumer = "mlp-consumer",
-        .Messages = { TMessageId(0, 17) }
+        .Messages = { TMessageId(0, 0) }
     });
 
     auto result = GetChangeResponse(runtime);
@@ -79,8 +83,11 @@ Y_UNIT_TEST(CommitTest) {
     UNIT_ASSERT_VALUES_EQUAL(result->Status, Ydb::StatusIds::SUCCESS);
     UNIT_ASSERT_VALUES_EQUAL(result->Messages.size(), 1);
     UNIT_ASSERT_VALUES_EQUAL(result->Messages[0].MessageId.PartitionId, 0);
-    UNIT_ASSERT_VALUES_EQUAL(result->Messages[0].MessageId.Offset, 17);
+    UNIT_ASSERT_VALUES_EQUAL(result->Messages[0].MessageId.Offset, 0);
     UNIT_ASSERT_VALUES_EQUAL(result->Messages[0].Success, true);
+
+    auto describe = setup->DescribeConsumer("/Root/topic1", "mlp-consumer");
+    UNIT_ASSERT_VALUES_EQUAL(describe.GetPartitions()[0].GetPartitionConsumerStats()->GetCommittedOffset(), 1);
 }
 
 Y_UNIT_TEST(ReadAndReleaseTest) {

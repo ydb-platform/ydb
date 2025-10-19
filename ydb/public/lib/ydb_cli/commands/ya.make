@@ -11,6 +11,7 @@ SRCS(
     topic_write_scenario.cpp
     topic_readwrite_scenario.cpp
     ydb_admin.cpp
+    ydb_ai.cpp
     ydb_benchmark.cpp
     ydb_bridge.cpp
     ydb_cluster.cpp
@@ -57,6 +58,7 @@ PEERDIR(
     ydb/public/lib/ydb_cli/commands/sdk_core_access
     ydb/public/lib/ydb_cli/commands/topic_workload
     ydb/public/lib/ydb_cli/commands/transfer_workload
+    ydb/public/lib/ydb_cli/commands/ydb_ai
     ydb/public/lib/ydb_cli/commands/ydb_discovery
     ydb/public/lib/ydb_cli/common
     ydb/public/lib/ydb_cli/dump
@@ -92,5 +94,6 @@ RECURSE(
     sdk_core_access
     topic_workload
     transfer_workload
+    ydb_ai
     ydb_discovery
 )

@@ -245,6 +245,90 @@ Y_UNIT_TEST(CommitCommittedMessage) {
     UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 0);
 }
 
+
+
+Y_UNIT_TEST(UnlockLockedMessage_WithoutKeepMessageOrder) {
+    TStorage storage;
+    {
+        storage.AddMessage(3, true, 5);
+        auto result = storage.Next(TInstant::Now() + TDuration::Seconds(1));
+        UNIT_ASSERT(result.has_value());
+    }
+
+    auto result = storage.Unlock(3);
+    UNIT_ASSERT(result);
+
+    auto& metrics = storage.GetMetrics();
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.DeadlineExpiredMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 0);
+}
+
+Y_UNIT_TEST(UnlockLockedMessage_WithKeepMessageOrder) {
+    TStorage storage;
+    {
+        storage.SetKeepMessageOrder(true);
+        storage.AddMessage(3, true, 5);
+        auto result = storage.Next(TInstant::Now() + TDuration::Seconds(1));
+        UNIT_ASSERT(result.has_value());
+    }
+
+    auto result = storage.Unlock(3);
+    UNIT_ASSERT(result);
+
+    auto& metrics = storage.GetMetrics();
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.DeadlineExpiredMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 0);
+}
+
+Y_UNIT_TEST(UnlockUnlockedMessage) {
+    TStorage storage;
+    storage.AddMessage(3, true, 5);
+
+    auto result = storage.Unlock(3);
+    UNIT_ASSERT(!result);
+
+    auto& metrics = storage.GetMetrics();
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.DeadlineExpiredMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 0);
+}
+
+Y_UNIT_TEST(UnlockCommittedMessage) {
+    TStorage storage;
+    {
+        storage.AddMessage(3, true, 5);
+        auto result = storage.Commit(3);
+        UNIT_ASSERT(result);
+    }
+
+    auto result = storage.Unlock(3);
+    UNIT_ASSERT(!result);
+
+    auto& metrics = storage.GetMetrics();
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.DeadlineExpiredMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 0);
+}
+
+
 }
 
 } // namespace NKikimr::NPQ::NMLP

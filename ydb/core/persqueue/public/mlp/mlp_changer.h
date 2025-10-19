@@ -32,7 +32,12 @@ public:
         DoDescribe();
     }
 
-    void PassAway() override;
+    void PassAway() override {
+        if (ChildActorId) {
+            TBase::Send(ChildActorId, new TEvents::TEvPoison());
+        }
+        TBase::Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvUnlink(0));
+    }
 
 private:
 

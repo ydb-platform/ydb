@@ -1,118 +1,14 @@
-#include "mlp.h"
-
-#include <library/cpp/testing/unittest/registar.h>
-#include <ydb/core/persqueue/events/global.h>
-#include <ydb/core/testlib/tenant_runtime.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
-#include <ydb/public/sdk/cpp/src/client/topic/ut/ut_utils/topic_sdk_test_setup.h>
-
+#include <ydb/core/persqueue/public/mlp/ut/common.h>
 
 namespace NKikimr::NPQ::NMLP {
 
-using namespace NPersQueue;
-
-using namespace NYdb;
-using namespace NYdb::NQuery;
-using namespace NYdb::NTopic;
-using namespace NYdb::NTopic::NTests;
-
 Y_UNIT_TEST_SUITE(TMLPReaderTests) {
 
-    auto CreateSetup() {
-        auto setup = std::make_shared<TTopicSdkTestSetup>("TODO");
-        setup->GetServer().EnableLogs({
-                NKikimrServices::PQ_MLP_READER,
-                NKikimrServices::PQ_MLP_CONSUMER,
-                NKikimrServices::PQ_MLP_ENRICHER,
-                NKikimrServices::PERSQUEUE,
-                NKikimrServices::PERSQUEUE_READ_BALANCER,
-            },
-            NActors::NLog::PRI_DEBUG
-        );
-        return setup;
-    }
-
-    void ExecuteDDL(TTopicSdkTestSetup& setup, const TString& query) {
-        TDriver driver(setup.MakeDriverConfig());
-        TQueryClient client(driver);
-        auto session = client.GetSession().GetValueSync().GetSession();
-
-        Cerr << "DDL: " << query << Endl << Flush;
-        auto res = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
-        UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
-
-        driver.Stop(true);
-    }
-
-    void CreateTopic(std::shared_ptr<TTopicSdkTestSetup>& setup, const TString& topicName, const TString& consumerName) {
-        auto driver = TDriver(setup->MakeDriverConfig());
-        auto client = TTopicClient(driver);
-
-        const auto settings = NYdb::NTopic::TCreateTopicSettings()
-                .BeginAddConsumer()
-                    .ConsumerName(consumerName)
-                    .AddAttribute("_mlp", "1")
-                .EndAddConsumer();
-        client.CreateTopic(topicName, settings);
-
-        setup->GetServer().WaitInit(GetTopicPath(topicName));
-    }
-
-    TActorId CreateActor(NActors::TTestActorRuntime& runtime, TReaderSettings&& settings) {
-        auto edgeId = runtime.AllocateEdgeActor();
-        auto readerId = runtime.Register(CreateReader(edgeId, std::move(settings)));
-        runtime.EnableScheduleForActor(readerId);
-        runtime.DispatchEvents();
-
-        return readerId;
-    }
-
-    THolder<TEvPersQueue::TEvMLPReadResponse> WaitResult(NActors::TTestActorRuntime& runtime) {
-        return runtime.GrabEdgeEvent<TEvPersQueue::TEvMLPReadResponse>();
-    }
-
-    void AssertError(NActors::TTestActorRuntime& runtime, ::NPersQueue::NErrorCode::EErrorCode errorCode, const TString& message, TDuration timeout = TDuration::Seconds(5)) {
-        TAutoPtr<IEventHandle> handle;
-        auto [error, read] = runtime.GrabEdgeEvents<TEvPersQueue::TEvMLPErrorResponse, TEvPersQueue::TEvMLPReadResponse>(handle,timeout);
-
-        if (error) {
-            UNIT_ASSERT_VALUES_EQUAL_C(::NPersQueue::NErrorCode::EErrorCode_Name(error->GetErrorCode()),
-                ::NPersQueue::NErrorCode::EErrorCode_Name(errorCode), error->GetErrorMessage());
-            UNIT_ASSERT_VALUES_EQUAL(error->GetErrorMessage(), message);
-        } else if (read) {
-            UNIT_FAIL("Unexpected read result");
-        } else {
-            UNIT_FAIL("Timeout");
-        }
-    }
-
-    NKikimrPQ::TEvMLPReadResponse GetReadResonse(NActors::TTestActorRuntime& runtime, TActorId actorId, TDuration timeout = TDuration::Seconds(5)) {
-        while(true) {
-            TAutoPtr<IEventHandle> handle;
-            auto [error, read] = runtime.GrabEdgeEvents<TEvPersQueue::TEvMLPErrorResponse, TEvPersQueue::TEvMLPReadResponse>(handle,timeout);
-
-            if (handle->Sender != actorId) {
-                continue;
-            }
-
-            if (error) {
-                UNIT_FAIL("Unexpected error: " << ::NPersQueue::NErrorCode::EErrorCode_Name(error->GetErrorCode())
-                    << " " << error->GetErrorMessage());
-            } else if (read) {
-                return read->Record;
-            } else {
-                UNIT_FAIL("Timeout");
-            }
-
-            return {};
-        }
-    }
-
-    Y_UNIT_TEST(TopicNotExistsConsumer) {
+    Y_UNIT_TEST(TopicNotExists) {
         auto setup = CreateSetup();
         
         auto& runtime = setup->GetRuntime();
-        CreateActor(runtime, {
+        CreateReaderActor(runtime, {
             .DatabasePath = "/Root",
             .TopicName = "/Root/topic_not_exists",
             .Consumer = "consumer_not_exists"
@@ -128,7 +24,7 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
         ExecuteDDL(*setup, "CREATE TOPIC topic1");
 
         auto& runtime = setup->GetRuntime();
-        CreateActor(runtime, {
+        CreateReaderActor(runtime, {
             .DatabasePath = "/Root",
             .TopicName = "/Root/topic1",
             .Consumer = "consumer_not_exists"
@@ -144,7 +40,7 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
         CreateTopic(setup, "/Root/topic1", "mlp-consumer");
 
         auto& runtime = setup->GetRuntime();
-        auto actorId = CreateActor(runtime, {
+        auto actorId = CreateReaderActor(runtime, {
             .DatabasePath = "/Root",
             .TopicName = "/Root/topic1",
             .Consumer = "mlp-consumer"
@@ -161,7 +57,7 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
         setup->Write("/Root/topic1", "msg-1", 0);
 
         auto& runtime = setup->GetRuntime();
-        auto actorId = CreateActor(runtime, {
+        auto actorId = CreateReaderActor(runtime, {
             .DatabasePath = "/Root",
             .TopicName = "/Root/topic1",
             .Consumer = "mlp-consumer",
@@ -186,7 +82,7 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
         Sleep(TDuration::Seconds(2));
 
         {
-            auto actorId = CreateActor(runtime, {
+            auto actorId = CreateReaderActor(runtime, {
                 .DatabasePath = "/Root",
                 .TopicName = "/Root/topic1",
                 .Consumer = "mlp-consumer",
@@ -202,7 +98,7 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
         }
 
         {
-            auto actorId = CreateActor(runtime, {
+            auto actorId = CreateReaderActor(runtime, {
                 .DatabasePath = "/Root",
                 .TopicName = "/Root/topic1",
                 .Consumer = "mlp-consumer",
@@ -217,7 +113,7 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
         }
 
         {
-            auto actorId = CreateActor(runtime, {
+            auto actorId = CreateReaderActor(runtime, {
                 .DatabasePath = "/Root",
                 .TopicName = "/Root/topic1",
                 .Consumer = "mlp-consumer",
@@ -231,7 +127,7 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
         }
 
         {
-            auto actorId = CreateActor(runtime, {
+            auto actorId = CreateReaderActor(runtime, {
                 .DatabasePath = "/Root",
                 .TopicName = "/Root/topic1",
                 .Consumer = "mlp-consumer",

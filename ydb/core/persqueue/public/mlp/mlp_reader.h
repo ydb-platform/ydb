@@ -18,7 +18,7 @@ public:
 
     void Bootstrap();
     void PassAway() override;
-    TString BuildLogPrefix() const override;
+    //TString BuildLogPrefix() const override;
 
 private:
 

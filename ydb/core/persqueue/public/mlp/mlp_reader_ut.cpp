@@ -89,7 +89,7 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
                 .TopicName = "/Root/topic1",
                 .Consumer = "mlp-consumer",
                 .WaitTime = TDuration::Seconds(1),
-                .VisibilityTimeout = TDuration::Seconds(5),
+                .VisibilityTimeout = TDuration::Seconds(2),
                 .MaxNumberOfMessage = 2
             });
 
@@ -104,9 +104,9 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
                 .DatabasePath = "/Root",
                 .TopicName = "/Root/topic1",
                 .Consumer = "mlp-consumer",
-                .WaitTime = TDuration::Seconds(1),
+                .WaitTime = TDuration::Seconds(0),
                 .VisibilityTimeout = TDuration::Seconds(5),
-                .MaxNumberOfMessage = 2
+                .MaxNumberOfMessage = 10
             });
 
             auto response = GetReadResponse(runtime);
@@ -127,6 +127,8 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
             auto response = GetReadResponse(runtime);
             UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 0);
         }
+
+        Sleep(TDuration::Seconds(2));
 
         {
             CreateReaderActor(runtime, {

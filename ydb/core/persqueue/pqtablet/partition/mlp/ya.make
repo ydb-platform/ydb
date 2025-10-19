@@ -17,6 +17,9 @@ PEERDIR(
     ydb/core/persqueue/public/write_meta
 )
 
+
+GENERATE_ENUM_SERIALIZATION(mlp_storage.h)
+
 END()
 
 RECURSE_FOR_TESTS(

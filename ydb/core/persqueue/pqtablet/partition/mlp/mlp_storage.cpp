@@ -80,7 +80,7 @@ size_t TStorage::ProccessDeadlines() {
 
     for (size_t i = 0; i < Messages.size(); ++i) {
         auto& message = Messages[i];
-        if (message.Status == EMessageStatus::Locked && message.DeadlineDelta > deadlineDelta) {
+        if (message.Status == EMessageStatus::Locked && message.DeadlineDelta < deadlineDelta) {
             DoUnlock(message, FirstOffset + i);
             ++count;
 
@@ -267,7 +267,11 @@ ui64 TStorage::NormalizeDeadline(TInstant deadline) {
     auto deadlineDelta = deadlineDuration.Seconds() + (deadlineDuration.MilliSecondsOfSecond() ? 1 : 0);
     if (deadlineDelta >= MaxDeadlineDelta) {
         UpdateDeltas();
-        deadlineDelta = std::min((deadline - BaseDeadline).Seconds(), MaxDeadlineDelta - 1);
+        if (deadline <= BaseDeadline) {
+            deadlineDelta = 0;
+        } else {
+            deadlineDelta = std::min((deadline - BaseDeadline).Seconds(), MaxDeadlineDelta - 1);
+        }
     }
 
     return deadlineDelta;
@@ -278,9 +282,7 @@ TMessageId TStorage::DoLock(ui64 offsetDelta, TInstant deadline) {
     AFL_VERIFY(message.Status == EMessageStatus::Unprocessed)("status", message.Status);
     message.Status = EMessageStatus::Locked;
 
-    auto deadlineDelta = NormalizeDeadline(deadline);
- 
-    message.DeadlineDelta = deadlineDelta;
+    message.DeadlineDelta = NormalizeDeadline(deadline);
     ++message.ReceiveCount;
 
     if (KeepMessageOrder && message.HasMessageGroupId) {
@@ -408,6 +410,24 @@ ui64 TStorage::GetFirstUnlockedOffset() const {
 
 TInstant TStorage::GetBaseDeadline() const {
     return BaseDeadline;
+}
+
+TString TStorage::DebugString() const {
+    TStringBuilder sb;
+    sb << "FirstOffset: " << FirstOffset
+         << " FirstUncommittedOffset: " << FirstUncommittedOffset
+         << " FirstUnlockedOffset: " << FirstUnlockedOffset
+         << " BaseDeadline: " << BaseDeadline.ToString()
+         << " Messages: [";
+
+    for (size_t i = 0; i < Messages.size(); ++i) {
+        sb << "{" << (FirstOffset + i) << ", "
+            << static_cast<EMessageStatus>(Messages[i].Status) << ", "
+            << Messages[i].DeadlineDelta << "} ";
+    }
+
+    sb << "]";
+    return sb;
 }
 
 } // namespace NKikimr::NPQ::NMLP

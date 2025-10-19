@@ -20,7 +20,7 @@ std::unique_ptr<TEvPQ::TEvRead> MakeEvRead(
         count,
         TString{},
         consumerName,
-        1000,
+        0,
         std::numeric_limits<ui32>::max(),
         0,
         0,

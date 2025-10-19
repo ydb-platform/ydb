@@ -172,8 +172,6 @@ void TConsumerActor::HandleOnInit(TEvKeyValue::TEvResponse::TPtr& ev) {
             return Restart(TStringBuilder() << "Received KV response error on initialization: " << readResult.GetStatus());
     }
 
-
-    Storage->ProccessDeadlines();
     if (!FetchMessagesIfNeeded()) {
         LOG_D("Initialized");
         Become(&TConsumerActor::StateWork);
@@ -311,6 +309,11 @@ void TConsumerActor::ProcessEventQueue() {
     }
     ChangeMessageDeadlineRequestsQueue.clear();
 
+    if (!ReadRequestsQueue.empty()) {
+        Storage->ProccessDeadlines();
+        LOG_T("AfterDeadlinesDump: " << Storage->DebugString());
+    }
+
     ui64 fromOffset = 0;
     while (!ReadRequestsQueue.empty()) {
         auto& ev = ReadRequestsQueue.front();
@@ -347,6 +350,8 @@ void TConsumerActor::ProcessEventQueue() {
         PendingReadQueue.emplace_back(ev->Sender, ev->Cookie, std::move(messages));
         ReadRequestsQueue.pop_front();
     }
+
+    LOG_T("AfterQueueDump: " << Storage->DebugString());
 
     if (PendingCommitQueue.empty() && PendingUnlockQueue.empty() &&
         PendingChangeMessageDeadlineQueue.empty() && PendingReadQueue.empty()) {
@@ -453,15 +458,13 @@ void TConsumerActor::Handle(TEvPQ::TEvError::TPtr& ev) {
 }
 
 void TConsumerActor::HandleOnWork(TEvents::TEvWakeup::TPtr&) {
-    auto expiredCount = Storage->ProccessDeadlines();
-    LOG_D("Expired " << expiredCount << " messages");
-
     FetchMessagesIfNeeded();
     ProcessEventQueue();
     Schedule(WakeupInterval, new TEvents::TEvWakeup());
 }
 
 void TConsumerActor::Handle(TEvents::TEvWakeup::TPtr&) {
+    LOG_D("Handle TEvents::TEvWakeup");
     Schedule(WakeupInterval, new TEvents::TEvWakeup());
 }
 

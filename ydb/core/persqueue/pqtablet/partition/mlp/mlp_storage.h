@@ -102,6 +102,8 @@ public:
 
     const TMetrics& GetMetrics() const;
 
+    TString DebugString() const;
+
 private:
     // offsetDelte, TMessage
     TMessage* GetMessage(ui64 offset);

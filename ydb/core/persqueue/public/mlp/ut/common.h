@@ -78,6 +78,15 @@ inline TActorId CreateCommitterActor(NActors::TTestActorRuntime& runtime, TCommi
     return readerId;
 }
 
+inline TActorId CreateMessageDeadlineChangerActor(NActors::TTestActorRuntime& runtime, TMessageDeadlineChangerSettings&& settings) {
+    auto edgeId = runtime.AllocateEdgeActor();
+    auto readerId = runtime.Register(CreateMessageDeadlineChanger(edgeId, std::move(settings)));
+    runtime.EnableScheduleForActor(readerId);
+    runtime.DispatchEvents();
+
+    return readerId;
+}
+
 inline THolder<TEvPersQueue::TEvMLPReadResponse> WaitResult(NActors::TTestActorRuntime& runtime) {
     return runtime.GrabEdgeEvent<TEvPersQueue::TEvMLPReadResponse>();
 }

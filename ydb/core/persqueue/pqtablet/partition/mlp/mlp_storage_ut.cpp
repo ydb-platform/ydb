@@ -1,6 +1,7 @@
 #include "mlp_storage.h"
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <ydb/core/protos/pqconfig.pb.h>
 
 namespace NKikimr::NPQ::NMLP {
 
@@ -375,6 +376,89 @@ Y_UNIT_TEST(ChangeDeadlineUnlockedMessage) {
 
     auto deadline = storage.GetMessageDeadline(3);
     UNIT_ASSERT_VALUES_EQUAL(deadline, TInstant::Zero());
+}
+
+Y_UNIT_TEST(EmptyStorageSerialization) {
+    NKikimrPQ::TMLPStorageSnapshot snapshot;
+
+    {
+        TStorage storage(CreateDefaultTimeProvider());
+
+        storage.CreateSnapshot(snapshot);
+
+        UNIT_ASSERT_VALUES_EQUAL(snapshot.GetFormatVersion(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(snapshot.GetMeta().GetFirstOffset(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(snapshot.GetMeta().GetFirstUncommittedOffset(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(snapshot.GetMeta().GetBaseDeadlineMilliseconds(), storage.GetBaseDeadline().MilliSeconds());
+        UNIT_ASSERT_VALUES_EQUAL(snapshot.GetMessages().size(), 0);
+    }
+    {
+        TStorage storage(CreateDefaultTimeProvider());
+
+        storage.InitializeFromSnapshot(snapshot);
+
+        UNIT_ASSERT_VALUES_EQUAL(storage.GetFirstOffset(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(storage.GetLastOffset(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(storage.GetFirstUnlockedOffset(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(storage.GetFirstUncommittedOffset(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(storage.GetBaseDeadline().MilliSeconds(), snapshot.GetMeta().GetBaseDeadlineMilliseconds());
+
+        auto& metrics = storage.GetMetrics();
+        UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 0);
+        UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 0);
+        UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 0);
+        UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
+        UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 0);
+        UNIT_ASSERT_VALUES_EQUAL(metrics.DeadlineExpiredMessageCount, 0);
+        UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 0);
+    }
+}
+
+Y_UNIT_TEST(StorageSerialization) {
+    NKikimrPQ::TMLPStorageSnapshot snapshot;
+
+    {
+        TStorage storage(CreateDefaultTimeProvider());
+        storage.SetKeepMessageOrder(true);
+
+        storage.AddMessage(3, true, 5);
+        storage.AddMessage(4, true, 7);
+        storage.AddMessage(5, true, 11);
+        storage.AddMessage(6, true, 13);
+
+        storage.Commit(3);
+        storage.Next(TInstant::Now() + TDuration::Seconds(1));
+        storage.Commit(5);
+
+        storage.CreateSnapshot(snapshot);
+
+        UNIT_ASSERT_VALUES_EQUAL(snapshot.GetFormatVersion(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(snapshot.GetMeta().GetFirstOffset(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(snapshot.GetMeta().GetFirstUncommittedOffset(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(snapshot.GetMeta().GetBaseDeadlineMilliseconds(), storage.GetBaseDeadline().MilliSeconds());
+        UNIT_ASSERT(snapshot.GetMessages().size() > 0);
+    }
+    {
+        TStorage storage(CreateDefaultTimeProvider());
+        storage.SetKeepMessageOrder(true);
+
+        storage.InitializeFromSnapshot(snapshot);
+
+        UNIT_ASSERT_VALUES_EQUAL(storage.GetFirstOffset(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(storage.GetLastOffset(), 7);
+        UNIT_ASSERT_VALUES_EQUAL(storage.GetFirstUnlockedOffset(), 6);
+        UNIT_ASSERT_VALUES_EQUAL(storage.GetFirstUncommittedOffset(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(storage.GetBaseDeadline().MilliSeconds(), snapshot.GetMeta().GetBaseDeadlineMilliseconds());
+
+        auto& metrics = storage.GetMetrics();
+        UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 4);
+        UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 1);
+        UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 1);
+        UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 1);
+        UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 2);
+        UNIT_ASSERT_VALUES_EQUAL(metrics.DeadlineExpiredMessageCount, 0);
+        UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 0);
+    }
 }
 
 

@@ -70,6 +70,9 @@ public:
 
     ui64 GetFirstOffset() const;
     ui64 GetLastOffset() const;
+    ui64 GetFirstUncommittedOffset() const;
+    ui64 GetFirstUnlockedOffset() const;
+    TInstant GetBaseDeadline() const;
 
     // Return next message for client processing.
     // deadline - time for processing visibility

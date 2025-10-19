@@ -8,6 +8,7 @@ namespace NKikimr::NPQ::NMLP {
 TStorage::TStorage(TIntrusivePtr<ITimeProvider> timeProvider)
     : TimeProvider(timeProvider)
 {
+    BaseDeadline = timeProvider->Now();
 }
 
 void TStorage::SetKeepMessageOrder(bool keepMessageOrder) {
@@ -162,8 +163,12 @@ bool TStorage::InitializeFromSnapshot(const NKikimrPQ::TMLPStorageSnapshot& snap
 
     auto& meta = snapshot.GetMeta();
     FirstOffset = meta.GetFirstOffset();
-    FirstUncommittedOffset = meta.GetFirstUncommittedOffset();
+    FirstUncommittedOffset = FirstOffset;
+    FirstUnlockedOffset = FirstOffset;
     BaseDeadline = TInstant::MilliSeconds(meta.GetBaseDeadlineMilliseconds());
+
+    bool moveUnlockedOffset = true;
+    bool moveUncommittedOffset = true;
 
     const TMessage* ptr = reinterpret_cast<const TMessage*>(snapshot.GetMessages().data());
     for (size_t i = 0; i < Messages.size(); ++i) {
@@ -176,14 +181,26 @@ bool TStorage::InitializeFromSnapshot(const NKikimrPQ::TMLPStorageSnapshot& snap
                     LockedMessageGroupsId.insert(message.MessageGroupIdHash);
                     ++Metrics.LockedMessageGroupCount;
                 }
+                moveUncommittedOffset = false;
                 break;
             case EMessageStatus::Committed:
                 ++Metrics.CommittedMessageCount;
                 break;
             case EMessageStatus::Unprocessed:
                 ++Metrics.UnprocessedMessageCount;
+                moveUnlockedOffset = false;
+                moveUncommittedOffset = false;
                 break;
-
+            case EMessageStatus::DLQ:
+                moveUncommittedOffset = false;
+                break;
+        }
+    
+        if (moveUnlockedOffset) {
+            ++FirstUnlockedOffset;
+        }
+        if (moveUncommittedOffset) {
+            ++FirstUncommittedOffset;
         }
     }
 
@@ -375,4 +392,16 @@ ui64 TStorage::GetLastOffset() const {
     return FirstOffset + Messages.size();
 }
 
+ui64 TStorage::GetFirstUncommittedOffset() const {
+    return FirstUncommittedOffset;
 }
+
+ui64 TStorage::GetFirstUnlockedOffset() const {
+    return FirstUnlockedOffset;
+}
+
+TInstant TStorage::GetBaseDeadline() const {
+    return BaseDeadline;
+}
+
+} // namespace NKikimr::NPQ::NMLP

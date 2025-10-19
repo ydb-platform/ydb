@@ -3933,9 +3933,9 @@
                     "Body": 1,
                     "DataCenter": 49,
                     "DataCenterId": "1",
-                    "Location": "DC=1/M=/R=1/U=1/",
+                    "Location": "DC=1/M=1/R=1/U=1/",
                     "Rack": 1,
-                    "Room": 0
+                    "Room": 1
                 },
                 "Port": "not-zero-number",
                 "ResolveHost": "text"
@@ -3950,7 +3950,7 @@
                     "Body": 0,
                     "DataCenter": 0,
                     "DataCenterId": "",
-                    "Location": "DC=/M=/R=/U=0/",
+                    "Location": "DC=/R=/U=0/",
                     "Rack": 0,
                     "Room": 0
                 },
@@ -3967,7 +3967,7 @@
                     "Body": 0,
                     "DataCenter": 0,
                     "DataCenterId": "",
-                    "Location": "DC=/M=/R=/U=0/",
+                    "Location": "DC=/R=/U=0/",
                     "Rack": 0,
                     "Room": 0
                 },
@@ -3984,7 +3984,7 @@
                     "Body": 0,
                     "DataCenter": 0,
                     "DataCenterId": "",
-                    "Location": "DC=/M=/R=/U=0/",
+                    "Location": "DC=/R=/U=0/",
                     "Rack": 0,
                     "Room": 0
                 },
@@ -4001,9 +4001,9 @@
                     "Body": 1,
                     "DataCenter": 49,
                     "DataCenterId": "1",
-                    "Location": "DC=1/M=/R=1/U=1/",
+                    "Location": "DC=1/M=1/R=1/U=1/",
                     "Rack": 1,
-                    "Room": 0
+                    "Room": 1
                 },
                 "Port": "not-zero-number",
                 "ResolveHost": "text"
@@ -4016,7 +4016,7 @@
                     "Body": 0,
                     "DataCenter": 0,
                     "DataCenterId": "",
-                    "Location": "DC=/M=/R=/U=0/",
+                    "Location": "DC=/R=/U=0/",
                     "Rack": 0,
                     "Room": 0
                 },
@@ -4031,7 +4031,7 @@
                     "Body": 0,
                     "DataCenter": 0,
                     "DataCenterId": "",
-                    "Location": "DC=/M=/R=/U=0/",
+                    "Location": "DC=/R=/U=0/",
                     "Rack": 0,
                     "Room": 0
                 },
@@ -9890,7 +9890,6 @@
                 "LoadAverage": "not-empty-array",
                 "Location": {
                     "DataCenter": "",
-                    "Module": "",
                     "Rack": "",
                     "Unit": "0"
                 },
@@ -9957,7 +9956,6 @@
                 "LoadAverage": "not-empty-array",
                 "Location": {
                     "DataCenter": "",
-                    "Module": "",
                     "Rack": "",
                     "Unit": "0"
                 },

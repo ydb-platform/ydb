@@ -794,7 +794,9 @@ struct TCommonAppOptions {
             location.SetBridgePileName(BridgePileName);
         }
         location.SetDataCenter(DataCenter ? DataCenter.GetRef() : TString(""));
-        location.SetModule(Module ? Module.GetRef() : TString(""));
+        if (Module) {
+            location.SetModule(Module.GetRef());
+        }
         location.SetRack(Rack);
         location.SetUnit(ToString(Body));
         NActors::TNodeLocation loc(location);

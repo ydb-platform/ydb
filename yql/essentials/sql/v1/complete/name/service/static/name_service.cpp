@@ -139,6 +139,8 @@ public:
                   "Resource",
                   "Tagged",
                   "Callable",
+                  "Linear",
+                  "DynamicLinear",
               }, NormalizeName))
         , ParameterizedTypes_(BuildNameIndex(
               {

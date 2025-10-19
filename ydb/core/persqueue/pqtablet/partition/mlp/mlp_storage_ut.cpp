@@ -245,8 +245,6 @@ Y_UNIT_TEST(CommitCommittedMessage) {
     UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 0);
 }
 
-
-
 Y_UNIT_TEST(UnlockLockedMessage_WithoutKeepMessageOrder) {
     TStorage storage;
     {
@@ -326,6 +324,36 @@ Y_UNIT_TEST(UnlockCommittedMessage) {
     UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.DeadlineExpiredMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 0);
+}
+
+Y_UNIT_TEST(ChangeDeadlineLockedMessage) {
+    auto now = TInstant::Now();
+
+    TStorage storage;
+    {
+        storage.AddMessage(3, true, 5);
+        auto result = storage.Next(now + TDuration::Seconds(1));
+        UNIT_ASSERT(result.has_value());
+    }
+
+    auto result = storage.ChangeMessageDeadline(3, now + TDuration::Seconds(5));
+    UNIT_ASSERT(result);
+
+    auto deadline = storage.GetMessageDeadline(3);
+    UNIT_ASSERT_VALUES_EQUAL(deadline.Seconds(), now.Seconds() + 5);
+}
+
+Y_UNIT_TEST(ChangeDeadlineUnlockedMessage) {
+    auto now = TInstant::Now();
+
+    TStorage storage;
+    storage.AddMessage(3, true, 5);
+
+    auto result = storage.ChangeMessageDeadline(3, now + TDuration::Seconds(5));
+    UNIT_ASSERT(!result);
+
+    auto deadline = storage.GetMessageDeadline(3);
+    UNIT_ASSERT_VALUES_EQUAL(deadline, TInstant::Zero());
 }
 
 

@@ -33,7 +33,7 @@ public:
     // зоне (их выборка будет происходить очень быстро, без поиска по списку всех Messages).
     static constexpr size_t MaxReleasedMessageSize = 1024;
 
-private:
+public:
     enum EMessageStatus {
         Unprocessed = 0,
         Locked = 1,
@@ -54,10 +54,7 @@ private:
         // не отдавать сообщения из одной группы параллельно)
         ui64 MessageGroupIdHash: 32 = 0;
     };
-
     static_assert(sizeof(TMessage) == sizeof(ui64));
-
-public:
 
     struct TMetrics {
         size_t InflyMessageCount = 0;
@@ -89,6 +86,7 @@ public:
     // For SQS compatibility
     // https://docs.amazonaws.cn/en_us/AWSSimpleQueueService/latest/APIReference/API_ChangeMessageVisibility.html
     bool ChangeMessageDeadline(TMessageId message, TInstant deadline);
+    TInstant GetMessageDeadline(TMessageId message);
 
     void AddMessage(ui64 offset, bool hasMessagegroup, ui32 messageGroupIdHash);
 

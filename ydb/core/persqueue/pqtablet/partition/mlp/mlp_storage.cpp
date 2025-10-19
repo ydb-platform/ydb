@@ -59,6 +59,15 @@ bool TStorage::ChangeMessageDeadline(TMessageId messageId, TInstant deadline) {
     return true;
 }
 
+TInstant TStorage::GetMessageDeadline(TMessageId messageId) {
+    auto [offsetDelta, message] = GetMessage(messageId, EMessageStatus::Locked);
+    if (!message) {
+        return TInstant::Zero();
+    }
+
+    return BaseDeadline + TDuration::Seconds(message->DeadlineDelta);
+}
+
 size_t TStorage::ProccessDeadlines() {
     auto deadlineDelta = (TInstant::Now() - BaseDeadline).Seconds();
     size_t count = 0;
@@ -204,7 +213,8 @@ ui64 TStorage::NormalizeDeadline(TInstant deadline) {
         return 0;
     }
 
-    auto deadlineDelta = (deadline - BaseDeadline).Seconds();
+    auto deadlineDuration = deadline - BaseDeadline;
+    auto deadlineDelta = deadlineDuration.Seconds() + (deadlineDuration.MilliSecondsOfSecond() ? 1 : 0);
     if (deadlineDelta >= MaxDeadlineDelta) {
         UpdateDeltas();
         deadlineDelta = std::min((deadline - BaseDeadline).Seconds(), MaxDeadlineDelta - 1);

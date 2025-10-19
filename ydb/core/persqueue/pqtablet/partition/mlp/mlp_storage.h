@@ -73,6 +73,8 @@ public:
     ui64 GetFirstUncommittedOffset() const;
     ui64 GetFirstUnlockedOffset() const;
     TInstant GetBaseDeadline() const;
+    TInstant GetMessageDeadline(TMessageId message);
+
 
     // Return next message for client processing.
     // deadline - time for processing visibility
@@ -88,13 +90,12 @@ public:
     // For SQS compatibility
     // https://docs.amazonaws.cn/en_us/AWSSimpleQueueService/latest/APIReference/API_ChangeMessageVisibility.html
     bool ChangeMessageDeadline(TMessageId message, TInstant deadline);
-    TInstant GetMessageDeadline(TMessageId message);
 
     void AddMessage(ui64 offset, bool hasMessagegroup, ui32 messageGroupIdHash);
 
     size_t ProccessDeadlines();
     // TODO удалять сообщения если в партиции сместился StartOffset
-    bool Compact();
+    size_t Compact();
 
     bool InitializeFromSnapshot(const NKikimrPQ::TMLPStorageSnapshot& snapshot);
     bool CreateSnapshot(NKikimrPQ::TMLPStorageSnapshot& snapshot);

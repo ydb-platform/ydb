@@ -91,22 +91,25 @@ size_t TStorage::ProccessDeadlines() {
     return count;
 }
 
-bool TStorage::Compact() {
+size_t TStorage::Compact() {
     AFL_ENSURE(FirstOffset <= FirstUncommittedOffset)("l", FirstOffset)("r", FirstUncommittedOffset);
     AFL_ENSURE(FirstOffset <= FirstUnlockedOffset)("l", FirstOffset)("r", FirstUnlockedOffset);
     AFL_ENSURE(FirstUncommittedOffset <= FirstUnlockedOffset)("l", FirstUncommittedOffset)("r", FirstUnlockedOffset);
 
-    if (FirstOffset = FirstUncommittedOffset) {
-        return false;
+    if (FirstOffset == FirstUncommittedOffset) {
+        return 0;
     }
 
+    size_t removed = 0;
     while(FirstOffset < FirstUncommittedOffset) {
         Messages.pop_front();
         ++FirstOffset;
         --Metrics.InflyMessageCount;
+        --Metrics.CommittedMessageCount;
+        ++removed;
     }
 
-    return true;
+    return removed;
 }
 
 void TStorage::AddMessage(ui64 offset, bool hasMessagegroup, ui32 messageGroupIdHash) {
@@ -375,6 +378,9 @@ void TStorage::UpdateDeltas() {
 void TStorage::UpdateFirstUncommittedOffset() {
     auto offsetDelta = FirstUncommittedOffset > FirstOffset ? FirstUncommittedOffset - FirstOffset : 0;
     while (offsetDelta < Messages.size() && Messages[offsetDelta].Status == EMessageStatus::Committed) {
+        if (FirstUnlockedOffset == FirstUncommittedOffset) {
+            ++FirstUnlockedOffset;
+        }
         ++FirstUncommittedOffset;
         ++offsetDelta;
     }

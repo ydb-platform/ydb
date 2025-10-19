@@ -461,6 +461,29 @@ Y_UNIT_TEST(StorageSerialization) {
     }
 }
 
+Y_UNIT_TEST(CompactStorage) {
+    TStorage storage(CreateDefaultTimeProvider());
+    storage.AddMessage(3, true, 5);
+    storage.AddMessage(4, true, 7);
+    storage.AddMessage(5, true, 11);
+    storage.AddMessage(6, true, 13);
+
+    storage.Commit(3);
+    UNIT_ASSERT_VALUES_EQUAL(storage.GetFirstOffset(), 3);
+    UNIT_ASSERT_VALUES_EQUAL(storage.GetFirstUncommittedOffset(), 4);
+    storage.Commit(5);
+    UNIT_ASSERT_VALUES_EQUAL(storage.GetFirstOffset(), 3);
+    UNIT_ASSERT_VALUES_EQUAL(storage.GetFirstUncommittedOffset(), 4);
+
+    auto result = storage.Compact();
+    UNIT_ASSERT_VALUES_EQUAL_C(result, 1, "must remove only message with offset 3 beacause it is committed");
+
+    UNIT_ASSERT_VALUES_EQUAL(storage.GetFirstOffset(), 4);
+    UNIT_ASSERT_VALUES_EQUAL(storage.GetLastOffset(), 7);
+    UNIT_ASSERT_VALUES_EQUAL(storage.GetFirstUnlockedOffset(), 4);
+    UNIT_ASSERT_VALUES_EQUAL(storage.GetFirstUncommittedOffset(), 4);
+}
+
 
 }
 

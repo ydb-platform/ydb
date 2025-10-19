@@ -519,7 +519,7 @@ namespace NKikimr::TEvPersQueue {
     struct TEvMLPChangeMessageDeadlineRequest : TEventPB<TEvMLPChangeMessageDeadlineRequest, NKikimrPQ::TEvMLPChangeMessageDeadlineRequest, EvMLPChangeMessageDeadlineRequest> {
         TEvMLPChangeMessageDeadlineRequest() = default;
 
-        TEvMLPChangeMessageDeadlineRequest(const TString& topic, const TString& consumer, ui32 partitionId, TInstant deadlineTimestamp, const std::vector<ui64>& offsets) {
+        TEvMLPChangeMessageDeadlineRequest(const TString& topic, const TString& consumer, ui32 partitionId, const std::vector<ui64>& offsets, TInstant deadlineTimestamp) {
             Record.SetTopic(topic);
             Record.SetConsumer(consumer);
             Record.SetPartitionId(partitionId);

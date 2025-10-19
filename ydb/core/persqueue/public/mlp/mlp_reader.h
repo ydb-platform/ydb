@@ -51,7 +51,7 @@ private:
     ui32 PartitionId;
     ui64 PQTabletId;
 
-    TBackoff Backoff = TBackoff(5);
+    TBackoff Backoff = TBackoff(5); // TODO retries
     ui64 Cookie = 1;
 };
 

@@ -1,9 +1,15 @@
 #pragma once
 
+#include <ydb/public/api/protos/ydb_status_codes.pb.h>
 #include <ydb/core/persqueue/events/events.h>
 #include <ydb/library/actors/core/actorsystem_fwd.h>
 
 namespace NKikimr::NPQ::NMLP {
+
+enum EEv : ui32 {
+    EvChangeResponse = InternalEventSpaceBegin(NPQ::NEvents::EServices::MLP),
+    EvEnd
+};
 
 struct TMessageId {
     ui32 PartitionId;
@@ -24,6 +30,26 @@ struct TReaderSettings {
 // Reply TEvPersQueue::TEvMLPReadResponse or TEvPersQueue::TEvMLPErrorResponse 
 IActor* CreateReader(const NActors::TActorId& parentId, TReaderSettings&& settings);
 
+struct TEvChangeResponse : public NActors::TEventLocal<TEvChangeResponse, EEv::EvChangeResponse> {
+
+    TEvChangeResponse(Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS, TString&& errorDescription = {})
+        : Status(status)
+        , ErrorDescription(std::move(errorDescription))
+    {
+    }
+
+    Ydb::StatusIds::StatusCode Status;
+    TString ErrorDescription;
+
+    struct TResult {
+        TMessageId MessageId;
+        bool Success = false;
+    };
+    // The original topic path (from request) -> TopicInfo
+    std::vector<TResult> Messages;
+};
+
+
 struct TCommitterSettings {
     TString DatabasePath;
     TString TopicName;
@@ -33,9 +59,10 @@ struct TCommitterSettings {
     // TODO check access
 };
 
+// Return TEvChangeResponse
 IActor* CreateCommitter(const NActors::TActorId& parentId, TCommitterSettings&& settings);
 
-struct TUnlockerSetting {
+struct TUnlockerSettings {
     TString DatabasePath;
     TString TopicName;
     TString Consumer;
@@ -44,9 +71,10 @@ struct TUnlockerSetting {
     // TODO check access
 };
 
-IActor* CreateUnlocker(const NActors::TActorId& parentId, TUnlockerSetting&& settings);
+// Return TEvChangeResponse
+IActor* CreateUnlocker(const NActors::TActorId& parentId, TUnlockerSettings&& settings);
 
-struct TMessageDeadlineChangerSetting {
+struct TMessageDeadlineChangerSettings {
     TString DatabasePath;
     TString TopicName;
     TString Consumer;
@@ -56,6 +84,7 @@ struct TMessageDeadlineChangerSetting {
     // TODO check access
 };
 
-IActor* CreateMessageDeadlineChanger(const NActors::TActorId& parentId, TMessageDeadlineChangerSetting&& settings);
+// Return TEvChangeResponse
+IActor* CreateMessageDeadlineChanger(const NActors::TActorId& parentId, TMessageDeadlineChangerSettings&& settings);
 
 } // NKikimr::NPQ::NMLP

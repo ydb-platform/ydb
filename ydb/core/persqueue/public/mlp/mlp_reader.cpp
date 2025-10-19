@@ -17,10 +17,6 @@ void TReaderActor::Bootstrap() {
     DoDescribe();
 }
 
-TString TReaderActor::BuildLogPrefix() const {
-    return "";
-}
-
 void TReaderActor::DoDescribe() {
     LOG_D("Start describe");
     Become(&TReaderActor::DescribeState);

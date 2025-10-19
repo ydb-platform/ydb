@@ -42,7 +42,7 @@ void ReplyOk(const TActorIdentity selfActorId, std::deque<T>& queue) {
 
 
 TString MakeSnapshotKey(ui32 partitionId, ui32 consumerId) {
-    return TStringBuilder() << TKeyPrefix(TKeyPrefix::EType::TypeConsumerData, TPartitionId(partitionId)).ToString()
+    return TStringBuilder() << TKeyPrefix(TKeyPrefix::EType::TypeMLPConsumerData, TPartitionId(partitionId)).ToString()
         << "_" << Sprintf("%.10" PRIu32, consumerId);
 }
 
@@ -422,8 +422,8 @@ void TConsumerActor::HandleOnInit(TEvPQ::TEvProxyResponse::TPtr& ev) {
 
 void TConsumerActor::Handle(TEvPQ::TEvProxyResponse::TPtr& ev) {
     LOG_D("Handle TEvPQ::TEvProxyResponse");
-    if (FetchCookie != ev->Cookie) {
-        LOG_D("Cookie mismatch: " << FetchCookie << " != " << ev->Cookie);
+    if (FetchCookie != GetCookie(ev)) {
+        LOG_D("Cookie mismatch: " << FetchCookie << " != " << GetCookie(ev));
         //return;
     }
 

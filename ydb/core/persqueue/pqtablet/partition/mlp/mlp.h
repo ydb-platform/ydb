@@ -5,8 +5,6 @@
 
 #include <util/system/types.h>
 
-
-
 namespace NKikimr::NPQ::NMLP {
 
 // the offset of the message
@@ -21,4 +19,4 @@ NActors::IActor* CreateConsumerActor(
     const NKikimrPQ::TPQTabletConfig_TConsumer& config
 );
 
-}
+} // namespace NKikimr::NPQ::NMLP

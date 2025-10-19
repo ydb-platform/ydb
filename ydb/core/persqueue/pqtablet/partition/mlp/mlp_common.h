@@ -35,5 +35,6 @@ std::unique_ptr<TEvPQ::TEvRead> MakeEvRead(
 );
 
 bool IsSucess(const TEvPQ::TEvProxyResponse::TPtr& ev);
+ui64 GetCookie(const TEvPQ::TEvProxyResponse::TPtr& ev);
 
 } // namespace NKikimr::NPQ::NMLP

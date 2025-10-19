@@ -36,4 +36,8 @@ bool IsSucess(const TEvPQ::TEvProxyResponse::TPtr& ev) {
         ev->Get()->Response->GetErrorCode() == NPersQueue::NErrorCode::OK;
 }
 
+ui64 GetCookie(const TEvPQ::TEvProxyResponse::TPtr& ev) {
+    return ev->Get()->Response->GetCookie();
+}
+
 }

@@ -32,8 +32,8 @@ void TMessageEnricherActor::PassAway() {
 
 void TMessageEnricherActor::Handle(TEvPQ::TEvProxyResponse::TPtr& ev) {
     LOG_D("Handle TEvPQ::TEvProxyResponse");
-    if (Cookie != ev->Cookie) {
-        LOG_D("Cookie mismatch: " << Cookie << " != " << ev->Cookie);
+    if (Cookie != GetCookie(ev)) {
+        LOG_D("Cookie mismatch: " << Cookie << " != " << GetCookie(ev));
         //return PassAway();
     }
 

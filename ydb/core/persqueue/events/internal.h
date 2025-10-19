@@ -199,7 +199,6 @@ struct TEvPQ {
         EvMirrorTopicDescription,
         EvBroadcastPartitionError,
         EvForceCompaction,
-        EvMLPReadBatchResponse,
         EvMLPRestartActor,
         EvEnd
     };
@@ -1291,17 +1290,6 @@ struct TEvPQ {
         }
 
         ui32 PartitionId = 0;
-    };
-
-    struct TEvMLPReadBatchResponse : TEventLocal<TEvMLPReadBatchResponse, EvMLPReadBatchResponse> {
-        TEvMLPReadBatchResponse() = default;
-
-        struct TResponse {
-            TActorId Sender;
-            ui64 Cookie;
-            std::vector<ui64> Offsets;
-        };
-        std::vector<TResponse> Responses;
     };
 
     struct TEvMLPRestartActor : TEventLocal<TEvMLPRestartActor, EvMLPRestartActor> {

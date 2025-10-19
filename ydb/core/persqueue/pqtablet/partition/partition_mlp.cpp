@@ -66,10 +66,10 @@ void TPartition::ProcessMLPPendingEvents() {
     while (!MLPPendingEvents.empty()) {
         auto& ev = MLPPendingEvents.front();
         std::visit(visitor, ev);
-        PendingEvents.pop_front();
+        MLPPendingEvents.pop_front();
     }
 
-    PendingEvents = {};
+    MLPPendingEvents = {};
 }
 
 void TPartition::InitializeMLPConsumers() {

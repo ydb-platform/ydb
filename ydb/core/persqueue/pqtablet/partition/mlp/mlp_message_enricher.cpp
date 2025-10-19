@@ -85,6 +85,7 @@ void TMessageEnricherActor::Handle(TEvPQ::TEvProxyResponse::TPtr& ev) {
 
 void TMessageEnricherActor::Handle(TEvPQ::TEvError::TPtr&) {
     LOG_D("Handle TEvPQ::TEvError");
+    ProcessQueue();
 }
 
 void TMessageEnricherActor::Handle(TEvents::TEvWakeup::TPtr&) {

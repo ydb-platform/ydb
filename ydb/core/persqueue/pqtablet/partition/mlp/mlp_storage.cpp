@@ -371,7 +371,7 @@ void TStorage::UpdateDeltas() {
     auto deadlineDiff = (now - BaseDeadline).Seconds();
 
     for (auto& message : Messages) {
-        message.DeadlineDelta += message.DeadlineDelta > deadlineDiff ? message.DeadlineDelta - deadlineDiff : 0;
+        message.DeadlineDelta = message.DeadlineDelta > deadlineDiff ? message.DeadlineDelta - deadlineDiff : 0;
     }
 
     BaseDeadline = now;

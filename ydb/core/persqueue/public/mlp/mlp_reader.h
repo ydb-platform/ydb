@@ -54,4 +54,4 @@ private:
     ui64 Cookie = 1;
 };
 
-} // namespace NKikimr::NPQ::NMLPUSetting&
+} // namespace NKikimr::NPQ::NMLP

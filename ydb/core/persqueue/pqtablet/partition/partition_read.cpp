@@ -711,8 +711,6 @@ void TPartition::Handle(TEvPQ::TEvReadTimeout::TPtr& ev, const TActorContext& ct
     );
 
     TActorId replyTo = ReplyTo(answer.IsInternal, answer.ReplyTo);
-    LOG_E("replyTo=" << replyTo << " answer.IsInternal=" << answer.IsInternal << " answer.ReplyTo=" << answer.ReplyTo);
-
     ctx.Send(replyTo, answer.Event.Release());
     LOG_D(" waiting read cookie " << ev->Get()->Cookie
         << " partition " << Partition << " read timeout for " << res->User << " offset " << res->Offset);

@@ -1218,7 +1218,7 @@ private:
         TEvPersQueue::TEvMLPUnlockRequest::TPtr,
         TEvPersQueue::TEvMLPChangeMessageDeadlineRequest::TPtr
     >;
-    std::vector<TMLPPendingEvent> MLPPendingEvents;
+    std::deque<TMLPPendingEvent> MLPPendingEvents;
 };
 
 inline ui64 TPartition::GetStartOffset() const {

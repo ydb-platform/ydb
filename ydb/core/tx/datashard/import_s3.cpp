@@ -213,21 +213,22 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
             Y_ENSURE(ReadyInputBytes == 0 && ReadyOutputPos == 0);
 
             auto input = ZSTD_inBuffer{Portion.Data(), Portion.Size(), 0};
+            size_t decompressionResult = 0;
             while (!ReadyOutputPos) {
                 PendingInputBytes -= input.pos; // dec before decompress
 
                 auto output = ZSTD_outBuffer{Buffer.Data(), Buffer.Capacity(), Buffer.Size()};
-                auto res = ZSTD_decompressStream(Context.Get(), &output, &input);
+                decompressionResult = ZSTD_decompressStream(Context.Get(), &output, &input);
 
-                if (ZSTD_isError(res)) {
-                    error = ZSTD_getErrorName(res);
+                if (ZSTD_isError(decompressionResult)) {
+                    error = ZSTD_getErrorName(decompressionResult);
                     return ERROR;
                 }
 
                 PendingInputBytes += input.pos; // inc after decompress
                 Buffer.Proceed(output.pos);
 
-                if (res == 0) {
+                if (decompressionResult == 0) {
                     // end of frame
                     if (Buffer.Size() > 0 && AsStringBuf(Buffer.Size()).back() != '\n') { // Handle also a special case: theoretically it is possible to have nonempty zstd block with empty output data (we created a new block and have not added any data yet)
                         error = "cannot find new line symbol";
@@ -262,7 +263,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
 
             Portion.ChopHead(input.pos);
 
-            if (!ReadyOutputPos && input.pos < input.size) {
+            if (!ReadyOutputPos && decompressionResult != 0) {
                 if (!CanRequestNextRange(Buffer.Size(), error)) {
                     return ERROR;
                 } else {

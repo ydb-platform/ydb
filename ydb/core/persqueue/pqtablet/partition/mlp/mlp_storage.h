@@ -2,6 +2,8 @@
 
 #include "mlp.h"
 
+#include <library/cpp/time_provider/time_provider.h>
+
 #include <util/datetime/base.h>
 
 #include <deque>
@@ -9,17 +11,12 @@
 
 namespace NKikimr::NPQ::NMLP {
 
-class TSerializer;    
-
 //
 // На диске храним 3 типа блобов
 // * Общая информация об процессе (мета), включающая FirstUncommittedOffset и т.д. Всегда один блоб.
 // * Информация о статусе обработке сообщений. MaxMessages * 8 байтов (~800Kb). Всегда один блоб. Перезаписывается редко.
 // * WAL изменений. Несколько блобов. Частая запись. Информация об измененных статусах сообщениях.
 class TStorage {
-
-    friend class TSerializer;
-
 public:
     // Имеет смысл ограничить 100К сообщений на партицию. Надо больше - увеличивайте кол-во партиции.
     // В худшем случае на 100000 сообщений надо ~3MB памяти
@@ -65,6 +62,8 @@ public:
         size_t DeadlineExpiredMessageCount = 0;
         size_t DLQMessageCount = 0;
     };
+
+    TStorage(TIntrusivePtr<ITimeProvider> timeProvider);
 
     void SetKeepMessageOrder(bool keepMessageOrder);
     void SetMaxMessageReceiveCount(ui32 maxMessageReceiveCount);
@@ -114,6 +113,8 @@ private:
     void UpdateFirstUncommittedOffset();
 
 private:
+    const TIntrusivePtr<ITimeProvider> TimeProvider;
+
     bool KeepMessageOrder = false;
     ui32 MaxMessageReceiveCount = 1000;
 

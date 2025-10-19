@@ -5,6 +5,11 @@
 
 namespace NKikimr::NPQ::NMLP {
 
+TStorage::TStorage(TIntrusivePtr<ITimeProvider> timeProvider)
+    : TimeProvider(timeProvider)
+{
+}
+
 void TStorage::SetKeepMessageOrder(bool keepMessageOrder) {
     KeepMessageOrder = keepMessageOrder;
 }
@@ -69,7 +74,7 @@ TInstant TStorage::GetMessageDeadline(TMessageId messageId) {
 }
 
 size_t TStorage::ProccessDeadlines() {
-    auto deadlineDelta = (TInstant::Now() - BaseDeadline).Seconds();
+    auto deadlineDelta = (TimeProvider->Now() - BaseDeadline).Seconds();
     size_t count = 0;
 
     for (size_t i = 0; i < Messages.size(); ++i) {
@@ -233,7 +238,7 @@ TStorage::TMessage* TStorage::GetMessage(ui64 offset, EMessageStatus expectedSta
 }
 
 ui64 TStorage::NormalizeDeadline(TInstant deadline) {
-    auto now = TInstant::Now();
+    auto now = TimeProvider->Now();
     if (deadline <= now) {
         return 0;
     }
@@ -340,7 +345,7 @@ void TStorage::DoUnlock(TMessage& message, ui64 offset) {
 }
 
 void TStorage::UpdateDeltas() {
-    auto now = TInstant::Now();
+    auto now = TimeProvider->Now();
     auto deadlineDiff = (now - BaseDeadline).Seconds();
 
     for (auto& message : Messages) {

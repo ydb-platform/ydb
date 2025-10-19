@@ -51,7 +51,7 @@ TConsumerActor::TConsumerActor(ui64 tabletId, const TActorId& tabletActorId, ui3
     , PartitionId(partitionId)
     , PartitionActorId(partitionActorId)
     , Config(config)
-    , Storage(std::make_unique<TStorage>()) {
+    , Storage(std::make_unique<TStorage>(CreateDefaultTimeProvider())) {
 }
 
 void TConsumerActor::Bootstrap() {

@@ -7,7 +7,7 @@ namespace NKikimr::NPQ::NMLP {
 Y_UNIT_TEST_SUITE(TMLPStorageTests) {
 
 Y_UNIT_TEST(NextFromEmptyStorage) {
-    TStorage storage;
+    TStorage storage(CreateDefaultTimeProvider());
 
     auto result = storage.Next(TInstant::Now());
     UNIT_ASSERT(!result.has_value());
@@ -23,7 +23,7 @@ Y_UNIT_TEST(NextFromEmptyStorage) {
 }
 
 Y_UNIT_TEST(CommitToEmptyStorage) {
-    TStorage storage;
+    TStorage storage(CreateDefaultTimeProvider());
 
     auto result = storage.Commit(123);
     UNIT_ASSERT(!result);
@@ -39,7 +39,7 @@ Y_UNIT_TEST(CommitToEmptyStorage) {
 }
 
 Y_UNIT_TEST(UnlockToEmptyStorage) {
-    TStorage storage;
+    TStorage storage(CreateDefaultTimeProvider());
 
     auto result = storage.Unlock(123);
     UNIT_ASSERT(!result);
@@ -55,7 +55,7 @@ Y_UNIT_TEST(UnlockToEmptyStorage) {
 }
 
 Y_UNIT_TEST(ChangeDeadlineEmptyStorage) {
-    TStorage storage;
+    TStorage storage(CreateDefaultTimeProvider());
 
     auto result = storage.ChangeMessageDeadline(123, TInstant::Now());
     UNIT_ASSERT(!result);
@@ -71,7 +71,7 @@ Y_UNIT_TEST(ChangeDeadlineEmptyStorage) {
 }
 
 Y_UNIT_TEST(AddMessageToEmptyStorage) {
-    TStorage storage;
+    TStorage storage(CreateDefaultTimeProvider());
 
     storage.AddMessage(0, true, 5);
     UNIT_ASSERT_VALUES_EQUAL(storage.GetFirstOffset(), 0);
@@ -88,7 +88,7 @@ Y_UNIT_TEST(AddMessageToEmptyStorage) {
 }
 
 Y_UNIT_TEST(AddNotFirstMessageToEmptyStorage) {
-    TStorage storage;
+    TStorage storage(CreateDefaultTimeProvider());
 
     storage.AddMessage(3, true, 5);
     UNIT_ASSERT_VALUES_EQUAL(storage.GetFirstOffset(), 3);
@@ -105,7 +105,7 @@ Y_UNIT_TEST(AddNotFirstMessageToEmptyStorage) {
 }
 
 Y_UNIT_TEST(AddMessageWithSkippedMessage) {
-    TStorage storage;
+    TStorage storage(CreateDefaultTimeProvider());
 
     storage.AddMessage(3, true, 5);
     UNIT_ASSERT_VALUES_EQUAL(storage.GetFirstOffset(), 3);
@@ -126,7 +126,7 @@ Y_UNIT_TEST(AddMessageWithSkippedMessage) {
 }
 
 Y_UNIT_TEST(NextWithoutKeepMessageOrderStorage) {
-    TStorage storage;
+    TStorage storage(CreateDefaultTimeProvider());
     storage.AddMessage(3, true, 5);
 
     auto result = storage.Next(TInstant::Now() + TDuration::Seconds(1));
@@ -145,7 +145,7 @@ Y_UNIT_TEST(NextWithoutKeepMessageOrderStorage) {
 }
 
 Y_UNIT_TEST(NextWithKeepMessageOrderStorage) {
-    TStorage storage;
+    TStorage storage(CreateDefaultTimeProvider());
     storage.SetKeepMessageOrder(true);
     storage.AddMessage(3, true, 5);
 
@@ -165,7 +165,7 @@ Y_UNIT_TEST(NextWithKeepMessageOrderStorage) {
 }
 
 Y_UNIT_TEST(SkipLockedMessage) {
-    TStorage storage;
+    TStorage storage(CreateDefaultTimeProvider());
     {
         storage.AddMessage(3, true, 5);
         auto result = storage.Next(TInstant::Now() + TDuration::Seconds(1));
@@ -186,7 +186,7 @@ Y_UNIT_TEST(SkipLockedMessage) {
 }
 
 Y_UNIT_TEST(CommitLockedMessage_WithoutKeepMessageOrder) {
-    TStorage storage;
+    TStorage storage(CreateDefaultTimeProvider());
     {
         storage.AddMessage(3, true, 5);
         auto result = storage.Next(TInstant::Now() + TDuration::Seconds(1));
@@ -207,7 +207,7 @@ Y_UNIT_TEST(CommitLockedMessage_WithoutKeepMessageOrder) {
 }
 
 Y_UNIT_TEST(CommitLockedMessage_WithKeepMessageOrder) {
-    TStorage storage;
+    TStorage storage(CreateDefaultTimeProvider());
     {
         storage.SetKeepMessageOrder(true);
         storage.AddMessage(3, true, 5);
@@ -229,7 +229,7 @@ Y_UNIT_TEST(CommitLockedMessage_WithKeepMessageOrder) {
 }
 
 Y_UNIT_TEST(CommitUnlockedMessage) {
-    TStorage storage;
+    TStorage storage(CreateDefaultTimeProvider());
     storage.AddMessage(3, true, 5);
 
     auto result = storage.Commit(3);
@@ -246,7 +246,7 @@ Y_UNIT_TEST(CommitUnlockedMessage) {
 }
 
 Y_UNIT_TEST(CommitCommittedMessage) {
-    TStorage storage;
+    TStorage storage(CreateDefaultTimeProvider());
     {
         storage.AddMessage(3, true, 5);
         auto result = storage.Commit(3);
@@ -267,7 +267,7 @@ Y_UNIT_TEST(CommitCommittedMessage) {
 }
 
 Y_UNIT_TEST(UnlockLockedMessage_WithoutKeepMessageOrder) {
-    TStorage storage;
+    TStorage storage(CreateDefaultTimeProvider());
     {
         storage.AddMessage(3, true, 5);
         auto result = storage.Next(TInstant::Now() + TDuration::Seconds(1));
@@ -288,7 +288,7 @@ Y_UNIT_TEST(UnlockLockedMessage_WithoutKeepMessageOrder) {
 }
 
 Y_UNIT_TEST(UnlockLockedMessage_WithKeepMessageOrder) {
-    TStorage storage;
+    TStorage storage(CreateDefaultTimeProvider());
     {
         storage.SetKeepMessageOrder(true);
         storage.AddMessage(3, true, 5);
@@ -310,7 +310,7 @@ Y_UNIT_TEST(UnlockLockedMessage_WithKeepMessageOrder) {
 }
 
 Y_UNIT_TEST(UnlockUnlockedMessage) {
-    TStorage storage;
+    TStorage storage(CreateDefaultTimeProvider());
     storage.AddMessage(3, true, 5);
 
     auto result = storage.Unlock(3);
@@ -327,7 +327,7 @@ Y_UNIT_TEST(UnlockUnlockedMessage) {
 }
 
 Y_UNIT_TEST(UnlockCommittedMessage) {
-    TStorage storage;
+    TStorage storage(CreateDefaultTimeProvider());
     {
         storage.AddMessage(3, true, 5);
         auto result = storage.Commit(3);
@@ -350,7 +350,7 @@ Y_UNIT_TEST(UnlockCommittedMessage) {
 Y_UNIT_TEST(ChangeDeadlineLockedMessage) {
     auto now = TInstant::Now();
 
-    TStorage storage;
+    TStorage storage(CreateDefaultTimeProvider());
     {
         storage.AddMessage(3, true, 5);
         auto result = storage.Next(now + TDuration::Seconds(1));
@@ -367,7 +367,7 @@ Y_UNIT_TEST(ChangeDeadlineLockedMessage) {
 Y_UNIT_TEST(ChangeDeadlineUnlockedMessage) {
     auto now = TInstant::Now();
 
-    TStorage storage;
+    TStorage storage(CreateDefaultTimeProvider());
     storage.AddMessage(3, true, 5);
 
     auto result = storage.ChangeMessageDeadline(3, now + TDuration::Seconds(5));

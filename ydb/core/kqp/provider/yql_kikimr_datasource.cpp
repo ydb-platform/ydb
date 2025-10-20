@@ -909,6 +909,7 @@ public:
                     .Build()
                 .Columns(result.Columns())
                 .RowsLimit().Build(ToString(rowsLimit))
+                .Discard().Build("false")
                 .Done();
 
             auto newResults = ctx.ChangeChild(results.Ref(), index - startBlockIndex, newResult.Ptr());

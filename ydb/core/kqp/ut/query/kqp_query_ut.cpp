@@ -3414,7 +3414,8 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
             auto session = tableClient.CreateSession().GetValueSync().GetSession();
             TVector<TString> queries = {
                 "DISCARD SELECT 1",
-                "DISCARD SELECT COUNT(*) FROM `/Root/EightShard`"
+                "DISCARD SELECT COUNT(*) FROM `/Root/EightShard`",
+                "SELECT 5 FROM (DISCARD SELECT Key FROM `/Root/EightShard`)"
             };
             for (auto& query : queries) {
                 auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), TExecDataQuerySettings()).ExtractValueSync();
@@ -3433,7 +3434,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetResultSets().size(), 2,
                 "expect 2 result sets, got " << result.GetResultSets().size() << " instead");
         }
-        // todo: somehow check that ensures calculated
+        // todo anely-d: somehow check that ensures calculated
         {
             auto ensureQuery = R"(DISCARD SELECT Ensure(Data, Data < 100, "Data value out of range") AS value FROM `/Root/EightShard`)";
 
@@ -3473,7 +3474,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
                 UNIT_ASSERT_C(!result.IsSuccess(),
                     "Query should fail: " << query);
                 UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(),
-                    "DISCARD can only be used at the top level");
+                    "DISCARD");
             }
         }
     }

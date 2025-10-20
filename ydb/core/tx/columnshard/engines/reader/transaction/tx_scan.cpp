@@ -30,6 +30,20 @@ bool TTxScan::Execute(TTransactionContext& /*txc*/, const TActorContext& /*ctx*/
 void TTxScan::Complete(const TActorContext& ctx) {
     TMemoryProfileGuard mpg("TTxScan::Complete");
     auto& request = Ev->Get()->Record;
+    auto lockId = request.GetLockTxId();
+
+    if (Self->IsLocksMemoryLimitExceeded()) {
+        Self->DeleteLock(lockId);
+
+        SendError("Overloaded", "flight locks ranges memory limit exceeded", ctx);
+        return;
+    }
+
+    if (Self->IsLockDeleted(lockId)) {
+        SendError("Lock invalidated", "lock is already delted", ctx);
+        return;
+    }
+
     auto scanComputeActor = Ev->Sender;
     TSnapshot snapshot = TSnapshot(request.GetSnapshot().GetStep(), request.GetSnapshot().GetTxId());
     if (snapshot.IsZero()) {

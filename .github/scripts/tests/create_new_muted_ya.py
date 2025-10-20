@@ -861,8 +861,12 @@ def mute_worker(args):
     logging.info(f"Starting mute worker with mode: {args.mode}")
     logging.info(f"Branch: {args.branch}")
     
+    # Используем переданный файл или дефолтный
+    input_muted_ya_path = getattr(args, 'muted_ya_file', muted_ya_path)
+    logging.info(f"Using muted_ya file: {input_muted_ya_path}")
+    
     mute_check = YaMuteCheck()
-    mute_check.load(muted_ya_path)
+    mute_check.load(input_muted_ya_path)
     logging.info(f"Loaded muted_ya.txt with {len(mute_check.regexps)} test patterns")
 
     logging.info("Executing single query for 7 days window...")
@@ -902,6 +906,7 @@ if __name__ == "__main__":
     update_muted_ya_parser = subparsers.add_parser('update_muted_ya', help='create new muted_ya')
     update_muted_ya_parser.add_argument('--output_folder', default=repo_path, required=False, help='Output folder.')
     update_muted_ya_parser.add_argument('--branch', default='main', help='Branch to get history')
+    update_muted_ya_parser.add_argument('--muted_ya_file', default=muted_ya_path, help='Path to input muted_ya.txt file')
 
     create_issues_parser = subparsers.add_parser(
         'create_issues',

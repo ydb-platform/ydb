@@ -1573,12 +1573,11 @@ class TestIncrementalChainRestoreAfterDeletion(TestFullCycleLocalBackupRestore):
             WITH ( STORAGE = 'cluster' );
         """
         res = self._execute_yql(create_restore_sql)
-        assert res.exit_code == 0, f"CREATE restore collection {coll_restore} failed"
+        assert res.exit_code == 0, f"CREATE backup collection {coll_restore} failed"
         self.wait_for_collection(coll_restore, timeout_s=30)
 
         self._import_exported_snapshots_up_to(coll_restore, export_dir, target_ts)
-
-        # Drop target tables so restore will re-create them
+        time.sleep(1)
         self._drop_tables([t_orders, t_products])
 
         # Run RESTORE

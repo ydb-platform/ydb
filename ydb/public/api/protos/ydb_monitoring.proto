@@ -163,10 +163,16 @@ message LocationComputeTablet {
     uint32 count = 3;
 }
 
+message LocationStateStorage {
+    uint32 ring = 1;
+    LocationNode node = 2;
+}
+
 message LocationCompute {
     LocationNode node = 1;
     LocationComputePool pool = 2;
     LocationComputeTablet tablet = 3;
+    LocationStateStorage state_storage = 6;
 }
 
 message LocationDatabase {

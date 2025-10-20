@@ -842,6 +842,10 @@ class TStateStorageProxy : public TActor<TStateStorageProxy> {
         Send(ev->Sender, new TEvStateStorage::TEvListStateStorageResult(Info), 0, ev->Cookie);
     }
 
+    void Handle(TEvStateStorage::TEvListBoard::TPtr &ev) {
+        Send(ev->Sender, new TEvStateStorage::TEvListBoardResult(BoardInfo), 0, ev->Cookie);
+    }
+
     void Handle(TEvStateStorage::TEvUpdateGroupConfig::TPtr &ev) {
         auto *msg = ev->Get();
         Info = msg->GroupConfig;
@@ -898,7 +902,7 @@ public:
             hFunc(TEvStateStorage::TEvListSchemeBoard, Handle);
             hFunc(TEvStateStorage::TEvListStateStorage, Handle);
             hFunc(TEvStateStorage::TEvUpdateGroupConfig, Handle);
-            fFunc(TEvents::TSystem::Unsubscribe, HandleUnsubscribe);
+            hFunc(TEvStateStorage::TEvListBoard, Handle);
         default:
             TActivationContext::Forward(ev, RegisterWithSameMailbox(new TStateStorageProxyRequest(Info, FlowControlledInfo)));
             break;

@@ -90,6 +90,26 @@ SELECT SUBSTRING("abcdefg", 3); -- defg
 SELECT SUBSTRING("abcdefg", NULL, 3); -- abc
 ```
 
+## Concat {#concat}
+
+Concatenate one or more strings.
+
+#### Signature
+
+```yql
+Concat((String|Utf8)[?], ...)->(String|Utf8)[?]
+```
+
+This function is available since version [2025.04](../changelog/2025.04.md).
+If at least one input string is of type `Optional`, then the result is also of type `Optional`.
+If all input strings are of type `Utf8`, then the result is also of type `Utf8`; otherwise, it is `String`.
+If at least one input string is `NULL`, then the result is also of type `NULL`.
+
+#### Examples
+
+```yql
+SELECT Concat("abc", "de", "f"); -- "abcdef"
+```
 
 
 ## FIND {#find}

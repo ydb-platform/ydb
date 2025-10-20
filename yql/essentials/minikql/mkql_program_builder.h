@@ -222,6 +222,7 @@ public:
     TRuntimeNode ToDecimal(TRuntimeNode data, ui8 precision, ui8 scale);
     TRuntimeNode Concat(TRuntimeNode data1, TRuntimeNode data2);
     TRuntimeNode AggrConcat(TRuntimeNode data1, TRuntimeNode data2);
+    TRuntimeNode ConcatMany(const TArrayRef<const TRuntimeNode>& args);
     TRuntimeNode Substring(TRuntimeNode data, TRuntimeNode start, TRuntimeNode count);
     TRuntimeNode Find(TRuntimeNode haystack, TRuntimeNode needle, TRuntimeNode pos);
     TRuntimeNode RFind(TRuntimeNode haystack, TRuntimeNode needle, TRuntimeNode pos);

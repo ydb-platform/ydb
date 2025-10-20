@@ -3390,6 +3390,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
     Y_UNIT_TEST(DiscardSelectSupport) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetQueryClient();
+        auto tableClient = kikimr.GetTableClient();
         {
             TVector<TString> queries = {
                 "DISCARD SELECT 1",
@@ -3408,9 +3409,19 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
                     "DISCARD SELECT should return no result sets for query: " << query);
             }
         }
-        // check that dml queries returns result with discard within backward compability
+        // dml queries returns result with discard within backward compability
         {
-            
+            auto session = tableClient.CreateSession().GetValueSync().GetSession();
+            TVector<TString> queries = {
+                "DISCARD SELECT 1",
+                "DISCARD SELECT COUNT(*) FROM `/Root/EightShard`"
+            };
+            for (auto& query : queries) {
+                auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), TExecDataQuerySettings()).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                UNIT_ASSERT_C(result.GetResultSets().size() > 0,
+                    "DISCARD SELECT should return result sets for dml but got: " << result.GetResultSets().size() << " for query " << query);
+            }
         }
         {
             auto queries = R"(SELECT 1; DISCARD SELECT 2; DISCARD SELECT COUNT(*) FROM `/Root/EightShard`;
@@ -3424,19 +3435,17 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         }
         // todo: somehow check that ensures calculated
         {
-            auto discardEnsureQueries = R"(DISCARD SELECT Ensure(Data, Data < 100, "Data value out of range") AS value FROM `/Root/EightShard`)";
+            auto ensureQuery = R"(DISCARD SELECT Ensure(Data, Data < 100, "Data value out of range") AS value FROM `/Root/EightShard`)";
 
-            auto result = db.ExecuteQuery(discardEnsureQueries,
+            auto result = db.ExecuteQuery(ensureQuery,
                     NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetResultSets().size(), 0,
-                "got result sets: " << result.GetResultSets().size() << " instead of 0 for query: " << query);
+                "got result sets: " << result.GetResultSets().size() << " instead of 0 for query: " << ensureQuery);
         
         }
-        // test discard scan queries
+        // discard scan queries
         {
-            auto tableClient = kikimr.GetTableClient();
-
             TVector<TString> scanQueries = {
                 "DISCARD SELECT Key FROM `/Root/EightShard`",
                 "DISCARD SELECT COUNT(*) FROM `/Root/EightShard`",
@@ -3450,7 +3459,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
             }
         
         }
-        // check that discard is not allowed in subqueries
+        // discard is not allowed in subqueries
         {
             TVector<TString> invalidQueries = {
                 "SELECT 5 FROM (DISCARD SELECT Key FROM `/Root/EightShard`)",

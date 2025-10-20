@@ -1962,8 +1962,8 @@ Y_UNIT_TEST_SUITE(Viewer) {
                                                     const TString& token,
                                                     const TString& database = "/Root",
                                                     const TString& path = "/Root/topic1",
-                                                    const i32 partition = 0,
-                                                    const TString message = "adfnoanr") {
+                                                    const TString message = "adfnoanr",
+                                                    const i32 partition = 0) {
         NJson::TJsonValue jsonRequest;
         NJson::TJsonArray headersArray;
         NJson::TJsonValue header1;
@@ -2014,12 +2014,18 @@ Y_UNIT_TEST_SUITE(Viewer) {
         client->InitSourceIds();
         NYdb::TDriverConfig driverCfg;
         TString topicPath = "/Root/topic1";
+        TString message = "message_Ira";
         driverCfg.SetEndpoint(TStringBuilder() << "localhost:" << grpcPort)
                 .SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG).Release()));
+        TTestActorRuntime& runtime = *server.GetRuntime();
+        runtime.SetLogPriority(NKikimrServices::PQ_WRITE_PROXY, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::PQ_TX, NLog::PRI_TRACE);
         TClient client1(settings);
         client1.InitRootScheme();
         GrantConnect(client1);
         client1.Grant("/", "Root", "username", NACLib::EAccessRights::UpdateRow);
+        client1.Grant("/", "Root", "username", NACLib::EAccessRights::GenericRead); // удалить
+        client1.Grant("/", "Root", "username", NACLib::EAccessRights::GenericWrite); // удалить
         TKeepAliveHttpClient httpClient("localhost", monPort);
         TString consumerName = "consumer1";
         NYdb::TDriver ydbDriver{driverCfg};
@@ -2029,7 +2035,8 @@ Y_UNIT_TEST_SUITE(Viewer) {
         UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
 
         NKikimr::NViewerTests::WaitForHttpReady(httpClient);
-        auto postReturnCode1 = PostPutRecords(httpClient, VALID_TOKEN, "/Root", topicPath);
+        auto postReturnCode1 = PostPutRecords(httpClient, VALID_TOKEN, "/Root", topicPath, message);
+        Cerr << postReturnCode1 << Endl;
         UNIT_ASSERT_EQUAL(postReturnCode1, HTTP_OK);
 
         NYdb::NTopic::TReadSessionSettings rSSettings{.ConsumerName_ = "consumer1"};

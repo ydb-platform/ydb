@@ -48,6 +48,7 @@ private:
     ui64 TabletId;
     TActorId WriteActorId;
     ui64 SeqNo = 0;
+    TString SourceId = "1";
 
 public:
     STATEFN(StateWork) {
@@ -146,7 +147,9 @@ public:
         TString str;
         bool res = proto.SerializeToString(&str);
         Y_ABORT_UNLESS(res);
+
         auto w = partitionRequest->AddCmdWrite();
+        w->SetSourceId(SourceId);
         w->SetData(str);
         // create timestamp?? какой ставить?
         w->SetCreateTimeMS(TInstant::Now().MilliSeconds());
@@ -230,8 +233,8 @@ public:
         }
         NPQ::TPartitionWriterOpts opts;
         opts.WithDeduplication(false)
-            .WithTopicPath(TopicPath);
-            // .WithSourceId(SourceId)
+            .WithTopicPath(TopicPath)
+            .WithSourceId(SourceId);
             // .WithCheckRequestUnits(MeteringMode, Context->RlContext)
             // .WithKafkaProducerInstanceId(producerInstanceId);
 
@@ -248,9 +251,14 @@ public:
         if (cookie != Cookie) {
             ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "Cookies do not match"));
         }
-        // auto error = r->GetError();
-        // Cerr << error << Endl;
-        ReplyAndPassAway(Viewer->GetHTTPOK(Event->Get(), "text/plain", "Recieved response"));
+        if (r->IsSuccess()) {
+            ReplyAndPassAway(Viewer->GetHTTPOK(Event->Get(), "text/plain", "Recieved response"));
+        } else {
+            auto error = r->GetError();
+            TString reason = r->GetError().Reason;
+            Cerr << reason << Endl;
+            ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", reason));
+        }
     }
     void ReplyAndPassAway() override {
         TStringStream jsonBody;

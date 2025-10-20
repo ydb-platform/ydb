@@ -805,7 +805,7 @@ private:
                 break;
             }
             case TRule_value_constructor::ALT_NOT_SET:
-                Y_ABORT("You should change implementation according to grammar changes");
+                Y_UNREACHABLE();
         }
     }
 
@@ -2773,7 +2773,7 @@ private:
                 VisitKeyword(msg.GetAlt_ttl_tier_action2().GetToken1());
                 break;
             case TRule_ttl_tier_action::ALT_NOT_SET:
-                break;
+                Y_UNREACHABLE();
         }
     }
 

@@ -57,7 +57,7 @@ private:
             case NSQLv1Generated::TRule_select_kind_TBlock2::kAlt3:
                 return Build(block.GetAlt3().GetRule_select_core1());
             case NSQLv1Generated::TRule_select_kind_TBlock2::ALT_NOT_SET:
-                Y_ABORT("You should change implementation according to grammar changes");
+                Y_UNREACHABLE();
         }
     }
 
@@ -188,7 +188,7 @@ private:
                 return expr;
             } break;
             case NSQLv1Generated::TRule_result_column::ALT_NOT_SET:
-                Y_ABORT("You should change implementation according to grammar changes");
+                Y_UNREACHABLE();
         }
     }
 
@@ -253,7 +253,7 @@ private:
             case NSQLv1Generated::TRule_single_source::kAltSingleSource3:
                 return Build(rule.GetAlt_single_source3().GetRule_values_stmt2());
             case NSQLv1Generated::TRule_single_source::ALT_NOT_SET:
-                Y_ABORT("You should change implementation according to grammar changes");
+                Y_UNREACHABLE();
         }
     }
 
@@ -303,7 +303,7 @@ private:
             case TRule_result_column_TAlt2_TBlock2::kAlt2:
                 return Id(block.GetAlt2().GetRule_an_id_as_compat1(), *this);
             case TRule_result_column_TAlt2_TBlock2::ALT_NOT_SET:
-                Y_ABORT("You should change implementation according to grammar changes");
+                Y_UNREACHABLE();
         }
     }
 
@@ -314,7 +314,7 @@ private:
             case NSQLv1Generated::TRule_select_kind_parenthesis::kAltSelectKindParenthesis2:
                 return parenthesis.GetAlt_select_kind_parenthesis2().GetRule_select_kind_partial2();
             case NSQLv1Generated::TRule_select_kind_parenthesis::ALT_NOT_SET:
-                Y_ABORT("You should change implementation according to grammar changes");
+                Y_UNREACHABLE();
         }
     }
 
@@ -325,7 +325,7 @@ private:
             case TRule_named_single_source_TBlock3_TBlock1::kAlt2:
                 return Id(block.GetAlt2().GetRule_an_id_as_compat1(), *this);
             case TRule_named_single_source_TBlock3_TBlock1::ALT_NOT_SET:
-                Y_ABORT("You should change implementation according to grammar changes");
+                Y_UNREACHABLE();
         }
     }
 

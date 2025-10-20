@@ -125,7 +125,6 @@ bool NeedUseForAllStatements(const TRule_sql_stmt_core::AltCase& subquery) {
         case TRule_sql_stmt_core::kAltSqlStmtCore14: // export
         case TRule_sql_stmt_core::kAltSqlStmtCore18: // define action or subquery
             return true;
-        case TRule_sql_stmt_core::ALT_NOT_SET:
         case TRule_sql_stmt_core::kAltSqlStmtCore2:  // select
         case TRule_sql_stmt_core::kAltSqlStmtCore4:  // create table
         case TRule_sql_stmt_core::kAltSqlStmtCore5:  // drop table
@@ -188,6 +187,8 @@ bool NeedUseForAllStatements(const TRule_sql_stmt_core::AltCase& subquery) {
         case TRule_sql_stmt_core::kAltSqlStmtCore67: // alter secret
         case TRule_sql_stmt_core::kAltSqlStmtCore68: // drop secret
             return false;
+        case TRule_sql_stmt_core::ALT_NOT_SET:
+            Y_UNREACHABLE();
     }
 }
 

@@ -275,7 +275,7 @@ bool TGroupByClause::GroupingElement(const TRule_grouping_element& node, EGroupB
             break;
         }
         case TRule_grouping_element::ALT_NOT_SET:
-            Y_ABORT("You should change implementation according to grammar changes");
+            Y_UNREACHABLE();
     }
     return true;
 }
@@ -435,8 +435,11 @@ bool TGroupByClause::AllowUnnamed(TPosition pos, EGroupByFeatures featureContext
         case EGroupByFeatures::GroupingSet:
             feature = "GROUPING SETS";
             break;
-        default:
+        case EGroupByFeatures::Expression:
+        case EGroupByFeatures::Empty:
+        case EGroupByFeatures::End:
             YQL_ENSURE(false, "Unknown feature");
+            break;
     }
 
     Ctx_.Error(pos) << "Unnamed expressions are not supported in " << feature << ". Please use '<expr> AS <name>'.";

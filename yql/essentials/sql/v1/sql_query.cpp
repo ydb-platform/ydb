@@ -775,7 +775,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                     break;
                 }
                 case TRule_alter_user_stmt_TBlock4::ALT_NOT_SET:
-                    Y_ABORT("You should change implementation according to grammar changes");
+                    Y_UNREACHABLE();
             }
 
             AddStatementToBlocks(blocks, stmt);
@@ -878,7 +878,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                     break;
                 }
                 case TRule_alter_group_stmt_TBlock4::ALT_NOT_SET:
-                    Y_ABORT("You should change implementation according to grammar changes");
+                    Y_UNREACHABLE();
             }
 
             AddStatementToBlocks(blocks, stmt);
@@ -1641,8 +1641,8 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                     }
                     break;
                 }
-                case TRule_alter_backup_collection_stmt_TBlock3::ALT_NOT_SET: {
-                } // do nothing
+                case TRule_alter_backup_collection_stmt_TBlock3::ALT_NOT_SET:
+                    Y_UNREACHABLE();
             }
 
             auto database = addDatabase ? TAlterBackupCollectionParameters::EDatabase::Add : dropDatabase ? TAlterBackupCollectionParameters::EDatabase::Drop
@@ -2011,8 +2011,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                     break;
                 }
                 case TRule_alter_database_action::ALT_NOT_SET:
-                    AltNotImplemented("alter_database_action", action);
-                    return false;
+                    Y_UNREACHABLE();
             }
 
             const TPosition pos = Ctx_.Pos();
@@ -2256,9 +2255,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             break;
         }
         case TRule_sql_stmt_core::ALT_NOT_SET:
-            Ctx_.IncrementMonCounter("sql_errors", "UnknownStatement" + internalStatementName);
-            AltNotImplemented("sql_stmt_core", core);
-            return false;
+            Y_UNREACHABLE();
     }
 
     Ctx_.IncrementMonCounter("sql_features", internalStatementName);
@@ -2495,10 +2492,8 @@ bool TSqlQuery::AlterTableAction(const TRule_alter_table_action& node, TAlterTab
             break;
         }
 
-        case TRule_alter_table_action::ALT_NOT_SET: {
-            AltNotImplemented("alter_table_action", node);
-            return false;
-        }
+        case TRule_alter_table_action::ALT_NOT_SET:
+            Y_UNREACHABLE();
     }
     return true;
 }
@@ -2553,8 +2548,7 @@ bool TSqlQuery::AlterExternalTableAction(const TRule_alter_external_table_action
         }
 
         case TRule_alter_external_table_action::ALT_NOT_SET:
-            AltNotImplemented("alter_external_table_action", node);
-            return false;
+            Y_UNREACHABLE();
     }
     return true;
 }
@@ -2769,8 +2763,7 @@ bool TSqlQuery::AlterTableAlterIndex(const TRule_alter_table_alter_index& node, 
             break;
         }
         case TRule_alter_table_alter_index_action::ALT_NOT_SET:
-            AltNotImplemented("alter_table_alter_index_action", action);
-            return false;
+            Y_UNREACHABLE();
     }
 
     return true;
@@ -2827,7 +2820,7 @@ bool TSqlQuery::AlterSequenceAction(const TRule_alter_sequence_action& node, TSe
             break;
         }
         case TRule_alter_sequence_action::ALT_NOT_SET:
-            Y_ABORT("You should change implementation according to grammar changes");
+            Y_UNREACHABLE();
     }
 
     return true;
@@ -2873,8 +2866,7 @@ bool TSqlQuery::AlterTableAlterChangefeed(const TRule_alter_table_alter_changefe
         }
 
         case TRule_changefeed_alter_settings::ALT_NOT_SET:
-            AltNotImplemented("changefeed_alter_settings", alter);
-            return false;
+            Y_UNREACHABLE();
     }
 
     return true;
@@ -3221,8 +3213,6 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
             case TWarningRule::EParseResult::PARSE_ACTION_FAIL:
                 ctx.Error() << parseError;
                 return {};
-            default:
-                Y_ENSURE(false, "Unknown parse result");
         }
 
         ctx.WarningPolicy.AddRule(rule);
@@ -3881,7 +3871,7 @@ TNodePtr TSqlQuery::Build(const TRule_delete_stmt& stmt) {
             }
 
             case TRule_delete_stmt_TBlock5::ALT_NOT_SET:
-                return nullptr;
+                Y_UNREACHABLE();
         }
     }
 
@@ -3959,7 +3949,7 @@ TNodePtr TSqlQuery::Build(const TRule_update_stmt& stmt) {
         }
 
         case TRule_update_stmt_TBlock4::ALT_NOT_SET:
-            return nullptr;
+            Y_UNREACHABLE();
     }
 }
 
@@ -3970,8 +3960,7 @@ TSourcePtr TSqlQuery::Build(const TRule_set_clause_choice& stmt) {
         case TRule_set_clause_choice::kAltSetClauseChoice2:
             return Build(stmt.GetAlt_set_clause_choice2().GetRule_multiple_column_assignment1());
         case TRule_set_clause_choice::ALT_NOT_SET:
-            AltNotImplemented("set_clause_choice", stmt);
-            return nullptr;
+            Y_UNREACHABLE();
     }
 }
 
@@ -4173,7 +4162,7 @@ static bool BuildColumnFeatures(std::map<TString, TDeferredAtom>& result, const 
         case TRule_type_name_or_bind::kAltTypeNameOrBind2:
             return false;
         case TRule_type_name_or_bind::ALT_NOT_SET:
-            Y_ABORT("You should change implementation according to grammar changes");
+            Y_UNREACHABLE();
     }
 
     result["NAME"] = TDeferredAtom(pos, columnName);
@@ -4209,7 +4198,7 @@ bool TSqlQuery::ParseTableStoreFeatures(std::map<TString, TDeferredAtom>& result
             break;
         }
         case TRule_alter_table_store_action::ALT_NOT_SET:
-            Y_ABORT("You should change implementation according to grammar changes");
+            Y_UNREACHABLE();
     }
     return true;
 }

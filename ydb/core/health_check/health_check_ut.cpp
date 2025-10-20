@@ -2889,6 +2889,8 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         }
 
         auto ssObserver = runtime.AddObserver<TEvStateStorage::TEvListStateStorageResult>([&](auto&& ev) { ev->Get()->Info = info; });
+        auto sbObserver = runtime.AddObserver<TEvStateStorage::TEvListSchemeBoardResult>([&](auto&& ev) { ev->Get()->Info = info; });
+        auto bObserver = runtime.AddObserver<TEvStateStorage::TEvListBoardResult>([&](auto&& ev) { ev->Get()->Info = info; });
 
         auto disconnectObserver = runtime.AddObserver<TEvWhiteboard::TEvSystemStateResponse>([&](auto&& ev) {
             auto actor = ev->Recipient;
@@ -2900,11 +2902,15 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
             }
         });
 
-        runtime.Send(new IEventHandle(NHealthCheck::MakeHealthCheckID(), sender, new NHealthCheck::TEvSelfCheckRequest(), 0));
+        auto *request = new NHealthCheck::TEvSelfCheckRequest();
+        request->Request.set_merge_records(true);
+        runtime.Send(new IEventHandle(NHealthCheck::MakeHealthCheckID(), sender, request, 0));
         auto result = runtime.GrabEdgeEvent<NHealthCheck::TEvSelfCheckResult>(handle)->Result;
         Cerr << result.ShortDebugString() << Endl;
         if (expectedStatus) {
             CheckHcResultHasIssuesWithStatus(result, "STATE_STORAGE", *expectedStatus, 1);
+            CheckHcResultHasIssuesWithStatus(result, "SCHEME_BOARD", *expectedStatus, 1);
+            CheckHcResultHasIssuesWithStatus(result, "BOARD", *expectedStatus, 1);
         } else {
             UNIT_ASSERT_VALUES_EQUAL(result.self_check_result(), Ydb::Monitoring::SelfCheck::GOOD);
         }

@@ -320,7 +320,7 @@ public:
             if (issueLog.status() != Ydb::Monitoring::StatusFlag::UNSPECIFIED) {
                 id << Ydb::Monitoring::StatusFlag_Status_Name(issueLog.status()) << '-';
             }
-            id << crc16(issueLog.message());
+            id << crc16(TStringBuilder() << issueLog.message() << issueLog.type());
             if (location.database().name()) {
                 id << '-' << crc32(location.database().name());
             }
@@ -367,6 +367,15 @@ public:
             if (location.compute().schema().path()) {
                 id << '-' << crc32(location.compute().schema().path());
             }
+            if (location.compute().state_storage().pile().name()) {
+                id << '-' << location.compute().state_storage().pile().name();
+            }
+            if (location.compute().state_storage().ring()) {
+                id << '-' << location.compute().state_storage().ring();
+            }
+            if (location.compute().state_storage().node().id()) {
+                id << '-' << location.compute().state_storage().node().id();
+            }
             return id.Str();
         }
 
@@ -396,10 +405,10 @@ public:
                 if (Location.ByteSizeLong() > 0) {
                     issueLog.mutable_location()->CopyFrom(Location);
                 }
-                issueLog.set_id(GetIssueId(issueLog));
                 if (Type) {
                     issueLog.set_type(Type);
                 }
+                issueLog.set_id(GetIssueId(issueLog));
                 issueLog.set_level(Level);
                 if (!reason.empty()) {
                     for (const TString& r : reason) {
@@ -680,6 +689,8 @@ public:
     std::optional<TRequestResponse<TEvNodeWardenStorageConfig>> NodeWardenStorageConfig;
     std::optional<TRequestResponse<TEvStateStorage::TEvBoardInfo>> DatabaseBoardInfo;
     std::optional<TRequestResponse<TEvStateStorage::TEvListStateStorageResult>> StateStorageInfo;
+    std::optional<TRequestResponse<TEvStateStorage::TEvListSchemeBoardResult>> SchemeBoardInfo;
+    std::optional<TRequestResponse<TEvStateStorage::TEvListBoardResult>> BoardInfo;
     THashSet<TNodeId> UnknownStaticGroups;
 
     const NKikimrConfig::THealthCheckConfig& HealthCheckConfig;
@@ -845,7 +856,11 @@ public:
         if (!IsSpecificDatabaseFilter()) {
             StateStorageInfo = TRequestResponse<TEvStateStorage::TEvListStateStorageResult>(Span.CreateChild(TComponentTracingLevels::TTablet::Detailed, "TEvStateStorage::TEvListStateStorageResult"));
             Send(MakeStateStorageProxyID(), new TEvStateStorage::TEvListStateStorage(), 0/*flags*/, 0/*cookie*/, Span.GetTraceId());
-            ++Requests;
+            SchemeBoardInfo = TRequestResponse<TEvStateStorage::TEvListSchemeBoardResult>(Span.CreateChild(TComponentTracingLevels::TTablet::Detailed, "TEvStateStorage::TEvListSchemeBoardResult"));
+            Send(MakeStateStorageProxyID(), new TEvStateStorage::TEvListSchemeBoard(false), 0/*flags*/, 0/*cookie*/, Span.GetTraceId());
+            BoardInfo = TRequestResponse<TEvStateStorage::TEvListBoardResult>(Span.CreateChild(TComponentTracingLevels::TTablet::Detailed, "TEvStateStorage::TEvListBoardResult"));
+            Send(MakeStateStorageProxyID(), new TEvStateStorage::TEvListBoard(), 0/*flags*/, 0/*cookie*/, Span.GetTraceId());
+            Requests += 3;
         }
 
 
@@ -945,6 +960,32 @@ public:
         }
     }
 
+    void Handle(TEvStateStorage::TEvListSchemeBoardResult::TPtr& ev) {
+        if (SchemeBoardInfo->Set(std::move(ev))) {
+            for (const auto& group : SchemeBoardInfo->Get()->Info->RingGroups) {
+                for (const auto& ring : group.Rings) {
+                    for (const auto& replica : ring.Replicas) {
+                        RequestGenericNode(replica.NodeId());
+                    }
+                }
+            }
+            RequestDone("TEvListSсhemeBoardResult");
+        }
+    }
+
+    void Handle(TEvStateStorage::TEvListBoardResult::TPtr& ev) {
+        if (BoardInfo->Set(std::move(ev))) {
+            for (const auto& group : BoardInfo->Get()->Info->RingGroups) {
+                for (const auto& ring : group.Rings) {
+                    for (const auto& replica : ring.Replicas) {
+                        RequestGenericNode(replica.NodeId());
+                    }
+                }
+            }
+            RequestDone("TEvListBoardResult");
+        }
+    }
+
     STATEFN(StateWait) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvents::TEvUndelivered, Handle);
@@ -971,6 +1012,8 @@ public:
             hFunc(TEvents::TEvWakeup, HandleTimeout);
             hFunc(TEvNodeWardenStorageConfig, Handle);
             hFunc(TEvStateStorage::TEvListStateStorageResult, Handle);
+            hFunc(TEvStateStorage::TEvListSchemeBoardResult, Handle);
+            hFunc(TEvStateStorage::TEvListBoardResult, Handle);
         }
     }
 
@@ -3024,6 +3067,18 @@ public:
                             message = std::regex_replace(message.c_str(), std::regex("^PDisk "), "PDisks ");
                             break;
                         }
+                        case ETags::StateStorageRing: {
+                            message = std::regex_replace(message.c_str(), std::regex("^Ring has "), "Rings have ");
+                            message = std::regex_replace(message.c_str(), std::regex("^Ring is "), "Rings are ");
+                            message = std::regex_replace(message.c_str(), std::regex("^Ring "), "Rings ");
+                            break;
+                        }
+                        case ETags::StateStorageNode: {
+                            message = std::regex_replace(message.c_str(), std::regex("^Ring has "), "Rings have ");
+                            message = std::regex_replace(message.c_str(), std::regex("^Ring is "), "Rings are ");
+                            message = std::regex_replace(message.c_str(), std::regex("^Ring "), "Rings ");
+                            break;
+                        }
                         default:
                             break;
                     }
@@ -3078,6 +3133,10 @@ public:
                 if (isSimilar && similar.begin()->IssueLog.location().storage().pool().group().has_pile()) {
                     isSimilar = it->IssueLog.location().storage().pool().group().pile().name()
                         == similar.begin()->IssueLog.location().storage().pool().group().pile().name();
+                }
+                if (isSimilar && similar.begin()->IssueLog.location().compute().state_storage().has_pile()) {
+                    isSimilar = it->IssueLog.location().compute().state_storage().pile().name()
+                        == similar.begin()->IssueLog.location().compute().state_storage().pile().name();
                 }
                 if (isSimilar) {
                     auto move = it++;
@@ -3320,6 +3379,8 @@ public:
             MergeLevelRecords(mergeContext, ETags::VDiskState, ETags::BridgeGroupState);
             MergeLevelRecords(mergeContext, ETags::VDiskState, ETags::GroupState);
             MergeLevelRecords(mergeContext, ETags::PDiskState, ETags::VDiskState);
+            MergeLevelRecords(mergeContext, ETags::StateStorageRing);
+            MergeLevelRecords(mergeContext, ETags::StateStorageNode, ETags::StateStorageRing);
         }
         mergeContext.FillRecords(records);
     }
@@ -3488,20 +3549,16 @@ public:
         }
     }
 
-    void FillStateStorage(TOverallStateContext& context) {
-        if (!StateStorageInfo || !StateStorageInfo->IsOk()) {
-            return;
-        }
+    void FillStateStorage(TOverallStateContext& context, TString type, TIntrusiveConstPtr<TStateStorageInfo> info) {
         TSelfCheckResult ssContext;
-        ssContext.Type = "STATE_STORAGE";
-        const auto info = StateStorageInfo->Get()->Info;
+        ssContext.Type = type;
         for (const auto& ringGroup : info->RingGroups) {
             if (ringGroup.State != ERingGroupState::PRIMARY && ringGroup.State != ERingGroupState::SYNCHRONIZED) {
                 continue;
             }
             TSelfCheckResult* currentContext = &ssContext;
-            TSelfCheckContext pileContext(&ssContext, "PILE_STATE_STORAGE");
-            if ((bool)ringGroup.BridgePileId) {
+            TSelfCheckContext pileContext(&ssContext, TStringBuilder() << "PILE_" << type);
+            if ((bool)ringGroup.BridgePileId && NodeWardenStorageConfig->IsOk()) {
                 const auto& pileName = NodeWardenStorageConfig->Get()->BridgeInfo->GetPile(ringGroup.BridgePileId)->Name;
                 pileContext.Location.mutable_compute()->mutable_state_storage()->mutable_pile()->set_name(pileName);
                 currentContext = &pileContext;
@@ -3510,8 +3567,8 @@ public:
             ui32 badRings = 0;
             for (size_t ringIdx = 0; ringIdx < ringGroup.Rings.size(); ++ringIdx) {
                 const auto& ring = ringGroup.Rings[ringIdx];
-                TSelfCheckContext ringContext(currentContext, "STATE_STORAGE_RING");
-                ringContext.Location.mutable_compute()->mutable_state_storage()->set_ring(ringIdx);
+                TSelfCheckContext ringContext(currentContext, TStringBuilder() << type << "_RING");
+                ringContext.Location.mutable_compute()->mutable_state_storage()->set_ring(ringIdx + 1);
                 if (ring.IsDisabled) {
                     ++disabledRings;
                     continue;
@@ -3519,9 +3576,9 @@ public:
                 for (const auto& replica : ring.Replicas) {
                     const auto node = replica.NodeId();
                     if (!NodeSystemState[node].IsOk()) {
-                        TSelfCheckContext nodeContext(&ringContext, "STATE_STORAGE_NODE");
+                        TSelfCheckContext nodeContext(&ringContext, TStringBuilder() << type << "_NODE");
                         nodeContext.Location.mutable_compute()->mutable_state_storage()->mutable_node()->set_id(node);
-                        nodeContext.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "State storage node is not available", ETags::StateStorageNode);
+                        nodeContext.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "Node is not available", ETags::StateStorageNode);
                     }
                 }
                 ringContext.ReportWithMaxChildStatus("Ring has unavailable nodes", ETags::StateStorageRing, {ETags::StateStorageNode});
@@ -3530,13 +3587,14 @@ public:
                 }
             }
             if (disabledRings + badRings > (ringGroup.NToSelect - 1) / 2) {
-                currentContext->ReportStatus(Ydb::Monitoring::StatusFlag::RED, "State storage is not functional", ETags::StateStorage);
+                currentContext->ReportStatus(Ydb::Monitoring::StatusFlag::RED, "There is not enough functional rings", ETags::StateStorage);
             } else if (badRings > 1) {
-                currentContext->ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Some state storage rings have unavailable replicas", ETags::StateStorage);
+                currentContext->ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Multiple rings have unavailable replicas", ETags::StateStorage);
             } else if (badRings > 0) {
-                currentContext->ReportStatus(Ydb::Monitoring::StatusFlag::BLUE, "State storage has unavailable replicas", ETags::StateStorage);
+                currentContext->ReportStatus(Ydb::Monitoring::StatusFlag::BLUE, "One ring has unavailable replicas", ETags::StateStorage);
             }
         }
+        MergeRecords(ssContext.IssueRecords);
         context.UpdateMaxStatus(ssContext.GetOverallStatus());
         context.AddIssues(ssContext.IssueRecords);
     }
@@ -3548,7 +3606,15 @@ public:
             for (auto& [path, state] : DatabaseState) {
                 FillDatabaseResult(context, path, state);
             }
-            FillStateStorage(context);
+            if (StateStorageInfo && StateStorageInfo->IsOk()) {
+                FillStateStorage(context, "STATE_STORAGE", StateStorageInfo->Get()->Info);
+            }
+            if (SchemeBoardInfo && SchemeBoardInfo->IsOk()) {
+                FillStateStorage(context, "SCHEME_BOARD", SchemeBoardInfo->Get()->Info);
+            }
+            if (BoardInfo && BoardInfo->IsOk()) {
+                FillStateStorage(context, "BOARD", BoardInfo->Get()->Info);
+            }
         }
         if (DatabaseState.empty()) {
             Ydb::Monitoring::DatabaseStatus& databaseStatus(*context.Result->add_database_status());

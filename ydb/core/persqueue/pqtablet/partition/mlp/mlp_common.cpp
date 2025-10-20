@@ -31,6 +31,23 @@ std::unique_ptr<TEvPQ::TEvRead> MakeEvRead(
     );
 }
 
+std::unique_ptr<TEvPQ::TEvSetClientInfo> MakeEvCommit(
+    const NKikimrPQ::TPQTabletConfig::TConsumer consumer,
+    ui64 offset,
+    ui64 cookie
+) {
+    return std::make_unique<TEvPQ::TEvSetClientInfo>(
+        cookie,
+        consumer.GetName(),
+        offset,
+        TString{}, // sessionId
+        0, // partitionSessionId
+        consumer.GetGeneration(),
+        0, // step
+        TActorId{} // pipeClient
+    );    
+}
+
 bool IsSucess(const TEvPQ::TEvProxyResponse::TPtr& ev) {
     return ev->Get()->Response->GetStatus() == NMsgBusProxy::MSTATUS_OK &&
         ev->Get()->Response->GetErrorCode() == NPersQueue::NErrorCode::OK;

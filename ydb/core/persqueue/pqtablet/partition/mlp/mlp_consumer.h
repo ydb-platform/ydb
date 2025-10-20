@@ -63,7 +63,7 @@ private:
     void ReadSnapshot();
     void PersistSnapshot();
 
-    void Commit();
+    void CommitIfNeeded();
     
 private:
     const ui32 PartitionId;

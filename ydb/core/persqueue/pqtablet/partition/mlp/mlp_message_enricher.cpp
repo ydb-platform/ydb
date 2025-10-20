@@ -34,7 +34,7 @@ void TMessageEnricherActor::Handle(TEvPQ::TEvProxyResponse::TPtr& ev) {
     LOG_D("Handle TEvPQ::TEvProxyResponse");
     if (Cookie != GetCookie(ev)) {
         LOG_D("Cookie mismatch: " << Cookie << " != " << GetCookie(ev));
-        //return PassAway();
+        //return PassAway(); TODO MLP Check cookie
     }
 
     if (!IsSucess(ev)) {
@@ -55,7 +55,7 @@ void TMessageEnricherActor::Handle(TEvPQ::TEvProxyResponse::TPtr& ev) {
                 while (!reply.Offsets.empty() && offset > reply.Offsets.front()) {
                     reply.Offsets.pop_front();
                 }
-                // TODO multi part messages
+                // TODO MLP multi part messages
                 if (!reply.Offsets.empty() && offset == reply.Offsets.front()) {
                     auto* message = PendingResponse->Record.AddMessage();
                     message->MutableId()->SetPartitionId(PartitionId);
@@ -90,6 +90,12 @@ void TMessageEnricherActor::Handle(TEvPQ::TEvError::TPtr&) {
 
 void TMessageEnricherActor::Handle(TEvents::TEvWakeup::TPtr&) {
     LOG_D("TEvents::TEvWakeup");
+
+    for (auto& reply : Queue) {
+        Send(reply.Sender, new TEvPersQueue::TEvMLPErrorResponse(Ydb::StatusIds::TIMEOUT, "Enrich timeout"), 0, reply.Cookie);
+    }
+    Queue.clear();
+
     PassAway();
 }
 
@@ -116,7 +122,7 @@ void TMessageEnricherActor::ProcessQueue() {
 
         auto offset = reply.Offsets.front();
         LOG_D("Fetching from offset " << offset << " from " << PartitionActorId);
-        Send(PartitionActorId, MakeEvRead(SelfId(), ConsumerName, offset, 1, ++Cookie));
+        Send(PartitionActorId, MakeEvRead(SelfId(), ConsumerName, offset, 1 /* message count */, ++Cookie));
 
         return;
     }

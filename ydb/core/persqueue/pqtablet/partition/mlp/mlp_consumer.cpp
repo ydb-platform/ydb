@@ -216,7 +216,7 @@ void TConsumerActor::HandleOnWrite(TEvKeyValue::TEvResponse::TPtr& ev) {
     LOG_D("Snapshot persisted");
     Become(&TConsumerActor::StateWork);
 
-    Commit();
+    CommitIfNeeded();
 
     if (!PendingReadQueue.empty()) {
         auto msgs = std::exchange(PendingReadQueue, {});
@@ -230,13 +230,11 @@ void TConsumerActor::HandleOnWrite(TEvKeyValue::TEvResponse::TPtr& ev) {
     FetchMessagesIfNeeded();
 }
 
-void TConsumerActor::Commit() {
+void TConsumerActor::CommitIfNeeded() {
     auto offset = Storage->GetFirstUncommittedOffset();
     LOG_D("Try commit offset: " << offset << " vs " << LastCommittedOffset);
     if (LastCommittedOffset != offset) {
-        auto ev = std::make_unique<TEvPQ::TEvSetClientInfo>(0, Config.GetName(), offset,
-            TString{}, 0, 0, 0, TActorId{});
-        Send(PartitionActorId, std::move(ev));
+        Send(PartitionActorId, MakeEvCommit(Config, offset));
         LastCommittedOffset = offset;
     }
 }

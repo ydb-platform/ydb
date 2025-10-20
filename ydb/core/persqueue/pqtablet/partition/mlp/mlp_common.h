@@ -34,6 +34,12 @@ std::unique_ptr<TEvPQ::TEvRead> MakeEvRead(
     ui64 nextPartNo = 0
 );
 
+std::unique_ptr<TEvPQ::TEvSetClientInfo> MakeEvCommit(
+    const NKikimrPQ::TPQTabletConfig::TConsumer consumer,
+    ui64 offset,
+    ui64 cookie = 0
+);
+
 bool IsSucess(const TEvPQ::TEvProxyResponse::TPtr& ev);
 ui64 GetCookie(const TEvPQ::TEvProxyResponse::TPtr& ev);
 

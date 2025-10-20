@@ -206,7 +206,7 @@ struct TGraphMeta {
     bool IsRestored = false;
     IKqpGateway::TKqpSnapshot Snapshot;
     TMaybe<ui64> LockTxId;
-    ui64 TxId;
+    ui64 TxId = 0;
     ui32 LockNodeId = 0;
     NKikimrKqp::EIsolationLevel RequestIsolationLevel;
     TMaybe<NKikimrDataEvents::ELockMode> LockMode;

@@ -1633,7 +1633,6 @@ class TestFullCycleLocalBackupRestoreWComplSchemaChange(TestFullCycleLocalBackup
         src_rel = to_rel(full_from)
         dst_rel = to_rel(full_to)
 
-        # ensure parent directory for destination exists (idempotent)
         parent = os.path.dirname(dst_rel)
         parent_full = os.path.join(self.root_dir, parent) if parent else None
         if parent and parent_full:
@@ -1766,13 +1765,6 @@ class TestFullCycleLocalBackupRestoreWComplSchemaChange(TestFullCycleLocalBackup
                 session.execute_scheme('ALTER TABLE `/Root/orders` ADD COLUMN new_col Uint32;')
             except Exception:
                 raise AssertionError("ADD COLUMN failed in stage 2")
-
-            # alter columns (best-effort: change type via SET with TTL as a proxy)
-            try:
-                session.execute_scheme('ALTER TABLE `/Root/orders` SET (TTL = Interval("PT0S") ON expire_at);')
-            except Exception:
-                # non-fatal: not all servers support TTL syntax — continue
-                pass
 
             # drop a column
             try:

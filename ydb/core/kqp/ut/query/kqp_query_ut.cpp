@@ -3394,7 +3394,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
             TVector<TString> queries = {
                 "DISCARD SELECT 1",
                 "DISCARD SELECT COUNT(*) FROM `/Root/EightShard`",
-                // "DISCARD SELECT 5 FROM (SELECT Key FROM `/Root/EightShard`)",
+                "DISCARD SELECT 5 FROM (SELECT Key FROM `/Root/EightShard`)",
                 R"(DISCARD SELECT e1.Key, e2.Value1
                 FROM `/Root/EightShard` AS e1
                 JOIN `/Root/TwoShard` AS e2 ON e1.Key = e2.Key)"
@@ -3408,41 +3408,64 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
                     "DISCARD SELECT should return no result sets for query: " << query);
             }
         }
+        // check that dml queries returns result with discard within backward compability
         {
-            TVector<TString> queries = {
-                "SELECT 1; DISCARD SELECT 2; DISCARD SELECT COUNT(*) FROM `/Root/EightShard`; SELECT MIN(Key) FROM `/Root/TwoShard`"
-            };
+            
+        }
+        {
+            auto queries = R"(SELECT 1; DISCARD SELECT 2; DISCARD SELECT COUNT(*) FROM `/Root/EightShard`;
+                        SELECT MIN(Key) FROM `/Root/TwoShard`)";
 
-            for (const auto& query : queries) {
-                auto result = db.ExecuteQuery(query,
+                auto result = db.ExecuteQuery(queries,
                         NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
                 UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetResultSets().size(), 2,
                 "expect 2 result sets, got " << result.GetResultSets().size() << " instead");
-            }
         }
-
-        // Test case: DISCARD with ENSURE
+        // todo: somehow check that ensures calculated
         {
-            TVector<TString> discardEnsureQueries = {
-                R"(DISCARD SELECT Ensure(Data, Data < 100, "Data value out of range") AS value FROM `/Root/EightShard`)"
+            auto discardEnsureQueries = R"(DISCARD SELECT Ensure(Data, Data < 100, "Data value out of range") AS value FROM `/Root/EightShard`)";
+
+            auto result = db.ExecuteQuery(discardEnsureQueries,
+                    NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetResultSets().size(), 0,
+                "got result sets: " << result.GetResultSets().size() << " instead of 0 for query: " << query);
+        
+        }
+        // test discard scan queries
+        {
+            auto tableClient = kikimr.GetTableClient();
+
+            TVector<TString> scanQueries = {
+                "DISCARD SELECT Key FROM `/Root/EightShard`",
+                "DISCARD SELECT COUNT(*) FROM `/Root/EightShard`",
+                "DISCARD SELECT * FROM `/Root/EightShard` WHERE Key > 100",
             };
 
-            for (const auto& query : discardEnsureQueries) {
+            for (auto& query : scanQueries) {
+                auto it = tableClient.StreamExecuteScanQuery(query).GetValueSync();                UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+                auto result = StreamResultToYson(it);
+                CompareYson(R"([])", result);
+            }
+        
+        }
+        // check that discard is not allowed in subqueries
+        {
+            TVector<TString> invalidQueries = {
+                "SELECT 5 FROM (DISCARD SELECT Key FROM `/Root/EightShard`)",
+                "SELECT * FROM `/Root/EightShard` WHERE Key IN (DISCARD SELECT 1)",
+                "SELECT 1 UNION ALL (DISCARD SELECT 2)"
+            };
+
+            for (const auto& query : invalidQueries) {
                 auto result = db.ExecuteQuery(query,
                         NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-                UNIT_ASSERT_VALUES_EQUAL_C(result.GetResultSets().size(), 0,
-                    "got result sets: " << result.GetResultSets().size() << " instead of 0 for query: " << query);
+                UNIT_ASSERT_C(!result.IsSuccess(),
+                    "Query should fail: " << query);
+                UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(),
+                    "DISCARD can only be used at the top level");
             }
-        }
-        // todo anely-d: create scan request and check discard on it
-        // todo anely-d: make error on this test
-        {
-            auto notValidQuery = "SELECT 5 FROM (DISCARD SELECT Key FROM `/Root/EightShard`)";
-            auto result = db.ExecuteQuery(notValidQuery,
-                    NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_C(!result.IsSuccess(), "discard is high level operator, can not be used in inner queries");
         }
     }
 }

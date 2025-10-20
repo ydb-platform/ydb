@@ -2627,7 +2627,16 @@ TNodeResult TSqlExpression::SelectSubExpr(const TRule_select_subexpr& node) {
         result = SelectOrExpr(node.GetRule_select_subexpr_intersect1()
                                   .GetRule_select_or_expr1());
     } else {
-        result = Wrap(LangVersionedSubSelect(TSqlSelect(Ctx_, Mode_).BuildSubSelect(node)));
+        auto subSelect = TSqlSelect(Ctx_, Mode_).BuildSubSelect(node);
+        if (subSelect) {
+            auto writeSettings = subSelect->GetWriteSettings();
+            if (writeSettings.Discard) {
+                Ctx_.Error(subSelect->GetPos()) << "DISCARD can only be used at the top level, not inside subqueries1";
+                return nullptr;
+            }
+        }
+        result = Wrap(LangVersionedSubSelect(std::move(subSelect)));
+
     }
 
     if (!result) {
@@ -2651,6 +2660,13 @@ TNodeResult TSqlExpression::SelectOrExpr(const TRule_select_or_expr& node) {
         case NSQLv1Generated::TRule_select_or_expr::kAltSelectOrExpr1: {
             const auto& select_kind = node.GetAlt_select_or_expr1().GetRule_select_kind_partial1();
             TSourcePtr source = TSqlSelect(Ctx_, Mode_).BuildSubSelect(select_kind);
+            if (source) {
+                auto writeSettings = source->GetWriteSettings();
+                if (writeSettings.Discard) {
+                    Ctx_.Error(source->GetPos()) << "DISCARD can only be used at the top level, not inside subqueries2";
+                    return nullptr;
+                }
+            }
             return Wrap(LangVersionedSubSelect(std::move(source)));
         }
         case NSQLv1Generated::TRule_select_or_expr::kAltSelectOrExpr2:

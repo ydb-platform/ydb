@@ -523,8 +523,8 @@ class BaseTestBackupInFiles(object):
             return 0, 0, f"CLI failed: {e}"
 
         candidates = [
-            l for l in output.splitlines()
-            if "│" in l and not l.strip().startswith(("┌", "├", "└", "┬", "┴", "┼"))
+            cand for cand in output.splitlines()
+            if "│" in cand and not cand.strip().startswith(("┌", "├", "└", "┬", "┴", "┼"))
         ]
 
         header_idx = None
@@ -544,21 +544,15 @@ class BaseTestBackupInFiles(object):
 
         return total, success_count, output
 
-    def poll_restore_by_count(self,
-                          start_total: int,
-                          start_success: int,
-                          timeout_s: int = 180,
-                          poll_interval: float = 2.0,
-                          verbose: bool = True):
+    def poll_restore_by_count(self, start_total: int, start_success: int, timeout_s: int = 180, poll_interval: float = 2.0, verbose: bool = True):
         deadline = time.time() + timeout_s
         seen_more = False
         last_total = start_total
         last_success = start_success
-        last_raw = ""
 
         while time.time() < deadline:
             total, success, raw = self._count_restore_operations()
-            last_total, last_success, last_raw = total, success, raw
+            last_total, last_success, _ = total, success, raw
 
             if verbose:
                 logger.info(f"[poll_restore] total={total} success={success} (start {start_total}/{start_success})")
@@ -1071,11 +1065,7 @@ class TestFullCycleLocalBackupRestoreWIncr(TestFullCycleLocalBackupRestore):
         start_total, start_success, _ = self._count_restore_operations()
         rest_inc1 = self._execute_yql(f"RESTORE `{col_inc1}`;")
         assert rest_inc1.exit_code == 0, f"RESTORE inc1 failed: {rest_inc1.std_err}"
-        ok, info = self.poll_restore_by_count(start_total=start_total,
-                                      start_success=start_success,
-                                      timeout_s=180,
-                                      poll_interval=2.0,
-                                      verbose=True)
+        ok, info = self.poll_restore_by_count(start_total=start_total, start_success=start_success, timeout_s=180, poll_interval=2.0, verbose=True)
         if not ok:
             raise AssertionError(
                 "Timeout waiting restore via operation list. Diagnostics: "
@@ -1092,11 +1082,7 @@ class TestFullCycleLocalBackupRestoreWIncr(TestFullCycleLocalBackupRestore):
         start_total, start_success, _ = self._count_restore_operations()
         rest_inc2 = self._execute_yql(f"RESTORE `{col_inc2}`;")
         assert rest_inc2.exit_code == 0, f"RESTORE inc2 failed: {rest_inc2.std_err}"
-        ok, info = self.poll_restore_by_count(start_total=start_total,
-                                      start_success=start_success,
-                                      timeout_s=180,
-                                      poll_interval=2.0,
-                                      verbose=True)
+        ok, info = self.poll_restore_by_count(start_total=start_total, start_success=start_success, timeout_s=180, poll_interval=2.0, verbose=True)
         if not ok:
             raise AssertionError(
                 "Timeout waiting restore via operation list. Diagnostics: "

@@ -184,7 +184,13 @@ class CommonClientInvoker(object):
             ('grpc.max_receive_message_length', 64 * 10 ** 6),
             ('grpc.max_send_message_length', 64 * 10 ** 6)
         ]
-        self._channel = grpc.insecure_channel("%s:%s" % (self.endpoint, self.port), options=self._options)
+
+        is_secure = "ydb.mdb.cloud" in endpoint # for dynamic nodes
+
+        if is_secure:
+            self._channel = grpc.secure_channel("%s:%s" % (self.endpoint, self.port), credentials=grpc.ssl_channel_credentials(), options=self._options)
+        else:
+            self._channel = grpc.insecure_channel("%s:%s" % (self.endpoint, self.port), options=self._options)
 
         self._dynconfig_stub = grpc_server.DynamicConfigServiceStub(self._channel)
         self._cms_stub = cms_grpc_server.CmsServiceStub(self._channel)
@@ -242,7 +248,8 @@ def fetch_dynconfig(client: CommonClientInvoker, expected_result : EExpectedResu
     if expected_result == EExpectedResult.Success:
         assert status == StatusIds.SUCCESS, generate_error_message('GetConfig', status, issue)
     elif expected_result == EExpectedResult.PermissionDenied:
-        assert status == StatusIds.PERMISSION_DENIED, generate_error_message('GetConfig', status, issue)
+        assert status == StatusIds.UNAUTHORIZED, generate_error_message('GetConfig', status, issue)
+        return None
     else:
         raise ValueError(f"Unknown expected_result: {expected_result}")
 
@@ -283,7 +290,7 @@ def alter_database(client: CommonClientInvoker, path : str, expected_result : EE
         if expected_result == EExpectedResult.Success:
             assert status == StatusIds.SUCCESS, generate_error_message("Alter database", status, issue)
         elif expected_result == EExpectedResult.PermissionDenied:
-            assert status == StatusIds.PERMISSION_DENIED, generate_error_message("Alter database", status, issue)
+            assert status == StatusIds.UNAUTHORIZED, generate_error_message("Alter database", status, issue)
         else:
             raise ValueError(f"Unknown expected_result: {expected_result}")
 
@@ -301,7 +308,7 @@ def scheme_ls(client: CommonClientInvoker, path : str, expected_result : EExpect
     if expected_result == EExpectedResult.Success:
         assert status == StatusIds.SUCCESS, generate_error_message("Scheme ls", status, issue)
     elif expected_result == EExpectedResult.PermissionDenied:
-        assert status == StatusIds.PERMISSION_DENIED, generate_error_message("Scheme ls", status, issue)
+        assert status == StatusIds.UNAUTHORIZED, generate_error_message("Scheme ls", status, issue)
     else:
         raise ValueError(f"Unknown expected_result: {expected_result}")
 

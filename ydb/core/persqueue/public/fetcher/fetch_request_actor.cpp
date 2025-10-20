@@ -42,6 +42,7 @@ struct TTopicInfo {
     TIntrusiveConstPtr<TSchemeCacheNavigate::TPQGroupInfo> PQInfo;
     TString RealPath;
     THashSet<ui32> PartitionsToRequest;
+    TIntrusivePtr<TSecurityObject> SecurityObject;
 
     //fetchRequest part
     THashMap<ui32, TAutoPtr<TEvPersQueue::TEvHasDataInfo>> HasDataRequests;
@@ -192,6 +193,7 @@ public:
                     auto& topicInfo = TopicInfo[topicPath];
                     topicInfo.PQInfo = info.Info;
                     topicInfo.RealPath = std::move(info.RealPath);
+                    topicInfo.SecurityObject = std::move(info.SecurityObject);
                     break;
                 }
                 default:
@@ -226,6 +228,12 @@ public:
 
         for (auto& [topicPath, info]: TopicInfo) {
             if (HasConsumer(info.PQInfo->Description.GetPQTabletConfig(), Settings.Consumer)) {
+                continue;
+            }
+
+            auto& topicInfo = TopicInfo[topicPath];
+            auto pqInfo = topicInfo.PQInfo;
+            if (Settings.UserToken && !topicInfo.SecurityObject->CheckAccess(NACLib::EAccessRights::AlterSchema,  *Settings.UserToken)) {
                 continue;
             }
 

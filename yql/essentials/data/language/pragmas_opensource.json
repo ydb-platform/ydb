@@ -1023,6 +1023,9 @@
     "name": "DisableSimpleColumns"
   },
   {
+    "name": "DisableSimplePg"
+  },
+  {
     "name": "DisableStrictJoinKeyTypes"
   },
   {
@@ -1180,6 +1183,9 @@
   },
   {
     "name": "SimpleColumns"
+  },
+  {
+    "name": "SimplePg"
   },
   {
     "name": "StrictJoinKeyTypes"

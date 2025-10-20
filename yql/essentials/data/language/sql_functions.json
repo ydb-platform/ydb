@@ -1248,6 +1248,18 @@
     "kind": "Normal"
   },
   {
+    "name": "SimplePg::now",
+    "kind": "Normal"
+  },
+  {
+    "name": "SimplePg::round",
+    "kind": "Normal"
+  },
+  {
+    "name": "SimplePg::to_date",
+    "kind": "Normal"
+  },
+  {
     "name": "Some",
     "kind": "Agg"
   },

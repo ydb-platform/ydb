@@ -53,6 +53,7 @@ struct TScopedState: public TThrRefBase {
     bool StrictJoinKeyTypes = false;
     bool UnicodeLiterals = false;
     bool WarnUntypedStringLiterals = false;
+    bool SimplePgByDefault = false;
     TNamedNodesMap NamedNodes;
 
     struct TLocal {

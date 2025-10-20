@@ -947,41 +947,33 @@ public:
         }
     }
 
-    void Handle(TEvStateStorage::TEvListStateStorageResult::TPtr& ev) {
-        if (StateStorageInfo->Set(std::move(ev))) {
-            for (const auto& group : StateStorageInfo->Get()->Info->RingGroups) {
-                for (const auto& ring : group.Rings) {
-                    for (const auto& replica : ring.Replicas) {
-                        RequestGenericNode(replica.NodeId());
-                    }
+    void RequestNodes(TIntrusiveConstPtr<TStateStorageInfo> info) {
+        for (const auto& group : info->RingGroups) {
+            for (const auto& ring : group.Rings) {
+                for (const auto& replica : ring.Replicas) {
+                    RequestGenericNode(replica.NodeId());
                 }
             }
+        }
+    }
+
+    void Handle(TEvStateStorage::TEvListStateStorageResult::TPtr& ev) {
+        if (StateStorageInfo->Set(std::move(ev))) {
+            RequestNodes(StateStorageInfo->Get()->Info);
             RequestDone("TEvListStateStorageResult");
         }
     }
 
     void Handle(TEvStateStorage::TEvListSchemeBoardResult::TPtr& ev) {
         if (SchemeBoardInfo->Set(std::move(ev))) {
-            for (const auto& group : SchemeBoardInfo->Get()->Info->RingGroups) {
-                for (const auto& ring : group.Rings) {
-                    for (const auto& replica : ring.Replicas) {
-                        RequestGenericNode(replica.NodeId());
-                    }
-                }
-            }
+            RequestNodes(SchemeBoardInfo->Get()->Info);
             RequestDone("TEvListSсhemeBoardResult");
         }
     }
 
     void Handle(TEvStateStorage::TEvListBoardResult::TPtr& ev) {
         if (BoardInfo->Set(std::move(ev))) {
-            for (const auto& group : BoardInfo->Get()->Info->RingGroups) {
-                for (const auto& ring : group.Rings) {
-                    for (const auto& replica : ring.Replicas) {
-                        RequestGenericNode(replica.NodeId());
-                    }
-                }
-            }
+            RequestNodes(BoardInfo->Get()->Info);
             RequestDone("TEvListBoardResult");
         }
     }
@@ -3558,7 +3550,7 @@ public:
             }
             TSelfCheckResult* currentContext = &ssContext;
             TSelfCheckContext pileContext(&ssContext, TStringBuilder() << "PILE_" << type);
-            if ((bool)ringGroup.BridgePileId && NodeWardenStorageConfig->IsOk()) {
+            if ((bool)ringGroup.BridgePileId && NodeWardenStorageConfig && NodeWardenStorageConfig->IsOk()) {
                 const auto& pileName = NodeWardenStorageConfig->Get()->BridgeInfo->GetPile(ringGroup.BridgePileId)->Name;
                 pileContext.Location.mutable_compute()->mutable_state_storage()->mutable_pile()->set_name(pileName);
                 currentContext = &pileContext;

@@ -1071,7 +1071,7 @@ class TStateStorageProxy : public TActor<TStateStorageProxy> {
     }
 
     void Handle(TEvStateStorage::TEvListBoard::TPtr &ev) {
-        Send(ev->Sender, new TEvStateStorage::TEvListBoardResult(Info), 0, ev->Cookie);
+        Send(ev->Sender, new TEvStateStorage::TEvListBoardResult(BoardInfo), 0, ev->Cookie);
     }
 
     void Handle(TEvStateStorage::TEvUpdateGroupConfig::TPtr &ev) {

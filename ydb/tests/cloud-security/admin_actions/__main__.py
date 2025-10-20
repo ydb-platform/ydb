@@ -320,32 +320,35 @@ def main():
     parsed_args = parse_args()
     client = CommonClientInvoker(parsed_args.endpoint, parsed_args.port, parsed_args.database, parsed_args.token)
 
-    match parsed_args.action:
-        case EAction.SchemeLs:
-            ls_result = scheme_ls(client, parsed_args.scheme_special_options.path, parsed_args.expected_result)
+    try:
+        match parsed_args.action:
+            case EAction.SchemeLs:
+                ls_result = scheme_ls(client, parsed_args.scheme_special_options.path, parsed_args.expected_result)
 
-            if parsed_args.expected_result == EExpectedResult.Success:
-                if parsed_args.scheme_special_options.quite:
-                    print("Scheme ls result fetched successfully")
-                else:
-                    print(f"Scheme ls result:\n{ls_result}")
+                if parsed_args.expected_result == EExpectedResult.Success:
+                    if parsed_args.scheme_special_options.quite:
+                        print("Scheme ls result fetched successfully")
+                    else:
+                        print(f"Scheme ls result:\n{ls_result}")
 
-        case EAction.AlterDatabase:
-            alter_database(client, parsed_args.database, parsed_args.expected_result)
+            case EAction.AlterDatabase:
+                alter_database(client, parsed_args.database, parsed_args.expected_result)
 
-        case EAction.Dynconfig:
-            fetched_dynconfig = fetch_dynconfig(client, parsed_args.expected_result)
+            case EAction.Dynconfig:
+                fetched_dynconfig = fetch_dynconfig(client, parsed_args.expected_result)
 
-            if parsed_args.expected_result == EExpectedResult.Success:
-                if parsed_args.dynconfig_special_options.quite:
-                    print("Config fetched successfully")
-                else:
-                    print(f"Fetched dynconfig:\n{fetched_dynconfig}")
+                if parsed_args.expected_result == EExpectedResult.Success:
+                    if parsed_args.dynconfig_special_options.quite:
+                        print("Config fetched successfully")
+                    else:
+                        print(f"Fetched dynconfig:\n{fetched_dynconfig}")
 
-        case _:
-            raise ValueError(f"Unknown action: {parsed_args.action}")
+            case _:
+                raise ValueError(f"Unknown action: {parsed_args.action}")
 
-    print("Done successfully")
+        print(f"Done successfully ({"permission denied" if parsed_args.expected_result == EExpectedResult.PermissionDenied else "no errors"})")
+    except Exception as e:
+        print(f"Something wrong. Issue: {e}")
 
 if __name__ == '__main__':
     main()

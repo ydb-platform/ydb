@@ -205,8 +205,21 @@ private:
                 auto tupleAnn = ctx.MakeType<TTupleExprType>(children);
                 node.Ptr()->SetTypeAnn(tupleAnn);
 
-                YQL_ENSURE(tableDesc->Metadata->ColumnOrder.size() == tableDesc->Metadata->Columns.size());
-                return Types.SetColumnOrder(node.Ref(), TColumnOrder(tableDesc->Metadata->ColumnOrder), ctx);
+                const auto& cols = tableDesc->Metadata->Columns;
+
+                TColumnOrder columnOrder;
+                size_t buildInProgressColumns = 0;
+
+                for (const auto& name : tableDesc->Metadata->ColumnOrder) {
+                    if (auto it = cols.find(name); it != cols.end() && it->second.IsBuildInProgress) {
+                        ++buildInProgressColumns;
+                    } else {
+                        columnOrder.AddColumn(name);
+                    }
+                }
+
+                YQL_ENSURE(columnOrder.Size() + buildInProgressColumns == tableDesc->Metadata->Columns.size());
+                return Types.SetColumnOrder(node.Ref(), columnOrder, ctx);
             }
 
             case TKikimrKey::Type::TableList:

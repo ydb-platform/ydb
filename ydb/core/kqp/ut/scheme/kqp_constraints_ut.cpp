@@ -887,6 +887,15 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
         {
             TString result = fQuery(R"(
+                PRAGMA OrderedColumns;
+                SELECT * FROM `/Root/AddNonColumnDoesnotReturnInternalError`;
+            )");
+
+            UNIT_ASSERT_STRING_CONTAINS(result, R"([[1u;"Changed";"Updated"];[2u;"New";"text"]])");
+        }
+
+        {
+            TString result = fQuery(R"(
                 UPSERT INTO `/Root/AddNonColumnDoesnotReturnInternalError` (Key, Value, Value2, Value3) VALUES (1, "4", "four", 1);
             )");
 

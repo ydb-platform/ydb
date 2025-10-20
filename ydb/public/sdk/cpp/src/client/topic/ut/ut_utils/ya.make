@@ -3,6 +3,8 @@ LIBRARY()
 SRCS(
     topic_sdk_test_setup.cpp
     topic_sdk_test_setup.h
+    txusage_fixture.cpp
+    txusage_fixture.h
 )
 
 PEERDIR(

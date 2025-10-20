@@ -244,6 +244,21 @@ public:
         }
 
         {
+            auto status = client.CreateUser("/Root", "useronlyreadrights", "AbAcAbA");
+            UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::MSTATUS_OK);
+
+            NYdb::NScheme::TSchemeClient schemeClient(*Driver);
+            NYdb::NScheme::TPermissions permissions("useronlyreadrights", {"ydb.generic.read"});
+
+            auto result = schemeClient
+                              .ModifyPermissions(
+                                  "/Root", NYdb::NScheme::TModifyPermissionsSettings().AddGrantPermissions(permissions))
+                              .ExtractValueSync();
+            Cerr << result.GetIssues().ToString() << "\n";
+            UNIT_ASSERT(result.IsSuccess());
+        }
+
+        {
             // Access Server Mock
             grpc::ServerBuilder builder;
             builder.AddListeningPort(accessServiceEndpoint, grpc::InsecureServerCredentials()).RegisterService(&accessServiceMock);
@@ -1992,6 +2007,26 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             CreateTopic(pqClient, topicName, totalPartitions, {consumerName});
         }
 
+        {
+            // authenticating as user with only read rights
+            TKafkaTestClient client(testServer.Port);
+            TString userName = "useronlyreadrights@/Root";
+            TString userPassword = "AbAcAbA";
+            client.AuthenticateToKafka(userName, userPassword);
+            std::vector<TString> topics = {topicName};
+            i32 heartbeatTimeout = 15000;
+            {
+                auto joinRespA = client.JoinAndSyncGroupAndWaitPartitions(topics, newConsumer2, totalPartitions, protocolName, totalPartitions, heartbeatTimeout);
+                auto fetchResponse1 = client.Fetch({{topicName, {0, 1}}});
+                UNIT_ASSERT_VALUES_EQUAL(fetchResponse1->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+                UNIT_ASSERT_VALUES_EQUAL(fetchResponse1->Responses.size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(fetchResponse1->Responses[0].Topic, topicName);
+                UNIT_ASSERT_VALUES_EQUAL(fetchResponse1->Responses[0].Partitions.size(), 2);
+                for (const auto& partitionResponse : fetchResponse1->Responses[0].Partitions) {
+                    UNIT_ASSERT_VALUES_EQUAL(partitionResponse.ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::TOPIC_AUTHORIZATION_FAILED));
+                }
+            }
+        }
         {
             // authenticating as user with read and write rights
             // checking that new consumer is added to a topic

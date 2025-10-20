@@ -3376,6 +3376,16 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
         ctx.Scoped->WarnUntypedStringLiterals = false;
         return TNodePtr{};
     }),
+    TableElemExt("SimplePg", [](CB_SIG) -> TMaybe<TNodePtr> {
+        auto& ctx = query.Context();
+        ctx.Scoped->SimplePgByDefault = true;
+        return TNodePtr{};
+    }),
+    TableElemExt("DisableSimplePg", [](CB_SIG) -> TMaybe<TNodePtr> {
+        auto& ctx = query.Context();
+        ctx.Scoped->SimplePgByDefault = false;
+        return TNodePtr{};
+    }),
     // END TODO
 
     TableElemExt("DataWatermarks", [](CB_SIG) -> TMaybe<TNodePtr> {
@@ -3614,6 +3624,8 @@ TMaybe<TNodePtr> TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt) {
         "disableunicodeliterals",
         "warnuntypedstringliterals",
         "disablewarnuntypedstringliterals",
+        "simplepg",
+        "disablesimplepg",
     };
     const bool hasLexicalScope = withConfigure || lexicalScopePragmas.contains(normalizedPragma);
     const bool withFileAlias = normalizedPragma == "file" || normalizedPragma == "folder" || normalizedPragma == "library" || normalizedPragma == "udf";

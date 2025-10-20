@@ -1,0 +1,7 @@
+pragma SimplePg;
+define action $a() as
+    pragma DisableSimplePg;
+    select now();
+end define;
+
+do $a();

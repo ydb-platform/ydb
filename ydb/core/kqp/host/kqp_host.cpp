@@ -1565,6 +1565,7 @@ private:
                 .SetUsePgParser(settings.UsePgParser)
                 .SetFromConfig(SessionCtx->Config());
             auto compileResult = CompileYqlQuery(query, /* isSql */ true, ctx, sqlVersion, settingsBuilder);
+
             if (compileResult.NeedToSplit) {
                 return MakeIntrusive<TAsyncPrepareNeedToSplitYqlResult>();
             } else {

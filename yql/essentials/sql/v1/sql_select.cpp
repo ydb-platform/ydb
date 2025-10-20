@@ -549,7 +549,7 @@ TSourcePtr TSqlSelect::SingleSource(const TRule_single_source& node, const TVect
             }
             auto writeSettings = source->GetWriteSettings();
             if (writeSettings.Discard) {
-                Ctx_.Error(pos) << "DISCARD can only be used at the top level, not inside subqueries3";
+                Ctx_.Error(pos) << "DISCARD can only be used at the top level, not inside subqueries";
                 return nullptr;
             }
             return BuildInnerSource(pos, BuildSourceNode(pos, std::move(source)), Ctx_.Scoped->CurrService, Ctx_.Scoped->CurrCluster);
@@ -1358,7 +1358,7 @@ TSqlSelect::TSelectKindResult TSqlSelect::SelectKind(const TRule_select_kind_par
     if (node.Alt_case() == TRule_select_kind_parenthesis::kAltSelectKindParenthesis1) {
         return SelectKind(node.GetAlt_select_kind_parenthesis1().GetRule_select_kind_partial1(), selectPos, placement);
     } else {
-        return SelectKind(node.GetAlt_select_kind_parenthesis2().GetRule_select_kind_partial2(), selectPos, {});
+        return SelectKind(node.GetAlt_select_kind_parenthesis2().GetRule_select_kind_partial2(), selectPos, placement);
     }
 }
 

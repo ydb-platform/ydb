@@ -247,29 +247,41 @@ public:
         TStringBuilder res;
         res << "{\n";
         auto serializeDict = [&](const char *name, auto &info) {
-            res << "\"" << name << "\" : {\n";
+            res << "\"" << name << "\": {\n";
+            bool first = true;
             for (auto &[k, v] : info) {
+                if (!first) {
+                    res << ",\n";
+                }
+                first = false;
                 TString data;
                 google::protobuf::util::MessageToJsonString(v, &data);
-                res << "\"" << k << "\": " << data << ",\n";
+                res << "\"" << k << "\": " << data;
             }
-            res << "}\n";
+            res << "},\n";
         };
-        auto serializeArray = [&](auto &info) {
-            res << "[\n";
-            for (auto v : info) {
-                res << v << ",\n";
-            }
-            res << "]";
-        };
+
         auto serializeDictOfArray = [&](const char *name, auto &info) {
-            res << "\"" << name << "\" : {\n";
-            for(auto &[k, v] : info) {
+            res << "\"" << name << "\": {\n";
+            bool first = true;
+            for(auto &[k, value] : info) {
+                if (!first) {
+                    res << ",\n";
+                }
+                first = false;
                 res << "\"" << k << "\": ";
-                serializeArray(v);
-                res << ",\n";
+                res << "[\n";
+                bool firstInArray = true;
+                for (auto v : value) {
+                    if (!firstInArray) {
+                        res << ",\n";
+                    }
+                    firstInArray = false;
+                    res << v;
+                }
+                res << "]";
             }
-            res << "}\n";
+            res << "},\n";
         };
         auto serialize = [&](const char *name, auto &info) {
             res << "\"" << name <<"\": ";

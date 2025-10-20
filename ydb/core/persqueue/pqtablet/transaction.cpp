@@ -51,7 +51,7 @@ TDistributedTransaction::TDistributedTransaction(const NKikimrPQ::TTransaction& 
         InitConfigTransaction(tx);
         break;
     case NKikimrPQ::TTransaction::KIND_UNKNOWN:
-        AFL_ENSURE(false, "unknown transaction type");
+        AFL_ENSURE(false);
     }
 
     AFL_ENSURE(tx.HasSourceActor());
@@ -152,7 +152,7 @@ void TDistributedTransaction::OnProposeTransaction(const NKikimrPQ::TEvProposeTr
         OnProposeTransaction(event.GetConfig(), extractTabletId);
         break;
     default:
-        AFL_ENSURE(false, "unknown TxBody case");
+        AFL_ENSURE(false);
     }
 
     PartitionRepliesCount = 0;
@@ -437,7 +437,7 @@ NKikimrPQ::TTransaction TDistributedTransaction::Serialize(EState state) {
         AddCmdWriteConfigTx(tx);
         break;
     case NKikimrPQ::TTransaction::KIND_UNKNOWN:
-        AFL_ENSURE(false, "unknown transaction type");
+        AFL_ENSURE(false);
     }
 
     tx.MutableOperations()->Add(Operations.begin(), Operations.end());

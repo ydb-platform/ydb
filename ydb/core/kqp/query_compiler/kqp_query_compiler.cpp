@@ -799,7 +799,6 @@ public:
             auto& txResult = *queryProto.MutableTransactions(txIndex)->MutableResults(txResultIndex);
 
             YQL_ENSURE(txResult.GetIsStream());
-            // txResult.SetQueryResultIndex(i);
 
             auto& queryBindingProto = *queryProto.AddResultBindings();
             auto& txBindingProto = *queryBindingProto.MutableTxResultBinding();
@@ -807,7 +806,6 @@ public:
             txBindingProto.SetResultIndex(txResultIndex);
 
             bool isDiscard = (i < resultDiscardFlags.size() && resultDiscardFlags[i]); // is it not always true?: i < resultDiscardFlags.size()
-            // queryBindingProto.SetDiscard(isDiscard);
             if (!isDiscard) {
                 txResult.SetQueryResultIndex(resultIdx);
                 resultIdx++;

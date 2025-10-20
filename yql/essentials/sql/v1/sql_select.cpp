@@ -553,7 +553,7 @@ TSourcePtr TSqlSelect::SingleSource(const TRule_single_source& node, const TVect
             }
             auto writeSettings = source->GetWriteSettings();
             if (writeSettings.Discard) {
-                Ctx_.Error(pos) << "DISCARD can only be used at the top level, not inside subqueries3";
+                Ctx_.Error(pos) << "DISCARD can only be used at the top level, not inside subqueries";
                 return nullptr;
             }
             return BuildInnerSource(pos, BuildSourceNode(pos, std::move(source)), Ctx_.Scoped->CurrService, Ctx_.Scoped->CurrCluster);
@@ -1364,18 +1364,7 @@ TSqlSelect::TSelectKindResult TSqlSelect::SelectKind(const TRule_select_kind_par
     if (node.Alt_case() == TRule_select_kind_parenthesis::kAltSelectKindParenthesis1) {
         return SelectKind(node.GetAlt_select_kind_parenthesis1().GetRule_select_kind_partial1(), selectPos, placement);
     } else {
-        const auto& partial = node.GetAlt_select_kind_parenthesis2().GetRule_select_kind_partial2();
-        const auto& innerSelectKind = partial.GetRule_select_kind1();
-        // filter only discard
-        if (innerSelectKind.HasBlock1() && placement.Defined() && !placement->IsFirstInSelectOp) {
-            auto discardPos = Ctx_.TokenPosition(partial.GetRule_select_kind1().GetBlock1().GetToken1());
-            if (!Ctx_.Warning(discardPos, TIssuesIds::YQL_DISCARD_IN_INVALID_PLACE, [](auto& out) {
-                    out << "DISCARD within set operators has no effect in second or later subqueries";
-                })) {
-                return {};
-            }
-        }
-        return SelectKind(partial, selectPos, {});
+        return SelectKind(node.GetAlt_select_kind_parenthesis2().GetRule_select_kind_partial2(), selectPos, placement);
     }
 }
 

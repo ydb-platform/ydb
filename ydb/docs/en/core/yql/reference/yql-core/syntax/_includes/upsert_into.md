@@ -25,3 +25,24 @@ VALUES ( 1, 10, 'Some text', Date('2021-10-07')),
        ( 2, 10, 'Some text', Date('2021-10-08'))
 ```
 
+# UPSERT INTO ... RETURNING
+
+It is used to insert or update rows and simultaneously return values from them. This allows you to get information about the modified record in a single query, eliminating the need for an additional `SELECT`.
+
+**Examples**
+
+* Return of all values of the changed string
+
+``` yql
+UPSERT INTO orders (order_id, status, amount)
+VALUES (1001, 'shipped', 500)
+RETURNING *;
+```
+
+* Return of specific columns
+
+``` yql
+UPSERT INTO users (user_id, name, email)
+VALUES (42, 'John Doe', 'john@example.com')
+RETURNING user_id, email;
+```

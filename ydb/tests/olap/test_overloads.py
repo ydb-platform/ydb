@@ -87,7 +87,6 @@ class TestLogScenario(object):
         cls.ydb_client.stop()
         cls.cluster.stop()
 
-
     @classmethod
     def _setup_ydb(cls, writing_in_flight_requests_count_limit, writing_in_flight_request_bytes_limit):
         ydb_path = yatest.common.build_path(os.environ.get("YDB_DRIVER_BINARY"))

@@ -1904,3 +1904,642 @@ class TestFullCycleLocalBackupRestoreWComplSchemaChange(TestFullCycleLocalBackup
         # cleanup
         if os.path.exists(export_dir):
             shutil.rmtree(export_dir)
+
+
+class TestFullCycleLocalBackupRestoreWIncrComplSchemaChange(TestFullCycleLocalBackupRestoreWSchemaChange):
+    def normalize_rows(self, rows):
+        header = rows[0]
+        body = rows[1:]
+
+        def norm_val(v):
+            return v.decode() if isinstance(v, (bytes, bytearray)) else str(v)
+        sorted_body = sorted([tuple(norm_val(x) for x in r) for r in body])
+        return (tuple(header), tuple(sorted_body))
+
+    def _remove_tables(self, table_paths: List[str]):
+        with self.session_scope() as session:
+            for tp in table_paths:
+                try:
+                    session.execute_scheme(f"DROP TABLE `{tp}`;")
+                except Exception:
+                    raise AssertionError(f"Failed to drop table {tp} (maybe not exists)")
+
+    name_re = re.compile(r"^([0-9]{8}T[0-9]{6}Z?)_(full|incremental)")
+
+    def extract_ts(self, name):
+        m = self.name_re.match(name)
+        if m:
+            return m.group(1)
+        return name.split("_", 1)[0]
+
+    def _rearrange_table(self, from_name: str, to_name: str):
+        full_from = f"/Root/{from_name}"
+        full_to = f"/Root/{to_name}"
+
+        def run_cli(args):
+            cmd = [
+                backup_bin(),
+                "--endpoint", f"grpc://localhost:{self.cluster.nodes[1].grpc_port}",
+                "--database", self.root_dir,
+            ] + args
+            return yatest.common.execute(cmd, check_exit_code=False)
+
+        def to_rel(p):
+            if p.startswith(self.root_dir + "/"):
+                return p[len(self.root_dir) + 1 :]
+            if p == self.root_dir:
+                return ""
+            return p.lstrip("/")
+
+        src_rel = to_rel(full_from)
+        dst_rel = to_rel(full_to)
+
+        # ensure parent directory for destination exists (idempotent)
+        parent = os.path.dirname(dst_rel)
+        parent_full = os.path.join(self.root_dir, parent) if parent else None
+        if parent and parent_full:
+            self.driver.scheme_client.list_directory(parent_full)
+
+            mkdir_res = run_cli(["scheme", "mkdir", parent])
+            if mkdir_res.exit_code != 0:
+                logger.debug("scheme mkdir parent returned code=%s stdout=%s stderr=%s",
+                             mkdir_res.exit_code,
+                             getattr(mkdir_res, "std_out", b"").decode("utf-8", "ignore"),
+                             getattr(mkdir_res, "std_err", b"").decode("utf-8", "ignore"))
+
+        # perform tools copy via CLI to the requested destination
+        item_arg = f"destination={dst_rel},source={src_rel}"
+        res = run_cli(["tools", "copy", "--item", item_arg])
+        if res.exit_code != 0:
+            out = (res.std_out or b"").decode("utf-8", "ignore")
+            err = (res.std_err or b"").decode("utf-8", "ignore")
+            raise AssertionError(f"tools copy failed: from={full_from} to={full_to} code={res.exit_code} STDOUT: {out} STDERR: {err}")
+
+        tmp_dir_rel = f"tmp_rearr_{int(time.time())}"
+        tmp_full = os.path.join(self.root_dir, tmp_dir_rel)
+        tmp_created = False
+        try:
+            # create temporary directory
+            try:
+                self.driver.scheme_client.list_directory(tmp_full)
+                tmp_created = False
+            except Exception:
+                res_mk = run_cli(["scheme", "mkdir", tmp_dir_rel])
+                if res_mk.exit_code != 0:
+                    logger.debug("tmp dir mkdir returned code=%s stdout=%s stderr=%s",
+                                 res_mk.exit_code,
+                                 getattr(res_mk, "std_out", b"").decode("utf-8", "ignore"),
+                                 getattr(res_mk, "std_err", b"").decode("utf-8", "ignore"))
+                else:
+                    tmp_created = True
+
+            # copy to temporary dir (basename of destination)
+            basename = os.path.basename(dst_rel) or to_rel(full_from)
+            item_tmp = f"destination={tmp_dir_rel}/{basename},source={src_rel}"
+            res_tmp = run_cli(["tools", "copy", "--item", item_tmp])
+            if res_tmp.exit_code != 0:
+                logger.warning("tools copy to tmp dir failed: code=%s stdout=%s stderr=%s",
+                               res_tmp.exit_code,
+                               getattr(res_tmp, "std_out", b"").decode("utf-8", "ignore"),
+                               getattr(res_tmp, "std_err", b"").decode("utf-8", "ignore"))
+            else:
+                # list temporary dir contents via scheme_client for visibility
+                try:
+                    desc = self.driver.scheme_client.list_directory(tmp_full)
+                    names = [c.name for c in desc.children if not is_system_object(c)]
+                    logger.info("Temporary directory %s contents: %s", tmp_full, names)
+                except Exception as e:
+                    logger.info("Failed to list tmp dir %s: %s", tmp_full, e)
+
+        finally:
+            # remove temporary directory if we created it here
+            if tmp_created:
+                rmdir_res = run_cli(["scheme", "rmdir", "-rf", tmp_dir_rel])
+                if rmdir_res.exit_code != 0:
+                    logger.warning("Failed to rmdir tmp dir %s: code=%s stdout=%s stderr=%s",
+                                   tmp_dir_rel,
+                                   rmdir_res.exit_code,
+                                   getattr(rmdir_res, "std_out", b"").decode("utf-8", "ignore"),
+                                   getattr(rmdir_res, "std_err", b"").decode("utf-8", "ignore"))
+    
+    def test_full_cycle_local_backup_restore_with_incrementals_and_complex_schema_change(self):
+        """
+        11. Full cycle local backup restore with incrementals and complex schema change
+        Инкрементальная часть реализована по аналогии с TestFullCycleLocalBackupRestoreWIncr:
+        - сохраняем rows только для исходных таблиц (t1/t2),
+        - при импорте используем последовательный импорт экспортированных папок до нужного ts,
+        - при восстановлении проверяем именно исходные таблицы (t1).
+        """
+
+        collection_src = f"coll_src_{int(time.time())}"
+        t1 = "orders"
+        t2 = "products"
+        full_t1 = f"/Root/{t1}"
+        full_t2 = f"/Root/{t2}"
+
+        # хранение созданных снапшотов и их эталонных строк (всегда относительно исходных таблиц)
+        created_snapshots: List[str] = []
+        snapshot_meta = {}  # snapshot_name -> { "rows": ..., "schema": ..., "acl": ... }
+
+        def record_last_snapshot():
+            kids = sorted(self.get_collection_children(collection_src))
+            assert kids, "no snapshots found in collection"
+            last = kids[-1]
+            created_snapshots.append(last)
+            return last
+
+        def import_exported_up_to_timestamp_local(target_collection, target_ts, export_dir, full_orders, full_products, timeout_s=60):
+            """
+            Более робастная версия импорта экспортированных snapshot'ов в коллекцию до target_ts.
+            Сравнение таймстампов выполняется через парсинг в целочисленный YYYYMMDDHHMMSS (без Z),
+            чтобы избежать проблем с лексикографическими сравнениями и разным форматированием.
+            """
+            create_sql = f"""
+                CREATE BACKUP COLLECTION `{target_collection}`
+                    ( TABLE `{full_orders}`, TABLE `{full_products}` )
+                WITH ( STORAGE = 'cluster' );
+            """
+            res = self._execute_yql(create_sql)
+            assert res.exit_code == 0, f"CREATE {target_collection} failed: {getattr(res, 'std_err', None)}"
+            self.wait_for_collection(target_collection, timeout_s=30)
+
+            # helper: parse ts like 20251020T173334Z or 20251020173334Z or 20251020173334
+            def parse_ts_to_int(ts_str):
+                if ts_str is None:
+                    return None
+                # strip trailing non-digits (like 'Z')
+                # accept formats: YYYYMMDDTHHMMSSZ, YYYYMMDDTHHMMSS, YYYYMMDDHHMMSSZ, YYYYMMDDHHMMSS
+                m = re.search(r"([0-9]{8}T?[0-9]{6})", ts_str)
+                if not m:
+                    return None
+                core = m.group(1)
+                core = core.replace("T", "")
+                try:
+                    return int(core)  # e.g. 20251020173334
+                except Exception:
+                    return None
+
+            # normalize target_ts to integer
+            target_ts_int = parse_ts_to_int(target_ts)
+            if target_ts_int is None:
+                raise AssertionError(f"Cannot parse target_ts='{target_ts}'")
+
+            all_dirs = sorted([d for d in os.listdir(export_dir) if os.path.isdir(os.path.join(export_dir, d))])
+
+            # Build list of (dir, parsed_ts) for those that match expected pattern
+            candidates = []
+            for d in all_dirs:
+                # try to extract using your name_re first
+                if self.name_re.match(d):
+                    ts = self.extract_ts(d)
+                    ts_int = parse_ts_to_int(ts)
+                    if ts_int is not None:
+                        candidates.append((d, ts_int))
+                    else:
+                        logger.debug("Could not parse ts from name via extract_ts for dir '%s' (extract_ts gave '%s')", d, ts)
+                else:
+                    # try to extract timestamp-looking prefix anyway
+                    m = re.search(r"([0-9]{8}T?[0-9]{6}Z?)", d)
+                    if m:
+                        ts_guess = m.group(1)
+                        ts_int = parse_ts_to_int(ts_guess)
+                        if ts_int is not None:
+                            candidates.append((d, ts_int))
+                        else:
+                            logger.debug("Fallback parse failed for dir '%s' (guess='%s')", d, ts_guess)
+                    else:
+                        logger.debug("Dir '%s' doesn't match name_re and has no timestamp-like prefix", d)
+
+            # choose those with ts <= target_ts_int
+            chosen = [name for name, tsi in sorted(candidates, key=lambda x: x[1]) if tsi <= target_ts_int]
+
+            if not chosen:
+                # diagnostic output to help debugging in CI
+                logger.error("No exported snapshots with ts <= %s found in %s. All dirs: %s", target_ts, export_dir, all_dirs)
+                logger.error("Parsed candidate timestamps: %s", candidates)
+                raise AssertionError(f"No exported snapshots with ts <= {target_ts} found in {export_dir}: {all_dirs}")
+
+            logger.info(f"Will import into {target_collection} these snapshots (in order): {chosen}")
+
+            for name in chosen:
+                src = os.path.join(export_dir, name)
+                dest_path = f"/Root/.backups/collections/{target_collection}/{name}"
+                logger.info(f"Importing {name} (ts={self.extract_ts(name)}) -> {dest_path}")
+                r = yatest.common.execute(
+                    [
+                        backup_bin(),
+                        "--verbose",
+                        "--endpoint",
+                        "grpc://localhost:%d" % self.cluster.nodes[1].grpc_port,
+                        "--database",
+                        self.root_dir,
+                        "tools",
+                        "restore",
+                        "--path",
+                        dest_path,
+                        "--input",
+                        src,
+                    ],
+                    check_exit_code=False,
+                )
+                out = (r.std_out or b"").decode("utf-8", "ignore")
+                err = (r.std_err or b"").decode("utf-8", "ignore")
+                if r.exit_code != 0:
+                    logger.error(f"tools restore import failed for {name}: exit={r.exit_code} stdout={out} stderr={err}")
+                assert r.exit_code == 0, f"tools restore import failed for {name}: stdout={out} stderr={err}"
+
+            # wait until registered
+            deadline = time.time() + timeout_s
+            expected = set(chosen)
+            while time.time() < deadline:
+                try:
+                    kids = set(self.get_collection_children(target_collection))
+                    if expected.issubset(kids):
+                        logger.info(f"All imported snapshots are registered in collection {target_collection}")
+                        break
+                    else:
+                        missing = expected - kids
+                        logger.info(f"Waiting for registered snapshots in {target_collection}, missing: {missing}")
+                except Exception as e:
+                    logger.debug(f"While waiting for imported snapshots: {e}")
+                time.sleep(2)
+            else:
+                try:
+                    kids = sorted(self.get_collection_children(target_collection))
+                except Exception:
+                    kids = "<could not list children>"
+                raise AssertionError(f"Imported snapshots did not appear in collection {target_collection} within {timeout_s}s. Expected: {sorted(chosen)}. Present: {kids}")
+
+            time.sleep(2)
+
+
+        # --- 1) Создаём исходные таблицы и коллекцию с INCREMENTAL enabled ---
+        with self.session_scope() as session:
+            create_table_with_data(session, t1)
+            create_table_with_data(session, t2)
+
+        create_collection_sql = f"""
+            CREATE BACKUP COLLECTION `{collection_src}`
+                ( TABLE `{full_t1}`, TABLE `{full_t2}` )
+            WITH ( STORAGE = 'cluster', INCREMENTAL_BACKUP_ENABLED = 'true' );
+        """
+        res = self._execute_yql(create_collection_sql)
+        assert res.exit_code == 0, "CREATE BACKUP COLLECTION failed"
+        self.wait_for_collection(collection_src, timeout_s=30)
+
+        # helper to capture and record snapshot rows for the canonical table names
+        def record_snapshot_rows(snapshot_name):
+            # always capture rows for the original table t1 (orders)
+            rows = self._capture_snapshot(t1)
+            schema = None
+            acl = None
+            try:
+                schema = self._capture_schema(full_t1)
+            except Exception:
+                schema = None
+            try:
+                acl = self._capture_acl(full_t1)
+            except Exception:
+                acl = None
+            snapshot_meta[snapshot_name] = {"rows": rows, "schema": schema, "acl": acl}
+
+        # --- Stage 1: changes and full backup 1 ---
+        with self.session_scope() as session:
+            session.transaction().execute('PRAGMA TablePathPrefix("/Root"); UPSERT INTO orders (id, number, txt) VALUES (10, 100, "s1");', commit_tx=True)
+            session.transaction().execute('PRAGMA TablePathPrefix("/Root"); DELETE FROM products WHERE id = 1;', commit_tx=True)
+            # change ACL
+            desc = self.driver.scheme_client.describe_path("/Root/orders")
+            owner_role = getattr(desc, "owner", None) or "root@builtin"
+            acl_ok = False
+            for role in ("public", owner_role):
+                cmd = f"GRANT SELECT ON `/Root/orders` TO `{role.replace('`','')}`;"
+                r = self._execute_yql(cmd)
+                if r.exit_code == 0:
+                    acl_ok = True
+                    break
+            assert acl_ok, "Failed to apply any GRANT variant in stage1"
+            create_table_with_data(session, "extra1_stage1")
+
+        time.sleep(1.1)
+        res = self._execute_yql(f"BACKUP `{collection_src}`;")
+        assert res.exit_code == 0, "FULL BACKUP 1 failed"
+        self.wait_for_collection_has_snapshot(collection_src, timeout_s=30)
+        snap_full1 = record_last_snapshot()
+        # record canonical rows/schema/acl for full1 (always for t1)
+        record_snapshot_rows(snap_full1)
+
+        # --- Stage 2: schema changes, rearrange, incremental 1 ---
+        with self.session_scope() as session:
+            session.transaction().execute('PRAGMA TablePathPrefix("/Root"); UPSERT INTO orders (id, number, txt) VALUES (20, 200, "s2");', commit_tx=True)
+            session.transaction().execute('PRAGMA TablePathPrefix("/Root"); DELETE FROM orders WHERE id = 2;', commit_tx=True)
+            create_table_with_data(session, "extra2_stage2")
+            try:
+                session.execute_scheme('DROP TABLE `/Root/extra1_stage1`;')
+            except Exception:
+                logger.info("extra1_stage1 drop failed or not present — continuing")
+
+            try:
+                session.execute_scheme('ALTER TABLE `/Root/orders` ADD COLUMN new_col Uint32;')
+            except Exception:
+                raise AssertionError("ADD COLUMN failed in stage2")
+
+            try:
+                session.execute_scheme('ALTER TABLE `/Root/orders` SET (TTL = Interval("PT0S") ON expire_at);')
+            except Exception:
+                logger.info("SET TTL unsupported — continuing")
+
+            # rearrange: creates orders_rearr but this table is NOT part of the backup collection
+            self._rearrange_table("orders", "orders_rearr")
+
+            # now drop column from original orders (best-effort)
+            # try:
+            #     session.execute_scheme('ALTER TABLE `/Root/orders` DROP COLUMN number;')
+            # except Exception:
+            #     logger.info("DROP COLUMN number unsupported — continuing")
+
+            # change ACLs
+            desc2 = self.driver.scheme_client.describe_path("/Root/orders")
+            owner_role2 = getattr(desc2, "owner", None) or "root@builtin"
+            r_acl = self._execute_yql(f"GRANT SELECT ON `/Root/orders` TO `{owner_role2.replace('`','')}`;")
+            assert r_acl.exit_code == 0, "Failed to apply GRANT in stage2"
+
+            create_table_with_data(session, "cross_other_place_topic")
+
+        # Create incremental 1 (snapshot will contain changes for TABLE `/Root/orders` as it's part of collection)
+        time.sleep(1.1)
+        res = self._execute_yql(f"BACKUP `{collection_src}` INCREMENTAL;")
+        assert res.exit_code == 0, "INCREMENTAL 1 failed"
+        snap_inc1 = record_last_snapshot()
+        # capture rows/schema/acl for canonical table t1 (orders)
+        record_snapshot_rows(snap_inc1)
+
+        # --- Stage 3: more changes and incremental 2 ---
+        with self.session_scope() as session:
+            # try to write into orders_rearr if exists, but canonical snapshots are for t1.
+            # we will not rely on orders_rearr being restored because it's not part of collection.
+            try:
+                session.transaction().execute('PRAGMA TablePathPrefix("/Root"); UPSERT INTO orders_rearr (id, number, txt) VALUES (30, 300, "s3");', commit_tx=True)
+            except Exception:
+                # if orders_rearr doesn't have 'number' column or doesn't exist, ignore — canonical table is orders
+                logger.info("UPSERT into orders_rearr failed or not applicable — continuing")
+
+            session.transaction().execute('PRAGMA TablePathPrefix("/Root"); DELETE FROM orders WHERE id = 10;', commit_tx=True)
+            create_table_with_data(session, "extra3_stage3")
+            try:
+                session.execute_scheme('DROP TABLE `/Root/extra2_stage2`;')
+            except Exception:
+                logger.info("extra2_stage2 drop failed or not present — continuing")
+
+            try:
+                self._rearrange_table("orders_rearr", "orders_rearr_v2")
+            except Exception:
+                logger.info("rearrange stage3 failed — continuing")
+
+        time.sleep(1.1)
+        res = self._execute_yql(f"BACKUP `{collection_src}` INCREMENTAL;")
+        assert res.exit_code == 0, "INCREMENTAL 2 failed"
+        snap_inc2 = record_last_snapshot()
+        record_snapshot_rows(snap_inc2)
+
+        # --- Stage 4: more changes and full backup 2 ---
+        with self.session_scope() as session:
+            create_table_with_data(session, "extra4_stage4")
+            try:
+                session.execute_scheme('DROP TABLE `/Root/extra3_stage3`;')
+            except Exception:
+                logger.info("extra3_stage3 drop failed or not present — continuing")
+
+            session.transaction().execute('PRAGMA TablePathPrefix("/Root"); UPSERT INTO orders (id, number, txt) VALUES (40, 400, "s4");', commit_tx=True)
+            session.transaction().execute('PRAGMA TablePathPrefix("/Root"); DELETE FROM orders WHERE id = 20;', commit_tx=True)
+
+        time.sleep(1.1)
+        res = self._execute_yql(f"BACKUP `{collection_src}`;")
+        assert res.exit_code == 0, "FULL BACKUP 2 failed"
+        self.wait_for_collection_has_snapshot(collection_src, timeout_s=30)
+        snap_full2 = record_last_snapshot()
+        record_snapshot_rows(snap_full2)
+
+        # --- Stage 5: incremental 3 with some schema ops ---
+        with self.session_scope() as session:
+            create_table_with_data(session, "extra5_stage5")
+            session.transaction().execute('PRAGMA TablePathPrefix("/Root"); UPSERT INTO orders (id, number, txt) VALUES (50, 500, "s5");', commit_tx=True)
+            session.transaction().execute('PRAGMA TablePathPrefix("/Root"); DELETE FROM orders WHERE id = 30;', commit_tx=True)
+            try:
+                session.execute_scheme('ALTER TABLE `/Root/orders` ADD COLUMN more_col Uint64;')
+            except Exception:
+                logger.info("ADD COLUMN more_col unsupported — continuing")
+            try:
+                session.execute_scheme('ALTER TABLE `/Root/orders` DROP COLUMN new_col;')
+            except Exception:
+                logger.info("DROP COLUMN new_col unsupported — continuing")
+            desc3 = None
+            try:
+                desc3 = self.driver.scheme_client.describe_path("/Root/orders")
+            except Exception:
+                pass
+            owner_role3 = getattr(desc3, "owner", None) if desc3 else None
+            if owner_role3:
+                self._execute_yql(f"GRANT SELECT ON `/Root/orders` TO `{owner_role3.replace('`','')}`;")
+
+        time.sleep(1.1)
+        res = self._execute_yql(f"BACKUP `{collection_src}` INCREMENTAL;")
+        assert res.exit_code == 0, "INCREMENTAL 3 failed"
+        snap_inc3 = record_last_snapshot()
+        record_snapshot_rows(snap_inc3)
+
+        # --- Stage 6: incremental 4 with final changes ---
+        with self.session_scope() as session:
+            create_table_with_data(session, "extra6_stage6")
+            try:
+                session.execute_scheme('DROP TABLE `/Root/extra4_stage4`;')
+            except Exception:
+                logger.info("extra4_stage4 drop failed or not present — continuing")
+
+            session.transaction().execute('PRAGMA TablePathPrefix("/Root"); UPSERT INTO orders (id, number, txt) VALUES (60, 600, "s6");', commit_tx=True)
+            session.transaction().execute('PRAGMA TablePathPrefix("/Root"); DELETE FROM orders WHERE id = 40;', commit_tx=True)
+
+            try:
+                session.execute_scheme('ALTER TABLE `/Root/orders` ADD COLUMN final_col String;')
+            except Exception:
+                logger.info("ADD COLUMN final_col unsupported — continuing")
+
+            desc4 = None
+            try:
+                desc4 = self.driver.scheme_client.describe_path("/Root/orders")
+            except Exception:
+                pass
+            owner_role4 = getattr(desc4, "owner", None) if desc4 else None
+            if owner_role4:
+                self._execute_yql(f"GRANT ALL ON `/Root/orders` TO `{owner_role4.replace('`','')}`;")
+
+        time.sleep(1.1)
+        res = self._execute_yql(f"BACKUP `{collection_src}` INCREMENTAL;")
+        assert res.exit_code == 0, "INCREMENTAL 4 failed"
+        snap_inc4 = record_last_snapshot()
+        record_snapshot_rows(snap_inc4)
+
+        # --- Export backups for restore-testing ---
+        export_dir, exported_items = self._export_backups(collection_src)
+        exported_dirs = sorted([d for d in os.listdir(export_dir) if os.path.isdir(os.path.join(export_dir, d))])
+        for s in created_snapshots:
+            assert s in exported_dirs, f"Recorded snapshot {s} not in exported dirs {exported_dirs}"
+
+        # ---- Try restore to last point and expect failure because tables already exist ----
+        restore_all_col = f"restore_all_{int(time.time())}"
+        latest_ts = self.extract_ts(created_snapshots[-1])
+        import_exported_up_to_timestamp_local(restore_all_col, latest_ts, export_dir, full_t1, full_t2)
+        rest_all = self._execute_yql(f"RESTORE `{restore_all_col}`;")
+        assert rest_all.exit_code != 0, "Expected RESTORE to fail when tables already exist"
+
+        # ---- Remove all tables and then restore to various points, validating canonical t1 rows/schema/acl ----
+        # remove originals and extras
+        self._remove_tables([full_t1, full_t2, "/Root/cross_other_place_topic",
+                            "/Root/extra5_stage5", "/Root/extra6_stage6"])
+
+        # Restore to full backup 1
+        col_full1 = f"restore_full1_{int(time.time())}"
+        ts_full1 = self.extract_ts(snap_full1)
+        import_exported_up_to_timestamp_local(col_full1, ts_full1, export_dir, full_t1, full_t2)
+        rest_full1 = self._execute_yql(f"RESTORE `{col_full1}`;")
+        assert rest_full1.exit_code == 0, f"RESTORE full1 failed: {rest_full1.std_err}"
+        restored_rows = self.wait_for_table_rows(t1, snapshot_meta[snap_full1]["rows"], timeout_s=90)
+        assert self.normalize_rows(restored_rows) == self.normalize_rows(snapshot_meta[snap_full1]["rows"]), "Verify data in backup (full1) failed"
+
+        restored_schema1 = self._capture_schema(full_t1)
+        assert restored_schema1 == snapshot_meta[snap_full1]["schema"], "Schema mismatch for full1"
+        restored_acl1 = self._capture_acl(full_t1)
+        if 'show_grants' in (snapshot_meta[snap_full1]["acl"] or {}):
+            assert 'show_grants' in (restored_acl1 or {}) and snapshot_meta[snap_full1]["acl"]['show_grants'] in restored_acl1['show_grants']
+
+        # Restore to incremental 1 (full1 + inc1)
+        col_inc1 = f"restore_inc1_{int(time.time())}"
+        ts_inc1 = self.extract_ts(snap_inc1)
+        import_exported_up_to_timestamp_local(col_inc1, ts_inc1, export_dir, full_t1, full_t2)
+        # ensure target absent before restore
+        self._remove_tables([full_t1, full_t2])
+        rest_inc1 = self._execute_yql(f"RESTORE `{col_inc1}`;")
+        assert rest_inc1.exit_code == 0, f"RESTORE inc1 failed: {rest_inc1.std_err}"
+        restored_rows = self.wait_for_table_rows(t1, snapshot_meta[snap_inc1]["rows"], timeout_s=90)
+        assert self.normalize_rows(restored_rows) == self.normalize_rows(snapshot_meta[snap_inc1]["rows"]), "Verify data in backup (inc1) failed"
+
+        restored_schema_inc1 = self._capture_schema(full_t1)
+        if snapshot_meta[snap_inc1]["schema"] is not None:
+            assert restored_schema_inc1 == snapshot_meta[snap_inc1]["schema"], "Schema mismatch for inc1"
+        restored_acl_inc1 = self._capture_acl(full_t1)
+        if 'show_grants' in (snapshot_meta[snap_inc1]["acl"] or {}):
+            assert 'show_grants' in (restored_acl_inc1 or {}) and snapshot_meta[snap_inc1]["acl"]['show_grants'] in restored_acl_inc1['show_grants']
+
+        # Restore to incremental 2 (full1 + inc1 + inc2)
+        col_inc2 = f"restore_inc2_{int(time.time())}"
+        ts_inc2 = self.extract_ts(snap_inc2)
+        import_exported_up_to_timestamp_local(col_inc2, ts_inc2, export_dir, full_t1, full_t2)
+        self._remove_tables([full_t1, full_t2])
+        rest_inc2 = self._execute_yql(f"RESTORE `{col_inc2}`;")
+        assert rest_inc2.exit_code == 0, f"RESTORE inc2 failed: {rest_inc2.std_err}"
+        restored_rows = self.wait_for_table_rows(t1, snapshot_meta[snap_inc2]["rows"], timeout_s=90)
+        assert self.normalize_rows(restored_rows) == self.normalize_rows(snapshot_meta[snap_inc2]["rows"]), "Verify data in backup (inc2) failed"
+
+        # ---- Try incremental-only restore (no base) -> expect fail ----
+        # remove originals
+        self._remove_tables([full_t1, full_t2])
+        inc_only_col = f"inc_only_{int(time.time())}"
+        # pick incrementals strictly after full1
+        idx_full1 = created_snapshots.index(snap_full1)
+        incs_after_full1 = [s for s in created_snapshots if "_incremental" in s and created_snapshots.index(s) > idx_full1]
+        if incs_after_full1:
+            # create new collection and import only incrementals
+            create_sql = f"""
+                CREATE BACKUP COLLECTION `{inc_only_col}`
+                    ( TABLE `{full_t1}`, TABLE `{full_t2}` )
+                WITH ( STORAGE = 'cluster' );
+            """
+            res = self._execute_yql(create_sql)
+            assert res.exit_code == 0
+            self.wait_for_collection(inc_only_col, timeout_s=30)
+            for s in incs_after_full1:
+                src = os.path.join(export_dir, s)
+                dest_path = f"/Root/.backups/collections/{inc_only_col}/{s}"
+                r = yatest.common.execute(
+                    [
+                        backup_bin(),
+                        "--verbose",
+                        "--endpoint",
+                        "grpc://localhost:%d" % self.cluster.nodes[1].grpc_port,
+                        "--database",
+                        self.root_dir,
+                        "tools",
+                        "restore",
+                        "--path",
+                        dest_path,
+                        "--input",
+                        src,
+                    ],
+                    check_exit_code=False,
+                )
+                assert r.exit_code == 0, f"tools restore import for inc-only failed: {r.std_err}"
+            rest_inc_only = self._execute_yql(f"RESTORE `{inc_only_col}`;")
+            assert rest_inc_only.exit_code != 0, "Expected restore of incrementals-only (no base) to fail"
+        else:
+            logger.info("No incrementals after full1 — skipping incremental-only restore check")
+
+        # ---- Restore to full backup 2 and verify ----
+        col_full2 = f"restore_full2_{int(time.time())}"
+        ts_full2 = self.extract_ts(snap_full2)
+        import_exported_up_to_timestamp_local(col_full2, ts_full2, export_dir, full_t1, full_t2)
+        self._remove_tables([full_t1, full_t2])
+        rest_full2 = self._execute_yql(f"RESTORE `{col_full2}`;")
+        assert rest_full2.exit_code == 0, f"RESTORE full2 failed: {rest_full2.std_err}"
+        restored_rows = self.wait_for_table_rows(t1, snapshot_meta[snap_full2]["rows"], timeout_s=90)
+        assert self.normalize_rows(restored_rows) == self.normalize_rows(snapshot_meta[snap_full2]["rows"]), "Verify data in backup (full2) failed"
+
+        # ---- Restore to most-relevant incremental after full2 (if any) and verify ---
+        chosen_inc_after_full2 = None
+        for cand in (snap_inc3, snap_inc4):
+            if cand in created_snapshots and created_snapshots.index(cand) > created_snapshots.index(snap_full2):
+                chosen_inc_after_full2 = cand
+                break
+
+        if chosen_inc_after_full2:
+            col_post_full2 = f"restore_postfull2_{int(time.time())}"
+            idx_chosen = created_snapshots.index(chosen_inc_after_full2)
+            snaps_for_post = created_snapshots[: idx_chosen + 1]
+            # create collection and import required snapshots
+            create_sql = f"""
+                CREATE BACKUP COLLECTION `{col_post_full2}`
+                    ( TABLE `{full_t1}`, TABLE `{full_t2}` )
+                WITH ( STORAGE = 'cluster' );
+            """
+            res = self._execute_yql(create_sql)
+            assert res.exit_code == 0
+            self.wait_for_collection(col_post_full2, timeout_s=30)
+            for s in snaps_for_post:
+                src = os.path.join(export_dir, s)
+                dest_path = f"/Root/.backups/collections/{col_post_full2}/{s}"
+                r = yatest.common.execute(
+                    [
+                        backup_bin(),
+                        "--verbose",
+                        "--endpoint",
+                        "grpc://localhost:%d" % self.cluster.nodes[1].grpc_port,
+                        "--database",
+                        self.root_dir,
+                        "tools",
+                        "restore",
+                        "--path",
+                        dest_path,
+                        "--input",
+                        src,
+                    ],
+                    check_exit_code=False,
+                )
+                assert r.exit_code == 0, f"tools restore import failed for {s}: {r.std_err}"
+            # drop and restore
+            self._remove_tables([full_t1, full_t2])
+            rest_post = self._execute_yql(f"RESTORE `{col_post_full2}`;")
+            assert rest_post.exit_code == 0, f"RESTORE post-full2 failed: {rest_post.std_err}"
+            restored_rows = self.wait_for_table_rows(t1, snapshot_meta[chosen_inc_after_full2]["rows"], timeout_s=90)
+            assert self.normalize_rows(restored_rows) == self.normalize_rows(snapshot_meta[chosen_inc_after_full2]["rows"]), "Verify data in backup (post-full2) failed"
+
+        # cleanup
+        if os.path.exists(export_dir):
+            shutil.rmtree(export_dir)

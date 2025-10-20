@@ -16,11 +16,11 @@
 
 #include <util/random/shuffle.h>
 
+#include <ydb/core/counters_info/counters_info.h>
 #include <ydb/core/health_check/health_check.h>
 #include <ydb/public/api/protos/ydb_monitoring.pb.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <google/protobuf/util/json_util.h>
-#include <ydb/core/health_check/health_check.h>
 
 namespace NKikimr {
 namespace NGRpcService {
@@ -36,9 +36,9 @@ public:
     using TThis = TClusterStateRPC;
     using TBase = TRpcRequestActor<TClusterStateRPC, TEvClusterStateRequest, true>;
 
-    ui32 Requested;
-    ui32 Received;
-    ui32 CountersRequested;
+    ui32 Requested = 0;
+    ui32 Received = 0;
+    ui32 CountersRequested = 0;
 
     TVector<TEvInterconnect::TNodeInfo> Nodes;
     TMap<ui32, NKikimrWhiteboard::TEvVDiskStateResponse> VDiskInfo;
@@ -68,7 +68,6 @@ public:
         request(TEvSystemStateRequest);
         request(TEvBridgeInfoRequest);
         request(TEvNodeStateRequest);
-        request(TEvCountersInfoRequest);
 #undef request
     }
 
@@ -78,7 +77,7 @@ public:
         for (const auto& ni : Nodes) {
             SendRequest(ni.NodeId);
         }
-        CountersRequested = 1;
+        RequestCounters();
         Period = TDuration::Seconds(GetProtoRequest()->period());
         if (Period > TDuration::Zero()) {
             Schedule(Period, new TEvents::TEvWakeup());
@@ -106,7 +105,7 @@ public:
             processCase(EvSystemStateResponse, SystemInfo)
             processCase(EvBridgeInfoResponse, BridgeInfo)
             processCase(EvNodeStateResponse, NodeInfo)
-            case NNodeWhiteboard::TEvWhiteboard::EvCountersInfoResponse:
+            case NKikimr::NCountersInfo::EvCountersInfoResponse:
                 if (CountersInfo[nodeId].size() < CountersRequested) {
                     for (ui32 _ : xrange(CountersRequested - CountersInfo[nodeId].size())) {
                         NodeStateInfoReceived();
@@ -154,7 +153,7 @@ public:
     HandleWhiteboard(TEvBridgeInfoResponse, BridgeInfo)
     HandleWhiteboard(TEvNodeStateResponse, NodeInfo)
 
-    void Handle(NNodeWhiteboard::TEvWhiteboard::TEvCountersInfoResponse::TPtr& ev) {
+    void Handle(NKikimr::NCountersInfo::TEvCountersInfoResponse::TPtr& ev) {
         ui64 nodeId = ev.Get()->Cookie;
         CountersInfo[nodeId].emplace_back(std::move(ev->Get()->Record.GetResponse()));
         NodeStateInfoReceived();
@@ -162,7 +161,7 @@ public:
 
     void NodeStateInfoReceived() {
         ++Received;
-        if (Received == Requested && Period != TDuration::Zero()) {
+        if (Received == Requested && Period == TDuration::Zero()) {
             ReplyAndPassAway();
         }
     }
@@ -189,14 +188,17 @@ public:
         Schedule(Duration, new TEvents::TEvWakeup());
     }
 
+    void RequestCounters() {
+        for (const auto& ni : Nodes) {
+            TActorId countersInfoProviderServiceId = NKikimr::NCountersInfo::MakeCountersInfoProviderServiceID(ni.NodeId);
+            Send(countersInfoProviderServiceId, new NKikimr::NCountersInfo::TEvCountersInfoRequest(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, ni.NodeId);
+            Requested++;
+        }
+        CountersRequested++;
+    }
     void Wakeup() {
         if (Period > TDuration::Zero()) {
-            for (const auto& ni : Nodes) {
-                TActorId whiteboardServiceId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(ni.NodeId);
-                Send(whiteboardServiceId, new NNodeWhiteboard::TEvWhiteboard::TEvCountersInfoRequest(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, ni.NodeId);
-                Requested++;
-            }
-            CountersRequested++;
+            RequestCounters();
             Schedule(Period, new TEvents::TEvWakeup());
         }
         if (TInstant::Now() - Started >= Duration) {
@@ -227,7 +229,7 @@ public:
             hFunc(NNodeWhiteboard::TEvWhiteboard::TEvSystemStateResponse, Handle);
             hFunc(NNodeWhiteboard::TEvWhiteboard::TEvBridgeInfoResponse, Handle);
             hFunc(NNodeWhiteboard::TEvWhiteboard::TEvNodeStateResponse, Handle);
-            hFunc(NNodeWhiteboard::TEvWhiteboard::TEvCountersInfoResponse, Handle);
+            hFunc(NKikimr::NCountersInfo::TEvCountersInfoResponse, Handle);
             hFunc(TEvents::TEvUndelivered, Undelivered);
             hFunc(TEvInterconnect::TEvNodeDisconnected, Disconnected);
             cFunc(TEvents::TSystem::Wakeup, Wakeup);

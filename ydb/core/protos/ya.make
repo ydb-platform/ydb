@@ -52,6 +52,7 @@ SRCS(
     counters_coordinator.proto
     counters_datashard.proto
     counters_hive.proto
+    counters_info.proto
     counters_kesus.proto
     counters_keyvalue.proto
     counters_mediator.proto

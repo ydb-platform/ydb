@@ -441,9 +441,3 @@ message TEvBridgeInfoResponse {
     optional uint64 ResponseTime = 4;
 }
 
-message TEvCountersInfoRequest {
-}
-
-message TEvCountersInfoResponse {
-    optional string Response = 1;
-}

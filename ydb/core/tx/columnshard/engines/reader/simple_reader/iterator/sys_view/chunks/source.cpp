@@ -139,11 +139,11 @@ std::shared_ptr<arrow::Array> TSourceData::BuildArrayAccessor(const ui64 columnI
     if (columnId == NKikimr::NSysView::Schema::PrimaryIndexStats::TierName::ColumnId) {
         auto builder = NArrow::MakeBuilder(arrow::utf8());
         for (auto&& i : GetPortionAccessor().GetRecordsVerified()) {
-            const TString tierName = Schema->GetIndexInfo().GetEntityStorageId(i.GetEntityId(), Portion->GetMeta().GetTierName());
+            const TString tierName = Portion->GetEntityStorageId(i.GetEntityId(), Schema->GetIndexInfo());
             NArrow::Append<arrow::StringType>(*builder, arrow::util::string_view(tierName.data(), tierName.size()));
         }
         for (auto&& i : GetPortionAccessor().GetIndexesVerified()) {
-            const TString tierName = Schema->GetIndexInfo().GetEntityStorageId(i.GetEntityId(), Portion->GetMeta().GetTierName());
+            const TString tierName = Portion->GetEntityStorageId(i.GetEntityId(), Schema->GetIndexInfo());
             NArrow::Append<arrow::StringType>(*builder, arrow::util::string_view(tierName.data(), tierName.size()));
         }
         return NArrow::FinishBuilder(std::move(builder));

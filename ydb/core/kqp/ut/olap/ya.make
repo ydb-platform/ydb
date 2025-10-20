@@ -27,6 +27,7 @@ SRCS(
     kqp_olap_stats_ut.cpp
     locks_ut.cpp
     optimizer_ut.cpp
+    simple_reader_ut.cpp
     sparsed_ut.cpp
     statistics_ut.cpp
     sys_view_ut.cpp

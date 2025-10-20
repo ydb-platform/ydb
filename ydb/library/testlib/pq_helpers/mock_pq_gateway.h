@@ -52,6 +52,10 @@ public:
 
     virtual std::vector<TString> ExtractData() = 0;
 
+    virtual void ExpectMessage(const TString& message) = 0;
+
+    virtual void ExpectMessages(std::vector<TString> messages, bool sort = false) = 0;
+
     virtual void Lock() = 0;
 
     virtual void Unlock() = 0;
@@ -64,14 +68,22 @@ class IMockPqGateway : public NYql::IPqGateway {
 public:
     using TPtr = TIntrusivePtr<IMockPqGateway>;
 
-    // Extract last created partition read session
+    // Extract last created partition read session, returns nullptr if there is no existing session
     virtual IMockPqReadSession::TPtr ExtractReadSession(const TString& topic) = 0;
 
-    // Extract last created partition write session
+    // Wait for read session creation
+    virtual IMockPqReadSession::TPtr WaitReadSession(const TString& topic) = 0;
+
+    // Extract last created partition write session, returns nullptr if there is no existing session
     virtual IMockPqWriteSession::TPtr ExtractWriteSession(const TString& topic) = 0;
+
+    // Wait for write session creation
+    virtual IMockPqWriteSession::TPtr WaitWriteSession(const TString& topic) = 0;
 };
 
 struct TMockPqGatewaySettings {
+    bool LockWritingByDefault = false;
+    TDuration OperationTimeout = TDuration::Seconds(10);
     NActors::TTestActorRuntime* Runtime = nullptr;
     NActors::TActorId Notifier;
 };

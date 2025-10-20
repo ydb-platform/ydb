@@ -510,6 +510,7 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
 
         Sleep(TDuration::MilliSeconds(100));
 
+        ExpectNewDataArrived({ReadActorId1, ReadActorId2});
         readMessages = ReadMessages(ReadActorId1);
         UNIT_ASSERT_VALUES_EQUAL(readMessages, messagesSize);
 

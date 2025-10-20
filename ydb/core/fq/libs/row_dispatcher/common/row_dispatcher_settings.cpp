@@ -7,12 +7,11 @@
 
 namespace NFq {
 
-TRowDispatcherSettings::TJsonParserSettings::TJsonParserSettings(const NConfig::TJsonParserConfig& config) {
+TRowDispatcherSettings::TJsonParserSettings::TJsonParserSettings(const NConfig::TJsonParserConfig& config)
+    : BatchCreationTimeout(TDuration::MilliSeconds(config.GetBatchCreationTimeoutMs()))
+{
     if (config.GetBatchSizeBytes()) {
         BatchSizeBytes = config.GetBatchSizeBytes();
-    }
-    if (config.GetBatchCreationTimeoutMs()) {
-        BatchCreationTimeout = TDuration::MilliSeconds(config.GetBatchCreationTimeoutMs());
     }
     if (config.GetBufferCellCount()) {
         BufferCellCount = config.GetBufferCellCount();

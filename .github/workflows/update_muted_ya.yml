@@ -134,6 +134,9 @@ jobs:
       - name: Create PR branch and apply changes
         if: env.changes == 'true'
         run: |
+          # Отменяем изменения в debug скрипте перед переключением ветки
+          git checkout -- .github/scripts/tests/create_new_muted_ya.py
+          
           # Создаем PR ветку на основе целевой ветки
           git checkout -B ${{ env.PR_BRANCH }} origin/${{ env.BASE_BRANCH }}
           
@@ -242,23 +245,30 @@ jobs:
           WORKFLOW_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           COMPLETE_BODY="Collected in workflow [#${{ github.run_number }}](${WORKFLOW_URL}) for ${{ env.BASE_BRANCH }}\n\n${PR_BODY_CONTENT}"
           
-          # Сохраняем в output для использования в следующем шаге
-          echo "PR_BODY_CONTENT<<EOF" >> $GITHUB_OUTPUT
-          echo "$COMPLETE_BODY" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          echo "$COMPLETE_BODY" > pr_comment_final.txt
+          echo "PR_COMMENT_FILE=pr_comment_final.txt" >> $GITHUB_OUTPUT
 
-      - name: Add reviewers and labels
+      - name: Add comment, reviewers and labels
         if: env.changes == 'true'
         uses: actions/github-script@v7
+        env:
+          LABELS: ${{ env.LABELS }}
+          REVIEWERS: ${{ env.REVIEWERS }}
         with:
           github-token: ${{ secrets.YDBOT_TOKEN }}
           script: |
+            const fs = require('fs');
+            
+            // Читаем комментарий из файла
+            const commentFile = '${{ steps.comment_pr.outputs.PR_COMMENT_FILE }}';
+            const commentBody = fs.readFileSync(commentFile, 'utf8');
+            
             // Добавляем комментарий
             await github.rest.issues.createComment({
               issue_number: ${{ steps.create_or_update_pr.outputs.pr_number }},
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: `${{ steps.comment_pr.outputs.PR_BODY_CONTENT }}`
+              body: commentBody
             });
             
             // Добавляем лейблы

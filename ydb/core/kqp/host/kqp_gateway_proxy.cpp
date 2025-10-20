@@ -2525,15 +2525,20 @@ public:
         }
     }
 
-    static TString AdjustPath(const TString& path, const TString& database) {
+    TString AdjustPath(const TString& path, const TString& database) const {
         if (path.StartsWith('/')) {
+            if (database.empty() && !path.StartsWith(GetDatabase())) {
+                throw yexception() << "Path '" << path << "' not in database '" << GetDatabase() << "'";
+            }
             if (!path.StartsWith(database)) {
                 throw yexception() << "Path '" << path << "' not in database '" << database << "'";
             }
             return path;
-        } else {
-            return database + '/' + path;
         }
+        if (database.empty()) {
+            return path;
+        }
+        return database + '/' + path;
     }
 
     TFuture<TGenericResult> CreateReplication(const TString& cluster, const NYql::TCreateReplicationSettings& settings) override {

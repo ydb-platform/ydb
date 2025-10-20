@@ -29,9 +29,9 @@ struct TRequiredSingletonConfig
 
     REGISTER_YSON_STRUCT(TRequiredSingletonConfig);
 
-    static void Register(TRegistrar registarar)
+    static void Register(TRegistrar registrar)
     {
-        registarar.Parameter("speed", &TThis::Speed);
+        registrar.Parameter("speed", &TThis::Speed);
     }
 };
 
@@ -58,9 +58,9 @@ struct TOptionalSingletonConfig
 
     REGISTER_YSON_STRUCT(TOptionalSingletonConfig);
 
-    static void Register(TRegistrar registarar)
+    static void Register(TRegistrar registrar)
     {
-        registarar.Parameter("depth", &TThis::Depth);
+        registrar.Parameter("depth", &TThis::Depth);
     }
 };
 
@@ -91,9 +91,9 @@ struct TDefaultNewSingletonConfig
 
     REGISTER_YSON_STRUCT(TDefaultNewSingletonConfig);
 
-    static void Register(TRegistrar registarar)
+    static void Register(TRegistrar registrar)
     {
-        registarar.Parameter("width", &TThis::Width)
+        registrar.Parameter("width", &TThis::Width)
             .Default(456);
     }
 };
@@ -123,9 +123,9 @@ struct TReconfigurableSingletonConfig
 
     REGISTER_YSON_STRUCT(TReconfigurableSingletonConfig);
 
-    static void Register(TRegistrar registarar)
+    static void Register(TRegistrar registrar)
     {
-        registarar.Parameter("cost", &TThis::Cost)
+        registrar.Parameter("cost", &TThis::Cost)
             .Default(777);
     }
 };
@@ -139,9 +139,9 @@ struct TReconfigurableSingletonDynamicConfig
 
     REGISTER_YSON_STRUCT(TReconfigurableSingletonDynamicConfig);
 
-    static void Register(TRegistrar registarar)
+    static void Register(TRegistrar registrar)
     {
-        registarar.Parameter("cost", &TThis::Cost)
+        registrar.Parameter("cost", &TThis::Cost)
             .Default();
     }
 };

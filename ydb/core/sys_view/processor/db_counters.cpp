@@ -284,6 +284,7 @@ void TSysViewProcessor::SendNavigate() {
 
     using TNavigate = NSchemeCache::TSchemeCacheNavigate;
     auto request = MakeHolder<TNavigate>();
+    request->DatabaseName = Database;
     request->ResultSet.push_back({});
 
     auto& entry = request->ResultSet.back();

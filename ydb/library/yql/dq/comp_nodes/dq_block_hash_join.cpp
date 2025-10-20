@@ -87,20 +87,21 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
     TBlockHashJoinWrapper(TComputationMutables& mutables, const TVector<TType*>&& resultItemTypes,
                           const TVector<TType*>&& leftItemTypes, const TVector<ui32>&& leftKeyColumns,
                           const TVector<TType*>&& rightItemTypes, const TVector<ui32>&& rightKeyColumns,
-                          IComputationNode* leftStream, IComputationNode* rightStream)
+                          IComputationNode* leftStream, IComputationNode* rightStream, TDqRenames renames)
         : TBaseComputation(mutables, EValueRepresentation::Boxed)
         , ResultItemTypes_(std::move(resultItemTypes))
         , LeftItemTypes_(std::move(leftItemTypes))
         , LeftKeyColumns_(std::move(leftKeyColumns))
         , RightItemTypes_(std::move(rightItemTypes))
         , RightKeyColumns_(std::move(rightKeyColumns))
+        , Renames_(std::move(renames))
         , LeftStream_(leftStream)
         , RightStream_(rightStream)
     {}
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         return ctx.HolderFactory.Create<TStreamValue>(ctx, LeftKeyColumns_, RightKeyColumns_, LeftStream_, RightStream_,
-                                                      LeftItemTypes_, RightItemTypes_, ResultItemTypes_);
+                                                      LeftItemTypes_, RightItemTypes_, ResultItemTypes_, Renames_);
     }
 
   private:
@@ -111,7 +112,7 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
         TStreamValue(TMemoryUsageInfo* memInfo, TComputationContext& ctx, const TVector<ui32>& leftKeyColumns,
                      const TVector<ui32>& rightKeyColumns, IComputationNode* leftStream, IComputationNode* rightStream,
                      const TVector<TType*>& leftStreamTypes, const TVector<TType*>& rightStreamTypes,
-                     const TVector<TType*>& resultStreamTypes)
+                     const TVector<TType*>& resultStreamTypes, TDqRenames renames)
             : TBase(memInfo)
             , Join_(memInfo, TBlockRowSource{ctx, leftStream, leftStreamTypes},
                     TBlockRowSource{ctx, rightStream, rightStreamTypes},
@@ -120,6 +121,7 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
                                   KeyTypesFromColumns(leftStreamTypes, leftKeyColumns)}, ctx.MakeLogger(),
                     "BlockHashJoin")
             , Ctx_(&ctx)
+            , Output_(std::move(renames), leftStreamTypes, rightStreamTypes)
             , OutputTypes_(resultStreamTypes)
         {
             TTypeInfoHelper typeInfoHelper;
@@ -129,37 +131,31 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
             }
         }
 
-        int TupleSize() const {
-            return OutputTypes_.size() - 1 /*mind last integer column*/;
-        }
-
-        int SizeTuples() const {
-            MKQL_ENSURE(OutputBuffer_.size() % TupleSize() == 0, "buffer contains tuple parts??");
-            return OutputBuffer_.size() / TupleSize();
-        }
-
-        void FlushTo(NUdf::TUnboxedValue* output) {
-            MKQL_ENSURE(!OutputBuffer_.empty(), "make sure we are flushing something, not empty set of tuples");
+        NUdf::EFetchStatus FlushTo(NUdf::TUnboxedValue* output) {
+            MKQL_ENSURE(!Output_.OutputBuffer.empty(), "make sure we are flushing something, not empty set of tuples");
             TTypeInfoHelper helper;
             std::vector<std::unique_ptr<NYql::NUdf::IArrayBuilder>> blockBuilders;
-            int rows = SizeTuples();
-            for (int i = 0; i < TupleSize(); ++i) {
+            int rows = Output_.SizeTuples();
+            for (int i = 0; i < Output_.TupleSize(); ++i) {
                 blockBuilders.push_back(MakeArrayBuilder(helper, OutputTypes_[i], Ctx_->ArrowMemoryPool, rows,
                                                          &Ctx_->Builder->GetPgBuilder()));
             }
 
             for (int rowIndex = 0; rowIndex < rows; ++rowIndex) {
-                for (int colIndex = 0; colIndex < TupleSize(); ++colIndex) {
-                    int valueIndex = colIndex + rowIndex * TupleSize();
-                    blockBuilders[colIndex]->Add(OutputItemConverters_[colIndex]->MakeItem(OutputBuffer_[valueIndex]));
+                for (int colIndex = 0; colIndex < Output_.TupleSize(); ++colIndex) {
+                    int valueIndex = colIndex + rowIndex * Output_.TupleSize();
+                    blockBuilders[colIndex]->Add(
+                        OutputItemConverters_[colIndex]->MakeItem(Output_.OutputBuffer[valueIndex]));
                 }
             }
-            OutputBuffer_.clear();
-            for (int colIndex = 0; colIndex < TupleSize(); ++colIndex) {
+            Output_.OutputBuffer.clear();
+            for (int colIndex = 0; colIndex < Output_.TupleSize(); ++colIndex) {
                 output[colIndex] = Ctx_->HolderFactory.CreateArrowBlock(blockBuilders[colIndex]->Build(true));
             }
-            output[TupleSize()] = Ctx_->HolderFactory.CreateArrowBlock(arrow::Datum(static_cast<uint64_t>(rows)));
-            MKQL_ENSURE(OutputBuffer_.empty(), "something left after flush??");
+            output[Output_.TupleSize()] =
+                Ctx_->HolderFactory.CreateArrowBlock(arrow::Datum(static_cast<uint64_t>(rows)));
+            MKQL_ENSURE(Output_.OutputBuffer.empty(), "something left after flush??");
+            return NYql::NUdf::EFetchStatus::Ok;
         }
 
       private:
@@ -169,37 +165,15 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
             if (Finished_) {
                 return NYql::NUdf::EFetchStatus::Finish;
             }
-            auto out = std::back_inserter(OutputBuffer_);
-            auto consumeOneOrTwo = [&] {
-                if constexpr (SemiOrOnlyJoin(Kind)) {
-                    return [&](NJoinTable::TTuple tuple) {
-                        MKQL_ENSURE(tuple != nullptr, "null output row in semi/only join?");
-                        std::copy_n(tuple, Join_.ProbeSize(), out);
-                    };
-                } else {
-                    return [&](NJoinTable::TTuple probe, NJoinTable::TTuple build) {
-                        if (!probe) { // todo: remove nullptr checks for some join types.
-                            probe = NullTuples_.data();
-                        }
-                        std::copy_n(probe, Join_.ProbeSize(), out);
-
-                        if (!build) {
-                            build = NullTuples_.data();
-                        }
-                        std::copy_n(build, Join_.BuildSize(), out);
-                    };
-                }
-            }();
-            while (SizeTuples() < Threshold) {
-                auto res = Join_.MatchRows(*Ctx_, consumeOneOrTwo);
+            while (Output_.SizeTuples() < Threshold_) {
+                auto res = Join_.MatchRows(*Ctx_, Output_.MakeConsumeFn());
                 switch (res) {
                 case EFetchResult::Finish: {
-                    if (SizeTuples() == 0) {
+                    if (Output_.SizeTuples() == 0) {
                         return NYql::NUdf::EFetchStatus::Finish;
                     }
-                    FlushTo(output);
                     Finished_ = true;
-                    return NYql::NUdf::EFetchStatus::Ok;
+                    return FlushTo(output);
                 }
                 case EFetchResult::Yield:
                     return NYql::NUdf::EFetchStatus::Yield;
@@ -207,20 +181,17 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
                     break;
                 }
             }
-            FlushTo(output);
-            return NUdf::EFetchStatus::Ok;
+            return FlushTo(output);
         }
 
       private:
         TJoin<TBlockRowSource, Kind> Join_;
         TComputationContext* Ctx_;
-        std::vector<NUdf::TUnboxedValue> OutputBuffer_;
+        TRenamedOutput<Kind> Output_;
         std::vector<std::unique_ptr<IBlockItemConverter>> OutputItemConverters_;
         const std::vector<TType*> OutputTypes_;
-        const int Threshold = 10000;
+        const int Threshold_ = 10000;
         bool Finished_ = false;
-        const std::vector<NYql::NUdf::TUnboxedValue> NullTuples_{
-            static_cast<size_t>(std::max(Join_.BuildSize(), Join_.ProbeSize())), NYql::NUdf::TUnboxedValuePod{}};
     };
 
     void RegisterDependencies() const final {
@@ -234,6 +205,7 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
     const TVector<ui32> LeftKeyColumns_;
     const TVector<TType*> RightItemTypes_;
     const TVector<ui32> RightKeyColumns_;
+    const TDqRenames Renames_;
     IComputationNode* LeftStream_;
     IComputationNode* RightStream_;
 };
@@ -241,7 +213,7 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
 } // namespace
 
 IComputationNode* WrapDqBlockHashJoin(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-    MKQL_ENSURE(callable.GetInputsCount() == 5, "Expected 5 args");
+    MKQL_ENSURE(callable.GetInputsCount() == 7, "Expected 7 args");
 
     const auto joinType = callable.GetType()->GetReturnType();
     MKQL_ENSURE(joinType->IsStream(), "Expected WideStream as a resulting stream");
@@ -282,7 +254,6 @@ IComputationNode* WrapDqBlockHashJoin(TCallable& callable, const TComputationNod
     const auto joinKindNode = callable.GetInput(2);
     const auto rawKind = AS_VALUE(TDataLiteral, joinKindNode)->AsValue().Get<ui32>();
     const auto joinKind = GetJoinKind(rawKind);
-    MKQL_ENSURE(joinKind != EJoinKind::Cross, "Only inner join is supported in block hash join prototype");
 
     const auto leftKeyColumnsLiteral = callable.GetInput(3);
     const auto leftKeyColumnsTuple = AS_VALUE(TTupleLiteral, leftKeyColumnsLiteral);
@@ -301,16 +272,19 @@ IComputationNode* WrapDqBlockHashJoin(TCallable& callable, const TComputationNod
         const auto item = AS_VALUE(TDataLiteral, rightKeyColumnsTuple->GetValue(i));
         rightKeyColumns.emplace_back(item->AsValue().Get<ui32>());
     }
+    TDqRenames renames =
+        FromGraceFormat(TGraceJoinRenames::FromRuntimeNodes(callable.GetInput(5), callable.GetInput(6)));
 
     MKQL_ENSURE(leftKeyColumns.size() == rightKeyColumns.size(), "Key columns mismatch");
 
     const auto leftStream = LocateNode(ctx.NodeLocator, callable, 0);
     const auto rightStream = LocateNode(ctx.NodeLocator, callable, 1);
-    return std::visit([&](auto kind) -> IComputationNode* {
-        return new TBlockHashJoinWrapper<decltype(kind)::Kind_>(
-            ctx.Mutables, std::move(joinItems), std::move(leftStreamItems), std::move(leftKeyColumns),
-            std::move(rightStreamItems), std::move(rightKeyColumns), leftStream, rightStream);
-    }, TypifyJoinKind(joinKind));
+    MKQL_ENSURE(joinKind == EJoinKind::Inner, "Only inner is supported, see gh#26780 for details.");
+    ValidateRenames(renames, joinKind, std::ssize(leftStreamItems) - 1, std::ssize(rightStreamItems) - 1);
+
+    return new TBlockHashJoinWrapper<EJoinKind::Inner>(ctx.Mutables, std::move(joinItems), std::move(leftStreamItems),
+                                                       std::move(leftKeyColumns), std::move(rightStreamItems),
+                                                       std::move(rightKeyColumns), leftStream, rightStream, renames);
 }
 
 } // namespace NKikimr::NMiniKQL

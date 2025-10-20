@@ -594,11 +594,6 @@ bool MergeBatchColumns(const std::vector<std::shared_ptr<arrow::RecordBatch>>& b
     return MergeBatchColumnsImpl<arrow::RecordBatch, arrow::Array>(batches, result, columnsOrder, orderFieldsAreNecessary, builder);
 }
 
-std::partial_ordering ColumnsCompare(
-    const std::vector<std::shared_ptr<arrow::Array>>& x, const ui32 xRow, const std::vector<std::shared_ptr<arrow::Array>>& y, const ui32 yRow) {
-    return TRawReplaceKey(&x, xRow).CompareNotNull(TRawReplaceKey(&y, yRow));
-}
-
 NJson::TJsonValue DebugJson(std::shared_ptr<arrow::RecordBatch> array, const ui32 position) {
     NJson::TJsonValue result = NJson::JSON_ARRAY;
     for (auto&& i : array->columns()) {

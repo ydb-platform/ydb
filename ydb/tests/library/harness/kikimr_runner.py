@@ -52,9 +52,11 @@ def ensure_path_exists(path):
 
 
 class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
-    def __init__(self, node_id, config_path, port_allocator, cluster_name, configurator,
-                 udfs_dir=None, role='node', node_broker_port=None, tenant_affiliation=None, encryption_key=None,
-                 binary_path=None, data_center=None, module=None, use_config_store=False, seed_nodes_file=None):
+    def __init__(self, node_id, config_path, port_allocator, cluster_name,
+                 configurator, udfs_dir=None, role='node',
+                 node_broker_port=None, tenant_affiliation=None,
+                 encryption_key=None, binary_path=None, data_center=None,
+                 module=None, use_config_store=False, seed_nodes_file=None):
 
         super(kikimr_node_interface.NodeInterface, self).__init__()
         self.node_id = node_id
@@ -551,7 +553,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         if isinstance(configurator.dc_mapping, dict):
             if node_index in configurator.dc_mapping:
                 data_center = configurator.dc_mapping[node_index]
-        
+
         module = None
         for node in configurator.naming_config.NameserviceConfig.Node:
             if node.NodeId == node_index:
@@ -560,7 +562,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
                     if module_value:  # if not empty
                         module = module_value
                 break
-        
+
         self._nodes[node_index] = KiKiMRNode(
             node_id=node_index,
             config_path=node_config_path,

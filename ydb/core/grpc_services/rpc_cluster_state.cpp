@@ -52,8 +52,8 @@ public:
     Ydb::Monitoring::SelfCheckResult SelfCheck;
     Ydb::StatusIds_StatusCode Status = Ydb::StatusIds::SUCCESS;
     TInstant Started;
-    ui32 Duration;
-    ui32 Period;
+    TDuration Duration;
+    TDuration Period;
 
     void SendRequest(ui32 nodeId) {
         TActorId whiteboardServiceId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(nodeId);
@@ -79,9 +79,9 @@ public:
             SendRequest(ni.NodeId);
         }
         CountersRequested = 1;
-        Period = GetProtoRequest()->period();
-        if (Period > 0) {
-            Schedule(TDuration::Seconds(Period), new TEvents::TEvWakeup());
+        Period = TDuration::Seconds(GetProtoRequest()->period());
+        if (Period > TDuration::Zero()) {
+            Schedule(Period, new TEvents::TEvWakeup());
         }
         if (Requested > 0) {
             TBase::Become(&TThis::StateRequestedNodeInfo);
@@ -162,7 +162,7 @@ public:
 
     void NodeStateInfoReceived() {
         ++Received;
-        if (Received == Requested && Period == 0) {
+        if (Received == Requested && Period != TDuration::Zero()) {
             ReplyAndPassAway();
         }
     }
@@ -179,30 +179,27 @@ public:
     }
 
     void Bootstrap() {
-        constexpr ui32 defaultDuration = 60;
+        constexpr ui32 defaultDurationSec = 60;
         const TActorId nameserviceId = GetNameserviceActorId();
         Send(nameserviceId, new TEvInterconnect::TEvListNodes());
         TBase::Become(&TThis::StateRequestedBrowse);
 
-        Duration = GetProtoRequest()->duration();
-        if (Duration == 0) {
-            Duration = defaultDuration;
-        }
+        Duration = TDuration::Seconds(GetProtoRequest()->duration() ? GetProtoRequest()->duration() : defaultDurationSec);
         Started = TInstant::Now();
-        Schedule(TDuration::Seconds(Duration), new TEvents::TEvWakeup());
+        Schedule(Duration, new TEvents::TEvWakeup());
     }
 
-    void Timeout() {
-        if (Period != 0) {
+    void Wakeup() {
+        if (Period > TDuration::Zero()) {
             for (const auto& ni : Nodes) {
                 TActorId whiteboardServiceId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(ni.NodeId);
                 Send(whiteboardServiceId, new NNodeWhiteboard::TEvWhiteboard::TEvCountersInfoRequest(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, ni.NodeId);
                 Requested++;
             }
             CountersRequested++;
-            Schedule(TDuration::Seconds(Period), new TEvents::TEvWakeup());
+            Schedule(Period, new TEvents::TEvWakeup());
         }
-        if (TInstant::Now() - Started >= TDuration::Seconds(Duration)) {
+        if (TInstant::Now() - Started >= Duration) {
             ReplyAndPassAway();
         }
     }
@@ -217,7 +214,7 @@ public:
     STFUNC(StateRequestedBrowse) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvInterconnect::TEvNodesInfo, HandleBrowse);
-            cFunc(TEvents::TSystem::Wakeup, Timeout);
+            cFunc(TEvents::TSystem::Wakeup, Wakeup);
         }
     }
 
@@ -233,9 +230,54 @@ public:
             hFunc(NNodeWhiteboard::TEvWhiteboard::TEvCountersInfoResponse, Handle);
             hFunc(TEvents::TEvUndelivered, Undelivered);
             hFunc(TEvInterconnect::TEvNodeDisconnected, Disconnected);
-            cFunc(TEvents::TSystem::Wakeup, Timeout);
+            cFunc(TEvents::TSystem::Wakeup, Wakeup);
             hFunc(NHealthCheck::TEvSelfCheckResult, Handle);
         }
+    }
+
+    void SerializeSelfCheck(TStringBuilder& res) {
+        res << "\"SelfCheck\": ";
+        TString data;
+        google::protobuf::util::MessageToJsonString(SelfCheck, &data);
+        res << data << ",\n";
+    }
+
+    void SerializeDict(TStringBuilder& res, const char *name, auto &info) {
+        res << "\"" << name << "\": {\n";
+        bool first = true;
+        for (auto &[k, v] : info) {
+            if (!first) {
+                res << ",\n";
+            }
+            first = false;
+            TString data;
+            google::protobuf::util::MessageToJsonString(v, &data);
+            res << "\"" << k << "\": " << data;
+        }
+        res << "},\n";
+    }
+
+    void SerializeCountersInfo(TStringBuilder& res) {
+        res << "\"CountersInfo\": {\n";
+        bool first = true;
+        for (auto &[k, value] : CountersInfo) {
+            if (!first) {
+                res << ",\n";
+            }
+            first = false;
+            res << "\"" << k << "\": ";
+            res << "[\n";
+            bool firstInArray = true;
+            for (auto v : value) {
+                if (!firstInArray) {
+                    res << ",\n";
+                }
+                firstInArray = false;
+                res << v;
+            }
+            res << "]";
+        }
+        res << "},\n";
     }
 
     void ReplyAndPassAway() {
@@ -246,58 +288,15 @@ public:
         Ydb::Monitoring::ClusterStateResult result;
         TStringBuilder res;
         res << "{\n";
-        auto serializeDict = [&](const char *name, auto &info) {
-            res << "\"" << name << "\": {\n";
-            bool first = true;
-            for (auto &[k, v] : info) {
-                if (!first) {
-                    res << ",\n";
-                }
-                first = false;
-                TString data;
-                google::protobuf::util::MessageToJsonString(v, &data);
-                res << "\"" << k << "\": " << data;
-            }
-            res << "},\n";
-        };
-
-        auto serializeDictOfArray = [&](const char *name, auto &info) {
-            res << "\"" << name << "\": {\n";
-            bool first = true;
-            for(auto &[k, value] : info) {
-                if (!first) {
-                    res << ",\n";
-                }
-                first = false;
-                res << "\"" << k << "\": ";
-                res << "[\n";
-                bool firstInArray = true;
-                for (auto v : value) {
-                    if (!firstInArray) {
-                        res << ",\n";
-                    }
-                    firstInArray = false;
-                    res << v;
-                }
-                res << "]";
-            }
-            res << "},\n";
-        };
-        auto serialize = [&](const char *name, auto &info) {
-            res << "\"" << name <<"\": ";
-            TString data;
-            google::protobuf::util::MessageToJsonString(info, &data);
-            res << data << ",\n";
-        };
-        serializeDict("VDiskInfo", VDiskInfo);
-        serializeDict("PDiskInfo", PDiskInfo);
-        serializeDict("TabletInfo", TabletInfo);
-        serializeDict("BSGroupInfo", BSGroupInfo);
-        serializeDict("SystemInfo", SystemInfo);
-        serializeDict("BridgeInfo", BridgeInfo);
-        serializeDict("NodeInfo", NodeInfo);
-        serialize("SelfCheck", SelfCheck);
-        serializeDictOfArray("CountersInfo", CountersInfo);
+        SerializeDict(res, "VDiskInfo", VDiskInfo);
+        SerializeDict(res, "PDiskInfo", PDiskInfo);
+        SerializeDict(res, "TabletInfo", TabletInfo);
+        SerializeDict(res, "BSGroupInfo", BSGroupInfo);
+        SerializeDict(res, "SystemInfo", SystemInfo);
+        SerializeDict(res, "BridgeInfo", BridgeInfo);
+        SerializeDict(res, "NodeInfo", NodeInfo);
+        SerializeSelfCheck(res);
+        SerializeCountersInfo(res);
 
         res << "\"version\": 1}\n";
         result.Setresult(res);

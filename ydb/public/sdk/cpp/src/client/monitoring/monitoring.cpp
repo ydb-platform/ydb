@@ -129,16 +129,13 @@ public:
         using Ydb::Monitoring::ClusterStateRequest;
         using Ydb::Monitoring::ClusterStateResponse;
 
-        auto requestSettings = TRpcRequestSettings::Make(settings);
-        requestSettings.EndpointPolicy = TRpcRequestSettings::TEndpointPolicy::UseDiscoveryEndpoint;
-
         Connections_->RunDeferred<Ydb::Monitoring::V1::MonitoringService, ClusterStateRequest, ClusterStateResponse>(
             std::move(request),
             extractor,
             &Ydb::Monitoring::V1::MonitoringService::Stub::AsyncClusterState,
             DbDriverState_,
             INITIAL_DEFERRED_CALL_DELAY,
-            requestSettings);
+            TRpcRequestSettings::Make(settings));
 
         return promise.GetFuture();
     }

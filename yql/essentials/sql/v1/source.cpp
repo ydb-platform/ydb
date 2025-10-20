@@ -703,8 +703,9 @@ TNodePtr BuildFrameNode(const TFrameBound& frame, EFrameType frameType) {
         case FrameFollowing:
             settingStr = "following";
             break;
-        default:
+        case FrameUndefined:
             YQL_ENSURE(false, "Unexpected frame setting");
+            break;
     }
 
     TNodePtr node = frame.Bound;

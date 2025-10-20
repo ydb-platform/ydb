@@ -94,27 +94,29 @@ inline bool HasSpillingFlag(const TCallable& callable) {
     return TStringBuf(callable.GetType()->GetName()).EndsWith("WithSpilling"_sb);
 }
 
+// clang-format off
 #define MKQL_SCRIPT_TYPES(xx)                                                                                                 \
-    xx(Unknown, 0, unknown, false)                                                                                            \
-        xx(Python, 1, python, false)                                                                                          \
-            xx(Lua, 2, lua, false)                                                                                            \
-                xx(ArcPython, 3, arcpython, false)                                                                            \
-                    xx(CustomPython, 4, custompython, true)                                                                   \
-                        xx(Javascript, 5, javascript, false)                                                                  \
-                            xx(Python2, 6, python2, false)                                                                    \
-                                xx(ArcPython2, 7, arcpython2, false)                                                          \
-                                    xx(CustomPython2, 8, custompython2, true)                                                 \
-                                        xx(Python3, 9, python3, false)                                                        \
-                                            xx(ArcPython3, 10, arcpython3, false)                                             \
-                                                xx(CustomPython3, 11, custompython3, true)                                    \
-                                                    xx(SystemPython2, 12, systempython2, false)                               \
-                                                        xx(SystemPython3, 13, systempython3, false)                           \
-                                                            xx(SystemPython3_8, 14, systempython3_8, false)                   \
-                                                                xx(SystemPython3_9, 15, systempython3_9, false)               \
-                                                                    xx(SystemPython3_10, 16, systempython3_10, false)         \
-                                                                        xx(SystemPython3_11, 17, systempython3_11, false)     \
-                                                                            xx(SystemPython3_12, 18, systempython3_12, false) \
-                                                                                xx(SystemPython3_13, 19, systempython3_13, false)
+    xx(Unknown, 0, unknown, false)                    \
+    xx(Python, 1, python, false)                      \
+    xx(Lua, 2, lua, false)                            \
+    xx(ArcPython, 3, arcpython, false)                \
+    xx(CustomPython, 4, custompython, true)           \
+    xx(Javascript, 5, javascript, false)              \
+    xx(Python2, 6, python2, false)                    \
+    xx(ArcPython2, 7, arcpython2, false)              \
+    xx(CustomPython2, 8, custompython2, true)         \
+    xx(Python3, 9, python3, false)                    \
+    xx(ArcPython3, 10, arcpython3, false)             \
+    xx(CustomPython3, 11, custompython3, true)        \
+    xx(SystemPython2, 12, systempython2, false)       \
+    xx(SystemPython3, 13, systempython3, false)       \
+    xx(SystemPython3_8, 14, systempython3_8, false)   \
+    xx(SystemPython3_9, 15, systempython3_9, false)   \
+    xx(SystemPython3_10, 16, systempython3_10, false) \
+    xx(SystemPython3_11, 17, systempython3_11, false) \
+    xx(SystemPython3_12, 18, systempython3_12, false) \
+    xx(SystemPython3_13, 19, systempython3_13, false)
+// clang-format on
 
 enum class EScriptType {
     MKQL_SCRIPT_TYPES(ENUM_VALUE_GEN)

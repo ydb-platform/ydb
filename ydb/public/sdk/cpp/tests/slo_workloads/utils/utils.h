@@ -10,7 +10,6 @@
 
 extern const TDuration DefaultReactionTime;
 extern const TDuration ReactionTimeDelay;
-extern const TDuration GlobalTimeout;
 extern const std::uint64_t PartitionsCount;
 
 struct TRecordData {
@@ -48,7 +47,6 @@ struct TCommonOptions {
     std::uint32_t MaxCallbackThreads = 50;
     std::uint32_t MaxInfly = 500;
     std::uint32_t MaxRetries = 50;
-    std::uint64_t A_ReactionTime = 70; //ms
     TDuration ReactionTime = DefaultReactionTime;
     bool StopOnError = false;
     bool UseApplicationTimeout = false;
@@ -75,6 +73,8 @@ struct TRunOptions {
     bool DontRunB = false;
     std::uint32_t Read_rps = 1000;
     std::uint32_t Write_rps = 10;
+    TDuration ReadTimeout = DefaultReactionTime;
+    TDuration WriteTimeout = DefaultReactionTime;
 };
 
 class TRpsProvider {

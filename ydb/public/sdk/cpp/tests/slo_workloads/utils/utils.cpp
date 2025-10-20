@@ -16,7 +16,6 @@ using namespace NYdb;
 
 const TDuration DefaultReactionTime = TDuration::Minutes(2);
 const TDuration ReactionTimeDelay = TDuration::MilliSeconds(5);
-const TDuration GlobalTimeout = TDuration::Minutes(2);
 const std::uint64_t PartitionsCount = 64;
 
 Y_DECLARE_OUT_SPEC(, NYdb::TStatus, stream, value) {
@@ -434,8 +433,6 @@ void ParseOptionsCommon(TOpts& opts, TCommonOptions& options) {
         .DefaultValue(options.MinLength).StoreResult(&options.MinLength);
     opts.AddLongOption("payload-max", "Maximum length of payload string").RequiredArgument("NUM")
         .DefaultValue(options.MaxLength).StoreResult(&options.MaxLength);
-    opts.AddLongOption("timeout", "Read requests execution timeout [ms]").RequiredArgument("NUM")
-        .DefaultValue(options.A_ReactionTime).StoreResult(&options.A_ReactionTime);
     opts.AddLongOption("dont-push", "Do not push metrics").NoArgument()
         .SetFlag(&options.DontPushMetrics).DefaultValue(options.DontPushMetrics);
     opts.AddLongOption("metrics-push-url", "URL to push metrics").RequiredArgument("URL")
@@ -500,6 +497,10 @@ bool ParseOptionsRun(int argc, char** argv, TRunOptions& runOptions) {
         .SetFlag(&runOptions.DontRunB).DefaultValue(runOptions.DontRunB);
     opts.AddLongOption("infly", "Maximum number of running jobs").RequiredArgument("NUM")
         .DefaultValue(runOptions.CommonOptions.MaxInfly).StoreResult(&runOptions.CommonOptions.MaxInfly);
+    opts.AddLongOption("read-timeout", "Read requests execution timeout [ms]").RequiredArgument("NUM")
+        .DefaultValue(runOptions.ReadTimeout).StoreResult(&runOptions.ReadTimeout);
+    opts.AddLongOption("write-timeout", "Write requests execution timeout [ms]").RequiredArgument("NUM")
+        .DefaultValue(runOptions.WriteTimeout).StoreResult(&runOptions.WriteTimeout);
     TOptsParseResult res(&opts, argc, argv);
 
     if (!CheckOptionsCommon(runOptions.CommonOptions)) {

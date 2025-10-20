@@ -182,12 +182,19 @@ message LocationBridgePile {
     string name = 1;
 }
 
+message LocationStateStorage {
+    uint32 ring = 1;
+    LocationNode node = 2;
+    LocationBridgePile pile = 3;
+}
+
 message LocationCompute {
     LocationNode node = 1;
     LocationComputePool pool = 2;
     LocationComputeTablet tablet = 3;
     LocationComputeSchema schema = 4;
     LocationBridgePile pile = 5;
+    LocationStateStorage state_storage = 6;
 }
 
 message LocationDatabase {

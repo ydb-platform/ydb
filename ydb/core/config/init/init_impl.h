@@ -317,6 +317,7 @@ struct TCommonAppOptions {
     TString NodeKind = TString(NODE_KIND_YDB);
     TMaybe<TString> NodeType;
     TMaybe<TString> DataCenter;
+    TMaybe<TString> Module;
     TString Rack = "";
     ui32 Body = 0;
     ui32 GRpcPort = 0;
@@ -427,6 +428,8 @@ struct TCommonAppOptions {
         opts.AddLongOption("ic-ca", "Path to certificate authority file (PEM) for interconnect").RequiredArgument("PATH").StoreResult(&PathToInterconnectCaFile);
         opts.AddLongOption("data-center", "data center name (used to describe dynamic node location)")
             .RequiredArgument("NAME").StoreResult(&DataCenter);
+        opts.AddLongOption("module", "module name (used to describe dynamic node location)")
+            .RequiredArgument("NAME").StoreResult(&Module);
         opts.AddLongOption("rack", "rack name (used to describe dynamic node location)")
             .RequiredArgument("NAME").StoreResult(&Rack);
         opts.AddLongOption("body", "body name (used to describe dynamic node location)")
@@ -788,6 +791,9 @@ struct TCommonAppOptions {
     NActors::TNodeLocation CreateNodeLocation() const {
         NActorsInterconnect::TNodeLocation location;
         location.SetDataCenter(DataCenter ? DataCenter.GetRef() : TString(""));
+        if (Module) {
+            location.SetModule(Module.GetRef());
+        }
         location.SetRack(Rack);
         location.SetUnit(ToString(Body));
         NActors::TNodeLocation loc(location);

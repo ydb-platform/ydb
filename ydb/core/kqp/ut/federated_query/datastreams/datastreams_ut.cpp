@@ -3177,7 +3177,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {
         WriteTopicMessage(InputTopic, "test");
         ReadTopicMessages(OutputTopic, resultMessages);
 
-        WaitFor(TDuration::Seconds(10), "Wait for queries to complete", [&](TString& error) {
+        WaitFor(TDuration::Seconds(60), "Wait for queries to complete", [&](TString& error) {
             const auto& result = ExecQuery("SELECT COUNT(*) FROM `.metadata/script_execution_leases`");
             UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
 

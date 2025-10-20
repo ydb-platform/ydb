@@ -32,6 +32,8 @@ jobs:
               --write-rps ${{inputs.slo_workload_write_max_rps || 100}} \
               --read-timeout 1000 \
               --write-timeout 1000
+
+    concurrency:
       group: slo-${{ github.ref }}
       cancel-in-progress: true
 

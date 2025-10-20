@@ -20,6 +20,7 @@ void DoAlterTopicRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvid
 void DoDescribeTopicRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f);
 void DoDescribeConsumerRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f);
 void DoDescribePartitionRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f);
+void DoCommitOffsetRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f);
 
 void DoPQDropTopicRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f);
 void DoPQCreateTopicRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f, TIntrusiveConstPtr<NGRpcProxy::V1::TClustersCfg>);

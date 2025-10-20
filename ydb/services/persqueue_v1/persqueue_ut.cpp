@@ -2069,7 +2069,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
 
         auto driver = pqClient->GetDriver();
         {
-            auto writer = CreateSimpleWriter(*driver, "acc/topic1", "source");
+            auto writer = CreateSimpleWriter(*driver, "/Root/PQ/rt3.dc1--acc--topic1", "source");
             for (int i = 1; i < 17; ++i) {
                 bool res = writer->Write("valuevaluevalue" + ToString(i), i);
                 UNIT_ASSERT(res);
@@ -2090,7 +2090,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             Ydb::Topic::StreamReadMessage::FromClient req;
             Ydb::Topic::StreamReadMessage::FromServer resp;
 
-            req.mutable_init_request()->add_topics_read_settings()->set_path("acc/topic1");
+            req.mutable_init_request()->add_topics_read_settings()->set_path("/Root/PQ/rt3.dc1--acc--topic1");
 
             req.mutable_init_request()->set_consumer("user");
 
@@ -2139,7 +2139,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             Ydb::Topic::CommitOffsetRequest req;
             Ydb::Topic::CommitOffsetResponse resp;
 
-            req.set_path("acc/topic1");
+            req.set_path("/Root/PQ/rt3.dc1--acc--topic1");
             req.set_consumer("user");
             req.set_offset(5);
             grpc::ClientContext rcontext;

@@ -1402,6 +1402,8 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
     }
 
     Y_UNIT_TEST_F(CheckpointsOnNotDrainedChannels, TStreamingTestFixture) {
+        LogSettings.Freeze = true;
+
         CheckpointPeriod = TDuration::Seconds(3);
         const auto pqGateway = SetupMockPqGateway();
 
@@ -3080,6 +3082,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {
     }
 
     Y_UNIT_TEST_F(ReadSysViewWithRowCountBackPressure, TStreamingSysViewTestFixture) {
+        LogSettings.Freeze = true;
         SetupAppConfig().MutableTableServiceConfig()->MutableResourceManager()->SetChannelBufferSize(1_KB);
         Setup();
 
@@ -3107,6 +3110,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {
     }
 
     Y_UNIT_TEST_F(ReadSysViewWithRowSizeBackPressure, TStreamingSysViewTestFixture) {
+        LogSettings.Freeze = true;
         SetupAppConfig().MutableTableServiceConfig()->MutableResourceManager()->SetChannelBufferSize(1_KB);
         Setup();
 
@@ -3137,6 +3141,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {
     }
 
     Y_UNIT_TEST_F(ReadSysViewWithMetadataSizeBackPressure, TStreamingSysViewTestFixture) {
+        LogSettings.Freeze = true;
         SetupAppConfig().MutableTableServiceConfig()->MutableResourceManager()->SetChannelBufferSize(1_KB);
         Setup();
 

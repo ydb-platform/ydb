@@ -154,6 +154,7 @@ public:
     NCommon::TConfSetting<bool, Static> UseDefaultArrowAllocatorInJobs;
     NCommon::TConfSetting<bool, Static> UseNativeYtDefaultColumnOrder;
     NCommon::TConfSetting<bool, Static> EarlyPartitionPruning;
+    NCommon::TConfSetting<bool, Static> ValidateClusters;
 
     // Job runtime
     NCommon::TConfSetting<TString, Dynamic> Pool;

@@ -604,6 +604,7 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx)
     REGISTER_SETTING(*this, DontForceTransformForInputTables);
     REGISTER_SETTING(*this, _LocalTableContentLimit);
     REGISTER_SETTING(*this, ValidatePool);
+    REGISTER_SETTING(*this, ValidateClusters);
 }
 
 EReleaseTempDataMode GetReleaseTempDataMode(const TYtSettings& settings) {

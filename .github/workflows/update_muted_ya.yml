@@ -89,7 +89,7 @@ jobs:
         run: |
           echo "Getting base muted_ya.txt from branch: ${{ env.BASE_BRANCH }}"
           git fetch origin ${{ env.BASE_BRANCH }}:refs/remotes/origin/${{ env.BASE_BRANCH }}
-          git show ${{ env.BASE_BRANCH }}:.github/config/muted_ya.txt > base_muted_ya.txt
+          git show origin/${{ env.BASE_BRANCH }}:.github/config/muted_ya.txt > base_muted_ya.txt
           echo "✓ Retrieved base muted_ya.txt from ${{ env.BASE_BRANCH }}"
     
       - name: Collect test history data

@@ -72,7 +72,7 @@ def parse_args() -> ParsedOptions:
         required=True
     )
 
-    dynconfig_parser = action_parser.add_parser("dynconfig", help="Performs an operation that first fetches the config file, then replaces it with itself")
+    dynconfig_parser = action_parser.add_parser("dynconfig", help="Performs an operation that fetches the dynconfig file")
     dynconfig_parser.add_argument(
         '-q',
         '--quiet',

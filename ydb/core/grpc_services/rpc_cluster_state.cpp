@@ -251,12 +251,12 @@ public:
             for(auto &[k, v] : info) {
                 TString data;
                 google::protobuf::util::MessageToJsonString(v, &data);
-                res << "{" << k << ":" << data << "},\n";
+                res << "{\"" << k << "\":" << data << "},\n";
             }
             res << "}\n";
         };
         auto serializeArray = [&](auto &info) {
-            res << "[";
+            res << "[\n";
             for (auto v : info) {
                 res << v << ",\n";
             }
@@ -265,7 +265,7 @@ public:
         auto serializeDictOfArray = [&](const char *name, auto &info) {
             res << "\"" << name <<"\" : {\n";
             for(auto &[k, v] : info) {
-                res << "{" << k << ":";
+                res << "{\"" << k << "\":";
                 serializeArray(v);
                 res << "},\n";
             }

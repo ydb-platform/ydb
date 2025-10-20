@@ -16,7 +16,7 @@ This section provides a step-by-step overview of how SQL queries are handled in 
 Your application uses one of the [official {{ ydb-short-name }} SDKs](../reference/ydb-sdk/index.md) to connect to the database. The SDK automatically manages a pool of sessions, logical connections required to execute queries. Behind the scenes, each session is physically connected to one of the nodes in the {{ ydb-short-name }} cluster. When you need to run a query, the SDK provides a session from this pool, so you don’t need to manage connections manually.
 
 2. **Starting a Transaction and Sending a Query**
-With your session in hand, your application can begin a new transaction. You then generate your query in the [YQL query language](../yql/reference/index.md) based on your application logic and send it to the {{ ydb-short-name }} cluster using the session.
+With your session in hand, your application can begin a new transaction. You then issue your query in the [YQL query language](../yql/reference/index.md) based on your application logic and send it to the {{ ydb-short-name }} cluster using the session.
 
 3. **Parsing and Plan Cache Lookup**
 On the server side, the {{ ydb-short-name }} node that receives your query first parses and analyzes it for correctness. Before planning execution, {{ ydb-short-name }} checks whether a physical execution plan for this query already exists in the query cache. If a cached plan is found, it can be reused to save time and resources.
@@ -47,21 +47,21 @@ In practice, you don’t need to worry about creating, reusing, or closing sessi
 
 Every query in {{ ydb-short-name }} is executed within the context of a transaction, ensuring data consistency and reliability. Transactions can be managed either explicitly, or by specifying appropriate transaction control parameters during query execution.
 
-{{ ydb-short-name }} also supports interactive transactions, which give you the flexibility to execute multiple queries within the same transaction, while allowing your application to perform custom logic between those queries. This makes it possible to build complex workflows that require several related operations to be treated as a single atomic unit.
+{{ ydb-short-name }} also supports [Interactive transactions](./glossary.md#interactive-transaction), which give you the flexibility to execute multiple queries within the same transaction, while allowing your application to perform custom logic between those queries. This makes it possible to build complex workflows that require several related operations to be treated as a single atomic unit.
 
 For comprehensive information on transactions and the available transaction modes in {{ ydb-short-name }}, see the [Transactions](transactions.md) article.
 
 ## Retries
 
-{{ ydb-short-name }} employs optimistic concurrency control for transaction management. This means that a transaction may be aborted during execution if {{ ydb-short-name }} detects a conflict and cannot guarantee the requested isolation level — for example, when two transactions attempt to modify the same data concurrently. Additionally, because {{ ydb-short-name }} operates as a distributed system across potentially large clusters, some nodes may become temporarily unavailable due to network partitions, hardware failures, or maintenance. Such events can also cause transaction failures that require retries.
+{{ ydb-short-name }} employs [Optimistic concurrency control](https://en.wikipedia.org/wiki/Optimistic_concurrency_control) for transaction management. This means that a transaction may be aborted during execution if {{ ydb-short-name }} detects a conflict and cannot guarantee the requested isolation level — for example, when two transactions attempt to modify the same data concurrently. Additionally, because {{ ydb-short-name }} operates as a distributed system across potentially large clusters, some nodes may become temporarily unavailable due to network partitions, hardware failures, or maintenance. Such events can also cause transaction failures that require retries.
 
-Retries should always be handled at the transaction level, not at the level of individual queries. In [interactive transactions](glossary.md#interactive-transaction), the sequence of queries and their intermediate results may influence subsequent operations, making it unsafe or impossible to retry only a single failed query. Therefore, if a query fails due to a conflict or a transient error, the entire transaction should be retried from the beginning to ensure correctness and consistency.
+Retries should always be handled at the transaction level, not at the level of individual queries. In [Interactive transactions](glossary.md#interactive-transaction), the sequence of queries and their intermediate results may influence subsequent operations, making it unsafe or impossible to retry only a single failed query. Therefore, if a query fails due to a conflict or a transient error, the entire transaction should be retried from the beginning to ensure correctness and consistency.
 
 All official {{ ydb-short-name }} SDKs provide built-in retry logic and transaction management helpers to simplify application development. By using the standard transaction methods provided by your SDK, you automatically get correct and robust retry behavior without having to implement it manually. For details about retry mechanisms in specific SDKs, see the [{#T}](../reference/ydb-sdk/error_handling.md).
 
 ## Query language
 
-Queries for {{ ydb-short-name }} are written in YQL — an SQL dialect designed with scalable distributed databases in mind. While YQL is not fully ANSI SQL compatible, it closely follows familiar SQL syntax and concepts for most common use cases, making it easy to learn for those with SQL experience. The complete language reference is available in the [YQL documentation](../yql/reference/index.md).
+Queries for {{ ydb-short-name }} are written in [YQL](./glossary.md#yql) — an SQL dialect designed with scalable distributed databases in mind. While YQL is not fully ANSI SQL compatible, it closely follows familiar SQL syntax and concepts for most common use cases, making it easy to learn for those with SQL experience. The complete language reference is available in the [YQL documentation](../yql/reference/index.md).
 
 Most interactions with {{ ydb-short-name }} are performed using YQL, making it the primary tool for querying and managing data in {{ ydb-short-name }}. Because of this, understanding YQL’s features and capabilities is essential for effectively working with {{ ydb-short-name }}. Learning YQL enables you to take full advantage of the database’s advanced query functionality, express complex business logic, and utilize {{ ydb-short-name }}’s distributed architecture efficiently.
 

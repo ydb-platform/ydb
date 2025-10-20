@@ -4,7 +4,6 @@
 #include "schemeshard_xxport__helpers.h"
 
 #include <ydb/core/base/path.h>
-#include <ydb/core/protos/datashard_config.pb.h>
 #include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/core/ydb_convert/topic_description.h>
@@ -173,10 +172,6 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> RestoreTableDataPropose(
             restoreSettings.SetObjectKeyPattern(importInfo.GetItemSrcPrefix(itemIdx));
             restoreSettings.SetUseVirtualAddressing(!importInfo.Settings.disable_virtual_addressing());
 
-            if (const auto& datashardConfig = AppData()->DataShardConfig; datashardConfig.HasRestoreDataS3ReadBatchSize()) {
-                restoreSettings.MutableLimits()->SetReadBatchSize(datashardConfig.GetRestoreDataS3ReadBatchSize());
-            }
-
             switch (importInfo.Settings.scheme()) {
             case Ydb::Import::ImportFromS3Settings::HTTP:
                 restoreSettings.SetScheme(NKikimrSchemeOp::TS3Settings::HTTP);
@@ -297,9 +292,9 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateChangefeedPropose(
     Y_ABORT_UNLESS(!tableDesc.GetKeyColumnIds().empty());
     const auto& keyId = tableDesc.GetKeyColumnIds()[0];
     bool isPartitioningAvailable = false;
-
+    
     // Explicit specification of the number of partitions when creating CDC
-    // is possible only if the first component of the primary key
+    // is possible only if the first component of the primary key 
     // of the source table is Uint32 or Uint64
     for (const auto& column : tableDesc.GetColumns()) {
         if (column.GetId() == keyId) {

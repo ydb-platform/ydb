@@ -28,5 +28,4 @@ message TDataShardConfig {
     optional uint64 InMemoryStateMigrationTimeoutMs = 24 [default = 1000];
     optional uint32 StatsReportIntervalSeconds = 25 [default = 10];
     optional uint32 BackupTableStatsReportIntervalSeconds = 26 [default = 30];
-    optional uint32 RestoreDataS3ReadBatchSize = 27 [default = 8388608]; // 8 MB
 }

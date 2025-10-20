@@ -258,6 +258,10 @@ public:
                     continue;
                 }
 
+                // TODO revert asap; diagnostics-only for q-stable-*
+                if (WatermarkMode && hopIndex >= keyState.HopIndex + DelayHopCount + IntervalHopCount) {
+                    ++EarlyEventsThrown;
+                }
                 if constexpr (false) { // TODO: if (WatermarkMode) {
                     if (hopIndex >= keyState.HopIndex + DelayHopCount + IntervalHopCount) {
                         ++EarlyEventsThrown;

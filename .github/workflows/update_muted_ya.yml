@@ -137,8 +137,8 @@ jobs:
           # Создаем PR ветку на основе целевой ветки
           git checkout -B ${{ env.PR_BRANCH }} ${{ env.BASE_BRANCH }}
           
-          # Копируем новый файл в PR ветку
-          cp ../mute_update/new_muted_ya.txt .github/config/muted_ya.txt
+          # Копируем новый файл в PR ветку (файл остается в рабочей директории)
+          cp mute_update/new_muted_ya.txt .github/config/muted_ya.txt
           
           # Коммитим изменения
           git add .github/config/muted_ya.txt

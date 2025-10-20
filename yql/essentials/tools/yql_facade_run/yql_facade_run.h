@@ -141,6 +141,7 @@ public:
     bool EnableQPlayer = false;
     bool OptimizeLibs = true;
     bool CustomTests = false;
+    bool EnableLineage = false;
 
     void Parse(int argc, const char* argv[]);
 

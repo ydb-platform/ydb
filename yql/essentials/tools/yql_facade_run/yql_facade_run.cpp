@@ -777,6 +777,9 @@ int TFacadeRunner::DoRun(TProgramFactory& factory) {
     }
     program->SetUseTableMetaFromGraph(RunOptions_.UseMetaFromGrpah);
     program->SetValidateOptions(RunOptions_.ValidateMode);
+    if (RunOptions_.EnableLineage) {
+        program->SetEnableLineage();
+    }
 
     bool fail = false;
     if (RunOptions_.ProgramType != EProgramType::SExpr) {

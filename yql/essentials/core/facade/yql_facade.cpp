@@ -1192,7 +1192,7 @@ TProgram::TFutureStatus TProgram::OptimizeAsync(
                        .AddTypeAnnotation(TIssuesIds::CORE_TYPE_ANN, true)
                        .AddPostTypeAnnotation()
                        .Add(TExprOutputTransformer::Sync(ExprRoot_, traceOut), "ExprOutput")
-                       .AddOptimization()
+                       .AddOptimizationWithLineage(EnableLineage_)
                        .Add(TExprOutputTransformer::Sync(ExprRoot_, exprOut, withTypes), "AstOutput")
                        .Build();
 
@@ -1262,7 +1262,7 @@ TProgram::TFutureStatus TProgram::OptimizeAsyncWithConfig(
     pipeline.AddPostTypeAnnotation();
     pipelineConf.AfterTypeAnnotation(&pipeline);
 
-    pipeline.AddOptimization();
+    pipeline.AddOptimizationWithLineage(EnableLineage_);
     if (EnableRangeComputeFor_) {
         pipeline.Add(MakeExpandRangeComputeForTransformer(pipeline.GetTypeAnnotationContext()),
                      "ExpandRangeComputeFor", TIssuesIds::CORE_EXEC);
@@ -1402,7 +1402,7 @@ TProgram::TFutureStatus TProgram::RunAsync(
     pipeline.AddTypeAnnotation(TIssuesIds::CORE_TYPE_ANN, true);
     pipeline.AddPostTypeAnnotation();
     pipeline.Add(TExprOutputTransformer::Sync(ExprRoot_, traceOut), "ExprOutput");
-    pipeline.AddOptimizationWithLineage();
+    pipeline.AddOptimizationWithLineage(EnableLineage_);
     if (EnableRangeComputeFor_) {
         pipeline.Add(MakeExpandRangeComputeForTransformer(pipeline.GetTypeAnnotationContext()),
                      "ExpandRangeComputeFor", TIssuesIds::CORE_EXEC);
@@ -1480,7 +1480,7 @@ TProgram::TFutureStatus TProgram::RunAsyncWithConfig(
     pipeline.AddPostTypeAnnotation();
     pipelineConf.AfterTypeAnnotation(&pipeline);
 
-    pipeline.AddOptimizationWithLineage();
+    pipeline.AddOptimizationWithLineage(EnableLineage_);
     if (EnableRangeComputeFor_) {
         pipeline.Add(MakeExpandRangeComputeForTransformer(pipeline.GetTypeAnnotationContext()),
                      "ExpandRangeComputeFor", TIssuesIds::CORE_EXEC);

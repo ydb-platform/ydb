@@ -5,6 +5,7 @@
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/core/yql_join.h>
 
+#include <library/cpp/yson/node/node_io.h>
 #include <util/system/env.h>
 
 namespace NYql {
@@ -964,6 +965,28 @@ private:
 TString CalculateLineage(const TExprNode& root, const TTypeAnnotationContext& ctx, TExprContext& exprCtx, bool standalone) {
     TLineageScanner scanner(root, ctx, exprCtx, standalone);
     return scanner.Process();
+}
+
+TString NormalizeLineage(const TString& lineageStr) {
+    THashMap<i64, TString> idToPath;
+    auto lineageNode = NYT::NodeFromYsonString(lineageStr);
+    auto& readsSection = lineageNode.AsMap()["Reads"];
+    for (auto& readNode : readsSection.AsList()) {
+        auto& readMap = readNode.AsMap();
+        idToPath[readMap["Id"].AsInt64()] = readMap["Name"].AsString();
+        readMap["Id"] = readMap["Name"];
+    }
+    auto& writesSection = lineageNode.AsMap()["Writes"];
+    for (auto& writeNode : writesSection.AsList()) {
+        auto& writeMap = writeNode.AsMap();
+        writeMap["Id"] = writeMap["Name"];
+        for (auto& [fieldName, fieldLineage] : writeMap["Lineage"].AsMap()) {
+            for (auto& inputField : fieldLineage.AsList()) {
+                inputField["Input"] = idToPath[inputField["Input"].AsInt64()];
+            }
+        }
+    }
+    return NYT::NodeToCanonicalYsonString(lineageNode);
 }
 
 } // namespace NYql

@@ -40,9 +40,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.commit_sha }}
-          fetch-depth: 0
 
       - name: Configure git
         uses: ./.github/actions/configure_git

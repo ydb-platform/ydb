@@ -757,6 +757,7 @@ void roaring64_bitmap_remove_bulk(roaring64_bitmap_t *r,
             assert(erased);
             (void)erased;
             remove_container(r, leaf);
+            context->leaf = NULL;
         }
     } else {
         // We're not positioned anywhere yet or the high bits of the key

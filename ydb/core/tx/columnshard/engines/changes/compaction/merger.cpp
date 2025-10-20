@@ -336,10 +336,10 @@ std::vector<TWritePortionInfoWithBlobsResult> TMerger::Execute(const std::shared
         ui32 recordIdx = 0;
         for (auto&& i : packs) {
             TGeneralSerializedSlice slicePrimary(std::move(i));
-            auto dataWithSecondary =
-                resultFiltered->GetIndexInfo()
-                    .AppendIndexes(slicePrimary.GetPortionChunksToHash(), SaverContext.GetStoragesManager(), slicePrimary.GetRecordsCount())
-                    .DetachResult();
+            auto dataWithSecondary = resultFiltered->GetIndexInfo()
+                                         .AppendIndexes(slicePrimary.GetPortionChunksToHash(), SaverContext.GetStoragesManager(),
+                                             slicePrimary.GetRecordsCount(), IStoragesManager::DefaultStorageId)
+                                         .DetachResult();
             TGeneralSerializedSlice slice(dataWithSecondary.GetExternalData(), schemaDetails, Context.Counters.SplitterCounters);
 
             auto b = batchResult->Slice(recordIdx, slice.GetRecordsCount());

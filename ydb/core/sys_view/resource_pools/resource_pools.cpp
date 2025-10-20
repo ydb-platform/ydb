@@ -37,12 +37,11 @@ public:
     }
 
     TResourcePoolsScan(const NActors::TActorId& ownerId, ui32 scanId,
-        const NKikimrSysView::TSysViewDescription& sysViewInfo,
+        const TString& database, const NKikimrSysView::TSysViewDescription& sysViewInfo,
         const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
-        TIntrusiveConstPtr<NACLib::TUserToken> userToken, const TString& database, bool reverse)
-        : TBase(ownerId, scanId, sysViewInfo, tableRange, columns)
+        TIntrusiveConstPtr<NACLib::TUserToken> userToken, bool reverse)
+        : TBase(ownerId, scanId, database, sysViewInfo, tableRange, columns)
         , UserToken(std::move(userToken))
-        , Database(database)
         , Reverse(reverse)
     {
     }
@@ -68,7 +67,7 @@ private:
     void SendRequestToSchemeCache(const TVector<TVector<TString>>& pathsComponents, NSchemeCache::TSchemeCacheNavigate::EOp operation) {
         auto event = NTableCreator::BuildSchemeCacheNavigateRequest(
             pathsComponents,
-            Database,
+            DatabaseName,
             UserToken
         );
         for (auto& resultSet : event->ResultSet) {
@@ -234,17 +233,16 @@ private:
 private:
     EState State = EState::LIST_RESOURCE_POOLS;
     const TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
-    const TString Database;
     const bool Reverse;
 };
 
 THolder<NActors::IActor> CreateResourcePoolsScan(const NActors::TActorId& ownerId, ui32 scanId,
-    const NKikimrSysView::TSysViewDescription& sysViewInfo, const TTableRange& tableRange,
-    const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
-    TIntrusiveConstPtr<NACLib::TUserToken> userToken, const TString& database, bool reverse)
+    const TString& database, const NKikimrSysView::TSysViewDescription& sysViewInfo,
+    const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
+    TIntrusiveConstPtr<NACLib::TUserToken> userToken, bool reverse)
 {
-    return MakeHolder<TResourcePoolsScan>(ownerId, scanId, sysViewInfo, tableRange, columns,
-        std::move(userToken), database, reverse);
+    return MakeHolder<TResourcePoolsScan>(ownerId, scanId, database, sysViewInfo, tableRange, columns,
+        std::move(userToken), reverse);
 }
 
 } // NSysView

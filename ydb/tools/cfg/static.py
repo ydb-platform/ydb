@@ -1509,6 +1509,7 @@ class StaticConfigGenerator(object):
             if not self._skip_location:
                 if self.__cluster_details.use_walle:
                     node.WalleLocation.DataCenter = host.datacenter
+                    node.WalleLocation.Module = host.module
                     node.WalleLocation.Rack = host.rack
                     node.WalleLocation.Body = int(host.body)
                 elif self.__cluster_details.use_k8s_api:
@@ -1517,6 +1518,7 @@ class StaticConfigGenerator(object):
                     node.Location.Body = int(host.body)
                 else:
                     node.Location.DataCenter = host.datacenter
+                    node.Location.Module = host.module
                     node.Location.Rack = host.rack
                     node.Location.Body = int(host.body)
 

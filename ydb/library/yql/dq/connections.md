@@ -106,13 +106,13 @@ DQ-граф состоит из стадий (_DqStage_), соединённых
 Не должно попадать в explain.
 
 
-# KQP Specific Connections
+# QP Specific Connections
 
-## KqpCnMapShard
+## QpCnMapShard
 * _NodeType_: **Map**
 * _PlanNodeType_: **Connection**
 
 Используется только для inplace-update под прагмой. В этом случае обе стадии выполняются на одном шарде и последовательно.
 
-## KqpCnShuffleShard
+## QpCnShuffleShard
 Задумывалось для межшардового взаимодействия. Нигде не используется.

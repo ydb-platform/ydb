@@ -19,7 +19,7 @@ For example, you can generate a [load on Distributed Storage](load-actors-storag
 
 | Type | Description |
 | --- | --- |
-| [KqpLoad](load-actors-kqp.md) | Generates a load on the Query Processor layer and loads all cluster components. |
+| [QPLoad](load-actors-kqp.md) | Generates a load on the Query Processor layer and loads all cluster components. |
 | [KeyValueLoad](load-actors-key-value.md) | Loads a key-value tablet. |
 | [StorageLoad](load-actors-storage.md) | Loads Distributed Storage without using tablet and Query Processor layers. |
 | [VDiskLoad](load-actors-vdisk.md) | Tests the performance of writes to the VDisk. |
@@ -36,7 +36,7 @@ You can run load using the following tools:
 * Cluster Embedded UI: Allows you to create, based on a configuration, and start a load actor either on the current node or all tenant nodes at once.
 * The `ydbd` utility: Allows you to send the actor configuration to any cluster node specifying the nodes to create and run the actor on.
 
-The use case described below shows how to create and run the KqpLoad actor. The actor accesses the `/slice/db` database as a key-value store using 64 threads with a 30-second load. Before the test, the actor creates the necessary tables and deletes them once the test is completed. When being created, the actor is automatically assigned a tag. The same tag will be assigned to the test result.
+The use case described below shows how to create and run the QPLoad actor. The actor accesses the `/slice/db` database as a key-value store using 64 threads with a 30-second load. Before the test, the actor creates the necessary tables and deletes them once the test is completed. When being created, the actor is automatically assigned a tag. The same tag will be assigned to the test result.
 
 {% list tabs group=tool %}
 

@@ -511,81 +511,6 @@ class BaseTestBackupInFiles(object):
                 except Exception:
                     raise AssertionError("Drop failed")
 
-    def _count_restore_operations(self):
-        endpoint = f"grpc://localhost:{self.cluster.nodes[1].grpc_port}"
-        database = self.root_dir
-
-        cmd = [backup_bin(), "-e", endpoint, "-d", database, "operation", "list", "restore"]
-        try:
-            res = yatest.common.execute(cmd, check_exit_code=False)
-            output = (res.std_out or b"").decode("utf-8", "ignore")
-        except Exception as e:
-            return 0, 0, f"CLI failed: {e}"
-
-        candidates = [
-            l for l in output.splitlines()
-            if "│" in l and not l.strip().startswith(("┌", "├", "└", "┬", "┴", "┼"))
-        ]
-
-        header_idx = None
-        for i, ln in enumerate(candidates):
-            if re.search(r"\bid\b", ln, re.I) and re.search(r"\bstatus\b", ln, re.I):
-                header_idx = i
-                break
-        if header_idx is not None:
-            del candidates[header_idx]
-
-        total = len(candidates)
-        success_count = 0
-        for ln in candidates:
-            low = ln.lower()
-            if "success" in low or "true" in low:
-                success_count += 1
-
-        return total, success_count, output
-
-    def poll_restore_by_count(self,
-                          start_total: int,
-                          start_success: int,
-                          timeout_s: int = 180,
-                          poll_interval: float = 2.0,
-                          verbose: bool = True):
-        deadline = time.time() + timeout_s
-        seen_more = False
-        last_total = start_total
-        last_success = start_success
-        last_raw = ""
-
-        while time.time() < deadline:
-            total, success, raw = self._count_restore_operations()
-            last_total, last_success, last_raw = total, success, raw
-
-            if verbose:
-                logger.info(f"[poll_restore] total={total} success={success} (start {start_total}/{start_success})")
-
-            # если появилась новая строка в списке операций — отмечаем, что операция зарегистрирована
-            if total > start_total:
-                seen_more = True
-
-            # когда операция зарегистрирована и появился новый SUCCESS -> считаем завершившейся успешно
-            if seen_more and success > start_success:
-                return True, {
-                    "start_total": start_total,
-                    "start_success": start_success,
-                    "last_total": last_total,
-                    "last_success": last_success,
-                }
-
-            time.sleep(poll_interval)
-
-        # таймаут
-        return False, {
-            "start_total": start_total,
-            "start_success": start_success,
-            "last_total": last_total,
-            "last_success": last_success,
-        }
-
 
 class TestFullCycleLocalBackupRestore(BaseTestBackupInFiles):
     def _execute_yql(self, script, verbose=False):
@@ -1071,22 +996,9 @@ class TestFullCycleLocalBackupRestoreWIncr(TestFullCycleLocalBackupRestore):
         self.import_exported_up_to_timestamp(col_inc1, ts_inc1, export_dir, full_orders, full_products)
         # ensure target tables absent
         self._remove_tables([full_orders, full_products])
-        start_total, start_success, _ = self._count_restore_operations()
         rest_inc1 = self._execute_yql(f"RESTORE `{col_inc1}`;")
         assert rest_inc1.exit_code == 0, f"RESTORE inc1 failed: {rest_inc1.std_err}"
-        ok, info = self.poll_restore_by_count(start_total=start_total,
-                                      start_success=start_success,
-                                      timeout_s=180,
-                                      poll_interval=2.0,
-                                      verbose=True)
-        if not ok:
-            # минимальная fallback-диагностика (вы можете тут же вызвать wait_for_table_rows или describe_path)
-            raise AssertionError(
-                "Timeout waiting restore via operation list. Diagnostics: "
-                f"{info}"
-            )
-        restored_rows = self._capture_snapshot(t_orders)
-        # restored_rows = self.wait_for_table_rows(t_orders, snapshot_rows[snap_inc1], timeout_s=90)
+        restored_rows = self.wait_for_table_rows(t_orders, snapshot_rows[snap_inc1], timeout_s=90)
         assert self.normalize_rows(restored_rows) == self.normalize_rows(snapshot_rows[snap_inc1]), "Verify data in backup (2) failed"
 
         # Restore to incremental 2 (full1 + inc1 + inc2)
@@ -1094,22 +1006,9 @@ class TestFullCycleLocalBackupRestoreWIncr(TestFullCycleLocalBackupRestore):
         ts_inc2 = self.extract_ts(snap_inc2)
         self.import_exported_up_to_timestamp(col_inc2, ts_inc2, export_dir, full_orders, full_products)
         self._remove_tables([full_orders, full_products])
-        start_total, start_success, _ = self._count_restore_operations()
         rest_inc2 = self._execute_yql(f"RESTORE `{col_inc2}`;")
         assert rest_inc2.exit_code == 0, f"RESTORE inc2 failed: {rest_inc2.std_err}"
-        ok, info = self.poll_restore_by_count(start_total=start_total,
-                                      start_success=start_success,
-                                      timeout_s=180,
-                                      poll_interval=2.0,
-                                      verbose=True)
-        if not ok:
-            # минимальная fallback-диагностика (вы можете тут же вызвать wait_for_table_rows или describe_path)
-            raise AssertionError(
-                "Timeout waiting restore via operation list. Diagnostics: "
-                f"{info}"
-            )
-        restored_rows = self._capture_snapshot(t_orders)
-        # restored_rows = self.wait_for_table_rows(t_orders, snapshot_rows[snap_inc2], timeout_s=90)
+        restored_rows = self.wait_for_table_rows(t_orders, snapshot_rows[snap_inc2], timeout_s=90)
         assert self.normalize_rows(restored_rows) == self.normalize_rows(snapshot_rows[snap_inc2]), "Verify data in backup (3) failed"
 
         # Remove all tables (2)
@@ -1713,137 +1612,94 @@ class TestIncrementalChainRestoreAfterDeletion(TestFullCycleLocalBackupRestore):
 
 class TestFullCycleLocalBackupRestoreWComplSchemaChange(TestFullCycleLocalBackupRestoreWSchemaChange):
     def _rearrange_table(self, from_name: str, to_name: str):
-        """Simulate 'rearrange' by creating new table, copying data and dropping old one.
-        Best-effort: try to preserve column types by describing the source table.
-        """
         full_from = f"/Root/{from_name}"
         full_to = f"/Root/{to_name}"
-        with self.session_scope() as session:
-            # Try to get precise schema (names + types) from table description
-            cols_info = None
+
+        def run_cli(args):
+            cmd = [
+                backup_bin(),
+                "--endpoint", f"grpc://localhost:{self.cluster.nodes[1].grpc_port}",
+                "--database", self.root_dir,
+            ] + args
+            return yatest.common.execute(cmd, check_exit_code=False)
+
+        def to_rel(p):
+            if p.startswith(self.root_dir + "/"):
+                return p[len(self.root_dir) + 1 :]
+            if p == self.root_dir:
+                return ""
+            return p.lstrip("/")
+
+        src_rel = to_rel(full_from)
+        dst_rel = to_rel(full_to)
+
+        # ensure parent directory for destination exists (idempotent)
+        parent = os.path.dirname(dst_rel)
+        parent_full = os.path.join(self.root_dir, parent) if parent else None
+        if parent and parent_full:
+            self.driver.scheme_client.list_directory(parent_full)
+
+            mkdir_res = run_cli(["scheme", "mkdir", parent])
+            if mkdir_res.exit_code != 0:
+                logger.debug("scheme mkdir parent returned code=%s stdout=%s stderr=%s",
+                             mkdir_res.exit_code,
+                             getattr(mkdir_res, "std_out", b"").decode("utf-8", "ignore"),
+                             getattr(mkdir_res, "std_err", b"").decode("utf-8", "ignore"))
+
+        # perform tools copy via CLI to the requested destination
+        item_arg = f"destination={dst_rel},source={src_rel}"
+        res = run_cli(["tools", "copy", "--item", item_arg])
+        if res.exit_code != 0:
+            out = (res.std_out or b"").decode("utf-8", "ignore")
+            err = (res.std_err or b"").decode("utf-8", "ignore")
+            raise AssertionError(f"tools copy failed: from={full_from} to={full_to} code={res.exit_code} STDOUT: {out} STDERR: {err}")
+
+        tmp_dir_rel = f"tmp_rearr_{int(time.time())}"
+        tmp_full = os.path.join(self.root_dir, tmp_dir_rel)
+        tmp_created = False
+        try:
+            # create temporary directory
             try:
-                tc = getattr(self.driver, "table_client", None)
-                if tc is not None and hasattr(tc, "describe_table"):
-                    desc_tbl = tc.describe_table(full_from)
-                else:
-                    desc_tbl = None
-
-                if desc_tbl is None and hasattr(session, "describe_table"):
-                    desc_tbl = session.describe_table(full_from)
-
-                if desc_tbl is not None:
-                    raw_cols = getattr(desc_tbl, "columns", None) or getattr(desc_tbl, "Columns", None)
-                    if raw_cols:
-                        cols_info = []
-                        for c in raw_cols:
-                            # try to get name and type representation
-                            cname = getattr(c, "name", None) or getattr(c, "Name", None) or str(c)
-                            ctype = getattr(c, "type", None) or getattr(c, "Type", None) or c
-                            try:
-                                tstr = str(ctype)
-                            except Exception:
-                                tstr = repr(ctype)
-                            cols_info.append((cname, tstr))
+                self.driver.scheme_client.list_directory(tmp_full)
+                tmp_created = False
             except Exception:
-                cols_info = None
+                res_mk = run_cli(["scheme", "mkdir", tmp_dir_rel])
+                if res_mk.exit_code != 0:
+                    logger.debug("tmp dir mkdir returned code=%s stdout=%s stderr=%s",
+                                 res_mk.exit_code,
+                                 getattr(res_mk, "std_out", b"").decode("utf-8", "ignore"),
+                                 getattr(res_mk, "std_err", b"").decode("utf-8", "ignore"))
+                else:
+                    tmp_created = True
 
-            # Fallback: if we couldn't get types, call earlier `_capture_schema` (only names)
-            if not cols_info:
-                names = []
+            # copy to temporary dir (basename of destination)
+            basename = os.path.basename(dst_rel) or to_rel(full_from)
+            item_tmp = f"destination={tmp_dir_rel}/{basename},source={src_rel}"
+            res_tmp = run_cli(["tools", "copy", "--item", item_tmp])
+            if res_tmp.exit_code != 0:
+                logger.warning("tools copy to tmp dir failed: code=%s stdout=%s stderr=%s",
+                               res_tmp.exit_code,
+                               getattr(res_tmp, "std_out", b"").decode("utf-8", "ignore"),
+                               getattr(res_tmp, "std_err", b"").decode("utf-8", "ignore"))
+            else:
+                # list temporary dir contents via scheme_client for visibility
                 try:
-                    names = self._capture_schema(full_from) or []
-                except Exception:
-                    names = []
-                cols_info = [(n, "String") for n in names]  # conservative fallback
+                    desc = self.driver.scheme_client.list_directory(tmp_full)
+                    names = [c.name for c in desc.children if not is_system_object(c)]
+                    logger.info("Temporary directory %s contents: %s", tmp_full, names)
+                except Exception as e:
+                    logger.info("Failed to list tmp dir %s: %s", tmp_full, e)
 
-            # Map descriptor type string to SQL type names (heuristic)
-            def map_type(tstr: str) -> str:
-                s = tstr.lower()
-                if "uint32" in s or "uint32" in s:
-                    return "Uint32"
-                if "uint64" in s or "uint64" in s:
-                    return "Uint64"
-                if "int32" in s or "int32" in s:
-                    return "Int32"
-                if "int64" in s or "int64" in s:
-                    return "Int64"
-                if "timestamp" in s or "time" in s:
-                    return "Timestamp"
-                if "bool" in s:
-                    return "Bool"
-                # default to String for complex/unrecognized
-                return "String"
-
-            # Build CREATE TABLE with primary key on id if present, else first column
-            cols_sql = []
-            pk = None
-            for name, t in cols_info:
-                sql_t = map_type(t)
-                cols_sql.append(f"{name} {sql_t}")
-                if name == "id":
-                    pk = "id"
-            if not pk and cols_info:
-                pk = cols_info[0][0]
-
-            create_sql = f"CREATE TABLE `{full_to}` ({', '.join(cols_sql)}, PRIMARY KEY ({pk}));"
-            try:
-                session.execute_scheme(create_sql)
-            except Exception as e:
-                # If create fails, raise — rearrange can't proceed
-                raise AssertionError(f"Failed to create rearranged table {full_to}: {e}")
-
-            # Try fast path: UPSERT INTO new SELECT * FROM old
-            try:
-                session.transaction().execute(
-                    f'PRAGMA TablePathPrefix("/Root"); UPSERT INTO {to_name} SELECT * FROM `{from_name}`;',
-                    commit_tx=True,
-                )
-            except Exception:
-                # Fallback: manual copy using captured snapshot. Need to format literals with correct typing.
-                snapshot = self._capture_snapshot(from_name)
-                if not snapshot or len(snapshot) <= 1:
-                    # nothing to copy
-                    pass
-                else:
-                    cols = snapshot[0]
-                    for row in snapshot[1:]:
-                        vals_sql_parts = []
-                        for v in row:
-                            if v == "" or v is None:
-                                vals_sql_parts.append("NULL")
-                            else:
-                                # v is str because _capture_snapshot converts to str; try to detect numeric forms
-                                s = v
-                                # bytes already decoded earlier in _capture_snapshot; still guard
-                                if isinstance(s, (bytes, bytearray)):
-                                    s = s.decode("utf-8", "ignore")
-                                # integer?
-                                if re.fullmatch(r"-?\d+", s):
-                                    vals_sql_parts.append(s)
-                                # float?
-                                elif re.fullmatch(r"-?\d+\.\d+", s):
-                                    vals_sql_parts.append(s)
-                                # timestamp-ish ISO (rough heuristic) -> quote
-                                else:
-                                    escaped = s.replace("'", "\\'")
-                                    vals_sql_parts.append(f"'{escaped}'")
-                        vals_sql = ", ".join(vals_sql_parts)
-                        col_list = ", ".join(cols)
-                        try:
-                            session.transaction().execute(
-                                f'PRAGMA TablePathPrefix("/Root"); UPSERT INTO {to_name} ({col_list}) VALUES ({vals_sql});',
-                                commit_tx=True,
-                            )
-                        except Exception as e:
-                            # log and rethrow — if one row fails, it's likely a type mismatch
-                            logger.exception("Failed to UPSERT row during manual copy: %s", e)
-                            raise AssertionError(f"Failed to UPSERT row into {full_to}: {e}")
-
-            # drop old
-            # try:
-                # session.execute_scheme(f"DROP TABLE `{full_from}`;")
-            # except Exception:
-                # raise AssertionError(f"Failed to drop original table {full_from} after rearrange")
+        finally:
+            # remove temporary directory if we created it here
+            if tmp_created:
+                rmdir_res = run_cli(["scheme", "rmdir", "-rf", tmp_dir_rel])
+                if rmdir_res.exit_code != 0:
+                    logger.warning("Failed to rmdir tmp dir %s: code=%s stdout=%s stderr=%s",
+                                   tmp_dir_rel,
+                                   rmdir_res.exit_code,
+                                   getattr(rmdir_res, "std_out", b"").decode("utf-8", "ignore"),
+                                   getattr(rmdir_res, "std_err", b"").decode("utf-8", "ignore"))
 
     def test_full_cycle_local_backup_restore_with_complex_schema_changes(self):
         # Preparations: create source collection and initial tables
@@ -1869,7 +1725,7 @@ class TestFullCycleLocalBackupRestoreWComplSchemaChange(TestFullCycleLocalBackup
             role_candidates = ["public", owner_role]
             acl_applied = False
             for r in role_candidates:
-                cmd = f"GRANT SELECT ON `/Root/orders` TO `{r.replace('`','')}`;"
+                cmd = f"GRANT SELECT ON `/Root/orders` TO `{r.replace('`', '')}`;"
                 res = self._execute_yql(cmd)
                 if res.exit_code == 0:
                     acl_applied = True
@@ -1928,21 +1784,14 @@ class TestFullCycleLocalBackupRestoreWComplSchemaChange(TestFullCycleLocalBackup
             # change ACLs again
             desc_for_acl2 = self.driver.scheme_client.describe_path("/Root/orders")
             owner_role2 = getattr(desc_for_acl2, "owner", None) or "root@builtin"
-            cmd = f"GRANT SELECT ON `/Root/orders` TO `{owner_role2.replace('`','')}`;"
+            cmd = f"GRANT SELECT ON `/Root/orders` TO `{owner_role2.replace('`', '')}`;"
             res = self._execute_yql(cmd)
             assert res.exit_code == 0, "Failed to apply GRANT in stage 2"
 
             # rearrange initial table orders -> orders_rearr
             self._rearrange_table("orders", "orders_rearr")
 
-            # create a cross/other place/topic like additional directories: simulate by creating tables with different names
             create_table_with_data(session, "other_place_topic")
-
-            # remove a table to simulate rmdir effect
-            # try:
-                # session.execute_scheme('DROP TABLE `/Root/products`;')
-            # except Exception:
-                # logger.info("DROP products in stage 2 failed or already removed")
 
         snapshot_stage2_t1 = self._capture_snapshot("orders_rearr")
         # products may be dropped; try capture but tolerate errors
@@ -1985,7 +1834,7 @@ class TestFullCycleLocalBackupRestoreWComplSchemaChange(TestFullCycleLocalBackup
         assert res_restore_when_exists.exit_code != 0, "Expected RESTORE to fail when target tables already exist"
 
         # Remove all tables (1)
-        self._drop_tables([t1, t2, "orders_rearr", "extra_table_2", "other_place_topic"])  # ignore errors for missing
+        self._drop_tables([t1, t2, "orders_rearr", "extra_table_2", "other_place_topic"])
 
         # Restore backup 1 and verify
         res_restore1 = self._execute_yql(f"RESTORE `{coll_restore_1}`;")
@@ -2030,7 +1879,7 @@ class TestFullCycleLocalBackupRestoreWComplSchemaChange(TestFullCycleLocalBackup
 
         # schema checks for v2
         try:
-            restored_schema2_t1 = self._capture_schema(f"/Root/orders")
+            restored_schema2_t1 = self._capture_schema("/Root/orders")
         except Exception:
             restored_schema2_t1 = None
         try:
@@ -2045,7 +1894,7 @@ class TestFullCycleLocalBackupRestoreWComplSchemaChange(TestFullCycleLocalBackup
             assert restored_schema2_t2 == schema_stage2_t2, "Schema for products after restore v2 differs (best-effort)"
 
         # acl checks for v2
-        restored_acl2_t1 = self._capture_acl(f"/Root/orders")
+        restored_acl2_t1 = self._capture_acl("/Root/orders")
         restored_acl2_t2 = self._capture_acl(f"/Root/{t2}")
         if 'show_grants' in (acl_stage2_t1 or {}):
             assert 'show_grants' in (restored_acl2_t1 or {}) and acl_stage2_t1['show_grants'] in restored_acl2_t1['show_grants']

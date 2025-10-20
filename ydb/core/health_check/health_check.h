@@ -12,13 +12,11 @@ enum EEv {
     EvNodeCheckRequest,
     EvSelfCheckRequestProto,
     EvClusterStateRequest,
-    EvClusterStateRequestProto,
 
     // replies
     EvSelfCheckResult = EvSelfCheckRequest + 512,
     EvSelfCheckResultProto,
     EvClusterStateResult,
-    EvClusterStateResultProto,
 
     EvEnd
 };
@@ -50,9 +48,6 @@ struct TEvSelfCheckRequestProto : TEventPB<TEvSelfCheckRequestProto, Ydb::Monito
 
 struct TEvSelfCheckResultProto : TEventPB<TEvSelfCheckResultProto, Ydb::Monitoring::SelfCheckResult, EvSelfCheckResultProto> {};
 
-struct TEvClusterStateRequestProto : TEventPB<TEvClusterStateRequestProto, Ydb::Monitoring::ClusterStateRequest, EvClusterStateRequestProto> {};
-
-struct TEvClusterStateResultProto : TEventPB<TEvClusterStateResultProto, Ydb::Monitoring::ClusterStateResult, EvClusterStateResultProto> {};
 
 void RemoveUnrequestedEntries(Ydb::Monitoring::SelfCheckResult& result, const Ydb::Monitoring::SelfCheckRequest& request);
 

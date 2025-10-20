@@ -21,6 +21,10 @@ public:
     void Config(TConfig& config) override;
     void Parse(TConfig& config) override;
     int Run(TConfig& config) override;
+
+private:
+    ui32 Duration = 0;
+    ui32 Period = 0;
 };
 
 }

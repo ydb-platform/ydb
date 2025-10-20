@@ -25,6 +25,7 @@ using namespace NActors;
 using namespace Ydb;
 
 using TEvSelfCheckRequest = TGrpcRequestOperationCall<Ydb::Monitoring::SelfCheckRequest, Ydb::Monitoring::SelfCheckResponse>;
+
 class TSelfCheckRPC : public TRpcRequestActor<TSelfCheckRPC, TEvSelfCheckRequest, true> {
 public:
     using TRpcRequestActor::TRpcRequestActor;
@@ -119,6 +120,7 @@ public:
 void DoSelfCheckRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
     f.RegisterActor(new TSelfCheckRPC(p.release()));
 }
+
 class TNodeCheckRPC : public TRpcRequestActor<TNodeCheckRPC, TEvNodeCheckRequest, true> {
 public:
     using TRpcRequestActor::TRpcRequestActor;

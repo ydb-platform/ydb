@@ -38,6 +38,8 @@ public:
 
     ui32 Requested;
     ui32 Received;
+    ui32 CountersRequested;
+
     TVector<TEvInterconnect::TNodeInfo> Nodes;
     TMap<ui32, NKikimrWhiteboard::TEvVDiskStateResponse> VDiskInfo;
     TMap<ui32, NKikimrWhiteboard::TEvPDiskStateResponse> PDiskInfo;
@@ -49,6 +51,9 @@ public:
     TMap<ui32, TVector<TString>> CountersInfo;
     Ydb::Monitoring::SelfCheckResult SelfCheck;
     Ydb::StatusIds_StatusCode Status = Ydb::StatusIds::SUCCESS;
+    TInstant Started;
+    ui32 Duration;
+    ui32 Period;
 
     void SendRequest(ui32 nodeId) {
         TActorId whiteboardServiceId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(nodeId);
@@ -64,7 +69,6 @@ public:
         request(TEvBridgeInfoRequest);
         request(TEvNodeStateRequest);
         request(TEvCountersInfoRequest);
-
 #undef request
     }
 
@@ -73,6 +77,11 @@ public:
         Nodes = ev->Get()->Nodes;
         for (const auto& ni : Nodes) {
             SendRequest(ni.NodeId);
+        }
+        CountersRequested = 1;
+        Period = GetProtoRequest()->period();
+        if (Period > 0) {
+            Schedule(TDuration::Seconds(Period), new TEvents::TEvWakeup());
         }
         if (Requested > 0) {
             TBase::Become(&TThis::StateRequestedNodeInfo);
@@ -97,7 +106,14 @@ public:
             processCase(EvSystemStateResponse, SystemInfo)
             processCase(EvBridgeInfoResponse, BridgeInfo)
             processCase(EvNodeStateResponse, NodeInfo)
-            NodeStateInfoReceived();
+            case NNodeWhiteboard::TEvWhiteboard::EvCountersInfoResponse:
+                if (CountersInfo[nodeId].size() < CountersRequested) {
+                    for (ui32 _ : xrange(CountersRequested - CountersInfo[nodeId].size())) {
+                        NodeStateInfoReceived();
+                    }
+                    CountersInfo[nodeId].resize(CountersRequested);
+                }
+                break;
         }
     }
 
@@ -114,7 +130,12 @@ public:
         process(TEvSystemStateResponse, SystemInfo)
         process(TEvBridgeInfoResponse, BridgeInfo)
         process(TEvNodeStateResponse, NodeInfo)
-        NodeStateInfoReceived();
+        if (CountersInfo[nodeId].size() < CountersRequested) {
+            for (ui32 _ : xrange(CountersRequested - CountersInfo[nodeId].size())) {
+                NodeStateInfoReceived();
+            }
+            CountersInfo[nodeId].resize(CountersRequested);
+        }
 #undef process
     }
 
@@ -141,7 +162,7 @@ public:
 
     void NodeStateInfoReceived() {
         ++Received;
-        if (Received == Requested) {
+        if (Received == Requested && Period == 0) {
             ReplyAndPassAway();
         }
     }
@@ -154,23 +175,36 @@ public:
     void RequestHealthCheck() {
         THolder<NHealthCheck::TEvSelfCheckRequest> request = MakeHolder<NHealthCheck::TEvSelfCheckRequest>();
         Send(NHealthCheck::MakeHealthCheckID(), request.Release());
-        Requested++;
+        ++Requested;
     }
 
     void Bootstrap() {
+        constexpr ui32 defaultDuration = 60;
         const TActorId nameserviceId = GetNameserviceActorId();
         Send(nameserviceId, new TEvInterconnect::TEvListNodes());
         TBase::Become(&TThis::StateRequestedBrowse);
 
-        ui32 duration = 60;
-        if (GetProtoRequest()->duration()) {
-            duration = GetProtoRequest()->duration();
+        Duration = GetProtoRequest()->duration();
+        if (Duration == 0) {
+            Duration = defaultDuration;
         }
-        Schedule(TDuration::Seconds(duration), new TEvents::TEvWakeup());
+        Started = TInstant::Now();
+        Schedule(TDuration::Seconds(Duration), new TEvents::TEvWakeup());
     }
 
     void Timeout() {
-        ReplyAndPassAway();
+        if (Period != 0) {
+            for (const auto& ni : Nodes) {
+                TActorId whiteboardServiceId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(ni.NodeId);
+                Send(whiteboardServiceId, new NNodeWhiteboard::TEvWhiteboard::TEvCountersInfoRequest(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, ni.NodeId);
+                Requested++;
+            }
+            CountersRequested++;
+            Schedule(TDuration::Seconds(Period), new TEvents::TEvWakeup());
+        }
+        if (TInstant::Now() - Started >= TDuration::Seconds(Duration)) {
+            ReplyAndPassAway();
+        }
     }
 
     void Die(const TActorContext& ctx) override {
@@ -213,7 +247,7 @@ public:
         TStringBuilder res;
         res << "{\n";
         auto serializeDict = [&](const char *name, auto &info) {
-            res << "\"" << name <<"\" : {";
+            res << "\"" << name <<"\" : {\n";
             for(auto &[k, v] : info) {
                 TString data;
                 google::protobuf::util::MessageToJsonString(v, &data);
@@ -229,7 +263,7 @@ public:
             res << "]";
         };
         auto serializeDictOfArray = [&](const char *name, auto &info) {
-            res << "\"" << name <<"\" : {";
+            res << "\"" << name <<"\" : {\n";
             for(auto &[k, v] : info) {
                 res << "{" << k << ":";
                 serializeArray(v);

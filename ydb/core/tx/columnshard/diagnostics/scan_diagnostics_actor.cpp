@@ -7,8 +7,11 @@ namespace NKikimr::NColumnShard::NDiagnostics {
 namespace {
 
 void ReplaceAll(TString& str, const TString& from, const TString& to) {
+    if (from.empty()) {
+        return;
+    }
     size_t start_pos = 0;
-    while((start_pos = str.find(from, start_pos)) != TString::npos) {
+    while ((start_pos = str.find(from, start_pos)) != TString::npos) {
         str.replace(start_pos, from.length(), to);
         start_pos += to.length();
     }

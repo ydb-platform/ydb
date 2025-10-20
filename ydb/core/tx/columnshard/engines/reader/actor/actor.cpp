@@ -450,8 +450,10 @@ void TColumnShardScan::SendScanError(const TString& reason) {
 }
 
 void TColumnShardScan::Finish(const NColumnShard::TScanCounters::EStatusFinish status) {
-    auto scanIteratorDiagnostics = ScanIterator->DebugString(true);
-    Send(ScanDiagnosticsActorId, std::make_unique<NColumnShard::TEvPrivate::TEvReportScanIteratorDiagnostics>(RequestCookie, std::move(scanIteratorDiagnostics)));
+    if (AppDataVerified().ColumnShardConfig.GetEnableDiagnostics()) {
+        auto scanIteratorDiagnostics = ScanIterator->DebugString(true);
+        Send(ScanDiagnosticsActorId, std::make_unique<NColumnShard::TEvPrivate::TEvReportScanIteratorDiagnostics>(RequestCookie, std::move(scanIteratorDiagnostics)));
+    }
     LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_COLUMNSHARD_SCAN, "Scan " << ScanActorId << " finished for tablet " << TabletId);
     Send(ColumnShardActorId, new NColumnShard::TEvPrivate::TEvReadFinished(RequestCookie, TxId));
     AFL_VERIFY(StartInstant);

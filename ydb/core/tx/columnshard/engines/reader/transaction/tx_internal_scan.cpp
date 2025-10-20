@@ -78,15 +78,17 @@ void TTxInternalScan::Complete(const TActorContext& ctx) {
             readMetadataRange = TValidator::CheckNotNull(newRange.DetachResult());
         }
 
-        auto graphOptional = read.GetProgram().GetGraphOptional();
-        TString dotGraph = graphOptional ? graphOptional->DebugDOT() : "";
-        TString ssaProgram = read.GetProgram().ProtoDebugString();
-        auto requestMessage = request.ToString();
-        auto pkRangesFilter = read.PKRangesFilter->DebugString();
-        if (pkRangesFilter.size() > 1024) {
-            pkRangesFilter = pkRangesFilter.substr(0, 1024) + "...";
+        if (AppDataVerified().ColumnShardConfig.GetEnableDiagnostics()) {
+            auto graphOptional = read.GetProgram().GetGraphOptional();
+            TString dotGraph = graphOptional ? graphOptional->DebugDOT() : "";
+            TString ssaProgram = read.GetProgram().ProtoDebugString();
+            auto requestMessage = request.ToString();
+            auto pkRangesFilter = read.PKRangesFilter->DebugString();
+            if (pkRangesFilter.size() > 1024) {
+                pkRangesFilter = pkRangesFilter.substr(0, 1024) + "...";
+            }
+            scanDiagnosticsEvent = std::make_unique<NColumnShard::TEvPrivate::TEvReportScanDiagnostics>(std::move(requestMessage), std::move(dotGraph), std::move(ssaProgram), std::move(pkRangesFilter), false);
         }
-        scanDiagnosticsEvent = std::make_unique<NColumnShard::TEvPrivate::TEvReportScanDiagnostics>(std::move(requestMessage), std::move(dotGraph), std::move(ssaProgram), std::move(pkRangesFilter), false);
     }
     TStringBuilder detailedInfo;
     if (IS_LOG_PRIORITY_ENABLED(NActors::NLog::PRI_TRACE, NKikimrServices::TX_COLUMNSHARD_SCAN)) {
@@ -100,8 +102,10 @@ void TTxInternalScan::Complete(const TActorContext& ctx) {
     readMetadataRange->OnBeforeStartReading(*Self);
 
     const ui64 requestCookie = Self->InFlightReadsTracker.AddInFlightRequest(readMetadataRange, index);
-    scanDiagnosticsEvent->RequestId = requestCookie;
-    ctx.Send(Self->ScanDiagnosticsActorId, std::move(scanDiagnosticsEvent));
+    if (AppDataVerified().ColumnShardConfig.GetEnableDiagnostics()) {
+        scanDiagnosticsEvent->RequestId = requestCookie;
+        ctx.Send(Self->ScanDiagnosticsActorId, std::move(scanDiagnosticsEvent));
+    }
     auto scanActorId = ctx.Register(new TColumnShardScan(Self->SelfId(), scanComputeActor, Self->ScanDiagnosticsActorId, Self->GetStoragesManager(),
         Self->DataAccessorsManager.GetObjectPtrVerified(), Self->ColumnDataManager.GetObjectPtrVerified(), TComputeShardingPolicy(), ScanId, request.GetLockId().value_or(0), ScanGen, requestCookie,
         Self->TabletID(), TDuration::Max(), readMetadataRange, NKikimrDataEvents::FORMAT_ARROW, Self->Counters.GetScanCounters(), {}));

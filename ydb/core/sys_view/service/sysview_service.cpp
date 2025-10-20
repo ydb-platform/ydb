@@ -461,6 +461,7 @@ private:
         using TNavigate = NSchemeCache::TSchemeCacheNavigate;
 
         auto request = MakeHolder<TNavigate>();
+        request->DatabaseName = database;
         request->ResultSet.push_back({});
 
         auto& entry = request->ResultSet.back();

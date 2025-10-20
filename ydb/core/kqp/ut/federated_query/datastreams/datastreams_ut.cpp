@@ -6,6 +6,7 @@
 #include <ydb/core/kqp/proxy_service/kqp_script_executions.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/ut/federated_query/common/common.h>
+#include <ydb/library/testlib/common/test_utils.h>
 #include <ydb/library/testlib/pq_helpers/mock_pq_gateway.h>
 #include <ydb/library/testlib/s3_recipe_helper/s3_recipe_helper.h>
 #include <ydb/library/testlib/solomon_helpers/solomon_emulator_helpers.h>
@@ -33,6 +34,7 @@ struct TScriptQuerySettings {
     NKikimrKqp::TScriptExecutionRetryState::TMapping RetryMapping;
     std::optional<NKikimrKqp::TQueryPhysicalGraph> PhysicalGraph;
     TDuration Timeout = TDuration::Seconds(30);
+    TString CheckpointId = CreateGuidAsString();
 };
 
 struct TColumn {
@@ -83,7 +85,7 @@ public:
         UNIT_ASSERT_C(!PqGateway, "PqGateway is already initialized");
         EnsureNotInitialized("MockPqGateway");
 
-        const auto mockPqGateway = CreateMockPqGateway();
+        const auto mockPqGateway = CreateMockPqGateway({.OperationTimeout = TEST_OPERATION_TIMEOUT});
         PqGateway = mockPqGateway;
 
         return mockPqGateway;
@@ -117,7 +119,9 @@ public:
 
             LogSettings
                 .AddLogPriority(NKikimrServices::STREAMS_STORAGE_SERVICE, NLog::PRI_DEBUG)
-                .AddLogPriority(NKikimrServices::STREAMS_CHECKPOINT_COORDINATOR, NLog::PRI_DEBUG);
+                .AddLogPriority(NKikimrServices::STREAMS_CHECKPOINT_COORDINATOR, NLog::PRI_DEBUG)
+                .AddLogPriority(NKikimrServices::KQP_EXECUTER, NLog::PRI_DEBUG)
+                .AddLogPriority(NKikimrServices::KQP_COMPUTE, NLog::PRI_DEBUG);
 
             Kikimr = MakeKikimrRunner(true, ConnectorClient, nullptr, AppConfig, NYql::NDq::CreateS3ActorsFactory(), {
                 .CredentialsFactory = CreateCredentialsFactory(),
@@ -245,11 +249,11 @@ public:
         }
     }
 
-    void ReadTopicMessage(const TString& topicName, const TString& expectedMessage, TInstant disposition = TInstant::Now() - TDuration::Seconds(100), bool sort = false) {
-        ReadTopicMessages(topicName, {expectedMessage}, disposition, sort);
+    void ReadTopicMessage(const TString& topicName, const TString& expectedMessage, TInstant disposition = TInstant::Now() - TDuration::Seconds(100)) {
+        ReadTopicMessages(topicName, {expectedMessage}, disposition);
     }
 
-    void ReadTopicMessages(const TString& topicName, const TVector<TString>& expectedMessages, TInstant disposition = TInstant::Now() - TDuration::Seconds(100), bool sort = false) {
+    void ReadTopicMessages(const TString& topicName, TVector<TString> expectedMessages, TInstant disposition = TInstant::Now() - TDuration::Seconds(100), bool sort = false) {
         NTopic::TReadSessionSettings readSettings;
         readSettings
             .WithoutConsumer()
@@ -293,7 +297,8 @@ public:
         });
 
         if (sort) {
-            std::sort(received.begin(), received.end());
+            Sort(expectedMessages);
+            Sort(received);
         }
 
         UNIT_ASSERT_VALUES_EQUAL(received.size(), expectedMessages.size());
@@ -514,6 +519,7 @@ public:
         ev->RetryMapping = {settings.RetryMapping};
         ev->SaveQueryPhysicalGraph = settings.SaveState;
         ev->QueryPhysicalGraph = settings.PhysicalGraph;
+        ev->CheckpointId = settings.CheckpointId;
 
         const auto edgeActor = runtime.AllocateEdgeActor();
         runtime.Send(MakeKqpProxyID(runtime.GetNodeId()), edgeActor, ev.release());
@@ -577,13 +583,13 @@ public:
         });
     }
 
-    void WaitCheckpointUpdate(const TString& executionId) {
+    void WaitCheckpointUpdate(const TString& checkpointId) {
         std::optional<uint64_t> minSeqNo;
         WaitFor(TEST_OPERATION_TIMEOUT, "checkpoint update", [&](TString& error) {
             const auto& result = ExecExternalQuery(fmt::format(R"(
                 SELECT MIN(seq_no) AS seq_no FROM checkpoints_metadata
-                WHERE graph_id = "{execution_id}";
-            )", "execution_id"_a = executionId));
+                WHERE graph_id = "{checkpoint_id}";
+            )", "checkpoint_id"_a = checkpointId));
             UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
 
             std::optional<uint64_t> seqNo;
@@ -609,54 +615,6 @@ public:
             error = TStringBuilder() << "seq_no is not changed from: " << *minSeqNo;
             return false;
         });
-    }
-
-    // Mock PQ utils
-
-    static IMockPqReadSession::TPtr WaitMockPqReadSession(IMockPqGateway::TPtr gateway, const TString& topic) {
-        return WaitForPqMockSession<IMockPqReadSession>(TEST_OPERATION_TIMEOUT, "read", [gateway, topic]() {
-            return gateway->ExtractReadSession(topic);
-        });
-    }
-
-    static IMockPqWriteSession::TPtr WaitMockPqWriteSession(IMockPqGateway::TPtr gateway, const TString& topic) {
-        return WaitForPqMockSession<IMockPqWriteSession>(TEST_OPERATION_TIMEOUT, "write", [gateway, topic]() {
-            return gateway->ExtractWriteSession(topic);
-        });
-    }
-
-    template <typename TSession>
-    static TSession::TPtr WaitForPqMockSession(TDuration timeout, const TString& info, std::function<typename TSession::TPtr()> sessionExtractor) {
-        typename TSession::TPtr session;
-        WaitFor(timeout, TStringBuilder() << info << " session from mock pq gateway", [&](TString& errorString) {
-            if (session = sessionExtractor()) {
-                return true;
-            }
-
-            errorString = "Session is not ready";
-            return false;
-        });
-
-        return session;
-    }
-
-    static void ReadMockPqMessages(IMockPqWriteSession::TPtr session, const std::vector<TString>& messages) {
-        ui64 receivedMessages = 0;
-        WaitFor(TEST_OPERATION_TIMEOUT, "read message from mock pq gateway", [&](TString& errorString) {
-            const auto data = session->ExtractData();
-            UNIT_ASSERT_GE(messages.size(), receivedMessages + data.size());
-
-            for (const auto& message : data) {
-                UNIT_ASSERT_VALUES_EQUAL(message, messages[receivedMessages++]);
-            }
-
-            errorString = "no messages found";
-            return receivedMessages == messages.size();
-        });
-    }
-
-    static void ReadMockPqMessage(IMockPqWriteSession::TPtr session, const TString& message) {
-        ReadMockPqMessages(session, {message});
     }
 
     // Mock Connector utils
@@ -745,23 +703,6 @@ public:
             readSplitsBuilder.Result()
                 .AddResponse(settings.ResultFactory(), NYql::NConnector::NewSuccess());
         }
-    }
-
-    // Utils
-
-    static void WaitFor(TDuration timeout, const TString& description, std::function<bool(TString&)> callback) {
-        TInstant start = TInstant::Now();
-        TString errorString;
-        while (TInstant::Now() - start <= timeout) {
-            if (callback(errorString)) {
-                return;
-            }
-
-            Cerr << "Wait " << description << " " << TInstant::Now() - start << ": " << errorString << "\n";
-            Sleep(TDuration::Seconds(1));
-        }
-
-        UNIT_FAIL("Waiting " << description << " timeout. Spent time " << TInstant::Now() - start << " exceeds limit " << timeout << ", last error: " << errorString);
     }
 
 private:
@@ -1203,7 +1144,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             .RetryMapping = CreateRetryMapping({Ydb::StatusIds::BAD_REQUEST})
         });
 
-        WaitMockPqReadSession(pqGateway, topicName)->AddCloseSessionEvent(EStatus::UNAVAILABLE, {NIssue::TIssue("Test pq session failure")});
+        pqGateway->WaitReadSession(topicName)->AddCloseSessionEvent(EStatus::UNAVAILABLE, {NIssue::TIssue("Test pq session failure")});
         WaitScriptExecution(operationId, EExecStatus::Failed, true);
 
         ExecQuery(fmt::format(R"(
@@ -1213,7 +1154,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             "pq_source"_a = pqSourceName
         ));
 
-        WaitMockPqReadSession(pqGateway, topicName)->AddDataReceivedEvent(1, R"({"key": "key1", "value": "value1"})");
+        pqGateway->WaitReadSession(topicName)->AddDataReceivedEvent(1, R"({"key": "key1", "value": "value1"})");
         WaitScriptExecution(operationId);
 
         UNIT_ASSERT_VALUES_EQUAL(GetAllObjects(writeBucket), "{\"key\":\"key1\",\"value\":\"value1\"}\n");
@@ -1231,6 +1172,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         constexpr char sourceName[] = "sourceName";
         CreatePqSource(sourceName);
 
+        const TString checkpointId = CreateGuidAsString();
         const auto& [executionId, operationId] = ExecScriptNative(fmt::format(R"(
                 $input = SELECT key, value FROM `{source}`.`{input_topic}`
                 WITH (
@@ -1246,25 +1188,26 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                 "output_topic"_a = outputTopicName
             ), {
                 .SaveState = true,
-                .RetryMapping = CreateRetryMapping({Ydb::StatusIds::BAD_REQUEST})
+                .RetryMapping = CreateRetryMapping({Ydb::StatusIds::BAD_REQUEST}),
+                .CheckpointId = checkpointId
             });
 
-        WaitCheckpointUpdate(executionId);
+        WaitCheckpointUpdate(checkpointId);
 
-        auto readSession = WaitMockPqReadSession(pqGateway, inputTopicName);
-        auto writeSession = WaitMockPqWriteSession(pqGateway, outputTopicName);
+        auto readSession = pqGateway->WaitReadSession(inputTopicName);
+        auto writeSession = pqGateway->WaitWriteSession(outputTopicName);
         readSession->AddDataReceivedEvent(1, R"({"key": "key1", "value": "value1"})");
         readSession->AddDataReceivedEvent(2, R"({"key": "key2", "value": "value2"})");
         readSession->AddDataReceivedEvent(3, R"({"key": "key3", "value": "value3"})");
-        WaitCheckpointUpdate(executionId);
+        WaitCheckpointUpdate(checkpointId);
         readSession->AddCloseSessionEvent(EStatus::UNAVAILABLE, {NIssue::TIssue("Test pq session failure")});
 
         WaitScriptExecution(operationId, EExecStatus::Failed, true);
-        WaitCheckpointUpdate(executionId);
+        WaitCheckpointUpdate(checkpointId);
 
-        WaitMockPqReadSession(pqGateway, inputTopicName)->AddDataReceivedEvent(4, R"({"key": "key4", "value": "value4"})");
-        writeSession = WaitMockPqWriteSession(pqGateway, outputTopicName);
-        ReadMockPqMessage(writeSession, "key4value4");
+        pqGateway->WaitReadSession(inputTopicName)->AddDataReceivedEvent(4, R"({"key": "key4", "value": "value4"})");
+        writeSession = pqGateway->WaitWriteSession(outputTopicName);
+        writeSession->ExpectMessage("key4value4");
 
         CancelScriptExecution(operationId);
     }
@@ -1280,6 +1223,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         constexpr char sourceName[] = "sourceName";
         CreatePqSource(sourceName);
 
+        const TString checkpointId = CreateGuidAsString();
         const auto& [executionId, operationId] = ExecScriptNative(fmt::format(R"(
             INSERT INTO `{source}`.`{output_topic}`
             SELECT event FROM `{source}`.`{input_topic}` WITH (
@@ -1294,7 +1238,8 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             "input_topic"_a = inputTopicName,
             "output_topic"_a = outputTopicName
         ), {
-            .SaveState = true
+            .SaveState = true,
+            .CheckpointId = checkpointId
         });
 
         WriteTopicMessages(inputTopicName, {
@@ -1302,14 +1247,14 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             R"({"time": "2025-08-25T00:00:00.000000Z", "event": "B"})"
         });
         ReadTopicMessage(outputTopicName, "A");
-        WaitCheckpointUpdate(executionId);
+        WaitCheckpointUpdate(checkpointId);
 
         const auto& result = ExecExternalQuery(fmt::format(R"(
             SELECT COUNT(*) AS states_count FROM (
                 SELECT DISTINCT task_id FROM states
-                WHERE graph_id = "{execution_id}"
+                WHERE graph_id = "{checkpoint_id}"
             )
-        )", "execution_id"_a = executionId));
+        )", "checkpoint_id"_a = checkpointId));
         UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
 
         CheckScriptResult(result[0], 1, 1, [](TResultSetParser& resultSet) {
@@ -1329,6 +1274,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         constexpr char sourceName[] = "sourceName";
         CreatePqSource(sourceName);
 
+        const TString checkpointId = CreateGuidAsString();
         const auto& [executionId, operationId] = ExecScriptNative(fmt::format(R"(
             INSERT INTO `{source}`.`{output_topic}`
             SELECT event FROM `{source}`.`{input_topic}` WITH (
@@ -1343,14 +1289,15 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             "input_topic"_a = inputTopicName,
             "output_topic"_a = outputTopicName
         ), {
-            .SaveState = true
+            .SaveState = true,
+            .CheckpointId = checkpointId
         });
 
-        auto writeSession = WaitMockPqWriteSession(pqGateway, outputTopicName);
-        WaitCheckpointUpdate(executionId);
+        auto writeSession = pqGateway->WaitWriteSession(outputTopicName);
+        WaitCheckpointUpdate(checkpointId);
         writeSession->Lock();
 
-        auto readSession = WaitMockPqReadSession(pqGateway, inputTopicName);
+        auto readSession = pqGateway->WaitReadSession(inputTopicName);
         const TString value(1_KB, 'x');
         TInstant time = TInstant::Now();
         for (ui64 i = 0; i < 100000; ++i, time += TDuration::Hours(2)) {
@@ -1361,7 +1308,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         writeSession->Unlock();
 
         for (ui64 i = 0; i < 3; ++i) {
-            WaitCheckpointUpdate(executionId);
+            WaitCheckpointUpdate(checkpointId);
         }
     }
 
@@ -1788,7 +1735,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         CheckScriptExecutionsCount(1, 1);
 
         CleanupSolomon(soLocation);
-        auto readSession = WaitMockPqReadSession(pqGateway, inputTopicName);
+        auto readSession = pqGateway->WaitReadSession(inputTopicName);
         readSession->AddDataReceivedEvent(0, "1234");
 
         Sleep(TDuration::Seconds(2));
@@ -1814,7 +1761,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         readSession->AddCloseSessionEvent(EStatus::UNAVAILABLE, {NIssue::TIssue("Test pq session failure")});
 
-        WaitMockPqReadSession(pqGateway, inputTopicName)->AddDataReceivedEvent(1, "4321");
+        pqGateway->WaitReadSession(inputTopicName)->AddDataReceivedEvent(1, "4321");
         Sleep(TDuration::Seconds(2));
 
         expectedMetrics = R"([
@@ -1899,7 +1846,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         CheckScriptExecutionsCount(1, 1);
 
-        auto readSession = WaitMockPqReadSession(pqGateway, inputTopicName);
+        auto readSession = pqGateway->WaitReadSession(inputTopicName);
         const std::vector<IMockPqReadSession::TMessage> sampleMessages = {
             {0, R"({"time": 0, "event": "A", "host": "host1.example.com"})"},
             {1, R"({"time": 1, "event": "B", "host": "host3.example.com"})"},
@@ -1907,14 +1854,13 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         };
         readSession->AddDataReceivedEvent(sampleMessages);
 
-        auto writeSession = WaitMockPqWriteSession(pqGateway, outputTopicName);
         const std::vector<TString> sampleResult = {"A-P1", "B-P3", "A-P1"};
-        ReadMockPqMessages(writeSession, sampleResult);
+        pqGateway->WaitWriteSession(outputTopicName)->ExpectMessages(sampleResult);
 
         readSession->AddCloseSessionEvent(EStatus::UNAVAILABLE, {NIssue::TIssue("Test pq session failure")});
 
-        WaitMockPqReadSession(pqGateway, inputTopicName)->AddDataReceivedEvent(sampleMessages);
-        ReadMockPqMessages(WaitMockPqWriteSession(pqGateway, outputTopicName), sampleResult);
+        pqGateway->WaitReadSession(inputTopicName)->AddDataReceivedEvent(sampleMessages);
+        pqGateway->WaitWriteSession(outputTopicName)->ExpectMessages(sampleResult);
     }
 
     Y_UNIT_TEST_F(StreamingQueryWithYdbJoin, TStreamingTestFixture) {
@@ -2010,7 +1956,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         CheckScriptExecutionsCount(1, 1);
 
-        auto readSession = WaitMockPqReadSession(pqGateway, inputTopicName);
+        auto readSession = pqGateway->WaitReadSession(inputTopicName);
         const std::vector<IMockPqReadSession::TMessage> sampleMessages = {
             {0, R"({"time": 0, "event": "A", "host": "host1.example.com"})"},
             {1, R"({"time": 1, "event": "B", "host": "host3.example.com"})"},
@@ -2018,14 +1964,13 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         };
         readSession->AddDataReceivedEvent(sampleMessages);
 
-        auto writeSession = WaitMockPqWriteSession(pqGateway, outputTopicName);
         const std::vector<TString> sampleResult = {"A-P1", "B-P3", "A-P1"};
-        ReadMockPqMessages(writeSession, sampleResult);
+        pqGateway->WaitWriteSession(outputTopicName)->ExpectMessages(sampleResult);
 
         readSession->AddCloseSessionEvent(EStatus::UNAVAILABLE, {NIssue::TIssue("Test pq session failure")});
 
-        WaitMockPqReadSession(pqGateway, inputTopicName)->AddDataReceivedEvent(sampleMessages);
-        ReadMockPqMessages(WaitMockPqWriteSession(pqGateway, outputTopicName), sampleResult);
+        pqGateway->WaitReadSession(inputTopicName)->AddDataReceivedEvent(sampleMessages);
+        pqGateway->WaitWriteSession(outputTopicName)->ExpectMessages(sampleResult);
     }
 
     Y_UNIT_TEST_F(StreamingQueryWithStreamLookupJoin, TStreamingTestFixture) {
@@ -2120,7 +2065,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         CheckScriptExecutionsCount(1, 1);
 
-        auto readSession = WaitMockPqReadSession(pqGateway, inputTopicName);
+        auto readSession = pqGateway->WaitReadSession(inputTopicName);
         const std::vector<IMockPqReadSession::TMessage> sampleMessages = {
             {0, R"({"time": 0, "event": "A", "host": "host1.example.com"})"},
             {1, R"({"time": 1, "event": "B", "host": "host3.example.com"})"},
@@ -2128,20 +2073,19 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         };
         readSession->AddDataReceivedEvent(sampleMessages);
 
-        auto writeSession = WaitMockPqWriteSession(pqGateway, outputTopicName);
         const std::vector<TString> sampleResult = {"A-P1", "B-P3", "A-P1"};
-        ReadMockPqMessages(writeSession, sampleResult);
+        pqGateway->WaitWriteSession(outputTopicName)->ExpectMessages(sampleResult);
 
         readSession->AddCloseSessionEvent(EStatus::UNAVAILABLE, {NIssue::TIssue("Test pq session failure")});
 
-        readSession = WaitMockPqReadSession(pqGateway, inputTopicName);
+        readSession = pqGateway->WaitReadSession(inputTopicName);
         readSession->AddDataReceivedEvent(sampleMessages);
-        writeSession = WaitMockPqWriteSession(pqGateway, outputTopicName);
-        ReadMockPqMessages(writeSession, sampleResult);
+        auto writeSession = pqGateway->WaitWriteSession(outputTopicName);
+        writeSession->ExpectMessages(sampleResult);
 
         Sleep(TDuration::Seconds(2));
         readSession->AddDataReceivedEvent(sampleMessages);
-        ReadMockPqMessages(writeSession, {"A-P4", "B-P6", "A-P4"});
+        writeSession->ExpectMessages({"A-P4", "B-P6", "A-P4"});
 
         CheckScriptExecutionsCount(1, 1);
         const auto results = ExecQuery(
@@ -2153,6 +2097,71 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             UNIT_ASSERT(ast);
             UNIT_ASSERT_STRING_CONTAINS(*ast, "DqCnStreamLookup");
         });
+    }
+
+    Y_UNIT_TEST_F(StreamingQueryUnderSecureScriptExecutions, TStreamingTestFixture) {
+        SetupAppConfig().MutableFeatureFlags()->SetEnableSecureScriptExecutions(true);
+        GetRuntime().GetAppData().FeatureFlags.SetEnableSecureScriptExecutions(true);
+
+        constexpr char inputTopicName[] = "streamingQueryUnderSecureScriptExecutionsInputTopic";
+        constexpr char outputTopicName[] = "streamingQueryUnderSecureScriptExecutionsOutputTopic";
+        CreateTopic(inputTopicName);
+        CreateTopic(outputTopicName);
+
+        constexpr char pqSourceName[] = "sourceName";
+        CreatePqSource(pqSourceName);
+
+        constexpr char queryName[] = "streamingQuery";
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                INSERT INTO `{pq_source}`.`{output_topic}`
+                SELECT * FROM `{pq_source}`.`{input_topic}`
+            END DO;)",
+            "query_name"_a = queryName,
+            "pq_source"_a = pqSourceName,
+            "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName
+        ));
+
+        Sleep(TDuration::Seconds(1));
+        WriteTopicMessage(inputTopicName, R"({"key": "key1", "value": "value1"})");
+        ReadTopicMessage(outputTopicName, R"({"key": "key1", "value": "value1"})");
+
+        NOperation::TOperationClient rootClient(*GetInternalDriver(), TCommonClientSettings().AuthToken(BUILTIN_ACL_ROOT));
+        {
+            const auto result = rootClient.List<TScriptExecutionOperation>(10).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetList().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetList()[0].Metadata().ExecStatus, EExecStatus::Running);
+        }
+
+        NOperation::TOperationClient testClient(*GetInternalDriver(), TCommonClientSettings().AuthToken("test@" BUILTIN_ACL_DOMAIN));
+        {
+            const auto result = testClient.List<TScriptExecutionOperation>(10).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetList().size(), 0);
+        }
+
+        ExecQuery(fmt::format(R"(
+            ALTER STREAMING QUERY `{query_name}` SET (
+                RUN = FALSE
+            ))",
+            "query_name"_a = queryName
+        ));
+
+        {
+            const auto result = rootClient.List<TScriptExecutionOperation>(10).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetList().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetList()[0].Metadata().ExecStatus, EExecStatus::Canceled);
+        }
+
+        {
+            const auto result = testClient.List<TScriptExecutionOperation>(10).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetList().size(), 0);
+        }
     }
 
     Y_UNIT_TEST_F(OffsetsAndStateRecoveryOnInternalRetry, TStreamingTestFixture) {
@@ -2281,6 +2290,362 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             "A-2025-08-25T00:00:00.000000Z-P1-1",
             "B-2025-08-25T00:00:00.000000Z-P2-1"
         }, readDisposition, /* sort */ true);
+    }
+
+    struct TTestInfo {
+        TString InputTopicName;
+        TString OutputTopicName;
+        TString PqSourceName;
+        TString QueryName;
+        TString QueryText;
+    };
+
+    TTestInfo SetupCheckpointRecoveryTest(TStreamingTestFixture& self) {
+        TTestInfo info = {
+            .InputTopicName = TStringBuilder() << "inputTopicName" << self.Name_,
+            .OutputTopicName = TStringBuilder() << "outputTopicName" << self.Name_,
+            .PqSourceName = "pqSourceName",
+            .QueryName = "streamingQuery"
+        };
+        info.QueryText = fmt::format(R"(
+            -- Test that offsets are recovered
+            $pq_source = SELECT * FROM `{pq_source}`.`{input_topic}` WITH (
+                FORMAT = "json_each_row",
+                SCHEMA (
+                    time String NOT NULL,
+                    event String
+                )
+            );
+
+            -- Test that state also recovered
+            $grouped = SELECT
+                event,
+                CAST(SOME(time) AS String) AS time,
+                CAST(COUNT(*) AS String) AS count
+            FROM $pq_source
+            GROUP BY
+                HOP (CAST(time AS Timestamp), "PT1H", "PT1H", "PT0H"),
+                event;
+
+            INSERT INTO `{pq_source}`.`{output_topic}`
+            SELECT Unwrap(event || "-" || time || "-" || count) FROM $grouped)",
+            "pq_source"_a = info.PqSourceName,
+            "input_topic"_a = info.InputTopicName,
+            "output_topic"_a = info.OutputTopicName
+        );
+
+        self.CreateTopic(info.InputTopicName);
+        self.CreateTopic(info.OutputTopicName);
+        self.CreatePqSource(info.PqSourceName);
+
+        self.ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                {query_text}
+            END DO;)",
+            "query_name"_a = info.QueryName,
+            "query_text"_a = info.QueryText
+        ));
+        self.CheckScriptExecutionsCount(1, 1);
+        Sleep(TDuration::Seconds(1));
+
+        return info;
+    }
+
+    Y_UNIT_TEST_F(OffsetsAndStateRecoveryOnManualRestart, TStreamingTestFixture) {
+        const auto info = SetupCheckpointRecoveryTest(*this);
+
+        WriteTopicMessages(info.InputTopicName, {
+            R"({"time": "2025-08-24T00:00:00.000000Z", "event": "A"})",
+            R"({"time": "2025-08-25T00:00:00.000000Z", "event": "A"})",
+        });
+        ReadTopicMessage(info.OutputTopicName, "A-2025-08-24T00:00:00.000000Z-1");
+
+        ExecQuery(fmt::format(R"(
+            ALTER STREAMING QUERY `{query_name}` SET (
+                RUN = FALSE
+            );)",
+            "query_name"_a = info.QueryName
+        ));
+        CheckScriptExecutionsCount(1, 0);
+
+        Sleep(TDuration::Seconds(1));
+        WriteTopicMessage(info.InputTopicName, R"({"time": "2025-08-25T00:00:00.000000Z", "event": "B"})");
+        const auto readDisposition = TInstant::Now();
+
+        ExecQuery(fmt::format(R"(
+            ALTER STREAMING QUERY `{query_name}` SET (
+                RUN = TRUE
+            );)",
+            "query_name"_a = info.QueryName
+        ));
+        CheckScriptExecutionsCount(2, 1);
+        Sleep(TDuration::Seconds(1));
+
+        WriteTopicMessage(info.InputTopicName, R"({"time": "2025-08-26T00:00:00.000000Z", "event": "A"})");
+        ReadTopicMessages(info.OutputTopicName, {
+            "A-2025-08-25T00:00:00.000000Z-1",
+            "B-2025-08-25T00:00:00.000000Z-1"
+        }, readDisposition, /* sort */ true);
+    }
+
+    Y_UNIT_TEST_F(OffsetsRecoveryOnQueryTextChangeBasic, TStreamingTestFixture) {
+        const auto info = SetupCheckpointRecoveryTest(*this);
+
+        WriteTopicMessages(info.InputTopicName, {
+            R"({"time": "2025-08-24T00:00:00.000000Z", "event": "A"})",
+            R"({"time": "2025-08-25T00:00:00.000000Z", "event": "A"})",
+        });
+        ReadTopicMessage(info.OutputTopicName, "A-2025-08-24T00:00:00.000000Z-1");
+
+        ExecQuery(fmt::format(R"(
+            ALTER STREAMING QUERY `{query_name}` SET (
+                FORCE = TRUE,
+                RUN = FALSE
+            ) AS
+            DO BEGIN
+                /* some comment */
+                {text}
+            END DO;)",
+            "query_name"_a = info.QueryName,
+            "text"_a = info.QueryText
+        ));
+        CheckScriptExecutionsCount(1, 0);
+
+        Sleep(TDuration::Seconds(1));
+        WriteTopicMessage(info.InputTopicName, R"({"time": "2025-08-25T00:00:00.000000Z", "event": "B"})");
+        const auto readDisposition = TInstant::Now();
+
+        ExecQuery(fmt::format(R"(
+            ALTER STREAMING QUERY `{query_name}` SET (
+                RUN = TRUE
+            );)",
+            "query_name"_a = info.QueryName
+        ));
+        CheckScriptExecutionsCount(2, 1);
+        Sleep(TDuration::Seconds(1));
+
+        WriteTopicMessage(info.InputTopicName, R"({"time": "2025-08-26T00:00:00.000000Z", "event": "A"})");
+        ReadTopicMessage(info.OutputTopicName, "B-2025-08-25T00:00:00.000000Z-1", readDisposition);
+    }
+
+    Y_UNIT_TEST_F(OffsetsRecoveryOnQueryTextChangeWithFail, TStreamingTestFixture) {
+        const auto info = SetupCheckpointRecoveryTest(*this);
+
+        WriteTopicMessages(info.InputTopicName, {
+            R"({"time": "2025-08-24T00:00:00.000000Z", "event": "A"})",
+            R"({"time": "2025-08-25T00:00:00.000000Z", "event": "A"})",
+        });
+        ReadTopicMessage(info.OutputTopicName, "A-2025-08-24T00:00:00.000000Z-1");
+
+        ExecQuery(fmt::format(R"(
+            ALTER STREAMING QUERY `{query_name}` SET (
+                FORCE = TRUE,
+                RESOURCE_POOL = "unknown_pool"
+            ) AS
+            DO BEGIN
+                /* some comment */
+                {text}
+            END DO;)",
+            "query_name"_a = info.QueryName,
+            "text"_a = info.QueryText
+        ), EStatus::NOT_FOUND, "Resource pool unknown_pool not found or you don't have access permissions");
+
+        Sleep(TDuration::Seconds(1));
+        WriteTopicMessage(info.InputTopicName, R"({"time": "2025-08-25T00:00:00.000000Z", "event": "B"})");
+        const auto readDisposition = TInstant::Now();
+
+        ExecQuery(fmt::format(R"(
+            ALTER STREAMING QUERY `{query_name}` SET (
+                RESOURCE_POOL = "default"
+            );)",
+            "query_name"_a = info.QueryName
+        ));
+        CheckScriptExecutionsCount(3, 1);
+        Sleep(TDuration::Seconds(1));
+
+        WriteTopicMessage(info.InputTopicName, R"({"time": "2025-08-26T00:00:00.000000Z", "event": "A"})");
+        ReadTopicMessage(info.OutputTopicName, "B-2025-08-25T00:00:00.000000Z-1", readDisposition);
+    }
+
+    Y_UNIT_TEST_F(OffsetsAndStateRecoveryAfterQueryTextChange, TStreamingTestFixture) {
+        const auto info = SetupCheckpointRecoveryTest(*this);
+
+        WriteTopicMessages(info.InputTopicName, {
+            R"({"time": "2025-08-24T00:00:00.000000Z", "event": "A"})",
+            R"({"time": "2025-08-25T00:00:00.000000Z", "event": "A"})",
+        });
+        ReadTopicMessage(info.OutputTopicName, "A-2025-08-24T00:00:00.000000Z-1");
+
+        ExecQuery(fmt::format(R"(
+            ALTER STREAMING QUERY `{query_name}` SET (
+                FORCE = TRUE,
+                RUN = FALSE
+            ) AS
+            DO BEGIN
+                /* some comment */
+                {text}
+            END DO;)",
+            "query_name"_a = info.QueryName,
+            "text"_a = info.QueryText
+        ));
+        CheckScriptExecutionsCount(1, 0);
+
+        Sleep(TDuration::Seconds(1));
+        WriteTopicMessage(info.InputTopicName, R"({"time": "2025-08-25T00:00:00.000000Z", "event": "B"})");
+        auto readDisposition = TInstant::Now();
+
+        ExecQuery(fmt::format(R"(
+            ALTER STREAMING QUERY `{query_name}` SET (
+                RUN = TRUE
+            );)",
+            "query_name"_a = info.QueryName
+        ));
+        CheckScriptExecutionsCount(2, 1);
+        Sleep(TDuration::Seconds(1));
+
+        WriteTopicMessage(info.InputTopicName, R"({"time": "2025-08-26T00:00:00.000000Z", "event": "A"})");
+        ReadTopicMessage(info.OutputTopicName, "B-2025-08-25T00:00:00.000000Z-1", readDisposition);
+
+        ExecQuery(fmt::format(R"(
+            ALTER STREAMING QUERY `{query_name}` SET (
+                RUN = FALSE
+            );)",
+            "query_name"_a = info.QueryName
+        ));
+        CheckScriptExecutionsCount(2, 0);
+
+        Sleep(TDuration::Seconds(1));
+        WriteTopicMessage(info.InputTopicName, R"({"time": "2025-08-26T00:00:00.000000Z", "event": "B"})");
+        readDisposition = TInstant::Now();
+
+        ExecQuery(fmt::format(R"(
+            ALTER STREAMING QUERY `{query_name}` SET (
+                RUN = TRUE
+            );)",
+            "query_name"_a = info.QueryName
+        ));
+        CheckScriptExecutionsCount(3, 1);
+        Sleep(TDuration::Seconds(1));
+
+        WriteTopicMessage(info.InputTopicName, R"({"time": "2025-08-27T00:00:00.000000Z", "event": "A"})");
+        ReadTopicMessages(info.OutputTopicName, {
+            "A-2025-08-26T00:00:00.000000Z-1",
+            "B-2025-08-26T00:00:00.000000Z-1"
+        }, readDisposition, /* sort */ true);
+    }
+
+    Y_UNIT_TEST_F(CheckpointPropagationWithStreamLookupJoinHanging, TStreamingTestFixture) {
+        const auto connectorClient = SetupMockConnectorClient();
+
+        constexpr char inputTopicName[] = "sljInputTopicName";
+        constexpr char outputTopicName[] = "sljOutputTopicName";
+        CreateTopic(inputTopicName);
+        CreateTopic(outputTopicName);
+
+        constexpr char pqSourceName[] = "pqSourceName";
+        constexpr char ydbSourceName[] = "ydbSourceName";
+        CreatePqSource(pqSourceName);
+        CreateYdbSource(ydbSourceName);
+
+        constexpr char ydbTable[] = "lookup";
+        ExecExternalQuery(fmt::format(R"(
+            CREATE TABLE `{table}` (
+                fqdn String,
+                payload String,
+                PRIMARY KEY (fqdn)
+            ))",
+            "table"_a = ydbTable
+        ));
+
+        {   // Prepare connector mock
+            const std::vector<TColumn> columns = {
+                {"fqdn", Ydb::Type::STRING},
+                {"payload", Ydb::Type::STRING}
+            };
+            SetupMockConnectorTableDescription(connectorClient, {
+                .TableName = ydbTable,
+                .Columns = columns,
+                .DescribeCount = 2,
+                .ListSplitsCount = 4,
+                .ValidateListSplitsArgs = false
+            });
+
+            const std::vector<std::string> fqdnColumn = {"host1.example.com", "host2.example.com", "host3.example.com"};
+            const std::vector<std::string> payloadColumn = std::vector<std::string>{"P1", "P2", "P3"};
+            SetupMockConnectorTableData(connectorClient, {
+                .TableName = ydbTable,
+                .Columns = columns,
+                .NumberReadSplits = 3,
+                .ValidateReadSplitsArgs = false,
+                .ResultFactory = [&]() {
+                    return MakeRecordBatch(
+                        MakeArray<arrow::BinaryBuilder>("fqdn", fqdnColumn, arrow::binary()),
+                        MakeArray<arrow::BinaryBuilder>("payload", payloadColumn, arrow::binary())
+                    );
+                }
+            });
+        }
+
+        constexpr char queryName[] = "streamingQuery";
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                $ydb_lookup = SELECT * FROM `{ydb_source}`.`{ydb_table}`;
+
+                $pq_source = SELECT * FROM `{pq_source}`.`{input_topic}` WITH (
+                    FORMAT = "json_each_row",
+                    SCHEMA (
+                        time Int32 NOT NULL,
+                        event String,
+                        host String
+                    )
+                );
+
+                $joined = SELECT l.payload AS payload, p.* FROM $pq_source AS p
+                LEFT JOIN /*+ streamlookup(TTL 1) */ ANY $ydb_lookup AS l
+                ON (l.fqdn = p.host);
+
+                INSERT INTO `{pq_source}`.`{output_topic}`
+                SELECT Unwrap(event || "-" || payload) FROM $joined
+            END DO;)",
+            "query_name"_a = queryName,
+            "pq_source"_a = pqSourceName,
+            "ydb_source"_a = ydbSourceName,
+            "ydb_table"_a = ydbTable,
+            "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName
+        ));
+        CheckScriptExecutionsCount(1, 1);
+        Sleep(TDuration::Seconds(1));
+
+        WriteTopicMessage(inputTopicName, R"({"time": 0, "event": "A", "host": "host1.example.com"})");
+        ReadTopicMessage(outputTopicName, "A-P1");
+
+        connectorClient->LockReading();
+        WriteTopicMessage(inputTopicName, R"({"time": 1, "event": "B", "host": "host3.example.com"})");
+        Sleep(TDuration::Seconds(2));
+        const auto readDisposition = TInstant::Now();
+
+        ExecQuery(fmt::format(R"(
+            ALTER STREAMING QUERY `{query_name}` SET (
+                RUN = FALSE
+            );)",
+            "query_name"_a = queryName
+        ));
+        CheckScriptExecutionsCount(1, 0);
+
+        connectorClient->UnlockReading();
+
+        ExecQuery(fmt::format(R"(
+            ALTER STREAMING QUERY `{query_name}` SET (
+                RUN = TRUE
+            );)",
+            "query_name"_a = queryName
+        ));
+        CheckScriptExecutionsCount(2, 1);
+
+        ReadTopicMessage(outputTopicName, "B-P3", readDisposition);
     }
 }
 

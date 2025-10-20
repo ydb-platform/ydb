@@ -323,6 +323,8 @@ struct TPartitionTablesOptions
 
     //! Whether to return cookies that can be fed to CreateTablePartitionReader.
     bool EnableCookies = false;
+
+    bool OmitInaccessibleRows = false;
 };
 
 struct TReadTablePartitionOptions

@@ -190,6 +190,7 @@ void TExecutor::Registered(TActorSystem *sys, const TActorId&)
     GetServiceCounters(AppData()->Counters, "tablets")->GetCounter("alerts_scan_broken", true);
     GetServiceCounters(AppData()->Counters, "tablets")->GetCounter("alerts_boot_nodata", true);
     GetServiceCounters(AppData()->Counters, "tablets")->GetCounter("alerts_broken", true);
+    GetServiceCounters(AppData()->Counters, "tablets")->GetCounter("alerts_exception", true);
 }
 
 void TExecutor::PassAway() {

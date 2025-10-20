@@ -6,7 +6,7 @@
 
 namespace NKikimr::NOlap::NIndexes {
 
-TConclusion<std::vector<std::shared_ptr<IPortionDataChunk>>> TIndexByColumns::DoBuildIndexOptional(
+TConclusion<std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>>> TIndexByColumns::DoBuildIndexOptional(
     const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, const ui32 recordsCount, const TIndexInfo& indexInfo) const {
     AFL_VERIFY(Serializer);
     AFL_VERIFY(data.size());
@@ -16,7 +16,7 @@ TConclusion<std::vector<std::shared_ptr<IPortionDataChunk>>> TIndexByColumns::Do
         if (it == data.end()) {
             AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "index_data_absent")("column_id", i)("index_name", GetIndexName())(
                 "index_id", GetIndexId());
-            return std::vector<std::shared_ptr<IPortionDataChunk>>();
+            return std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>>();
         }
         columnReaders.emplace_back(it->second, indexInfo.GetColumnLoaderVerified(i));
     }
@@ -29,11 +29,12 @@ bool TIndexByColumns::DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDe
     return true;
 }
 
-TIndexByColumns::TIndexByColumns(
-    const ui32 indexId, const TString& indexName, const ui32 columnId, const TString& storageId, const TReadDataExtractorContainer& extractor)
-    : TBase(indexId, indexName, storageId)
+TIndexByColumns::TIndexByColumns(const ui32 indexId, const TString& indexName, const ui32 columnId, const TString& storageId,
+    const bool inheritPortionStorage, const TReadDataExtractorContainer& extractor)
+    : TBase(indexId, indexName, storageId, inheritPortionStorage)
     , DataExtractor(extractor)
-    , ColumnIds({ columnId }) {
+    , ColumnIds({ columnId })
+{
     Serializer = NArrow::NSerialization::TSerializerContainer::GetDefaultSerializer();
 }
 

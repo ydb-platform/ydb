@@ -930,6 +930,7 @@ private:
         if (Params.Resources.rate_limiter_path()) {
             const TString rateLimiterResource = GetRateLimiterResourcePath(Params.CloudId, Params.Scope.ParseFolder(), Params.QueryId);
             for (auto& task : *ev->Get()->GraphParams.MutableTasks()) {
+                task.SetRateLimiterDatabase(Params.TenantName);
                 task.SetRateLimiter(Params.Resources.rate_limiter_path());
                 task.SetRateLimiterResource(rateLimiterResource);
             }
@@ -2056,7 +2057,15 @@ private:
                 case FederatedQuery::StreamingDisposition::DISPOSITION_NOT_SET:
                     break;
             }
-            dataProvidersInit.push_back(GetPqDataProviderInitializer(pqGateway, false, dbResolver, std::move(disposition), Params.TaskSensorLabels, Params.NodeIds));
+            dataProvidersInit.push_back(GetPqDataProviderInitializer(
+                pqGateway,
+                /* supportRtmrMode */ false,
+                dbResolver,
+                std::move(disposition),
+                Params.TaskSensorLabels,
+                Params.NodeIds,
+                Params.Config.GetCommon().GetUseActorSystemThreadsInTopicClient()
+            ));
         }
 
         {

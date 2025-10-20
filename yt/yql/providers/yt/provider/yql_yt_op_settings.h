@@ -74,6 +74,7 @@ enum class EYtSettingType: ui64 {
     SysColumns               /* "syscolumns" */,
     IgnoreTypeV3             /* "ignore_type_v3" "ignoretypev3" */,
     ExtraColumns             /* "extraColumns" */,
+    Pruned                   /* "pruned" */,
     // Table content
     MemUsage                 /* "memUsage" */,
     ItemsCount               /* "itemsCount" */,

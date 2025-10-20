@@ -312,18 +312,22 @@ namespace NKikimr::NBsController {
             }
 
             void LogCommand(TTransactionContext& txc, TDuration executionTime) {
+                ui64 operationLogIndex = Self->NextOperationLogIndex;
                 // update operation log for write transaction
                 NIceDb::TNiceDb db(txc.DB);
                 TString requestBuffer, responseBuffer;
                 Y_PROTOBUF_SUPPRESS_NODISCARD Cmd.SerializeToString(&requestBuffer);
                 Y_PROTOBUF_SUPPRESS_NODISCARD Response->SerializeToString(&responseBuffer);
-                db.Table<Schema::OperationLog>().Key(Self->NextOperationLogIndex).Update(
+                db.Table<Schema::OperationLog>().Key(operationLogIndex).Update(
                     NIceDb::TUpdate<Schema::OperationLog::Timestamp>(TActivationContext::Now()),
                     NIceDb::TUpdate<Schema::OperationLog::Request>(requestBuffer),
                     NIceDb::TUpdate<Schema::OperationLog::Response>(responseBuffer),
                     NIceDb::TUpdate<Schema::OperationLog::ExecutionTime>(executionTime));
                 db.Table<Schema::State>().Key(true).Update(
                     NIceDb::TUpdate<Schema::State::NextOperationLogIndex>(++Self->NextOperationLogIndex));
+
+                STLOG(PRI_INFO, BS_CONTROLLER_AUDIT, BSCA10, "Finished processing command", (Request, Cmd.DebugString()),
+                        (Response, Response->DebugString()), (ExecutionTime, executionTime), (OperationLogIndex, operationLogIndex));
             }
 
             void ExecuteStep(TConfigState& state, const NKikimrBlobStorage::TConfigRequest::TCommand& cmd,

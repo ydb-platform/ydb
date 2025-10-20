@@ -1,4 +1,4 @@
-# KqpLoad
+# QPLoad
 
 Тестирует производительности кластера {{ ydb-short-name }} в целом, нагружая все компоненты через слой Query Processor. Нагрузка, аналогична нагрузке от подкоманды [workload](../reference/ydb-cli/commands/workload/index.md) {{ ydb-short-name }} CLI, но запускается изнутри кластера.
 

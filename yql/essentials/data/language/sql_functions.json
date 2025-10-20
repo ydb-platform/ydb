@@ -220,6 +220,10 @@
     "kind": "Normal"
   },
   {
+    "name": "Concat",
+    "kind": "Normal"
+  },
+  {
     "name": "Corr",
     "kind": "Agg"
   },

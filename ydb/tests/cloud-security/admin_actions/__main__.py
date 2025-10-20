@@ -1,14 +1,8 @@
 # -*- coding: utf-8 -*-
 import argparse
 import grpc
-import ydb
-import os
-import logging
-import yaml
 import time
 from enum import Enum
-
-
 
 from ydb.public.api.grpc.draft import ydb_dynamic_config_v1_pb2_grpc as grpc_server
 from ydb.public.api.grpc import ydb_cms_v1_pb2_grpc as cms_grpc_server
@@ -18,18 +12,20 @@ from ydb.public.api.protos.draft import ydb_dynamic_config_pb2 as dynamic_config
 from ydb.public.api.protos import ydb_cms_pb2 as cms_api
 from ydb.public.api.protos import ydb_scheme_pb2 as scheme_api
 
-
 from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
 import ydb.public.api.protos.draft.ydb_dynamic_config_pb2 as dynconfig
+
 
 class EExpectedResult(Enum):
     Success = 0
     PermissionDenied = 1
 
+
 class EAction(Enum):
     SchemeLs = 0
     AlterDatabase = 1
     Dynconfig = 2
+
 
 class ParsedOptions:
     class DynconfigSpecialOptions:
@@ -160,11 +156,12 @@ def parse_args() -> ParsedOptions:
 
     if result.action == EAction.AlterDatabase:
         assert result.database is not None, "Database is required for dynconfig"
-    
+
     if result.action == EAction.SchemeLs:
         assert result.database is not None, "Database is required for scheme_ls"
 
     return result
+
 
 class CommonClientInvoker(object):
     class EService(Enum):
@@ -185,7 +182,7 @@ class CommonClientInvoker(object):
             ('grpc.max_send_message_length', 64 * 10 ** 6)
         ]
 
-        is_secure = "ydb.mdb.cloud" in endpoint # for dynamic nodes
+        is_secure = "ydb.mdb.cloud" in endpoint  # for dynamic nodes
 
         if is_secure:
             self._channel = grpc.secure_channel("%s:%s" % (self.endpoint, self.port), credentials=grpc.ssl_channel_credentials(), options=self._options)
@@ -204,7 +201,7 @@ class CommonClientInvoker(object):
             metadata.append(('x-ydb-database', self.database))
         return metadata
 
-    def _get_invoke_callee(self, method : str, service : EService):
+    def _get_invoke_callee(self, method: str, service: EService):
         if service == CommonClientInvoker.EService.Cms:
             return getattr(self._cms_stub, method)
         elif service == CommonClientInvoker.EService.Dynconfig:
@@ -212,7 +209,7 @@ class CommonClientInvoker(object):
         elif service == CommonClientInvoker.EService.Scheme:
             return getattr(self._scheme_stub, method)
 
-    def invoke(self, request, method : str, service : EService):
+    def invoke(self, request, method: str, service: EService):
         retry = self.__retry_count
         while True:
             try:
@@ -233,10 +230,12 @@ class CommonClientInvoker(object):
     def __del__(self):
         self.close()
 
+
 def generate_error_message(action, status, issue):
     return f"{action} response. Status: {status}; issue: {issue}"
 
-def fetch_dynconfig(client: CommonClientInvoker, expected_result : EExpectedResult):
+
+def fetch_dynconfig(client: CommonClientInvoker, expected_result: EExpectedResult):
     def make_request():
         request = dynamic_config_api.GetConfigRequest()
         return client.invoke(request, 'GetConfig', CommonClientInvoker.EService.Dynconfig)
@@ -257,7 +256,8 @@ def fetch_dynconfig(client: CommonClientInvoker, expected_result : EExpectedResu
     fetch_config_response.operation.result.Unpack(result)
     return result.config[0]
 
-def alter_database(client: CommonClientInvoker, path : str, expected_result : EExpectedResult):
+
+def alter_database(client: CommonClientInvoker, path: str, expected_result: EExpectedResult):
     class EAlterDatabaseAction(Enum):
         CreateAttributes = 0
         DropAttributes = 1
@@ -294,7 +294,8 @@ def alter_database(client: CommonClientInvoker, path : str, expected_result : EE
         else:
             raise ValueError(f"Unknown expected_result: {expected_result}")
 
-def scheme_ls(client: CommonClientInvoker, path : str, expected_result : EExpectedResult):
+
+def scheme_ls(client: CommonClientInvoker, path: str, expected_result: EExpectedResult):
     def make_request():
         request = scheme_api.ListDirectoryRequest()
         request.path = path
@@ -315,6 +316,7 @@ def scheme_ls(client: CommonClientInvoker, path : str, expected_result : EExpect
     result = scheme_api.ListDirectoryResult()
     ls_response.operation.result.Unpack(result)
     return result.children
+
 
 def main():
     parsed_args = parse_args()
@@ -349,6 +351,7 @@ def main():
         print(f"Done successfully ({"permission denied" if parsed_args.expected_result == EExpectedResult.PermissionDenied else "no errors"})")
     except Exception as e:
         print(f"Something wrong. Issue: {e}")
+
 
 if __name__ == '__main__':
     main()

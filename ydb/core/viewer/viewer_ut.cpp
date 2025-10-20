@@ -78,6 +78,7 @@ duration_t GetBasePerformance() {
 }
 
 double BASE_PERF = GetBasePerformance().count();
+TString VALID_TOKEN = "test_ydb_token";
 
 Y_UNIT_TEST_SUITE(Viewer) {
     Y_UNIT_TEST(TabletMerging) {
@@ -454,7 +455,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
                 return;
             }
 
-            if (ev->Get()->Ticket != "test_ydb_token") {
+            if (ev->Get()->Ticket != VALID_TOKEN) {
                 Fail(ev, TStringBuilder() << "Incorrect token " << ev->Get()->Ticket);
                 return;
             }
@@ -550,7 +551,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TStringStream responseStream;
         TKeepAliveHttpClient::THeaders headers;
         headers["Content-Type"] = "application/json";
-        headers["Authorization"] = "test_ydb_token";
+        headers["Authorization"] = VALID_TOKEN;
         const TKeepAliveHttpClient::THttpCode statusCode = httpClient.DoPost("/viewer/query?timeout=600000", NJson::WriteJson(jsonRequest, false), &responseStream, headers);
         UNIT_ASSERT_EQUAL(statusCode, HTTP_OK);
         return NJson::ReadJsonTree(&responseStream, /* throwOnError = */ true);
@@ -1719,7 +1720,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TStringStream responseStream;
         TKeepAliveHttpClient::THeaders headers;
         headers["Content-Type"] = "application/json";
-        headers["Authorization"] = "test_ydb_token";
+        headers["Authorization"] = VALID_TOKEN;
         TString requestBody = R"json({
             "query": "SELECT cast('311111111113.222222223' as Double);",
             "database": "/Root",
@@ -1782,7 +1783,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TStringStream responseStream;
         TKeepAliveHttpClient::THeaders headers;
         headers["Content-Type"] = "application/json";
-        headers["Authorization"] = "test_ydb_token";
+        headers["Authorization"] = VALID_TOKEN;
         TString requestBody = R"json({
             "query": "SELECT 42;",
             "database": "/Root",
@@ -1845,7 +1846,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TStringStream responseStream;
         TKeepAliveHttpClient::THeaders headers;
         headers["Content-Type"] = "application/json";
-        headers["Authorization"] = "test_ydb_token";
+        headers["Authorization"] = VALID_TOKEN;
         const TKeepAliveHttpClient::THttpCode statusCode = httpClient.DoPost(TStringBuilder()
                                                             << "/query/script/execute?timeout=600000"
                                                             << "&database=%2FRoot", requestBody.Str(), &responseStream, headers);
@@ -1859,7 +1860,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TStringStream responseStream;
         TKeepAliveHttpClient::THeaders headers;
         headers["Content-Type"] = "application/json";
-        headers["Authorization"] = "test_ydb_token";
+        headers["Authorization"] = VALID_TOKEN;
         id = std::regex_replace(id.c_str(), std::regex("/"), "%2F");
         const TKeepAliveHttpClient::THttpCode statusCode = httpClient.DoGet(TStringBuilder()
                                                             << "/operation/get?timeout=600000&id=" << id
@@ -1875,7 +1876,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TStringStream responseStream;
         TKeepAliveHttpClient::THeaders headers;
         headers["Content-Type"] = "application/json";
-        headers["Authorization"] = "test_ydb_token";
+        headers["Authorization"] = VALID_TOKEN;
         const TKeepAliveHttpClient::THttpCode statusCode = httpClient.DoGet(TStringBuilder()
                                                             << "/operation/list?timeout=600000&kind=scriptexec"
                                                             << "&database=%2FRoot", &responseStream, headers);
@@ -1890,7 +1891,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TStringStream responseStream;
         TKeepAliveHttpClient::THeaders headers;
         headers["Content-Type"] = "application/json";
-        headers["Authorization"] = "test_ydb_token";
+        headers["Authorization"] = VALID_TOKEN;
         id = std::regex_replace(id.c_str(), std::regex("/"), "%2F");
         const TKeepAliveHttpClient::THttpCode statusCode = httpClient.DoGet(TStringBuilder()
                                                             << "/query/script/fetch?timeout=600000&operation_id=" << id
@@ -2010,7 +2011,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TStringStream responseStream;
         TKeepAliveHttpClient::THeaders headers;
         headers["Content-Type"] = "application/json";
-        headers["Authorization"] = "test_ydb_token";
+        headers["Authorization"] = VALID_TOKEN;
         const TKeepAliveHttpClient::THttpCode statusCode = httpClient.DoPost("/viewer/plan2svg", tinyPlan, &responseStream, headers);
         const TString response = responseStream.ReadAll();
         UNIT_ASSERT_EQUAL_C(statusCode, HTTP_OK, statusCode << ": " << response);
@@ -2170,7 +2171,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TStringStream responseStream;
         TKeepAliveHttpClient::THeaders headers;
         headers["Content-Type"] = "application/json";
-        headers["Authorization"] = "test_ydb_token";
+        headers["Authorization"] = VALID_TOKEN;
         const TKeepAliveHttpClient::THttpCode statusCode = httpClient.DoPost("/viewer/plan2svg", brokenPlan, &responseStream, headers);
         const TString response = responseStream.ReadAll();
         UNIT_ASSERT_EQUAL_C(statusCode, HTTP_BAD_REQUEST, statusCode << ": " << response);

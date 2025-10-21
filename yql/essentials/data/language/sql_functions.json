@@ -1252,6 +1252,14 @@
     "kind": "Normal"
   },
   {
+    "name": "SimplePg::date_trunc",
+    "kind": "Normal"
+  },
+  {
+    "name": "SimplePg::floor",
+    "kind": "Normal"
+  },
+  {
     "name": "SimplePg::now",
     "kind": "Normal"
   },

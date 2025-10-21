@@ -8867,6 +8867,50 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                 .Build();
             // clang-format on
             return IGraphTransformer::TStatus::Repeat;
+        } else if (name == "date_trunc") {
+            if (args.size() != 2) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(pos), "Expected 2 arguments"));
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            // clang-format off
+            output = ctx.Expr.Builder(pos)
+                .Callable("FromPg")
+                    .Callable(0, "PgCall")
+                        .Atom(0, "date_trunc")
+                        .List(1)
+                        .Seal()
+                        .Callable(2, "SafeCast")
+                            .Add(0, args[0])
+                            .Callable(1, "DataType")
+                                .Atom(0, "Utf8")
+                            .Seal()
+                        .Seal()
+                        .Add(3, args[1])
+                    .Seal()
+                .Seal()
+                .Build();
+            // clang-format on
+            return IGraphTransformer::TStatus::Repeat;
+        } else if (name == "floor") {
+            if (args.size() != 1) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(pos), "Expected 1 argument"));
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            // clang-format off
+            output = ctx.Expr.Builder(pos)
+                .Callable("FromPg")
+                    .Callable(0, "PgCall")
+                        .Atom(0,"floor")
+                        .List(1)
+                        .Seal()
+                        .Add(2, args[0])
+                    .Seal()
+                .Seal()
+                .Build();
+            // clang-format on
+            return IGraphTransformer::TStatus::Repeat;
         } else {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(pos), TStringBuilder() << "Unknown SimplePg function: " << name));
             return IGraphTransformer::TStatus::Error;

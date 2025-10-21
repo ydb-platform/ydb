@@ -8420,6 +8420,20 @@
             "uri": "https://{canondata_backend}/1775059/be020ceb210e118c9d8f06ae73e0f97466c49478/resource.tar.gz#test_sql2yql.test_side_effects-x_not_x_fail_/sql.yql"
         }
     ],
+    "test_sql2yql.test[simple_pg-date_trunc]": [
+        {
+            "checksum": "a9996b1ee3ffaf0710119963624f85e4",
+            "size": 1080,
+            "uri": "https://{canondata_backend}/1773845/d44e77c717d417cc593a54611fecfab186795fbf/resource.tar.gz#test_sql2yql.test_simple_pg-date_trunc_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[simple_pg-floor]": [
+        {
+            "checksum": "413e810bd6fb4f1bd0fe7d3593fe57a8",
+            "size": 1050,
+            "uri": "https://{canondata_backend}/1936997/1d3ea50925a55c20709dcadb9a15a859d043a0de/resource.tar.gz#test_sql2yql.test_simple_pg-floor_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[simple_pg-now]": [
         {
             "checksum": "9c101cb0547fdd904399f3c7b83b3ab7",
@@ -13456,6 +13470,16 @@
             "uri": "file://test_sql_format.test_side_effects-x_not_x_fail_/formatted.sql"
         }
     ],
+    "test_sql_format.test[simple_pg-date_trunc]": [
+        {
+            "uri": "file://test_sql_format.test_simple_pg-date_trunc_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[simple_pg-floor]": [
+        {
+            "uri": "file://test_sql_format.test_simple_pg-floor_/formatted.sql"
+        }
+    ],
     "test_sql_format.test[simple_pg-now]": [
         {
             "uri": "file://test_sql_format.test_simple_pg-now_/formatted.sql"
@@ -14151,6 +14175,13 @@
             "checksum": "e0ce66df53204c1c27e622ecb103c627",
             "size": 289,
             "uri": "https://{canondata_backend}/1924537/c7a75d88255019fa5cdd3450d7e30c52905fc710/resource.tar.gz#test_sql_negative.test_select-use_subrequest_as_table-_/err_file.out"
+        }
+    ],
+    "test_sql_negative.test[simple_pg-missing-]": [
+        {
+            "checksum": "782e4a4561a8427e738ff3380e02a810",
+            "size": 160,
+            "uri": "https://{canondata_backend}/1773845/d44e77c717d417cc593a54611fecfab186795fbf/resource.tar.gz#test_sql_negative.test_simple_pg-missing-_/err_file.out"
         }
     ],
     "test_sql_negative.test[simple_pg-no_prefix-]": [

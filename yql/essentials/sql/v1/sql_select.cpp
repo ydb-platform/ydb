@@ -549,8 +549,9 @@ TSourcePtr TSqlSelect::SingleSource(const TRule_single_source& node, const TVect
             }
             auto writeSettings = source->GetWriteSettings();
             if (writeSettings.Discard) {
-                Ctx_.Error(pos) << "DISCARD can only be used at the top level, not inside subqueries";
-                return nullptr;
+                // Mark DISCARD as being in invalid place (subquery), but don't fail here
+                // The error will be raised in KQP for non-DML queries
+                source->SetDiscardInInvalidPlace();
             }
             return BuildInnerSource(pos, BuildSourceNode(pos, std::move(source)), Ctx_.Scoped->CurrService, Ctx_.Scoped->CurrCluster);
         }
@@ -1317,9 +1318,10 @@ TSqlSelect::TSelectKindResult TSqlSelect::SelectKind(const TRule_select_kind& no
         if (placement->IsFirstInSelectOp) {
             res.Settings.Discard = settings.Discard;
         } else if (settings.Discard) {
-            auto discardPos = Ctx_.TokenPosition(node.GetBlock1().GetToken1());
-            Ctx_.Error(discardPos) << "DISCARD within UNION ALL is only allowed before first subquery";
-            return {};
+            // Mark DISCARD as being in invalid place (non-first subquery in UNION ALL), but don't fail here
+            // The error will be raised in KQP for non-DML queries
+            res.Settings.Discard = true;
+            res.Settings.DiscardInInvalidPlace = true;
         }
 
         if (placement->IsLastInSelectOp) {

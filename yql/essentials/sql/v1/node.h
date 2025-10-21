@@ -856,6 +856,7 @@ bool ValidateAllNodesForAggregation(TContext& ctx, const TVector<TNodePtr>& node
 struct TWriteSettings {
     bool Discard = false;
     TDeferredAtom Label;
+    bool DiscardInInvalidPlace = false;
 };
 
 class TColumnNode final: public INode {

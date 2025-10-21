@@ -1347,8 +1347,9 @@ namespace Tests {
 
                 auto actorSystemPtr = std::make_shared<NKikimr::TDeferredActorLogBackend::TAtomicActorSystemPtr>(nullptr);
                 actorSystemPtr->store(Runtime->GetActorSystem(nodeIdx));
-                auto driver = std::make_shared<NYdb::TDriver>(NYdb::TDriverConfig()
-                    .SetLog(std::make_unique<NKikimr::TDeferredActorLogBackend>(actorSystemPtr, NKikimrServices::EServiceKikimr::YDB_SDK)));
+
+                auto driver = NKqp::MakeYdbDriver(actorSystemPtr, queryServiceConfig.GetStreamingQueries().GetTopicSdkSettings());
+                auto pqGateway = NKqp::MakePqGateway(driver);
 
                 federatedQuerySetupFactory = std::make_shared<NKikimr::NKqp::TKqpFederatedQuerySetupFactoryMock>(
                     NKqp::MakeHttpGateway(queryServiceConfig.GetHttpGateway(), Runtime->GetAppData(nodeIdx).Counters),
@@ -1365,7 +1366,7 @@ namespace Tests {
                     NYql::NDq::CreateReadActorFactoryConfig(queryServiceConfig.GetS3()),
                     Settings->DqTaskTransformFactory,
                     NYql::TPqGatewayConfig{},
-                    Settings->PqGateway ? Settings->PqGateway : NKqp::MakePqGateway(driver, NYql::TPqGatewayConfig{}),
+                    Settings->PqGateway ? Settings->PqGateway : pqGateway,
                     actorSystemPtr,
                     driver);
             }

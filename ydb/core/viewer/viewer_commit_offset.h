@@ -68,7 +68,7 @@ public:
         });
         yaml.AddParameter({
             .Name = "read_session_id",
-            .Description = "read session if",
+            .Description = "read session id",
             .Type = "string",
         });
         yaml.SetResponseSchema(TProtoToYaml::ProtoToYamlSchema<Ydb::Topic::CommitOffsetResult>());

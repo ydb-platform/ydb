@@ -4,7 +4,6 @@
 #include <ydb/core/fq/libs/metrics/sanitize_label.h>
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
 #include <ydb/core/fq/libs/row_dispatcher/format_handler/format_handler.h>
-#include <ydb/core/protos/config.pb.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/yql/dq/actors/dq.h>
@@ -267,7 +266,7 @@ private:
     const NYdb::TDriver Driver;
     const NYql::IPqGateway::TPtr PqGateway;
     const std::shared_ptr<NYdb::ICredentialsProviderFactory> CredentialsProviderFactory;
-    const NKikimrConfig::TSharedReadingConfig Config;
+    const TRowDispatcherSettings Config;
     const TFormatHandlerConfig FormatHandlerConfig;
     const i64 BufferSize;
     TString LogPrefix;
@@ -301,7 +300,7 @@ public:
         const TString& topicPath,
         const TString& endpoint,
         const TString& database,
-        const NKikimrConfig::TSharedReadingConfig& config,
+        const TRowDispatcherSettings& config,
         const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
         TActorId rowDispatcherActorId,
         TActorId compileServiceActorId,
@@ -386,7 +385,7 @@ TTopicSession::TTopicSession(
     const TString& topicPath,
     const TString& endpoint,
     const TString& database,
-    const NKikimrConfig::TSharedReadingConfig& config,
+    const TRowDispatcherSettings& config,
     const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
     TActorId rowDispatcherActorId,
     TActorId compileServiceActorId,
@@ -420,7 +419,7 @@ void TTopicSession::Bootstrap() {
     Metrics.Init(Counters, TopicPath, ReadGroup, PartitionId);
     LogPrefix = LogPrefix + " " + SelfId().ToString() + " ";
     LOG_ROW_DISPATCHER_DEBUG("Bootstrap " << TopicPathPartition
-        << ", Timeout " << Config.GetTimeoutBeforeStartSessionSec() << " sec");
+        << ", Timeout " << Config.GetTimeoutBeforeStartSession() << " sec");
     Schedule(TDuration::Seconds(SendStatisticPeriodSec), new NFq::TEvPrivate::TEvSendStatistic());
 }
 
@@ -492,17 +491,20 @@ NYdb::NTopic::TReadSessionSettings TTopicSession::GetReadSessionSettings(const T
     TInstant minTime = GetMinStartingMessageTimestamp();
     LOG_ROW_DISPATCHER_INFO("Create topic session, Path " << TopicPathPartition
         << ", StartingMessageTimestamp " << minTime
-        << ", BufferSize " << BufferSize << ", WithoutConsumer " << Config.GetWithoutConsumer());
+        << ", BufferSize " << BufferSize << ", GetConsumerMode " << Config.GetConsumerMode());
 
     auto settings = NYdb::NTopic::TReadSessionSettings()
         .AppendTopics(topicReadSettings)
         .MaxMemoryUsageBytes(BufferSize)
         .ReadFromTimestamp(minTime);
-    if (Config.GetWithoutConsumer()) {
+
+    if (Config.GetConsumerMode() == TRowDispatcherSettings::EConsumerMode::Without
+     || (Config.GetConsumerMode() == TRowDispatcherSettings::EConsumerMode::Auto && !consumerName)) {
         settings.WithoutConsumer();
     } else {
         settings.ConsumerName(consumerName);
     }
+
     return settings;
 }
 
@@ -554,7 +556,7 @@ void TTopicSession::Handle(NFq::TEvPrivate::TEvReconnectSession::TPtr&) {
     StartingMessageTimestamp = GetMinStartingMessageTimestamp();
     LOG_ROW_DISPATCHER_DEBUG("Reconnect topic session, " << TopicPathPartition
         << ", StartingMessageTimestamp " << StartingMessageTimestamp
-        << ", BufferSize " << BufferSize << ", WithoutConsumer " << Config.GetWithoutConsumer());
+        << ", BufferSize " << BufferSize << ", ConsumerMode " << Config.GetConsumerMode());
     RefreshParsers();
     StopReadSession();
     CreateTopicSession();
@@ -762,7 +764,7 @@ void TTopicSession::StartClientSession(TClientsInfo& info) {
     }
 
     if (!ReadSession) {
-        Schedule(TDuration::Seconds(Config.GetTimeoutBeforeStartSessionSec()), new NFq::TEvPrivate::TEvCreateSession());
+        Schedule(Config.GetTimeoutBeforeStartSession(), new NFq::TEvPrivate::TEvCreateSession());
     }
 }
 
@@ -856,7 +858,7 @@ void TTopicSession::RestartSessionIfOldestClient(const TClientsInfo& info) {
     StopReadSession();
 
     if (!ReadSession) {
-        Schedule(TDuration::Seconds(Config.GetTimeoutBeforeStartSessionSec()), new NFq::TEvPrivate::TEvCreateSession());
+        Schedule(Config.GetTimeoutBeforeStartSession(), new NFq::TEvPrivate::TEvCreateSession());
     }
 }
 
@@ -973,7 +975,7 @@ bool TTopicSession::CheckNewClient(NFq::TEvRowDispatcher::TEvStartSession::TPtr&
     }
 
     const auto& source = ev->Get()->Record.GetSource();
-    if (!Config.GetWithoutConsumer() && ConsumerName && ConsumerName != source.GetConsumerName()) {
+    if (Config.GetConsumerMode() != TRowDispatcherSettings::EConsumerMode::Without && ConsumerName && ConsumerName != source.GetConsumerName()) {
         LOG_ROW_DISPATCHER_INFO("Different consumer, expected " <<  ConsumerName << ", actual " << source.GetConsumerName() << ", send error");
         SendSessionError(ev->Sender, TStatus::Fail(EStatusId::PRECONDITION_FAILED, TStringBuilder() << "Use the same consumer in all queries via RD (current consumer " << ConsumerName << ")"), false);
         return false;
@@ -1007,7 +1009,7 @@ std::unique_ptr<IActor> NewTopicSession(
     const TString& topicPath,
     const TString& endpoint,
     const TString& database,
-    const NKikimrConfig::TSharedReadingConfig& config,
+    const TRowDispatcherSettings& config,
     const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
     TActorId rowDispatcherActorId,
     TActorId compileServiceActorId,

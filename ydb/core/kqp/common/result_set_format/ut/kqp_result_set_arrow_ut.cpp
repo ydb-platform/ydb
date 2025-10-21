@@ -46,7 +46,7 @@ NUdf::TUnboxedValue GetValueOfBasicType(TType* type, ui64 value) {
     Y_ABORT_UNLESS(type->GetKind() == TType::EKind::Data);
     auto dataType = static_cast<const TDataType*>(type);
     auto slot = *dataType->GetDataSlot().Get();
-    switch(slot) {
+    switch (slot) {
         case NUdf::EDataSlot::Bool:
             return NUdf::TUnboxedValuePod(static_cast<bool>(value % 2 == 0));
         case NUdf::EDataSlot::Int8:
@@ -69,33 +69,13 @@ NUdf::TUnboxedValue GetValueOfBasicType(TType* type, ui64 value) {
             return NUdf::TUnboxedValuePod(static_cast<float>(value) / 1234);
         case NUdf::EDataSlot::Double:
             return NUdf::TUnboxedValuePod(static_cast<double>(value) / 12345);
-        case NUdf::EDataSlot::String: {
-            std::string string = TStringBuilder() << value;
-            return MakeString(NUdf::TStringRef(string.data(), string.size()));
-        }
-        case NUdf::EDataSlot::Utf8: {
-            std::string string = TStringBuilder() << value << "utf8";
-            return MakeString(NUdf::TStringRef(string.data(), string.size()));
-        }
-        case NUdf::EDataSlot::Yson:
-        case NUdf::EDataSlot::Json: {
-            std::string json = TStringBuilder() << '[' << value << ']';
-            return MakeString(NUdf::TStringRef(json.data(), json.size()));
-        }
-        case NUdf::EDataSlot::JsonDocument: {
-            std::string json = SerializeToBinaryJson(TStringBuilder() << '[' << value << ']');
-            return MakeString(NUdf::TStringRef(json.data(), json.size()));
-        }
-        case NUdf::EDataSlot::Uuid: {
-            std::string uuid;
-            for (size_t i = 0; i < NKikimr::NScheme::FSB_SIZE / 2; ++i) {
-                uuid += "a" + std::to_string((i + value) % 10);
-            }
-            return MakeString(NUdf::TStringRef(uuid));
-        }
         case NUdf::EDataSlot::Decimal: {
             auto decimal = NYql::NDecimal::FromString(TStringBuilder() << value << ".123", DECIMAL_PRECISION, DECIMAL_SCALE);
             return NUdf::TUnboxedValuePod(decimal);
+        }
+        case NUdf::EDataSlot::DyNumber: {
+            // TODO: Implement DyNumber
+            break;
         }
         case NUdf::EDataSlot::Date:
             return NUdf::TUnboxedValuePod(static_cast<ui16>(value % NUdf::MAX_DATE));
@@ -105,14 +85,6 @@ NUdf::TUnboxedValue GetValueOfBasicType(TType* type, ui64 value) {
             return NUdf::TUnboxedValuePod(static_cast<ui64>(value % NUdf::MAX_TIMESTAMP));
         case NUdf::EDataSlot::Interval:
             return NUdf::TUnboxedValuePod(static_cast<i64>(value / 2 - 1));
-        case NUdf::EDataSlot::Date32:
-            return NUdf::TUnboxedValuePod(static_cast<i32>(value % NUdf::MAX_DATE32));
-        case NUdf::EDataSlot::Datetime64:
-            return NUdf::TUnboxedValuePod(static_cast<i64>(value % NUdf::MAX_DATETIME64));
-        case NUdf::EDataSlot::Timestamp64:
-            return NUdf::TUnboxedValuePod(static_cast<i64>(value % NUdf::MAX_TIMESTAMP64));
-        case NUdf::EDataSlot::Interval64:
-            return NUdf::TUnboxedValuePod(static_cast<i64>(value % NUdf::MAX_INTERVAL64));
         case NUdf::EDataSlot::TzDate: {
             auto ret = NUdf::TUnboxedValuePod(static_cast<ui16>(value % NUdf::MAX_DATE));
             ret.SetTimezoneId(GetTimezoneIdSkipEmpty(value));
@@ -128,6 +100,14 @@ NUdf::TUnboxedValue GetValueOfBasicType(TType* type, ui64 value) {
             ret.SetTimezoneId(GetTimezoneIdSkipEmpty(value));
             return ret;
         }
+        case NUdf::EDataSlot::Date32:
+            return NUdf::TUnboxedValuePod(static_cast<i32>(value % NUdf::MAX_DATE32));
+        case NUdf::EDataSlot::Datetime64:
+            return NUdf::TUnboxedValuePod(static_cast<i64>(value % NUdf::MAX_DATETIME64));
+        case NUdf::EDataSlot::Timestamp64:
+            return NUdf::TUnboxedValuePod(static_cast<i64>(value % NUdf::MAX_TIMESTAMP64));
+        case NUdf::EDataSlot::Interval64:
+            return NUdf::TUnboxedValuePod(static_cast<i64>(value % NUdf::MAX_INTERVAL64));
         case NUdf::EDataSlot::TzDate32: {
             auto ret = NUdf::TUnboxedValuePod(static_cast<i32>(value % NUdf::MAX_DATE32));
             ret.SetTimezoneId(GetTimezoneIdSkipEmpty(value));
@@ -143,9 +123,36 @@ NUdf::TUnboxedValue GetValueOfBasicType(TType* type, ui64 value) {
             ret.SetTimezoneId(GetTimezoneIdSkipEmpty(value));
             return ret;
         }
-        default:
-            Y_ABORT("Not implemented creation value for such type");
+        case NUdf::EDataSlot::String: {
+            std::string string = TStringBuilder() << value;
+            return MakeString(NUdf::TStringRef(string.data(), string.size()));
+        }
+        case NUdf::EDataSlot::Utf8: {
+            std::string string = TStringBuilder() << value << "utf8";
+            return MakeString(NUdf::TStringRef(string.data(), string.size()));
+        }
+        case NUdf::EDataSlot::Yson: {
+            std::string yson = TStringBuilder() << '[' << value << ']';
+            return MakeString(NUdf::TStringRef(yson.data(), yson.size()));
+        }
+        case NUdf::EDataSlot::Json: {
+            std::string json = TStringBuilder() << '[' << value << ']';
+            return MakeString(NUdf::TStringRef(json.data(), json.size()));
+        }
+        case NUdf::EDataSlot::JsonDocument: {
+            std::string json = SerializeToBinaryJson(TStringBuilder() << '[' << value << ']');
+            return MakeString(NUdf::TStringRef(json.data(), json.size()));
+        }
+        case NUdf::EDataSlot::Uuid: {
+            std::string uuid;
+            for (size_t i = 0; i < NKikimr::NScheme::FSB_SIZE / 2; ++i) {
+                uuid += "a" + std::to_string((i + value) % 10);
+            }
+            return MakeString(NUdf::TStringRef(uuid));
+        }
     }
+
+    return NUdf::TUnboxedValuePod();
 }
 
 struct TTestContext {
@@ -156,7 +163,6 @@ struct TTestContext {
     TDefaultValueBuilder Vb;
     ui16 VariantSize = 0;
 
-    // Used to create LargeVariantType
     TVector<TType*> BasicTypes = {
         TDataType::Create(NUdf::TDataType<bool>::Id, TypeEnv),
         TDataType::Create(NUdf::TDataType<i8>::Id, TypeEnv),
@@ -169,24 +175,29 @@ struct TTestContext {
         TDataType::Create(NUdf::TDataType<ui64>::Id, TypeEnv),
         TDataType::Create(NUdf::TDataType<float>::Id, TypeEnv),
         TDataType::Create(NUdf::TDataType<double>::Id, TypeEnv),
-        TDataType::Create(NUdf::TDataType<char*>::Id, TypeEnv),
-        TDataType::Create(NUdf::TDataType<NUdf::TUtf8>::Id, TypeEnv),
-        TDataType::Create(NUdf::TDataType<NUdf::TUuid>::Id, TypeEnv),
         TDataDecimalType::Create(DECIMAL_PRECISION, DECIMAL_SCALE, TypeEnv),
+        TDataType::Create(NUdf::TDataType<NUdf::TDyNumber>::Id, TypeEnv),
         TDataType::Create(NUdf::TDataType<NUdf::TDate>::Id, TypeEnv),
         TDataType::Create(NUdf::TDataType<NUdf::TDatetime>::Id, TypeEnv),
         TDataType::Create(NUdf::TDataType<NUdf::TTimestamp>::Id, TypeEnv),
         TDataType::Create(NUdf::TDataType<NUdf::TInterval>::Id, TypeEnv),
+        TDataType::Create(NUdf::TDataType<NUdf::TTzDate>::Id, TypeEnv),
+        TDataType::Create(NUdf::TDataType<NUdf::TTzDatetime>::Id, TypeEnv),
+        TDataType::Create(NUdf::TDataType<NUdf::TTzTimestamp>::Id, TypeEnv),
         TDataType::Create(NUdf::TDataType<NUdf::TDate32>::Id, TypeEnv),
         TDataType::Create(NUdf::TDataType<NUdf::TDatetime64>::Id, TypeEnv),
         TDataType::Create(NUdf::TDataType<NUdf::TTimestamp64>::Id, TypeEnv),
         TDataType::Create(NUdf::TDataType<NUdf::TInterval64>::Id, TypeEnv),
-        TDataType::Create(NUdf::TDataType<NUdf::TTzDate>::Id, TypeEnv),
-        TDataType::Create(NUdf::TDataType<NUdf::TTzDatetime>::Id, TypeEnv),
-        TDataType::Create(NUdf::TDataType<NUdf::TTzTimestamp>::Id, TypeEnv),
         TDataType::Create(NUdf::TDataType<NUdf::TTzDate32>::Id, TypeEnv),
         TDataType::Create(NUdf::TDataType<NUdf::TTzDatetime64>::Id, TypeEnv),
-        TDataType::Create(NUdf::TDataType<NUdf::TTzTimestamp64>::Id, TypeEnv)};
+        TDataType::Create(NUdf::TDataType<NUdf::TTzTimestamp64>::Id, TypeEnv),
+        TDataType::Create(NUdf::TDataType<char*>::Id, TypeEnv),
+        TDataType::Create(NUdf::TDataType<NUdf::TUtf8>::Id, TypeEnv),
+        TDataType::Create(NUdf::TDataType<NUdf::TYson>::Id, TypeEnv),
+        TDataType::Create(NUdf::TDataType<NUdf::TJson>::Id, TypeEnv),
+        TDataType::Create(NUdf::TDataType<NUdf::TJsonDocument>::Id, TypeEnv),
+        TDataType::Create(NUdf::TDataType<NUdf::TUuid>::Id, TypeEnv)
+    };
 
     TTestContext()
         : Alloc(__LOCATION__)
@@ -616,7 +627,6 @@ struct TTestContext {
     }
 };
 
-// Note this equality check is not fully valid. But it is sufficient for UnboxedValues used in tests.
 void AssertUnboxedValuesAreEqual(NUdf::TUnboxedValue& left, NUdf::TUnboxedValue& right, TType* type) {
     switch (type->GetKind()) {
         case TType::EKind::Void:
@@ -748,12 +758,14 @@ void AssertUnboxedValuesAreEqual(NUdf::TUnboxedValue& left, NUdf::TUnboxedValue&
 
 namespace NKikimr::NKqp::NFormats {
 
-template <typename MiniKQLType, typename PhysicalType, typename ArrowArrayType, bool IsStringType = false, bool IsTimezoneType = false>
+namespace {
+
+template <typename TMiniKQLType, typename TPhysicalType, typename TArrowArrayType, bool IsStringType = false, bool IsTimezoneType = false>
 void TestDataTypeConversion(arrow::Type::type arrowTypeId) {
     TTestContext context;
 
-    auto type = TDataType::Create(NUdf::TDataType<MiniKQLType>::Id, context.TypeEnv);
-    UNIT_ASSERT(NFormats::IsArrowCompatible(type));
+    auto type = TDataType::Create(NUdf::TDataType<TMiniKQLType>::Id, context.TypeEnv);
+    UNIT_ASSERT(IsArrowCompatible(type));
 
     TUnboxedValueVector values;
     values.reserve(TEST_ARRAY_SIZE);
@@ -762,11 +774,11 @@ void TestDataTypeConversion(arrow::Type::type arrowTypeId) {
         values.emplace_back(GetValueOfBasicType(type, i));
     }
 
-    auto array = NFormats::NTestUtils::MakeArray(values, type);
+    auto array = NTestUtils::MakeArray(values, type);
     UNIT_ASSERT_C(array->ValidateFull().ok(), array->ValidateFull().ToString());
     UNIT_ASSERT(array->length() == static_cast<i64>(values.size()));
 
-    std::shared_ptr<ArrowArrayType> typedArray;
+    std::shared_ptr<TArrowArrayType> typedArray;
     std::shared_ptr<arrow::StringArray> timezoneArray;
 
     if constexpr (IsTimezoneType) {
@@ -776,22 +788,22 @@ void TestDataTypeConversion(arrow::Type::type arrowTypeId) {
         UNIT_ASSERT(structArray->field(0)->type_id() == arrowTypeId);
         UNIT_ASSERT(structArray->field(1)->type_id() == arrow::Type::STRING);
 
-        typedArray = static_pointer_cast<ArrowArrayType>(structArray->field(0));
+        typedArray = static_pointer_cast<TArrowArrayType>(structArray->field(0));
         timezoneArray = static_pointer_cast<arrow::StringArray>(structArray->field(1));
     } else {
         UNIT_ASSERT(array->type_id() == arrowTypeId);
-        typedArray = static_pointer_cast<ArrowArrayType>(array);
+        typedArray = static_pointer_cast<TArrowArrayType>(array);
     }
 
     for (size_t i = 0; i < TEST_ARRAY_SIZE; ++i) {
         if constexpr (IsStringType) {
-            static_assert(std::is_same_v<PhysicalType, std::string>, "PhysicalType must be std::string for string types");
+            static_assert(std::is_same_v<TPhysicalType, std::string>, "TPhysicalType must be std::string for string types");
 
             auto valueLine = typedArray->Value(i);
             auto expected = values[i].AsStringRef();
-            UNIT_ASSERT_STRINGS_EQUAL(PhysicalType(valueLine.data(), valueLine.size()), PhysicalType(expected.Data(), expected.Size()));
+            UNIT_ASSERT_STRINGS_EQUAL(TPhysicalType(valueLine.data(), valueLine.size()), TPhysicalType(expected.Data(), expected.Size()));
         } else {
-            UNIT_ASSERT(static_cast<PhysicalType>(typedArray->Value(i)) == values[i].Get<PhysicalType>());
+            UNIT_ASSERT(static_cast<TPhysicalType>(typedArray->Value(i)) == values[i].Get<TPhysicalType>());
         }
 
         if constexpr (IsTimezoneType) {
@@ -812,7 +824,7 @@ void TestFixedSizeBinaryDataTypeConversion() {
         type = TDataType::Create(NUdf::TDataType<TMiniKQLType>::Id, context.TypeEnv);
     }
 
-    UNIT_ASSERT(NFormats::IsArrowCompatible(type));
+    UNIT_ASSERT(IsArrowCompatible(type));
 
     TUnboxedValueVector values;
     values.reserve(TEST_ARRAY_SIZE);
@@ -821,7 +833,7 @@ void TestFixedSizeBinaryDataTypeConversion() {
         values.emplace_back(GetValueOfBasicType(type, i));
     }
 
-    auto array = NFormats::NTestUtils::MakeArray(values, type);
+    auto array = NTestUtils::MakeArray(values, type);
     UNIT_ASSERT_C(array->ValidateFull().ok(), array->ValidateFull().ToString());
     UNIT_ASSERT(array->length() == static_cast<i64>(values.size()));
 
@@ -847,19 +859,27 @@ void TestFixedSizeBinaryDataTypeConversion() {
 template <TType::EKind SingularKind>
 void TestSingularTypeConversion() {
     TTestContext context;
+
     TType* type = GetTypeOfSingular<SingularKind>(context.TypeEnv);
+    UNIT_ASSERT(IsArrowCompatible(type));
 
-    UNIT_ASSERT(NFormats::IsArrowCompatible(type));
+    TUnboxedValueVector values;
+    values.reserve(TEST_ARRAY_SIZE);
 
-    TUnboxedValueVector empty;
+    for (size_t i = 0; i < TEST_ARRAY_SIZE; ++i) {
+        values.emplace_back();
+    }
 
-    auto array = NFormats::NTestUtils::MakeArray(empty, type);
+    auto array = NTestUtils::MakeArray(values, type);
     UNIT_ASSERT_C(array->ValidateFull().ok(), array->ValidateFull().ToString());
+    UNIT_ASSERT(array->length() == static_cast<i64>(TEST_ARRAY_SIZE));
     UNIT_ASSERT(array->type_id() == arrow::Type::NA);
-    UNIT_ASSERT(array->length() == 0);
 }
 
+} // namespace
+
 Y_UNIT_TEST_SUITE(KqpFormat_MiniKQL_Arrow) {
+
     // Integral types
     Y_UNIT_TEST(DataType_Bool) {
         TestDataTypeConversion<bool, bool, arrow::UInt8Array>(arrow::Type::UINT8);
@@ -897,15 +917,6 @@ Y_UNIT_TEST_SUITE(KqpFormat_MiniKQL_Arrow) {
         TestDataTypeConversion<ui64, ui64, arrow::UInt64Array>(arrow::Type::UINT64);
     }
 
-    // Floating point types
-    Y_UNIT_TEST(DataType_Float) {
-        TestDataTypeConversion<float, float, arrow::FloatArray>(arrow::Type::FLOAT);
-    }
-
-    Y_UNIT_TEST(DataType_Double) {
-        TestDataTypeConversion<double, double, arrow::DoubleArray>(arrow::Type::DOUBLE);
-    }
-
     // Binary number types
     Y_UNIT_TEST(DataType_Decimal) {
         TestFixedSizeBinaryDataTypeConversion<NUdf::TDecimal, /* IsDecimalType */ true>();
@@ -914,6 +925,15 @@ Y_UNIT_TEST_SUITE(KqpFormat_MiniKQL_Arrow) {
     Y_UNIT_TEST(DataType_DyNumber) {
         // TODO: Serialize DyNumber from binary to string
         // TestDataTypeConversion<NUdf::TDyNumber, std::string, arrow::StringArray, /* IsStringType */ true>(arrow::Type::STRING);
+    }
+
+    // Floating point types
+    Y_UNIT_TEST(DataType_Float) {
+        TestDataTypeConversion<float, float, arrow::FloatArray>(arrow::Type::FLOAT);
+    }
+
+    Y_UNIT_TEST(DataType_Double) {
+        TestDataTypeConversion<double, double, arrow::DoubleArray>(arrow::Type::DOUBLE);
     }
 
     // Datetime types
@@ -929,24 +949,8 @@ Y_UNIT_TEST_SUITE(KqpFormat_MiniKQL_Arrow) {
         TestDataTypeConversion<NUdf::TTimestamp, ui64, arrow::UInt64Array>(arrow::Type::UINT64);
     }
 
-    Y_UNIT_TEST(DataType_Date32) {
-        TestDataTypeConversion<NUdf::TDate32, i32, arrow::Int32Array>(arrow::Type::INT32);
-    }
-
-    Y_UNIT_TEST(DataType_Datetime64) {
-        TestDataTypeConversion<NUdf::TDatetime64, i64, arrow::Int64Array>(arrow::Type::INT64);
-    }
-
-    Y_UNIT_TEST(DataType_Timestamp64) {
-        TestDataTypeConversion<NUdf::TTimestamp64, i64, arrow::Int64Array>(arrow::Type::INT64);
-    }
-
     Y_UNIT_TEST(DataType_Interval) {
         TestDataTypeConversion<NUdf::TInterval, i64, arrow::Int64Array>(arrow::Type::INT64);
-    }
-
-    Y_UNIT_TEST(DataType_Interval64) {
-        TestDataTypeConversion<NUdf::TInterval64, i64, arrow::Int64Array>(arrow::Type::INT64);
     }
 
     Y_UNIT_TEST(DataType_TzDate) {
@@ -959,6 +963,22 @@ Y_UNIT_TEST_SUITE(KqpFormat_MiniKQL_Arrow) {
 
     Y_UNIT_TEST(DataType_TzTimestamp) {
         TestDataTypeConversion<NUdf::TTzTimestamp, ui64, arrow::UInt64Array, /* IsStringType */ false, /* HasTimezone */ true>(arrow::Type::UINT64);
+    }
+
+    Y_UNIT_TEST(DataType_Date32) {
+        TestDataTypeConversion<NUdf::TDate32, i32, arrow::Int32Array>(arrow::Type::INT32);
+    }
+
+    Y_UNIT_TEST(DataType_Datetime64) {
+        TestDataTypeConversion<NUdf::TDatetime64, i64, arrow::Int64Array>(arrow::Type::INT64);
+    }
+
+    Y_UNIT_TEST(DataType_Timestamp64) {
+        TestDataTypeConversion<NUdf::TTimestamp64, i64, arrow::Int64Array>(arrow::Type::INT64);
+    }
+
+    Y_UNIT_TEST(DataType_Interval64) {
+        TestDataTypeConversion<NUdf::TInterval64, i64, arrow::Int64Array>(arrow::Type::INT64);
     }
 
     Y_UNIT_TEST(DataType_TzDate32) {
@@ -982,6 +1002,10 @@ Y_UNIT_TEST_SUITE(KqpFormat_MiniKQL_Arrow) {
         TestDataTypeConversion<NUdf::TUtf8, std::string, arrow::StringArray, /* IsStringType */ true>(arrow::Type::STRING);
     }
 
+    Y_UNIT_TEST(DataType_Yson) {
+        TestDataTypeConversion<NUdf::TYson, std::string, arrow::BinaryArray, /* IsStringType */ true>(arrow::Type::BINARY);
+    }
+
     Y_UNIT_TEST(DataType_Json) {
         TestDataTypeConversion<NUdf::TJson, std::string, arrow::StringArray, /* IsStringType */ true>(arrow::Type::STRING);
     }
@@ -989,10 +1013,6 @@ Y_UNIT_TEST_SUITE(KqpFormat_MiniKQL_Arrow) {
     Y_UNIT_TEST(DataType_JsonDocument) {
         // TODO: Support serialize JsonDocument from binary to string
         // TestDataTypeConversion<NUdf::TJsonDocument, std::string, arrow::StringArray, /* IsStringType */ true>(arrow::Type::STRING);
-    }
-
-    Y_UNIT_TEST(DataType_Yson) {
-        TestDataTypeConversion<NUdf::TYson, std::string, arrow::BinaryArray, /* IsStringType */ true>(arrow::Type::BINARY);
     }
 
     Y_UNIT_TEST(DataType_Uuid) {

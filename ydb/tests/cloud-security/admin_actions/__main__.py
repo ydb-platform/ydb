@@ -95,8 +95,7 @@ def parse_args() -> ParsedOptions:
         '--expected-result',
         choices=['success', 'permission_denied'],
         required=True,
-        help=
-        '''
+        help='''
             Expected result of response.\n
             If "success" is specified, it is checked that the action was performed successfully.\n
             If "permission_denied" is specified, it is checked that the request crashes with an error.

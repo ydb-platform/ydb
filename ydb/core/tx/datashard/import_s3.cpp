@@ -9,6 +9,7 @@
 #include <ydb/core/backup/common/checksum.h>
 #include <ydb/core/backup/common/encryption.h>
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/counters.h>
 #include <ydb/core/protos/datashard_config.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/library/services/services.pb.h>
@@ -443,6 +444,8 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
             for (ui32 id : tableInfo.GetValueColumnIds(columnNames)) {
                 rowScheme.AddValueColumnIds(id);
             }
+
+            CellBytes = 0;
         }
 
         void AddRow(const TVector<TCell>& keys, const TVector<TCell>& values) {
@@ -450,6 +453,13 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
             auto& row = *Record->AddRows();
             row.SetKeyColumns(TSerializedCellVec::Serialize(keys));
             row.SetValueColumns(TSerializedCellVec::Serialize(values));
+
+            for (const auto& x : keys) {
+                CellBytes += x.Size();
+            }
+            for (const auto& x : values) {
+                CellBytes += x.Size();
+            }
         }
 
         const std::shared_ptr<NKikimrTxDataShard::TEvUploadRowsRequest>& GetRecord() {
@@ -457,10 +467,56 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
             return Record;
         }
 
+        ui64 GetCellBytes() const {
+            return CellBytes;
+        }
+
     private:
         std::shared_ptr<NKikimrTxDataShard::TEvUploadRowsRequest> Record;
+        ui64 CellBytes;
 
     }; // TUploadRowsRequestBuilder
+
+    struct TCounters {
+        struct TLatency {
+            TInstant Begin;
+            ::NMonitoring::THistogramPtr Counter;
+
+            explicit TLatency(::NMonitoring::THistogramPtr counter)
+                : Counter(counter)
+            {
+            }
+
+            void Start(TInstant begin) {
+                Begin = begin;
+            }
+
+            void Finish(TInstant end) {
+                Counter->Collect((end - Begin).MilliSeconds());
+                Begin = TInstant::Zero();
+            }
+        };
+
+        ::NMonitoring::TDynamicCounters::TCounterPtr BytesReceived;
+        ::NMonitoring::TDynamicCounters::TCounterPtr BytesWritten;
+        TLatency LatencyRead;
+        TLatency LatencyProcess;
+        TLatency LatencyWrite;
+
+        explicit TCounters(::NMonitoring::TDynamicCounterPtr counters)
+            : BytesReceived(counters->GetCounter("BytesReceived", true))
+            , BytesWritten(counters->GetCounter("BytesWritten", true))
+            , LatencyRead(counters->GetHistogram("LatencyReadMs", ::NMonitoring::ExponentialHistogram(10, 4, 1)))
+            , LatencyProcess(counters->GetHistogram("LatencyProcessMs", ::NMonitoring::ExponentialHistogram(10, 4, 1)))
+            , LatencyWrite(counters->GetHistogram("LatencyWriteMs", ::NMonitoring::ExponentialHistogram(10, 4, 1)))
+        {
+        }
+
+    }; // TCounters
+
+    static TInstant Now() {
+        return TlsActivationContext->Now();
+    }
 
     void AllocateResource() {
         IMPORT_LOG_D("AllocateResource");
@@ -493,7 +549,6 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
         if (const TActorId client = std::exchange(Client, TActorId())) {
             Send(client, new TEvents::TEvPoisonPill());
         }
-
 
         Client = RegisterWithSameMailbox(CreateS3Wrapper(ExternalStorageConfig->ConstructStorageOperator()));
 
@@ -665,6 +720,9 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
             << ", content-length# " << ContentLength
             << ", body-size# " << msg.Body.size());
 
+        *Counters.BytesReceived += msg.Body.size();
+        Counters.LatencyRead.Finish(Now());
+
         ReadBytes += msg.Body.size();
         Reader->Feed(std::move(msg.Body), ReadBytes >= ContentLength);
         Process();
@@ -710,6 +768,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
 
         case IReadController::NOT_ENOUGH_DATA:
             if (SumWithSaturation(ProcessedBytes, Reader->PendingBytes()) < ContentLength) {
+                Counters.LatencyRead.Start(Now());
                 return GetObject(Settings.GetDataKey(DataFormat, CompressionCodec),
                     Reader->NextRange(ContentLength, ProcessedBytes));
             } else {
@@ -721,6 +780,8 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
             return Finish(false, TStringBuilder() << "Cannot process data"
                 << ": " << error);
         }
+
+        Counters.LatencyProcess.Start(Now());
 
         RequestBuilder.New(TableInfo, Scheme);
 
@@ -802,6 +863,9 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
             << ": count# " << record->RowsSize()
             << ", size# " << record->ByteSizeLong());
 
+        Counters.LatencyProcess.Finish(Now());
+        Counters.LatencyWrite.Start(Now());
+
         Send(DataShard, new TEvDataShard::TEvS3UploadRowsRequest(TxId, record, {
             ETag, ProcessedBytes, WrittenBytes, WrittenRows, ProcessedChecksumState, DownloadState
         }));
@@ -809,6 +873,9 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
 
     void Handle(TEvDataShard::TEvS3UploadRowsResponse::TPtr& ev) {
         IMPORT_LOG_D("Handle " << ev->Get()->ToString());
+
+        *Counters.BytesWritten += RequestBuilder.GetCellBytes();
+        Counters.LatencyWrite.Finish(Now());
 
         const auto& record = ev->Get()->Record;
         switch (record.GetStatus()) {
@@ -1004,6 +1071,7 @@ public:
         , ReadBufferSizeLimit(AppData()->DataShardConfig.GetRestoreReadBufferSizeLimit())
         , Checksum(task.GetValidateChecksums() ? CreateChecksum() : nullptr)
         , ProcessedChecksumState(Checksum ? Checksum->GetState() : NKikimrBackup::TChecksumState())
+        , Counters(GetServiceCounters(AppData()->Counters, "tablets")->GetSubgroup("subsystem", "import"))
     {
     }
 
@@ -1086,6 +1154,9 @@ private:
     NBackup::IChecksum::TPtr Checksum;
     NKikimrBackup::TChecksumState ProcessedChecksumState;
     TString ExpectedChecksum;
+
+    TCounters Counters;
+
 }; // TS3Downloader
 
 IActor* CreateS3Downloader(const TActorId& dataShard, ui64 txId, const NKikimrSchemeOp::TRestoreTask& task, const TTableInfo& info) {

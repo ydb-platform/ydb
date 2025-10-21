@@ -60,7 +60,7 @@ public:
 
         TKikimrSettings runnerSettings;
         runnerSettings.WithSampleTables = false;
-        runnerSettings.SetEnableTieringInColumnShard(true);
+        runnerSettings.SetColumnShardAlterObjectEnabled(true);
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableColumnshardBool(true);
         runnerSettings.SetFeatureFlags(featureFlags);

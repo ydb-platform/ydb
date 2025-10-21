@@ -1,7 +1,6 @@
 LIBRARY()
 
 SRCS(
-    config.cpp
     control_plane_proxy.cpp
     probes.cpp
 )

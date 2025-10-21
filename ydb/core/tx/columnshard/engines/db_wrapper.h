@@ -6,6 +6,7 @@
 #include <ydb/core/tx/columnshard/common/blob.h>
 #include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/common/snapshot.h>
+#include <ydb/core/tx/columnshard/engines/protos/portion_info.pb.h>
 
 namespace NKikimrTxColumnShard {
 class TIndexPortionMeta;

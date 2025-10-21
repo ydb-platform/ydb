@@ -32,8 +32,29 @@ jobs:
             echo "branches=$(echo '["main","stable-25-2","stable-25-2-1","stable-25-3","stable-25-3-1","stream-nb-25-1"]' | jq -c .)" >> $GITHUB_OUTPUT
           fi
 
+  collect-testowners:
+    runs-on: [ self-hosted, auto-provisioned, build-preset-analytic-node]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install ydb[yc] codeowners pandas
+
+      - name: Setup ydb access
+        uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
+        with:
+          ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
+    
+      - name: Collect testowners
+        run: python3 .github/scripts/analytics/upload_testowners.py
+
   update-muted-tests:
-    needs: setup
+    needs: [setup, collect-testowners]
     runs-on: [ self-hosted, auto-provisioned, build-preset-analytic-node]
     strategy:
       fail-fast: false
@@ -63,7 +84,7 @@ jobs:
         run: python3 .github/scripts/analytics/flaky_tests_history.py --days-window=1 --branch=${{ env.BASE_BRANCH }} --build_type=${{ env.BUILD_TYPE }}
       
       - name: Update muted tests in DB
-        run: python3 .github/scripts/tests/get_muted_tests.py upload_muted_tests --branch=${{ env.BASE_BRANCH }} 
+        run: python3 .github/scripts/tests/get_muted_tests.py upload_muted_tests --branch=${{ env.BASE_BRANCH }} --build_type=${{ env.BUILD_TYPE }} 
       
       - name: Update test monitor
         run: python3 .github/scripts/analytics/tests_monitor.py --branch=${{ env.BASE_BRANCH }} --build_type=${{ env.BUILD_TYPE }}

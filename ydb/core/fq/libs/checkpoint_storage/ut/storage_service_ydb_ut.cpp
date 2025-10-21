@@ -58,7 +58,7 @@ public:
         Runtime = std::make_unique<TTestBasicRuntime>(1, true);
         Runtime->SetLogPriority(NKikimrServices::STREAMS_STORAGE_SERVICE, NLog::PRI_DEBUG);
 
-        NKikimrConfig::TCheckpointsConfig config;
+        NConfig::TCheckpointCoordinatorConfig config;
         config.SetEnabled(true);
         auto& checkpointConfig = *config.MutableExternalStorage();
         checkpointConfig.SetEndpoint(GetEnv("YDB_ENDPOINT"));

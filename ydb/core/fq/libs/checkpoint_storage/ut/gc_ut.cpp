@@ -96,7 +96,7 @@ class TGcTestBase: public NUnitTest::TTestBase {
         Runtime->SetLogPriority(NKikimrServices::STREAMS_STORAGE_SERVICE, NLog::PRI_DEBUG);
         SetupTabletServices(*Runtime);
 
-        auto& storageConfig = *Config.MutableExternalStorage();
+        auto& storageConfig = *Config.MutableStorage();
         storageConfig.SetEndpoint(YdbEndpoint);
         storageConfig.SetDatabase(YdbDatabase);
         storageConfig.SetToken("");
@@ -129,7 +129,7 @@ class TGcTestBase: public NUnitTest::TTestBase {
 
         Fill();
 
-        NKikimrConfig::TCheckpointsConfig::TCheckpointGcConfig gcConfig;
+        NConfig::TCheckpointGcConfig gcConfig;
         auto gc = NewGC(gcConfig, CheckpointStorage, StateStorage);
         ActorGC = GetRuntime()->Register(gc.release());
         Runtime->DispatchEvents({}, TDuration::Zero());

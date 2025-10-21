@@ -73,7 +73,7 @@ public:
     }
 
 private:
-    IActor* CreateResolveActor(const TString& kesusPath);
+    IActor* CreateResolveActor(const TString& database, const TString& kesusPath);
 
     void Handle(TEvKesusProxy::TEvResolveKesusProxy::TPtr& ev) {
         const auto* msg = ev->Get();
@@ -103,7 +103,7 @@ private:
                 // Recheck schemecache for changes
                 LOG_TRACE_S(ctx, NKikimrServices::KESUS_PROXY,
                     "Starting resolve for kesus " << msg->KesusPath.Quote());
-                RegisterWithSameMailbox(CreateResolveActor(msg->KesusPath));
+                RegisterWithSameMailbox(CreateResolveActor(msg->Database, msg->KesusPath));
                 entry.State = CACHE_STATE_RESOLVING;
                 [[fallthrough]];
 
@@ -220,21 +220,25 @@ private:
 class TKesusProxyService::TResolveActor : public TActorBootstrapped<TResolveActor> {
 private:
     const TActorId Owner;
+    const TString Database;
     const TString KesusPath;
 
 public:
-    TResolveActor(const TActorId& owner, const TString& kesusPath)
+    TResolveActor(const TActorId& owner, const TString& database, const TString& kesusPath)
         : Owner(owner)
+        , Database(database)
         , KesusPath(kesusPath)
     {}
 
     void Bootstrap(const TActorContext& ctx) {
         LOG_TRACE_S(ctx, NKikimrServices::KESUS_PROXY,
             "Sending resolve request to SchemeCache: " << KesusPath.Quote());
-        auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+        auto request = MakeHolder<TSchemeCacheNavigate>();
+        request->DatabaseName = Database;
+
         auto& entry = request->ResultSet.emplace_back();
         entry.Path = SplitPath(KesusPath);
-        entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
+        entry.Operation = TSchemeCacheNavigate::OpPath;
         Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()));
         Become(&TThis::StateWork);
     }
@@ -262,8 +266,8 @@ private:
     }
 };
 
-IActor* TKesusProxyService::CreateResolveActor(const TString& kesusPath) {
-    return new TResolveActor(SelfId(), kesusPath);
+IActor* TKesusProxyService::CreateResolveActor(const TString& database, const TString& kesusPath) {
+    return new TResolveActor(SelfId(), database, kesusPath);
 }
 
 TActorId MakeKesusProxyServiceId() {

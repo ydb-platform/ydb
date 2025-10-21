@@ -40,7 +40,7 @@ public:
     }
 
     void InitCheckpointStorage(IEntityIdGenerator::TPtr entityIdGenerator = CreateEntityIdGenerator("id")) {
-        NKikimrConfig::TExternalStorage checkpointStorageConfig;
+        NConfig::TYdbStorageConfig checkpointStorageConfig;
         checkpointStorageConfig.SetEndpoint(GetEnv("YDB_ENDPOINT"));
         checkpointStorageConfig.SetDatabase(GetEnv("YDB_DATABASE"));
         checkpointStorageConfig.SetToken("");

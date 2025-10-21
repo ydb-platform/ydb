@@ -105,7 +105,7 @@ public:
         ExecutionMeta_ = TExecutionMeta();
         ExecutionMeta_.Database = script.Database;
 
-        return WaitScriptExecutionOperation(script.QueryId, duration);
+        return WaitScriptExecutionOperation(script.QueryId, duration, script.UserSID);
     }
 
     Ydb::StatusIds::StatusCode ExecuteQuery(const TRequestOptions& query, EQueryType queryType, TDuration* duration) {
@@ -163,13 +163,13 @@ public:
         YdbSetup_.CloseSessions();
     }
 
-    bool FetchScriptResults() {
+    bool FetchScriptResults(const TString& userSID) {
         TYdbSetup::StopTraceOpt();
 
         ResultSets_.clear();
         ResultSets_.resize(ExecutionMeta_.ResultSetsCount);
         for (i32 resultSetId = 0; resultSetId < ExecutionMeta_.ResultSetsCount; ++resultSetId) {
-            TRequestResult status = YdbSetup_.FetchScriptExecutionResultsRequest(ExecutionMeta_.Database, ExecutionOperation_, resultSetId, ResultSets_[resultSetId]);
+            TRequestResult status = YdbSetup_.FetchScriptExecutionResultsRequest(ExecutionMeta_.Database, ExecutionOperation_, userSID, resultSetId, ResultSets_[resultSetId]);
 
             if (!status.IsSuccess()) {
                 Cerr << CerrColors_.Red() << "Failed to fetch result set with id " << resultSetId << ", reason:" << CerrColors_.Default() << Endl << status.ToString() << Endl;
@@ -180,10 +180,10 @@ public:
         return true;
     }
 
-    bool ForgetExecutionOperation() {
+    bool ForgetExecutionOperation(const TString& userSID) {
         TYdbSetup::StopTraceOpt();
 
-        TRequestResult status = YdbSetup_.ForgetScriptExecutionOperationRequest(ExecutionMeta_.Database, ExecutionOperation_);
+        TRequestResult status = YdbSetup_.ForgetScriptExecutionOperationRequest(ExecutionMeta_.Database, ExecutionOperation_, userSID);
 
         if (!status.IsSuccess()) {
             Cerr << CerrColors_.Red() << "Failed to forget script execution operation, reason:" << CerrColors_.Default() << Endl << status.ToString() << Endl;
@@ -210,7 +210,7 @@ public:
     }
 
 private:
-    Ydb::StatusIds::StatusCode WaitScriptExecutionOperation(ui64 queryId, TDuration* duration) {
+    Ydb::StatusIds::StatusCode WaitScriptExecutionOperation(ui64 queryId, TDuration* duration, const TString& userSID) {
         StartTime_ = TInstant::Now();
         Y_DEFER {
             TYdbSetup::StopTraceOpt();
@@ -224,7 +224,7 @@ private:
         TRequestResult status;
         TString previousIssues;
         while (true) {
-            status = YdbSetup_.GetScriptExecutionOperationRequest(ExecutionMeta_.Database, ExecutionOperation_, ExecutionMeta_);
+            status = YdbSetup_.GetScriptExecutionOperationRequest(ExecutionMeta_.Database, ExecutionOperation_, userSID, ExecutionMeta_);
             PrintScriptProgress(queryId, ExecutionMeta_.Plan);
 
             if (ExecutionMeta_.Ready) {
@@ -243,7 +243,7 @@ private:
 
             if (Options_.ScriptCancelAfter && TInstant::Now() - StartTime_ > Options_.ScriptCancelAfter) {
                 Cout << CoutColors_.Yellow() << TInstant::Now().ToIsoStringLocal() << " Cancelling script execution..." << CoutColors_.Default() << Endl;
-                TRequestResult cancelStatus = YdbSetup_.CancelScriptExecutionOperationRequest(ExecutionMeta_.Database, ExecutionOperation_);
+                TRequestResult cancelStatus = YdbSetup_.CancelScriptExecutionOperationRequest(ExecutionMeta_.Database, ExecutionOperation_, userSID);
                 if (!cancelStatus.IsSuccess()) {
                     Cerr << CerrColors_.Red() << "Failed to cancel script execution operation, reason:" << CerrColors_.Default() << Endl << cancelStatus.ToString() << Endl;
                     return cancelStatus.Status;
@@ -433,12 +433,12 @@ void TKqpRunner::FinalizeRunner() const {
     Impl_->FinalizeRunner();
 }
 
-bool TKqpRunner::FetchScriptResults() {
-    return Impl_->FetchScriptResults();
+bool TKqpRunner::FetchScriptResults(const TString& userSID) {
+    return Impl_->FetchScriptResults(userSID);
 }
 
-bool TKqpRunner::ForgetExecutionOperation() {
-    return Impl_->ForgetExecutionOperation();
+bool TKqpRunner::ForgetExecutionOperation(const TString& userSID) {
+    return Impl_->ForgetExecutionOperation(userSID);
 }
 
 void TKqpRunner::PrintScriptResults() const {

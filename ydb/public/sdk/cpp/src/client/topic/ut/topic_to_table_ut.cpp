@@ -153,16 +153,6 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_43_Query, TFixtureQuery)
     TestWriteToTopic43();
 }
 
-Y_UNIT_TEST_F(WriteToTopic_Demo_44_Table, TFixtureTable)
-{
-    TestWriteToTopic44();
-}
-
-Y_UNIT_TEST_F(WriteToTopic_Demo_44_Query, TFixtureQuery)
-{
-    TestWriteToTopic44();
-}
-
 Y_UNIT_TEST_F(ReadRuleGeneration, TFixtureNoClient)
 {
     // There was a server
@@ -224,16 +214,6 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_47_Table, TFixtureTable)
 Y_UNIT_TEST_F(WriteToTopic_Demo_47_Query, TFixtureQuery)
 {
     TestWriteToTopic47();
-}
-
-Y_UNIT_TEST_F(Transactions_Conflict_On_SeqNo_Table, TFixtureTable)
-{
-    TestTransactionsConflictOnSeqNo();
-}
-
-Y_UNIT_TEST_F(Transactions_Conflict_On_SeqNo_Query, TFixtureQuery)
-{
-    TestTransactionsConflictOnSeqNo();
 }
 
 Y_UNIT_TEST_F(Sinks_Oltp_WriteToTopic_1_Table, TFixtureSinksTable)

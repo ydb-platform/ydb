@@ -2344,6 +2344,7 @@ message TColumnShardConfig {
     optional uint64 BadPortionsLimit = 52;
     optional uint64 InFlightLocksRangesBytesLimit = 53 [default = 1073741824];
     optional bool CombineChunksInResult = 54 [default = true];
+    optional bool EnableDiagnostics = 55 [default = true];
 }
 
 message TSchemeShardConfig {

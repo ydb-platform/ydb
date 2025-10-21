@@ -20,10 +20,12 @@ TString TFetchingScript::DebugString() const {
 TString TFetchingScript::ProfileDebugString() const {
     TStringBuilder sb;
     TStringBuilder sbBranch;
+    sb << "steps:";
     for (auto&& i : Steps) {
         if (i->GetSumDuration() > TDuration::MilliSeconds(10)) {
             sbBranch << "{" << i->DebugString(true) << "};";
         }
+        sb << "{" << i->DebugString(true) << "};";
     }
     if (!sbBranch) {
         return "";

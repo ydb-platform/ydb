@@ -1,5 +1,4 @@
 #include <yql/essentials/minikql/mkql_type_ops.h>
-#include <yql/essentials/public/udf/tz/udf_tz.h>
 #include <yql/essentials/public/udf/udf_helpers.h>
 #include <yql/essentials/minikql/datetime/datetime.h>
 #include <yql/essentials/minikql/datetime/datetime64.h>
@@ -3183,14 +3182,37 @@ private:
                             }
                             SetYear<TMResourceName>(result, year);
                         } else {
-                            static constexpr size_t size = 6;
                             i64 year = 0LL;
                             i64 negative = 1LL;
+                            if (limit == 0) {
+                                // Year must take at least 1 byte.
+                                return false;
+                            }
                             if (*it == '-') {
                                 negative = -1LL;
                                 it++;
+                                limit--;
                             }
-                            if (!ParseNDigits<size, true>::Do(it, year) || !ValidateYear<TM64ResourceName>(negative * year)) {
+                            auto parseDigits = [&]() {
+                                switch (limit) {
+                                    case 0:
+                                        // Year number must take at least 1 byte.
+                                        return false;
+                                    case 1:
+                                        return ParseNDigits<1, true>::Do(it, year);
+                                    case 2:
+                                        return ParseNDigits<2, true>::Do(it, year);
+                                    case 3:
+                                        return ParseNDigits<3, true>::Do(it, year);
+                                    case 4:
+                                        return ParseNDigits<4, true>::Do(it, year);
+                                    case 5:
+                                        return ParseNDigits<5, true>::Do(it, year);
+                                    default:
+                                        return ParseNDigits<6, true>::Do(it, year);
+                                }
+                            };
+                            if (!parseDigits() || !ValidateYear<TM64ResourceName>(negative * year)) {
                                 return false;
                             }
                             SetYear<TM64ResourceName>(result, negative * year);

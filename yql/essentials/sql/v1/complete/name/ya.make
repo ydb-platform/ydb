@@ -8,6 +8,7 @@ PEERDIR(
 END()
 
 RECURSE(
+    cluster
     object
     service
 )

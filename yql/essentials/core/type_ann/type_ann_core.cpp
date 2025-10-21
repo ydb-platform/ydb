@@ -13355,7 +13355,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                 return Nothing();
             }
 
-            if (status == IGraphTransformer::TStatus::Ok && Types.OrderedColumns && !Types.LookupColumnOrder(*input)) {
+            if (status == IGraphTransformer::TStatus::Ok && Types.DeriveColumnOrder && !Types.LookupColumnOrder(*input)) {
                 if (auto func = columnOrderFunctions.FindPtr(name)) {
                     TExtContext funcCtx(ctx, Types);
                     status = (*func)(input, output, funcCtx);

@@ -108,4 +108,5 @@ RECURSE(
 RECURSE_FOR_TESTS(
     benchmark
     ut
+    gtest_ut
 )

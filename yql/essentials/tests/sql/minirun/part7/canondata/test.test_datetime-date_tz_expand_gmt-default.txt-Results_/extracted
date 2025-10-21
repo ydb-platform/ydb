@@ -1,9 +1,9 @@
 <tmp_path>/program.sql:<main>: Warning: Type annotation
 
-    <tmp_path>/program.sql:<main>:2:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject
+    <tmp_path>/program.sql:<main>:2:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject, At tuple
     	select
 	^
-        <tmp_path>/program.sql:<main>:2:1: Warning: At function: SqlProjectItem
+        <tmp_path>/program.sql:<main>:2:1: Warning: At function: SqlProjectItem, At lambda
         	select
 	^
             <tmp_path>/program.sql:<main>:3:5: Warning: At function: SafeCast
@@ -12,7 +12,7 @@
                 <tmp_path>/program.sql:<main>:3:10: Warning: Consider using AddTimezone to convert from UTC time
                 	    cast(Date("2000-01-01") as TzDate),
 	         ^
-        <tmp_path>/program.sql:<main>:2:1: Warning: At function: SqlProjectItem
+        <tmp_path>/program.sql:<main>:2:1: Warning: At function: SqlProjectItem, At lambda
         	select
 	^
             <tmp_path>/program.sql:<main>:4:5: Warning: At function: SafeCast
@@ -21,7 +21,7 @@
                 <tmp_path>/program.sql:<main>:4:10: Warning: Consider using AddTimezone to convert from UTC time
                 	    cast(Datetime("2000-01-01T01:02:03Z") as TzDatetime),
 	         ^
-        <tmp_path>/program.sql:<main>:2:1: Warning: At function: SqlProjectItem
+        <tmp_path>/program.sql:<main>:2:1: Warning: At function: SqlProjectItem, At lambda
         	select
 	^
             <tmp_path>/program.sql:<main>:5:5: Warning: At function: SafeCast

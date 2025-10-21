@@ -11,7 +11,10 @@ namespace NSQLComplete {
     public:
         using TPtr = TIntrusivePtr<IRanking>;
 
-        virtual void CropToSortedPrefix(TVector<TGenericName>& names, size_t limit) const = 0;
+        virtual void CropToSortedPrefix(
+            TVector<TGenericName>& names,
+            const TNameConstraints& constraints,
+            size_t limit) const = 0;
         virtual ~IRanking() = default;
     };
 

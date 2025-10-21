@@ -202,6 +202,8 @@ void TGraceJoinPacker::Pack()  {
 
     TuplesPacked++;
     std::fill(TupleIntVals.begin(), TupleIntVals.end(), 0);
+    std::fill(TupleStrings.begin(), TupleStrings.end(), nullptr);
+    std::fill(TupleStrSizes.begin(), TupleStrSizes.end(), 0);
 
     for (ui64 i = 0; i < ColumnsPackInfo.size(); i++) {
 

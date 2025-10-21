@@ -9,6 +9,8 @@
 #include <util/system/yassert.h>
 
 #include <stack>
+#include <queue>
+
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -50,18 +52,9 @@ public:
     static int Munmap(void* addr, size_t size);
 };
 
-class TFakeAlignedMmap {
+class TFakeMmap {
 public:
-    static std::function<void(size_t size)> OnMmap;
-    static std::function<void(void* addr, size_t size)> OnMunmap;
-
-    static void* Mmap(size_t size);
-    static int Munmap(void* addr, size_t size);
-};
-
-class TFakeUnalignedMmap {
-public:
-    static std::function<void(size_t size)> OnMmap;
+    static std::function<void*(size_t size)> OnMmap;
     static std::function<void(void* addr, size_t size)> OnMunmap;
 
     static void* Mmap(size_t size);
@@ -261,6 +254,9 @@ protected:
 
     bool TryIncreaseLimit(ui64 required);
 
+    void* GetBlockImpl(size_t size);
+
+    void* GetPageImpl();
 protected:
     std::stack<void*, std::vector<void*>> FreePages;
     std::unordered_set<void*> AllPages;

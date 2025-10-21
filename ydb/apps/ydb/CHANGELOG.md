@@ -1,3 +1,4 @@
+* Added a new `ydb admin cluster state fetch` command to collect information about cluster nodes state and metrics. The `--duration` option is the duration of collecting cluster state in seconds. The `--period` option is the period of collectiong metric counters from nodes in seconds.
 * Fixed a bug where the `ydb debug ping` command crashed in case of any error.
 * Added a new `--retention-period` option to the `ydb topic` subcommands. The new option supports various time units, such as seconds, minutes, or days. Usage of the legacy `--retention-period-hours` option is discouraged.
 * The `ydb topic consumer add` subcommand now has a new `--availability-period` option, which overrides the consumer's retention guarantee.

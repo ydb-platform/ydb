@@ -23,8 +23,8 @@ public:
     int Run(TConfig& config) override;
 
 private:
-    ui32 Duration = 0;
-    ui32 Period = 0;
+    ui32 DurationSeconds = 0;
+    ui32 PeriodSeconds = 0;
 };
 
 }

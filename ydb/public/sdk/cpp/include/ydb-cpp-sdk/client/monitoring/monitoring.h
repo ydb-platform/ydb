@@ -36,8 +36,8 @@ struct TSelfCheckSettings : public TOperationRequestSettings<TSelfCheckSettings>
 };
 
 struct TClusterStateSettings : public TOperationRequestSettings<TClusterStateSettings> {
-    FLUENT_SETTING_OPTIONAL(uint32_t, Duration);
-    FLUENT_SETTING_OPTIONAL(uint32_t, Period);
+    FLUENT_SETTING_OPTIONAL(uint32_t, DurationSeconds);
+    FLUENT_SETTING_OPTIONAL(uint32_t, PeriodSeconds);
 };
 
 

@@ -19,6 +19,7 @@
 #include <ydb/core/counters_info/counters_info.h>
 #include <ydb/core/health_check/health_check.h>
 #include <ydb/public/api/protos/ydb_monitoring.pb.h>
+#include <ydb/core/protos/cluster_state_info.pb.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <google/protobuf/util/json_util.h>
 
@@ -36,30 +37,23 @@ public:
     using TThis = TClusterStateRPC;
     using TBase = TRpcRequestActor<TClusterStateRPC, TEvClusterStateRequest, true>;
 
+    TVector<ui32> NodeRequested;
+    TVector<ui32> NodeReceived;
     ui32 Requested = 0;
     ui32 Received = 0;
-    ui32 CountersRequested = 0;
 
     TVector<TEvInterconnect::TNodeInfo> Nodes;
-    TMap<ui32, NKikimrWhiteboard::TEvVDiskStateResponse> VDiskInfo;
-    TMap<ui32, NKikimrWhiteboard::TEvPDiskStateResponse> PDiskInfo;
-    TMap<ui32, NKikimrWhiteboard::TEvTabletStateResponse> TabletInfo;
-    TMap<ui32, NKikimrWhiteboard::TEvBSGroupStateResponse> BSGroupInfo;
-    TMap<ui32, NKikimrWhiteboard::TEvSystemStateResponse> SystemInfo;
-    TMap<ui32, NKikimrWhiteboard::TEvBridgeInfoResponse> BridgeInfo;
-    TMap<ui32, NKikimrWhiteboard::TEvNodeStateResponse> NodeInfo;
-    TMap<ui32, TVector<TString>> CountersInfo;
-    Ydb::Monitoring::SelfCheckResult SelfCheck;
-    Ydb::StatusIds_StatusCode Status = Ydb::StatusIds::SUCCESS;
+    NKikimrClusterStateInfoProto::TClusterStateInfo State;
     TInstant Started;
     TDuration Duration;
     TDuration Period;
 
-    void SendRequest(ui32 nodeId) {
+    void SendRequest(ui32 i) {
+        ui32 nodeId = Nodes[i].NodeId;
         TActorId whiteboardServiceId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(nodeId);
 #define request(NAME) \
-        Send(whiteboardServiceId, new NNodeWhiteboard::TEvWhiteboard::NAME(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, nodeId); \
-        Requested++;
+        Send(whiteboardServiceId, new NNodeWhiteboard::TEvWhiteboard::NAME(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, i); \
+        NodeRequested[i]++;
 
         request(TEvVDiskStateRequest);
         request(TEvPDiskStateRequest);
@@ -74,75 +68,45 @@ public:
     void HandleBrowse(TEvInterconnect::TEvNodesInfo::TPtr& ev) {
         RequestHealthCheck();
         Nodes = ev->Get()->Nodes;
-        for (const auto& ni : Nodes) {
-            SendRequest(ni.NodeId);
+        NodeReceived.resize(Nodes.size());
+        NodeRequested.resize(Nodes.size());
+        for (ui32 i : xrange(Nodes.size())) {
+            const auto& ni = Nodes[i];
+            auto* node = State.AddNodeInfos();
+            node->SetNodeId(ni.NodeId);
+            node->SetHost(ni.Host);
+            node->SetPort(ni.Port);
+            node->SetLocation(ni.Location.ToString());
+            SendRequest(i);
         }
         RequestCounters();
-        Period = TDuration::Seconds(GetProtoRequest()->period());
+        Period = TDuration::Seconds(GetProtoRequest()->period_seconds());
         if (Period > TDuration::Zero()) {
             Schedule(Period, new TEvents::TEvWakeup());
         }
-        if (Requested > 0) {
+        if (NodeRequested.size() > 0) {
             TBase::Become(&TThis::StateRequestedNodeInfo);
         } else {
             ReplyAndPassAway();
         }
     }
 
-    void Undelivered(TEvents::TEvUndelivered::TPtr &ev) {
-        ui32 nodeId = ev.Get()->Cookie;
-#define processCase(NAME, INFO) \
-    case NNodeWhiteboard::TEvWhiteboard::NAME: \
-        if (INFO.emplace(nodeId, NKikimrWhiteboard::T##NAME{}).second) { \
-            NodeStateInfoReceived(); \
-        } \
-        break;
-        switch (ev->Get()->SourceType) {
-            processCase(EvVDiskStateResponse, VDiskInfo)
-            processCase(EvPDiskStateResponse, PDiskInfo)
-            processCase(EvTabletStateResponse, TabletInfo)
-            processCase(EvBSGroupStateResponse, BSGroupInfo)
-            processCase(EvSystemStateResponse, SystemInfo)
-            processCase(EvBridgeInfoResponse, BridgeInfo)
-            processCase(EvNodeStateResponse, NodeInfo)
-            case NKikimr::NCountersInfo::EvCountersInfoResponse:
-                if (CountersInfo[nodeId].size() < CountersRequested) {
-                    for (ui32 _ : xrange(CountersRequested - CountersInfo[nodeId].size())) {
-                        NodeStateInfoReceived();
-                    }
-                    CountersInfo[nodeId].resize(CountersRequested);
-                }
-                break;
-        }
-    }
-
     void Disconnected(TEvInterconnect::TEvNodeDisconnected::TPtr &ev) {
         ui32 nodeId = ev->Get()->NodeId;
-#define process(NAME, INFO) \
-    if (INFO.emplace(nodeId, NKikimrWhiteboard::NAME{}).second) { \
-        NodeStateInfoReceived(); \
-    }
-        process(TEvVDiskStateResponse, VDiskInfo)
-        process(TEvPDiskStateResponse, PDiskInfo)
-        process(TEvTabletStateResponse, TabletInfo)
-        process(TEvBSGroupStateResponse, BSGroupInfo)
-        process(TEvSystemStateResponse, SystemInfo)
-        process(TEvBridgeInfoResponse, BridgeInfo)
-        process(TEvNodeStateResponse, NodeInfo)
-        if (CountersInfo[nodeId].size() < CountersRequested) {
-            for (ui32 _ : xrange(CountersRequested - CountersInfo[nodeId].size())) {
-                NodeStateInfoReceived();
+        for (ui32 i : xrange(Nodes.size())) {
+            if (Nodes[i].NodeId == nodeId) {
+                NodeReceived[i] = NodeRequested[i];
+                CheckReply();
+                return;
             }
-            CountersInfo[nodeId].resize(CountersRequested);
         }
-#undef process
     }
 
 #define HandleWhiteboard(NAME, INFO) \
     void Handle(NNodeWhiteboard::TEvWhiteboard::NAME::TPtr& ev) { \
-        ui64 nodeId = ev.Get()->Cookie; \
-        INFO[nodeId] = std::move(ev->Get()->Record); \
-        NodeStateInfoReceived(); \
+        ui32 idx = ev.Get()->Cookie; \
+        State.MutableNodeInfos(idx)->Mutable##INFO()->CopyFrom(ev->Get()->Record); \
+        NodeStateInfoReceived(idx); \
     }
 
     HandleWhiteboard(TEvVDiskStateResponse, VDiskInfo)
@@ -151,24 +115,34 @@ public:
     HandleWhiteboard(TEvBSGroupStateResponse, BSGroupInfo)
     HandleWhiteboard(TEvSystemStateResponse, SystemInfo)
     HandleWhiteboard(TEvBridgeInfoResponse, BridgeInfo)
-    HandleWhiteboard(TEvNodeStateResponse, NodeInfo)
+    HandleWhiteboard(TEvNodeStateResponse, NodeStateInfo)
 
     void Handle(NKikimr::NCountersInfo::TEvCountersInfoResponse::TPtr& ev) {
-        ui64 nodeId = ev.Get()->Cookie;
-        CountersInfo[nodeId].emplace_back(std::move(ev->Get()->Record.GetResponse()));
-        NodeStateInfoReceived();
+        ui32 idx = ev.Get()->Cookie;
+        State.MutableNodeInfos(idx)->AddCountersInfo(std::move(ev->Get()->Record.GetResponse()));
+        NodeStateInfoReceived(idx);
     }
 
-    void NodeStateInfoReceived() {
-        ++Received;
-        if (Received == Requested && Period == TDuration::Zero()) {
-            ReplyAndPassAway();
+    void NodeStateInfoReceived(ui32 idx) {
+        NodeReceived[idx]++;
+        CheckReply();
+    }
+    void CheckReply() {
+        if (Period > TDuration::Zero() || Received < Requested) {
+            return;
         }
+        for (ui32 i : xrange(NodeRequested.size())) {
+            if (NodeReceived[i] < NodeRequested[i]) {
+                return;
+            }
+        }
+        ReplyAndPassAway();
     }
 
     void Handle(NHealthCheck::TEvSelfCheckResult::TPtr& ev) {
-        SelfCheck = std::move(ev->Get()->Result);
-        NodeStateInfoReceived();
+        State.MutableSelfCheck()->CopyFrom(ev->Get()->Result);
+        ++Received;
+        CheckReply();
     }
 
     void RequestHealthCheck() {
@@ -183,18 +157,18 @@ public:
         Send(nameserviceId, new TEvInterconnect::TEvListNodes());
         TBase::Become(&TThis::StateRequestedBrowse);
 
-        Duration = TDuration::Seconds(GetProtoRequest()->duration() ? GetProtoRequest()->duration() : defaultDurationSec);
+        Duration = TDuration::Seconds(GetProtoRequest()->duration_seconds() ? GetProtoRequest()->duration_seconds() : defaultDurationSec);
         Started = TInstant::Now();
         Schedule(Duration, new TEvents::TEvWakeup());
     }
 
     void RequestCounters() {
-        for (const auto& ni : Nodes) {
+        for (ui32 i : xrange(Nodes.size())) {
+            const auto& ni = Nodes[i];
             TActorId countersInfoProviderServiceId = NKikimr::NCountersInfo::MakeCountersInfoProviderServiceID(ni.NodeId);
-            Send(countersInfoProviderServiceId, new NKikimr::NCountersInfo::TEvCountersInfoRequest(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, ni.NodeId);
-            Requested++;
+            Send(countersInfoProviderServiceId, new NKikimr::NCountersInfo::TEvCountersInfoRequest(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, i);
+            NodeRequested[i]++;
         }
-        CountersRequested++;
     }
     void Wakeup() {
         if (Period > TDuration::Zero()) {
@@ -230,78 +204,23 @@ public:
             hFunc(NNodeWhiteboard::TEvWhiteboard::TEvBridgeInfoResponse, Handle);
             hFunc(NNodeWhiteboard::TEvWhiteboard::TEvNodeStateResponse, Handle);
             hFunc(NKikimr::NCountersInfo::TEvCountersInfoResponse, Handle);
-            hFunc(TEvents::TEvUndelivered, Undelivered);
             hFunc(TEvInterconnect::TEvNodeDisconnected, Disconnected);
             cFunc(TEvents::TSystem::Wakeup, Wakeup);
             hFunc(NHealthCheck::TEvSelfCheckResult, Handle);
         }
     }
 
-    void SerializeSelfCheck(TStringBuilder& res) {
-        res << "\"SelfCheck\": ";
-        TString data;
-        google::protobuf::util::MessageToJsonString(SelfCheck, &data);
-        res << data << ",\n";
-    }
-
-    void SerializeDict(TStringBuilder& res, const char *name, auto &info) {
-        res << "\"" << name << "\": {\n";
-        bool first = true;
-        for (auto &[k, v] : info) {
-            if (!first) {
-                res << ",\n";
-            }
-            first = false;
-            TString data;
-            google::protobuf::util::MessageToJsonString(v, &data);
-            res << "\"" << k << "\": " << data;
-        }
-        res << "},\n";
-    }
-
-    void SerializeCountersInfo(TStringBuilder& res) {
-        res << "\"CountersInfo\": {\n";
-        bool first = true;
-        for (auto &[k, value] : CountersInfo) {
-            if (!first) {
-                res << ",\n";
-            }
-            first = false;
-            res << "\"" << k << "\": ";
-            res << "[\n";
-            bool firstInArray = true;
-            for (auto v : value) {
-                if (!firstInArray) {
-                    res << ",\n";
-                }
-                firstInArray = false;
-                res << v;
-            }
-            res << "]";
-        }
-        res << "},\n";
-    }
-
     void ReplyAndPassAway() {
         TResponse response;
         Ydb::Operations::Operation& operation = *response.mutable_operation();
         operation.set_ready(true);
-        operation.set_status(Status);
+        operation.set_status(Ydb::StatusIds::SUCCESS);
         Ydb::Monitoring::ClusterStateResult result;
-        TStringBuilder res;
-        res << "{\n";
-        SerializeDict(res, "VDiskInfo", VDiskInfo);
-        SerializeDict(res, "PDiskInfo", PDiskInfo);
-        SerializeDict(res, "TabletInfo", TabletInfo);
-        SerializeDict(res, "BSGroupInfo", BSGroupInfo);
-        SerializeDict(res, "SystemInfo", SystemInfo);
-        SerializeDict(res, "BridgeInfo", BridgeInfo);
-        SerializeDict(res, "NodeInfo", NodeInfo);
-        SerializeSelfCheck(res);
-        SerializeCountersInfo(res);
-
-        res << "\"version\": 1}\n";
-        result.Setresult(res);
+        google::protobuf::util::JsonPrintOptions jsonOpts;
+        jsonOpts.add_whitespace = true;
+        TString data;
+        google::protobuf::util::MessageToJsonString(State, &data, jsonOpts);
+        result.Setresult(data);
         operation.mutable_result()->PackFrom(result);
         return Reply(response);
     }

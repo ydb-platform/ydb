@@ -20,9 +20,9 @@ void TCommandClusterStateFetch::Config(TConfig& config) {
     TYdbReadOnlyCommand::Config(config);
     config.SetFreeArgsNum(0);
     config.Opts->AddLongOption("duration", "Duration of collecting cluster state in seconds")
-        .OptionalArgument("NUM").StoreResult(&Duration);
+        .OptionalArgument("NUM").StoreResult(&DurationSeconds);
     config.Opts->AddLongOption("period", "Period of collectiong counters in seconds")
-        .OptionalArgument("NUM").StoreResult(&Period);
+        .OptionalArgument("NUM").StoreResult(&PeriodSeconds);
     AddOutputFormats(config, {
         EDataFormat::Json
     }, EDataFormat::Json);
@@ -37,8 +37,8 @@ void TCommandClusterStateFetch::Parse(TConfig& config) {
 int TCommandClusterStateFetch::Run(TConfig& config) {
     NMonitoring::TMonitoringClient client(CreateDriver(config));
     NMonitoring::TClusterStateSettings settings;
-    settings.Duration(Duration);
-    settings.Period(Period);
+    settings.DurationSeconds(DurationSeconds);
+    settings.PeriodSeconds(PeriodSeconds);
     NMonitoring::TClusterStateResult result = client.ClusterState(settings).GetValueSync();
     NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
     const auto& proto = NYdb::TProtoAccessor::GetProto(result);

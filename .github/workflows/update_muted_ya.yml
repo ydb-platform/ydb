@@ -243,7 +243,12 @@ jobs:
           # Читаем содержимое PR body
           PR_BODY_CONTENT=$(cat pr_body_content.txt)
           WORKFLOW_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          COMPLETE_BODY="Collected in workflow [#${{ github.run_number }}](${WORKFLOW_URL}) for ${{ env.BASE_BRANCH }}\n\n${PR_BODY_CONTENT}"
+          COMPLETE_BODY=$(cat << EOF
+          Collected in workflow [#${{ github.run_number }}](${WORKFLOW_URL}) for ${{ env.BASE_BRANCH }}
+
+          ${PR_BODY_CONTENT}
+          EOF
+          )
           
           echo "$COMPLETE_BODY" > pr_comment_final.txt
           echo "PR_COMMENT_FILE=pr_comment_final.txt" >> $GITHUB_OUTPUT

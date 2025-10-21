@@ -39,6 +39,7 @@ PEERDIR(
     ydb/core/tx/schemeshard
     ydb/core/ymq/actor
     ydb/core/ymq/base
+    ydb/core/statistics/agg_funcs/udfs
     ydb/library/folder_service/mock
     ydb/library/keys
     ydb/library/pdisk_io

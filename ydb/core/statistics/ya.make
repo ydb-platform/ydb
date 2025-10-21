@@ -17,6 +17,7 @@ PEERDIR(
 END()
 
 RECURSE(
+    agg_funcs
     aggregator
     database
     service

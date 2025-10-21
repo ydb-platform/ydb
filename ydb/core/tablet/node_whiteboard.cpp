@@ -15,7 +15,6 @@
 #include <ydb/core/util/cpuinfo.h>
 #include <ydb/core/util/tuples.h>
 
-
 #include <util/string/split.h>
 #include <util/system/getpid.h>
 #include <contrib/libs/protobuf/src/google/protobuf/util/message_differencer.h>

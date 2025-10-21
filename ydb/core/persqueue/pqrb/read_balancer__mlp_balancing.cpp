@@ -12,7 +12,7 @@ const NKikimrPQ::TPQTabletConfig& TMLPConsumer::GetConfig() const {
 }
 
 const NKikimrPQ::TPQTabletConfig::TPartition& TMLPConsumer::NextPartition() {
-    // TODO skip inactive partitions without messages
+    // TODO MLP skip inactive partitions without messages
     AFL_ENSURE(!GetConfig().GetAllPartitions().empty());
     auto partitionId = PartitionIterator++ % GetConfig().GetAllPartitions().size();
     return GetConfig().GetAllPartitions(partitionId);

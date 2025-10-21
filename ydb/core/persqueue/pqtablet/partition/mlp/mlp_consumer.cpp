@@ -56,7 +56,7 @@ TConsumerActor::TConsumerActor(ui64 tabletId, const TActorId& tabletActorId, ui3
 void TConsumerActor::Bootstrap() {
     Become(&TConsumerActor::StateInit);
 
-    // TODO Update consumer config
+    // TODO MLP Update consumer config
     Storage->SetKeepMessageOrder(Config.GetKeepMessageOrder());
     Storage->SetMaxMessageReceiveCount(Config.GetMaxMessageReceiveCount());
 
@@ -371,6 +371,7 @@ void TConsumerActor::PersistSnapshot() {
 
     Become(&TConsumerActor::StateWrite);
 
+    // TODO MLP Move StartOffset
     Storage->Compact();
 
     NKikimrPQ::TMLPStorageSnapshot snapshot;
@@ -427,6 +428,7 @@ void TConsumerActor::HandleOnInit(TEvPQ::TEvProxyResponse::TPtr& ev) {
 void TConsumerActor::Handle(TEvPQ::TEvProxyResponse::TPtr& ev) {
     LOG_D("Handle TEvPQ::TEvProxyResponse");
     if (FetchCookie != GetCookie(ev)) {
+        // TODO MLP
         LOG_D("Cookie mismatch: " << FetchCookie << " != " << GetCookie(ev));
         //return;
     }

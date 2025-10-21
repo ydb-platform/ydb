@@ -393,7 +393,7 @@ message TTableServiceConfig {
     optional bool EnableOlapScalarApply = 86 [default = true];
     optional bool EnableOlapSubstringPushdown = 87 [default = true];
 
-    optional bool EnableIndexStreamWrite = 88 [default = false];
+    optional bool EnableIndexStreamWrite = 88 [default = true];
 
     optional bool EnableParallelPointReadConsolidation = 89 [default = true];
 

@@ -16,7 +16,7 @@ using namespace NYdb;
 using namespace NYdb::NQuery;
 
 Y_UNIT_TEST_SUITE(KqpStreamIndexes) {
-    void RunTest(TString query, TString mainResult, TString indexResult, bool exists) {
+    void RunTest(TString query, TString mainResult, TString indexResult, bool exists, bool indexOverlap) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(true);
@@ -31,10 +31,10 @@ Y_UNIT_TEST_SUITE(KqpStreamIndexes) {
                 Col1 Uint64,
                 Col2 Uint64,
                 Col3 Uint64,
-                INDEX idx GLOBAL ON (Col2),
+                INDEX idx GLOBAL ON (Col2 %s),
                 PRIMARY KEY (Col1)
             );
-        )");
+        )", indexOverlap ? ", Col1" : "");
 
         auto result = session.ExecuteSchemeQuery(createQuery).GetValueSync();
         UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
@@ -76,172 +76,193 @@ Y_UNIT_TEST_SUITE(KqpStreamIndexes) {
         }
     }
 
-    Y_UNIT_TEST(InsertFull) {
+    Y_UNIT_TEST_TWIN(InsertFull, overlap) {
         RunTest(
             "INSERT INTO `/Root/DataShard` (Col1, Col2, Col3) VALUES (0u, 0u, 0u);",
             R"([[[0u];[0u];[0u]]])",
             R"([[[0u];[0u]]])",
-            false);
+            false,
+            overlap);
     }
 
-    Y_UNIT_TEST_TWIN(ReplaceFull, exists) {
+    Y_UNIT_TEST_QUAD(ReplaceFull, exists, overlap) {
         RunTest(
             "REPLACE INTO `/Root/DataShard` (Col1, Col2, Col3) VALUES (0u, 0u, 0u);",
             R"([[[0u];[0u];[0u]]])",
             R"([[[0u];[0u]]])",
-            exists);
+            exists,
+            overlap);
     }
 
-    Y_UNIT_TEST_TWIN(UpsertFull, exists) {
+    Y_UNIT_TEST_QUAD(UpsertFull, exists, overlap) {
         RunTest(
             "UPSERT INTO `/Root/DataShard` (Col1, Col2, Col3) VALUES (0u, 0u, 0u);",
             R"([[[0u];[0u];[0u]]])",
             R"([[[0u];[0u]]])",
-            exists);
+            exists,
+            overlap);
     }
 
-    Y_UNIT_TEST(InsertNoColumn) {
+    Y_UNIT_TEST_TWIN(InsertNoColumn, overlap) {
         RunTest(
             "INSERT INTO `/Root/DataShard` (Col1, Col3) VALUES (0u, 0u);",
             R"([[[0u];#;[0u]]])",
             R"([[[0u];#]])",
-            false);
+            false,
+            overlap);
     }
 
-    Y_UNIT_TEST(InsertNoColumn2) {
+    Y_UNIT_TEST_TWIN(InsertNoColumn2, overlap) {
         RunTest(
             "INSERT INTO `/Root/DataShard` (Col1, Col2) VALUES (0u, 0u);",
             R"([[[0u];[0u];#]])",
             R"([[[0u];[0u]]])",
-            false);
+            false,
+            overlap);
     }
 
-    Y_UNIT_TEST_TWIN(ReplaceNoColumn, exists) {
+    Y_UNIT_TEST_QUAD(ReplaceNoColumn, exists, overlap) {
         RunTest(
             "REPLACE INTO `/Root/DataShard` (Col1, Col3) VALUES (0u, 0u);",
             R"([[[0u];#;[0u]]])",
             R"([[[0u];#]])",
-            exists);
+            exists,
+            overlap);
     }
 
-    Y_UNIT_TEST_TWIN(ReplaceNoColumn2, exists) {
+    Y_UNIT_TEST_QUAD(ReplaceNoColumn2, exists, overlap) {
         RunTest(
             "REPLACE INTO `/Root/DataShard` (Col1, Col2) VALUES (0u, 0u);",
             R"([[[0u];[0u];#]])",
             R"([[[0u];[0u]]])",
-            exists);
+            exists,
+            overlap);
     }
 
-    Y_UNIT_TEST(UpsertNoColumnNotExists) {
+    Y_UNIT_TEST_TWIN(UpsertNoColumnNotExists, overlap) {
         RunTest(
             "UPSERT INTO `/Root/DataShard` (Col1, Col3) VALUES (0u, 0u);",
             R"([[[0u];#;[0u]]])",
             R"([[[0u];#]])",
-            false);
+            false,
+            overlap);
     }
 
-    Y_UNIT_TEST(UpsertNoColumnExists) {
+    Y_UNIT_TEST_TWIN(UpsertNoColumnExists, overlap) {
         RunTest(
             "UPSERT INTO `/Root/DataShard` (Col1, Col3) VALUES (0u, 0u);",
             R"([[[0u];[1u];[0u]]])",
             R"([[[0u];[1u]]])",
-            true);
+            true,
+            overlap);
     }
 
-    Y_UNIT_TEST(UpsertNoColumnNotExists2) {
+    Y_UNIT_TEST_TWIN(UpsertNoColumnNotExists2, overlap) {
         RunTest(
             "UPSERT INTO `/Root/DataShard` (Col1, Col2) VALUES (0u, 0u);",
             R"([[[0u];[0u];#]])",
             R"([[[0u];[0u]]])",
-            false);
+            false,
+            overlap);
     }
 
-    Y_UNIT_TEST(UpsertNoColumnExists2) {
+    Y_UNIT_TEST_TWIN(UpsertNoColumnExists2, overlap) {
         RunTest(
             "UPSERT INTO `/Root/DataShard` (Col1, Col2) VALUES (0u, 0u);",
             R"([[[0u];[0u];[1u]]])",
             R"([[[0u];[0u]]])",
-            true);
+            true,
+            overlap);
     }
 
-    Y_UNIT_TEST_TWIN(DeleteKey, exists) {
+    Y_UNIT_TEST_QUAD(DeleteKey, exists, overlap) {
         RunTest(
             "DELETE FROM `/Root/DataShard` WHERE Col1 = 0u;",
             R"([])",
             R"([])",
-            exists);
+            exists,
+            overlap);
     }
 
-    Y_UNIT_TEST_TWIN(DeleteKey2, exists) {
+    Y_UNIT_TEST_QUAD(DeleteKey2, exists, overlap) {
         RunTest(
             "DELETE FROM `/Root/DataShard` ON SELECT 0u AS Col1;",
             R"([])",
             R"([])",
-            exists);
+            exists,
+            overlap);
     }
 
-    Y_UNIT_TEST(UpdateKeyExists) {
+    Y_UNIT_TEST_TWIN(UpdateKeyExists, overlap) {
         RunTest(
             "UPDATE `/Root/DataShard` SET Col2 = 0u WHERE Col1 = 0u;",
             R"([[[0u];[0u];[1u]]])",
             R"([[[0u];[0u]]])",
-            true);
+            true,
+            overlap);
     }
 
-    Y_UNIT_TEST(UpdateKeyNotExists) {
+    Y_UNIT_TEST_TWIN(UpdateKeyNotExists, overlap) {
         RunTest(
             "UPDATE `/Root/DataShard` SET Col2 = 0u WHERE Col1 = 0u;",
             R"([])",
             R"([])",
-            false);
+            false,
+            overlap);
     }
 
-    Y_UNIT_TEST(UpdateKeyExists2) {
+    Y_UNIT_TEST_TWIN(UpdateKeyExists2, overlap) {
         RunTest(
             "UPDATE `/Root/DataShard` SET Col3 = 0u WHERE Col1 = 0u;",
             R"([[[0u];[1u];[0u]]])",
             R"([[[0u];[1u]]])",
-            true);
+            true,
+            overlap);
     }
 
-    Y_UNIT_TEST(UpdateKeyNotExists2) {
+    Y_UNIT_TEST_TWIN(UpdateKeyNotExists2, overlap) {
         RunTest(
             "UPDATE `/Root/DataShard` SET Col3 = 0u WHERE Col1 = 0u;",
             R"([])",
             R"([])",
-            false);
+            false,
+            overlap);
     }
 
-    Y_UNIT_TEST(UpdateKeyExists3) {
+    Y_UNIT_TEST_TWIN(UpdateKeyExists3, overlap) {
         RunTest(
             "UPDATE `/Root/DataShard` ON SELECT 0u AS Col1, 0u AS Col3;",
             R"([[[0u];[1u];[0u]]])",
             R"([[[0u];[1u]]])",
-            true);
+            true,
+            overlap);
     }
 
-    Y_UNIT_TEST(UpdateKeyNotExists3) {
+    Y_UNIT_TEST_TWIN(UpdateKeyNotExists3, overlap) {
         RunTest(
             "UPDATE `/Root/DataShard` ON SELECT 0u AS Col1, 0u AS Col3;",
             R"([])",
             R"([])",
-            false);
+            false,
+            overlap);
     }
 
-    Y_UNIT_TEST(UpdateKeyExists4) {
+    Y_UNIT_TEST_TWIN(UpdateKeyExists4, overlap) {
         RunTest(
             "UPDATE `/Root/DataShard` ON SELECT 0u AS Col1, 0u AS Col2;",
             R"([[[0u];[0u];[1u]]])",
             R"([[[0u];[0u]]])",
-            true);
+            true,
+            overlap);
     }
 
-    Y_UNIT_TEST(UpdateKeyNotExists4) {
+    Y_UNIT_TEST_TWIN(UpdateKeyNotExists4, overlap) {
         RunTest(
             "UPDATE `/Root/DataShard` ON SELECT 0u AS Col1, 0u AS Col2;",
             R"([])",
             R"([])",
-            false);
+            false,
+            overlap);
     }
 }
 }

@@ -90,6 +90,8 @@ const TVector<SysViewsRegistryRecord> SysViewsRegistry::SysViews = {
     {"primary_index_portion_stats", ESysViewType::ETablePrimaryIndexPortionStats, {ESource::ColumnTable},  &FillSchema<Schema::PrimaryIndexPortionStats>},
     {"primary_index_granule_stats", ESysViewType::ETablePrimaryIndexGranuleStats, {ESource::ColumnTable},  &FillSchema<Schema::PrimaryIndexGranuleStats>},
     {"primary_index_optimizer_stats", ESysViewType::ETablePrimaryIndexOptimizerStats, {ESource::ColumnTable},  &FillSchema<Schema::PrimaryIndexOptimizerStats>},
+
+    {"streaming_queries", ESysViewType::EStreamingQueries, {ESource::Domain, ESource::SubDomain}, &FillSchema<Schema::StreamingQueries>},
 };
 
 const TVector<SysViewsRegistryRecord> SysViewsRegistry::RewrittenSysViews = {

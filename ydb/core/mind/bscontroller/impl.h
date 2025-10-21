@@ -8,9 +8,10 @@
 #include "resources.h"
 #include "stat_processor.h"
 #include "indir.h"
-#include "scan_throttler.h"
 #include "self_heal.h"
 #include "storage_pool_stat.h"
+#include "blob_checker.h"
+#include "blob_checker_planner.h"
 
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 
@@ -654,8 +655,6 @@ public:
 
         // a reference to proxy group id when this group is a part of Bridge group
         std::optional<TGroupId> BridgeProxyGroupId;
-
-        bool IsScanInProgress = false;
 
         struct TGroupStatus {
             // status derived from the actual state of VDisks (IsReady() to be exact)
@@ -1543,6 +1542,8 @@ private:
     std::shared_ptr<TControlWrapper> EnableSelfHealWithDegraded;
     TMonotonic LoadedAt;
 
+    bool BlobCheckerEnabled = false;
+
     struct TLifetimeToken {};
     std::shared_ptr<TLifetimeToken> LifetimeToken = std::make_shared<TLifetimeToken>();
 
@@ -1582,6 +1583,16 @@ private:
             EvUpdateHostRecords,
             EvUpdateShredState,
             EvCheckSyncerDisconnectedNodes,
+            
+            // BlobCheckerOrchestrator <-> BSC interface
+            EvUpdateBlobCheckerSettings,
+            EvBlobCheckerUpdateGroupState,
+            EvBlobCheckerPlanScan,
+            EvBlobCheckerScanDecision,
+            EvBlobCheckerUpdateGroupSet,
+
+            // BlobCheckerWorker <-> BlobCheckerOrchestrator interface
+            EvBlobCheckerFinishQuantum,
         };
 
         struct TEvUpdateSystemViews : public TEventLocal<TEvUpdateSystemViews, EvUpdateSystemViews> {};
@@ -1931,9 +1942,18 @@ private:
     void IssueInitialGroupContent();
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    // Blob scan handling
+    // BlobChecking background process
 
-    
+    TActorId BlobCheckerOrchestratorId;
+
+    TBlobCheckerPlanner BlobCheckerPlanner;
+    TMonotonic NextAllowedBlobCheckerTimestamp = TMonotonic::Zero();
+
+    void Handle(const TEvBlobCheckerPlanScan::TPtr& ev);
+    void Handle(const TEvControllerBlobCheckerUpdateGroupStatus::TPtr& ev);
+
+    void UpdateBlobCheckerState();
+    void DequeueCheckForGroup(TGroupId groupId);
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Metric collection
@@ -2238,6 +2258,8 @@ public:
             cFunc(TEvPrivate::EvScrub, ScrubState.HandleTimer);
             cFunc(TEvPrivate::EvVSlotReadyUpdate, VSlotReadyUpdate);
             hFunc(TEvBlobStorage::TEvControllerShredRequest, ShredState.Handle);
+            hFunc(TEvPrivate::TEvBlobCheckerPlanScan, Handle);
+            hFunc(TEvPrivate::TEvControllerBlobCheckerUpdateGroupStatus, Handle);
         }
 
         if (const TDuration time = TDuration::Seconds(timer.Passed()); time >= TDuration::MilliSeconds(100)) {

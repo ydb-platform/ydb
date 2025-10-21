@@ -567,6 +567,7 @@ message TUpdateSettings {
     repeated bool AllowMultipleRealmsOccupation = 12;
     repeated bool UseSelfHealLocalPolicy = 13;
     repeated bool TryToRelocateBrokenDisksLocallyFirst = 14;
+    repeated uint64 BlobCheckerPeriodicitySeconds = 15;
 }
 
 message TBscConfig {
@@ -587,6 +588,7 @@ message TBscConfig {
     optional bool TryToRelocateBrokenDisksLocallyFirst = 14;
     optional TClusterBalancingSettings ClusterBalancingSettings = 15;
     optional TSelfHealSettings SelfHealSettings = 16;
+    repeated ui64 BlobCheckerPeriodicitySeconds = 17;
 }
 
 message TBoxStoragePoolId {

@@ -12,7 +12,6 @@
 #include <ydb/library/logger/actor.h>
 
 #include <ydb/core/base/path.h>
-#include <ydb/core/protos/config.pb.h>
 
 #include <memory>
 
@@ -99,7 +98,7 @@ class TLeaderElection: public TActorBootstrapped<TLeaderElection>, public TActor
         WaitSemaphoreCreated,
         Started
     };
-    NKikimrConfig::TSharedReadingConfig::TCoordinatorConfig Config;
+    TRowDispatcherSettings::TCoordinatorSettings Config;
     NKikimr::TYdbCredentialsProviderFactory CredentialsProviderFactory;
     std::unique_ptr<NYdb::TDriver> Driver;
     TYdbConnectionPtr YdbConnection;
@@ -129,7 +128,7 @@ public:
     TLeaderElection(
         NActors::TActorId parentId,
         NActors::TActorId coordinatorId,
-        const NKikimrConfig::TSharedReadingConfig::TCoordinatorConfig& config,
+        const TRowDispatcherSettings::TCoordinatorSettings& config,
         const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
         NYdb::TDriver driver,
         const TString& tenant,
@@ -178,7 +177,7 @@ private:
 TLeaderElection::TLeaderElection(
     NActors::TActorId parentId,
     NActors::TActorId coordinatorId,
-    const NKikimrConfig::TSharedReadingConfig::TCoordinatorConfig& config,
+    const TRowDispatcherSettings::TCoordinatorSettings& config,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     NYdb::TDriver /*driver*/,
     const TString& tenant,
@@ -495,7 +494,7 @@ NYdb::TDriverConfig TLeaderElection::GetYdbDriverConfig() const {
 std::unique_ptr<NActors::IActor> NewLeaderElection(
     NActors::TActorId rowDispatcherId,
     NActors::TActorId coordinatorId,
-    const NKikimrConfig::TSharedReadingConfig::TCoordinatorConfig& config,
+    const TRowDispatcherSettings::TCoordinatorSettings& config,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     NYdb::TDriver driver,
     const TString& tenant,

@@ -1,15 +1,12 @@
 #pragma once
 
+#include <ydb/core/fq/libs/row_dispatcher/common/row_dispatcher_settings.h>
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
 #include <ydb/core/fq/libs/row_dispatcher/format_handler/filters/filters_set.h>
 #include <ydb/core/fq/libs/row_dispatcher/format_handler/parsers/json_parser.h>
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/util/rope.h>
-
-namespace NKikimrConfig {
-class TSharedReadingConfig;
-} // namespace NKikimrConfig
 
 namespace NFq::NRowDispatcher {
 
@@ -81,7 +78,7 @@ struct TFormatHandlerConfig {
 };
 
 ITopicFormatHandler::TPtr CreateTopicFormatHandler(const NActors::TActorContext& owner, const TFormatHandlerConfig& config, const ITopicFormatHandler::TSettings& settings, const TCountersDesc& counters);
-TFormatHandlerConfig CreateFormatHandlerConfig(const NKikimrConfig::TSharedReadingConfig& rowDispatcherConfig, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, NActors::TActorId compileServiceId);
+TFormatHandlerConfig CreateFormatHandlerConfig(const TRowDispatcherSettings& rowDispatcherConfig, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, NActors::TActorId compileServiceId);
 
 namespace NTests {
 

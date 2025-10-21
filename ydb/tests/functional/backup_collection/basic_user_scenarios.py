@@ -511,6 +511,72 @@ class BaseTestBackupInFiles(object):
                 except Exception:
                     raise AssertionError("Drop failed")
 
+    def _count_restore_operations(self):
+        endpoint = f"grpc://localhost:{self.cluster.nodes[1].grpc_port}"
+        database = self.root_dir
+
+        cmd = [backup_bin(), "-e", endpoint, "-d", database, "operation", "list", "restore"]
+        try:
+            res = yatest.common.execute(cmd, check_exit_code=False)
+            output = (res.std_out or b"").decode("utf-8", "ignore")
+        except Exception as e:
+            return 0, 0, f"CLI failed: {e}"
+
+        candidates = [
+            cand for cand in output.splitlines()
+            if "│" in cand and not cand.strip().startswith(("┌", "├", "└", "┬", "┴", "┼"))
+        ]
+
+        header_idx = None
+        for i, ln in enumerate(candidates):
+            if re.search(r"\bid\b", ln, re.I) and re.search(r"\bstatus\b", ln, re.I):
+                header_idx = i
+                break
+        if header_idx is not None:
+            del candidates[header_idx]
+
+        total = len(candidates)
+        success_count = 0
+        for ln in candidates:
+            low = ln.lower()
+            if "success" in low or "true" in low:
+                success_count += 1
+
+        return total, success_count, output
+
+    def poll_restore_by_count(self, start_total: int, start_success: int, timeout_s: int = 180, poll_interval: float = 2.0, verbose: bool = True):
+        deadline = time.time() + timeout_s
+        seen_more = False
+        last_total = start_total
+        last_success = start_success
+
+        while time.time() < deadline:
+            total, success, raw = self._count_restore_operations()
+            last_total, last_success, _ = total, success, raw
+
+            if verbose:
+                logger.info(f"[poll_restore] total={total} success={success} (start {start_total}/{start_success})")
+
+            if total > start_total:
+                seen_more = True
+
+            if seen_more and success > start_success:
+                return True, {
+                    "start_total": start_total,
+                    "start_success": start_success,
+                    "last_total": last_total,
+                    "last_success": last_success,
+                }
+
+            time.sleep(poll_interval)
+
+        return False, {
+            "start_total": start_total,
+            "start_success": start_success,
+            "last_total": last_total,
+            "last_success": last_success,
+        }
+
 
 class TestFullCycleLocalBackupRestore(BaseTestBackupInFiles):
     def _execute_yql(self, script, verbose=False):
@@ -996,9 +1062,16 @@ class TestFullCycleLocalBackupRestoreWIncr(TestFullCycleLocalBackupRestore):
         self.import_exported_up_to_timestamp(col_inc1, ts_inc1, export_dir, full_orders, full_products)
         # ensure target tables absent
         self._remove_tables([full_orders, full_products])
+        start_total, start_success, _ = self._count_restore_operations()
         rest_inc1 = self._execute_yql(f"RESTORE `{col_inc1}`;")
         assert rest_inc1.exit_code == 0, f"RESTORE inc1 failed: {rest_inc1.std_err}"
-        restored_rows = self.wait_for_table_rows(t_orders, snapshot_rows[snap_inc1], timeout_s=90)
+        ok, info = self.poll_restore_by_count(start_total=start_total, start_success=start_success, timeout_s=180, poll_interval=2.0, verbose=True)
+        if not ok:
+            raise AssertionError(
+                "Timeout waiting restore via operation list. Diagnostics: "
+                f"{info}"
+            )
+        restored_rows = self._capture_snapshot(t_orders)
         assert self.normalize_rows(restored_rows) == self.normalize_rows(snapshot_rows[snap_inc1]), "Verify data in backup (2) failed"
 
         # Restore to incremental 2 (full1 + inc1 + inc2)
@@ -1006,9 +1079,16 @@ class TestFullCycleLocalBackupRestoreWIncr(TestFullCycleLocalBackupRestore):
         ts_inc2 = self.extract_ts(snap_inc2)
         self.import_exported_up_to_timestamp(col_inc2, ts_inc2, export_dir, full_orders, full_products)
         self._remove_tables([full_orders, full_products])
+        start_total, start_success, _ = self._count_restore_operations()
         rest_inc2 = self._execute_yql(f"RESTORE `{col_inc2}`;")
         assert rest_inc2.exit_code == 0, f"RESTORE inc2 failed: {rest_inc2.std_err}"
-        restored_rows = self.wait_for_table_rows(t_orders, snapshot_rows[snap_inc2], timeout_s=90)
+        ok, info = self.poll_restore_by_count(start_total=start_total, start_success=start_success, timeout_s=180, poll_interval=2.0, verbose=True)
+        if not ok:
+            raise AssertionError(
+                "Timeout waiting restore via operation list. Diagnostics: "
+                f"{info}"
+            )
+        restored_rows = self._capture_snapshot(t_orders)
         assert self.normalize_rows(restored_rows) == self.normalize_rows(snapshot_rows[snap_inc2]), "Verify data in backup (3) failed"
 
         # Remove all tables (2)
@@ -1432,5 +1512,174 @@ class TestFullCycleLocalBackupRestoreWSchemaChange(TestFullCycleLocalBackupResto
             assert 'show_grants' in (restored_acl2_t2 or {}) and acl_stage2_t2['show_grants'] in restored_acl2_t2['show_grants']
 
         # cleanup exported data
+        if os.path.exists(export_dir):
+            shutil.rmtree(export_dir)
+
+
+class TestIncrementalChainRestoreAfterDeletion(TestFullCycleLocalBackupRestore):
+    def _record_snapshot_and_rows(self, collection_src: str, t_orders: str, t_products: str,
+                                  created_snapshots: list, snapshot_rows: dict) -> str:
+        """Record newest snapshot name and capture rows for orders/products."""
+        kids = sorted(self.get_collection_children(collection_src))
+        assert kids, "No snapshots found after backup"
+        last = kids[-1]
+        created_snapshots.append(last)
+        snapshot_rows[last] = {
+            "orders": self._capture_snapshot(t_orders),
+            "products": self._capture_snapshot(t_products),
+        }
+        return last
+
+    def _apply_sql_mutations(self, *sql_statements: str) -> None:
+        with self.session_scope() as session:
+            for s in sql_statements:
+                session.transaction().execute(s, commit_tx=True)
+        time.sleep(1.1)
+
+    def _import_exported_snapshots_up_to(self, coll_restore: str, export_dir: str, target_ts: str) -> list:
+        """Import exported snapshot directories whose timestamp part <= target_ts into the restore collection."""
+        all_dirs = sorted([d for d in os.listdir(export_dir) if os.path.isdir(os.path.join(export_dir, d))])
+        chosen = [d for d in all_dirs if d.split("_", 1)[0] <= target_ts]
+        assert chosen, f"No exported snapshots with ts <= {target_ts} found in {export_dir}: {all_dirs}"
+
+        for name in chosen:
+            src = os.path.join(export_dir, name)
+            dest_path = f"/Root/.backups/collections/{coll_restore}/{name}"
+            r = yatest.common.execute(
+                [
+                    backup_bin(),
+                    "--verbose",
+                    "--endpoint",
+                    "grpc://localhost:%d" % self.cluster.nodes[1].grpc_port,
+                    "--database",
+                    self.root_dir,
+                    "tools",
+                    "restore",
+                    "--path",
+                    dest_path,
+                    "--input",
+                    src,
+                ],
+                check_exit_code=False,
+            )
+            out = (r.std_out or b"").decode("utf-8", "ignore")
+            err = (r.std_err or b"").decode("utf-8", "ignore")
+            assert r.exit_code == 0, f"tools restore import failed for {name}: stdout={out} stderr={err}"
+
+        # wait for imported snapshots to appear in scheme
+        deadline = time.time() + 60
+        expected = set(chosen)
+        while time.time() < deadline:
+            kids = set(self.get_collection_children(coll_restore))
+            if expected.issubset(kids):
+                break
+            time.sleep(1)
+        else:
+            raise AssertionError(
+                f"Imported snapshots did not appear in collection {coll_restore} within timeout. Expected: {sorted(chosen)}"
+            )
+
+        return chosen
+
+    def test_incremental_chain_restore_when_tables_deleted(self):
+        """Create chain full -> inc1 -> inc2 -> inc3, export/import up to inc2, delete tables and restore."""
+        # Setup
+        collection_src, t_orders, t_products = self._setup_test_collections()
+        full_orders = f"/Root/{t_orders}"
+        full_products = f"/Root/{t_products}"
+
+        # Create incremental-enabled collection
+        create_collection_sql = f"""
+            CREATE BACKUP COLLECTION `{collection_src}`
+                ( TABLE `{full_orders}`, TABLE `{full_products}` )
+            WITH ( STORAGE = 'cluster', INCREMENTAL_BACKUP_ENABLED = 'true' );
+        """
+        create_res = self._execute_yql(create_collection_sql)
+        assert create_res.exit_code == 0, f"CREATE BACKUP COLLECTION failed: {getattr(create_res, 'std_err', None)}"
+        self.wait_for_collection(collection_src, timeout_s=30)
+
+        created_snapshots = []
+        snapshot_rows = {}  # snapshot_name -> {"orders": rows, "products": rows}
+
+        # Full backup
+        r = self._execute_yql(f"BACKUP `{collection_src}`;")
+        assert r.exit_code == 0, f"FULL BACKUP 1 failed: {getattr(r, 'std_err', None)}"
+        self.wait_for_collection_has_snapshot(collection_src, timeout_s=30)
+        self._record_snapshot_and_rows(collection_src, t_orders, t_products, created_snapshots, snapshot_rows)
+
+        # change data and create incremental 1
+        self._apply_sql_mutations(
+            'PRAGMA TablePathPrefix("/Root"); UPSERT INTO orders (id, number, txt) VALUES (10, 1000, "inc1");',
+            'PRAGMA TablePathPrefix("/Root"); DELETE FROM products WHERE id = 1;'
+        )
+        r = self._execute_yql(f"BACKUP `{collection_src}` INCREMENTAL;")
+        assert r.exit_code == 0, "INCREMENTAL 1 failed"
+        self._record_snapshot_and_rows(collection_src, t_orders, t_products, created_snapshots, snapshot_rows)
+
+        # change data and create incremental 2
+        self._apply_sql_mutations(
+            'PRAGMA TablePathPrefix("/Root"); UPSERT INTO orders (id, number, txt) VALUES (20, 2000, "inc2");',
+            'PRAGMA TablePathPrefix("/Root"); DELETE FROM orders WHERE id = 1;'
+        )
+        r = self._execute_yql(f"BACKUP `{collection_src}` INCREMENTAL;")
+        assert r.exit_code == 0, "INCREMENTAL 2 failed"
+        snap_inc2 = self._record_snapshot_and_rows(collection_src, t_orders, t_products, created_snapshots, snapshot_rows)
+
+        # change data and create incremental 3
+        self._apply_sql_mutations(
+            'PRAGMA TablePathPrefix("/Root"); UPSERT INTO orders (id, number, txt) VALUES (30, 3000, "inc3");'
+        )
+        r = self._execute_yql(f"BACKUP `{collection_src}` INCREMENTAL;")
+        assert r.exit_code == 0, "INCREMENTAL 3 failed"
+        self._record_snapshot_and_rows(collection_src, t_orders, t_products, created_snapshots, snapshot_rows)
+
+        assert len(created_snapshots) >= 2, "Expected at least 1 full + incrementals"
+
+        # Export backups
+        export_dir, exported_items = self._export_backups(collection_src)
+        assert exported_items, "No exported snapshots found"
+        exported_dirs = sorted([d for d in os.listdir(export_dir) if os.path.isdir(os.path.join(export_dir, d))])
+        for s in created_snapshots:
+            assert s in exported_dirs, f"Recorded snapshot {s} not found in exported dirs {exported_dirs}"
+
+        # Create restore collection and import snapshots up to target (choose inc2)
+        target_snap = snap_inc2
+        target_ts = target_snap.split("_", 1)[0]
+
+        coll_restore = f"coll_restore_incr_{int(time.time())}"
+        create_restore_sql = f"""
+            CREATE BACKUP COLLECTION `{coll_restore}`
+                ( TABLE `{full_orders}`, TABLE `{full_products}` )
+            WITH ( STORAGE = 'cluster' );
+        """
+        res = self._execute_yql(create_restore_sql)
+        assert res.exit_code == 0, f"CREATE backup collection {coll_restore} failed"
+        self.wait_for_collection(coll_restore, timeout_s=30)
+
+        self._import_exported_snapshots_up_to(coll_restore, export_dir, target_ts)
+        time.sleep(1)
+        self._drop_tables([t_orders, t_products])
+
+        # Run RESTORE
+        res_restore = self._execute_yql(f"RESTORE `{coll_restore}`;")
+        assert res_restore.exit_code == 0, f"RESTORE failed: {getattr(res_restore, 'std_err', None) or getattr(res_restore, 'std_out', None)}"
+
+        # Verify restored data matches snapshot inc2
+        expected_orders = snapshot_rows[target_snap]["orders"]
+        expected_products = snapshot_rows[target_snap]["products"]
+
+        self._verify_restored_table_data(t_orders, expected_orders)
+        self._verify_restored_table_data(t_products, expected_products)
+
+        # Check whether original collection still present or removed (either is acceptable)
+        coll_present = self.collection_exists(collection_src)
+        if not coll_present:
+            logger.info("Starting collection %s not present (deleted) — OK", collection_src)
+        else:
+            logger.info(
+                f"Starting collection {collection_src} is present and incremental backups appear enabled. "
+                "Expected: starting collection removed OR incremental backups disabled."
+            )
+
         if os.path.exists(export_dir):
             shutil.rmtree(export_dir)

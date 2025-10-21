@@ -8,7 +8,6 @@ namespace NFq {
 
 using TOperationFunc = std::function<NYdb::TAsyncStatus(ISession::TPtr)>;
 
-
 struct IYdbTableClient : public TThrRefBase{
 
     using TPtr = TIntrusivePtr<IYdbTableClient>;

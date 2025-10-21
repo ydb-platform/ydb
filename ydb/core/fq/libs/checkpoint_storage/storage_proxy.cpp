@@ -162,7 +162,7 @@ void TStorageProxy::Bootstrap() {
     
     LOG_STREAMS_STORAGE_SERVICE_INFO("Bootstrap");
     IYdbConnection::TPtr ydbConnection;
-    if (StorageConfig.HasEndpoint()) {
+    if (!StorageConfig.GetEndpoint().empty()) {
         LOG_STREAMS_STORAGE_SERVICE_INFO("Create sdk ydb connection");
         ydbConnection = CreateSdkYdbConnection(StorageConfig, CredentialsProviderFactory, Driver);
     } else {

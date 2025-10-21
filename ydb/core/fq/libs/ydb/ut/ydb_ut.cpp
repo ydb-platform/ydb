@@ -113,7 +113,7 @@ public:
 
     void SetUp() override {
         if (!UseYdbSdk) {
-            InitRuntime();
+            InitTestServer();
         }
         Connection = MakeConnection();
     }
@@ -139,7 +139,7 @@ public:
         abort();
     }
 
-    void InitRuntime() {
+    void InitTestServer() {
         EnableYDBBacktraceFormat();
         for (auto sig : {SIGILL, SIGSEGV}) {
             signal(sig, &TSelf::BackTraceSignalHandler);

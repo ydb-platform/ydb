@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: frozenlist
-Version: 1.7.0
+Version: 1.8.0
 Summary: A list-like structure which implements collections.abc.MutableSequence
 Home-page: https://github.com/aio-libs/frozenlist
 Maintainer: aiohttp team <team@aiohttp.org>
@@ -28,6 +28,7 @@ Classifier: Programming Language :: Python :: 3.10
 Classifier: Programming Language :: Python :: 3.11
 Classifier: Programming Language :: Python :: 3.12
 Classifier: Programming Language :: Python :: 3.13
+Classifier: Programming Language :: Python :: 3.14
 Classifier: Programming Language :: Python :: Implementation :: CPython
 Classifier: Programming Language :: Python :: Implementation :: PyPy
 Requires-Python: >=3.9
@@ -160,6 +161,51 @@ Changelog
     WARNING: Don't drop the next directive!
 
 .. towncrier release notes start
+
+v1.8.0
+======
+
+*(2025-10-05)*
+
+
+Contributor-facing changes
+--------------------------
+
+- The ``reusable-cibuildwheel.yml`` workflow has been refactored to
+  be more generic and ``ci-cd.yml`` now holds all the configuration
+  toggles -- by `@webknjaz <https://github.com/sponsors/webknjaz>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#668 <https://github.com/aio-libs/frozenlist/issues/668>`__.
+
+- When building wheels, the source distribution is now passed directly
+  to the ``cibuildwheel`` invocation -- by `@webknjaz <https://github.com/sponsors/webknjaz>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#669 <https://github.com/aio-libs/frozenlist/issues/669>`__.
+
+- Builds and tests have been added to
+  ``ci-cd.yml`` for arm64 Windows wheels -- by `@finnagin <https://github.com/sponsors/finnagin>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#677 <https://github.com/aio-libs/frozenlist/issues/677>`__.
+
+- Started building wheels for CPython 3.14 -- by `@kumaraditya303 <https://github.com/sponsors/kumaraditya303>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#681 <https://github.com/aio-libs/frozenlist/issues/681>`__, `#682 <https://github.com/aio-libs/frozenlist/issues/682>`__.
+
+- Removed ``--config-settings=pure-python=false`` from ``requirements/dev.txt``.
+  Developers on CPython still get accelerated builds by default. To explicitly build
+  a pure Python wheel, use ``pip install -e . --config-settings=pure-python=true``
+  -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#687 <https://github.com/aio-libs/frozenlist/issues/687>`__.
+
+
+----
+
 
 v1.7.0
 ======

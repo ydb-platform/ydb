@@ -1883,6 +1883,8 @@ TFuture<NApi::TMultiTablePartitions> TClient::PartitionTables(
     req->set_enable_key_guarantee(options.EnableKeyGuarantee);
     req->set_enable_cookies(options.EnableCookies);
 
+    req->set_omit_inaccessible_rows(options.OmitInaccessibleRows);
+
     ToProto(req->mutable_transactional_options(), options);
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspPartitionTablesPtr& rsp) {

@@ -267,6 +267,7 @@ public:
                 }
 
                 srcDesc.SetFormat(format);
+                srcDesc.SetUseActorSystemThreadsInTopicClient(State_->UseActorSystemThreadsInTopicClient);
 
                 if (auto maybeToken = TMaybeNode<TCoSecureParam>(topicSource.Token().Raw())) {
                     srcDesc.MutableToken()->SetName(TString(maybeToken.Cast().Name().Value()));
@@ -347,6 +348,8 @@ public:
                     sinkDesc.SetTopicPath(TString(topicPath));
                     sinkDesc.SetDatabase(TString(topicDatabase));
                 }
+
+                sinkDesc.SetUseActorSystemThreadsInTopicClient(State_->UseActorSystemThreadsInTopicClient);
 
                 size_t const settingsCount = topicSink.Settings().Size();
                 for (size_t i = 0; i < settingsCount; ++i) {

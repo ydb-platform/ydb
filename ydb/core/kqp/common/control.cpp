@@ -28,4 +28,8 @@ std::shared_ptr<TControlWrapper> MergeDatashardReadsControl() {
     return Singleton<TControls>()->MergeReads;
 }
 
+bool IsEnabledReadsMerge() {
+    return *MergeDatashardReadsControl() == 1;
+}
+
 } // namespace NKikimr::NKqp

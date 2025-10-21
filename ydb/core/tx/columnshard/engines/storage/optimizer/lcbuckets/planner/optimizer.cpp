@@ -39,6 +39,9 @@ std::vector<std::shared_ptr<TColumnEngineChanges>> TOptimizerPlanner::DoGetOptim
             if (data.IsEmpty()) {
                 continue;
             }
+            if (!results.empty() && (dynamic_pointer_cast<TOneLayerPortions>(Levels[data.GetTargetCompactionLevel()]) || dynamic_pointer_cast<TOneLayerPortions>(level))) {
+                return results;
+            }
             std::shared_ptr<NCompaction::TGeneralCompactColumnEngineChanges> result;
             //    if (level->GetLevelId() == 0) {
             result =
@@ -58,6 +61,9 @@ std::vector<std::shared_ptr<TColumnEngineChanges>> TOptimizerPlanner::DoGetOptim
                 AFL_VERIFY(!locksManager->IsLocked(i, NDataLocks::ELockCategory::Compaction));
             }
             results.push_back(result);
+            if (!AppDataVerified().ColumnShardConfig.GetEnableParallelCompaction()) {
+                return results;
+            }
         }
     }
     return results;

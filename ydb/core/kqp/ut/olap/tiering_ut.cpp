@@ -620,6 +620,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
 
         csController->WaitCompactions(TDuration::Seconds(5));
         csController->WaitActualization(TDuration::Seconds(5));
+        tieringHelper.CheckAllDataInTier(DEFAULT_TIER_PATH);
 
         {
             NYdb::NTable::TTableClient tableClient = testHelper.GetKikimr().GetTableClient();

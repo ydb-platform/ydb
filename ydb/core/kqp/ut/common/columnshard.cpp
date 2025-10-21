@@ -106,6 +106,15 @@ namespace NKqp {
         }
     }
 
+    void TTestHelper::ReadDataExecQuery(const TString& query, const TString& expected, const EStatus opStatus /*= EStatus::SUCCESS*/) const {
+        auto it = QueryClient->StreamExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+        TString result = StreamResultToYson(it, false, opStatus, "");
+        if (opStatus == EStatus::SUCCESS) {
+            UNIT_ASSERT_NO_DIFF(ReformatYson(result), ReformatYson(expected));
+        }
+    }
+
     void TTestHelper::ExecuteQuery(const TString& query) const {
         auto it = QueryClient->ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString()); // Means stream successfully get

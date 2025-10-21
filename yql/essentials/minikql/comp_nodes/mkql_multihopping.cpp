@@ -60,7 +60,7 @@ public:
             , StatesMap(0, hash, equal)
             , Ctx(ctx)
         {
-            if (!watermarkMode && dataWatermarks) {
+            if (!WatermarkMode && dataWatermarks) {
                 DataWatermarkTracker.emplace(TWatermarkTracker(delayHopCount * hopTime, hopTime));
             }
         }
@@ -257,13 +257,18 @@ public:
                     ++LateEventsThrown;
                     continue;
                 }
-                if (WatermarkMode && (hopIndex >= keyState.HopIndex + DelayHopCount + IntervalHopCount)) {
-                    ++EarlyEventsThrown;
-                    continue;
-                }
 
-                // Overflow is not possible, because hopIndex is a product of a division
-                if (!WatermarkMode) {
+                // TODO revert asap; diagnostics-only for q-stable-*
+                if (WatermarkMode && hopIndex >= keyState.HopIndex + DelayHopCount + IntervalHopCount) {
+                    ++EarlyEventsThrown;
+                }
+                if constexpr (false) { // TODO: if (WatermarkMode) {
+                    if (hopIndex >= keyState.HopIndex + DelayHopCount + IntervalHopCount) {
+                        ++EarlyEventsThrown;
+                        continue;
+                    }
+                } else {
+                    // Overflow is not possible, because hopIndex is a product of a division
                     auto closeBeforeIndex = Max<i64>(hopIndex + 1 - DelayHopCount - IntervalHopCount, 0);
                     CloseOldBucketsForKey(key, keyState, closeBeforeIndex, newHopsStat);
                 }
@@ -279,8 +284,7 @@ public:
                 }
 
                 if (DataWatermarkTracker) {
-                    const auto newWatermark = DataWatermarkTracker->HandleNextEventTime(ts);
-                    if (newWatermark && !WatermarkMode) {
+                    if (const auto newWatermark = DataWatermarkTracker->HandleNextEventTime(ts)) {
                         CloseOldBuckets(*newWatermark, newHopsStat);
                     }
                 }

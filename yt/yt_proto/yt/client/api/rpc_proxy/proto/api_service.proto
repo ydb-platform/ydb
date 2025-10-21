@@ -3726,6 +3726,54 @@ message TRspWriteTableFragment
     required bytes signed_write_result = 1; // YSON-serialized TSignedWriteFragmentResultPtr
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// Distributed file client
+////////////////////////////////////////////////////////////////////////////////
+
+message TReqStartDistributedWriteFileSession
+{
+    required bytes path = 1; // RichYPath
+    required int32 cookie_count = 2;
+    optional int64 timeout = 3;
+
+    optional TTransactionalOptions transactional_options = 100;
+}
+
+message TRspStartDistributedWriteFileSession
+{
+    required bytes signed_session = 1; // YSON-serialized TSignedDistributedWriteFileSessionPtr
+    repeated bytes signed_cookies = 2; // vector of YSON-serialized TSignedDistributedWriteFileCookiePtr
+}
+
+message TReqPingDistributedWriteFileSession
+{
+    required bytes signed_session = 1; // YSON-serialized TSignedDistributedWriteFileSessionPtr
+}
+
+message TRspPingDistributedWriteFileSession
+{
+}
+
+message TReqFinishDistributedWriteFileSession
+{
+    required bytes signed_session = 1; // YSON-serialized TSignedDistributedWriteFileSessionPtr
+    repeated bytes signed_write_results = 2; // vector of YSON-serialized TSignedWriteFileFragmentResultPtr
+}
+
+message TRspFinishDistributedWriteFileSession
+{
+}
+
+message TReqWriteFileFragment
+{
+    required bytes signed_cookie = 1; // YSON-serialized TSignedWriteFileFragmentCookiePtr
+}
+
+message TRspWriteFileFragment
+{
+    required bytes signed_write_result = 1; // YSON-serialized TSignedWriteFileFragmentResultPtr
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 // Shuffle Service
 ////////////////////////////////////////////////////////////////////////////////

@@ -146,7 +146,7 @@ public:
     virtual std::vector<TPortionInfo::TPtr> DoModifyPortions(
         const std::vector<TPortionInfo::TPtr>& add, const std::vector<TPortionInfo::TPtr>& remove) override;
 
-    virtual TCompactionTaskData DoGetOptimizationTask() const override;
+    virtual std::vector<TCompactionTaskData> DoGetOptimizationTasks() const override;
 
     virtual NArrow::NMerger::TIntervalPositions DoGetBucketPositions(const std::shared_ptr<arrow::Schema>& /*pkSchema*/) const override {
         NArrow::NMerger::TIntervalPositions result;

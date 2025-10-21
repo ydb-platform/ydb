@@ -1032,6 +1032,10 @@
     "kind": "Window"
   },
   {
+    "name": "NullIf",
+    "kind": "Normal"
+  },
+  {
     "name": "NullTypeHandle",
     "kind": "Normal"
   },

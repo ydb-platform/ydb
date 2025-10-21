@@ -68,7 +68,6 @@ struct TEvWhiteboard {
         EvBridgeInfoUpdate,
         EvBridgeInfoRequest,
         EvBridgeInfoResponse,
-
         EvEnd
     };
 

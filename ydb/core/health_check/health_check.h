@@ -48,7 +48,6 @@ struct TEvSelfCheckRequestProto : TEventPB<TEvSelfCheckRequestProto, Ydb::Monito
 
 struct TEvSelfCheckResultProto : TEventPB<TEvSelfCheckResultProto, Ydb::Monitoring::SelfCheckResult, EvSelfCheckResultProto> {};
 
-
 void RemoveUnrequestedEntries(Ydb::Monitoring::SelfCheckResult& result, const Ydb::Monitoring::SelfCheckRequest& request);
 
 inline NActors::TActorId MakeHealthCheckID() { return NActors::TActorId(0, "healthcheck"); }

@@ -16,7 +16,13 @@ namespace {
 
 class TFulltextAnalyzeWrapper : public TMutableComputationNode<TFulltextAnalyzeWrapper> {
     typedef TMutableComputationNode<TFulltextAnalyzeWrapper> TBaseComputation;
-    using TSettings = Ydb::Table::FulltextIndexSettings::Analyzers;
+
+    struct TSettings : public TComputationValue<TSettings> {
+        using TComputationValue::TComputationValue;
+
+        bool IsValid = false;
+        Ydb::Table::FulltextIndexSettings::Analyzers Analyzers;
+    };
 
 public:
     TFulltextAnalyzeWrapper(TComputationMutables& mutables, IComputationNode* textArg, IComputationNode* settingsArg)
@@ -34,31 +40,14 @@ public:
             return ctx.HolderFactory.GetEmptyContainerLazy();
         }
 
-        TSettings* settings = nullptr;
-        auto& cachedSettings = ctx.MutableValues[CachedSettingsIndex];
-        if (cachedSettings.IsInvalid()) {
-            // First time - get, parse, and cache the settings
-            auto settingsProto = SettingsArg->GetValue(ctx);
-            if (!settingsProto) {
-                // If settings is null, return empty list
-                return ctx.HolderFactory.GetEmptyContainerLazy();
-            }
-
-            auto analyzersPtr = std::make_unique<TSettings>();
-            if (!analyzersPtr->ParseFromString(settingsProto.AsStringRef())) {
-                // Failed to parse settings, return empty list
-                return ctx.HolderFactory.GetEmptyContainerLazy();
-            }
-            
-            settings = analyzersPtr.get();
-            cachedSettings = NUdf::TUnboxedValuePod(reinterpret_cast<ui64>(analyzersPtr.release()));
-        } else {
-            // Reuse cached settings
-            settings = reinterpret_cast<TSettings*>(static_cast<ui64>(cachedSettings.Get<ui64>()));
+        auto& settings = GetSettings(ctx);
+        if (!settings.IsValid) {
+            // Failed to parse settings, return empty list
+            return ctx.HolderFactory.GetEmptyContainerLazy();
         }
 
         // Tokenize text using NKikimr::NFulltext::Analyze
-        TVector<TString> tokens = Analyze(TString(text.AsStringRef()), *settings);
+        TVector<TString> tokens = Analyze(TString(text.AsStringRef()), settings.Analyzers);
 
         // Convert tokens to TUnboxedValue list
         NUdf::TUnboxedValue* items = nullptr;
@@ -68,6 +57,25 @@ public:
         }
 
         return result;
+    }
+
+    TSettings& GetSettings(TComputationContext& ctx) const {
+        auto& cachedSettings = ctx.MutableValues[CachedSettingsIndex];
+        if (cachedSettings.IsInvalid()) {
+            // First time - get, parse, and cache the settings
+            cachedSettings = ctx.HolderFactory.Create<TSettings>();
+            auto& settings = GetSettings(cachedSettings);
+            auto settingsProto = SettingsArg->GetValue(ctx);
+            settings.IsValid = settings.Analyzers.ParseFromString(settingsProto.AsStringRef());
+            return settings;
+        } else {
+            // Return cached settings
+            return GetSettings(cachedSettings);
+        }
+    }    
+
+    TSettings& GetSettings(auto& cachedSettings) const {
+        return *static_cast<TSettings*>(cachedSettings.AsBoxed().Get());
     }
 
 private:

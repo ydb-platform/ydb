@@ -57,7 +57,7 @@ private:
     YDB_READONLY_DEF(std::vector<NOlap::NTxInteractions::TTxEventContainer>, Events);
     std::shared_ptr<TLockSharingInfo> SharingInfo;
 
-    YDB_READONLY_DEF(THashSet<ui64>, BrokeOnCommit);
+    YDB_READONLY_DEF(THashSet<ui64>, BreakOnCommit);
     YDB_READONLY_DEF(THashSet<ui64>, NotifyOnCommit);
     YDB_READONLY_DEF(THashSet<ui64>, Committed);
 
@@ -100,16 +100,18 @@ public:
         return Committed.contains(lockId);
     }
 
-    void AddNotifyCommit(const ui64 lockId) {
-        AFL_VERIFY(NotifyOnCommit.erase(lockId));
+    /*
+    Let the given `TLockFeatures` know that the transaction with `lockId` has committed
+    */
+    void NotifyAboutCommit(const ui64 lockId) {
         Committed.emplace(lockId);
     }
 
-    void AddBrokeOnCommit(const THashSet<ui64>& lockIds) {
-        BrokeOnCommit.insert(lockIds.begin(), lockIds.end());
+    void AddBreakOnCommit(const THashSet<ui64>& lockIds) {
+        BreakOnCommit.insert(lockIds.begin(), lockIds.end());
     }
 
-    void AddNotificationsOnCommit(const THashSet<ui64>& lockIds) {
+    void AddNotifyOnCommit(const THashSet<ui64>& lockIds) {
         NotifyOnCommit.insert(lockIds.begin(), lockIds.end());
     }
 

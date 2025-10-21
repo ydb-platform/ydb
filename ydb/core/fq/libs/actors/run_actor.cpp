@@ -1614,18 +1614,11 @@ private:
         }
 
         if (enableCheckpointCoordinator) {
-            NKikimrConfig::TCheckpointsConfig config;
-            const auto& oldConfig = Params.Config.GetCheckpointCoordinator();
-            config.SetEnabled(oldConfig.GetEnabled());
-            config.SetCheckpointingPeriodMillis(oldConfig.GetCheckpointingPeriodMillis());
-            config.SetMaxInflight(oldConfig.GetMaxInflight());
-            config.SetCheckpointingSnapshotRotationPeriod(oldConfig.GetCheckpointingSnapshotRotationPeriod());
-
             CheckpointCoordinatorId = Register(MakeCheckpointCoordinator(
                 ::NFq::TCoordinatorId(Params.QueryId + "-" + ToString(DqGraphIndex), Params.PreviousQueryRevision),
                 NYql::NDq::MakeCheckpointStorageID(),
                 SelfId(),
-                config,
+                Params.Config.GetCheckpointCoordinator(),
                 QueryCounters.Counters,
                 dqGraphParams,
                 Params.StateLoadMode,

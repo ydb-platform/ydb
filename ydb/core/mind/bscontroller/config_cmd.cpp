@@ -177,12 +177,11 @@ namespace NKikimr::NBsController {
                             Self->TryToRelocateBrokenDisksLocallyFirst = value;
                             db.Table<T>().Key(true).Update<T::TryToRelocateBrokenDisksLocallyFirst>(Self->TryToRelocateBrokenDisksLocallyFirst);
                         }
-                        for (bool value : settings.GetEnableBlobChecker()) {
-                            Self->BlobCheckerEnabled = value;
-                            db.Table<T>().Key(true).Update<T::BlobCheckerEnabled>(Self->BlobCheckerEnabled);
-                            auto ev = std::make_unique<TEvUpdateBlobCheckerSettings>();
-                            ev->GroupLayoutSanitizerEnabled = Self->GroupLayoutSanitizerEnabled;
-                            Self->Send(Self->SelfHealId, ev.release());
+                        for (ui64 raw : settings.GetBlobCheckerPeriodicity()) {
+                            TDuration value = static_cast<TDuration>(raw);
+                            db.Table<T>().Key(true).Update<T::BlobCheckerPeriodicity>(value);
+                            Self->Send(Self->SelfId(), new TEvBlobCheckerUpdateSettings(value));
+                            // Self->BlobCheckerPeriodicity is updated in the event handler
                         }
                         return;
                     }

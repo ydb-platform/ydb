@@ -119,6 +119,15 @@ public:
         return true;
     }
 
+    void ResetState() {
+        LocksByGroup.clear();
+        GroupsAllowedToScan.Clear();
+        NodeLockQueues.clear();
+
+        TimeWasted = TDuration::Zero();
+        LastPlannedTimestamp = TDuration::Zero();
+    }
+
     std::optional<TGroupId> ObtainNextGroupToCheck();
 
     void SetGroupCount(ui32 groupCount) {
@@ -136,7 +145,9 @@ public:
             // last planned request was too long ago, allow next scan right now
             // and accelerate further requests to compensate wasted time
             TDuration wasted = now - (LastPlannedTimestamp + delay);
-            TimeWasted = std::max(Periodicity, TimeWasted + wasted);
+            if (LastPlannedTimestamp != TMonotonic::Zero()) {
+                TimeWasted = std::max(Periodicity, TimeWasted + wasted);
+            }
             LastPlannedTimestamp = now;
         } else {
             LastPlannedTimestamp += delay;
@@ -214,6 +225,10 @@ bool TBlobCheckerPlanner::DequeueCheck(TGroupId groupId) {
     return Impl->DequeueCheck(groupId);
 }
 
+void TBlobCheckerPlanner::ResetState() {
+    Impl->ResetState();
+}
+
 TMonotonic TBlobCheckerPlanner::GetNextAllowedCheckTimestamp(TMonotonic now) {
     return Impl->GetNextAllowedCheckTimestamp(now);
 }
@@ -228,61 +243,5 @@ void TBlobCheckerPlanner::SetGroupCount(ui32 groupCount) {
 void TBlobCheckerPlanner::SetPeriodicity(TDuration newPeriodicity) {
     Impl->SetPeriodicity(newPeriodicity);
 }
-
-/////////////////////////////////////////////////////////////////////////////////////
-
-namespace NBsController {
-
-void TBlobStorageController::UpdateBlobCheckerState() {
-    TMonotonic now = TActivationContext::Monotonic();
-    if (now >= NextAllowedBlobCheckerTimestamp) {
-        NextAllowedBlobCheckerTimestamp = BlobCheckerPlanner.GetNextAllowedCheckTimestamp(now);
-
-        const std::optional<TGroupId> groupToScan = BlobCheckerPlanner.ObtainNextGroupToCheck();
-        if (groupToScan) {
-            Send(BlobCheckerOrchestratorId,
-                    new TEvBlobCheckerScanDecision(*groupToScan, NKikimrProto::OK));
-        }
-    }
-}
-
-void TBlobStorageController::DequeueCheckForGroup(TGroupId groupId) {
-    bool scanWasPlanned = BlobCheckerPlanner.DequeueCheck(groupId);
-    if (scanWasPlanned) {
-        NextAllowedBlobCheckerTimestamp = BlobCheckerPlanner.GetNextAllowedCheckTimestamp(now);
-        Send(BlobCheckerOrchestratorId,
-            new TEvBlobCheckerScanDecision(*groupToScan, NKikimrProto::ERROR));
-    }
-}
-
-void TBlobStorageController::Handle(const TEvControllerBlobCheckerUpdateGroupStatus::TPtr& ev) {
-
-}
-
-void TBlobStorageController::Handle(const TEvBlobCheckerPlanScan::TPtr& ev) {
-    TGroupId groupId = ev->Get()->GroupId;
-    TGroupInfo::TGroupFinder finder = [this](TGroupId groupId) { return FindGroup(groupId); };
-    TGroupInfo::TStaticTGroupFinder staticFinder = [this](TGroupId groupId) {
-        const auto it = StaticGroups.find(groupId);
-        if (it == StaticGroups.end()) {
-            return nullptr;
-        }
-        return &it->second;
-    };
-
-    if (const TGroupInfo* groupInfo = finder(groupId)) {
-        TGroupInfo::TGroupStatus status = groupInfo->GetStatus(finder, BridgeInfo.get());
-        if (status.OperatingStatus == NKikimrBlobStorage::TGroupStatus::FULL) {
-            BlobCheckerPlanner.EnqueueBlobChecker(groupInfo->);
-        }
-    } else if (const TStaticGroupInfo* staticGroupInfo = staticFinder(groupId)) {
-        TGroupInfo::TGroupStatus status = staticGroupInfo->GetStatus(staticFinder, BridgeInfo.get());
-        if (status.OperatingStatus == NKikimrBlobStorage::TGroupStatus::FULL) {
-            BlobCheckerPlanner.EnqueueBlobChecker(groupId);
-        }
-    }
-}
-
-} // namespace NBsController
 
 } // namespace NKikimr

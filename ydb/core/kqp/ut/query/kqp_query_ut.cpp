@@ -3391,38 +3391,28 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetQueryClient();
         auto tableClient = kikimr.GetTableClient();
-        {
-            TVector<TString> queries = {
-                "DISCARD SELECT 1",
-                "DISCARD SELECT COUNT(*) FROM `/Root/EightShard`",
-                "DISCARD SELECT 5 FROM (SELECT Key FROM `/Root/EightShard`)",
-                R"(DISCARD SELECT e1.Key, e2.Value1
-                FROM `/Root/EightShard` AS e1
-                JOIN `/Root/TwoShard` AS e2 ON e1.Key = e2.Key)"
-            };
+        
+        TVector<TString> queries = {
+            "DISCARD SELECT 1",
+            "DISCARD SELECT COUNT(*) FROM `/Root/EightShard`",
+            "DISCARD SELECT 5 FROM (SELECT Key FROM `/Root/EightShard`)",
+            R"(DISCARD SELECT e1.Key, e2.Value1
+            FROM `/Root/EightShard` AS e1
+            JOIN `/Root/TwoShard` AS e2 ON e1.Key = e2.Key)"
+        };
 
-            for (const auto& query : queries) {
-                auto result = db.ExecuteQuery(query,
-                        NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-                UNIT_ASSERT_VALUES_EQUAL_C(result.GetResultSets().size(), 0,
-                    "DISCARD SELECT should return no result sets for query: " << query);
-            }
-        }
-        // dml queries returns result with discard within backward compability
-        {
-            auto session = tableClient.CreateSession().GetValueSync().GetSession();
-            TVector<TString> queries = {
-                "DISCARD SELECT 1",
-                "DISCARD SELECT COUNT(*) FROM `/Root/EightShard`",
-                "SELECT 5 FROM (DISCARD SELECT Key FROM `/Root/EightShard`)"
-            };
-            for (auto& query : queries) {
-                auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), TExecDataQuerySettings()).ExtractValueSync();
-                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-                UNIT_ASSERT_C(result.GetResultSets().size() > 0,
-                    "DISCARD SELECT should return result sets for dml but got: " << result.GetResultSets().size() << " for query " << query);
-            }
+        TVector<TString> invalidQueries = {
+            "SELECT 5 FROM (DISCARD SELECT Key FROM `/Root/EightShard`)",
+            "SELECT * FROM `/Root/EightShard` WHERE Key IN (DISCARD SELECT 1)",
+            "SELECT 1 UNION ALL (DISCARD SELECT 2)"
+        };
+
+        for (const auto& query : queries) {
+            auto result = db.ExecuteQuery(query,
+                    NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetResultSets().size(), 0,
+                "DISCARD SELECT should return no result sets for query: " << query);
         }
         {
             auto queries = R"(SELECT 1; DISCARD SELECT 2; DISCARD SELECT COUNT(*) FROM `/Root/EightShard`;
@@ -3445,38 +3435,32 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
                 "got result sets: " << result.GetResultSets().size() << " instead of 0 for query: " << ensureQuery);
         
         }
-        // discard scan queries
-        {
-            TVector<TString> scanQueries = {
-                "DISCARD SELECT Key FROM `/Root/EightShard`",
-                "DISCARD SELECT COUNT(*) FROM `/Root/EightShard`",
-                "DISCARD SELECT * FROM `/Root/EightShard` WHERE Key > 100",
-            };
-
-            for (auto& query : scanQueries) {
-                auto it = tableClient.StreamExecuteScanQuery(query).GetValueSync();                UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-                auto result = StreamResultToYson(it);
-                CompareYson(R"([])", result);
-            }
         
+        for (const auto& query : invalidQueries) {
+            auto result = db.ExecuteQuery(query,
+                    NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(!result.IsSuccess(),
+                "Query should fail: " << query);
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(),
+                "DISCARD");
         }
-        // discard is not allowed in subqueries
+        // backward compability tests
         {
-            TVector<TString> invalidQueries = {
-                "SELECT 5 FROM (DISCARD SELECT Key FROM `/Root/EightShard`)",
-                "SELECT * FROM `/Root/EightShard` WHERE Key IN (DISCARD SELECT 1)",
-                "SELECT 1 UNION ALL (DISCARD SELECT 2)"
-            };
-
-            for (const auto& query : invalidQueries) {
-                auto result = db.ExecuteQuery(query,
-                        NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-                UNIT_ASSERT_C(!result.IsSuccess(),
-                    "Query should fail: " << query);
-                UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(),
-                    "DISCARD");
+            auto session = tableClient.CreateSession().GetValueSync().GetSession();
+            for (auto& query : Concatenate(queries, invalidQueries)) {
+                auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), TExecDataQuerySettings()).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                UNIT_ASSERT_C(result.GetResultSets().size() > 0,
+                    "DISCARD SELECT should return result sets for dml but got: " << result.GetResultSets().size() << " for query " << query);
             }
         }
+
+        for (auto& query : queries) {
+            auto it = tableClient.StreamExecuteScanQuery(query).GetValueSync();                UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            auto result = StreamResultToYson(it);
+            CompareYson(R"([])", result); // should be result
+        }
+
     }
 }
 

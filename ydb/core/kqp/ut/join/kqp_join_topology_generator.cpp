@@ -178,17 +178,7 @@ std::string TRelationGraph::MakeQuery() const {
             "JOIN " + TLexicographicalNameGenerator::getName(i, /*lowerCase=*/false) + " ON";
 
         bool hasJoin = false;
-        for (unsigned j = 0; j < AdjacencyList_[i].size(); ++ j) {
-            const unsigned connectionsJ = AdjacencyList_[AdjacencyList_[i][j].Target].size();
-
-            if (AdjacencyList_[i].size() > connectionsJ) {
-                continue;
-            }
-
-            if (AdjacencyList_[i].size() == connectionsJ && i < AdjacencyList_[i][j].Target) {
-                continue;
-            }
-
+        auto addJoinCodition = [&](int j) {
             if (hasJoin) {
                 currentJoin += " AND";
             }
@@ -198,15 +188,24 @@ std::string TRelationGraph::MakeQuery() const {
             currentJoin += " " +
                            getRelationName(i, AdjacencyList_[i][j].ColumnLHS) + " = " +
                            getRelationName(AdjacencyList_[i][j].Target, AdjacencyList_[i][j].ColumnRHS);
+
+        };
+
+        for (unsigned j = 0; j < AdjacencyList_[i].size(); ++ j) {
+            if (i < AdjacencyList_[i][j].Target) {
+                continue;
+            }
+
+            addJoinCodition(j);
         }
         currentJoin += "\n";
 
         if (hasJoin) {
             joinClause += currentJoin;
-            continue;
-        } else {
-            assert(fromClause.empty());
+        } else if (fromClause.empty()) {
             fromClause = "SELECT *\nFROM " + getTableName(i) + "\n";
+        } else {
+            joinClause += "CROSS JOIN " + getTableName(i) + "\n";
         }
     }
 

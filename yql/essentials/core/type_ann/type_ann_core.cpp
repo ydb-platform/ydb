@@ -8244,13 +8244,18 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                                 return IGraphTransformer::TStatus::Error;
                             }
                         }
-                        auto sett = ctx.Expr.Builder(setting->Pos()).List()
-                            .Atom(0, "layers");
-                        size_t idx = 1;
-                        for (const auto& nameStr: setting->Child(1)->Children()) {
-                            sett.Atom(idx++, nameStr->Child(0)->Content());
-                        }
-                        output = ctx.Expr.ChangeChild(*input, 4, ctx.Expr.ChangeChild(*input->Child(4), i, sett.Seal().Build()));
+                        auto sett = ctx.Expr.Builder(setting->Pos())
+                            .List()
+                                .Do([&setting](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                                    parent.Atom(0, "layers");
+                                    size_t idx = 1;
+                                    for (const auto& nameStr: setting->Child(1)->Children()) {
+                                        parent.Atom(idx++, nameStr->Child(0)->Content());
+                                    }
+                                    return parent;
+                                })
+                            .Seal().Build();
+                        output = ctx.Expr.ChangeChild(*input, 4, ctx.Expr.ChangeChild(*input->Child(4), i, std::move(sett)));
                         return IGraphTransformer::TStatus::Repeat;
                     }
                 }
@@ -13697,6 +13702,11 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         ColumnOrderFunctions["PgSetItem"] = &OrderForPgSetItem;
         ColumnOrderFunctions["PgIterate"] = &OrderFromFirst;
         ColumnOrderFunctions["PgIterateAll"] = &OrderFromFirst;
+
+        ColumnOrderFunctions["YqlSetItem"] = &OrderForPgSetItem;
+        ColumnOrderFunctions["YqlIterate"] = &OrderFromFirst;
+        ColumnOrderFunctions["YqlIterateAll"] = &OrderFromFirst;
+
         ColumnOrderFunctions["AssumeColumnOrder"] = &OrderForAssumeColumnOrder;
 
         ColumnOrderFunctions["SqlProject"] = ColumnOrderFunctions["OrderedSqlProject"] = &OrderForSqlProject;
@@ -13714,6 +13724,12 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             ColumnOrderFunctions["Filter"] = ColumnOrderFunctions["OrderedFilter"] = &OrderFromFirst;
         ColumnOrderFunctions["AssumeSorted"] = ColumnOrderFunctions["Unordered"] =
             ColumnOrderFunctions["UnorderedSubquery"] = ColumnOrderFunctions["AssumeUniq"] = &OrderFromFirst;
+
+        ExtFunctions["YqlSelect"] = &PgSelectWrapper;
+        ExtFunctions["YqlSetItem"] = &PgSetItemWrapper;
+        ExtFunctions["YqlResultItem"] = &PgResultItemWrapper;
+        ExtFunctions["YqlValuesList"] = &PgValuesListWrapper;
+        Functions["YqlColumnRef"] = &PgColumnRefWrapper;
 
         for (ui32 i = 0; i < NKikimr::NUdf::DataSlotCount; ++i) {
             auto name = TString(NKikimr::NUdf::GetDataTypeInfo((EDataSlot)i).Name);

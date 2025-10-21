@@ -152,6 +152,7 @@ public:
     NCommon::TConfSetting<bool, Static> EnableDynamicStoreReadInDQ;
     NCommon::TConfSetting<bool, Static> UseDefaultArrowAllocatorInJobs;
     NCommon::TConfSetting<bool, Static> UseNativeYtDefaultColumnOrder;
+    NCommon::TConfSetting<bool, Static> EarlyPartitionPruning;
 
     // Job runtime
     NCommon::TConfSetting<TString, Dynamic> Pool;

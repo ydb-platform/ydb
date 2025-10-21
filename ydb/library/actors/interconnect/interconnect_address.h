@@ -7,13 +7,14 @@
 
 namespace NInterconnect {
     class TAddress {
+    public:
         union {
             sockaddr Generic;
             sockaddr_in Ipv4;
             sockaddr_in6 Ipv6;
         } Addr;
 
-    public:
+        using TV6Addr = in6_addr;
         TAddress();
         TAddress(const char* addr, ui16 port);
         TAddress(const TString& addr, ui16 port);
@@ -44,4 +45,8 @@ namespace NInterconnect {
             return res;
         }
     };
+
+#if not defined(_win32_)
+    TAddress::TV6Addr GetV6CompatAddr(const TAddress& a) noexcept;
+#endif
 }

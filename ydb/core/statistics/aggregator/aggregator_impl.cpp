@@ -541,7 +541,7 @@ void TStatisticsAggregator::InitializeStatisticsTable() {
 }
 
 void TStatisticsAggregator::Navigate() {
-    Y_ABORT_UNLESS(NavigateType == ENavigateType::Traversal  && !NavigateAnalyzeOperationId
+    Y_ABORT_UNLESS(NavigateType == ENavigateType::Traversal && !NavigateAnalyzeOperationId
                 || NavigateType == ENavigateType::Analyze && NavigateAnalyzeOperationId);
     Y_ABORT_UNLESS(NavigatePathId);
 
@@ -552,6 +552,7 @@ void TStatisticsAggregator::Navigate() {
     entry.Operation = TNavigate::OpTable;
 
     auto request = std::make_unique<TNavigate>();
+    request->DatabaseName = NavigateDatabase;
     request->ResultSet.emplace_back(entry);
 
     Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.release()));
@@ -653,6 +654,7 @@ void TStatisticsAggregator::ScheduleNextAnalyze(NIceDb::TNiceDb& db) {
                 std::optional<bool> isColumnTable = IsColumnTable(operationTable.PathId);
                 if (!isColumnTable) {
                     ForceTraversalOperationId = operation.OperationId;
+                    TraversalDatabase = operation.DatabaseName;
                     TraversalPathId = operationTable.PathId;
                     DeleteStatisticsFromTable();
                     return;
@@ -660,6 +662,7 @@ void TStatisticsAggregator::ScheduleNextAnalyze(NIceDb::TNiceDb& db) {
 
                 if (*isColumnTable) {
                     NavigateAnalyzeOperationId = operation.OperationId;
+                    NavigateDatabase = operation.DatabaseName;
                     NavigatePathId = operationTable.PathId;
                     Navigate();
                     return;
@@ -681,6 +684,7 @@ void TStatisticsAggregator::ScheduleNextAnalyze(NIceDb::TNiceDb& db) {
 void TStatisticsAggregator::ScheduleNextTraversal(NIceDb::TNiceDb& db) {
     SA_LOG_D("[" << TabletID() << "] ScheduleNextTraversal");
 
+    TString databaseName;
     TPathId pathId;
 
     if (!LastTraversalWasForce) {
@@ -693,6 +697,7 @@ void TStatisticsAggregator::ScheduleNextTraversal(NIceDb::TNiceDb& db) {
                 for (TForceTraversalTable& operationTable : operation.Tables) {
                     if (operationTable.Status == TForceTraversalTable::EStatus::AnalyzeFinished) {
                         UpdateForceTraversalTableStatus(TForceTraversalTable::EStatus::TraversalStarted, operation.OperationId, operationTable,  db);
+                        databaseName = operation.DatabaseName;
                         pathId = operationTable.PathId;
                         break;
                     }
@@ -723,6 +728,7 @@ void TStatisticsAggregator::ScheduleNextTraversal(NIceDb::TNiceDb& db) {
             return;
         }
 
+        databaseName = ""; // it's intentional, because ScheduleTraversalsByTime is filled by SchemeShards
         pathId = oldestTable->PathId;
     }
 
@@ -731,6 +737,7 @@ void TStatisticsAggregator::ScheduleNextTraversal(NIceDb::TNiceDb& db) {
         return;
     }
 
+    TraversalDatabase = databaseName;
     TraversalPathId = pathId;
     TraversalStartTime = TInstant::Now();
 
@@ -762,6 +769,7 @@ void TStatisticsAggregator::StartTraversal(NIceDb::TNiceDb& db) {
     TraversalStartKey = TSerializedCellVec();
     PersistStartKey(db);
 
+    NavigateDatabase = TraversalDatabase;
     NavigatePathId = TraversalPathId;
     Navigate();
 }
@@ -872,6 +880,7 @@ void TStatisticsAggregator::PersistSysParam(NIceDb::TNiceDb& db, ui64 id, const 
 }
 
 void TStatisticsAggregator::PersistTraversal(NIceDb::TNiceDb& db) {
+    PersistSysParam(db, Schema::SysParam_TraversalTableDatabase, ToString(TraversalDatabase));
     PersistSysParam(db, Schema::SysParam_TraversalTableOwnerId, ToString(TraversalPathId.OwnerId));
     PersistSysParam(db, Schema::SysParam_TraversalTableLocalPathId, ToString(TraversalPathId.LocalPathId));
     PersistSysParam(db, Schema::SysParam_TraversalStartTime, ToString(TraversalStartTime.MicroSeconds()));
@@ -888,6 +897,7 @@ void TStatisticsAggregator::PersistGlobalTraversalRound(NIceDb::TNiceDb& db) {
 
 void TStatisticsAggregator::ResetTraversalState(NIceDb::TNiceDb& db) {
     ForceTraversalOperationId.clear();
+    TraversalDatabase = "";
     TraversalPathId = {};
     TraversalStartTime = TInstant::MicroSeconds(0);
     PersistTraversal(db);
@@ -1063,6 +1073,7 @@ bool TStatisticsAggregator::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev
 
             str << Endl;
             str << "TraversalStartTime: " << TraversalStartTime.ToStringUpToSeconds() << Endl;
+            str << "TraversalDatabase: " << TraversalDatabase << Endl;
             str << "TraversalPathId: " << TraversalPathId << Endl;
             str << "TraversalIsColumnTable: " << TraversalIsColumnTable << Endl;
             str << "TraversalStartKey: " << TraversalStartKey.GetBuffer() << Endl;

@@ -50,10 +50,7 @@ protected:
 };
 
 struct THashV1 : public THashBase {
-    explicit THashV1(
-        const TVector<TColumnInfo>& keyColumns
-    )
-    {
+    explicit THashV1(const TVector<TColumnInfo>& keyColumns) {
         for (const auto& column : keyColumns) {
             Hashers.emplace_back(MakeHashImpl(column.DataType));
         }
@@ -64,15 +61,10 @@ struct THashV1 : public THashBase {
     }
 };
 
-struct THashV2 : public THashBase {
-    explicit THashV2(
-        const TVector<TColumnInfo>& keyColumns
-    )
-    {
-        for (const auto& column : keyColumns) {
-            Hashers.emplace_back(MakeHashImpl(column.OriginalType));
-        }
-    }
+struct THashV2 : public THashV1 {
+    explicit THashV2(const TVector<TColumnInfo>& keyColumns)
+        : THashV1(keyColumns)
+    {}
 
     static inline ui64 SpreadHash(ui64 hash) {
         // https://probablydance.com/2018/06/16/fibonacci-hashing-the-optimization-that-the-world-forgot-or-a-better-alternative-to-integer-modulo/
@@ -84,19 +76,24 @@ struct THashV2 : public THashBase {
     }
 };
 
-struct TBlockHashV1 {
-    TBlockHashV1(
-        const TVector<TColumnInfo>& keyColumns
-    )
-    {
+struct TBlockHashBase {
+    void Start() {
+        Hash = 0;
+    }
+
+protected:
+    TBlockHashBase() = default;
+
+    TVector<NUdf::IBlockItemHasher::TPtr> Hashers;
+    ui64 Hash;
+};
+
+struct TBlockHashV1 : public TBlockHashBase {
+    explicit TBlockHashV1(const TVector<TColumnInfo>& keyColumns) {
         TBlockTypeHelper helper;
         for (const auto& column : keyColumns) {
             Hashers.emplace_back(helper.MakeHasher(column.OriginalType));
         }
-    }
-
-    void Start() {
-        Hash = 0;
     }
 
     template <class TValue>
@@ -107,18 +104,20 @@ struct TBlockHashV1 {
     ui64 Finish(ui64 outputsSize) {
         return Hash % outputsSize;
     }
-
-protected:
-    TVector<NUdf::IBlockItemHasher::TPtr> Hashers;
-    ui64 Hash;
 };
 
-struct TBlockHashV2 : public TBlockHashV1 {
-    TBlockHashV2(
-        const TVector<TColumnInfo>& keyColumns
-    )
-        : TBlockHashV1(keyColumns)
-    {}
+struct TBlockHashV2 : public TBlockHashBase {
+    explicit TBlockHashV2(const TVector<TColumnInfo>& keyColumns) {
+        TBlockTypeHelper helper;
+        for (const auto& column : keyColumns) {
+            Hashers.emplace_back(helper.MakeHasher(column.DataType));
+        }
+    }
+
+    template <class TValue>
+    void Update(const TValue& item, size_t keyIdx) {
+        Hash = CombineHashes(Hash, item.HasValue() ? Hashers.at(keyIdx)->Hash(item) : 0);
+    }
 
     ui64 Finish(ui64 outputsSize) {
         return THashV2::SpreadHash(Hash) % outputsSize;

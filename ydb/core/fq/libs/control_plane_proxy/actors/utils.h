@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/fq/libs/compute/common/utils.h>
+#include <ydb/core/fq/libs/control_plane_storage/events/events.h>
 
 namespace NFq {
 

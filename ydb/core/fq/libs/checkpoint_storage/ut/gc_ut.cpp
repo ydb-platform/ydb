@@ -96,6 +96,7 @@ class TGcTestBase: public NUnitTest::TTestBase {
         Runtime->SetLogPriority(NKikimrServices::STREAMS_STORAGE_SERVICE, NLog::PRI_DEBUG);
         SetupTabletServices(*Runtime);
 
+        NConfig::TCheckpointCoordinatorConfig config;
         auto& storageConfig = *Config.MutableStorage();
         storageConfig.SetEndpoint(YdbEndpoint);
         storageConfig.SetDatabase(YdbDatabase);
@@ -104,7 +105,7 @@ class TGcTestBase: public NUnitTest::TTestBase {
 
         NYdb::TDriver driver({});
         if (UseYdbSdk) {
-            return CreateSdkYdbConnection(Config.GetExternalStorage(), NKikimr::CreateYdbCredentialsProviderFactory, driver);
+            return CreateSdkYdbConnection(storageConfig, NKikimr::CreateYdbCredentialsProviderFactory, driver);
         } else {
             return CreateLocalYdbConnection(YdbDatabase, TablePrefix);
         }
@@ -119,7 +120,7 @@ class TGcTestBase: public NUnitTest::TTestBase {
     }
 
     void Init() {
-        CheckpointStorage = NewYdbCheckpointStorage(Config.GetExternalStorage(), CreateEntityIdGenerator("id"), Connection);
+        CheckpointStorage = NewYdbCheckpointStorage(Config.GetStorage(), CreateEntityIdGenerator("id"), Connection);
         auto issues = Call<NThreading::TFuture<NYql::TIssues>>([&](){ return CheckpointStorage->Init(); }).GetValueSync();
         UNIT_ASSERT_C(issues.Empty(), issues.ToString());
 
@@ -129,7 +130,7 @@ class TGcTestBase: public NUnitTest::TTestBase {
 
         Fill();
 
-        NConfig::TCheckpointGcConfig gcConfig;
+        TCheckpointStorageSettings::TGcSettings gcConfig;
         auto gc = NewGC(gcConfig, CheckpointStorage, StateStorage);
         ActorGC = GetRuntime()->Register(gc.release());
         Runtime->DispatchEvents({}, TDuration::Zero());
@@ -240,7 +241,7 @@ private:
     THolder<Tests::TServerSettings> ServerSettings;
     THolder<Tests::TServer> Server;
     THolder<Tests::TClient> Client;
-    NKikimrConfig::TCheckpointsConfig Config;
+    NConfig::TCheckpointCoordinatorConfig Config;
 
     TCheckpointStoragePtr CheckpointStorage;
     TStateStoragePtr StateStorage;

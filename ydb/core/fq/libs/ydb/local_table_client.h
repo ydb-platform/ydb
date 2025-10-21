@@ -5,6 +5,9 @@
 #include <ydb/core/fq/libs/ydb/local_session.h>
 #include <library/cpp/retry/retry_policy.h>
 
+#include <ydb/core/fq/libs/ydb/table_client.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+
 namespace NFq {
 
 

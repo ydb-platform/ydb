@@ -14,6 +14,7 @@
 #include <util/string/strip.h>
 #include <util/system/env.h>
 
+#include <ydb/core/fq/libs/ydb/table_client.h>
 #include <ydb/core/fq/libs/ydb/ydb_connection.h>
 
 namespace NKikimrConfig {
@@ -49,7 +50,7 @@ private:
     YDB_ACCESSOR_DEF(TDuration, CancelAfter);
 };
 
-struct TYdbConnection : public TThrRefBase {
+struct TYdbConnection : public TThrRefBase {    // TODO :rm ?
     NYdb::TDriver Driver;
     NYdb::NTable::TTableClient TableClient;
     NYdb::NScheme::TSchemeClient SchemeClient;
@@ -65,6 +66,25 @@ struct TYdbConnection : public TThrRefBase {
 };
 
 using TYdbConnectionPtr = TIntrusivePtr<TYdbConnection>;
+
+struct IYdbConnection : public TThrRefBase {
+    using TPtr = TIntrusivePtr<IYdbConnection>;
+
+    virtual IYdbTableClient::TPtr GetTableClient() = 0;
+    virtual TString GetTablePathPrefix() = 0;
+    virtual TString GetDb() = 0;
+    virtual TString GetTablePathPrefixWithoutDb() = 0;
+};
+
+IYdbConnection::TPtr CreateLocalYdbConnection(
+    const TString& db,
+    const TString& tablePathPrefix);
+
+IYdbConnection::TPtr CreateSdkYdbConnection(
+    const TExternalStorageSettings& config,
+    const NKikimr::TYdbCredentialsProviderFactory& credProviderFactory,
+    const NYdb::TDriver& driver);
+
 
 ////////////////////////////////////////////////////////////////////////////////
 

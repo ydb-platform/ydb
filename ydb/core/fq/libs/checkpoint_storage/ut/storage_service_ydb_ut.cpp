@@ -60,11 +60,11 @@ public:
 
         NConfig::TCheckpointCoordinatorConfig config;
         config.SetEnabled(true);
-        auto& checkpointConfig = *config.MutableExternalStorage();
-        checkpointConfig.SetEndpoint(GetEnv("YDB_ENDPOINT"));
-        checkpointConfig.SetDatabase(GetEnv("YDB_DATABASE"));
-        checkpointConfig.SetToken("");
-        checkpointConfig.SetTablePrefix(CreateGuidAsString());
+        auto& storageConfig = *config.MutableStorage();
+        storageConfig.SetEndpoint(GetEnv("YDB_ENDPOINT"));
+        storageConfig.SetDatabase(GetEnv("YDB_DATABASE"));
+        storageConfig.SetToken("");
+        storageConfig.SetTablePrefix(CreateGuidAsString());
 
         auto& gcConfig = *config.MutableCheckpointGarbageConfig();
         gcConfig.SetEnabled(EnableGc);
@@ -88,7 +88,6 @@ public:
         NKikimrProto::TAuthConfig authConfig;
         authConfig.SetUseBuiltinDomain(true);
         ServerSettings = MakeHolder<Tests::TServerSettings>(MsgBusPort, authConfig);
-        ServerSettings->AppConfig->MutableQueryServiceConfig()->MutableCheckpointsConfig()->SetEnabled(true);
         ServerSettings->AppConfig->MutableFeatureFlags()->SetEnableStreamingQueries(true);
 
         NKikimrConfig::TFeatureFlags featureFlags;

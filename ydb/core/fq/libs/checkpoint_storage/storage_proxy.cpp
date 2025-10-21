@@ -158,13 +158,12 @@ void TStorageProxy::Bootstrap() {
     }
     CheckpointStorage = NewYdbCheckpointStorage(StorageConfig, CreateEntityIdGenerator(IdsPrefix), ydbConnection);
     StateStorage = NewYdbStateStorage(Config, ydbConnection);
-    bool enableGc = !Config.HasCheckpointGarbageConfig() || Config.GetCheckpointGarbageConfig().GetEnabled();
-    if (enableGc) {
+
+    if (Config.GetCheckpointGarbageConfig().GetEnabled()) {
         const auto& gcConfig = Config.GetCheckpointGarbageConfig();
         ActorGC = Register(NewGC(gcConfig, CheckpointStorage, StateStorage).release());
     }
     Initialize();
-    
 
     LOG_STREAMS_STORAGE_SERVICE_INFO("Successfully bootstrapped TStorageProxy " << SelfId() << " with connection to "
         << StorageConfig.GetEndpoint().data()
@@ -305,7 +304,7 @@ void TStorageProxy::Handle(TEvCheckpointStorage::TEvCompleteCheckpointRequest::T
                 cookie = ev->Cookie,
                 sender = ev->Sender,
                 type = event->Type,
-                gcEnabled = !Config.GetCheckpointGarbageConfig().HasEnabled() || Config.GetCheckpointGarbageConfig().GetEnabled(),
+                gcEnabled = Config.GetCheckpointGarbageConfig().GetEnabled(),
                 actorGC = ActorGC,
                 actorSystem = TActivationContext::ActorSystem(),
                 context]

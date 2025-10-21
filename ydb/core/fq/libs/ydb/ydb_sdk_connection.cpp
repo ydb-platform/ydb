@@ -9,13 +9,13 @@ namespace NFq {
 struct TSdkYdbConnection : public IYdbConnection {
 
     TSdkYdbConnection(
-        const NKikimrConfig::TExternalStorage& config,
+        const TExternalStorageSettings& config,
         const NKikimr::TYdbCredentialsProviderFactory& credProviderFactory,
         const NYdb::TDriver& driver)
         : Driver(driver)
         , TableClient(CreateSdkTableClient(driver, GetClientSettings<NYdb::NTable::TClientSettings>(config, credProviderFactory)))
         , Db(config.GetDatabase())
-        , TablePathPrefix(JoinPath(Db, config.GetTablePrefix())) {
+        , TablePathPrefix(JoinPath(Db, config.GetPathPrefix())) {
     }
 
     IYdbTableClient::TPtr GetTableClient() override {
@@ -42,7 +42,7 @@ private:
 };
 
 IYdbConnection::TPtr CreateSdkYdbConnection(
-    const NKikimrConfig::TExternalStorage& config,
+    const TExternalStorageSettings& config,
     const NKikimr::TYdbCredentialsProviderFactory& credProviderFactory,
     const NYdb::TDriver& driver) {
     return MakeIntrusive<TSdkYdbConnection>(config, credProviderFactory, driver);

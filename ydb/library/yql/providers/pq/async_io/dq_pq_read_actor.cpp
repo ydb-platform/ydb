@@ -226,7 +226,7 @@ public:
             MetadataFields.emplace_back(fieldName, fieldsExtractor.FindExtractorLambda(fieldName));
         }
 
-        InitWatermarkTracker();
+        InitWatermarkTracker(); // non-virtual!
         IngressStats.Level = statsLevel;
     }
 

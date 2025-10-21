@@ -16,15 +16,14 @@ struct TSdkYdbTableClient : public IYdbTableClient {
     }
 
     NYdb::TAsyncStatus RetryOperation(TOperationFunc&& operation,
-        const NYdb::NRetry::TRetryOperationSettings& /*settings*/ = NYdb::NRetry::TRetryOperationSettings()) override {
-
+        const NYdb::NRetry::TRetryOperationSettings& settings = NYdb::NRetry::TRetryOperationSettings()) override {
         return TableClient.RetryOperation([operation](NYdb::NTable::TSession s) {
             auto session = MakeIntrusive<TSdkSession>(s);
-
             return operation(session);
-        });
+        }, settings);
     }
 
+private:
     NYdb::NTable::TTableClient TableClient;
 };
 

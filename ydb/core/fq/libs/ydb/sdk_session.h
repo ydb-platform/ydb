@@ -15,7 +15,7 @@ namespace NFq {
 struct TSdkSession : public ISession { 
 
     TSdkSession(NYdb::NTable::TSession session)
-    : Session(session) {
+        : Session(session) {
     }
 
     NThreading::TFuture<NYdb::NTable::TDataQueryResult> ExecuteDataQuery(
@@ -37,7 +37,7 @@ struct TSdkSession : public ISession {
         Cerr << "Begin_ " << txControl.Begin_ << Endl;
         Cerr << "Continue_ " << txControl.Continue_ << Endl;
         Cerr << "Commit_ " << txControl.Commit_ << Endl;
-        
+    
         if (paramsBuilder) {
             return Session.ExecuteDataQuery(sql, tx, paramsBuilder->Build(), execDataQuerySettings);
         } else {

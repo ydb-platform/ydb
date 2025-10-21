@@ -9,7 +9,6 @@ namespace NFq {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-//std::tuple<TCheckpointStoragePtr, NActors::IActor*> NewYdbCheckpointStorage(
 TCheckpointStoragePtr NewYdbCheckpointStorage(
     const TExternalStorageSettings& config,
     const IEntityIdGenerator::TPtr& entityIdGenerator,

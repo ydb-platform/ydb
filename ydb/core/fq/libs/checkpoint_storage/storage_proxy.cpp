@@ -144,8 +144,6 @@ TStorageProxy::TStorageProxy(
 }
 
 void TStorageProxy::Bootstrap() {
-    Become(&TStorageProxy::StateFunc);
-    
     LOG_STREAMS_STORAGE_SERVICE_INFO("Bootstrap");
     IYdbConnection::TPtr ydbConnection;
     if (!StorageConfig.GetEndpoint().empty()) {
@@ -163,6 +161,7 @@ void TStorageProxy::Bootstrap() {
         ActorGC = Register(NewGC(gcConfig, CheckpointStorage, StateStorage).release());
     }
     Initialize();
+    Become(&TStorageProxy::StateFunc);
 
     LOG_STREAMS_STORAGE_SERVICE_INFO("Successfully bootstrapped TStorageProxy " << SelfId() << " with connection to "
         << StorageConfig.GetEndpoint().data()
@@ -241,7 +240,6 @@ void TStorageProxy::Handle(TEvCheckpointStorage::TEvCreateCheckpointRequest::TPt
                 context->IncError();
                 return NThreading::MakeFuture(ICheckpointStorage::TCreateCheckpointResult {TString(), std::move(issues) } );
             }
-
             if (std::holds_alternative<TString>(graphDesc)) {
                 return storage->CreateCheckpoint(coordinatorId, checkpointId, std::get<TString>(graphDesc), ECheckpointStatus::Pending);
             } else {

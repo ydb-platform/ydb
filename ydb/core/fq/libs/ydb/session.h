@@ -26,18 +26,15 @@ struct ISession : public TThrRefBase{
         FLUENT_SETTING_DEFAULT(bool, SnapshotRead, false);
     };
 
-
     virtual NThreading::TFuture<NYdb::NTable::TDataQueryResult> ExecuteDataQuery(
         const TString& sql,
         TTxControl txControl,
         std::shared_ptr<NYdb::TParamsBuilder> params,
         NYdb::NTable::TExecDataQuerySettings execDataQuerySettings = NYdb::NTable::TExecDataQuerySettings()) = 0;
     
-    //virtual void CommitTransaction() = 0;
     virtual NYdb::TAsyncStatus Rollback() = 0;
 
-    virtual NYdb::TAsyncStatus CreateTable(const std::string& db, const std::string& path, NYdb::NTable::TTableDescription&& tableDesc
-        /*const TCreateTableSettings& settings = TCreateTableSettings()*/) = 0;
+    virtual NYdb::TAsyncStatus CreateTable(const std::string& db, const std::string& path, NYdb::NTable::TTableDescription&& tableDesc) = 0;
     
     virtual NYdb::TAsyncStatus DropTable( const std::string& path) = 0;
 

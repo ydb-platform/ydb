@@ -83,7 +83,7 @@ class TRegisterCheckTestBase: public NUnitTest::TTestBase {
 public:
 
     IYdbConnection::TPtr MakeConnection() {
-        NKikimrConfig::TExternalStorage config;
+        NConfig::TYdbStorageConfig config;
 
         config.SetEndpoint(GetEnv("YDB_ENDPOINT"));
         config.SetDatabase(GetEnv("YDB_DATABASE"));
@@ -96,9 +96,6 @@ public:
         } else {
             Connection = CreateLocalYdbConnection(Server->GetRuntime()->GetAppData().TenantName, ".metadata/checkpoints");
         }
-
-        // auto status = Connection->SchemeClient.MakeDirectory(Connection->TablePathPrefix).GetValueSync();
-        // UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
 
         auto desc = TTableBuilder()
             .AddNullableColumn("id", EPrimitiveType::String)
@@ -158,9 +155,6 @@ public:
     }
 
     TFuture<TStatus> CheckTransactionClosed(const TFuture<TStatus>& future, const TGenerationContextPtr& context) {
-        // if (!UseYdbSdk) {
-        //     return future;  // HasActiveTransaction in local connection is not fully supported
-        // }
         return future.Apply(
             [context] (const TFuture<TStatus>& future) {
                 if (context->Session->HasActiveTransaction()) {

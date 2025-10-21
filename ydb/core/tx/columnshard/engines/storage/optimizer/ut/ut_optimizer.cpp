@@ -53,7 +53,7 @@ Y_UNIT_TEST_SUITE(StorageOptimizer) {
         NKikimr::NOlap::TCompactionLimits limits;
         auto tasks = dynamic_pointer_cast<NKikimr::NOlap::TCompactColumnEngineChanges>(planner.GetOptimizationTasks(limits, nullptr));
         Y_ABORT_UNLESS(!tasks.empty());
-        Y_ABORT_UNLESS(tasks.front()->SwitchedPortions.size() == 2); TODO: // why???
+        Y_ABORT_UNLESS(tasks.front()->SwitchedPortions.size() == 2);
     }
 
     Y_UNIT_TEST(MergeSmall1) {

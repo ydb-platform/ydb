@@ -11,44 +11,44 @@
 
 namespace NKikimr::NPQ::NMLP {
 
-//
-// На диске храним 3 типа блобов
-// * Общая информация об процессе (мета), включающая FirstUncommittedOffset и т.д. Всегда один блоб.
-// * Информация о статусе обработке сообщений. MaxMessages * 8 байтов (~800Kb). Всегда один блоб. Перезаписывается редко.
-// * WAL изменений. Несколько блобов. Частая запись. Информация об измененных статусах сообщениях.
 class TStorage {
 public:
-    // Имеет смысл ограничить 100К сообщений на партицию. Надо больше - увеличивайте кол-во партиции.
-    // В худшем случае на 100000 сообщений надо ~3MB памяти
-    static constexpr size_t MaxMessages = 100000;
-    static constexpr size_t MinMessages = 1000;
+    // The maximum number of messages per flight. If a larger number is required, then you need
+    // to increase the number of partitions in the topic.
+    static constexpr size_t MaxMessages = 50000;
+    // The minimum number of messages in flight. We try to maintain this number of messages so
+    // that we can respond without delay.
+    static constexpr size_t MinMessages = 100;
 
-    // Максимальное время блокировки сообщения (Message visibility timeout). (в SQS 12 часов).
+    // The maximum supported time delta. If it has reached this value, then it is necessary
+    // to shift the BaseDeadline. Allows you to store deadlines for up to 18 hours.
     static constexpr size_t MaxDeadlineDelta = Max<ui16>();
-
-    // Оптимизация. Кол-во сообщений, которые вернулись по timeout-у обратно для обработки, которые будут храниться в быстрой
-    // зоне (их выборка будет происходить очень быстро, без поиска по списку всех Messages).
-    static constexpr size_t MaxReleasedMessageSize = 1024;
 
 public:
     enum EMessageStatus {
+        // The message is waiting to be processed.
         Unprocessed = 0,
+        // The message is locked because it is currently being processed.
         Locked = 1,
+        // Message processing completed successfully.
         Committed = 2,
+        // The message needs to be moved to the DLQ queue.
         DLQ = 3
     };
 
     struct TMessage {
-        // Статус сообщения. EMessageStatus
         ui64 Status: 3 = EMessageStatus::Unprocessed;
         ui64 Reserve: 2;
         ui64 HasMessageGroupId: 1 = false;
-        // Сколько раз отдавали сообщение для чтения. В SQS максимальное значение 1000 (интернеты про это пишут, но в документации не нашел)
+        // It stores how many times the message was submitted to work.
+        // If the value is large, then the message has been processed several times,
+        // but it has never been processed successfully.
         ui64 ReceiveCount: 10 = 0;
-        // Для заблокированных сообщений время, после которого сообщение должно вернуться в очередь.
+        // For locked messages, the time after which the message should be returned to the queue by timeout.
         ui64 DeadlineDelta: 16 = 0;
-        // Hash группы сообщений (храним hash т.к. нас устраивает вероятность блокироки разных групп - главно
-        // не отдавать сообщения из одной группы параллельно)
+        // Hash of the message group. For consumers who keep the order of messages, it is guaranteed that
+        // messages within the same group are processed sequentially in the order in which they were recorded
+        // in the topic.
         ui64 MessageGroupIdHash: 32 = 0;
     };
     static_assert(sizeof(TMessage) == sizeof(ui64));
@@ -77,7 +77,7 @@ public:
     const TMessage* GetMessage(TMessageId message);
 
 
-    // Return next message for client processing.
+    // Return the next message for client processing.
     // deadline - time for processing visibility
     // fromOffset indicates from which offset it is necessary to continue searching for the next free message.
     //            it is an optimization for the case when the method is called several times in a row.
@@ -125,27 +125,15 @@ private:
     bool KeepMessageOrder = false;
     ui32 MaxMessageReceiveCount = 1000;
 
-    // Первый загруженный оффсет  для обработки. Все сообщения с меньшим оффсетом либо уже закоммичены, либо удалены из партиции.
-    // Как часто двигаем FirstOffset? Когда сохраняем большой блоб. 
-    // Как часто сохраняем большой блоб? Если FirstUncommittedOffset больше FirstOffset на 1000 (5000? 10000?) либо все сообщения обработаны и закончились / раз в N секунд.
+    // Offset of the first message loaded for processing. All messages with a smaller offset
+    // have either already been committed or deleted from the partition.
     ui64 FirstOffset = 0;
-    // Первый не закоммиченный оффсет для обработки. Всегда <= LastOffset
     ui64 FirstUncommittedOffset = 0;
-    // Первый не отданный клиенту для обработки. Всегда <= LastOffset
     ui64 FirstUnlockedOffset = 0;
-    // Время, от которого отсчитываются delta deadline-ов. Позволяет использовать не ui64, а 15 бит.
-    // Недостаток - периодически надо смещать BaseDeadline и пересчитывать текущие дельты.
-    // Если клиент не использует большие visisbility timeouts, то пересчет редкий (раз в несколько часов)
+
     TInstant BaseDeadline;
 
-    // Список сообщений вычитанных (при 100000 сообщений ~800KB)
-    // Максимум храним в памяти MaxMessages сообщений, но для небольших очередей кол-во сообщений ограничиваем 1000.
-    // Для больших очередей стараемся размер подобрать оптимально, например, в зависимости от одновременно обрабатываемых
-    // клиентом сообщений (умножаем их на 2)
     std::deque<TMessage> Messages;
-
-    // Список обрабатываемых MessageGroupId. Нельзя отдавать в обработку несколько сообщений с одной MessageGroup параллельно.
-    // В худшем случае (все сообщений содержать разные message group id и все сообщения отданы клиенту) MaxMessages * 4 * {накладные расходы хранения в map} ~ 2MB
     std::unordered_set<ui32> LockedMessageGroupsId;
 
     TMetrics Metrics;

@@ -8,6 +8,7 @@
 #include <ydb/core/persqueue/common/actor.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 
+// TODO MLP DLQ
 namespace NKikimr::NPQ::NMLP {
 
 class TBatch;

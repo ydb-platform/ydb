@@ -2178,6 +2178,11 @@ message TColumnShardConfig {
     optional uint64 BadPortionSizeLimit = 51 [default = 524288];
     optional uint64 BadPortionsLimit = 52;
     optional bool CombineChunksInResult = 54 [default = true];
+<<<<<<< HEAD
+=======
+    optional bool EnableDiagnostics = 55 [default = true];
+    optional bool EnableParallelCompaction = 56 [default = true];
+>>>>>>> 07aeccc41b4 (parallel compaction has been supported (#27208))
 }
 
 message TSchemeShardConfig {

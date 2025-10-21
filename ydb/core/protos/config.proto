@@ -1959,6 +1959,7 @@ message TColumnShardConfig {
     optional uint64 BadPortionSizeLimit = 51 [default = 524288];
     optional uint64 BadPortionsLimit = 52;
     optional bool CombineChunksInResult = 54 [default = true];
+    optional bool EnableParallelCompaction = 56 [default = false];
 }
 
 message TSchemeShardConfig {

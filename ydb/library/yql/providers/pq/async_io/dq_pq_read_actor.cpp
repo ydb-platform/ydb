@@ -219,7 +219,7 @@ public:
             MetadataFields.emplace_back(fieldName, fieldsExtractor.FindExtractorLambda(fieldName));
         }
 
-        InitWatermarkTracker();
+        InitWatermarkTracker(); // non-virtual!
         IngressStats.Level = statsLevel;
     }
 
@@ -515,7 +515,7 @@ private:
         SRC_LOG_T("SessionId: " << GetSessionId() << " GetAsyncInputData freeSpace = " << freeSpace);
 
         const auto now = TInstant::Now();
-        MaybeScheduleNextIdleCheck(now);
+        MaybeScheduleNextIdleCheck();
 
         if (!InflightReconnect && ReconnectPeriod != TDuration::Zero()) {
             Metrics.ReconnectRate->Inc();

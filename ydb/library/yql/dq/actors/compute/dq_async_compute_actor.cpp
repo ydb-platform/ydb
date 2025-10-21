@@ -1129,10 +1129,10 @@ private:
                 Y_ABORT_UNLESS(ContinueRunEvent->CheckpointRequest->Checkpoint.GetId() == checkpointRequest->GetId());
             }
         }
-        if (auto watermarkRequest = WatermarksTracker.GetPendingWatermark() /*; watermarkRequest && *watermarkRequest != TInstant::Max() */) {
+        if (auto watermarkRequest = WatermarksTracker.GetPendingWatermark()) {
             Y_ENSURE(*watermarkRequest >= ContinueRunEvent->WatermarkRequest);
             ContinueRunEvent->WatermarkRequest = *watermarkRequest;
-            MetricsReporter.ReportInjectedToTaskRunnerWatermark(*watermarkRequest, WatermarksTracker.GetWatermarkDiscrepancy());
+            MetricsReporter.ReportInjectedToTaskRunnerWatermark(*watermarkRequest, *WatermarksTracker.GetMaxWatermark() - *watermarkRequest);
             CA_LOG_T("Injecting watermark to TaskRunnerActorLocal " << watermarkRequest);
         }
 

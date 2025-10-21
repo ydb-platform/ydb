@@ -558,7 +558,7 @@ TDqPqRdReadActor::TDqPqRdReadActor(
     InputDataType = programBuilder->NewMultiType(inputTypeParts);
     DataUnpacker = std::make_unique<NKikimr::NMiniKQL::TValuePackerTransport<true>>(InputDataType, NKikimr::NMiniKQL::EValuePackerVersion::V0);
 
-    InitWatermarkTracker();
+    InitWatermarkTracker(); // non-virtual!
     IngressStats.Level = statsLevel;
 }
 
@@ -751,7 +751,7 @@ i64 TDqPqRdReadActor::GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& b
 
     if (WatermarkTracker) {
         const auto now = TInstant::Now();
-        MaybeScheduleNextIdleCheck(now);
+        MaybeScheduleNextIdleCheck();
 
         const auto idleWatermark = WatermarkTracker->HandleIdleness(now);
 

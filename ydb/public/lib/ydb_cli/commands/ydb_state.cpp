@@ -21,7 +21,10 @@ void TCommandClusterStateFetch::Config(TConfig& config) {
     config.SetFreeArgsNum(0);
     config.Opts->AddLongOption("duration", "The time limit to collect cluster state and metrics in seconds")
         .OptionalArgument("NUM").StoreResult(&DurationSeconds);
-    config.Opts->AddLongOption("period", "The period of collecting metrics from nodes in seconds")
+    config.Opts->AddLongOption("period",
+        "Interval in seconds between metric collections during the --duration period.\n"
+        "If set to zero or omitted, only a single collection is done.")
+    .DefaultValue(0)
         .OptionalArgument("NUM").StoreResult(&PeriodSeconds);
     AddOutputFormats(config, {
         EDataFormat::Json

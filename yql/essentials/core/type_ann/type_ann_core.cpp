@@ -3341,6 +3341,33 @@ namespace NTypeAnnImpl {
         return IGraphTransformer::TStatus::Ok;
     }
 
+    IGraphTransformer::TStatus NullIfWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
+        if (!IsBackwardCompatibleFeatureAvailable(ctx.Types.LangVer, MakeLangVersion(2025, 04), ctx.Types.BackportMode)) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "NullIf function is not available before version 2025.04"));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        // clang-format off
+        output = ctx.Expr.Builder(input->Pos())
+            .Callable("If")
+                .Callable(0, "==")
+                    .Add(0, input->HeadPtr())
+                    .Add(1, input->TailPtr())
+                .Seal()
+                .Callable(1, "Null")
+                .Seal()
+                .Add(2, input->HeadPtr())
+            .Seal()
+            .Build();
+        // clang-format on
+
+        return IGraphTransformer::TStatus::Repeat;
+    }
+
     IGraphTransformer::TStatus SubstringWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         if (!EnsureArgsCount(*input, 3, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
@@ -13191,6 +13218,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["StringContains"] = &WithWrapper;
         Functions["StringContainsIgnoreCase"] = &WithWrapper;
         ExtFunctions["ByteAt"] = &ByteAtWrapper;
+        ExtFunctions["NullIf"] = &NullIfWrapper;
         Functions["ListIf"] = &ListIfWrapper;
         ExtFunctions["AsList"] = &AsListWrapper<false>;
         ExtFunctions["AsListMayWarn"] = &AsListWrapper<false>;

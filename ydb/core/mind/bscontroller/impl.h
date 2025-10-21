@@ -84,6 +84,7 @@ public:
     class TTxCheckUnsynced;
     class TTxUpdateBridgeGroupInfo;
     class TTxUpdateBridgeSyncState;
+    class TTxBlobCheckerUpdateGroupStatus;
 
     class TVSlotInfo;
     class TPDiskInfo;
@@ -1518,8 +1519,6 @@ private:
     std::shared_ptr<TControlWrapper> EnableSelfHealWithDegraded;
     TMonotonic LoadedAt;
 
-    bool BlobCheckerEnabled = false;
-
     struct TLifetimeToken {};
     std::shared_ptr<TLifetimeToken> LifetimeToken = std::make_shared<TLifetimeToken>();
 
@@ -1562,10 +1561,10 @@ private:
             EvCheckSyncerDisconnectedNodes,
             
             // BlobCheckerOrchestrator <-> BSC interface
-            EvUpdateBlobCheckerSettings,
-            EvBlobCheckerUpdateGroupState,
-            EvBlobCheckerPlanScan,
-            EvBlobCheckerScanDecision,
+            EvBlobCheckerUpdateSettings,
+            EvBlobCheckerUpdateGroupStatus,
+            EvBlobCheckerPlanCheck,
+            EvBlobCheckerDecision,
             EvBlobCheckerUpdateGroupSet,
 
             // BlobCheckerWorker <-> BlobCheckerOrchestrator interface
@@ -1696,8 +1695,13 @@ private:
         return *it->second;
     }
 
+    // returns number of groups, including static groups
+    ui32 TotalGroupCount() const {
+        return GroupLookup.size() + StaticGroups.size();
+    }
+
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    // NODE ACCESS
+    // NODE ACCESS AND STATS
 
     TNodeInfo* FindNode(TNodeId id) {
         auto it = Nodes.find(id);
@@ -1921,15 +1925,17 @@ private:
     void IssueInitialGroupContent();
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    // BlobChecking background process
+    // BlobChecker background process
 
+    TDuration BlobCheckerPeriodicity = TDuration::Zero();
     TActorId BlobCheckerOrchestratorId;
-
     TBlobCheckerPlanner BlobCheckerPlanner;
     TMonotonic NextAllowedBlobCheckerTimestamp = TMonotonic::Zero();
+    std::unordered_map<TGroupId, TString> BlobCheckerSerializedGroupStatuses;
 
-    void Handle(const TEvBlobCheckerPlanScan::TPtr& ev);
-    void Handle(const TEvControllerBlobCheckerUpdateGroupStatus::TPtr& ev);
+    void Handle(const TEvBlobCheckerPlanCheck::TPtr& ev);
+    void Handle(const TEvBlobCheckerUpdateGroupStatus::TPtr& ev);
+    void Handle(const TEvBlobCheckerUpdateSettings::TPtr& ev);
 
     void UpdateBlobCheckerState();
     void DequeueCheckForGroup(TGroupId groupId);
@@ -2232,8 +2238,8 @@ public:
             cFunc(TEvPrivate::EvScrub, ScrubState.HandleTimer);
             cFunc(TEvPrivate::EvVSlotReadyUpdate, VSlotReadyUpdate);
             hFunc(TEvBlobStorage::TEvControllerShredRequest, ShredState.Handle);
-            hFunc(TEvPrivate::TEvBlobCheckerPlanScan, Handle);
-            hFunc(TEvPrivate::TEvControllerBlobCheckerUpdateGroupStatus, Handle);
+            hFunc(TEvPrivate::TEvBlobCheckerPlanCheck, Handle);
+            hFunc(TEvPrivate::TEvBlobCheckerUpdateGroupStatus, Handle);
         }
 
         if (const TDuration time = TDuration::Seconds(timer.Passed()); time >= TDuration::MilliSeconds(100)) {

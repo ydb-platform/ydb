@@ -45,7 +45,7 @@ public:
             auto pdiskSerial = db.Table<Schema::DriveSerial>().Select();
             auto blobDepotDeleteQueue = db.Table<Schema::BlobDepotDeleteQueue>().Select();
             auto bridgeSyncState = db.Table<Schema::BridgeSyncState>().Select();
-            auto blobScannerState = db.Table<Schema::BlobCheckerState>().Select();
+            auto groupStatuses = db.Table<Schema::BlobCheckerGroupStatus>().Select();
             if (!state.IsReady()
                     || !nodes.IsReady()
                     || !disk.IsReady()
@@ -67,7 +67,7 @@ public:
                     || !pdiskSerial.IsReady()
                     || !blobDepotDeleteQueue.IsReady()
                     || !bridgeSyncState.IsReady()
-                    || !blobScannerState.IsReady()) {
+                    || !groupStatuses.IsReady()) {
                 return false;
             }
         }
@@ -550,14 +550,14 @@ public:
         // blob scanner state
         Self->SerializedBlobCheckerGroupStates.clear();
         {
-            using Table = Schema::BlobCheckerState;
-            auto blobScannerState = db.Table<Table>().Select();
-            if (!blobScannerState.IsReady()) {
+            using Table = Schema::BlobCheckerGroupStatus;
+            auto groupStatuses = db.Table<Table>().Select();
+            if (!groupStatuses.IsReady()) {
                 return false;
             }
-            while (blobScannerState.IsValid()) {
-                SerializedBlobCheckerGroupStates[blobScannerState.GetKey()] = blobScannerState.GetValue<Table::SerializedState>();
-                if (!blobScannerState.Next()) {
+            while (groupStatuses.IsValid()) {
+                BlobCheckerSerializedGroupStatuses[groupStatuses.GetKey()] = groupStatuses.GetValue<Table::SerializedState>();
+                if (!groupStatuses.Next()) {
                     return false;
                 }
             }
@@ -720,6 +720,15 @@ public:
             }
             const auto& selfId = Self->SelfId();
             selfId.Send(MakeBlobStorageNodeWardenID(selfId.NodeId()), new NStorage::TEvNodeWardenUpdateCache(std::move(m)));
+        }
+
+        // create initial empty BlobChecker status for all groups
+        {
+            for (const auto& [groupId, _] : GroupMap) {
+                if (!BlobCheckerSerializedGroupStatuses.contains(groupId)) {
+                    BlobCheckerSerializedGroupStatuses[groupId] = 
+                }
+            }
         }
 
         return true;

@@ -1,7 +1,9 @@
 LIBRARY()
 
 SRCS(
-    blob_scanner.cpp
+    blob_checker.cpp
+    blob_checker_bsc.cpp
+    blob_checker_planner.cpp
     bsc.cpp
     bsc.h
     bsc_audit.h
@@ -36,7 +38,6 @@ SRCS(
     group_mapper.cpp
     group_mapper.h
     group_metrics_exchange.cpp
-    blob_checker_planner.cpp
     impl.h
     indir.h
     init_scheme.cpp

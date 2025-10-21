@@ -297,4 +297,5 @@ enum ETxTypes {
     TXTYPE_UPDATE_BRIDGE_GROUP_INFO = 32 [(TxTypeOpts) = {Name: "TTxUpdateBridgeGroupInfo"}];
     TXTYPE_UPDATE_BRIDGE_SYNC_STATE = 33 [(TxTypeOpts) = {Name: "TTxUpdateBridgeSyncState"}];
     TXTYPE_ALLOCATE_DDISK_BLOCK_GROUP = 34 [(TxTypeOpts) = {Name: "TTxAllocateDDiskBlockGroup"}];
+    TXTYPE_BLOB_CHECKER_UPDATE_GROUP_STATUS = 35 [(TxTypeOpts) = {Name: "TTxBlobCheckerUpdateGroupStatus"}];
 }

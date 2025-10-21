@@ -5301,9 +5301,10 @@ bool TPersQueue::ForwardToPartition(ui32 partitionId, TAutoPtr<TEventHandle>& ev
 }
 
 void TPersQueue::ProcessMLPQueue() {
-    while(!MLPRequests.empty()) {
-        auto ev = std::move(MLPRequests.front());
-        MLPRequests.pop_front();
+    auto queue = std::exchange(MLPRequests, {});
+    while(!queue.empty()) {
+        auto ev = std::move(queue.front());
+        queue.pop_front();
 
         auto result = std::visit([&, this](auto& ev) {
             return ForwardToPartition(ev->Get()->GetPartitionId(), ev);
@@ -5311,9 +5312,6 @@ void TPersQueue::ProcessMLPQueue() {
         if (!result) {
             return;
         }
-    }
-    if (MLPRequests.empty()) {
-        MLPRequests = {};
     }
 }
 

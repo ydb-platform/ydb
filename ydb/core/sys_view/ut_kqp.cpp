@@ -3913,7 +3913,7 @@ R"(CREATE TABLE `test_show_create` (
             UNIT_ASSERT_VALUES_EQUAL(entry.Type, ESchemeEntryType::Directory);
 
             auto children = result.GetChildren();
-            UNIT_ASSERT_VALUES_EQUAL(children.size(), 34);
+            UNIT_ASSERT_VALUES_EQUAL(children.size(), 35);
 
             THashSet<TString> names;
             for (const auto& child : children) {
@@ -3936,7 +3936,7 @@ R"(CREATE TABLE `test_show_create` (
 
             auto children = result.GetChildren();
 
-            UNIT_ASSERT_VALUES_EQUAL(children.size(), 28);
+            UNIT_ASSERT_VALUES_EQUAL(children.size(), 29);
 
             THashSet<TString> names;
             for (const auto& child : children) {

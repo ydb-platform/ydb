@@ -130,7 +130,10 @@ TVector<NKikimrKqp::TKqpSetting> SyntaxV1Settings() {
 }
 
 TTestLogSettings& TTestLogSettings::AddLogPriority(NKikimrServices::EServiceKikimr service, NLog::EPriority priority) {
-    LogPriorities.emplace(service, priority);
+    if (!Freeze) {
+        LogPriorities.emplace(service, priority);
+    }
+
     return *this;
 }
 

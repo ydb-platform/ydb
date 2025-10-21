@@ -947,7 +947,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         TString topicName = "topicName";
         CreateTopic(topicName);
 
-        ExecAndWaitScript(fmt::format(R"(
+        const auto scriptExecutionOperation = ExecAndWaitScript(fmt::format(R"(
             SELECT * FROM `{source}`.`{topic}`
                 WITH (
                     FORMAT="json_each_row",
@@ -960,6 +960,48 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             "source"_a=sourceName,
             "topic"_a=topicName
         ), EExecStatus::Failed);
+
+        const auto& status = scriptExecutionOperation.Status();
+        UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::GENERIC_ERROR, status.GetIssues().ToOneLineString());
+        UNIT_ASSERT_STRING_CONTAINS(status.GetIssues().ToString(), "Unsupported. Failed to load metadata for table: /Root/sourceName.[topicName] data source generic doesn't exist");
+    }
+
+    Y_UNIT_TEST_F(ReadTopicEndpointValidationWithoutAvailableExternalDataSourcesYdbTopics, TStreamingTestFixture) {
+        auto& cfg = *SetupAppConfig().MutableQueryServiceConfig();
+        cfg.AddAvailableExternalDataSources("Ydb");
+        cfg.SetAllExternalDataSourcesAreAvailable(false);
+
+        constexpr char sourceName[] = "sourceName";
+        CreatePqSource(sourceName);
+
+        // Execute script without existing topic
+        const auto scriptExecutionOperation = ExecAndWaitScript(fmt::format(R"(
+            SELECT * FROM `{source}`.`topicName`
+            )",
+            "source"_a=sourceName
+        ), EExecStatus::Failed);
+
+        const auto& status = scriptExecutionOperation.Status();
+        UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::GENERIC_ERROR, status.GetIssues().ToOneLineString());
+        UNIT_ASSERT_STRING_CONTAINS(status.GetIssues().ToString(), "Unsupported. Failed to load metadata for table: /Root/sourceName.[topicName] data source generic doesn't exist");
+    }
+
+    Y_UNIT_TEST_F(ReadTopicEndpointValidation, TStreamingTestFixture) {
+        constexpr char sourceName[] = "sourceName";
+        CreatePqSource(sourceName);
+
+        // Execute script without existing topic
+        const auto scriptExecutionOperation = ExecAndWaitScript(fmt::format(R"(
+            SELECT * FROM `{source}`.`topicName`
+            )",
+            "source"_a=sourceName
+        ), EExecStatus::Failed);
+
+        const auto& status = scriptExecutionOperation.Status();
+        UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::GENERIC_ERROR, status.GetIssues().ToOneLineString());
+        const auto& issues = status.GetIssues().ToString();
+        UNIT_ASSERT_STRING_CONTAINS(issues, "Couldn't determine external YDB entity type");
+        UNIT_ASSERT_STRING_CONTAINS(issues, "Describe path 'local/topicName' in external YDB database 'local'");
     }
 
     Y_UNIT_TEST_F(ReadTopic, TStreamingTestFixture) {
@@ -1608,9 +1650,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     }
 
     Y_UNIT_TEST_F(MaxStreamingQueryExecutionsLimit, TStreamingTestFixture) {
-        constexpr ui64 executionsLimit = 5;
-        SetupAppConfig().MutableQueryServiceConfig()->MutableStreamingQueries()->SetMaxQueryExecutions(executionsLimit);
-
+        constexpr ui64 executionsLimit = 3;
         constexpr char inputTopicName[] = "maxStreamingQueryExecutionsLimitInputTopic";
         constexpr char outputTopicName[] = "maxStreamingQueryExecutionsLimitOutputTopic";
         CreateTopic(inputTopicName);
@@ -2303,6 +2343,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
             UNIT_ASSERT_VALUES_EQUAL(result.GetList().size(), 0);
         }
+
+        ExecQuery("SELECT COUNT(*) FROM `.metadata/streaming/queries`", EStatus::SCHEME_ERROR, "Cannot find table");
     }
 
     Y_UNIT_TEST_F(OffsetsAndStateRecoveryOnInternalRetry, TStreamingTestFixture) {

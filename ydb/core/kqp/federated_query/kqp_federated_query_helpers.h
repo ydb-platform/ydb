@@ -23,6 +23,7 @@
 
 namespace NKikimrConfig {
     class TQueryServiceConfig;
+    class TStreamingQueriesConfig_TExternalTopicsSettings;
 }  // namespace NKikimrConfig
 
 namespace NKqpProto {
@@ -37,8 +38,11 @@ namespace NKikimr::NKqp {
 
     NYql::IHTTPGateway::TPtr MakeHttpGateway(const NYql::THttpGatewayConfig& httpGatewayConfig, NMonitoring::TDynamicCounterPtr countersRoot);
 
-    NYql::IPqGateway::TPtr MakePqGateway(const std::shared_ptr<NYdb::TDriver>& driver, const NYql::TPqGatewayConfig& pqGatewayConfig);
+    NYdb::NTopic::TTopicClientSettings MakeCommonTopicClientSettings(ui64 handlersExecutorThreadsNum, ui64 compressionExecutorThreadsNum);
 
+    std::shared_ptr<NYdb::TDriver> MakeYdbDriver(NKikimr::TDeferredActorLogBackend::TSharedAtomicActorSystemPtr actorSystemPtr, const NKikimrConfig::TStreamingQueriesConfig_TExternalTopicsSettings& config);
+
+    NYql::IPqGateway::TPtr MakePqGateway(const std::shared_ptr<NYdb::TDriver>& driver);
 
     struct TKqpFederatedQuerySetup {
         NYql::IHTTPGateway::TPtr HttpGateway;

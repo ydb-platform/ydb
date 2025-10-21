@@ -1757,12 +1757,13 @@ private:
     }
 
     void InitSharedReading() {
-        const auto& sharedReading = QueryServiceConfig.GetSharedReading();
-        if (!sharedReading.GetEnabled() || !FederatedQuerySetup) {
+        const auto& streamingQueries = QueryServiceConfig.GetStreamingQueries();
+        if (!streamingQueries.HasExternalStorage() || !FederatedQuerySetup) {
             return;
         }
+
         auto rowDispatcher = NFq::NewRowDispatcherService(
-            QueryServiceConfig.GetSharedReading(),
+            streamingQueries.GetExternalStorage(),
             NKikimr::CreateYdbCredentialsProviderFactory,
             FederatedQuerySetup->CredentialsFactory,
             AppData()->FunctionRegistry,
@@ -1779,17 +1780,18 @@ private:
     }
 
     void InitCheckpointStorage() {
-        const auto& checkpointConfig = QueryServiceConfig.GetCheckpointsConfig();
-        if (!checkpointConfig.GetEnabled() || !FederatedQuerySetup) {
+        const auto& streamingQueries = QueryServiceConfig.GetStreamingQueries();
+        if (!streamingQueries.HasExternalStorage() || !FederatedQuerySetup) {
             return;
         }
+
         auto service = NFq::NewCheckpointStorageService(
-            checkpointConfig,
+            streamingQueries.GetExternalStorage(),
             "cs",
             NKikimr::CreateYdbCredentialsProviderFactory,
             *FederatedQuerySetup->Driver,
             Counters->GetKqpCounters()->GetSubgroup("subsystem", "storage_service"));
-            
+
         CheckpointStorageService = TActivationContext::Register(service.release());
         TActivationContext::ActorSystem()->RegisterLocalService(
             NYql::NDq::MakeCheckpointStorageID(), CheckpointStorageService);

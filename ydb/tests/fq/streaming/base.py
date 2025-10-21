@@ -52,32 +52,16 @@ class StreamingImportTestBase(object):
             nodes=2,
             default_clusteradmin="root@builtin"
         )
-        config.yaml_config["query_service_config"] = {}
-        config.yaml_config["query_service_config"]["available_external_data_sources"] = ["ObjectStorage", "Ydb", "YdbTopics"]
+
         config.yaml_config["log_config"]["default_level"] = 8
 
-        config.yaml_config["query_service_config"]["shared_reading"] = {}
-        config.yaml_config["query_service_config"]["shared_reading"]["enabled"] = True
-        config.yaml_config["query_service_config"]["shared_reading"]["without_consumer"] = True
-        config.yaml_config["query_service_config"]["shared_reading"]["send_status_period_sec"] = 1
+        query_service_config = config.yaml_config.setdefault("query_service_config", {})
+        query_service_config["available_external_data_sources"] = ["ObjectStorage", "Ydb", "YdbTopics"]
 
-        config.yaml_config["query_service_config"]["shared_reading"]["coordinator"] = {}
-        config.yaml_config["query_service_config"]["shared_reading"]["coordinator"]["coordination_node_path"] = "path"
-        config.yaml_config["query_service_config"]["shared_reading"]["coordinator"]["local_mode"] = False
-        config.yaml_config["query_service_config"]["shared_reading"]["coordinator"]["database"] = {}
-        config.yaml_config["query_service_config"]["shared_reading"]["coordinator"]["database"]["endpoint"] = os.getenv("YDB_ENDPOINT")
-        config.yaml_config["query_service_config"]["shared_reading"]["coordinator"]["database"]["database"] = os.getenv("YDB_DATABASE")
+        database_connection = query_service_config.setdefault("streaming_queries", {}).setdefault("external_storage", {}).setdefault("database_connection", {})
+        database_connection["endpoint"] = os.getenv("YDB_ENDPOINT")
+        database_connection["database"] = os.getenv("YDB_DATABASE")
 
-        config.yaml_config["query_service_config"]["checkpoints_config"] = {}
-        config.yaml_config["query_service_config"]["checkpoints_config"]["enabled"] = True
-        config.yaml_config["query_service_config"]["checkpoints_config"]["external_storage"] = {}
-        config.yaml_config["query_service_config"]["checkpoints_config"]["external_storage"]["endpoint"] = os.getenv("YDB_ENDPOINT")
-        config.yaml_config["query_service_config"]["checkpoints_config"]["external_storage"]["database"] = os.getenv("YDB_DATABASE")
-        config.yaml_config["query_service_config"]["checkpoints_config"]["external_storage"]["table_prefix"] = "checkpoints"
-        config.yaml_config["query_service_config"]["checkpoints_config"]["checkpoint_garbage_config"] = {}
-        config.yaml_config["query_service_config"]["checkpoints_config"]["checkpoint_garbage_config"]["enabled"] = True
-        config.yaml_config["query_service_config"]["checkpoints_config"]["max_inflight"] = 1
-        config.yaml_config["query_service_config"]["checkpoints_config"]["checkpointing_period_millis"] = 500
         return config
 
     @classmethod

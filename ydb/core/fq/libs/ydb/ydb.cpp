@@ -1,7 +1,7 @@
 #include "ydb.h"
-
 #include "util.h"
 
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/public/sdk/cpp/adapters/issue/issue.h>
 
 #include <util/stream/str.h>
@@ -179,11 +179,50 @@ TFuture<TStatus> RegisterGenerationWrapper(
         });
 }
 
-} // namespace
+} // anonymous namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TYdbConnection::TYdbConnection(const NConfig::TYdbStorageConfig& config,
+TExternalStorageSettings::TExternalStorageSettings(const NConfig::TYdbStorageConfig& config)
+    : Endpoint(config.GetEndpoint())
+    , Database(config.GetDatabase())
+    , PathPrefix(config.GetTablePrefix())
+    , Token(config.GetToken())
+    , TokenFile(config.GetOAuthFile())
+    , SaKeyFile(config.GetSaKeyFile())
+    , CaCertFile(config.GetCertificateFile())
+    , UseSsl(config.GetUseSsl())
+    , UseLocalMetadataService(config.GetUseLocalMetadataService())
+    , IamEndpoint(config.GetIamEndpoint())
+    , ClientTimeout(TDuration::Seconds(config.GetClientTimeoutSec()))
+    , OperationTimeout(TDuration::Seconds(config.GetOperationTimeoutSec()))
+    , CancelAfter(TDuration::Seconds(config.GetCancelAfterSec()))
+{
+    if (config.GetTableClientMaxActiveSessions()) {
+        MaxActiveQuerySessions = config.GetTableClientMaxActiveSessions();
+    }
+}
+
+TExternalStorageSettings::TExternalStorageSettings(const NKikimrConfig::TStreamingQueriesConfig::TExternalStorageConfig& config)
+    : Endpoint(config.GetDatabaseConnection().GetEndpoint())
+    , Database(config.GetDatabaseConnection().GetDatabase())
+    , PathPrefix(config.GetPathPrefix())
+    , TokenFile(config.GetDatabaseConnection().GetTokenFile())
+    , SaKeyFile(config.GetDatabaseConnection().GetSaKeyFile())
+    , CaCertFile(config.GetDatabaseConnection().GetCaCertFile())
+    , UseSsl(config.GetDatabaseConnection().GetUseSsl())
+    , UseLocalMetadataService(config.GetDatabaseConnection().GetUseLocalMetadataService())
+    , IamEndpoint(config.GetDatabaseConnection().GetIamEndpoint())
+    , ClientTimeout(TDuration::Seconds(config.GetQueryTimeoutSec()))
+    , OperationTimeout(TDuration::Seconds(config.GetQueryTimeoutSec()))
+    , CancelAfter(TDuration::Seconds(config.GetQueryTimeoutSec()))
+{
+    if (config.GetMaxActiveQuerySessions()) {
+        MaxActiveQuerySessions = config.GetMaxActiveQuerySessions();
+    }
+}
+
+TYdbConnection::TYdbConnection(const TExternalStorageSettings& config,
                                const NKikimr::TYdbCredentialsProviderFactory& credProviderFactory,
                                const NYdb::TDriver& driver)
     : Driver(driver)
@@ -192,32 +231,12 @@ TYdbConnection::TYdbConnection(const NConfig::TYdbStorageConfig& config,
     , CoordinationClient(Driver, GetClientSettings<NYdb::TCommonClientSettings>(config, credProviderFactory))
     , RateLimiterClient(Driver, GetClientSettings<NYdb::TCommonClientSettings>(config, credProviderFactory))
     , DB(config.GetDatabase())
-    , TablePathPrefix(JoinPath(DB, config.GetTablePrefix()))
-{
-}
-
-TYdbConnection::TYdbConnection(const NKikimrConfig::TExternalStorage& config,
-                               const NKikimr::TYdbCredentialsProviderFactory& credProviderFactory,
-                               const NYdb::TDriver& driver)
-    : Driver(driver)
-    , TableClient(Driver, GetClientSettings<NYdb::NTable::TClientSettings>(config, credProviderFactory))
-    , SchemeClient(Driver, GetClientSettings<NYdb::TCommonClientSettings>(config, credProviderFactory))
-    , CoordinationClient(Driver, GetClientSettings<NYdb::TCommonClientSettings>(config, credProviderFactory))
-    , RateLimiterClient(Driver, GetClientSettings<NYdb::TCommonClientSettings>(config, credProviderFactory))
-    , DB(config.GetDatabase())
-    , TablePathPrefix(JoinPath(DB, config.GetTablePrefix()))
-{
-}
+    , TablePathPrefix(JoinPath(DB, config.GetPathPrefix()))
+{}
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TYdbConnectionPtr NewYdbConnection(const NConfig::TYdbStorageConfig& config,
-                                   const NKikimr::TYdbCredentialsProviderFactory& credProviderFactory,
-                                   const NYdb::TDriver& driver) {
-    return MakeIntrusive<TYdbConnection>(config, credProviderFactory, driver);
-}
-
-TYdbConnectionPtr NewYdbConnection(const NKikimrConfig::TExternalStorage& config,
+TYdbConnectionPtr NewYdbConnection(const TExternalStorageSettings& config,
                                    const NKikimr::TYdbCredentialsProviderFactory& credProviderFactory,
                                    const NYdb::TDriver& driver) {
     return MakeIntrusive<TYdbConnection>(config, credProviderFactory, driver);
@@ -342,6 +361,24 @@ TFuture<TStatus> RollbackTransaction(const TGenerationContextPtr& context) {
     auto future = context->Transaction->Rollback();
     context->Transaction.reset();
     return future;
+}
+
+NKikimr::TYdbCredentialsSettings GetYdbCredentialSettings(const TExternalStorageSettings& config) {
+    TString oauth;
+    if (config.GetToken()) {
+        oauth = config.GetToken();
+    } else if (config.GetTokenFile()) {
+        oauth = StripString(TFileInput(config.GetTokenFile()).ReadAll());
+    } else {
+        oauth = GetEnv("YDB_TOKEN");
+    }
+
+    NKikimr::TYdbCredentialsSettings credSettings;
+    credSettings.UseLocalMetadata = config.GetUseLocalMetadataService();
+    credSettings.OAuthToken = oauth;
+    credSettings.SaKeyFile = config.GetSaKeyFile();
+    credSettings.IamEndpoint = config.GetIamEndpoint();
+    return credSettings;
 }
 
 } // namespace NFq

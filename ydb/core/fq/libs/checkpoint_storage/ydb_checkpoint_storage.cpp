@@ -3,15 +3,14 @@
 #include <ydb/core/fq/libs/actors/logging/log.h>
 #include <ydb/core/fq/libs/ydb/util.h>
 #include <ydb/core/fq/libs/ydb/ydb.h>
-
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
 #include <ydb/public/sdk/cpp/adapters/issue/issue.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
+
+#include <fmt/format.h>
 
 #include <util/stream/str.h>
 #include <util/string/builder.h>
 #include <util/string/printf.h>
-
-#include <fmt/format.h>
 
 namespace NFq {
 
@@ -590,11 +589,11 @@ TFuture<TStatus> UpdateCheckpointWithCheckWrapper(
 
 class TCheckpointStorage : public ICheckpointStorage {
     TYdbConnectionPtr YdbConnection;
-    const NKikimrConfig::TExternalStorage Config;
+    const TExternalStorageSettings Config;
 
 public:
     explicit TCheckpointStorage(
-        const NKikimrConfig::TExternalStorage& config,
+        const TExternalStorageSettings& config,
         const IEntityIdGenerator::TPtr& entityIdGenerator,
         const TYdbConnectionPtr& ydbConnection);
 
@@ -659,7 +658,7 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 
 TCheckpointStorage::TCheckpointStorage(
-    const NKikimrConfig::TExternalStorage& config,
+    const TExternalStorageSettings& config,
     const IEntityIdGenerator::TPtr& entityIdGenerator,
     const TYdbConnectionPtr& ydbConnection)
     : YdbConnection(ydbConnection)
@@ -1176,17 +1175,17 @@ TFuture<ICheckpointStorage::TGetTotalCheckpointsStateSizeResult> TCheckpointStor
 TExecDataQuerySettings TCheckpointStorage::DefaultExecDataQuerySettings() {
     return TExecDataQuerySettings()
         .KeepInQueryCache(true)
-        .ClientTimeout(TDuration::Seconds(Config.GetClientTimeoutSec()))
-        .OperationTimeout(TDuration::Seconds(Config.GetOperationTimeoutSec()))
-        .CancelAfter(TDuration::Seconds(Config.GetCancelAfterSec()));
+        .ClientTimeout(Config.GetClientTimeout())
+        .OperationTimeout(Config.GetOperationTimeout())
+        .CancelAfter(Config.GetCancelAfter());
 }
 
-} // namespace
+} // anonymous namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 
 TCheckpointStoragePtr NewYdbCheckpointStorage(
-    const NKikimrConfig::TExternalStorage& config,
+    const TExternalStorageSettings& config,
     const IEntityIdGenerator::TPtr& entityIdGenerator,
     const TYdbConnectionPtr& ydbConnection)
 {

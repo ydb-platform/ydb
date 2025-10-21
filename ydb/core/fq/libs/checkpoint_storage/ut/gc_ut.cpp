@@ -81,8 +81,8 @@ struct TTestRuntime {
         TAppPrepare app;
         SetupTabletServices(*Runtime, &app, true);
 
-        NKikimrConfig::TCheckpointsConfig config;
-        auto& storageConfig = *config.MutableExternalStorage();
+        NConfig::TCheckpointCoordinatorConfig config;
+        auto& storageConfig = *config.MutableStorage();
         storageConfig.SetEndpoint(YdbEndpoint);
         storageConfig.SetDatabase(YdbDatabase);
         storageConfig.SetToken("");
@@ -90,7 +90,7 @@ struct TTestRuntime {
 
         auto credFactory = NKikimr::CreateYdbCredentialsProviderFactory;
         NYdb::TDriver driver(NYdb::TDriverConfig{});
-        auto ydbConnectionPtr = NewYdbConnection(config.GetExternalStorage(), credFactory, driver);
+        auto ydbConnectionPtr = NewYdbConnection(config.GetStorage(), credFactory, driver);
         CheckpointStorage = NewYdbCheckpointStorage(storageConfig, CreateEntityIdGenerator("id"), ydbConnectionPtr);
         auto issues = CheckpointStorage->Init().GetValueSync();
         UNIT_ASSERT_C(issues.Empty(), issues.ToString());
@@ -101,7 +101,7 @@ struct TTestRuntime {
 
         Fill();
 
-        NKikimrConfig::TCheckpointsConfig::TCheckpointGcConfig gcConfig;
+        NConfig::TCheckpointGcConfig gcConfig;
         auto gc = NewGC(gcConfig, CheckpointStorage, StateStorage);
         ActorGC = Runtime->Register(gc.release());
 

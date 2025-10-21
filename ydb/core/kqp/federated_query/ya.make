@@ -18,6 +18,9 @@ PEERDIR(
     ydb/library/yql/providers/s3/proto
     ydb/library/yql/providers/solomon/gateway
     ydb/library/yql/providers/pq/gateway/native
+    ydb/public/api/protos
+    ydb/public/sdk/cpp/adapters/issue
+    ydb/public/sdk/cpp/src/client/extensions/discovery_mutator
     yql/essentials/core/dq_integration/transform
     yql/essentials/public/issue
     yt/yql/providers/yt/gateway/native

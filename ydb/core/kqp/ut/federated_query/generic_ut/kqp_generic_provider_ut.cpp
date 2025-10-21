@@ -114,6 +114,7 @@ namespace NKikimr::NKqp {
         connector.MutableEndpoint()->set_port(1234);
 
         config.MutableGeneric()->MutableDefaultSettings()->Add(std::move(dateTimeFormat));
+        config.SetAllExternalDataSourcesAreAvailable(false);
         config.AddAvailableExternalDataSources("ObjectStorage");
         config.AddAvailableExternalDataSources("ClickHouse");
         config.AddAvailableExternalDataSources("PostgreSQL");
@@ -781,6 +782,8 @@ namespace NKikimr::NKqp {
             NKikimrConfig::TAppConfig appConfig;
             appConfig.MutableFeatureFlags()->SetEnableScriptExecutionOperations(true);
             appConfig.MutableFeatureFlags()->SetEnableExternalDataSources(true);
+            appConfig.MutableQueryServiceConfig()->SetAllExternalDataSourcesAreAvailable(false);
+            appConfig.MutableQueryServiceConfig()->AddAvailableExternalDataSources("Ydb");
 
             auto kikimr = std::make_shared<TKikimrRunner>(NKqp::TKikimrSettings(appConfig)
                 .SetEnableExternalDataSources(true)

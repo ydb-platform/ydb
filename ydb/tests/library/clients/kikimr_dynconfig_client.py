@@ -1,18 +1,36 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 import time
+import os
 
 
 import grpc
+import logging
 
 from ydb.public.api.grpc.draft import ydb_dynamic_config_v1_pb2_grpc as grpc_server
 from ydb.public.api.protos.draft import ydb_dynamic_config_pb2 as dynamic_config_api
 
 
+logger = logging.getLogger()
+
+
+def dynconfig_client_factory(server, port, cluster=None, retry_count=1):
+    return DynConfigClient(
+        server, port, cluster=cluster,
+        retry_count=retry_count
+    )
+
+
+def channels_list():
+    return os.getenv('CHANNELS_LIST', '')
+
+
 class DynConfigClient(object):
-    def __init__(self, server, port, retry_count=1, token=None):
+    def __init__(self, server, port, cluster=None, retry_count=1):
         self.server = server
         self.port = port
+        self._cluster = cluster
+        self.__domain_id = 1
         self.__retry_count = retry_count
         self.__retry_sleep_seconds = 10
         self._options = [
@@ -21,13 +39,6 @@ class DynConfigClient(object):
         ]
         self._channel = grpc.insecure_channel("%s:%s" % (self.server, self.port), options=self._options)
         self._stub = grpc_server.DynamicConfigServiceStub(self._channel)
-        self.token = token
-
-    def _create_metadata(self):
-        metadata = []
-        if self.token:
-            metadata.append(('x-ydb-auth-ticket', self.token))
-        return metadata
 
     def _get_invoke_callee(self, method):
         return getattr(self._stub, method)
@@ -37,7 +48,7 @@ class DynConfigClient(object):
         while True:
             try:
                 callee = self._get_invoke_callee(method)
-                return callee(request, metadata=self._create_metadata())
+                return callee(request)
             except (RuntimeError, grpc.RpcError):
                 retry -= 1
 

@@ -724,7 +724,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
         auto fetchType = static_cast<EBlockIOFetchTypeCookie>(ev->Cookie);
 
-        RemoveInFlyPages(msg->Pages.size(), msg->Cookie, fetchType);
+        RemoveInFlyPages(msg->Pages.size(), msg->Cookie);
 
         TRequestQueue *queue = nullptr;
         switch (fetchType) {
@@ -1053,7 +1053,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     }
 
     void SendRequest(TRequest& request, TVector<TPageId>&& pages, ui64 bytes, EBlockIOFetchTypeCookie cookie) {
-        AddInFlyPages(pages.size(), bytes, cookie);
+        AddInFlyPages(pages.size(), bytes);
 
         // fetch cookie -> requested size
         // event cookie -> queue type
@@ -1424,26 +1424,19 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         Counters.PassiveBytes->Sub(pageSize);
     }
 
-    inline void AddInFlyPages(ui64 count, ui64 size, EBlockIOFetchTypeCookie fetchType) {
+    inline void AddInFlyPages(ui64 count, ui64 size) {
         ui64 totalBytes = size + sizeof(TPage) * count;
         StatLoadInFlyBytes += totalBytes;
         Counters.LoadInFlyPages->Add(count);
         Counters.LoadInFlyBytes->Add(totalBytes);
-        if (fetchType == EBlockIOFetchTypeCookie::TryKeepInMemoryPreload) {
-            InFlyInMemoryBytes += totalBytes;
-        }
     }
 
-    inline void RemoveInFlyPages(ui64 count, ui64 size, EBlockIOFetchTypeCookie fetchType) {
+    inline void RemoveInFlyPages(ui64 count, ui64 size) {
         ui64 totalBytes = size + sizeof(TPage) * count;
         Y_ENSURE(StatLoadInFlyBytes >= totalBytes);
         StatLoadInFlyBytes -= totalBytes;
         Counters.LoadInFlyPages->Sub(count);
         Counters.LoadInFlyBytes->Sub(totalBytes);
-        if (fetchType == EBlockIOFetchTypeCookie::TryKeepInMemoryPreload) {
-            Y_DEBUG_ABORT_UNLESS(InFlyInMemoryBytes >= totalBytes);
-            InFlyInMemoryBytes -= totalBytes;
-        }
     }
 
 public:

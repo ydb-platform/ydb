@@ -13,7 +13,10 @@ TCommandClusterState::TCommandClusterState()
 }
 
 TCommandClusterStateFetch::TCommandClusterStateFetch()
-    : TYdbReadOnlyCommand("fetch", {}, "Collect information about cluster nodes state and metrics")
+    : TYdbReadOnlyCommand("fetch", {},
+        "Fetch aggregated cluster node state and metrics over a time period.\n"
+        "Sends a cluster-wide request to collect state as a set of metrics from all nodes.\n"
+        "One of the nodes gathers metrics from all others over the specified duration, then returns an aggregated result.")
 {}
 
 void TCommandClusterStateFetch::Config(TConfig& config) {

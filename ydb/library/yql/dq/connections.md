@@ -106,9 +106,9 @@ DQ-граф состоит из стадий (_DqStage_), соединённых
 Не должно попадать в explain.
 
 
-# QP Specific Connections
+# KQP Specific Connections
 
-## QpCnMapShard
+## KQpCnMapShard
 * _NodeType_: **Map**
 * _PlanNodeType_: **Connection**
 

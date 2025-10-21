@@ -27,7 +27,7 @@ We use the following symbols as abbreviations:
 1. ㉔ **Data Spilling** in case there is issufient amount of RAM
 1. ㉔ **TPC-H, TPC-DS for 100TB** dataset
 1. ✅ ㉓ Support for **Snapshot Readonly** transactions mode
-1. 🚧 ㉓ **Better resource management** for QP Resource Manager (share information about nodes resources, avoid OOMs)
+1. 🚧 ㉓ **Better resource management** for KQP Resource Manager (share information about nodes resources, avoid OOMs)
 1. ✅ ㉓ Switch to **New Engine** for OLTP queries
 1. ✅ ㉓ Support **`not null` for PK (primary key) table columns**
 1. ✅ ㉓ **Aggregates and predicates push down to column-oriented tables**

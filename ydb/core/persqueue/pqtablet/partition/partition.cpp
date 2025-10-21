@@ -1735,8 +1735,7 @@ void TPartition::OnReadComplete(TReadInfo& info,
         TabletCounters.Cumulative()[COUNTER_PQ_READ_BYTES].Increment(resp->ByteSize());
     }
 
-    auto replyTo = ReplyTo(info.IsInternal, info.ReplyTo);
-    ctx.Send(replyTo, answer.Event.Release());
+    ctx.Send(ReplyTo(info.ReplyTo), answer.Event.Release());
 
     OnReadRequestFinished(info.Destination, answer.Size, info.User, ctx);
 }

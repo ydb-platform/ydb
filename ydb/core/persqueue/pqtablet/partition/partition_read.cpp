@@ -710,8 +710,7 @@ void TPartition::Handle(TEvPQ::TEvReadTimeout::TPtr& ev, const TActorContext& ct
             res->Destination, 0, TabletActorId, Config.GetMeteringMode(), IsActive(), GetResultPostProcessor<NKikimrClient::TCmdReadResult>(res->User)
     );
 
-    TActorId replyTo = ReplyTo(answer.IsInternal, answer.ReplyTo);
-    ctx.Send(replyTo, answer.Event.Release());
+    ctx.Send(ReplyTo(answer.ReplyTo), answer.Event.Release());
     LOG_D(" waiting read cookie " << ev->Get()->Cookie
         << " partition " << Partition << " read timeout for " << res->User << " offset " << res->Offset);
     auto& userInfo = UsersInfoStorage->GetOrCreate(res->User, ctx);
@@ -782,10 +781,7 @@ TVector<TClientBlob> TPartition::GetReadRequestFromHead(
                                                   lastOffset);
 }
 
-TActorId TPartition::ReplyTo(bool isInternal, const TActorId& replyTo) const {
-    if (isInternal) {
-        return SelfId();
-    }
+TActorId TPartition::ReplyTo(const TActorId& replyTo) const {
     if (replyTo) {
         return replyTo;
     }
@@ -795,7 +791,7 @@ TActorId TPartition::ReplyTo(bool isInternal, const TActorId& replyTo) const {
 void TPartition::Handle(TEvPQ::TEvRead::TPtr& ev, const TActorContext& ctx) {
     auto* read = ev->Get();
 
-    auto replyTo = ReplyTo(read->IsInternal, read->ReplyTo);
+    auto replyTo = ReplyTo(read->ReplyTo);
 
     if (read->Count == 0) {
         TabletCounters.Cumulative()[COUNTER_PQ_READ_ERROR].Increment(1);
@@ -804,7 +800,7 @@ void TPartition::Handle(TEvPQ::TEvRead::TPtr& ev, const TActorContext& ctx) {
                    replyTo);
         return;
     }
-    if (read->Offset < GetStartOffset() && !read->IsInternal) {
+    if (read->Offset < GetStartOffset() && !read->IsInternal()) {
         TabletCounters.Cumulative()[COUNTER_PQ_READ_ERROR_SMALL_OFFSET].Increment(1);
         read->Offset = GetStartOffset();
         if (read->PartNo > 0) {
@@ -883,7 +879,7 @@ void TPartition::DoRead(TEvPQ::TEvRead::TPtr&& readEvent, TDuration waitQuotaTim
 
     TReadInfo info(
             user, read->ClientDC, offset, read->LastOffset, read->PartNo, read->Count, read->Size, read->Cookie, read->ReadTimestampMs,
-            waitQuotaTime, read->ExternalOperation, userInfo->PipeClient, read->IsInternal, read->ReplyTo
+            waitQuotaTime, read->ExternalOperation, userInfo->PipeClient, read->IsInternal(), read->ReplyTo
     );
 
     ui64 cookie = NextReadCookie();
@@ -912,9 +908,9 @@ void TPartition::DoRead(TEvPQ::TEvRead::TPtr&& readEvent, TDuration waitQuotaTim
         return;
     }
 
-    if (offset > GetEndOffset()) {
+    if (offset >= GetEndOffset() && !read->IsInternal()) { // Why? EndOffset == 0 && offset == 0
         ReplyError(ctx, read->Cookie,  NPersQueue::NErrorCode::BAD_REQUEST,
-            TStringBuilder() << "Offset more than EndOffset. Offset=" << offset << ", EndOffset=" << GetEndOffset(), ReplyTo(read->IsInternal, read->ReplyTo));
+            TStringBuilder() << "Offset more than EndOffset. Offset=" << offset << ", EndOffset=" << GetEndOffset() << " internal=" << read->IsInternal(), ReplyTo(read->ReplyTo));
         return;
     }
 

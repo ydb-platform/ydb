@@ -284,7 +284,6 @@ struct TEvPQ {
             , ExternalOperation(externalOperation)
             , PipeClient(pipeClient)
             , LastOffset(lastOffset)
-            , IsInternal(false)
             , ReplyTo(replyTo)
         {}
 
@@ -302,8 +301,11 @@ struct TEvPQ {
         bool ExternalOperation;
         TActorId PipeClient;
         ui64 LastOffset;
-        bool IsInternal;
         TActorId ReplyTo;
+
+        bool IsInternal() {
+            return !!ReplyTo;
+        }
     };
 
     struct TMessageGroup {

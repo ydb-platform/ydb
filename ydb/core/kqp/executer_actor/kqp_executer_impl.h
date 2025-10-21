@@ -8,6 +8,7 @@
 #include <ydb/core/kqp/common/kqp_ru_calc.h>
 #include <ydb/core/kqp/common/kqp_lwtrace_probes.h>
 #include <ydb/core/kqp/common/kqp_types.h>
+// #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/runtime/kqp_transport.h>
 #include <ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler_service.h>
 
@@ -810,7 +811,7 @@ protected:
                     for (auto& task : record.GetNotStartedTasks()) {
                         if (task.GetReason() == NKikimrKqp::TEvStartKqpTasksResponse::NODE_SHUTTING_DOWN
                               and ev->Sender.NodeId() != SelfId().NodeId()) {
-                            Planner->SendStartKqpTasksRequest(task.GetRequestId(), SelfId());
+                            Planner->SendStartKqpTasksRequest(task.GetRequestId(), MakeKqpNodeServiceID(SelfId().NodeId()));
                         }
                     }
                     break;

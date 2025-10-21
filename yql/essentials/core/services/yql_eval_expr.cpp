@@ -1021,7 +1021,7 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
         NYT::TNode ysonNode;
         if (types.QContext) {
             key = MakeCacheKey(*clonedArg);
-            if (types.QContext.CanRead()) {
+            if (types.QContext.CanRead() && types.QContext.CaptureMode() != EQPlayerCaptureMode::Full) {
                 auto item = types.QContext.GetReader()->Get({EvaluationComponent, key}).GetValueSync();
                 if (!item) {
                     throw yexception() << "Missing replay data";
@@ -1058,7 +1058,7 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
                     return nullptr;
                 }
 
-                if (types.QContext.CanRead()) {
+                if (types.QContext.CanRead() && types.QContext.CaptureMode() != EQPlayerCaptureMode::Full) {
                     break;
                 }
 

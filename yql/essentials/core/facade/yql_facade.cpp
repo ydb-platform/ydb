@@ -67,6 +67,7 @@ const TString StaticUserFilesLabel = "UserFiles";
 const TString DynamicUserFilesLabel = "DynamicUserFiles";
 const TString StaticCredentialsLabel = "Credentials";
 const TString DynamicCredentialsLabel = "DynamicCredentials";
+const TString FullCaptureLabel = "FullCapture";
 
 class TUrlLoader: public IUrlLoader {
 public:
@@ -359,7 +360,7 @@ TProgram::TProgram(
 
         auto credList = NYT::NodeToYsonString(credListNode, NYT::NYson::EYsonFormat::Binary);
         QContext_.GetWriter()->Put({FacadeComponent, StaticCredentialsLabel}, credList).GetValueSync();
-    } else if (QContext_.CanRead()) {
+    } else if (QContext_.CaptureMode() == EQPlayerCaptureMode::MetaOnly) {
         Credentials_ = MakeIntrusive<TCredentials>();
         Credentials_->SetUserCredentials({.OauthToken = "REPLAY_OAUTH",
                                           .BlackboxSessionIdCookie = "REPLAY_SESSIONID"});
@@ -533,6 +534,24 @@ IPlanBuilder& TProgram::GetPlanBuilder() {
 
 TString TProgram::GetSourceCode() const {
     return SourceCode_;
+}
+
+bool TProgram::IsFullCaptureReady() const {
+    if (!TypeCtx_ || !QContext_.CanWrite() || QContext_.CaptureMode() != EQPlayerCaptureMode::Full) {
+        return false;
+    }
+
+    for (auto& source : TypeCtx_->DataSources) {
+        if (!source->IsFullCaptureReady()) {
+            return false;
+        }
+    }
+    for (auto& sink : TypeCtx_->DataSinks) {
+        if (!sink->IsFullCaptureReady()) {
+            return false;
+        }
+    }
+    return true;
 }
 
 void TProgram::SetParametersYson(const TString& parameters) {
@@ -734,6 +753,11 @@ void UpdateSqlFlagsFromQContext(const TQContext& qContext, THashSet<TString>& fl
             AddSqlFlagsFromPatch(flags, *gatewaysPatch);
         }
     }
+}
+
+bool HasFullCapture(const IQReaderPtr& reader) {
+    auto fullCaptureItem = reader->Get({FacadeComponent, FullCaptureLabel}).GetValueSync();
+    return fullCaptureItem.Defined();
 }
 
 void TProgram::HandleTranslationSettings(NSQLTranslation::TTranslationSettings& loadedSettings,
@@ -1980,6 +2004,10 @@ NThreading::TFuture<void> TProgram::CloseLastSession() {
         }
 
         CloseLastSessionFuture_ = promise.GetFuture();
+    }
+
+    if (IsFullCaptureReady()) {
+        QContext_.GetWriter()->Put({FacadeComponent, FullCaptureLabel}, "").GetValueSync();
     }
 
     TVector<NThreading::TFuture<void>> closeFutures;

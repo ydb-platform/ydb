@@ -81,6 +81,7 @@ public:
     TString Token;
     ui64 MemLimit = 0;
     EQPlayerMode QPlayerMode = EQPlayerMode::None;
+    EQPlayerCaptureMode QPlayerCaptureMode = EQPlayerCaptureMode::None;
     TString OperationId;
     TQContext QPlayerContext;
 

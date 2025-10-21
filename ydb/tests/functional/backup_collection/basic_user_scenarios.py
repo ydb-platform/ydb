@@ -1775,7 +1775,6 @@ class TestIncrementalChainRestoreAfterDeletion(TestFullCycleLocalBackupRestore):
 
 
 class TestFullCycleLocalBackupRestoreWComplSchemaChange(TestFullCycleLocalBackupRestoreWSchemaChange):
-
     def test_full_cycle_local_backup_restore_with_complex_schema_changes(self):
         # Preparations: create source collection and initial tables
         collection_src = f"coll_src_{int(time.time())}"

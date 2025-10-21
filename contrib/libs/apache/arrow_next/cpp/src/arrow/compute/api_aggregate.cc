@@ -15,13 +15,13 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "arrow/compute/api_aggregate.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/api_aggregate.h"
 
-#include "arrow/compute/exec.h"
-#include "arrow/compute/function_internal.h"
-#include "arrow/compute/registry.h"
-#include "arrow/util/checked_cast.h"
-#include "arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/exec.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/function_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/registry.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/checked_cast.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
 
 namespace arrow20 {
 namespace internal {

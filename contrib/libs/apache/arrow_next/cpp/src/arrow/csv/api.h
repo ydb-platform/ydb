@@ -18,6 +18,6 @@
 
 #pragma once
 
-#include "arrow/csv/options.h"
-#include "arrow/csv/reader.h"
-#include "arrow/csv/writer.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/csv/options.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/csv/reader.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/csv/writer.h"

@@ -20,8 +20,8 @@
 
 #include <cstdint>
 
-#include "arrow/io/interfaces.h"
-#include "arrow/util/visibility.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/io/interfaces.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/visibility.h"
 
 namespace arrow20 {
 namespace io {

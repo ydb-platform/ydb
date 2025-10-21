@@ -19,4 +19,4 @@
 #pragma once
 
 // Schemas
-#include "parquet/schema.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/schema.h"

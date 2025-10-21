@@ -17,8 +17,8 @@
 
 #include <string>
 
-#include "arrow/device_allocation_type_set.h"
-#include "arrow/type_fwd.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/device_allocation_type_set.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type_fwd.h"
 
 namespace arrow20 {
 

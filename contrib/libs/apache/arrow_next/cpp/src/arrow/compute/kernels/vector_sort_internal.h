@@ -23,12 +23,12 @@
 #include <cstdint>
 #include <functional>
 
-#include "arrow/array.h"
-#include "arrow/compute/api_vector.h"
-#include "arrow/compute/kernels/chunked_internal.h"
-#include "arrow/table.h"
-#include "arrow/type.h"
-#include "arrow/type_traits.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/api_vector.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/kernels/chunked_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/table.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type_traits.h"
 
 namespace arrow20::compute::internal {
 

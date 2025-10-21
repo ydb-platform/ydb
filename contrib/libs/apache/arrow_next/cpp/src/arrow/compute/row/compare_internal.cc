@@ -15,17 +15,17 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "arrow/compute/row/compare_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/row/compare_internal.h"
 
 #include <memory.h>
 
 #include <algorithm>
 #include <cstdint>
 
-#include "arrow/compute/util.h"
-#include "arrow/compute/util_internal.h"
-#include "arrow/util/bit_util.h"
-#include "arrow/util/ubsan.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/util.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/util_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/bit_util.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/ubsan.h"
 
 namespace arrow20 {
 namespace compute {

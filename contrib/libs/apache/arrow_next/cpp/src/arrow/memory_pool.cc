@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "arrow/memory_pool_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/memory_pool_internal.h"
 
 #include <algorithm>  // IWYU pragma: keep
 #include <atomic>
@@ -31,19 +31,19 @@
 #  include <stdlib.h>
 #endif
 
-#include "arrow/buffer.h"
-#include "arrow/io/util_internal.h"
-#include "arrow/result.h"
-#include "arrow/status.h"
-#include "arrow/util/bit_util.h"
-#include "arrow/util/config.h"
-#include "arrow/util/debug.h"
-#include "arrow/util/int_util_overflow.h"
-#include "arrow/util/io_util.h"
-#include "arrow/util/logging.h"  // IWYU pragma: keep
-#include "arrow/util/string.h"
-#include "arrow/util/thread_pool.h"
-#include "arrow/util/ubsan.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/buffer.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/io/util_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/result.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/status.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/bit_util.h"
+#include "contrib/libs/apache/arrow_next/src/arrow/util/config.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/debug.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/int_util_overflow.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/io_util.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"  // IWYU pragma: keep
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/string.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/thread_pool.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/ubsan.h"
 
 #ifdef __GLIBC__
 #  include <malloc.h>

@@ -15,15 +15,15 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "arrow/compute/key_map_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/key_map_internal.h"
 
 #include <algorithm>
 #include <cstdint>
 
-#include "arrow/util/bit_util.h"
-#include "arrow/util/bitmap_ops.h"
-#include "arrow/util/logging.h"
-#include "arrow/util/ubsan.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/bit_util.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/bitmap_ops.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/ubsan.h"
 
 namespace arrow20 {
 

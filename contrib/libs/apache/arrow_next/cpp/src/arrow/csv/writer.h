@@ -20,11 +20,11 @@
 
 #include <memory>
 
-#include "arrow/csv/options.h"
-#include "arrow/io/interfaces.h"
-#include "arrow/ipc/type_fwd.h"
-#include "arrow/record_batch.h"
-#include "arrow/table.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/csv/options.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/io/interfaces.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/ipc/type_fwd.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/record_batch.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/table.h"
 
 namespace arrow20 {
 namespace csv {

@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "arrow/csv/reader.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/csv/reader.h"
 
 #include <cstdint>
 #include <cstring>
@@ -29,28 +29,28 @@
 #include <utility>
 #include <vector>
 
-#include "arrow/array.h"
-#include "arrow/buffer.h"
-#include "arrow/csv/chunker.h"
-#include "arrow/csv/column_builder.h"
-#include "arrow/csv/column_decoder.h"
-#include "arrow/csv/options.h"
-#include "arrow/csv/parser.h"
-#include "arrow/io/interfaces.h"
-#include "arrow/result.h"
-#include "arrow/status.h"
-#include "arrow/table.h"
-#include "arrow/type.h"
-#include "arrow/type_fwd.h"
-#include "arrow/util/async_generator.h"
-#include "arrow/util/future.h"
-#include "arrow/util/iterator.h"
-#include "arrow/util/logging.h"
-#include "arrow/util/macros.h"
-#include "arrow/util/task_group.h"
-#include "arrow/util/thread_pool.h"
-#include "arrow/util/utf8_internal.h"
-#include "arrow/util/vector.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/buffer.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/csv/chunker.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/csv/column_builder.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/csv/column_decoder.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/csv/options.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/csv/parser.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/io/interfaces.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/result.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/status.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/table.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type_fwd.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/async_generator.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/future.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/iterator.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/macros.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/task_group.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/thread_pool.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/utf8_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/vector.h"
 
 namespace arrow20 {
 

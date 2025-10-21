@@ -15,19 +15,19 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "arrow/array/builder_adaptive.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/builder_adaptive.h"
 
 #include <algorithm>
 #include <cstdint>
 
-#include "arrow/array/data.h"
-#include "arrow/buffer.h"
-#include "arrow/buffer_builder.h"
-#include "arrow/result.h"
-#include "arrow/status.h"
-#include "arrow/type.h"
-#include "arrow/util/int_util.h"
-#include "arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/data.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/buffer.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/buffer_builder.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/result.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/status.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/int_util.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
 
 namespace arrow20 {
 

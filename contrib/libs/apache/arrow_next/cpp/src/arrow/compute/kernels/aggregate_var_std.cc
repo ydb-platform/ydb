@@ -19,13 +19,13 @@
 #include <cmath>
 #include <type_traits>
 
-#include "arrow/compute/api_aggregate.h"
-#include "arrow/compute/kernels/aggregate_internal.h"
-#include "arrow/compute/kernels/aggregate_var_std_internal.h"
-#include "arrow/compute/kernels/common_internal.h"
-#include "arrow/util/bit_run_reader.h"
-#include "arrow/util/checked_cast.h"
-#include "arrow/util/int128_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/api_aggregate.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/kernels/aggregate_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/kernels/aggregate_var_std_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/kernels/common_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/bit_run_reader.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/checked_cast.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/int128_internal.h"
 
 namespace arrow20::compute::internal {
 

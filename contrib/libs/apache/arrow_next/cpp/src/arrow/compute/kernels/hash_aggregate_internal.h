@@ -20,17 +20,17 @@
 
 #include <memory>
 
-#include "arrow/array/data.h"
-#include "arrow/buffer_builder.h"
-#include "arrow/compute/exec.h"
-#include "arrow/compute/kernel.h"
-#include "arrow/compute/kernels/codegen_internal.h"
-#include "arrow/result.h"
-#include "arrow/scalar.h"
-#include "arrow/status.h"
-#include "arrow/type.h"
-#include "arrow/type_traits.h"
-#include "arrow/util/bit_util.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/data.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/buffer_builder.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/exec.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/kernel.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/kernels/codegen_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/result.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/scalar.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/status.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type_traits.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/bit_util.h"
 
 namespace arrow20::compute::internal {
 

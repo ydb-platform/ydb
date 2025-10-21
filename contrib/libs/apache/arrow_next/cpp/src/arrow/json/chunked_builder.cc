@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "arrow/json/chunked_builder.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/json/chunked_builder.h"
 
 #include <mutex>
 #include <string>
@@ -23,13 +23,13 @@
 #include <utility>
 #include <vector>
 
-#include "arrow/array.h"
-#include "arrow/buffer.h"
-#include "arrow/json/converter.h"
-#include "arrow/table.h"
-#include "arrow/util/checked_cast.h"
-#include "arrow/util/logging.h"
-#include "arrow/util/task_group.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/buffer.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/json/converter.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/table.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/checked_cast.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/task_group.h"
 
 namespace arrow20 {
 

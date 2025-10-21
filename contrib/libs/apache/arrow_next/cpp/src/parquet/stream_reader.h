@@ -27,9 +27,9 @@
 #include <string>
 #include <vector>
 
-#include "parquet/column_reader.h"
-#include "parquet/file_reader.h"
-#include "parquet/stream_writer.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/column_reader.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/file_reader.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/stream_writer.h"
 
 namespace parquet20 {
 

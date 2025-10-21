@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "parquet/arrow/reader.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/arrow/reader.h"
 
 #include <algorithm>
 #include <cstring>
@@ -24,28 +24,28 @@
 #include <utility>
 #include <vector>
 
-#include "arrow/array.h"
-#include "arrow/buffer.h"
-#include "arrow/extension_type.h"
-#include "arrow/io/memory.h"
-#include "arrow/record_batch.h"
-#include "arrow/table.h"
-#include "arrow/type.h"
-#include "arrow/util/async_generator.h"
-#include "arrow/util/bit_util.h"
-#include "arrow/util/future.h"
-#include "arrow/util/iterator.h"
-#include "arrow/util/logging.h"
-#include "arrow/util/parallel.h"
-#include "arrow/util/range.h"
-#include "arrow/util/tracing_internal.h"
-#include "parquet/arrow/reader_internal.h"
-#include "parquet/column_reader.h"
-#include "parquet/exception.h"
-#include "parquet/file_reader.h"
-#include "parquet/metadata.h"
-#include "parquet/properties.h"
-#include "parquet/schema.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/buffer.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/extension_type.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/io/memory.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/record_batch.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/table.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/async_generator.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/bit_util.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/future.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/iterator.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/parallel.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/range.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/tracing_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/arrow/reader_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/column_reader.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/exception.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/file_reader.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/metadata.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/properties.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/schema.h"
 
 using arrow20::Array;
 using arrow20::ArrayData;

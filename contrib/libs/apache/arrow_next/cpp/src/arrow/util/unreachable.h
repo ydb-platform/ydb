@@ -18,7 +18,7 @@
 
 #pragma once
 
-#include "arrow/util/visibility.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/visibility.h"
 
 #include <string_view>
 

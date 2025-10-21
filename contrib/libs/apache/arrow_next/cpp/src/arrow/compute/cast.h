@@ -22,14 +22,14 @@
 #include <string>
 #include <vector>
 
-#include "arrow/compute/function.h"
-#include "arrow/compute/function_options.h"
-#include "arrow/compute/type_fwd.h"
-#include "arrow/result.h"
-#include "arrow/status.h"
-#include "arrow/type.h"
-#include "arrow/util/macros.h"
-#include "arrow/util/visibility.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/function.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/function_options.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/type_fwd.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/result.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/status.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/macros.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/visibility.h"
 
 namespace arrow20 {
 

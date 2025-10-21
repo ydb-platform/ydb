@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "parquet/arrow/reader_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/arrow/reader_internal.h"
 
 #include <algorithm>
 #include <climits>
@@ -27,36 +27,36 @@
 #include <type_traits>
 #include <vector>
 
-#include "arrow/array.h"
-#include "arrow/compute/api.h"
-#include "arrow/datum.h"
-#include "arrow/io/memory.h"
-#include "arrow/ipc/reader.h"
-#include "arrow/ipc/writer.h"
-#include "arrow/scalar.h"
-#include "arrow/status.h"
-#include "arrow/table.h"
-#include "arrow/type.h"
-#include "arrow/type_traits.h"
-#include "arrow/util/base64.h"
-#include "arrow/util/bit_util.h"
-#include "arrow/util/checked_cast.h"
-#include "arrow/util/endian.h"
-#include "arrow/util/float16.h"
-#include "arrow/util/int_util_overflow.h"
-#include "arrow/util/logging.h"
-#include "arrow/util/ubsan.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/api.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/datum.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/io/memory.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/ipc/reader.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/ipc/writer.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/scalar.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/status.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/table.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type_traits.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/base64.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/bit_util.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/checked_cast.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/endian.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/float16.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/int_util_overflow.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/ubsan.h"
 
-#include "parquet/arrow/reader.h"
-#include "parquet/arrow/schema.h"
-#include "parquet/arrow/schema_internal.h"
-#include "parquet/column_reader.h"
-#include "parquet/platform.h"
-#include "parquet/properties.h"
-#include "parquet/schema.h"
-#include "parquet/statistics.h"
-#include "parquet/types.h"
-#include "parquet/windows_fixup.h"  // for OPTIONAL
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/arrow/reader.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/arrow/schema.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/arrow/schema_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/column_reader.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/platform.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/properties.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/schema.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/statistics.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/types.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/windows_fixup.h"  // for OPTIONAL
 
 using arrow20::Array;
 using arrow20::BooleanArray;

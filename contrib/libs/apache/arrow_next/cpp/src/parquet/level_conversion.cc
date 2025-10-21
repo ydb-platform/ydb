@@ -14,21 +14,21 @@
 // KIND, either express or implied.  See the License for the
 // specific language governing permissions and limitations
 // under the License.
-#include "parquet/level_conversion.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/level_conversion.h"
 
 #include <algorithm>
 #include <limits>
 #include <optional>
 
-#include "arrow/util/bit_run_reader.h"
-#include "arrow/util/bit_util.h"
-#include "arrow/util/cpu_info.h"
-#include "arrow/util/logging.h"
-#include "parquet/exception.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/bit_run_reader.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/bit_util.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/cpu_info.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/exception.h"
 
-#include "parquet/level_comparison.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/level_comparison.h"
 #define PARQUET_IMPL_NAMESPACE standard
-#include "parquet/level_conversion_inc.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/level_conversion_inc.h"
 #undef PARQUET_IMPL_NAMESPACE
 
 namespace parquet20::internal {

@@ -17,12 +17,12 @@
 
 #define FASTFLOAT_ALLOWS_LEADING_PLUS 1
 
-#include "arrow/util/value_parsing.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/value_parsing.h"
 
 #include <string>
 #include <utility>
 
-#include "arrow/util/float16.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/float16.h"
 #include "contrib/restricted/fast_float/include/fast_float/fast_float.h"
 
 using arrow20::util::Float16;

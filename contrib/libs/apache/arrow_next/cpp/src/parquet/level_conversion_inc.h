@@ -17,19 +17,19 @@
 // under the License.
 #pragma once
 
-#include "parquet/level_conversion.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/level_conversion.h"
 
 #include <algorithm>
 #include <cstdint>
 #include <limits>
 
-#include "arrow/util/bit_run_reader.h"
-#include "arrow/util/bit_util.h"
-#include "arrow/util/bitmap_writer.h"
-#include "arrow/util/logging.h"
-#include "arrow/util/simd.h"
-#include "parquet/exception.h"
-#include "parquet/level_comparison.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/bit_run_reader.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/bit_util.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/bitmap_writer.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/simd.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/exception.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/level_comparison.h"
 
 #ifndef PARQUET_IMPL_NAMESPACE
 #  error "PARQUET_IMPL_NAMESPACE must be defined"

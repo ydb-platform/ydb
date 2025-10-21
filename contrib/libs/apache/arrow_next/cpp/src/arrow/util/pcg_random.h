@@ -18,7 +18,7 @@
 
 #pragma once
 
-#include "arrow/vendored/pcg/pcg_random.hpp"  // IWYU pragma: export
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/vendored/pcg/pcg_random.hpp"  // IWYU pragma: export
 
 namespace arrow20 {
 namespace random {

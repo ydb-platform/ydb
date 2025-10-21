@@ -18,21 +18,21 @@
 #include <limits>
 #include <optional>
 
-#include "arrow/array/array_base.h"
-#include "arrow/array/builder_binary.h"
-#include "arrow/compute/kernels/base_arithmetic_internal.h"
-#include "arrow/compute/kernels/codegen_internal.h"
-#include "arrow/compute/kernels/common_internal.h"
-#include "arrow/compute/kernels/scalar_cast_internal.h"
-#include "arrow/compute/kernels/temporal_internal.h"
-#include "arrow/result.h"
-#include "arrow/type.h"
-#include "arrow/type_traits.h"
-#include "arrow/util/formatting.h"
-#include "arrow/util/int_util.h"
-#include "arrow/util/logging.h"
-#include "arrow/util/utf8_internal.h"
-#include "arrow/visit_data_inline.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/array_base.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/builder_binary.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/kernels/base_arithmetic_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/kernels/codegen_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/kernels/common_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/kernels/scalar_cast_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/kernels/temporal_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/result.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type_traits.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/formatting.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/int_util.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/utf8_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/visit_data_inline.h"
 
 namespace arrow20 {
 

@@ -19,14 +19,14 @@
 #include <optional>
 #include <utility>
 
-#include "arrow/array/data.h"
-#include "arrow/compute/kernel.h"
-#include "arrow/result.h"
-#include "arrow/type.h"
-#include "arrow/util/checked_cast.h"
-#include "arrow/util/fixed_width_internal.h"
-#include "arrow/util/logging.h"
-#include "arrow/util/small_vector.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/data.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/kernel.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/result.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/checked_cast.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/fixed_width_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/small_vector.h"
 
 namespace arrow20::util {
 

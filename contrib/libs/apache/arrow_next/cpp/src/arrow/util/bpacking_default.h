@@ -27,8 +27,8 @@
 
 #pragma once
 
-#include "arrow/util/bit_util.h"
-#include "arrow/util/ubsan.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/bit_util.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/ubsan.h"
 
 namespace arrow20 {
 namespace internal {

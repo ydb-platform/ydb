@@ -25,14 +25,14 @@
 #include <string>
 #include <utility>
 
-#include "arrow/buffer.h"
-#include "arrow/status.h"
-#include "arrow/util/bit_util.h"
-#include "arrow/util/bitmap_generate.h"
-#include "arrow/util/bitmap_ops.h"
-#include "arrow/util/macros.h"
-#include "arrow/util/ubsan.h"
-#include "arrow/util/visibility.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/buffer.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/status.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/bit_util.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/bitmap_generate.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/bitmap_ops.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/macros.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/ubsan.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/visibility.h"
 
 namespace arrow20 {
 

@@ -15,18 +15,18 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "arrow/csv/writer.h"
-#include "arrow/array.h"
-#include "arrow/compute/cast.h"
-#include "arrow/io/interfaces.h"
-#include "arrow/ipc/writer.h"
-#include "arrow/record_batch.h"
-#include "arrow/result.h"
-#include "arrow/stl_allocator.h"
-#include "arrow/util/iterator.h"
-#include "arrow/util/logging.h"
-#include "arrow/visit_data_inline.h"
-#include "arrow/visit_type_inline.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/csv/writer.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/cast.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/io/interfaces.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/ipc/writer.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/record_batch.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/result.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/stl_allocator.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/iterator.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/visit_data_inline.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/visit_type_inline.h"
 
 #include <memory>
 

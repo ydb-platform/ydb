@@ -20,7 +20,7 @@
 #include <algorithm>
 #include <cstdint>
 
-#include "parquet/platform.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/platform.h"
 
 namespace parquet20::internal {
 

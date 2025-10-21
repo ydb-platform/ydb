@@ -15,9 +15,9 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "arrow/ipc/options.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/ipc/options.h"
 
-#include "arrow/status.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/status.h"
 
 namespace arrow20 {
 namespace ipc {

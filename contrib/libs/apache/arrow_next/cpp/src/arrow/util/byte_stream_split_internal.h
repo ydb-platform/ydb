@@ -18,10 +18,10 @@
 
 #pragma once
 
-#include "arrow/util/endian.h"
-#include "arrow/util/simd.h"
-#include "arrow/util/small_vector.h"
-#include "arrow/util/ubsan.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/endian.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/simd.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/small_vector.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/ubsan.h"
 
 #include <algorithm>
 #include <array>

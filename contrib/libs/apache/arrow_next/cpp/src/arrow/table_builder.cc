@@ -15,17 +15,17 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "arrow/table_builder.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/table_builder.h"
 
 #include <memory>
 #include <utility>
 
-#include "arrow/array/array_base.h"
-#include "arrow/array/builder_base.h"
-#include "arrow/record_batch.h"
-#include "arrow/status.h"
-#include "arrow/type.h"
-#include "arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/array_base.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/builder_base.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/record_batch.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/status.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
 
 namespace arrow20 {
 

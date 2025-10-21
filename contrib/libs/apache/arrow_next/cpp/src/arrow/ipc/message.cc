@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "arrow/ipc/message.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/ipc/message.h"
 
 #include <algorithm>
 #include <cstddef>
@@ -25,19 +25,19 @@
 #include <utility>
 #include <vector>
 
-#include "arrow/buffer.h"
-#include "arrow/device.h"
-#include "arrow/io/interfaces.h"
-#include "arrow/ipc/metadata_internal.h"
-#include "arrow/ipc/options.h"
-#include "arrow/ipc/reader.h"
-#include "arrow/ipc/reader_internal.h"
-#include "arrow/ipc/util.h"
-#include "arrow/status.h"
-#include "arrow/util/endian.h"
-#include "arrow/util/future.h"
-#include "arrow/util/logging.h"
-#include "arrow/util/ubsan.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/buffer.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/device.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/io/interfaces.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/ipc/metadata_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/ipc/options.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/ipc/reader.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/ipc/reader_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/ipc/util.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/status.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/endian.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/future.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/ubsan.h"
 
 #include "generated/Message.fbs.h"
 

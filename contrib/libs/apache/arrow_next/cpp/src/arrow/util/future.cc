@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "arrow/util/future.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/future.h"
 
 #include <algorithm>
 #include <atomic>
@@ -24,11 +24,11 @@
 #include <mutex>
 #include <numeric>
 
-#include "arrow/util/checked_cast.h"
-#include "arrow/util/config.h"
-#include "arrow/util/logging.h"
-#include "arrow/util/thread_pool.h"
-#include "arrow/util/tracing_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/checked_cast.h"
+#include "contrib/libs/apache/arrow_next/src/arrow/util/config.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/thread_pool.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/tracing_internal.h"
 
 namespace arrow20 {
 

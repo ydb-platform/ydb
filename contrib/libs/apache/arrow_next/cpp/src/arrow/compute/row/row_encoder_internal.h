@@ -20,8 +20,8 @@
 
 #include <cstdint>
 
-#include "arrow/compute/kernels/codegen_internal.h"
-#include "arrow/visit_data_inline.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/kernels/codegen_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/visit_data_inline.h"
 
 namespace arrow20 {
 

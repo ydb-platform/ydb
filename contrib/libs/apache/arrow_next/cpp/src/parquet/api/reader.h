@@ -19,18 +19,18 @@
 #pragma once
 
 // Column reader API
-#include "parquet/column_reader.h"
-#include "parquet/column_scanner.h"
-#include "parquet/exception.h"
-#include "parquet/file_reader.h"
-#include "parquet/metadata.h"
-#include "parquet/platform.h"
-#include "parquet/printer.h"
-#include "parquet/properties.h"
-#include "parquet/statistics.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/column_reader.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/column_scanner.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/exception.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/file_reader.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/metadata.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/platform.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/printer.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/properties.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/statistics.h"
 
 // Schemas
-#include "parquet/api/schema.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/api/schema.h"
 
 // IO
-#include "parquet/api/io.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/api/io.h"

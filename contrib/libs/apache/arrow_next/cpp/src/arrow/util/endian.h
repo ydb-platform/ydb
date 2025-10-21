@@ -56,8 +56,8 @@
 #include <algorithm>
 #include <array>
 
-#include "arrow/util/type_traits.h"
-#include "arrow/util/ubsan.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/type_traits.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/ubsan.h"
 
 namespace arrow20 {
 namespace bit_util {

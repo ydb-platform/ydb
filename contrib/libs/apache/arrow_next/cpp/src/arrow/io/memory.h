@@ -25,10 +25,10 @@
 #include <string_view>
 #include <vector>
 
-#include "arrow/io/concurrency.h"
-#include "arrow/io/interfaces.h"
-#include "arrow/type_fwd.h"
-#include "arrow/util/visibility.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/io/concurrency.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/io/interfaces.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type_fwd.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/visibility.h"
 
 namespace arrow20 {
 

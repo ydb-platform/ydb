@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "arrow/chunk_resolver.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/chunk_resolver.h"
 
 #include <algorithm>
 #include <cstdint>
@@ -23,8 +23,8 @@
 #include <memory>
 #include <vector>
 
-#include "arrow/array.h"
-#include "arrow/record_batch.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/record_batch.h"
 
 namespace arrow20 {
 

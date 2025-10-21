@@ -8,6 +8,7 @@
 #include <ydb/library/formats/arrow/simple_builder/filler.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
+#include <ydb/public/lib/scheme_types/scheme_type_id.h>
 #include <yql/essentials/minikql/computation/mkql_block_reader.h>
 #include <yql/essentials/minikql/computation/mkql_value_builder.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
@@ -79,10 +80,13 @@ NUdf::TUnboxedValue GetValueOfBasicType(TType* type, ui64 value) {
             std::string json = SerializeToBinaryJson(TStringBuilder() << '[' << value << ']');
             return MakeString(NUdf::TStringRef(json.data(), json.size()));
         }
-        // TODO: Decimal, DyNumber, JsonDocument, Uuid
-        //
-        // case NUdf::EDataSlot::Decimal: // TODO: yql/essentials/minikql/mkql_node.cpp:486
-        //     return NUdf::TUnboxedValuePod(NDecimal::FromHalfs(value, value / 2 - 1));
+        case NUdf::EDataSlot::Uuid: {
+            std::string uuid;
+            for (size_t i = 0; i < NKikimr::NScheme::FSB_SIZE / 2; ++i) {
+                uuid += "a" + std::to_string((i + value) % 10);
+            }
+            return MakeString(NUdf::TStringRef(uuid));
+        }
         case NUdf::EDataSlot::Date:
             return NUdf::TUnboxedValuePod(static_cast<ui16>(value % NUdf::MAX_DATE));
         case NUdf::EDataSlot::Datetime:
@@ -788,6 +792,37 @@ void TestDataTypeConversion(arrow::Type::type arrowTypeId) {
     }
 }
 
+template <typename TMiniKQLType>
+void TestFixedSizeBinaryDataTypeConversion() {
+    TTestContext context;
+
+    auto type = TDataType::Create(NUdf::TDataType<TMiniKQLType>::Id, context.TypeEnv);
+    UNIT_ASSERT(NFormats::NTestUtils::IsArrowCompatible(type));
+
+    TUnboxedValueVector values;
+    values.reserve(TEST_ARRAY_SIZE);
+
+    for (size_t i = 0; i < TEST_ARRAY_SIZE; ++i) {
+        values.emplace_back(GetValueOfBasicType(type, i));
+    }
+
+    auto array = NFormats::NTestUtils::MakeArray(values, type);
+    UNIT_ASSERT_C(array->ValidateFull().ok(), array->ValidateFull().ToString());
+    UNIT_ASSERT(array->length() == static_cast<i64>(values.size()));
+
+    std::shared_ptr<arrow::FixedSizeBinaryArray> typedArray;
+
+    UNIT_ASSERT(array->type_id() == arrow::Type::FIXED_SIZE_BINARY);
+    typedArray = static_pointer_cast<arrow::FixedSizeBinaryArray>(array);
+    UNIT_ASSERT(typedArray->byte_width() == NScheme::FSB_SIZE);
+
+    for (size_t i = 0; i < TEST_ARRAY_SIZE; ++i) {
+        auto valueLine = std::string(reinterpret_cast<const char *>(typedArray->Value(i)), NScheme::FSB_SIZE);
+        auto expected = values[i].AsStringRef();
+        UNIT_ASSERT_STRINGS_EQUAL(valueLine, std::string(expected.Data(), expected.Size()));
+    }
+}
+
 Y_UNIT_TEST_SUITE(KqpFormat_MiniKQL_Arrow) {
     // Integral types
     Y_UNIT_TEST(DataType_Bool) {
@@ -926,8 +961,7 @@ Y_UNIT_TEST_SUITE(KqpFormat_MiniKQL_Arrow) {
     }
 
     Y_UNIT_TEST(DataType_Uuid) {
-        // TODO: Support fixed size binary
-        // TestDataTypeConversion<NUdf::TUuid, std::string, arrow::FixedSizeBinaryArray, /* IsStringType */ true>(arrow::Type::FIXED_SIZE_BINARY);
+        TestFixedSizeBinaryDataTypeConversion<NUdf::TUuid>();
     }
 }
 

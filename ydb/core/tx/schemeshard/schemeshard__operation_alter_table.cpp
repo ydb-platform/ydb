@@ -146,7 +146,7 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
         return nullptr;
     }
 
-    bool isServerless = context.SS->IsServerlessDomain(TPath::Init(context.SS->RootPathId(), context.SS));
+    const bool isServerless = context.SS->IsServerlessDomain(TPath::Init(context.SS->RootPathId(), context.SS));
 
     NKikimrSchemeOp::TPartitionConfig compilationPartitionConfig;
     if (!TPartitionConfigMerger::ApplyChanges(compilationPartitionConfig, table->PartitionConfig(), copyAlter.GetPartitionConfig(), appData, isServerless, errStr)

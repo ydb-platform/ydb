@@ -526,7 +526,7 @@ public:
         // incr backup config is not copied
         schema.ClearIncrementalBackupConfig();
 
-        bool isServerless = context.SS->IsServerlessDomain(TPath::Init(context.SS->RootPathId(), context.SS));
+        const bool isServerless = context.SS->IsServerlessDomain(TPath::Init(context.SS->RootPathId(), context.SS));
 
         NKikimrSchemeOp::TPartitionConfig compilationPartitionConfig;
         if (!TPartitionConfigMerger::ApplyChanges(compilationPartitionConfig, srcTableInfo->PartitionConfig(), schema.GetPartitionConfig(), AppData(), isServerless, errStr)

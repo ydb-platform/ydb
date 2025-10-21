@@ -578,7 +578,7 @@ public:
             return result;
         }
 
-        bool isServerless = context.SS->IsServerlessDomain(TPath::Init(context.SS->RootPathId(), context.SS));
+        const bool isServerless = context.SS->IsServerlessDomain(TPath::Init(context.SS->RootPathId(), context.SS));
 
         std::optional<TString> defaultPoolKind = InferDefaultPoolKind(domainInfo->EffectiveStoragePools(), schema.GetPartitionConfig());
         NKikimrSchemeOp::TPartitionConfig compilationPartitionConfig;

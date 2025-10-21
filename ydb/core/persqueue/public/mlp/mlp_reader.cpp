@@ -67,7 +67,7 @@ void TReaderActor::Handle(TEvPQ::TEvMLPGetPartitionResponse::TPtr& ev) {
             return DoRead();
         }
         default:
-            ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, "Patition choose error");
+            ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, "Partition choose error");
     }
 }
 

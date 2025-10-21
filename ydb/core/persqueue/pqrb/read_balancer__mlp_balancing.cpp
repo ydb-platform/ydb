@@ -33,7 +33,7 @@ void TMLPBalancer::Handle(TEvPQ::TEvMLPGetPartitionRequest::TPtr& ev) {
         return;
     }
 
-    if (consumerConfig->GetType() != NKikimrPQ::TPQTabletConfig::EConsumerType::TPQTabletConfig_EConsumerType_CONSUMER_TYPE_MLP) {
+    if (consumerConfig->GetType() != NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP) {
         PQ_LOG_D("Consumer '" << consumerName << "' is not MLP consumer");
         TopicActor.Send(ev->Sender, new TEvPQ::TEvMLPErrorResponse(Ydb::StatusIds::SCHEME_ERROR,
             TStringBuilder() << "Consumer '" << consumerName << "' is not MLP consumer"), 0, ev->Cookie);

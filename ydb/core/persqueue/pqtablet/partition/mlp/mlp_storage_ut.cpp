@@ -519,7 +519,7 @@ Y_UNIT_TEST(CompactStorage) {
     UNIT_ASSERT_VALUES_EQUAL(storage.GetFirstUncommittedOffset(), 4);
 
     auto result = storage.Compact();
-    UNIT_ASSERT_VALUES_EQUAL_C(result, 1, "must remove only message with offset 3 beacause it is committed");
+    UNIT_ASSERT_VALUES_EQUAL_C(result, 1, "must remove only message with offset 3 because it is committed");
 
     UNIT_ASSERT_VALUES_EQUAL(storage.GetFirstOffset(), 4);
     UNIT_ASSERT_VALUES_EQUAL(storage.GetLastOffset(), 7);

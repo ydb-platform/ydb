@@ -327,7 +327,7 @@ void TPartition::Handle(TEvPQ::TEvSetClientInfo::TPtr& ev, const TActorContext& 
     if (size_t count = GetUserActCount(ev->Get()->ClientId); count > MAX_USER_ACTS) {
         TabletCounters.Cumulative()[COUNTER_PQ_SET_CLIENT_OFFSET_ERROR].Increment(1);
         ReplyError(ctx, ev->Get()->Cookie, NPersQueue::NErrorCode::OVERLOAD,
-            TStringBuilder() << "too big inflight: " << count, ev->Get()->IsInternal ? SelfId() : TabletActorId);
+            TStringBuilder() << "too big inflight: " << count, ev->Get()->IsInternal ? SelfId() : TActorId{});
         return;
     }
 
